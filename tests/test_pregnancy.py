@@ -42,7 +42,7 @@ def test_burnin_pregnancies():
     assert n > 10 and np.all(npreg == 1 + parity), f'Women pregnant at the start have {np.unique(npreg)} pregnancies'
 
     # With deliveries before the start (short pregnancies), counted in parity, and losses in the run
-    preg = ss.Pregnancy(fertility_rate=ss.freqperyear(600), dur_pregnancy=ss.uniform(ss.weeks(10), ss.weeks(70)), p_abortion=0.1, p_loss=ss.bernoulli(0.01))
+    preg = ss.Pregnancy(fertility_rate=ss.freqperyear(600), dur_pregnancy=ss.uniform(ss.weeks(10), ss.weeks(70)), p_abortion=0.1, loss_rate=ss.probperweek(0.01))
     preg.stratify(parity=['0', '1', '2', '3+'], split=[1, 0, 0, 0])
     sim = ss.Sim(demographics=preg, analyzers=check, n_agents=10_000, start=2000, stop=2004, dt=ss.months(1), verbose=0).run()
     n, npreg, parity = seen.start
@@ -188,7 +188,7 @@ def test_path_triggers():
         S, I, Cs = ss.states('S I Cs')
         delivery = ss.state('pregnancy.delivery') if by_path else preg.delivery
         d = ss.Disease(S, I, Cs, infection=S >> I @ ss.peryear(0.1), mtct=ss.Transition(S, Cs, rate=ss.peryear(3)*ss.mother(I)),
-                       still=ss.Transition(Cs, ss.null, on=delivery), name='d')
+                       still=ss.Transition(Cs, ss.null, where=delivery), name='d')
         return ss.Sim(demographics=preg, diseases=d, networks=ss.MaternalNet(), n_agents=5000, start=2000, stop=2005, verbose=0).run()
     direct, path = make(False), make(True)
     assert path.results.d.still.sum() > 0, 'A fetus is removed at its mother\'s delivery'

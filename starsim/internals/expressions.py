@@ -969,7 +969,7 @@ def per_person(rate, src, people):
 
 def divide(a, b, xp=np):
     """ Division in an expression: nothing divided by anything is nothing, e.g. the infectious share of an empty group; the inner where keeps a gradient finite """
-    if np.ndim(a) == 0 and np.ndim(b) == 0 and not hasattr(a, 'shape'):
+    if type(a) is float and type(b) is float or (np.ndim(a) == 0 and np.ndim(b) == 0 and not hasattr(a, 'shape')):
         return 0.0 if a == 0 else a / b
     return xp.where(a == 0, 0.0, a / xp.where(a == 0, 1.0, b))
 

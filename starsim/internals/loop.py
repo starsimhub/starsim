@@ -5,6 +5,7 @@ It exists so that modules with different timesteps run together in one fixed ord
 
 Used with: agents and compartments; declared and coded modules
 """
+import dis
 import time
 import functools as ft
 from dataclasses import dataclass
@@ -14,6 +15,11 @@ import pandas as pd
 import sciris as sc
 import starsim as ss
 import matplotlib.pyplot as plt
+
+
+def empty_function(func):
+    """ Whether a function does nothing: `pass`, with or without a docstring """
+    return [(i.opname, i.argval) for i in dis.get_instructions(func) if i.opname not in ['RESUME', 'NOP']] in [[('RETURN_CONST', None)], [('LOAD_CONST', None), ('RETURN_VALUE', None)]]
 
 
 @dataclass(slots=True)
@@ -199,7 +205,8 @@ class Loop:
 
         # Update connectors
         for connector in sim.connectors():
-            self += connector.step
+            if self._keep(connector.step):
+                self += connector.step
 
         # Update networks - this takes place here in case autonomous state changes at this timestep
         # affect eligibility for contacts
@@ -209,7 +216,8 @@ class Loop:
         # Apply interventions - new changes to contacts will be visible and so the final networks can be customized by
         # interventions, by running them at this point
         for intv in sim.interventions():
-            self += intv.step
+            if self._keep(intv.step):
+                self += intv.step
 
         # Carry out autonomous state changes in the disease modules, including transmission (but excluding deaths)
         for disease in sim.diseases():
@@ -233,7 +241,8 @@ class Loop:
 
         # Apply analyzers
         for ana in sim.analyzers():
-            self += ana.step
+            if self._keep(ana.step):
+                self += ana.step
         intvs = {intv.name for intv in sim.interventions()} # Which have done nothing before the first step, so record nothing at the start
         self.at_start = {i for i in range(first, len(self.funcs)) if self.funcs[i]['module'] not in intvs}
 
@@ -265,7 +274,7 @@ class Loop:
         Whether a call of the step is sure to do nothing in this sim, so is left out of the plan
 
         This is so only for Starsim's own methods, when nothing has been changed that they
-        would act on: a module's `start_step()` with no random numbers to move on, its
+        would act on, and for a `step()` with nothing in it: a module's `start_step()` with no random numbers to move on, its
         `finish_step()` and `update_results()` (see `_null_update_results()`) when inherited
         unchanged, and the people's deaths and removals in a run without agents (in which nobody
         dies as an agent). The sim's own calls are always kept, as places to insert others. A method that a
@@ -275,6 +284,10 @@ class Loop:
         obj, name = func.__self__, func.__name__
         sim = self.sim
         if isinstance(obj, ss.Module):
+            if name == 'step':
+                return empty_function(func) # E.g. an analyzer that only has finalize(), which needs one
+            elif name not in ['start_step', 'finish_step', 'update_results']: # An intervention given as a function
+                return False
             inherited = getattr(type(obj), name) is getattr(ss.Module, name)
             if name == 'start_step':
                 return inherited and (obj.dists is None or not ss.options.crn) # Moving the streams on is all it does

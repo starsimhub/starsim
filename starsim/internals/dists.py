@@ -12,10 +12,10 @@ import inspect
 import sciris as sc
 import numpy as np
 import numba as nb
-import scipy.stats as sps
 import starsim as ss
 import matplotlib.pyplot as plt
 from ..solvers.backends import draws, cache as _cache
+sps = sc.lazyimport('scipy.stats') # A third of the time `import starsim` would take, which most runs never use: see scipy_dist
 ss_int = ss.dtypes.int
 
 
@@ -304,6 +304,33 @@ class Dists(sc.prettyobj):
         return new
 
 
+class scipy_dist:
+    """
+    A distribution of `scipy.stats`, by name, and its parameters (`kwds`), as a frozen one holds them
+
+    Most draws use a distribution's own inverse CDF or NumPy's, and only read `kwds`, so SciPy is only imported and the
+    distribution only frozen if something else is asked of it (e.g. `ppf()` for a shape with no inverse of its own).
+    """
+    def __init__(self, name, **kwds):
+        self.name = name
+        self.kwds = kwds
+        self.random_state = None
+        self.frozen = None
+        return
+
+    def __call__(self, **kwds):
+        return scipy_dist(self.name, **kwds)
+
+    def __getattr__(self, attr):
+        if attr.startswith('__') or attr == 'frozen': # Asked for by copying and pickling, before the attributes are set
+            raise AttributeError(attr)
+        if self.frozen is None:
+            self.frozen = getattr(sps, self.name)(**self.kwds)
+        self.frozen.kwds = self.kwds
+        self.frozen.random_state = self.random_state
+        return getattr(self.frozen, attr)
+
+
 class Dist:
     """
     Base class for tracking one random number generator associated with one distribution,
@@ -411,7 +438,7 @@ class Dist:
         if isinstance(dist, str) and distname is None:
             distname = dist
             dist = None
-        self.dist = dist # The type of distribution
+        self.dist = scipy_dist(dist) if isinstance(dist, str) else dist # The type of distribution
         self.distname = distname
         self.name = name
         self.pars = sc.obj(kwargs) # The user-defined kwargs
@@ -582,12 +609,6 @@ class Dist:
     def state(self):
         """ Get the current state """
         try:    return self.bitgen.state
-        except: return None
-
-    @property
-    def state_int(self):
-        """ Get the integer corresponding to the current state """
-        try:    return self.state['state']['state']
         except: return None
 
     def get_state(self):
@@ -783,12 +804,13 @@ class Dist:
         if self.dist is not None:
 
             # Pull out parameters of an already-frozen distribution
-            if isinstance(self.dist, sps._distn_infrastructure.rv_frozen):
+            named = isinstance(self.dist, scipy_dist) # Only a distribution that was given is SciPy's, which is then imported already
+            if not named and isinstance(self.dist, sps._distn_infrastructure.rv_frozen):
                 if not self.initialized: # Don't do this more than once
                     self.pars = sc.dictobj(sc.mergedicts(self.pars, self.dist.kwds))
 
             # Convert to a frozen distribution
-            if isinstance(self.dist, sps._distn_infrastructure.rv_generic):
+            if named or isinstance(self.dist, sps._distn_infrastructure.rv_generic):
                 spars = self.process_pars(call=False)
                 spars.pop('dtype', None) # Not a valid arg for SciPy distributions
                 self.dist = self.dist(**spars)
@@ -940,10 +962,9 @@ class Dist:
             if len(self._pars) == 1:
                 self.pars[0] = self._pars[0] = self.unit(self._pars[0]) # Try to convert to a time unit (NB, may fail for functions); store in pars so it persists
                 self.unit = None
-                if ss.options.warn_convert:
-                    msg += f'Since ss.{self.__class__.__name__} only takes one input parameter, this has been automatically converted to predrawn scaling. '
-                    msg += 'To avoid this warning, use e.g. ss.poisson(ss.years(3)) instead of ss.years(ss.poisson(3)), or set ss.options.warn_convert=False.'
-                    ss.warn(msg)
+                msg += f'Since ss.{self.__class__.__name__} only takes one input parameter, this has been automatically converted to predrawn scaling. '
+                msg += 'To avoid this warning, use e.g. ss.poisson(ss.years(3)) instead of ss.years(ss.poisson(3)).'
+                ss.warn(msg)
             else:
                 msg += f'Since ss.{self.__class__.__name__} has more than one input parameter, the parameters cannot be scaled by time in this way. '
                 msg += 'Use e.g. ss.weibull(3, ss.years(5), loc=ss.years(2)) instead of ss.weibull(3, 5, loc=2, unit=ss.years).'

@@ -5,6 +5,7 @@ It exists for the setup done once, outside Python.
 
     starsim init                # Both of the below: what most users run once, after pip install starsim
     starsim compile             # Compile Starsim's numerical code (once per install)
+    starsim compile --check     # Say whether it is compiled, and exit with 1 if not
     starsim ai                  # Install the Starsim skill for AI coding agents (Claude Code, Codex, Kimi, ...)
     starsim ai show [skill]     # Show the guide for AI agents, or one of its skills
     starsim ai status           # Where the skill is installed
@@ -37,7 +38,11 @@ targets = sc.obj(
 
 
 def compile(args=None):
-    """ Compile Starsim's numerical code now, so that no run waits for it: see `ss.compile()` """
+    """ Compile Starsim's numerical code now, so that no run waits for it (see `ss.compile()`), or with --check, say whether it is compiled """
+    if getattr(args, 'check', False):
+        status = ss.compile_status()
+        print(status.summary)
+        sys.exit(0 if status.compiled else 1)
     ss.compile()
     return
 
@@ -159,6 +164,7 @@ def main(argv=None):
     p.set_defaults(func=init)
 
     p = commands.add_parser('compile', help='Compile Starsim\'s numerical code (once per install; a few minutes)')
+    p.add_argument('--check', action='store_true', help='Say whether it is compiled, rather than compiling it, and exit with 1 if not')
     p.set_defaults(func=compile)
 
     p = commands.add_parser('ai', help='Install the Starsim skill for AI coding agents, or show its guide')

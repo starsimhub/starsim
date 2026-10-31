@@ -415,7 +415,7 @@ def to_hub(msim, targets, origin_date=None, by=None, every='week', output_type='
         dated = isinstance(dates[0], ss.date)
         origin = dates[0] if origin_date is None else ss.date(origin_date) if dated else float(origin_date) # Without dates, a time in the sim's unit
         i0 = next((i for i,d in enumerate(dates) if d >= origin), len(dates)) # The values after the origin
-        places = res.by(by) if by is not None else {location or 'total':res}
+        places = res.by(by).by_column() if by is not None else {location or 'total':res}
         for place,sub in places.items():
             vals = sub.values[:, i0+1:]
             n = vals.shape[1]//steps

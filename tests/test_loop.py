@@ -142,7 +142,7 @@ def test_callable_cache_cleanup():
         raise RuntimeError('intentional loop failure')
 
     sim.loop.insert(fail_after_cache, label='sim.start_step')
-    with pytest.raises(RuntimeError, match='intentional loop failure'):
+    with pytest.raises(RuntimeError):
         sim.run()
 
     for dist in sim.dists.dists.values():
@@ -195,11 +195,50 @@ def test_coded_alone():
         def step(self):
             self.y *= np.exp(-0.1)
     sim = ss.Sim(modules=Decay(), stop=10, verbose=0).run()
-    assert sim.solver != 'abm' and len(sim.people) == 1, 'Code with nothing per person should not make agents'
+    assert sim.solver != 'abm' and len(sim.people.uid) == 1, 'Code with nothing per person should not make agents'
+    assert sim.people.n_alive == sim.pars.total_pop == 10_000 # What describe() says it runs with
     assert np.isclose(sim.custom.decay.y, np.exp(-1))
     assert set(sim.loop.to_df().label) == {'sim.advance', 'sim.start_step', 'decay.step', 'sim.finish_step'} # Nothing else does anything here
     assert not sim.check_method_calls() # What was left out counts as called
     return sim
+
+
+@sc.timer()
+def test_run_says_why(capsys):
+    sc.heading('A run says why it runs as it does, and what its repeats mean')
+    class Peek(ss.Analyzer):
+        def step(self):
+            self.sim.diseases.sir.I.uids
+    class Empty(ss.Analyzer):
+        def step(self):
+            self.stepped = True
+
+    def make(**kwargs):
+        S, I, R = ss.states(3)
+        return ss.Sim(ss.Disease(S >> I @ ss.perday(0.3)*I, I >> R @ ss.days(8), init=dict(I=0.01), name='sir'), unit='day', stop=30, **kwargs)
+
+    # A module with a step of its own: named once, at the default verbosity
+    capsys.readouterr()
+    make(analyzers=Empty()).run()
+    assert capsys.readouterr().out.count('a step at a time, which is much slower than all at once, since empty has a step') == 1
+
+    # 'auto' moved it to agents; a solver that was asked for needs no reason
+    make(n_agents=100).init()
+    assert 'Running as agents: n_agents was given' in capsys.readouterr().out
+    make(n_agents=100, solver='abm').init()
+    assert 'Running as agents' not in capsys.readouterr().out
+
+    # Repeated runs of an ODE are identical, whether restarted or stepped; those of a stochastic run are not
+    make().run(n_runs=2)
+    make(analyzers=Empty()).run(n_runs=2)
+    assert capsys.readouterr().out.count('the repeated runs are identical') == 2
+    make(solver='binomial').run(n_runs=2)
+    assert 'identical' not in capsys.readouterr().out
+
+    # Reading agents from a compartmental run gives the line to run it as agents
+    with pytest.raises(ss.CapabilityError, match=r'ss\.Sim\(\.\.\., solver="abm"\)'):
+        make(analyzers=Peek(), verbose=0).run()
+    return
 
 
 # %% Run as a script

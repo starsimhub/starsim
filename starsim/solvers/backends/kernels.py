@@ -16,6 +16,7 @@ Used with: compartments; declared modules
 import os
 import sys
 import ast
+import glob
 import importlib
 import contextlib
 import functools as ft
@@ -107,9 +108,9 @@ Program = collections.namedtuple('Program', fields)
 Program.__doc__ = """
 The flows of a compartmental model, as the kernels take them (see `fields`)
 
-A new field must reach every engine that takes a program, or be refused by its `reason()`: the ODE (`step()`), the
-stochastic solvers (`draw()`, `place_rates()` and `sparse_events()`), the ODE in JAX (`ss.gradients.Run`, and
-`ss.gradients.reason()`), and the chain binomial in JAX (`ss.solvers.backends.chain`, and its `reason()`).
+A new field must reach every engine that takes a program, or be refused: the ODE (`step()`), the
+stochastic solvers (`draw()`, `place_rates()` and `sparse_events()`), and the ODE in JAX (`ss.gradients.Run`,
+and `ss.solvers.why_not()`).
 """
 
 # A movement register (see ss.geo.Mobility), as the kernels apply it
@@ -215,18 +216,18 @@ def hold(x):
     """ Nothing: a use of x, so that Numba keeps it to here, for what was borrowed from it (see `borrow()`) """
     return
 
-pieces = 4 # The stochastic solvers that take steps of their own length hold values that vary in time for a quarter of a step at a time: see step()
 golden = draws.GOLDEN # The step between the counters of a random stream: see uniform()
 sparse_flows = 256 # The flows above which the exact solver by place follows only the compartments that hold anyone: see sparse_events()
 row_groups = 50 # The groups from which a draw for every group is made as a vectorized row, which is faster for many groups (and slower for a few): measured for 1, 16, 50, and 260 groups, see v4_design/oct25/backlog/perf_jax.md
 
 
-compile_seconds = 60 # About how long compiling the kernels takes, once per install: runs that would take longer than this as plain Python are compiled first (by default: see choose())
+compile_seconds = 120 # About how long compiling the kernels for a first run takes, once per install (86 to 128 s measured, 2026-10-31, with nothing in Numba's cache): runs that would take longer than this as plain Python are compiled first (by default: see choose())
+compile_all_seconds = 300 # About how long `compile()` takes (360 s measured on a busy machine, 2026-10-31); the time of each part is in `ss.solvers.backends.cache.slow`
 note_after = 1 # The seconds of a plain run above which choose() says how long it would take compiled
 plain_total = 0.0 # The seconds that the runs taken as plain Python in this session would have taken, as estimated: see choose()
 noted = False # Whether choose() has said that a run is taken as plain Python, in this session
 chosen = False # Whether choose() has chosen to compile the kernels, in this session
-no_tables = (np.zeros((0, 0, 0)),)*4 # For a step whose program holds for the whole step: see step()
+no_tables = (np.zeros((0, 0, 0)),)*4 # For a step whose program is set already: see one_step()
 plain_copy = None # The copy of the kernels that runs as plain Python, once made: see uncompiled()
 on_disk = None # Whether the compiled kernels were found in Numba's cache, once looked for: see is_compiled()
 entries = ['run', 'run_many', 'one_step', 'advance', 'advance_threads', 'apply_events', 'apply_shifts', 'settle_places'] # What the engines call
@@ -304,14 +305,16 @@ def plain_seconds(p, y, npts, solver, n_sub=1):
     to 100 groups, over 20 and 50 places, Ghana measles over 260 districts, MEmilio's 50 counties, two SEIRs with
     stages tracked jointly, a stiff SIS, and an SIS with aging), it is within 0.75 to 1.6 times the time taken, and
     0.35 for the SIS with aging, whose epidemic needs more substeps than its rates at the start (see `substeps()`):
-    enough to choose whether to compile.
+    enough to choose whether to compile. The binomial and tau-leaping solvers add 70 µs for each draw, one for each flow, group, and
+    step or substep (measured 2026-10-31 on SEIRSs with 1 to 40 groups, within 0.7 to 1.1 times the time taken; without it, 0.1 to 0.2).
 
     Args:
         n_sub (int): the substeps in each step (see `substeps()`)
     """
     if solver == solvers['gillespie']:
         return y.sum()*len(p.src)*(1e-5 + 3e-7*work(p, y))
-    return evals(npts, solver, n_sub)*(1e-5 + 6e-7*work(p, y))
+    draws = npts*max(n_sub, 1)*len(p.src)*y.shape[1]*7e-5 if solver in [solvers['binomial'], solvers['tau']] else 0.0
+    return evals(npts, solver, n_sub)*(1e-5 + 6e-7*work(p, y)) + draws
 
 
 def compiled_seconds(p, y, npts, solver, n_sub=1):
@@ -341,12 +344,12 @@ def choose(seconds=0.0):
     The kernels to take a run with: the Rust ones (see `ss.solvers.backends.rust`) if they are in use, else these, compiled by
     Numba, or the same code as plain Python (see `uncompiled()`), as `ss.options.kernels` says
 
-    Compiling them takes about a minute, once per install (or ahead of time, with `ss.compile()`). By default
+    Compiling them takes about two minutes (`compile_seconds`), once per install (or ahead of time, with `ss.compile()`). By default
     (`ss.options.kernels = 'auto'`, without Rust) they are compiled first if the runs taken as plain Python in this session, with
     this one, would take longer than that (as a long run, or a calibration's many small runs, would), with a note
     saying so; and otherwise the run is taken as plain Python, with a note (once a session, for a run of more than
     `note_after` seconds) of how long it would take each way. A note is printed whatever the sim's `verbose`, since
-    a minute of silence looks like a hang.
+    minutes of silence look like a hang.
 
     Args:
         seconds (float): about how long the run (or runs) would take as plain Python: see `plain_seconds()`
@@ -367,7 +370,7 @@ def choose(seconds=0.0):
         plain_total = total
         if seconds >= note_after and not noted:
             noted = True
-            print(f'Note: running the solver as plain Python (about {seconds:.0f} s; 15 to 300 times faster compiled, after compiling once per install for about a minute: ss.compile())')
+            print(f'Note: running the solver as plain Python (about {seconds:.0f} s; 15 to 300 times faster compiled, after compiling once per install for about {compile_seconds/60:.0f} minutes: ss.compile())')
         return uncompiled()
     chosen = True
     which = 'this run' if seconds >= compile_seconds else 'the runs in this session'
@@ -377,12 +380,12 @@ def choose(seconds=0.0):
 
 def compile(verbose=True):
     """
-    Compile the kernels now (those of the compartmental solvers, the passes over the agents and the rest of what sims with agents use, and the draws of the chain binomial in JAX), so that no run waits for them: e.g. after installing Starsim (as `starsim compile` does), in a Docker image, in CI, or before a calibration
+    Compile the kernels now (those of the compartmental solvers, the passes over the agents and the rest of what sims with agents use), so that no run waits for them: e.g. after installing Starsim (as `starsim compile` does), in a Docker image, in CI, or before a calibration
 
-    Compiling takes about five minutes, once per install (and after an upgrade); the result is kept in Numba's cache,
-    beside the package (or, if that cannot be written to, in the user's cache folder, or in `NUMBA_CACHE_DIR` if it
-    is set). Until the kernels are compiled, small runs are taken as plain Python: see `ss.options.kernels`. With the
-    Rust kernels in use, there is nothing to compile: they are compiled already.
+    Compiling takes about five minutes (`compile_all_seconds`), once per install (and after an upgrade); the result is kept in Numba's cache,
+    beside the package (or, if that cannot be written to, in the user's cache folder, then a temporary folder, or in
+    `NUMBA_CACHE_DIR` if it is set). Until the kernels are compiled, small runs are taken as plain Python: see `ss.options.kernels`. With the
+    Rust kernels in use, there is nothing to compile: they are compiled already. To see which is the case, use `ss.compile_status()`.
 
     **Example**:
 
@@ -394,7 +397,7 @@ def compile(verbose=True):
         return
     T = sc.timer()
     if verbose and not is_compiled():
-        ss.solvers.backends.compiling('the solver kernels', 'Numba', 60, 180) # Then each part, as it is compiled
+        ss.solvers.backends.compiling('the solver kernels', 'Numba', compile_all_seconds*3//4, compile_all_seconds*3//2) # Then each part, as it is compiled
     def make(solver='binomial'):
         S, I, R = ss.states(3)
         sir = ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(10), init=dict(I=0.1), name='sir')
@@ -413,8 +416,6 @@ def compile(verbose=True):
         apply_events(engine.make_rng(), y, engine.register, 0, True)
         apply_shifts(engine.make_rng(), y, engine.shifts, 0, True, np.zeros((0, 2, y.shape[1])))
         settle_places(y, p, engine.dt, np.zeros((p.n_trans + p.n_movers, y.shape[1])))
-        if importlib.util.find_spec('jax') is not None: # The draws of the chain binomial in JAX
-            importlib.import_module('starsim.solvers.backends.chain').check()
         make('abm').run() # The passes over the agents (ss.solvers.backends.passes), which are cached apart from the kernels
         for sim in typical_sims(): # And the rest of what sims with agents compile on their first run
             sim.run()
@@ -423,18 +424,57 @@ def compile(verbose=True):
     return
 
 
+def compile_status():
+    """
+    Whether Starsim's numerical code is compiled, without compiling anything (it takes a few milliseconds)
+
+    From the shell, `starsim compile --check` says the same, and exits with 1 if it isn't compiled.
+
+    Returns:
+        An `sc.obj` of `engine` ('rust', 'numba', or 'python': what runs the kernels), `compiled` (True only if they run
+        at full speed from the first run, from the current code), `missing` (the parts for which they don't), and `summary` (a line saying so)
+
+    **Example**:
+
+        print(ss.compile_status().summary)
+    """
+    from . import passes
+    rust = ss.solvers.backends.rust
+    parts = {'the compartmental solvers':step, 'the agent solver':passes.bounds, 'the draws':draws.uniform} # One function for each file, since a file's functions go out of date together
+    cold = [part for part,func in parts.items() if not (func.signatures or func._cache._cache_file._load_index())]
+    if rust.on:
+        engine = 'rust'
+        src = glob.glob(os.path.join(os.path.dirname(__file__), '..', 'rust', 'src', '*.rs')) # Only in a clone of the repository
+        missing = ['the Rust kernels'] if src and max(map(os.path.getmtime, src)) > os.path.getmtime(rust.load().__file__) else []
+        if missing:
+            summary = 'Starsim kernels: Rust, OUT OF DATE (built before its source last changed, so results may be wrong): run "./build" in starsim/solvers/rust/'
+        elif cold:
+            summary = 'Starsim kernels: Rust, compiled (Numba\'s copy is not, which only comparing the two needs)'
+        else:
+            summary = 'Starsim kernels: Rust, compiled'
+    elif ss.options.kernels == 'python':
+        engine = 'python'
+        missing = list(parts)
+        summary = 'Starsim kernels: plain Python, NOT COMPILED, so runs are slow: set ss.options.kernels = "auto"'
+    else:
+        engine = 'numba'
+        missing = cold
+        summary = f'Starsim kernels: Numba, NOT COMPILED ({sc.strjoin(cold)}), so the first runs are slow: run "starsim compile" or ss.compile()' if cold else 'Starsim kernels: Numba, compiled'
+    return sc.obj(engine=engine, compiled=not missing, missing=missing, summary=summary)
+
+
 def note_uncompiled():
     """
-    On import, say that Starsim has not been compiled yet, unless it has, or `ss.options.uncompiled_warning` is
+    On import, say that Starsim's kernels aren't compiled (see `compile_status()`), unless `ss.options.uncompiled_warning` is
     False (`STARSIM_UNCOMPILED_WARNING=0`); not in the workers of `ss.parallel()`, nor for the `starsim` command
     """
     command = os.path.basename(getattr(sys, 'argv', [''])[0]) in ['-m', 'starsim', 'starsim.exe', 'starsim-script.py'] # The command (or python -m starsim), which says what it does itself
-    if not ss.solvers.backends.rust.on and ss.options.uncompiled_warning and mp.parent_process() is None and not command and not is_compiled():
-        print(uncompiled_note)
+    if ss.options.uncompiled_warning and mp.parent_process() is None and not command:
+        status = compile_status()
+        if not status.compiled:
+            print(status.summary)
     return
 
-
-uncompiled_note = 'Note: run "starsim compile" (or ss.compile()) to make Starsim 20-80 times faster for the first run of each kind of sim, and 20 times faster for compartmental runs; this takes about 5 minutes and only needs to be done once. Set STARSIM_UNCOMPILED_WARNING=0 to hide this note.' # Measured from an empty cache (2026-10-26): the first run of an SIR as 10,000 agents took 7 s, not 0.09 s; with demographics 8 s, not 0.34 s; an ODE over 10 years 0.43 s, not 0.02 s
 
 
 def typical_sims():
@@ -442,7 +482,7 @@ def typical_sims():
     import starsim.library as ssl
     small = dict(n_agents=1000, start=2000, stop=2002, verbose=0)
     sims = [
-        ss.Sim(diseases=['sis', 'sir'], networks=['random', 'sexual'], demographics=True, **small),
+        ss.Sim(diseases=[ss.SIS(beta=dict(randomnet=0.05, sexualnet=ss.peract(0.05))), ss.SIR(beta=dict(randomnet=0.1, sexualnet=ss.peract(0.1)))], networks=['random', 'sexual'], demographics=True, **small),
         ss.Sim(diseases=ssl.HIV(), networks='sexual', demographics=True, **small),
         ss.Sim(diseases=ssl.AgentSIR(), networks='random', interventions=ss.vaccinate(ss.Vaccine(efficacy=0.9), coverage=0.5), **small),
         ss.Sim(demographics=[ss.Pregnancy(), ss.Deaths()], networks='maternal', **small),
@@ -1656,7 +1696,14 @@ def by_block(matrix, v, size, block, out):
 
 @jit
 def share(pair, vals, v, size, block, out, by_columns):
-    """ The product of the time share between places (its entries: see `Program`) with a vector of places by levels (each level in turn, `block` of them), into out: `v @ share` if `by_columns`, else `share @ v` """
+    """ The product of the time share between places (its entries: see `Program`) with a vector of places by levels (each level in turn, `block` of them), into out: `v @ share` if `by_columns`, else `share @ v`; by BLAS if every pair of places has an entry (gravity between hundreds of places), which is a matrix, in order """
+    places = size//block
+    if len(vals) == places*places and places > 16:
+        matrix = vals.reshape(places, places)
+        for i in range(block):
+            part = v[i:size:block].copy() # Contiguous, as np.dot needs
+            out[i:size:block] = np.dot(part, matrix) if by_columns else np.dot(matrix, part)
+        return
     for i in range(size):
         out[i] = 0.0
     for k in range(len(vals)):
@@ -1671,18 +1718,6 @@ def share(pair, vals, v, size, block, out, by_columns):
 
 
 @jit
-def interp(out, table, row, th):
-    """ A part of the program at a fraction th of the way through a step, from its values at the start, middle, and end (rows row to row+2 of its table) """
-    a = (2*th - 1)*(th - 1) # Quadratic through the three points, so exact at each stage of a single RK4 step
-    b = 4*th*(1 - th)
-    c = th*(2*th - 1)
-    for i in range(out.shape[0]):
-        for g in range(out.shape[1]):
-            out[i, g] = a*table[row, i, g] + b*table[row+1, i, g] + c*table[row+2, i, g]
-    return
-
-
-@jit
 def convey(rng, y, p, w, flows, release):
     """
     The conveyors of fixed delays and minimum stays: release the people in the last slot of each, or move them all along one slot
@@ -1690,14 +1725,15 @@ def convey(rng, y, p, w, flows, release):
     A conveyor of K steps has K+1 slots. People arrive in slot 0 during a step, and at its
     end (`release=False`) everyone moves along one slot, so at each time point slot j holds
     the people who entered j steps ago, and the last those who have been there K steps.
-    These leave in the next step: the chain-binomial solver releases them at its start (once
-    the step's rates are worked out from the people as they were, as all its rates are), as
-    agents leave at the start of the step their dwell time ends in, and Gillespie and
-    tau-leaping at its middle (`release=True`); the ODE lets them leave at a constant rate
-    over the step (see `step()`), which is exact at each time point for a delay of whole steps.
-    The other exits of the state act on every slot, the last until its people leave it (for
-    the ODE, see `release_rates()`). A place with people in a conveyor is stepped by the exact
-    solver by place, since the people in it move.
+    These leave in the next step, at its middle (`release=True`), since they arrived through
+    a step, so the delay is K steps on average: Gillespie exactly there, and the chain-binomial
+    solver and tau-leaping after the first draws past it, so they count in those draws' rates,
+    and then arrive as anyone arriving by a flow does. With whole steps this is the order of
+    agents, who leave in the step their dwell time ends in, after its rates are worked out. The
+    ODE lets them leave at a constant rate over the step (see `step()`), which is exact at each
+    time point for a delay of whole steps. The other exits of the state act on every slot, the
+    last until its people leave it (for the ODE, see `release_rates()`). A place with people
+    in a conveyor is stepped by the exact solver by place, since the people in it move.
 
     Each conveyor is a set of operations after the flows' (see `Program.starts`), all CONVEY:
     the first one's argument is the flow the last slot leaves by, and the others' are its
@@ -1891,7 +1927,7 @@ def into_many(expr, caller, callee):
 
 
 @kernel(inline=into_many)
-def step(rng, y, p, w, dt, n_sub, solver, flows, tables, row):
+def step(rng, y, p, w, dt, n_sub, solver, flows, varying):
     """
     Take one timestep
 
@@ -1909,8 +1945,7 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, tables, row):
         n_sub (int): the number of substeps; if 0, for the ODE, enough that no compartment turns over, or grows through its inflows, by more than a quarter in one, chosen at the start of each step (tau-leaping and the exact solver choose their own)
         solver (int): which of `solvers` to use
         flows (array): filled in with the total of each transition and mover over the step
-        tables (tuple): the fixed, mult, consts, and rel_trans tables (see `run()`), with three rows per step
-        row (int): the row of the start of this step, or -1 if the program holds for the whole step
+        varying (bool): whether the program's values can differ from those of the step before (only the exact solver by place, which keeps each place's rates, needs to know)
     """
     rates, exposures, stack, groups, cells, dy, df, yt, chain, credits, rows = w
     n, local_n, vals, infectious = groups[0], groups[1], groups[2], groups[3]
@@ -1936,17 +1971,6 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, tables, row):
     while True:
         for stage in range(stages):
             ys = y if stage == 0 else yt # Where the rates are worked out
-            if row >= 0: # Values that vary in time, at the time of this stage; for the stochastic solvers, at the middle of each substep, or of each quarter of the step for those that take steps of their own length
-                if solver < 2:
-                    th = (sub + (0.0 if stage == 0 else (1.0 if stage == 3 else 0.5)))/max(n_sub, 1)
-                elif timed:
-                    th = (min(int((elapsed + 1e-12)*pieces/dt), pieces - 1) + 0.5)/pieces
-                else:
-                    th = (sub + 0.5)/max(n_sub, 1)
-                for k in range(4):
-                    if len(tables[k]) > 1:
-                        interp((p.fixed, p.mult, p.consts, p.rel_trans)[k], tables[k], row, th)
-                set_movers(p)
 
             # The rate of every flow, by group: per member of its source compartment, or in total for an inflow
             for f in range(nf):
@@ -1955,7 +1979,8 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, tables, row):
             if len(p.ops) and not by_place:
                 for g in range(ng): # The people in each group, and in the same place as each group
                     n[g] = 0
-                    for c in p.people:
+                for c in p.people:
+                    for g in range(ng):
                         n[g] += ys[c, g]
                 for i in range(p.n_places):
                     num[i] = 0
@@ -1975,8 +2000,10 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, tables, row):
                     for g in range(ng):
                         exposures[e, g] = 0
                         infectious[g] = 0
-                        for k in range(p.set_starts[s], p.set_starts[s+1]):
-                            infectious[g] += ys[p.set_comps[k], g]*p.rel_trans[e, g]
+                    for k in range(p.set_starts[s], p.set_starts[s+1]):
+                        c = p.set_comps[k]
+                        for g in range(ng):
+                            infectious[g] += ys[c, g]*p.rel_trans[e, g]
                     for t in range(len(p.sizes)):
                         size = p.sizes[t]
                         for i in range(size):
@@ -2102,28 +2129,22 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, tables, row):
                 if extra and solver < 2:
                     release_rates(y, p, rates, dt)
             if solver >= 2: # The stochastic solvers take it from here
-                end = dt if row < 0 else min(int((elapsed + 1e-12)*pieces/dt) + 1, pieces)*dt/pieces # The end of the piece of the step that values which vary in time are held for; events are exact within it, since the rates are held
-                if pending and timed: # The people due to leave a conveyor leave at the middle of the step
+                end = dt
+                if pending and solver == 4: # The people due to leave a conveyor leave at the middle of the step
                     end = min(end, dt/2)
                 if by_place: # The exact solver, place by place: the whole step (or piece) at once
-                    varying = row >= 0 or p.has_det # Rates that may have changed since the last step, in every place
-                    for k in range(4):
-                        varying = varying or len(tables[k]) > 1
-                    gillespie_places(rng, y, p, w, end - elapsed, flows, varying)
+                    gillespie_places(rng, y, p, w, end - elapsed, flows, varying or p.has_det) # Rates that may have changed since the last step, in every place
                     h = end - elapsed
                 elif solver == 4: # The exact solver: up to the next event
                     h = event(rng, y, p, w, end - elapsed, flows)
                 else:
                     if solver == 3: # Tau-leaping: a leap short enough that the rates change little over it
                         h = min(end - elapsed, 0.03/max(fastest, 1e-12))
-                    elif pending: # The chain-binomial solver: they leave at the start of the step, once the rates are worked out from the people as they were (as agents' scheduled exits come first, but not in the counts the rates use)
-                        convey(rng, y, p, w, flows, True)
-                        pending = False
                     draw(rng, y, p, w, h, flows, solver == 3)
                 if p.has_det and not by_place: # By place, the counts are settled after the step's events: see settle_places()
                     settle(y, p, rates, h, flows)
                 elapsed += h
-                if pending and timed and elapsed >= dt/2 - 1e-12:
+                if pending and elapsed >= dt/2 + (-1e-12 if solver == 4 else 1e-12): # At it for the exact solver; otherwise after the first draws that pass it (see convey())
                     convey(rng, y, p, w, flows, True)
                     pending = False
                 continue
@@ -2158,33 +2179,44 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, tables, row):
                 for c in range(nc):
                     for g in range(ng):
                         yt[c, g] = 1.0/yt[c, g] if yt[c, g] > 1 else 1.0
-            for f in range(nf):
+            for f in range(nf): # The groups inside what each flow does, not the other way round, so a loop over them is simple enough to be vectorized
                 s = p.src[f]
-                for g in range(ng):
-                    if s >= 0:
-                        amount = rates[f, g]*ys[s, g]
-                        if solver == 1:
-                            amount *= yt[s, g]
-                        dy[stage, s, g] -= amount
+                if s >= 0:
+                    for g in range(ng):
+                        vals[g] = rates[f, g]*ys[s, g]
+                    if solver == 1:
+                        for g in range(ng):
+                            vals[g] *= yt[s, g]
+                    for g in range(ng):
+                        dy[stage, s, g] -= vals[g]
+                else:
+                    for g in range(ng):
+                        vals[g] = rates[f, g]*p.inflow[f, g]
+                if p.named[f]:
+                    i, m = p.index[f], p.record[f]
+                    if m < 0:
+                        for g in range(ng):
+                            df[stage, i, g] += vals[g]
                     else:
-                        amount = rates[f, g]*p.inflow[f, g]
-                    if amount != 0:
-                        if p.named[f]:
-                            if p.record[f] < 0:
-                                df[stage, p.index[f], g] += amount
-                            else:
-                                for j in range(ng):
-                                    df[stage, p.index[f], j] += amount*p.maps[p.record[f], g, j]
-                        for k in range(p.tgt_starts[f], p.tgt_starts[f+1]):
-                            if p.tgt_rec[k] >= 0:
-                                df[stage, p.tgt_rec[k], g] += amount*p.tgt_w[k, g]
-                            if p.tgt_map[k] < 0:
-                                dy[stage, p.tgt_comp[k], g] += amount*p.tgt_w[k, g]
-                            else:
-                                for j in range(ng):
-                                    dy[stage, p.tgt_comp[k], j] += amount*p.tgt_w[k, g]*p.maps[p.tgt_map[k], g, j]
-                        for k in range(p.crd_starts[f], p.crd_starts[f+1]):
-                            df[stage, p.crd_index[k], g] += amount*p.crd_w[k, g]
+                        for g in range(ng):
+                            for j in range(ng):
+                                df[stage, i, j] += vals[g]*p.maps[m, g, j]
+                for k in range(p.tgt_starts[f], p.tgt_starts[f+1]):
+                    i, c, m = p.tgt_rec[k], p.tgt_comp[k], p.tgt_map[k]
+                    if i >= 0:
+                        for g in range(ng):
+                            df[stage, i, g] += vals[g]*p.tgt_w[k, g]
+                    if m < 0:
+                        for g in range(ng):
+                            dy[stage, c, g] += vals[g]*p.tgt_w[k, g]
+                    else:
+                        for g in range(ng):
+                            for j in range(ng):
+                                dy[stage, c, j] += vals[g]*p.tgt_w[k, g]*p.maps[m, g, j]
+                for k in range(p.crd_starts[f], p.crd_starts[f+1]):
+                    i = p.crd_index[k]
+                    for g in range(ng):
+                        df[stage, i, g] += vals[g]*p.crd_w[k, g]
 
             if auto and sub == 0 and stage == 0: # ... nor grows by more than a quarter in one, through its inflows (an epidemic's infected, growing much faster than they recover)
                 growing = 0.0
@@ -2431,7 +2463,13 @@ def set_movers(p):
 
 
 @kernel(inline='always')
-def time_point(rng, y, p, w, ti, row, per_step, dt, n_sub, solver, flows, tables, reg, sh, tally):
+def varies(tables):
+    """ Whether any of the tables has a row for each step """
+    return len(tables[0]) > 1 or len(tables[1]) > 1 or len(tables[2]) > 1 or len(tables[3]) > 1
+
+
+@kernel(inline='always')
+def time_point(rng, y, p, w, ti, row, dt, n_sub, solver, flows, tables, reg, sh, tally):
     """
     Step ti of a run, from time point ti-1 to ti, as `run()`, `run_many()` and `advance()` take it, in this order: the
     deliveries at its start (added to `tally`), the values of the step (row `row` of the tables), the step, the events
@@ -2446,7 +2484,7 @@ def time_point(rng, y, p, w, ti, row, per_step, dt, n_sub, solver, flows, tables
             wake(w)
     set_step((p.fixed, p.mult, p.consts, p.rel_trans), row, tables)
     set_movers(p)
-    step(rng, y, p, w, dt, n_sub, solver, flows, tables, row if per_step == 3 else -1)
+    step(rng, y, p, w, dt, n_sub, solver, flows, varies(tables))
     short = 0.0
     if len(reg.src): # The events dated at its end (not called if there are none, since passing the register costs as much as a small step)
         short = apply_events(rng, y, reg, ti, whole)
@@ -2458,7 +2496,7 @@ def time_point(rng, y, p, w, ti, row, per_step, dt, n_sub, solver, flows, tables
 
 
 @jit
-def run(rng, y, p, dt, npts, solver, n_sub, fixed, mult, consts, rel_trans, reg, sh, tally, per_step, start):
+def run(rng, y, p, dt, npts, solver, n_sub, fixed, mult, consts, rel_trans, reg, sh, tally, start):
     """
     Take every step of a run, or the steps from time point `start` on
 
@@ -2475,7 +2513,6 @@ def run(rng, y, p, dt, npts, solver, n_sub, fixed, mult, consts, rel_trans, reg,
         reg (Register): the events of a movement register, applied at the end of the step they are dated in (those of the start are already in y)
         sh (Shifts): the deliveries, applied at the start of each step they happen in; `due` is by the time point the step starts from
         tally (array): filled in with the number each delivery reached and found eligible, by group, at the time point of the step it happened in, its end (time points by deliveries by 2 by groups)
-        per_step (int): 3 if the tables have the values at the start, middle, and end of each step (for the ODE), and otherwise 1
         start (int): the time point that y is at; the run is taken from there to time point npts-1, so it can be taken a part at a time
             (the tables then start at the step from `start`, unless they have a single entry)
 
@@ -2494,14 +2531,14 @@ def run(rng, y, p, dt, npts, solver, n_sub, fixed, mult, consts, rel_trans, reg,
     stocks[0] = y
     for ti in range(start + 1, npts): # Step ti goes from time point ti-1 to ti, with the values at the start of it
         k = ti - start
-        short += time_point(rng, y, p, w, ti, (k-1)*per_step, per_step, dt, n_sub, solver, flows[k], tables, reg, sh, tally[k])
+        short += time_point(rng, y, p, w, ti, k-1, dt, n_sub, solver, flows[k], tables, reg, sh, tally[k])
         stocks[k] = y
     hold(ws)
     return y, stocks, flows, short
 
 
 @jit
-def run_many(rngs, ys, p, dt, start, npts, solver, n_sub, fixed, mult, consts, rel_trans, reg, sh, stocks, flows, stocks_g, flows_g, tally, tally_g, state_of, rows, grp_state, grp_flow, per_step=1):
+def run_many(rngs, ys, p, dt, start, npts, solver, n_sub, fixed, mult, consts, rel_trans, reg, sh, stocks, flows, stocks_g, flows_g, tally, tally_g, state_of, rows, grp_state, grp_flow):
     """
     Take the steps from time point `start` to npts-1 of many runs that differ only in their random numbers, filling in their results
 
@@ -2535,7 +2572,7 @@ def run_many(rngs, ys, p, dt, start, npts, solver, n_sub, fixed, mult, consts, r
             if ti > start:
                 k = ti - start
                 now_sh[:] = 0
-                time_point(rng, y, p, w, ti, (k-1)*per_step, per_step, dt, n_sub, solver, now, tables, reg, sh, now_sh)
+                time_point(rng, y, p, w, ti, k-1, dt, n_sub, solver, now, tables, reg, sh, now_sh)
                 if len(sh.to):
                     for d in range(len(sh.to)):
                         for g in range(ng):
@@ -2563,7 +2600,7 @@ def run_many(rngs, ys, p, dt, start, npts, solver, n_sub, fixed, mult, consts, r
 
 
 @jit
-def advance(rngs, p, ys, first, last, dt, start, end, solver, n_sub, fixed, mult, consts, rel_trans, sh_vals, reg, sh, state_of, stocks, flows, per_step=1, row0=0):
+def advance(rngs, p, ys, first, last, dt, start, end, solver, n_sub, fixed, mult, consts, rel_trans, sh_vals, reg, sh, state_of, stocks, flows, row0=0):
     """
     Take steps start+1 to end of runs first to last-1 (particles of a particle filter), each from its own compartments, with its own random numbers
 
@@ -2604,9 +2641,9 @@ def advance(rngs, p, ys, first, last, dt, start, end, solver, n_sub, fixed, mult
                 apply_shifts(rng, y, sh, ti-1, solver >= 2, tally)
                 if sh.due[:, ti-1].any():
                     wake(w)
-            set_step(parts, (ti-1)*per_step - row0, tables)
+            set_step(parts, ti - 1 - row0, tables)
             set_movers(p)
-            step(rng, y, p, w, dt, n_sub, solver, now, tables, (ti-1)*per_step - row0 if per_step == 3 else -1) # Compiled into advance(): see into_many()
+            step(rng, y, p, w, dt, n_sub, solver, now, varies(tables)) # Compiled into advance(): see into_many()
             if len(reg.src):
                 apply_events(rng, y, reg, ti, solver >= 2)
                 if solver == 4 and p.local:
@@ -2631,23 +2668,26 @@ def advance(rngs, p, ys, first, last, dt, start, end, solver, n_sub, fixed, mult
 
 
 @kernel(parallel=True)
-def advance_threads(rngs, progs, ys, dt, start, end, solver, n_sub, fixed, mult, consts, rel_trans, sh_vals, reg, sh, state_of, stocks, flows, per_step=1, row0=0):
+def advance_threads(rngs, progs, ys, dt, start, end, solver, n_sub, fixed, mult, consts, rel_trans, sh_vals, reg, sh, state_of, stocks, flows, row0=0):
     """ `advance()` for every run, with the runs shared between threads: one program for each thread (progs, a typed list of copies), since a step changes the parts of it that vary in time """
     k = len(progs)
     bounds = np.arange(k + 1)*len(ys)//k # The runs of each thread
     threads = np.arange(k) # Indices as signed integers, which the typed list takes, since a prange index is unsigned
     for i in nb.prange(k):
         c = threads[i]
-        advance(rngs, progs[c], ys, bounds[c], bounds[c+1], dt, start, end, solver, n_sub, fixed, mult, consts, rel_trans, sh_vals, reg, sh, state_of, stocks, flows, per_step, row0)
+        advance(rngs, progs[c], ys, bounds[c], bounds[c+1], dt, start, end, solver, n_sub, fixed, mult, consts, rel_trans, sh_vals, reg, sh, state_of, stocks, flows, row0)
     return
 
 
 @jit
 def one_step(rng, y, p, dt, solver, n_sub, tables, row):
-    """ Take one step, and return the compartments after it and the total of each transition and mover over it: see `run()` and `step()` """
+    """ Take one step, with the values of row `row` of the tables (if -1, the program as it is, which holds from the step before), and return the compartments after it and the total of each transition and mover over it: see `run()` and `step()` """
     y = y.copy()
     flows = np.empty((p.n_trans + p.n_movers, y.shape[1]))
-    step(rng, y, p, workspace(y, p), dt, n_sub, solver, flows, tables, row)
+    if row >= 0:
+        set_step((p.fixed, p.mult, p.consts, p.rel_trans), row, tables)
+        set_movers(p)
+    step(rng, y, p, workspace(y, p), dt, n_sub, solver, flows, row >= 0)
     return y, flows
 
 

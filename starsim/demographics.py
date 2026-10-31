@@ -273,6 +273,10 @@ class Births(Demographics):
         self.parent_dist = ss.randint(low=0, high=2)
         return
 
+    def agent_reasons(self, sim):
+        """ It adds agents, unless it says it works on groups """
+        return [] if getattr(self, 'compartmental', None) else [f'"{self.name}" ({type(self).__name__}) adds and removes agents; ss.birth() and ss.death() in the disease are its compartmental form']
+
     def standardize_birth_data(self):
         """ Standardize/validate birth rates - handled in an external file due to shared functionality """
         birth_rate = ss.utils.standardize_data(data=self.pars.birth_rate, metadata=self.metadata)
@@ -484,6 +488,8 @@ class Deaths(Demographics):
         self.n_deaths = 0 # For results tracking
         return
 
+    agent_reasons = Births.agent_reasons
+
     def standardize_death_data(self):
         """ Standardize/validate death rates - handled in an external file due to shared functionality """
         death_rate = ss.utils.standardize_data(data=self.pars.death_rate, metadata=self.metadata)
@@ -604,8 +610,8 @@ class Pregnancy(Demographics, ss.Disease):
     solver named explicitly runs a small approximate form (see `compartmental_form()`).
 
     For other modules, `preg.delivery` happens to the mother, and to her fetuses (if they are agents: see `_init_fetus()`)
-    before they are born, so a death of a fetus `on=preg.delivery` is a stillbirth; `preg.birth` happens to the newborns,
-    so a neonatal death is `on=preg.birth`.
+    before they are born, so a death of a fetus `where=preg.delivery` is a stillbirth; `preg.birth` happens to the newborns,
+    so a neonatal death is `where=preg.birth`.
 
     As agents, a live birth starts breastfeeding (`lactating`, with `p_breastfeed`), or restarts it for a woman breastfeeding
     already; it ends after `dur_breastfeed`, or at once if a child of hers dies before the age of 1. It is a state of each
@@ -632,8 +638,7 @@ class Pregnancy(Demographics, ss.Disease):
         min_age (float): minimum age of conception
         max_age (float): maximum age of conception
         dur_pregnancy (dur/Dist): duration of pregnancy; a number is in weeks
-        p_loss (bernoulli): chance of a spontaneous loss in each step of the module
-        loss_rate (rate/func): hazard of a spontaneous loss (instead of `p_loss`), or a function of `(sim, uids)`
+        loss_rate (rate/func): hazard of a spontaneous loss, or a function of `(sim, uids)`
         loss_threshold (dur): gestational age that separates a miscarriage from a stillbirth
         infant_rate (rate/func): hazard of death before the age of 1, for the children (a function of the sim and the agents is called only for the children aged 0 to 1); `ss.mother(x)` in it reads each child's mother (so fetuses need not be agents)
         p_breastfeed (bernoulli): chance a mother breastfeeds a newborn
@@ -660,7 +665,7 @@ class Pregnancy(Demographics, ss.Disease):
     first = 'NP' # Where people start, and are born into
     fertility      = ss.par(None, doc='The hazard of conception for each woman: see Pregnancy.conception_rate()')
     p_abortion     = ss.par(0.0, doc='Chance a pregnancy ends in an abortion, at conception')
-    loss_rate      = ss.par(ss.peryear(0.0), doc='Hazard of a spontaneous loss (from p_loss)')
+    loss_rate      = ss.par(ss.peryear(0.0), doc='Hazard of a spontaneous loss')
     loss_threshold = ss.par(ss.weeks(20), doc='Gestational age below which a loss is a miscarriage, and above which a stillbirth')
     maternal_rate  = ss.par(ss.peryear(0.0), doc='Hazard of a maternal death while pregnant')
     infant_rate    = ss.par(ss.peryear(0.0), doc='Hazard of death before the age of 1, for the children (infant mortality)')
@@ -677,38 +682,12 @@ class Pregnancy(Demographics, ss.Disease):
 
     sets_unit = False # Its typed defaults (weeks and years) do not set the unit of the model's bare numbers: see ss.solvers.choose.init_unit()
 
-    _v3_methods = ['make_p_conceive', 'standardize_fertility_data', 'set_ptb', 'set_rel_sus', 'updates_pre', 'update_breastfeeding', 'process_delivery',
-                   '_post_delivery', 'set_breastfeeding', 'process_newborns', 'progress_pregnancies', 'update_maternal_deaths', 'select_conceivers',
-                   '_make_newborn_uids', '_set_embryo_states', 'make_embryos', 'make_pregnancies', 'process_maternal_deaths', 'process_prenatal_deaths',
-                   'process_neonatal_deaths'] # The hooks of Starsim 3's coded pregnancy (the methods its own steps called), which this one never calls; not its properties and helpers (fecund, tri1_uids, _get_uids, ...), which a subclass may define for its own code
-
-    _v3_attrs = dict(ti_delivery='ti_exit_P, the step of the scheduled delivery (np.ceil() of it for a whole step)', ti_pregnant='ti_P', pregnant='P',
-                     breastfeeding='lactating') # Attributes of Starsim 3's coded pregnancy, and what they are now
-
-    def __getattr__(self, attr):
-        """ An attribute of Starsim 3's pregnancy says what it is now, rather than suggesting a near name """
-        now = type(self)._v3_attrs.get(attr)
-        if now is not None:
-            raise AttributeError(f'"{attr}" is from Starsim 3\'s ss.Pregnancy; it is now {now}')
-        return super().__getattr__(attr)
-
-    def __init_subclass__(cls, **kwargs):
-        """ A subclass that overrides a method of Starsim 3's pregnancy would be silently ignored, since this one never calls it """
-        super().__init_subclass__(**kwargs)
-        overridden = [name for name in cls._v3_methods if name in vars(cls)]
-        if overridden:
-            errormsg = (f'{cls.__name__} defines {sc.strjoin(overridden)}, from Starsim 3\'s ss.Pregnancy, which v4\'s declared one never calls, so it would be silently ignored.\n'
-                        f'     Use its seams instead: fertility= (a rate, or a function of (sim, uids); conception_rate() by default) for who conceives; ss.modify() of its transitions (preg.conception, preg.miscarriage, ...) and its parameters (maternal_rate, infant_rate, ...);\n'
-                        f'     since_birth and lactating for postpartum and breastfeeding; ss.on(preg.birth), or add_callback() from code, at a delivery or loss (see the migrate-starsim3 skill).')
-            raise ss.CapabilityError(errormsg)
-        return
-
     def __init__(self, pars=None, fetus='auto', metadata=None, **kwargs):
         declared = [k for k,v in ss.transitions.class_members(type(self)).items() if isinstance(v, ss.par)]
         given = sc.mergedicts(pars, {k:kwargs.pop(k) for k in list(kwargs) if k not in ss.Timeline.keywords + ['label', 'strains'] and not (k in declared and isinstance(kwargs[k], ss.par))})
         kwargs.setdefault('name', 'pregnancy')
         super().__init__(**kwargs)
-        self.define_pars( # Starsim 3's parameters, which its code reads rather than its graph (so they are in code_pars: see ss.Disease.define_pars())
+        self.define_pars( # The parameters its code reads rather than its graph (so they are in code_pars: see ss.Disease.define_pars())
             fertility_rate = ss.peryear(100), # A number or a dataframe
             rel_fertility = 1, # Scales all fertility rates, useful if a dataframe is used
             p_infertile = ss.bernoulli(p=0), # Primary infertility
@@ -721,7 +700,6 @@ class Pregnancy(Demographics, ss.Disease):
             rr_ptb = ss.normal(loc=1, scale=0.1), # Baseline relative risk of preterm birth, from factors other than the mother's age
             rr_ptb_age = np.array([[18, 35, 1000], [1.2, 1, 1.2]]), # Relative risk of preterm birth by the mother's age
             p_maternal_death = ss.bernoulli(0), # At delivery
-            p_loss = ss.bernoulli(p=ss.probperweek(0)), # Chance of a spontaneous loss per week of pregnancy (a bare number is per week); becomes loss_rate
             sex_ratio = ss.bernoulli(0.5), # Share of babies born female
             preterm_threshold = ss.weeks(37),
             very_preterm_threshold = ss.weeks(32),
@@ -739,7 +717,7 @@ class Pregnancy(Demographics, ss.Disease):
         graph = {k:v for k,v in given.items() if k not in own}
         if 'dur_pregnancy' in graph:
             dp = graph['dur_pregnancy']
-            if sc.isnumber(dp): # A number is in weeks, as in Starsim 3
+            if sc.isnumber(dp): # A number is in weeks, as its default is
                 dp = ss.weeks(dp)
             if isinstance(dp, ss.dur):
                 dp = ss.constant(dp)
@@ -836,10 +814,6 @@ class Pregnancy(Demographics, ss.Disease):
             self.fertility_rate_data = standardize_fertility_data(self)
             self.fertility_rows = ss.demographics.rate_rows(self.fertility_rate_data)
             self.pars.rate_units = ss.demographics.infer_rate_units(pars.rate_units, self.fertility_rate_data, 'fertility_rate')
-        p_loss = pars.p_loss.pars.p if isinstance(pars.p_loss, ss.bernoulli) else pars.p_loss # A chance per week of pregnancy (a bare number is per week, as in Starsim 3) is a hazard
-        p_loss = p_loss if isinstance(p_loss, ss.TimePar) else ss.probperweek(p_loss)
-        if np.any(np.asarray(p_loss.value) > 0): # Before the engine lays out the clocks, which depend on it
-            self.pars.update(loss_rate=p_loss)
         self._gate_infant()
         if 'parity' in [strat.name for strat in sim.groups.strats] and self.graph.transitions.delivery.increment is None: # Parity as a counter: up one at each delivery
             self.graph.transitions.delivery.increment = dict(parity=1)
@@ -899,7 +873,7 @@ class Pregnancy(Demographics, ss.Disease):
             if self.fetus and self.abm:
                 self._conceive(kept, self.ti)
                 for mod in self.sim.declared: # The start is counted again, with them in each module's first state
-                    if mod is not self and isinstance(getattr(mod, 'engine', None), ss.solvers.Agents):
+                    if mod is not self and mod.abm:
                         mod.engine.live = None
                         mod.engine.record_stocks()
         note = f'{self.name}: women pregnant at the start, conceived over the {"step" if steps == 1 else f"{steps} steps"} before it (burnin=True)'
@@ -1002,7 +976,7 @@ class Pregnancy(Demographics, ss.Disease):
         new = engine.grow_children(tr, moms, ti, counts=counts, age=age, into=False)
         self.fetal[new] = True
         for mod in self.sim.declared: # Each module's first state, whatever its arrays' defaults (as people placed at the start would be)
-            if mod is not self and isinstance(getattr(mod, 'engine', None), ss.solvers.Agents):
+            if mod is not self and mod.abm:
                 mod.engine.put_first(new)
         for net in self.sim.networks.values():
             if isinstance(net, ss.PrenatalNet):
@@ -1295,10 +1269,6 @@ class Pregnancy(Demographics, ss.Disease):
         if self.callbacks and engine._started: # The events of these deaths (losses, infant deaths) are recorded after the step's callbacks, and are no longer news by the next step's
             self.run_callbacks()
         return
-
-    @property
-    def abm(self):
-        return isinstance(self.engine, ss.solvers.Agents)
 
     def conception_rate(self, sim):
         """

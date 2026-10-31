@@ -16,30 +16,6 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 
 
-class Levels(sc.obj):
-    """ A result across runs split by a dimension: a result across runs for each level, which can be plotted together """
-    def plot(self, fig=None, ax=None, lines=False, log=False, **kwargs):
-        """ Plot each level's median and interval (or every run, if `lines=True`) on the same axes; the other arguments are as for `ss.Result.plot()`
-
-        Args:
-            fig (Figure): the figure to plot on
-            ax (Axes): the axes to plot on
-            lines (bool): if True, plot every run rather than the median and interval
-            log (bool): whether to use a log scale for the y-axis
-            kwargs (dict): passed to `ss.plot_args()`
-        """
-        kw = ss.plot_args(kwargs, alpha=0.8)
-        given = fig is not None or ax is not None
-        with ss.style(**kw.style):
-            ax = get_ax(fig, ax, kw)
-            for label,res in self.items():
-                res._draw(ax, kw, label=label, lines=lines, floor=False)
-            set_scale(ax, res, log)
-            ax.legend(**kw.legend)
-            ax.set_title(res.full_label)
-        return ss.return_fig(ax.figure, given=given, **kw.return_fig)
-
-
 def get_ax(fig, ax, kw):
     """ The axes to plot a result into: those given, else the figure's current axes (made if it has none), else those of a new figure """
     if ax is not None:
@@ -106,7 +82,7 @@ class Result(ss.arrays.BaseArr):
 
     Args:
         module (str): the name or label of the parent module, e.g. 'SIR'
-        name (str): the name of this result, e.g. 'new_infections'
+        name (str): the name of this result, e.g. 'infection'
         shape (int/tuple): the shape of the result array (usually `module.npts`)
         scale (bool): whether the result scales with the population (by `pop_scale`, the people each agent stands for): by default ('auto'), by its kind, so a flow or stock (a count, e.g. infections) does, and a ratio (e.g. prevalence) does not
         auto_plot (bool): whether to include automatically in `sim.plot()` results
@@ -130,10 +106,10 @@ class Result(ss.arrays.BaseArr):
 
     Examples:
         ```python
-        res = ss.Result('new_infections', columns=['wild', 'alpha'], shape=10)
+        res = ss.Result('infection', columns=['wild', 'alpha'], shape=10)
         res[3] = [20, 5] # Set the values for timestep 3
         res['alpha'][4] = 8 # Set one value for timestep 4
-        res['alpha'].label # Returns 'new_infections (alpha)'
+        res['alpha'].label # Returns 'infection (alpha)'
         ```
 
     A result across the runs of a MultiSim (`msim.results.sir.I`) is the same result with a
@@ -150,9 +126,15 @@ class Result(ss.arrays.BaseArr):
         ```
     """
     runs = None # For a result across the runs of a MultiSim: one row per run (see above)
+    part_dims = ['disease', 'edge'] # The dimensions of the keys of by_edge
+    by_edge = dests = family = None # What selects from it besides runs and groups, kept as results: see axes() and parts_after()
+    strats = dims = strata = denom = denom_dims = group_ti = no_groups = None # The values by group: see init_groups()
+    split = parts = None # The result it was split from (see by()), and for a ratio not by group, the results it is made of
+    in_people, use_years = False, False # Written in people already (see people_scale()), and labeled by years (see resample())
+    write_scale = 1.0 # What the values by group are multiplied by when written: see people_scale()
     def __getattr__(self, attr):
         """ The flow to one destination of a transition with several (`res.cin.X`); otherwise, as `ss.arrays.BaseArr` """
-        dests = self.__dict__.get('dests')
+        dests = self.dests
         if dests and attr in dests:
             return dests[attr]
         return super().__getattr__(attr)
@@ -300,72 +282,139 @@ class Result(ss.arrays.BaseArr):
             res.syndromic.cured.select(disease='ct') # A treatment's results for one disease (or edge=) of several
             ```
         """
-        split = self.__dict__.get('_by') # A result split by one dimension (see by()): select from the result it came from, then split it again, so the two can come in either order
-        if split is not None and dims and run is None and split[2] is self.values: # Not if it was changed since, e.g. resampled
-            source, dim, _ = split
+        if self.split is not None and dims and run is None and self.split[2] is self.values: # A result split by one dimension (see by()): select from the result it came from, then split it again, so the two can come in either order; not if it was changed since, e.g. resampled
+            source, dim, _ = self.split
             if dim in dims:
                 errormsg = f'"{self.name}" is split by "{dim}", so select a level of it before splitting (res.select({dim}=...)), or take its column'
                 raise ValueError(errormsg)
             return source.select(**dims).by(dim)
-        if 'to' in dims: # The flow to some of the destinations of a transition with several
-            to = sc.tolist(dims.pop('to'))
-            dests = self.__dict__.get('dests')
-            if not dests:
-                errormsg = f'The result "{self.name}" has no destinations to select: only a transition with several (e.g. C -> X | R) has a flow to each'
-                raise ValueError(errormsg)
-            unknown = [name for name in to if name not in dests]
-            if unknown:
-                errormsg = f'"{self.name}" has no destination {sc.strjoin(unknown)}; its destinations are {sc.strjoin(dests.keys())}'
-                raise KeyError(errormsg)
-            out = dests[to[0]]
-            for name in to[1:]:
-                out = out + dests[name]
-            return out.select(run=run, **dims)
-        pick = {key:dims.pop(key) for key in self.part_dims if key in dims}
-        if pick:
-            out = self._select_parts(pick)
-            return out.select(run=run, **dims) if (dims or run is not None) else out
-        out = self
-        if self.runs is not None:
-            named = {str(col).rpartition('.')[2]:col for col in self.runs.columns if '.' in str(col)} # A parameter swept by its full name ('sir.beta') can be selected by its own (beta=0.3)
-            dims = {(named[key] if key not in self.runs.columns and key in named else key):val for key,val in dims.items()}
-            coords = {key:val for key,val in dims.items() if key in self.runs.columns}
-            dims = {key:val for key,val in dims.items() if key not in coords}
-            if coords:
-                out = out.take(out.match_runs(coords))
-            if run is not None:
-                out = out.take(run)
-        elif run is not None or 'scenario' in dims:
-            errormsg = f'The result "{self.name}" is of one run, so it has no runs or scenarios to select'
+        if run is not None and self.runs is None:
+            errormsg = f'The result "{self.name}" is of one run, so it has no runs to select'
             raise ValueError(errormsg)
-        if not dims:
-            return out
-        strats = out._check_strata()
-        coords = strats[0].sim_coords
-        keep = np.ones(out.strata.shape[-1], dtype=bool)
-        keep_den = keep.copy() # For a ratio, the groups of the denominator: a dimension it does not have is added up over
-        den_dims = getattr(out, 'denom_dims', None)
-        for dim,levels in dims.items():
-            names = [strat.name for strat in strats]
-            out._check_dim(dim)
-            d = names.index(dim)
-            inds = [strats[d].index(level) for level in sc.tolist(levels)]
-            keep &= np.isin(coords[:, d], inds)
-            if den_dims is None or dim in den_dims:
-                keep_den &= np.isin(coords[:, d], inds)
-        out = out._substrata(keep, keep_den)
-        out.label = f'{self.label} ({", ".join(f"{k}={v}" for k,v in dims.items())})'
+        for dim in dims:
+            self._axis(dim)
+        out = self
+        for dim in self.axes(): # In this order, since e.g. the flow to a destination is stratified, but a group of a result has no destinations
+            if dim in dims:
+                out = out._axis(dim)[1](sc.tolist(dims[dim]))
+        if run is not None:
+            out = out.take(run)
+        labeled = {k:v for k,v in dims.items() if k not in self._run_cols().values()}
+        if labeled:
+            out.label = f'{self.label} ({", ".join(f"{k}={v}" for k,v in labeled.items())})'
+        return out
+
+    def axes(self):
+        """
+        The dimensions of this result, whichever way they are kept, for `select()` and `by()`: for each, its levels, and a function that gives the result for a list of them
+
+        A result has the destinations of a transition with several (`to`), the parts of a treatment of several diseases or
+        transitions (`disease`, `edge`), the strains of a family with courses of their own, the scenarios and parameters of a
+        result across runs, and the groups of a stratified result. The values themselves have only the axes of `t_axis` and `columns`.
+        """
+        out = {}
+        if self.dests:
+            out['to'] = (list(self.dests), self._pick_dests)
+        if self.by_edge:
+            for i,dim in enumerate(self.part_dims):
+                out[dim] = ([*dict.fromkeys(key[i] for key in self.by_edge if key[i] is not None)], functools.partial(self._pick_parts, dim))
+        if self.family is not None:
+            out[self.family[0]] = (list(self.family[1]), self._pick_member)
+        for col,short in self._run_cols().items():
+            out[short] = (distinct(self.runs[col]), functools.partial(self._pick_runs, col))
+        if self.strata is not None:
+            for strat in self.strats:
+                if strat.name in (self.dims or [strat.name]): # A state has only the dimensions it was stratified by
+                    out[strat.name] = (strat.labels, functools.partial(self._pick_groups, strat))
+        return out
+
+    def _axis(self, dim):
+        """ The levels of a dimension, and how to pick them (see `axes()`), or an error saying what there is """
+        axes = self.axes()
+        if dim in axes:
+            return axes[dim]
+        if self.strata is None:
+            errormsg = f'The result "{self.name}" has no dimension "{dim}": it is not stratified, so there is nothing to select'
+            errormsg += f' ({self.no_groups})' if self.no_groups else ''
+            raise ValueError(errormsg)
+        errormsg = f'The result "{self.name}" has no dimension "{dim}"; its dimensions are {list(axes)}'
+        raise KeyError(errormsg)
+
+    def _run_cols(self):
+        """ The columns of `runs` that can be selected, each by the name it is selected by: a parameter swept by its full name ('sir.beta') can be selected by its own (beta=0.3) """
+        return {} if self.runs is None else {col:str(col).rpartition('.')[2] for col in self.runs.columns}
+
+    def _pick_dests(self, levels):
+        """ The flow to some of the destinations of a transition with several """
+        unknown = [name for name in levels if name not in self.dests]
+        if unknown:
+            errormsg = f'"{self.name}" has no destination {sc.strjoin(unknown)}; its destinations are {sc.strjoin(self.dests.keys())}'
+            raise KeyError(errormsg)
+        return sum((self.dests[name] for name in levels[1:]), self.dests[levels[0]]).asnew()
+
+    def _pick_parts(self, dim, levels):
+        """ The sum of the parts of a treatment for some diseases or transitions """
+        i = self.part_dims.index(dim)
+        keep = {key:res for key,res in self.by_edge.items() if key[i] in levels}
+        if not keep:
+            errormsg = f'The result "{self.name}" has no part with {dim}={levels}; its parts are {sc.strjoin(".".join(k for k in key if k) for key in self.by_edge)}'
+            raise KeyError(errormsg)
+        out = self._like(np.sum([res.values for res in keep.values()], axis=0), runs=self.runs, by_edge=keep)
+        if self.strata is not None and all(res.strata is not None for res in keep.values()):
+            out.__dict__.update(strata=np.sum([res.strata for res in keep.values()], axis=0), strats=self.strats, dims=self.dims, group_ti=self.group_ti)
+        return out
+
+    def _pick_member(self, levels):
+        """ The sum of some members' own results (see `ss.strains.Family`) """
+        return self._like(np.sum([self.family[1][level].values for level in levels], axis=0), runs=self.runs)
+
+    def _pick_runs(self, col, levels):
+        """ The runs with some of the values of a column of `runs` """
+        return self.take(self.match_runs({col:levels}))
+
+    def _pick_groups(self, strat, levels):
+        """ The groups with some levels of a dimension, as a result that can be selected from or split again: the groups left out are zero """
+        keep, keep_den = self._keep(strat, levels)
+        denom = None if self.denom is None else self.denom*keep_den
+        return self._like(self._total(keep, keep_den), runs=self.runs, timevec=self.group_timevec, strata=self.strata*keep, denom=denom, denom_dims=self.denom_dims, strats=self.strats, dims=self.dims)
+
+    def _keep(self, strat, levels):
+        """ Which groups have these levels of a dimension, and which of the denominator of a ratio, where a dimension it does not have is added up over """
+        d = [other.name for other in self.strats].index(strat.name)
+        keep = np.isin(self.strats[0].sim_coords[:, d], [strat.index(level) for level in levels])
+        return keep, keep if self.denom_dims is None or strat.name in self.denom_dims else np.ones_like(keep)
+
+    def _total(self, keep, keep_den):
+        """ The value of some of the groups: for a ratio, the numerator and denominator are each added up over the groups, then divided """
+        values = self.strata[..., keep].sum(axis=-1)
+        if self.denom is None:
+            return values
+        denom = self.denom[..., keep_den].sum(axis=-1)
+        return np.divide(values, denom, out=np.zeros(values.shape), where=denom!=0)
+
+    def parts_after(self, func):
+        """ The results kept beside the values (the destinations, parts, and family members of `axes()`), each with the operation `func` done to it, for a result that had the same one done to its values """
+        dests, by_edge, family = self.dests, self.by_edge, self.family
+        return dict(dests=dests and sc.obj({k:func(res) for k,res in dests.items()}), by_edge=by_edge and {k:func(res) for k,res in by_edge.items()},
+                    family=family and (family[0], {k:func(res) for k,res in family[1].items()}))
+
+    def _like(self, values, columns=None, runs=None, **kwargs):
+        """ A new result of this name and kind, with other values, in people already
+
+        Args:
+            values (array): its values
+            columns (list): its columns
+            runs (dataframe): its runs
+            kwargs (dict): other attributes to set, e.g. `timevec`
+        """
+        out = Result(name=self.name, label=self.label, module=self.module, scale=False, timevec=self.timevec, values=values, kind=self.kind, summarize_by=self.summarize_by, columns=columns, runs=runs)
+        out.__dict__.update(kwargs)
         return out
 
     @property
     def n_runs(self):
         """ The number of runs, for a result across the runs of a MultiSim; None for a result of one run """
         return None if self.runs is None else len(self.runs)
-
-    @property
-    def labels(self):
-        """ The scenario of each run, for a result across runs """
-        return None if self.runs is None else list(self.runs['scenario'])
 
     @property
     def t_axis(self):
@@ -397,10 +446,7 @@ class Result(ss.arrays.BaseArr):
         one = np.ndim(inds) == 0
         pick = lambda arr: None if arr is None else np.asarray(arr)[inds]
         values = pick(self.values)
-        out = self.asnew(values=values, _shape=values.shape, runs=None if one else self.runs.iloc[sc.toarray(inds)].reset_index(drop=True))
-        if getattr(self, 'strata', None) is not None:
-            out.strata, out.denom = pick(self.strata), pick(getattr(self, 'denom', None))
-        return out
+        return self.asnew(values=values, _shape=values.shape, runs=None if one else self.runs.iloc[sc.toarray(inds)].reset_index(drop=True), strata=pick(self.strata), denom=pick(self.denom), **self.parts_after(lambda res: res.take(inds)))
 
     def match_runs(self, coords):
         """ The positions of the runs with the given scenario or values of the parameters swept, e.g. `dict(beta=0.3)` """
@@ -411,9 +457,9 @@ class Result(ss.arrays.BaseArr):
             if pd.api.types.is_numeric_dtype(col) and all(sc.isnumber(level) for level in levels): # Values from e.g. np.linspace
                 keep &= np.any([np.isclose(col.to_numpy(dtype=float), level) for level in levels], axis=0)
             else:
-                keep &= col.isin(levels).to_numpy()
+                keep &= np.array([any(value == level for level in levels) for value in col]) # Not col.isin(), since a rate (ss.peryear) cannot be hashed
         if not keep.any():
-            values = {key:sorted(set(self.runs[key])) for key in coords}
+            values = {key:distinct(self.runs[key]) for key in coords}
             errormsg = f'No runs of "{self.name}" have {", ".join(f"{k}={v}" for k,v in coords.items())}; the values are {values}'
             raise KeyError(errormsg)
         return np.flatnonzero(keep)
@@ -421,14 +467,11 @@ class Result(ss.arrays.BaseArr):
     def over_runs(self, func, linear=False):
         """ Each scenario's runs reduced to one, by a function of an array whose first axis is the runs: a result of one run if there is one scenario """
         groups = self.scenarios()
-        part = lambda arr: np.stack([func(np.asarray(arr)[inds]) for inds in groups.values()])
+        part = lambda arr: None if arr is None else np.stack([func(np.asarray(arr)[inds]) for inds in groups.values()])
         values = part(self.values)
-        out = self.asnew(values=values, _shape=values.shape, runs=pd.DataFrame(dict(scenario=list(groups))))
-        if getattr(self, 'strata', None) is not None: # A mean keeps the values by group (and a ratio its parts); other summaries do not
-            out.strata = part(self.strata) if linear else None
-            out.denom = part(self.denom) if linear and getattr(self, 'denom', None) is not None else None
-            if not linear:
-                out.no_groups = 'a summary over runs is not kept by group; select the groups first, e.g. res.select(age=0).median()'
+        out = self.asnew(values=values, _shape=values.shape, runs=pd.DataFrame(dict(scenario=list(groups))), strata=part(self.strata) if linear else None, denom=part(self.denom) if linear else None, **self.parts_after(lambda res: res.over_runs(func, linear))) # A mean keeps the values by group (and a ratio its parts); other summaries do not
+        if self.strata is not None and not linear:
+            out.no_groups = 'a summary over runs is not kept by group; select the groups first, e.g. res.select(age=0).median()'
         return out.take(0) if len(groups) == 1 else out
 
     def quantiles(self, q=(0.025, 0.5, 0.975)):
@@ -448,9 +491,8 @@ class Result(ss.arrays.BaseArr):
         values = np.stack([np.quantile(self.values[inds], q, axis=0) for inds in groups.values()], axis=1) # Quantile, scenario, time
         values = values.reshape((-1,) + values.shape[2:])
         rows = [dict(scenario=scenario, quantile=x) for x in q for scenario in groups]
-        out = self.asnew(values=values, _shape=values.shape, runs=pd.DataFrame(rows))
-        if getattr(self, 'strata', None) is not None:
-            out.strata = out.denom = None
+        out = self.asnew(values=values, _shape=values.shape, runs=pd.DataFrame(rows), strata=None, denom=None, **self.parts_after(lambda res: res.quantiles(q)))
+        if self.strata is not None:
             out.no_groups = 'quantiles are not kept by group; select the groups first, e.g. res.select(age=0).quantiles()'
         return out
 
@@ -507,10 +549,9 @@ class Result(ss.arrays.BaseArr):
                     errormsg = f'Cannot compare "{label}" with "{baseline}": they have {len(inds)} and {len(base.values)} runs'
                     raise ValueError(errormsg)
                 other = self.take(inds)
-                diff = other.asnew(values=other.values - base.values, label=f'{self.label}: difference from {baseline}')
-                if getattr(other, 'strata', None) is not None:
-                    ratio = getattr(other, 'denom', None) is not None
-                    diff.strata, diff.denom = (None, None) if ratio else (other.strata - base.strata, None) # A difference of ratios has no parts
+                diff = other.asnew(values=other.values - base.values, label=f'{self.label}: difference from {baseline}', dests=None, by_edge=None, family=None)
+                if other.strata is not None: # A difference of ratios has no parts
+                    diff.strata, diff.denom = (None, None) if other.denom is not None else (other.strata - base.strata, None)
                 out[label] = diff
         return out
 
@@ -521,48 +562,30 @@ class Result(ss.arrays.BaseArr):
         Args:
             dim (str): the dimension, e.g. 'age'; or, for the results of a treatment of several diseases or transitions, 'disease' or 'edge'
 
-        For a result across runs, returns a dict of results across runs instead, one per level.
+        For a result across runs, the columns come after the runs and time points, so `res.by('age').young` is a result across runs.
         For strains carried together (`ss.Strains(max_strains=2)`), the columns are the strains, and a person who carries several is in each.
         For a result of strains with courses of their own (`ss.Strains(shared=...)`), the name of the strains gives each strain's own result.
         """
-        family = self.__dict__.get('family')
-        if family is not None and dim == family[0]: # Each member's own
-            name, members, values = family
-            return Result(name=self.name, label=self.label, module=self.module, scale=False, timevec=self.timevec, values=values, shape=values.shape[0], columns=members, kind=self.kind, summarize_by=self.summarize_by)
-        if dim in self.part_dims:
-            i = self.part_dims.index(dim)
-            levels = list(dict.fromkeys(k[i] for k in self._parts(dim) if k[i] is not None))
-            values = np.column_stack([self._select_parts({dim:level}).values for level in levels])
-            return Result(name=self.name, label=self.label, module=self.module, scale=False, timevec=self.timevec,
-                          values=values, shape=values.shape[0], columns=levels, kind=self.kind, summarize_by=self.summarize_by)
-        strats = self._check_strata()
-        if self.runs is not None:
-            self._check_dim(dim)
-            strat = strats[[strat.name for strat in strats].index(dim)]
-            return Levels({str(label):self.select(**{dim:label}) for label in strat.labels})
-        names = [strat.name for strat in strats]
-        self._check_dim(dim)
-        d = names.index(dim)
-        strat = strats[d]
-        coords = strat.sim_coords
-        values = np.column_stack([self.strata[:, coords[:, d] == i].sum(axis=1) for i in range(strat.n)])
-        denom = getattr(self, 'denom', None)
-        if denom is not None: # A ratio: the numerator and denominator of each level, divided
-            den_dims = getattr(self, 'denom_dims', None)
-            if den_dims is None or dim in den_dims:
-                den = np.column_stack([denom[:, coords[:, d] == i].sum(axis=1) for i in range(strat.n)])
-            else: # The denominator does not have this dimension, so is the whole of it for every level
-                den = np.tile(denom.sum(axis=1)[:, None], (1, strat.n))
-            values = np.divide(values, den, out=np.zeros(values.shape), where=den!=0)
-        columns = [str(label) for label in strat.labels]
-        if getattr(strat, 'carries', None) is not None and denom is None: # Strains carried together: each strain's own, counting a person who carries several in each (a set is select(strain='A+B'))
-            values = values @ strat.carries[:, strat.base].astype(float)
+        levels, pick = self._axis(dim)
+        if dim in self._run_cols().values():
+            errormsg = f'Runs are not split by "{dim}": select them instead, e.g. res.select({dim}=...)'
+            raise ValueError(errormsg)
+        strat = next((strat for strat in self.strats or [] if strat.name == dim), None)
+        if strat is None:
+            values = np.stack([pick([level]).values for level in levels], axis=-1)
+        else: # Adding up each level on its own, since picking it would keep every group, and there can be many levels
+            values = np.stack([self._total(*self._keep(strat, [level])) for level in levels], axis=-1)
+        columns = [str(level) for level in levels]
+        carries = getattr(strat, 'carries', None)
+        if carries is not None and self.denom is None: # Strains carried together: each strain's own, counting a person who carries several in each (a set is select(strain='A+B'))
+            values = values @ carries[:, strat.base].astype(float)
             columns = [columns[j] for j in strat.base]
         if any(col in self.__dict__ or hasattr(type(self), col) or hasattr(np.ndarray, col) for col in columns): # A level named like an attribute of a result (e.g. "low") is qualified by its dimension
             columns = [f'{dim}_{col}' for col in columns]
-        out = Result(name=self.name, label=self.label, module=self.module, scale=False, timevec=self.group_timevec,
-                     values=values, shape=values.shape[0], columns=columns, kind=self.kind, summarize_by=self.summarize_by)
-        out._by = (self, dim, out.values) # So it can still select groups of the other dimensions (see select()), while its values are these
+        if strat is None:
+            return self._like(values, columns=columns, runs=self.runs)
+        out = self._like(values, columns=columns, runs=self.runs, timevec=self.group_timevec)
+        out.split = (self, dim, out.values) # So it can still select groups of the other dimensions (see select()), while its values are these
         return out
 
     def init_groups(self, strats, dims, shape, group_ti=None, ratio=False):
@@ -586,10 +609,10 @@ class Result(ss.arrays.BaseArr):
 
     def store_group(self, ti, vals, rows=None, flow=False):
         """ Keep the values by group at time point ti, if this result keeps them: in its row, where a flow is added up over the steps of the row (`rows` gives the row of each time point; see `ss.solvers.group_rows()`) """
-        strata = getattr(self, 'strata', None)
+        strata = self.strata
         if strata is None:
             return
-        vals = vals*getattr(self, 'write_scale', 1.0) # In people, as agents: see people_scale()
+        vals = vals*self.write_scale # In people, as agents: see people_scale()
         if rows is None:
             strata[ti] = vals
         elif flow:
@@ -626,7 +649,7 @@ class Result(ss.arrays.BaseArr):
             sim.results.sis.prevalence.select(sex='female', age='15-24') # Women aged 15-24 infected, over all women aged 15-24
             ```
         """
-        if getattr(self, 'strata', None) is None:
+        if self.strata is None:
             errormsg = f'The result "{self.name}" does not keep values by group: make it with ss.Result(..., groups=True), in a module of a sim'
             raise ValueError(errormsg)
         vals = np.asarray(vals, dtype=float)
@@ -634,7 +657,7 @@ class Result(ss.arrays.BaseArr):
         if denom is None:
             self[ti] = vals.sum()
         else:
-            if getattr(self, 'denom', None) is None:
+            if self.denom is None:
                 self.denom = np.zeros(self.strata.shape)
             denom = np.asarray(denom, dtype=float)
             self.denom[ti] = denom
@@ -645,93 +668,22 @@ class Result(ss.arrays.BaseArr):
     @property
     def group_timevec(self):
         """ The time points of the values by group: every one, or the end of every few steps (see `select()`) """
-        group_ti = getattr(self, 'group_ti', None)
-        return self.timevec if group_ti is None or self.timevec is None else self.timevec[group_ti]
-
-    @property
-    def part_dims(self):
-        """ The dimensions of the parts of a result: (disease, transition) for a treatment, (result,) for the outcomes of a test """
-        return self.__dict__.get('_part_dims', ['disease', 'edge'])
-
-    @part_dims.setter
-    def part_dims(self, value):
-        self._part_dims = value
-        return
-
-    def _parts(self, dim):
-        """ The results of a treatment for each (disease, transition) it acts on: see `ss.Delivery` """
-        parts = getattr(self, 'by_edge', None)
-        if not parts:
-            errormsg = f'The result "{self.name}" has no dimension "{dim}": only the results of a treatment of several diseases or transitions do'
-            raise KeyError(errormsg)
-        return parts
-
-    def _select_parts(self, pick):
-        """ The sum of the parts for some diseases and transitions """
-        parts = self._parts(sc.strjoin(pick.keys()))
-        keep = [res for key,res in parts.items() if all(key[i] in sc.tolist(pick[dim]) for i,dim in enumerate(self.part_dims) if dim in pick)]
-        if not keep:
-            errormsg = f'The result "{self.name}" has no part with {pick}; its parts are {sc.strjoin(".".join(k for k in key if k) for key in parts)}'
-            raise KeyError(errormsg)
-        out = Result(name=self.name, label=f'{self.label} ({", ".join(f"{k}={v}" for k,v in pick.items())})', module=self.module, scale=False, timevec=self.timevec,
-                     values=np.sum([res.values for res in keep], axis=0), shape=len(self.values), kind=self.kind, summarize_by=self.summarize_by)
-        if getattr(self, 'strata', None) is not None and all(getattr(res, 'strata', None) is not None for res in keep):
-            out.strata = np.sum([res.strata for res in keep], axis=0)
-            for attr in ['strats', 'dims', 'group_ti']:
-                setattr(out, attr, getattr(self, attr, None))
-            out.denom = None
-        return out
-
-    def _check_strata(self):
-        if getattr(self, 'strata', None) is None:
-            errormsg = f'The result "{self.name}" is not stratified, so there is nothing to select'
-            why = getattr(self, 'no_groups', None)
-            errormsg += f' ({why})' if why else ''
-            raise ValueError(errormsg)
-        return self.strats
-
-    def _check_dim(self, dim):
-        """ Check that the result has a dimension; a state has only the dimensions it was stratified by """
-        names = getattr(self, 'dims', None) or [strat.name for strat in self.strats]
-        if dim not in names:
-            errormsg = f'The result "{self.name}" has no dimension "{dim}"; its dimensions are {names}'
-            raise KeyError(errormsg)
-        return
+        return self.timevec if self.group_ti is None or self.timevec is None else self.timevec[self.group_ti]
 
     def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
         """ Arithmetic on results; the values by group are kept only where they can be: for a sum or difference of stratified results, or one scaled by a number """
         out = super().__array_ufunc__(ufunc, method, *inputs, **kwargs)
-        if isinstance(out, Result) and getattr(out, 'strata', None) is not None:
-            stratified = [x for x in inputs if isinstance(x, Result) and getattr(x, 'strata', None) is not None]
+        if isinstance(out, Result) and out.strata is not None:
+            stratified = [x for x in inputs if isinstance(x, Result) and x.strata is not None]
             numbers = [x for x in inputs if np.ndim(x) == 0]
             same = all(x.strata.shape == stratified[0].strata.shape for x in stratified)
-            linear = (ufunc in [np.add, np.subtract] and len(stratified) == len(inputs)) or (ufunc in [np.multiply, np.divide, np.true_divide, np.negative] and len(stratified) == 1 and len(numbers) == len(inputs) - 1 and (ufunc is not np.divide and ufunc is not np.true_divide or inputs[0] is stratified[0]))
-            keep = method == '__call__' and not kwargs and same and linear # Otherwise (e.g. a ratio of two results) the value of the whole is not the sum of the values by group
+            scaled = len(stratified) == 1 and len(numbers) == len(inputs) - 1 and (ufunc in [np.multiply, np.negative] or (ufunc in [np.divide, np.true_divide] and inputs[0] is stratified[0]))
+            linear = scaled or (ufunc in [np.add, np.subtract] and len(stratified) == len(inputs))
+            denoms = [x.denom for x in stratified if x.denom is not None]
+            keep = method == '__call__' and not kwargs and same and linear and (scaled or not denoms) # Otherwise (e.g. a ratio of two results) the value of the whole is not the sum of the values by group, and a ratio keeps its denominator only when scaled by a number
             out.strata = getattr(ufunc, method)(*[x.strata if isinstance(x, Result) else x for x in inputs]) if keep else None
-            denoms = [x.denom for x in stratified if getattr(x, 'denom', None) is not None]
-            if denoms: # A ratio keeps its denominator only when scaled by a number
-                scaled = ufunc in [np.multiply, np.negative] or (ufunc in [np.divide, np.true_divide] and inputs[0] is stratified[0])
-                out.denom = denoms[0] if (out.strata is not None and len(stratified) == 1 and scaled) else None
-                if out.denom is None:
-                    out.strata = None
-        return out
-
-    def _substrata(self, keep, keep_den=None):
-        """ A result made of some of the groups of this one (and, for a ratio, of its denominator: `keep_den`, by default the same) """
-        strata = self.strata*keep # The groups left out are zero, so the result can be selected from or split again
-        denom = getattr(self, 'denom', None)
-        values = strata.sum(axis=-1)
-        if denom is not None: # A ratio: the numerator and denominator are each added up over the groups, then divided
-            denom = denom*(keep if keep_den is None else keep_den)
-            values = np.divide(values, denom.sum(axis=-1), out=np.zeros(values.shape), where=denom.sum(axis=-1)!=0)
-        out = Result(name=self.name, label=self.label, module=self.module, scale=False, timevec=self.group_timevec,
-                     values=values, kind=self.kind, summarize_by=self.summarize_by, runs=self.runs)
-        out.strata = strata
-        out.denom = denom
-        out.denom_dims = getattr(self, 'denom_dims', None)
-        out.strats = self.strats
-        out.dims = getattr(self, 'dims', None)
-        out.group_ti = None # Its values are at the time points of its rows
+            if denoms:
+                out.denom = denoms[0] if keep else None
         return out
 
     def col(self, col):
@@ -755,27 +707,16 @@ class Result(ss.arrays.BaseArr):
         """ Return a dict of 1D results, one per column, for a 2D result """
         return sc.obj({col:self.col(col) for col in self.columns})
 
-    def stack(self, results):
-        """ Make a copy of this 2D result from a list of 1D results, one per column (e.g. after resampling)
-
-        Args:
-            results (list): the 1D results, one per column
-        """
-        def stack_key(key):
-            return None if results[0][key] is None else np.stack([res[key] for res in results], axis=-1)
-        values = stack_key('values')
-        return self.asnew(values=values, low=stack_key('low'), high=stack_key('high'), timevec=results[0].timevec, _shape=values.shape)
-
     def apply_scale(self, scale):
         """ Multiply the values by the population scale: a number, or an array with one entry per timestep
 
         Args:
             scale (float/array): the population scale
         """
-        if getattr(self, 'in_people', False): # Written in people already: see people_scale()
+        if self.in_people: # Written in people already: see people_scale()
             return self
         scale = np.asarray(scale)
-        if getattr(self, 'strata', None) is not None: # The values by group too
+        if self.strata is not None: # The values by group too
             self.strata = (self.strata.T*scale).T
         if scale.ndim == 1 and self.values.ndim == 2: # Scale each row of a 2D result
             scale = scale[:, None]
@@ -797,7 +738,7 @@ class Result(ss.arrays.BaseArr):
 
     @property
     def key(self):
-        """ Return the unique key of the result: <module>.<name>, e.g. "hiv.new_infections" """
+        """ Return the unique key of the result: <module>.<name>, e.g. "hiv.infection" """
         modulestr = f'{self.module}.' if (self.module is not None) else ''
         namestr = self.name if (self.name is not None) else 'unnamed'
         key = modulestr + namestr
@@ -884,7 +825,7 @@ class Result(ss.arrays.BaseArr):
         """
         out = self._summarize()
         if self.columns is not None and self.runs is None and np.ndim(out) == 1 and len(out) == len(self.columns):
-            out = pd.Series(out, index=pd.Index(self.columns, name=getattr(self, 'by_dim', None)), name=self.name)
+            out = pd.Series(out, index=self.columns, name=self.name)
         elif self.runs is not None and self.runs['scenario'].nunique() > 1:
             out = sc.obj({scenario:out[inds] for scenario,inds in self.scenarios().items()})
         return out
@@ -896,14 +837,12 @@ class Result(ss.arrays.BaseArr):
             raise ValueError(errormsg)
         t = self.t_axis
         if self.summarize_by == 'mean':
-            denom = getattr(self, 'denom', None)
-            if denom is not None and self.values.ndim == t + 1:
-                axes = tuple(range(t, denom.ndim)) # Over time and groups
-                num, den = self.strata.sum(axis=axes), denom.sum(axis=axes)
+            if self.denom is not None and self.values.ndim == t + 1:
+                axes = tuple(range(t, self.denom.ndim)) # Over time and groups
+                num, den = self.strata.sum(axis=axes), self.denom.sum(axis=axes)
                 return np.divide(num, den, out=np.zeros(np.shape(num)), where=den!=0) if t else (num/den if den else 0.0)
-            parts = getattr(self, 'parts', None) # The results a ratio is made from, if it is not by group, e.g. a delivery's coverage, which is 0 between its rounds
-            if parts is not None and self.values.ndim == 1:
-                num, den = [part.values.sum() for part in parts]
+            if self.parts is not None and self.values.ndim == 1: # The results a ratio is made from, if it is not by group, e.g. a delivery's coverage, which is 0 between its rounds
+                num, den = [part.values.sum() for part in self.parts]
                 return num/den if den else 0.0
         values = np.moveaxis(np.asarray(self.values), t, 0) # Time first
         n = len(values)
@@ -918,8 +857,8 @@ class Result(ss.arrays.BaseArr):
         t = self.t_axis
         values = np.cumsum(self.values, axis=t)
         label = sc.ifelse(self.label, self.name)
-        out = self.asnew(values=values, _shape=values.shape, name=f'cum_{self.name}', label=f'Cumulative {label}', kind='stock', summarize_by='last', low=None, high=None, auto_plot=False)
-        if getattr(self, 'strata', None) is not None: # Over the rows of the values by group, which for a flow are totals over each row
+        out = self.asnew(values=values, _shape=values.shape, name=f'{self.name}.cum', label=f'Cumulative {label}', kind='stock', summarize_by='last', low=None, high=None, auto_plot=False, **self.parts_after(lambda res: res.cum))
+        if self.strata is not None: # Over the rows of the values by group, which for a flow are totals over each row
             out.strata = np.cumsum(self.strata, axis=t)
         return out
 
@@ -999,38 +938,20 @@ class Result(ss.arrays.BaseArr):
         if new_unit is None:
             raise ValueError('new_unit must be specified, e.g. "week", "month", "year", or ss.weeks(2)')
 
-        # For 2D results, resample each column separately
-        if self.columns is not None:
-            results = [res.resample(new_unit=new_unit, summarize_by=summarize_by, use_years=use_years) for res in self.by_column().values()]
-            return self.stack(results)
-
         how = self.get_summarize_by(self.name, sc.ifelse(summarize_by, self.summarize_by), self.kind)
         if how is None:
             errormsg = f'Cannot resample "{self.name}": it is not summarized over time (summarize_by=None); give summarize_by=, e.g. "mean"'
             raise ValueError(errormsg)
         t = self.t_axis
-        if t: # Across runs: resample with the time points first, then put the runs first again
-            tfirst = self.asnew(values=np.moveaxis(self.values, t, 0), runs=None)
-            if getattr(self, 'strata', None) is not None:
-                tfirst.strata = np.moveaxis(self.strata, t, 0)
-                tfirst.denom = None if getattr(self, 'denom', None) is None else np.moveaxis(self.denom, t, 0)
-            out = tfirst.resample(new_unit=new_unit, summarize_by=how, use_years=use_years)
-            out.values, out.runs = np.moveaxis(out.values, 0, t), self.runs
-            out._shape = out.values.shape
-            if getattr(out, 'strata', None) is not None:
-                out.strata = np.moveaxis(out.strata, 0, t)
-                out.denom = None if getattr(out, 'denom', None) is None else np.moveaxis(out.denom, 0, t)
-            return out
         bins, period_ends = self.periods(new_unit)
         starts = np.flatnonzero(np.diff(bins, prepend=-1)) # The first time point of each period
         ends = np.append(starts[1:], len(bins)) - 1 # And the last
 
         def agg(arr, how, starts=starts, ends=ends):
-            return None if arr is None else self.summarizers[how](np.asarray(arr), starts, ends)
+            """ An array with time on axis t, over each period; a run axis or columns come along """
+            return None if arr is None else np.moveaxis(self.summarizers[how](np.moveaxis(np.asarray(arr), t, 0), starts, ends), 0, t)
 
-        strata = getattr(self, 'strata', None)
-        denom = getattr(self, 'denom', None)
-        group_ti = getattr(self, 'group_ti', None)
+        strata, denom, group_ti = self.strata, self.denom, self.group_ti
         agg_g = agg # For the values by group
         no_groups = None
         if strata is not None and group_ti is not None: # The values by group are kept every few steps: each row goes into the period its last time point is in
@@ -1041,7 +962,7 @@ class Result(ss.arrays.BaseArr):
             if len(g_starts) < len(starts):
                 no_groups = f'it is kept by group every {group_ti[1]} steps, so its groups cannot be resampled to a shorter period'
                 strata = denom = None
-        if how == 'mean' and denom is not None: # A ratio: the parts, each summed over the period, then divided
+        if how == 'mean' and denom is not None and self.columns is None: # A ratio: the parts, each summed over the period, then divided
             new_strata, new_denom = agg_g(strata, 'sum'), agg_g(denom, 'sum')
             num, den = new_strata.sum(axis=-1), new_denom.sum(axis=-1)
             values = np.divide(num, den, out=np.zeros(num.shape), where=den!=0)
@@ -1059,7 +980,7 @@ class Result(ss.arrays.BaseArr):
             if self.has_dates and len(self.timevec) > 1: # Labeled by the calendar year each period covers, so the one ending on 1 January 2001 is 2000
                 years = years - 0.5*np.min(np.diff(np.asarray(self.timevec.years, dtype=float)))
             timevec = np.floor(years + 1e-9).astype(int)
-        out = self.asnew(values=values, low=low, high=high, timevec=timevec, summarize_by=self.summarize_by, _shape=values.shape)
+        out = self.asnew(values=values, low=low, high=high, timevec=timevec, summarize_by=self.summarize_by, _shape=values.shape, **self.parts_after(lambda res: res.resample(new_unit, summarize_by, use_years)))
         out.group_ti = None # Its values by group, if any, are at its own time points
         out.use_years = use_years # Its times are years, which to_df() keeps (see convert_timevec())
         if strata is not None:
@@ -1078,27 +999,19 @@ class Result(ss.arrays.BaseArr):
             kwargs: passed to the resample method
             sep (str): the separator between the name and column in each column of a 2D result
 
-        For a 2D result, return a dataframe with one column per result column, e.g. `new_infections_alpha`.
+        For a 2D result, return a dataframe with one column per result column, e.g. `infection_alpha`.
         """
-        # For 2D results, make one dataframe column per result column
-        if self.columns is not None:
-            series = [res.to_series(set_name=True, resample=resample, sep=sep, **kwargs) for res in self.by_column().values()]
-            return pd.concat(series, axis=1)
-
-        # Return a resampled version if requested
-        if resample is not None:
-            resampled = self.resample(new_unit=resample, **kwargs)
-            return resampled.to_series(set_name=set_name, sep=sep)
-        name = self.name if set_name else None
-        timevec = self.convert_timevec()
-        s = pd.Series(self.values, index=timevec, name=name)
-        return s
+        res = self.resample(new_unit=resample, **kwargs) if resample is not None else self
+        timevec = res.convert_timevec()
+        if res.columns is not None:
+            return pd.DataFrame(res.values, index=timevec, columns=[f'{res.name}{sep}{col}' for col in res.columns])
+        return pd.Series(res.values, index=timevec, name=res.name if set_name else None)
 
     def convert_timevec(self, force=False):
         """ Make sure we're using a timevec that's in the right format i.e. dates """
         if self.timevec is None:
             return None
-        if getattr(self, 'use_years', False) and not force: # Resampled with use_years=True: the periods are labeled by their year
+        if self.use_years and not force: # Resampled with use_years=True: the periods are labeled by their year
             return np.asarray(self.timevec)
         if not self.has_dates or force:
             if not force and len(self.timevec) and sc.isnumber(self.timevec[0]) and not ss.time.assume_cal_year(self.timevec[0]): # Elapsed time (e.g. from year 0), not calendar years, so there are no dates to give
@@ -1124,73 +1037,35 @@ class Result(ss.arrays.BaseArr):
             kwargs: passed to the resample method if resample=True
 
         For a 2D result, there is one set of dataframe columns per result column, e.g. `alpha` and `alpha_low`
-        (or `new_infections_alpha` and `new_infections_alpha_low` if `col_names='new_infections'`).
+        (or `infection_alpha` and `infection_alpha_low` if `col_names='infection'`).
         """
-        data = dict()
+        res = self.resample(new_unit=resample, **kwargs) if resample is not None else self
+        if res.runs is not None and quantiles is not None:
+            res = res.quantiles(quantiles)
+        parts = res.by_column() if res.columns is not None else {None:res}
 
         # Across runs: one row per run (or quantile) and time point
-        if self.runs is not None:
-            res = self.resample(new_unit=resample, **kwargs) if resample is not None else self
-            if quantiles is not None:
-                res = res.quantiles(quantiles)
+        if res.runs is not None:
             rows = []
-            for i,(row,vals) in enumerate(zip(res.runs.to_dict('records'), res.values)):
-                q = row.pop('quantile', None)
-                head = row if q is not None else dict(run=i, **row)
-                rows.append(pd.DataFrame(dict(**head, time=res.timevec, **({} if q is None else dict(quantile=q)), value=vals)))
+            for col,part in parts.items():
+                for i,(row,vals) in enumerate(zip(part.runs.to_dict('records'), part.values)):
+                    q = row.pop('quantile', None)
+                    head = row if q is not None else dict(run=i, **row)
+                    rows.append(pd.DataFrame(dict(**head, **({} if col is None else dict(column=col)), time=part.timevec, **({} if q is None else dict(quantile=q)), value=vals)))
             return sc.dataframe(pd.concat(rows, ignore_index=True))
 
-        # For 2D results, make one set of dataframe columns per result column
-        if self.columns is not None:
-            dfs = []
-            for col,res in self.by_column().items():
-                gcol = col if col_names == 'vlh' else f'{sc.ifelse(col_names, self.name)}{sep}{col}'
-                dfs.append(res.to_df(sep=sep, col_names=gcol, bounds=bounds, resample=resample, set_date_index=set_date_index, **kwargs))
-            df = pd.concat(dfs, axis=1)
-            df = df.loc[:, ~df.columns.duplicated()] # Remove duplicate time columns
-            return sc.dataframe(df)
-
-        # Return a resampled version if requested
-        if resample is not None:
-            resampled = self.resample(new_unit=resample, **kwargs)
-            return resampled.to_df(col_names=col_names, set_date_index=set_date_index, sep=sep, bounds=bounds)
-
-        # Checks
-        if self.timevec is None and set_date_index:
+        if res.timevec is None and set_date_index:
             raise ValueError('Cannot convert to dataframe with date index: timevec is not set')
-
-        # Deal with timevec
-        timevec = self.convert_timevec()
-        if not set_date_index:
-            data['time'] = timevec
-
-        # Determine how to label columns
-        if col_names is None:
-            valcol = self.name
-            prefix = self.name+sep
-        elif col_names == 'vlh':
-            valcol = 'value'
-            prefix = ''
-        else:
-            valcol = col_names
-            prefix = col_names+sep
-
-        # If high and low exist, include them too
-        data[valcol] = self.values
-        if bounds:
-            for key in ['low', 'high']:
-                val = self[key]
-                valcol = f'{prefix}{key}'
-                if val is not None:
-                    data[valcol] = val
-
-        # Convert to dataframe, optionally with a date index
-        if set_date_index:
-            df = sc.dataframe(data, index=timevec)
-        else:
-            df = sc.dataframe(data)
-
-        return df
+        timevec = res.convert_timevec()
+        data = {} if set_date_index else dict(time=timevec)
+        stem = sc.ifelse(col_names, res.name)
+        for col,part in parts.items():
+            name = stem if col is None else col if stem == 'vlh' else f'{stem}{sep}{col}'
+            valcol, prefix = ('value', '') if name == 'vlh' else (name, name + sep)
+            data[valcol] = part.values
+            if bounds: # If high and low exist, include them too
+                data |= {f'{prefix}{key}':part[key] for key in ['low', 'high'] if part[key] is not None}
+        return sc.dataframe(data, index=timevec) if set_date_index else sc.dataframe(data)
 
     @property
     def df(self):
@@ -1309,7 +1184,7 @@ class Results(ss.ndict):
         """
         self = super().__new__(cls, *args, **kwargs)
         self.setattribute('_module', None)   # The name of the module the results belong to
-        self.setattribute('_implicit', None) # The sim's one disease: see _implicit_get()
+        self.setattribute('_implicit', None) # The sim's one disease: see matches()
         self.setattribute('_given_to', None) # The sim's name for a module given to it: see _given_msg()
         return self
 
@@ -1368,15 +1243,46 @@ class Results(ss.ndict):
         print(super().__str__(*args, **kwargs))
         return
 
-    def _implicit_get(self, key):
+    def matches(self, name):
         """
-        A result of the sim's one disease (the one it made or named, else its only one; see `ss.Sim.init_results()`), which is also found here, e.g. `sim.results.I` for `sim.results.sir.I`; else None
+        The results a name could be, by their names in `to_df()`: those that have this name in full (`seir.I`, `seir_I`, or a column, `sis_infection_alpha`), else those of the sim's one disease, else those of any module; see `find()`
 
-        Across the runs of a MultiSim, it is a result of each sim's one disease, even if their names differ (see `ss.run.MultiResults.from_sims()`).
+        Across the runs of a MultiSim, the sim's one disease is each sim's, even if their names differ (see `ss.run.MultiResults.from_sims()`).
+
+        Args:
+            name (str): the name, in any case
         """
+        spelled = name.replace('.', '_')
+        def same(entries, part):
+            return {e[0]:e[3] for e in entries if e[part].replace('.', '_') == spelled} or {e[0]:e[3] for e in entries if e[part].replace('.', '_').lower() == spelled.lower()}
+
+        entries = list(spellings(self))
         implicit = self._implicit
-        res = dict.get(self, implicit) if isinstance(implicit, str) else implicit # A module's name here, or results of their own
-        return res[key] if isinstance(key, str) and isinstance(res, dict) and key in res else None
+        found = same(entries, 0)
+        if not found and isinstance(implicit, dict): # Results of their own
+            found = implicit.matches(name)
+        found = found or same([e for e in entries if e[2] == implicit], 1) or same(entries, 1)
+        if not found and spelled.lower().endswith('_cum'): # A flow's cumulative total, e.g. 'sis.infection.cum'
+            found = {f'{key}_cum':res.cum for key,res in self.matches(name[:-4]).items() if isinstance(res, Result) and res.kind == 'flow'}
+        return found
+
+    def find(self, name, die=True):
+        """
+        A result, however it is spelled: by its name (`'I'`), with its module (`'seir.I'`), or as a column of `to_df()` (`'seir_I'`, or `'sis_infection_alpha'` for a column of a 2D result), in any case; a flow's name followed by `.cum` (`'sis.infection.cum'`) is its cumulative total
+
+        The name without its module is enough if it names one result, or one of the sim's one disease (the one it made or named, else its only one;
+        see `ss.Sim.init_results()`). This is what `sim.results[name]`, `sim.plot(name)`, `sim.summarize(name)`, and a column of data all go through.
+
+        Args:
+            name (str): the name of the result
+            die (bool): whether to raise an error if the name is not of exactly one result, saying which it could be; otherwise, None
+        """
+        found = self.matches(name) if isinstance(name, str) and not name.startswith('_') else {}
+        if len(found) == 1:
+            return next(iter(found.values()))
+        if die:
+            raise sc.KeyNotFoundError(self._given_msg(name) or self._unknown_msg(name) or f'"{name}" is not a result')
+        return None
 
     def _given_msg(self, key):
         """ For the results of a module that was given to a sim, which ran its own copy: where the results are """
@@ -1388,15 +1294,19 @@ class Results(ss.ndict):
     def _unknown_msg(self, key):
         """ For a name that is not a result here: the closest names that are, and all of them """
         if isinstance(key, str) and not key.startswith('_') and len(self) and key not in self:
-            keys = [k for k in self.keys() if isinstance(k, str)]
+            found = self.matches(key)
+            if len(found) > 1:
+                return f'"{key}" could be any of {sc.strjoin(found)}: name one of them'
+            keys = [entry[0] for entry in spellings(self) if not entry[0].endswith('timevec')]
+            near = [k for k in keys if key.replace('.', '_').lower() in k.lower()] # A part of a name is only a suggestion
             owner = f'"{self._module}"' if self._module else 'the sim'
-            return f'"{key}" is not a result of {owner}{ss.expressions.did_you_mean(key, keys)} The results are {sc.strjoin(keys)}'
+            return f'"{key}" is not a result of {owner}{f"; did you mean {sc.strjoin(near[:3])}?" if near else ss.expressions.did_you_mean(key, keys)} The results are {sc.strjoin(keys)}'
         return None
 
     def __getitem__(self, key):
         if isinstance(key, str) and dict.__contains__(self, key): # The usual case, as fast as a dict; the rest only for a key that is not here
             return dict.__getitem__(self, key)
-        if (res := self._implicit_get(key)) is not None:
+        if (res := self.find(key, die=False)) is not None:
             return res
         if msg := self._given_msg(key) or self._unknown_msg(key):
             raise sc.KeyNotFoundError(msg)
@@ -1405,7 +1315,7 @@ class Results(ss.ndict):
     def __getattr__(self, attr):
         if dict.__contains__(self, attr): # As in __getitem__()
             return dict.__getitem__(self, attr)
-        if (res := self._implicit_get(attr)) is not None:
+        if (res := self.find(attr, die=False)) is not None:
             return res
         if msg := self._given_msg(attr) or self._unknown_msg(attr):
             raise AttributeError(msg)
@@ -1417,8 +1327,8 @@ class Results(ss.ndict):
         if isinstance(value, Result) and isinstance(key, str):
             total = key.rpartition('.')[0]
             if '.' in key and isinstance(self.get(total), Result):
-                self[total].dests = sc.obj({**(self[total].__dict__.get('dests') or {}), key.rpartition('.')[2]:value}) # A new dict, since a copy of a result (asnew) shares it
-            elif '.' not in key and (value.__dict__.get('dests') or any('.' in str(k) for k in self.keys())):
+                self[total].dests = sc.obj({**(self[total].dests or {}), key.rpartition('.')[2]:value}) # A new dict, since a copy of a result (asnew) shares it
+            elif '.' not in key and (value.dests or any('.' in str(k) for k in self.keys())):
                 dests = {k.rpartition('.')[2]:v for k,v in self.items() if isinstance(k, str) and k.startswith(f'{key}.') and isinstance(v, Result)}
                 value.dests = sc.obj(dests) if dests else None
         return
@@ -1453,7 +1363,7 @@ class Results(ss.ndict):
         """
         Turn from a nested dictionary into a flat dictionary, keeping only results by default; keys keep their case, as in `to_df()` (e.g. `sis_I`)
 
-        If `columns=True`, split each 2D result into one 1D result per column, e.g. `sis_new_infections_alpha`.
+        If `columns=True`, split each 2D result into one 1D result per column, e.g. `sis_infection_alpha`.
 
         Args:
             sep (str): the separator between the parts of each key
@@ -1464,13 +1374,7 @@ class Results(ss.ndict):
         """
         out = sc.flattendict(self, sep=sep)
         if columns:
-            split = {}
-            for k,v in out.items():
-                if isinstance(v, Result) and v.columns is not None:
-                    split.update({f'{k}{sep}{col}':res for col,res in v.by_column().items()})
-                else:
-                    split[k] = v
-            out = split
+            out = split_columns(out, sep=sep)
         if 'resample' in kwargs and kwargs['resample'] is not None:
             resample = kwargs.pop('resample')
             out = {k:(v.resample(new_unit=resample, **kwargs) if isinstance(v, Result) else v) for k,v in out.items() if resamplable(v, kwargs)}
@@ -1640,7 +1544,6 @@ def summary_funcs(how, results):
     funcs = dict(mean=np.mean, median=np.median, sum=np.sum, last=lambda vals: vals[-1], max=np.max, min=np.min)
     how = {} if how is None else how if isinstance(how, dict) else {'':how} # '' matches every key
     out = {}
-    flat = None
     for key,func in how.items():
         if not callable(func) and func not in funcs:
             errormsg = f'Unknown how={func!r}{f" for {key}" if key else ""}; use {sc.strjoin([repr(k) for k in funcs])}, or a function'
@@ -1649,65 +1552,51 @@ def summary_funcs(how, results):
         if key == '':
             out[key] = func
             continue
-        flat = flat if flat is not None else results.flatten(sep='_', only_results=False) # 2D results whole, as a key names them
-        try:
-            (name, res), = match_result_keys(flat, key, show_skipped=True, flattened=True).items()
-        except KeyError:
-            names = [k for k,v in flat.items() if isinstance(v, Result) and 'timevec' not in k]
-            errormsg = f'how= names "{key}", which is not the name of one result{ss.expressions.did_you_mean(key.replace(".", "_"), names)} The results are {sc.strjoin(names)}.'
-            raise sc.KeyNotFoundError(errormsg) from None
-        cols = getattr(res, 'columns', None)
-        out.update({k:func for k in ([name] if cols is None else [f'{name}_{col}' for col in res.by_column()])})
+        res = results.find(key)
+        name = next(iter(results.matches(key)))
+        out.update({k:func for k in split_columns({name:res}, sep='_')})
     return out
 
 
-def match_result_keys(results, key, show_skipped=False, flattened=False):
-    """ Ensure that the user-provided keys match available ones, and raise an exception if not """
+def distinct(column):
+    """ The different values of a column of `runs`, in order; told apart by how they print, since a rate (ss.peryear) cannot be hashed """
+    return list({repr(value):value for value in column}.values())
 
-    def normkey(key):
-        """ Normalize the key: e.g. 'SIS.prevalence' becomes 'sis_prevalence' """
-        return key.replace('.','_').lower()
 
-    implicit = lambda key: results._implicit_get(key) if isinstance(results, Results) else None # A result of the sim's one disease (see Results._implicit_get())
+def spellings(results, prefix='', top=None):
+    """ Each result, however deep (and each column of a 2D result), as a tuple: its name in `to_df()`, that name without its module, its module, and the result """
+    for key,val in results.items():
+        full = f'{prefix}{key}'
+        if isinstance(val, dict):
+            yield from spellings(val, f'{full}_', top or key)
+            continue
+        cols = val.by_column() if isinstance(val, Result) and val.columns is not None and val.values is not None else {}
+        for name,res in {full:val, **{f'{full}_{col}':res for col,res in cols.items()}}.items():
+            yield name, name.removeprefix(f'{top}_'), top, res
 
-    # Handle accessing subdicts
-    if isinstance(key, str) and key in results and isinstance(results[key], dict): # Key matches a subdict, use that directly, e.g. sim.plot('sis')
-        flat = results[key].flatten() # e.g. sim.results['sis']
-        key = None # We've already used the key, so reset it
-    else: # Main use case: flatten the dict, e.g. sim.plot()
-        flat = sc.obj(results) if flattened else results.flatten() # Copy so the original results aren't modified below
 
-    # Configuration
-    flat_orig = flat # Copy reference before we modify in place
-    if not show_skipped: # Skip plots with auto_plot set to False
-        for k in list(flat.keys()): # NB: can't call it "key", shadows argument
-            res = flat[k]
-            if isinstance(res, ss.Result) and not res.auto_plot:
-                flat.pop(k)
-
-    if key is not None:
-        lower = {k.lower():k for k in flat} # Keys match whatever their case
-        if isinstance(key, str):
-            if normkey(key) in lower: # Use an exact match if there is one, e.g. 'new_deaths' rather than 'cholera_new_deaths'
-                flat = {lower[normkey(key)]:flat[lower[normkey(key)]]}
-            elif implicit(key) is not None: # A result of the sim's one disease, e.g. 'I' for 'sir.I', or of each sim's across the runs of a MultiSim
-                flat = {key:implicit(key)}
-            else:
-                flat = {k:v for k,v in flat.items() if (normkey(key) in k.lower())} # Will match e.g. 'SIS.prevalence' and 'sis_prevalence'
-                named = {k:v for k,v in flat.items() if k.lower().endswith('_' + normkey(key))} # A result's own name, e.g. 'cpr' for 'contraception_cpr' rather than 'contraception_acpr'
-                if len(flat) > 1 and len(named) == 1:
-                    flat = named
-            if len(flat) != 1:
-                errormsg = f'Key "{key}" not found; valid keys are:\n{sc.newlinejoin(flat_orig.keys())}'
-                raise sc.KeyNotFoundError(errormsg)
+def split_columns(flat, sep='_'):
+    """ Results by name, with each 2D result split into one 1D result per column, e.g. `sis_infection_alpha` """
+    out = {}
+    for key,res in flat.items():
+        if isinstance(res, Result) and res.columns is not None:
+            out.update({f'{key}{sep}{col}':part for col,part in res.by_column().items()})
         else:
-            try:
-                flat = {k.lower():flat[lower[normkey(k)]] if normkey(k) in lower or implicit(k) is None else implicit(k) for k in key}
-            except KeyError as e:
-                errormsg = f'Not all keys could be matched.\nAvailable keys:\n{sc.newlinejoin(flat_orig.keys())}\n\nYour keys:\n{sc.newlinejoin(key)}'
-                raise sc.KeyNotFoundError(errormsg) from e
+            out[key] = res
+    return out
 
-    return flat
+
+def match_result_keys(results, key, show_skipped=False):
+    """ The results named by a key or list of keys (see `ss.Results.find()`), or all of a module's, or with no key, every one that is plotted by default (or every one, with `show_skipped`), by their names in `to_df()` """
+    if isinstance(key, str) and isinstance(dict.get(results, key), dict): # All of a module's, e.g. sim.plot('sis')
+        return results[key].flatten()
+    if key is None:
+        return sc.obj({k:res for k,res in results.flatten().items() if show_skipped or res.auto_plot})
+    out = {}
+    for k in sc.tolist(key):
+        results.find(k)
+        out.update(results.matches(k))
+    return out
 
 
 def format_axes(ax, res):
@@ -1779,7 +1668,7 @@ def validate_sim_data(data=None, die=None):
     Validate data intended to be compared to the sim outputs, e.g. for calibration
 
     Args:
-        data (df/dict): a dataframe (or dict) of data, with a column "time" plus data columns of the form "module.result", e.g. "hiv.new_infections"
+        data (df/dict): a dataframe (or dict) of data, with a column "time" plus data columns of the form "module.result", e.g. "hiv.infection"
         die (bool): whether to raise an exception if the data cannot be converted (default: die if data is not None but cannot be converted)
 
     """
@@ -1887,32 +1776,9 @@ def match_column(sim, col):
 
 
 def match_name(sim, col):
-    """ The result a column corresponds to, by name; see `match_column()` """
-    modname, _, name = col.replace('_', '.', 1).rpartition('.') if '.' not in col and col.split('_')[0] in sim.results else col.rpartition('.')
-    matches = []
-    for mod in sim.modules:
-        if modname in ['', mod.name] and name in mod.results and isinstance(mod.results[name], ss.Result):
-            matches.append(mod.results[name])
-    if not matches and col in sim.results and isinstance(sim.results[col], ss.Result):
-        matches.append(sim.results[col])
-    if not matches and '.' in col: # The flow to a destination, "cin.X" or "hpv.cin.X"
-        first, _, rest = col.partition('.')
-        for mod in sim.modules:
-            for key in [col] + ([rest] if first == mod.name else []):
-                if key in mod.results and isinstance(mod.results[key], ss.Result):
-                    matches.append(mod.results[key])
-    if not matches and '.' in col: # A result nested deeper ("hpv.genotype.cancers"), or a column of a result with columns ("sis.new_infections.alpha"), by its path in sim.results
-        obj = sim.results
-        for part in col.split('.'):
-            if isinstance(obj, Results):
-                obj = obj.get(part)
-            elif isinstance(obj, Result) and obj.columns is not None:
-                obj = {str(c):res for c,res in obj.by_column().items()}.get(part)
-            else:
-                obj = None
-        if isinstance(obj, Result) and obj.columns is None:
-            matches.append(obj)
-    return matches[0] if len(matches) == 1 else None
+    """ The result a column corresponds to, by name; see `match_column()` and `ss.Results.find()` """
+    res = sim.results.find(col, die=False)
+    return res if isinstance(res, ss.Result) else None
 
 
 def check_data(sim, df, die=False):

@@ -118,6 +118,11 @@ def type_str(obj):
     return name
 
 
+def is_number(val):
+    """ Whether a value is a plain number or an array of them, not e.g. an array of durations """
+    return sc.isnumber(val) or (isinstance(val, np.ndarray) and val.dtype != object)
+
+
 def incompatible(a, op, b, hint=''):
     """ Raise a `TypeError` for two values that cannot be combined, e.g. `ss.perday(0.1) + ss.prob(0.1, 'day')` """
     raise TypeError(f'cannot compute {a!r} {op} {b!r}: {type_str(a)} {op} {type_str(b)} has no meaning. {hint}'.strip())
@@ -551,11 +556,15 @@ class dur(TimePar):
                 return other + self
         elif isinstance(other, ss.DateArray):
             return ss.DateArray(np.vectorize(self.__add__)(other))
+        elif is_number(other):
+            incompatible(self, '+', other, 'A number has no unit of time; give it one, e.g. ss.days(1) + ss.days(2).')
+        elif isinstance(other, np.ndarray): # An array of durations
+            return self._new(self.value + np.array([self.to_base(val) for val in other]))
         else:
             return self._new(self.value + other)
 
     def __radd__(self, other):
-        return self.__add__(other)
+        return self if sc.isnumber(other) and other == 0 else self.__add__(other) # For sum(), which starts from 0
 
     def __sub__(self, other):
         if isinstance(other, dur):
@@ -569,14 +578,16 @@ class dur(TimePar):
                 raise TypeError('Cannot subtract a date from a duration')
             else:
                 return ss.DateArray(np.vectorize(self.__sub__)(other))
+        elif is_number(other):
+            incompatible(self, '-', other, 'A number has no unit of time; give it one, e.g. ss.days(1) + ss.days(2).')
+        elif isinstance(other, np.ndarray): # An array of durations
+            return self._new(self.value - np.array([self.to_base(val) for val in other]))
         else:
-            out = self._new(self.value - other)
-            if sc.isnumber(out) and out < 0:
-                warnmsg = f'Subtracting {self} and {other} yields {out}. Durations are rarely negative; are you sure this is intentional?'
-                ss.warn(warnmsg)
-            return out
+            return self._new(self.value - other)
 
     def __rsub__(self, other):
+        if is_number(other):
+            incompatible(other, '-', self, 'A number has no unit of time; give it one, e.g. ss.days(1) + ss.days(2).')
         return (-self) + other
 
     def __mul__(self, other):
@@ -1368,7 +1379,7 @@ class years(dur):
         to_convert = (str, pd.Timestamp)
         if isinstance(value, to_convert): # A single date or date string
             value = sc.datetoyear(value)
-        elif np.iterable(value) and getattr(value, 'dtype', np.dtype(object)).kind in 'OUS' and any(isinstance(val, to_convert) for val in value): # Create a new array rather than modifying the input; an array of numbers is not scanned
+        elif np.iterable(value) and not isinstance(value, dur) and getattr(value, 'dtype', np.dtype(object)).kind in 'OUS' and any(isinstance(val, to_convert) for val in value): # Create a new array rather than modifying the input; an array of numbers is not scanned
             value = np.array([sc.datetoyear(val) if isinstance(val, to_convert) else val for val in value])
         super().__init__(value=value, base=base)
         return

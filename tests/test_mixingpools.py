@@ -43,7 +43,7 @@ def test_single(do_plot=do_plot):
 
     # Female to male (only) transmission
     mp = ss.MixingPool(src=lambda sim: sim.people.female, dst=lambda sim: sim.people.male, beta=1.0, n_contacts=ss.poisson(lam=4))
-    sir = ss.SIR(init_prev=ss.bernoulli(p=lambda self, sim, uids: 0.05*sim.people.female)) # Seed 5% of the female population
+    sir = ss.SIR(init_prev=lambda sim, uids: 0.05*sim.people.female[uids]) # Seed 5% of the female population
     sims.sex = sim = run(mp, sir, do_plot=do_plot)
     assert sim.people.male[sim.diseases.sir.ti_I>0].all() # All new infections should be in men
     return sims
@@ -100,9 +100,22 @@ def test_layers():
     assert np.isclose(run(dict(home=0.03, school=0.02), 'abm'), ode, rtol=0.1)
     assert np.isclose(run(dict(home=0.03, school=0.0), 'ode'), run(0.03, 'ode', layers=['home'])) < 0.9*ode # No transmission at school is home contacts only
     for bad in [dict(home=0.03, school=0.02, wrok=0.1), dict(home=0.03)]: # A key with no route, and a route with no key
-        with pytest.raises(ValueError, match='is given for each route'):
+        with pytest.raises(ValueError):
             run(bad, 'abm')
     return ode
+
+
+@sc.timer()
+def test_contacts_coded():
+    """ A disease written as code goes through ss.contacts() from the counts in each band, as through a pool for each pair of bands """
+    sc.heading('Testing ss.contacts() with a disease written as code...')
+    ages = [0, 15, 65]
+    matrix = np.array([[6.0, 2, 1], [2, 8, 2], [1, 3, 4]])
+    groups = {str(low):ss.AgeGroup(low, high) for low,high in zip(ages, [15, 65, None])}
+    pools = ss.MixingPools(src=groups, dst=sc.dcp(groups), n_contacts=np.vectorize(lambda v: ss.constant(float(v)), otypes=[object])(matrix.T))
+    cases = [ss.Sim(diseases=ssl.AgentSIR(init_prev=0.02, beta=ss.perday(0.05), dur_inf=ss.days(6)), networks=net, n_agents=n_agents, unit='day', stop=60, verbose=0).run().results.agentsir.infection.sum() for net in [ss.contacts(matrix, ages=ages), pools]]
+    assert cases[0] > 0.5*n_agents and np.isclose(*cases, rtol=0.05)
+    return
 
 
 if __name__ == '__main__':

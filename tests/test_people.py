@@ -2,6 +2,7 @@
 Test the People object
 """
 import numpy as np
+import pytest
 import sciris as sc
 import starsim as ss
 import starsim.library as ssl
@@ -94,6 +95,22 @@ def test_ppl_construction(do_plot=False):
         plt.plot(sim.timevec, sim.results.hiv.infected)
         plt.title('Number of HIV infections')
 
+    return sim
+
+
+@sc.timer()
+def test_groups_are_not_agents():
+    sc.heading('Testing that people mean people in a compartmental run')
+    S, I, R = ss.states(3)
+    sir = ss.Disease(infection=S >> I @ 0.3*I, recovery=ss.Transition(I, R, dur=10), init_prev=0.01)
+    sim = ss.Sim(sir, total_pop=5000, stop=10, solver='ode', verbose=0).run()
+    ppl = sim.people
+    assert np.isclose(ppl.n_alive, 5000) and len(ppl) == 5000
+    assert not hasattr(ppl, 'age') and not hasattr(ppl, 'auids')
+    for attr in ['age', 'auids']:
+        with pytest.raises(ss.CapabilityError, match=attr):
+            getattr(ppl, attr)
+    assert ppl.alive.values.all() # Arrays still work, on the groups
     return sim
 
 

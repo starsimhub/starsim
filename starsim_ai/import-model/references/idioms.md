@@ -17,7 +17,7 @@ What to write for the pieces that `ss.import_from()` lists as not translated (`I
 | A lognormal or other distribution | `dur=ss.lognorm_ex(mean=ss.days(10), std=ss.days(3))` (agents sample it; compartments use Erlang stages, with a note) |
 | "As soon as", probability 1 at the next step | If it happens on entry, a branch with `p=` and no rate on the transition into the state (nobody waits in it, under every solver). If it waits on a condition (`where=`), a rate of a few per step, such as `rate=ss.perday(5)` for a daily step (99% leave within the step); not a very high rate such as `ss.perday(1e9)`, since a compartmental solver takes as many substeps as the fastest rate needs, and hangs |
 | A delay that is exact (odin's `delay()`, a lag) | `ss.outcome(source, delay=ss.days(14))` for a reported quantity; for people, a fixed dwell (`ss.constant`), which every solver takes exactly, as a conveyor of whole steps |
-| Rates that change in time | `ss.timeseries({'2020-01-01': 1, '2020-04-01': 0.5})` as the value of a parameter, `ss.seasonal(mean=, amplitude=, peak=)`, or `ss.change(sir.pars.beta, at=[...], by=[...])` |
+| Rates that change in time | `ss.timeseries({'2020-01-01': 1, '2020-04-01': 0.5})` as the value of a parameter, `ss.seasonal(mean=, amplitude=, peak=)`, or `ss.modify(sir.pars.beta, multiply=ss.timeseries({...}), start=...)` |
 | A calendar period (on/off) | A parameter that is an `ss.timeseries` of 0 and 1, multiplying the rate (`rate * quarantine_period`); or `ss.modify(..., start=, stop=)` |
 
 ## Who it applies to
@@ -76,11 +76,11 @@ A numeric variable that only gates transitions (age, a counter) is either a stra
 
 | In the source | In Starsim |
 |---|---|
-| A change of a parameter at given times | `ss.change(sir.pars.beta, at=['2020-03-15', '2020-06-01'], by=[0.5, 1.0])` |
+| A change of a parameter at given times | `ss.modify(sir.pars.beta, multiply=ss.timeseries({'2020-03-15': 0.5, '2020-06-01': 1.0}), start='2020-03-15')` |
 | A change for some people or under a condition | `ss.modify(sir.rel_sus, multiply=0.6, where=..., start=, stop=, when=)` |
 | Vaccination as a move between strata | `sir.stratify(vaccinated=[False, True], adjust={'infection': [1, 0.15]})` and `ss.Delivery(move=dict(vaccinated=True), coverage=, at=)` |
 | A product delivered to people | `ss.vaccinate(efficacy=0.85, coverage=0.7, at=[...], where=...)`, `ss.screen(...)`, `ss.treat(...)` |
-| A trigger (start when prevalence passes a threshold) | `when=lambda sim: ...` on a modifier or delivery (no memory); a rule with memory is a delivery's `deliver=` function |
+| A trigger (start when prevalence passes a threshold) | `where=lambda sim: ...` on a modifier or delivery (no memory); a rule with memory is a delivery's `deliver=` function |
 | Scenarios | One sim per scenario, run together with `ss.parallel(baseline=sim, vaccine=sim2)` |
 
 ## Outputs

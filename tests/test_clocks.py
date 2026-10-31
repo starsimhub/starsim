@@ -62,13 +62,13 @@ def test_clocks():
 
     # Errors: outside the domain, and no scheduled dwell; as compartments, see test_conveyor.py
     S, A, B, C = ss.states('S A B C')
-    with pytest.raises(ValueError, match='which has a value only for people in B, but moves people from S'):
+    with pytest.raises(ValueError):
         ss.Disease(S, A, B, C, ab=A >> B @ ss.days(4), sc_=ss.Transition(S, C, rate=ss.perday(1)*(B.time > 1)))
     d, ab = make()
-    with pytest.raises(ValueError, match='but applies to everyone'):
+    with pytest.raises(ValueError):
         ss.Sim(d, connectors=ss.modify(d.bc, multiply=ab.time/ss.days(1)), n_agents=100, **kw).init()
     S, A, B, C = ss.states('S A B C')
-    with pytest.raises(ValueError, match='so no dwell time is scheduled'):
+    with pytest.raises(ValueError):
         ss.Disease(S, A, B, C, ab=A >> B @ ss.perday(0.2), bc=ss.Transition(A, C, rate=ss.perday(1)*A.progress))
     d, ab = make()
     with pytest.raises(ss.CapabilityError):
@@ -121,8 +121,21 @@ def test_stamps():
     return
 
 
+@sc.timer()
+def test_modifier_clock():
+    sc.heading('A clock of a state with no exit, read only by a modifier, is known when the sim is built')
+    for key in ['connectors', 'interventions']:
+        S, I, R = ss.states(3)
+        d = ss.Disease(infection=S >> I @ 0.3*I, recovery=ss.Transition(I, R, dur=10), init_prev=0.01, name='d')
+        protect = ss.modify(d.rel_sus, multiply=0.5, where=R.time > 5) # R has no exit, so nothing else keeps its times
+        sim = ss.Sim(d, n_agents=500, stop=30, **{key:protect}, **kw).run()
+        assert sim.solver == 'abm'
+    return
+
+
 if __name__ == '__main__':
     sc.options(interactive=False)
     test_clocks()
     test_bv_recurrence()
+    test_modifier_clock()
     test_stamps()

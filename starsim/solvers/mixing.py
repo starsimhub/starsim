@@ -450,7 +450,7 @@ class Mixing(Telling):
         net.to_unit(sim)
         full = getattr(net, 'full', None)
         if full is not None:
-            net.init_full(sim) # Checks the dimensions and the shape
+            net.check_full(sim)
             names = [strat.name for strat in sim.groups.strats]
             cells = np.zeros(sim.groups.n_groups, dtype=int)
             for dim in full.dims:
@@ -530,7 +530,7 @@ class Mixing(Telling):
         self.solver = sim.solver
         self.pool_terms = sc.obj()
         def by_dims(net): # A matrix from ss.contacts() over the model's dimensions
-            return isinstance(net, ss.MixingPools) and net.constant and (getattr(net, 'dims', None) or getattr(net, 'full', None) is not None)
+            return isinstance(net, ss.MixingPools) and (net.dims or net.full is not None)
         nets = sim.pars.networks.values()
         if self.space is None:
             pools = [net for net in nets if by_dims(net)]

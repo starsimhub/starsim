@@ -31,7 +31,7 @@ What kind of module it is decides only where in each step it is called, and wher
 | Networks | `ss.networks.Route` | `sim.networks` | `ss.RandomNet`, `ss.SexualNet`, `ss.MixingPool` |
 | Demographics | `ss.Demographics` | `sim.demographics` | `ss.Births`, `ss.Deaths`, `ss.Pregnancy` |
 | Interventions | `ss.Intervention` | `sim.interventions` | `ss.vaccinate`, `ss.screen`, `ss.treat` (deliveries, which hold products) |
-| Connectors | `ss.Connector` | `sim.connectors` | `ss.modify` (and `ss.change`, which makes one) |
+| Connectors | `ss.Connector` | `sim.connectors` | `ss.modify` |
 | Analyzers | `ss.Analyzer` | `sim.analyzers` | `ss.infection_log`, or a function of the sim |
 | Custom | `ss.Module`, or anything that is none of the above | `sim.custom` | a module of your own |
 

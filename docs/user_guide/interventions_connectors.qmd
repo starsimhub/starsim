@@ -118,7 +118,7 @@ inflammation = Inflammation()
 effect = ss.modify(hiv.rel_sus, multiply=inflammation.factor)
 sim = ss.Sim([hiv, sti], connectors=[inflammation, effect], **kw)
 sim.run()
-print('New HIV infections:', sim.results.hiv.new_infections.sum())
+print('New HIV infections:', sim.results.hiv.infection.sum())
 ```
 
 A connector's parameters (`define_pars()`) can be changed when it is made, `Inflammation(half_life=ss.months(6))`, and fitted like any other. [Custom modules](building_modules.qmd) covers parameters, states, and results of a module's own.

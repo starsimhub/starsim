@@ -8,11 +8,10 @@ Used with: agents and compartments; declared and coded modules
 import inspect
 import numpy as np
 import numba as nb
-import scipy.stats as sps
 import scipy.special as sp_special
 import sciris as sc
 import starsim as ss
-from .internals.dists import Dist, every, inverse, positive, some
+from .internals.dists import Dist, every, inverse, positive, some, sps
 ss_int = ss.dtypes.int
 
 
@@ -115,7 +114,7 @@ class normal(Dist):
     scaling = ['predraw', 'postdraw']
     unit_pars = ('loc', 'scale')
     def __init__(self, loc=0.0, scale=1.0, **kwargs): # Does not accept dtype
-        super().__init__(distname='normal', dist=sps.norm, loc=loc, scale=scale, **kwargs)
+        super().__init__(distname='normal', dist='norm', loc=loc, scale=scale, **kwargs)
         return
 
     def ppf(self, rands):
@@ -181,7 +180,7 @@ class lognorm_im(Dist):
     unitless_pars = ('mean', 'sigma')
 
     def __init__(self, mean=0.0, sigma=1.0, **kwargs): # Does not accept dtype
-        super().__init__(distname='lognormal', dist=sps.lognorm, mean=mean, sigma=sigma, **kwargs)
+        super().__init__(distname='lognormal', dist='lognorm', mean=mean, sigma=sigma, **kwargs)
         return
 
     @staticmethod
@@ -245,7 +244,7 @@ class lognorm_ex(Dist):
     unit_pars = ('mean', 'std')
 
     def __init__(self, mean=1.0, std=1.0, **kwargs): # Does not accept dtype
-        super().__init__(distname='lognormal', dist=sps.lognorm, mean=mean, std=std, **kwargs)
+        super().__init__(distname='lognormal', dist='lognorm', mean=mean, std=std, **kwargs)
         return
 
     def convert_ex_to_im(self):
@@ -291,7 +290,7 @@ class expon(Dist):
     """
     scaling = ['predraw', 'postdraw']
     def __init__(self, scale=1.0, **kwargs):
-        super().__init__(distname='exponential', dist=sps.expon, scale=scale, **kwargs)
+        super().__init__(distname='exponential', dist='expon', scale=scale, **kwargs)
         return
 
     def ppf(self, rands):
@@ -316,7 +315,7 @@ class poisson(Dist):
     """
     scaling = 'predraw'
     def __init__(self, lam=1.0, **kwargs):
-        super().__init__(distname='poisson', dist=sps.poisson, lam=lam, **kwargs)
+        super().__init__(distname='poisson', dist='poisson', lam=lam, **kwargs)
         self._ppf_lam = None # Cached lambda for the fast ppf (see ppf())
         self._ppf_cdf = None # Cached CDF for the fast ppf
         return
@@ -364,7 +363,7 @@ class beta_dist(Dist):
     scaling = None
     unitless_pars = ('a', 'b')
     def __init__(self, a=1.0, b=1.0, **kwargs):
-        super().__init__(distname="beta", dist=sps.beta, a=a, b=b, **kwargs)
+        super().__init__(distname="beta", dist='beta', a=a, b=b, **kwargs)
         return
 
 
@@ -386,9 +385,7 @@ class beta_mean(Dist):
         eps = 1e-6 # With force=True, clip to strictly inside the valid range, since the bounds themselves are invalid
         if not (0 < mean < 1):
             if force:
-                if ss.options.warn_convert:
-                    warnmsg = f'Clipping the mean from {mean:n} to 0 < mean < 1.'
-                    ss.warn(warnmsg)
+                ss.warn(f'Clipping the mean from {mean:n} to 0 < mean < 1.')
                 mean = np.clip(mean, eps, 1-eps)
             else:
                 errormsg = f'The mean of a beta distribution must be 0 < mean < 1, not {mean:n}'
@@ -396,9 +393,7 @@ class beta_mean(Dist):
         max_var = mean*(1-mean)
         if not (0 < var < max_var):
             if force:
-                if ss.options.warn_convert:
-                    warnmsg = f'Clipping the variance from {var} to 0 < var < {max_var:n}.'
-                    ss.warn(warnmsg)
+                ss.warn(f'Clipping the variance from {var} to 0 < var < {max_var:n}.')
                 var = np.clip(var, eps*max_var, (1-eps)*max_var)
             else:
                 errormsg = f'The variance of a beta distribution must be 0 < var < mean*(1-mean). For your {mean=}, {var=} is invalid; the maximum variance is {max_var:n}.'
@@ -407,7 +402,7 @@ class beta_mean(Dist):
         # We're good to go
         a = ((1 - mean)/var - 1/mean) * mean**2
         b = a * (1 / mean - 1)
-        super().__init__(distname="beta", dist=sps.beta, a=a, b=b, **kwargs)
+        super().__init__(distname="beta", dist='beta', a=a, b=b, **kwargs)
         return
 
 
@@ -423,7 +418,7 @@ class nbinom(Dist):
     scaling = 'predraw'
     unitless_pars = ('n',)
     def __init__(self, n=1, p=0.5, **kwargs):
-        super().__init__(distname='negative_binomial', dist=sps.nbinom, n=n, p=p, **kwargs)
+        super().__init__(distname='negative_binomial', dist='nbinom', n=n, p=p, **kwargs)
         return
 
     def ppf(self, rands):
@@ -446,7 +441,7 @@ class binom(Dist):
     scaling = 'predraw'
     unitless_pars = ('n',)
     def __init__(self, n=1, p=0.5, **kwargs):
-        super().__init__(distname='binomial', dist=sps.binom, n=n, p=p, **kwargs)
+        super().__init__(distname='binomial', dist='binom', n=n, p=p, **kwargs)
         return
 
     def ppf(self, rands):
@@ -530,7 +525,7 @@ class weibull(Dist):
     unitless_pars = ('c',)
     unit_pars = ('scale', 'loc')
     def __init__(self, c=1.0, scale=1.0, *, loc=0.0, **kwargs):
-        super().__init__(distname='weibull', dist=sps.weibull_min, c=c, scale=scale, loc=loc, **kwargs)
+        super().__init__(distname='weibull', dist='weibull_min', c=c, scale=scale, loc=loc, **kwargs)
         return
 
     def ppf(self, rands):
@@ -581,7 +576,7 @@ class gamma(Dist):
             scale = mean/a
         a = sc.ifelse(a, 1.0)
         scale = sc.ifelse(scale, 1.0)
-        super().__init__(distname='gamma', dist=sps.gamma, a=a, scale=scale, loc=loc, **kwargs)
+        super().__init__(distname='gamma', dist='gamma', a=a, scale=scale, loc=loc, **kwargs)
         if mean is not None:
             self.given = ('gamma', given)
         return
@@ -720,8 +715,8 @@ class choose_n(Dist):
 
     Examples:
         ```python
-        # Seed exactly 20 infections
-        sir = ss.SIR(init_prev=ss.choose_n(20))
+        # Seed exactly 20 infections of a disease written as code
+        sir = ssl.AgentSIR(init_prev=ss.choose_n(20))
 
         # Choose 5 agents, weighted by age
         chooser = ss.choose_n(5, weights=lambda self, sim, uids: sim.people.age[uids])
@@ -977,16 +972,18 @@ class histogram(Dist):
         vsum = values.sum()
         if vsum != 1.0:
             values = values / vsum
-        dist = sps.rv_histogram((values, bins), density=density) # Create the SciPy distribution
-        super().__init__(dist=dist, distname='histogram', **kwargs)
-        self.cdf_bins = (dist._hcdf, dist._hbins) # For ppf()
-        self.hist = (values, bins, density) # As given (not in pars, which SciPy would read): for copies, see ss.transitions.numeric_dist()
+        widths = np.diff(bins)
+        pdf = values if density or (density is None and not np.allclose(widths, widths[0])) else values/widths # As scipy.stats.rv_histogram, which takes unequal bins as a density
+        pdf = pdf/np.sum(pdf*widths)
+        super().__init__(distname='histogram', **kwargs)
+        self.cdf_bins = (np.hstack([0.0, np.cumsum(pdf*widths)]), bins.astype(float)) # For ppf()
+        self.hist = (values, bins, density) # As given (not in pars): for copies, see ss.transitions.numeric_dist()
         self.parts = None # One histogram for each group, see by_group()
         # Leave _use_ppf as None (the default) so UID draws go through the hash-based
-        # CRN path: one uniform per slot mapped through the SciPy histogram's inverse
-        # CDF (self.dist.ppf). This is CRN-safe and draws exactly len(uids) numbers,
+        # CRN path: one uniform per slot mapped through the histogram's inverse
+        # CDF (ppf()). This is CRN-safe and draws exactly len(uids) numbers,
         # avoiding the slot_scale "blowup" (drawing slots.max()+1 and discarding most).
-        # The values/bins arrays are baked into self.dist, not treated as per-UID pars.
+        # The values/bins arrays are not treated as per-UID pars.
         return
 
     @classmethod
@@ -1005,18 +1002,12 @@ class histogram(Dist):
         dist.cdf_parts = [part.cdf_bins for part in parts]
         return dist
 
-    def process_dist(self):
-        """ Frozen with no parameters: the group is not one of SciPy's histogram """
-        if isinstance(self.dist, sps._distn_infrastructure.rv_generic):
-            self.dist = self.dist()
-        return super().process_dist()
-
-    def update_dist_pars(self, pars=None):
-        """ The group is not a parameter of SciPy's histogram """
-        return
+    def make_rvs(self):
+        """ Draws without UIDs: the same inverse CDF as ppf(); not for the user """
+        return self.ppf(self.rand(self._size))
 
     def ppf(self, rands):
-        """ The inverse of the CDF, which is piecewise linear: as SciPy's, without its temporaries (about 90 bytes per value) """
+        """ The inverse of the CDF, which is piecewise linear """
         def one(rands, cdf, bins):
             return np.where(rands == 0, bins[0], np.interp(rands, cdf, bins)) # SciPy gives the lowest bin edge for 0, even if the first bins are empty
         if self.parts is None:

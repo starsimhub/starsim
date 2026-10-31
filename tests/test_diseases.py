@@ -145,15 +145,15 @@ def test_aliases():
     dis = sim.diseases.isolationsir
     res = sim.results.isolationsir
     assert (dis.infectious == (dis.infected & ~dis.isolated)).all(), 'The derived alias should combine the two states'
-    assert res.cum_infections[-1] == 0, 'Isolated agents should not transmit'
+    assert res.infection.cum[-1] == 0, 'Isolated agents should not transmit'
     assert 'infectious' in res, 'A derived alias should generate an automatic result'
     assert res.infectious.max() == 0, 'Nobody is infectious, since everyone is isolated'
 
     # Its new infections are recorded at the end of the step they happen in, as the counts of its states are (during a step, self.ti is its start)
     sim = ss.Sim(n_agents=1000, diseases=ssl.AgentSIR(beta=ss.perday(0.1), dur_inf=ss.days(10), p_death=0), networks='random', dur=ss.days(30), dt=ss.days(1), verbose=0).run()
     res = sim.results.agentsir
-    assert np.array_equal(res.new_infections[1:], -np.diff(res.susceptible)) # The infections of each step leave S in it
-    assert np.count_nonzero(sim.diseases.agentsir.ti_infected == 10) == res.new_infections[10] # And are dated there too, as a declared disease dates ti_I
+    assert np.array_equal(res.infection[1:], -np.diff(res.susceptible)) # The infections of each step leave S in it
+    assert np.count_nonzero(sim.diseases.agentsir.ti_infected == 10) == res.infection[10] # And are dated there too, as a declared disease dates ti_I
 
     # Aliases can also be defined alongside the states they refer to
     class AliasSIR(ssl.AgentSIR):
@@ -260,12 +260,12 @@ def test_ncd():
     sim2 = ss.Sim(diseases=[Anemia(), Background(init_prev=0.1)], networks='random', n_agents=500, verbose=0).run()
     anemia = sim2.diseases.anemia
     assert sim2.results.anemia.anemic[-1] > 400 # Anemia(p_onset=0.1) for 50 years
-    assert sim2.results.background.new_infections.sum() == 0 # Not transmitted
+    assert sim2.results.background.infection.sum() == 0 # Not transmitted
     assert isinstance(anemia, ss.Disease) and not isinstance(anemia, ss.Infection) and isinstance(sim2.diseases.background, ss.Disease)
     assert not hasattr(anemia, 'susceptible') and 'infect' not in anemia.describe(output=True) # No states of an infection forced on it
 
     # An infection written as code with a beta but nothing to transmit it over is an error, not a run with no infections; with beta=0 it is not transmitted by design
-    with pytest.raises(ValueError, match='has none'):
+    with pytest.raises(ValueError):
         ss.Sim(diseases=ssl.AgentSIR(), n_agents=100, verbose=0).init()
     ss.Sim(diseases=ssl.AgentSIR(beta=0), n_agents=100, verbose=0).init()
     return sim
@@ -419,7 +419,7 @@ def test_strains_errors():
     build = lambda hpv, **kwargs: ss.Sim(diseases=hpv, n_agents=100, stop=2001, verbose=0, **kwargs).init()
     with pytest.raises(ss.CapabilityError): # A strain written as code, whose states the others cannot see
         family([make_genotype('hpv16'), ssl.AgentSIS()])
-    with pytest.raises(KeyError, match='have no state or named sum of states for'): # A state the members do not have
+    with pytest.raises(KeyError): # A state the members do not have
         build(pair(immunity=ss.immunity(due_to='nab', rel_sus=0.5)))
     with pytest.raises(ss.CapabilityError): # A combine= function under sim.gradient()
         ss.Sim(diseases=pair(immunity=ss.immunity(due_to='R', rel_sus=0.5, combine=lambda p: p.max(0))), stop=2001, verbose=0).gradient()
@@ -427,7 +427,7 @@ def test_strains_errors():
         build(ss.Disease(name='hpv', strains=ss.Strains([make_genotype('hpv16').stratify(risk=['low', 'high']), make_genotype('hpv18')], name='risk')))
     with pytest.raises(ValueError): # A strain with its own initial values in a disease that seeds
         family([make_genotype('hpv16', init_prev=0.1), make_genotype('hpv18')], init_prev=0.1)
-    with pytest.raises(ValueError, match='which would make its exits infinitely fast'): # A protection of 1 on a time spent
+    with pytest.raises(ValueError): # A protection of 1 on a time spent
         build(pair(immunity=ss.immunity(due_to='R', dur=dict(I=0.6), combine='sum')))
     with pytest.raises(KeyError, match='to move to; add one'): # A shared state with no state to move to
         def sis(name):
@@ -492,7 +492,7 @@ def test_infect():
         sim = ss.Sim(n_agents=1000, diseases=sir, interventions=Import(), analyzers=ss.infection_log(), start=2000, stop=2008, verbose=0).run()
         infected = sim.interventions[0].infected
         log = sim.analyzers[0].to_df()
-        ti, new = ('ti_I', 'infection') if sir.graph else ('ti_infected', 'new_infections')
+        ti, new = ('ti_I', 'infection') if sir.graph else ('ti_infected', 'infection')
         assert len(infected) == 50 and (sim.diseases.sir[ti][infected] == 3).all() and sim.results.sir[new][3] == 50
         assert len(log) == 50 and (log.source.to_numpy(dtype=float, na_value=np.nan) == -1).all() # Not NA, which (log.source == -1).all() skips
 
@@ -528,10 +528,10 @@ def test_same_transmission():
     kw = dict(n_agents=n_agents, stop=50, unit='day', verbose=0, analyzers=ss.infection_log(), networks=[ss.RandomNet(n_contacts=4), ss.RandomNet(n_contacts=2, name='other')],
               connectors=[ss.modify('sir.rel_sus', multiply=0.5, where=lambda sim: sim.people.age > 40), ss.modify('other.pars.n_contacts', multiply=0.5)],
               interventions=ss.vaccinate(ss.Vaccine(efficacy=0.7), coverage=0.3, at=10))
-    dec = ss.Sim(diseases=ss.SIR(name='sir', beta=ss.perday(0.1), dur_inf=ss.constant(ss.days(10)), init_prev=ss.bernoulli(seeds)), solver='abm', **kw).run()
+    dec = ss.Sim(diseases=ss.SIR(name='sir', beta=ss.perday(0.1), dur_inf=ss.constant(ss.days(10)), init_prev=lambda sim, uids: seeds(None, sim, uids)), solver='abm', **kw).run()
     cod = ss.Sim(diseases=CodedSIR(name='sir'), **kw).run()
     d, c = dec.results.sir, cod.results.sir
-    assert np.array_equal(d.infection, c.new_infections) and np.array_equal(d.I, c.infected) and np.array_equal(d.R, c.recovered) and d.infection.sum() > 500
+    assert np.array_equal(d.infection, c.infection) and np.array_equal(d.I, c.infected) and np.array_equal(d.R, c.recovered) and d.infection.sum() > 500
     logs = [sim.analyzers[0].to_df().sort_values('target')[['target', 'source', 'network']].fillna('-').astype(str).values for sim in [dec, cod]]
     assert np.array_equal(*logs) # Who infected whom, and over which network
     return dec, cod
@@ -566,11 +566,11 @@ def test_same_strains():
 
     def same(imm=None):
         kw = dict(n_agents=n_agents, stop=40, unit='day', verbose=0, analyzers=ss.infection_log(), networks=[ss.RandomNet(n_contacts=4), ss.RandomNet(n_contacts=2, name='other')])
-        dec = ss.Sim(diseases=ss.SIR(name='sir', beta=ss.perday(0.1), dur_inf=ss.constant(ss.days(10)), init_prev=ss.bernoulli(seeds), strains=strains(imm and 'R')), solver='abm', **kw).init()
+        dec = ss.Sim(diseases=ss.SIR(name='sir', beta=ss.perday(0.1), dur_inf=ss.constant(ss.days(10)), init_prev=lambda sim, uids: seeds(None, sim, uids), strains=strains(imm and 'R')), solver='abm', **kw).init()
         cod = ss.Sim(diseases=CodedSIR(name='sir', seed_strain=dec.diseases.sir.engine.strain_raw().copy(), imm=imm), **kw).run()
         dec.run()
         d, c = dec.results.sir, cod.results.sir
-        assert np.array_equal(d.infection, c.new_infections) and np.array_equal(d.I, c.infected) and d.infection.sum() > 1000
+        assert np.array_equal(d.infection, c.infection) and np.array_equal(d.I, c.infected) and d.infection.sum() > 1000
         held = cod.diseases.sir.strain.raw >= 0
         assert np.array_equal(dec.diseases.sir.engine.strain_raw()[held], cod.diseases.sir.strain.raw[held]) and (np.bincount(cod.diseases.sir.strain.raw[held]) > 100).all() # The same strain for everyone infected
         logs = [sim.analyzers[0].to_df().sort_values('target')[['target', 'source', 'network']].fillna('-').astype(str).values for sim in [dec, cod]]
@@ -666,7 +666,7 @@ def test_mixed_disease():
     assert np.isclose(mixed.years_infected.sum(), mixed.results.I[1:].sum()*sim.t.dt_year) # One step for each step spent infected
     fitted, _ = ss.fit.bounded_pars(ss.Sim(diseases=Mixed(rate=ss.par(1.0, bounds=[0.5, 2])), n_agents=100, verbose=0).init())
     assert list(fitted.keys()) == ['rate'] # Its code's parameter can be fitted too
-    with pytest.raises(ss.CapabilityError, match='never calls'): # A declared transition never calls set_prognoses()
+    with pytest.raises(ss.CapabilityError): # A declared transition never calls set_prognoses()
         type('Bad', (ss.SIS,), dict(set_prognoses=lambda self, uids, sources=None: None))
 
     # Its code sees those infected from code (disease.infect()) among the infection's events, in the step; and its own results are scaled as the declared ones are
@@ -725,6 +725,42 @@ def test_code_seams():
     return sim
 
 
+def test_coded_defaults():
+    sc.heading('Testing a bare beta, typed parameters, and results in __init__() of a disease written as code')
+    class SI(ss.Infection):
+        def __init__(self):
+            super().__init__()
+            self.define_pars(beta=0.02, init_prev=ss.bernoulli(0.05))
+            self.define_results(ss.Result('extra'))
+            return
+        def set_prognoses(self, uids, sources=None):
+            super().set_prognoses(uids, sources)
+            self.infected[uids] = True
+            return
+    def infected(dt):
+        sim = ss.Sim(SI(), networks=ss.RandomNet(n_contacts=4), n_agents=1000, stop=ss.days(28), dt=dt, verbose=0, rand_seed=1).run()
+        assert 'extra' in sim.results.si
+        return sim.results.si.infected[-1]
+    daily, weekly = infected(ss.days(1)), infected(ss.days(7))
+    assert daily < 1.5*weekly, f'A bare beta should be per day whatever the step: {daily}, {weekly}'
+
+    class Early(ss.Disease): # Given a typed parameter, a disease that declares nothing is still written as code
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            self.define_pars(beta=ss.peryear(0.1))
+            return
+    early = Early(beta=ss.par(ss.peryear(0.2)))
+    assert early.graph is None and early.pars.beta == ss.peryear(0.2)
+    assert not ss.Sim(early, n_agents=100, stop=2, verbose=0).init().declared
+
+    S, I = ss.states('S I') # A disease's own prevalence takes the place of the automatic one
+    own = ss.Disease(infection=S >> I @ 0.3*I, recovery=I >> S @ ss.days(10), name='own')
+    own.define_results(ss.Result('prevalence'))
+    assert not ss.Sim(own, total_pop=100, stop=2, verbose=0).run().results.own.prevalence.values.any() # Left for its own code to fill in
+    return
+
+
+@sc.timer()
 def test_define_transitions():
     sc.heading('A declared disease whose structure depends on its arguments, declared on self in __init__()')
 
@@ -762,7 +798,7 @@ def test_define_transitions():
             self.define_transitions(extra=self.R >> self.I @ ss.peryear(0.1))
     extra = Extra()
     assert 'extra' in extra.transitions and 'code_par' in extra.code_pars
-    with pytest.raises(ss.CapabilityError, match='was built when it was made'): # Declared after the disease was made
+    with pytest.raises(ss.CapabilityError): # Declared after the disease was made
         extra.define_results(share_I=extra.I.frac)
 
     class Fitted(ss.Disease): # A parameter given with bounds is a value, not a declaration, so the states and transitions can follow

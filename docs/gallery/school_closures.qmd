@@ -72,6 +72,6 @@ The Epidemics package says a closure another way: as a share by which the contac
 ## Going further
 
 - [Interventions and scenarios](../tutorials/t5_interventions.qmd) compares scenarios in the measles model, including school terms.
-- [Interventions](../user_guide/interventions_interventions.qmd) covers `ss.modify()` and `ss.change()`; [Population data](../user_guide/populations_data.qmd) covers the contact matrices by country and setting.
+- [Interventions](../user_guide/interventions_interventions.qmd) covers `ss.modify()`; [Population data](../user_guide/populations_data.qmd) covers the contact matrices by country and setting.
 - [Epidemics: modeling non-pharmaceutical interventions](https://epiverse-trace.github.io/epidemics/articles/modelling_interventions.html), the original of this example.
 - Prem K, et al. (2021). Projecting contact matrices in 177 geographical regions. *PLoS Computational Biology* 17(7): e1009098.

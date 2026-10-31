@@ -235,9 +235,12 @@ class People:
     def __getattr__(self, attr):
         """ Called only if the attribute isn't found: in a compartmental run, per-agent attributes that are not stratifications do not exist """
         missing = self.__dict__.get('_no_groups', [])
+        if attr == 'auids' and '_no_groups' in self.__dict__:
+            raise ss.errors.NoAgentAttribute('people.auids was asked for, but this run has no agents: it has one row for each group of people.\n'
+                                             '     Use the number alive (people.n_alive) or the number in a disease\'s states (e.g. sir.I.n), or run with solver="abm".')
         if attr in missing:
-            raise ss.CapabilityError(f'people.{attr} was asked for, but it is a per-agent attribute and not a stratification, so it does not exist in a compartmental run.\n'
-                                     f'     Stratify by it (e.g. sim.stratify({attr}=[...])), or run with solver="abm".')
+            raise ss.errors.NoAgentAttribute(f'people.{attr} was asked for, but it is a per-agent attribute and not a stratification, so it does not exist in a compartmental run.\n'
+                                             f'     Stratify by it (e.g. sim.stratify({attr}=[...])), or run with solver="abm".')
         if '_no_groups' in self.__dict__ and not attr.startswith('_'): # A compartmental run, whose people lack what networks and modules written as code add to agents
             raise AttributeError(f'People object has no attribute "{attr}".\n     In a compartmental run, people are one row per group, without the attributes that networks and modules written as code give agents; if it is one of those, run with solver="abm"')
         raise AttributeError(f'People object has no attribute "{attr}"')
@@ -287,19 +290,22 @@ class People:
         return True
 
     def __len__(self):
-        """ Length of people """
-        return len(self.auids)
+        """ The number of people: the active agents, or in a compartmental run, the people alive, to the nearest whole person """
+        return round(self.alive.sum()) if '_no_groups' in self.__dict__ else len(self.auids)
 
     @property
     def n_alive(self):
         """
-        The number of living agents, which is what `results.alive` records (with each agent counted by its weight if agents' weights differ: see `people.scale`)
+        The number of living agents, which is what `results.alive` records (with each agent counted by its weight if agents' weights differ: see `people.scale`);
+        in a compartmental run, the number of people alive
 
         This is not the same as `len(people)`: agents who died on the current timestep are
         not removed from `auids` until `finish_step()`, so that analyzers can still inspect
         them, and the unborn (agents made at conception by `ss.Pregnancy`) are not counted. Use
         this rather than `len(people)` for any per-timestep denominator.
         """
+        if '_no_groups' in self.__dict__:
+            return self.alive.sum()
         unborn = self.unborn_uids()
         return np.count_nonzero(self.alive) - np.count_nonzero(self.alive.raw[unborn])
     
@@ -327,7 +333,7 @@ class People:
         if not self.grouped:
             return len(self)
         engine = self.sim.declared[0].engine
-        return engine.n_people(total=False) if hasattr(engine, 'n_people') else np.full(self.n_agents_init, np.nan)
+        return engine.n_people(total=False) if engine is not None else np.full(self.n_agents_init, np.nan)
 
     def brief(self, output=False):
         """ Print a one-line summary of the people

@@ -10,7 +10,6 @@ import itertools
 import functools
 import numpy as np
 import numba as nb
-import scipy.stats as sps
 import scipy.sparse as spsp
 import scipy.optimize as spo
 import sciris as sc
@@ -162,6 +161,10 @@ class Route(ss.Module):
     """
     sets_unit = False # Its typed defaults (e.g. how long partnerships last) do not set the unit of the model's bare numbers: see ss.solvers.choose.init_unit()
     one_step = False # Whether every edge lasts one step: the edges of the dead then end at the next step anyway, so People.remove_dead() leaves them (see RandomNet)
+    def agent_reasons(self, sim):
+        """ A route works on groups, unless it says otherwise """
+        return []
+
     def compute_transmission(self, rel_sus, rel_trans, disease_beta, disease=None):
         """ Compute transmission probabilities along this route (must be overridden by subclasses).
 
@@ -325,15 +328,6 @@ class Network(Route):
             raise ValueError(f'"{self.name}" has a partnership from {src[k]} to {trg[k]}, whose sides give no direction it has ({sc.strjoin(dirs)}; {self.name} has {self.sides_str()}){hint}')
         return out
 
-    @property
-    def custom_beta(self):
-        """
-        Whether it defines its own `net_beta()`: a declared disease then gives it the probability per act
-        of each edge, in place of the hazard per act, and what it returns (the probability for the partnership in the step)
-        is multiplied by `rel_trans`, `rel_sus`, and the modifiers on the route
-        """
-        return type(self).net_beta is not Network.net_beta
-
     def transmit(self, rel_trans, rel_sus, edge_beta, rng, prob=None):
         """
         The edges that transmit in a step, in each direction the network transmits in (p1 to p2, then p2 to p1 unless it is one way)
@@ -347,7 +341,7 @@ class Network(Route):
             rel_trans (array): the transmissibility of each agent, by UID (0 if not infectious)
             rel_sus (array): the susceptibility of each agent, by UID (0 if not susceptible)
             edge_beta (func): of the direction (0 or 1), and the indices, sources, and targets of the edges from someone with `rel_trans` not 0
-                to someone with `rel_sus` not 0, the beta of each of them (an array, or a number for all; see `edge_net_beta()`): with `prob`, only
+                to someone with `rel_sus` not 0, the beta of each of them (an array, or a number for all; see `net_beta()`): with `prob`, only
                 where it is 0 matters (no transmission); None to skip the direction (no random numbers are drawn)
             rng (`ss.multi_random`): the random numbers, by source and target
             prob (func): of the direction, and the indices, sources, and targets of the edges that can transmit, the probability of each, in place of the product above
@@ -415,6 +409,10 @@ class Network(Route):
         super().init_post()
         if add_pairs: self.add_pairs()
         return
+
+    def agent_reasons(self, sim):
+        """ An individual-level network that has an approximation; one with none is refused by the layout of the mixing (see `ss.solvers.Mixing.init()`) """
+        return [ss.modules.Preference(f'{type(self).__name__} is an individual-level network')] if self.mean_contacts(sim)[0] is not None else []
 
     def mean_contacts(self, sim):
         """
@@ -775,7 +773,7 @@ class Network(Route):
         """
         The probability that each edge transmits in a step, given the disease's probability (in the step, or on a network with acts, per act)
 
-        A network written as code can override this (see `custom_beta`).
+        A network written as code can override this, for a disease written as code; a declared disease works out a network with acts from its hazard per act (see `ss.modify()` for what changes it on one route).
 
         Args:
             disease_beta (float): the disease's probability
@@ -790,13 +788,6 @@ class Network(Route):
     def ends(self, d):
         """ The sources and targets of every edge, in direction `d`: p1 to p2 (0) or p2 to p1 (1) """
         return (self.edges.p1, self.edges.p2) if d == 0 else (self.edges.p2, self.edges.p1)
-
-    def edge_net_beta(self, inds, disease_beta=None, disease=None):
-        """ `net_beta()` for the edges at `inds`; one written as code (see `custom_beta`) is worked out for every edge, as in Starsim 3, so `disease_beta` is then a number or a value for every edge; not for the user """
-        if self.custom_beta:
-            beta = self.net_beta(disease_beta=disease_beta, disease=disease)
-            return beta[inds] if np.ndim(beta) else beta
-        return self.net_beta(disease_beta=disease_beta, inds=inds, disease=disease)
 
 
 class DynamicNetwork(Network):
@@ -1252,6 +1243,10 @@ class DegreeNet(DynamicNetwork):
         self.waiting = ss.uids() # People who looked for a partner and were left over, who look again
         return
 
+    def agent_reasons(self, sim):
+        """ Lasting partnerships are approximate in compartments, so `solver='auto'` keeps agents """
+        return [ss.modules.Preference(f'"{self.name}" ({type(self).__name__}) has lasting partnerships, which agents follow exactly')]
+
     def set_between(self):
         """ The groups of `between` (or None), and from them the sides of the network """
         between = self.pars.between
@@ -1365,7 +1360,7 @@ class DegreeNet(DynamicNetwork):
         if isinstance(n_contacts, ss.poisson):
             mean = pars['lam']
             k = np.arange(sc.ifelse(top, int(mean + 10*np.sqrt(mean) + 10)) + 1)
-            base = sps.poisson.pmf(k, mean)
+            base = ss.dists.sps.poisson.pmf(k, mean)
         elif isinstance(n_contacts, ss.constant):
             mean = int(pars['v'])
             k = np.arange(sc.ifelse(top, mean) + 1)
@@ -1986,25 +1981,6 @@ class AgeGroup(sc.prettyobj):
         return f'age({self.low}-{self.high})'
 
 
-class LevelGroup(sc.prettyobj):
-    """ A filter that returns the uids of the agents at given levels of the sim's stratifications, e.g. `LevelGroup(age=0, location=1)` """
-    def __init__(self, **levels):
-        self.levels = levels
-        self.name = repr(self)
-        return
-
-    def __call__(self, sim):
-        in_group = sim.people.alive
-        for dim,level in self.levels.items():
-            strat = sim.groups.strats[sim.groups.dim_index(dim)]
-            raw = sim.people[strat.attr]
-            in_group = in_group & ((raw >= strat.edges[level]) & (raw < np.append(strat.edges, np.inf)[level+1]) if strat.edges is not None else (raw == level))
-        return ss.uids(in_group)
-
-    def __repr__(self):
-        return ','.join(f'{dim}={level}' for dim,level in self.levels.items())
-
-
 class MixingPools(Route):
     """
     A container for creating a rectangular array of MixingPool instances
@@ -2047,8 +2023,11 @@ class MixingPools(Route):
         self.update_pars(pars, **kwargs)
         self.validate_pars()
         self.pools = []
-        self.constant = False # Whether a number of contacts is the same for everyone in a group (as from ss.contacts()), rather than Poisson
         self.edges = None # The lower edges of the matrix's own age bands (from ss.contacts()), whose exposure agents work out by band: see band_exposure()
+        self.dims = None # The matrices over the model's own dimensions (from ss.contacts())
+        self.age_edges = None # The lower edges of the age matrix's own groups, if given with ages= (see ss.solvers.Mixing.dim_matrices())
+        self.full = None # One matrix over several of the model's dimensions together (from ss.contacts())
+        self.p_acquire = ss.bernoulli(p=0) # Placeholder value, for a matrix with no pools: see compute_transmission()
         self.unit = None # The unit of time the contacts are counted over, if not the sim's (e.g. 'day' for ss.contacts('Kenya')): see to_unit()
         return
 
@@ -2057,9 +2036,9 @@ class MixingPools(Route):
         if self.unit is not None:
             factor = ss.solvers.convert(getattr(ss, f'per{self.unit.removesuffix("s")}')(1.0), sim.unit_base)
             self.pars.n_contacts = self.pars.n_contacts*factor
-            if getattr(self, 'dims', None) is not None:
+            if self.dims is not None:
                 self.dims = {dim:mat*factor for dim,mat in self.dims.items()}
-            if getattr(self, 'full', None) is not None:
+            if self.full is not None:
                 self.full.matrix = self.full.matrix*factor
             self.unit = None
         return
@@ -2094,8 +2073,8 @@ class MixingPools(Route):
 
         return
 
-    def init_full(self, sim):
-        """ For one matrix over several stratifications together (`ss.contacts(matrix, dims=[...])`), a group for each combination of their levels, the first slowest; checks the shape against the levels """
+    def check_full(self, sim):
+        """ For one matrix over several stratifications together (`ss.contacts(matrix, dims=[...])`): check its shape against the levels of each """
         full = self.full
         names = [strat.name for strat in sim.groups.strats]
         for dim in full.dims:
@@ -2106,14 +2085,7 @@ class MixingPools(Route):
         if (full.levels is not None and tuple(full.levels) != counts) or len(full.matrix) != np.prod(counts):
             levels = '; '.join(f'"{strat.name}" has {strat.n} ({sc.strjoin(strat.labels)})' for strat in strats)
             shape = full.matrix.shape if full.levels is None else tuple(full.levels)*2
-            raise ValueError(f'the contact matrix of "{self.name}" has shape {shape}, but {levels}, so it needs shape {counts*2} (or {(int(np.prod(counts)),)*2}, the first stratification slowest)')
-        groups = {}
-        for combo in itertools.product(*[range(n) for n in counts]):
-            group = LevelGroup(**dict(zip(full.dims, combo)))
-            groups[group.name] = group
-        p = self.pars
-        p.src, p.dst = sc.obj(groups), sc.obj(sc.dcp(groups))
-        p.n_contacts = full.matrix.T # Indexed [source, destination]
+            raise ValueError(f'the contact matrix of "{self.name}" has shape {shape}, but {levels}, so it needs shape {counts*2} (or {(int(np.prod(counts)),)*2}, the first stratification slowest).')
         return
 
     def init_pre(self, sim):
@@ -2126,22 +2098,14 @@ class MixingPools(Route):
         self.to_unit(sim)
         p = self.pars
         time_args = {k:p.get(k) for k in ss.Timeline.time_args} # get() allows None
-        if getattr(self, 'full', None) is not None:
-            self.init_full(sim)
-
         self.pools = []
-        coded = any(isinstance(dis, ss.Infection) for dis in sim.pars.diseases.values()) # A disease written as code transmits through the pools themselves
-        if (self.name in sim.mixing.pool_terms or self.edges is not None) and not coded: # Declared diseases use the matrix from the counts in each group or band: see ss.solvers.Mixing.init_pools() and band_exposure()
+        if self.edges is not None or self.dims is not None or self.full is not None or self.name in sim.mixing.pool_terms: # Used from the counts in each group or band, not with a pool for each pair: see ss.solvers.Mixing.init_pools()
             return
-        if getattr(self, 'age_edges', None) is not None: # The pools of a disease written as code are by the levels of each dimension, so they need the age matrix over the model's age groups
-            ages = next((strat.edges for strat in sim.groups.strats if strat.kind == 'age'), None)
-            if ages is None or len(ages) != len(self.age_edges) or not np.allclose(ages, self.age_edges):
-                raise ss.CapabilityError(f'the contacts "{self.name}" have age groups of their own ({sc.strjoin(self.age_edges)}) beside other dimensions, which a disease written as code cannot use yet; stratify the sim by the same age groups (stratify=dict(age={self.age_edges.tolist()}))')
         for i,sk,src in p.src.enumitems():
             for j,dk,dst in p.dst.enumitems():
                 n_contacts = p.n_contacts[i,j]
                 if sc.isnumber(n_contacts): # If it's a number, convert to a distribution
-                    n_contacts = ss.constant(n_contacts) if self.constant else ss.poisson(lam=n_contacts)
+                    n_contacts = ss.poisson(lam=n_contacts)
                 name = f'{self.name}:{sk}->{dk}' # Named after the whole, so that two of them (e.g. home and school contacts) can be in one sim
                 mp = MixingPool(name=name, diseases=p.diseases, beta=p.beta, n_contacts=n_contacts, src=src, dst=dst, **time_args)
                 mp.init_pre(sim) # Initialize the pool
@@ -2174,11 +2138,29 @@ class MixingPools(Route):
         expo[ok] = (self.pars.n_contacts.T @ prev)[band[ok]] # n_contacts is indexed [source, destination]
         return auids, self.pars.beta*expo
 
-    def compute_transmission(self, *args, **kwargs):
-        new_cases = []
-        for mp in self.pools:
-            new_cases.extend(mp.compute_transmission(*args, **kwargs))
-        return new_cases
+    def compute_transmission(self, rel_sus, rel_trans, disease_beta, disease):
+        """
+        Calculate transmission, for a disease written as code: through each pool, or for a matrix from `ss.contacts()`, from the counts in
+        each group or band, as a declared disease's is (see `ss.solvers.Agents.transmit()`), since everyone in a group has the same contacts
+
+        Args:
+            rel_sus (Arr): Relative susceptibility
+            rel_trans (Arr): Relative infectiousness
+            disease_beta (float): The beta value for the disease, as the probability in the step
+            disease (Disease): The disease
+        """
+        if self.pools:
+            return [uid for mp in self.pools for uid in mp.compute_transmission(rel_sus, rel_trans, disease_beta, disease)]
+        sim = self.sim
+        if self.name in sim.mixing.pool_terms:
+            auids = sim.people.auids
+            groups = sim.groups.group_raw()[auids]
+            n, infectious = [np.bincount(groups, weights=w, minlength=sim.groups.n_groups) for w in [None, rel_trans.raw[auids]]]
+            expo = sim.mixing.term_exposure(sim.mixing.pool_terms[self.name], infectious, n.astype(float))[groups]
+        else:
+            auids, expo = self.band_exposure(rel_trans.raw)
+        self.p_acquire.set(p=1 - (1 - disease_beta)**(expo*rel_sus.raw[auids]))
+        return self.p_acquire.filter(auids)
 
     def remove_uids(self, uids):
         """ Remove UIDs from each mixing pool
@@ -2268,6 +2250,15 @@ class MixingPool(Route):
         self.dst_uids = None
         self.p_acquire = ss.bernoulli(p=0) # Placeholder value
         return
+
+    def agent_reasons(self, sim):
+        """ A pool of some people has no compartmental form yet, and a number of contacts that differs between people is approximated """
+        n_contacts = self.pars.n_contacts
+        if self.pars.src is not None or self.pars.dst is not None:
+            return [f'the mixing pool "{self.name}" is between some people (src= or dst=), which only agents have']
+        elif isinstance(n_contacts, ss.Dist) and not isinstance(n_contacts, ss.constant):
+            return [ss.modules.Preference(f'the mixing pool "{self.name}" has a number of contacts that differs between people ({type(n_contacts).__name__})')]
+        return []
 
     def shrink(self):
         """ Shrink the size of the mixing pool for saving to disk """
@@ -2475,8 +2466,7 @@ def contacts(matrix=None, ages=None, dims=None, name=None, source=None, layer='a
             errormsg = f'ss.contacts(matrix, dims={over}) needs a matrix of shape (levels of each, then levels of each again), e.g. (2, 3, 2, 3) for 2 and 3 levels, or square over the combinations of levels, e.g. (6, 6); got shape {matrix.shape}'
             raise ValueError(errormsg)
         check_contacts(matrix, sc.strjoin(over, sep=' and '))
-        out = MixingPools(src={}, dst={}, n_contacts=np.zeros((0, 0)), name=name) # Its pools are made when the sim is built, once the levels are known (see MixingPools.init_full())
-        out.constant = True
+        out = MixingPools(src={}, dst={}, n_contacts=np.zeros((0, 0)), name=name)
         out.full = sc.obj(dims=over, matrix=matrix, levels=levels) # So a compartmental run can use the matrix directly
         out.unit = unit
         return out
@@ -2505,14 +2495,7 @@ def contacts(matrix=None, ages=None, dims=None, name=None, source=None, layer='a
                 errormsg = f'The contact matrix of ss.contacts() for "{dim}" needs to be square, with a row and a column for each level of "{dim}"; got shape {mat.shape}'
                 raise ValueError(errormsg)
             check_contacts(mat, dim)
-        levels = list(itertools.product(*[range(len(mat)) for mat in mats.values()]))
-        groups = {}
-        for combo in levels:
-            group = LevelGroup(**dict(zip(mats.keys(), combo)))
-            groups[group.name] = group
-        product = functools.reduce(np.kron, mats.values(), np.ones((1, 1))) # The product of the entries for each dimension, for each pair of combinations of levels (in the order of `levels`)
-        out = MixingPools(src=groups, dst=sc.dcp(groups), n_contacts=product.T, name=name) # ss.MixingPools is indexed [source, destination]; kept as numbers, since a matrix with many levels would be a million objects to make and copy
-        out.constant = True # Everyone in a group has the same number of contacts
+        out = MixingPools(src={}, dst={}, n_contacts=np.zeros((0, 0)), name=name)
         out.dims = mats # So a compartmental run can use the matrices directly
         out.age_edges = age_edges # The lower edges of the age matrix's own groups, if given with ages= (see ss.solvers.Mixing.dim_matrices())
         out.unit = unit
@@ -2531,7 +2514,6 @@ def contacts(matrix=None, ages=None, dims=None, name=None, source=None, layer='a
     highs = list(ages[1:]) + [None]
     groups = {(f'{lo}-{hi}' if hi is not None else f'{lo}+'): AgeGroup(lo, hi) for lo,hi in zip(ages, highs)}
     out = MixingPools(src=groups, dst=sc.dcp(groups), n_contacts=matrix.T, name=name) # ss.MixingPools is indexed [source, destination]
-    out.constant = True # Everyone in a group has the same number of contacts
     out.ref = ref # Where a named matrix came from
     out.edges = np.asarray(ages, dtype=float)
     out.unit = unit or ('day' if ref is not None else None) # S7.8: a country's matrix is contacts a day, whatever the sim's unit

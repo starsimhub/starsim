@@ -94,7 +94,7 @@ sim = ss.Sim(networks=ssl.HouseholdNet(dhs_data=dhs_data))
 `ssl.DiskNet` is a spatial network: each agent has a position (`x`, `y`) in a unit square and a heading, moves at speed `v` each step (by default 0.05 a day), bounces off the walls, and is in contact with every agent within radius `r` (by default 0.1). Because contacts depend on position, an epidemic spreads outwards from each case as a wave, rather than evenly through the population. The positions are states of the network, so they can be plotted at any point in a run; here the sim runs in stages, with the agents moving slowly, and plots who is susceptible, infected, and recovered at each:
 
 ```{python}
-sir = lambda: ss.SIR(beta=ss.perday(0.1), dur_inf=ss.days(10), init_prev=ss.choose_n(3))
+sir = lambda: ss.SIR(beta=ss.perday(0.1), dur_inf=ss.days(10), init_prev=3)
 kw = dict(n_agents=2000, start='2000-01-01', dur=ss.days(150), dt=ss.days(1))
 disk = ss.Sim(diseases=sir(), networks=ssl.DiskNet(r=0.04, v=ss.freqperday(0.001)), **kw)
 

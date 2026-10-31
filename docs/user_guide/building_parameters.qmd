@@ -77,7 +77,7 @@ except Exception as e:
     print(type(e).__name__, e)
 ```
 
-A parameter can also be changed during a run, from a date or when a condition holds, with `ss.change()` and `ss.modify()`; see [Interventions](interventions_interventions.qmd).
+A parameter can also be changed during a run, from a date or when a condition holds, with `ss.modify()`; see [Interventions](interventions_interventions.qmd).
 
 ## The forms a value can take
 

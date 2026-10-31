@@ -243,6 +243,14 @@ class Base:
         return out
 
 
+class Preference(str):
+    """
+    A reason in `agent_reasons()` for `solver='auto'` to run a module as agents that does not stop a compartmental solver that was asked for
+
+    It exists so that a reason says this in one word.
+    """
+
+
 class Module(Base):
     """
     The main base class for all Starsim modules: diseases, networks, interventions, etc.
@@ -284,6 +292,7 @@ class Module(Base):
         ```
     """
     _state_aliases = {} # Default state aliases; defined on the class so it always exists, e.g. while unpickling. See define_aliases()
+    has_product = False # Whether it delivers a product: see ss.Intervention
 
     def __init__(self, name=None, label=None, **kwargs):
         # Housekeeping
@@ -314,6 +323,7 @@ class Module(Base):
         self.finalized = False
         self._lock_attrs = True # Prevent key attributes from being overwritten directly
         self._auto_states = [] # Store automatic states (State objects) added via define_states()
+        self._early_results = [] # Results defined in __init__(): see define_results()
         return
 
     def __call__(self, *args, **kwargs):
@@ -420,7 +430,7 @@ class Module(Base):
         reqs = {}
         for cls in inspect.getmro(type(self)):
             for attr,method in cls.__dict__.items():
-                if getattr(method, '_call_required', False):
+                if inspect.isfunction(method) and getattr(method, '_call_required', False):
                     key = f'{cls.__qualname__}.{attr}'
                     reqs[key] = 0 # Meaning it's been called 0 times
         self._call_required = reqs
@@ -758,11 +768,14 @@ class Module(Base):
 
     def define_results(self, *args):
         """
-        Add results to the module
+        Add results to the module; in `__init__()`, they are kept, and added once the sim's timeline is known
 
         Args:
             *args (`ss.Result`/list/dict): the results; a list or dict is passed to `ss.Result()`
         """
+        if not self.t.initialized:
+            self._early_results += args
+            return
         auto_names = {state.name for state in self.auto_state_list} | set(self.derived_state_names) # Names that already generate a result of the same name, their count
         for arg in args:
             if isinstance(arg, (list, tuple)):
@@ -784,6 +797,26 @@ class Module(Base):
                 raise ValueError(msg)
             self.results += result
         return
+
+    def agent_reasons(self, sim):
+        """
+        What needs agents in this module, from what it is rather than by running it, for choosing the solver (see `ss.solvers.rules`):
+        each a sentence, which stops a compartmental solver that was asked for, or a `ss.modules.Preference`, which does not
+
+        Here, for a module written as code: `compartmental = True` or `False` on it (or its class) says whether it works on
+        groups; without it, keeping a value for each person (`define_states()`) needs agents. A subclass can say more.
+
+        Args:
+            sim (`ss.Sim`): the sim, with its groups and unit worked out, but no solver yet
+        """
+        flag = getattr(self, 'compartmental', None)
+        if flag or getattr(self, 'graph', None) is not None:
+            return []
+        elif flag is False:
+            return [f'"{self.name}" ({type(self).__name__}) has compartmental = False, so runs only as agents']
+        elif self.state_list:
+            return [f'"{self.name}" ({type(self).__name__}) keeps a value for each person ({sc.strjoin(s.name for s in self.state_list[:3])}), which only agents have; if its code works on groups, set compartmental = True on it']
+        return []
 
     @required()
     def init_pre(self, sim, force=False):
@@ -815,6 +848,7 @@ class Module(Base):
             sim.results[self.name] = self.results
             sim.people.add_module(self) # Connect the states to the people
             self.init_results()
+            self.define_results(*self._early_results)
             self.pre_initialized = True
         return
 

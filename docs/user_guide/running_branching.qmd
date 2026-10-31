@@ -148,7 +148,7 @@ static.run();
 Starsim notes the problem: 10 people are 0.05 of an agent, so the run starts with one agent infectious, which is 200 people, and its epidemic is that of 200 cases, not 10. The initial infections can instead be given as a number of agents, with `ss.choose_n()`, here 10 agents, each of whom stands for 200 people, so 2,000 people are infectious at the start:
 
 ```{python}
-flu = ss.Disease(infection, recovery, init_prev=ss.choose_n(10)) # 10 agents infectious at the start
+flu = ss.Disease(infection, recovery, init_prev=10) # 10 agents infectious at the start
 static = ss.Sim(flu, total_pop=1e6, n_agents=5_000, stop=ss.days(150), label='Static')
 static.run();
 ```

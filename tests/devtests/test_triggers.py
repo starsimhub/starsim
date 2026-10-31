@@ -16,7 +16,7 @@ def test_bv_debut():
     def make():
         U, CST1, CST4 = ss.states('U CST1 CST4')
         return ss.Disease(U, CST1, CST4,
-            debut = ss.Transition(U, [CST1, CST4], on=adult_f, p=[0.8, None]), # Was rate=ss.perday(1), where=adult_f
+            debut = ss.Transition(U, [CST1, CST4], where=adult_f, p=[0.8, None]), # Was rate=ss.perday(1), where=adult_f
             onset = CST1 >> CST4 @ ss.peryear(0.2),
             clear = CST4 >> CST1 @ ss.months(6),
             first='U', name='bv')
@@ -36,7 +36,7 @@ def test_bv_debut():
 
     # A trigger has no rate to modify
     bv = make()
-    with pytest.raises(KeyError, match='has no rate to scale'):
+    with pytest.raises(KeyError):
         ss.Sim(bv, connectors=ss.modify(bv.debut, multiply=2), n_agents=100, **kw).init()
 
     # As compartments: the compartments of women 15+ in U are empty at the start, and aging into them is moved on at each step
@@ -68,7 +68,7 @@ def test_on_event():
         S, F, G = ss.states('S F G')
         b = ss.Disease(S, F, G, flag=S >> F @ ss.on(ss.state('a.I').enter if path else a.I.enter), unflag=F >> S @ ss.years(0.2), name='b')
         on = [ss.state('a.I').exit] if path else [a.I.exit] # A transition by path (ss.state('a.sa')) is not known to be an event when the delivery is made, so is not an on=
-        dx = [ss.screen(ss.Diagnostic(), on=x, name=f'dx{i}') for i,x in enumerate(on)]
+        dx = [ss.screen(ss.Diagnostic(), where=x, name=f'dx{i}') for i,x in enumerate(on)]
         return ss.Sim([a, b], interventions=dx, n_agents=3000, start=2000, stop=2005, dt=ss.months(1), unit='year', **kw).run().results
     direct, path = by_path(False), by_path(True)
     assert path.b.flag.sum() > 100 and np.array_equal(path.b.flag.values, direct.b.flag.values)

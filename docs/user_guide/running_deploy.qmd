@@ -32,7 +32,7 @@ def make_sim(coverage=0.5, seed=1):
 if __name__ == '__main__':
     sims = [make_sim(coverage) for coverage in [0, 0.25, 0.5, 0.75]]
     msim = ss.parallel(sims, n_runs=100)
-    msim.to_df().to_csv('measles_campaign.csv', index=False)  # The results, as quantiles over the runs
+    msim.to_df(quantiles=[0.025, 0.5, 0.975]).to_csv('measles_campaign.csv', index=False)  # The results, as quantiles over the runs
     sc.savejson('measles_campaign_info.json', dict(            # What is needed to make them again
         starsim = ss.__version__,
         git = sc.gitinfo(__file__),

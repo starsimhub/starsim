@@ -44,17 +44,18 @@ class Target:
 def parse_target(target):
     """ Work out what a modifier changes: returns the module (or its name), the kind of quantity, and its name """
     if isinstance(target, ss.par):
-        if target.module is None:
-            raise sc.KeyNotFoundError('the target of ss.modify() is a parameter that does not belong to a module yet; build the module first, then use e.g. sir.pars.beta.')
-        return target.module, 'par', target.name
+        return target.module, 'par', target if target.module is None else target.name # Not a module's yet: named by the disease that holds the modifier (see modify.own())
     elif isinstance(target, Target):
         return target.module, target.kind, target.name
     elif isinstance(target, ss.expressions.attr) and target.module is not None: # An attribute, wherever it is read
         return target.module, 'attr', target.name
     elif isinstance(target, ss.Arr) and target.name in ['rel_sus', 'rel_trans'] and target.mod is not None: # The array itself, once the sim exists (or, for a disease written as code, e.g. hiv.rel_trans, at once)
         return target.mod, target.name, None
-    elif isinstance(target, (ss.Transition, ss.dimensions.Transfer)) and getattr(target, 'module', None) is not None: # A transfer's rate is modified as a transition's is
-        return target.module, 'transition', target.name
+    elif isinstance(target, (ss.Transition, ss.dimensions.Transfer)): # A transfer's rate is modified as a transition's is
+        module = getattr(target, 'module', None)
+        return module, 'transition', target if module is None else target.name # As for a parameter
+    elif isinstance(target, str) and target in ['rel_sus', 'rel_trans']: # Of the disease that holds the modifier
+        return None, target, None
     elif isinstance(target, ss.networks.Route) and target.name and 'n_contacts' in target.pars: # A network or a contact layer means its number of contacts, as "school.pars.n_contacts"
         return target.name, 'par', 'n_contacts'
     elif isinstance(target, str) and '.' in target:
@@ -65,7 +66,7 @@ def parse_target(target):
         return parts[0], kind, None if kind in ['rel_sus', 'rel_trans'] else parts[-1]
     what = 'a value' if isinstance(target, (ss.TimePar, ss.Dist)) else 'a plain number' if sc.isnumber(target) else 'an object'
     raise sc.KeyNotFoundError(f'the target of ss.modify() must be a named quantity, such as sir.pars.beta, sir.rel_sus, sir.recovery, or "sir.pars.beta", not {target} ({type(target).__name__}), which is {what} with no name to refer to.\n'
-                                f'     (A parameter of a network is named by its path, e.g. ss.modify("randomnet.pars.n_contacts", multiply=0.5), or its contacts by the network itself. A parameter of a disease written as code is a plain value, read by its own code, so it cannot be modified; its rel_sus and rel_trans can be, e.g. ss.modify(hiv.rel_trans, multiply=0.5).)')
+                                f'     (A parameter of a network is named by its path, e.g. ss.modify("randomnet.pars.n_contacts", multiply=0.5), or its contacts by the network itself. A parameter of a module written as code is a plain value, so it is named by its path too, e.g. ss.modify("hiv.pars.beta", multiply=0.5); the rel_sus and rel_trans of a disease by themselves, e.g. ss.modify(hiv.rel_trans, multiply=0.5).)')
 
 
 def to_time(sim, val):
@@ -204,11 +205,11 @@ def route_mult(engine, name, route, inds, trg):
 
 def check_applied(sim):
     """
-    Raise a `ValueError` for any modifier, change, or efficacy of a product that nothing in the sim would apply, naming it and why
+    Raise a `ValueError` for any modifier or efficacy of a product that nothing in the sim would apply, naming it and why
 
     Called once by `sim.init()`, after every module has registered its modifiers in `sim.modifiers` (by module, kind of
     quantity, and name). For each quantity modified, the module it belongs to says whether it reads it: a declared module
-    from its graph (`unapplied()`), and a disease written as code from what its own code reads (`ss.solvers.Undeclared.unapplied()`).
+    from its graph (`unapplied()`), and a module written as code from what its own code reads (`ss.solvers.Effects.unapplied_par()`, and for a disease `ss.solvers.Undeclared.unapplied()`).
     A network's contacts are read by every transmission over it. It costs one pass over the quantities modified.
     """
     modules = {mod.name:mod for mod in sim.modules}
@@ -220,6 +221,8 @@ def check_applied(sim):
             why = unapplied(mod.graph, modname, kind, name, mods)
         elif isinstance(mod, ss.Disease):
             why = mod.engine.unapplied(kind, name, mods)
+        elif mod is not None and name in mod.pars and name != 'n_contacts': # A parameter of a module written as code, whose code reads it from self.pars
+            why = ss.solvers.Effects(mod, sim).unapplied_par(name, mods)
         else: # A network's contacts, read by every transmission over it
             continue
         if why:
@@ -229,9 +232,9 @@ def check_applied(sim):
 
 
 def describe_mod(m):
-    """ What a modifier is, for a message: `ss.modify()`, `ss.change()`, a product's efficacy, or another's (e.g. a strain's immunity) """
+    """ What a modifier is, for a message: `ss.modify()`, a product's efficacy, or another's (e.g. a strain's immunity) """
     if isinstance(m, modify):
-        return f'ss.{"change" if m.times else "modify"}() "{m.name}"'
+        return f'ss.modify() "{m.name}"'
     elif isinstance(m, ss.products.Effect):
         return f'the {m.key} efficacy of "{m.name}"'
     return f'"{m.name}"'
@@ -266,16 +269,17 @@ class modify(Connector):
     A modifier never overwrites the quantity it changes: the base value is kept, and
     the value used is `(set value if any, else base) × multipliers + addends` over
     the modifiers that are currently active. It can be passed to a sim in `connectors`
-    (interactions that are part of the model) or `interventions` (policy).
+    (interactions that are part of the model) or `interventions` (policy), or be a member of a
+    declared disease, as part of its natural history.
 
     Note: CRN safe.
 
     Args:
-        target (par/str): the quantity to change: a parameter (`sir.pars.beta`), a transition (`sir.recovery`, which
-            scales its rate, or its probability if it is a branch with `p=`), `sir.rel_sus` or `sir.rel_trans`, a parameter of a disease written as code, or the path of
+        target (par/str): the quantity to change (for a modifier that is a member of a disease, its own, e.g. `beta`, `recovery`, or `'rel_trans'`): a parameter (`sir.pars.beta`), a transition (`sir.recovery`, which
+            scales its rate, or its probability if it is a branch with `p=`), `sir.rel_sus` or `sir.rel_trans`, a parameter of any module written as code, or the path of
             any of these as a string (`'sir.pars.beta'`); or the contacts of a network, as the network (`ss.contacts('Kenya', layer='school')`,
             matched by its name) or as a path (`'school.pars.n_contacts'`)
-        multiply (float): multiply the quantity by this; like `add` and `set`, it can also be `ss.by(...)` or a function of the sim
+        multiply (float): multiply the quantity by this; like `add` and `set`, it can also be `ss.by(...)`, a function of the sim, or an `ss.timeseries`, for changes at given times
         add (float): add this to the quantity: a parameter, or an inflow (a transition from `ss.null`, e.g. CFUs shed into a reservoir), to which it adds an amount per unit time from outside the model
         set (float): replace the quantity with this (a parameter only)
         efficacy (float): for protection such as a condom or a needle program, the share of the risk it removes: the same as `multiply=1 - efficacy` (give one of them)
@@ -283,10 +287,10 @@ class modify(Connector):
             `1 − share·(1 − multiply)`, exactly, since hazards add; a number, an `ss.timeseries`, an `ss.by`, or (with `route=`, as agents) a function of
             the network returning one value per edge (e.g. `lambda net: net.edges.condoms`)
         route (str/list): for a modifier of a transmission, the network or networks (by name) it applies on; by default, every route. A disease written as code has no transmission to name, so on a route the target is its `rel_sus` (of the people who would be infected over it)
-        where (Cond/func): who it applies to: a condition (e.g. `sir.vaccinated`), or a function of the sim (default: everyone); with `route=`, the people who would be infected
+        where (Cond/func): who it applies to: a condition (e.g. `sir.vaccinated`), a condition on a count (e.g. `sir.I.n > 1000`, worked out at each step), or a function of the sim (default: everyone); with `route=`, the people who would be infected
         start (date/float): when the modifier starts to apply, within the sim (default: the start of the sim); a number is a calendar year from 1900 on, and otherwise a time in the sim's unit
         stop (date/float): when it stops applying (default: never); a stop after the end of the sim never stops it
-        when (func): a function of the sim returning True on the steps it applies
+        when (func): a condition on time: a function of the timeline returning True on the steps it applies (e.g. `lambda t: t.ti % 7 == 0`); a condition on anything else goes in `where=`
         hold (dur): once `where=` (or `when=`) selects someone, the modifier stays on for them for at least this long, as a rule that is lifted only after a while; a bare number is in the sim's unit
         name (str): the name of the modifier
 
@@ -297,16 +301,25 @@ class modify(Connector):
         masks = ss.modify(sir.pars.beta, multiply=0.6, start=30)
         sim = ss.Sim(sir, interventions=masks, stop=100).run()
 
+        # Changes at given times, each holding until the next; before the first, the quantity has its own value
+        lockdown = ss.modify(sir.pars.beta, multiply=ss.timeseries({30: 0.5, 60: 1.0}), start=30)
+
         # Each place on its own: contacts cut by 40% for at least 14 days once a week's cases pass 200 per 100,000
         npi = ss.modify(sir.pars.beta, multiply=0.6, where=sir.infection.incidence(over=ss.days(7), by='patch') > 200e-5, hold=ss.days(14))
 
         # Condoms, 90% effective against gonorrhea, used in a share of acts that grows over time, on one network
         use = ss.timeseries({2000: 0.05, 2020: 0.3})
         condoms = ss.modify(ng.infection, efficacy=0.9, share=use, route='sexualnet')
+
+        # A member of a disease, with the rest of its natural history
+        class Measles(ss.Disease):
+            S, I, R = ss.states('S I R')
+            infection = S >> I @ 0.5*I
+            recovery = I >> R @ ss.days(10)
+            fading = ss.modify('rel_trans', multiply=0.5**(I.time/ss.days(3)), where=I)
         ```
     """
     compartmental = True # It works on groups as well as on agents
-    has_product = False # So it can be passed as an intervention
 
     timepar_skip = ['where', 'when', 'target_module', 'hold'] # These refer to other modules, which hold their own time parameters (see Module.link_timepars()); hold is converted to steps at init
 
@@ -327,7 +340,7 @@ class modify(Connector):
         self.route = None if route is None else sc.tolist(route)
         self.op = given[0]
         if name is None: # Until it is named from its variable: what it does, so several unnamed modifiers do not clash
-            self.name = self.label = f'{self.target_name or self.target_kind}_{self.op}'
+            self.name = self.label = f'{getattr(self.target_name, "name", self.target_name) or self.target_kind}_{self.op}'
         self.amount = dict(multiply=multiply, add=add, set=set)[self.op]
         if isinstance(self.amount, ss.Arr) and getattr(self.amount, 'mod', None) is not None: # A module's array, e.g. multiply=coded.factor: read from the sim by name, so it is not taken as a state of this modifier, and follows the sim's own copy
             modname, arrname = self.amount.mod.name, self.amount.name
@@ -337,17 +350,17 @@ class modify(Connector):
             named = self.amount.name
             self.define_pars(**{'efficacy' if efficacy is not None else self.op:self.amount})
             self.amount.name = named # Named by its target when the sim is built, if it is not named (see ss.solvers.choose)
-        self.where = None if where is None else ss.conditions.as_cond(where)
+        self.where = None if where is None else where if isinstance(where, ss.State) and where.name is None else ss.conditions.as_cond(where) # A state of a class body has no name until its disease is built (see own())
         self.start = start
         self.stop = stop
-        self.when = when
+        self.when = ss.conditions.check_when(when)
         if hold is not None and where is None and when is None:
             errormsg = f'hold= of ss.modify() keeps the modifier on for a while after its condition holds, so it needs where= or when='
             raise ValueError(errormsg)
         self.hold = hold
         self.held = {} # With hold=: for each engine, the step until which each agent or group is held, and the value it was held at
         self.when_until = -1 # With hold= and when=: the step until which it is held
-        self.times = None # For ss.change(), the times it changes the quantity at
+        self.writer = None # For a parameter of a module written as code that is not a disease: see init_post()
         return
 
     @property
@@ -357,6 +370,19 @@ class modify(Connector):
         kind, name = self.target_kind, self.target_name
         return f'{modname}.pars.{name}' if kind == 'par' else f'{modname}.{name or kind}'
 
+    def own(self, module, name):
+        """ Become a member of a declared module, whose states, parameters, and transitions have their names now
+
+        Args:
+            module (Module): the module
+            name (str): the name of the modifier in it
+        """
+        self.target_module = module
+        self.target_name = getattr(self.target_name, 'name', self.target_name)
+        self.where = None if self.where is None else ss.conditions.as_cond(self.where)
+        self.name = self.label = name
+        return
+
     def init_pre(self, sim):
         """ Find the quantity this modifies, by name if it was given as a string, and register the modifier with the sim
 
@@ -364,6 +390,8 @@ class modify(Connector):
             sim (Sim): the sim being initialized
         """
         super().init_pre(sim)
+        if self.target_module is None:
+            raise sc.KeyNotFoundError(f'the target of the modifier "{self.name}" does not belong to a module yet. A modifier of a module\'s own quantities is a member of it; otherwise build the module first, then use e.g. sir.pars.beta.')
         modname = self.target_module if isinstance(self.target_module, str) else self.target_module.name
         mods = {mod.name:mod for mod in sim.declared}
         nets = [name for name,net in sim.all_networks().items() if 'n_contacts' in net.pars]
@@ -372,14 +400,15 @@ class modify(Connector):
         options += [f'{mod.name}.{key}' for mod in sim.declared for key in list(mod.graph.transitions) + mod.graph.destinations() + list(mod.graph.attrs) + ['rel_sus', 'rel_trans']]
         options += [f'{net}.pars.n_contacts' for net in nets]
         found = False
-        coded = {key:dis for key,dis in sim.diseases.items() if isinstance(dis, ss.Disease) and dis.graph is None}
-        options += [f'{key}.{path}' for key,dis in coded.items() for path in [*[f'pars.{k}' for k in dis.pars], 'rel_sus', 'rel_trans']]
+        coded = {mod.name:mod for mod in sim.modules if not isinstance(mod, modify) and getattr(mod, 'graph', None) is None and mod.name not in nets}
+        people = {key:[] if key not in sim.diseases else ['rel_sus', 'rel_trans'] for key in coded} # What a disease written as code has for each person, as well as its parameters
+        options += [f'{key}.{path}' for key,mod in coded.items() for path in [*[f'pars.{k}' for k in mod.pars], *people[key]]]
         if modname in nets and modname not in mods: # The contacts of a network: see Engine.contact_mult()
             found = kind in [None, 'par'] and name == 'n_contacts'
             kind = 'par'
-        elif modname in coded: # A disease written as code: its rel_sus and rel_trans, as agents, and its parameters
+        elif modname in coded: # A module written as code: its parameters, and for a disease its rel_sus and rel_trans, as agents
             kind = kind or 'par'
-            found = kind in ['rel_sus', 'rel_trans'] or (kind == 'par' and name in coded[modname].pars)
+            found = kind in people[modname] or (kind == 'par' and name in coded[modname].pars)
         elif modname in mods:
             graph = mods[modname].graph
             if kind is None:
@@ -416,14 +445,36 @@ class modify(Connector):
         for key in [name] if self.route is None else [f'{name}@{route}' for route in self.route]: # On a route, under the transmission's name and the route's (see ss.connectors.route_mult())
             sim.modifiers[(modname, kind, key)].append(self)
         ss.conditions.check_clocks(self.amount, self.where, f'the modifier "{self.name}"')
-        for time in self.times or [self.start]: # Each must be within the sim
-            if time is not None:
-                to_ti(sim, time, name=f'the {"time" if self.times else "start"} of "{self.name}"')
+        if self.start is not None: # It must be within the sim
+            to_ti(sim, self.start, name=f'the start of "{self.name}"')
         if self.stop is not None:
             to_ti(sim, self.stop, name=f'the stop of "{self.name}"', after=True) # A stop after the end never stops it
         self.hold_steps = None if self.hold is None else to_steps(sim, self.hold)
         self.held = {}
         self.when_until = -1
+        return
+
+    def init_post(self):
+        """ A parameter of a module written as code with no engine of its own (an `ss.Module` or `ss.Connector`), whose code reads it from `self.pars`: written there at the start of each step, as the engine of a disease written as code does """
+        super().init_post()
+        mod = next((mod for mod in self.sim.modules if mod.name == self.target_module), None)
+        if self.target_kind == 'par' and getattr(mod, 'engine', None) is None and self.target_name in getattr(mod, 'pars', {}) and self.target_name != 'n_contacts':
+            self.writer = ss.solvers.Effects(mod, self.sim)
+            self.writer.init_pars()
+        return
+
+    def start_step(self):
+        """ Write the modified parameters of a module written as code, if any """
+        super().start_step()
+        if self.writer is not None:
+            self.writer.write_pars()
+        return
+
+    def finalize_results(self):
+        """ Parameters are back to their base values after the run """
+        super().finalize_results()
+        if self.writer is not None:
+            self.writer.reset_pars()
         return
 
     @property
@@ -455,7 +506,7 @@ class modify(Connector):
             return False
         if self.when is None:
             return True
-        on = bool(self.when(sim))
+        on = ss.conditions.holds_now(self.when, sim)
         if self.hold is not None: # Held on for a while after
             if on:
                 self.when_until = sim.ti + self.hold_steps
@@ -560,44 +611,3 @@ class modify(Connector):
 
     def step(self):
         pass
-
-
-def change(target, at=None, by=None, to=None, name=None, **kwargs):
-    """
-    Change a quantity at given times: returns an `ss.modify()` whose amount is a step function of time
-
-    Each value holds from its time until the next; before the first time, the
-    quantity has its own value. `stop=`, `when=`, and `where=` work as for `ss.modify()`.
-
-    Args:
-        target (par/str): the quantity to change; anything `ss.modify()` accepts
-        at (list): the times, each within the sim: dates, durations since the start, or numbers, which are times in the sim's unit (in a sim with dates, that long after the start)
-        by (list): a multiplier for each time, relative to the quantity's own value (not to the previous entry)
-        to (list): a value for each time (instead of `by`)
-        name (str): the name of the modifier
-        kwargs (dict): passed to `ss.modify()`
-
-    Examples:
-        ```python
-        S, I, R = ss.states(3)
-        sir = ss.Disease(infection=S >> I @ 0.3*I, recovery=ss.Transition(I, R, dur=10), init_prev=0.01)
-        lockdown = ss.change(sir.pars.beta, at=[30, 60], by=[0.5, 1.0])
-        sim = ss.Sim(sir, interventions=lockdown, stop=100).run()
-        ```
-    """
-    if (by is None) == (to is None):
-        errormsg = 'ss.change() takes exactly one of by= (multipliers) or to= (values)'
-        raise ValueError(errormsg)
-    values = sc.tolist(by if by is not None else to)
-    at = sc.tolist(at)
-    if len(at) != len(values):
-        errormsg = f'ss.change() needs one value per time, but there are {len(at)} times and {len(values)} values'
-        raise ValueError(errormsg)
-    if 'start' in kwargs:
-        errormsg = 'ss.change() starts at its first time (at=); start= is for ss.modify()'
-        raise ValueError(errormsg)
-    key = 'multiply' if by is not None else 'set'
-    amount = ss.timeseries(dict(zip(at, values)), mode='constant') # The times are checked to be in order, and within the sim, when the sim is built
-    out = modify(target, **{key:amount}, start=at[0], name=name, **kwargs) # Not active before the first time, so the quantity has its own value
-    out.times = at
-    return out

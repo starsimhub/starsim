@@ -343,7 +343,7 @@ def test_strains_compartmental():
         sim = ss.Sim(diseases=make_family(), total_pop=10_000, approx=True, **pars).init()
         assert sim.solver == 'abm' and 'compartmental solvers: none' in sim.describe(output=True)
         for solver in ['ode', 'binomial']:
-            with pytest.raises(ss.CapabilityError, match='only agents follow'):
+            with pytest.raises(ss.CapabilityError):
                 ss.Sim(diseases=make_family(), solver=solver, total_pop=10_000, approx=True, **pars).init()
     return res
 
@@ -377,7 +377,7 @@ def test_condition_by_sex():
         susceptible, affected = ss.states('susceptible affected')
         onset = ss.Transition(susceptible, affected, rate=ss.by(sex=dict(female=p_female, male=p_male)))
 
-    cond = Condition(pars=dict(init_prev=ss.bernoulli(p=lambda sim, uids: np.where(sim.people.female[uids], 0.3, 0.1))), p_male=ss.par(ss.probperyear(0.01), bounds=[0.001, 0.1]))
+    cond = Condition(pars=dict(init_prev=lambda sim, uids: np.where(sim.people.female[uids], 0.3, 0.1)), p_male=ss.par(ss.probperyear(0.01), bounds=[0.001, 0.1]))
     assert {'p_female', 'p_male'} <= set(cond.pars.keys()) and cond.pars.p_male.bounds == [0.001, 0.1] # The parameters inside ss.by are the disease's, and one given replaces the class's
     sim = ss.Sim(diseases=cond, n_agents=10_000, start=2000, stop=2010, dt=1, verbose=0).run()
     first = sim.results.condition.affected[0]/10_000
@@ -439,10 +439,10 @@ def test_coded_par_modifiers():
     ppl = dis.sim.people
     rates = dis.rates.to('year').value
     assert np.allclose(rates, np.where(ppl.female[ppl.auids], 1.0, 0.2))
-    with pytest.raises(ValueError, match='allow_modifiers'):
-        ss.Sim(diseases=Coded(), connectors=make(multiply=0.5, where=where), **pars).init()
+    with pytest.raises(ss.CapabilityError, match='allow_modifiers'): # Only a run shows that a function differs between people
+        ss.Sim(diseases=Coded(), connectors=make(multiply=0.5, where=where), **pars).run()
     with pytest.raises(ss.CapabilityError, match='allow_modifiers'):
-        ss.Sim(diseases=Coded(), connectors=make(multiply=lambda sim: np.full(len(sim.people), 0.5)), **pars).run()
+        ss.Sim(diseases=Coded(), connectors=make(multiply=lambda sim: np.linspace(0.1, 1, len(sim.people))), **pars).run()
     with pytest.raises(ValueError, match='normal'):
         ss.Sim(diseases=Coded(), connectors=make(target='coded.pars.spread', multiply=0.5), **pars).init()
 

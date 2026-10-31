@@ -23,7 +23,7 @@ authorship:
 
 A "stochastic compartmental" model has `solver='binomial'`, `'gillespie'`, or `'tau'`, and is one that the kernels run from start to finish, which `sim.kernel_only()` checks. If it doesn't, `'if2'` and `'pmcmc'` raise an error that gives the reason.
 
-Any other method of `scipy.optimize.minimize` can also be named, e.g. `'powell'`. A list runs methods in turn: see [below](#several-methods-in-turn).
+Two more methods of `scipy.optimize.minimize` can also be named: `'powell'` (no gradients) and `'slsqp'` (gradients, when the sim has them). A list runs methods in turn: see [below](#several-methods-in-turn).
 
 A setting that the method doesn't take is an error, so a mistyped name can't be ignored by accident.
 

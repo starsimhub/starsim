@@ -5,7 +5,6 @@ It exists since a condition in one disease on a state of another (e.g. coinfecti
 
 Used with: compartments; declared modules
 """
-import importlib
 import numpy as np
 import numba as nb
 import sciris as sc
@@ -594,7 +593,7 @@ class Crossing:
         return ss.kernels.Shifts(due=np.zeros((0, npts), dtype=np.bool_), sel=np.zeros((0, self.n_rows, self.n_cols)), cov=np.zeros((0, self.n_rows, self.n_cols)),
                                  to=np.zeros((0, self.n_cols), dtype=np.int64), rest=np.zeros((0, self.n_cols), dtype=np.int64), land=np.zeros((0, self.n_rows, self.n_cols)))
 
-    def numbers(self, Xs, xp=np, reps=None, keys=None):
+    def numbers(self, Xs, xp=np, keys=None):
         """
         The numbers in the program, from those in each engine's: each a dict of the arrays of its program (by the
         names of `ss.kernels.Program`), its tables (`fixed`, `mult`, `consts`, `rel_trans`; see `ss.solvers.Compartmental.tables()`),
@@ -605,17 +604,14 @@ class Crossing:
         Args:
             Xs (list): the numbers of each engine
             xp (module): NumPy, or JAX's NumPy
-            reps (list): for each engine, the rows of the program's tables for each of its own (3 if the program's have the start, middle, and end of each step, and the engine's one row a step)
             keys (list): the numbers to give (default: those in the first engine's)
         """
-        reps = reps or [1]*len(Xs)
         keys = keys or list(Xs[0].keys())
         cat = lambda parts, axis=0: xp.concatenate(parts, axis=axis)
         out = {}
         for key in keys:
             if key in ['fixed', 'mult', 'consts', 'rel_trans']: # Tables, with a row for each step (or one for all of them)
                 vals = [xp.broadcast_to(X[key], X[key].shape[:2] + (engine.n_groups,)) for X,engine in zip(Xs, self.engines)] # By group, if kept once for all of them (see ss.gradients.capture())
-                vals = [xp.repeat(v, r, axis=0) if r > 1 and len(v) > 1 else v for v,r in zip(vals, reps)]
                 T = max(len(v) for v in vals)
                 parts = [v[:, I[:, None], C] for v,(I,C) in zip(vals, self.pieces[dict(fixed='flows', mult='flows').get(key, key)])]
                 out[key] = cat([xp.broadcast_to(part, (T,) + part.shape[1:]) for part in parts], axis=1)
@@ -672,28 +668,20 @@ class Crossing:
 
     #%% Running it
 
-    def per_step(self):
-        """ The rows of the program's tables for each step (see `ss.solvers.Compartmental.per_step()`) """
-        return max(engine.per_step() for engine in self.engines)
-
-    def reps(self):
-        """ How many rows of the program's tables each row of each engine's is (see `numbers()`) """
-        return [self.per_step()//engine.per_step() for engine in self.engines]
-
     def run_args(self, tables=True):
         """ What the kernels need for a whole run of the program, as `ss.solvers.Compartmental.run_args()` gives it for one engine """
         setups = [engine.run_args(tables=tables) for engine in self.engines]
         progs = [args[1] for args,_ in setups]
         self.build(progs)
         Xs = [{key:getattr(prog, key) for key in ['inflow', 'contacts', 'tgt_w', 'crd_w', 'maps', 'mov_rate']} | dict(zip(['fixed', 'mult', 'consts', 'rel_trans'], tabs or [])) for prog,(_,tabs) in zip(progs, setups)]
-        J = self.numbers(Xs, reps=self.reps())
+        J = self.numbers(Xs)
         program = self.program._replace(**{key:J[key] for key in ['inflow', 'contacts', 'tgt_w', 'crd_w', 'maps', 'mov_rate']})
         args = [self.y.copy(), program] + setups[0][0][2:]
         return args, ([np.ascontiguousarray(J[key]) for key in ['fixed', 'mult', 'consts', 'rel_trans']] if tables else None)
 
     def tables(self, start=0, stop=None):
         """ The program's tables for some steps (see `ss.solvers.Compartmental.tables()`) """
-        J = self.numbers([dict(zip(['fixed', 'mult', 'consts', 'rel_trans'], engine.tables(start, stop))) for engine in self.engines], reps=self.reps())
+        J = self.numbers([dict(zip(['fixed', 'mult', 'consts', 'rel_trans'], engine.tables(start, stop))) for engine in self.engines])
         return [np.ascontiguousarray(J[key]) for key in ['fixed', 'mult', 'consts', 'rel_trans']]
 
     def kernels(self, runs=1):
@@ -710,39 +698,33 @@ class Crossing:
     def run(self, use_jax=False):
         """ A whole run of the diseases together, in one call to the kernels (or to JAX): gives each engine its part of the output (as `ss.gradients` does; see `ss.solvers.Compartmental.run_all()`) """
         if use_jax:
-            parts = ss.gradients.run_crossing(self) if self.sim.solver not in ['binomial', 'tau'] else importlib.import_module('starsim.solvers.backends.chain').run_crossing(self)
+            parts = ss.gradients.run_crossing(self)
         else:
             args, tables = self.run_args()
             tally = np.zeros((args[3], 0, 2, self.n_cols))
-            y, stocks, flows, short = self.kernels().run(self.engines[0].make_rng(stream=1), *args, *tables, self.register, self.shifts, tally, self.per_step(), 0)
+            y, stocks, flows, short = self.kernels().run(self.engines[0].make_rng(stream=1), *args, *tables, self.register, self.shifts, tally, 0)
             parts = [self.split(k, y, stocks, flows) + (short if k == 0 else 0.0,) for k in range(len(self.engines))]
         for engine,part in zip(self.engines, parts):
             engine.given = part
         return
 
-    def step_tables(self, dt, smooth=True):
+    def step_tables(self):
         """ For a step taken from Python: the program's tables, from those of each engine, which has worked out its rates for the step (see `ss.solvers.Compartmental.step()`), as an engine's `step_tables()` gives them """
         ti = self.engines[-1].mod.ti
         stale = [e.mod.name for e in self.engines if e.rated != ti]
         if stale:
             errormsg = f'The diseases {sc.strjoin(self.names)} are tracked jointly, so they step together, but {sc.strjoin(stale)} did not step at time point {ti} (does it define its own step() that does not call the one it replaces?)'
             raise RuntimeError(errormsg)
-        steps = [engine.step_tables(dt, smooth=smooth) for engine in self.engines]
+        steps = [engine.step_tables() for engine in self.engines]
         progs = [e.program for e in self.engines]
         p = self.build(progs)
         row = 0 if any(r >= 0 for tables,r in steps) else -1
-        Xs = []
-        for q,(tables,r) in zip(progs, steps): # The values at the start, middle, and end of the step, if any vary smoothly in time, and otherwise as they are now
-            X = dict(zip(['fixed', 'mult', 'consts', 'rel_trans'], tables if r >= 0 else [q.fixed[None], q.mult[None], q.consts[None], q.rel_trans[None]]))
-            X.update(contacts=q.contacts, mov_rate=q.mov_rate)
-            Xs.append(X)
+        Xs = [dict(fixed=q.fixed[None], mult=q.mult[None], consts=q.consts[None], rel_trans=q.rel_trans[None], contacts=q.contacts, mov_rate=q.mov_rate) for q in progs]
         J = self.numbers(Xs)
         p.contacts[:] = J['contacts']
         p.mov_rate[:] = J['mov_rate']
-        if row < 0:
-            p.fixed[:], p.mult[:], p.consts[:], p.rel_trans[:] = [J[key][0] for key in ['fixed', 'mult', 'consts', 'rel_trans']]
-            return no_tables, row
-        return tuple(np.ascontiguousarray(J[key]) for key in ['fixed', 'mult', 'consts', 'rel_trans']), row
+        p.fixed[:], p.mult[:], p.consts[:], p.rel_trans[:] = [J[key][0] for key in ['fixed', 'mult', 'consts', 'rel_trans']]
+        return no_tables, row
 
     def flows_of(self, flows):
         """ Each engine's flows over a step, by its groups, from the program's """
@@ -759,7 +741,6 @@ class Crossing:
             engine.restart()
         self.init()
         args, _ = self.run_args(tables=False)
-        per_step = self.per_step()
         y0, npts = args[0], args[3]
         rngs = kernel_list([engines[0].make_rng(stream=1, seed=seed) for seed in seeds]) # The random numbers that each run would have
         R, nc, nflows, n_runs = self.n_cols, self.n_rows, self.n_trans + self.n_movers, len(seeds)
@@ -774,11 +755,7 @@ class Crossing:
         tally, tally_g = np.zeros((n_runs, npts, 0, 2, 1)), np.zeros((n_runs, n_rows, 0, 2, R))
         grp_state, grp_flow = (np.arange(nc), np.arange(nflows)) if grouped else (np.full(nc, -1), np.full(nflows, -1))
         ys = np.repeat(y0[None], n_runs, axis=0)
-        if self.sim.solver in ['binomial', 'tau'] and ss.solvers.choose_engine(self.sim)[0]: # In JAX, as a single run would be (see ss.solvers.choose_engine())
-            kept = (range(nc), range(nflows)) if grouped else ([], [])
-            stocks, flows, stocks_g, flows_g = importlib.import_module('starsim.solvers.backends.chain').run_many(self, seeds, np.arange(nc), *kept, rows)[:4]
-        else:
-            run_many_parts(self, rngs, ys, args, per_step, R, (stocks, flows, stocks_g, flows_g, tally, tally_g), np.arange(nc), rows, grp_state, grp_flow)
+        run_many_parts(self, rngs, ys, args, R, (stocks, flows, stocks_g, flows_g, tally, tally_g), np.arange(nc), rows, grp_state, grp_flow)
         outs = []
         for k,engine in enumerate(engines):
             states = range(len(engine.graph.states))

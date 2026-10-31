@@ -51,7 +51,7 @@ def test_people():
             if sim.ti == 30:
                 seen[sim.solver] = sc.obj(I=sim.results.sir.I[sim.ti - 1], delivered=sim.results.stock.delivered[sim.ti - 1])
             return True
-        stock = ss.vaccinate(ss.Vaccine(efficacy=0.9), capacity=ss.perday(500), start=10, when=look)
+        stock = ss.vaccinate(ss.Vaccine(efficacy=0.9), capacity=ss.perday(500), start=10, where=look)
         return ss.Sim(sir, interventions=stock, **kwargs)
     sims = run_both(make, stop=60)
     for solver,sim in sims.items():
@@ -105,7 +105,7 @@ def test_queue():
     sc.heading('Testing queues: dropped, waiting up to a limit (agents only), and leaving when no longer eligible')
     def make(queue=None, **kwargs):
         sis = make_sis()
-        clinic = ss.treat(ss.Treatment(moves=sis.cure), on=sis.infection, where=sis.I, capacity=ss.perday(20), queue=queue)
+        clinic = ss.treat(ss.Treatment(moves=sis.cure), who=sis.I, where=sis.infection, capacity=ss.perday(20), queue=queue)
         return ss.Sim(sis, interventions=clinic, **kwargs)
     out = sc.obj()
     for label,queue in dict(none=None, days=ss.days(5), true=True).items():

@@ -49,14 +49,13 @@ A delivery says who can receive the product, when, and how many. There is one de
 | `at_age=` | Routine delivery to people as they reach an age, e.g. `at_age=ss.months(9)` |
 | `where=` | Who can receive it: a condition, or a function of the sim |
 | `who=` | Who receives it: an event (such as `screening.positive` or `sis.infection`), a condition, or both, joined with `&` |
-| `on=` | The event part of `who=`, e.g. `on=sis.infection`, or a transition by its path, e.g. `on='sis.infection'` |
 | `coverage=` | The share of eligible people reached |
 | `capacity=` | The number that can be delivered (per round, per step, or as a rate) |
 | `priority=` | Who is served first when capacity runs short |
 | `queue=` | Whether those not served wait their turn (agents only) |
 | `delay=` | The time from a trigger to delivery (agents only) |
 | `trace=` | Deliver to the contacts of those selected, on a network (agents only) |
-| `when=` | Deliver only on steps where a function of the sim returns `True` |
+| `when=` | Deliver only on steps where a function of the timeline returns `True`, e.g. `lambda t: t.ti % 7 == 0` |
 | `deliver=` | A function of the sim that returns who receives it, instead of `where=`, `coverage=`, and the rounds |
 | `disease=` | The disease the product acts on, if there is more than one |
 
@@ -137,10 +136,10 @@ Each of these deliveries makes its own vaccine. The first is named `vaccine`; si
 
 ### Delivery when something happens
 
-`on=` delivers to the people something has just happened to, instead of on a schedule: a transition (the people who went through it on this step), the outcome of another delivery, or a function of the sim returning UIDs. For the people in a state, use `where=` instead (`where=sis.I`). Here half of people are treated when they are infected, up to 30 treatments a month:
+An event in `where=` delivers to the people something has just happened to, instead of on a schedule: a transition (the people who went through it on this step), or the outcome of another delivery. A transition can also be given by its path, `where='sis.infection'`. Here half of people are treated when they are infected, up to 30 treatments a month:
 
 ```{python}
-on_infection = ss.treat(cure=0.9, on=sis.infection, coverage=0.5, capacity=30)
+on_infection = ss.treat(cure=0.9, where=sis.infection, coverage=0.5, capacity=30)
 sim = ss.Sim(sis, interventions=on_infection, **kw)
 sim.run()
 sim.plot('sis')
@@ -180,7 +179,7 @@ sim.run()
 sim.plot('sis')
 ```
 
-`when=` takes a function of the sim that returns `True` or `False`, and delivers only on steps where it is `True`, e.g. once prevalence passes a threshold (see [below](#changes-triggered-by-the-epidemic)).
+`when=` is a condition on time, a function of the timeline that returns `True` or `False`, and delivers only on steps where it is `True`. A function of the sim goes in `where=`, e.g. once prevalence passes a threshold (see [below](#changes-triggered-by-the-epidemic)).
 
 ## Changing parameters
 
@@ -197,7 +196,7 @@ recovery  = I >> R @ ss.days(5)   # Infectious for 5 days on average
 flu = ss.Disease(infection, recovery, init_prev=0.001)
 
 masks = ss.modify(flu.pars.beta, multiply=0.6, start=ss.days(20), stop=ss.days(60))
-distancing = ss.change(flu.pars.beta, at=[ss.days(20), ss.days(60)], by=[0.5, 0.8])
+distancing = ss.modify(flu.pars.beta, multiply=ss.timeseries({ss.days(20): 0.5, ss.days(60): 0.8}), start=ss.days(20))
 
 kw = dict(total_pop=100_000, stop=ss.days(150), verbose=0)
 scenarios = {
@@ -215,13 +214,13 @@ msim.plot('flu.I')
 msim.summarize().loc['flu_infection']
 ```
 
-### Changes at given times: `ss.change()`
+### Changes at given times: `ss.timeseries()`
 
-`ss.change(target, at=[...], by=[...])` multiplies a quantity by each value of `by` from each time in `at` until the next; before the first, the quantity has its own value. Each multiplier is relative to the quantity's own value, not to the one before. `to=` gives values instead of multipliers: `ss.change(flu.pars.beta, at=[ss.days(20)], to=[0.25])`. The times are dates in a sim with dates (`at=['2025-03-01']`), durations since the start (`ss.days(20)`), or numbers in the sim's unit.
+`ss.modify(target, multiply=ss.timeseries({t1: x1, t2: x2}), start=t1)` multiplies a quantity by each value from its time until the next; before `start=`, the quantity has its own value. Each multiplier is relative to the quantity's own value, not to the one before. `set=` gives values instead of multipliers, and one change needs no series: `ss.modify(flu.pars.beta, set=0.25, start=ss.days(20))`. The times are dates in a sim with dates (`'2025-03-01'`), durations since the start (`ss.days(20)`), or numbers in the sim's unit.
 
 ### Changes while a condition holds: `ss.modify()`
 
-`ss.modify(target, multiply=...)` changes a quantity for as long as it applies: always, between `start=` and `stop=`, on the steps where a function says so (`when=`), or for the people a condition selects (`where=`). It takes exactly one of:
+`ss.modify(target, multiply=...)` changes a quantity for as long as it applies: always, between `start=` and `stop=`, on the steps a condition on time says so (`when=`), or where a condition holds (`where=`), of people, of the population, or a function of the sim. It takes exactly one of:
 
 | Keyword | What it does |
 |---|---|
@@ -236,7 +235,7 @@ and any of:
 |---|---|
 | `start=`, `stop=` | When it applies (by default, always) |
 | `where=` | Who it applies to: a condition, or a function of the sim (by default, everyone) |
-| `when=` | A function of the sim that returns `True` on the steps it applies |
+| `when=` | A condition on time: a function of the timeline that returns `True` on the steps it applies |
 | `hold=` | Once `where=` or `when=` selects someone, it stays on for them for at least this long |
 | `share=` | With `multiply=` or `efficacy=`, the share of acts (or contacts) it applies to, e.g. condom use in 30% of acts |
 | `route=` | For a change to transmission, the network or networks it applies on (by default, all) |
@@ -280,13 +279,13 @@ Closing schools is a modifier on the school layer of a contact matrix: see [Popu
 
 ### Changes triggered by the epidemic
 
-A rule such as "close schools when cases pass a threshold" is a function of the sim, given as `when=`, which returns `True` on the steps it applies. It can read any result up to the start of the step (`sim.ti - 1`, since this step's results aren't written yet). `when=` has no memory: the modifier is on exactly when the function says so, so a bare threshold switches on and off as the epidemic crosses it. `hold=` adds the simplest memory: once on, it stays on for at least that long. Here transmission is halved for at least 30 days whenever more than 5,000 people are infectious:
+A rule such as "close schools when cases pass a threshold" is a function of the sim, given as `where=`, which returns `True` on the steps it applies. It can read any result up to the start of the step (`sim.ti - 1`, since this step's results aren't written yet). It has no memory: the modifier is on exactly when the function says so, so a bare threshold switches on and off as the epidemic crosses it. `hold=` adds the simplest memory: once on, it stays on for at least that long. Here transmission is halved for at least 30 days whenever more than 5,000 people are infectious:
 
 ```{python}
 def many_infectious(sim):
     return sim.results.flu.I[sim.ti - 1] > 5000
 
-reactive = ss.modify(flu.pars.beta, multiply=0.5, when=many_infectious, hold=ss.days(30))
+reactive = ss.modify(flu.pars.beta, multiply=0.5, where=many_infectious, hold=ss.days(30))
 sim = ss.Sim(flu, interventions=reactive, **kw)
 sim.run()
 sim.plot('flu')
@@ -365,7 +364,7 @@ class Lockdown(ss.Intervention):
         return
 
 lockdown = Lockdown()
-effect = ss.modify(flu.pars.beta, multiply=0.5, when=lambda sim: sim.interventions.lockdown.active)
+effect = ss.modify(flu.pars.beta, multiply=0.5, where=lambda sim: sim.interventions.lockdown.active)
 
 msim = ss.parallel({
     'No intervention': ss.Sim(flu, **kw),
@@ -391,10 +390,10 @@ An intervention's effect is the difference between a run with it and a run witho
 - **Coverage is of the eligible.** `coverage=0.8` with `where=ss.ppl.age < 5` reaches 80% of children under 5, not 80% of everyone.
 - **Routine delivery needs a rate of capacity.** A bare number as `capacity=` is per round or per step; routine delivery has neither, so it needs a rate, e.g. `ss.peryear(500)`.
 - **`and`, `or`, and `not` don't combine conditions.** Use `&`, `|`, and `~`, with brackets: `(ss.ppl.age > 15) & ~sis.I`.
-- **`by=` is relative to the base.** `ss.change(beta, at=[20, 60], by=[0.5, 0.8])` sets transmission to 80% of its base from day 60, not to 80% of the 50% before.
+- **A multiplier is relative to the base.** `ss.modify(beta, multiply=ss.timeseries({20: 0.5, 60: 0.8}), start=20)` sets transmission to 80% of its base from day 60, not to 80% of the 50% before.
 - **Susceptibility and infectiousness only multiply.** `add=` and `set=` are for parameters; on `rel_sus` and `rel_trans`, use `multiply=`.
-- **A trigger with no memory flickers.** `when=` on a threshold switches the modifier on and off as the quantity crosses it; give `hold=` for a measure that stays in place once begun.
-- **Read results from before this step.** A function given as `when=` runs before the step's results are written; read `[sim.ti - 1]`, not `[sim.ti]`.
+- **A trigger with no memory flickers.** `where=` on a threshold switches the modifier on and off as the quantity crosses it; give `hold=` for a measure that stays in place once begun.
+- **Read results from before this step.** A function given as `where=` runs before the step's results are written; read `[sim.ti - 1]`, not `[sim.ti]`.
 
 The API reference for this page: [Interventions](../api/interventions.qmd), [Connectors](../api/connectors.qmd) (for `ss.modify()`).
 

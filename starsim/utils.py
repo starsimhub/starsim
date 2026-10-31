@@ -21,7 +21,7 @@ import starsim as ss
 
 class method_wrapper:
     """
-    A method that Starsim wraps in a subclass (e.g. the `__init__()` of a disease, see `ss.diseases.built_after`); a subclass defines `__call__(self, obj, *args, **kwargs)`, which calls `self.func`
+    A method that Starsim wraps in a subclass (e.g. `init()`, see `outermost`); a subclass defines `__call__(self, obj, *args, **kwargs)`, which calls `self.func`
 
     It is a class rather than a closure so that a class defined in a script, which dill pickles by value (e.g. to
     send a sim to `ss.parallel()`'s workers), pickles with its own method and not with the globals of the module that
@@ -323,14 +323,17 @@ def assigned_name(obj):
     return None
 
 
-def caller_names(depth=1):
+def caller_names(depth=1, skip=None):
     """
     The names of the variables in the code that called the caller (`depth` levels above it), as a dict of the name of
     each object by its id: its local variables, else its global ones, and only for an object bound to exactly one of
     them. A declared disease (`ss.Disease(infection, recovery)`) and a sim (`ss.Sim(diseases=sir)`, `sim.new(interventions=campaign)`) look up the names of
-    what they are given once, here; nothing else does. Empty if the stack is not that deep (e.g. from R via reticulate)
+    what they are given once, here; nothing else does. Empty if the stack is not that deep (e.g. from R via reticulate).
+    The code of the function `skip`, if that is the code above, does not count.
     """
     frame = getframe(depth + 1)
+    if frame is not None and skip is not None and frame.f_code is skip.__code__:
+        frame = frame.f_back
     if frame is None:
         return {}
     out = {}

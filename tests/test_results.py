@@ -34,40 +34,40 @@ def test_export():
     # A name that is not a result says so, with the closest, also in a sim given a module that was given to another sim before; the module given holds none, and says where they are
     sim2 = ss.Sim(n_agents=small, diseases=d1, networks='random', dur=1, verbose=0).run()
     for res in [rs1, sim2.results.sis1]:
-        with pytest.raises(AttributeError, match='did you mean new_infections'):
-            res.new_infectionz
-    with pytest.raises(AttributeError, match='runs its own copy'):
-        d1.results.new_infections
+        with pytest.raises(AttributeError, match='did you mean infection'):
+            res.infectionz
+    with pytest.raises(AttributeError):
+        d1.results.infection
 
     # Export a single result to a series or dataframe
-    res = rs1.new_infections
+    res = rs1.infection
     res_df = res.to_df()
     res_series = res.to_series()
     assert res[-1] == res_df.iloc[-1].value == res_series.iloc[-1]
 
     # Resampling (always returns a Result) sums a flow over each year, and takes a stock at the end of it
-    resampled = rs1.new_infections.resample(new_unit='year')
+    resampled = rs1.infection.resample(new_unit='year')
     assert isinstance(resampled, ss.Result)
-    assert len(resampled.values) < len(rs1.new_infections.values)
-    assert resampled[0] == rs1.new_infections[:13].sum() # The first year's period includes its end (2001.01.01), as resample() says
-    assert resampled.values.sum() == rs1.new_infections.values.sum()
+    assert len(resampled.values) < len(rs1.infection.values)
+    assert resampled[0] == rs1.infection[:13].sum() # The first year's period includes its end (2001.01.01), as resample() says
+    assert resampled.values.sum() == rs1.infection.values.sum()
     assert rs1.infected.resample('year')[0] == rs1.infected[12] # The end of the first year, 2001.01.01
 
     # Results.resample() resamples all the results in the group
     rs1_annual = rs1.resample('year')
     assert isinstance(rs1_annual, ss.Results)
-    assert np.allclose(rs1_annual.new_infections.values, resampled.values, rtol=1e-10)
+    assert np.allclose(rs1_annual.infection.values, resampled.values, rtol=1e-10)
 
     # Export results of a whole module to a dataframe
     dfs = rs1.to_df()
-    assert res_df.value.sum() == dfs.cum_infections.values[-1] == sim.summary.value.sis1_cum_infections
+    assert res_df.value.sum() == rs1.infection.cum.values[-1] == sim.summary.value.sis1_infection
 
     # Export resampled summary of results to dataframe
     dfy1 = rs1.to_df(resample='year')
     dfy2 = rs2.to_df(resample=ss.years(5))
-    assert dfs.new_infections.iloc[:13].sum() == dfy1.new_infections.iloc[0] # As above
+    assert dfs.infection.iloc[:13].sum() == dfy1.infection.iloc[0] # As above
     assert rs2.susceptible[10] == dfy2.susceptible.iloc[0] # Periods from the start, each including its end: entry 10 is 2005.0
-    assert rs2.new_infections[:11].sum() == dfy2.new_infections.iloc[0]
+    assert rs2.infection[:11].sum() == dfy2.infection.iloc[0]
 
     # Export whole sim to unified annualized dataframe
     sim_df = sim.to_df(resample='year', use_years=True)
@@ -349,7 +349,7 @@ def test_destinations():
             assert abs(C.sum() - 3000) < 3*np.sqrt(10_000*0.3*0.7) # Within 3 standard errors
         assert C is res['course.C'] and np.array_equal(total.select(to='C'), C) and np.allclose(total.select(to=['C', 'R']), total) # select(to=) is a second spelling
         assert abs(res.cases.sum() - 0.5*C.sum()) <= 3*np.sqrt(0.25*C.sum()) # A destination is a source of an outcome (drawn, except under the ODE)
-    with pytest.raises(ValueError):
+    with pytest.raises(KeyError):
         res.P.select(to='C') # Not a transition with several destinations
 
     # A data column named for a destination is matched to it, and fitted
@@ -396,10 +396,10 @@ def test_plot():
     lines = lambda fig: [[line.get_label() for line in ax.get_lines()] for ax in fig.axes]
     assert lines(sim.sir.plot()) == [['S', 'I', 'R']] # The states, together
     assert [len(ax.get_lines()) for ax in sim.sir.plot('flows').axes] == [1, 1] # Each flow, apart
-    assert len(sim.sir.plot('all').axes) == 5
+    assert len(sim.sir.plot('all').axes) == 6
     assert lines(sim.sir.plot(['S', 'I'])) == [['S', 'I']]
     assert len(sim.sir.plot('S', 'I').axes) == 2
-    assert len(sim.plot().axes) == 5 # The number alive and the deaths of a closed population are left out
+    assert len(sim.plot().axes) == 6 # The number alive and the deaths of a closed population are left out
 
     # In Jupyter, the figure is returned when not shown, and a figure given is not shown; results can be overlaid, on a log scale, and saved
     res = sim.results.sir
@@ -420,6 +420,74 @@ def test_plot():
     assert len(ax.lines[0].get_xdata()) == 12 # The 12 whole weeks of the run (6 with data)
     plt.close('all')
     return sim
+
+
+@sc.timer()
+def test_find():
+    sc.heading('Testing that a result is found however it is spelled, and only if there is one')
+    sim = ss.Sim(diseases='seir', n_agents=100, networks='random', stop=2021, start=2020, verbose=0).run()
+    res = sim.results
+    for name in ['I', 'seir.I', 'seir_I', 'SEIR.I']:
+        assert res[name] is res.seir.I and res.find(name) is res.seir.I and ss.results.match_name(sim, name) is res.seir.I
+        assert sim.summarize(name) == sim.summarize('seir_I')
+    assert all(res.find(col) is not None for col in sim.to_df().columns if col != 'time') # Every name of a table
+    assert res.find('prev', die=False) is None
+    with pytest.raises(KeyError, match='did you mean seir_prevalence'): # Part of a name is only a suggestion
+        res['prev']
+    both = ss.Sim(diseases=['sis', 'sir'], n_agents=100, networks='random', stop=2021, start=2020, verbose=0).run().results
+    with pytest.raises(KeyError, match='could be any of'):
+        both['I']
+    assert both['sir.I'] is both.sir.I
+    return
+
+
+@sc.timer()
+def test_axes():
+    sc.heading('Testing that select, by, resample, and to_df each work the same way across runs and columns')
+    S, I = ss.states(2)
+    sis = ss.Disease(S, I, infection=S >> I @ ss.perday(0.1)*I, recovery=I >> S @ ss.perday(0.05), init_prev=0.1, name='sis')
+    sis.stratify(sex=['female', 'male'])
+    msim = ss.Sim(sis, unit='day', stop=40, total_pop=1000, solver='binomial', verbose=0).run(n_runs=3)
+    res = msim.results.sis.I
+    by = res.by('sex')
+    assert by.shape == (3, 41, 2) and np.array_equal(by.values.sum(axis=-1), res.values) and np.array_equal(by.male.values, res.select(sex='male').values) # Across runs, a column for each level
+    assert by.resample('week').shape[0] == 3 and np.array_equal(by.resample('week').values[..., 0], res.select(sex='female').resample('week').values)
+    assert set(by.to_df().column) == {'female', 'male'} and by.select(run=0).shape == (41, 2)
+    assert 'sir' not in res.axes() and list(res.axes()['sex'][0]) == ['female', 'male'] and 'scenario' in res.axes()
+    with pytest.raises(ValueError):
+        res.by('scenario') # Runs are selected, not split
+    assert msim.to_df().columns.tolist() == msim.results.to_df().columns.tolist() and 'quantile' in msim.to_df(quantiles=[0.5]) # One default
+    return
+
+
+@sc.timer()
+def test_parts_across_runs():
+    sc.heading('Testing that the destinations and parts of a result, and a flow\'s total by name, hold across runs')
+    S, I, X, R = ss.states('S I X R')
+    dis = ss.Disease(infection=S >> I @ ss.perday(0.1)*I, progress=ss.Transition(I, [X, R], dur=ss.days(5), p=[0.3, 0.7]), init_prev=0.1, name='dis')
+    base = ss.Sim(dis, unit='day', stop=20, total_pop=1000, solver='binomial', verbose=0, stratify=dict(age=[0, 15]))
+    msim = ss.parallel(a=base, b=base.copy(), n_runs=2, parallel=False, verbose=0)
+    res = msim.results.dis.progress
+    assert res.median().select(to='X').shape == (2, 21) and res.select(scenario='a').select(to='X').shape == (2, 21)
+    assert np.array_equal(res.take(0).select(to='X').values, res.X.values[0]) and res.quantiles().select(to='X').shape == (6, 21)
+    assert res.take(0).resample('week').select(to='X').shape == res.take(0).resample('week').shape
+    assert np.array_equal(res.cum.select(to='X').values, res.X.cum.values)
+
+    # A rate swept can be selected
+    sis = ss.Sim(diseases=ss.SIS(beta=ss.peryear(2), init_prev=0.1), total_pop=500, start=2000, stop=2004, verbose=0, solver='binomial', stratify=dict(age=[0, 15]))
+    sweep = ss.parallel(sis, pars={'sis.beta': [ss.peryear(1), ss.peryear(2)]}, parallel=False, verbose=0).results.sis.I
+    assert sweep.select(age='0-14').shape == (2, 5) and sweep.by('age').shape == (2, 5, 2) and sweep.select(beta=ss.peryear(1)).shape == (1, 5)
+
+    # A flow's total, by name
+    sim = sis.copy().run()
+    total = sim.results.sis.infection.cum
+    assert all(np.array_equal(sim.results[key], total) for key in ['sis.infection.cum', 'sis_infection_cum', 'infection.cum'])
+    assert sim.summarize('sis.infection.cum') == total[-1] and ss.results.match_column(sim, 'sis.infection.cum') is not None
+    assert sim.results.find('sis.I.cum', die=False) is None # Not a flow
+    fig = msim.plot_each(['dis.infection.cum'])
+    assert len(fig.axes[0].lines) == 4
+    plt.close('all')
+    return
 
 
 if __name__ == '__main__':

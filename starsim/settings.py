@@ -8,11 +8,29 @@ kernels to use) is set in one place. All options should be set using set() or di
 
 Used with: agents and compartments; declared and coded modules
 """
+import os
+import tempfile
 import numpy as np
 import numba as nb
+import numba.core.caching as nb_caching
 import sciris as sc
 import matplotlib.font_manager as fm
 import starsim as ss # Only used to set references
+
+
+def cache_numba():
+    """ Keep Numba's cache in a temporary folder if it has nowhere else to go (a read-only package and home folder, as in some containers), since `cache=True` would otherwise fail on import; Numba finds it by `NUMBA_CACHE_DIR`, as do the workers of `ss.parallel()` """
+    if any(locator.from_function(cache_numba, __file__) for locator in nb_caching.CacheImpl._locator_classes):
+        return
+    uid = getattr(os, 'getuid', int)() # Not on Windows, whose temporary folder is the user's own
+    path = os.path.join(tempfile.gettempdir(), f'starsim_numba_{uid}') # The same folder each time, so only the first process compiles
+    os.makedirs(path, mode=0o700, exist_ok=True)
+    if os.stat(path).st_uid != uid: # Someone else's, so not to be loaded from
+        path = tempfile.mkdtemp(prefix='starsim_numba_')
+    os.environ['NUMBA_CACHE_DIR'] = nb.config.CACHE_DIR = path
+    return
+
+cache_numba()
 
 
 # Define Starsim-default data types
@@ -98,9 +116,6 @@ class Options(sc.obj):
         optdesc.warnings = 'How warnings are handled: options are "warn" (default), "print", and "error"'
         options.warnings = sc.parse_env('STARSIM_WARNINGS', 'warn', str)
 
-        optdesc.warn_convert = 'Whether to warn about automatic time conversions'
-        options.warn_convert = sc.parse_env('STARSIM_WARN_CONVERT', True, bool)
-
         optdesc.max_steps = 'The number of timesteps above which a sim warns that it may be slow (0 to never warn)'
         options.max_steps = sc.parse_env('STARSIM_MAX_STEPS', 50_000, int) # More than a century at a daily step, which the textbooks' models run
 
@@ -109,9 +124,6 @@ class Options(sc.obj):
 
         optdesc.style = 'Set the plotting style: choices are "starsim", "fancy", "simple", or any of Matplotlib\'s'
         options.style = sc.parse_env('STARSIM_STYLE', 'starsim', str)
-
-        optdesc.install_fonts = 'Choose whether or not to install Starsim-specific fonts on first import -- NOTE, only has effect via the environment variable since executed on load'
-        options.install_fonts = sc.parse_env('STARSIM_INSTALL_FONTS', True, bool)
 
         optdesc.show = 'Whether to show the plot immediately (i.e. call plt.show())'
         options.show = sc.parse_env('STARSIM_SHOW', True, bool)
@@ -125,10 +137,10 @@ class Options(sc.obj):
         optdesc.threads = 'The number of threads that the passes over the agents of a large sim, and the particles of a particle filter, take: 0 (default) for as many as Numba has (by default, one per core), 1 for none. Each worker of ss.parallel() and of a calibration takes one, since the workers share the cores already'
         options.threads = sc.parse_env('STARSIM_THREADS', 0, int)
 
-        optdesc.kernels = 'Which kernels run the solvers (all give the same results, except as said for "python"): "auto" (default) for Rust if it has been built (see starsim/solvers/rust/README.md), and otherwise Numba, with compartmental runs taken as plain Python until Numba has compiled (if a run, or the runs of a session, would take longer as plain Python than compiling takes, about two minutes once per install, Numba compiles first; a note says which); "rust" for Rust, compiled ahead of time, so a first run takes no compiling; "numba" to always compile with Numba first (see ss.compile()); "python" for the compartmental kernels as plain Python (and the kernels, not JAX, for the chain binomial, whose draws in JAX are compiled, so a long seeded chain-binomial run gives other numbers than with the others; the passes over agents are Numba). JAX is chosen by the run (see sim.jax), and ss.jit is always Numba'
+        optdesc.kernels = 'Which kernels run the solvers (all give the same results, except as said for "python"): "auto" (default) for Rust if it is there (in the wheels, or built: see starsim/solvers/rust/README.md), and otherwise Numba, with compartmental runs taken as plain Python until Numba has compiled (if a run, or the runs of a session, would take longer as plain Python than compiling takes, about two minutes once per install, Numba compiles first; a note says which); "rust" for Rust, compiled ahead of time, so a first run takes no compiling; "numba" to always compile with Numba first (see ss.compile()); "python" for the compartmental kernels as plain Python (and the kernels, not JAX, for the chain binomial, whose draws in JAX are compiled, so a long seeded chain-binomial run gives other numbers than with the others; the passes over agents are Numba). JAX is chosen by the run (see sim.jax), and ss.jit is always Numba'
         options.kernels = sc.parse_env('STARSIM_KERNELS', 'auto', str)
 
-        optdesc.jax = 'The platform that JAX runs on where Starsim uses it (sim.gradient(), posteriors, and long compartmental runs; see sim.jax): "auto" (default) for JAX\'s own choice (a GPU if it finds one), or a platform, e.g. "cpu" (for a GPU that JAX cannot use) or "cuda". It sets JAX_PLATFORMS, so it applies to everything in the session that uses JAX, and must be set before JAX is first used'
+        optdesc.jax = 'The platform that JAX runs on where Starsim uses it (sim.gradient(), posteriors, and long ODE runs; see sim.jax): "auto" (default) for JAX\'s own choice (a GPU if it finds one), or a platform, e.g. "cpu" (for a GPU that JAX cannot use) or "cuda". It sets JAX_PLATFORMS, so it applies to everything in the session that uses JAX, and must be set before JAX is first used'
         options.jax = sc.parse_env('STARSIM_JAX', 'auto', str)
 
         optdesc.uncompiled_warning = 'If True (default), say on import when Starsim has not been compiled yet (see ss.compile()) -- NOTE, only has effect via the environment variable since executed on load'
@@ -142,9 +154,6 @@ class Options(sc.obj):
 
         optdesc.max_joint = 'The most compartments that the diseases tracked jointly in a compartmental run may take (their joint states times the groups of the other dimensions; see ss.solvers.Crossing): above it, solver="auto" runs agents, and a compartmental solver that was asked for stops before anything is made. 0 for no limit'
         options.max_joint = sc.parse_env('STARSIM_MAX_JOINT', 10_000, int) # 6,912 compartments (three diseases with Erlang stages, by four age groups) take about 2 GB over 400 steps
-
-        optdesc.keep_memory = 'If True (default), large arrays that a sim frees are kept by the process for reuse, rather than given back to the system, which makes sims with networks 15-30% faster, but the process keeps its peak memory until it ends (Linux only). Set False (before importing Starsim, via the environment variable) to give memory back as it is freed; ss.solvers.backends.release_memory() gives back what is free now'
-        options.keep_memory = sc.parse_env('STARSIM_KEEP_MEMORY', True, bool)
 
         return optdesc, options
 
@@ -480,17 +489,16 @@ options = Options()
 options.set_precision(refresh=False) # Other modules are not loaded yet, so nothing to refresh
 
 # Load the fonts, rebuilding Matplotlib's font cache the first time (marked by a file in internals/assets/; if it can't be written, the cache isn't rebuilt)
-if options.install_fonts:
-    marker = sc.thispath(__file__) / 'internals' / 'assets' / 'fonts_installed_successfully'
-    first = not marker.exists()
-    try:
-        if first:
-            marker.touch()
-        load_fonts(rebuild=first)
-        if first and options.verbose:
-            print('\nNote: rebuilding the font cache only happens once on first import, or set the environment variable STARSIM_INSTALL_FONTS=0 to disable.')
-    except Exception: # Not writable, or something else went wrong: plot without them
-        pass
+marker = sc.thispath(__file__) / 'internals' / 'assets' / 'fonts_installed_successfully'
+first = not marker.exists()
+try:
+    if first:
+        marker.touch()
+    load_fonts(rebuild=first)
+    if first and options.verbose:
+        print('\nNote: rebuilding the font cache only happens once on first import.')
+except Exception: # Not writable, or something else went wrong: plot without them
+    pass
 
 # Set the style
 options.set_style()

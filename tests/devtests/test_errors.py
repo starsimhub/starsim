@@ -208,7 +208,7 @@ def _(): ss.Sim(sir(), n_agents=100, stop=5, **kw).run().diseases.sir.ti_R.notna
 @trigger('is outside the sim', ValueError)
 def _():
     d = sir()
-    ode(d, interventions=ss.change(d.pars.beta, at=[2030], to=[0.1]), start='2020-01-01', stop='2020-04-30').init()
+    ode(d, interventions=ss.modify(d.pars.beta, set=0.1, start=2030), start='2020-01-01', stop='2020-04-30').init()
 
 @trigger('but the model is not stratified by "sex"', KeyError)
 def _(): ode(sir().stratify(age=[0, 15], where=dict(sex='female'))).init()

@@ -17,7 +17,7 @@ datadir = ss.root / 'tests/test_data'
 @sc.timer()
 def test_background_loss():
     """
-    Test that background pregnancy loss (p_loss) produces losses, that higher p_loss
+    Test that background pregnancy loss (loss_rate) produces losses, that a higher rate
     produces more losses, and that they are classified as miscarriage (<20w) or
     stillbirth (>=20w) by gestational age
     """
@@ -28,7 +28,7 @@ def test_background_loss():
         sim = ss.Sim(
             n_agents=5_000,
             demographics=[
-                ss.Pregnancy(fertility_rate=ss.time.freq(30, 'year'), p_loss=ss.bernoulli(p=p_loss), burnin=True),
+                ss.Pregnancy(fertility_rate=ss.time.freq(30, 'year'), loss_rate=ss.probperweek(p_loss), burnin=True),
                 ss.Deaths(death_rate=ss.time.freq(10/1010*1000, 'year')),
             ],
             dur=ss.years(5),
@@ -53,10 +53,10 @@ def test_background_loss():
 
 @sc.timer()
 def test_pregnancy_risks():
-    """ p_loss is per week whatever the time step, and the relative risk of preterm birth changes the share born preterm """
+    """ A chance per week of a loss is per week whatever the time step, and the relative risk of preterm birth changes the share born preterm """
     sc.heading('Testing pregnancy risks...')
     def run(dt, p_loss=0, rr=1.0):
-        preg = ss.Pregnancy(fertility_rate=ss.peryear(150), p_loss=p_loss, rr_ptb=ss.constant(1), rr_ptb_age=np.array([[18, 35, 1000], [rr, rr, rr]]), burnin=False)
+        preg = ss.Pregnancy(fertility_rate=ss.peryear(150), loss_rate=ss.probperweek(p_loss), rr_ptb=ss.constant(1), rr_ptb_age=np.array([[18, 35, 1000], [rr, rr, rr]]), burnin=False)
         sim = ss.Sim(n_agents=10_000, start=2000, stop=2003, dt=dt, demographics=preg, rand_seed=1, verbose=0).run()
         p = sim.demographics.pregnancy
         ga = p.gestation_at_birth.raw[~np.isnan(p.gestation_at_birth.raw)]

@@ -48,7 +48,7 @@ Some people with the infection notice symptoms and seek care. Suppose 30% of peo
 
 ```{python}
 drug = ss.Treatment(cure=0.95) # Cures 95% of the people it is given to
-care = ss.treat(drug, on=sti.infection, coverage=0.3, delay=ss.uniform(ss.weeks(1), ss.months(2)))
+care = ss.treat(drug, where=sti.infection, coverage=0.3, delay=ss.uniform(ss.weeks(1), ss.months(2)))
 ```
 
 The treatment is given when it is due, whether or not the person is still infected by then; for someone who has recovered already, it does nothing.

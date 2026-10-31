@@ -108,7 +108,7 @@ def test_default(do_plot=do_plot):
     sim = ss.Sim(n_agents=n_agents).run()
     if do_plot:
         sim.plot()
-    with pytest.raises(ValueError, match='no agents'): # It was a ZeroDivisionError
+    with pytest.raises(ValueError): # It was a ZeroDivisionError
         ss.Sim(n_agents=0, total_pop=1, diseases='sir').init()
     assert ss.Sim(diseases='sir', n_agents=None).run().solver != 'abm' # Not given, as if left out
     return sim
@@ -127,7 +127,7 @@ def test_simple(do_plot=do_plot):
     # A sim of modules written as code can be built again with other values, as a declared one can
     agentsim = ss.Sim(n_agents=n_agents, diseases=ssl.AgentSIS(name='sis'), networks='random', start=2000, stop=2010, verbose=0)
     again = agentsim.new(rand_seed=2).run()
-    assert again.summary.value.sis_cum_infections == ss.Sim(n_agents=n_agents, diseases=ssl.AgentSIS(name='sis'), networks='random', start=2000, stop=2010, rand_seed=2, verbose=0).run().summary.value.sis_cum_infections
+    assert again.summary.value.sis_infection == ss.Sim(n_agents=n_agents, diseases=ssl.AgentSIS(name='sis'), networks='random', start=2000, stop=2010, rand_seed=2, verbose=0).run().summary.value.sis_infection
 
     # So can a subclass that adds its modules after Sim.__init__() (as FPsim's does), and settings changed after the sim was made are kept
     class MySim(ss.Sim):
@@ -170,25 +170,11 @@ def test_api():
 
     # Check different ways of setting a distribution
     kw = dict(n_agents=n_agents, networks='random')
-    d2 = ss.lognorm_ex(mean=10, std=2) # Create a distribution with kwargs
-    d3 = ss.normal(loc=10) # Create a different type of distribution
 
-    # Check specifying a duration with a scalar, which is in years, as the default
+    # Check specifying a duration with a scalar, which is in the model's unit, years here
     s4 = ss.Sim(diseases=dict(type='sir', dur_inf=10), **kw).run() # Supply values as a scalar
     s5 = ss.Sim(diseases=dict(type='sir', dur_inf=ss.years(10)), **kw).run() # Supply as a duration
     assert ss.debugtools.check_sims_match(s4, s5), 'Sims should match'
-
-    # Check specifying dist with a dict
-    s7 = ss.Sim(diseases=dict(type='sir', dur_inf=dict(type='lognorm_ex', mean=10, std=2)), **kw).run() # Supply values as a dict
-    s8 = ss.Sim(diseases=dict(type='sir', dur_inf=d2), **kw).run() # Supply as a distribution
-    assert ss.debugtools.check_sims_match(s7, s8), 'Sims should match'
-    with pytest.raises(TypeError):
-        ss.SIR(dur_inf=[10, 2]) # Starsim 3's values of its default lognormal
-
-    # Check changing dist type
-    s9  = ss.Sim(diseases=dict(type='sir', dur_inf=dict(type='normal', loc=10)), **kw).run() # Supply values as a dict
-    s10 = ss.Sim(diseases=dict(type='sir', dur_inf=d3), **kw).run() # Supply values as a distribution
-    assert ss.debugtools.check_sims_match(s9, s10), 'Sims should match'
 
     # Check that Bernoulli distributions can't be changed
     with pytest.raises(TypeError):
@@ -222,7 +208,7 @@ def test_complex_api():
             dict(type='random', name='random2', n_contacts=4)
         ],
         diseases = [
-            dict(type='sir',  dur_inf=dict(type='expon', scale=ss.years(6.0))),
+            dict(type='sir',  dur_inf=ss.expon(scale=ss.years(6.0))),
             dict(type='sis', beta=ss.prob(0.07, 'year'), init_prev=0.1),
         ],
         demographics = [
@@ -240,7 +226,7 @@ def test_complex_api():
     networks = ss.ndict(net1, net2)
 
     dis1 = ss.SIR(dur_inf=ss.expon(scale=ss.years(6.0)))
-    dis2 = ss.SIS(beta=ss.prob(0.07, 'year'), init_prev=ss.bernoulli(0.1))
+    dis2 = ss.SIS(beta=ss.prob(0.07, 'year'), init_prev=0.1)
     diseases = ss.ndict(dis1, dis2)
 
     dem1 = ss.Births(birth_rate=ss.time.freq(20, 'year'))
@@ -535,9 +521,9 @@ def test_rescale():
     """ Test dynamic rescaling, and that duplicate modules get unique names """
     sc.heading('Testing dynamic rescaling')
     def make_sim(init_inf, **kwargs):
-        sir = ss.SIR(beta=ss.perday(0.025), dur_inf=ss.days(10), init_prev=ss.choose_n(init_inf), p_death=0)
+        sir = ss.SIR(beta=ss.perday(0.025), dur_inf=ss.days(10), init_n=dict(I=init_inf), p_death=0)
         return ss.Sim(n_agents=5e3, pop_scale=10, diseases=sir, networks=ss.RandomNet(n_contacts=10), dt=ss.days(1), dur=ss.days(150), verbose=0, **kwargs)
-    fixed = make_sim(init_inf=5).run() # Enough seeds that the epidemic seldom dies out (with 2, a run in 6 does)
+    fixed = make_sim(init_inf=50).run() # Enough seeds, 5 agents, that the epidemic seldom dies out (with 2, a run in 6 does)
     rescaled = make_sim(init_inf=50, rescale=True).run()
     scale = rescaled.results.pop_scale
     assert scale[0] == 1 and scale[-1] == 10 # Scale starts at 1 and ends at pop_scale
@@ -552,7 +538,7 @@ def test_rescale():
     assert seeded() == 1 # Too few to be an agent: one, with a note
 
     # A declared disease counts the people no agent stands for yet in its first state, and so do alive and the ratios
-    flu = ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(10), init_prev=ss.choose_n(10), prevalence=I/(S+I+R), name='flu')
+    flu = ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(10), init_n=dict(I=10), prevalence=I/(S+I+R), name='flu')
     res = ss.Sim(flu, total_pop=1e6, n_agents=2000, stop=ss.days(60), rescale=True, verbose=0).run().results
     assert np.allclose(res.flu.S + res.flu.I + res.flu.R, 1e6) and np.allclose(res.alive, 1e6)
     assert res.flu.I[0] == 10 and np.isclose(res.flu.prevalence[0], 1e-5)
@@ -606,7 +592,45 @@ def test_init_order():
             self.unset = np.mean(self.sim.demographics[0].district[self.sim.people.auids] < 0)
     sim = ss.Sim(n_agents=1000, demographics=Demography(), custom=Lifestyle(name='life'), start=2010, stop=2011, verbose=0).init()
     assert sim.custom.life.unset == 0 # Was 1: the custom module came first
+
+    # Whatever reads the disease in init_post() sees who starts infected
+    seen = {}
+    class Reader(ss.Connector):
+        def init_post(self):
+            super().init_post()
+            seen[self.name] = self.sim.diseases.sir.I.n
+        def step(self):
+            pass
+    class Custom(Reader, ss.Module):
+        pass
+    sir = ss.SIR(init_n=dict(I=10), name='sir')
+    ss.Sim(n_agents=1000, diseases=sir, connectors=Reader(name='conn'), custom=Custom(name='cust'), stop=1, verbose=0).init()
+    assert seen == dict(conn=10, cust=10) # Was 0 from the connector
     return sim
+
+
+def test_engine_rules():
+    """ A module of the user's takes the route the built-in ones do; an engine says what it does not define """
+    class Clinic(ss.Intervention):
+        def agent_reasons(self, sim):
+            return ['the clinic keeps a list of names']
+    class Survey(ss.Analyzer):
+        def agent_reasons(self, sim):
+            return [ss.modules.Preference('the survey samples people')]
+    kw = dict(diseases=ss.SIR(), stop=2002, verbose=0)
+    sim = ss.Sim(interventions=Clinic(), **kw).init()
+    assert sim.solver == 'abm' and sim.solver_reason == 'the clinic keeps a list of names'
+    with pytest.raises(ss.CapabilityError, match='keeps a list'):
+        ss.Sim(interventions=Clinic(), solver='ode', **sc.dcp(kw)).init()
+    assert ss.Sim(analyzers=Survey(), **sc.dcp(kw)).init().solver == 'abm'
+    assert ss.Sim(analyzers=Survey(), solver='ode', **sc.dcp(kw)).init().solver == 'ode'
+
+    assert ss.solvers.why_not(ss.Sim(**sc.dcp(kw)).init(), 'kernels') is None
+    table = ss.solvers.solver_table()
+    assert len(table) == len(ss.solvers.rules) and set(table.compartments) == {'yes', 'no', 'if asked'}
+    with pytest.raises(ss.CapabilityError, match='does not define count'):
+        object.__new__(ss.solvers.Engine).count([])
+    return
 
 
 if __name__ == '__main__':

@@ -222,7 +222,7 @@ class CountState:
     def no_agents(self, what):
         """ A read of agents, which a compartmental run does not have (TC3: a module that reads each person's state, run beside the compartments) """
         raise ss.CapabilityError(f'{self.engine.mod.name}.{self.name}{what} was asked for, but a compartmental run has the number in each state ({self.engine.mod.name}.{self.name}.n), not agents.\n'
-                                 f'     Run with solver="abm"; a module written as code that reads agents can say so with compartmental = False, so that solver="auto" runs them.')
+                                 f'     Run with solver="abm", e.g. ss.Sim(..., solver="abm") or sim.run(solver="abm"); a module written as code that reads agents can say so with compartmental = False, so that solver="auto" runs them.')
 
     @property
     def uids(self):
@@ -305,6 +305,8 @@ class Effects(sc.prettyobj):
         module (`ss.Module`): the module
         sim (`ss.Sim`): the sim
     """
+    agents = False # Whether it runs the disease's states as agents
+    compartmental = False # Whether it runs them as compartments; a disease written as code does neither
     cross = None # In a compartmental run, the diseases whose states are tracked jointly with this one's, if any: see ss.solvers.Crossing
 
     def __init__(self, module, sim):
@@ -371,6 +373,43 @@ class Effects(sc.prettyobj):
             value = np.asarray(value)[uids]
         return unconvert(raw, value, self.sim.unit_base)
 
+    def init_pars(self):
+        """ For a module written as code: the parameters its code reads from `self.pars`, with their base values, which have modifiers (see `write_pars()`) """
+        reads = getattr(self.mod, 'allow_modifiers', ())
+        self.base_pars = {name:self.mod.pars[name] for (modname, kind, name) in getattr(self.sim, 'modifiers', ()) if modname == self.mod.name and kind == 'par' and name not in reads}
+        return
+
+    def write_pars(self):
+        """ Put the modified value of each of these parameters in `self.pars`, which is what the module's code reads """
+        for name in self.base_pars:
+            self.mod.pars[name] = self.base_pars[name] # current_par() reads the base value
+            value = self.current_par(name)
+            vals = np.ravel(getattr(value, 'value', value))
+            if np.ptp(vals):
+                raise ss.CapabilityError(f'the modifiers of {self.mod.name}.pars.{name} give it a value for each person, but "{self.mod.name}" is written as code and reads one value, self.pars.{name}. '
+                                         f'Read self.current_value(\'{name}\', uids) in its code, and say so in its class: allow_modifiers = (\'{name}\',).')
+            if np.ndim(getattr(value, 'value', value)): # The same for everyone, e.g. by a condition on the population
+                value = type(value)(vals[0]) if isinstance(value, ss.TimePar) else vals[0]
+            self.mod.pars[name] = value
+        return
+
+    def reset_pars(self):
+        """ Parameters are back to their base values after the run """
+        self.mod.pars.update(self.base_pars)
+        return
+
+    def unapplied_par(self, name, mods):
+        """ Why a module written as code would not apply the modifiers (`mods`) on a parameter, or None if it would """
+        mod = self.mod
+        value = mod.pars[name]
+        value = value.raw if isinstance(value, ss.par) else value
+        if not (sc.isnumber(value) or isinstance(value, ss.TimePar)):
+            return f'"{name}" of "{mod.name}" is a {type(value).__name__}, and a module written as code reads a number, a rate, a probability, or a duration from a parameter a modifier changes. Modify its rel_sus or rel_trans, or declare the disease (see ss.Disease).'
+        if name not in getattr(mod, 'allow_modifiers', ()) and any(ss.conditions.on_people(getattr(m, 'where', None)) for m in mods):
+            return (f'"{mod.name}" is written as code, so it reads one value of "{name}", self.pars.{name}, which cannot differ between people. '
+                    f'Read self.current_value(\'{name}\', uids) in its code, and say so in its class: allow_modifiers = (\'{name}\',).')
+        return None
+
     def mult_raw(self, kind, name=None, state=None):
         """ The multiplier on a quantity that is not a parameter (`rel_sus`, `rel_trans`, or a transition's rate) from the modifiers active on it, at least 0 (1 if there are none) """
         mods = self.sim.modifiers.get((self.mod.name, kind, name))
@@ -402,8 +441,8 @@ class Engine(Telling, Effects):
         self.held_series = dict() # Values that vary in time, at the start of each step of the sim: see held_value()
         self.rng = self.make_rng() # For draws that are not per agent
         self.dwells = sc.obj() # Dwell-time information for each transition that has one
-        self.flowcounts = sc.obj({name:0.0 for name in list(self.graph.transitions) + self.graph.destinations()}) # Events in the current step, and those of each destination of a transition with several ('cin.X')
-        self.stocks = sc.obj() # The number in each state at the start of the step
+        self.flowcounts = {name:0.0 for name in list(self.graph.transitions) + self.graph.destinations()} # Events in the current step, and those of each destination of a transition with several ('cin.X')
+        self.stocks = dict() # The number in each state at the start of the step
         self._by_group = False # Whether rates are being worked out for groups rather than for agents (in an agent-based run, for the states that are counts)
         self.strain = None # The position of the module's strain dimension, if it has one
         self.move_levels = dict() # For each transition with move=: see moves()
@@ -413,12 +452,112 @@ class Engine(Telling, Effects):
         self.routed = set() # In a compartmental run, the ids of the betas applied to the exposure through each route instead: see Compartmental.route_betas()
         self.partnership_info = dict() # Under the partner-change model, the chance a partnership transmits, by transmission, source state, network, and side of the partner: see Compartmental.partnership_chance()
         self.register = None # The movement register, as arrays for the kernels
-        self.year = None # The year in the step that values that vary smoothly in time are taken at, for its stages (None for its start, sim.now)
+        self.year = None # The year that values that vary smoothly in time are taken at, the middle of the step (None for its start, sim.now)
         self.immune_states = [] # Protection between strains: the states whose people can be infected again, and the protection by level in a state (see init_immunity())
         self.protect = {}
         self.kernel_rng = None # The random numbers of a run stepped by the kernels: see init_program()
         self.compiled = None # Whether the run is taken by the compiled kernels or as plain Python, once chosen: see Compartmental.kernels()
         return
+
+    #%% What each engine defines, in its own terms: as agents, uids; in compartments, shares of each state and group
+
+    def undefined(self, name):
+        """ The error for a method this engine does not define """
+        return ss.CapabilityError(f'{type(self).__name__} does not define {name}()')
+
+    def define(self):
+        """ Put the run-time form of the declared states on the module, and make its distributions """
+        raise self.undefined('define')
+
+    def init_pre(self):
+        """ Lay out what the run needs, before the people are initialized """
+        raise self.undefined('init_pre')
+
+    def init_post(self):
+        """ Set the starting values, once the people are initialized """
+        raise self.undefined('init_post')
+
+    def step_state(self):
+        """ The part of a step before the interventions: what changes with no contact with others """
+        raise self.undefined('step_state')
+
+    def step(self):
+        """ The part of a step after the interventions, including transmission """
+        raise self.undefined('step')
+
+    def arrive(self, *args, **kwargs):
+        """ Add the people who arrive in a step """
+        raise self.undefined('arrive')
+
+    def force(self, *args, **kwargs):
+        """ Move people to a state now, by a delivery; returns how many moved """
+        raise self.undefined('force')
+
+    def move_states(self, *args, **kwargs):
+        """ Move people out of some states into another """
+        raise self.undefined('move_states')
+
+    def move_some(self, *args, **kwargs):
+        """ A one-off move from code (`ss.move()`) """
+        raise self.undefined('move_some')
+
+    def whole_steps(self, *args, **kwargs):
+        """ A time as a number of whole steps """
+        raise self.undefined('whole_steps')
+
+    def backfill_burnin(self, sp):
+        """ Place the people part way through at the start (see `ss.Pregnancy`'s `burnin=`) """
+        raise self.undefined('backfill_burnin')
+
+    def n_people(self, total=True):
+        """ The number of people, in all or by group """
+        raise self.undefined('n_people')
+
+    def count(self, states, total=True):
+        """ The number of people in some states, in all or by group """
+        raise self.undefined('count')
+
+    def set_count(self, state, value):
+        """ Set the number of people in a state """
+        raise self.undefined('set_count')
+
+    def stock(self, state):
+        """ The number in a state, as an expression reads it """
+        raise self.undefined('stock')
+
+    def exposure(self, state):
+        """ Exposure to the people in a state """
+        raise self.undefined('exposure')
+
+    def prop(self, cond):
+        """ The value of a property of people, as an expression reads it """
+        raise self.undefined('prop')
+
+    def attr(self, a):
+        """ The value of an attribute, as an expression reads it """
+        raise self.undefined('attr')
+
+    def clock(self, clock):
+        """ The value of a clock (`X.time`), as an expression reads it """
+        raise self.undefined('clock')
+
+    def coverage(self, expr):
+        """ The coverage of a product, as an expression reads it """
+        raise self.undefined('coverage')
+
+    def mother(self, expr):
+        """ The value of an expression for each person's mother (`ss.mother()`) """
+        raise self.undefined('mother')
+
+    def call_uids(self, func, p=None):
+        """ Call a function that takes uids """
+        raise self.undefined('call_uids')
+
+    def note_counter(self, strat, what):
+        """ Note a counter whose levels are not one apart, if it matters to this engine """
+        raise self.undefined('note_counter')
+
+    #%% What the engines share
 
     def step_funcs(self):
         """ Call the module's custom per-step functions, after its transitions """
@@ -1008,7 +1147,7 @@ class Engine(Telling, Effects):
         return
 
     def note_function_reads(self):
-        """ Say when a parameter that a modifier changes (e.g. ss.change) is read inside a function, which sees its own value rather than the changed one """
+        """ Say when a parameter that a modifier changes is read inside a function, which sees its own value rather than the changed one """
         modified = [name for (modname, kind, name) in self.sim.modifiers if modname == self.mod.name and kind == 'par']
         if not modified:
             return
@@ -1092,17 +1231,27 @@ class Engine(Telling, Effects):
             self.cache[key] = func(self.sim)
         return self.cache[key]
 
+    def series_over(self, func, years, key):
+        """ The values of something that varies in time at some years, kept under `key`, as (func, the values of any parameters inside it, which can change between runs, values) """
+        inner = tuple(p.raw for p in getattr(func, 'pars', []))
+        kept = self.held_series.get((id(func), key))
+        if kept is None or kept[0] is not func or kept[1] != inner:
+            kept = self.held_series[(id(func), key)] = (func, inner, func.series(years, self.sim, self.convert))
+        return kept
+
+    def at_points(self, func):
+        """ The values of something that varies in time at each time point, as results read them: an array over the steps (and over the groups, for an `ss.by`) """
+        vals = np.array(self.series_over(func, self.mod.t.yearvec, 'points')[2], dtype=float)
+        return vals.reshape(len(vals), -1)[:, 0] if vals.size == len(vals) else vals
+
     def held_value(self, func, year=None):
-        """ A value that varies in time (or an `ss.by` of them, for each group), at the start of the current step, or at a year within it (a stage of an ODE step, see `Compartmental.at_time()`): worked out for every step (or stage) at once, the first time it is needed (as in `Compartmental.tables()`), rather than at each call """
+        """ A value that varies in time (or an `ss.by` of them, for each group), at the start of the current step, or at a year within it (see `Compartmental.at_middle()`): worked out for every step at once, the first time it is needed (as in `Compartmental.tables()`), rather than at each call """
         key = ('held', id(func), year)
         if key in self.cache: # Already looked up this step
             return self.cache[key]
         t = self.sim.t
         years = t.yearvec if year is None else np.union1d(t.yearvec, (t.yearvec[:-1] + t.yearvec[1:])/2) # The steps' starts, or also their middles
-        inner = tuple(p.raw for p in getattr(func, 'pars', [])) # The values of any parameters inside it, which can change between runs
-        kept = self.held_series.get((id(func), year is None))
-        if kept is None or kept[0] is not func or kept[1] != inner:
-            kept = self.held_series[(id(func), year is None)] = (func, inner, func.series(years, self.sim, self.convert))
+        kept = self.series_over(func, years, year is None)
         ti = max(t.ti - 1, 0) if year is None else int(np.searchsorted(years, year)) # The step's start: the loop's ti is its end (the start of the run before the first step)
         if year is not None and (ti >= len(years) or years[ti] != year):
             out = func.series([year], self.sim, self.convert)[0]
@@ -1298,9 +1447,9 @@ class Engine(Telling, Effects):
         for tr in self.graph.transitions.values(): # A rate per person that grows with a count of people, which is often a count written for a share
             if tr.people and not tr.inflow and tr.rate is not None and tr.flow_given is None and ss.expressions.count_power(tr.rate) > 0 and not self.plausible_density(tr): # Not for the whole flow written without a total (beta*S*I), which says so
                 ss.note(f'{tr.name} has a rate per person of {ss.expressions.format_expr(tr.rate)}, which grows with the number of people (density-dependent); for a share of the population, write .frac (e.g. I.frac), or write the transmission with the bare state (e.g. beta * I)', sim=sim)
-        if sim.solver in ['gillespie', 'tau'] and self.smooth: # Exact only for rates that are constant within each quarter of a step
+        if sim.solver in ['gillespie', 'tau'] and self.smooth: # Exact only for rates that are constant within a step
             what = 'solver="gillespie"' if sim.solver == 'gillespie' else 'Tau-leaping'
-            msg = f'{what} holds values that vary in time for a quarter of a step at a time, at their middle'
+            msg = f'{what} holds values that vary in time for each step, at its middle'
             if sim.pars.approx is False:
                 raise ss.CapabilityError(f'{msg}, which approx=False does not allow.\n     Run with solver="ode", or allow the approximation; a shorter step follows the values more closely.')
             ss.note(f'{msg}; a shorter step follows them more closely', sim=sim, verbose=0 if sim.pars.approx else None)
@@ -1472,19 +1621,17 @@ class Engine(Telling, Effects):
         if family is not None and self.solver != 'abm': # A strain with its own course, seeded by the disease (ss.Strains(shared=...)): the disease's share, times this member's split (independently of the other members, so unlike agents some are seeded with two)
             family = self.sim.diseases[family]
             init_prev, share = ss.parameters.starting(family.init_prev), family.split[family.member_names.index(self.mod.name)]
-        if isinstance(init_prev, ss.expressions.par): # A parameter (e.g. sir.pars.init_prev), whose value can be a distribution, or a value for each level (worked out for each group below, not for each agent)
+        if isinstance(init_prev, ss.expressions.par): # A parameter (e.g. sir.pars.init_prev), whose value can be a value for each level (worked out for each group below, not for each agent)
             init_prev = init_prev.raw if isinstance(init_prev.raw, (ss.Dist, ss.by)) else self.value(init_prev)
+        if isinstance(init_prev, ss.Dist):
+            raise TypeError(f'init_prev of "{self.mod.name}" is {init_prev!r}: for a declared disease, give a share, a number of people above 1, or a function of the sim')
         if init_prev is not None and self.seed_dist() is not None: # Drawn for each agent instead: see Agents.init_post()
             init_prev = None
         if isinstance(init_prev, ss.by): # A share for each level of some dimensions (a property of each person that is not one raises here, unless run as agents: see seed_dist())
             init_prev = init_prev.per_group(self.sim, self.convert)
-        elif callable(init_prev) and not isinstance(init_prev, ss.Dist): # A function of the sim, giving a share (or one for each group)
+        elif callable(init_prev): # A function of the sim, giving a share (or one for each group)
             init_prev = self.call(init_prev)
         if init_prev is not None and np.any(init_prev):
-            if isinstance(init_prev, ss.bernoulli):
-                init_prev = self.call(init_prev.pars.p) if callable(init_prev.pars.p) else init_prev.pars.p # A function of the agents raises here: see call_uids()
-            elif isinstance(init_prev, ss.choose_n): # A number of people, as Starsim 3 gave it
-                init_prev = init_prev.pars.n
             if np.ndim(init_prev) and np.any(np.asarray(init_prev) > 1):
                 raise ValueError(f'init_prev of "{self.mod.name}" gives a share of more than 1 for some groups ({np.max(init_prev):n}); a value for each group is a share of the people in it')
             elif np.ndim(init_prev) == 0 and init_prev > 1: # More than 1 is a number of people, and up to 1 a share (1.0 is everyone)
@@ -1618,6 +1765,9 @@ class Engine(Telling, Effects):
             for end in tr.ends: # A flow for each destination, e.g. res.cin.X, whose sum is the total
                 dst = graph.states.get(end)
                 results += ss.Result(f'{name}.{end}', dtype=float, scale=scale, label=f'{tr.label or name} to {"death" if dst is None else dst.label or dst.name}', kind='flow', auto_plot=False)
+        if graph.auto_prevalence and 'prevalence' in mod.results: # Its own takes the place of the automatic one
+            graph.auto_prevalence = False
+            del graph.exprs['prevalence']
         for name,expr in graph.exprs.items(): # A ratio, a sum of flows, or otherwise a stock
             if len(ratio_parts(expr)) == 2: # Including one scaled by a number, e.g. I/N*1e5
                 kind = 'ratio'
@@ -1894,7 +2044,7 @@ class Engine(Telling, Effects):
         module (e.g. `ss.Pregnancy`), each state has its share. The engine's own stocks (used in the dynamics) are untouched.
         """
         sim = self.sim
-        if not sim.pars.rescale or sim.solver != 'abm' or 'unrepresented' not in sim.results:
+        if sim.solver != 'abm' or not sim.pars.rescale or 'unrepresented' not in sim.results:
             return self.stocks, self.stock_groups
         n_alive = sim.people.n_alive
         extra = sim.results.unrepresented[sim.ti]/self.scale/n_alive if n_alive else 0.0 # For each agent alive, in agents
@@ -1922,22 +2072,30 @@ class Engine(Telling, Effects):
         res = mod.results
         ti = mod.ti
         scale = ss.results.people_scale(self.sim) # As agents, counts of people are written in people
-        if getattr(self, '_in_people', (None, None))[0] != len(res): # The results counted in people, found once (results are not added during the run)
-            self._in_people = (len(res), [r for r in res.values() if getattr(r, 'in_people', False)])
-        people = self._in_people[1]
-        for r in people: # The values by group, as they are kept
-            r.write_scale = scale
-        if getattr(getattr(self.sim.people, 'scale', None), 'weighted', False): # Agents of different weights (people.scale) make fractions of people
-            for key in list(self.stocks) + list(self.flowcounts):
-                if res[key].values.dtype.kind in 'iu':
-                    res[key].init_values(dtype=float, force=True)
+        if getattr(self, 'res_found', None) != len(res): # What it writes to, found once (results are not added during the run)
+            self.res_found = len(res)
+            self.in_people = [r for r in res.values() if getattr(r, 'in_people', False)]
+            self.coded = [state.name for state in mod.auto_state_list if state.name not in graph.states] + mod.derived_state_names
+            if getattr(getattr(self.sim.people, 'scale', None), 'weighted', False): # Agents of different weights (people.scale) make fractions of people
+                for key in list(self.stocks) + list(self.flowcounts):
+                    if res[key].values.dtype.kind in 'iu':
+                        res[key].init_values(dtype=float, force=True)
+            self.res_values = {key:res[key].values for key in list(graph.states) + list(self.flowcounts) + list(graph.exprs)}
+            self.exprs_by_group = {name for name in graph.exprs if getattr(res[name], 'strata', None) is not None}
+        people = self.in_people
+        if scale != getattr(self, 'res_scale', None): # The values by group, as they are kept
+            self.res_scale = scale
+            for r in people:
+                r.write_scale = scale
         stocks, stock_groups = self.with_unrepresented()
+        values = self.res_values
         for name,val in stocks.items():
-            res[name][ti] = val
+            values[name][ti] = val
         for name,val in self.flowcounts.items():
-            res[name][ti] = val
+            values[name][ti] = val
         self.written_ti = ti # See Agents.infect_now()
-        self.step_outcomes()
+        if self.outcomes:
+            self.step_outcomes()
         derived = getattr(self, 'derived_res', {})
         for name,val in stock_groups.items():
             if name not in derived:
@@ -1953,11 +2111,11 @@ class Engine(Telling, Effects):
             for name,val in self.flow_groups.items():
                 self.row_flows[name] = self.row_flows.get(name, 0) + val
         if graph.exprs:
-            ctx = StockCtx(self, stocks)
+            ctx = StockCtx(self, stocks, ti=ti) # Before the results are scaled
             for name,expr in graph.exprs.items():
-                res[name][ti] = ss.expressions.evaluate(expr, ctx)
-                if getattr(res[name], 'strata', None) is not None: # By group: in a row of several steps, from the states at its end and the flows over it
-                    ctx_g = StockCtx(self, stock_groups, self.flow_groups if self.rows is None else self.row_flows)
+                values[name][ti] = ss.expressions.evaluate(expr, ctx)
+                if name in self.exprs_by_group: # By group: in a row of several steps, from the states at its end and the flows over it
+                    ctx_g = StockCtx(self, stock_groups, self.flow_groups if self.rows is None else self.row_flows, ti=ti)
                     if name in self.ratios:
                         num, den = [ss.expressions.evaluate(part, ctx_g) for part in self.ratios[name]]
                         row = ti if self.rows is None else self.rows[ti]
@@ -1967,9 +2125,8 @@ class Engine(Telling, Effects):
         if scale != 1:
             for r in people: # The values written this step
                 r[ti] = r[ti]*scale
-        coded = [state.name for state in mod.auto_state_list if state.name not in graph.states] + mod.derived_state_names
-        if coded: # The module's own ss.BoolStates (and derived states), counted as for a module written as code
-            ss.Module.update_results(mod, names=coded)
+        if self.coded: # The module's own ss.BoolStates (and derived states), counted as for a module written as code
+            ss.Module.update_results(mod, names=self.coded)
         return
 
     def register_sets(self):
@@ -2048,12 +2205,14 @@ class StockCtx(sc.prettyobj):
         engine (`ss.solvers.Engine`): the engine
         stocks (dict): the number in each state: one number for the current step (the default), or an array over the steps
         flows (dict): the same for the flow along each transition
+        ti (int/array): the time point, for one step, or for stocks by group, the time point of each row; if None, an array over the steps
     """
-    def __init__(self, engine, stocks=None, flows=None):
+    def __init__(self, engine, stocks=None, flows=None, ti=None):
         self.engine = engine
         self.stocks = engine.stocks if stocks is None else stocks
         self.flows = engine.flowcounts if flows is None else flows
-        self.scale = engine.scale if isinstance(engine, ss.solvers.Agents) else 1.0 # As agents, the stocks are numbers of agents
+        self.scale = engine.scale if engine.agents else 1.0 # As agents, the stocks are numbers of agents
+        self.ti = ti
         return
 
     def flow(self, flow):
@@ -2061,6 +2220,12 @@ class StockCtx(sc.prettyobj):
         return self.flows.get(flow.name, 0.0)*(self.scale if flow.tr.people else 1.0)
 
     def value(self, p):
+        """ A parameter's value; one that varies in time is taken at the time point of the result, for a whole run or a step, whichever moment a rate reads it at """
+        raw = p.raw
+        if isinstance(raw, ss.parameters.TimeValue) or (isinstance(raw, ss.by) and raw.varies):
+            vals = self.engine.at_points(raw)
+            vals = vals if self.ti is None else vals[self.ti]
+            return vals[:, None] if np.ndim(self.ti) and np.ndim(vals) == 1 else vals # Rows by groups
         return self.engine.value(p)
 
     def prop(self, cond):

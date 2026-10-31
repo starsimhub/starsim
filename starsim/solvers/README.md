@@ -10,5 +10,5 @@ How a module's declared states and transitions are run. The same declared model 
 - `crossing.py`: diseases whose states are tracked jointly in a compartmental run
 - `deliveries.py`: what an intervention's delivery does differently in a compartmental run
 - `particles.py`: many runs stepped forward together, for a particle filter
-- `backends/`: the compiled kernels the engines run, in Numba and JAX (see its README)
+- `backends/`: the compiled kernels the engines run, in Numba and Rust (see its README)
 - `rust/`: the same kernels in Rust, built from source (see its README); not part of the installed package

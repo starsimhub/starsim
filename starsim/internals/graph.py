@@ -113,6 +113,7 @@ class Graph:
         self.transitions = TransitionTable()
         self.pars = sc.obj()
         self.outcomes = sc.obj()
+        self.modifiers = sc.obj() # What modifies its quantities: see ss.modify()
         self.exprs = sc.obj() # Results that are sums or ratios of states
         self.funcs = sc.obj() # Custom per-step behavior
         self.attrs = sc.obj() # Values for each person: see ss.attr
@@ -120,6 +121,7 @@ class Graph:
         self.guessed = sc.obj()
         self.strats = [] # Stratifications, filled by stratify()
         self.transfers = sc.obj() # Movement between the levels of a stratification
+        self.auto_prevalence = False # Whether exprs has the automatic prevalence: see resolve_prevalence()
 
         self.collect(list(args or []), dict(members or {}))
         if isinstance(init_prev, par):
@@ -133,7 +135,20 @@ class Graph:
         self.resolve_pars()
         self.set_keywords()
         self.resolve_exits()
+        self.resolve_prevalence()
         self.check()
+        return
+
+    def taken(self, name):
+        """ Whether a member of the module has this name """
+        return any(name in other for other in [self.states, self.transitions, self.pars, self.outcomes, self.exprs, self.funcs, self.transfers, self.attrs, self.modifiers])
+
+    def resolve_prevalence(self):
+        """ A disease with transmission has the result `prevalence`, the share of people in the states counted in it, unless the name is taken """
+        infected = [state for state in self.infected if state.people]
+        if infected and (self.transmissions or self.density_sources) and not self.taken('prevalence') and not hasattr(type(self.module), 'prevalence'):
+            self.add(self.exprs, 'prevalence', ss.expressions.as_stocks(sum(infected[1:], infected[0])/sum(self.people_states[1:], self.people_states[0])))
+            self.auto_prevalence = True
         return
 
     def __repr__(self):
@@ -156,6 +171,9 @@ class Graph:
         for name,obj in named:
             if isinstance(obj, FlowSum): # A sum or a share of flows, e.g. recovery + death or 0.5 * infection, is an outcome
                 obj = outcome(obj)
+            if isinstance(obj, ss.modify): # Part of the model, given to the sim with it (see ss.solvers.choose.init_where())
+                self.add(self.modifiers, name or self.names.get(id(obj)) or obj.name, obj)
+                continue
             if isinstance(obj, ss.expressions.attr):
                 if name is not None:
                     obj.name = name
@@ -220,7 +238,7 @@ class Graph:
             reserved |= {key for cls in type(self.module).__mro__ for key,val in vars(cls).items() if isinstance(val, (types.FunctionType, property, classmethod, staticmethod))}
         if name in reserved:
             raise ValueError(f'"{name}" cannot be used as the name of a state, transition, parameter, or result, since it is an attribute of every module. Please choose another name.')
-        for other in [self.states, self.transitions, self.pars, self.outcomes, self.exprs, self.funcs, self.transfers, self.attrs]:
+        for other in [self.states, self.transitions, self.pars, self.outcomes, self.exprs, self.funcs, self.transfers, self.attrs, self.modifiers]:
             if name in other and other[name] is not obj:
                 raise ValueError(f'two members of "{self.module.name}" are both named "{name}"; names must be unique within a module.')
         container[name] = obj
@@ -328,7 +346,7 @@ class Graph:
         for tr in self._unnamed:
             src = '_'.join([s.name for s in tr.src or []]) or 'in'
             dst = '_'.join([s.name for s in tr.dst or []]) or 'out'
-            if contacts == [tr] and not any('infection' in other for other in [self.states, self.transitions, self.pars, self.outcomes, self.exprs, self.funcs, self.transfers, self.attrs]):
+            if contacts == [tr] and not self.taken('infection'):
                 base, why = 'infection', 'given to the only transmission'
             else:
                 base = f'{src}_to_{dst}' if tr.dst is not None else 'immigration' if tr.migration else 'births' # A birth with no state given is into the first state, found later

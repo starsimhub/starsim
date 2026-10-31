@@ -84,7 +84,7 @@ def test_emulsion_quickstart():
         M_deaths    = ss.Transition(M, ss.null, rate=ss.perday(0.002)*(M.time < ss.days(adult_age))), # EMULSION's escape
         E_deaths    = ss.Transition(E, ss.null, rate=ss.perday(0.004)*(E.time < ss.days(10))),
         newborns    = newborns,
-        vertical    = ss.Transition(M, [I, M], on=newborns, p=[0.3, 0.7], where=ss.mother(E | I | Q, born=True)), # EMULSION's produce_offspring: (J, NG, I) with chance 0.3 from an infected mother
+        vertical    = ss.Transition(M, [I, M], where=newborns & ss.mother(E | I | Q, born=True), p=[0.3, 0.7]), # EMULSION's produce_offspring: (J, NG, I) with chance 0.3 from an infected mother
         init_n      = dict(I=10),
     )
     life = ss.Disease(

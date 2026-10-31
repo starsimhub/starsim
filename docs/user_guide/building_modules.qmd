@@ -21,7 +21,7 @@ Many things that once needed a module of their own are declared, and a declared 
 | Vaccination, testing, or treatment | `ss.vaccinate()`, `ss.screen()`, `ss.treat()` | [Products](interventions_products.qmd) |
 | Protection that wanes | `ss.vaccinate(efficacy=0.9, waning=ss.years(5), ...)`, or a state people leave (`R >> S @ ss.years(5)`) | [Products](interventions_products.qmd) |
 | Contact tracing | a delivery with `trace=` | [Products](interventions_products.qmd) |
-| A change to a parameter for some people or some time (masks, school closures) | `ss.modify()`, `ss.change()` | [Interventions](interventions_interventions.qmd) |
+| A change to a parameter for some people or some time (masks, school closures) | `ss.modify()` | [Interventions](interventions_interventions.qmd) |
 | One disease changing the risk of another | `ss.modify(sti.rel_sus, multiply=3, where=hiv.I)` | [Connectors](interventions_connectors.qmd) |
 | A number to report, such as cases from infections | `ss.outcome()` | [Outcomes](building_outcomes.qmd) |
 

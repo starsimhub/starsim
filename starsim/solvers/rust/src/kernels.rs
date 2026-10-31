@@ -46,7 +46,6 @@ pub const LOAD: i64 = 23;
 pub const STORE: i64 = 24;
 pub const GROUP: i64 = 25; // A count in the group each rate is for (kernels.py's GROUP)
 
-pub const PIECES: usize = 4; // The stochastic solvers that take steps of their own length hold values that vary in time for a quarter of a step at a time
 pub const GOLDEN: u64 = 0x9e3779b97f4a7c15;
 pub const SPARSE_FLOWS: usize = 256; // The flows above which the exact solver by place follows only the compartments that hold anyone
 pub const ROW_GROUPS: usize = 50; // The groups from which a draw for every group is made as a vectorized row
@@ -341,6 +340,24 @@ pub fn by_block(matrix: A2<f64>, v: A1<f64>, size: usize, block: usize, out: A1<
 
 /// The product of the time share between places with a vector of places by levels, into out: `v @ share` if `by_columns`, else `share @ v` (`share()`)
 pub fn share(pair: A2<i64>, vals: A1<f64>, v: A1<f64>, size: usize, block: usize, out: A1<f64>, by_columns: bool) {
+    let places = size/block;
+    if vals.len() == places*places && places > 16 {
+        let f: Dgemv = unsafe { std::mem::transmute::<usize, Dgemv>(*DGEMV.get().expect("BLAS not found")) };
+        let (mut part, mut res) = (vec![0.0; places], vec![0.0; places]);
+        let (n, inc) = (places as i32, 1i32);
+        let (alpha, beta) = (1.0f64, 0.0f64);
+        let trans = if by_columns { b"n" } else { b"t" }; // The rows are BLAS's columns
+        for i in 0..block {
+            for j in 0..places {
+                part[j] = v.at(j*block + i);
+            }
+            unsafe { f(trans.as_ptr(), &n, &n, &alpha, vals.ptr() as *const f64, &n, part.as_ptr(), &inc, &beta, res.as_mut_ptr(), &inc) };
+            for j in 0..places {
+                out.set(j*block + i, res[j]);
+            }
+        }
+        return;
+    }
     for i in 0..size {
         out.set(i, 0.0);
     }
@@ -354,18 +371,6 @@ pub fn share(pair: A2<i64>, vals: A1<f64>, v: A1<f64>, size: usize, block: usize
             for i in 0..block {
                 out.add(a*block + i, vals.at(k)*v.at(b*block + i));
             }
-        }
-    }
-}
-
-/// A part of the program at a fraction th of the way through a step, from its values at the start, middle, and end (`interp()`)
-pub fn interp(out: A2<f64>, table: A3<f64>, row: usize, th: f64) {
-    let a = (2.0*th - 1.0)*(th - 1.0);
-    let b = 4.0*th*(1.0 - th);
-    let c = th*(2.0*th - 1.0);
-    for i in 0..out.n0() {
-        for g in 0..out.n1() {
-            out.set(i, g, a*table.at(row, i, g) + b*table.at(row + 1, i, g) + c*table.at(row + 2, i, g));
         }
     }
 }
@@ -394,7 +399,7 @@ pub fn parts(p: &Program) -> [A2<f64>; 4] { [p.fixed, p.mult, p.consts, p.rel_tr
 
 /// Take one timestep (`step()`): the ODE by Euler or RK4, or the rates for the stochastic solvers, which hand them to `draw()` or `event()`
 #[allow(clippy::too_many_arguments)]
-pub fn step(rng: Rng, y: A2<f64>, p: &Program, w: &Work, dt: f64, mut n_sub: i64, solver: i64, flows: A2<f64>, tables: &Tables, row: i64) {
+pub fn step(rng: Rng, y: A2<f64>, p: &Program, w: &Work, dt: f64, mut n_sub: i64, solver: i64, flows: A2<f64>, varying: bool) {
     let (rates, exposures, stack, groups, cells, dy, df, yt) = (w.rates, w.exposures, w.stack, w.groups, w.cells, w.dy, w.df, w.yt);
     let (n, local_n, vals, infectious) = (groups.row(0), groups.row(1), groups.row(2), groups.row(3));
     let (num, den, num2, den2, prev) = (cells.row(0), cells.row(1), cells.row(2), cells.row(3), cells.row(4));
@@ -419,22 +424,6 @@ pub fn step(rng: Rng, y: A2<f64>, p: &Program, w: &Work, dt: f64, mut n_sub: i64
     loop {
         for stage in 0..stages {
             let ys = if stage == 0 { y } else { yt };
-            if row >= 0 { // Values that vary in time, at the time of this stage
-                let th = if solver < 2 {
-                    (sub as f64 + if stage == 0 { 0.0 } else if stage == 3 { 1.0 } else { 0.5 })/(n_sub.max(1) as f64)
-                } else if timed {
-                    ((to_int((elapsed + 1e-12)*PIECES as f64/dt).min(PIECES as i64 - 1)) as f64 + 0.5)/PIECES as f64
-                } else {
-                    (sub as f64 + 0.5)/(n_sub.max(1) as f64)
-                };
-                let pt = parts(p);
-                for k in 0..4 {
-                    if tables[k].n0() > 1 {
-                        interp(pt[k], tables[k], row as usize, th);
-                    }
-                }
-                set_movers(p);
-            }
 
             // The rate of every flow, by group
             for f in 0..nf {
@@ -443,12 +432,12 @@ pub fn step(rng: Rng, y: A2<f64>, p: &Program, w: &Work, dt: f64, mut n_sub: i64
                 }
             }
             if p.ops.len() > 0 && !by_place {
-                for g in 0..ng {
-                    let mut v = 0.0;
-                    for i in 0..p.people.len() {
-                        v += ys.at(p.people.u(i), g);
+                n.fill(0.0);
+                for i in 0..p.people.len() {
+                    let c = ys.row(p.people.u(i));
+                    for g in 0..ng {
+                        n.add(g, c.at(g));
                     }
-                    n.set(g, v);
                 }
                 for i in 0..p.n_places {
                     num.set(i, 0.0);
@@ -473,13 +462,14 @@ pub fn step(rng: Rng, y: A2<f64>, p: &Program, w: &Work, dt: f64, mut n_sub: i64
                         continue;
                     }
                     let s = s as usize;
-                    for g in 0..ng {
-                        exposures.set(e, g, 0.0);
-                        let mut v = 0.0;
-                        for k in p.set_starts.u(s)..p.set_starts.u(s + 1) {
-                            v += ys.at(p.set_comps.u(k), g)*p.rel_trans.at(e, g);
+                    exposures.row(e).fill(0.0);
+                    infectious.fill(0.0);
+                    let rel = p.rel_trans.row(e);
+                    for k in p.set_starts.u(s)..p.set_starts.u(s + 1) {
+                        let c = ys.row(p.set_comps.u(k));
+                        for g in 0..ng {
+                            infectious.add(g, c.at(g)*rel.at(g));
                         }
-                        infectious.set(g, v);
                     }
                     for t in 0..p.sizes.len() {
                         let size = p.sizes.u(t);
@@ -664,25 +654,18 @@ pub fn step(rng: Rng, y: A2<f64>, p: &Program, w: &Work, dt: f64, mut n_sub: i64
                 }
             }
             if solver >= 2 { // The stochastic solvers take it from here
-                let mut end = if row < 0 { dt } else { ((to_int((elapsed + 1e-12)*PIECES as f64/dt) + 1).min(PIECES as i64)) as f64*dt/PIECES as f64 };
-                if pending && timed {
+                let mut end = dt;
+                if pending && solver == 4 {
                     end = mn(end, dt/2.0);
                 }
                 if by_place {
-                    let mut varying = row >= 0 || p.has_det;
-                    for k in 0..4 {
-                        varying = varying || tables[k].n0() > 1;
-                    }
-                    gillespie_places(rng, y, p, w, end - elapsed, flows, varying);
+                    gillespie_places(rng, y, p, w, end - elapsed, flows, varying || p.has_det);
                     h = end - elapsed;
                 } else if solver == 4 {
                     h = event(rng, y, p, w, end - elapsed, flows);
                 } else {
                     if solver == 3 {
                         h = mn(end - elapsed, 0.03/mx(fastest, 1e-12));
-                    } else if pending {
-                        convey(rng, y, p, w, flows, true);
-                        pending = false;
                     }
                     draw(rng, y, p, w, h, flows, solver == 3);
                 }
@@ -690,7 +673,7 @@ pub fn step(rng: Rng, y: A2<f64>, p: &Program, w: &Work, dt: f64, mut n_sub: i64
                     settle(y, p, rates, h, flows);
                 }
                 elapsed += h;
-                if pending && timed && elapsed >= dt/2.0 - 1e-12 {
+                if pending && elapsed >= dt/2.0 + (if solver == 4 { -1e-12 } else { 1e-12 }) {
                     convey(rng, y, p, w, flows, true);
                     pending = false;
                 }
@@ -734,50 +717,68 @@ pub fn step(rng: Rng, y: A2<f64>, p: &Program, w: &Work, dt: f64, mut n_sub: i64
                     }
                 }
             }
-            for f in 0..nf {
+            for f in 0..nf { // The groups inside what each flow does, not the other way round, so a loop over them is simple enough to be vectorized
                 let s = p.src.at(f);
-                let named = p.named.b(f);
-                let record = p.record.at(f);
-                let (ta, tb) = (p.tgt_starts.u(f), p.tgt_starts.u(f + 1));
-                let (ca, cb) = (p.crd_starts.u(f), p.crd_starts.u(f + 1));
-                for g in 0..ng {
-                    let amount;
-                    if s >= 0 {
-                        let s = s as usize;
-                        let mut a = rates.at(f, g)*ys.at(s, g);
-                        if solver == 1 {
-                            a *= yt.at(s, g);
-                        }
-                        dys.set(s, g, dys.at(s, g) - a);
-                        amount = a;
-                    } else {
-                        amount = rates.at(f, g)*p.inflow.at(f, g);
+                let r = rates.row(f);
+                if s >= 0 {
+                    let (from, out) = (ys.row(s as usize), dys.row(s as usize));
+                    for g in 0..ng {
+                        vals.set(g, r.at(g)*from.at(g));
                     }
-                    if amount != 0.0 {
-                        if named {
-                            if record < 0 {
-                                dfs.add(p.index.u(f), g, amount);
-                            } else {
-                                for j in 0..ng {
-                                    dfs.add(p.index.u(f), j, amount*p.maps.at(record as usize, g, j));
-                                }
+                    if solver == 1 {
+                        let scale = yt.row(s as usize);
+                        for g in 0..ng {
+                            vals.set(g, vals.at(g)*scale.at(g));
+                        }
+                    }
+                    for g in 0..ng {
+                        out.set(g, out.at(g) - vals.at(g));
+                    }
+                } else {
+                    let inflow = p.inflow.row(f);
+                    for g in 0..ng {
+                        vals.set(g, r.at(g)*inflow.at(g));
+                    }
+                }
+                if p.named.b(f) {
+                    let (to, m) = (dfs.row(p.index.u(f)), p.record.at(f));
+                    if m < 0 {
+                        for g in 0..ng {
+                            to.add(g, vals.at(g));
+                        }
+                    } else {
+                        for g in 0..ng {
+                            for j in 0..ng {
+                                to.add(j, vals.at(g)*p.maps.at(m as usize, g, j));
                             }
                         }
-                        for k in ta..tb {
-                            if p.tgt_rec.at(k) >= 0 {
-                                dfs.add(p.tgt_rec.u(k), g, amount*p.tgt_w.at(k, g));
-                            }
-                            if p.tgt_map.at(k) < 0 {
-                                dys.add(p.tgt_comp.u(k), g, amount*p.tgt_w.at(k, g));
-                            } else {
-                                for j in 0..ng {
-                                    dys.add(p.tgt_comp.u(k), j, amount*p.tgt_w.at(k, g)*p.maps.at(p.tgt_map.u(k), g, j));
-                                }
+                    }
+                }
+                for k in p.tgt_starts.u(f)..p.tgt_starts.u(f + 1) {
+                    let (w, m) = (p.tgt_w.row(k), p.tgt_map.at(k));
+                    if p.tgt_rec.at(k) >= 0 {
+                        let to = dfs.row(p.tgt_rec.u(k));
+                        for g in 0..ng {
+                            to.add(g, vals.at(g)*w.at(g));
+                        }
+                    }
+                    let to = dys.row(p.tgt_comp.u(k));
+                    if m < 0 {
+                        for g in 0..ng {
+                            to.add(g, vals.at(g)*w.at(g));
+                        }
+                    } else {
+                        for g in 0..ng {
+                            for j in 0..ng {
+                                to.add(j, vals.at(g)*w.at(g)*p.maps.at(m as usize, g, j));
                             }
                         }
-                        for k in ca..cb {
-                            dfs.add(p.crd_index.u(k), g, amount*p.crd_w.at(k, g));
-                        }
+                    }
+                }
+                for k in p.crd_starts.u(f)..p.crd_starts.u(f + 1) {
+                    let (w, to) = (p.crd_w.row(k), dfs.row(p.crd_index.u(k)));
+                    for g in 0..ng {
+                        to.add(g, vals.at(g)*w.at(g));
                     }
                 }
             }
@@ -878,9 +879,14 @@ pub fn step(rng: Rng, y: A2<f64>, p: &Program, w: &Work, dt: f64, mut n_sub: i64
     }
 }
 
+/// Whether any of the tables has a row for each step (`varies()`)
+pub fn varies(tables: &Tables) -> bool {
+    (0..4).any(|k| tables[k].n0() > 1)
+}
+
 /// Step ti of a run, from time point ti-1 to ti (`time_point()`): the deliveries at its start, the values of the step, the step, the events of the register at its end, and the places' fixed delays; returns the people the register could not find
 #[allow(clippy::too_many_arguments)]
-pub fn time_point(rng: Rng, y: A2<f64>, p: &Program, w: &Work, ti: usize, row: i64, per_step: i64, dt: f64, n_sub: i64, solver: i64, flows: A2<f64>, tables: &Tables,
+pub fn time_point(rng: Rng, y: A2<f64>, p: &Program, w: &Work, ti: usize, row: i64, dt: f64, n_sub: i64, solver: i64, flows: A2<f64>, tables: &Tables,
                   reg: &Register, sh: &Shifts, tally: A3<f64>) -> f64 {
     let whole = solver >= 2;
     if sh.to.n0() > 0 {
@@ -891,7 +897,7 @@ pub fn time_point(rng: Rng, y: A2<f64>, p: &Program, w: &Work, ti: usize, row: i
     }
     set_step(parts(p), row, tables);
     set_movers(p);
-    step(rng, y, p, w, dt, n_sub, solver, flows, tables, if per_step == 3 { row } else { -1 });
+    step(rng, y, p, w, dt, n_sub, solver, flows, varies(tables));
     let mut short = 0.0;
     if reg.src.len() > 0 {
         short = apply_events(rng, y, reg, ti, whole);
@@ -908,13 +914,13 @@ pub fn time_point(rng: Rng, y: A2<f64>, p: &Program, w: &Work, ti: usize, row: i
 /// Every step of a run from time point `start` (`run()`), into stocks and flows (time points from `start` on); returns the people the register could not find
 #[allow(clippy::too_many_arguments)]
 pub fn run(rng: Rng, y: A2<f64>, p: &Program, dt: f64, npts: usize, solver: i64, n_sub: i64, tables: &Tables, reg: &Register, sh: &Shifts, tally: Nd<f64, 4>,
-           per_step: i64, start: usize, stocks: A3<f64>, flows: A3<f64>) -> f64 {
+           start: usize, stocks: A3<f64>, flows: A3<f64>) -> f64 {
     let w = workspace(y.n0(), y.n1(), p);
     let mut short = 0.0;
     stocks.plane(0).copy_from(y);
     for ti in start + 1..npts {
         let k = ti - start;
-        short += time_point(rng, y, p, &w, ti, (k as i64 - 1)*per_step, per_step, dt, n_sub, solver, flows.plane(k), tables, reg, sh, tally.sub(k));
+        short += time_point(rng, y, p, &w, ti, k as i64 - 1, dt, n_sub, solver, flows.plane(k), tables, reg, sh, tally.sub(k));
         stocks.plane(k).copy_from(y);
     }
     short
@@ -933,7 +939,7 @@ pub struct ManyOut {
 /// The steps from time point `start` to npts-1 of many runs that differ only in their random numbers, filling in their results (`run_many()`)
 #[allow(clippy::too_many_arguments)]
 pub fn run_many(rngs: &[Rng], ys: A3<f64>, p: &Program, dt: f64, start: usize, npts: usize, solver: i64, n_sub: i64, tables: &Tables, reg: &Register, sh: &Shifts,
-                o: &ManyOut, state_of: A1<i64>, rows: A1<i64>, grp_state: A1<i64>, grp_flow: A1<i64>, per_step: i64) {
+                o: &ManyOut, state_of: A1<i64>, rows: A1<i64>, grp_state: A1<i64>, grp_flow: A1<i64>) {
     let (nc, ng) = (ys.n1(), ys.n2());
     let nflows = p.n_trans + p.n_movers;
     let n_rows = if rows.len() > 0 { o.stocks_g.shape(1) } else { 0 };
@@ -948,7 +954,7 @@ pub fn run_many(rngs: &[Rng], ys: A3<f64>, p: &Program, dt: f64, start: usize, n
             if ti > start {
                 let k = ti - start;
                 for d in 0..n_sh { now_sh.plane(d).fill(0.0); }
-                time_point(rng, y, p, &w, ti, (k as i64 - 1)*per_step, per_step, dt, n_sub, solver, now, tables, reg, sh, now_sh);
+                time_point(rng, y, p, &w, ti, k as i64 - 1, dt, n_sub, solver, now, tables, reg, sh, now_sh);
                 for d in 0..n_sh {
                     for g in 0..ng {
                         o.tally.add([r, ti, d, 0, 0], now_sh.at(d, 0, g));
@@ -998,7 +1004,6 @@ pub struct Advance<'a> {
     pub state_of: A1<i64>,
     pub stocks: Nd<f64, 4>,
     pub flows: Nd<f64, 4>,
-    pub per_step: i64,
     pub row0: i64,
 }
 
@@ -1032,10 +1037,10 @@ pub fn advance(rngs: &[Rng], p: &Program, ys: A3<f64>, first: usize, last: usize
                     wake(&w);
                 }
             }
-            let row = (ti as i64 - 1)*a.per_step - a.row0;
+            let row = ti as i64 - 1 - a.row0;
             set_step(pt, row, &tables);
             set_movers(p);
-            step(rng, y, p, &w, a.dt, a.n_sub, a.solver, now, &tables, if a.per_step == 3 { row } else { -1 });
+            step(rng, y, p, &w, a.dt, a.n_sub, a.solver, now, varies(&tables));
             if a.reg.src.len() > 0 {
                 apply_events(rng, y, a.reg, ti, a.solver >= 2);
                 if a.solver == 4 && p.local {

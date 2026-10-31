@@ -197,7 +197,7 @@ class Product(EventSource, ss.Module):
         """ Called by its deliveries at the start of each step, before anyone is offered it: see `ss.products.Held` """
         return
 
-    def agent_reasons(self):
+    def agent_reasons(self, sim):
         """ The reasons, if any, that this product needs agents """
         if type(self).administer is not Product.administer:
             return [f'the product "{self.name}" has an administer() of its own, which acts on agents']
@@ -520,8 +520,8 @@ class Held(Product):
         out[uids] = np.broadcast_to(np.asarray(vals, dtype=float), len(uids))
         return out
 
-    def agent_reasons(self):
-        out = super().agent_reasons()
+    def agent_reasons(self, sim):
+        out = super().agent_reasons(sim)
         if self.fades and self.box_form is None:
             out.append(f'the protection of "{self.name}" fades by a function of the time since delivery, which only agents keep' + (' (an ss.box() has a compartmental form)' if not isinstance(self.waning, dict) else ' (a box for each effect has a compartmental form if they are the same)'))
         return out
@@ -727,7 +727,7 @@ class Treatment(Held):
     of several diseases, and the probability for each can differ; a modifier of an undriven transition
     (`ss.modify(ng.cure, multiply=0.5, where=...)`) multiplies the probability for the people it applies to.
     It is then given to the people in their sources. What happens at failure (resistance) is a transition of
-    the disease triggered by the outcome: `ss.Transition(I, R_res, on=drug.failed, p=0.05)`.
+    the disease triggered by the outcome: `ss.Transition(I, R_res, where=drug.failed, p=0.05)`.
 
     Note: CRN safe as agents.
 
@@ -1064,8 +1064,8 @@ class Diagnostic(Product):
         """ A test has no step of its own (its deliveries give it), so it does not stop a whole run in the kernels """
         return self.sim.solver != 'abm'
 
-    def agent_reasons(self):
-        out = super().agent_reasons()
+    def agent_reasons(self, sim):
+        out = super().agent_reasons(sim)
         detects = self.detects
         if callable(detects) and not isinstance(detects, ss.conditions.Cond) and ss.utils.n_args(detects) >= 2:
             out.append(f'what the test "{self.name}" detects is a function of uids')

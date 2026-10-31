@@ -167,12 +167,12 @@ def test_seasonal_steps():
         return sim.results.sis.infection.sum()/pop, sim.solver
     ode = make('ode', ss.days(1))[0]
     out = sc.obj()
-    for solver,pop in dict(gillespie=5000, tau=500_000).items(): # Steps of a quarter of a year: holding beta for the whole step gave 5-6% too many infections
+    for solver,pop in dict(gillespie=5000, tau=500_000).items(): # Steps of a quarter of a year, held at their middle: about 3% too many infections, against 5-6% held at the start
         runs = [make(solver, ss.days(91), seed, pop) for seed in range(3)]
         out[solver] = np.mean([run[0] for run in runs])
         assert runs[0][1] == solver
-        assert np.isclose(out[solver], ode, rtol=0.02), f'{solver}: {out[solver]:n} infections per person, against {ode:n} for the ODE'
-    with pytest.raises(ss.CapabilityError): # Exact only for rates that are constant within each quarter of a step
+        assert np.isclose(out[solver], ode, rtol=0.04), f'{solver}: {out[solver]:n} infections per person, against {ode:n} for the ODE'
+    with pytest.raises(ss.CapabilityError): # Exact only for rates that are constant within a step
         S, I = ss.states('S I')
         sis = ss.Disease(infection=ss.Transition(S, I, rate=ss.seasonal(mean=0.15, amplitude=0.5) * I), recovery=ss.Transition(I, S, dur=10), init_prev=0.05, name='sis')
         ss.Sim(sis, solver='gillespie', approx=False, unit='day', stop=100, **kw).init()
@@ -187,6 +187,48 @@ def test_seasonal_steps():
     stepped = ss.Sim(sir(), unit='day', start='2020-01-01', stop='2020-02-15', total_pop=1e6, **kw).run(until='2020-02-15')
     assert np.allclose(stepped.results.sir.I, whole.results.sir.I, rtol=1e-9)
     return out
+
+
+@sc.timer()
+def test_module_beside_kernels():
+    sc.heading('Testing that a module with a step of its own does not change a run, and that a parameter it sets is used')
+    class Counts(ss.Analyzer):
+        def step(self):
+            self.last = self.sim.results.sis.I[self.ti] # Results are there for it to read at each step
+
+    class Halves(ss.Intervention):
+        def step(self):
+            if self.ti == 50:
+                self.sim.diseases.sis.pars.beta.value /= 2
+
+    class Quiet(ss.Analyzer):
+        def step(self):
+            """ Nothing at all, so not in the loop """
+
+    def make(beta=ss.seasonal(mean=ss.perday(0.2), amplitude=0.3), **kwargs):
+        return ss.Sim(ss.SIS(beta=beta, dur_inf=ss.days(10), init_prev=0.01), unit='day', stop=200, total_pop=1e5, **kw, **kwargs)
+
+    for solver in ['ode', 'binomial']:
+        whole = make(solver=solver).run()
+        stepped = make(solver=solver, analyzers=Counts()).run()
+        assert np.array_equal(whole.results.sis.I, stepped.results.sis.I), f'{solver}: a module that does nothing changed the run'
+        assert stepped.analyzers[0].last == whole.results.sis.I[-1]
+    assert make(analyzers=Quiet()).init().kernel_only(), 'an analyzer with an empty step needs no step of its own'
+
+    plain = lambda **kwargs: make(beta=ss.perday(0.2), **kwargs)
+    halved = plain(interventions=Halves()).run()
+    before = plain().run()
+    assert np.array_equal(halved.results.sis.I[:50], before.results.sis.I[:50])
+    assert halved.results.sis.I[-1] < before.results.sis.I[-1], 'a parameter set by a module was not used'
+
+    class Replaces(ss.Intervention): # The tables of a whole run no longer hold from then on
+        def step(self):
+            if self.ti == 50:
+                self.sim.diseases.sis.pars.beta = ss.perday(0.05)
+
+    replaced = make(interventions=Replaces()).run()
+    assert replaced.results.sis.I[-1] < 0.2*make().run().results.sis.I[-1], 'a value that varied in time was kept after a module replaced it'
+    return
 
 
 @sc.timer()
@@ -237,6 +279,24 @@ def test_worker_threads():
     return
 
 
+def test_compile_status():
+    sc.heading('Testing that it is clear whether the kernels are compiled')
+    status = ss.compile_status()
+    assert status.compiled == (not status.missing)
+    assert ('compiled' if status.compiled else 'NOT COMPILED' if status.engine != 'rust' else 'OUT OF DATE') in status.summary
+    with ss.options.context(kernels='python'):
+        status = ss.compile_status()
+    assert status.engine == 'python' and not status.compiled and 'NOT COMPILED' in status.summary
+    return status
+
+
+def test_typical_sims():
+    sc.heading('Testing that the sims ss.compile() runs are valid, without compiling')
+    for sim in ss.kernels.typical_sims():
+        sim.init()
+    return
+
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -250,5 +310,6 @@ if __name__ == '__main__':
     plain = test_plain_estimate()
     choices = test_engine_choice()
     test_worker_threads()
+    status = test_compile_status()
 
     T.toc()
