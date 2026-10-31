@@ -16,7 +16,6 @@ Used with: compartments; declared modules
 import os
 import sys
 import ast
-import glob
 import importlib
 import contextlib
 import functools as ft
@@ -444,8 +443,7 @@ def compile_status():
     cold = [part for part,func in parts.items() if not (func.signatures or func._cache._cache_file._load_index())]
     if rust.on:
         engine = 'rust'
-        src = glob.glob(os.path.join(os.path.dirname(__file__), '..', 'rust', 'src', '*.rs')) # Only in a clone of the repository
-        missing = ['the Rust kernels'] if src and max(map(os.path.getmtime, src)) > os.path.getmtime(rust.load().__file__) else []
+        missing = ['the Rust kernels'] if rust.source_hash() not in [None, rust.load().source_hash] else [] # None in a wheel, which has no source beside it
         if missing:
             summary = 'Starsim kernels: Rust, OUT OF DATE (built before its source last changed, so results may be wrong): run "./build" in starsim/solvers/rust/'
         elif cold:

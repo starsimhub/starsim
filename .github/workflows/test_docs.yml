@@ -26,8 +26,9 @@ jobs:
       with:
         python-version: "3.13"
 
-    - name: Install Starsim
-      run: pip install -e .[dev]
+    - uses: ./.github/actions/install
+      with:
+        extras: '[dev]'
 
     - name: Set up Quarto
       uses: quarto-dev/quarto-actions/setup@v2

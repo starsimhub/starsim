@@ -13,6 +13,10 @@ on:
       - main
       - v4
 
+concurrency: # A newer push to a pull request replaces its older runs, which would only queue ahead of it
+  group: r-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   test_r:
     name: Starsim from R
@@ -27,8 +31,9 @@ jobs:
         with:
           python-version: '3.14'
           architecture: x64
-      - name: Install Starsim
-        run: pip install -e .[dev]
+      - uses: ./.github/actions/install
+        with:
+          extras: '[dev]'
       - name: Check out R-Starsim (v4)
         uses: actions/checkout@v7 # Fails if the branch doesn't exist
         with:

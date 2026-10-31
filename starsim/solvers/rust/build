@@ -8,4 +8,5 @@ lib=$(ls target/release/lib_rs.so target/release/lib_rs.dylib target/release/_rs
 name=_rs.abi3.so
 [[ $lib == *.dll ]] && name=_rs.pyd
 cp "$lib" ../backends/$name
+rm -f ../backends/_rs.cp* # What an editable install compiled, which Python would otherwise load instead of this
 echo "Built starsim/solvers/backends/$name; use it with ss.options(kernels='rust') or STARSIM_KERNELS=rust"

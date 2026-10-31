@@ -7,6 +7,10 @@ on:
       - main
   pull_request:
 
+concurrency: # A newer push to a pull request replaces its older runs, which would only queue ahead of it
+  group: tests-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   install_and_test:
     name: Tests
@@ -26,17 +30,16 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           architecture: x64
-      - name: Install Starsim
-        run: pip install -e .[dev]
-      - name: Build the Rust kernels
-        working-directory: ./starsim/solvers/rust
-        run: ./build # Rust is installed on GitHub's runners
+      - uses: ./.github/actions/install
+        with:
+          extras: '[dev]'
+          numba: true
       - name: Run API tests
         working-directory: ./tests
         env:
           STARSIM_KERNELS: ${{ matrix.kernels }}
           STARSIM_RUST_REQUIRED: 1 # So the comparison with Rust's kernels fails rather than skips if they weren't built
-        run: pytest test_*.py -n auto --durations=0 --junitxml=test-results.xml # Run actual tests
+        run: pytest test_*.py -n logical --durations=0 --junitxml=test-results.xml # Run actual tests; logical since auto counts physical cores, 2 on GitHub's runners
       - name: Publish Test Report
         uses: mikepenz/action-junit-report@v6
         if: always()
