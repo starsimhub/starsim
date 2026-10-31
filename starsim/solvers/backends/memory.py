@@ -30,9 +30,12 @@ def libc():
 
 
 def keep():
-    """ Keep freed blocks (up to 1 GB each) in the heap for reuse, rather than giving them back to the system; returns whether it was set """
+    """
+    Keep freed blocks (up to 1 GB each, or 32 MB on older glibc, which refuses more) in the heap for reuse, rather than giving them back to
+    the system; returns whether it was set. This overrides `MALLOC_TRIM_THRESHOLD_` and `MALLOC_MMAP_THRESHOLD_`, which Dask's nanny sets for its workers.
+    """
     lib = libc()
-    return bool(lib and lib.mallopt(M_MMAP_THRESHOLD, 2**30) and lib.mallopt(M_TRIM_THRESHOLD, 2**31 - 1))
+    return bool(lib and (lib.mallopt(M_MMAP_THRESHOLD, 2**30) or lib.mallopt(M_MMAP_THRESHOLD, 2**25)) and lib.mallopt(M_TRIM_THRESHOLD, 2**31 - 1))
 
 
 def release():
