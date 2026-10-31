@@ -2278,8 +2278,8 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, varying):
         step_end(rng, y, p, w, flows)
     for c in range(nc):
         for g in range(ng):
-            if y[c, g] < 0:
-                y[c, g] = 0
+            v = y[c, g]
+            y[c, g] = 0.0 if v < 0 else v # Always written, so the loop is vectorized
     return
 
 

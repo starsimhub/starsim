@@ -530,10 +530,10 @@ class modify(Connector):
         out = np.where(until > ti, np.maximum(mask, value), mask)
         return out.astype(mask.dtype)
 
-    def current(self, engine, share=True):
-        """ The amount on this step: a scalar, or one value per agent or group; with share=, the multiplier on the hazard, 1 − share·(1 − multiply) """
+    def current(self, engine, share=True, mask=None):
+        """ The amount on this step: a scalar, or one value per agent or group; with share=, the multiplier on the hazard, 1 − share·(1 − multiply); given a mask, a clock is read only for the agents in it """
         convert = None if self.op == 'multiply' else engine.convert # A value that is set or added is in the target's own type
-        amount = engine.selector.per_person(self.amount, convert=convert)
+        amount = engine.selector.per_person(self.amount, convert=convert, mask=mask)
         if self.efficacy is not None:
             amount = 1 - amount
         if share and self.share is not None:
@@ -556,8 +556,8 @@ class modify(Connector):
 
     def apply(self, value, engine):
         """ Apply the modifier to a value, for the people it applies to """
-        amount = self.current(engine)
         mask = None if self.where is None else engine.selector.select(self.where)
+        amount = self.current(engine, mask=mask if self.hold is None else None)
         if np.ndim(amount) and np.isnan(amount).any(): # A clock or an attribute read where it has no value: see ss.conditions.check_clocks()
             check = amount if mask is None else np.where(mask > 0, amount, 0.0)
             if engine.selector.abm: # Only the people alive now: the spare slots in the arrays, for people not yet born, hold NaN

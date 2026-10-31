@@ -33,8 +33,8 @@ def make_hiv_sis(*interventions, where=None):
 
 
 def test_starsim3_unchanged():
-    sc.heading('Starsim 3: the v3 SIS, as code (ssl.AgentSIS, one changed name), gives the v3 answer')
-    sis = ssl.AgentSIS(name='sis', beta=dict(randomnet=0.05), dur_inf=ss.years(1), init_prev=0.01, waning=ss.peryear(1e6))
+    sc.heading('Starsim 3: the v3 SIS, as code (ssl.AgentSIS, one changed name), gives the v3 answer, with the one change the migration guide gives')
+    sis = ssl.AgentSIS(name='sis', beta=dict(randomnet=ss.prob(0.05, 'month')), dur_inf=ss.years(1), init_prev=0.01, waning=ss.peryear(1e6))
     sim = ss.Sim(diseases=sis, dt=1/12, rand_seed=1, **kw()).run()
     infections = sim.results.sis.infection.cum[-1]
     assert np.isclose(infections, ref_v3_sis_dict, rtol=ref_seed_noise), f'Unchanged v3 code gave {infections:n} infections, not about {ref_v3_sis_dict:n}'

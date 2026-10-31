@@ -38,8 +38,8 @@ dependencies = [
     "networkx",
     "matplotlib",
     "optuna",
-    "jax>=0.8",
-    "blackjax",
+    "jax>=0.8; sys_platform != 'darwin' or platform_machine != 'x86_64'", # No builds for Intel Macs, which do without gradients
+    "blackjax; sys_platform != 'darwin' or platform_machine != 'x86_64'",
     "starsim_data>=2.1.0",
 ]
 
@@ -170,7 +170,6 @@ build = "cp311-*"
 skip = "*-musllinux*"
 archs = ["auto64"]
 test-command = "python -c \"import starsim as ss; assert ss.solvers.backends.rust.on; print(ss.compile_status()); ss.Sim(diseases='sir', networks='random', n_agents=1000, stop=20, verbose=0).run()\""
-test-skip = "*-macosx_x86_64" # JAX, a dependency, has no wheels for it
 
 [tool.cibuildwheel.linux]
 before-all = "curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal"

@@ -1165,7 +1165,7 @@ class Infection(Disease):
             return isinstance(β, ss.Rate) or sc.isnumber(β)
 
         nets = {ss.networks.standardize_netkey(k):net for k,net in sim.networks.items()}
-        def in_unit(k, β): # A bare number is a rate in the sim's unit, as in a declared disease (on a network with acts, a probability per act); a dict of them stays a probability per step, as Starsim 3's
+        def in_unit(k, β): # A bare number is a rate in the sim's unit, as in a declared disease (on a network with acts, a probability per act)
             has_acts = getattr(nets.get(ss.networks.standardize_netkey(k)), 'has_acts', False)
             return ss.per(β, unit) if sc.isnumber(β) and β and unit and not has_acts else β
 
@@ -1198,9 +1198,11 @@ class Infection(Disease):
             for k,thisbeta in β.items():
                 nkey = ss.networks.standardize_netkey(k)
                 if scalar_beta(thisbeta):
-                    betamap[nkey] = both_ways(nkey, thisbeta)
-                else:
+                    betamap[nkey] = both_ways(nkey, in_unit(k, thisbeta))
+                elif isinstance(thisbeta, ss.peract):
                     betamap[nkey] = as_pair(thisbeta, nkey)
+                else:
+                    betamap[nkey] = [in_unit(k, b) for b in thisbeta]
 
         else:
             errormsg = f'Invalid type {type(β)} for beta'

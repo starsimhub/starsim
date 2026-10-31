@@ -82,6 +82,9 @@ def times(x, *factors):
 def add_rows(out, rows, tis, vals):
     """ Add values at consecutive time points `tis` (along the first axis of `vals`) into the rows of `out` they belong to: see `ss.solvers.group_rows()` """
     r = rows[tis]
+    if r[-1] - r[0] == len(r) - 1: # Each in a row of its own
+        out[r[0]:r[-1]+1] += vals
+        return
     firsts = np.flatnonzero(np.diff(r, prepend=-1)) # Where each row starts
     out[r[firsts]] += np.add.reduceat(vals, firsts, axis=0)
     return
@@ -89,6 +92,9 @@ def add_rows(out, rows, tis, vals):
 
 def at_ends(out, rows, ends, tis, vals):
     """ Put the values at the time points among `tis` that end a row into that row of `out` """
+    if len(ends) == len(rows): # Each ends a row of its own
+        out[rows[tis[0]]:rows[tis[-1]]+1] = vals
+        return
     last = np.isin(tis, ends)
     out[rows[tis[last]]] = vals[last]
     return
@@ -2234,7 +2240,8 @@ class StockCtx(sc.prettyobj):
 
     def stock(self, state):
         """ The number of people (or the count) in a state """
-        return self.stocks[state.name]*(self.scale if state.people else 1.0)
+        scale = self.scale if state.people else 1.0
+        return self.stocks[state.name] if np.ndim(scale) == 0 and scale == 1 else self.stocks[state.name]*scale
 
     def count(self, states):
         return sum(self.stock(s) for s in states)

@@ -18,7 +18,7 @@ Starsim 4 adds a way to write a model as declared states and transitions, which 
 - **Pregnancy and demographics**: declared `ss.Pregnancy`, `ss.birth()` and `ss.death()`. Named data: `ss.people('Kenya')`, and birth, death and fertility rates by country (from `starsim_data`).
 - **Results and fitting**: `ss.outcome()` declares reported quantities. `sim.fit()` fits to data by optimization, MCMC (with gradients in JAX), particle MCMC, iterated filtering or ABC-SMC, with `fit.profile()` and `sim.sensitivity()`; `ss.fit.optimize()` allocates budgets.
 - **Scenarios and runs**: `ss.parallel()` and `sim.run(n_runs=)` return a MultiSim whose results have a run dimension, with summaries, bands and comparisons by scenario. Sims with different steps can be run together.
-- **Importing and exporting**: `ss.import_from()` reads models from EMULSION, odin, SBML, SimInf, flepiMoP, summer2, Atomica, camdl, EpiModel, epydemix and MEmilio; `ss.export_to()` writes SBML and odin. `python -m starsim.io.migrate` rewrites Starsim 3 code.
+- **Importing and exporting**: `ss.import_from()` reads models from EMULSION, odin, SBML, SimInf, flepiMoP, summer2, Atomica, camdl, EpiModel, epydemix and MEmilio; `ss.export_to()` writes SBML and odin. `python -m starsim.converters.migrate` rewrites Starsim 3 code.
 - **Library**: `starsim.library` (`ssl`) holds HIV, cholera, Ebola, measles, malaria, TB, COVID, influenza, dengue, and other simple disease models, maternal and newborn health, more networks, and health economics (`ssl.Costs`, `ssl.DALYs`, `ssl.discount()`, `ssl.ICER`).
 - **Command line and speed**: `starsim init` and `starsim compile`; Numba kernels throughout, with optional Rust copies that give the same numbers; optional JAX for gradients.
 
@@ -32,7 +32,7 @@ Starsim 4 adds a way to write a model as declared states and transitions, which 
 - *Regression*: `ss.Deaths` and `ss.Births` hold each period's rate until the next; delivery rounds are timed by date.
 - *Regression*: with `rescale=True`, a declared disease's results (and `alive`) include the people no agent stands for yet.
 - *Regression*: fixed delays under the chain binomial and tau-leaping last their full length on average, with default substeps counting them; final sizes were up to 14% low.
-- *Regression*: a bare `beta` in a disease written as code is a rate in the sim's unit, unless on a network with acts.
+- *Regression*: a bare `beta` in a disease written as code is a rate in the sim's unit, alone or in a dict by network, unless on a network with acts.
 - *Regression*: a daily timeline started from a numeric year has whole-day dates.
 - *Regression*: values that vary smoothly in time are taken once a step, at its middle (at its start by Euler's method), for every solver.
 
@@ -60,6 +60,7 @@ Starsim 4 adds a way to write a model as declared states and transitions, which 
 - `res.by(dim)` across runs is an `ss.Result` with a column for each level.
 - `ss.solvers.why_not()` replaces `ss.gradients.reason()`.
 - The chain binomial and tau-leaping always run in the kernels: their JAX engine is removed, since it was no faster, so a seeded run no longer changes when it gets long. `sim.jax` is now for the ODE only.
+- In `init_post()`, diseases come before networks, so a disease that seeds from a network's states has to call that network's `init_post()` first (or seed later). This silently gave no infections in STIsim and HPVsim until they were changed.
 
 ### Bugfixes and performance
 - `sim.run(n_runs=)` restarts one built sim again; a stray argument had turned that off.
@@ -85,7 +86,7 @@ Starsim 4 adds a way to write a model as declared states and transitions, which 
 - The compartmental kernels are up to 1.8× faster with 100 groups, and `import starsim` no longer imports `scipy.stats`.
 - Which engine runs a model is one table of rules, shown by `ss.solvers.solver_table()`.
 - Mixing between many places is up to 5× faster in the kernels, by BLAS when every pair of places has a time share (Ghana measles, 260 districts: 4.8 s to 1.6 s a run; 600 places: 22.6 s to 4.4 s).
-- `pip install starsim` is set up to include the compiled Rust kernels, as one wheel per platform for Python 3.11 and later; the sdist includes the crate, and Numba's kernels remain the fallback.
+- `pip install starsim` is set up to include the compiled Rust kernels, as one wheel per platform for Python 3.11 and later; the sdist includes the crate, and Numba's kernels remain the fallback. JAX is not installed on Intel Macs, which have no builds of it; gradients are the only thing they lack.
 - `ss.compile()` works under Numba.
 - A rate or duration that reads another disease's count is no longer frozen in a whole run.
 - A change in code to a modifier's amount or a product's efficacy takes effect in a stepped run.
@@ -95,6 +96,13 @@ Starsim 4 adds a way to write a model as declared states and transitions, which 
 - Runs swept over a rate can be selected.
 - `sum()` of durations works, and a transition in a class body can use a sibling transition as its event.
 - `python -m starsim.converters.migrate` renames prefixed names only for the diseases in the file.
+- Compartmental models with one group run up to 1.7× faster in the Rust kernels, and those with many groups up to 1.3× faster on CPUs with AVX2.
+- `sim.run()` of a compartmental model with many groups is up to 1.5× faster, from less copying as results are stored.
+- `sim.summary` is made the first time it is read, not at the end of every run.
+- A modifier whose amount reads a clock (e.g. `multiply=0.5**(El.time/half_life)`) is worked out only for the people in its `where=`, so a declared `ssl.Syphilis` runs within about 6% of the version with `step()`.
+- `sim.fit()` works on a family of strains with `ss.immunity`.
+- As agents, a transition with no driver (moved only by an intervention) is no longer drawn each step, a `where=` by sex no longer makes dwell times rescale, and the one-pass exit check applies per state.
+- Protection in `ss.strains.Family` from an attribute reads its array directly.
 
 ## Version 3.7.2 (2026-10-06)
 - `ss.ClusterNet` (and so `ss.HybridNet`) and `ss.MSMNet` now shuffle agents using `float64` random numbers and a stable sort. Previously, tied `float32` random numbers were ordered differently on different CPUs, so the same seed could give slightly different results on different machines.

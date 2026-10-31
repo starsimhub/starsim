@@ -2574,11 +2574,11 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         for start,stocks,flows in parts:
             flows = self.count_deaths(flows)
             tis = start + np.arange(len(stocks))
-            by_state = np.stack([stocks[:, self.state_comps[name]].sum(axis=1) for name in states], axis=1) # Time points by states by groups
+            by_state = np.stack([stocks[:, comps[0]] if len(comps) == 1 else stocks[:, comps].sum(axis=1) for comps in (self.state_comps[name] for name in states)], axis=1) # Time points by states by groups
             totals.stocks[:, tis] = by_state.sum(axis=-1).T
             totals.flows[:, tis] = flows.sum(axis=-1).T
-            at_ends(groups.stocks, rows, ends, tis, by_state[:, kept_s])
-            add_rows(groups.flows, rows, tis, flows[:, kept_f])
+            at_ends(groups.stocks, rows, ends, tis, by_state if len(kept_s) == len(states) else by_state[:, kept_s])
+            add_rows(groups.flows, rows, tis, flows if kept_f == list(range(n_flows)) else flows[:, kept_f])
             if whole:
                 for key in sources:
                     src[key][tis] = flows[:, self.tr_index[key]]

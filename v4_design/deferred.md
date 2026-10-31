@@ -264,13 +264,22 @@ Looked at whether v4 should support modeling paradigms beyond the ODE, chain-bin
 - **Conditions on unnamed states in a class body** (`I & x` with `ss.states(3)`) get no name.
 - **A coded `stratify=` with `ss.contacts(dims=)`** raises "nothing would use it" unless a result has `groups=True`.
 - **`flatten_rates()`** is still about 190 lines of closures; temporary state in `choose_solver()` is held on the sim and deleted.
-- **Intel Macs:** `jax>=0.8` has no build for them (the newest `jaxlib` for macOS x86 is 0.4.38), so `pip install starsim` fails there. Make JAX optional, or drop the platform and its wheel.
 - **Threaded compartmental ensembles:** `run_many()` is serial, so parallelism comes only from `ss.parallel()` workers. `advance_threads()` shows the way. Forked workers gave 3.7× on 4 cores.
 - **`share()` by BLAS** applies only when every pair has an entry; JAX's rule was an eighth of the entries. Gravity with a cutoff still loops. Measure before widening.
 - **Wheels on macOS, Windows, and Arm** have never been compiled, and the docs say wheels exist before the first release that has them. Run `pypi_release.yml` by hand with `publish` off.
 - **People in a fixed delay at the start** leave half a step late under the stochastic solvers (see decision 8 of `oct31/plan.md`).
+- **Building a sim is most of a short run.** About 7 ms plus 2 µs a step: a Python object for each time point in `tvec` (`DateArray`, through `sc.toarray()`), the searches for distributions and time parameters (`sc.search` in `dists.init()` and `link_timepars()`), and copying parameters. A lazy `tvec` would fix the part that grows with steps; it touches every reader of `tvec`.
+- **Declared agents at small sizes:** about 170 µs a step more than coded (SIR at 5,000 agents is 1.27×, at 50,000 about equal), from the bookkeeping of moves. Not ablated.
+- **Numba at one group:** 33 to 41× hand-written, about 5× Rust's time, with no fix short of a second compile of `step()`.
+- **`fading_late` in `ssl.Syphilis`** uses `Ll.time`, which restarts at 0, so people moving to `Ll` jump back to full infectiousness, coded and declared alike. The docstring and STIsim count from the start of latency.
+- **Denormals:** a long SIR leaves `I` at the smallest denormal, about 10× slower per step, in hand-written code too; only runs far past the end of an epidemic.
+- **Mixing by indirect indexing** is the largest single kernel cost left at 100 groups (about 20%), if the 2.8× it would give is ever worth a program field.
+- **`ss.strains.Family` from the HPVsim port:** attributes are read once a step, and moves and transmission run per member (`diseases.py:909`, `strains.py:1136`), so someone clearing a later genotype is unprotected that step; HPVsim runs moves first (`HPV.step_state()`). `rel_sus` scales each act's hazard when declared (`agents_branching.py:615`) but the chance over all acts when coded (`networks.py:785`), which gave nab-only prevalence of 0.30 against 0.16; HPVsim overrides `transmit()`. `ss.outcome()` gave 13 deaths against 22.8 from fractional agent weights in multiscale (`agents.py:1148`), not traced. `ss.immunity(dur=)` rescales during a stay, so it can't carry `sev_imm`. `fit.py:1343` names a shared beta `hpv16.beta`, and `graph.py:240` blocks an `infected` property. Family immunity needs agents, so the compartmental HPVsim line in `targets.md` doesn't advance.
+- **`inspect.signature()` of a disease class** gives `(*args, **kwargs)`, from the `BuiltAfterInit` metaclass (`diseases.py:22`). STIsim reads `cls.__init__` instead.
+- **`ss.diff_sims(die=True)`** raises on different values, not on keys that differ (`debugtools.py:457`), so a baseline test passes with stale keys.
+- **A declared HPV genotype** costs about 2.5 ms a step against 0.75 ms coded, so the HPVsim port is about 1.5× a coded model with the same network: flat Python in `send()`, `fire()`, `enter()`, and `schedule()`, and `Arr.grow()` over about twice the arrays. M.
+- **`BoolState.time`** is O(N) per read; give it a form for some agents. S.
 - **`v4_design/design/12-backends.md`** still describes the chain binomial in JAX.
-- **STIsim needs one edit for this pass:** `stisim/networks/base.py:153` takes `inds=` instead of `uids=`.
 
 ## Won't do
 

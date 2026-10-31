@@ -49,7 +49,11 @@ def jax():
             os.environ['XLA_FLAGS'] = f'{os.environ.get("XLA_FLAGS", "")} --xla_force_host_platform_device_count={os.cpu_count() or 1}'.strip()
         if ss.options.jax != 'auto':
             os.environ['JAX_PLATFORMS'] = ss.options.jax
-    import jax
+    try:
+        import jax
+    except ImportError as E:
+        errormsg = 'Gradients need JAX, which is not installed (it has no builds for Intel Macs); fitting by methods without gradients works without it'
+        raise ImportError(errormsg) from E
     from jax._src import xla_bridge
     if not xla_bridge.backends_are_initialized(): # The first use, by Starsim or anything else
         if ss.options.jax != 'auto':

@@ -741,6 +741,7 @@ class Protection(sc.prettyobj):
     tabulated = False
     constant = False
     where = None
+    amount = None # What `ss.fit` reads of every modifier; this one has no expression
 
     def __init__(self, family, index, key, member, state=None):
         self.family = family
@@ -1126,7 +1127,7 @@ class Family(ss.Module):
 
     def attr_level(self, mod, a, n_agents):
         """ The value of a member's attribute for each agent (by UID), as a level of protection between 0 and 1; none (0) where it is NaN """
-        vals = np.nan_to_num(mod.engine.attr_values(a, ss.uids(np.arange(n_agents))), nan=0.0)
+        vals = np.nan_to_num(mod[a.name].raw[:n_agents].astype(float) if a.kind != 'derived' else mod.engine.attr_values(a, ss.uids(np.arange(n_agents))), nan=0.0)
         if np.any(vals < 0) or np.any(vals > 1):
             raise ValueError(f'the attribute "{a.name}" of "{mod.name}" scales a protection of "{self.name}", so it needs to be between 0 and 1, but it is {vals.min():n} to {vals.max():n}; scale it, e.g. with a derived attribute')
         return vals

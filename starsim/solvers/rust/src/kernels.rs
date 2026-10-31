@@ -399,11 +399,36 @@ pub fn parts(p: &Program) -> [A2<f64>; 4] { [p.fixed, p.mult, p.consts, p.rel_tr
 
 /// Take one timestep (`step()`): the ODE by Euler or RK4, or the rates for the stochastic solvers, which hand them to `draw()` or `event()`
 #[allow(clippy::too_many_arguments)]
-pub fn step(rng: Rng, y: A2<f64>, p: &Program, w: &Work, dt: f64, mut n_sub: i64, solver: i64, flows: A2<f64>, varying: bool) {
+pub fn step(rng: Rng, y: A2<f64>, p: &Program, w: &Work, dt: f64, n_sub: i64, solver: i64, flows: A2<f64>, varying: bool) {
+    if y.n1() == 1 {
+        step_one(rng, y, p, w, dt, n_sub, solver, flows, varying)
+    } else {
+        step_many(rng, y, p, w, dt, n_sub, solver, flows, varying)
+    }
+}
+
+/// `step()` for one group, compiled apart: the loops over groups are gone, where their set-up costs more than the arithmetic in them
+#[allow(clippy::too_many_arguments)]
+fn step_one(rng: Rng, y: A2<f64>, p: &Program, w: &Work, dt: f64, n_sub: i64, solver: i64, flows: A2<f64>, varying: bool) {
+    step_groups::<true>(rng, y, p, w, dt, n_sub, solver, flows, varying)
+}
+
+avx2! {
+    /// `step()` for many groups, whose loops over groups are vectorized
+    #[allow(clippy::too_many_arguments)]
+    pub fn step_many(rng: Rng, y: A2<f64>, p: &Program, w: &Work, dt: f64, n_sub: i64, solver: i64, flows: A2<f64>, varying: bool) {
+        step_groups::<false>(rng, y, p, w, dt, n_sub, solver, flows, varying)
+    }
+}
+
+/// `step()`, for any number of groups, or (`ONE`) for one
+#[allow(clippy::too_many_arguments)]
+#[inline(always)]
+fn step_groups<const ONE: bool>(rng: Rng, y: A2<f64>, p: &Program, w: &Work, dt: f64, mut n_sub: i64, solver: i64, flows: A2<f64>, varying: bool) {
     let (rates, exposures, stack, groups, cells, dy, df, yt) = (w.rates, w.exposures, w.stack, w.groups, w.cells, w.dy, w.df, w.yt);
     let (n, local_n, vals, infectious) = (groups.row(0), groups.row(1), groups.row(2), groups.row(3));
     let (num, den, num2, den2, prev) = (cells.row(0), cells.row(1), cells.row(2), cells.row(3), cells.row(4));
-    let (nc, ng) = (y.n0(), y.n1());
+    let (nc, ng) = (y.n0(), if ONE { 1 } else { y.n1() });
     let nf = p.src.len();
     let nflows = p.n_trans + p.n_movers;
     let stages = if solver == 0 { 4 } else { 1 };
@@ -872,9 +897,8 @@ pub fn step(rng: Rng, y: A2<f64>, p: &Program, w: &Work, dt: f64, mut n_sub: i64
     }
     for c in 0..nc {
         for g in 0..ng {
-            if y.at(c, g) < 0.0 {
-                y.set(c, g, 0.0);
-            }
+            let v = y.at(c, g);
+            y.set(c, g, if v < 0.0 { 0.0 } else { v }); // Always written, so the loop is vectorized
         }
     }
 }

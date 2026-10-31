@@ -1016,7 +1016,8 @@ class Moving:
         """ Whether what is left of a transition's dwell times is rescaled when its speed changes: if it has modifiers, or a duration or rate that can change (see `varies()`) """
         if tr.name not in self.dwells:
             return False
-        return bool(self.sim.modifiers.get((self.mod.name, 'transition', tr.name))) or self.varies(self.dwells[tr.name]) or bool(self.adjust_dims[tr.name] & self.changing_dims)
+        mods = self.sim.modifiers.get((self.mod.name, 'transition', tr.name))
+        return bool(mods and not self.lifelong_mods(mods)) or self.varies(self.dwells[tr.name]) or bool(self.adjust_dims[tr.name] & self.changing_dims)
 
     @property
     def changing_dims(self):

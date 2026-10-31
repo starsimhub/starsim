@@ -1124,11 +1124,16 @@ class Selector(sc.prettyobj):
             out = cond.eval(self) if isinstance(cond, Cond) else self.expr(cond) if isinstance(cond, ss.expressions.Expr) else cond
         return self.to_selection(out, cond)
 
-    def expr(self, expr):
-        """ An expression of the model (a clock, a count, a parameter): one value per agent, or per group """
+    def expr(self, expr, mask=None):
+        """ An expression of the model (a clock, a count, a parameter): one value per agent, or per group; given a mask, as agents, worked out only for those in it (0 for the others) """
         engine = self.mod.engine
         if self.abm:
-            return engine.eval_for(expr, ss.uids(np.arange(self.shape[0])))
+            if mask is None:
+                return engine.eval_for(expr, ss.uids(np.arange(self.shape[0])))
+            uids = ss.uids(np.flatnonzero(mask))
+            out = np.zeros(self.shape)
+            out[uids] = engine.eval_for(expr, uids)
+            return out
         return engine.eval(expr)
 
     def to_selection(self, out, cond=None):
@@ -1171,8 +1176,8 @@ class Selector(sc.prettyobj):
         out = out > 0 if out.dtype != bool and out.dtype.kind in 'iu' else out
         return np.broadcast_to(out, self.shape).astype(float)
 
-    def per_person(self, val, convert=None):
-        """ A value (a number, `ss.by`, or a function of the sim) as a scalar or one value per agent or per group """
+    def per_person(self, val, convert=None, mask=None):
+        """ A value (a number, `ss.by`, or a function of the sim) as a scalar or one value per agent or per group; given a mask (see `expr()`), one that reads a clock is worked out only for those in it """
         sim = self.sim
         if isinstance(val, ss.expressions.Expr) and any(isinstance(leaf, (ss.State, ss.expressions.Prop)) for leaf in val.leaves): # Of people's properties or states (of any module), read for each person as where= reads them, e.g. multiply=1 - 0.9*meth.on
             val = person_cond(val)
@@ -1180,7 +1185,7 @@ class Selector(sc.prettyobj):
             val = val.eval(self)
             val = val.astype(float) if isinstance(val, np.ndarray) and val.dtype == bool else val
         if isinstance(val, ss.expressions.Expr) and self.mod is not None: # A parameter (e.g. one that is fitted), or an expression of parameters
-            val = self.expr(val) if ss.expressions.clocks_in(val) else self.mod.engine.eval(val) # One that reads a clock has a value for each agent
+            val = self.expr(val, mask) if ss.expressions.clocks_in(val) else self.mod.engine.eval(val) # One that reads a clock has a value for each agent
         if isinstance(val, ss.by):
             if self.abm and val.on_people(sim): # Read from each person
                 return val.lookup(sim)
