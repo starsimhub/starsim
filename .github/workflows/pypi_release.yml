@@ -1,89 +1,18 @@
 name: Publish Starsim to PyPI
 
-# Builds the wheels (one abi3 wheel per platform, with the Rust kernels) and the sdist. Publishes only for a tag, or when run by hand with "publish" ticked: never on a merge.
+# For a version tag: builds and tests everything (build_wheels.yml), and publishes it if all of that passes. This is the only workflow that publishes.
 on:
   push:
     tags:
       - 'v*'
-  workflow_dispatch:
-    inputs:
-      publish:
-        description: 'Publish to PyPI (otherwise only build and test)'
-        type: boolean
-        default: false
 
 jobs:
-  wheels:
-    name: Wheel for ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os:
-          - ubuntu-latest    # manylinux x86-64
-          - ubuntu-24.04-arm # manylinux Arm
-          - macos-latest     # macOS Arm
-          - windows-latest   # Windows x86-64
-          - windows-11-arm   # Windows Arm
-
-    steps:
-    - uses: actions/checkout@v7
-      with:
-        persist-credentials: false
-    - name: Build and test the wheel # Settings in pyproject.toml; Rust is installed on GitHub's runners, and in the manylinux containers by before-all
-      uses: pypa/cibuildwheel@v4.3.5
-    - uses: actions/upload-artifact@v7
-      with:
-        name: dist-wheel-${{ matrix.os }}
-        path: wheelhouse/*.whl
-
-  sdist:
-    name: Source distribution
-    runs-on: ubuntu-latest
-
-    steps:
-    - uses: actions/checkout@v7
-      with:
-        persist-credentials: false
-    - name: Set up Python
-      uses: actions/setup-python@v7
-      with:
-        python-version: "3.14"
-    - name: Install pypa/build
-      run: python3 -m pip install build --user
-    - name: Build the sdist
-      run: python3 -m build --sdist
-    - uses: actions/upload-artifact@v7
-      with:
-        name: dist-sdist
-        path: dist/*.tar.gz
-
-  newest-python:
-    name: The abi3 wheel on the newest Python
-    needs: wheels
-    runs-on: ubuntu-latest
-
-    steps:
-    - name: Set up Python
-      uses: actions/setup-python@v7
-      with:
-        python-version: "3.14"
-    - uses: actions/download-artifact@v8
-      with:
-        name: dist-wheel-ubuntu-latest
-        path: wheelhouse/
-    - name: Install and run it
-      run: |
-        python3 -m pip install wheelhouse/*.whl
-        python3 -c "import starsim as ss; assert ss.solvers.backends.rust.on; print(ss.compile_status())"
+  build:
+    uses: ./.github/workflows/build_wheels.yml
 
   publish-to-pypi:
     name: Publish Starsim
-    needs:
-    - wheels
-    - sdist
-    - newest-python
-    if: startsWith(github.ref, 'refs/tags/v') || inputs.publish
+    needs: build
     runs-on: ubuntu-latest
     environment:
       name: pypi
