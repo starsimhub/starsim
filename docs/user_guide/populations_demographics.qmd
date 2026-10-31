@@ -145,7 +145,7 @@ With a constant death rate, everyone has the same chance of dying each year what
 
 ## Migration
 
-People arriving from outside are `ss.immigration(rate=r)`, where `r` is a number of people per unit time (not per person); as agents, they arrive with ages drawn from the population's. People leaving are `ss.emigration(rate=r)`, a rate per person; as agents, they are recorded as having left (`results.new_emigrants`), not as having died. Both go in `demographics=`:
+People arriving from outside are `ss.immigration(rate=r)`, where `r` is a number of people per unit time (not per person); as agents, they arrive with ages drawn from the population's. People leaving are `ss.emigration(rate=r)`, a rate per person; as agents, they are recorded as having left (`results.emigrated`), not as having died. Both go in `demographics=`:
 
 ```{python}
 demographics = [ss.immigration(rate=ss.peryear(500)), ss.emigration(rate=ss.peryear(0.005))]
@@ -158,7 +158,7 @@ pars = dict(n_agents=5000, total_pop=100_000, start=2000, stop=2010, dt=ss.month
 sim = ss.Sim(demographics=demographics, **pars)
 sim.run()
 print('Population after 10 years:', sim.results.alive[-1])
-print('Emigrants:', sim.results.new_emigrants.sum())
+print('Emigrants:', sim.results.emigrated.sum())
 ```
 
 About 500 people leave each year (0.5% of 100,000) and 500 arrive, so the population stays near 100,000. For movement between places within a model, see [Geography](populations_geography.qmd).

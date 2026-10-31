@@ -1,0 +1,3 @@
+#!/bin/bash
+# Tests build wheels on GitHub
+gh workflow run pypi_release.yml --ref v4 -f publish=false # V4-PREVIEW: Update v4 -> main when released

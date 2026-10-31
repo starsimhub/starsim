@@ -262,7 +262,7 @@ def test_births():
             mig.stratify(age=[0, 15, 50])
         sim = ss.Sim(mig, n_agents=10_000, total_pop=10_000, start=2000, stop=2010, **kw).run()
         res = sim.results
-        assert res.new_deaths.sum() == 0 and res.new_emigrants.sum() == res.mig.leave.sum() > 0
+        assert res.died.sum() == 0 and res.emigrated.sum() == res.mig.leave.sum() > 0
         assert np.isclose(res.alive[-1], 10_000, rtol=0.05) # As many arrive as leave
         assert sim.people.age.mean() > 25 # Not newborns
         if age:

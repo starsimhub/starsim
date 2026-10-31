@@ -22,9 +22,9 @@ jobs:
         os:
           - ubuntu-latest    # manylinux x86-64
           - ubuntu-24.04-arm # manylinux Arm
-          - macos-15-intel   # macOS x86-64
           - macos-latest     # macOS Arm
           - windows-latest   # Windows x86-64
+          - windows-11-arm   # Windows Arm
 
     steps:
     - uses: actions/checkout@v7

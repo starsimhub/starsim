@@ -16,7 +16,7 @@ jobs:
       max-parallel: 8
       matrix:
         os: ['ubuntu-latest']
-        python-version: ['3.11', '3.14']
+        python-version: ['3.12', '3.14']
         kernels: ['rust', 'numba'] # The suite with each (both are built, so test_kernel_sets.py compares them either way)
     runs-on: ${{ matrix.os }}
     steps:

@@ -124,7 +124,7 @@ print('Mean age at the start:', ppl.age.mean())
 
 sim.run()
 print('Births:', sim.results.population.births.sum())
-print('Deaths:', sim.results.new_deaths.sum())
+print('Deaths:', sim.results.died.sum())
 print('Agents at the end:', len(ppl))
 print('UIDs used:', ppl.uid.raw.max() + 1)
 print('Length of the raw arrays:', len(ppl.age.raw))

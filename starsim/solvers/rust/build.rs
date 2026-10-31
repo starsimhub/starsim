@@ -27,6 +27,10 @@ fn crc32(mut crc: u32, bytes: &[u8]) -> u32 {
 }
 
 fn main() {
+    if std::env::var("CARGO_CFG_TARGET_OS").unwrap() == "macos" { // Python's symbols are found when it loads the library, so `cargo build` can link it (as maturin and setuptools-rust do themselves)
+        println!("cargo:rustc-cdylib-link-arg=-undefined");
+        println!("cargo:rustc-cdylib-link-arg=dynamic_lookup");
+    }
     println!("cargo:rerun-if-changed=src");
     println!("cargo:rerun-if-changed=Cargo.toml");
     let mut files = vec![PathBuf::from("Cargo.toml")];

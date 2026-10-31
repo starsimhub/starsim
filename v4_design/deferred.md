@@ -263,7 +263,8 @@ Looked at whether v4 should support modeling paradigms beyond the ODE, chain-bin
 - **`flatten_rates()`** is still about 190 lines of closures; temporary state in `choose_solver()` is held on the sim and deleted.
 - **Threaded compartmental ensembles:** `run_many()` is serial, so parallelism comes only from `ss.parallel()` workers. `advance_threads()` shows the way. Forked workers gave 3.7× on 4 cores.
 - **`share()` by BLAS** applies only when every pair has an entry; JAX's rule was an eighth of the entries. Gravity with a cutoff still loops. Measure before widening.
-- **Wheels on macOS, Windows, and Arm** have never been compiled, and the docs say wheels exist before the first release that has them. Run `pypi_release.yml` by hand with `publish` off.
+- **Wheels on macOS, Windows, and Arm** have never been linked or run (the crate passes `cargo check` for each target), and the docs say wheels exist before the first release that has them. Run `pypi_release.yml` by hand with `publish` off.
+- **Intel Macs are not supported:** Numba's last wheels for them are 0.62 (Python 3.13 at most), so `pip` tries to compile LLVM's bindings. They could return with a `numba<0.63` marker on that platform.
 - **People in a fixed delay at the start** leave half a step late under the stochastic solvers (see decision 8 of `oct31/plan.md`).
 - **Building a sim is most of a short run.** About 7 ms plus 2 µs a step: a Python object for each time point in `tvec` (`DateArray`, through `sc.toarray()`), the searches for distributions and time parameters (`sc.search` in `dists.init()` and `link_timepars()`), and copying parameters. A lazy `tvec` would fix the part that grows with steps; it touches every reader of `tvec`.
 - **Declared agents at small sizes:** about 170 µs a step more than coded (SIR at 5,000 agents is 1.27×, at 50,000 about equal), from the bookkeeping of moves. Not ablated.
@@ -277,6 +278,7 @@ Looked at whether v4 should support modeling paradigms beyond the ODE, chain-bin
 - **A declared HPV genotype** costs about 2.5 ms a step against 0.75 ms coded, so the HPVsim port is about 1.5× a coded model with the same network: flat Python in `send()`, `fire()`, `enter()`, and `schedule()`, and `Arr.grow()` over about twice the arrays. M.
 - **`BoolState.time`** is O(N) per read; give it a form for some agents. S.
 - **`v4_design/design/12-backends.md`** still describes the chain binomial in JAX.
+- **Flow names left in the old style:** `ss.Births` and `ss.Deaths` have `new` and a stored `cumulative` (`new.cum` would do); `ss.Pregnancy` and `FetalHealth` have flows named `n_preterm`, `n_births`, etc., so `n_` means a flow there and a stock elsewhere, and `maternal_deaths` and `neonatal_deaths` are plural. S.
 
 ## Won't do
 

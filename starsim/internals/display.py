@@ -642,7 +642,7 @@ def check_dt(sim, factor=2, output=False):
     for mod in coarse.declared:
         n = mod.t.npts - 1 # The module's own timeline, which may differ from the sim's
         for key,res in mod.results.items():
-            if not isinstance(res, ss.Result) or key.startswith('cum_') or np.ndim(res.values) != 1:
+            if not isinstance(res, ss.Result) or np.ndim(res.values) != 1:
                 continue
             other = fine.results[mod.name][key].values
             if res.kind == 'flow': # A flow: total it over each of the larger steps (a flow at a time point is over the step that ends there)

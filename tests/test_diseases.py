@@ -38,7 +38,7 @@ def test_sir():
     if do_plot:
         res = sim.results
         plt.figure()
-        plt.stackplot(sim.timevec, res.sir.S, res.sir.I, res.sir.R, res.new_deaths.cumsum())
+        plt.stackplot(sim.timevec, res.sir.S, res.sir.I, res.sir.R, res.died.cum)
         plt.legend(['Susceptible', 'Infected', 'Recovered', 'Dead'])
         plt.title('SIR')
 
@@ -76,7 +76,7 @@ def test_sir_epi():
         key = 'networks' if par == 'n_contacts' else 'diseases'
         s0, s1 = [ss.Sim(sc.mergedicts(sc.dcp(base_pars), {key: sc.mergedicts(base_pars[key], {par: val})}), label=f'{par} {val}').run() for val in [lo, hi]]
         if par == 'p_death':
-            v0, v1 = s0.results.cum_deaths[-1], s1.results.cum_deaths[-1]
+            v0, v1 = s0.results.died.cum[-1], s1.results.died.cum[-1]
         else:
             prev = [s.results.sir.prevalence for s in [s0, s1]]
             v0, v1 = [p[1] if par == 'init_prev' else p.max() if par in ['beta', 'n_contacts'] else p[-1] for p in prev] # The peak for what speeds the epidemic up, which may have burned out by the end
@@ -239,7 +239,7 @@ def test_ncd():
     assert ncd.results.affected.label == 'Affected'
     if do_plot:
         plt.figure()
-        plt.stackplot(sim.timevec, ncd.results.not_at_risk, ncd.results.at_risk - ncd.results.affected, ncd.results.affected, sim.results.new_deaths.cumsum())
+        plt.stackplot(sim.timevec, ncd.results.not_at_risk, ncd.results.at_risk - ncd.results.affected, ncd.results.affected, sim.results.died.cum)
         plt.legend(['Not at risk', 'At risk', 'Affected', 'Dead'])
         plt.title('NCD')
 
@@ -651,7 +651,7 @@ def test_code_seams():
     S, I = ss.states('S I')
     sis = ss.Disease(S >> I @ ss.peryear(2)*I, I >> S @ ss.years(1), ss.death(rate=ss.peryear(0.02)), init=dict(I=0.05), name='sis')
     ode = ss.Sim(sis, total_pop=1000, start=2000, stop=2004, verbose=0).run() # The people results agents give the sim
-    assert np.isclose(ode.results.alive[-1], ode.diseases.sis.count()) and np.isclose(ode.results.cum_deaths[-1], 1000 - ode.results.alive[-1])
+    assert np.isclose(ode.results.alive[-1], ode.diseases.sis.count()) and np.isclose(ode.results.died.cum[-1], 1000 - ode.results.alive[-1])
     return sim
 
 

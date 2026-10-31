@@ -104,14 +104,14 @@ class HIV(ss.Infection):
         """ Initialize results """
         super().init_results()
         self.define_results(
-            ss.Result('new_deaths', dtype=int, label='Deaths')
+            ss.Result('death', dtype=int, label='Deaths', kind='flow')
         )
         return
 
     def update_results(self):
         super().update_results()
         ti = self.ti
-        self.results['new_deaths'][ti] = np.count_nonzero(self.ti_dead == ti) # Died in this step
+        self.results.death[ti] = np.count_nonzero(self.ti_dead == ti) # Died in this step
         return
 
     def set_prognoses(self, uids, sources=None):

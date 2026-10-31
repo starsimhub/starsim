@@ -146,7 +146,7 @@ def group_rows(sim, npts, row_bytes, budget, name=None):
 
 
 def people_results(sim):
-    """ In a compartmental run, the results that agents give the sim (alive, new_deaths, new_emigrants, cum_deaths), from the declared states and flows """
+    """ In a compartmental run, the results that agents give the sim (alive, died, emigrated), from the declared states and flows """
     mods = [mod for mod in sim.declared if mod.graph.people_states]
     if sim.solver in [None, 'abm'] or 'alive' in sim.results or not mods:
         return
@@ -161,9 +161,8 @@ def people_results(sim):
     deaths, emigrants = [np.broadcast_to(gone[key], alive.shape).copy() for key in ['deaths', 'emigrants']]
     sim.results += [
         ss.Result('alive', label='Number alive', values=alive, kind='stock', **kw),
-        ss.Result('new_deaths', label='Deaths', values=deaths, **kw),
-        ss.Result('new_emigrants', label='Emigrants', values=emigrants, **kw),
-        ss.Result('cum_deaths', label='Cumulative deaths', values=np.cumsum(deaths), **kw),
+        ss.Result('died', label='Deaths', values=deaths, kind='flow', **kw),
+        ss.Result('emigrated', label='Emigrants', values=emigrants, kind='flow', **kw),
     ]
     return
 

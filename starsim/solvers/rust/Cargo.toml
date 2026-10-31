@@ -9,7 +9,7 @@ name = "_rs"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = { version = "0.30", features = ["extension-module", "abi3-py311"] }
+pyo3 = { version = "0.30", features = ["extension-module", "abi3-py312"] }
 numpy = "0.30"
 
 [profile.release]

@@ -106,8 +106,7 @@ class Cholera(AgentSEIR):
         """ Initialize results """
         super().init_results()
         self.define_results(
-            ss.Result('new_deaths', dtype=int,   label='Deaths'),
-            ss.Result('cum_deaths', dtype=int,   label='Cumulative deaths'),
+            ss.Result('death',    dtype=int,   label='Deaths', kind='flow'),
             ss.Result('env_prev',   dtype=float, label='Environmental prevalence'),
             ss.Result('env_conc',   dtype=float, label='Environmental concentration'),
         )
@@ -200,6 +199,5 @@ class Cholera(AgentSEIR):
         super().update_results()
         res = self.results
         ti = self.ti
-        res.new_deaths[ti] = np.count_nonzero(self.ti_dead.isclose(ti)) # Deaths requested in this step, as due() rounds ti_dead
-        res.cum_deaths[ti] = np.sum(res.new_deaths[:ti+1])
+        res.death[ti] = np.count_nonzero(self.ti_dead.isclose(ti)) # Deaths requested in this step, as due() rounds ti_dead
         return

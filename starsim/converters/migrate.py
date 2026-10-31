@@ -20,7 +20,7 @@ way), `copy_inputs=` (removed: a sim always copies its inputs), `ss.uids.cat()` 
 `ss.years(10)`, since a bare number is in the model's unit), `p_loss=` of `ss.Pregnancy` (now `loss_rate=ss.probperweek(...)`), and the counts of the states of Starsim's own
 modules after results (`results.n_alive`, `res['n_infected']`, now `results.alive`, `res['infected']`; a result the code makes
 itself keeps its name, and other counts are listed), the results of `ss.Infection` (`new_infections` is `infection`, and `cum_infections` is
-`infection.cum`), `on=` of a delivery or transition (now `where=`), and `ss.change()` (now `ss.modify()` of an `ss.timeseries()`). Read the diff
+`infection.cum`), the deaths and emigrants of the sim (`new_deaths` is `died`, `cum_deaths` is `died.cum`, and `new_emigrants` is `emigrated`) and of a disease (`death`), `on=` of a delivery or transition (now `where=`), and `ss.change()` (now `ss.modify()` of an `ss.timeseries()`). Read the diff
 afterwards: each change is listed with its line.
 
 Used with: agents; coded modules
@@ -135,6 +135,7 @@ flags = [
 # The names of results that depend on the rest of the code: the counts of states (n_<state>), and the results of ss.SIR and the others
 counts_note = 'the count of a state is the result named after the state (e.g. results.alive, res.infected, results["sir.infected"])'
 infections_note = "ss.Infection's results are those of a declared disease: new_infections is infection, and cum_infections is infection.cum (sis_infection in sim.summary, which is its total)"
+deaths_note = "the people who died or left are the flows results.died and results.emigrated (new_deaths, new_emigrants), with results.died.cum for cum_deaths; a disease's is its flow, results.hiv.death"
 results_like = r'(?:\bresults(?:\.\w+)*|\bres\w*)' # An object of results: results, sim.results.sir, res, res_sir, ...
 fstring_pattern = r"""\bf(['"])([^'"]*\bn_\{[^'"]*)\1"""
 make_results = r'(\w*Result)$' # A call that makes a result, e.g. ss.Result('n_ill', ...)
@@ -208,6 +209,28 @@ def rename_infections(line, names, context):
         new = re.sub(r'(?<!self)\.new_infections\b', '.infection', new)
         new = re.sub(r"""\[(['"])new_infections\1\]""", r'[\1infection\1]', new)
         new = re.sub(r'\b(\w+)_new_infections\b', summary, new)
+    return new, new != line
+
+
+def rename_deaths(line, names, context):
+    """ Rename the deaths and emigrants of a sim (`died`, its total `died.cum`, and `emigrated`) and of a disease (`death`), as `rename_infections()` does, unless the code makes a result of that name itself; returns the line and whether it changed """
+    new = line
+    module = rf'({results_like}\.\w+)' # e.g. results.hiv, but not results
+    summary = lambda m: f'{m[1]}_death' if m[1].lower() in context.diseases else m[0]
+    if 'new_deaths' not in names.own:
+        new = re.sub(rf'{module}\.new_deaths\b', r'\1.death', new)
+        new = re.sub(r"""(['"])(\w+)\.new_deaths\1""", r'\1\2.death\1', new)
+        new = re.sub(r'\b(\w+)_new_deaths\b', summary, new)
+        new = re.sub(r'(?<!self)\.new_deaths\b', '.died', new)
+        new = re.sub(r"""\[(['"])new_deaths\1\]""", r'[\1died\1]', new)
+    if 'cum_deaths' not in names.own:
+        new = re.sub(rf'{module}\.cum_deaths\b', r'\1.death.cum', new)
+        new = re.sub(r'\b(\w+)_cum_deaths\b', summary, new)
+        new = re.sub(r'(?<!self)\.cum_deaths\b', '.died.cum', new)
+        new = re.sub(r"""\[(['"])cum_deaths\1\]""", r'[\1died\1].cum', new)
+    if 'new_emigrants' not in names.own:
+        new = re.sub(r'(?<!self)\.new_emigrants\b', '.emigrated', new)
+        new = re.sub(r"""\[(['"])new_emigrants\1\]""", r'[\1emigrated\1]', new)
     return new, new != line
 
 
@@ -543,6 +566,9 @@ def migrate_text(text, analyzers=None, imported=False, names=None, context=None)
         new, n = rename_infections(new, names, context)
         if n:
             changes.append((i+1, infections_note))
+        new, n = rename_deaths(new, names, context)
+        if n:
+            changes.append((i+1, deaths_note))
         lines[i] = new
     text = ''.join(lines)
 
