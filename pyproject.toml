@@ -163,6 +163,7 @@ target = "starsim.solvers.backends._rs"
 path = "starsim/solvers/rust/Cargo.toml"
 binding = "PyO3"
 optional = true
+debug = false # Otherwise `pip install -e .` makes a debug build, about 5 times slower, which Python then prefers to the one from ./build
 args = ["--locked"]
 
 [tool.distutils.bdist_wheel]
