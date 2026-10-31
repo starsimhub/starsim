@@ -1301,6 +1301,18 @@ class Results(ss.ndict):
         args (list): passed to `ss.ndict`
         kwargs (dict): passed to `ss.ndict`
     """
+    __slots__ = ('_module', '_implicit', '_given_to')
+
+    def __new__(cls, *args, **kwargs):
+        """
+        Set attributes here, not in __init__(), so that __getattr__() can always read them, even during a copy
+        """
+        self = super().__new__(cls, *args, **kwargs)
+        self.setattribute('_module', None)   # The name of the module the results belong to
+        self.setattribute('_implicit', None) # The sim's one disease: see _implicit_get()
+        self.setattribute('_given_to', None) # The sim's name for a module given to it: see _given_msg()
+        return self
+
     def __init__(self, module=None, *args, **kwargs):
         if module is not None and not isinstance(module, str):
             modlabel = getattr(module, 'label', None)
@@ -1362,13 +1374,13 @@ class Results(ss.ndict):
 
         Across the runs of a MultiSim, it is a result of each sim's one disease, even if their names differ (see `ss.run.MultiResults.from_sims()`).
         """
-        implicit = self.__dict__.get('_implicit')
+        implicit = self._implicit
         res = dict.get(self, implicit) if isinstance(implicit, str) else implicit # A module's name here, or results of their own
         return res[key] if isinstance(key, str) and isinstance(res, dict) and key in res else None
 
     def _given_msg(self, key):
         """ For the results of a module that was given to a sim, which ran its own copy: where the results are """
-        name = self.__dict__.get('_given_to')
+        name = self._given_to
         if name is not None and isinstance(key, str) and not key.startswith('_') and key not in self:
             return f'"{key}" is not here: this module was given to a sim, which runs its own copy, so its results are in the sim, e.g. sim.results.{name}.{key}'
         return None
@@ -1397,7 +1409,7 @@ class Results(ss.ndict):
             return res
         if msg := self._given_msg(attr) or self._unknown_msg(attr):
             raise AttributeError(msg)
-        return super().__getattr__(attr)
+        raise AttributeError(f'"{attr}" is not a result')
 
     def __setitem__(self, key, value):
         """ Also link the flow to each destination of a transition with several to its total, so `res.cin.X` is `res['cin.X']` """

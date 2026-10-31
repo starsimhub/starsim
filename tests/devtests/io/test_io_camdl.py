@@ -155,7 +155,7 @@ def test_camdl_golden():
 @pytest.mark.skipif(not lfd.exists(), reason=paths.no_lfd)
 @pytest.mark.skipif(not sc.path(camdl).exists(), reason='needs camdl')
 def test_camdl_stratified(tmp_path):
-    """ An SEIR by age and patch, with aging and movement, as a .camdl file: against camdl's own ODE run of it, and the pycamdl original's """
+    """ An SEIR by age and patch, with aging and movement, as a .camdl file: against camdl's own ODE run of it, and the saved reference """
     sc.heading('Testing camdl import of a stratified model')
     folder = lfd / 'examples/camdl/stratified'
     model, pars = folder / 'stratified.camdl', dict(beta=0.04, gamma=0.1, move=0.01)
@@ -171,10 +171,10 @@ def test_camdl_stratified(tmp_path):
     assert len(cells) == 24 # 4 states by 3 age groups by 2 patches
     for key in cells:
         assert np.abs(res[key].values - theirs[key].values).max() <= 0.5, f'{key} should agree with camdl to its rounding (it writes whole numbers)'
-    ref = pd.read_csv(folder / 'reference/results.csv') # The original in pycamdl, written to full precision
+    ref = pd.read_csv(folder / 'reference/results.csv') # From camdl, which writes whole numbers, so a sum of 6 cells can differ by up to 3
     for c in 'SEIR':
         ours = sum(res[key].values for key in cells if key.startswith(f'{c}_'))
-        assert np.allclose(ours, ref[ref.series == f'ode_novax_{c}'].value.values, rtol=1e-9), f'{c} should agree with the original'
+        assert np.abs(ours - ref[ref.series == f'ode_novax_{c}'].value.values).max() <= 3, f'{c} should agree with the reference to its rounding'
     return sim
 
 
