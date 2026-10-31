@@ -1,5 +1,5 @@
 """
-Benchmark models for the performance guard (test_baselines.py) and the S0.3 benchmarks (v4_design/oct20/simplify/bench.py)
+Benchmark models for the performance guard (test_baselines.py)
 
 Each covers a kind of model the other benchmarks miss:
 

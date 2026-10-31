@@ -81,10 +81,10 @@ How the design is tested (the test suites, and which to run after a change) is i
 
 ## In the design record
 
-- [constitution.md](https://github.com/starsimhub/starsim/blob/v4/v4_design/constitution.md): the principles in full
-- [00-overview.md](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/00-overview.md): the whole language on one page, and the object model
-- [design/README.md](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/README.md): the index of the spec
-- [v4_design/README.md](https://github.com/starsimhub/starsim/blob/v4/v4_design/README.md): where the design record starts
+- [constitution.md](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/admin/constitution.md): the principles in full
+- [00-overview.md](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/design/00-overview.md): the whole language on one page, and the object model
+- [design/README.md](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/design/README.md): the index of the spec
+- [README.md](https://github.com/starsimhub/lingua_franca_design/blob/main/README.md): where the design record starts
 
 ## Further reading
 

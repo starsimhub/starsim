@@ -130,11 +130,11 @@ Five errors and four warnings are classes of their own, in `starsim/internals/er
 
 ## In the design record
 
-- [Overview](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/00-overview.md): what happens at build time
-- [Objects and construction](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/01-objects.md): `ss.Sim`, the lifecycle, and the module contract
-- [Types](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/02-types.md): the time types, the sim's unit, and the timing contract
-- [Execution](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/10-execution.md): the loop, competing hazards, deferred removals, and per-module timesteps
-- [Errors, warnings, and notes](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/15-errors.md): the policy, the message shape, and the errors and warnings that are classes
+- [Overview](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/design/00-overview.md): what happens at build time
+- [Objects and construction](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/design/01-objects.md): `ss.Sim`, the lifecycle, and the module contract
+- [Types](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/design/02-types.md): the time types, the sim's unit, and the timing contract
+- [Execution](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/design/10-execution.md): the loop, competing hazards, deferred removals, and per-module timesteps
+- [Errors, warnings, and notes](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/design/15-errors.md): the policy, the message shape, and the errors and warnings that are classes
 
 ## Further reading
 

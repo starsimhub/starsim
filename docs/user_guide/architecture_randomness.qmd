@@ -81,8 +81,8 @@ The fitting code is the submodule `ss.fit` (`starsim/fit.py`), which an ordinary
 
 ## In the design record
 
-- [Randomness and reproducibility](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/11-random.md): streams, common random numbers, run identity, and `check_dt()`
-- [Inference](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/13-inference.md): calibration, the choice of method, gradients, staged fitting, sensitivity, and model comparison
+- [Randomness and reproducibility](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/design/11-random.md): streams, common random numbers, run identity, and `check_dt()`
+- [Inference](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/design/13-inference.md): calibration, the choice of method, gradients, staged fitting, sensitivity, and model comparison
 
 ## Further reading
 

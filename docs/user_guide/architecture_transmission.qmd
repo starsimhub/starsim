@@ -124,10 +124,10 @@ The code is in `starsim/networks.py` and `solvers/mixing.py` (routes), `connecto
 
 ## In the design record
 
-- [Routes](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/06-routes.md): the force of infection, counts used literally, the table of routes, layers, mobility, and geography
-- [Effects](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/07-effects.md): `ss.modify`, base and effective values, conditions, and execution order
-- [Interventions](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/08-interventions.md): products, delivery keywords, cascades and events, triggers, scenarios, and how each solver realizes them
-- [Results](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/09-results.md): automatic and declared results, outcomes, data, and many runs
+- [Routes](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/design/06-routes.md): the force of infection, counts used literally, the table of routes, layers, mobility, and geography
+- [Effects](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/design/07-effects.md): `ss.modify`, base and effective values, conditions, and execution order
+- [Interventions](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/design/08-interventions.md): products, delivery keywords, cascades and events, triggers, scenarios, and how each solver realizes them
+- [Results](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/design/09-results.md): automatic and declared results, outcomes, data, and many runs
 
 ## Further reading
 

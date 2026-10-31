@@ -174,7 +174,7 @@ The code is in `starsim/converters/`: `core.py` holds `Source`, `write()`, and `
 
 ## The vocabulary
 
-A language nobody can hold in their head is one nobody uses correctly, so the design record lists every public name in one place ([17-vocabulary.md](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/17-vocabulary.md)), and a name is added only after asking: does Starsim already have one; can it be written with what exists (a bednet is an `ss.modify`, a metapopulation a stratification by patch); would more than one kind of model use it; is a keyword enough?
+A language nobody can hold in their head is one nobody uses correctly, so the design record lists every public name in one place ([17-vocabulary.md](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/design/17-vocabulary.md)), and a name is added only after asking: does Starsim already have one; can it be written with what exists (a bednet is an `ss.modify`, a metapopulation a stratification by patch); would more than one kind of model use it; is a keyword enough?
 
 The capitalization rule is Starsim's existing one: modules, containers, and base classes are CamelCase (`ss.Sim`, `ss.Disease`, `ss.Vaccine`); the pieces you put inside them are lowercase (`ss.days`, `ss.normal`, `ss.modify`, `ss.vaccinate`). The importers are held to the same vocabulary: they write only names that a person would write by hand, which is why every import is ordinary Starsim code.
 
@@ -187,14 +187,14 @@ The capitalization rule is Starsim's existing one: modules, containers, and base
 
 ## In the design record
 
-- [Overview](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/00-overview.md)
-- [Objects and construction](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/01-objects.md): names, the equivalence rule, `describe()`
-- [Types](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/02-types.md): durations, rates, and bare numbers
-- [States and transitions](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/03-states-and-transitions.md): the operators, rates, dwell times, and what is guessed
-- [Parameters and data](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/04-parameters.md)
-- [Dimensions and stratification](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/05-dimensions.md)
-- [Working with other frameworks](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/16-interop.md): importers, classifying rates, exports, and the vignette test
-- [The complete vocabulary](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/17-vocabulary.md): every public name, with keywords and slot types
+- [Overview](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/design/00-overview.md)
+- [Objects and construction](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/design/01-objects.md): names, the equivalence rule, `describe()`
+- [Types](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/design/02-types.md): durations, rates, and bare numbers
+- [States and transitions](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/design/03-states-and-transitions.md): the operators, rates, dwell times, and what is guessed
+- [Parameters and data](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/design/04-parameters.md)
+- [Dimensions and stratification](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/design/05-dimensions.md)
+- [Working with other frameworks](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/design/16-interop.md): importers, classifying rates, exports, and the vignette test
+- [The complete vocabulary](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/design/17-vocabulary.md): every public name, with keywords and slot types
 
 ## Further reading
 

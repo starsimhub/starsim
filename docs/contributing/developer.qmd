@@ -130,11 +130,11 @@ The extra specificity (which arguments map to which, with example values) is wha
 
 ## The design record
 
-The design record is in `v4_design/` in the repository. It has three parts that matter today:
+The design record is in the [lingua_franca_design](https://github.com/starsimhub/lingua_franca_design) repository. It has three parts that matter today:
 
-- **The constitution** (`constitution.md`): the principles every choice is checked against, summarized on [the architecture overview](../user_guide/architecture_index.qmd).
-- **The spec** (`design/`, files 00 to 19): what the language is and how each part behaves, with a reason for each choice and a list of what was rejected. This section of the docs is a short translation of it.
-- **What was set aside** (`deferred.md`): ideas deferred or decided against, so they aren't proposed again without new reasons.
+- **The constitution** (`docs/admin/constitution.md`): the principles every choice is checked against, summarized on [the architecture overview](../user_guide/architecture_index.qmd).
+- **The spec** (`docs/design/`, files 00 to 19): what the language is and how each part behaves, with a reason for each choice and a list of what was rejected. This section of the docs is a short translation of it.
+- **What was set aside** (`docs/admin/deferred.md`): ideas deferred or decided against, so they aren't proposed again without new reasons.
 
 When a design changes, the spec is changed first, and then the code to match it. The user documentation is executed when it is built, so its examples run against the current code too.
 
@@ -156,6 +156,6 @@ This assumes you're about to release version `4.1.1`.
 
 ## In the design record
 
-- [18-conformance.md](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/18-conformance.md): every claim of the spec and the test that checks it, and the corpus
-- [12-backends.md](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/12-backends.md#agreement-between-solvers): how closely the solvers agree, and why
-- [constitution.md](https://github.com/starsimhub/starsim/blob/v4/v4_design/constitution.md): the principles the tests ultimately serve
+- [18-conformance.md](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/design/18-conformance.md): every claim of the spec and the test that checks it, and the corpus
+- [12-backends.md](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/design/12-backends.md#agreement-between-solvers): how closely the solvers agree, and why
+- [constitution.md](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/admin/constitution.md): the principles the tests ultimately serve
