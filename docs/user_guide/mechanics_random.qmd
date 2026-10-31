@@ -97,6 +97,12 @@ Common random numbers pair the draws, not the outcomes. In an epidemic, an inter
 
 `ss.options.crn = False` turns them off, e.g. to check how much they help in a given model. It is a global option, so set it back to `True` afterwards. Even turned off, Starsim draws one number for each person from each distribution, in the same order, so where everyone draws at every step and nobody is born, the draws stay largely paired anyway; what common random numbers add is the pairing when the people drawing differ between scenarios: a subset that draws (as in the fishing example), people born or removed, or an intervention that draws for those it reaches. How much this narrows the difference between two epidemics depends on the model, and is worth checking: compare the spread of the paired differences over a few seeds with `crn` on and off.
 
+## Reducing the variance between runs
+
+With agents, `ss.Sim(even_draws=True)` makes each call's random numbers evenly spaced rather than independent, so about the expected number of agents move each time, and fewer runs are needed for the same precision. Each agent's number is still uniform, and common random numbers still pair scenarios. In a simple SIR, the variance of the final size between runs fell by about 10 times with even mixing and 3 to 6 times on networks.
+
+This changes the model slightly, so it suits comparing scenarios better than estimating absolute numbers. Small outbreaks die out less often than they should, and the mean of a result can shift: the peak of the same SIR on a network fell by about 6 to 13%. It also takes longer, about 30 to 90% in the same model. It has no effect on compartmental solvers, and needs `ss.options.crn`.
+
 ## Drawing random numbers in a module
 
 A module keeps common random numbers if it draws every random number from a Starsim distribution (see [Distributions](mechanics_distributions.qmd)), in this way:

@@ -1141,4 +1141,7 @@ class multi_random(sc.prettyobj):
         else:
             nb_list = nb.typed.List(rvs_list) # See https://numba.readthedocs.io/en/stable/reference/deprecation.html#deprecation-of-reflection-for-list-and-set-types
             rvs = self.combine_rvs(nb_list, int_type, int_max)
+        dist = self.dists[0]
+        if dist.even: # Combining them undoes the even spacing of each
+            rvs = ss.dists.even_out(rvs, dist.seed, dist.ind)
         return rvs

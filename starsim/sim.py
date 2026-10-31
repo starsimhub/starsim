@@ -34,6 +34,7 @@ class SimPars(ss.Pars):
         dur (int): How many timesteps to simulate, if "stop" is not provided (default 50)
         dt (float): The timestep, in units of "unit" (default 1.0)
         rand_seed (int): The overall random seed for the simulation (used to set module-specific random seeds)
+        even_draws (bool): Whether to space each call's random numbers evenly for agents, so that about the expected number of them move each time (default False). This reduces the variance between runs (about 3 to 10 times in final size for a simple SIR), but outbreaks die out less often than they should, and the mean of a result can shift (e.g. the peak of an SIR on a network, by about 10%). It has no effect on compartments, and needs `ss.options.crn`
         use_aging (bool): Specify whether agents age (by default, agents age if and only if births and/or deaths are included)
         people_results (bool): Whether to collect the automatic People-level results (alive, female, died, emigrated, etc.) every timestep (default True); set to False to skip this per-timestep cost in lightweight/ODE-style sims that do not need them (note: some modules, e.g. demographics, rely on results.alive)
         people (People): If provided, use a pre-existing People object rather than creating one (in which case n_agents will be ignored)
@@ -67,6 +68,7 @@ class SimPars(ss.Pars):
         self.dur       = None  # Duration of time to run, if stop isn't specified (default 50 steps of self.unit)
         self.dt        = None  # Timestep
         self.rand_seed = 1     # Random seed; if None, don't reset
+        self.even_draws = False # Whether to space each call's random numbers evenly for agents (see ss.Sim)
 
         # How the model is run; these only apply to modules with declared states and transitions (see ss.Disease)
         self.unit       = None   # The unit for bare numbers, e.g. 'day'; if nothing in the model has a unit, time is in timesteps
@@ -164,6 +166,8 @@ class SimPars(ss.Pars):
         self.validate_verbose()
         self.validate_whole()
         self.validate_agents()
+        if self.even_draws and not ss.options.crn:
+            raise ValueError('even_draws=True needs common random numbers, but ss.options.crn is False')
         self.validate_total_pop()
         return
 

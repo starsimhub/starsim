@@ -777,7 +777,7 @@ class Moving:
         """ As `ss.Dist.crn_key()`, for a compiled pass that makes the draws of one of the engine's distributions itself (for `uids`), keyed as `draw()` is; None if it cannot """
         dist = self.dists[key]
         diagnostics = self.sim.diagnostics
-        if not ss.options.crn or dist.initialized is not True or dist.slots is None or (diagnostics and diagnostics.rvs is not None):
+        if not ss.options.crn or dist.even or dist.initialized is not True or dist.slots is None or (diagnostics and diagnostics.rvs is not None):
             return None
         if check_draws and uids is not None:
             self.check_drawn(key, uids)

@@ -34,6 +34,7 @@ def str2int(string, modulo=1_000_000_000):
 
 
 _ROUND_IND = 2**62 # Added to the draw index for the stochastic rounding uniforms, so they're independent of the draw itself
+_EVEN_IND = 2**61 # Added to the draw index for the offset of evenly spaced uniforms (see even_out())
 _cache.depends(__file__, draws.__file__) # So the cached hash below is compiled again when the draws change
 
 @nb.jit([nb.void(nb.int64, nb.int64, nb.uint64[:], nb.float32[:], nb.uint64, nb.float64),
@@ -94,7 +95,29 @@ def same_objects(a, b):
     return b is not None and len(a) == len(b) and all(x is y or (type(x) is type(y) and isinstance(x, static_types) and x == y) for x,y in zip(a, b))
 
 
-def hash_uniforms(seed, ind, slots, dtype=None):
+def even_out(rands, seed, ind):
+    """
+    Evenly spaced uniforms in the same order as `rands`, for `ss.Sim(even_draws=True)`; not for the user
+
+    The smallest of n uniforms becomes (0 + v)/n, the next (1 + v)/n, and so on, with one offset v for the call. Each number
+    is still exactly uniform, so every distribution keeps its shape, but together they have the mean and spread they should.
+    Each stays close to its original value, so CRN keeps working, though less well (see `ss.Sim`).
+
+    Args:
+        rands (array): the uniforms
+        seed (int): the seed of the call, as `hash_uniforms()`
+        ind (int): the index of the call, as `hash_uniforms()`
+    """
+    n = len(rands)
+    if n < 2:
+        return rands
+    offset = hash_uniforms(seed, ind + _EVEN_IND, [0])[0]
+    out = np.empty(n, dtype=rands.dtype)
+    out[np.argsort(rands)] = (np.arange(n) + offset)/n
+    return np.minimum(out, np.nextafter(out.dtype.type(1), out.dtype.type(0))) # Rounding to float32 could reach 1, which uniforms never do
+
+
+def hash_uniforms(seed, ind, slots, dtype=None, even=False):
     """
     Generate one uniform random number in (0, 1) per slot via a counter-based (splitmix64)
     hash keyed by (seed, ind); not for the user.
@@ -111,6 +134,7 @@ def hash_uniforms(seed, ind, slots, dtype=None):
     width (24-bit for float32, 53-bit for float64) so every value stays strictly < 1 -- a plain
     float64->float32 cast would round the largest values up to exactly 1.0 and break the [0, 1)
     contract (e.g. `expon.ppf(1.0)` is inf). The float64 stream is unchanged from earlier versions.
+    With `even`, the numbers of the call are evenly spaced (see `even_out()`).
     """
     if dtype is None:
         dtype = ss.dtypes.float
@@ -125,7 +149,7 @@ def hash_uniforms(seed, ind, slots, dtype=None):
 
     out = np.empty(slots.shape[0], dtype=dtype)
     _hash_uniforms_fill(seed, ind, slots, out, *draws.crn_bits(dtype)) # The top 24 bits for float32, 53 for float64 (unchanged from earlier versions)
-    return out
+    return even_out(out, seed, ind) if even else out
 
 
 def timepar_of(val):
@@ -450,6 +474,7 @@ class Dist:
         self.module = module
         self.sim = sim
         self.slots = None # Created on initialization with a sim
+        self.even = False # Whether each call's uniforms are evenly spaced, from the sim's `even_draws`: set on initialization
         self.strict = strict
         self.scaling = sc.tolist(self.scaling) # Convert e.g. 'predraw' to ['predraw'] so can use "if x in y" later
         self.given = None # What the distribution was made from, if not its parameters (e.g. ('erlang', dict(k=4, mean=ss.days(10)))), for its repr
@@ -729,6 +754,7 @@ class Dist:
         # Handle the sim, module, and slots
         self.link_sim(sim)
         self.link_module(module)
+        self.even = self.sim is not None and bool(self.sim.pars.get('even_draws'))
         if slots is None and self.sim is not None:
             try:
                 slots = self.sim.people.slot
@@ -1227,7 +1253,7 @@ class Dist:
             # Common random numbers via hashing: one uniform per slot, keyed by (seed, ind).
             # Generates exactly len(uids) numbers (no slot_scale blowup) while preserving CRN.
             # (choice/histogram set _use_ppf=False and keep the native path below.)
-            rands = hash_uniforms(self.seed, self.ind, self._slots, dtype=self.hash_dtype)
+            rands = hash_uniforms(self.seed, self.ind, self._slots, dtype=self.hash_dtype, even=self.even)
             rvs = self.ppf(rands) # Convert to actual values via the PPF
         elif self._use_ppf:
             rands = self.rand(size)
@@ -1286,7 +1312,7 @@ class Dist:
         are being recorded), in which case `rvs()` is called instead.
         """
         diagnostics = self.sim.diagnostics if self.sim is not None else None
-        if not ss.options.crn or self.initialized is not True or self.slots is None or (diagnostics and diagnostics.rvs is not None):
+        if not ss.options.crn or self.even or self.initialized is not True or self.slots is None or (diagnostics and diagnostics.rvs is not None):
             return None
         self.make_history()
         key = (self.seed, self.ind, np.dtype(self.hash_dtype or ss.dtypes.float))
@@ -1318,7 +1344,7 @@ class Dist:
             slots (array): if provided, use one CRN uniform per slot (distinct from the draw itself) rather than the next numbers from the RNG
         """
         if slots is not None:
-            rands = hash_uniforms(self.seed, self.ind + _ROUND_IND, slots)
+            rands = hash_uniforms(self.seed, self.ind + _ROUND_IND, slots, even=self.even)
         else:
             rands = self.rand(rvs.shape)
         rvs = np.array(np.floor(rvs+rands), dtype=ss_int) # Unsure whether the dtype should be int or rand_int, but the former is safer performance-wise

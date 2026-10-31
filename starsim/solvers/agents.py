@@ -98,7 +98,7 @@ class Transmission(Effects):
         elif not ss.options.crn:
             return dist.rvs(uids)
         slots = self.sim.people.slot_raw()
-        return ss.dists.hash_uniforms(dist.seed, ROUNDS + self.mod.t.ti*ROUND_MAX, uids if slots is None else slots[uids], dtype=dist.hash_dtype)
+        return ss.dists.hash_uniforms(dist.seed, ROUNDS + self.mod.t.ti*ROUND_MAX, uids if slots is None else slots[uids], dtype=dist.hash_dtype, even=dist.even)
 
     def pick_sources(self, pairs, name):
         """

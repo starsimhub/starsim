@@ -656,6 +656,22 @@ def test_engine_copy():
     return copy
 
 
+def test_even_draws():
+    """ With even_draws, each call's uniforms are evenly spaced, in the same order; the sim runs, and variance falls """
+    uniforms = np.random.default_rng(1).random(1000)
+    even = ss.dists.even_out(uniforms, 1, 2)
+    assert np.array_equal(np.argsort(even), np.argsort(uniforms))
+    assert np.allclose(np.diff(np.sort(even)), 1/1000)
+    assert 0 < even.min() < 1/1000 and even.max() < 1
+
+    def final_size(seed, **kwargs):
+        sim = ss.Sim(n_agents=1000, dur=ss.days(100), dt=ss.days(1), rand_seed=seed, verbose=0, solver='abm', diseases=ss.SIR(beta=ss.perday(0.25), dur_inf=ss.days(10), init_prev=0.02), **kwargs).run()
+        return sim.results.sir.S[-1]
+    plain, spaced = [np.std([final_size(seed, even_draws=even) for seed in range(8)]) for even in [False, True]]
+    assert spaced < plain, f'Evenly spaced draws should reduce the spread of final sizes, but it went from {plain} to {spaced}'
+    return
+
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -684,5 +700,6 @@ if __name__ == '__main__':
     o18 = test_shape_scale()
     o18b = test_own_unit()
     o19 = test_engine_copy()
+    o20 = test_even_draws()
 
     T.toc()

@@ -20,6 +20,7 @@ Starsim 4 adds a way to write a model as declared states and transitions, which 
 - **Scenarios and runs**: `ss.parallel()` and `sim.run(n_runs=)` return a MultiSim whose results have a run dimension, with summaries, bands and comparisons by scenario. Sims with different steps can be run together.
 - **Importing and exporting**: `ss.import_from()` reads models from EMULSION, odin, SBML, SimInf, flepiMoP, summer2, Atomica, camdl, EpiModel, epydemix and MEmilio; `ss.export_to()` writes SBML and odin. `python -m starsim.converters.migrate` rewrites Starsim 3 code.
 - **Library**: `starsim.library` (`ssl`) holds HIV, cholera, Ebola, measles, malaria, TB, COVID, influenza, dengue, and other simple disease models, maternal and newborn health, more networks, and health economics (`ssl.Costs`, `ssl.DALYs`, `ssl.discount()`, `ssl.ICER`).
+- **Lower variance**: `ss.Sim(even_draws=True)` spaces each call's random numbers evenly for agents, which reduces the variance between runs by about 3 to 10 times in final size for a simple SIR, though outbreaks die out less often than they should and means can shift.
 - **Command line and speed**: `starsim init` and `starsim compile`; Numba kernels throughout, with optional Rust copies that give the same numbers; optional JAX for gradients.
 
 ### Changes that may affect results
