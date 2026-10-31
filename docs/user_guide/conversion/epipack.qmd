@@ -1,0 +1,89 @@
+---
+title: epipack
+authorship:
+  human: 0
+  ai: 100
+  note: Written by AI, from translations of epipack models checked against the originals
+jupyter: python3
+---
+
+This page is for people who use [epipack](https://github.com/benmaier/epipack) in Python: compartmental models written as a list of reaction processes, run as ODEs or by Gillespie's method, and analyzed symbolically. It shows an epipack model next to the same model in Starsim, how their results agree, and how to bring a model in.
+
+## The same model in both
+
+The SIRS from epipack's README:
+
+```{python}
+#| eval: false
+import numpy as np
+from epipack import EpiModel
+
+S, I, R = list('SIR')
+N = 1000
+
+model = EpiModel([S, I, R], N).set_processes([
+    (S, I, 2.5, I, I), # Transmission
+    (I, 1, R),         # Recovery
+    (R, 1/14, S),      # Waning
+]).set_initial_conditions({S: N - 10, I: 10})
+
+result = model.integrate(np.linspace(0, 40, 41))
+```
+
+Each process is one transition in Starsim. A transmission process divides by the population, which Starsim's `I` in a rate already does:
+
+```{python}
+import starsim as ss
+
+S, I, R = ss.states('S I R')
+sirs = ss.Disease(
+    infection = S >> I @ (2.5 * I),
+    recovery  = I >> R @ 1,
+    waning    = R >> S @ (1/14),
+    init_n    = dict(I=10),
+    name      = 'sirs',
+)
+sim = ss.Sim(sirs, total_pop=1000, unit='day', start=0, stop=41, dt=1, solver='ode', use_aging=False, verbose=0).run()
+res = sim.results.sirs
+print(f'At t=40: S = {res.S[40]:.2f} (epipack: 411.87), I = {res.I[40]:.2f} (40.71), R = {res.R[40]:.2f} (547.42)')
+sim.plot()
+```
+
+`solver='gillespie'` runs the same disease by Gillespie's method, as `model.simulate()` does.
+
+## How the results agree
+
+| Model | Agreement |
+|---|---|
+| The SIRS above, integrated | Agree: within 0.002% at every day to t=40 |
+| A symbolic SIRS with births, deaths, and the population size corrected for | Agree: within 0.002% at every day to t=60 |
+
+## Bringing your model in
+
+`ss.import_from(source, format='epipack')` reads an `EpiModel`, a `SymbolicEpiModel`, or a `StochasticEpiModel`: either the live model (if epipack is installed alongside Starsim) or the JSON written by `starsim/converters/epipack.py` run as a script, which runs your script in epipack's own environment and needs neither Starsim nor Sciris:
+
+```bash
+python epipack.py my_model.py model.json              # A script that makes a variable called model
+python epipack.py my_model.py:build_model model.json  # Or a function that returns the model
+```
+
+```python
+sim = ss.import_from('model.json') # The format is told from the file
+```
+
+The last `integrate()` or `simulate()` in the script gives the end time and the solver (ODE or Gillespie). If there was none, give `stop=` and `solver=`. Time is read as days. A symbolic model with parameters that have no value takes them from `pars=`.
+
+Three things to check after importing:
+
+- **The population.** epipack divides quadratic terms by a fixed `initial_population_size`, which is 1 unless given, unless `correct_for_dynamical_population_size` is set. The importer keeps this: where the size is the number of people in a model that keeps them all, the terms are exposure, as in the example above; otherwise the division stays in the rate as a number.
+- **Networks.** A `StochasticEpiModel` on a network is read as well mixed at the mean degree, and the network is listed in `sim.imported.incomplete`.
+- **Time in a rate.** Python functions as rates in an `EpiModel`, and `t` in a symbolic rate, are listed, not translated. An `ss.timeseries` can carry them.
+
+Models set by their ODEs or matrices (`SymbolicODEModel`, `MatrixEpiModel`) have no processes to read, and are refused.
+
+See [Import/export](index.qmd) for importing in general: checking an import, keeping it as code, and finishing one that is incomplete.
+
+## Further reading
+
+- [epipack: documentation](https://epipack.benmaier.org/): models, symbolic analysis, and network simulations
+- [epipack: repository](https://github.com/benmaier/epipack): the code and its examples

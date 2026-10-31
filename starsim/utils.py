@@ -80,9 +80,11 @@ class ndict(sc.obj):
         networks = ss.ndict({'sexual':ss.SexualNet(), 'prenatal':ss.PrenatalNet()})
         ```
     """
+    __slots__ = ('_type',) # Since otherwise treated as keys
+
     def __init__(self, *args, type=None, **kwargs):
         super().__init__()
-        self.setattribute('_type', type)  # Since otherwise treated as keys
+        self.setattribute('_type', type)
         self.extend(*args, **kwargs)
         return
 
@@ -524,7 +526,7 @@ def copy_given(*inputs):
     for mod in given_modules(out): # The sim's own copies are its to change, and hold their own results (also if the module given was given to a sim before)
         mod.setattribute('_given', False)
         if isinstance(getattr(mod, 'results', None), ss.Results):
-            mod.results.__dict__.pop('_given_to', None)
+            mod.results.setattribute('_given_to', None)
     for mod in given_modules(*inputs): # The modules given hold no results (the sim runs its copies), so reading one says where they are
         if isinstance(getattr(mod, 'results', None), ss.Results) and not len(mod.results):
             mod.results.setattribute('_given_to', mod.name)

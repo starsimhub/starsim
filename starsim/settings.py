@@ -69,6 +69,8 @@ class Options(sc.obj):
         ```
     """
 
+    __slots__ = ('optdesc', 'orig_options', 'on_entry', '_locked', '_style')
+
     def __init__(self):
         super().__init__()
         optdesc, options = self.get_orig_options()  # Get the options

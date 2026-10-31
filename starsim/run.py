@@ -1155,7 +1155,7 @@ class MultiResults(ss.Results):
                     sub = res.take([j for j,_ in keep])
                     arrays[modname, key] = dict(like=sub, values=sub.values, strata=getattr(sub, 'strata', None), denom=getattr(sub, 'denom', None), runs=sub.runs, run_pos=[i for _,i in keep])
         out = MultiResults.build(arrays, runs, timevec=self.get('timevec'))
-        implicit = self.__dict__.get('_implicit') # The results of each sim's one disease (see from_sims())
+        implicit = self._implicit # The results of each sim's one disease (see from_sims())
         if implicit is not None:
             out.setattribute('_implicit', implicit if isinstance(implicit, str) else implicit.take(inds))
         return out
@@ -1178,7 +1178,7 @@ class MultiResults(ss.Results):
 
 def own_disease(sim):
     """ The name of a sim's one disease: the one it made or named, else its only disease (see `ss.Sim.init_results()`); None if it has several, or none """
-    return sim.results.__dict__.get('_implicit')
+    return sim.results._implicit
 
 
 def run_row(sim, p, seed, draws=False):

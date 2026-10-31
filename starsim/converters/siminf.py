@@ -684,10 +684,10 @@ def event_register(ev, compartments, E, N):
             return None
         sel = selected(select) or compartments
         return ','.join(compartments[compartments.index(c) + int(N[compartments.index(c), int(shift) - 1])] for c in sel)
-    sel = {s:selected(s) for s in ev.select.unique()}
+    sel = {s:selected(s) for s in ev['select'].unique()}
     sel = {s:(None if v is not None and len(v) == len(compartments) else v) for s,v in sel.items()} # Every compartment is the register's default (naming them all gives different results: see the report)
-    states = ev.select.map(lambda s: ','.join(sel[s]) if sel[s] else None)
-    first = ev.select.map(lambda s: sel[s][0] if sel[s] else compartments[0]) # Entering individuals go to the first compartment selected
+    states = ev['select'].map(lambda s: ','.join(sel[s]) if sel[s] else None)
+    first = ev['select'].map(lambda s: sel[s][0] if sel[s] else compartments[0]) # Entering individuals go to the first compartment selected
     states = states.where(ev.event != 'enter', first)
     is_int = ev.event == 'intTrans'
     to_states = pd.Series([None]*len(ev), index=ev.index, dtype=object)
@@ -696,7 +696,7 @@ def event_register(ev, compartments, E, N):
             notes.append(('events', f'{is_int.sum()} internal transfers (intTrans) need a shift matrix (N); they were left out'))
             ev, states, to_states = ev[~is_int], states[~is_int], to_states[~is_int]
         else:
-            pairs = list(zip(ev.select[is_int], ev['shift'][is_int]))
+            pairs = list(zip(ev['select'][is_int], ev['shift'][is_int]))
             found = {pair:shifted(*pair) for pair in set(pairs)} # Each pair of a select and a shift column once, since there can be many events
             to_states[is_int] = [found[pair] for pair in pairs]
     register = pd.DataFrame({

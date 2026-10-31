@@ -135,17 +135,18 @@ class MixedNetworks(ss.ndict):
 
     It exists to turn a confusing error into a useful one.
     """
+    __slots__ = ('_mixed_names',)
+
     def __init__(self, names=None):
         super().__init__()
-        self.__dict__['_mixed_names'] = list(names or [])
+        self.setattribute('_mixed_names', list(names or []))
 
     def __getattr__(self, attr):
-        try:
-            return super().__getattr__(attr)
-        except AttributeError:
-            if attr in self.__dict__.get('_mixed_names', []):
-                raise AttributeError(f'"{attr}" is not run in a compartmental run: it became contact rates between groups. It is in sim.all_networks()["{attr}"]; sim.networks holds only the networks that are run') from None
-            raise
+        if dict.__contains__(self, attr):
+            return dict.__getitem__(self, attr)
+        if attr != '_mixed_names' and attr in self._mixed_names:
+            raise AttributeError(f'"{attr}" is not run in a compartmental run: it became contact rates between groups. It is in sim.all_networks()["{attr}"]; sim.networks holds only the networks that are run') from None
+        raise AttributeError(f'"{attr}" is not a network')
 
 
 def clocks_of(mod):
@@ -554,7 +555,7 @@ def set_par_values(sim):
                 held[id(val)].append(key)
         for keys in held.values():
             val = getattr(mod, keys[0])
-            object.__setattr__(mod.pars, '_bounded', (mod.pars._bounded or {}) | {keys[0]:val})
+            mod.pars.setattribute('_bounded', (mod.pars._bounded or {}) | {keys[0]:val})
             object.__setattr__(mod, '_par_attrs', getattr(mod, '_par_attrs', {}) | {keys[0]:keys})
             for key in keys:
                 mod.setattribute(key, val.value)

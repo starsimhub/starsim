@@ -18,6 +18,8 @@ from .core import Source, Code, write, build
 from .camdl import load_camdl
 from .emulsion import load_emulsion
 from .epimodel import load_epimodel
+from .epipack import load_epipack
+from .epymorph import load_epymorph
 from .epydemix import load_epydemix
 from .atomica import load_atomica
 from .flepimop import load_flepimop
@@ -35,6 +37,8 @@ importers = dict(
     camdl    = load_camdl,
     emulsion = load_emulsion,
     epimodel = load_epimodel,
+    epipack  = load_epipack,
+    epymorph = load_epymorph,
     epydemix = load_epydemix,
     flepimop = load_flepimop,
     memilio  = load_memilio,
@@ -52,6 +56,8 @@ def sniff(source):
             return 'summer2'
         elif all(hasattr(source, attr) for attr in ['transitions_list', 'population']): # A live epydemix model
             return 'epydemix'
+        elif hasattr(source, 'set_processes') or hasattr(source, 'node_transition_events'): # A live epipack model
+            return 'epipack'
         return None
     elif not sc.path(source).is_file():
         return None
@@ -82,8 +88,8 @@ def sniff(source):
             return 'siminf'
     elif ext in ['.xml', '.sbml'] and '<sbml' in text:
         return 'sbml'
-    elif ext == '.json': # As written by summer2.py, epydemix.py, or memilio.py (run as scripts), or dump_epimodel.R; or camdlc's JSON form
-        match = re.search(r'"format"\s*:\s*"(summer2|epydemix|epimodel|memilio)"', text)
+    elif ext == '.json': # As written by summer2.py, epydemix.py, epipack.py, epymorph.py, or memilio.py (run as scripts), or dump_epimodel.R; or camdlc's JSON form
+        match = re.search(r'"format"\s*:\s*"(summer2|epydemix|epimodel|epipack|epymorph|memilio)"', text)
         if match:
             return match.group(1)
         elif '"ir_version"' in text and '"model"' in text:

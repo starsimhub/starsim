@@ -34,6 +34,20 @@ class Pars(sc.obj):
         pars (dict): initial parameters to populate the object with
         kwargs: additional key-value pairs merged with pars
     """
+    __slots__ = ('_locked', '_bare', '_bounded', '_added', '_module')
+
+    def __new__(cls, *args, **kwargs):
+        """
+        Set attributes here, not in __init__(), so they're also set for a copy, and before a subclass calls super().__init__()
+        """
+        self = super().__new__(cls, *args, **kwargs)
+        self.setattribute('_locked', False) # Whether new keys can be added; set by lock()
+        self.setattribute('_bare', None)    # The parameters set to a bare number, with the unit it is read in: see bare_units()
+        self.setattribute('_bounded', None) # For a module written as code, the parameters given as ss.par (e.g. with bounds, to be fitted), by name; see bounded()
+        self.setattribute('_added', None)   # Keys added by setting them (pars.x = v) rather than defined (define_pars(), or update(create=True)); see check_added()
+        self.setattribute('_module', None)  # The module whose parameters these are, once it is in a sim: see bind()
+        return self
+
     def __init__(self, pars=None, **kwargs):
         if pars is not None:
             if isinstance(pars, dict):
@@ -44,12 +58,6 @@ class Pars(sc.obj):
         super().__init__(**kwargs)
         return
 
-    _locked = False # Whether new keys can be added; set by lock()
-    _bare = None # The parameters set to a bare number, with the unit it is read in: see bare_units()
-    _bounded = None # For a module written as code: the parameters given as ss.par (e.g. with bounds, to be fitted), by name; see bounded()
-    _added = None # Keys added by setting them (pars.x = v) rather than defined (define_pars(), or update(create=True)); see check_added()
-    _module = None # The module whose parameters these are, once it is in a sim: see bind()
-
     def bind(self, module):
         """
         Bind the values that vary (`ss.timeseries`, `ss.seasonal`, `ss.by`) to the module, now and when set later, so that once its model is
@@ -57,7 +65,7 @@ class Pars(sc.obj):
         declared parameter (`ss.par`); before then, it builds an expression, as in a rate. One of typed values is typed now, as a typed value in the
         parameters is, so `self.pars.rate.to_prob()` works on either
         """
-        object.__setattr__(self, '_module', module)
+        self.setattribute('_module', module)
         for key,val in self.items():
             bind(val, module, key)
         return self
@@ -81,13 +89,13 @@ class Pars(sc.obj):
         """ Note that a parameter with a unit (or a distribution of values with one) was set to a bare number, which keeps that unit """
         typed = [old] if isinstance(old, ss.TimePar) else [v for v in old.pars.values() if isinstance(v, ss.TimePar)]
         if typed and typed[0].base is not None and np.any(np.asarray(sc.tolist(new), dtype=float) != 0): # Zero is the same in any unit
-            object.__setattr__(self, '_bare', (self._bare or {}) | {key:(typed[0].base, type(typed[0]).__name__)}) # The unit, and the kind of value (e.g. "years" or "peryear"), to say how to give it
+            self.setattribute('_bare', (self._bare or {}) | {key:(typed[0].base, type(typed[0]).__name__)}) # The unit, and the kind of value (e.g. "years" or "peryear"), to say how to give it
         return
 
     def forget_bare(self, keys):
         """ Forget the notes of `note_bare()` for these keys: given again, or a module's own defaults """
         if self._bare:
-            object.__setattr__(self, '_bare', {k:v for k,v in self._bare.items() if k not in keys})
+            self.setattribute('_bare', {k:v for k,v in self._bare.items() if k not in keys})
         return
 
     def bare_units(self, unit, label):
@@ -111,7 +119,7 @@ class Pars(sc.obj):
         Args:
             locked (bool): whether to lock, or unlock with False
         """
-        object.__setattr__(self, '_locked', locked) # Set as an attribute, not a key
+        self.setattribute('_locked', locked) # Set as an attribute, not a key
         return self
 
     def check_added(self, label):
@@ -133,7 +141,7 @@ class Pars(sc.obj):
             errormsg = f'Key "{key}" not found; available keys are {list(self.keys())}. To add a new parameter, use pars.update({key}=..., create=True).'
             raise sc.KeyNotFoundError(errormsg)
         if key not in self: # Added by setting it, not defined: see check_added()
-            object.__setattr__(self, '_added', (self._added or set()) | {key})
+            self.setattribute('_added', (self._added or set()) | {key})
         current = self.get(key)
         if isinstance(current, ss.par): # A new value for a declared parameter (e.g. sir.pars.beta = 0.1) is taken by it, keeping its name and bounds, since the module's transitions use this same object
             if isinstance(value, ss.par):
@@ -151,7 +159,7 @@ class Pars(sc.obj):
 
     def __reduce_ex__(self, protocol):
         """ Pickled (and shallow-copied) with its keys and attributes restored directly, as for a deep copy, so a key is not taken as one set by hand (see `check_added()`) """
-        return (_restore_pars, (self.__class__, dict(self), dict(self.__dict__)))
+        return (_restore_pars, (self.__class__, dict(self), {name:getattr(self, name) for name in Pars.__slots__}))
 
     def __deepcopy__(self, memo):
         """ Copy the keys directly, since by default a copy sets the attributes first, so locked parameters couldn't be copied """
@@ -159,7 +167,8 @@ class Pars(sc.obj):
         memo[id(self)] = new
         for key,value in self.items():
             dict.__setitem__(new, key, sc.dcp(value, memo))
-        new.__dict__.update(sc.dcp(self.__dict__, memo))
+        for name in Pars.__slots__:
+            new.setattribute(name, sc.dcp(getattr(self, name), memo))
         return new
 
     def update(self, pars=None, create=False, **kwargs):
@@ -189,17 +198,17 @@ class Pars(sc.obj):
         # Perform the update
         self.forget_bare(pars) # Noted again below if still a bare number
         if create and self._added: # Now defined
-            object.__setattr__(self, '_added', self._added - set(pars))
+            self.setattribute('_added', self._added - set(pars))
         for key,new in pars.items():
             if isinstance(new, ss.par) and key in self.keys() and not isinstance(self[key], ss.par): # A parameter of a module written as code, given with bounds (say): its code uses the value, and the parameter is kept so it can be fitted
                 new.name = new.name or key
-                object.__setattr__(self, '_bounded', (self._bounded or {}) | {key:new})
+                self.setattribute('_bounded', (self._bounded or {}) | {key:new})
                 new = new.value
             elif has_par(new) and key in self.keys() and not isinstance(self[key], (ss.par, Pars, ss.Module)): # The same for a value in a dict parameter, e.g. cin_fn=dict(k=ss.par(0.3, bounds=[0.1, 0.5])), kept as "cin_fn.k"
                 given = {f'{key}.{k}':v for k,v in new.items() if isinstance(v, ss.par)}
                 for name,p in given.items():
                     p.name = p.name or name
-                object.__setattr__(self, '_bounded', (self._bounded or {}) | given)
+                self.setattribute('_bounded', (self._bounded or {}) | given)
                 new = {k:(v.value if isinstance(v, ss.par) else v) for k,v in new.items()}
             elif key in (self._bounded or {}) and not isinstance(new, ss.par): # A new value of one given as ss.par: the parameter keeps it too, e.g. for a modifier, whose code uses the parameter (see ss.modify)
                 self._bounded[key].value = new
@@ -380,7 +389,8 @@ def _restore_pars(cls, items, state):
     """ Rebuild a `Pars` from its keys and attributes (see `Pars.__reduce_ex__()`) """
     new = cls.__new__(cls)
     dict.update(new, items)
-    new.__dict__.update(state)
+    for name,value in state.items():
+        new.setattribute(name, value)
     return new
 
 
