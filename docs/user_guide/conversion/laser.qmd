@@ -124,7 +124,7 @@ The last row was measured on 17 October 2026, on a machine shared with other job
 
 ## What works and what does not yet
 
-These are from Starsim's switching demo for LASER users (`tests/switching/test_laser.py`), which compares speed and memory per agent with LASER's, and from the review it was built from. "Fails" means the demo's check does not pass today.
+These are from Starsim's switching demo for LASER users (`tests/switching/test_laser.py` in the lingua_franca_design repo), which compares speed and memory per agent with LASER's, and from the review it was built from. "Fails" means the demo's check does not pass today.
 
 | Task | Today |
 |---|---|

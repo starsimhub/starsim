@@ -147,7 +147,7 @@ The last two rows were measured on 17 October 2026, on a machine shared with oth
 
 ## What works and what does not yet
 
-These are from Starsim's switching demo for EMULSION users (`tests/switching/test_emulsion.py`), which checks each task against EMULSION's published output, and from the review it was built from. "Fails" means the demo's check does not pass today.
+These are from Starsim's switching demo for EMULSION users (`tests/switching/test_emulsion.py` in the lingua_franca_design repo), which checks each task against EMULSION's published output, and from the review it was built from. "Fails" means the demo's check does not pass today.
 
 | Task | Today |
 |---|---|

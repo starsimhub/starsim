@@ -1,5 +1,5 @@
 """
-Let the tests in subfolders (devtests/, switching/) import the helpers in tests/ (such as paths.py and corpus.py),
+Let the tests in subfolders (devtests/) import the helpers in tests/ (such as paths.py and corpus.py),
 and run JAX on the CPU: many test workers can't share one GPU (set JAX_PLATFORMS to test on a GPU)
 """
 import os

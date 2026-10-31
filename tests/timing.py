@@ -29,11 +29,11 @@ def timed(fn, repeats=3):
     return min(times)*(r1 + r2)/2, out
 
 
-def check(value, ref, what, unit='s', other=None, slowdown=SLOWDOWN):
+def check(value, ref, what, unit='s', other=None):
     """ Assert that a normalized time is within `SLOWDOWN` of Starsim's reference for it, saying how it compares with another framework's if given (`other`: its time, in the same unit, and name) """
     msg = f'{what}: {value:.3g} {unit} (normalized), against a reference of {ref:.3g} {unit}'
     if other is not None:
         msg += f'; {other[1]} takes {other[0]:.3g} {unit} ({value/other[0]:.2g} times as long)'
     print(msg)
-    assert value < slowdown*ref, f'{msg}: more than {slowdown} times the reference'
+    assert value < SLOWDOWN*ref, f'{msg}: more than {SLOWDOWN} times the reference'
     return

@@ -107,7 +107,7 @@ The last two rows were measured on 18 October 2026, on a machine shared with oth
 
 ## What works and what does not yet
 
-These are from Starsim's switching demo for camdl users (`tests/switching/test_camdl.py`), which checks each task against camdl's numbers, and from the review it was built from. "Fails" means the demo's check does not pass today.
+These are from Starsim's switching demo for camdl users (`tests/switching/test_camdl.py` in the lingua_franca_design repo), which checks each task against camdl's numbers, and from the review it was built from. "Fails" means the demo's check does not pass today.
 
 | Task | Today |
 |---|---|

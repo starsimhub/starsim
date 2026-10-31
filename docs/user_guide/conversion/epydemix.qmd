@@ -78,7 +78,7 @@ The Kenya row fails the lines test because the translation the north star measur
 
 ## What works and what does not yet
 
-These are from Starsim's switching demo for epydemix users (`tests/switching/test_epydemix.py`), which checks each task against epydemix's numbers, and from the review it was built from. "Fails" means the demo's check does not pass today.
+These are from Starsim's switching demo for epydemix users (`tests/switching/test_epydemix.py` in the lingua_franca_design repo), which checks each task against epydemix's numbers, and from the review it was built from. "Fails" means the demo's check does not pass today.
 
 | Task | Today |
 |---|---|

@@ -130,7 +130,7 @@ The last two rows are the switching demo's synthetic Germany (lognormal county p
 
 ## What works and what does not yet
 
-These are from Starsim's switching demo for MEmilio users (`tests/switching/test_memilio.py`), which checks each task against MEmilio's numbers, and from the review it was built from. All four of the demo's checks pass today.
+These are from Starsim's switching demo for MEmilio users (`tests/switching/test_memilio.py` in the lingua_franca_design repo), which checks each task against MEmilio's numbers, and from the review it was built from. All four of the demo's checks pass today.
 
 | Task | Today |
 |---|---|

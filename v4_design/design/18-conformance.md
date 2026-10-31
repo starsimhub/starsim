@@ -171,7 +171,7 @@ The table has one row per vignette, failing rows included. A row where the lingu
 
 The table SHOULD cover at least one example from each main framework: MEmilio, EpiModel, epydemix, summer2, SimInf, odin, EMULSION, flepiMoP, Atomica, LASER, and Starsim itself.
 
-The acceptance test is the thirteen switching demos in `tests/switching/` (run with `cd tests && pytest switching`): one per framework, each the five steps of a switch (bring the model in, describe it, fit it, ask the policy question, run it in another paradigm or at another scale), scaled down to run in CI and asserting the original framework's reference numbers. A demo that does not pass yet is marked `xfail`, naming what blocks it.
+The acceptance test is the thirteen switching demos in `tests/switching/` in the lingua_franca_design repo (run with `cd tests && pytest switching`): one per framework, each the five steps of a switch (bring the model in, describe it, fit it, ask the policy question, run it in another paradigm or at another scale), scaled down to run in CI and asserting the original framework's reference numbers. A demo that does not pass yet is marked `xfail`, naming what blocks it.
 
 Three notes on fairness. Time is compared for the solver closest to the original's (an ODE against an ODE, a network model against agents); where the original is compiled C++ or Rust, matching its speed from Python is a real requirement, which is why the compartmental solvers run in compiled kernels ([12-backends.md](12-backends.md)). The allowance for built-ins is there because the comparison is of what each framework lets a modeler say, not of its library of ready-made cases. And the line count is of the model, not of the surrounding analysis, since that is what the claim is about.
 

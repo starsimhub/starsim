@@ -103,7 +103,7 @@ A spreadsheet row that a program officer fills in is not the same as a line of P
 
 ## What works and what does not yet
 
-These are from Starsim's switching demo for Atomica users (`tests/switching/test_atomica.py`), which checks each task against Atomica's numbers, and from the review it was built from. "Fails" means the demo's check does not pass today.
+These are from Starsim's switching demo for Atomica users (`tests/switching/test_atomica.py` in the lingua_franca_design repo), which checks each task against Atomica's numbers, and from the review it was built from. "Fails" means the demo's check does not pass today.
 
 | Task | Today |
 |---|---|
