@@ -228,10 +228,10 @@ Looked at whether v4 should support modeling paradigms beyond the ODE, chain-bin
 
 ## From the Atomica speed work (October 27)
 
-- **Parts shared between rates for the exact solver and for diseases tracked jointly.** The kernels' program works out the parts several rates share once, first (cat-tb India: 13,696 operations to 3,492, its run 0.49 s to 0.28 s), except for the exact solver, whose by-place paths work out a few rates at a time, and for diseases tracked jointly, whose program is joined rate by rate; both keep the sharing within each rate.
+- **Parts shared between rates for the exact solver and for diseases tracked jointly.** The kernels' program works out the parts several rates share once, first (Optima TB India: 13,696 operations to 3,492, its run 0.49 s to 0.28 s), except for the exact solver, whose by-place paths work out a few rates at a time, and for diseases tracked jointly, whose program is joined rate by rate; both keep the sharing within each rate.
 - **A transfer whose rate varies in time, in the JAX engines and in diseases tracked jointly.** A whole run in the kernels takes it from the program's values at each step (`ss.kernels.set_movers()`); the JAX ODE and chain binomial, and a crossing, hold a mover's rate for the run, so they refuse it (or, a crossing, step it).
-- **Reading Atomica's workbooks.** cat-tb India takes 10.7 s to read and write as code, against about 6 s for Atomica to read it; done once with `ss.converters.convert()`, so it waits.
-- **The states a transfer moves, written once.** Each of cat-tb's transfers lists the ~110 states it moves, so its `stratify()` is one line of 14,565 characters; a variable for the list would need `ss.converters.Source` to hold code of its own.
+- **Reading Atomica's workbooks.** Optima TB India takes 10.7 s to read and write as code, against about 6 s for Atomica to read it; done once with `ss.converters.convert()`, so it waits.
+- **The states a transfer moves, written once.** Each of Optima TB's transfers lists the ~110 states it moves, so its `stratify()` is one line of 14,565 characters; a variable for the list would need `ss.converters.Source` to hold code of its own.
 
 ## From the October 31 constitution pass
 

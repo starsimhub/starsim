@@ -487,7 +487,7 @@ class Run(sc.prettyobj):
         """
         The numbers of a run, with what is worked out from them once a run: the time share as a matrix from place to
         place, if it is dense (a product with it is much faster in XLA than adding into an array at indices: 4x for 50
-        places), and its transpose (since XLA transposes a matrix that is an input again at every step: 10x slower for Ghana)
+        places), and its transpose (since XLA transposes a matrix that is an input again at every step: 10x slower for 260 places)
         """
         if not self.dense_share:
             return X

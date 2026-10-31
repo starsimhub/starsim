@@ -117,7 +117,7 @@ The same declaration runs as a stochastic compartmental model or as agents with 
 
 ## Timings
 
-Lines are lines of model code (not counting blank lines, comments, imports, or plotting, and counting a line over 100 characters twice); times are for one run. Both are measured by Starsim's north-star script, `tests/north_star.py` (see the [index page](../library_landscape.qmd#how-these-numbers-were-made)). MEmilio 2.4.1's times were recorded on the same machine, as a whole command, which is nearly all starting Python and importing; MEmilio's `simulate()` itself takes about 0.1 ms.
+Lines are lines of model code (not counting blank lines, comments, imports, or plotting, and counting a line over 100 characters twice); times are for one run. Both are measured by Starsim's north-star script, `tests/north_star/north_star.py` in the lingua_franca_design repo (see the [index page](../library_landscape.qmd#how-these-numbers-were-made)). MEmilio 2.4.1's times were recorded on the same machine, as a whole command, which is nearly all starting Python and importing; MEmilio's `simulate()` itself takes about 0.1 ms.
 
 | Model | Lines: MEmilio | Lines: Starsim | One run: MEmilio | One run: Starsim | |
 |---|---|---|---|---|---|

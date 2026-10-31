@@ -94,7 +94,7 @@ With data attached (`ss.Sim(..., data=...)`, a table with columns `time` and `ca
 
 ## Timings
 
-Lines are lines of model code (not counting blank lines, comments, imports, or plotting, and counting a line over 100 characters twice), against the lines of the `.camdl` file; times are for one run. Both are measured by Starsim's north-star script, `tests/north_star.py` (see the [index page](../library_landscape.qmd#how-these-numbers-were-made)). camdl's times were recorded on the same machine.
+Lines are lines of model code (not counting blank lines, comments, imports, or plotting, and counting a line over 100 characters twice), against the lines of the `.camdl` file; times are for one run. Both are measured by Starsim's north-star script, `tests/north_star/north_star.py` in the lingua_franca_design repo (see the [index page](../library_landscape.qmd#how-these-numbers-were-made)). camdl's times were recorded on the same machine.
 
 | Model | Lines: camdl | Lines: Starsim | One run: camdl | One run: Starsim | |
 |---|---|---|---|---|---|

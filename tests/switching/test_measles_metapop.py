@@ -1,25 +1,25 @@
 """
-Switching demo for the Ghana measles seat: fit, then routine MCV1 at 9 months plus a targeted campaign, 100 runs by district.
+Switching demo for the measles metapop seat: fit, then routine MCV1 at 9 months plus a targeted campaign, 100 runs by district.
 
 Passes when: the fit (with a fittable `away=`) improves the loss; routine starts with newborns; 100 runs fit in memory.
 Blocked today by: N21.
-Scaled down to 20 synthetic districts (Ghana has 260) and two years (the original runs 2010 to 2028); results memory is projected to full size from the memory per group per step.
+Scaled down to 20 synthetic districts (the full model has 260) and two years (the original runs 2010 to 2028); results memory is projected to full size from the memory per group per step.
 """
 import numpy as np
 import sciris as sc
 import starsim as ss
 
 kw = dict(verbose=0)
-ref_first_day  = 8_757/10_000 # Share vaccinated on day one by the spec's "routine at 9 months" (08-interventions.md:91); switching/ghana_measles.md, "The second week" §4
+ref_first_day  = 8_757/10_000 # Share vaccinated on day one by the spec's "routine at 9 months" (08-interventions.md:91); switching/measles_metapop.md, "The second week" §4
 ref_gb_per_run = 4.9    # Results for one age-structured run with a campaign, 2010 to 2028; "The second week" §2
-full_districts = 260    # Ghana's districts
+full_districts = 260    # its districts
 full_days      = 6_940  # 2010-01-01 to 2028-12-31, daily
 laptop_gb      = 16     # What "fits in memory" means here: 100 runs on a 16 GB laptop
 northern = [0, 4, 8, 12, 16] # The synthetic districts standing in for the five northern regions
 
 
 def make_districts(n=20, seed=1):
-    """ A synthetic stand-in for Ghana's districts """
+    """ A synthetic stand-in for its districts """
     rng = np.random.default_rng(seed)
     return sc.obj(names=[f'd{i}' for i in range(n)], popsize=rng.lognormal(np.log(90_000), 0.6, n), lat=rng.uniform(5, 11, n), lon=rng.uniform(-3, 1, n))
 
@@ -50,8 +50,8 @@ def monthly(sim):
     return np.add.reduceat(by.values[1:], np.arange(0, len(by.values) - 1, 30), axis=0)
 
 
-def test_ghana_measles_fit():
-    sc.heading('Ghana measles: fit beta, the share of contacts away, and the reporting rate to cases by district and month, with a loss of their own')
+def test_measles_metapop_fit():
+    sc.heading('measles metapop: fit beta, the share of contacts away, and the reporting rate to cases by district and month, with a loss of their own')
     d = make_districts()
     data = monthly(make_sim(make_measles(d, away=0.03, report=0.008), d).run()) # The "surveillance data", from known values
     beta = ss.par(ss.perday(1.75), bounds=[1.0, 2.5])
@@ -65,8 +65,8 @@ def test_ghana_measles_fit():
     return fit
 
 
-def test_ghana_measles_routine():
-    sc.heading('Ghana measles: routine MCV1 at 9 months starts with newborns')
+def test_measles_metapop_routine():
+    sc.heading('measles metapop: routine MCV1 at 9 months starts with newborns')
     ppl = ss.People(10_000, age_data=np.array([np.arange(80), np.exp(-0.035*np.arange(80))]).T)
     S, I, R = ss.states(3)
     sir = ss.Disease(S >> I @ ss.perday(0.1)*I, I >> R @ ss.days(8), ss.birth(S, rate=ss.peryear(0.03)), init=dict(I=0.001), name='sir')
@@ -78,8 +78,8 @@ def test_ghana_measles_routine():
     return sim
 
 
-def test_ghana_measles_memory(monkeypatch):
-    sc.heading('Ghana measles: a campaign in the north, with results by age and district; would 100 runs fit in memory?')
+def test_measles_metapop_memory(monkeypatch):
+    sc.heading('measles metapop: a campaign in the north, with results by age and district; would 100 runs fit in memory?')
     d = make_districts()
     measles = make_measles(d)
     ppl = ss.People(1)
@@ -98,6 +98,6 @@ def test_ghana_measles_memory(monkeypatch):
 
 
 if __name__ == '__main__':
-    fit = test_ghana_measles_fit()
-    ri  = test_ghana_measles_routine()
-    sim = test_ghana_measles_memory()
+    fit = test_measles_metapop_fit()
+    ri  = test_measles_metapop_routine()
+    sim = test_measles_metapop_memory()

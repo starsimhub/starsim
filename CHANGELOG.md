@@ -86,7 +86,7 @@ Starsim 4 adds a way to write a model as declared states and transitions, which 
 - A compartmental run beside a module with a step of its own is about 4.6× faster, and an empty `step()` no longer stops a run being taken whole.
 - The compartmental kernels are up to 1.8× faster with 100 groups, and `import starsim` no longer imports `scipy.stats`.
 - Which engine runs a model is one table of rules, shown by `ss.solvers.solver_table()`.
-- Mixing between many places is up to 5× faster in the kernels, by BLAS when every pair of places has a time share (Ghana measles, 260 districts: 4.8 s to 1.6 s a run; 600 places: 22.6 s to 4.4 s).
+- Mixing between many places is up to 5× faster in the kernels, by BLAS when every pair of places has a time share (measles metapop, 260 districts: 4.8 s to 1.6 s a run; 600 places: 22.6 s to 4.4 s).
 - `pip install starsim` is set up to include the compiled Rust kernels, as one wheel per platform for Python 3.11 and later; the sdist includes the crate, and Numba's kernels remain the fallback.
 - `ss.compile()` works under Numba.
 - `import starsim` limits BLAS to one thread, whatever was imported first, since more never made Starsim faster on any platform tested, and slowed its start and its workers. Use `STARSIM_NUM_THREADS` or `ss.options.num_threads` to change it.

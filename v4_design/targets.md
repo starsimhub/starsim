@@ -34,7 +34,7 @@ R-Starsim wraps Starsim rather than modeling a disease, so the targets above don
 
 The originals are in `lingua_franca_design/examples/<framework>/<model>/` (with their line counts and reference timings in `meta.yaml` and `README.md`), and the Starsim versions, with `compare.py` and a comparison table, are in `lingua_franca_design/vignettes/<framework>/<model>/`. Reviewed with `/v4.others`.
 
-- [ ] Ghana measles (`ghana_measles/seir_districts`: SEIR in 260 districts, on laser-measles)
+- [ ] measles metapop (`measles_metapop/seir_districts`: SEIR in 260 districts, on laser-measles)
   - [ ] Works as-is (more or less) when supplied as a custom module
   - [ ] Written in Starsim v4, is faster (compiled) with fewer lines of code
 - [ ] LASER
@@ -80,6 +80,6 @@ The benchmark of [oct17/naive_review](oct17/naive_review/README.md): simulated n
 The skills that check these targets are in [ai/](ai/README.md). Each writes its report to `<date>/reviews/` (e.g. `oct22/reviews/canon.md`):
 
 - `/v4.review <model>`: one Starsim-family model per session (`covasim`, `fpsim`, `hpvsim`, `malariasim`, `stisim`, `tbsim`), one report each
-- `/v4.others`: Ghana measles, LASER, and the survey models, one report
+- `/v4.others`: Measles metapop, LASER, and the survey models, one report
 - `/v4.canon`: the textbook canon, one report
 - `/v4.naive`: the naive-user benchmark, one report

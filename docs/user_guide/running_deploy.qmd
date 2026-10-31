@@ -81,6 +81,21 @@ Making sims in parallel copies each one back to the main process, which takes ti
 A remote computer can be used through SSH and a terminal, or from an editor on your own computer: [VS Code](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-ssh) (and editors based on it, such as [Positron](https://positron.posit.co)), [PyCharm](https://www.jetbrains.com/help/pycharm/configuring-remote-interpreters-via-ssh.html), and [Spyder](https://docs.spyder-ide.org/current/panes/ipythonconsole.html#connect-to-a-remote-kernel) all connect to a remote Python. A Jupyter server on the remote computer (such as [The Littlest JupyterHub](https://tljh.jupyter.org/)) works too.
 :::
 
+### Threads for linear algebra
+
+NumPy and SciPy do their linear algebra with a library called BLAS, which can use many threads. Starsim sets it to one thread when it is imported: on the machines we tested, more threads didn't make Starsim faster, and they slow down starting up and starting workers. More threads can speed up large matrix calculations of your own, so you can change this:
+
+```python
+ss.options.num_threads = 4 # For the rest of the session; use 0 to leave BLAS as it is
+
+with ss.options.context(num_threads=4): # Or just for this block
+    results = my_matrix_calculation()
+```
+
+Or set it from the shell, with `STARSIM_NUM_THREADS=4 python my_script.py`. This is separate from `ss.options.threads`, which sets the threads for Starsim's own loops over agents.
+
+On Linux, this works at any time. On Windows and macOS, it can't change BLAS once NumPy has been imported, though workers of `ss.parallel()` still get it. This rarely matters, but if it does, import Starsim before NumPy, or set `OPENBLAS_NUM_THREADS` (`VECLIB_MAXIMUM_THREADS` on a Mac) before starting Python.
+
 ## On a cluster with Dask
 
 For more runs than one computer can manage, tools such as [Dask](https://docs.dask.org/) spread them across many computers. Each task makes and runs a sim and returns it; `sim.shrink()` first removes the people, so that only the results are sent back. `ss.MultiSim()` then collects sims that have already run, without running them again. (This and the next example are not run on this page.)

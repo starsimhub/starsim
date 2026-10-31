@@ -71,7 +71,7 @@ These are from the translations of two EpiModel examples, each run many times an
 
 ## Timings
 
-Lines are lines of model code (not counting blank lines, comments, imports, or plotting, and counting a line over 100 characters twice); times are for one run. Both are measured by Starsim's north-star script, `tests/north_star.py`, which is described on the [index page](../library_landscape.qmd#how-these-numbers-were-made). EpiModel's times were recorded with EpiModel 2.6.2 on the same machine, inside one R session.
+Lines are lines of model code (not counting blank lines, comments, imports, or plotting, and counting a line over 100 characters twice); times are for one run. Both are measured by Starsim's north-star script, `tests/north_star/north_star.py` in the lingua_franca_design repo, which is described on the [index page](../library_landscape.qmd#how-these-numbers-were-made). EpiModel's times were recorded with EpiModel 2.6.2 on the same machine, inside one R session.
 
 | Model | Lines: EpiModel | Lines: Starsim | One run: EpiModel | One run: Starsim | |
 |---|---|---|---|---|---|
