@@ -1,0 +1,60 @@
+## T7 – Data and calibration
+
+```{python}
+import starsim as ss
+import pandas as pd
+
+S, E, I, R = ss.states('S E I R')
+beta = ss.par(0.14, bounds=[0.05, 0.5])
+reported = ss.par(0.5, bounds=[0.05, 1])
+infection   = S >> E @ beta*I
+progression = E >> I @ ss.days(10)
+recovery    = I >> R @ ss.days(8)
+cases       = ss.outcome(reported*infection)
+measles = ss.Disease(infection, progression, recovery, cases,
+    init = dict(R=ss.by(age=[0.8, 0.92, 0.98])),
+    init_n = dict(I=10),
+)
+measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1})
+contacts = ss.contacts(ages=[0, 15, 65], matrix=[[10, 6, 1], [3, 8, 1], [3, 6, 3]])
+settings = dict(networks=contacts, total_pop=100_000, start='2025-01-01', stop='2026-01-01', verbose=0)
+data = pd.read_csv('data/measles_cases.csv')
+```
+
+**1. Different starting guesses.**
+
+```{python}
+early = data[data.date <= '2025-03-12']
+for label, df in [('All the data', data), ('Data to 12 March', early)]:
+    for guess in [dict(beta=0.14, reported=0.5), dict(beta=0.3, reported=0.2)]:
+        fit = ss.Sim(measles, pars=guess, data=df, **settings).fit(verbose=False)
+        print(label, '- starting from', guess, '- beta:', round(fit.pars.beta, 3), '- reported:', round(fit.pars.reported, 3), '- mismatch:', round(fit.mismatch, 4))
+```
+
+From either starting point, the fit to all the data finds the same values (β ≈ 0.162, 41% reported): the fit starts by scanning the whole range within the bounds, and then searches from the best few points of the scan, so it doesn't depend much on the starting guesses. Fitted to the data up to 12 March, both starting points also agree, but on the wrong values (β ≈ 0.19, 19% reported), and with a smaller mismatch than the fit to all the data. Searches that agree show that the search has found the best fit to the data it was given, not that the data pin the values down: here the rise of the outbreak alone fits equally well with more infections and less of them reported, and the search settles on one of many nearly equal answers.
+
+**2. Fitting β only.**
+
+```{python}
+fit_both = ss.Sim(measles, data=data, **settings).fit(verbose=False)
+fit_beta = ss.Sim(measles, data=data, **settings).fit(pars=['beta'], verbose=False)
+for label, fit in [('Both fitted', fit_both), ('Reported fixed at 50%', fit_beta)]:
+    res = fit.sim.results.measles
+    print(label, '- beta:', round(fit.pars.beta, 3), '- mismatch:', round(fit.mismatch, 3), '- infections:', round(res.infection.sum()), '- reported cases:', round(res.cases.sum()))
+fit_beta.plot()
+```
+
+With the reported share fixed at 50%, too high, the fit finds a smaller β (about 0.152) and fits about four times worse: with too many of its infections reported, the model can't match both the rise of the data and its peak: it overshoots the peak, and falls too slowly after it. It projects about the same number of infections over the year, since here the size of the outbreak is set mostly by the immunity in the town, but about a fifth more reported cases than the fit of both parameters. A fit that is much worse than another with one more parameter free is a sign that a fixed value is wrong.
+
+**3. A campaign on 1 April.**
+
+```{python}
+sims = {'No intervention': fit_both.sim}
+for date in ['2025-04-01', '2025-05-01']:
+    campaign = ss.vaccinate(efficacy=0.93, where=measles.age < 15, coverage=0.8, at=date)
+    sims['Campaign on ' + date] = fit_both.sim.new(interventions=campaign)
+msim = ss.parallel(sims)
+msim.summarize().loc['measles_cases']
+```
+
+A campaign on 1 April, at about the peak, would have prevented about 700 reported cases (about a fifth of them), six times as many as one on 1 May.

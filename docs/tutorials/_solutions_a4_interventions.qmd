@@ -1,0 +1,103 @@
+## A4 – Interventions
+
+These solutions use the model and interventions from the tutorial, so we define them again here:
+
+```{python}
+import numpy as np
+import starsim as ss
+
+S, I = ss.states('S I')
+infection = S >> I @ ss.peract(m2f=0.1, f2m=0.05)*I
+recovery  = I >> S @ ss.months(6)
+sti = ss.Disease(infection, recovery, init_prev=0.05)
+
+settings = dict(
+    networks     = ss.SexualNet(dur=ss.months(1), memory=ss.years(1)),
+    demographics = [ss.birth(rate=ss.peryear(0.02)), ss.death(rate=ss.peryear(0.02))],
+    n_agents     = 5000,
+    start        = 2000,
+    stop         = 2020,
+    dt           = ss.months(1),
+    verbose      = 0,
+)
+
+drug = ss.Treatment(cure=0.95)
+care = ss.treat(drug, where=sti.infection, coverage=0.3, delay=ss.uniform(ss.weeks(1), ss.months(2)))
+young = (ss.ppl.age >= 15) & (ss.ppl.age < 30)
+screening = ss.screen(sensitivity=0.9, specificity=0.98, where=young, coverage=0.5, interval=ss.months(6), start='2010')
+treatment = ss.treat(drug, who=screening.positive)
+notification = ss.treat(drug, who=screening.positive, trace='sexualnet', coverage=0.5)
+```
+
+### Question 1
+
+**Q: What happens if the partners of people who seek care are notified too (a second notification, with `who=care`)? Is the effect larger than notifying the partners of those found by screening?**
+
+A: A delivery is an event too, so `who=care` is the people treated after seeking care. Notifying their partners starts in 2000, rather than 2010, and starts from far more people than screening finds, so it has a much larger effect: here it keeps the infection at a low level from the start, and nearly eliminates it once screening begins.
+
+```{python}
+care_notification = ss.treat(drug, who=care, trace='sexualnet', coverage=0.5)
+
+scenarios = {
+    'Screening and notification':  [care, screening, treatment, notification],
+    'Also notifying after care':   [care, screening, treatment, notification, care_notification],
+}
+sims = {label: ss.Sim(sti, interventions=interventions, **settings) for label, interventions in scenarios.items()}
+msim = ss.parallel(sims)
+msim.plot('sti.I')
+msim.summarize().loc['sti_infection']
+```
+
+### Question 2
+
+**Q: How much does the effect change if screening reaches everyone aged 15 to 49? Which gives more infections prevented per test?**
+
+A: We compare each with treatment when seeking care alone (without partner notification, so that the effect is that of screening):
+
+```{python}
+adults = (ss.ppl.age >= 15) & (ss.ppl.age < 50)
+screening_adults = ss.screen(sensitivity=0.9, specificity=0.98, where=adults, coverage=0.5, interval=ss.months(6), start='2010', name='screening')
+treatment_adults = ss.treat(drug, who=screening_adults.positive, name='treatment')
+
+sims = {
+    'Treatment when seeking care': ss.Sim(sti, interventions=care, **settings),
+    'Screening 15-29':             ss.Sim(sti, interventions=[care, screening, treatment], **settings),
+    'Screening 15-49':             ss.Sim(sti, interventions=[care, screening_adults, treatment_adults], **settings),
+}
+msim = ss.parallel(sims)
+msim.plot('sti.I')
+
+baseline = msim.sims['Treatment when seeking care'].results.sti.infection.sum()
+for label in ['Screening 15-29', 'Screening 15-49']:
+    sim = msim.sims[label]
+    prevented = baseline - sim.results.sti.infection.sum()
+    tests = sim.results.screening.delivered.sum()
+    print(label, '- tests:', tests, '- infections prevented:', prevented, '- per 100 tests:', round(100*prevented/tests, 1))
+```
+
+Screening everyone aged 15 to 49 takes a little over twice as many tests, and prevents about three times as many infections, so it prevents more per test. In this model, partnerships don't depend on age beyond sexual debut, so people over 30 are as much at risk as younger people; in a real setting, where infection is concentrated in young people, the answer could well be the reverse. Since each run is a single stochastic run, the infections prevented are uncertain; with several runs of each (`n_runs=`), the comparison per test would be clearer.
+
+### Question 3
+
+**Q: Add a catch-up campaign in 2010 for everyone aged 15 to 29. How much sooner does vaccination make a difference, and how many more doses does it take?**
+
+A: The two deliveries share one vaccine, so that nobody is protected twice:
+
+```{python}
+vaccine = ss.Vaccine(efficacy=0.35)
+vaccination = ss.vaccinate(vaccine, at_age=15, coverage=0.8, start='2010')
+catch_up = ss.vaccinate(vaccine, where=young, coverage=0.8, at=['2010'])
+
+sims = {
+    'Treatment when seeking care': ss.Sim(sti, interventions=care, **settings),
+    'And vaccination at age 15':   ss.Sim(sti, interventions=[care, vaccination], **settings),
+    'And a catch-up campaign':     ss.Sim(sti, interventions=[care, vaccination, catch_up], **settings),
+}
+msim = ss.parallel(sims)
+msim.plot('sti.I')
+sim = msim.sims['And a catch-up campaign']
+print('Doses at age 15:', sim.results.vaccination.delivered.sum())
+print('Doses in the catch-up campaign:', sim.results.catch_up.delivered.sum())
+```
+
+The catch-up campaign protects many of the people at risk at once, rather than waiting for them to be replaced by vaccinated cohorts, so the effect comes years sooner, for about two and a half times as many doses in all.

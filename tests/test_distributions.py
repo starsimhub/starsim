@@ -46,8 +46,9 @@ def test_dist(m=m):
     assert 0 < rvs.min() < 1, 'Values should be between 0 and 1'
 
     # Test other options
-    dist.show_state()
     dist.plot_hist()
+    normal = ss.normal(3, 1) # Not initialized: plotted from a copy, leaving it for a sim to initialize
+    assert np.isclose(normal.plot_hist().mean(), 3, atol=0.2) and not normal.initialized
     return rvs
 
 
@@ -56,12 +57,12 @@ def test_custom_dists(n=n, do_plot=False):
     """ Test all custom dists """
     sc.heading('Testing all custom distributions')
 
-    o     = sc.objdict()
-    dists = sc.objdict()
-    rvs   = sc.objdict()
-    times = sc.objdict()
-    for name in ss.dist_list:
-        dist_class = getattr(ss, name)
+    o     = sc.obj()
+    dists = sc.obj()
+    rvs   = sc.obj()
+    times = sc.obj()
+    for name in ss.distributions.dist_list:
+        dist_class = getattr(ss.distributions, name)
         dist = dist_class(name='test', strict=False)
         dist.init()
         dists[name] = dist
@@ -90,14 +91,14 @@ def test_dists(n=n, do_plot=False):
 
         # Create a complex object containing various distributions
         obj = sc.prettyobj()
-        obj.a = sc.objdict()
+        obj.a = sc.obj()
         obj.a.mylist = [ss.random(), ss.Dist(distname='uniform', low=2, high=3)]
         obj.b = dict(d3=ss.weibull(c=2), d4=ss.constant(v=0.3))
-        dists = ss.Dists(obj).init(sim=make_sim())
+        dists = ss.dists.Dists(obj).init(sim=make_sim())
 
         # Call each distribution twice
         for j in range(2):
-            rvs = sc.objdict()
+            rvs = sc.obj()
             for key,dist in dists.dists.items():
                 rvs[str(dist)] = dist(n)
                 dist.jump() # Reset
@@ -111,7 +112,7 @@ def test_dists(n=n, do_plot=False):
     if do_plot:
         plot_rvs(rvs)
 
-    o = sc.objdict()
+    o = sc.obj()
     o.dists = dists
     o.rvs = rvs
     return dists
@@ -141,15 +142,11 @@ def test_exceptions(m=m):
     sc.heading('Testing exceptions and strict')
 
     # Create a strict distribution
-    dist = ss.random(strict=True, auto=False)
-    with pytest.raises(ss.distributions.DistNotInitializedError):
+    dist = ss.random(strict=True)
+    with pytest.raises(ss.errors.DistNotInitializedError):
         dist(m) # Check that we can't call an uninitialized
-
-    # Initialize and check we can't call repeatedly
     dist.init(trace='test', sim=make_sim())
     rvs = dist(m)
-    with pytest.raises(ss.distributions.DistNotReadyError):
-        dist(m) # Check that we can't call an already-used distribution
 
     # Check that we can with a non-strict Dist
     dist2 = ss.random(strict=False)
@@ -198,7 +195,7 @@ def test_callable(n=n):
     """ Test callable parameters """
     sc.heading('Testing a uniform distribution with callable parameters')
 
-    sim = ss.mock_sim(n_agents=10)
+    sim = ss.debugtools.mock_sim(n_agents=10)
 
     # Define a parameter as a function
     def custom_loc(module, sim, uids):
@@ -314,12 +311,53 @@ def test_choice_slots():
     return vals
 
 
+def test_choice_rows():
+    """ ss.choice with a row of probabilities per agent: right frequencies, and each agent's choice independent of the others' """
+    sc.heading('Test ss.choice with a row per agent')
+    n, k = 20_000, 4
+    rng = np.random.default_rng(1)
+    P = rng.random((n, k)) # Unnormalized: each row is normalized
+    P2 = P.copy()
+    P2[1::2] = rng.random((n//2, k)) # Change every other agent's row
+    uids = ss.uids(np.arange(n))
+    make = lambda Q: ss.choice(a=k, p=lambda uids: Q[uids], strict=False).init(slots=np.arange(n))
+
+    # Common random numbers: the same choice whoever else is drawn for, and whatever their rows
+    vals = make(P).rvs(uids)
+    assert np.array_equal(make(P).rvs(uids[::3]), vals[::3]), 'Drawing for fewer agents changed their choices'
+    assert np.array_equal(make(P2).rvs(uids)[::2], vals[::2]), "Changing other agents' rows changed these agents' choices"
+
+    # Frequencies match the rows, here two kinds of row
+    Q = np.where((np.arange(n) % 2)[:, None], [0, 1, 1, 2], [3, 0, 0, 1]) # As weights
+    vals = make(Q).rvs(uids)
+    assert np.all(vals[0::2] != 1) and np.all(vals[1::2] != 0), 'A choice with probability 0 was chosen'
+    assert np.isclose((vals[1::2] == 3).mean(), 0.5, atol=0.02) and np.isclose((vals[0::2] == 0).mean(), 0.75, atol=0.02), 'Frequencies do not match the rows'
+
+    # A row per draw for a size works too, and a wrong shape is an error
+    assert len(ss.choice(a=3, p=np.full((5, 3), 1/3), strict=False).init().rvs(5)) == 5
+    with pytest.raises(ValueError):
+        make(P[:, :3]).rvs(uids)
+    sc.printgreen('✓ ss.choice with a row per agent is correct and CRN-safe')
+    return vals
+
+
+def test_callable_default():
+    """ A function as a parameter can fix a value with a default argument (e.g. a loop variable), which is not filled in """
+    sc.heading('Test a callable parameter with a default argument')
+    means = []
+    for v in [0.2, 0.8]:
+        d = ss.bernoulli(p=lambda self, sim, uids, v=v: v)
+        d.init(force=True)
+        means.append(d.rvs(10_000).mean())
+    assert abs(means[0] - 0.2) < 0.02 and abs(means[1] - 0.8) < 0.02, means
+    return means
+
 def make_mock_modules():
     """ Create mock modules for the tests to use """
-    mod = sc.objdict()
-    mod.year  = ss.mock_module(dt=ss.year)
-    mod.month = ss.mock_module(dt=ss.month)
-    mod.week  = ss.mock_module(dt=ss.week)
+    mod = sc.obj()
+    mod.year  = ss.debugtools.mock_module(dt=ss.years(1))
+    mod.month = ss.debugtools.mock_module(dt=ss.months(1))
+    mod.week  = ss.debugtools.mock_module(dt=ss.weeks(1))
     return mod
 
 
@@ -335,122 +373,80 @@ def test_timepar_dists():
     mock_mods = make_mock_modules()
 
     # Create time parameters
-    v = sc.objdict()
+    v = sc.obj()
     v.base = 30.0
     v.dur = ss.years(30)
-    v.freq = ss.freqperyear(30)
+    v.freq = ss.time.freq(30, 'year')
 
     rtol = 0.1  # Be somewhat generous with the uncertainty
-    check_which = ['linear', 'unitless', 'special']
 
-    if 'linear' in check_which:
-        # Check distributions that scale linearly with time, with the parameter we'll set
-        print('Testing linear distributions ...')
-        linear_dists = dict(
-            constant   = 'v',
-            uniform    = 'high',
-            normal     = 'loc',
-            lognorm_ex = 'mean',
-            expon      = 'scale',
-            weibull    = 'scale',
-            gamma      = 'scale',
-        )
-
-        for name,par in linear_dists.items():
-            dist_class = getattr(ss, name)
-
-            for module in mock_mods.values():
-
-                # Create the dists, the first parameter of which should have time units
-                dists = sc.objdict()
-                for key,val in v.items():
-                    pardict = {par:val} # Convert to a tiny dictionary to insert the correct name
-                    dists[key] = dist_class(**pardict, name=key, module=module, strict=False).init()
-
-                # Create the random variates
-                rvs = sc.objdict()
-                for k,dist in dists.items():
-                    rvs[k] = dist.rvs(n)
-
-                # Check that the distributions match
-                ratio = ss.years(1)/module.t.dt
-                expected = rvs.base.mean()
-                expected_dur = expected*ratio
-                expected_rate = expected/ratio
-                actual_dur = rvs.dur.mean()
-                actual_rate = rvs.freq.mean()
-                assert np.isclose(expected_dur, actual_dur, rtol=rtol), f'Duration not close for {name}: {expected_dur:n} ≠ {actual_dur:n}'
-                assert np.isclose(expected_rate, actual_rate, rtol=rtol), f'Rate not close for {name}: {expected_rate:n} ≠ {actual_rate:n}'
-                sc.printgreen(f'✓ {name} passed: {expected_dur:n} ≈ {actual_dur:n} with dt={module.t.dt}')
-
-    if 'unitless' in check_which:
-        # Check that unitless distributions fail
-        print('Testing unitless distributions ...')
-        par = ss.dur(10, 'years')
-        unitless_dists = ['lognorm_im', 'randint']
-        for name in unitless_dists:
-            dist_class = getattr(ss, name)
-            with pytest.raises(NotImplementedError):
-                dist = dist_class(par, name='notimplemented', module=mock_mods.year, strict=False).init()
-                dist.rvs(n)
-            sc.printgreen(f'✓ {name} passed: raised appropriate error')
-
-    if 'special' in check_which:
-        # Check special distributions
-        print('Testing choice distribution ...')
-        a = ss.days(np.array([10, 20, 30]))
-        p = np.array([0.2, 0.3, 0.5])
+    # Check distributions that scale linearly with time, with the parameter we'll set
+    print('Testing linear distributions ...')
+    linear_dists = dict(
+        constant   = 'v',
+        uniform    = 'high',
+        normal     = 'loc',
+        lognorm_ex = 'mean',
+        expon      = 'scale',
+        weibull    = 'scale',
+        gamma      = 'scale',
+    )
+    for name,par in linear_dists.items():
+        dist_class = getattr(ss, name)
         for module in mock_mods.values():
-            choice = ss.choice(a=a, p=p, module=module, strict=False).init()
-            mean = choice.rvs(n).mean()
-            expected = (a*p/module.t.dt).sum()
-            assert np.isclose(mean, expected, rtol=rtol), f'Choice values do not match: {mean:n} ≠ {expected:n}'
-            sc.printgreen(f'✓ Choice passed: {expected:n} ≈ {mean:n} with dt={module.t.dt}')
+            # Create the dists, the first parameter of which should have time units, and their random variates
+            rvs = sc.obj({key:dist_class(**{par:val}, name=key, module=module, strict=False).init().rvs(n) for key,val in v.items()})
 
-        print('Testing Poisson distribution ...')
-        lam1 = ss.freqperyear(1)
-        lam2 = ss.perday(1)
+            # Check that the distributions match
+            ratio = ss.years(1)/module.t.dt
+            expected = rvs.base.mean()
+            expected_dur, expected_rate = expected*ratio, expected/ratio
+            actual_dur, actual_rate = rvs.dur.mean(), rvs.freq.mean()
+            assert np.isclose(expected_dur, actual_dur, rtol=rtol), f'Duration not close for {name}: {expected_dur:n} ≠ {actual_dur:n}'
+            assert np.isclose(expected_rate, actual_rate, rtol=rtol), f'Rate not close for {name}: {expected_rate:n} ≠ {actual_rate:n}'
+
+    # Check that unitless distributions fail
+    print('Testing unitless distributions ...')
+    par = ss.dur(10, 'years')
+    for name in ['lognorm_im', 'randint']:
+        with pytest.raises(NotImplementedError):
+            getattr(ss, name)(par, name='notimplemented', module=mock_mods.year, strict=False).init().rvs(n)
+
+    # Check special distributions
+    print('Testing choice distribution ...')
+    a = ss.days(np.array([10, 20, 30]))
+    p = np.array([0.2, 0.3, 0.5])
+    for module in mock_mods.values():
+        mean = ss.choice(a=a, p=p, module=module, strict=False).init().rvs(n).mean()
+        expected = (a*p/module.t.dt).sum()
+        assert np.isclose(mean, expected, rtol=rtol), f'Choice values do not match: {mean:n} ≠ {expected:n}'
+
+    print('Testing Poisson distribution ...')
+    for lam in [ss.time.freq(1, 'year'), ss.perday(1)]:
         for module in mock_mods.values():
-            poi1 = ss.poisson(lam=lam1, module=module, strict=False).init()
-            poi2 = ss.poisson(lam=lam2, module=module, strict=False).init()
-            mean1 = poi1.rvs(n).mean()
-            mean2 = poi2.rvs(n).mean()
-            expected1 = lam1*module.t.dt
-            expected2 = lam2*module.t.dt
-            assert np.isclose(mean1, expected1, rtol=rtol), f'Poisson values do not match for {lam1}: {mean1:n} ≠ {expected1:n}'
-            assert np.isclose(mean2, expected2, rtol=rtol), f'Poisson values do not match for {lam2}: {mean2:n} ≠ {expected2:n}'
-            sc.printgreen(f'✓ Poisson passed: {lam1} {expected1:n} ≈ {mean1:n} with dt={module.t.dt}')
-            sc.printgreen(f'✓ Poisson passed: {lam2} {expected2:n} ≈ {mean2:n} with dt={module.t.dt}')
+            mean = ss.poisson(lam=lam, module=module, strict=False).init().rvs(n).mean()
+            expected = lam*module.t.dt
+            assert np.isclose(mean, expected, rtol=rtol), f'Poisson values do not match for {lam}: {mean:n} ≠ {expected:n}'
 
-        print('Testing Bernoulli distribution ...')
-        p1 = ss.probperday(0.1/365)
-        p2 = ss.probperyear(0.1)
-        ber1 = ss.bernoulli(p=p1, module=mock_mods.year, strict=False).init()
-        ber2 = ss.bernoulli(p=p2, module=mock_mods.year, strict=False).init()
-        mean1 = ber1.rvs(n).mean()
-        mean2 = ber2.rvs(n).mean()
-        assert np.isclose(mean1, mean2, rtol=rtol), f'Bernoulli values do not match for {ber1} and {ber2}: {mean1:n} ≠ {mean2:n}'
-        sc.printgreen(f'✓ bernoulli passed: {mean1:n} ≈ {mean2:n}')
+    print('Testing Bernoulli distribution ...')
+    ber1 = ss.bernoulli(p=ss.prob(0.1/365, 'day'), module=mock_mods.year, strict=False).init()
+    ber2 = ss.bernoulli(p=ss.prob(0.1, 'year'), module=mock_mods.year, strict=False).init()
+    mean1, mean2 = ber1.rvs(n).mean(), ber2.rvs(n).mean()
+    assert np.isclose(mean1, mean2, rtol=rtol), f'Bernoulli values do not match for {ber1} and {ber2}: {mean1:n} ≠ {mean2:n}'
 
     print('Testing different syntaxes for adding timepars')
     kw = dict(dt=ss.days(1))
     mean = 10
     std = 0.1
 
-    d = sc.objdict()
+    d = sc.obj()
     d.a = ss.normal(ss.years(mean), ss.years(std)).mock(**kw)
     d.b = ss.normal(mean, std, unit=ss.years).mock(**kw)
-    d.c = ss.years(ss.normal(mean, std)).mock(**kw)
+    with pytest.raises(TypeError): # The unit goes on the parameters, or unit=
+        ss.years(ss.normal(mean, std))
 
-    n = int(1e6)
-    rvs = sc.objdict()
-    for key,dist in d.items():
-        rvs.key = dist.rvs(n)
-
-    factor = ss.time.factors.years.days
-    expected = factor*mean
-
-    means = [rvs.mean() for rvs in rvs.values()]
+    expected = ss.time.factors.years.days*mean
+    means = [dist.rvs(int(1e6)).mean() for dist in d.values()] # Both of them (before, only the last was checked)
     assert all([np.isclose(expected, m) for m in means]), f'Expecting timepar scaling to match {expected = } and {means = }'
 
     return ber2
@@ -480,12 +476,6 @@ def test_timepar_callable():
 
     print('Testing callable parameters with Bernoulli distributions')
     n = 1000
-    sim = ss.mock_sim(n_agents=n)
-    uids = np.random.choice(n, size=n//2, replace=False)
-    age = sim.people.age[uids]
-    mean = age.mean()
-    young = sc.findinds(age<=mean)
-    old = sc.findinds(age>mean)
     p_young = 0.1
     p_old = 0.2
 
@@ -496,7 +486,7 @@ def test_timepar_callable():
         out[old]   = ss.peryear(p_old)*dt
         return out
 
-    sim = ss.mock_sim(n_agents=100_000)
+    sim = ss.debugtools.mock_sim(n_agents=100_000)
     uids = np.random.choice(n, size=n//2, replace=False)
     age = sim.people.age[uids]
     mean = age.mean()
@@ -512,24 +502,6 @@ def test_timepar_callable():
     rtol = 0.2  # We're dealing with order-of-magnitude differences but small numbers, so be generous to avoid random failures
     assert np.isclose(a, b*12, rtol=rtol), f'Callable Bernoulli sums did not match: {a} ≠ {b*12}'
 
-    return
-
-
-@sc.timer()
-def test_hist_plotting():
-    """ Test that histogram plotting works """
-    sc.heading('Test plotting of distribution histograms')
-
-    # Based on the advanced distributions user guide
-    sir = ss.SIR(
-        init_prev = ss.bernoulli(p=0.15),
-        dur_inf = ss.weibull(c=2, loc=1, scale=2)
-    )
-    sim = ss.Sim(n_agents=100, diseases=sir, dur=15, networks=ss.RandomNet())
-    sim.run()
-
-    # Plot the distribution
-    rvs = sim.diseases.sir.pars.dur_inf.plot_hist()
     return
 
 
@@ -596,12 +568,9 @@ def test_choose_n():
     heavy = choose(200, np.where(uids < 500, 9, 1))
     assert (heavy < 500).mean() > 0.8 # Higher weights are chosen more often (expected 0.9)
 
-    # In a sim: exact seeding, including with a callable
-    sir = ss.SIR(init_prev=ss.choose_n(lambda sim: sim.pars.n_agents//100))
-    sim = ss.Sim(n_agents=500, diseases=sir, networks='random', dur=1, verbose=0).init()
-    assert sim.diseases.sir.infected.sum() == 5 # Exactly 1% are seeded
-    with pytest.raises(ValueError, match='choose_n'):
-        ss.Sim(n_agents=500, diseases=ss.SIR(init_prev=20), networks='random', verbose=0).init() # A count rather than a probability
+    # In a sim: exact seeding
+    sim = ss.Sim(n_agents=500, diseases=ss.SIR(init_prev=20), networks='random', verbose=0).init()
+    assert sim.diseases.sir.I.sum() == 20 # A number of people rather than a probability
     return chosen
 
 
@@ -624,7 +593,69 @@ def test_round():
     return steps
 
 
-# %% Run as a script
+@sc.timer()
+def test_shape_scale():
+    """ Test that gamma and Weibull take a shape and a scale, and gamma a mean and a standard deviation """
+    sc.heading('Testing shape, scale, and mean for gamma and Weibull')
+    assert ss.gamma(2, 3).pars.scale == 3 and ss.weibull(2, 5).pars.scale == 5 # The second number is the scale; loc is by keyword
+    with pytest.raises(TypeError):
+        ss.gamma(2, 0, 3)
+    vals = ss.gamma(mean=1800, std=400, strict=False).rvs(n)
+    assert np.isclose(vals.mean(), 1800, rtol=0.01) and np.isclose(vals.std(), 400, rtol=0.02)
+    assert isinstance(ss.gamma(mean=ss.days(10), std=ss.days(5)).pars.scale, ss.days)
+    with pytest.raises(ValueError):
+        ss.gamma(a=2, mean=10, std=5)
+    return vals
+
+
+@sc.timer()
+def test_own_unit():
+    """ Test that a distribution with a unit draws and plots in it outside a sim, and shows what it was made from """
+    sc.heading('Testing distributions in their own unit')
+    dist = ss.erlang(k=4, mean=ss.days(10))
+    assert repr(dist) == 'ss.erlang(k=4, mean=ss.days(10))' # Not ss.gamma(a=4, scale=2.5, loc=0.0)
+    vals = dist.rvs(n) # In days, with no sim and no strict=False
+    assert np.isclose(vals.mean(), 10, rtol=0.05) and np.isclose(vals.std(), 5, rtol=0.1)
+    dist.plot_hist()
+    assert plt.gca().get_xlabel() == 'Days'
+    plt.close('all')
+    assert np.isclose(ss.normal(3, 0.1, unit='weeks').rvs(n).mean(), 3, rtol=0.01)
+    with pytest.raises(ss.errors.DistNotInitializedError): # One with no unit still needs a sim, or strict=False
+        ss.normal(0, 1).rvs(5)
+    dist.set(a=3)
+    assert repr(dist).startswith('ss.gamma(a=3') # Changed, so shown by its parameters
+    return vals
+
+
+def test_engine_copy():
+    """ Test that the copy of a distribution a declared model draws from (in the sim's unit) draws what the distribution does """
+    sc.heading('Testing that the engine draws what each distribution draws')
+    year = ss.debugtools.mock_module(dt=ss.years(1)) # Typed values are drawn in steps of a year, the unit the copy is in
+    dists = [ss.random(), ss.uniform(1, 3), ss.normal(5, 1), ss.truncnorm(5, 2, a=0, b=10), ss.lognorm_im(1, 0.5), ss.lognorm_ex(5, 2),
+             ss.expon(4), ss.poisson(3), ss.beta_dist(2, 3), ss.beta_mean(0.3, 0.01), ss.nbinom(3, 0.5), ss.binom(10, 0.3), ss.randint(0, 10),
+             ss.weibull(2, 3), ss.gamma(2, 3), ss.constant(7), ss.bernoulli(0.3), ss.choice([1, 5, 9], p=[0.2, 0.3, 0.5]),
+             ss.histogram(values=[0.6, 0.3, 0.1], bins=[0, 6, 12, 18]), ss.lognorm_ex(ss.days(50), ss.days(20)), ss.normal(5, 1, unit='month'),
+             ss.choice([30, 40], unit='week'), ss.histogram(values=[0.6, 0.4], bins=[0, 6, 12], unit='month')]
+    for dist in dists:
+        copy = ss.transitions.numeric_dist(dist, lambda v: ss.solvers.convert(v, 'year'))
+        dist.init(seed=1, module=year, force=True)
+        copy.init(seed=1, module=year, force=True)
+        a, b = np.asarray(dist.rvs(m), dtype=float), np.asarray(copy.rvs(m), dtype=float)
+        assert np.allclose(a, b), f'{dist}: the engine draws {b}, the distribution {a}'
+
+    # A histogram for each group, as a dwell and as a trait, draws from each person's own (it drew uniform(0, 1))
+    h0, h1 = ss.histogram(values=[1], bins=[0, 1], unit='year'), ss.histogram(values=[1], bins=[10, 11], unit='year')
+    A, B = ss.states('A B')
+    d = ss.Disease(A, B, go=ss.Transition(A, B, dur=ss.by(urban={False: h0, True: h1})), obj=ss.attr(ss.by(urban={False: h0, True: h1})), name='m', first='A')
+    ppl = ss.People(1000, extra_states=[ss.BoolState('urban', default=ss.bernoulli(p=0.5))])
+    sim = ss.Sim(d, people=ppl, start=2000, stop=2003, verbose=0).run()
+    u = sim.people.auids
+    urban, obj, went = sim.people.urban[u], sim.diseases.m.obj[u], sim.diseases.m.B[u]
+    assert np.all(obj[urban] >= 10) and np.all(obj[~urban] <= 1)
+    assert went[~urban].all() and not went[urban].any()
+    return copy
+
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -643,11 +674,15 @@ if __name__ == '__main__':
     o9 = test_repeat_slot()
     o10 = test_poisson_ppf()
     o11 = test_choice_slots()
+    o11b = test_choice_rows()
+    o11c = test_callable_default()
     o12 = test_timepar_dists()
     o13 = test_timepar_callable()
-    o14 = test_hist_plotting()
     o15 = test_dtype_consistency()
     o16 = test_choose_n()
     o17 = test_round()
+    o18 = test_shape_scale()
+    o18b = test_own_unit()
+    o19 = test_engine_copy()
 
     T.toc()

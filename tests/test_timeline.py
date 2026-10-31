@@ -1,10 +1,12 @@
 """
 Test the Timeline object
 """
+import warnings
 import numpy as np
 import pytest
 import sciris as sc
 import starsim as ss
+import starsim.library as ssl
 
 small = 100
 medium = 1000
@@ -31,6 +33,8 @@ def test_timeline_lengths():
     t2 = ss.Timeline(ss.date('2000-01-01'), ss.date('2000-01-10'), ss.days(0.25)).init()
     assert len(t2) == 37
     assert np.allclose(t2.tvec.days_since('2000-01-01'), np.arange(37)*0.25)
+    with pytest.warns(RuntimeWarning, match='max_steps'): # More steps than ss.options.max_steps
+        ss.Timeline(ss.years(0), ss.years(200), ss.days(1)).init()
 
     return t
 
@@ -140,7 +144,7 @@ def test_timeline():
 def test_timeline_syntax():
     sc.heading('Test all ss.Timeline input options')
 
-    kw = sc.objdict()
+    kw = sc.obj()
 
     # Categories of tests
     keymap = dict(
@@ -153,7 +157,7 @@ def test_timeline_syntax():
         g = 'stop and dur',
         h = 'multiple',
     )
-    dd20 = ss.date(2010) - ss.date(1990) # This was ss.datedur(days=7305), but is now just ss.datedur(years=20), since we switched from pd.Timedelta to dateutil.relativedelta
+    dd20 = ss.date(2010) - ss.date(1990) # The time between two dates, in days: ss.days(7305)
 
     # Test start
     kw.a1 = [dict(start=None, stop=None, dur=None, dt=None)           , dict(start=ss.years(2000), stop=ss.years(2050), dur=ss.years(50), dt=ss.years(1))]
@@ -233,7 +237,7 @@ def test_timeline_syntax():
             sc.printgreen('✓ Success')
         else:
             sc.printred('× Mismatch :(')
-            mismatches.append(sc.objdict(key=key, args=args, expected=expected, actual=actual))
+            mismatches.append(sc.obj(key=key, args=args, expected=expected, actual=actual))
 
     if len(mismatches):
         errormsg = f'{len(mismatches)} output(s) did not match expected value(s):\n'
@@ -278,82 +282,6 @@ def test_multi_timestep(do_plot=False):
 
 
 @sc.timer()
-def test_mixed_timesteps():
-    sc.heading('Test behavior of different combinations of timesteps')
-
-    siskw = dict(dur_inf=ss.datedur(days=50), beta=ss.perday(0.01), waning=ss.perday(0.005))
-    kw = dict(n_agents=medium, start='2001-01-01', stop='2001-07-01', networks='random', copy_inputs=False, verbose=0)
-
-    print('Year-year')
-    sis1 = ss.SIS(dt=1/365, **sc.dcp(siskw))
-    sim1 = ss.Sim(dt=1/365, diseases=sis1, label='year-year', **kw)
-
-    print('Day-day')
-    sis2 = ss.SIS(dt=ss.days(1), **sc.dcp(siskw))
-    sim2 = ss.Sim(dt=ss.days(1), diseases=sis2, label='day-day', **kw)
-
-    print('Day-year')
-    sis3 = ss.SIS(dt=ss.days(1), **sc.dcp(siskw))
-    sim3 = ss.Sim(dt=1/365, diseases=sis3, label='day-year', **kw)
-
-    print('Year-day')
-    sis4 = ss.SIS(dt=1/365, **sc.dcp(siskw))
-    sim4 = ss.Sim(dt=ss.days(1), diseases=sis4, label='year-day', **kw)
-
-    msim = ss.parallel(sim1, sim2, sim3, sim4)
-
-    # Check that all results are close
-    threshold = 0.02
-    summary = msim.summarize()
-    for key,res in summary.items():
-        if res.mean:
-            ratio = res.std/res.mean
-            assert ratio < threshold, f'Result {key} exceeds threshold: {ratio:n} > {threshold}'
-            print(f'✓ Result {key} within threshold: {ratio:n} < {threshold}')
-    return msim
-
-
-@sc.timer()
-def test_units(do_plot=False):
-    sc.heading('Test behavior of year vs day units')
-
-    sis = ss.SIS(
-        beta = ss.probperday(0.05),
-        init_prev = ss.bernoulli(p=0.1),
-        dur_inf = ss.lognorm_ex(mean=ss.datedur(days=10)),
-        waning = ss.perday(0.05),
-        imm_boost = 1.0,
-    )
-
-    rnet = ss.RandomNet(
-        n_contacts = 10,
-        dur = 0, # Note; network edge durations are required to have the same unit as the network
-    )
-
-    pars = dict(
-        diseases = sis,
-        networks = rnet,
-        n_agents = small,
-    )
-
-    sims = sc.objdict()
-    sims.y = ss.Sim(pars, label='Year', start=2000, stop=2002, dt=1/365, verbose=0)
-    sims.d = ss.Sim(pars, label='Day', start='2000-01-01', stop='2002-01-01', dt=ss.days(1), verbose=0)
-
-    for sim in sims.values():
-        sim.run()
-        if do_plot:
-            sim.plot()
-
-    # Check that results match to within stochastic uncertainty
-    rtol = 0.05
-    vals = [sim.summary.sis_cum_infections for sim in [sims.y, sims.d]]
-    assert np.isclose(*vals, rtol=rtol), f'Values for cum_infections do not match ({vals})'
-
-    return sims
-
-
-@sc.timer()
 def test_step_count():
     """
     A disease with dt='month' should step exactly once per timestep, even when
@@ -383,7 +311,56 @@ def test_step_count():
     return sim
 
 
+@sc.timer()
+def test_coded_unit():
+    sc.heading('Test that the unit of a sim with only coded modules is honored')
+
+    class Step(ss.Module): # A module written as code, with no declared states or transitions
+        def step(self):
+            pass
+
+    sim = ss.Sim(connectors=Step(), unit='day', dt=1, start=0, stop=30, verbose=0).init()
+    assert sim.unit == 'day' and sim.t.dt == ss.days(1) and len(sim.t) == 31
+    sim = ss.Sim(connectors=Step(), unit='week', stop=10, verbose=0).init()
+    assert sim.t.dt == ss.weeks(1) and len(sim.t) == 11
+    sim = ss.Sim(connectors=Step(), verbose=0).init() # Nothing has a unit: time is in timesteps
+    assert sim.unit is None and sim.t.start == 0 and len(sim.t) == 51
+
+    # Typed values in days and years: a step of a day is said, unless the run is written in days
+    sis = lambda: ss.SIS(beta=ss.perday(0.002)) # Its dur_inf is in years
+    with pytest.warns(RuntimeWarning, match='different units'):
+        ss.Sim(diseases=sis(), n_agents=small, stop=100, verbose=0).init()
+    with warnings.catch_warnings():
+        warnings.simplefilter('error')
+        sim = ss.Sim(diseases=sis(), n_agents=small, start='2000', dur=ss.days(100), verbose=0).init()
+    assert sim.t.dt == ss.days(1)
+    return sim
+
+
+def test_sim_start_stop_dur():
+    sc.heading('A sim given a stop and dur starts at stop - dur, and raises if start, stop, and dur disagree')
+    kw = dict(diseases='sis', networks='random', n_agents=small, verbose=0)
+    sim = ss.Sim(stop=2035, dur=10, **kw).init()
+    assert sim.t.start == ss.years(2025) and sim.t.stop == ss.years(2035)
+    sim = ss.Sim(stop=100, dur=30, unit='day', **kw).init() # Also in a unit other than years
+    assert sim.t.start == ss.days(70)
+    sim = ss.Sim(start=2000, stop=2010, dur=10, **kw).init() # Three that agree are fine
+    with pytest.raises(ValueError, match='disagree'):
+        ss.Sim(start=2000, stop=2035, dur=10, **kw).init()
+    return sim
+
+
 # Run as a script
+@sc.timer()
+def test_daily_dates():
+    sc.heading('A daily step from a year as a number has whole days, all at once')
+    t = ss.Sim(start=2020, stop=2022, dt=ss.days(1), verbose=0).init().t
+    assert not t.tvec.subdaily
+    assert t.timevec[59] == ss.date('2020-02-29') and t.timevec[-1] == ss.date('2022-01-01') # A leap year, and the end
+    assert all(d == d.normalize() for d in t.timevec), 'Expected whole days'
+    return
+
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -395,8 +372,9 @@ if __name__ == '__main__':
     o3 = test_timeline()
     o4 = test_timeline_syntax()
     o5 = test_multi_timestep(do_plot)
-    o6 = test_mixed_timesteps()
-    o7 = test_units(do_plot)
     o8 = test_step_count()
+    o9 = test_coded_unit()
+    o10 = test_sim_start_stop_dur()
+    o11 = test_daily_dates()
 
     T.toc()

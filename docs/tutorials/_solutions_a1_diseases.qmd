@@ -1,0 +1,86 @@
+## A1 – Diseases
+
+These solutions build on the SIRS model from the tutorial, so we define it again here, with the duration of immunity and the latent period as arguments:
+
+```{python}
+import numpy as np
+import matplotlib.pyplot as plt
+import starsim as ss
+
+def make_cold(dur_imm=ss.days(180), dur_latent=None):
+    """ A respiratory infection with waning immunity: SIRS, or SEIRS with a latent period; β is 0.4 per day """
+    S, E, I, R = ss.states('S E I R')
+    if dur_latent is None: # SIRS
+        transitions = dict(infection=S >> I @ ss.perday(0.4)*I)
+    else: # SEIRS
+        transitions = dict(infection=S >> E @ ss.perday(0.4)*I, progression=E >> I @ dur_latent)
+    transitions['recovery'] = I >> R @ ss.days(7)
+    transitions['waning'] = R >> S @ dur_imm
+    infections = ss.attr(1, on=transitions['infection'], combine='sum', init=0)
+    states = [S, I, R] if dur_latent is None else [S, E, I, R]
+    return ss.Disease(*states, **transitions, infections=infections, init_prev=0.01, name='cold')
+
+pars = dict(n_agents=5000, stop=ss.days(3*365), dt=ss.days(1), verbose=0)
+```
+
+### Question 1
+
+**Q: Try different durations of immunity in the SIRS model (e.g. 1, 6, and 24 months). How do they affect the epidemic curve, and the number of times people are infected?**
+
+A: The shorter immunity is, the faster the susceptible pool is replenished, so transmission settles at a higher endemic level, and people are infected more often. With long-lasting immunity the model behaves much more like SIR: a single epidemic, followed by a long gap before the next wave:
+
+```{python}
+sims = {
+    '1 month':   ss.Sim(make_cold(ss.months(1)), **pars),
+    '6 months':  ss.Sim(make_cold(ss.months(6)), **pars),
+    '24 months': ss.Sim(make_cold(ss.months(24)), **pars),
+}
+msim = ss.parallel(sims)
+msim.plot('cold.I')
+
+for label, sim in sims.items():
+    print(label, '- mean number of infections per person:', round(sim.people.cold.infections.values.mean(), 1))
+```
+
+### Question 2
+
+**Q: Add a latent period of 2 days to the SIRS model, to make an SEIRS model. Does it change the endemic level?**
+
+A: The latent period slows each generation of infections, so the first epidemic comes later and has a lower peak, and the waves that follow are out of step with those of the SIRS model. The endemic level of people infectious changes little, since it depends mostly on R0 and the duration of immunity, which are the same:
+
+```{python}
+sims = {
+    'SIRS':  ss.Sim(make_cold(), **pars),
+    'SEIRS': ss.Sim(make_cold(dur_latent=ss.days(2)), **pars),
+}
+msim = ss.parallel(sims)
+msim.plot('cold.I')
+```
+
+### Question 3
+
+**Q: In the town with 90% immune, increase the share susceptible to 20% (`init=dict(R=0.8)`), so that each case infects about 3 others. What share of introductions die out now, with and without superspreading (k = 0.2)?**
+
+A: Without superspreading, a share of about 1/R ≈ 1/3 die out. With superspreading, many more do, since most cases still infect nobody:
+
+```{python}
+def make_sim(k=None, immune=0.8):
+    S, E, I, R = ss.states('S E I R')
+    infection   = S >> E @ 1.9*I
+    progression = E >> I @ ss.days(10)
+    recovery    = I >> R @ ss.days(8)
+    init = dict(init=dict(R=immune), init_n=dict(I=1))
+    sim_pars = dict(n_agents=5000, stop=ss.days(365), verbose=0)
+    if k is None:
+        measles = ss.Disease(infection, progression, recovery, **init)
+        return ss.Sim(measles, **sim_pars)
+    infectiousness = ss.attr(ss.gamma(a=k, scale=1/k))
+    measles = ss.Disease(infection, progression, recovery, infectiousness=infectiousness, **init)
+    superspreading = ss.modify(measles.rel_trans, multiply=infectiousness)
+    return ss.Sim(measles, connectors=superspreading, **sim_pars)
+
+for label, k in {'Everyone equally infectious': None, 'k = 0.2': 0.2}.items():
+    msim = ss.parallel(make_sim(k), n_runs=100)
+    total = msim.results.measles.infection.values.sum(axis=1)
+    print(label, '- share that die out:', np.mean(total < 20))
+```

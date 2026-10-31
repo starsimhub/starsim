@@ -1,20 +1,43 @@
 """
-Define options for Starsim.
-All options should be set using set() or directly, e.g.:
+Options for Starsim, and the plotting style
+
+These exist so that behavior that isn't part of a model (how much to print, how to treat warnings, which
+kernels to use) is set in one place. All options should be set using set() or directly, e.g.:
 
     ss.options(verbose=False)
+
+Used with: agents and compartments; declared and coded modules
 """
+import os
+import tempfile
 import numpy as np
 import numba as nb
+import numba.core.caching as nb_caching
 import sciris as sc
 import matplotlib.font_manager as fm
 import starsim as ss # Only used to set references
+
+
+def cache_numba():
+    """ Keep Numba's cache in a temporary folder if it has nowhere else to go (a read-only package and home folder, as in some containers), since `cache=True` would otherwise fail on import; Numba finds it by `NUMBA_CACHE_DIR`, as do the workers of `ss.parallel()` """
+    if any(locator.from_function(cache_numba, __file__) for locator in nb_caching.CacheImpl._locator_classes):
+        return
+    uid = getattr(os, 'getuid', int)() # Not on Windows, whose temporary folder is the user's own
+    path = os.path.join(tempfile.gettempdir(), f'starsim_numba_{uid}') # The same folder each time, so only the first process compiles
+    os.makedirs(path, mode=0o700, exist_ok=True)
+    if os.stat(path).st_uid != uid: # Someone else's, so not to be loaded from
+        path = tempfile.mkdtemp(prefix='starsim_numba_')
+    os.environ['NUMBA_CACHE_DIR'] = nb.config.CACHE_DIR = path
+    return
+
+cache_numba()
 
 
 # Define Starsim-default data types
 dtypes = sc.dictobj(
     bool = bool,
     int = np.int64, # np.int32 is actually much slower for indexing arrays
+    uid = np.int64, # The active agents (people.auids): 64-bit, since NumPy converts a 32-bit index array at every use (2-4 times slower), at 4 bytes more per agent; ss.uids keeps either width
     nbint = nb.int64,
     rand_int = np.int32,
     rand_uint = np.uint32,
@@ -41,7 +64,7 @@ rc_starsim = {
 
 
 # Not public to avoid confusion with ss.options
-class Options(sc.objdict):
+class Options(sc.obj):
     """
     Set options for Starsim.
 
@@ -64,10 +87,12 @@ class Options(sc.objdict):
         ```
     """
 
+    __slots__ = ('optdesc', 'orig_options', 'on_entry', '_locked', '_style')
+
     def __init__(self):
         super().__init__()
         optdesc, options = self.get_orig_options()  # Get the options
-        self.update(options)  # Update this object with them
+        super().update(options)  # Update this object with them
         self.setattribute('optdesc', optdesc)  # Set the description as an attribute, not a dict entry
         self.setattribute('orig_options', sc.dcp(options))  # Copy the default options
         self.setattribute('on_entry', [])  # Stack of settings to restore, to allow nested context() blocks
@@ -82,62 +107,68 @@ class Options(sc.objdict):
         """
 
         # Options acts like a class, but is actually an objdict for simplicity
-        optdesc = sc.objdict()  # Help for the options
-        options = sc.objdict()  # The options
+        optdesc = sc.obj()  # Help for the options
+        options = sc.obj()  # The options
 
-        optdesc.verbose = 'Set default level of verbosity (i.e. logging detail): e.g., 0.1 is an update every 10 simulated timesteps.'
-        options.verbose = sc.parse_env('STARSIM_VERBOSE', 0.1, float)
-
-        optdesc.license = 'Whether to print the license on import'
-        options.license = sc.parse_env('STARSIM_LICENSE', False, bool)
+        optdesc.verbose = 'Set default level of verbosity: 0 prints nothing, 1 the solver, notes, and progress, and 2 everything (e.g. each step).'
+        options.verbose = sc.parse_env('STARSIM_VERBOSE', 1, int)
 
         optdesc.warnings = 'How warnings are handled: options are "warn" (default), "print", and "error"'
         options.warnings = sc.parse_env('STARSIM_WARNINGS', 'warn', str)
 
-        optdesc.warn_convert = 'Whether to warn about automatic time conversions'
-        options.warn_convert = sc.parse_env('STARSIM_WARN_CONVERT', True, bool)
+        optdesc.max_steps = 'The number of timesteps above which a sim warns that it may be slow (0 to never warn)'
+        options.max_steps = sc.parse_env('STARSIM_MAX_STEPS', 50_000, int) # More than a century at a daily step, which the textbooks' models run
 
-        optdesc.check_method_calls = 'How to handle missing required method calls: options are "warn" (default), "die", and "" (False)'
-        options.check_method_calls = sc.parse_env('STARSIM_CHECK_METHOD_CALLS', 'warn', str)
-
-        optdesc.time_eps = 'Set size of smallest possible time unit (in units of sim time, e.g. "year" or "day")'
-        options.time_eps = sc.parse_env('STARSIM_TIME_EPS', 1e-6, float) # If unit = 'year', corresponds to ~30 seconds
-
-        optdesc.sep = 'Set thousands separator for text output'
-        options.sep = sc.parse_env('STARSIM_SEP', ',', str)
-
-        optdesc.date_sep = 'Set separator for dates'
-        options.date_sep = sc.parse_env('STARSIM_DATE_SEP', '.', str)
-
-        optdesc.jupyter = 'Set whether to use Jupyter settings: -1=auto, 0=False, 1=True'
+        optdesc.jupyter = 'Set whether to use Jupyter settings (retina figures): -1=auto, 0=False, 1=True'
         options.jupyter = sc.parse_env('STARSIM_JUPYTER', -1, int)
 
         optdesc.style = 'Set the plotting style: choices are "starsim", "fancy", "simple", or any of Matplotlib\'s'
         options.style = sc.parse_env('STARSIM_STYLE', 'starsim', str)
 
-        optdesc.install_fonts = 'Choose whether or not to install Starsim-specific fonts on first import -- NOTE, only has effect via the environment variable since executed on load'
-        options.install_fonts = sc.parse_env('STARSIM_INSTALL_FONTS', True, bool)
-
         optdesc.show = 'Whether to show the plot immediately (i.e. call plt.show())'
         options.show = sc.parse_env('STARSIM_SHOW', True, bool)
 
-        optdesc.reticulate = 'Set whether to use Reticulate (R) settings'
+        optdesc.reticulate = 'Whether a NumPy integer array indexes a state by UIDs, as for a module written in R (through reticulate), which cannot keep ss.uids'
         options.reticulate = sc.parse_env('STARSIM_RETICULATE', False, bool)
 
         optdesc.precision = 'Set arithmetic precision'
         options.precision = sc.parse_env('STARSIM_PRECISION', 32, int)
 
-        optdesc.numba_indexing = 'Threshold for the number of indices at which to switch to using Numba (rather than NumPy) for indexing arrays'
-        options.numba_indexing = sc.parse_env('STARSIM_NUMBA_INDEXING', 2000, int) # Numba wins for both gather and compaction above ~2k; see https://github.com/starsimhub/starsim/issues/1005
+        optdesc.threads = 'The number of threads that the passes over the agents of a large sim, and the particles of a particle filter, take: 0 (default) for as many as Numba has (by default, one per core), 1 for none. Each worker of ss.parallel() and of a calibration takes one, since the workers share the cores already'
+        options.threads = sc.parse_env('STARSIM_THREADS', 0, int)
+
+        optdesc.kernels = 'Which kernels run the solvers (all give the same results, except as said for "python"): "auto" (default) for Rust if it is there (in the wheels, or built: see starsim/solvers/rust/README.md), and otherwise Numba, with compartmental runs taken as plain Python until Numba has compiled (if a run, or the runs of a session, would take longer as plain Python than compiling takes, about two minutes once per install, Numba compiles first; a note says which); "rust" for Rust, compiled ahead of time, so a first run takes no compiling; "numba" to always compile with Numba first (see ss.compile()); "python" for the compartmental kernels as plain Python (and the kernels, not JAX, for the chain binomial, whose draws in JAX are compiled, so a long seeded chain-binomial run gives other numbers than with the others; the passes over agents are Numba). JAX is chosen by the run (see sim.jax), and ss.jit is always Numba'
+        options.kernels = sc.parse_env('STARSIM_KERNELS', 'auto', str)
+
+        optdesc.jax = 'The platform that JAX runs on where Starsim uses it (sim.gradient(), posteriors, and long ODE runs; see sim.jax): "auto" (default) for JAX\'s own choice (a GPU if it finds one), or a platform, e.g. "cpu" (for a GPU that JAX cannot use) or "cuda". It sets JAX_PLATFORMS, so it applies to everything in the session that uses JAX, and must be set before JAX is first used'
+        options.jax = sc.parse_env('STARSIM_JAX', 'auto', str)
+
+        optdesc.uncompiled_warning = 'If True (default), say on import when Starsim has not been compiled yet (see ss.compile()) -- NOTE, only has effect via the environment variable since executed on load'
+        options.uncompiled_warning = sc.parse_env('STARSIM_UNCOMPILED_WARNING', True, bool)
 
         optdesc.crn = 'If True (default), use common random numbers (CRN) for reproducibility across scenarios. Set False for faster draws (one plain uniform per agent/edge, skipping the slot machinery); statistically valid but not CRN-safe across scenarios.'
         options.crn = sc.parse_env('STARSIM_CRN', True, bool)
+
+        optdesc.keep_times = 'If True, a declared disease run as agents keeps the time each agent entered every state (e.g. ti_S) and the history of every transition (e.g. sir.infection.count, .since, and .ever); by default (False), only those the engine or the model needs (with, for each, the time each agent last left the state, for its stays, e.g. I.stays), to save memory (reading another raises an error)'
+        options.keep_times = sc.parse_env('STARSIM_KEEP_TIMES', False, bool)
+
+        optdesc.max_joint = 'The most compartments that the diseases tracked jointly in a compartmental run may take (their joint states times the groups of the other dimensions; see ss.solvers.Crossing): above it, solver="auto" runs agents, and a compartmental solver that was asked for stops before anything is made. 0 for no limit'
+        options.max_joint = sc.parse_env('STARSIM_MAX_JOINT', 10_000, int) # 6,912 compartments (three diseases with Erlang stages, by four age groups) take about 2 GB over 400 steps
 
         return optdesc, options
 
     def __call__(self, *args, **kwargs):
         """Allow `ss.options(verbose=0)` instead of `ss.options.set(verbose=0)` """
         return self.set(*args, **kwargs)
+
+    def update(self, *args, **kwargs):
+        """ Set several options, as `set()` does (so e.g. the kernels are swapped)
+
+        Args:
+            args (dict): the options to set, as a dict
+            kwargs (dict): the options to set, by name
+        """
+        return self.set(**dict(*args, **kwargs))
 
     def __setitem__(self, key, value):
         """ Do not allow accidental modifications """
@@ -217,10 +248,10 @@ class Options(sc.objdict):
             return
 
         n = 15 # Size of indent
-        optdict = sc.objdict()
+        optdict = sc.obj()
         orig_keys = self.orig_options.keys()
         for key in orig_keys:
-            entry = sc.objdict()
+            entry = sc.obj()
             entry.key = key
             entry.current = sc.indent(n=n, width=None, text=sc.pp(self[key], output=True)).rstrip()
             entry.default = sc.indent(n=n, width=None, text=sc.pp(self.orig_options[key], output=True)).rstrip()
@@ -230,7 +261,7 @@ class Options(sc.objdict):
 
         if len(args):
             try:
-                optdict = sc.objdict({k:optdict[k] for k in args})
+                optdict = sc.obj({k:optdict[k] for k in args})
             except Exception as e:
                 errormsg = f'Cannot provide help on invalid setting(s) "{sc.strjoin(args)}"; valid keys are:\n{sc.newlinejoin(sorted(orig_keys))}'
                 raise sc.KeyNotFoundError(errormsg) from e
@@ -294,6 +325,15 @@ class Options(sc.objdict):
             else:
                 if value in [None, 'default']:
                     value = self.orig_options[key]
+                if key == 'kernels': # Checked here rather than at the first run (CB-9), and swapped before the option is set, so it is not set if the Rust kernels have not been built
+                    if value not in ['auto', 'rust', 'numba', 'python']:
+                        errormsg = f'ss.options.kernels must be "auto", "rust", "numba", or "python", not {value!r}'
+                        raise ValueError(errormsg)
+                    import starsim.solvers.backends.rust as rust # Imported only now, since it imports the modules whose kernels it swaps
+                    rust.auto() if value == 'auto' else rust.use(value == 'rust')
+                elif key == 'jax' and not (isinstance(value, str) and value):
+                    errormsg = f'ss.options.jax must be "auto" or the name of a JAX platform, e.g. "cpu", not {value!r}'
+                    raise ValueError(errormsg)
                 super().__setitem__(key, value) # Needed since we overwrite __setitem__ to call this
 
                 # Handle special cases
@@ -301,8 +341,6 @@ class Options(sc.objdict):
                     self.set_jupyter()
                 elif key == 'precision':
                     self.set_precision()
-                elif key == 'numba_indexing':
-                    self.refresh_references()
                 elif key == 'style':
                     self.set_style()
 
@@ -311,6 +349,9 @@ class Options(sc.objdict):
     def context(self, **kwargs):
         """
         Alias to set(), for use in a "with" block.
+
+        Args:
+            kwargs (dict): the options to set, by name, until the end of the "with" block
 
         Examples:
             ```python
@@ -337,28 +378,29 @@ class Options(sc.objdict):
         return self
 
     def get_default(self, key):
-        """ Helper function to get the original default options """
-        return self.orig_options[key]
+        """ Helper function to get the original default options
 
-    def changed(self, key):
-        """ Check if current setting has been changed from default """
-        if key in self.orig_options:
-            return self[key] != self.orig_options[key]
-        else:
-            return None
+        Args:
+            key (str): the name of the option
+        """
+        return self.orig_options[key]
 
     @property
     def is_jupyter(self):
-        """ Check if we're in an Jupyter environment """
-        return [False, True, sc.isjupyter()][self.jupyter] # 0 = False, 1 = True, -1 = sc.isjupyter()
+        """ Check if we're in an Jupyter environment; jupyter=False doesn't change this, since a notebook still shows what is returned """
+        return self.jupyter == 1 or sc.isjupyter()
 
     def set_jupyter(self):
         """ Set Sciris' Jupyter settings as well """
-        sc.options(jupyter=self.is_jupyter)
+        sc.options(jupyter=bool(self.jupyter) and self.is_jupyter) # 0 = False, 1 = True, -1 = sc.isjupyter()
         return
 
     def set_precision(self, refresh=True):
-        """ Change the arithmetic precision used by Starsim/NumPy """
+        """ Change the arithmetic precision used by Starsim/NumPy
+
+        Args:
+            refresh (bool): whether to pass the new data types on to the modules that keep their own copies
+        """
         if self.precision == 32:
             dtypes.update(dict(
                 int       = np.int64, # Never set this or result_float to 32-bit since messed up array indexing
@@ -384,10 +426,7 @@ class Options(sc.objdict):
 
     def refresh_references(self):
         """ Many modules copy settings into them for speed; here we refresh those """
-        files = ['arrays', 'demographics', 'diseases', 'distributions', 'networks']
-
-        # Update Numba threshold
-        ss.arrays.numba_indexing = self.numba_indexing
+        files = ['arrays', 'demographics', 'diseases', 'dists', 'distributions', 'networks']
 
         # Update precision
         for file in files:
@@ -411,6 +450,12 @@ class Options(sc.objdict):
 
 
 
+def with_fallback(font):
+    """ A named font, followed by Matplotlib's sans-serif fonts (DejaVu Sans by default) for the glyphs it lacks, e.g. the Greek letters that Mulish, Raleway, and Rosario don't have; a generic family or a list is kept as it is """
+    generic = ['serif', 'sans-serif', 'monospace', 'cursive', 'fantasy']
+    return [font, 'sans-serif'] if isinstance(font, str) and font not in generic else font
+
+
 def load_fonts(folder=None, name='Mulish', rebuild=False, verbose=False, **kwargs):
     """
     Helper function to load custom fonts for plotting -- (usually) not for the user.
@@ -423,15 +468,16 @@ def load_fonts(folder=None, name='Mulish', rebuild=False, verbose=False, **kwarg
         name (str): the name of the font to load
         rebuild (bool): whether to rebuild the font cache
         verbose (bool): whether to print out progress/errors
+        kwargs (dict): passed to `sc.fonts()`
     """
     if folder is None:
-        folder = str(sc.thispath(__file__) / 'assets')
+        folder = str(sc.thispath(__file__) / 'internals' / 'assets')
     sc.fonts(add=folder, rebuild=rebuild, verbose=verbose, **kwargs)
 
     # Try to find the font, and if it succeeds, update the styles
     try:
         fm.findfont(name, fallback_to_default=False) # Raise an exception if the font isn't found
-        rc_starsim['font.family']  = name # Need to set both
+        rc_starsim['font.family'] = with_fallback(name)
         if verbose: print(f'Default Starsim font reset to "{name}"')
     except Exception as E:
         if verbose: print(f'Could not find font {name}: {str(E)}')
@@ -442,12 +488,26 @@ def load_fonts(folder=None, name='Mulish', rebuild=False, verbose=False, **kwarg
 options = Options()
 options.set_precision(refresh=False) # Other modules are not loaded yet, so nothing to refresh
 
-# Load the fonts
-if options.install_fonts:
-    load_fonts()
+# Load the fonts, rebuilding Matplotlib's font cache the first time (marked by a file in internals/assets/; if it can't be written, the cache isn't rebuilt)
+marker = sc.thispath(__file__) / 'internals' / 'assets' / 'fonts_installed_successfully'
+first = not marker.exists()
+try:
+    if first:
+        marker.touch()
+    load_fonts(rebuild=first)
+    if first and options.verbose:
+        print('\nNote: rebuilding the font cache only happens once on first import.')
+except Exception: # Not writable, or something else went wrong: plot without them
+    pass
 
 # Set the style
 options.set_style()
+
+# In a notebook, use Jupyter's settings (retina figures) as if ss.options(jupyter=True) had been called, unless another backend was chosen (e.g. %matplotlib widget)
+if options.jupyter and options.is_jupyter:
+    import matplotlib as mpl
+    if 'inline' in mpl.get_backend():
+        options.set_jupyter()
 
 
 def style(style=None, **kwargs):
@@ -486,6 +546,8 @@ def style(style=None, **kwargs):
     for key,val in mapping.items():
         if key in kwargs:
             kwargs[val] = kwargs.pop(key)
+    if 'font.family' in kwargs:
+        kwargs['font.family'] = with_fallback(kwargs['font.family'])
 
     # Reset
     out = sc.options.with_style(style, **kwargs)

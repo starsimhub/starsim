@@ -27,6 +27,7 @@ rm -rvf user_guide/.jupyter_cache/
 rm -rvf user_guide/.virtual_documents/
 rm -vf objects.json
 rm -vf objects.inv
+rm -rvf _inv
 
 duration=$(( SECONDS - start ))
 echo "Cleaned after $duration seconds."

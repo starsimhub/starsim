@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Quick render of the full site: execute and render pages in parallel, keep going if a notebook fails
+# (and retry the ones that failed last time), and only re-render pages that changed since the last
+# render. Needs a Quarto build with these options
+# (set QUARTO to its path to use one that isn't "quarto" on the PATH). Use ./render for a clean full build.
+set -euo pipefail # Fail fast if needed
+
+QUARTO=${QUARTO:-quarto}
+JOBS=${JOBS:-$(( $(nproc) / 2 ))} # Number of notebooks/pages to process at once
+
+SECONDS=0
+
+# Do the render!
+$QUARTO render --jobs "$JOBS" --keep-going --incremental --retry-failed "$@"
+
+echo -e "Done: docs built in ${SECONDS} s"
+echo -e "Index: $(pwd)/_site/index.html"

@@ -23,8 +23,8 @@ Usage::
     import starsim.library as ssl
 
     sim = ss.Sim(
-        diseases=ss.SIR(beta=0.1),
-        demographics=[ss.Pregnancy(fertility_rate=ss.freqperyear(30)), ss.Deaths()],
+        diseases=ssl.AgentSIR(name='sir', beta=0.1), # Written as code, since treat_pregnant() sets its states directly
+        demographics=[ss.Pregnancy(fertility_rate=ss.time.freq(30, 'year')), ss.Deaths()],
         connectors=ssl.mnch.fetal_infection(),
         interventions=ssl.mnch.treat_pregnant(disease='sir', start_year=2025),
         custom=ssl.mnch.FetalHealth(),
@@ -36,6 +36,8 @@ To extend for a different disease, subclass `fetal_infection` and override
 `_apply_damage` with disease-specific logic (e.g. stage-dependent penalties).
 To extend `treat_pregnant`, subclass and override `step()` with custom
 eligibility criteria or reversal logic.
+
+Used with: agents; coded modules
 """
 
 import numpy as np
@@ -54,11 +56,11 @@ class FetalHealth(ss.Module):
     Preterm classification is handled by the Pregnancy module (based on
     gestational age at birth). This module focuses on the weight/growth axis.
 
-    Integrates with Pregnancy via callbacks: Pregnancy calls `on_conception`
-    when new pregnancies begin and `on_delivery` when births occur. External
-    modules (e.g. disease connectors) can register their own callbacks via
-    `add_conception_callback` to act on new pregnancies after baseline
-    initialization.
+    Integrates with Pregnancy via its callbacks (`add_callback()`): Pregnancy
+    calls `on_conception` when new pregnancies begin and `on_delivery` when
+    births occur. External modules (e.g. disease connectors) can register their
+    own on `preg.conception`, after this module's, to act on new pregnancies
+    after baseline initialization.
 
     During pregnancy, `weight_percentile`, `growth_restriction`,
     `timing_shift`, and `n_exposures` are tracked on the mother. At
@@ -68,10 +70,16 @@ class FetalHealth(ss.Module):
     Each pregnancy gets a baseline weight percentile drawn at conception.
     Two modification levers are available:
 
-        1. **Delivery timing**: bring `ti_delivery` forward (preterm birth risk)
+        1. **Delivery timing**: bring the delivery (`ti_exit_P`) forward (preterm birth risk)
         2. **Growth restriction**: accumulate fractional weight reduction
 
     At delivery: `birth_weight = baseline_for_GA × percentile × (1 - restriction)`
+
+    The results are counts of births and outcomes on each step, and means and rates over a step's births
+    (`mean_birth_weight`, `lbw_rate`, ...), which are NaN on a step with no births, and are left out of a
+    mean over time (e.g. `res.mean_birth_weight.resample('year')`).
+
+    Note: CRN safe.
 
     Args:
         weight_by_ga (array):           Nx2 array of [gestational_age_weeks, weight_grams]
@@ -81,6 +89,7 @@ class FetalHealth(ss.Module):
         vlbw_threshold (float):         birth weight in grams below which VLBW is declared
         min_ga (dur):                   floor for timing shifts (delivery can't be brought before this GA)
         percentile_dist (Dist):         distribution for baseline fetal weight percentile
+        pars (dict): the same parameters, as a dict
 
     Examples:
         ```python
@@ -103,6 +112,7 @@ class FetalHealth(ss.Module):
         [34, 2100], [35, 2400], [36, 2600], [37, 2850], [38, 3050],
         [39, 3250], [40, 3400], [41, 3500], [42, 3550],
     ], dtype=float)
+    means = ['mean_birth_weight', 'mean_ga_at_birth', 'mean_exposures', 'lbw_rate', 'sga_rate', 'svn_rate'] # The results over the births of a step, which are NaN on a step with none
 
     def __init__(self, pars=None, **kwargs):
         super().__init__(name='fetal_health')
@@ -131,68 +141,72 @@ class FetalHealth(ss.Module):
             ss.BoolArr('sga',  label='Small for gestational age'),
             ss.BoolArr('svn',  label='Small vulnerable newborn'),
         )
-
-        self._conception_callbacks = []
         return
 
     def init_pre(self, sim):
-        """ Register callbacks with the Pregnancy module """
-        super().init_pre(sim)
-        if not hasattr(sim.demographics, 'pregnancy'):
-            raise ValueError('FetalHealth requires a Pregnancy module. Add ss.Pregnancy() to demographics.')
-        preg = sim.demographics.pregnancy
-        preg.add_conception_callback(self.on_conception)
-        preg.add_delivery_callback(self.on_delivery)
-        return
+        """ Register callbacks with the Pregnancy module
 
-    def add_conception_callback(self, fn):
+        Args:
+            sim (Sim): the sim being initialized
         """
-        Register a function to be called when new pregnancies are detected.
-        The function receives `(uids,)` after baseline initialization.
-        """
-        self._conception_callbacks.append(fn)
+        super().init_pre(sim)
+        preg = sim.get_module(ss.Pregnancy, die=False) # By type, so a subclass with its own name (e.g. FPsim's fp) is found
+        if preg is None:
+            raise ValueError('FetalHealth requires a Pregnancy module. Add ss.Pregnancy() to demographics.')
+        preg.add_callback(preg.conception, self.on_conception)
+        preg.add_callback(preg.birth, self.on_delivery)
         return
 
     def init_results(self):
         super().init_results()
         self.define_results(
-            ss.Result('n_births',          dtype=int, label='Births'),
-            ss.Result('n_lbw',             dtype=int, label='Low birth weight'),
-            ss.Result('n_vlbw',            dtype=int, label='Very low birth weight'),
-            ss.Result('n_sga',             dtype=int, label='Small for gestational age'),
-            ss.Result('n_svn',             dtype=int, label='Small vulnerable newborns'),
-            ss.Result('mean_birth_weight', scale=False, label='Mean birth weight (g)'),
-            ss.Result('mean_ga_at_birth',  scale=False, label='Mean GA at birth (weeks)'),
-            ss.Result('mean_exposures',    scale=False, label='Mean exposures per pregnancy'),
-            ss.Result('lbw_rate',          scale=False, label='LBW rate'),
-            ss.Result('sga_rate',          scale=False, label='SGA rate'),
-            ss.Result('svn_rate',          scale=False, label='SVN rate'),
+            ss.Result('n_births',          dtype=int, label='Births', kind='flow'),
+            ss.Result('n_lbw',             dtype=int, label='Low birth weight', kind='flow'),
+            ss.Result('n_vlbw',            dtype=int, label='Very low birth weight', kind='flow'),
+            ss.Result('n_sga',             dtype=int, label='Small for gestational age', kind='flow'),
+            ss.Result('n_svn',             dtype=int, label='Small vulnerable newborns', kind='flow'),
+            ss.Result('mean_birth_weight', label='Mean birth weight (g)'),
+            ss.Result('mean_ga_at_birth',  label='Mean GA at birth (weeks)'),
+            ss.Result('mean_exposures',    label='Mean exposures per pregnancy'),
+            ss.Result('lbw_rate',          label='LBW rate'),
+            ss.Result('sga_rate',          label='SGA rate'),
+            ss.Result('svn_rate',          label='SVN rate'),
         )
+        for key in self.means:
+            self.results[key][:] = np.nan # Undefined on a step with no births, so that it is left out of a mean over time
         return
 
     def on_conception(self, uids):
-        """ Initialize fetal health for new pregnancies (called by Pregnancy) """
+        """ Initialize fetal health for new pregnancies (called by Pregnancy)
+
+        Args:
+            uids (array): the women who conceived
+        """
         self.weight_percentile[uids] = self.pars.percentile_dist.rvs(uids)
         self.growth_restriction[uids] = 0.0
         self.timing_shift[uids] = 0.0
         self.n_exposures[uids] = 0
-        for cb in self._conception_callbacks:
-            cb(uids)
         return
 
-    def on_delivery(self, mother_uids, newborn_uids):
+    def on_delivery(self, newborn_uids):
         """
         Classify birth outcomes (called by Pregnancy).
 
         Birth weight is computed from the mother's pregnancy-time states
         (weight_percentile, growth_restriction). Outcomes (birth_weight,
         lbw, vlbw, sga) are stored on the newborn agents.
+
+        Args:
+            newborn_uids (array): the newborns
         """
         if not len(newborn_uids):
             return
 
         # Compute birth weight using mother states (handles twins via parent lookup)
         parents = self.sim.people.parent[newborn_uids]
+        unset = np.unique(parents[np.isnan(self.weight_percentile[parents])])
+        if len(unset): # Pregnant at the start (ss.Pregnancy's burnin=), so on_conception() was not called for them
+            self.on_conception(ss.uids(unset))
         birth_weights, ga_wk = self.compute_birth_weight(parents)
 
         # Store outcomes on newborns
@@ -209,24 +223,23 @@ class FetalHealth(ss.Module):
         self.sga[newborn_uids]  = sga
 
         # SVN: small vulnerable newborn = preterm | lbw | sga
-        preterm = self.sim.demographics.pregnancy.preterm[newborn_uids]
+        preterm = self.sim.get_module(ss.Pregnancy).preterm[newborn_uids]
         svn = preterm | lbw | sga
         self.svn[newborn_uids] = svn
 
-        # Results
-        n  = len(newborn_uids)
+        # Results: the means are over the births of the step, which may come in more than one call
+        res = self.results
         ti = self.ti
-        self.results['n_births'][ti]          += n
-        self.results['n_lbw'][ti]             += lbw.sum()
-        self.results['n_vlbw'][ti]            += vlbw.sum()
-        self.results['n_sga'][ti]             += sga.sum()
-        self.results['n_svn'][ti]             += svn.sum()
-        self.results['mean_birth_weight'][ti]  = birth_weights.mean() if n else 0
-        self.results['mean_ga_at_birth'][ti]   = ga_wk.mean() if n else 0
-        self.results['mean_exposures'][ti]     = self.n_exposures[parents].mean() if n else 0
-        self.results['lbw_rate'][ti]           = lbw.mean() if n else 0
-        self.results['sga_rate'][ti]           = sga.mean() if n else 0
-        self.results['svn_rate'][ti]           = svn.mean() if n else 0
+        n, before = len(newborn_uids), res['n_births'][ti]
+        values = dict(mean_birth_weight=birth_weights, mean_ga_at_birth=ga_wk, mean_exposures=self.n_exposures[parents], lbw_rate=lbw, sga_rate=sga, svn_rate=svn)
+        for key in self.means:
+            total = values[key].sum() + (res[key][ti]*before if before else 0)
+            res[key][ti] = total/(before + n)
+        res['n_births'][ti] += n
+        res['n_lbw'][ti]    += lbw.sum()
+        res['n_vlbw'][ti]   += vlbw.sum()
+        res['n_sga'][ti]    += sga.sum()
+        res['n_svn'][ti]    += svn.sum()
         return
 
     def apply_timing_shift(self, uids, shift_weeks):
@@ -243,18 +256,18 @@ class FetalHealth(ss.Module):
         if not len(uids):
             return
 
-        preg = self.sim.people.pregnancy
+        preg = self.sim.get_module(ss.Pregnancy)
         weeks_per_ts = self.dt.weeks
         shifts_ts = shift_weeks / weeks_per_ts
 
         min_ga_ts = self.pars.min_ga.weeks / weeks_per_ts
-        current_delivery = preg.ti_delivery[uids]
+        current_delivery = np.ceil(preg.ti_exit_P[uids]) # The step each delivery is due in
         new_delivery = current_delivery - shifts_ts
-        min_delivery = preg.ti_pregnant[uids] + min_ga_ts
+        min_delivery = preg.ti_P[uids] + min_ga_ts
         new_delivery = np.maximum(new_delivery, min_delivery)
 
         actually_shifted_ts = np.maximum(0, current_delivery - new_delivery)
-        preg.ti_delivery[uids] = np.minimum(current_delivery, new_delivery)
+        preg.set_delivery(uids, np.minimum(current_delivery, new_delivery))
         self.timing_shift[uids] += actually_shifted_ts * weeks_per_ts
         return
 
@@ -289,7 +302,7 @@ class FetalHealth(ss.Module):
         if not len(uids):
             return
 
-        preg = self.sim.people.pregnancy
+        preg = self.sim.get_module(ss.Pregnancy)
         current_shift = self.timing_shift[uids]
         recover_weeks = current_shift * fraction
 
@@ -301,8 +314,8 @@ class FetalHealth(ss.Module):
         recover_wk   = recover_weeks[has_shift]
         recover_ts   = recover_wk / self.dt.weeks
 
-        current_delivery = preg.ti_delivery[recover_uids]
-        preg.ti_delivery[recover_uids] = current_delivery + recover_ts
+        current_delivery = np.ceil(preg.ti_exit_P[recover_uids])
+        preg.set_delivery(recover_uids, current_delivery + recover_ts)
         self.timing_shift[recover_uids] -= recover_wk
         return
 
@@ -328,11 +341,14 @@ class FetalHealth(ss.Module):
         Override this method to customize the birth weight formula. The
         interpolation function can be swapped via `pars.interp_fn`.
 
+        Args:
+            uids (array): the newborns
+
         Returns:
             tuple: (birth_weights, ga_weeks) arrays
         """
-        preg = self.sim.people.pregnancy
-        ga_wk = (preg.ti_delivery[uids] - preg.ti_pregnant[uids]) * self.dt.weeks
+        preg = self.sim.get_module(ss.Pregnancy)
+        ga_wk = (preg.ti_delivered[uids] - preg.ti_P[uids]) * self.dt.weeks # At delivery, which has just happened
 
         ref = self.pars.weight_by_ga
         baseline    = self.pars.interp_fn(ga_wk, ref[:, 0], ref[:, 1])
@@ -356,6 +372,8 @@ class treat_pregnant(ss.Intervention):
     Treatment only applies between `start_year` and `end_year`. If not
     specified, defaults to the full simulation period.
 
+    Note: CRN safe.
+
     Args:
         disease (str):              name of the target disease (default: 'sir')
         start_year (float):         first year treatment is available (default: sim start)
@@ -363,6 +381,7 @@ class treat_pregnant(ss.Intervention):
         p_treat (Dist):             par: probability of treating an eligible woman per timestep
         tx_growth_reversal (float): par: fraction of growth restriction to reverse (0-1)
         tx_timing_reversal (float): par: fraction of timing shift to reverse (0-1)
+        pars (dict): the same parameters, as a dict
 
     Attributes:
         ti_treated (FloatArr):  timestep when each agent was treated
@@ -389,6 +408,11 @@ class treat_pregnant(ss.Intervention):
         return
 
     def init_pre(self, sim):
+        """ Check that the sim has the disease and `ssl.mnch.FetalHealth`, and fill in the years
+
+        Args:
+            sim (Sim): the sim being initialized
+        """
         super().init_pre(sim)
 
         # Validate that the required disease and FetalHealth modules exist
@@ -409,12 +433,12 @@ class treat_pregnant(ss.Intervention):
             return
 
         sim     = self.sim
-        preg    = sim.people.pregnancy
+        preg    = sim.get_module(ss.Pregnancy)
         disease = sim.diseases[self.disease_name]
         fh      = sim.custom['fetal_health']
 
         # Find pregnant women infected with the target disease
-        eligible = preg.pregnant & disease.infected
+        eligible = preg.P & disease.infected
         treated = self.pars.p_treat.filter(eligible)
         if len(treated):
             # Cure infection
@@ -440,15 +464,18 @@ class fetal_infection(ss.Connector):
 
     Damage is applied at two points:
     1. At conception, if the mother is already infected (via a conception callback
-       registered with FetalHealth).
+       registered with the pregnancy, after FetalHealth's).
     2. During pregnancy, when a new infection occurs (detected in `step()`
-       by checking `ti_infected == self.ti - 1`, since transmission happens after connectors).
+       by checking `ti_infected == self.ti`: an infection in the previous step is dated at its end, which is this step's start).
 
-    Requires `ssl.mnch.FetalHealth()` in `custom` and an SIR disease in `diseases`.
+    Requires `ssl.mnch.FetalHealth()` in `custom` and an SIR disease written as code (`ssl.AgentSIR(name="sir")`) in `diseases`.
+
+    Note: CRN safe.
 
     Args:
         timing_shift (Dist):    weeks to shift delivery forward per infection (default: lognormal mean=3, std=1)
         growth_penalty (float): fractional birth weight reduction per infection (default: 0.15 = 15%)
+        pars (dict): the same parameters, as a dict
 
     To adapt for a different disease::
 
@@ -484,6 +511,11 @@ class fetal_infection(ss.Connector):
         return self.sim.custom['fetal_health']
 
     def init_pre(self, sim):
+        """ Check that the sim has what the connector needs
+
+        Args:
+            sim (Sim): the sim being initialized
+        """
         super().init_pre(sim)
 
         # Validate that the required modules exist
@@ -491,14 +523,17 @@ class fetal_infection(ss.Connector):
             raise ValueError('fetal_infection requires a FetalHealth module. Add ssl.mnch.FetalHealth() to custom.')
         if 'sir' not in sim.diseases:
             raise ValueError('fetal_infection requires an SIR disease module.')
+        return
 
-        # Register a callback so we can apply damage at conception for
-        # women who are already infected when they become pregnant
-        self.fh.add_conception_callback(self._on_conception)
+    def init_post(self):
+        """ Register a callback so we can apply damage at conception for women who are already infected when they become pregnant: after FetalHealth's (registered in its init_pre()), which sets the baseline """
+        super().init_post()
+        preg = self.sim.get_module(ss.Pregnancy)
+        preg.add_callback(preg.conception, self._on_conception)
         return
 
     def _on_conception(self, uids):
-        """ Called by FetalHealth when new pregnancies begin — damage if already infected """
+        """ Called by Pregnancy when new pregnancies begin, after FetalHealth's baseline — damage if already infected """
         infected = self.sim.diseases.sir.infected[uids]
         infected_uids = uids[infected]
         if len(infected_uids):
@@ -523,13 +558,13 @@ class fetal_infection(ss.Connector):
     def step(self):
         """ Each timestep, check for new infections in pregnant women and apply damage """
         sim  = self.sim
-        preg = sim.people.pregnancy
-        if not preg.pregnant.any():
+        preg = sim.get_module(ss.Pregnancy)
+        if not preg.P.any():
             return
 
         # Find pregnant women infected on the previous timestep (since transmission happens after connectors), excluding new pregnancies (handled at conception)
-        pregnant_uids  = preg.pregnant.uids
-        newly_infected = (sim.diseases.sir.ti_infected == self.ti - 1) & (preg.ti_pregnant < self.ti)
+        pregnant_uids  = preg.P.uids
+        newly_infected = (sim.diseases.sir.ti_infected == self.ti - 1) & (preg.ti_P < self.ti)
         affected = pregnant_uids[newly_infected[pregnant_uids]]
         if len(affected):
             self.fh.n_exposures[affected] += 1

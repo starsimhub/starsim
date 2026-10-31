@@ -1,0 +1,9 @@
+---
+pagetitle: "Code of conduct"
+authorship:
+  human: 100
+  ai: 0
+  note: Written by humans (adapted from the Contributor Covenant)
+---
+
+{{< include ../../CODE_OF_CONDUCT.md >}}

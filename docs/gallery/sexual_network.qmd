@@ -1,0 +1,59 @@
+---
+title: An STI on a sexual network
+jupyter: python3
+authorship:
+  human: 0
+  ai: 100
+  note: Written by AI
+---
+
+A sexually transmitted infection spreads only within partnerships, which form and dissolve over time, and how fast it spreads depends on who partners with whom and for how long, not just on the average number of partners. This needs a model of individual people and their partnerships: a network, and so agents. This page models a curable bacterial STI (an SIS model: people become susceptible again when cured) on Starsim's sexual network of men and women, with a different chance of transmission per sex act from men to women and from women to men.
+
+## The model
+
+| Parameter | Value | Meaning |
+|---|---|---|
+| Transmission per act, male to female | 8% | Chance that one sex act with an infected partner infects a woman |
+| Transmission per act, female to male | 5% | The same, for a man |
+| Duration of infection | 5 years | Mean time in I (exponential), until cured |
+| Partnerships | `ss.SexualNet()` defaults | Partnerships between men and women, with acts per year in each |
+| Agents | 2,000 | |
+| Infected at the start | 5% | |
+| Time step | 1 month | Over 10 years |
+
+```{python}
+import starsim as ss
+
+S, I = ss.states('S I')
+infection = S >> I @ dict(sexual=ss.peract(m2f=0.08, f2m=0.05)) * I  # Per act, on the sexual network
+recovery  = I >> S @ ss.years(5)
+sti = ss.Disease(infection, recovery, init_prev=0.05, name='sti')
+```
+
+The chance of transmission is given per act (`ss.peract`), for each direction of the network, which has men on one side and women on the other. The diagram, from `diagram()`:
+
+```{python}
+sti.diagram()
+```
+
+## Result
+
+Since this model has a network, Starsim runs it as agents. With 2,000 people, each run is different, so it is run 20 times, each with its own random seed:
+
+```{python}
+sim = ss.Sim(sti, networks=ss.SexualNet(), n_agents=2_000, start=2000, stop=2010, dt=ss.months(1), verbose=0)
+msim = sim.run(n_runs=20)
+msim.plot('sti')
+```
+
+The plot shows the median of the runs and the range that holds 95% of them. The number infected rises in the first year, as infections pass to the partners of the people infected at the start, and then falls slowly, as people are cured faster than new partnerships bring them new infections. Since an infection can only pass to a current partner, how many partners people have, and how long partnerships last, matter as much as the chance of transmission per act. The number infected at the end, and the infections over the ten years:
+
+```{python}
+msim.summarize().loc[['sti_I', 'sti_infection']]
+```
+
+## Going further
+
+- [Networks](../tutorials/a2_networks.qmd) covers random, sexual, and maternal networks, and when a model needs one.
+- [Several diseases](../tutorials/t8_strata.qmd) adds HIV to a model like this one, with each infection changing the other.
+- [Coming from EpiModel](../user_guide/conversion/epimodel.qmd) shows EpiModel's SIS on a network in Starsim.

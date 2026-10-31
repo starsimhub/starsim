@@ -1,0 +1,444 @@
+"""
+Export a sim to other formats
+
+Exports use the compartmental form of declared diseases, turning a sim run as agents into it. `to_hub()` reads results alone, however they were made.
+
+`ss.export_to(sim, format, filename=...)` writes a sim's declared diseases in another
+format; see `v4_design/design/16-interop.md`. Each is read from the built model (each
+disease's graph and engine). The formats carry less than a sim, and what is left out or
+changed is listed as `ss.errors.LossyExport`. An export does not fail because something
+cannot be carried.
+
+- `sbml`: the compartmental form as species and reactions (https://sbml.org), for any SBML tool
+- `odin`: the compartmental form as `deriv()` equations (https://mrc-ide.github.io/odin)
+
+The runs of a MultiSim are written as a submission to a hub (by scenario, as quantiles or samples) by `ss.converters.to_hub()`.
+
+SBML and odin are written from the compartmental form of the model (what
+`sir.equations()` prints), with the numbers in the sim's unit of time: a dwell time
+that is not exponential is its Erlang stages, and each stratification is summed into
+one group. Both are read back by `ss.import_from()`.
+
+Used with: agents and compartments; declared and coded modules
+"""
+import re
+import ast
+import xml.etree.ElementTree as ET
+import numpy as np
+import pandas as pd
+import sciris as sc
+import starsim as ss
+
+__all__ = ['exporters', 'export_to', 'flatten', 'to_sbml', 'to_odin', 'to_hub']
+
+math_funcs = dict(exp='exp', log='ln', sqrt='root', abs='abs', absolute='abs', minimum='min', maximum='max', min='min', max='max', sin='sin', cos='cos', floor='floor', ceiling='ceiling')
+
+
+#%% The compartmental form
+
+def initialized(sim):
+    """ The sim initialized and not yet run (so its state is the initial one): itself if it is, else a new one (see `sim.new()`) """
+    if sim.initialized and not (sim.complete or sim.t.ti > 0):
+        return sim
+    return sim.new(verbose=0).init()
+
+
+def compartmental(sim):
+    """ An initialized sim whose diseases run as compartments, and what was changed to get it """
+    sim = initialized(sim)
+    if sim.solver != 'abm':
+        return sim, None
+    return sim.new(solver='ode', verbose=0).init(), 'changed: the agent-based sim was written as its compartmental form (an ODE)'
+
+
+def strata(sim, mod):
+    """ The stratifications of a disease, as text (e.g. 'age: 0-4, 5-17, 18+') """
+    seen = {}
+    for strat in list(getattr(getattr(sim, 'groups', None), 'strats', [])) + list(getattr(mod.graph, 'strats', [])):
+        seen[strat.name] = f'{strat.name}: {", ".join(str(l) for l in strat.labels)}'
+    return list(seen.values())
+
+
+def rename(text, names, unit):
+    """
+    An expression with its names changed, as plain numbers and counts
+
+    A typed value (`peryear(0.02)`) is its number in the sim's unit, a count (`(S + I).n`)
+    is the sum it counts, a fraction (`I.frac`) that over `N`, and `mean(x)` (the mean
+    of a dwell time) is `x`, whose value is the mean.
+    """
+    node = ast.parse(text, mode='eval').body
+    class Sub(ast.NodeTransformer):
+        def visit_Call(self, n):
+            func = n.func.id if isinstance(n.func, ast.Name) else None
+            if func == 'mean' and len(n.args) == 1:
+                return self.visit(n.args[0])
+            cls = getattr(ss, func, None) if func else None
+            if isinstance(cls, type) and issubclass(cls, ss.TimePar) and all(isinstance(a, ast.Constant) for a in n.args):
+                return ast.Constant(float(ss.solvers.convert(cls(*[a.value for a in n.args]), unit)))
+            self.generic_visit(n)
+            return n
+        def visit_Attribute(self, n):
+            if n.attr == 'n':
+                return self.visit(n.value)
+            elif n.attr == 'frac':
+                return ast.BinOp(self.visit(n.value), ast.Div(), ast.Name(names.get('N', 'N')))
+            self.generic_visit(n)
+            return n
+        def visit_Name(self, n):
+            return ast.Name(names.get(n.id, n.id))
+    return ast.unparse(Sub().visit(node))
+
+
+def flatten(sim):
+    """
+    The compartmental form of a sim's declared diseases, as plain data for the exporters
+
+    Returns an `sc.obj` with the unit of time; the compartments and their initial
+    numbers; the parameters (numbers in that unit); named expressions (a state with
+    several stages is their sum, and `N` is the people in a disease); the flows, each
+    with its compartments and its rate in total; and what was left out or changed.
+    """
+    sim, how = compartmental(sim)
+    unit = sim.unit_base
+    lost = [how] if how else []
+    diseases = [mod for mod in sim.diseases.values() if getattr(mod, 'graph', None) is not None]
+    many = len(diseases) > 1
+    out = sc.obj(name=diseases[0].name if len(diseases) == 1 else 'model', unit=unit, comps=sc.obj(), pars=sc.obj(), exprs=sc.obj(), flows=[], lost=lost, n_states=0, n_transitions=0)
+
+    for mod in diseases:
+        g, e = mod.graph, mod.engine
+        pre = f'{mod.name}_' if many else ''
+        names, flows = ss.display.flow_terms(g, e)
+        Y = np.asarray(e.y).sum(axis=1) # Summed over the groups of any stratification
+        table = {}
+        for i,name in enumerate(names):
+            table[name] = pre + name
+            out.comps[pre + name] = float(Y[i])
+        for state in g.states.values():
+            stages = [table[n] for i,n in enumerate(names) if e.comps[i].state is state]
+            if len(stages) > 1: # The state is the sum of its stages
+                table[state.name] = pre + state.name
+                out.exprs[pre + state.name] = ' + '.join(stages)
+        table['N'] = pre + 'N'
+        out.exprs[pre + 'N'] = ' + '.join(pre + s.name for s in g.people_states)
+        out.n_states += len(g.states)
+        out.n_transitions += len(g.transitions)
+
+        # Parameters, as numbers in the sim's unit
+        dwells = {id(dw.par): dw for dw in e.dwells.values()}
+        for name,p in g.pars.items():
+            table[name] = pre + name
+            raw = p.raw
+            if isinstance(raw, ss.Dist):
+                dw = dwells.get(id(p))
+                value = float(dw.mean) if dw is not None else np.nan
+                if dw is not None and dw.staged:
+                    lost.append(f'changed: the {dw.family} dwell time "{name}" written as {dw.k} exponential stages (Erlang) with its mean, {value:n} {unit}s')
+                elif dw is not None and dw.family not in ['expon', None]:
+                    lost.append(f'changed: the {dw.family} dwell time "{name}" written as exponential with its mean, {value:n} {unit}s')
+            else:
+                try:
+                    value = float(ss.solvers.convert(raw, unit))
+                except (TypeError, ValueError):
+                    value = np.nan
+                    lost.append(f'not exported: the value of parameter "{name}" ({type(raw).__name__}), which is not a number; written as NaN')
+            out.pars[pre + name] = value
+
+        # Flows, each named after its transition (with a number when it is several)
+        counts = sc.ddict(int)
+        for flow in flows:
+            counts[flow.tr.name] += max(len(flow.dst), 1)
+        seen = sc.ddict(int)
+        for flow in flows:
+            src = None if flow.src is None else table[names[flow.src]]
+            for dst,term in flow.dst or [(None, flow.term)]:
+                name = pre + flow.tr.name
+                if counts[flow.tr.name] > 1:
+                    seen[flow.tr.name] += 1
+                    name = f'{name}_{seen[flow.tr.name]}'
+                out.flows.append(sc.obj(name=name, src=src, dst=None if dst is None else table[names[dst]], rate=rename(term, table, unit), transition=flow.tr.name))
+
+    # Anything a rate uses that is not exported
+    known = set(out.comps) | set(out.pars) | set(out.exprs)
+    for flow in out.flows:
+        used = {n.id for n in ast.walk(ast.parse(flow.rate, mode='eval')) if isinstance(n, ast.Name)} - known - set(math_funcs)
+        if used:
+            lost.append(f'not exported: {sc.strjoin(sorted(used))}, used in the rate of "{flow.name}" ({flow.rate})')
+
+    # What the sim has that these formats do not
+    if not diseases:
+        lost.append('not exported: the sim has no declared diseases')
+    for mod in [mod for key in ['custom', 'demographics', 'diseases'] for mod in sim[key]() if not isinstance(mod, ss.demographics.Flows)]: # Births and deaths declared for the population are, by now, transitions of a disease
+        if not any(mod is dis for dis in diseases):
+            lost.append(f'not exported: module "{mod.name}" ({type(mod).__name__}), which has no declared transitions')
+            continue
+        for text in strata(sim, mod):
+            lost.append(f'changed: "{mod.name}" is stratified ({text}), written as one group, the sum of its groups, with the base values of its parameters')
+        results = [(name, 'result') for name in mod.graph.exprs] + [(name, 'outcome') for name in mod.graph.outcomes]
+        for name,kind in sorted(results):
+            lost.append(f'not exported: {kind} "{name}"')
+        for name in sorted(mod.graph.funcs):
+            lost.append(f'not exported: function "{name}" (Python code)')
+    for mods,what in [(list(sim.networks()) + getattr(sim, 'mixed', []), 'network'), (sim.interventions(), 'intervention'), (sim.connectors(), 'modifier')]:
+        for mod in mods:
+            extra = ' (contacts written as homogeneous mixing)' if what == 'network' else ''
+            lost.append(f'not exported: {what} "{mod.name}"{extra}')
+    if getattr(sim, 'crossings', None):
+        lost.append('not exported: the coupling between diseases (each is written on its own)')
+    if sim.solver not in ['ode', 'auto'] and how is None:
+        lost.append(f'changed: solver="{sim.solver}" is not carried; the model is written as an ODE')
+    return out
+
+
+#%% SBML
+
+def mathml(node):
+    """ A Python expression (an AST node) as a MathML element """
+    m = 'http://www.w3.org/1998/Math/MathML'
+    def el(tag, text=None):
+        e = ET.Element(f'{{{m}}}{tag}')
+        if text is not None:
+            e.text = f' {text} '
+        return e
+    def apply(op, args):
+        a = el('apply')
+        a.append(el(op))
+        for arg in args:
+            a.append(arg)
+        return a
+    def visit(n):
+        if isinstance(n, ast.Name):
+            return el('ci', n.id)
+        elif isinstance(n, ast.Constant):
+            return el('cn', repr(float(n.value)))
+        elif isinstance(n, ast.BinOp):
+            ops = {ast.Add:'plus', ast.Sub:'minus', ast.Mult:'times', ast.Div:'divide', ast.Pow:'power'}
+            return apply(ops[type(n.op)], [visit(n.left), visit(n.right)])
+        elif isinstance(n, ast.UnaryOp) and isinstance(n.op, ast.USub):
+            return apply('minus', [visit(n.operand)])
+        elif isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id in math_funcs:
+            return apply(math_funcs[n.func.id], [visit(a) for a in n.args])
+        raise ValueError(f'the expression "{ast.unparse(n)}" has no MathML form here')
+    out = el('math')
+    out.append(visit(n) if isinstance(node, ast.AST) and not isinstance(node, ast.Expression) else visit(node.body))
+    return out
+
+
+def to_sbml(sim):
+    """
+    The compartmental form of a sim as an SBML model (Level 3 Version 1): compartments as species, flows as reactions
+
+    Args:
+        sim (`ss.Sim`): the sim
+    """
+    flat = flatten(sim)
+    sb = 'http://www.sbml.org/sbml/level3/version1/core'
+    ET.register_namespace('', sb)
+    ET.register_namespace('math', 'http://www.w3.org/1998/Math/MathML')
+    q = lambda tag: f'{{{sb}}}{tag}'
+    sub = lambda parent, tag, **attrs: ET.SubElement(parent, q(tag), {k:str(v) for k,v in attrs.items()})
+    root = ET.Element(q('sbml'), dict(level='3', version='1'))
+    model = sub(root, 'model', id=flat.name if flat.name.isidentifier() else 'model', name=flat.name, timeUnits=flat.unit, substanceUnits='item', extentUnits='item')
+    seconds = dict(day=86400, week=7*86400, month=365.25/12*86400, year=365.25*86400)
+    units = sub(model, 'listOfUnitDefinitions')
+    ud = sub(units, 'unitDefinition', id=flat.unit)
+    sub(sub(ud, 'listOfUnits'), 'unit', kind='second', exponent=1, scale=0, multiplier=seconds.get(flat.unit, 1))
+    sub(sub(model, 'listOfCompartments'), 'compartment', id='population', size=1, constant='true', spatialDimensions=3, units='dimensionless')
+    species = sub(model, 'listOfSpecies')
+    for name,init in flat.comps.items():
+        sub(species, 'species', id=name, compartment='population', initialAmount=repr(init), hasOnlySubstanceUnits='true', boundaryCondition='false', constant='false')
+    params = sub(model, 'listOfParameters')
+    for name,value in flat.pars.items():
+        sub(params, 'parameter', id=name, value=repr(value), constant='true')
+    for name in flat.exprs:
+        sub(params, 'parameter', id=name, constant='false')
+    lost = list(flat.lost)
+    rules = sub(model, 'listOfRules')
+    for name,text in flat.exprs.items():
+        sub(rules, 'assignmentRule', variable=name).append(mathml(ast.parse(text, mode='eval')))
+    reactions = sub(model, 'listOfReactions')
+    for flow in flat.flows:
+        try:
+            law = mathml(ast.parse(flow.rate, mode='eval'))
+        except ValueError as E:
+            lost.append(f'not exported: the flow "{flow.name}": {E}')
+            continue
+        r = sub(reactions, 'reaction', id=flow.name, reversible='false', fast='false')
+        if flow.src is not None:
+            sub(sub(r, 'listOfReactants'), 'speciesReference', species=flow.src, stoichiometry=1, constant='true')
+        if flow.dst is not None:
+            sub(sub(r, 'listOfProducts'), 'speciesReference', species=flow.dst, stoichiometry=1, constant='true')
+        used = {n.id for n in ast.walk(ast.parse(flow.rate, mode='eval')) if isinstance(n, ast.Name)}
+        modifiers = [name for name in flat.comps if name in used and name not in [flow.src, flow.dst]] # Other species the law uses, as SBML requires
+        if modifiers:
+            mods = sub(r, 'listOfModifiers')
+            for name in modifiers:
+                sub(mods, 'modifierSpeciesReference', species=name)
+        sub(r, 'kineticLaw').append(law)
+    ET.indent(root, space='  ')
+    text = ET.tostring(root, encoding='unicode')
+    text = text.replace(' xmlns:math="http://www.w3.org/1998/Math/MathML"', '').replace('<math:math>', '<math xmlns="http://www.w3.org/1998/Math/MathML">') # MathML in its own default namespace, as SBML tools write it
+    text = re.sub(r'<(/?)math:', r'<\1', text)
+    text = '<?xml version="1.0" encoding="UTF-8"?>\n' + text + '\n'
+    summary = f'exported to SBML: {flat.n_states} states, {flat.n_transitions} transitions, as {len(flat.comps)} species and {len(flat.flows)} reactions (rates per {flat.unit})'
+    return text, summary, lost
+
+
+#%% odin
+
+def to_odin(sim):
+    """
+    The compartmental form of a sim as an odin model: a `deriv()` equation for each compartment, with each flow a named variable
+
+    Args:
+        sim (`ss.Sim`): the sim
+    """
+    flat = flatten(sim)
+    r = lambda text: text.replace('**', '^')
+    lines = [f'## {flat.name}, exported from Starsim {ss.__version__}; time is in {flat.unit}s', '']
+    taken = set(flat.comps) | set(flat.pars) | set(flat.exprs)
+    flow_names = []
+    for flow in flat.flows: # Each flow is its own variable, so the equations pair up when read back
+        name = flow.name if flow.name not in taken else f'{flow.name}_flow'
+        taken.add(name)
+        flow_names.append(name)
+    for comp in flat.comps:
+        terms = [f'+ {n}' for f,n in zip(flat.flows, flow_names) if f.dst == comp] + [f'- {n}' for f,n in zip(flat.flows, flow_names) if f.src == comp]
+        rhs = ' '.join(terms).lstrip('+ ') if terms else '0'
+        if rhs.startswith('- '):
+            rhs = '-' + rhs[2:]
+        lines.append(f'deriv({comp}) <- {rhs}')
+    lines.append('')
+    for comp,init in flat.comps.items():
+        lines.append(f'initial({comp}) <- {init:.15g}')
+    lines.append('')
+    for flow,name in zip(flat.flows, flow_names):
+        lines.append(f'{name} <- {r(flow.rate)}')
+    for name,text in flat.exprs.items():
+        lines.append(f'{name} <- {r(text)}')
+    lines.append('')
+    for name,value in flat.pars.items():
+        lines.append(f'{name} <- user({"NA" if np.isnan(value) else f"{value:.15g}"})')
+    summary = f'exported to odin: {flat.n_states} states, {flat.n_transitions} transitions, as {len(flat.comps)} compartments and {len(flat.flows)} flows (time in {flat.unit}s)'
+    return '\n'.join(lines) + '\n', summary, list(flat.lost)
+
+
+#%% Exporting
+
+exporters = dict(
+    sbml    = to_sbml,
+    odin    = to_odin,
+)
+
+
+def export_to(sim, format, filename=None, verbose=None):
+    """
+    Write a sim in another format (`sim.save()` and `ss.save()` write Starsim's own, a gzipped pickle that `ss.load()` reads)
+
+    What the format cannot carry is listed as `ss.errors.LossyExport`; the export still
+    writes everything it can.
+
+    Args:
+        sim (`ss.Sim`): the sim, with declared diseases
+        format (str): one of `ss.converters.exporters`: 'sbml' or 'odin'
+        filename (str): the file to write, if any
+        verbose (bool): whether to print what was exported (by default, unless something was lost)
+
+    Returns:
+        The text of the export
+
+    **Examples**:
+
+        ss.export_to(sim, 'sbml', filename='sir.xml')
+        print(ss.export_to(sim, 'odin'))
+    """
+    key = str(format).lower()
+    if key not in exporters:
+        errormsg = f'Cannot export to format "{format}"; the formats are {sc.strjoin(exporters)}'
+        raise ValueError(errormsg)
+    text, summary, lost = exporters[key](sim)
+    if lost:
+        ss.warn(f'{summary}\n' + '\n'.join(f'  {line}' for line in lost), ss.errors.LossyExport)
+    elif verbose is not False:
+        print(summary)
+    if filename is not None:
+        sc.savetext(filename, text)
+    return text
+
+
+#%% Exporting runs
+
+hub_quantiles = [0.01, 0.025] + [round(q, 2) for q in np.arange(0.05, 0.951, 0.05)] + [0.975, 0.99] # The 23 quantiles of the US forecast hubs
+
+def to_hub(msim, targets, origin_date=None, by=None, every='week', output_type='quantile', quantiles=hub_quantiles, location=None):
+    """
+    The runs of a MultiSim as a submission to a hub (in the hubverse format): each target, by scenario, location, and period
+
+    Each scenario (the label of its sim) is its own `scenario_id`, and the periods are counted from
+    `origin_date`. A target's name says what it is: one starting "cum " is the total since the origin
+    date, one starting "peak size " is the largest value of a period (with no horizon), and any other is
+    a flow's total over each period, or a count at its end.
+
+    Args:
+        msim (`ss.MultiSim`): the runs
+        targets (dict): the hub's name (or a list of names) for each result, e.g. `dict(incidHosp=['inc hosp', 'cum hosp', 'peak size hosp'])`
+        origin_date (date): the date the periods are counted from (default: the start of the runs); for runs without dates, a time, which the `origin_date` column then holds
+        by (str): the dimension whose levels are the locations (default: one location, the total)
+        every (str): the period: 'day' or 'week' (of the sim's steps, which must then be days)
+        output_type (str/list): 'quantile' (of the runs of each scenario), 'sample' (each run, by its position in its scenario), or both
+        quantiles (list): the quantiles (default: the 23 that the US hubs ask for)
+        location (str): the name of the single location, if `by` is not given
+
+    Returns a long dataframe with columns `origin_date`, `scenario_id`, `location`, `target`, `horizon`,
+    `output_type`, `output_type_id`, and `value`.
+
+    **Example**:
+
+        msim = ss.parallel(baseline=s1, lockdown=s2, n_runs=20)
+        hub = ss.converters.to_hub(msim, targets=dict(infection=['inc inf', 'cum inf']), origin_date='2020-03-01', by='patch')
+    """
+    msim.check_run('to_hub')
+    steps = dict(day=1, week=7)[every]
+    output_type = sc.tolist(output_type)
+    if not set(output_type) <= {'quantile', 'sample'}:
+        errormsg = f'The output type must be "quantile" or "sample", not {output_type}'
+        raise ValueError(errormsg)
+    found = {key:res for modname,key,res in msim.results.walk() if modname is not None}
+    rows = []
+    for key,names in targets.items():
+        if key not in found:
+            errormsg = f'No result called "{key}"; the results are {sc.strjoin(found)}'
+            raise KeyError(errormsg)
+        res = found[key]
+        dates = list(res.timevec)
+        dated = isinstance(dates[0], ss.date)
+        origin = dates[0] if origin_date is None else ss.date(origin_date) if dated else float(origin_date) # Without dates, a time in the sim's unit
+        i0 = next((i for i,d in enumerate(dates) if d >= origin), len(dates)) # The values after the origin
+        places = res.by(by).by_column() if by is not None else {location or 'total':res}
+        for place,sub in places.items():
+            vals = sub.values[:, i0+1:]
+            n = vals.shape[1]//steps
+            if sub.kind == 'flow':
+                periods = vals[:, :n*steps].reshape(len(vals), n, steps).sum(axis=2)
+            else:
+                periods = vals[:, steps-1:n*steps:steps]
+            for target in sc.tolist(names):
+                if target.startswith('cum '):
+                    if sub.kind != 'flow':
+                        errormsg = f'The target "{target}" is a cumulative total, but "{key}" is a count, not a flow'
+                        raise ValueError(errormsg)
+                    values, horizon = periods.cumsum(axis=1), np.arange(1, n+1)
+                elif target.startswith('peak size '):
+                    values, horizon = periods.max(axis=1, keepdims=True), [pd.NA]
+                else:
+                    values, horizon = periods, np.arange(1, n+1)
+                for scenario,inds in sub.scenarios().items():
+                    common = dict(origin_date=origin.strftime('%Y-%m-%d') if dated else float(origin), scenario_id=scenario, location=str(place), target=target, horizon=pd.array(horizon, dtype='Int64'))
+                    if 'quantile' in output_type:
+                        for q,qvals in zip(quantiles, np.quantile(values[inds], quantiles, axis=0)):
+                            rows.append(pd.DataFrame(dict(**common, output_type='quantile', output_type_id=q, value=qvals)))
+                    if 'sample' in output_type:
+                        for j,ind in enumerate(inds):
+                            rows.append(pd.DataFrame(dict(**common, output_type='sample', output_type_id=j, value=values[ind])))
+    return pd.concat(rows, ignore_index=True)

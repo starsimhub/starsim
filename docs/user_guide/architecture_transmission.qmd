@@ -1,0 +1,135 @@
+---
+title: Transmission
+jupyter: python3
+authorship:
+  human: 0
+  ai: 100
+  note: Written by AI from the Claude draft of "Mixing, interventions, and results", with a new section on how each engine computes transmission
+---
+
+A disease says *who infects whom*: `S >> I @ beta * I` reads "susceptible people become infected at a rate proportional to their contact with infected people". Everything around it is kept separate. The **routes** say who meets whom and how often; **effects** say what changes what; **interventions** say what is delivered to whom; and **results** say what comes out. Each of these is a separate object, so changing one (homogeneous mixing to a contact matrix, say, or a vaccine to a test) doesn't touch the disease. This page covers each of them, and how the engines turn routes and modifiers into who is infected.
+
+## Routes: who meets whom
+
+A bare state in a rate means contact with people in that state, through whatever routes the sim has. With no network, `beta * I` is the textbook `beta * I / N`, and `beta` is a transmission rate. With a network or mixing pool, the route supplies the contacts, and `beta` becomes a probability per contact (per act, on a sexual network). It is one rule: the hazard is `beta` times the contact rate times the share of contacts who are infectious, and the default contact rate is 1. Nobody has to write `/N`, a common mistake in hand-written models.
+
+When a formula needs the number itself, it uses `I.n`, which is taken literally. This is how environmental and vector-borne transmission are written: a water reservoir or a mosquito population is just a state declared with `people=False`, and its count appears in the rate (`beta * W.n / (W.n + K)`). There is no special route type for these.
+
+All routes are passed with `networks=`, and the disease stays the same object throughout:
+
+```{python}
+import starsim as ss
+
+S, I, R = ss.states('S I R')
+sir = ss.Disease(
+    infection = S >> I @ 0.05 * I,
+    recovery  = I >> R @ ss.days(10),
+    init_prev = 0.01,
+    name      = 'sir',
+)
+
+routes = {
+    'No network':     dict(),
+    'Mixing pool':    dict(networks=ss.MixingPool(n_contacts=10)),
+    'Contact matrix': dict(networks=ss.contacts('Kenya'), stratify=dict(age=[0, 15, 65])),
+    'Random network': dict(networks=ss.RandomNet(n_contacts=10)),
+}
+for label, kw in routes.items():
+    sim = ss.Sim(sir, unit='day', stop=ss.days(100), verbose=0, **kw)
+    sim.init()
+    print(f'{label}: {sim.solver}, since {sim.solver_reason}')
+```
+
+Homogeneous mixing, a mixing pool, and a contact matrix have exact compartmental forms, so `solver='auto'` runs them as an ODE; an individual-level network doesn't, so the sim runs as agents. `auto` never approximates the mixing. Ask for `solver='ode'` on a network and Starsim uses the standard approximation (homogeneous mixing with the same mean contacts for a random network; the Anderson–May partner-change model for lasting partnerships) and prints one line saying so, or raises `CapabilityError` with `approx=False`. See [Solvers and backends](architecture_solvers.qmd) for how the choice is made.
+
+A list of routes is a layered population (`ss.contacts('Kenya', layer='school')`, and so on), and the force of infection sums over the layers. Space is a stratification by patch (`ss.geo.geography('Kenya', level=1)`), with an optional mobility model (`ss.geo.gravity()`, `ss.geo.radiation()`, or a matrix) that couples the patches by commuting or migration; these run under every solver. Contact tracing and the transmission log need routes that keep individual contacts, so they need agents.
+
+## How the engines compute transmission
+
+The rule above is one, but each engine computes it in its own terms, from the same declaration:
+
+- **As compartments**, the routes are turned into contact rates between groups when the sim is initialized (`ss.solvers.Mixing`, in `solvers/mixing.py`): homogeneous mixing is one contact per unit of time, a mixing pool sets the number of contacts, mixing pools between age groups give a contact matrix, and space adds the movement between patches. The force of infection on each group is then `beta` times the contact rates times the share infectious in each group it meets, which the kernels evaluate as part of the program. Nothing is drawn per contact.
+- **As agents**, transmission is drawn over each network's edges (`ss.solvers.Transmission`, in `solvers/agents.py`): for each edge with an infectious person at one end and a susceptible at the other, the chance in the step is `1 − exp(−beta·dt)`, times the effective `rel_trans` of the source and `rel_sus` of the target. A network with acts per partnership works out a hazard per act instead. The routes are taken in the order of `sim.networks`, and someone reached by several sources is infected by the first, who is recorded as the source in the infection log. A mixing pool as agents is a force of infection on each agent from the share infectious in the pool, with no edges.
+- **A disease written as code** (`ss.Infection`) transmits through the same `ss.solvers.Transmission` code, so it sees the same modifiers and products, gives the same edges the same random numbers, and attributes infections the same way; it gives its `beta` as a probability per step, converting a rate the same way.
+
+Each edge's random number is drawn by its source and target, from a stream named after the disease, so adding a network or another disease doesn't change which edges transmit (see [Randomness](architecture_randomness.qmd)).
+
+## Effects: what changes what
+
+There are two ways for one module to change another, and both are first-class:
+
+- **`ss.modify`**, for the common case: while a condition holds, multiply (or add to, or set) a named quantity. `ss.modify(hiv.rel_trans, multiply=2.0, where=syphilis.active)` reads "for people with active syphilis, multiply HIV transmissibility by 2".
+- **Ordinary Python in a module's `step()`**, for everything else: several sources and targets, boolean flags, schedules, memory.
+
+A modifier never overwrites what it changes. Each modifiable quantity has a *base* value (what its module set) and an *effective* value (the base with every active modifier applied). Reading `sir.rel_sus[uids]` gives the base, assigning to it sets the base, and `sir.current_value('rel_sus', uids)` is what transmission will use (whether the disease is declared or written as code, which share the code that applies it: `ss.solvers.Transmission`). When a modifier switches off, the quantity is simply back at its base: there is nothing to save or restore, and two modules can't clobber each other. Several modifiers on one quantity combine by one fixed rule, whatever order they were declared in: **set, then multiply, then add**.
+
+Conditions (`where=`) use the sim's real attributes. Written before the sim exists, `ss.ppl.age > 65` is a lazy expression (an `ss.conditions.Cond`), evaluated each time it's needed. Nothing is analyzed in advance: a condition is tried on whatever the solver provides, agents or groups. `age > 65` works on groups if 65 is an age bin edge; for `age > 70` inside a bin, `auto` runs agents and an explicit `solver='ode'` stops and says why.
+
+Because modifiers are declared, Starsim can list them all, before anything runs. Products are modifiers too, so a vaccine shows up in the same list:
+
+```{python}
+masks       = ss.modify(sir.rel_sus, multiply=0.6, where=ss.ppl.age > 65, start=ss.days(20))
+vaccination = ss.vaccinate(efficacy=0.85, who=ss.ppl.age < 15, coverage=0.7, at=[ss.days(30)])
+sim = ss.Sim(sir, interventions=[masks, vaccination], stratify=dict(age=[0, 15, 65]), unit='day', stop=ss.days(100), verbose=0)
+sim.what_modifies(sir.rel_sus)
+```
+
+Code that writes another module's arrays directly is allowed, but isn't tracked. Nothing is accepted and then ignored: a modifier that no solver would apply raises a `ValueError` when the sim is built. Modules run in Starsim's ordered loop ([Model execution](architecture_execution.qmd#the-loop)), each seeing the current values, so mutual dependence (HIV raising syphilis susceptibility while syphilis raises HIV transmissibility) needs no special handling; any effect of the order is of order `dt`, which `sim.check_dt()` measures.
+
+## Interventions: products and delivery
+
+An intervention has two parts. *What* is a product (`ss.Vaccine`, `ss.Diagnostic`, `ss.Treatment`: nouns) or a change to a quantity (`ss.modify`). *Delivery* is who gets it, when, and how many (`ss.vaccinate`, `ss.screen`, `ss.treat`: verbs), given by keywords (`who=`, `coverage=`, `capacity=`, `at=`, `interval=`, `at_age=`), or by one `deliver=` function when those depend on each other. Routine versus campaign delivery is a keyword, not a class. A delivery takes its product's keywords and makes the product itself (`ss.vaccinate(efficacy=0.85, ...)` makes an `ss.Vaccine`); a product is made on its own only when several deliveries give the same one.
+
+A cascade of care is a list of ordinary deliveries, each triggered by the outcome of another:
+
+```python
+screening = ss.screen(sensitivity=0.8, specificity=0.95, coverage=0.1, interval=ss.days(7))  # a rapid test
+confirm   = ss.screen(sensitivity=0.95, specificity=0.99, who=screening.positive, coverage=0.9) # a follow-up is a step of its own
+treatment = ss.treat(cure=0.95, who=confirm.positive, capacity=ss.perday(50))                # while stocks last
+```
+
+An outcome such as `screening.positive` is an *event*: the people it happened to this step. Events can be joined (`a | b`), and they remember: `screening.positive.ever`, `.count`, and `.since` work anywhere a condition does. Each step runs after the steps whose events trigger it, whatever order they are listed in, so a follow-up acts on the same step as its trigger. Every delivery has results of its own (`delivered`, `eligible`, `coverage`, ...).
+
+The same declarations run under every solver where they can. This cascade runs as an ODE, with the tests as flows thinned by sensitivity and specificity and capacity as a cap on the total flow. Some things need individuals: a test result that comes after a `delay=`, the joint of two events, `.since`, `trace=` (delivery to contacts), or a product whose effect is your own code. Under `auto` any of these makes the sim run as agents, and the reason it prints names the part.
+
+A rule with memory ("reopen schools only after four weeks below the threshold") is a small intervention class whose `step()` keeps a flag, plus a modifier that reads it. A scenario is just a sim with its interventions; `ss.parallel({'Baseline': base, 'Masks': masks})` runs several as one `ss.MultiSim`, labeled by scenario.
+
+## Results
+
+Every state gets a count (`I`) and every transition a flow of the same name (`infection`), with no declaration needed. Extra results are declared with the model: a ratio (`prevalence = I / N`) or an `ss.outcome`, a weighted, delayed sum of flows for observed quantities ("half of infections are reported, five days later": `ss.outcome(0.5 * infection, delay=ss.days(5))`). An outcome moves nobody, and if the model includes testing, the tests' own `positive` results are the cases instead.
+
+Each result knows what kind of quantity it is (`kind`: a flow, a stock, or a ratio), and that one fact does a lot of work: it sets how the result is summarized over time (`summarize_by`: `'sum'` for a flow, `'last'` for a stock, `'mean'` for a ratio, unless told otherwise); resampling to weeks, or comparing with weekly data, sums a flow but reads a stock at the end of each week, and a ratio is never averaged across groups (its numerator and denominator are summed, then divided). After stratification a result is still one result with extra dimensions, so `res.I.select(age='0-14')` and `res.I.by('age')` replace names like `I_female_high`. Data attaches by column name (`data='cases.csv'` with a column called `cases`), which is also all that calibration needs (see [Calibration](calibration_fitting.qmd)).
+
+A sim is one run. Many runs are an `ss.MultiSim`, whose results are the same `ss.Result` objects, each holding every run (an array with a row for each run and a column for each time point), with the scenario and any parameters swept recorded for each run. So the same methods work on one run or many: `res.select(scenario=...)`, `res.median()` and `res.quantiles()` at each time point, and `res.summarize()`, which reduces each run to one value by the result's kind (a flow to its total, a stock to its final value):
+
+```{python}
+S, I, R = ss.states('S I R')
+small = ss.Disease(infection=S >> I @ 0.2 * I, recovery=I >> R @ ss.days(10), init_n=dict(I=3), name='sir')
+sim = ss.Sim(small, solver='gillespie', total_pop=1000, unit='day', stop=ss.days(120), verbose=0)
+msim = sim.run(n_runs=20)
+
+totals = msim.results.sir.infection.summarize() # The total infections of each run
+print('Total infections in each run:', totals)
+print('Share of runs with a major outbreak:', (totals > 100).mean())
+```
+
+Extinction and bimodality can't be seen in a median, which is why `msim.plot(lines=True)` draws every run, and `msim.summarize()` gives an interval as well as the median.
+
+## Limits
+
+- Modifiers on one quantity combine by the one rule above. Protection from several strains a person holds needs a different rule (the strongest, or a capped sum), which is `ss.immunity`; anything else is `step()` code.
+- Functions in `where=` and `ss.modify` keep no memory apart from `hold=`; anything that must remember is a class.
+
+The code is in `starsim/networks.py` and `solvers/mixing.py` (routes), `connectors.py` and `internals/conditions.py` (effects), `interventions.py`, `products.py` and `solvers/deliveries.py` (interventions), and `results.py`. For the modeler's view, see the user guide on [contact networks](populations_networks.qmd), [population data and contact matrices](populations_data.qmd), [geography](populations_geography.qmd), [connectors](interventions_connectors.qmd), [products](interventions_products.qmd), [interventions](interventions_interventions.qmd), [results](building_results.qmd), and [scenarios and many runs](running_scenarios.qmd).
+
+## In the design record
+
+- [Routes](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/06-routes.md): the force of infection, counts used literally, the table of routes, layers, mobility, and geography
+- [Effects](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/07-effects.md): `ss.modify`, base and effective values, conditions, and execution order
+- [Interventions](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/08-interventions.md): products, delivery keywords, cascades and events, triggers, scenarios, and how each solver realizes them
+- [Results](https://github.com/starsimhub/starsim/blob/v4/v4_design/design/09-results.md): automatic and declared results, outcomes, data, and many runs
+
+## Further reading
+
+- [EpiModel: Network modeling for epidemics](https://epimodel.org/): transmission over dynamic partnership networks, estimated with exponential-family random graph models
+- [EMOD: Campaign management](https://emod.idmod.org/EMOD-Generic/md_dev/dev-architecture-campaigns/): how interventions are distributed to individuals in IDM's agent-based model

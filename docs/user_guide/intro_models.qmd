@@ -1,10 +1,14 @@
 ---
 title: Starsim models
-jupyter: python3
+authorship:
+  human: 60
+  ai: 40
+  note: Adapted from the Starsim 3 user guide page of the same name; the sections on choosing a starting model and on the built-in library were written by AI
 ---
 
+The Starsim framework serves as a centralized "hub" for storing anything that is typically required to model the spread of diseases, as compartments or among agents. This includes representations of networks, diseases, populations, demographics, interventions, and products, and logic for connecting all of these things together and simulating their interactions over time.
 
-The Starsim framework serves as a centralized "hub" for storing anything that is typically required to model the spread of diseases among agents. This includes representations of networks, diseases, populations, demographics, interventions, and products, and logic for connecting all of these things together and simulating their interactions over time.
+## Models built with Starsim
 
 Specific models that have been created using the Starsim framework are kept in their own separate repositories. Starsim's models include the following:
 
@@ -20,11 +24,42 @@ Specific models that have been created using the Starsim framework are kept in t
 | [PHCsim](https://github.com/starsimhub/phcsim) | Pre-release | Primary health care and health systems |
 | [RVFsim](https://github.com/starsimhub/RVFSim) | Pre-release | Rift valley fever in cattle |
 
-
 *(If you've developed a model and want it included in this list, please [get in touch](mailto:info@starsim.org).)*
 
 One of the strengths of Starsim is that all of these models are inter-compatible. For example, an HIV-TB coinfection model can be created by combining the HIV module from STIsim and the TB module from TBsim.
 
+These models were written for Starsim 3, and are being ported to Starsim 4; check each model's own documentation for the version of Starsim it needs. For moving your own Starsim 3 code to Starsim 4, see [Starsim v3](conversion/starsim3.qmd); much of the rewriting is done by the migration script, `python -m starsim.converters.migrate`.
+
 Note: the Starsim suite also includes [Covasim](https://github.com/institutefordiseasemodeling/covasim) (for modeling COVID-19). Covasim is built on the same principles as Starsim, but unlike the above tools, it is a separate codebase and is not inter-operable with the other models.
 
+## The built-in library
 
+Starsim itself comes with a small library of example modules, imported with `import starsim.library as ssl`: diseases (HIV with CD4 counts, cholera with an environmental reservoir, Ebola, measles), networks (households, networks in space, and theoretical networks such as Erdős–Rényi), and maternal, newborn, and child health (fetal health, neonatal sepsis). They are illustrative rather than validated: their parameter values are indicative, and they are meant to be copied and adapted. See [Library: Diseases](library_diseases.qmd), [Library: Networks](library_networks.qmd), and [Library: Maternal-child health](library_mnch.qmd).
+
+The core of Starsim also includes the classic compartmental structures, `ss.SIR`, `ss.SIS`, and `ss.SEIR`, as declared diseases with named parameters (see [Diseases](building_diseases.qmd#built-in-sir-sis-and-seir)).
+
+## Choosing a starting model
+
+Start from the smallest model that represents the mechanism your question depends on. An extra compartment, network, or demographic process is worth adding when it changes a quantity relevant to the question, and when it can be supported by assumptions or data. These pages are good starting points for common questions:
+
+| Question | Starting point |
+|---|---|
+| How does a closed outbreak progress? | [SIR, four ways](../gallery/sir.qmd) |
+| Does the distribution of the latent or infectious period affect the timing? | [SEIR with a realistic infectious period](../gallery/seir_erlang.qmd) |
+| How many hospital beds will be occupied, and how many people die? | [Hospitalization and death](../gallery/branching.qmd) |
+| Does an environmental reservoir matter? | [Cholera with a water reservoir](../gallery/cholera.qmd) |
+| Which age groups are most affected? | [Age groups and a contact matrix](../gallery/age_contacts.qmd), [T4 – Age groups and contacts](../tutorials/t4_ages.qmd) |
+| What is the effect of vaccination? | [Vaccination as a stratification](../gallery/vaccination_strata.qmd), [T5 – Interventions and scenarios](../tutorials/t5_interventions.qmd) |
+| How does infection move between towns? | [T6 – Geography and mixing](../tutorials/t6_places.qmd) |
+| What do surveillance data say about the parameters? | [Cases, hospitalizations, and deaths, fitted to data](../gallery/outcomes_fit.qmd), [T7 – Data and calibration](../tutorials/t7_calibration.qmd) |
+| Do individual partnerships matter? | [An STI on a sexual network](../gallery/sexual_network.qmd), [A2 – Networks](../tutorials/a2_networks.qmd) |
+
+When adapting a model, first reproduce its baseline, then change one assumption at a time, and compare the results with and without each change. Record where each parameter value came from (`ss.par(..., source=...)` keeps it with the model; see [Parameters](building_parameters.qmd)), and which outputs were checked against data. If you already have a model in another framework, see [Conversion](conversion/index.qmd), and check that the translated model gives the same results as the original.
+
+## Further reading
+
+- [Epiverse](https://epiverse-trace.github.io/): R packages for outbreak analysis, including compartmental models
+- [The R Epidemics Consortium (RECON)](https://www.reconverse.org/): R packages for outbreak response
+- [EMOD](https://emod.idmod.org/): an individual-based disease model in C++, with models of malaria, HIV, and TB
+- [LASER](https://laser.idmod.org/): a framework for fast spatial agent-based models in Python
+- [EpiModel](https://www.epimodel.org/): network models of infectious disease in R, with a gallery of example models

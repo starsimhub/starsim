@@ -1,0 +1,119 @@
+## A5 – Custom modules
+
+### Question 1
+
+**Q: Change the half-life of the antibodies to 30 days and to 365 days. How does each change the endemic level of infection, compared with no immunity and with the all-or-nothing SIRS?**
+
+A: We define the infection and the `Antibodies` module from the tutorial again, and run them with each half-life:
+
+```{python}
+import numpy as np
+import starsim as ss
+import starsim.library as ssl
+
+class Antibodies(ss.Module):
+    """ Each person's antibody level: 1 on recovery, then halving every half_life """
+    def __init__(self, half_life=ss.days(90), **kwargs):
+        super().__init__(**kwargs)
+        self.define_pars(half_life=half_life)
+        self.define_states(ss.FloatArr('level', default=0.0, label='Antibody level'))
+        return
+
+    def step(self):
+        self.level[:] = self.level*0.5**(self.t.dt/self.pars.half_life)
+        self.level[self.sim.diseases.cold.recovery.uids] = 1.0
+        return
+
+S, I = ss.states('S I')
+sis = ss.Disease(infection=S >> I @ 0.4*I, recovery=I >> S @ ss.days(7), init_prev=0.01, name='cold')
+
+def susceptibility(sim):
+    return 1 - sim.custom.antibodies.level
+
+pars = dict(networks=ss.MixingPool(n_contacts=1), n_agents=10_000, stop=ss.days(2*365), verbose=0)
+S, I, R = ss.states('S I R')
+sirs = ss.Disease(infection=S >> I @ 0.4*I, recovery=I >> R @ ss.days(7), waning=R >> S @ ss.days(180), init_prev=0.01, name='cold')
+
+sims = {'No immunity': ss.Sim(sis, **pars), 'All or nothing': ss.Sim(sirs, **pars)}
+for label, half_life in {'Half-life of 30 days': ss.days(30), 'Half-life of 365 days': ss.days(365)}.items():
+    protection = ss.modify(sis.rel_sus, multiply=susceptibility)
+    sims[label] = ss.Sim(sis, Antibodies(half_life=half_life), connectors=protection, **pars)
+msim = ss.parallel(sims)
+msim.plot('cold.I')
+```
+
+The longer the antibodies last, the lower the endemic level. With a half-life of 30 days, people regain most of their susceptibility within a couple of months, so the infection settles at about a quarter of its level with no immunity, but well above its level with the all-or-nothing SIRS (whose protection lasts 180 days on average). With a half-life of a year, almost everyone is still well protected long after the first wave, and the infection dies out.
+
+### Question 2
+
+**Q: Give `AgeNet` a parameter `p_random`, the share of each person's contacts that are with anyone at random. How large does it have to be before the epidemic looks like the one with random contacts?**
+
+A: The simplest way is to keep `AgeNet` as it was, and add a random network beside it, splitting the 4 contacts a day between the two:
+
+```{python}
+class AgeNet(ss.Network):
+    """ Contacts each day with people close in age """
+    def __init__(self, n_contacts=4, spread=ss.years(2), **kwargs):
+        super().__init__()
+        self.define_pars(n_contacts=n_contacts, spread=spread)
+        self.update_pars(**kwargs)
+        self.noise = ss.normal(0, 1)
+        return
+
+    def add_pairs(self):
+        uids = self.sim.people.alive.uids
+        age = self.sim.people.age[uids] + self.pars.spread.years*self.noise.rvs(uids)
+        order = uids[np.argsort(age, kind='stable')]
+        p1 = np.concatenate([order[:-k] for k in range(1, self.pars.n_contacts//2 + 1)])
+        p2 = np.concatenate([order[k:] for k in range(1, self.pars.n_contacts//2 + 1)])
+        self.append(p1=p1, p2=p2, beta=np.ones(len(p1)))
+        return
+
+    def step(self):
+        self.remove_edges(np.ones(len(self), dtype=bool))
+        self.add_pairs()
+        return
+
+S, I, R = ss.states('S I R')
+cold = ss.Disease(infection=S >> I @ 0.1*I, recovery=I >> R @ ss.days(7), init_prev=0.001, name='cold')
+
+pars = dict(n_agents=5000, stop=ss.days(250), verbose=0)
+sims = {
+    'All random':           ss.Sim(cold, networks=ss.RandomNet(n_contacts=4), **pars),
+    'All close in age':     ss.Sim(cold, networks=AgeNet(n_contacts=4), **pars),
+    'Half at random':       ss.Sim(cold, networks=[AgeNet(n_contacts=2), ss.RandomNet(n_contacts=2)], **pars),
+}
+msim = ss.parallel(sims)
+msim.plot('cold.I')
+```
+
+With half of the 4 contacts at random, the epidemic is almost the same as with all contacts random: a few long-range contacts are enough to carry the infection across the ages, as in a "small-world" network. (`AgeNet` pairs each person with an even number of neighbors, so to try smaller shares, give it more contacts and the random network fewer, keeping the total the same, e.g. 6 and 2.)
+
+### Question 3
+
+**Q: Write an `SIRS` in which immunity is lost with a constant chance each step, using an `ss.bernoulli` distribution in `step_state()`. Does it give the same epidemic?**
+
+A: A constant chance each step gives an exponential (or, in whole steps, geometric) duration of immunity, with the same mean as `ss.expon(scale=ss.days(180))` if the chance per day is 1/180, so the waning works the same way. Run with daily steps, the first wave is smaller than in the tutorial, which used steps of a quarter of a day, for the reason given there:
+
+```{python}
+class SIRS(ssl.AgentSIR):
+    def __init__(self, pars=None, *args, **kwargs):
+        super().__init__()
+        self.define_pars(p_wane=ss.bernoulli(p=1/180)) # The chance of losing immunity each day
+        self.update_pars(pars, **kwargs)
+        return
+
+    def step_state(self):
+        super().step_state()
+        waning = self.pars.p_wane.filter(self.recovered.uids) # Each recovered agent loses immunity with this chance
+        self.recovered[waning] = False
+        self.susceptible[waning] = True
+        return
+
+coded = SIRS(beta=ss.perday(0.4), dur_inf=ss.expon(scale=ss.days(7)), p_death=0, init_prev=0.01, name='cold')
+sim = ss.Sim(coded, networks=ss.MixingPool(n_contacts=1), n_agents=10_000, stop=ss.days(2*365), dt=ss.days(1), verbose=0)
+sim.run()
+sim.results.cold.infected.plot()
+```
+
+The chance is per step, so it is only right for a step of one day; a version that works for any step would convert a rate to a chance per step (e.g. `ss.peryear(2).to_prob()`), or schedule the time of waning at recovery, as the tutorial's version does.

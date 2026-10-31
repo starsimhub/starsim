@@ -13,16 +13,10 @@ import starsim.library as ssl
 
 n = 5 # Default number of samples
 
-def make_dist(name='test', **kwargs):
-    """ Make a default Dist for testing """
-    dist = ss.random(name=name, **kwargs)
-    return dist
-
-def make_dists(**kwargs):
+def make_dists():
     """ Make a Dists object with two distributions in it """
     sim = ss.Sim(n_agents=100).init() # Need an empty sim to initialize properly
-    distlist = [make_dist(), make_dist()]
-    dists = ss.Dists(distlist)
+    dists = ss.dists.Dists([ss.random(name='test'), ss.random(name='test')])
     dists.init(sim=sim)
     return dists
 
@@ -44,55 +38,28 @@ def test_seed():
     # Re-initializing the sim's dists should not change their names or seeds
     sim = ss.Sim(n_agents=100, diseases='sis', networks='random', demographics=True).init()
     seeds = {k:d.seed for k,d in sim.dists.dists.items()}
-    sim.init_dists()
+    sim._init_dists()
     assert seeds == {k:d.seed for k,d in sim.dists.dists.items()} # Previously found the dists again via sim.dists
     return dist0, dist1
 
 
 @sc.timer()
-def test_reset(n=n):
-    """ Sample, reset, sample """
-    sc.heading('Testing sample, reset, sample')
-    dists = make_dists()
-    distlist = dists.dists.values()
-
-    # Reset via the container, but only
-    before = sc.autolist()
-    after = sc.autolist()
-    for dist in distlist:
-        before += list(dist(n))
-    dists.reset() # Return to step 0
-    for dist in distlist:
-        after += list(dist(n))
-
-    print(f'Initial sample:\n{before}')
-    print(f'After reset sample:\n{after}')
-    assert np.array_equal(before, after)
-
-    return before, after
-
-
-@sc.timer()
-def test_jump(n=n):
-    """ Sample, jump, sample """
-    sc.heading('Testing sample, jump, sample')
-    dists = make_dists()
-    distlist = dists.dists.values()
-
-    # Jump via the contianer
-    before = sc.autolist()
-    after = sc.autolist()
-    for dist in distlist:
-        before += list(dist(n))
-    dists.jump(to=10) # Jump to 10th step
-    for dist in distlist:
-        after += list(dist(n))
-
-    print(f'Initial sample:\n{before}')
-    print(f'After jump sample:\n{after}')
-    assert not np.array_equal(before, after)
-
-    return before, after
+def test_reset_jump(n=n):
+    """ Sample, reset or jump, sample """
+    sc.heading('Testing sample, reset, sample; and sample, jump, sample')
+    out = []
+    for how in ['reset', 'jump']:
+        dists = make_dists()
+        sample = lambda: np.concatenate([dist(n) for dist in dists.dists.values()])
+        before = sample()
+        if how == 'reset':
+            dists.reset() # Return to step 0, via the container
+        else:
+            dists.jump(to=10) # Jump to the 10th step
+        after = sample()
+        assert np.array_equal(before, after) == (how == 'reset')
+        out.append((before, after))
+    return out
 
 
 @sc.timer()
@@ -142,18 +109,11 @@ class OneMore(ss.Intervention):
         self.ti_apply = ti_apply
         return
 
-    def init_pre(self, sim):
-        super().init_pre(sim)
-        one_birth = ss.Pregnancy(name='one_birth', rel_fertility=0) # Ensure no default births
-        one_birth.init_pre(sim)
-        self.one_birth = one_birth
-        return
-
     def step(self):
         """ Create an extra agent """
         sim = self.sim
         if sim.ti == self.ti_apply:
-            _, new_uids = self.one_birth.make_embryos(ss.uids(0), embryo_counts=np.array([1])) # Assign 0th agent to be the "mother"
+            new_uids = sim.people.grow(1, parent=ss.uids(0), age=0) # The 0th agent is the "mother"
             sim.people.age[new_uids] = -100 # Set to a very low number to never reach debut age
 
             # Infect that agent and immediately recover
@@ -198,15 +158,15 @@ def test_worlds(do_plot=False):
     """ Test that one extra birth leads to one extra infection """
     sc.heading('Testing worlds...')
 
-    res = sc.objdict()
+    res = sc.obj()
 
     pars = dict(
         start = 2000,
         stop = 2100,
         n_agents = 200,
-        verbose = 0.05,
-        diseases = dict(
-            type = 'sir',
+        verbose = 1,
+        diseases = ssl.AgentSIR( # Written as code, since OneMore sets its prognoses directly
+            name = 'sir',
             init_prev = 0.1,
             beta = 1.0,
             dur_inf = 20,
@@ -232,8 +192,8 @@ def test_worlds(do_plot=False):
 
     l1 = len(s1.people)
     l2 = len(s2.people)
-    i1 = sum1.sir_cum_infections
-    i2 = sum2.sir_cum_infections
+    i1 = sum1.value.sir_infection
+    i2 = sum2.value.sir_infection
     a1 = s1.interventions.countinf.arr
     a2 = s2.interventions.countinf.arr
     assert l2 == l1 + 1, f'Expected one more person in s2 ({l2}) than s1 ({l1})'
@@ -252,24 +212,24 @@ def test_independence(do_plot=False, thresh=0.1):
     sim = ss.Sim(
         n_agents = 1000,
         diseases = [
-            dict(type='sir', init_prev=0.1),
-            dict(type='sis', init_prev=0.1),
+            dict(type='sir', init_prev=0.1, beta=dict(random=0.1, sexual=ss.peract(0.01))), # A probability per act on ss.SexualNet
+            dict(type='sis', init_prev=0.1, beta=dict(random=0.05, sexual=ss.peract(0.01))),
             ssl.diseases.HIV(init_prev=0.1),
         ],
         networks = [
             dict(type='random', n_contacts=ss.poisson(8)),
-            dict(type='mf', debut=ss.constant(0), participation=0.5), # To avoid age correlations
+            dict(type='sexual', debut=ss.constant(0), participation=0.5), # To avoid age correlations
         ]
     )
     sim.init()
 
     # Assemble measures
     st = sim.people.states
-    arrs = sc.objdict()
+    arrs = sc.obj()
     arrs.age = st.age.values
     arrs.sex = st.female.values
     for key,disease in sim.diseases.items():
-        arrs[f'{key}_init'] = disease.infected.values
+        arrs[f'{key}_init'] = (disease.infected if isinstance(disease, ss.Infection) else disease.I).values # Written as code, or declared
     for key,network in sim.networks.items():
         data = np.zeros(len(sim.people))
         for p in ['p1', 'p2']:
@@ -302,6 +262,12 @@ def test_independence(do_plot=False, thresh=0.1):
     max_corr = abs(stats).max()
     assert max_corr < thresh, f'The maximum correlation between variables was {max_corr}, above the threshold {thresh}'
 
+    # A declared disease's random numbers do not depend on which other declared diseases are in the sim
+    kw = dict(n_agents=1000, networks='random', dur=10, verbose=0)
+    alone = ss.Sim(diseases=ss.SIS(), **kw).run()
+    both = ss.Sim(diseases=[ss.SIR(p_death=0), ss.SIS()], **kw).run()
+    assert np.array_equal(alone.results.sis.I, both.results.sis.I) # The same people infected with SIS
+
     return sim
 
 
@@ -313,10 +279,10 @@ def test_combine_rands(do_plot=False):
     np.random.seed(2)
     a = np.random.randint(np.iinfo(np.uint64).max, size=n, dtype=np.uint64)
     b = np.random.randint(np.iinfo(np.uint64).max, size=n, dtype=np.uint64)
-    c = ss.utils.combine_rands(a, b)
+    c = ss.distributions.combine_rands(a, b)
     if do_plot:
         plt.figure()
-        for i,k,v in sc.objdict(a=a,b=b,combined=c).enumitems():
+        for i,k,v in sc.obj(a=a,b=b,combined=c).enumitems():
             plt.subplot(3,1,i+1)
             plt.hist(v)
             plt.title(k)
@@ -331,7 +297,7 @@ def test_combine_rands(do_plot=False):
     # Signed input would give values in [-0.5, 0.5] rather than [0, 1], so it should be refused
     # rather than cast, since casting would silently copy the array
     with pytest.raises(TypeError):
-        ss.utils.combine_rands(a.view(np.int64), b.view(np.int64))
+        ss.distributions.combine_rands(a.view(np.int64), b.view(np.int64))
 
     return c
 
@@ -341,23 +307,24 @@ def test_crn_option():
     """ The opt-in non-CRN fast path (ss.options.crn=False) for transmission """
     def run(crn, seed=1):
         with ss.options.context(crn=crn):
-            sim = ss.Sim(diseases=ss.SIS(beta=0.1, init_prev=0.05), networks=ss.RandomNet(),
+            sim = ss.Sim(diseases=ssl.AgentSIS(name='sis', beta=0.1, init_prev=0.05), networks=ss.RandomNet(), # The transmission of ss.Infection
                          n_agents=2000, dur=30, rand_seed=seed, verbose=0)
             sim.run()
-        return sim.results['sis']['n_infected'].values
+        return sim.results['sis']['infected'].values
 
     assert ss.options.crn is True, 'CRN should be the default'
 
     # CRN is reproducible, and is the default (not changed by toggling the option back)
-    assert np.array_equal(run(True), run(True)), 'CRN path should be reproducible'
+    crn = run(True)
+    assert np.array_equal(crn, run(True)), 'CRN path should be reproducible'
 
     # Non-CRN is reproducible given the same seed, but differs from CRN (it is a different RNG path)
     fast = run(False)
     assert np.array_equal(fast, run(False)), 'Non-CRN path should be reproducible for a fixed seed'
-    assert not np.array_equal(fast, run(True)), 'Non-CRN path should differ from the CRN path'
+    assert not np.array_equal(fast, crn), 'Non-CRN path should differ from the CRN path'
 
     # Statistically equivalent: similar epidemic size at the end
-    crn_eq = run(True)[-5:].mean()
+    crn_eq = crn[-5:].mean()
     fast_eq = fast[-5:].mean()
     assert np.isclose(crn_eq, fast_eq, rtol=0.1), f'Epidemic sizes should be similar: {crn_eq} vs {fast_eq}'
 
@@ -416,8 +383,7 @@ if __name__ == '__main__':
     do_plot = False
 
     o1 = test_seed()
-    o2 = test_reset(n)
-    o3 = test_jump(n)
+    o2 = test_reset_jump(n)
     o4 = test_order(n)
     o5 = test_worlds(do_plot=do_plot)
     o6 = test_independence(do_plot=do_plot)

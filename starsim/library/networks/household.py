@@ -1,5 +1,9 @@
 """
 Household contact networks built from DHS-style survey data
+
+This exists for models that need realistic households, with the ages of the people in each, including how households change with births and moves. It has no compartmental form, since it follows individuals.
+
+Used with: agents; declared and coded modules
 """
 import numpy as np
 import pandas as pd
@@ -25,6 +29,8 @@ class HouseholdNet(ss.Network):
     This network assumes only one mother per household. Births are automatically
     added to their mother's household network.
 
+    Note: not CRN safe unless `dynamic=False` (the partners who move out are drawn together).
+
     Args:
         dhs_data (DataFrame/str): A pandas or Sciris dataframe with columns `hh_id`
             and `ages`. Optionally also `sexes`. The `ages` column should
@@ -43,6 +49,7 @@ class HouseholdNet(ss.Network):
             Default 0.7. Only used when `dynamic=True`.
         update_freq (int): How often (in timesteps) to update the network.
             Default 1. Only used when `dynamic=True`.
+        pars (dict): the same parameters, as a dict
 
     The expected dataframe format is::
 
@@ -115,12 +122,22 @@ class HouseholdNet(ss.Network):
         return
 
     def init_pre(self, sim):
+        """ Initialize the network, and check that a dynamic network has `ss.Pregnancy`
+
+        Args:
+            sim (Sim): the sim being initialized
+        """
         super().init_pre(sim)
-        if self.dynamic:
-            ss.check_requires(self.sim, ['pregnancy'])
+        if self.dynamic and sim.get_module(ss.Pregnancy, die=False) is None: # By type, so a subclass with its own name is found
+            raise ValueError('A dynamic HouseholdNet requires a Pregnancy module. Add ss.Pregnancy() to demographics.')
         return
 
     def init_post(self, add_pairs=True):
+        """ Add the first edges, and add a random fraction of a year to each age
+
+        Args:
+            add_pairs (bool): whether to add edges
+        """
         super().init_post(add_pairs)
         ppl = self.sim.people
         # DHS age data is in integer years; add a random fractional age for realism
@@ -135,9 +152,9 @@ class HouseholdNet(ss.Network):
         # distorting the input household size distribution. (Pregnancy is a demographics module,
         # so it is initialized before networks and its states are populated by this point.)
         if self.dynamic:
-            preg = ppl.pregnancy
-            preg_uids = preg.pregnant.uids
-            self.ti_move_out_check[preg_uids] = preg.ti_pregnant[preg_uids]
+            preg = self.sim.get_module(ss.Pregnancy)
+            preg_uids = preg.P.uids
+            self.ti_move_out_check[preg_uids] = preg.ti_P[preg_uids]
         return
 
     def _parse_dhs(self):
@@ -299,13 +316,14 @@ class HouseholdNet(ss.Network):
         """
         ppl = self.sim.people
         # Evaluate each pregnancy for move-out exactly once (at its start). `ti_move_out_check`
-        # stores the `ti_pregnant` of the pregnancy a woman was last evaluated for; she is eligible
-        # only when her current `ti_pregnant` is newer than that. This is dt-agnostic: comparing
-        # against `ti_pregnant` (rather than the sim timestep vs. `ti_delivery`) avoids mis-timed,
+        # stores the `ti_P` of the pregnancy a woman was last evaluated for; she is eligible
+        # only when her current `ti_P` is newer than that. This is dt-agnostic: comparing
+        # against `ti_P` (rather than the sim timestep vs. the scheduled delivery) avoids mis-timed,
         # repeated move-outs when the pregnancy module runs on a coarser dt than the sim (e.g.
         # ss.Pregnancy(dt=ss.months(3))), which otherwise over-fragments households. Bit-identical
         # to the previous logic when pregnancy dt == sim dt.
-        potential_movers = ss.uids(~self.fhoh & ppl.pregnancy.pregnant & (self.ti_move_out_check < ppl.pregnancy.ti_pregnant))
+        preg = self.sim.get_module(ss.Pregnancy)
+        potential_movers = ss.uids(~self.fhoh & preg.P & (self.ti_move_out_check < preg.ti_P))
         moving_out = self.pars['prob_move_out'].filter(potential_movers)
         if len(moving_out) > 0:
             self.fhoh[moving_out] = True
@@ -323,7 +341,7 @@ class HouseholdNet(ss.Network):
             self.household_ids[moving_out] = new_cids
             self.household_ids[partners] = new_cids
 
-        self.ti_move_out_check[potential_movers] = ppl.pregnancy.ti_pregnant[potential_movers]
+        self.ti_move_out_check[potential_movers] = preg.ti_P[potential_movers]
         return
 
     @staticmethod

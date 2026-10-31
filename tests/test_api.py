@@ -24,10 +24,10 @@ def test_make_index():
     assert len(names) == len(set(names)), 'Entries should be unique'
 
     print('Checking entries')
-    namespaces = dict(ss=ss, ssl=ssl)
+    namespaces = {'ss':ss, 'ssl':ssl, 'ss.fit':ss.fit, 'ss.geo':ss.geo, 'ss.data':ss.data}
     for entry in entries:
         name = entry['name']
-        prefix, attr = name.split('.')
+        prefix, attr = name.rsplit('.', 1)
         assert hasattr(namespaces[prefix], attr), f'{name} is in the index but not in the Starsim namespace'
         assert entry['kind'] in ['function', 'class'], f'Unexpected kind for {name}'
         assert entry['signature'].startswith('('), f'Invalid signature for {name}'
@@ -39,6 +39,8 @@ def test_make_index():
     assert entrydict['ss.SIR']['pars']['beta'] == 'ss.peryear(0.1)', 'Expecting ss.SIR to list its default pars'
     assert entrydict['ss.Sim']['example'], 'Expecting ss.Sim to have an example'
     assert entrydict['ssl.Cholera']['module'] == 'library.diseases'
+    assert entrydict['ss.fit.compare_models']['module'] == 'fit' and 'ss.geo.gravity' in entrydict and 'ss.data.population' in entrydict
+    assert 'run()' in entrydict['ss.Sim']['methods'] and 'init_module_attrs()' not in entrydict['ss.Sim']['methods'], 'Expecting public methods only'
     for alias,canonical in index['aliases'].items():
         assert alias not in names, f'Alias {alias} should not have its own entry'
 

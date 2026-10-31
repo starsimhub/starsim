@@ -31,7 +31,7 @@ def make_simple_setup():
 def make_complex_30():
     """A shorter run with substantially more model structure."""
     hiv = ssl.diseases.HIV()
-    hiv.pars['beta'] = {'mf': [0.15, 0.10], 'maternal': [0.2, 0], 'random': [0, 0]}
+    hiv.pars['beta'] = {'sexual': [0.15, 0.10], 'maternal': [0.2, 0], 'random': [0, 0]}
 
     return ss.Sim(
         n_agents=80_000,
@@ -40,7 +40,7 @@ def make_complex_30():
         rand_seed=1,
         verbose=0,
         diseases=[ss.SIS(), hiv],
-        networks=[ss.RandomNet(), ss.MFNet(), ss.PrenatalNet()],
+        networks=[ss.RandomNet(), ss.SexualNet(), ss.PrenatalNet()],
         demographics=ss.Pregnancy(),
         label='complex_30',
     )
@@ -55,26 +55,26 @@ def make_moderate():
         rand_seed=1,
         verbose=0,
         diseases=[ss.SIR(), ss.SIS()],
-        networks=[ss.RandomNet(), ss.MFNet()],
+        networks=[ss.RandomNet(), ss.SexualNet()],
         demographics=True,
         label='moderate_300',
     )
 
 
-CASES = sc.objdict(
-    simple_setup=sc.objdict(
+CASES = sc.obj(
+    simple_setup=sc.obj(
         label='Simple setup-dominated simulation',
         timesteps=1,
         repeats=7,
         factory=make_simple_setup,
     ),
-    complex=sc.objdict(
+    complex=sc.obj(
         label='High-complexity simulation with 30 timesteps',
         timesteps=30,
         repeats=2,
         factory=make_complex_30,
     ),
-    moderate=sc.objdict(
+    moderate=sc.obj(
         label='Moderate-complexity simulation with 300 timesteps',
         timesteps=100,
         repeats=3,
@@ -101,7 +101,7 @@ def benchmark_case(name, case, repeats=None):
         sim.run()
         run_times.append(sc.toc(t0, output=True))
 
-    row = sc.objdict(
+    row = sc.obj(
         case=name,
         label=case.label,
         n_agents=int(sim.pars.n_agents),
@@ -122,7 +122,7 @@ def get_cases(selection):
     if selection not in CASES:
         errormsg = f'Invalid case "{selection}"; choices are: {sc.strjoin(CASES.keys())}, all'
         raise ValueError(errormsg)
-    return sc.objdict({selection: CASES[selection]})
+    return sc.obj({selection: CASES[selection]})
 
 
 def benchmark_examples(repeats=None, case='all'):

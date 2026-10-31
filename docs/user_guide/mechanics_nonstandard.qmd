@@ -1,0 +1,194 @@
+---
+title: Nonstandard usage
+jupyter: python3
+authorship:
+  human: 15
+  ai: 85
+  note: The wealth model is adapted from the Starsim 3 user guide page on nonstandard usage; the page, and the boids model, written by AI
+---
+
+Starsim is built for infectious diseases, but its machinery is general: a population of agents, each with properties kept as arrays over all of them; modules that change those properties at each step; results recorded over time; and random numbers drawn so that runs can be repeated and compared. A [module written as code](building_modules.qmd) can hold any property of people and any rule for changing it, so Starsim can run agent-based models with no disease at all. This page shows two classic ones: a model of wealth, from economics, and a model of flocking birds, from computer graphics.
+
+Not every model of something other than an infection needs code. States and transitions describe any process in which people move between categories at given rates (smoking, use of contraception, stages of a chronic disease, employment), and a declared model of such a process runs under every solver, with the same interventions as a disease: see [Diseases](building_diseases.qmd). Some models track things that are not people at all, such as bacteria in water or a population of mosquitoes, as states with `people=False` in the same model as the people.
+
+## A model of wealth
+
+This is the "wealth model" of the [Mesa](https://mesa.readthedocs.io/latest/tutorials/0_first_model.html) tutorial: each of 100 people starts with one unit of wealth, and at each step, everyone who has any gives one unit to someone chosen at random. Though the rule is fair, wealth ends up very unequal.
+
+Each person's wealth is a state, and whom each giver gives to is drawn from a Starsim distribution, so that runs can be repeated and compared (see [Random numbers](mechanics_random.qmd)). The Gini coefficient (0 if everyone has the same, near 1 if one person has everything) is a result:
+
+```{python}
+import numpy as np
+import matplotlib.pyplot as plt
+import starsim as ss
+
+class Wealth(ss.Module):
+    """ Each person starts with 1 unit of wealth; each step, everyone with any gives 1 unit to someone chosen at random """
+
+    def __init__(self, **kwargs):
+        super().__init__()
+        self.define_states(
+            ss.FloatArr('wealth', default=1.0, label='Wealth'),
+        )
+        self.update_pars(**kwargs)
+        self.recipient = ss.randint(low=0, high=lambda self, sim, uids: len(sim.people)) # Whom each giver gives to
+        return
+
+    def init_results(self):
+        super().init_results()
+        self.define_results(
+            ss.Result('gini', label='Gini coefficient'),
+        )
+        return
+
+    def step(self):
+        givers = (self.wealth > 0).uids
+        recipients = self.recipient.rvs(givers)
+        self.wealth[givers] = self.wealth[givers] - 1
+        self.wealth[:] = self.wealth + np.bincount(recipients, minlength=len(self.wealth)) # Each recipient gets 1 unit for each giver who chose them
+        return
+
+    def update_results(self):
+        super().update_results()
+        w = np.sort(self.wealth.values)
+        n = len(w)
+        self.results.gini[self.ti] = np.sum((2*np.arange(1, n+1) - n - 1)*w)/(n*w.sum())
+        return
+
+sim = ss.Sim(Wealth(), n_agents=100, stop=100) # 100 steps
+sim.run()
+sim.results.wealth.gini.plot()
+```
+
+Inequality rises within a few steps and then stays high. The final distribution has many people with nothing and a few with several units:
+
+```{python}
+wealth = sim.people.wealth.wealth
+plt.figure()
+plt.hist(wealth.values, bins=np.arange(wealth.max() + 2) - 0.5)
+plt.xlabel('Wealth')
+plt.ylabel('Number of people')
+plt.show()
+```
+
+Compared with Mesa, where each agent is an object with its own `step()`, Starsim keeps each property as one array over all people, so a rule is applied to everyone at once: the code is a little shorter, and faster for large populations.
+
+## A model of flocking
+
+Boids are the classic model of flocking, in which each bird follows three simple rules about the birds it can see: **alignment** (steer towards their average heading), **cohesion** (steer towards their center), and **separation** (steer away from any that are too close). No bird leads, and nobody tells the flock where to go, but flocks form and fly together.
+
+In Starsim, each boid's position (`x`, `y`) and velocity (`vx`, `vy`) are states, starting at random. The world is a unit square whose edges wrap around, so a boid leaving on the right comes back on the left. At each step, the module works out the offset from every boid to every other (the short way round), applies the three rules to all the boids at once, keeps each boid's speed between a minimum and a maximum, and moves them. How well the flock is aligned is a result: for each boid, the length of the average heading of those it can see (itself included), averaged over all boids, which is 1 when each moves with its neighbors and close to 0 when their headings are random:
+
+```{python}
+class Boids(ss.Module):
+    """ Flocking: each boid steers towards the heading and center of the boids it can see, and away from those too close """
+
+    def __init__(self, **kwargs):
+        super().__init__()
+        self.define_pars(
+            radius     = 0.1,    # How far a boid can see (the world is a unit square)
+            too_close  = 0.03,   # How close is too close
+            alignment  = 0.1,    # How strongly a boid steers towards its neighbors' heading
+            cohesion   = 0.005,  # ... towards its neighbors' center
+            separation = 3e-5,   # ... away from those too close
+            speed      = [0.005, 0.01], # The minimum and maximum distance moved in a step
+        )
+        self.update_pars(**kwargs)
+        self.define_states(
+            ss.FloatArr('x',  default=ss.random(), label='Position (x)'),
+            ss.FloatArr('y',  default=ss.random(), label='Position (y)'),
+            ss.FloatArr('vx', default=ss.uniform(-0.01, 0.01), label='Velocity (x)'),
+            ss.FloatArr('vy', default=ss.uniform(-0.01, 0.01), label='Velocity (y)'),
+        )
+        return
+
+    def init_results(self):
+        super().init_results()
+        self.define_results(ss.Result('aligned', label='Alignment with neighbors'))
+        return
+
+    def offsets(self):
+        """ The offsets from each boid to every other, the short way round the edges, and the distances """
+        x, y = self.x.values, self.y.values
+        dx = x[None, :] - x[:, None]
+        dy = y[None, :] - y[:, None]
+        dx -= np.round(dx)
+        dy -= np.round(dy)
+        return dx, dy, np.hypot(dx, dy)
+
+    def step(self):
+        p = self.pars
+        vx, vy = self.vx.values, self.vy.values
+        dx, dy, dist = self.offsets()
+        np.fill_diagonal(dist, np.inf) # A boid is not its own neighbor
+        near = dist < p.radius
+        n_near = np.maximum(near.sum(axis=1), 1)
+        close = dist < p.too_close
+
+        # The three rules, for all the boids at once
+        steer_x = p.alignment*(near @ vx / n_near - vx) + p.cohesion*(near*dx).sum(axis=1)/n_near - p.separation*(close*dx/dist**2).sum(axis=1)
+        steer_y = p.alignment*(near @ vy / n_near - vy) + p.cohesion*(near*dy).sum(axis=1)/n_near - p.separation*(close*dy/dist**2).sum(axis=1)
+        alone = ~near.any(axis=1) # A boid that sees nobody flies straight on
+        vx = vx + np.where(alone, 0, steer_x)
+        vy = vy + np.where(alone, 0, steer_y)
+
+        # Keep the speed within limits, then move, wrapping around the edges
+        speed = np.hypot(vx, vy)
+        factor = np.clip(speed, *p.speed)/speed
+        self.vx[:] = vx*factor
+        self.vy[:] = vy*factor
+        self.x[:] = (self.x + self.vx) % 1
+        self.y[:] = (self.y + self.vy) % 1
+        return
+
+    def update_results(self):
+        super().update_results()
+        speed = np.hypot(self.vx.values, self.vy.values)
+        hx, hy = self.vx.values/speed, self.vy.values/speed # Each boid's heading
+        _, _, dist = self.offsets()
+        sees = dist < self.pars.radius # Including itself
+        self.results.aligned[self.ti] = (np.hypot(sees @ hx, sees @ hy)/sees.sum(axis=1)).mean()
+        return
+```
+
+The rule of alignment is what makes a flock: without it, boids still gather and keep their distance, but each flies its own way. Here 200 boids fly for 200 steps, with and without it:
+
+```{python}
+scenarios = {
+    'Flocking': ss.Sim(Boids(), n_agents=200, stop=200),
+    'No alignment': ss.Sim(Boids(alignment=0), n_agents=200, stop=200),
+}
+msim = ss.parallel(scenarios, parallel=False)
+msim.plot('boids.aligned')
+```
+
+With alignment, most boids are moving with their neighbors within about 50 steps, and nearly all within 100; without it, their headings stay about as random as at the start. The positions and velocities are states, so the flock can be drawn at any point in a run. Here the sim runs in stages (`run(until=...)` runs up to a given step, and the next call carries on from there), and each snapshot shows every boid as an arrow along its heading:
+
+```{python}
+sim = ss.Sim(Boids(), n_agents=200, stop=200)
+fig, axes = plt.subplots(1, 3, figsize=(12, 4))
+for ax, step in zip(axes, [0, 30, 200]):
+    sim.run(until=step)
+    boids = sim.custom.boids
+    speed = np.hypot(boids.vx.values, boids.vy.values)
+    ax.quiver(boids.x.values, boids.y.values, boids.vx.values/speed, boids.vy.values/speed, angles='xy', scale_units='xy', scale=40, width=0.005) # Arrows along each heading
+    ax.set_title(f'Step {step}')
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    ax.set_aspect('equal')
+    ax.set_xticks([])
+    ax.set_yticks([])
+plt.show()
+```
+
+From random headings at the start, groups form within a few dozen steps, and by the end the boids fly as a few large flocks (which wrap around the edges of the square), with space between their members. The module is given to the sim as `custom` (any module that is not a disease, network, demographic module, intervention, analyzer, or connector), and is reached as `sim.custom.boids`.
+
+As in the wealth model, each rule is applied to every boid at once, as operations on arrays, rather than by looping over the boids. Working out the distance between every pair of boids takes time and memory in proportion to the square of their number, which is fine for hundreds or a few thousand; for many more, a spatial index (such as SciPy's `cKDTree`) would find each boid's neighbors faster.
+
+## Further reading
+
+- [Mesa: creating your first model](https://mesa.readthedocs.io/latest/tutorials/0_first_model.html): the wealth model, written in Mesa
+- [Vivarium: boids](https://vivarium.readthedocs.io/en/latest/tutorials/boids.html): the boids model, in another population simulation framework
+- [Boids (Reynolds)](https://www.red3d.com/cwr/boids/): the original description of the three rules of flocking
+- [NetLogo: flocking model](https://ccl.northwestern.edu/netlogo/models/Flocking): flocking in NetLogo, to run and change in a browser
+- [NetLogo: wealth distribution model](https://ccl.northwestern.edu/netlogo/models/WealthDistribution): a related model of how wealth becomes unequal

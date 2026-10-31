@@ -36,3 +36,19 @@ p:has(+ ul) {
 table td:first-child a {
   white-space: nowrap;
 }
+/* Bold every top-level sidebar section; a section with its own page (href) can't use **bold** in its title, since Quarto shows it literally */
+#quarto-sidebar li.sidebar-item-section:not(ul.sidebar-section li) > .sidebar-item-container .menu-text {
+  font-weight: bold;
+}
+/* Authorship badge from the "authorship" page metadata (see authorship.lua); the note shows on hover */
+#quarto-document-content {
+  position: relative;
+}
+.authorship {
+  position: absolute;
+  top: 0.5em;
+  right: 0;
+  font-size: 0.85em;
+  opacity: 0.75;
+  cursor: help;
+}

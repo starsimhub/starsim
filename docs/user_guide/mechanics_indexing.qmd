@@ -1,0 +1,186 @@
+---
+title: Array indexing
+jupyter: python3
+authorship:
+  human: 35
+  ai: 65
+  note: Adapted from the Starsim 3 user guide page on array indexing; ported to v4, with new sections on combining selections and indexing in a module written by AI
+---
+
+When a model runs as agents, each person's properties (age, sex, the state of each disease) are kept in arrays with one value per agent. Code that reads or changes them, in a [module written as code](building_modules.qmd) or in an analysis after a run, needs to pick out agents correctly, including when some of them have died. This page covers how agents are identified, how the arrays are laid out, and the rules for indexing them.
+
+A declared model needs none of this: conditions such as `where=ss.ppl.age < 5` or `where=measles.I` pick out people for you, and work under every solver. In a compartmental run there are no agents, and `sim.people` has one row for each group instead.
+
+## Agents and their UIDs
+
+Every agent has a **UID** (a unique identifier): a whole number, given in order from 0 as agents are made. An agent's UID never changes, and isn't reused after the agent dies, so a UID can be used to look up any agent, alive or dead.
+
+The **active UIDs** (`auids`) are those of the agents who are alive and in the sim now. Each array holds two views of its data:
+
+- `raw`: a value for every agent ever made, indexed by UID (once agents are born, it also has room at the end for agents not yet made)
+- `values`: a value for each active agent, in the order of `auids`
+
+To see this, here is a small measles outbreak in 10 people, in which infectious people die at a rate of 5% a day (a much higher death rate than measles has, so that some agents die in a short run):
+
+```{python}
+import starsim as ss
+
+S, I, R = ss.states('S I R')
+infection = S >> I @ 1.9*I                  # β = 1.9 per day
+recovery  = I >> R @ ss.days(8)             # Infectious for 8 days on average
+death     = ss.death(I, rate=ss.perday(0.05)) # Deaths of infectious people
+measles = ss.Disease(infection, recovery, death, init_prev=0.3)
+
+sim = ss.Sim(measles, n_agents=10, stop=ss.days(50), rand_seed=3, verbose=0)
+sim.run()
+
+ppl = sim.people
+print('Agents alive:', len(ppl))
+print('Active UIDs:', ppl.auids)
+print('Every UID:', ppl.uid.raw)
+print('Alive:', ppl.alive.raw)
+print('Ages of active agents:', ppl.age)
+print('Ages of every agent:', ppl.age.raw)
+```
+
+The dead agents are still in `raw`, but not in `auids` or in an array's `values`.
+
+## Which agents an operation uses
+
+The rules are:
+
+- **Sums, means, and other statistics** (`.sum()`, `.mean()`, `.std()`, and so on) use the active agents only.
+- **Indexing** depends on the index:
+  - a whole number, or `ss.uids()`, is a UID, so it can pick any agent, alive or dead (as `raw` does);
+  - `[:]`, or a boolean state such as `measles.I`, picks among the active agents (as `values` does);
+  - any other slice (e.g. `[1:3]`) raises an error, since it could mean either; write `arr.values[1:3]` or `arr.raw[1:3]`.
+
+```{python}
+age = ppl.age
+print('Mean age of active agents:', age.mean())
+print('The same:', age.values.mean())
+print('Ages of the dead:', age[ppl.dead.uids])
+```
+
+`ppl.dead.uids` finds the dead, since they aren't among the active agents.
+
+## Indexing that works
+
+```{python}
+print('Age of the agent with UID 0:', ppl.age[0]) # A whole number is a UID
+
+some = ss.uids([0, 1, 2]) # Several UIDs
+print('Their ages:', ppl.age[some])
+
+women = ppl.female.uids # The UIDs for which a boolean state is true
+print('Ages of women:', ppl.age[women])
+
+m = sim.diseases.measles # The sim's copy of the disease, which ran
+print('Recovered:', m.R.true()) # The UIDs of active agents in R
+print('Not recovered:', m.R.false())
+```
+
+A boolean state, such as `female` or a disease's `I`, has `.uids` (the UIDs for which it is true), and `.true()` and `.false()` (the active agents for which it is true or false). Comparisons give boolean arrays with the same methods, e.g. `(ppl.age < 15).uids`. The sim's own copy of a module is the one that ran: use `sim.diseases.measles`, not the `measles` given to the sim, whose arrays are empty.
+
+## Combining and changing selections
+
+UIDs (`ss.uids`) are sorted arrays of whole numbers, with methods for combining them as sets: `a.intersect(b)` (in both), `a.union(b)` (in either), `a.remove(b)` (in `a` but not `b`), and `a.concatenate(b)` (both, without sorting). Comparisons and boolean states combine with `&` (and), `|` (or), and `~` (not) before being turned into UIDs:
+
+```{python}
+children = (ppl.age < 15).uids
+print('Children:', children)
+print('Girls:', children.intersect(ppl.female.uids))
+print('Boys:', children.remove(ppl.female.uids))
+print('Girls, the same:', ((ppl.age < 15) & ppl.female).uids)
+print('Children or women:', children.union(ppl.female.uids))
+```
+
+Values are changed by UID in the same way as they are read: `arr[uids] = value` sets them, and `arr[uids] += value` adds to them. A single value is given to everyone selected, and an array gives each their own:
+
+```{python}
+women = ppl.female.uids
+print('Ages before:', ppl.age[women])
+ppl.age[women] += 1 # A year older
+print('Ages after:', ppl.age[women])
+```
+
+`&`, `|`, and `~` are only for true-or-false arrays; on an array of numbers they raise an error, since they would mean something else (bitwise operations). Compare first: `(ppl.age > 15) & (ppl.age < 50)`, not `ppl.age & ...`.
+
+## Indexing in a module
+
+The rules are the same inside a [module written as code](building_modules.qmd), where indexing is used most: at each step, a module picks out the agents it acts on, by UID, and reads or changes their values. Here an analyzer records the mean age of the people infectious with measles at each step. It finds them with the disease's `I.uids`, reads their ages by UID, and checks for an empty selection, since nobody may be infectious:
+
+```{python}
+import numpy as np
+
+class AgeOfInfectious(ss.Analyzer):
+    """ Record the mean age of the people infectious with measles at each step """
+    def init_results(self):
+        super().init_results()
+        self.define_results(ss.Result('mean_age', label='Mean age of the infectious'))
+        return
+
+    def step(self):
+        infectious = self.sim.diseases.measles.I.uids
+        if len(infectious):
+            self.results.mean_age[self.ti] = self.sim.people.age[infectious].mean()
+        else:
+            self.results.mean_age[self.ti] = np.nan
+        return
+
+S, I, R = ss.states('S I R')
+measles = ss.Disease(S >> I @ 1.9*I, I >> R @ ss.days(8), init_prev=0.001, name='measles')
+sim = ss.Sim(measles, analyzers=AgeOfInfectious(), n_agents=5000, stop=ss.days(60), verbose=0)
+sim.run()
+print('Mean age of everyone:', sim.people.age.mean())
+print('Mean age of the infectious, by day:', sim.results.ageofinfectious.mean_age[:10])
+```
+
+With everyone mixing equally, infection has nothing to do with age, so the mean age of the infectious stays close to that of everyone. [Analyzers](interventions_analyzers.qmd) and [Custom modules](building_modules.qmd) have more examples of modules that index agents.
+
+## Indexing that doesn't
+
+A list of whole numbers raises an error, since it could be UIDs or positions among the active agents:
+
+```{python}
+import sciris as sc
+
+with sc.tryexcept():
+    ppl.age[[0, 1, 2]] # Use ss.uids([0, 1, 2]) instead
+```
+
+`raw` includes the dead, so statistics of it differ from those of the active agents:
+
+```{python}
+print('Mean age (active agents):', age.mean())
+print('Mean age (raw, including the dead):', age.raw.mean())
+```
+
+## Arrays with several columns
+
+An array can have several columns, e.g. immunity to each of several strains (see [People](populations_people.qmd#states-with-several-columns)). The first index picks agents, by the rules above, and the second picks columns, by position or by name:
+
+```{python}
+imm = ss.FloatArr('imm', columns=['wild', 'mutant'], default=0, mock=5) # A stand-alone array of 5 agents
+uids = ss.uids([0, 1])
+imm[uids, 'mutant'] = 0.8 # The same as imm[uids, 1] = 0.8
+print(imm[uids])          # A row for each agent
+print(imm[:, 'mutant'])   # One column, for every active agent
+print((imm.mutant > 0.5).uids) # UIDs from one column
+```
+
+## Good practice
+
+- **Index by UIDs**: `ss.uids([...])`, a state's `.uids`, or `.true()`. Never index by a plain list of numbers.
+- **Use `.uids`, not `np.where()`**: `np.where(mask)[0]` gives positions among the active agents, which are no longer the same as UIDs once any agent has died.
+- **A boolean state is not a list of agents**: `measles.I[:]` is an array of true and false values, and converting it to whole numbers gives 0s and 1s; use `measles.I.uids` for the agents.
+- **Use statistics on the array itself** (`arr.mean()`), which leaves out the dead; use `raw` only when you mean to include them.
+- **Check for no agents**: a selection can be empty, e.g. when nobody is infectious; `len(uids)` is then 0.
+- **Find who just changed state from the transition**: in a module written as code, `measles.infection.uids` is the agents infected in the last step, and `measles.infection.since` the time since each person was last infected, rather than keeping the previous set by hand.
+- **Don't write through `raw`**: a write by UID (`arr[uids] = value`) to a state of a declared disease is tracked, so its counts see it; a write through `raw` isn't.
+- **Work on many agents at once**: indexing with arrays of UIDs and NumPy operations on whole arrays are much faster than a Python loop over agents.
+
+## Further reading
+
+- [NumPy: indexing on arrays](https://numpy.org/doc/stable/user/basics.indexing.html): the indexing that Starsim's arrays build on
+- [LASER: documentation for laser-generic](https://laser-base.github.io/laser-generic/): another framework that keeps agents as arrays, one value per person

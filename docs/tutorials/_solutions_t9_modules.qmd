@@ -1,0 +1,103 @@
+## T9 – Custom modules
+
+```{python}
+import starsim as ss
+
+S, E, I, R = ss.states('S E I R')
+infection   = S >> E @ 0.16*I
+progression = E >> I @ ss.days(10)
+recovery    = I >> R @ ss.days(8)
+cases       = ss.outcome(0.4*infection)
+measles = ss.Disease(infection, progression, recovery, cases,
+    init = dict(R=ss.by(age=[0.8, 0.92, 0.98])),
+    init_n = dict(I=10),
+    name = 'measles',
+)
+measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1})
+contacts = ss.contacts(ages=[0, 15, 65], matrix=[[10, 6, 1], [3, 8, 1], [3, 6, 3]])
+settings = dict(networks=contacts, total_pop=100_000, start='2025-01-01', stop='2026-01-01', verbose=0)
+
+class VaccineDemand(ss.Intervention):
+    """ Unvaccinated people seek vaccination at a rate that rises with the outbreak cases they remember """
+
+    def __init__(self, memory=ss.days(30), half=300, max_rate=ss.perweek(0.1), capacity=None, efficacy=0.93, **kwargs):
+        super().__init__()
+        self.define_pars(memory=memory, half=half, max_rate=max_rate, capacity=capacity, efficacy=efficacy)
+        self.update_pars(**kwargs)
+        self.remembered = 0.0
+        return
+
+    def init_results(self):
+        super().init_results()
+        self.define_results(
+            ss.Result('doses', kind='flow', scale=False, label='Doses given'),
+            ss.Result('remembered', kind='stock', scale=False, label='Cases remembered'),
+        )
+        return
+
+    def share(self):
+        """ The share of the highest demand, from the cases remembered """
+        return self.remembered/(self.remembered + self.pars.half)
+
+    def step(self):
+        measles = self.sim.diseases.measles
+        dt = self.t.dt
+        self.remembered += self.sim.results.measles.cases[self.ti-1] - self.remembered*(dt/self.pars.memory)
+        doses = (self.pars.max_rate*self.share()).to_prob(dt)*measles.count(measles.S)
+        if self.pars.capacity is not None:
+            doses = min(doses, self.pars.capacity.to_events(dt))
+        ss.move(measles.S, measles.R, n=doses*self.pars.efficacy)
+        self.results.doses[self.ti] = doses
+        self.results.remembered[self.ti] = self.remembered
+        return
+```
+
+The module is the one from the tutorial, with the share of the highest demand as a method of its own (`share()`), so that exercise 2 can use it too.
+
+**1. How long people remember.**
+
+```{python}
+baseline = ss.Sim(measles, **settings).run().results.measles.infection.sum()
+sims = {str(days) + ' days': ss.Sim(measles, interventions=VaccineDemand(memory=ss.days(days)), **settings) for days in [10, 30, 90]}
+msim = ss.parallel(sims)
+for sim in msim.sims:
+    res = sim.results
+    doses = res.vaccinedemand.doses.sum()
+    prevented = baseline - res.measles.infection.sum()
+    print('Memory of', sim.label, '- doses:', round(doses), '- infections prevented:', round(prevented), '- per dose:', round(prevented/doses, 2))
+```
+
+The longer people remember, the more doses are sought (about 3,500 with a memory of 10 days, 4,900 with 30, and 6,100 with 90), and the more infections are prevented (about 3,100, 4,000, and 4,300). But each extra dose prevents fewer: about 0.9 infections a dose with a memory of 10 days, and 0.7 with 90. A longer memory adds doses mostly after the peak, when people still remember the outbreak but most of those it would infect have already been infected; a dose given then protects someone who was unlikely to be infected anyway.
+
+**2. Avoiding contact as well.**
+
+```{python}
+def avoidance(sim):
+    """ Susceptibility falls by up to 30% as people remember more cases """
+    return 1 - 0.3*sim.interventions.vaccinedemand.share()
+
+sims = {
+    'Vaccine demand':               ss.Sim(measles, interventions=VaccineDemand(), **settings),
+    'Vaccine demand and avoidance': ss.Sim(measles, interventions=[VaccineDemand(), ss.modify(measles.rel_sus, multiply=avoidance)], **settings),
+}
+msim = ss.parallel(sims)
+msim.plot('measles.I')
+msim.summarize().loc['measles_infection']
+```
+
+Avoiding contact as well makes the outbreak about a fifth smaller again (about 4,400 infections rather than 5,400). The function reads the module from the sim (`sim.interventions.vaccinedemand`), not from a variable outside it, since the sim works on its own copy of each module; and since neither the module nor the modifier keeps anything for each person, the sim still runs as an ODE.
+
+**3. As agents.**
+
+```{python}
+sims = {
+    'ODE':    ss.Sim(measles, interventions=VaccineDemand(), **settings),
+    'Agents': ss.Sim(measles, interventions=VaccineDemand(), n_agents=100_000, **settings),
+}
+msim = ss.parallel(sims)
+for sim in msim.sims:
+    res = sim.results
+    print(sim.label, '(' + sim.solver + ') - infections:', round(res.measles.infection.sum()), '- doses:', round(res.vaccinedemand.doses.sum()))
+```
+
+The module runs unchanged as agents, and the two agree to within a few percent; the agents are one run of a random process, so they differ a little from run to run. The module needs no change because it uses only what works under every solver: a result of the sim (`cases`), the number of people in a state (`measles.count(measles.S)`), and `ss.move()` with a number of people, which as agents moves that many agents (chosen at random) from `S` to `R`. A module that picked out particular people, e.g. with `measles.S.uids`, would run only as agents ([A5](a5_modules.qmd)).
