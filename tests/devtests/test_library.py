@@ -44,7 +44,7 @@ def test_mnch():
                  networks=networks(), **mnch_pars)
     sim.run()
     new_inf = sim.results.neonatalsepsis.infection.sum()
-    nnd = sim.results.pregnancy.neonatal_deaths.sum()
+    nnd = sim.results.pregnancy.neonatal_death.sum()
     print(f'  Neonatal sepsis infections: {new_inf:n}; neonatal deaths: {nnd:n}')
     assert new_inf > 0, 'Expected newborns to be infected with sepsis'
     assert nnd > 0, 'Expected some neonatal deaths'

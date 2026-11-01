@@ -453,7 +453,7 @@ def test_triggered():
     # The errors: a cycle of triggers, an event outside the sim, an event | a condition, a misspelled outcome, and capacity by stratum
     a = ss.screen(ss.Diagnostic(), interval=7, name='a')
     b = ss.screen(ss.Diagnostic(), who=a.positive, name='b')
-    a.on = b.positive # A retest triggered by the test it follows
+    a.trigger = b.positive # A retest triggered by the test it follows
     with pytest.raises(ValueError, match='cycle'):
         ss.Sim(make_sis(), interventions=[a, b], **kw)
     a = ss.screen(ss.Diagnostic(), interval=7, name='a')

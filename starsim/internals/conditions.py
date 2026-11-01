@@ -999,7 +999,7 @@ class Selector(sc.prettyobj):
             if isinstance(mod, ss.Delivery):
                 if mod.product is not None:
                     out |= {(mod.product.name, outcome), (mod.product.name, None)}
-                out |= self.lineage(mod.on, depth + 1)
+                out |= self.lineage(mod.trigger, depth + 1)
             return out
         elif cond.op in leaves:
             return {event_key(cond)} if is_event(cond) else set()

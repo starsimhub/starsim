@@ -1554,6 +1554,7 @@ class Engine(Telling, Effects):
         graph = self.graph
         fracs = sc.obj({s.name:0.0 for s in graph.people_states})
         counts = sc.obj({s.name:0.0 for s in graph.count_states})
+        by_count = {} # Starting values read from the numbers in other states, e.g. init=m*N: worked out from the others, once they are known
         for state in graph.states.values():
             is_n = state.init_n is not None # init_n= is a number of people, and init= a share of them (or, for a state that is not people, its amount)
             init = state.init_n if is_n else state.init
@@ -1561,7 +1562,12 @@ class Engine(Telling, Effects):
                 continue
             if isinstance(init, ss.expressions.par):
                 init = init.raw
-            elif isinstance(init, ss.expressions.Expr) and ss.expressions.per_person_in(init): # An expression of people's properties and parameters, e.g. 1 - (A - age)/(k*age + A) (TY2)
+            if isinstance(init, ss.expressions.Expr) and any(isinstance(leaf, (ss.expressions.Count, ss.expressions.Stock)) for leaf in init.leaves):
+                if state.people:
+                    raise ss.CapabilityError(f'init= of "{state.name}" in "{self.mod.name}" reads the number in another state, but a state of people starts with a share of them; give a share or a number, which only a state that is not people (ss.State(people=False)) can read')
+                by_count[state.name] = init
+                continue
+            if isinstance(init, ss.expressions.Expr) and ss.expressions.per_person_in(init): # An expression of people's properties and parameters, e.g. 1 - (A - age)/(k*age + A) (TY2)
                 if state.people and not is_n and self.solver == 'abm': # Read for each person, as agents: see Agents.init_post()
                     continue
                 init = np.asarray(self.eval(init), dtype=float)[()] # For each group
@@ -1665,7 +1671,30 @@ class Engine(Telling, Effects):
             if left and graph.rest is not graph.first:
                 n_rest = self.total_pop*np.sum(np.broadcast_to(rest, (self.sim.groups.n_groups,))*self.sim.groups.group_split)
                 ss.note(f'the initial value of {graph.first.name} in "{self.mod.name}" is kept, and the other {n_rest:,.0f} people start in {graph.rest.name}, the only state not given one', sim=self.sim)
+        for name,init in by_count.items():
+            counts[name] = self.start_count(name, init, fracs, counts, by_count)
         return fracs, counts
+
+    def start_count(self, name, init, fracs, counts, later):
+        """ The starting amount of a state that is not people, read from the numbers in other states (e.g. init=m*N): those in the states of people are their shares of the population """
+        def number(state):
+            key = state.name
+            if key in fracs:
+                return self.total_pop*np.sum(np.broadcast_to(fracs[key], (self.sim.groups.n_groups,))*self.sim.groups.group_split)
+            if key in counts and key not in later:
+                return counts[key]
+            raise ss.CapabilityError(f'init= of "{name}" in "{self.mod.name}" reads "{key}", {"which also starts from the numbers in other states" if key in later else "which is not one of its states"}; give it a number, or a function of the sim')
+        values = {}
+        for leaf in init.leaves:
+            if isinstance(leaf, ss.expressions.Count):
+                weights = leaf.weights if leaf.weights is not None else [1.0]*len(leaf.states)
+                values[id(leaf)] = float(sum(w*number(state) for w,state in zip(weights, leaf.states)))
+            elif isinstance(leaf, ss.expressions.Stock):
+                values[id(leaf)] = float(number(leaf.state))
+        val = float(self.eval(ss.expressions.substitute(init, values)))
+        if not np.isfinite(val) or val < 0:
+            raise ValueError(f'the initial value of "{name}" in "{self.mod.name}" is {val}; an initial value must be finite and not negative.')
+        return val
 
     def check_share(self, state, vals, whole):
         """ Check a share given with init=: more than 1 raises, and a whole number 1 is everyone, with a warning to write 1.0 (or init_n= for one person) """
@@ -1970,10 +1999,16 @@ class Engine(Telling, Effects):
         return
 
     def outcome_share(self, flow, weight, draw):
-        """ The events of an outcome from those of one of its sources, times its weight: a fraction of whole events is a draw if `draw` """
+        """ The events of an outcome from those of one of its sources, times its weight: a fraction of whole events is a draw if `draw`, and the part of an event left over (from agents who stand for a fraction of a person) is kept as its mean """
         if draw and np.all((0 <= weight) & (weight <= 1)):
-            return self.rng.binomial(np.round(flow).astype(int), weight)
+            whole = np.floor(flow)
+            return self.rng.binomial(whole.astype(int), weight) + (flow - whole)*weight
         return flow*weight
+
+    def split_events(self, n, p):
+        """ `n` events over the slots with chances `p`: whole events are drawn, and the part of an event left over is kept as its mean, so that small amounts from fractional agents aren't rounded away """
+        whole = int(n)
+        return self.rng.multinomial(whole, p) + (n - whole)*p
 
     def report_outcome(self, info, buf, amount, ti, draw):
         """
@@ -1988,7 +2023,7 @@ class Engine(Telling, Effects):
         if amount.any():
             if draw and len(kernel) > 1:
                 for g in np.flatnonzero(amount):
-                    buf.pending[slots, g] += self.rng.multinomial(int(round(amount[g])), kernel/kernel.sum())
+                    buf.pending[slots, g] += self.split_events(amount[g], kernel/kernel.sum())
             else:
                 buf.pending[slots] += np.outer(kernel, amount)
         now = buf.pending[slots[0]].copy()
@@ -1997,7 +2032,7 @@ class Engine(Telling, Effects):
             slots = (ti + np.arange(len(info.stay))) % len(buf.leaving)
             if draw:
                 for g in np.flatnonzero(now):
-                    buf.leaving[slots, g] += self.rng.multinomial(int(round(now[g])), info.stay)
+                    buf.leaving[slots, g] += self.split_events(now[g], info.stay)
             else:
                 buf.leaving[slots] += np.outer(info.stay, now)
             buf.n = buf.n + now - buf.leaving[slots[0]]

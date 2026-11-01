@@ -298,9 +298,8 @@ class Births(Demographics):
     def init_results(self):
         super().init_results()
         self.define_results(
-            ss.Result('new',        dtype=int,   scale=True,  kind='flow',  label='New births'),
-            ss.Result('cumulative', dtype=int,   scale=True,  kind='stock', label='Cumulative births'),
-            ss.Result('cbr',        dtype=float, scale=False, kind='ratio', label='Crude birth rate'),
+            ss.Result('birth', dtype=int,   scale=True,  kind='flow',  label='New births'),
+            ss.Result('cbr',   dtype=float, scale=False, kind='ratio', label='Crude birth rate'),
         )
         return
 
@@ -373,18 +372,13 @@ class Births(Demographics):
     def update_results(self):
         """ Calculate new births and crude birth rate """
         # New births -- already calculated
-        self.results.new[self.ti] = self.n_births_this_step
+        self.results.birth[self.ti] = self.n_births_this_step
 
         # Calculate crude birth rate (CBR)
         inv_rate_units = 1.0/self.pars.rate_units
         births_per_year = self.n_births_this_step/self.t.dt_year
         denom = self.sim.people.alive.sum()
         self.results.cbr[self.ti] = inv_rate_units*births_per_year/denom
-        return
-
-    def finalize(self):
-        super().finalize()
-        self.results.cumulative[:] = np.cumsum(self.results.new)
         return
 
 
@@ -557,9 +551,8 @@ class Deaths(Demographics):
     def init_results(self):
         super().init_results()
         self.define_results(
-            ss.Result('new',        dtype=int,   scale=True,  kind='flow',  label='Deaths', auto_plot=False), # Use sim deaths instead
-            ss.Result('cumulative', dtype=int,   scale=True,  kind='stock', label='Cumulative deaths', auto_plot=False),
-            ss.Result('cmr',        dtype=float, scale=False, kind='ratio', label='Crude mortality rate'),
+            ss.Result('death', dtype=int,   scale=True,  kind='flow',  label='Deaths', auto_plot=False), # Use sim deaths instead
+            ss.Result('cmr',   dtype=float, scale=False, kind='ratio', label='Crude mortality rate'),
         )
         return
 
@@ -576,18 +569,17 @@ class Deaths(Demographics):
 
     def update_results(self):
         self.n_deaths = len(self.sim.people.died_of(self)) # Once each death has one cause: someone another module killed in the same step may have died of that instead
-        self.results['new'][self.ti] = self.n_deaths
+        self.results.death[self.ti] = self.n_deaths
         return
 
     def finalize(self):
         super().finalize()
-        self.results.cumulative[:] = np.cumsum(self.results.new)
         if 'alive' not in self.sim.results: # The crude death rate needs the number alive, which ss.Sim(people_results=False) does not record
             return
         units = self.pars.rate_units*self.t.dt_year
         inds = self.match_time_inds()
         n_alive = self.sim.results.alive[inds]
-        deaths = sc.safedivide(self.results.new, n_alive, default=0)
+        deaths = sc.safedivide(self.results.death, n_alive, default=0)
         self.results.cmr[:] = deaths/units
         return
 
@@ -1066,8 +1058,8 @@ class Pregnancy(Demographics, ss.Disease):
         self.preterm[newborns] = pre
         self.very_preterm[newborns] = very
         scale = self.sim.current_scale
-        self.results.n_preterm[self.ti] += pre.sum()*scale # At the step's index, as the flows are (ti is the engine's, the step's start)
-        self.results.n_very_preterm[self.ti] += very.sum()*scale
+        self.results.preterm[self.ti] += pre.sum()*scale # At the step's index, as the flows are (ti is the engine's, the step's start)
+        self.results.very_preterm[self.ti] += very.sum()*scale
         return
 
     def make_children(self, tr, parents, ti):
@@ -1110,7 +1102,7 @@ class Pregnancy(Demographics, ss.Disease):
         if not isinstance(p_md, ss.bernoulli) or np.any(np.asarray(p_md.pars.p) > 0):
             dead = p_md.filter(parents) if isinstance(p_md, ss.bernoulli) else parents[self.rng_md.rvs(parents) < p_md]
             ppl.request_death(dead)
-            self.results.maternal_deaths[self.ti] += len(dead)*self.sim.current_scale
+            self.results.maternal_death[self.ti] += len(dead)*self.sim.current_scale
         return new
 
     def set_delivery(self, uids, ti, weeks=None):
@@ -1139,12 +1131,12 @@ class Pregnancy(Demographics, ss.Disease):
         super().init_results()
         kw = dict(dtype=float, scale=False)
         self.define_results(
-            ss.Result('maternal_deaths', label='Maternal deaths', kind='flow', auto_plot=False, **kw),
-            ss.Result('n_preterm', label='Preterm births', kind='flow', auto_plot=False, **kw),
-            ss.Result('n_very_preterm', label='Very preterm births', kind='flow', auto_plot=False, **kw),
+            ss.Result('maternal_death', label='Maternal deaths', kind='flow', auto_plot=False, **kw),
+            ss.Result('preterm', label='Preterm births', kind='flow', auto_plot=False, **kw),
+            ss.Result('very_preterm', label='Very preterm births', kind='flow', auto_plot=False, **kw),
             ss.Result('preterm_rate', label='Preterm birth rate', kind='ratio', auto_plot=False, **kw),
-            ss.Result('n_unborn', label='Unborn (fetuses as agents; not counted among the people)', auto_plot=False, **kw),
-            ss.Result('neonatal_deaths', label='Neonatal deaths (within 28 days of birth)', kind='flow', auto_plot=False, **kw),
+            ss.Result('unborn', label='Unborn (fetuses as agents; not counted among the people)', auto_plot=False, **kw),
+            ss.Result('neonatal_death', label='Neonatal deaths (within 28 days of birth)', kind='flow', auto_plot=False, **kw),
             ss.Result('cbr', label='Crude birth rate', kind='ratio', **kw),
             ss.Result('tfr', label='Total fertility rate', kind='ratio', **kw), # A rate per year, not a count of events, so averaged rather than summed
             ss.Result('mmr', label='Maternal mortality ratio (per 100,000 births)', kind='ratio', auto_plot=False, **kw),
@@ -1154,10 +1146,10 @@ class Pregnancy(Demographics, ss.Disease):
 
     def update_results(self):
         super().update_results()
-        self.results.neonatal_deaths[self.ti] = self._nnd*self.sim.current_scale
+        self.results.neonatal_death[self.ti] = self._nnd*self.sim.current_scale
         self._nnd = 0
         if self.abm and self.fetus:
-            self.results.n_unborn[self.ti] = np.count_nonzero(self.fetal.raw & self.sim.people.alive.raw)*self.sim.current_scale
+            self.results.unborn[self.ti] = np.count_nonzero(self.fetal.raw & self.sim.people.alive.raw)*self.sim.current_scale
         self.compute_asfr()
         return
 
@@ -1198,9 +1190,9 @@ class Pregnancy(Demographics, ss.Disease):
     def finalize_results(self):
         super().finalize_results()
         res = self.results
-        res.maternal_deaths[:] += res.antepartum[:]
-        res.mmr[:] = sc.safedivide(res.maternal_deaths[:], res.birth[:], default=0)*100e3 # Antepartum deaths and deaths at delivery, per 100,000 births
-        res.preterm_rate[:] = sc.safedivide(res.n_preterm[:], res.birth[:], default=0)
+        res.maternal_death[:] += res.antepartum[:]
+        res.mmr[:] = sc.safedivide(res.maternal_death[:], res.birth[:], default=0)*100e3 # Antepartum deaths and deaths at delivery, per 100,000 births
+        res.preterm_rate[:] = sc.safedivide(res.preterm[:], res.birth[:], default=0)
         inds = self.match_time_inds()
         units = self.pars.rate_units*self.t.dt_year
         res.cbr[:] = sc.safedivide(res.birth[:], self.sim.results.alive[inds], default=0)/units if 'alive' in self.sim.results else 0

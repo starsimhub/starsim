@@ -29,7 +29,7 @@ Usage::
     sim.run()
 
     # NND results are on the Pregnancy module, not the disease
-    print('Neonatal deaths:', sim.results.pregnancy.neonatal_deaths.sum())
+    print('Neonatal deaths:', sim.results.pregnancy.neonatal_death.sum())
     print('Total births:', sim.results.pregnancy.birth.sum())
 
 Used with: agents; coded modules

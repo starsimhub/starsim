@@ -16,7 +16,7 @@ class Malaria(ss.Disease):
 
     People are susceptible, infectious, or recovered, and are born and die; mosquitoes are susceptible or
     infectious, and stay infectious until they die. Mosquitoes are a count, not people (`Sv`, `Iv`), and start
-    at zero, reaching their density of `m` per person within a few weeks (they live about a week).
+    at their density of `m` per person, all susceptible.
 
     Source: the Ross-Macdonald model, in the form of Keeling MJ, Rohani P, *Modeling Infectious Diseases in
     Humans and Animals*, Princeton University Press, 2008, section 4.4. Every default here is from its Program 4.4:
@@ -64,6 +64,7 @@ class Malaria(ss.Disease):
     Sv = ss.State(people=False, label='Susceptible mosquitoes')
     Iv = ss.State(people=False, label='Infectious mosquitoes')
     Nh = (Sh + Ih + Rh).n
+    init = dict(Sv=m*Nh)
 
     infection  = Sh >> Ih @ a*b*Iv.n/Nh
     recovery   = Ih >> Rh @ gamma

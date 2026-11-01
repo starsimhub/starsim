@@ -55,6 +55,15 @@ def test_people():
     sim.people.scale[sim.diseases.sis.I.uids] = 0.01
     assert sim.run().results.sis.infection[-1] < 50 # About 10 (unweighted, about 316)
 
+    # And in outcomes: a step's events from such agents can be less than one, and aren't rounded away (before, 18% were kept)
+    S, I = ss.states('S I')
+    infection = S >> I @ ss.perday(5e-4)
+    sis = ss.Disease(S, I, infection, cases=ss.outcome(infection), name='sis')
+    sim = ss.Sim(sis, n_agents=2000, stop=100, dt=1, unit='day', solver='abm', verbose=0).init()
+    sim.people.scale[sim.people.auids] = 0.05
+    res = sim.run().results.sis
+    assert res.infection.sum() > 0 and np.isclose(res.cases.sum(), res.infection.sum())
+
     # Memory: a People not yet in a sim (as in the copy of the sim before it was initialized, for sim.new()) has no arrays per agent; arrays nothing sets take none (the UIDs are made when read, slot reads them; parent, scale, rel_sus, and rel_trans are their defaults); times of death are 16-bit (the active UIDs are 64-bit, which index arrays faster)
     sim = ss.Sim(ss.SIR(), people=ss.People(small), networks='random', verbose=0)
     sim.run()

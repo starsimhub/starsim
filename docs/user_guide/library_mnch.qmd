@@ -48,7 +48,7 @@ for label, beta in {'No transmission': 0, 'Transmission': ss.peryear(20)}.items(
 
 Among the children infected before birth, the numbers of stillbirths and congenital infections follow the probabilities in `birth_outcomes`.
 
-To use this in a disease of your own, build on `ssl.mnch.CongenitalDisease` (or copy its `set_congenital()` and `step_congenital()`; `ss.Infection` calls `set_congenital()` for each person infected before birth): define `birth_outcome_keys` and `birth_outcomes` in its parameters, add a `ti_<key>` state for each outcome (and a true/false state for each outcome that doesn't kill), and call `self.step_congenital()` from `step_state()`. Outcomes named `'stillborn'`, `'miscarriage'`, or `'neonatal_deaths'` are deaths; the first two happen before delivery and the third after it. `ssl.HIV` (see [Library: diseases](library_diseases.qmd)) also uses `set_congenital()`, to infect children of infected mothers at birth.
+To use this in a disease of your own, build on `ssl.mnch.CongenitalDisease` (or copy its `set_congenital()` and `step_congenital()`; `ss.Infection` calls `set_congenital()` for each person infected before birth): define `birth_outcome_keys` and `birth_outcomes` in its parameters, add a `ti_<key>` state for each outcome (and a true/false state for each outcome that doesn't kill), and call `self.step_congenital()` from `step_state()`. Outcomes named `'stillborn'`, `'miscarriage'`, or `'neonatal_death'` are deaths; the first two happen before delivery and the third after it. `ssl.HIV` (see [Library: diseases](library_diseases.qmd)) also uses `set_congenital()`, to infect children of infected mothers at birth.
 
 ## Neonatal deaths
 
@@ -63,7 +63,7 @@ for label, sim in scenarios.items():
     sim.run()
     print(label)
     print('  Births:', int(sim.results.pregnancy.birth.sum()))
-    print('  Neonatal deaths:', int(sim.results.pregnancy.neonatal_deaths.sum()))
+    print('  Neonatal deaths:', int(sim.results.pregnancy.neonatal_death.sum()))
 ```
 
 ## Fetal health
@@ -96,12 +96,12 @@ import matplotlib.pyplot as plt
 fig = plt.figure()
 for label, sim in zip(scenarios, msim.sims):
     res = sim.results.fetal_health
-    births = int(res.n_births.sum())
+    births = int(res.birth.sum())
     print(label)
     print('  Births:', births)
-    print('  Low birth weight (%):', round(100*res.n_lbw.sum()/births))
-    print('  Small vulnerable newborns (%):', round(100*res.n_svn.sum()/births))
-    plt.plot(res.timevec, res.n_lbw.cumsum(), label=label)
+    print('  Low birth weight (%):', round(100*res.lbw.sum()/births))
+    print('  Small vulnerable newborns (%):', round(100*res.svn.sum()/births))
+    plt.plot(res.timevec, res.lbw.cumsum(), label=label)
 plt.ylabel('Babies born with a low birth weight (cumulative)')
 plt.legend()
 plt.show()

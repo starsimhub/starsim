@@ -282,6 +282,8 @@ sim.run()
 sim.results.measles.plot()
 ```
 
+The starting values can also go in the class body (`init = dict(I=0.001)`), as defaults that `init=` given to the disease replaces. A count can start from the number of people, e.g. `init = dict(W=10*N)`, with `N = (S + I + R).n`.
+
 A class can also have methods, for behavior that isn't a transition: override `step()`, and call `super().step()` to run the declared transitions ([Custom modules](building_modules.qmd)).
 
 ### Declaring in `__init__()`

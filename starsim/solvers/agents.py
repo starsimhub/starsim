@@ -50,7 +50,8 @@ class Transmission(Effects):
     def over_network(self, i, route, rel_trans, rel_sus, betas, name):
         """
         Who is infected over a network in the step: an edge from `u` to `v` transmits with probability `rel_trans[u]·rel_sus[v]·net_beta(beta)`,
-        times the modifiers on the route for `v` (see `ss.Network.transmit()`)
+        times the modifiers on the route for `v` (see `ss.Network.transmit()`). On a network with acts, these all scale the hazard of each act, as for
+        a declared disease (see `transmit_acts()`), not the chance over all the acts, so `net_beta()` is given the chance per act they leave
 
         Args:
             i (int): the index of the route in `sim.networks`, recorded for who infected whom
@@ -65,6 +66,7 @@ class Transmission(Effects):
             A list of (sources, targets, i), for each direction that transmits
         """
         mult = self.route_mult(name, route)
+        acts = route.has_acts
         def edge_beta(d, inds, src, trg): # For the edges that might transmit
             beta = betas[d]
             if isinstance(beta, np.ndarray): # A probability per act for each direction of the network
@@ -73,8 +75,12 @@ class Transmission(Effects):
                 return None
             if isinstance(beta, ss.Rate): # A disease written as code can give its beta as a rate
                 beta = beta.to_prob(self.mod.t.dt)
+            if acts:
+                with np.errstate(divide='ignore'): # A chance of 1 per act is an infinite hazard, and stays 1
+                    beta = -np.expm1(np.log1p(-np.minimum(beta, 1.0))*rel_trans[src]*rel_sus[trg]*mult(inds, trg))
+                return route.net_beta(disease_beta=beta, inds=inds, disease=self.mod)
             return route.net_beta(disease_beta=beta, inds=inds, disease=self.mod)*mult(inds, trg)
-        return [(srcs, trgs, i) for srcs,trgs in route.transmit(rel_trans, rel_sus, edge_beta, self.mod.trans_rng)]
+        return [(srcs, trgs, i) for srcs,trgs in route.transmit(rel_trans, rel_sus, edge_beta, self.mod.trans_rng, prob=True if acts else None)]
 
     @staticmethod
     def first_infections(pairs):

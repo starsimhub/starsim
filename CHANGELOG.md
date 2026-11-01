@@ -33,7 +33,10 @@ Starsim 4 adds a way to write a model as declared states and transitions, which 
 - *Regression*: `res.resample('year')` of a stock gives its value at the end of each year (Starsim 3's `annualize()` gave the mean). A result's `scale` follows its kind, so ratios aren't scaled.
 - *Regression*: `ss.Deaths` and `ss.Births` hold each period's rate until the next; delivery rounds are timed by date.
 - *Regression*: with `rescale=True`, a declared disease's results (and `alive`) include the people no agent stands for yet.
-- *Regression*: fixed delays under the chain binomial and tau-leaping last their full length on average, with default substeps counting them; final sizes were up to 14% low.
+- *Regression*: fixed delays under the chain binomial and tau-leaping last their full length on average, and the chain binomial takes an odd number of substeps in a model with one; final sizes were up to 28% low with substeps. A fixed delay doesn't add substeps, so a model with no other exit takes whole steps (final size within 1%, peak about 15% low; `substeps=3` gives about 5%).
+- *Regression*: on a network with acts, `rel_trans` and `rel_sus` of a disease written as code scale each act's hazard, as for a declared disease, not the chance over all acts. `net_beta()` is given the scaled chance for each edge.
+- *Regression*: an outcome's events from agents that stand for a fraction of a person are no longer rounded away when a step has less than half an event (82% were lost in one test).
+- *Regression*: a count state's `init=` can read the number of people (`init=dict(Sv=m*N)`), under every solver (it silently started at 0), so `ssl.Malaria`'s mosquitoes start at their density. `init`, `init_n` and `init_prev` can be given in the class body of a declared disease (they were silently ignored).
 - *Regression*: a bare `beta` in a disease written as code is a rate in the sim's unit, alone or in a dict by network, unless on a network with acts.
 - *Regression*: a daily timeline started from a numeric year has whole-day dates.
 - *Regression*: values that vary smoothly in time are taken once a step, at its middle (at its start by Euler's method), for every solver.
@@ -45,6 +48,9 @@ Starsim 4 adds a way to write a model as declared states and transitions, which 
   - deliveries take `at=` and `where=` (were `years=`/`dates=` and `eligible=`);
   - `ss.Infection` transmits in `transmit()` (was `infect()`);
   - lactation is part of `ss.Pregnancy`.
+- *Migration*: `ss.Births` and `ss.Deaths` have the flows `birth` and `death` (were `new`), with totals `birth.cum` and `death.cum` (were `cumulative`).
+- *Migration*: `ss.Pregnancy` results are `preterm`, `very_preterm`, `unborn`, `maternal_death`, and `neonatal_death`; `ssl.FetalHealth` results are `birth`, `lbw`, `vlbw`, `sga`, and `svn`.
+- *Migration*: `Delivery.on` is `Delivery.trigger`, and `delivery.compartments` is `delivery.in_compartments`.
 - *Migration*: `ss.strains.Family` is removed, so `ss.Strains` takes the names of strains that share a disease's states, without `shared=` or diseases as strains, and `ss.immunity()` takes `rel_sus=` due to a state, without `rel_trans=`, `dur=`, or an attribute. Strains with courses of their own are one disease per strain, connected by a connector (see the [Diseases](https://docs.starsim.org/user_guide/building_diseases.html#strains) guide). `ssl.Dengue()` is now a list of serotypes, with results `sim.results.den1` and so on, not `sim.results.dengue`.
 - *Migration*: there is no model spec: `sim.to_code()`, `ss.diff()` and `sim.hash()` are removed.
 - *Migration*: `ss.Disease` is the one disease class, declared, written as code, or both; `ss.Infection` adds only transmission.

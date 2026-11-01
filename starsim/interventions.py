@@ -230,15 +230,15 @@ def order_steps(mods):
     for i,m in enumerate(mods):
         deps[i] = set()
         if isinstance(m, Delivery):
-            for leaf in ss.conditions.event_leaves(m.on) if isinstance(m.on, ss.conditions.Cond) else []:
+            for leaf in ss.conditions.event_leaves(m.trigger) if isinstance(m.trigger, ss.conditions.Cond) else []:
                 if leaf.op == 'event' and isinstance(leaf.args[0], (ss.products.EventSource, str)):
                     found = find(leaf.args[0])
                     if not found:
                         errormsg = f'"{m.name}" is triggered by {leaf}, but "{ss.conditions.modname(leaf.args[0])}" is not delivered in the sim: add it to interventions='
                         raise ValueError(errormsg)
                     deps[i] |= {index[id(d)] for d in found if d is not m}
-            if any(leaf.op == 'event' and (leaf.args[0] is m or (isinstance(leaf.args[0], Delivery) and id(leaf.args[0]) not in index and leaf.args[0].name == m.name)) for leaf in ss.conditions.event_leaves(m.on) if isinstance(m.on, ss.conditions.Cond)): # By name only for a copy: two steps made in a function share the default name (HP72), which the sim then makes unique
-                errormsg = f'"{m.name}" is triggered by its own event ({m.on}), so would never happen; a delivery can read its own memory (e.g. who={m.name}.since >= ss.years(5)), but not be triggered by itself'
+            if any(leaf.op == 'event' and (leaf.args[0] is m or (isinstance(leaf.args[0], Delivery) and id(leaf.args[0]) not in index and leaf.args[0].name == m.name)) for leaf in ss.conditions.event_leaves(m.trigger) if isinstance(m.trigger, ss.conditions.Cond)): # By name only for a copy: two steps made in a function share the default name (HP72), which the sim then makes unique
+                errormsg = f'"{m.name}" is triggered by its own event ({m.trigger}), so would never happen; a delivery can read its own memory (e.g. who={m.name}.since >= ss.years(5)), but not be triggered by itself'
                 raise ValueError(errormsg)
     out, done = [], set()
     while len(out) < len(mods):
@@ -317,7 +317,7 @@ class Delivery(ss.products.EventSource, Intervention):
     With no product and no move, a delivery is a step people attend (e.g. a clinic visit): its event is who attended, which
     several steps can take. `delivery.reached()` is the UIDs of the people it reached on the step (agents only).
 
-    Its methods are how it runs as agents; in a compartmental run, what differs is `delivery.compartments`
+    Its methods are how it runs as agents; in a compartmental run, what differs is `delivery.in_compartments`
     (see `ss.solvers.CompartmentalDelivery`). A product whose effect is code of your own is an `ss.Product` with
     an `administer(uids)` method.
 
@@ -449,7 +449,7 @@ class Delivery(ss.products.EventSource, Intervention):
             raise ValueError(errormsg)
         self.coverage = coverage
         self.capacity = capacity
-        self.on = trigger # The events in who= and where=
+        self.trigger = trigger # The events in who= and where=
         self.delay = delay # From the trigger to delivery
         if delay is not None and trigger is None:
             errormsg = f'delay= is the time from a trigger to delivery, so it needs an event in who= (e.g. who=screening.positive); "{name or type(self).__name__}" has none'
@@ -468,7 +468,7 @@ class Delivery(ss.products.EventSource, Intervention):
             disease = self.disease_list[0]
         self.disease = disease
         self.started = False # For at_age=: whether the people already past the age have been left out (see skip_past())
-        self.compartments = None # In a compartmental run, what differs from agents: see ss.solvers.CompartmentalDelivery
+        self.in_compartments = None # In a compartmental run, what differs from agents: see ss.solvers.CompartmentalDelivery
         self.carry = 0.0 # The part of the capacity not yet used, when it is less than one agent per step
         self.define_states(ss.FloatArr('ti_result', label='Time the test result is available'), ss.FloatArr('result', label='Test result, waited for'))
         if self.queue is not None:
@@ -512,7 +512,7 @@ class Delivery(ss.products.EventSource, Intervention):
     @property
     def routine(self):
         """ Whether each person is offered the product once, at the first step on which they are eligible """
-        return not (self.in_rounds or self.on is not None or self.deliver is not None)
+        return not (self.in_rounds or self.trigger is not None or self.deliver is not None)
 
     @property
     def disease(self):
@@ -652,7 +652,7 @@ class Delivery(ss.products.EventSource, Intervention):
         out += [] if self.product is None else self.product.agent_reasons(sim)
         def leaves(cond):
             return [] if not isinstance(cond, ss.conditions.Cond) else [cond] if cond.op in ss.conditions.leaves else [l for arg in cond.args for l in leaves(arg)]
-        for leaf in leaves(self.on):
+        for leaf in leaves(self.trigger):
             if isinstance(leaf, ss.conditions.Event) and isinstance(leaf.args[1], ss.dimensions.Transfer):
                 out.append(f'"{self.name}" is triggered by the transfer "{leaf.args[1].name}", which only agents keep as an event (yet)')
         if self.trace is not None:
@@ -714,7 +714,7 @@ class Delivery(ss.products.EventSource, Intervention):
             sim (Sim): the sim being initialized
         """
         declared = [mod.name for mod in sim.declared]
-        ss.conditions.check_path_events(sim, self.on, self.name)
+        ss.conditions.check_path_events(sim, self.trigger, self.name)
         for other in [self] + [iv for iv in sim.interventions() if isinstance(iv, Delivery) and iv is not self and iv.product is not None and iv.product is self.product]:
             other.key_product(sim) # A product shared with a delivery for several diseases is keyed by them before any delivery initializes it, whatever the order (HP38)
         if isinstance(self.delay, ss.Dist) and not getattr(self.delay, '_numeric', False): # Durations in the sim's unit, however they are given
@@ -767,7 +767,7 @@ class Delivery(ss.products.EventSource, Intervention):
             errormsg = f'The capacity= of "{self.name}" is a bare number, but routine delivery has no rounds for it to be a number per round: give it as a rate, e.g. capacity=ss.perday({cap if sc.isnumber(cap) else "..."}) or ss.peryear(...)'
             raise ValueError(errormsg)
         if self.trace is not None:
-            if self.on is None:
+            if self.trigger is None:
                 errormsg = f'"{self.name}" traces the contacts of people, so needs to know whose: give an event in who= (e.g. who=tb.diagnosis, or who=screening.positive)'
                 raise ValueError(errormsg)
             self.trace_nets = [sim.networks[net if isinstance(net, str) else net.name] for net in sc.tolist(self.trace)]
@@ -836,7 +836,7 @@ class Delivery(ss.products.EventSource, Intervention):
         if self.queue is not None and self.capacity is None:
             errormsg = f'queue= of "{self.name}" is how long people wait when there is not enough capacity, so it needs capacity='
             raise ValueError(errormsg)
-        self.compartments = ss.solvers.CompartmentalDelivery(self) if sim.solver != 'abm' else None
+        self.in_compartments = ss.solvers.CompartmentalDelivery(self) if sim.solver != 'abm' else None
         if self.boxed(sim) and next(d for d in sim.interventions() if isinstance(d, Delivery) and d.product is self.product) is self: # Once for the product
             b = self.product.box_form
             ss.note(f'the box of "{self.product.name}" ({b.dur!r}) is {b.stages} levels of holding it, each left at a rate, so its end is spread over about {b.dur/np.sqrt(b.stages)!r} either way (as agents, it is exact); give ss.box(..., stages=) more for less', sim=sim)
@@ -864,7 +864,7 @@ class Delivery(ss.products.EventSource, Intervention):
 
     def trigger_disease(self, sim):
         """ The disease of the first transition or delivery in the event that triggers this delivery, if any """
-        for leaf in ss.conditions.event_leaves(self.on):
+        for leaf in ss.conditions.event_leaves(self.trigger):
             mod = leaf.args[0]
             if isinstance(mod, Delivery):
                 return mod.disease if mod.disease is not None else mod.trigger_disease(sim)
@@ -935,8 +935,8 @@ class Delivery(ss.products.EventSource, Intervention):
 
     def tally(self, key, sel, weight=1.0):
         """ Add the people selected to a result, in total and by group; returns the total """
-        if self.compartments is not None:
-            return self.compartments.tally(key, sel, weight)
+        if self.in_compartments is not None:
+            return self.in_compartments.tally(key, sel, weight)
         res = self.results[key]
         ti = self.sim.ti
         n = self.n_selected(sel)*weight
@@ -970,8 +970,8 @@ class Delivery(ss.products.EventSource, Intervention):
 
     def n_selected(self, sel):
         """ The number of people selected, as results count them (see `ss.results.people_scale()`) """
-        if self.compartments is not None:
-            return self.compartments.n_selected(sel)
+        if self.in_compartments is not None:
+            return self.in_compartments.n_selected(sel)
         return self.n_agents(sel)*ss.results.people_scale(self.sim)
 
     def n_agents(self, sel):
@@ -980,8 +980,8 @@ class Delivery(ss.products.EventSource, Intervention):
 
     def people(self, sel):
         """ The number of people selected, whatever the results count in """
-        if self.compartments is not None:
-            return self.compartments.n_selected(sel)
+        if self.in_compartments is not None:
+            return self.in_compartments.n_selected(sel)
         return self.n_agents(sel)*self.sim.current_scale
 
     def shift(self, sel, changes, mover=None):
@@ -989,8 +989,8 @@ class Delivery(ss.products.EventSource, Intervention):
         sim = self.sim
         if not changes:
             return
-        if self.compartments is not None:
-            return self.compartments.shift(sel, changes, mover)
+        if self.in_compartments is not None:
+            return self.in_compartments.shift(sel, changes, mover)
         uids = self.uids(sel)
         for d,level in changes.items():
             strat = sim.groups.strats[d]
@@ -1005,8 +1005,8 @@ class Delivery(ss.products.EventSource, Intervention):
 
     def follow(self, sel, chosen, changes, mover=None):
         """ Move the selected people to other levels of some dimensions; returns those chosen among them, as they now are """
-        if self.compartments is not None: # They are now in other groups
-            return self.compartments.follow(sel, chosen, changes, mover)
+        if self.in_compartments is not None: # They are now in other groups
+            return self.in_compartments.follow(sel, chosen, changes, mover)
         self.shift(sel, changes)
         return chosen
 
@@ -1053,9 +1053,9 @@ class Delivery(ss.products.EventSource, Intervention):
     def arrivals(self):
         """ Who is offered it now, before eligibility: everyone, or those its event happened to (with delay=, those it happened to the delay ago) """
         selector = self.selector
-        if self.on is None:
+        if self.trigger is None:
             return selector.everyone()
-        sel = selector.select(self.on)
+        sel = selector.select(self.trigger)
         return sel if self.delay is None else self.delayed_arrivals(sel)
 
     def delayed_arrivals(self, sel):
@@ -1100,14 +1100,14 @@ class Delivery(ss.products.EventSource, Intervention):
     def delivered_by_function(self):
         """ Who the deliver= function says receives the product: UIDs, or a number of people per group """
         out = self.deliver(self.sim)
-        if self.compartments is not None and not isinstance(out, (ss.uids, ss.Arr, ss.conditions.Cond)):
-            return self.compartments.delivered(out)
+        if self.in_compartments is not None and not isinstance(out, (ss.uids, ss.Arr, ss.conditions.Cond)):
+            return self.in_compartments.delivered(out)
         return self.selector.to_selection(out, 'deliver=')
 
     def default_eligible(self):
         """ Who is eligible if nothing is said: for a treatment that is not triggered, the people it can cure (those in the sources of its moves, or who are infected) """
         selector = self.selector
-        if isinstance(self.product, ss.Treatment) and self.on is None:
+        if isinstance(self.product, ss.Treatment) and self.trigger is None:
             if self.product.moves is not None or (self.disease_list and self.edges): # Over every disease it cures, with disease=[...]
                 return selector.select(self.edge_sources())
             return selector.in_states(self.infected_states())*selector.everyone()
@@ -1138,7 +1138,7 @@ class Delivery(ss.products.EventSource, Intervention):
         sel = self.offer(sel)
         self.tally('eligible', sel)
         cov = selector.per_person(1.0 if self.coverage is None else self.coverage, convert=lambda val: -np.expm1(-self.convert(val)*self.span)) # A typed probability or rate is over the step or the round
-        if self.compartments is not None: # That share of each state and group
+        if self.in_compartments is not None: # That share of each state and group
             chosen = sel*np.clip(cov, 0, 1)
         else:
             uids = self.uids(sel)
@@ -1159,7 +1159,7 @@ class Delivery(ss.products.EventSource, Intervention):
         d = self.sim.groups.dim_index(self.offered)
         gone = (selector.dim(self.offered) == 1)*selector.everyone()
         now = self.eligible_now(held=False) # Holding the product does not end a spell, so it is not offered again when protection is lost
-        gone = gone*(1 - now) if self.compartments is not None else gone & ~now
+        gone = gone*(1 - now) if self.in_compartments is not None else gone & ~now
         if np.any(gone):
             self.shift(gone, {d:0})
         return
@@ -1210,7 +1210,7 @@ class Delivery(ss.products.EventSource, Intervention):
         product that people hold, a transfer, or a move between states within each group (e.g. a seed, `move=S >> I`), given on a schedule (routine or in rounds) to people chosen by states and stratifications only,
         with a coverage that is a number or `ss.by`, and no capacity, `when=`, or follow-ups (see `ss.solvers.CompartmentalDelivery.shifts()`)
         """
-        return self.compartments is not None and self.compartments.tabulated()
+        return self.in_compartments is not None and self.in_compartments.tabulated()
 
     @property
     def span(self):
@@ -1225,7 +1225,7 @@ class Delivery(ss.products.EventSource, Intervention):
             return sel, chosen
         served = self.take(chosen, self.limit(), carry=True)
         self.use(served)
-        shares = self.compartments is not None # Of each state and group
+        shares = self.in_compartments is not None # Of each state and group
         dropped = chosen - served if shares else chosen & ~served
         self.tally('lost_capacity', dropped)
         return (sel - dropped if shares else sel & ~dropped), served
@@ -1303,8 +1303,8 @@ class Delivery(ss.products.EventSource, Intervention):
         """
         selector = self.selector
         key = self.key()
-        if self.compartments is not None:
-            return self.compartments.take(cands, n, key, wait)
+        if self.in_compartments is not None:
+            return self.in_compartments.take(cands, n, key, wait)
         uids = self.uids(cands)
         k = n/self.sim.current_scale # In agents
         if carry:
@@ -1401,8 +1401,8 @@ class Delivery(ss.products.EventSource, Intervention):
             self.tally('cost', chosen, self.cost)
         if not n:
             return
-        if self.compartments is not None:
-            return self.compartments.give(chosen)
+        if self.in_compartments is not None:
+            return self.in_compartments.give(chosen)
 
         if self.move_states is not None: # A one-off move between states
             states = self.dis.graph.states
@@ -1523,8 +1523,8 @@ class Delivery(ss.products.EventSource, Intervention):
         selector = self.selector
         product = self.product
         tails = product.tails(selector, self.dis.name, self.infected_states, together=self.disease_list if self._coded else None)
-        if self.compartments is not None:
-            return self.compartments.test(chosen, tails)
+        if self.in_compartments is not None:
+            return self.in_compartments.test(chosen, tails)
         n = len(product.result_names)
         steps = [None if d is None else self.convert(d)/self.dt_sim for d in product.delays()]
         uids = self.uids(chosen)
@@ -1589,7 +1589,7 @@ class Delivery(ss.products.EventSource, Intervention):
         """ A line saying what is delivered and how """
         what = f'move {self.move_arrow}' + (f', arriving with {self.strain}' if self.strain is not None else '') if self.move_states is not None else f'increment {sc.strjoin(f"{k}{v:+d}" for k,v in self.increment.items())}' if self.increment else ('visit' if not self.move else 'transfer') if self.product is None else self.product.describe()
         routine = 'routine (each person is offered it once in each spell of being eligible)' if self.remembers else 'routine'
-        how = 'in rounds' if self.in_rounds else 'by a function' if self.deliver is not None else f'on {self.on}' if self.on is not None else routine
+        how = 'in rounds' if self.in_rounds else 'by a function' if self.deliver is not None else f'on {self.trigger}' if self.trigger is not None else routine
         if isinstance(self.eligible, ss.conditions.Cond):
             how += f', to {self.eligible}'
         sim = getattr(self, 'sim', None)

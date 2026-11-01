@@ -25,10 +25,10 @@ Starsim includes an extensive library of features aimed to support a broad diver
 - **Data:** Extensive built-in data, including population and age structures for every country, contact matrices (Prem et al., 2021), and geospatial boundaries;
 - **Fitting:** Automatic gradients for compartmental models, plus Bayesian fitting and calibrating algorithms including no-U-turn sampling (NUTS) and the tree-structured Parzen estimator (Optuna);
 - **Scientific rigor:** Automatic dimension checking to prevent common programming errors; common random numbers that allow exact comparison between even stochastic model runs;
-- **Intercompatibility:** Automated import and export from more than a dozen other disease modeling frameworks, and interoperable with other disease modeling tools like [GeoPops](TBC) and [HubVerse](TBC);
-- **AI support:** Extensive set of skills and plugins that help implement Starsim models, including no-code chat interfaces for policymakers ([EpiChat](TBC)).
+- **Intercompatibility:** Automated import and export from more than a dozen other disease modeling frameworks, and interoperable with other disease modeling tools like [GeoPops](https://github.com/starsimhub/geopops) and [HubVerse](https://hubverse.io/);
+- **AI support:** Extensive set of skills and plugins that help implement Starsim models, including no-code chat interfaces for policymakers ([EpiChat](https://github.com/starsimhub/epichat)).
 
-Starsim "stands on the shoulders of giants", and aims to build on the best aspects of other disease modeling frameworks. It is especially indebted to [EpiModel](TBC), [MEmilio](TBC), [SimInf](TBC), [summer2](TBC), [camdl](TBC), [epidemics](TBC), and [epydemix](TBC) (see the [full list](TBC)). If there's a feature you think Starsim should support, please [get in touch](mailto:info@starsim.org).
+Starsim "stands on the shoulders of giants", and aims to build on the best aspects of other disease modeling frameworks. It is especially indebted to [EpiModel](https://www.epimodel.org/), [MEmilio](https://github.com/SciCompMod/memilio), [SimInf](https://github.com/stewid/SimInf), [summer2](https://github.com/monash-emu/summer2), [camdl](https://github.com/vsbuffalo/camdl), [epidemics](https://epiverse-trace.github.io/epidemics/), and [epydemix](https://github.com/epistorm/epydemix) (see the [full list](https://docs.starsim.org/user_guide/intro_starsim.html)). If there's a feature you think Starsim should support, please [get in touch](mailto:info@starsim.org).
 
 
 ## Starsim models
@@ -62,7 +62,7 @@ pip install "starsim[jax]"
 starsim init
 ```
 
-JAX is recommended, for gradients, fitting with them, and long runs. It is optional since it has no builds for Windows on Arm: there, use `pip install starsim`, and everything else works.
+JAX is recommended, for gradients, fitting with them, and long runs. It is optional since it has no builds for Windows on Arm: there, use `pip install starsim`, and everything else works. Intel Macs are not supported.
 
 `starsim init` compiles Starsim (once, which takes a few minutes and makes the first runs faster) and installs its skill for AI coding agents such as Claude Code and Codex (type `/starsim` to use it). To do just one of these, run `starsim compile` or `starsim ai`.
 

@@ -15,14 +15,12 @@
 #   6. Covasim
 #   7. MIGHTI
 #   8. Typhoidsim
+#   9. Rotasim
 #
 # The other frameworks are tested in frameworks.yml, in the lingua_franca_design repo: one job for
 # each, which builds it if its recipe has changed, and runs the import and export tests and the benchmark.
 #
 # R-Starsim is tested in test_r.yml, since it needs R.
-#
-# TBC:
-# - Rotasim (still in beta)
 
 name: Downstream
 on:
@@ -64,6 +62,7 @@ jobs:
           - {model: Covasim,    repo: starsimhub/covasim,         ref: v4, dir: covasim,    install: 'uv pip install -e ".[test]"'}
           - {model: MIGHTI,     repo: starsimhub/mighti,          ref: v4, dir: mighti,     install: 'uv pip install -e ".[dev]" pytest-xdist git+https://github.com/starsimhub/stisim@v4'} # As for HPVsim, get stisim from its v4 branch rather than the release
           - {model: Typhoidsim, repo: starsimhub/typhoidsim,      ref: v4, dir: typhoidsim, install: uv pip install -e . -r tests/requirements.txt}
+          - {model: Rotasim,    repo: starsimhub/rotasim,         ref: v4, dir: rotasim,    install: uv pip install -e . -r tests/requirements.txt}
 
     steps:
       - name: Checkout Starsim

@@ -2438,8 +2438,8 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         rows = [] # Each delivery, and for routine delivery that records who has been offered it, the new spells of being eligible before it (and after a transfer), each as a delivery that reaches nobody: see CompartmentalDelivery.respell()
         self.shift_of = [] # The row of each delivery, whose tally is its results
         for mod in self.deliveries:
-            due, sel_k, cov_k, to, rest, land = mod.compartments.shifts()
-            respell = mod.compartments.respell()
+            due, sel_k, cov_k, to, rest, land = mod.in_compartments.shifts()
+            respell = mod.in_compartments.respell()
             if respell is not None:
                 rows.append((due, respell[0], np.zeros_like(respell[0]), np.arange(ng), respell[1], np.zeros_like(land)))
             self.shift_of.append(len(rows))
@@ -2476,7 +2476,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             tally = np.zeros((self.mod.t.npts, len(self.shifts.to), 2, self.n_groups))
             out = self.kernels().run(self.make_rng(stream=1), *args, *tables, self.register, self.shifts, tally, 0)
             for k,mod in enumerate(self.deliveries):
-                mod.compartments.store_shifts(tally[:, self.shift_of[k]])
+                mod.in_compartments.store_shifts(tally[:, self.shift_of[k]])
         y, stocks, flows, short = out
         if self.cross is None:
             self.y = y
@@ -2536,7 +2536,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             short += more
             last = end == npts - 1
             for k,mod in enumerate(self.deliveries):
-                mod.compartments.store_shifts(tally[:, self.shift_of[k]] if start == 0 else tally[1:, self.shift_of[k]], start=0 if start == 0 else start + 1, done=last) # The first row is the end of the part before
+                mod.in_compartments.store_shifts(tally[:, self.shift_of[k]] if start == 0 else tally[1:, self.shift_of[k]], start=0 if start == 0 else start + 1, done=last) # The first row is the end of the part before
             yield (start, stocks, flows) if start == 0 else (start + 1, stocks[1:], flows[1:])
             start = end
         self.y = y
@@ -2629,7 +2629,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             if ti < len(stocks) - 1: # No step follows the last time point
                 self.kernels().apply_shifts(self.rng, np.array(stocks[ti]), sh, ti, False, tally[ti+1]) # Expected numbers, so nothing is drawn; at the time point of the step from ti, its end
         for k,mod in enumerate(self.deliveries):
-            mod.compartments.store_shifts(tally[:, self.shift_of[k]])
+            mod.in_compartments.store_shifts(tally[:, self.shift_of[k]])
         return
 
     def run_many(self, seeds):
@@ -2672,7 +2672,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         ys = np.repeat(y0[None], n_runs, axis=0) # The compartments of each run
         run_many_parts(self, rngs, ys, args, ng, (stocks, flows, stocks_g, flows_g, tally, tally_g), state_of, rows, grp_state, grp_flow)
         out = self.collect(stocks, flows, grouped=None if rows is None else (stocks_g, flows_g, kept_s, kept_f, group_ti), seeds=seeds)
-        out.deliveries = sc.obj({mod.name:mod.compartments.many_shifts(tally[:, :, self.shift_of[k]], None if rows is None else tally_g[:, :, self.shift_of[k]], group_ti) for k,mod in enumerate(self.deliveries)})
+        out.deliveries = sc.obj({mod.name:mod.in_compartments.many_shifts(tally[:, :, self.shift_of[k]], None if rows is None else tally_g[:, :, self.shift_of[k]], group_ti) for k,mod in enumerate(self.deliveries)})
         return out
 
     def collect(self, stocks, flows, expected=False, grouped=None, seeds=None):
@@ -2843,7 +2843,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         Each substep is off the ODE by an amount of order rate × dt (ST55: an acute stage of 1.7
         months at monthly steps took everyone infected from 9% to 51%). It moves people through as many stages of a dwell time as
         they pass in a substep (see `ss.kernels.draw_chain()`), so it is the dwell's mean
-        that counts, not its stages, or a fixed delay's length, which is whole steps. `substeps=1`
+        that counts, not its stages; a fixed delay is a conveyor of whole steps, so its length doesn't count. `substeps=1`
         takes whole steps, as most chain-binomial models (and frameworks' discrete-time
         models) do.
         """
@@ -2863,7 +2863,10 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         `binomial_bias` (5%), which bounds the bias in each compartment to about 2.5%; and near the epidemic threshold,
         where the prevalence moves by the bias in R over R0 - 1 (an SIS's endemic prevalence is 1 - 1/R0), to
         0.1 × |R0 - 1|, for a bias of about 5% (TB3: TBsim's resistance model, +12% at 3 substeps a month, is +3% at
-        12; an SIS with R0 = 1.05 gave 0.083 for 0.048 at whole steps).
+        12; an SIS with R0 = 1.05 gave 0.083 for 0.048 at whole steps). A fixed delay doesn't count, since its people
+        don't leave at a rate: a model whose only exits are fixed delays takes whole steps, which keeps its final size
+        but lowers its peak (by about 15% for an SIR at a fifth of the delay a step); `substeps=3` gives about 5%, for
+        about twice the time.
         """
         totals = {} # The rates out of each compartment, summed: e.g. recovery and death from I
         for flow in self.flows:
@@ -2871,8 +2874,6 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                 rate = np.ravel(self.flow_base(flow)*self.flow_mult(flow))/(flow.stages if flow.kind == 'stage' else 1) # A dwell in stages, by its mean
                 rate = np.where(np.isfinite(rate), rate, 0.0)
                 totals[flow.src] = totals.get(flow.src, 0.0) + rate
-        for cv in self.conveyors: # A fixed delay, by its length
-            totals[cv.flow.src] = 1/((len(cv.slots) - 1)*self.dt)
         fastest = max((np.max(rate, initial=0.0) for rate in totals.values()), default=0.0)
         x_max = self.binomial_bias
         R0 = None
@@ -2893,6 +2894,8 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             unit = self.sim.unit_name
             near = f' (R0 = {R0:.3g}, near the epidemic threshold, where a small bias in R moves the prevalence a lot)' if R0 is not None and x_max < self.binomial_bias else ''
             ss.note(f'"{self.mod.name}" has a rate of {fastest:.3g} per {unit} out of a state{near}, so the chain-binomial solver would take {need} substeps a step to keep its step bias small; it takes {n_sub}, with rate × dt = {fastest*self.dt/n_sub:.2g} in each. A smaller dt, substeps=, or solver="tau" follows it more closely', sim=self.sim)
+        if self.conveyors and n_sub % 2 == 0: # Odd, so that the people due to leave a conveyor leave after the middle draw, and the delay is its length (see ss.kernels.convey())
+            n_sub += 1
         return n_sub
 
     def step_state(self):

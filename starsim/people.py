@@ -886,7 +886,7 @@ class People:
                 if res[key].values.dtype.kind in 'iu':
                     res[key].init_values(dtype=float, force=True)
         unborn = self.unborn_uids()
-        if len(unborn): # Agents made at conception (by ss.Pregnancy) are not yet people, so are not counted (ss.Pregnancy counts them: pregnancy.n_unborn)
+        if len(unborn): # Agents made at conception (by ss.Pregnancy) are not yet people, so are not counted (ss.Pregnancy counts them: pregnancy.unborn)
             if counts is None:
                 counts = [state.count() for state in states] + list(count_gone(self.auids.view(np.ndarray), self.alive.raw, self.ti_dead.raw, self.ti_removed.raw, ti))
             w = self.scale.raw[unborn] if self.scale.weighted else np.ones(len(unborn))
