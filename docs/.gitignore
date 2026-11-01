@@ -17,7 +17,7 @@ objects.inv
 /llms.txt
 /llms-full.txt
 
-# Ignore the variables written from _variables.py
+# Ignore the variables written by qpyd prerender
 /_variables.yml
 
 **/*.quarto_ipynb
