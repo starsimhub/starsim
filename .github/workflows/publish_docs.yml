@@ -6,13 +6,12 @@ name: Publish docs
 on:
   push:
     tags:
-      - 'v*'
+      - 'v[0-9]+.[0-9]+.[0-9]+' # Not pre-releases, which aren't what pip installs, so leave the docs alone
   workflow_dispatch:
 
 jobs:
   publish:
     name: Quarto
-    if: ${{ !contains(github.ref_name, 'rc') }} # A release candidate isn't what pip installs, so leaves the docs alone
     timeout-minutes: 45
     runs-on: ubuntu-latest
     permissions:
