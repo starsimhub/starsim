@@ -89,7 +89,7 @@ def make_args():
     pars = dict(n_agents=2000, verbose=0)
     mf = ss.SexualNet(dur=ss.lognorm_ex(mean=5, std=0.5, unit=ss.years)) # TODO: think about whether these should be ss.dur(); currently they are not since stored in natural units with -self.dt
     hiv = ssl.diseases.HIV(beta={'sexual': [0.0008, 0.0004]}, init_prev=0.2) # TODO: beta should wrap the other way
-    sis = ssl.AgentSIS(name='sis', beta={'sexual': [0.1, 0.05]}, init_prev=0.05) # Written as code, since the connector and TreatSIS set its arrays directly
+    sis = ssl.AgentSIS(name='sis', beta={'sexual': [0.02, 0.01]}, init_prev=0.05) # Written as code, since the connector and TreatSIS set its arrays directly; low enough per act for rel_sus to matter
     return dict(pars=pars, networks=mf, diseases=[hiv, sis])
 
 

@@ -160,11 +160,11 @@ class FetalHealth(ss.Module):
     def init_results(self):
         super().init_results()
         self.define_results(
-            ss.Result('n_births',          dtype=int, label='Births', kind='flow'),
-            ss.Result('n_lbw',             dtype=int, label='Low birth weight', kind='flow'),
-            ss.Result('n_vlbw',            dtype=int, label='Very low birth weight', kind='flow'),
-            ss.Result('n_sga',             dtype=int, label='Small for gestational age', kind='flow'),
-            ss.Result('n_svn',             dtype=int, label='Small vulnerable newborns', kind='flow'),
+            ss.Result('birth',          dtype=int, label='Births', kind='flow'),
+            ss.Result('lbw',             dtype=int, label='Low birth weight', kind='flow'),
+            ss.Result('vlbw',            dtype=int, label='Very low birth weight', kind='flow'),
+            ss.Result('sga',             dtype=int, label='Small for gestational age', kind='flow'),
+            ss.Result('svn',             dtype=int, label='Small vulnerable newborns', kind='flow'),
             ss.Result('mean_birth_weight', label='Mean birth weight (g)'),
             ss.Result('mean_ga_at_birth',  label='Mean GA at birth (weeks)'),
             ss.Result('mean_exposures',    label='Mean exposures per pregnancy'),
@@ -230,16 +230,16 @@ class FetalHealth(ss.Module):
         # Results: the means are over the births of the step, which may come in more than one call
         res = self.results
         ti = self.ti
-        n, before = len(newborn_uids), res['n_births'][ti]
+        n, before = len(newborn_uids), res['birth'][ti]
         values = dict(mean_birth_weight=birth_weights, mean_ga_at_birth=ga_wk, mean_exposures=self.n_exposures[parents], lbw_rate=lbw, sga_rate=sga, svn_rate=svn)
         for key in self.means:
             total = values[key].sum() + (res[key][ti]*before if before else 0)
             res[key][ti] = total/(before + n)
-        res['n_births'][ti] += n
-        res['n_lbw'][ti]    += lbw.sum()
-        res['n_vlbw'][ti]   += vlbw.sum()
-        res['n_sga'][ti]    += sga.sum()
-        res['n_svn'][ti]    += svn.sum()
+        res['birth'][ti] += n
+        res['lbw'][ti]    += lbw.sum()
+        res['vlbw'][ti]   += vlbw.sum()
+        res['sga'][ti]    += sga.sum()
+        res['svn'][ti]    += svn.sum()
         return
 
     def apply_timing_shift(self, uids, shift_weeks):

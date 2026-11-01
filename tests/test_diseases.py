@@ -313,7 +313,7 @@ def test_mtct():
     if do_plot:
         sim.plot()
     res = sim.results
-    assert np.array_equal(res.sis.S + res.sis.I, res.alive + res.pregnancy.n_unborn) # Everyone is in a state of the declared SIS, the unborn too (so they can be infected before birth), though they are not counted among the people
+    assert np.array_equal(res.sis.S + res.sis.I, res.alive + res.pregnancy.unborn) # Everyone is in a state of the declared SIS, the unborn too (so they can be infected before birth), though they are not counted among the people
     return sim
 
 
@@ -341,7 +341,7 @@ def test_congenital():
 
     preg = sim.demographics.pregnancy
     sb           = preg.results['stillbirth'].sum()
-    neonatal_deaths = preg.results['neonatal_deaths'].sum()
+    neonatal_deaths = preg.results['neonatal_death'].sum()
     births          = preg.results['birth'].sum()
     n_congenital    = sim.diseases[0].congenital.sum()
     print(f'  Stillbirths: {sb}, Neonatal deaths: {neonatal_deaths}, Births: {births}, Congenital: {n_congenital}')
@@ -743,6 +743,49 @@ def test_define_transitions():
         sirs.graph
         sirs.define_states(ss.State('V'))
     return sim
+
+
+def test_init_in_class():
+    """ Starting values in a class body are used, and a count can start from the number of people """
+    class Vectors(ss.Disease):
+        m = ss.par(3.0)
+        S, I = ss.states(2)
+        V = ss.State(people=False)
+        N = (S + I).n
+        init = dict(I=0.2, V=m*N)
+        recovery = I >> S @ ss.perday(0.1)
+
+    for solver in ['abm', 'ode']:
+        sim = ss.Sim(Vectors(name='vec'), n_agents=1000, stop=2, unit='day', dt=1, solver=solver, verbose=0).run()
+        res = sim.results.vec
+        assert res.I[0] == 200, f'Only {res.I[0]} of 1000 started infected, not 200, under {solver}'
+        assert res.V[0] == 3000, f'The count started at {res.V[0]}, not 3 per person, under {solver}'
+    sim = ss.Sim(Vectors(name='vec', init=dict(I=0.1)), n_agents=1000, stop=2, unit='day', dt=1, solver='ode', verbose=0).run()
+    assert sim.results.vec.I[0] == 100, 'init= given to the disease should replace that of the class'
+    return
+
+
+def test_rel_sus_per_act():
+    """ On a network with acts, rel_sus scales each act's hazard for a disease written as code, as for a declared disease """
+    class Sus(ss.Connector):
+        def step(self):
+            self.sim.diseases.x.rel_sus[:] = 0.2
+            return
+
+    def run(make, seed):
+        disease = make()
+        sim = ss.Sim(diseases=disease, networks=ss.SexualNet(acts=ss.freqperweek(5)), connectors=Sus(), n_agents=20_000, start=2000, stop=2001, dt=ss.months(1), solver='abm', rand_seed=seed, verbose=0).run()
+        x = sim.diseases.x
+        return 18_000 - (x.susceptible if x.graph is None else x.S).sum() # New infections: 10% are seeds
+
+    def declared():
+        S, I = ss.states(2)
+        return ss.Disease(infection=S >> I @ (dict(sexualnet=ss.peract(0.03))*I), recovery=I >> S @ ss.years(1000), init_prev=0.1, name='x')
+
+    coded = lambda: ssl.AgentSIR(beta=dict(sexualnet=ss.peract(0.03)), dur_inf=ss.years(1000), p_death=0, init_prev=0.1, name='x')
+    a, b = [np.mean([run(make, seed) for seed in range(3)]) for make in [coded, declared]]
+    assert np.isclose(a, b, rtol=0.05), f'New infections written as code ({a}) and declared ({b}) should agree'
+    return
 
 
 if __name__ == '__main__':

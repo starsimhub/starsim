@@ -377,13 +377,13 @@ def test_starsim3():
     sim = ss.Sim(demographics=preg, diseases=d, networks=ss.MaternalNet(), analyzers=count, n_agents=5000, **kw).run()
     r, p = sim.results, sim.demographics.pregnancy
     assert r.d.flag.sum() > 0.5*r.pregnancy.conception.sum() and r.d.unflag.sum() > 0.5*r.d.flag.sum()
-    assert r.d.mtct.sum() > 100 and r.pregnancy.maternal_deaths.sum() > 0
+    assert r.d.mtct.sum() > 100 and r.pregnancy.maternal_death.sum() > 0
     assert np.all(np.ceil(p.ti_exit_P[p.P.uids]) >= p.ti) and np.all(p.parity >= 0) # Each due at the end of this step or later
     assert np.max((p.ti - p.ti_P[p.P.uids])*p.t.dt.weeks) < 45 # Weeks of gestation
     assert np.all(p.rel_ptb[p.P.uids] > 0)
     assert seen.conceived > 0.8*r.pregnancy.conception.sum() and seen.delivered > 0.8*r.pregnancy.birth.sum()
     born = (sim.people.age > 0) & np.isfinite(p.gestation_at_birth)
-    assert born.sum() > 100 and np.isclose(r.pregnancy.n_preterm.sum(), np.sum(p.gestation_at_birth[born.uids] < 37), rtol=0.2)
+    assert born.sum() > 100 and np.isclose(r.pregnancy.preterm.sum(), np.sum(p.gestation_at_birth[born.uids] < 37), rtol=0.2)
 
     # A Starsim 3 disease that transmits over the maternal network
     sim = ss.Sim(demographics=ss.Pregnancy(fertility_rate=ss.freqperyear(100)), diseases=ss.SIS(beta=dict(maternalnet=1.0, random=0.05)),
@@ -428,7 +428,7 @@ def test_syphilis():
     assert total > 500 and all(v > 10 for k,v in out.items() if k != 'nnd') and out['nnd'] > 0, out # Neonatal deaths are rare
     assert sum(out.values()) <= total # The rest unborn at the end, or lost earlier
     assert r.pregnancy.stillbirth.sum() >= out['stillbirth'] # Also a stillbirth of the pregnancy, for ANC and contraception to see
-    assert r.pregnancy.neonatal_deaths.sum() >= out['nnd']
+    assert r.pregnancy.neonatal_death.sum() >= out['nnd']
     assert np.isclose(r.pregnancy.birth.sum(), r.pregnancy.delivery.sum() - out['stillbirth'], rtol=0.01)
     return sim
 

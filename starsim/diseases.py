@@ -62,7 +62,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         results (list): extra results: sums and ratios of states
         outcomes (list): `ss.outcome` objects
         init_prev (float): the initial prevalence, seeded through the transmission (by default 0.01, unless a state is given an initial value)
-        init (dict): the share of people who start in each state, e.g. `dict(S=0.90, I=0.01, R=0.09)`; each value can be an `ss.by` or a function of the sim
+        init (dict): the share of people who start in each state, e.g. `dict(S=0.90, I=0.01, R=0.09)`, and, for a state that is not people, its amount, which can be read from the people (e.g. `dict(Sv=m*N)`, with `N = (S + I).n`); each value can be an `ss.by` or a function of the sim (in the class form, `init = dict(I=0.01)` in the class body; likewise `init_n` and `init_prev`)
         init_n (dict): instead, the number of people who start in each state, e.g. `dict(I=1)` for one person
         first (str): the state that everyone not put elsewhere starts in, and is born into; by default, the one named `S` or `susceptible`, else the first state of people made (in the class form, `first = 'N'` in the class body)
         strains (Strains): its strains (`ss.Strains`), which share its states; then `dis.strains`
@@ -395,6 +395,10 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         for key in ['init_prev', 'init', 'init_n']: # The initial conditions can also be given in pars=, as the parameters are
             if key in pars:
                 kwargs[key] = pars.pop(key)
+        for key in ['init_prev', 'init', 'init_n']: # Or in the class body, e.g. init = dict(I=0.01), as for first below
+            given = getattr(type(self), key, None)
+            if key not in kwargs and (isinstance(given, dict) or sc.isnumber(given)):
+                kwargs[key] = dict(given) if isinstance(given, dict) else given
         init_prev = kwargs.pop('init_prev', None)
         if sc.isnumber(init_prev): # A parameter, so it can be set (sir.pars.init_prev = 0.05) or fitted like the others
             init_prev = ss.par(init_prev)

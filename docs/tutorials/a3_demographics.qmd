@@ -154,7 +154,7 @@ sims = {
     '20,000 agents': ss.Sim(people=ss.people('Nigeria', n_agents=20_000), **pars),
 }
 msim = ss.parallel(sims)
-msim.plot('births.new')
+msim.plot('births.birth')
 ```
 
 With 1,000 agents, about 40 are born each year, and the number varies by chance by about the square root of that, around 6, or 15%; with 20,000 agents, the variation is about 4%. As a rule of thumb, use enough agents that the events you care about are counted in the hundreds: for births in a whole country, a few thousand agents is plenty, but for the cases of a rare disease, or the deaths in one age group, it may take many more. And for anything that depends on chance in small numbers, such as whether measles dies out in a town, the agents must be people, one each, not a sample of them. [Branching and rescaling](../user_guide/running_branching.qmd) shows how to add agents as a rare infection grows.

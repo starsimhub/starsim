@@ -2,7 +2,7 @@
 # Build & publish site to GitHub Pages
 set -euo pipefail # Fail fast if needed
 
-quarto render --cache-refresh
+quarto render --cache-refresh --jobs ${DOCS_JOBS:-4}
 
 # Publish the site as a single commit with no history, replacing the gh-pages
 # branch, so old copies of the rendered figures don't accumulate in the repo

@@ -53,7 +53,7 @@ def test_fetal_health(do_plot=do_plot):
 
     # Basic sanity checks
     res_fh = sim_baseline.results.fetal_health
-    total_births = res_fh.n_births.sum()
+    total_births = res_fh.birth.sum()
     assert total_births > 0, 'No births recorded'
     print(f'Total births: {total_births}')
 
@@ -65,7 +65,7 @@ def test_fetal_health(do_plot=do_plot):
     mean_ga = np.nanmean(ga)
     print(f'Mean GA at birth: {mean_ga:.1f} weeks')
     assert 36 < mean_ga < 44, f'Mean GA {mean_ga:.1f} weeks outside expected range'
-    none = res_fh.n_births.values == 0
+    none = res_fh.birth.values == 0
     assert np.isnan(res_fh.mean_birth_weight.values[none]).all() and not np.isnan(res_fh.mean_birth_weight.values[~none]).any() # Undefined on a step with no births
     assert not np.isnan(res_fh.mean_birth_weight.resample('year').values).any() # And left out of a mean over time
 
@@ -84,8 +84,8 @@ def test_fetal_health(do_plot=do_plot):
     print(f'Mean birth weight (disease): {bw_disease:.0f}g')
     assert bw_disease < bw_baseline, f'Disease ({bw_disease:.0f}g) should be lower than baseline ({bw_baseline:.0f}g)'
 
-    ptb_disease = sim_disease.results.pregnancy.n_preterm.sum()
-    ptb_baseline = sim_baseline.results.pregnancy.n_preterm.sum()
+    ptb_disease = sim_disease.results.pregnancy.preterm.sum()
+    ptb_baseline = sim_baseline.results.pregnancy.preterm.sum()
     print(f'Preterm births — baseline: {ptb_baseline}, disease: {ptb_disease}')
     assert ptb_disease > 3*ptb_baseline, f'Disease scenario should have several times the preterm births ({ptb_disease} against {ptb_baseline})' # About 5×; about 1.7× if the infection's shift of delivery is lost
 
@@ -106,7 +106,7 @@ def test_fetal_health(do_plot=do_plot):
     rtol = 0.05 # Generous tolerance for stochastic comparison
     assert bw_treated > bw_disease * (1 - rtol), f'Treated ({bw_treated:.0f}g) should be at least as high as disease-only ({bw_disease:.0f}g)'
 
-    ptb_treated = sim_treated.results.pregnancy.n_preterm.sum()
+    ptb_treated = sim_treated.results.pregnancy.preterm.sum()
     print(f'Preterm births — disease: {ptb_disease}, treated: {ptb_treated}')
 
     print(f'Summary — baseline: {bw_baseline:.0f}g, disease: {bw_disease:.0f}g, treated: {bw_treated:.0f}g')

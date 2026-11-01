@@ -131,7 +131,7 @@ def clocks_of(mod):
     graph = getattr(mod, 'graph', None)
     objs = [[tr.rate, tr.dur, tr.p, getattr(tr, 'where', None), getattr(tr.trigger, 'x', None)] for tr in graph.transitions.values()] if graph is not None else []
     objs += [a if a.kind == 'derived' else a.value for a in getattr(graph, 'attrs', {}).values()] # A derived attribute, through what it is worked out from; one set at an event, through its value
-    objs += [getattr(mod, key, None) for key in ['amount', 'where', 'eligible', 'on', 'coverage']]
+    objs += [getattr(mod, key, None) for key in ['amount', 'where', 'eligible', 'trigger', 'coverage']]
     return ss.expressions.clocks_in(objs)
 
 
@@ -1197,7 +1197,7 @@ def several_givers(sim):
     """ A step triggered by a product delivered by several steps: the union of their people """
     deliveries = [mod for mod in sim.gathered if isinstance(mod, ss.Delivery)]
     for mod in deliveries:
-        for leaf in ss.conditions.event_leaves(mod.on) if isinstance(mod.on, ss.conditions.Cond) else []:
+        for leaf in ss.conditions.event_leaves(mod.trigger) if isinstance(mod.trigger, ss.conditions.Cond) else []:
             name = ss.conditions.modname(leaf.args[0]) if leaf.op == 'event' else None
             givers = [d.name for d in deliveries if d.product is not None and d.product.name == name]
             if len(givers) > 1 and name not in [d.name for d in deliveries]:
@@ -1219,7 +1219,7 @@ def bad_age(sim, mod):
 def group_conditions(sim, mod):
     """ A condition of a delivery or a modifier (with `at_age=`, apart from the age) that no group can answer """
     aged = isinstance(mod, ss.Delivery) and mod.at_age is not None
-    conds = [mod.where_given if aged and key == 'eligible' else getattr(mod, key, None) for key in ['on', 'eligible', 'where'] if not (key == 'where' and getattr(mod, 'graph', None) is not None)]
+    conds = [mod.where_given if aged and key == 'eligible' else getattr(mod, key, None) for key in ['trigger', 'eligible', 'where'] if not (key == 'where' and getattr(mod, 'graph', None) is not None)]
     return [dict(reason=reason) for cond in conds for reason in ss.conditions.group_reasons(cond, sim)[:1]]
 
 

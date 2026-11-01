@@ -61,7 +61,7 @@ def test_mmr():
     preg = ss.Pregnancy(fertility_rate=ss.freqperyear(100), p_maternal_death=ss.bernoulli(0.05), p_infertile=ss.bernoulli(0.2), infant_rate=ss.peryear(0.05))
     sim = ss.Sim(demographics=preg, n_agents=5000, start=2000, stop=2010, dt=ss.months(1), verbose=0).run()
     r = sim.results.pregnancy
-    births, md = r.birth.values, r.maternal_deaths.values
+    births, md = r.birth.values, r.maternal_death.values
     assert md.sum() > 30
     assert np.allclose(r.mmr.values, sc.safedivide(md, births, default=0)*100e3), 'MMR: maternal deaths per 100,000 births'
     assert r.mmr.kind == 'ratio'

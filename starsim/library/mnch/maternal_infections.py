@@ -16,7 +16,7 @@ How it works:
        would be counted as a live birth followed by a neonatal death.
     3. `step_congenital()` (called each timestep from `step_state()`)
        checks whether any scheduled outcomes are due. Death outcomes
-       ('stillborn', 'miscarriage', 'neonatal_deaths') call `request_death()`;
+       ('stillborn', 'miscarriage', 'neonatal_death') call `request_death()`;
        non-lethal outcomes set a BoolArr state (e.g. `congenital = True`).
 
 To use it in your own disease, subclass `CongenitalDisease` (or copy its
@@ -109,7 +109,7 @@ class CongenitalDisease(AgentSIR):
     # Prenatal outcomes are fetal losses and must fire while the agent is still unborn;
     # postnatal outcomes happen to a live newborn. See set_congenital() for why this matters.
     prenatal_death_keys = {'miscarriage', 'stillborn'}
-    postnatal_death_keys = {'neonatal_deaths'}
+    postnatal_death_keys = {'neonatal_death'}
     congenital_death_keys = prenatal_death_keys | postnatal_death_keys
 
     def set_congenital(self, target_uids, source_uids=None):
@@ -131,7 +131,7 @@ class CongenitalDisease(AgentSIR):
 
         Each outcome name needs a matching `ti_<name>` FloatArr state; non-lethal
         outcomes also need a BoolArr of the same name. Death outcomes ('miscarriage',
-        'neonatal_deaths', 'stillborn') fire via `request_death`; others set a bool state.
+        'neonatal_death', 'stillborn') fire via `request_death`; others set a bool state.
 
         Outcomes are scheduled for the mother's delivery timestep, except for fetal
         losses ('miscarriage', 'stillborn'), which are scheduled one timestep earlier so

@@ -15,7 +15,7 @@ on:
 jobs:
   test:
     name: Render
-    timeout-minutes: 15
+    timeout-minutes: 45
     runs-on: ubuntu-latest
 
     steps:
@@ -30,13 +30,8 @@ jobs:
       with:
         extras: '[dev]'
 
-    - name: Set up Quarto
-      uses: quarto-dev/quarto-actions/setup@v2
-
-    - name: Install Quarto interlinks
-      working-directory: ./docs
-      run: quarto add sciris/quartopydoc --no-prompt # Fork with a faster interlinks filter
+    - uses: ./.github/actions/quarto
 
     - name: Render docs
       working-directory: ./docs
-      run: ./render
+      run: ./render --jobs 4

@@ -341,10 +341,10 @@ class Network(Route):
             rel_trans (array): the transmissibility of each agent, by UID (0 if not infectious)
             rel_sus (array): the susceptibility of each agent, by UID (0 if not susceptible)
             edge_beta (func): of the direction (0 or 1), and the indices, sources, and targets of the edges from someone with `rel_trans` not 0
-                to someone with `rel_sus` not 0, the beta of each of them (an array, or a number for all; see `net_beta()`): with `prob`, only
-                where it is 0 matters (no transmission); None to skip the direction (no random numbers are drawn)
+                to someone with `rel_sus` not 0, the beta of each of them (an array, or a number for all; see `net_beta()`): with a function
+                as `prob`, only where it is 0 matters (no transmission), and with `prob=True` it is already the probability; None to skip the direction (no random numbers are drawn)
             rng (`ss.multi_random`): the random numbers, by source and target
-            prob (func): of the direction, and the indices, sources, and targets of the edges that can transmit, the probability of each, in place of the product above
+            prob (func/bool): of the direction, and the indices, sources, and targets of the edges that can transmit, the probability of each, in place of the product above; True if `edge_beta` gives it
 
         Returns:
             A list of the (source UIDs, target UIDs) that transmit, for each direction not skipped
@@ -369,7 +369,7 @@ class Network(Route):
                 beta = np.broadcast_to(beta, len(inds)) if np.ndim(beta) == 0 else beta
                 src, trg = nb_transmit(np.asarray(src), np.asarray(trg), rel_trans, rel_sus, beta, rvs)
             else:
-                hit = rvs < prob(d, inds, src, trg)
+                hit = rvs < (beta if prob is True else prob(d, inds, src, trg))
                 src, trg = np.asarray(src)[hit], np.asarray(trg)[hit]
             out.append((src.view(ss.uids), trg.view(ss.uids))) # View (no copy): the kernel's output is its own int64 array
         return out
@@ -773,7 +773,7 @@ class Network(Route):
         """
         The probability that each edge transmits in a step, given the disease's probability (in the step, or on a network with acts, per act)
 
-        A network written as code can override this, for a disease written as code; a declared disease works out a network with acts from its hazard per act (see `ss.modify()` for what changes it on one route).
+        On a network with acts, `disease_beta` has a value for each edge, already scaled for the `rel_trans` and `rel_sus` of its two people, since these act on each act, as for a declared disease. A network written as code can override this, for a disease written as code; a declared disease works out a network with acts from its hazard per act (see `ss.modify()` for what changes it on one route).
 
         Args:
             disease_beta (float): the disease's probability

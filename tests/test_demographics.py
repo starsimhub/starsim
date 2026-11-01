@@ -151,7 +151,7 @@ def test_module_adding():
     with pytest.raises(ValueError): # Starsim 3's birth_rate= is removed, rather than added to the modules given
         ss.Sim(n_agents=1e3, demographics=demographics, birth_rate=ss.time.freq(10, 'year')).run()
     sim = ss.Sim(n_agents=1e3, demographics=[ss.Births(), ss.Deaths()], people_results=False, verbose=0).run() # Without people's results
-    assert sim.results.deaths.new.sum() > 0
+    assert sim.results.deaths.death.sum() > 0
     return demographics
 
 
@@ -313,7 +313,7 @@ def test_nnd():
     sim.run()
 
     preg = sim.demographics.pregnancy
-    neonatal_deaths = preg.results['neonatal_deaths'].sum()
+    neonatal_deaths = preg.results['neonatal_death'].sum()
     births = preg.results['birth'].sum()
     print(f'  Neonatal deaths: {neonatal_deaths}, Births: {births}')
 
@@ -336,7 +336,7 @@ def test_count_based_births():
         ss.options.crn = crn
         sim = ss.Sim(n_agents=3000, dur=15, dt=0.25, demographics=ss.Births(birth_rate=ss.peryear(30)),
                      rand_seed=seed, verbose=0).run()
-        return float(sim.results.births.cumulative[-1])
+        return float(sim.results.births.birth.cum[-1])
 
     orig_crn = ss.options.crn
     try:
@@ -540,7 +540,7 @@ def test_unborn():
     assert not (hiv.I.raw[mothers] & ~I0[mothers]).any() # Before, mothers were infected by their children
     r = sim.results
     born = ppl.alive.raw[ppl.auids] & (ppl.age.raw[ppl.auids] >= 0)
-    assert r.alive[-1] < r.alive[-1] + r.pregnancy.n_unborn[-1] and r.pregnancy.n_unborn[-1] > 0
+    assert r.alive[-1] < r.alive[-1] + r.pregnancy.unborn[-1] and r.pregnancy.unborn[-1] > 0
     assert np.isclose(ppl.n_alive, born.sum())
     return sim
 
@@ -553,7 +553,7 @@ def test_cause_of_death():
     sis = ss.Disease(infection=S >> I @ ss.peryear(0)*I, death=ss.death(I, rate=ss.peryear(1.0)), init_n=dict(I=10_000), name='sis')
     sim = ss.Sim(diseases=sis, demographics=ss.Deaths(death_rate=ss.peryear(1.0), rate_units=1), n_agents=10_000, start=2010, stop=2011, dt=ss.months(1), verbose=0).run()
     r = sim.results
-    by_disease, by_deaths, total = r.sis.death.sum(), r.deaths.new.sum(), r.died.sum()
+    by_disease, by_deaths, total = r.sis.death.sum(), r.deaths.death.sum(), r.died.sum()
     assert by_disease + by_deaths == total # Before, about 4.5% were counted twice
     ppl = sim.people
     dead = ss.uids(np.flatnonzero(~ppl.alive.raw[:ppl.uid.len_used]))
@@ -590,7 +590,7 @@ def test_declared_newborns():
         sim.run()
         r = sim.results
         n_states = r.sis.S[-1] + r.sis.I[-1]
-        alive = r.alive[-1] + (r.pregnancy.n_unborn[-1] if 'pregnancy' in r else 0) # The unborn are in the disease's states, but not counted among the people
+        alive = r.alive[-1] + (r.pregnancy.unborn[-1] if 'pregnancy' in r else 0) # The unborn are in the disease's states, but not counted among the people
         assert np.isclose(n_states, alive), f'{dem.name}: {n_states} in states but {alive} alive'
         new = sim.people.auids[sim.people.auids >= 2000]
         assert len(new) > 100

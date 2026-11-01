@@ -20,7 +20,7 @@ way), `copy_inputs=` (removed: a sim always copies its inputs), `ss.uids.cat()` 
 `ss.years(10)`, since a bare number is in the model's unit), `p_loss=` of `ss.Pregnancy` (now `loss_rate=ss.probperweek(...)`), and the counts of the states of Starsim's own
 modules after results (`results.n_alive`, `res['n_infected']`, now `results.alive`, `res['infected']`; a result the code makes
 itself keeps its name, and other counts are listed), the results of `ss.Infection` (`new_infections` is `infection`, and `cum_infections` is
-`infection.cum`), the deaths and emigrants of the sim (`new_deaths` is `died`, `cum_deaths` is `died.cum`, and `new_emigrants` is `emigrated`) and of a disease (`death`), `on=` of a delivery or transition (now `where=`), and `ss.change()` (now `ss.modify()` of an `ss.timeseries()`). Read the diff
+`infection.cum`), the deaths and emigrants of the sim (`new_deaths` is `died`, `cum_deaths` is `died.cum`, and `new_emigrants` is `emigrated`) and of a disease (`death`), results of demographics (`births.new` is `births.birth`, `deaths.cumulative` is `deaths.death.cum`, `pregnancy.n_preterm` is `pregnancy.preterm`, `maternal_deaths` is `maternal_death`), `on=` of a delivery or transition (now `where=`), and `ss.change()` (now `ss.modify()` of an `ss.timeseries()`). Read the diff
 afterwards: each change is listed with its line.
 
 Used with: agents; coded modules
@@ -56,6 +56,12 @@ renames = [
     (r'\b(\w*preg\w*)\.pregnant\b',  r'\1.P',                        "ss.Pregnancy's pregnant is its state P"),
     (r'\b(\w*preg\w*)\.ti_pregnant\b', r'\1.ti_P',                   "ss.Pregnancy's ti_pregnant is ti_P, the step P was entered"),
     (r'\b(\w*preg\w*)\.(stillbirth|miscarriage|birth)s\b', r'\1.\2', "ss.Pregnancy's results are its flows: stillbirth, miscarriage, birth"),
+    (r'\b(\w*preg\w*(?:\.results)?)\.n_(preterm|very_preterm|unborn)\b', r'\1.\2', "ss.Pregnancy's results have no n_: preterm, very_preterm, unborn"),
+    (r'\b(\w*preg\w*(?:\.results)?)\.(maternal|neonatal)_deaths\b', r'\1.\2_death', "ss.Pregnancy's flows are singular: maternal_death, neonatal_death"),
+    (r'''\bbirths([._])new\b''', r'births\1birth', "ss.Births' flow is named birth, and deaths' death (was new)"),
+    (r'''\bdeaths([._])new\b''', r'deaths\1death', "ss.Births' flow is named birth, and deaths' death (was new)"),
+    (r'\bbirths\.cumulative\b', 'births.birth.cum', "ss.Births and ss.Deaths have no stored total: births.birth.cum, deaths.death.cum"),
+    (r'\bdeaths\.cumulative\b', 'deaths.death.cum', "ss.Births and ss.Deaths have no stored total: births.birth.cum, deaths.death.cum"),
     (r'\b(\w*preg\w*)\.pregnancies\b', r'\1.conception',            "ss.Pregnancy's pregnancies result is its flow conception"),
     (r'\b(\w*preg\w*)\.breastfeeding\b', r'\1.lactating',            "ss.Pregnancy's breastfeeding is preg.lactating"),
     (r'\bdef infect\(\s*self\s*\)', 'def transmit(self)',         "ss.Infection's transmission pass is transmit() (infect(uids) now infects those agents at once, for every disease)"),
@@ -87,6 +93,7 @@ flags = [
     (r'\bss\.(RoutineDelivery|CampaignDelivery|BaseTest|BaseScreening|BaseTriage|BaseTreatment|BaseVaccination)\b', "Starsim 3's delivery classes were removed: ss.screen(), ss.vaccinate(), or ss.treat() with coverage= (prob=p is coverage=ss.probperyear(p), offered at every step), start= and stop= (start_year=, end_year=; stop is not included), at= (a campaign's years=), and where= (eligibility=); a subclass that overrides step() is an ss.Intervention written as code"),
     (r'\bss\.treat_num\b', 'ss.treat(cure=e, where=dis.infection (or who=screening.positive), capacity=n, queue=True): those not served wait, and leave the queue when no longer eligible'),
     (r'\bss\.(Dx|Tx|Vx)\b', "Starsim 3's products written as code were removed: ss.Diagnostic (a table of more than two results is results=dict(...), most severe first), ss.Treatment (cure=, or cure=dict(<state>=...) by state), ss.Vaccine (efficacy=); an administer() of your own is administer(self, uids) on a subclass of ss.Product, returning its outcomes as dict(positive=uids)"),
+    (r'\bself\.results(\.new\b|\.cumulative\b|\[.(new|cumulative).\])', "if this is a subclass of ss.Births or ss.Deaths, the flow is results.birth or results.death (was new), and its total is .cum (was cumulative), so nothing stores it"),
     (r'\bss\.simple_vx\b', 'ss.Vaccine(efficacy=e)'),
     (r'\bclass\s+\w+\(\s*(ss\.)?Pregnancy\s*\)', "ss.Pregnancy is now the declared module (states and transitions, with Starsim 3's arguments), and Starsim 3's pregnancy written as code was removed: its old methods are never called, so a subclass that overrides them does nothing. Rewrite onto its seams: conception_rate(sim) for who conceives, ss.modify() of its transitions (preg.conception, preg.miscarriage, ...), infant_rate= for infant mortality, since_birth and preg.lactating for postpartum and breastfeeding, ss.on(preg.birth) or preg.add_callback(preg.birth, fn) at a delivery"),
     (r'\.add_(conception|delivery)_callback\(', "ss.Pregnancy's add_conception_callback(fn) is preg.add_callback(preg.conception, fn); add_delivery_callback(fn), which was called with (mothers, newborns), is preg.add_callback(preg.birth, fn), called with the newborns (their mothers are sim.people.parent[newborns]). Both are called at the end of the pregnancy's step"),

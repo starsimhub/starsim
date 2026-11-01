@@ -12,7 +12,8 @@ on:
 jobs:
   publish:
     name: Quarto
-    timeout-minutes: 15
+    if: ${{ !contains(github.ref_name, 'rc') }} # A release candidate isn't what pip installs, so leaves the docs alone
+    timeout-minutes: 45
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -29,12 +30,7 @@ jobs:
       with:
         extras: '[dev]'
 
-    - name: Set up Quarto
-      uses: quarto-dev/quarto-actions/setup@v2
-
-    - name: Install Quarto interlinks
-      working-directory: ./docs
-      run: quarto add sciris/quartopydoc --no-prompt # Fork with a faster interlinks filter
+    - uses: ./.github/actions/quarto
 
     - name: Custom Quarto publish
       working-directory: ./docs

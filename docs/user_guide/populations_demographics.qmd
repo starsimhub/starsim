@@ -208,7 +208,7 @@ Mother-to-child transmission uses the networks that pregnancy makes between moth
 
 People age if the model has births or deaths, and not otherwise; `use_aging=True` or `use_aging=False` in the sim says otherwise. As agents, each person's age goes up with each step. In a compartmental model stratified by age, people move from each age group to the next: if people are spread evenly over the ages in a group, at a rate of one over its width (a group 5 years wide is left at a rate of 1/5 per year), and for a named population, at the rate its age pyramid gives, as agents would age.
 
-The API reference for this page: [ss.Births](../api/demographics.qmd), [ss.Deaths](../api/demographics.qmd), [ss.Pregnancy](../api/pregnancy.qmd).
+The API reference for this page: [ss.Births](../api/demographics.qmd), [ss.Deaths](../api/demographics.qmd), [ss.Pregnancy](../api/demographics.qmd).
 
 ## Further reading
 

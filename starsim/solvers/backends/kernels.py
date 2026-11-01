@@ -1726,7 +1726,10 @@ def convey(rng, y, p, w, flows, release):
     These leave in the next step, at its middle (`release=True`), since they arrived through
     a step, so the delay is K steps on average: Gillespie exactly there, and the chain-binomial
     solver and tau-leaping after the first draws past it, so they count in those draws' rates,
-    and then arrive as anyone arriving by a flow does. With whole steps this is the order of
+    and then arrive as anyone arriving by a flow does. People count in the rates from the draw
+    after they arrive, so with an odd number of substeps, the middle draw is the one that keeps
+    the delay at K steps (the solver's default; with an even number, it is half a substep long, so
+    `binomial_substeps()` makes it odd). With whole steps this is the order of
     agents, who leave in the step their dwell time ends in, after its rates are worked out. The
     ODE lets them leave at a constant rate over the step (see `step()`), which is exact at each
     time point for a delay of whole steps. The other exits of the state act on every slot, the
