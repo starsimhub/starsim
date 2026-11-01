@@ -18,26 +18,13 @@ def test_infection_log(do_plot=False):
     assert len(df) > 900, 'Expect almost everyone to be infected'
     assert set(df.network.dropna()) == {'randomnet'} # Network recorded for each transmission
     assert df.network.isna().sum() == df.source.lt(0).sum() # Seed infections have no network
+    assert df.t.dtype == float # Times as numbers, which can be subtracted (they were durations)
+    mixed = ss.Sim(ss.SIR(beta=0.3), n_agents=300, unit='day', stop=10, analyzers=ss.infection_log(), verbose=0).run().analyzers[0].to_df()
+    assert 'network' not in mixed.columns # With no networks no route is known, so no column of blanks
     if do_plot:
         log.plot()
         log.animate()
     return log
-
-
-@sc.timer()
-def test_dynamics_by_age(do_plot=False):
-    """ Test dynamics by age """
-    sc.heading('Testing dynamics by age')
-    by_age = ss.dynamics_by_age('sis.infected', age_bins=(0, 10, 30, 100))
-    sim = ss.Sim(diseases='sis', networks='random', analyzers=by_age, copy_inputs=False)
-    sim.run()
-
-    # Tests
-    h = by_age.hist
-    assert h[0].sum() < h[10].sum() < h[30].sum(), 'Expected larger bins to have more infections'
-    if do_plot:
-        by_age.plot()
-    return by_age
 
 
 if __name__ == '__main__':
@@ -46,6 +33,5 @@ if __name__ == '__main__':
     T = sc.timer()
 
     log    = test_infection_log(do_plot=do_plot)
-    by_age = test_dynamics_by_age(do_plot=do_plot)
 
     T.toc()

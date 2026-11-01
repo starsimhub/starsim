@@ -1,0 +1,17 @@
+[package]
+name = "starsim_rs"
+version = "0.1.0"
+edition = "2024"
+description = "Starsim's compiled kernels, in Rust"
+
+[lib]
+name = "_rs"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.30", features = ["extension-module", "abi3-py312"] }
+numpy = "0.30"
+
+[profile.release]
+lto = true
+codegen-units = 1

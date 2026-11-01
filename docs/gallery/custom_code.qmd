@@ -1,0 +1,68 @@
+---
+title: Severity by age, as a function
+jupyter: python3
+authorship:
+  human: 0
+  ai: 100
+  note: Written by AI
+---
+
+Some parts of a model are easiest to write as a function. Here the chance that an infection is severe enough for hospital depends on age: 10% under 50, and 40% from 50 up. Rather than stratify the disease by age and give a value for each group, the chance is a Python function of the sim, which reads people's ages. Starsim tries the function on the model's age groups, and since it works on them, the model still runs as compartments; run as agents, the same function is evaluated for each person.
+
+## The model
+
+| Parameter | Value | Meaning |
+|---|---|---|
+| β | 0.3 per day | Rate of infection |
+| Infectious period | 7 days | Mean time in I (exponential), before hospital or recovery |
+| Hospitalized | 10% under 50, 40% from 50 up | From a function of age |
+| Stay in hospital | 10 days | Mean time to discharge |
+| Age groups | 0–49, 50+ | For the compartmental run |
+| Population | 10,000 | |
+| Infectious at the start | 0.1% | |
+
+```{python}
+import starsim as ss
+
+def severity(sim):
+    """ The chance of hospitalization: 10%, plus 30% from age 50 """
+    return 0.1 + 0.3*(sim.people.age >= 50)
+
+S, I, H, R = ss.states('S I H R')
+infection = S >> I @ 0.3*I
+course    = ss.Transition(I, [H, R], p=severity, dur=ss.days(7))
+discharge = H >> R @ ss.days(10)
+flu = ss.Disease(infection, course, discharge, init=dict(I=0.001), name='flu')
+```
+
+The diagram, from `diagram()`:
+
+```{python}
+flu.diagram()
+```
+
+## Result
+
+The sim is split into two age groups at 50 (`stratify=dict(age=[0, 50])`), so that the function has ages to work on in a compartmental run. The same model is run as an ODE and as agents:
+
+```{python}
+sims = {
+    'ODE': ss.Sim(flu, total_pop=10_000, stop=ss.days(100), stratify=dict(age=[0, 50]), verbose=0),
+    'Agents': ss.Sim(flu, total_pop=10_000, stop=ss.days(100), solver='abm', verbose=0),
+}
+msim = ss.parallel(sims)
+msim.plot('flu')
+```
+
+The two agree, apart from chance in the agent run. Of about 8,000 infections, about 1,400 people are admitted to hospital (`flu_course.H`): one in six, between the 10% of those under 50 and the 40% of those over, since about a quarter of people are 50 or over (the population's ages are guessed as the world's in 2024, as `describe()` says):
+
+```{python}
+msim.summarize().loc[['flu_infection', 'flu_course.H']]
+```
+
+A function that needs each person (one that takes `uids`, the people it applies to, as well as the sim) can't be run as compartments, so Starsim runs a model with one as agents, and `describe()` says why.
+
+## Going further
+
+- [Modules written as code](../tutorials/t9_modules.qmd) goes further, with modules that have a `step()` of their own.
+- [Modules written as code](../user_guide/building_modules.qmd), in the user guide, covers functions in rates and probabilities, and when a model can still run as compartments.

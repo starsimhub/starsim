@@ -1,0 +1,218 @@
+---
+title: Distributions
+jupyter: python3
+authorship:
+  human: 25
+  ai: 75
+  note: Adapted from the Starsim 3 user guide page on distributions; ported to v4, with new sections on durations and on variation between people, and the vaccination example rewritten, by AI
+---
+
+Distributions appear in a model in three ways: as the distribution of a **duration** (how long people stay in a state, or the delay before an event is reported), as **variation between people** (each person's own value of a parameter), and, in modules written as code, as the **random draws** that decide what happens to each person (who is infected, who tests positive). This page covers the distributions Starsim has, how to choose one for a duration, and how to use them in each of these ways.
+
+Uncertainty about a single value, such as a parameter being fitted, is not variation between people; it is a prior, given with `ss.par(..., prior=...)` and used only in [calibration](calibration_fitting.qmd).
+
+## Distributions of durations
+
+A duration given as a single value, such as `I >> R @ ss.days(8)`, is the mean of an exponential distribution, as in an ODE model. The shape of the distribution matters: with the same mean, it changes when an epidemic peaks and how fast it grows ([Durations](building_diseases.qmd#durations)). These are the distributions most used for durations, each with a mean of 10 days:
+
+```{python}
+import numpy as np
+import matplotlib.pyplot as plt
+import starsim as ss
+
+durations = {
+    'Exponential':       ss.expon(scale=ss.days(10)),
+    'Erlang, 4 stages':  ss.erlang(k=4, mean=ss.days(10)),
+    'Lognormal, std 2':  ss.lognorm_ex(mean=ss.days(10), std=ss.days(2)),
+}
+plt.figure()
+for label, dist in durations.items():
+    draws = dist.rvs(10_000) # In days, the unit it was given in
+    print(label, '- share under 4 days:', np.mean(draws < 4).round(2))
+    plt.hist(draws, bins=np.arange(0, 40), histtype='step', lw=2, label=label)
+plt.xlabel('Days')
+plt.legend()
+plt.show()
+```
+
+With an exponential distribution, a third of people leave within 4 days, and a few stay for a month or more. An Erlang distribution with `k` stages (a gamma distribution with a whole-number shape) has less spread, a standard deviation of the mean divided by √k, and a lognormal is given by its mean and standard deviation directly, as a study would report them. A fixed duration, `ss.constant(ss.days(10))`, has no spread at all.
+
+In a model, a distribution of durations goes after `@`, or as `dur=`:
+
+```python
+onset    = E >> I @ ss.erlang(k=4, mean=ss.days(10))
+recovery = I >> R @ ss.lognorm_ex(mean=ss.days(8), std=ss.days(2))
+recovery = I >> R @ ss.lognorm_ex(mean=8, std=2, unit='days') # The same: the unit given once
+```
+
+A distribution's unit is given on its parameters, as typed durations, or once with `unit=`, which applies to every parameter of it that is a time. As agents, each person draws their own duration when they enter the state. As compartments, there are no individuals to draw for, so an Erlang distribution is run exactly as `k` compartments in a row (stages), a fixed duration as one compartment for each step people have been in the state, and any other distribution as Erlang stages with the same mean and standard deviation, with a note that says how many.
+
+## Variation between people
+
+A distribution given as a parameter's value gives each person their own value of it. A distribution of durations is one example; a share (`p=`), or the rate of a transition, can vary between people too. A model whose parameters vary between people, other than durations, needs individuals to hold their values, so it runs as agents.
+
+A value that differs by group, rather than at random between people, is better given with `ss.by()` ([Parameters](building_parameters.qmd#values-for-each-group)): it is the same for everyone in a group, and runs under every solver.
+
+## Available distributions
+
+| Distribution | Starsim | Parameters | Notes |
+|---|---|---|---|
+| Uniform | `ss.uniform` | `low`, `high` | Between a minimum and a maximum |
+| Normal | `ss.normal` | `loc` (mean), `scale` (standard deviation) | |
+| Truncated normal | `ss.truncnorm` | `loc`, `scale`, `low`, `high` | A normal distribution between `low` and `high` |
+| Lognormal | `ss.lognorm_ex` | `mean`, `std` | Given by the mean and standard deviation of the distribution itself |
+| Lognormal (of the underlying normal) | `ss.lognorm_im` | `mean`, `sigma` | Given by the mean and standard deviation of the normal distribution of its logarithm |
+| Exponential | `ss.expon` | `scale` (the mean) | |
+| Gamma | `ss.gamma` | `a` (shape), `scale`; or `mean`, `std` | |
+| Erlang | `ss.erlang` | `k` (stages), `mean` | A gamma distribution with a whole-number shape; exact as compartments |
+| Weibull | `ss.weibull` | `c` (shape), `scale`, `loc` | |
+| Beta | `ss.beta_dist` | `a`, `b` | Between 0 and 1 |
+| Beta, by its mean | `ss.beta_mean` | `mean`, `var` | E.g. a probability that varies |
+| Poisson | `ss.poisson` | `lam` (the mean) | A count |
+| Negative binomial | `ss.nbinom` | `n`, `p` | A count with more spread than a Poisson |
+| Constant | `ss.constant` | `v` | The same value for everyone; a fixed duration |
+| Random integer | `ss.randint` | `low`, `high` | |
+| Bernoulli | `ss.bernoulli` | `p` | True with probability `p`: whether something happens to each person |
+| Choose n | `ss.choose_n` | `n`, `weights` | Exactly `n` people; see [below](#a-fixed-number-of-people) |
+| Choice | `ss.choice` | `a` (the options), `p` (their probabilities, or a row of them per person) | One of a list of values |
+| Histogram | `ss.histogram` | `values`, `bins` | From a histogram of data |
+| Random | `ss.random` | | Between 0 and 1 |
+
+See the [API reference](../api/distributions.qmd) for each. A distribution of your own can be written by subclassing `ss.Dist`.
+
+## A fixed number of people
+
+Some things are a number of people, not a share: to start an outbreak with exactly 5 infectious people, give a number (`init_n=dict(I=5)`, or `init_prev=5`, since above 1 it is a number of people):
+
+```{python}
+S, I, R = ss.states('S I R')
+infection = S >> I @ 1.9*I
+recovery  = I >> R @ ss.days(8)
+measles = ss.Disease(infection, recovery, init_prev=5)
+
+sim = ss.Sim(measles, n_agents=10_000, stop=ss.days(50), verbose=0)
+sim.init()
+print('Infectious at the start:', sim.diseases.measles.I.sum())
+```
+
+`ss.choose_n()` can be used wherever a Bernoulli distribution can: `filter()` gives the people chosen, `split()` both those chosen and the rest, and `rvs()` a true-or-false value for each person. It can weight people (`weights=`, a value or a function of the people), so that some are more likely to be chosen. Unlike choosing at random from a list, it picks mostly the same people in two sims that differ slightly, which keeps comparisons between scenarios precise ([Random numbers](mechanics_random.qmd)). Here the same choice of 5 people out of 20, made with and without person 3 (one of those chosen), picks the same people apart from person 3, who is replaced by one other; and a choice weighted by age picks older people:
+
+```{python}
+sim = ss.Sim(n_agents=20, verbose=0).init()
+uids = sim.people.auids
+
+choose_a = ss.choose_n(5, name='Choose 5').init(sim=sim) # Two identical distributions, as if in two sims
+choose_b = ss.choose_n(5, name='Choose 5').init(sim=sim)
+print('Chosen from everyone:', choose_a.filter(uids))
+print('Chosen without person 3:', choose_b.filter(uids.remove(3)))
+
+by_age = ss.choose_n(5, weights=lambda self, sim, uids: sim.people.age[uids], name='Choose by age').init(sim=sim)
+chosen, not_chosen = by_age.split(uids)
+print('Mean age of those chosen:', sim.people.age[chosen].mean().round(1))
+print('Mean age of the rest:', sim.people.age[not_chosen].mean().round(1))
+```
+
+## Working with a distribution
+
+A distribution can be made, drawn from, and looked at on its own. Outside a sim, one with a unit draws in that unit, here days, and shows what it was made from:
+
+```{python}
+dist = ss.lognorm_ex(mean=ss.days(5), std=ss.days(2))
+print(dist)
+print(dist.rvs(5)) # Five draws, in days
+print('Mean:', dist.dist.mean())
+print('95% of draws are between', dist.dist.ppf([0.025, 0.975]).round(2))
+draws = dist.plot_hist(n=1000, bins=30) # Returns the draws
+```
+
+In a sim, the same distribution draws in steps of its module instead, and from the sim's random numbers ([Random numbers](mechanics_random.qmd)). One with no unit, such as `ss.normal(0, 1)`, draws outside a sim when made with `strict=False`, which says it need not use the sim's random numbers.
+
+`dist.dist` is the [SciPy](https://docs.scipy.org/doc/scipy/reference/stats.html) distribution with its parameters, for its mean, quantiles (`ppf`), density, and so on.
+
+A distribution can round what it draws, which matters for numbers that must be whole, such as a duration in steps: `round=True` rounds each value up or down at random in proportion to how close it is (so the mean is kept), and `round='nearest'` rounds to the nearest whole number. Either can be given when the distribution is made, or when drawing. Here a duration of about 5 days, in a sim with steps of a day, drawn for 10 people three ways (`reset=True` uses the same random numbers each time):
+
+```{python}
+sim = ss.Sim(n_agents=10, dt=ss.days(1), start='2025-01-01', dur=ss.days(30), verbose=0).init()
+dur = ss.lognorm_ex(ss.days(5), ss.days(2), round='nearest', name='Rounded duration')
+dur.init(sim=sim)
+
+print('Not rounded:', dur.rvs(sim.people.uid, round=False, reset=True).round(2))
+print('Nearest:    ', dur.rvs(sim.people.uid, reset=True)) # As set when it was made
+print('At random:  ', dur.rvs(sim.people.uid, round=True, reset=True))
+```
+
+The parameters of a distribution that is already made, such as the default of a library module, can be changed with `set()`: `ssl.Measles().pars.p_death.set(p=0.05)` (see [Library: diseases](library_diseases.qmd)).
+
+## Distributions in modules written as code
+
+In a module written as code, a distribution is made once, as a parameter (in `define_pars()`) or an attribute (in `__init__()`), and drawn from at each step for the people it is about:
+
+- `dist.rvs(uids)` gives one value for each of the people given (by their IDs, or a true-or-false array over people).
+- For a Bernoulli distribution, `dist.filter(uids)` gives the people for whom it came out true, and `dist.split(uids)` both those and the rest.
+
+Drawing for people, rather than a number of values, is what lets each person keep their own random numbers across scenarios, so that two sims differ only where their scenarios do ([Random numbers](mechanics_random.qmd)). Making a distribution at every step instead of once breaks this.
+
+A distribution's parameters can be functions, of the module, the sim, and the people (`fn(self, sim, uids)`), worked out each time it is drawn from, for the people it is drawn for. The function returns one value for each person (or a single value for all of them), and can use anything the sim knows: their ages, their states, the time.
+
+Here an intervention written as code vaccinates susceptible people against measles on the first day, each with probability `p_vx`, a Bernoulli distribution made once, as a parameter. A perfect vaccine is given by moving those vaccinated from `S` to `R` (a change by UID to a state of a declared disease, which its counts see). The probability can be a single value, or a function of the people: here, 90% of children under 15 and 10% of adults, against 30% of everyone. Measles spreads mostly among school-age children (10 contacts a day in school, 2 in the community), so the two campaigns use about the same number of doses, but with very different effects:
+
+```{python}
+class Campaign(ss.Intervention):
+    """ Vaccinate susceptible people against measles on one day, each with probability p_vx (a perfect vaccine) """
+    def __init__(self, p_vx=0.3, day=1, **kwargs):
+        super().__init__(**kwargs)
+        self.define_pars(p_vx=ss.bernoulli(p=p_vx), day=day) # The distribution is made once, here
+        self.update_pars(**kwargs)
+        return
+
+    def init_results(self):
+        super().init_results()
+        self.define_results(ss.Result('n_vaccinated', dtype=int, label='Vaccinated'))
+        return
+
+    def step(self):
+        if self.ti == self.pars.day:
+            measles = self.sim.diseases.measles
+            vaccinated = self.pars.p_vx.filter(measles.S.uids) # Draw for the susceptible people only
+            measles.S[vaccinated] = False
+            measles.R[vaccinated] = True
+            self.results.n_vaccinated[self.ti] = len(vaccinated)
+        return
+
+def p_by_age(self, sim, uids):
+    """ 90% for children under 15, 10% for everyone else """
+    return np.where(sim.people.age[uids] < 15, 0.9, 0.1)
+
+def make_sim(campaign=None):
+    S, I, R = ss.states('S I R')
+    measles = ss.Disease(S >> I @ 0.04*I, I >> R @ ss.days(8), init_prev=0.01, name='measles')
+    school = ss.RandomNet(name='school', n_contacts=10, age_range=[5, 15])
+    community = ss.RandomNet(name='community', n_contacts=2)
+    return ss.Sim(measles, networks=[school, community], interventions=campaign, n_agents=5000, stop=ss.days(200))
+
+scenarios = {
+    'No vaccination': make_sim(),
+    '30% of everyone': make_sim(Campaign(p_vx=0.3)),
+    '90% of children, 10% of adults': make_sim(Campaign(p_vx=p_by_age)),
+}
+msim = ss.parallel(scenarios, parallel=False)
+for label, sim in zip(scenarios, msim.sims):
+    doses = sim.results.campaign.n_vaccinated.sum() if 'campaign' in sim.results else 0
+    print(label, '- doses:', int(doses), '- largest number infectious:', int(sim.results.measles.I.max()))
+msim.plot('measles.I')
+```
+
+With the same number of doses, vaccinating the children who carry most of the transmission stops the outbreak, while spreading the doses over everyone only slows it. In a module, `init()` is done for each of its distributions when the sim is initialized; a distribution used on its own, outside a module, needs `dist.init(sim=sim)` first, as in the examples above. See [Custom modules](building_modules.qmd) for whole modules, and [Interventions](interventions_interventions.qmd) for vaccination as it is usually given, with `ss.vaccinate()`, which works under every solver.
+
+## Pitfalls
+
+- **A distribution as a value or as a prior.** A distribution as a parameter's value is variation between people; uncertainty about one value is a prior.
+- **The exponential default.** A single duration is exponential, with a lot of spread. For a latent or infectious period, an Erlang or lognormal distribution is usually closer to the data.
+- **A unit given twice, or not at all.** Give a distribution's unit on its parameters or with `unit=`; a bare number takes the model's unit.
+- **Making distributions at every step** in a module written as code, which breaks common random numbers. Make them once.
+
+## Further reading
+
+- [SciPy: statistical functions](https://docs.scipy.org/doc/scipy/reference/stats.html): the distributions that Starsim's are built on, with their parameters
+- [NumPy: random generator](https://numpy.org/doc/stable/reference/random/generator.html): how random numbers are drawn from them
+- [Stan functions reference: positive continuous distributions](https://mc-stan.org/docs/functions-reference/positive_continuous_distributions.html): the lognormal, gamma, Weibull, and others, with their parameterizations

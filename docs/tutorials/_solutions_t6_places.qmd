@@ -1,0 +1,81 @@
+## T6 – Geography and mixing
+
+Each solution starts from the model of the tutorial, in four towns:
+
+```{python}
+import starsim as ss
+
+towns = ss.geo.geography(
+    names = ['Riverton', 'Hillside', 'Lakeview', 'Fairfield'],
+    pop   = [100_000, 40_000, 20_000, 10_000],
+    x     = [0, 20, 35, 60],
+    y     = [0, 10, -15, 5],
+)
+
+def make_towns(immune=ss.by(age=[0.8, 0.92, 0.98]), mobility=ss.geo.gravity(away=0.01)):
+    """ The measles model of T6, in four towns, with the share immune and the movement given """
+    S, E, I, R = ss.states('S E I R')
+    beta = ss.par(0.14, bounds=[0.05, 0.5])
+    infection   = S >> E @ beta*I
+    progression = E >> I @ ss.days(10)
+    recovery    = I >> R @ ss.days(8)
+    measles = ss.Disease(infection, progression, recovery,
+        init   = dict(R=immune),
+        init_n = dict(I=ss.by(patch=[10, 0, 0, 0])),
+        name   = 'measles',
+    )
+    measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1})
+    measles.stratify(patch=towns, mobility=mobility)
+    return measles
+
+contacts = ss.contacts(ages=[0, 15, 65], matrix=[[10, 6, 1], [3, 8, 1], [3, 6, 3]])
+settings = dict(networks=contacts, start='2025-01-01', stop='2026-01-01', verbose=0)
+```
+
+**1. Lower immunity in Lakeview.** The share immune is the product of the values by age and by town, so a factor of 0.8125 for Lakeview gives 0.8 × 0.8125 = 65% of its children (and 75% of its adults under 65, and 80% of older adults):
+
+```{python}
+sims = {
+    'Same immunity':        ss.Sim(make_towns(), **settings),
+    'Less immune Lakeview': ss.Sim(make_towns(immune=ss.by(age=[0.8, 0.92, 0.98], patch=[1, 1, 0.8125, 1])), **settings),
+}
+msim = ss.parallel(sims)
+msim.results.measles.I.select(patch='Lakeview').plot()
+for label, sim in zip(sims, msim.sims):
+    print(label, '- infections in each town:')
+    print(sim.results.measles.infection.by('patch').summarize().round())
+```
+
+With less immunity, Lakeview has a much larger outbreak, about 5,400 infections (over a quarter of the town) rather than 1,800, which comes earlier and peaks higher: with more susceptible people, each case there infects more others, so the outbreak grows faster once it arrives. The other towns' outbreaks hardly change, since their own immunity is unchanged: Lakeview's larger outbreak sends a few more infectious visitors to them, but the size of an outbreak in each town is set mostly by that town's own susceptible people.
+
+**2. A campaign in Riverton only.**
+
+```{python}
+measles = make_towns()
+campaign = ss.vaccinate(efficacy=0.93, where=(measles.age < 15) & (measles.patch == 'Riverton'), coverage=0.8, at='2025-03-01')
+sims = {
+    'No intervention':      ss.Sim(measles, **settings),
+    'Campaign in Riverton': ss.Sim(measles, interventions=campaign, **settings),
+}
+msim = ss.parallel(sims)
+for label, sim in zip(sims, msim.sims):
+    print(label, '- infections in each town:')
+    print(sim.results.measles.infection.by('patch').summarize().round())
+```
+
+The campaign prevents about three quarters of the infections in Riverton, but almost none in the other towns. By 1 March, a little measles has already reached them, and as an ODE, the model has an outbreak in every town it reaches, as large as that town's own immunity allows; fewer cases in Riverton only delay it. A stochastic run (as in the tutorial) would show whether fewer travelers from Riverton make it less likely that measles takes off in the smaller towns at all.
+
+**3. The radiation model.**
+
+```{python}
+sims = {
+    'Gravity':   ss.Sim(make_towns(), **settings),
+    'Radiation': ss.Sim(make_towns(mobility=ss.geo.radiation(away=0.01)), **settings),
+}
+msim = ss.parallel(sims)
+for label, sim in zip(sims, msim.sims):
+    peaks = sim.results.measles.I.by('patch').values.argmax(axis=0)
+    print(label, '- day of the peak in each town:', peaks)
+```
+
+The outbreaks come at about the same times, except in Fairfield, where it peaks five days earlier with the radiation model. In the gravity model, travel falls with the square of the distance, which puts Fairfield, the farthest town, far from everyone. In the radiation model, the share of travelers who go to a place depends on how many people live nearer than it, not on the distance itself, so a far place with few people in between is less cut off than under the gravity model.

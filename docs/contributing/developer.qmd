@@ -1,0 +1,161 @@
+---
+title: Developer guide
+authorship:
+  human: 15
+  ai: 85
+  note: Written by AI, with the changelog and release guidelines from the human-written contributing guide
+---
+
+This guide is for people changing Starsim itself: how to set up, how the code is organized, how it is tested, and how changes are recorded and released. To understand how Starsim works inside, see the [architecture](../user_guide/architecture_index.qmd) section of the user guide.
+
+## Setting up
+
+Clone the [repository](https://github.com/starsimhub/starsim) and install it in editable mode, with the optional dependencies for testing and the docs:
+
+```bash
+git clone https://github.com/starsimhub/starsim
+cd starsim
+pip install -e .[dev]
+starsim compile # Optional: compile the Numba kernels now, rather than on the first run
+```
+
+Starsim's compiled kernels have two copies that give the same numbers bit for bit: Numba's (the reference, compiled on first use and cached) and Rust's (compiled ahead of time, so a first run takes no compiling). To build the Rust copy, install [Rust](https://rustup.rs) and run `./build` in `starsim/solvers/rust`. With the default `ss.options.kernels = 'auto'`, Starsim uses the Rust kernels whenever they have been built. To change a kernel, change the Numba code first, then the Rust copy to match, and run `tests/test_kernel_sets.py`; `starsim/solvers/rust/README.md` has the details.
+
+## How the code is organized
+
+The package is in `starsim/`. Each file holds one area, named as users meet it (`sim.py`, `people.py`, `diseases.py`, `networks.py`, `interventions.py`, `fit.py`, ...); its classes and functions are at the top level (`ss.Sim`, `ss.SIR`). The rest is in subfolders:
+
+- `solvers/`: the engines that run declared models (`compartmental.py`, `agents.py`), who meets whom in a compartmental run (`mixing.py`), and how the solver is chosen (`choose.py`); `solvers/backends/` has the compiled kernels (Numba, JAX, and the loader for Rust), and `solvers/rust/` the Rust copies.
+- `internals/`: how Starsim works under the hood: the graph of a declared module (`graph.py`), expressions in rates (`expressions.py`), how a model is shown (`display.py`), gradients (`gradients.py`), errors (`errors.py`), and debugging tools (`debugtools.py`).
+- `converters/`: importers and exporters for other frameworks, and the Starsim 3 migration script (`python -m starsim.converters.migrate`).
+- `library/`: example and reference modules (`import starsim.library as ssl`), which build on core Starsim but are not part of it.
+
+A compact index of the whole public API is in `docs/llms.txt`, built by `python make_api.py` in `docs/` (and at [starsim.org/v4/llms.txt](https://starsim.org/v4/llms.txt)).
+<!-- V4-PREVIEW: restore the link above to docs.starsim.org/llms.txt for normal publishing -->
+
+## Testing
+
+Tests come in three kinds:
+
+- **Asserted:** the test fails if the behavior is wrong (a modifier restores the base value when it ends; reordering competing exits changes nothing).
+- **Recorded:** the result is a number or a table rather than a pass or fail (how far an ODE approximation of a network model is from the agents).
+- **Measured against the original:** lines of code and run time for a model translated from another framework, compared with that framework.
+
+### The suites
+
+The tests are in `tests/`, in two sets. The core tests (`tests/test_*.py`, about 300) are quick, cover each feature, and are what `./run_tests` runs. The developer tests (`tests/devtests/`) are the slower and more exhaustive ones: the contracts, inference, gradients, the spec, every error, the importers, and the slower tests of each feature, in a file with the same name as its core file (`devtests/test_networks.py` has the rest of the network tests). They run every night in CI, and on demand. Most of the tests run on a shared set of small models, the *corpus* in `tests/corpus.py`: 23 functions, each returning an unrun sim that runs in seconds, with the solver as a keyword (`corpus.sir(solver='binomial')`). They range from a plain SIR to cholera with a water reservoir, Ross-Macdonald malaria, two diseases that modify each other, and a TB model with drug resistance.
+
+| Suite | What it guards |
+|---|---|
+| `test_contracts.py` | Properties every model and solver must have, over the corpus: people are conserved, the order of competing exits doesn't matter, the chain binomial, Gillespie and agents agree with the ODE on simple models, random streams are independent, and every guess is marked in `describe()`. A failure here usually means a silent wrong answer somewhere else. |
+| `test_contracts_inference.py` | The same for fitting: the JAX log-density equals the sim's log-likelihood, the particle filter matches direct runs, and each fitting method recovers known values from simulated data. |
+| `test_kernels.py`, `test_gradients.py` | The compartmental engine's paths agree with each other: a whole run with a stepped run, compiled kernels with plain Python, and JAX with the kernels. Gradients agree with finite differences. |
+| `test_fast_draws.py`, `test_jit.py` | The exact random draws match their distributions, and the same uniforms give the same draws compiled or not; `ss.jit` gives the same results as the code run as Python. |
+| `test_baselines.py` | A standard agent-based sim (two diseases, three networks, births and deaths) gives exactly its recorded results (`baseline.yaml`); and `test_performance_guard` fails if any of a set of timed cases is more than 1.5 times slower than its record (`perf_guard.yaml`). |
+| Feature tests | One file per area (`test_transitions.py`, `test_deliveries.py`, `test_dimensions.py`, ...), and `test_composition.py` for plain NumPy modules beside declared ones. |
+| `devtests/io/` | Each importer and exporter against the framework it reads or writes. Tests that need R, or the repository of translated examples, are skipped when it isn't available. |
+| `switching/` | Thirteen acceptance demos, each in the terms of a framework Starsim is compared with: bring the model in, describe it, fit it, ask a policy question, and run it another way. Each asserts the original's reference numbers; one that doesn't pass yet is marked `xfail`, with the reason. |
+| `north_star.py` | The north star: a model should never be easier to write without Starsim than with it. For each translated example (kept in a separate repository), a table of lines of model code and run time, original against Starsim, published on the [Coming from](../user_guide/library_landscape.qmd) pages. |
+
+The agreement between solvers is layered from exact to statistical. Conservation is checked to 1e-9; the ODE is checked against SciPy and the analytic final size of an SIR; the JAX ODE against the kernels to 1e-9; and the chain binomial, Gillespie and agents against the ODE, as the mean over a few runs at a quarter-day step, within 5% (or a wider tolerance, given with its reason in the test). [Solvers and backends](../user_guide/architecture_solvers.qmd) has the table of execution paths and the test that pins each one.
+
+#### Running them
+
+```bash
+cd tests
+./run_tests                                         # The core tests, in test_*.py, in parallel
+pytest devtests -n auto                             # The developer tests
+pytest devtests/test_contracts.py                   # One suite
+STARSIM_SLOW=1 pytest devtests/test_contracts.py             # The agreement test over every compartmental corpus model, not just the simple ones
+pytest switching -rxX                               # The switching demos, with the reason for each xfail
+pytest test_baselines.py::test_performance_guard    # The performance guard, which is skipped in parallel runs
+```
+
+The performance guard is timing-sensitive, so run it on its own on a quiet machine. After an intended change to results or speed, `./update_baseline.py` and `./update_benchmarks.py` record the new values, and the change shows up in review as a diff of the `.yaml` files.
+
+### What to run after a change
+
+| If you change | These parts see it | Run at least |
+|---|---|---|
+| How states, transitions or rates are declared (`transitions.py`, `expressions.py`, `graph.py`) | Every engine, `describe()`, the importers' code, and the exporters | `test_transitions.py`, `test_contracts.py` |
+| Parameters, time or units (`parameters.py`, `time.py`, `dates.py`) | Every engine, fitting (which reads bounds and priors), and the spec | `test_time.py`, `test_transitions.py`, `test_contracts_inference.py` |
+| Stratification or strains (`dimensions.py`, `strains.py`) | The compartment layout, mixing, agents' properties, and results by group | `test_dimensions.py`, `test_contracts.py` |
+| The compartmental engine or the kernels (`solvers/compartmental.py`, `kernels.py`) | All four compartmental solvers, the JAX runs that follow the kernels step for step, and the particle filter | `test_kernels.py`, `test_gradients.py`, `test_contracts.py` |
+| The agent engine or the passes (`solvers/agents.py`, `solvers/backends/passes.py`) | Declared models as agents, networks, and births | `test_contracts.py`, `test_baselines.py`, `test_networks.py` |
+| Random draws (`distributions.py`, `solvers/backends/draws.py`) | Every stochastic solver, common random numbers, and every recorded result | `test_fast_draws.py`, `test_randomness.py`, `test_contracts.py::test_streams`, `test_baselines.py` |
+| Solver choice (`solvers/choose.py`) | What `'auto'` picks, the notes, and `describe()` | `test_transitions.py::test_auto`, `test_contracts.py`, `test_sim.py` |
+| Interventions and modifiers (`interventions.py`, `products.py`, `connectors.py`, `solvers/deliveries.py`) | Both engines, the loop order, and whether a whole compartmental run is possible | `test_deliveries.py`, `test_interventions.py`, `test_products.py` |
+| The loop or module lifecycle (`loop.py`, `modules.py`, `sim.py`) | Every sim, including modules written as code | `test_loop.py`, `test_sim.py`, `test_baselines.py` |
+| Fitting (`fit.py`, `gradients.py`) | `sim.fit()` and every fitting method | `test_contracts_inference.py`, `test_calibration.py`, `test_gradients.py` |
+| The importers' code writer or the exporters (`converters/core.py`, `converters/export.py`) | Every import, and every export | `devtests/io/`, `switching/` |
+| An importer or exporter (`converters/`) | That framework's users, and its switching demo | its file in `devtests/io/`, and its demo in `switching/` |
+| An error, warning or note | Its message | `test_errors.py` |
+| Anything on a hot path | Run time | `test_baselines.py::test_performance_guard` |
+
+Files are named by area, so `test_networks.py` means both `tests/test_networks.py` and `tests/devtests/test_networks.py`. When in doubt, run both sets: `./run_tests`, then `pytest devtests -n auto`.
+
+### What the tests don't show
+
+- That a model is a good model. Nothing here checks the epidemiology.
+- That a fit converged. Each fit reports whether it did (`fit.converged`), and why not.
+- That an approximation is good enough for your question. Starsim says what was approximated; the judgment is the modeler's.
+- That complex models agree across solvers. Only simple ones are asserted to; for the rest, the differences are expected.
+
+## Building the docs
+
+The docs are built with [Quarto](https://quarto.org); the tutorials and user guide are notebooks, executed when they are built, so their examples always run against the current code. In `docs/`:
+
+```bash
+./render                                        # Build the whole site into _site/
+./quickrender t3                                # Build one page (any unique part of its name)
+./check_notebooks.py tutorials/t3_disease.qmd   # Run pages without building them
+./preview                                       # Build and serve, rebuilding pages as they change
+```
+
+`./render` also builds the API reference from the docstrings (with [quartodoc](https://machow.github.io/quartodoc/)), so a docstring is documentation: write it in the Google style, with an example. Every page has a note at the top of how much of it was written by humans and how much by AI (the `authorship:` field in its front matter); please keep it current when you change a page.
+
+## Changelog entries
+
+Every pull request should add an entry to `CHANGELOG.md`. Changes that alter model output, or that are needed to run an old parameter set with the current version, should be flagged with **Migration** or **Regression**.
+
+For any backwards-incompatible change, write the entry so that a human (or an LLM) could perform the migration from the changelog alone. Include the concrete before/after call. For example, instead of:
+
+> `ss.foo()` and `ss.bar()` are deprecated; use `ss.cat()` instead.
+
+write:
+
+> `ss.foo()` and `ss.bar()` have been replaced by `ss.cat()`. Instead of `ss.foo(x=1)` and `ss.bar(y=2)`, use e.g. `ss.cat(z=[1, 2])`.
+
+The extra specificity (which arguments map to which, with example values) is what makes the entry actionable.
+
+## The design record
+
+The design record is in the [lingua_franca_design](https://github.com/starsimhub/lingua_franca_design) repository. It has three parts that matter today:
+
+- **The constitution** (`docs/admin/constitution.md`): the principles every choice is checked against, summarized on [the architecture overview](../user_guide/architecture_index.qmd).
+- **The spec** (`docs/design/`, files 00 to 19): what the language is and how each part behaves, with a reason for each choice and a list of what was rejected. This section of the docs is a short translation of it.
+- **What was set aside** (`docs/admin/deferred.md`): ideas deferred or decided against, so they aren't proposed again without new reasons.
+
+When a design changes, the spec is changed first, and then the code to match it. The user documentation is executed when it is built, so its examples run against the current code too.
+
+## Release procedure
+
+This assumes you're about to release version `4.1.1`.
+
+1. Merge all pull requests into the release candidate branch (`rc4.1.1`).
+2. Update the version in `version.py` from `4.1.1.dev0` to `4.1.1`, and update the date.
+3. Mark the pull request ready.
+4. If tests pass, merge.
+5. On the repository page, click "Releases" to go to the [releases](https://github.com/starsimhub/starsim/releases) page.
+6. Click "Draft a new release" on the top right.
+7. In the tag dropdown, enter `v4.1.1` as a new tag. Leave the target as `main`.
+8. Set the release title to `v4.1.1`.
+9. Generate release notes automatically, and then edit further as required.
+10. Click "Publish release" to deploy, which will update PyPI and build and upload the latest documentation.
+11. Create a new release candidate branch (e.g. `rc4.1.2`), and make a draft pull request.
+
+## In the design record
+
+- [18-conformance.md](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/design/18-conformance.md): every claim of the spec and the test that checks it, and the corpus
+- [12-backends.md](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/design/12-backends.md#agreement-between-solvers): how closely the solvers agree, and why
+- [constitution.md](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/admin/constitution.md): the principles the tests ultimately serve

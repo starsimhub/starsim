@@ -1,0 +1,42 @@
+# Install Quarto from sciris/quarto-cli, which renders in parallel (`--jobs`), and the faster interlinks filter from
+# sciris/quartopydoc. The fork has no releases, so the latest commit is built from source once, then restored from the cache.
+
+name: Install Quarto
+description: Install Sciris's Quarto for building the docs
+inputs:
+  ref:
+    description: The branch, tag, or full commit of sciris/quarto-cli
+    default: refs/heads/main
+runs:
+  using: composite
+  steps:
+    - name: Find the Quarto commit
+      id: quarto
+      shell: bash
+      run: |
+        sha=$(git ls-remote https://github.com/sciris/quarto-cli "${{ inputs.ref }}" | cut -f1)
+        echo "sha=${sha:-${{ inputs.ref }}}" >> "$GITHUB_OUTPUT"
+    - uses: actions/cache@v4
+      id: cache
+      with:
+        path: quarto-cli
+        key: quarto-${{ runner.os }}-${{ steps.quarto.outputs.sha }}
+    - name: Check out Quarto
+      if: steps.cache.outputs.cache-hit != 'true'
+      uses: actions/checkout@v7
+      with:
+        repository: sciris/quarto-cli
+        ref: ${{ steps.quarto.outputs.sha }}
+        path: quarto-cli
+    - name: Build Quarto
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      working-directory: quarto-cli
+      run: ./configure.sh
+    - name: Put Quarto on the path
+      shell: bash
+      run: echo "$PWD/quarto-cli/package/dist/bin" >> "$GITHUB_PATH"
+    - name: Install the interlinks filter
+      shell: bash
+      working-directory: docs
+      run: quarto add sciris/quartopydoc --no-prompt

@@ -1,0 +1,1518 @@
+"""
+Not for the user: the ODE run in JAX: gradients of results with respect to parameters, and many runs at once
+
+A compartmental engine flattens its flows into a `ss.kernels.Program`. The Numba
+kernels step through it; `run()` here takes the same program and runs the same
+fourth-order Runge-Kutta (or Euler) steps in JAX, so that the run can be
+differentiated (`gradient()`) and many runs with different values can be taken in
+one call (`run_sets()`). JAX is imported only when one of these is used.
+
+What JAX differentiates is the run: the program's numbers, and the compartments at
+the start, to the compartments and flows at every step. The steps either side of it
+are Python (working out those numbers from the parameters, and the results from
+the run, including outcomes and the goodness of fit), and are differentiated by
+central differences along the direction the run is differentiated in. They are cheap
+and smooth, so this is accurate to about 1e-9 of the value.
+
+Used with: compartments; declared modules
+"""
+import os
+import sys
+import itertools
+import numpy as np
+import sciris as sc
+import starsim as ss
+
+__all__ = ['jax', 'Run', 'CrossRun', 'run', 'run_sets', 'gradient', 'of_results', 'Density', 'LogDensity', 'Unsupported'] # Used as ss.gradients (not imported into ss); these are the names documented
+
+# The parts of the program that are numbers, and so can be differentiated (the rest says how the flows are put together)
+diff_fields = ['inflow', 'contacts', 'mat', 'sh_val', 'tgt_w', 'crd_w', 'maps', 'mov_rate']
+table_fields = ['fixed', 'mult', 'consts', 'rel_trans'] # As tables over the steps: see ss.solvers.Compartmental.tables()
+
+
+platform_advice = 'run JAX on the CPU: ss.options.jax = "cpu" (or the environment variable STARSIM_JAX=cpu, or JAX_PLATFORMS=cpu), before JAX is first used' # What to do when JAX fails to start on a GPU
+
+
+def jax():
+    """
+    Import JAX (imported only when first used, since it takes a few tenths of a second)
+
+    If JAX has not been imported yet, it is given a device for each core of the CPU (as
+    `numpyro.set_host_device_count()` does), so that the chains of a posterior run on
+    cores of their own; everything else runs on the first, as before. The platform it runs
+    on is `ss.options.jax` (e.g. "cpu"), if not "auto". The first time, its devices are
+    started here, so that a GPU that fails to start (e.g. with a CUDA plugin of another
+    version than jaxlib) says what to do.
+    """
+    if 'jax' not in sys.modules:
+        if 'xla_force_host_platform_device_count' not in os.environ.get('XLA_FLAGS', ''):
+            os.environ['XLA_FLAGS'] = f'{os.environ.get("XLA_FLAGS", "")} --xla_force_host_platform_device_count={os.cpu_count() or 1}'.strip()
+        if ss.options.jax != 'auto':
+            os.environ['JAX_PLATFORMS'] = ss.options.jax
+    try:
+        import jax
+    except ImportError as E:
+        errormsg = 'Gradients need JAX, which is not installed: use pip install "starsim[jax]". Fitting by methods without gradients works without it.'
+        raise ImportError(errormsg) from E
+    from jax._src import xla_bridge
+    if not xla_bridge.backends_are_initialized(): # The first use, by Starsim or anything else
+        if ss.options.jax != 'auto':
+            jax.config.update('jax_platforms', ss.options.jax) # If JAX was imported before Starsim used it
+        else:
+            check_plugins()
+        try:
+            jax.devices()
+        except Exception as E:
+            errormsg = f'JAX could not start its devices ({type(E).__name__}: {E}).\nIf this is a GPU that JAX cannot use, {platform_advice}'
+            raise RuntimeError(errormsg) from E
+    elif ss.options.jax != 'auto' and ss.options.jax.split(',')[0] != jax.default_backend():
+        ss.warn(f'ss.options.jax = "{ss.options.jax}", but JAX was started already, on "{jax.default_backend()}", before Starsim used it; set it (or STARSIM_JAX, or JAX_PLATFORMS) before JAX is first used')
+    if jax.config.jax_compilation_cache_dir is None: # Keep what is compiled for later sessions, unless told otherwise (e.g. by JAX_COMPILATION_CACHE_DIR)
+        jax.config.update('jax_compilation_cache_dir', os.path.join(os.path.expanduser('~'), '.cache', 'starsim', 'jax'))
+        jax.config.update('jax_persistent_cache_min_compile_time_secs', 0.25)
+    return jax
+
+
+def check_plugins():
+    """
+    Warn, before JAX starts its devices, of a GPU plugin of another version than jaxlib (e.g. jax-cuda12-plugin 0.9.2 with
+    jaxlib 0.12), which can crash XLA itself, so that no Python error can say what to do; nothing if JAX_PLATFORMS is set
+    """
+    if os.environ.get('JAX_PLATFORMS'):
+        return
+    import importlib.metadata as md
+    try:
+        jaxlib = md.version('jaxlib')
+    except md.PackageNotFoundError:
+        return
+    plugins = {}
+    for dist in md.distributions():
+        name = (dist.metadata['Name'] or '').lower().replace('_', '-')
+        if name.startswith(('jax-cuda', 'jax-rocm')):
+            plugins[name] = dist.version
+    wrong = {name:v for name,v in plugins.items() if v != jaxlib}
+    if wrong:
+        ss.warn(f'JAX has GPU plugins of another version than jaxlib {jaxlib} ({sc.strjoin(f"{k} {v}" for k,v in wrong.items())}), which can crash XLA when it starts. '
+                f'If it does, {platform_advice}; or install the plugin of the same version as jaxlib')
+    return
+
+
+#%% The run
+
+class OneHot(sc.prettyobj):
+    """
+    Which of n rows each group is in (e.g. its place), applied as a one-hot matrix would be, but as sums and indexing (O(groups), not O(groups²)): nothing at all when each group is its own row
+
+    It exists to avoid a large dense matrix in the run.
+
+    Args:
+        index (array): the row of each group
+        n (int): the number of rows
+    """
+    def __init__(self, index, n):
+        self.index = np.asarray(index, dtype=int)
+        self.n = n
+        ng = len(self.index)
+        k = ng//n if n else 0
+        rows = np.arange(n)
+        if n == ng and np.array_equal(self.index, rows):
+            self.kind = 'identity'
+        elif n*k == ng and np.array_equal(self.index, np.repeat(rows, k)): # Each row's groups together (one row: all of them)
+            self.kind = 'blocks'
+        elif n*k == ng and np.array_equal(self.index, np.tile(rows, k)): # Each row's groups k apart
+            self.kind = 'strided'
+        else:
+            self.kind = 'scatter'
+        return
+
+    def sum(self, v):
+        """ The sum of v (by group) over the groups in each row """
+        if self.kind == 'identity':
+            return v
+        elif self.kind == 'blocks':
+            return v.reshape(self.n, -1).sum(axis=1)
+        elif self.kind == 'strided':
+            return v.reshape(-1, self.n).sum(axis=0)
+        return jax().ops.segment_sum(v, self.index, self.n)
+
+    def spread(self, w):
+        """ The value of each group's row, from w by row """
+        return w if self.kind == 'identity' else w[self.index]
+
+    def local(self, v):
+        """ The sum of v over the groups in the same row as each group """
+        return self.spread(self.sum(v))
+
+
+class Run(sc.prettyobj):
+    """
+    One engine's run, as a function of the numbers in it
+
+    Args:
+        program (Program): the engine's program, for how its flows are put together
+        dt (float): the timestep
+        npts (int): the number of steps
+        solver (int): 0 for RK4, 1 for Euler (see `ss.kernels.solvers`)
+        n_sub (int): the number of substeps a step, or 0 for enough that no compartment turns over, or grows through its inflows, by more than a quarter in one
+        n_max (int): the most substeps a step can take; a run that needs more is taken again with more
+    """
+    def __init__(self, program, dt, npts, solver, n_sub, n_max):
+        self.p = program
+        self.dt = dt
+        self.npts = npts
+        self.solver = solver
+        self.n_sub = n_sub
+        self.n_max = n_sub if n_sub else n_max
+        self.fixed = False # Whether a clamped step always takes n_max substeps (those past the ones it needs change nothing), so the run can be differentiated in reverse mode
+        self.compiled = dict()
+        self.layout()
+        return
+
+    @staticmethod
+    def key(program, dt, npts, solver, n_sub):
+        """ What a compiled run depends on, apart from the numbers in it """
+        static = [getattr(program, name) for name in program._fields if name not in diff_fields + table_fields]
+        return (dt, npts, solver, n_sub) + tuple(np.asarray(v).tobytes() + str(np.shape(v)).encode() for v in static)
+
+    def layout(self):
+        """ Work out, once, the matrices that put the flows together """
+        p = self.p
+        nf = len(p.src)
+        ng = len(p.places)
+        self.nf, self.ng = nf, ng
+        self.nflows = p.n_trans + p.n_movers
+        self.dynamic = [f for f in range(nf) if p.starts[f] < p.starts[f+1]]
+        self.leaves = np.flatnonzero(p.src >= 0) # The flows that leave a compartment
+        self.place = OneHot(p.places, p.n_places) # Which place each group is in
+        self.cells = [OneHot(p.levels[t], int(p.sizes[t])) for t in range(len(p.sizes))] # ... and which level of each stratification
+        self.sets = [p.set_comps[p.set_starts[s]:p.set_starts[s+1]] for s in range(len(p.set_starts) - 1)]
+        self.tgt_flow = np.repeat(np.arange(nf), np.diff(p.tgt_starts)) # The flow each target belongs to
+        self.crd_flow = np.repeat(np.arange(nf), np.diff(p.crd_starts)) # ... and each transition a flow is also counted as
+
+        # Where each flow takes people, and what it is counted as, as matrices (which XLA does much faster than adding into arrays at indices)
+        named = np.flatnonzero(p.named)
+        self.plain = named[p.record[named] < 0]
+        self.mapped = named[p.record[named] >= 0]
+        self.count_mat = np.zeros((self.nflows, nf)) # Transitions by flows: 1 where a flow is counted as its transition
+        self.count_mat[p.index[self.plain], self.plain] = 1
+        nt = len(p.tgt_comp)
+        self.tgt_plain = np.flatnonzero(p.tgt_map < 0) if nt else np.zeros(0, dtype=int)
+        self.tgt_mapped = np.flatnonzero(p.tgt_map >= 0) if nt else np.zeros(0, dtype=int)
+        self.gather_tgt = np.zeros((nt, nf)) # Targets by flows: which flow each target takes people from
+        self.gather_tgt[np.arange(nt), self.tgt_flow] = 1
+        recs = np.flatnonzero(p.tgt_rec >= 0) if nt else np.zeros(0, dtype=int)
+        self.rec_mat = np.zeros((self.nflows, nt)) # Transitions by targets: 1 where a target is also counted in the flow to its destination
+        self.rec_mat[p.tgt_rec[recs], recs] = 1
+        ncr = len(p.crd_index)
+        self.credit_mat = np.zeros((self.nflows, ncr)) # Transitions by credits
+        self.credit_mat[p.crd_index, np.arange(ncr)] = 1
+        self.gather_crd = np.zeros((ncr, nf))
+        self.gather_crd[np.arange(ncr), self.crd_flow] = 1
+        self.simple = p.n_places == 1 and ng == 1 # One group: no places or cells to go through
+        self.dense_share = 8*len(p.sh_val) >= p.n_places**2 > 1 # A time share with at least an eighth of its entries is taken as a matrix (see function())
+        conveyors = [(p.starts[i], p.starts[i+1]) for i in range(nf, len(p.starts) - 1)] # After the flows' operations (see ss.kernels.convey())
+        self.cv_flow = np.array([p.args[a] for a,b in conveyors], dtype=int)
+        slots = [p.args[a+1:b] for a,b in conveyors] # The slots of each conveyor: its first, last, and each that people move along from and to
+        self.cv_first = np.array([s[0] for s in slots], dtype=int)
+        self.cv_last = np.array([s[-1] for s in slots], dtype=int)
+        self.cv_prev = np.array([c for s in slots for c in s[:-1]], dtype=int)
+        self.cv_next = np.array([c for s in slots for c in s[1:]], dtype=int)
+        self.cv_exits = (p.src[None, :] == self.cv_last[:, None]).astype(float) # The other exits of the last slot of each conveyor, which act on the people there until they leave (see ss.kernels.release_rates())
+        self.comp_mats = {}
+        return
+
+    def comp_matrices(self, nc):
+        """ For nc compartments: the compartments by flows (-1 where a flow leaves) and by targets (1 where a target not mapped between groups takes people) """
+        if nc not in self.comp_mats:
+            p = self.p
+            leave = np.zeros((nc, self.nf))
+            leave[p.src[self.leaves], self.leaves] = -1
+            arrive = np.zeros((nc, len(p.tgt_comp)))
+            arrive[p.tgt_comp[self.tgt_plain], self.tgt_plain] = 1
+            self.comp_mats[nc] = (leave, arrive)
+        return self.comp_mats[nc]
+
+    def rates(self, ys, vals):
+        """ The rate of every flow, by group, with the compartments at ys and the program's values in vals: as `ss.kernels.step()` works them out """
+        jnp = jax().numpy
+        p = self.p
+        fixed, mult, consts, rel_trans, X = vals
+        fixed = jnp.broadcast_to(fixed, (self.nf, self.ng)) # A table kept once for every group (see capture())
+        if not self.dynamic:
+            return fixed
+        n = ys[p.people].sum(axis=0) # The people in each group
+        local_n = n if self.simple else self.place.local(n) # ... and in the same place as each group
+        exposures = []
+        for e in range(len(p.exp_set)): # Exposure to each infectious state through each mixing term
+            s = p.exp_set[e]
+            if s < 0: # The sum of the -s exposures before it, in order
+                expo = exposures[e+s]
+                for x in range(e+s+1, e):
+                    expo = expo + exposures[x]
+                exposures.append(expo)
+                continue
+            infectious = (ys[self.sets[p.exp_set[e]]]*rel_trans[e]).sum(axis=0)
+            expo = 0.0
+            if self.simple and not p.use[0].any() and not p.use[2].any(): # One group, mixing with itself
+                for t in range(len(p.sizes)):
+                    expo = expo + X['contacts'][min(e, len(p.contacts) - 1), t]*jnp.where(n > 0, infectious/jnp.where(n > 0, n, 1.0), 0.0)
+                exposures.append(expo)
+                continue
+            for t in range(len(p.sizes)):
+                num = self.cells[t].sum(infectious)
+                den = self.cells[t].sum(n)
+                block = int(p.block[t])
+                if p.use[0, t]: # Move people to where they spend their time
+                    num = self.share(num, block, X, True)
+                    den = self.share(den, block, X, True)
+                prev = jnp.where(den > 0, num/jnp.where(den > 0, den, 1.0), 0.0)
+                if p.use[1, t]: # Mix between the levels in each place
+                    prev = (prev.reshape(-1, block) @ X['mat'][t, :block, :block].T).ravel()
+                if p.use[2, t]: # Mix between places
+                    prev = self.share(prev, block, X, False)
+                expo = expo + X['contacts'][min(e, len(p.contacts) - 1), t]*self.cells[t].spread(prev)
+            exposures.append(expo)
+
+        rows = [fixed[f] for f in range(self.nf)]
+        regs = {} # The parts used more than once (see ss.kernels.LOAD), those several rates share first
+        self.evaluate(ys, 0, p.starts[0], consts, exposures, local_n, regs)
+        for f in self.dynamic: # The operations on a stack, as in the kernels
+            rows[f] = jnp.broadcast_to(self.evaluate(ys, p.starts[f], p.starts[f+1], consts, exposures, local_n, regs), (self.ng,))*mult[f]
+        return jnp.stack(rows)
+
+    def evaluate(self, ys, a, b, consts, exposures, local_n, regs):
+        """ The value of the operations a to b-1 of the program, by group, with the compartments at ys (as `ss.kernels.step()` works out a rate) """
+        jnp = jax().numpy
+        p = self.p
+        kn = ss.kernels
+        stack = []
+        for k in range(a, b):
+            op, arg = p.ops[k], p.args[k]
+            if op == kn.CONST:
+                stack.append(consts[arg])
+            elif op == kn.LOAD:
+                stack.append(regs[arg])
+            elif op == kn.STORE:
+                regs[arg] = stack.pop()
+            elif op == kn.EXPOSURE:
+                stack.append(exposures[arg])
+            elif op == kn.TOTAL: # In the whole population, every place
+                stack.append(jnp.broadcast_to(ys[self.sets[arg]].sum(), (self.ng,)))
+            elif op == kn.GROUP: # In the same group
+                stack.append(ys[self.sets[arg]].sum(axis=0))
+            elif op in [kn.COUNT, kn.FRAC]:
+                local = ys[self.sets[arg]].sum(axis=0)
+                if not self.simple:
+                    local = self.place.local(local)
+                stack.append(jnp.where(local_n > 0, local/jnp.where(local_n > 0, local_n, 1.0), 0.0) if op == kn.FRAC else local) # As ss.kernels.leaf_share(): the share of an empty place is 0
+            elif op >= kn.EXP:
+                x = stack.pop()
+                func = {kn.EXP:jnp.exp, kn.LOG:jnp.log, kn.SQRT:jnp.sqrt, kn.ABS:jnp.abs, kn.SIN:jnp.sin, kn.COS:jnp.cos}[op]
+                stack.append(func(x))
+            else:
+                y = stack.pop()
+                x = stack.pop()
+                if   op == kn.ADD: stack.append(x + y)
+                elif op == kn.SUB: stack.append(x - y)
+                elif op == kn.MUL: stack.append(x * y)
+                elif op == kn.DIV: stack.append(jnp.where(x == 0, 0.0, x/jnp.where(x == 0, 1.0, y))) # As in the kernels: nothing divided by anything is nothing
+                elif op == kn.POW: stack.append(x ** y)
+                elif op == kn.MIN: stack.append(jnp.minimum(x, y))
+                elif op == kn.MAX: stack.append(jnp.maximum(x, y))
+                elif op == kn.LT:  stack.append(jnp.where(x < y, 1.0, 0.0))
+                elif op == kn.LE:  stack.append(jnp.where(x <= y, 1.0, 0.0))
+                elif op == kn.GT:  stack.append(jnp.where(x > y, 1.0, 0.0))
+                elif op == kn.GE:  stack.append(jnp.where(x >= y, 1.0, 0.0))
+                else:
+                    raise ValueError(f'Unknown operation {op} on two values in the program of a rate')
+        return stack[0] if stack else None # None for the shared parts, which leave nothing on the stack
+
+    def share(self, v, block, X, by_columns):
+        """ The time share between places times values by place and level (as `ss.kernels.share()`) """
+        jnp = jax().numpy
+        p = self.p
+        v = v.reshape(-1, block)
+        if self.dense_share:
+            return (X['sh_mat' if by_columns else 'sh_mat_t'] @ v).ravel()
+        frm, to = (p.sh_pair[0], p.sh_pair[1]) if by_columns else (p.sh_pair[1], p.sh_pair[0]) # Taken from the entry's row and added to its column, or the reverse
+        return jnp.zeros_like(v).at[to].add(X['sh_val'][:, None]*v[frm]).ravel()
+
+    def derivs(self, ys, rates, X, h):
+        """ The rate of change of each compartment, and of each transition and mover """
+        jnp = jax().numpy
+        p = self.p
+        nc = ys.shape[0]
+        dy = jnp.zeros_like(ys)
+        df = jnp.zeros((self.nflows, self.ng))
+        for m in range(p.n_movers): # Movement between groups
+            ent = slice(p.mov_starts[1, m], p.mov_starts[1, m+1])
+            frm, to, rate = p.mov_pair[0, ent], p.mov_pair[1, ent], X['mov_rate'][ent]
+            comps = p.mov_comps[p.mov_starts[0, m]:p.mov_starts[0, m+1]]
+            moved = ys[comps][:, frm]*rate
+            dy = dy.at[comps].add(jnp.zeros((len(comps), self.ng)).at[:, to].add(moved).at[:, frm].add(-moved))
+            df = df.at[p.n_trans + m].add(jnp.zeros(self.ng).at[frm].add(moved.sum(axis=0)))
+        src = np.maximum(p.src, 0)
+        leave_mat, arrive_mat = self.comp_matrices(nc)
+        amount = jnp.where((p.src >= 0)[:, None], rates*ys[src], rates*X['inflow'])
+        if self.solver == 1: # Euler: outflows that would take more than everyone in a compartment are scaled down together
+            total = -leave_mat @ (rates*(p.src >= 0)[:, None]*h)
+            scale = jnp.where(total > 1, 1/jnp.where(total > 1, total, 1.0), 1.0)
+            amount = jnp.where((p.src >= 0)[:, None], amount*scale[src], amount)
+        dy = dy + leave_mat @ amount
+        df = df + self.count_mat @ amount
+        mapped = self.mapped
+        if len(mapped):
+            df = df.at[p.index[mapped]].add(jnp.einsum('kg,kgh->kh', amount[mapped], X['maps'][p.record[mapped]]))
+        if len(p.tgt_comp):
+            moved = (self.gather_tgt @ amount)*X['tgt_w']
+            dy = dy + arrive_mat @ moved
+            df = df + self.rec_mat @ moved
+            mapped = self.tgt_mapped
+            if len(mapped):
+                dy = dy.at[p.tgt_comp[mapped]].add(jnp.einsum('kg,kgh->kh', moved[mapped], X['maps'][p.tgt_map[mapped]]))
+        if len(p.crd_index):
+            df = df + self.credit_mat @ ((self.gather_crd @ amount)*X['crd_w'])
+        return dy, df
+
+    def stepper(self, X, clamp=False):
+        """
+        One step of the run, as a function of the compartments at its start and its number: returns the compartments at its end, the flows over it, and the substeps it needed
+
+        Args:
+            X (dict): the numbers in the run (see `capture()`)
+            clamp (bool): if True, a step takes at most `n_max` substeps, so that the run is the same function everywhere (for sampling, where it cannot be taken again with more)
+        """
+        jx = jax()
+        jnp = jx.numpy
+        lax = jx.lax
+        dt, n_max = self.dt, self.n_max
+        rk4 = self.solver == 0
+        rows = {}
+
+        def at(table, ti):
+            """ A table's value at step ti """
+            return table[0] if table.shape[0] == 1 else table[ti]
+
+        def vals(ti):
+            return [rows[name] if name in rows else at(X[name], ti) for name in table_fields] + [X]
+
+        def step(y, ti, step_rows=None):
+            nonlocal rows
+            rows = step_rows or {} # The rows of the tables that vary in time for this step, if given (see function())
+            due = y[self.cv_last] # The people due to leave each conveyor, at a constant rate over the step (see ss.kernels.convey())
+
+            if len(self.cv_flow): # The people due to leave each conveyor leave at a constant rate over the step, as the inflow of its flow (whose last target is its last slot, with a share of -1), lowered so that the slot is empty at its end with its other exits (see ss.kernels.release_rates())
+                x = self.cv_exits @ jnp.maximum(self.rates(y, vals(ti)), 0.0)*dt
+                small = x < 1e-12
+                share = jnp.where(small, 1.0, jnp.where(small, 1.0, x)/jnp.expm1(jnp.where(small, 1.0, x)))
+                Xs = dict(X, inflow=X['inflow'].at[self.cv_flow].set(due/dt*share))
+            else:
+                Xs = X
+            if self.n_sub:
+                n = self.n_sub
+            else: # Enough substeps that no compartment turns over by more than a quarter in one, nor grows by more than a quarter through its inflows (see ss.kernels.step())
+                rates0 = self.rates(y, vals(ti))
+                fastest = jnp.max(rates0[self.leaves]) if len(self.leaves) else 0.0
+                if len(self.p.mov_rate):
+                    fastest = jnp.maximum(fastest, jnp.max(X['mov_rate']))
+                dy0 = self.derivs(y, rates0, Xs, dt/jnp.maximum(jnp.ceil(fastest*dt/0.25), 1))[0]
+                for m in range(self.p.n_movers): # Not through people moving in from other groups, which the movers' rates allow for already (see ss.kernels.step())
+                    ent = slice(self.p.mov_starts[1, m], self.p.mov_starts[1, m+1])
+                    comps = self.p.mov_comps[self.p.mov_starts[0, m]:self.p.mov_starts[0, m+1]]
+                    dy0 = dy0.at[comps].add(-jnp.zeros((len(comps), self.ng)).at[:, self.p.mov_pair[1, ent]].add(y[comps][:, self.p.mov_pair[0, ent]]*X['mov_rate'][ent]))
+                least = 1e-9*y.sum() # Not a compartment that is only starting to fill: of everyone, not of its group (see ss.kernels.step())
+                filling = (dy0 > 0) & (y > least)
+                growing = jnp.max(jnp.where(filling, dy0/jnp.where(filling, y, 1.0), 0.0))
+                for comps in self.sets: # Nor a count that a rate reads, over all its compartments (see ss.kernels.step())
+                    tot, grow = y[comps].sum(axis=0), dy0[comps].sum(axis=0)
+                    rising = (grow > 0) & (tot > least)
+                    growing = jnp.maximum(growing, jnp.max(jnp.where(rising, grow/jnp.where(rising, tot, 1.0), 0.0)))
+                n = need = jnp.maximum(jnp.ceil(lax.stop_gradient(jnp.maximum(fastest, growing))*dt/0.25), 1)
+                if clamp:
+                    n = jnp.minimum(n, n_max)
+            if self.n_sub:
+                need = n
+            h = dt/n
+
+            def derivs(ys):
+                return self.derivs(ys, self.rates(ys, vals(ti)), Xs, h)
+
+            def sub(s, carry):
+                y, flows = carry
+                dy1, df1 = derivs(y)
+                if rk4:
+                    dy2, df2 = derivs(y + h/2*dy1)
+                    dy3, df3 = derivs(y + h/2*dy2)
+                    dy4, df4 = derivs(y + h*dy3)
+                    new_y = y + h/6*(dy1 + 2*dy2 + 2*dy3 + dy4)
+                    new_f = flows + h/6*(df1 + 2*df2 + 2*df3 + df4)
+                else:
+                    new_y = y + h*dy1
+                    new_f = flows + h*df1
+                active = s < n
+                return jnp.where(active, new_y, y), jnp.where(active, new_f, flows)
+
+            flows = jnp.zeros((self.nflows, self.ng))
+            if self.n_sub: # A given number of substeps: written out, which XLA runs faster than a loop inside the loop over steps
+                carry = (y, flows)
+                for s in range(self.n_sub):
+                    carry = sub(s, carry)
+                y_end, flows = carry
+            elif clamp and self.fixed: # A loop with a fixed count, which reverse mode needs; the substeps past those the step needs are skipped (except under vmap, where both branches are taken)
+                y_end, flows = lax.fori_loop(0, n_max, sub, (y, flows))
+            else: # As many substeps as the step needs (a loop with a fixed count would take n_max every time)
+                def body(carry):
+                    s, y, flows = carry
+                    y, flows = sub(s, (y, flows))
+                    return s + 1, y, flows
+                _, y_end, flows = lax.while_loop(lambda carry: carry[0] < n, body, (0, y, flows))
+            if len(self.cv_flow): # Everyone in a conveyor moves along one slot
+                y_end = y_end.at[self.cv_next].set(y_end[self.cv_prev]).at[self.cv_first].set(0.0)
+            return jnp.maximum(y_end, 0.0), flows, need # The compartments after the step, as the kernels record them, and the substeps it needed (more than it took, if clamped)
+
+        return step
+
+    @staticmethod
+    def deliver(y, X, ti):
+        """ The deliveries at time point ti, at the start of the step from it, in order (see `ss.kernels.apply_shifts()`): each moves some of the people in each group to another, or (a move between states) into another state """
+        for k in range(X['sh_due'].shape[0]):
+            reached = y*X['sh_sel'][k]*X['sh_due'][k, ti]
+            a = reached*X['sh_cov'][k]
+            b = reached - a
+            moves = X['sh_moves'][k] # 1 for a move between states, whose people land in the state's compartments (sh_land)
+            y = y - reached + (1 - moves)*(a @ X['sh_to'][k]) + X['sh_land'][k]*(a.sum(axis=0) @ X['sh_to'][k]) + b @ X['sh_rest'][k]
+        return y
+
+    def prepare(self, X):
+        """
+        The numbers of a run, with what is worked out from them once a run: the time share as a matrix from place to
+        place, if it is dense (a product with it is much faster in XLA than adding into an array at indices: 4x for 50
+        places), and its transpose (since XLA transposes a matrix that is an input again at every step: 10x slower for 260 places)
+        """
+        if not self.dense_share:
+            return X
+        p = self.p
+        zeros = jax().numpy.zeros((p.n_places, p.n_places))
+        return dict(X, sh_mat=zeros.at[p.sh_pair[1], p.sh_pair[0]].add(X['sh_val']), sh_mat_t=zeros.at[p.sh_pair[0], p.sh_pair[1]].add(X['sh_val']))
+
+    def function(self, clamp=False):
+        """
+        The run, as a function of a dict of its numbers (see `capture()`): returns the compartments at the end, at the end of each step, the flows over each step, and the most substeps a step needed
+
+        Args:
+            clamp (bool): see `stepper()`
+        """
+        jx = jax()
+        jnp = jx.numpy
+
+        def run(X):
+            X = self.prepare(X)
+            step = self.stepper(X, clamp)
+            steps = self.npts - 1
+            rows = {name:X[name][:steps] for name in table_fields if X[name].shape[0] > 1} # Each step's row of the tables that vary in time, given to it by the scan, rather than read from the whole table at each step (which reverse mode turns into adding into a table as large at every step)
+            def body(y, xs):
+                ti, step_rows = xs
+                y = self.deliver(y, X, ti)
+                y_end, flows, n = step(y, ti, step_rows)
+                return y_end, (y_end, flows, n)
+            y_end, (stocks, flows, n) = checkpointed(body, X['y'], (jnp.arange(steps), rows), steps, self.fixed and self.checkpoint(X)) # Step ti+1 goes from time point ti to ti+1, with the values at the start of it
+            stocks = jnp.concatenate([X['y'][None], stocks]) # The start, then the end of each step, as the kernels record them
+            flows = jnp.concatenate([jnp.zeros((1,) + flows.shape[1:]), flows])
+            return y_end, stocks, flows, jnp.max(n)
+
+        return run
+
+    def checkpoint(self, X):
+        """ Whether a run differentiated in reverse mode keeps the state at only about √T of its T steps (see `checkpointed()`): if what reverse mode would otherwise keep (the compartments at each substep and stage) is large """
+        kept = (self.npts - 1)*self.n_max*4*np.size(X['y'])*8
+        return kept > checkpoint_bytes
+
+    def get(self, kind='run'):
+        """ The compiled run: 'run' for one, 'many' for a batch, 'jvp' for its derivative along a batch of directions """
+        if kind not in self.compiled:
+            self.compiled[kind] = compile_run(self.function(), kind)
+        return self.compiled[kind]
+
+
+checkpoint_bytes = 200e6 # What reverse mode may keep of a run before it is checkpointed (see Run.checkpoint())
+
+
+def checkpointed(body, init, xs, steps, checkpoint):
+    """
+    `jax.lax.scan(body, init, xs)` over `steps` steps; with `checkpoint`, as about √T outer steps of √T inner steps each, with only the
+    state at the start of each outer step kept for reverse mode (the inner steps are taken again), so that its memory grows as the
+    square root of the run's length, at the cost of a second forward pass (as Jaxley's `nested_checkpoint_scan()` does). The steps
+    past the end that make the inner steps whole (given a time `ti >= steps`) change nothing.
+    """
+    jx = jax()
+    jnp = jx.numpy
+    if not checkpoint:
+        return jx.lax.scan(body, init, xs)
+    inner = int(np.ceil(np.sqrt(steps)))
+    outer = int(np.ceil(steps/inner))
+    pad = outer*inner - steps
+    def split(v, first=False):
+        v = jnp.concatenate([v, steps + jnp.arange(pad)]) if first else jnp.concatenate([v, jnp.repeat(v[-1:], pad, axis=0)]) # The time past the end, and the last rows again
+        return v.reshape((outer, inner) + v.shape[1:])
+    def masked(y, xs):
+        y_end, out = body(y, xs)
+        return jnp.where(xs[0] < steps, y_end, y), out
+    ti, rows = xs
+    xs = (split(ti, first=True), jx.tree_util.tree_map(split, rows))
+    y_end, outs = jx.lax.scan(jx.checkpoint(lambda y, xs: jx.lax.scan(masked, y, xs)), init, xs)
+    return y_end, jx.tree_util.tree_map(lambda v: v.reshape((outer*inner,) + v.shape[2:])[:steps], outs)
+
+
+def compile_run(run, kind):
+    """ A run compiled for one use: 'run' for one, 'many' for a batch, 'jvp' for its derivative along a batch of directions """
+    jx = jax()
+    ss.solvers.backends.compiling(dict(run='the run', many='the runs', jvp='the gradient')[kind], 'JAX', 0.2, 5)
+    if kind == 'run':
+        return jx.jit(run)
+    elif kind == 'many':
+        return jx.jit(jx.vmap(run))
+    return jx.jit(lambda X, dX: jx.vmap(lambda d: jx.jvp(run, (X,), (d,))[1][:3])(dX)) # The substeps a step needs have no derivative
+
+
+class CrossRun(sc.prettyobj):
+    """
+    The diseases of a crossing, run together by the crossing's program (see `ss.solvers.Crossing`)
+
+    Called with a tuple of the numbers of each disease's run: they are put together into the numbers of the
+    program (`ss.solvers.Crossing.numbers()`), which is run as any other, and its output is split between the diseases
+    again. Returns what `Run.function()` does, with a tuple over the diseases for each of the first three.
+
+    Args:
+        cross (`ss.solvers.Crossing`): the crossing
+        run (Run): the run of its program
+    """
+    def __init__(self, cross, run):
+        self.cross = cross
+        self.run = run
+        self.runs = [run]
+        self.npts = run.npts
+        self.n_sub = run.n_sub
+        self.compiled = dict()
+        return
+
+    @property
+    def n_max(self):
+        return self.run.n_max
+
+    @n_max.setter
+    def n_max(self, value):
+        self.run.n_max = value
+        return
+
+    def function(self, clamp=False):
+        jnp = jax().numpy
+        inner = self.run.function(clamp)
+
+        def run(Xs): # The crossing is looked up when traced, so a run shared by the sims of a model keeps only the latest one's (see `joint_runner()`)
+            y_end, stocks, flows, n = inner(self.cross.numbers(list(Xs), xp=jnp))
+            parts = [self.cross.split(k, y_end, stocks, flows, xp=jnp) for k in range(len(Xs))]
+            return tuple(part[0] for part in parts), tuple(part[1] for part in parts), tuple(part[2] for part in parts), n
+
+        return run
+
+    def get(self, kind='run'):
+        if kind not in self.compiled:
+            self.compiled[kind] = compile_run(self.function(), kind)
+        return self.compiled[kind]
+
+
+def capture(engine, compact=True):
+    """
+    The numbers in an engine's run, as it is set up now (with its current parameter values): the program, how to run it, and the numbers
+
+    Args:
+        compact (bool): keep a table that is the same for every group once for all of them, rather than for each (as the kernels take it)
+    """
+    args, tables = engine.run_args()
+    y, program, dt, npts, solver, n_sub = args
+    X = {name:np.array(getattr(program, name), dtype=float) for name in diff_fields}
+    X.update({name:np.array(table if grouped or not compact else table[:, :, :1], dtype=float) for name,table,grouped in zip(table_fields, tables, engine.tables_by_group)})
+    X['y'] = np.array(y, dtype=float)
+    sh = engine.shifts # The deliveries, with where each group's people go as matrices
+    onehot = lambda to: np.eye(engine.n_groups)[to] if len(to) else np.zeros((0, engine.n_groups, engine.n_groups))
+    X.update(sh_due=sh.due.astype(float), sh_sel=sh.sel, sh_cov=sh.cov, sh_to=onehot(sh.to), sh_rest=onehot(sh.rest), sh_land=sh.land, sh_moves=(sh.land.sum(axis=(1, 2)) > 0).astype(float))
+    return program, (dt, npts, solver, n_sub), X
+
+
+runs = {} # The runs made in this session, by what they depend on apart from the numbers in them (see `Run.key()`), so a new sim of the same model is not traced and compiled again
+
+
+def runner(engine, program, how):
+    """ The engine's `Run`, made again only if how its flows are put together has changed, and shared with any other engine whose flows are put together the same way """
+    kept = engine.jax_run
+    if kept is not None and kept[1] is program and kept[2] == how: # The same program: nothing can have changed
+        return kept[3]
+    key = Run.key(program, *how)
+    if key not in runs:
+        runs[key] = Run(program, *how, n_max=kept[3].n_max if kept is not None else 4)
+    engine.jax_run = (key, program, how, runs[key])
+    return runs[key]
+
+
+def joint_runner(cross, captured, n_max=None):
+    """ The `CrossRun` of a crossing, from the program and how to run each of its engines; made again only if how the program's flows, or the engines' within it, are put together has changed (or, with `n_max`, always), and shared with any other crossing put together the same way, as `runner()` does """
+    programs = [program for program,how in captured]
+    if cross.program is None or cross.built != [id(p) for p in programs]:
+        cross.build(programs)
+    how = captured[0][1][:4]
+    if n_max is not None:
+        return CrossRun(cross, Run(cross.program, *how, n_max=n_max))
+    key = (Run.key(cross.program, *how),) + tuple(Run.key(program, *eng_how) for program,eng_how in captured) # The engines' programs fix where each one's numbers go in the crossing's
+    if key not in runs:
+        runs[key] = CrossRun(cross, Run(cross.program, *how, n_max=4))
+    runs[key].cross = cross # Put together the same way, so the same run; the numbers are gathered from this crossing (and an earlier sim's is not kept)
+    return runs[key]
+
+
+def units(sim):
+    """ The declared modules that are run together, by their positions in `sim.declared`: the diseases of each crossing (in the order they step), and each other one on its own """
+    names = [mod.name for mod in sim.declared]
+    out = [[names.index(name) for name in cross.names] for cross in sim.crossings]
+    crossed = {j for unit in out for j in unit}
+    out += [[j] for j in range(len(names)) if j not in crossed]
+    return out
+
+
+def run_crossing(cross):
+    """ Take a whole run of the diseases of a crossing in JAX: returns, for each, what `ss.kernels.run()` does """
+    captured = [capture(engine) for engine in cross.engines]
+    run = joint_runner(cross, [c[:2] for c in captured])
+    ys, stocks, flows, n = call(run, 'run', tuple(c[2] for c in captured))
+    return [(np.asarray(ys[k]), np.asarray(stocks[k]), np.asarray(flows[k]), 0.0) for k in range(len(captured))]
+
+
+def call(run, kind, *args):
+    """ Call a compiled run, taking it again with more substeps if a step needed more than it allowed """
+    jx = jax()
+    with jx.enable_x64(True):
+        while True:
+            out = run.get(kind)(*args)
+            if kind == 'jvp' or run.n_sub:
+                return out
+            need = int(np.max(out[3]))
+            if need <= run.n_max:
+                return out
+            run.n_max = int(2**np.ceil(np.log2(need))) # Rounded up, so that it is compiled again only a few times
+            run.compiled.clear()
+
+
+def run(engine):
+    """ Take a whole run of an engine in JAX: returns what `ss.kernels.run()` does """
+    program, how, X = capture(engine)
+    y, stocks, flows, n = call(runner(engine, program, how), 'run', X)
+    return np.asarray(y), np.asarray(stocks), np.asarray(flows), 0.0
+
+
+#%% Many runs, and gradients
+
+def stack(Xs):
+    return {key:np.stack([X[key] for X in Xs]) for key in Xs[0]}
+
+
+def check_same(programs):
+    """ Runs can only be taken together if their flows are put together in the same way """
+    first, how = programs[0]
+    static = [name for name in first._fields if name not in diff_fields + table_fields]
+    if all(h == how and all(getattr(p, name) is getattr(first, name) for name in static) for p,h in programs): # The same arrays, so nothing to compare
+        return
+    keys = {Run.key(program, *how) for program,how in programs}
+    if len(keys) > 1:
+        errormsg = 'The parameter values change how the model is laid out (e.g. the number of stages of a dwell time), so the runs cannot be taken together'
+        raise ValueError(errormsg)
+    return
+
+
+def outputs(sim, Xs, kind='run', dX=None):
+    """ Take the runs of each engine: Xs is, for each engine, its program, how to run it, and its numbers (a list of them, for kind='many') """
+    out = [None]*len(sim.declared)
+    for unit in units(sim):
+        if kind == 'many':
+            programs = [[(program, how) for program,how,X in Xs[j]] for j in unit]
+            for progs in programs:
+                check_same(progs)
+            args = [tuple(stack([X for program,how,X in Xs[j]]) for j in unit)]
+        else:
+            programs = [[Xs[j][:2]] for j in unit]
+            args = [tuple(Xs[j][2] for j in unit)] + ([tuple(stack(dX[j]) for j in unit)] if kind == 'jvp' else [])
+        if len(unit) == 1:
+            run = runner(sim.declared[unit[0]].engine, *programs[0][0])
+            out[unit[0]] = [np.asarray(v) for v in call(run, kind, *[arg[0] for arg in args])]
+        else:
+            cross = sim.declared[unit[0]].engine.cross
+            res = call(joint_runner(cross, [progs[0] for progs in programs]), kind, *args)
+            for k,j in enumerate(unit):
+                out[j] = [np.asarray(v[k]) for v in res[:3]] + [np.asarray(v) for v in res[3:]]
+    return out
+
+
+def give(sim, outs, shift=None):
+    """ Give each engine the output of its run, so that `sim.run()` uses it instead of running the kernels (see `ss.solvers.Compartmental.run_all()`) """
+    for j,mod in enumerate(sim.declared):
+        y, stocks, flows = outs[j][:3]
+        if shift is not None:
+            dy, dstocks, dflows = shift[j]
+            y, stocks, flows = y + dy, stocks + dstocks, flows + dflows
+        mod.engine.given = (y, stocks, flows, 0.0)
+    return
+
+
+def run_sets(sim, par_sets):
+    """
+    Run a sim with many sets of parameter values, taking the runs in one call to JAX
+
+    Each set is a dict of values by name, as for `sim.restart(pars=...)`. Only for a
+    sim that `ss.solvers.why_not(sim, 'jax')` allows: an ODE that the kernels run from start to finish.
+
+    Args:
+        sim (`ss.Sim`): an initialized sim
+        par_sets (list): the values of each run
+
+    Returns, for each declared module, its results over the runs, as `ss.solvers.Compartmental.run_many()` does.
+    """
+    mods = sim.declared
+    captured = [[] for mod in mods]
+    for pars in par_sets:
+        sim.restart(pars=pars)
+        for j,mod in enumerate(mods):
+            captured[j].append(capture(mod.engine))
+    outs = outputs(sim, captured, kind='many')
+    base = sim.par_values
+    results = sc.obj()
+    for j,mod in enumerate(mods): # The number in each state, by group
+        engine = mod.engine
+        states = list(engine.graph.states)
+        member = np.array([[comp.state.name == name for comp in engine.comps] for name in states], dtype=float)
+        stocks = np.einsum('rtcg,sc->rtsg', outs[j][1], member)
+        flows = outs[j][2]
+        npts = engine.mod.t.npts
+        if not (sim.groups.strats != [] and len(par_sets)*npts*(stocks.shape[2] + flows.shape[2])*engine.n_groups*8 <= engine.max_bytes): # As in run_many()
+            stocks, flows = stocks.sum(axis=-1, keepdims=True), flows.sum(axis=-1, keepdims=True)
+        runs = []
+        for i,pars in enumerate(par_sets): # Results worked out from the values of the parameters in each run (an outcome can depend on them)
+            sim.par_values = sc.mergedicts(base, pars)
+            ss.solvers.set_par_values(sim)
+            engine.cache.clear()
+            runs.append(engine.collect(stocks[i:i+1], flows[i:i+1]))
+        results[mod.name] = sc.obj({key:(sc.obj({k:np.concatenate([run[key][k] for run in runs]) for k in runs[0][key]}) if key in ['groups', 'denoms'] else np.concatenate([run[key] for run in runs])) for key in runs[0] if key != 'group_ti'})
+        results[mod.name].group_ti = None # The values by group, if kept, are at every time point
+    sim.par_values = base
+    ss.solvers.set_par_values(sim)
+    return results
+
+
+def tangent(Xp, Xm, h):
+    return {key:(Xp[key] - Xm[key])/(2*h) for key in Xp}
+
+
+def gradient(sim, set_pars, x0, read, rel_step=1e-5):
+    """
+    The value of something read from a sim's run, and its derivative with respect to each of a set of values
+
+    The run is differentiated by JAX (forward mode, one direction per value); see the
+    module docstring for the rest.
+
+    Args:
+        sim (`ss.Sim`): an initialized sim that `ss.solvers.why_not(sim, 'jax')` allows, which is left as its run at x0
+        set_pars (func): called with an array of values; restarts the sim with them (e.g. `lambda x: sim.restart(pars=dict(beta=x[0]))`)
+        x0 (array): the values to work out the derivative at
+        read (func): called with the sim after its run; returns a number or an array (or an `sc.obj` of arrays)
+        rel_step (float): the step for the central differences, relative to each value (or absolute, for a value of 0)
+
+    Returns:
+        value, derivative: what `read()` returned at x0, and its derivative with respect to each value (a list, one per value, of the same type as the value)
+    """
+    x0 = np.asarray(x0, dtype=float)
+    hs = rel_step*np.where(x0 != 0, np.abs(x0), 1.0)
+    mods = sim.declared
+    set_pars(x0)
+    base = [capture(mod.engine) for mod in mods]
+    dirs = [[] for mod in mods] # For each engine, the direction of each value
+    for k,h in enumerate(hs):
+        sides = []
+        for sign in [1, -1]:
+            x = x0.copy()
+            x[k] += sign*h
+            set_pars(x)
+            sides.append([capture(mod.engine) for mod in mods])
+        for j in range(len(mods)):
+            check_same([sides[0][j][:2], sides[1][j][:2], base[j][:2]])
+            dirs[j].append(tangent(sides[0][j][2], sides[1][j][2], h))
+    set_pars(x0)
+    outs = outputs(sim, base)
+    slopes = outputs(sim, base, kind='jvp', dX=dirs)
+    give(sim, outs)
+    value = read(sim.run())
+    derivs = []
+    for k,h in enumerate(hs):
+        sides = []
+        for sign in [1, -1]:
+            x = x0.copy()
+            x[k] += sign*h
+            set_pars(x)
+            give(sim, outs, shift=[[sign*h*v[k] for v in slope[:3]] for slope in slopes])
+            sides.append(read(sim.run()))
+        derivs.append(difference(sides[0], sides[1], h))
+    set_pars(x0)
+    give(sim, outs)
+    sim.run() # Leave the sim as its run at x0
+    return value, derivs
+
+
+def difference(a, b, h):
+    """ (a - b)/2h, for numbers, arrays, or dicts of them """
+    if isinstance(a, dict):
+        return sc.obj({key:difference(a[key], b[key], h) for key in a})
+    return (np.asarray(a, dtype=float) - np.asarray(b, dtype=float))/(2*h)
+
+
+def find_pars(sim, names=None, several=False):
+    """
+    The parameters named (by name, or 'module.name' where needed), or every one that has bounds: an `sc.obj` of them by name
+
+    Args:
+        several (bool): whether a parameter may have several values (a value for each level, an array, or a time series), and a name may be of one of them ("beta[a]"); see `entries()`
+    """
+    out = sc.obj()
+    wanted = None if names is None else [base_name(name) if several else name for name in names]
+    for mod in sim.declared:
+        for name,p in mod.graph.pars.items():
+            if (wanted is None and p.bounds is not None) or (wanted is not None and (name in wanted or f'{mod.name}.{name}' in wanted)):
+                if not any(p is q for q in out.values()): # A parameter shared by several modules is counted once
+                    same = [m.graph.pars[name] for m in sim.declared if name in m.graph.pars]
+                    out[name if all(q is same[0] for q in same) else f'{mod.name}.{name}'] = p
+    missing = [name for name in sc.tolist(wanted) if not any(name == key or key.endswith(f'.{name}') or name.endswith(f'.{key}') for key in out)] if wanted is not None else [] # By name, or 'module.name'
+    if missing or not out:
+        options = [f'{mod.name}.{k}' for mod in sim.declared for k in mod.graph.pars]
+        what = f'no parameter named {sc.strjoin(missing)}' if missing else 'no parameter with bounds'
+        errormsg = f'Found {what}; parameters are {sc.strjoin(options)}'
+        raise ValueError(errormsg)
+    for key,p in out.items():
+        val = p.raw.value if isinstance(p.raw, ss.TimePar) else p.raw
+        if not (sc.isnumber(val) or (several and isinstance(val, (ss.by, np.ndarray, ss.timeseries)))):
+            what = 'a number, a value for each level (ss.by), an array, or a time series' if several else 'a single number'
+            errormsg = f'Only a parameter that is {what} can be differentiated with respect to, not "{key}" ({p.raw})'
+            raise ValueError(errormsg)
+    return out
+
+
+def base_name(name):
+    """ The name of the parameter that an entry of one with several values is of ("beta" for "beta[a]") """
+    return name.rpartition('[')[0] if name.endswith(']') else name
+
+
+def entries(sim, names=None):
+    """
+    The parameters named, or every one that has bounds (see `find_pars()`), with each that has several values as an entry for
+    each value, named as a fit names them (see `ss.fit.expand()`)
+
+    Returns the entries by name; the setter of `gradient()` (a function of an array of values that restarts the sim with them);
+    the values now; and the lowest and highest value of each (the value now, for one without bounds)
+    """
+    import starsim.fit # For the entries of a parameter with several values
+    found, levels, elements = ss.fit.expand(sim, find_pars(sim, names, several=True))
+    if names is not None: # Only the values named, of a parameter with several ("beta[a]")
+        named = lambda key: any(n in [key, base_name(key)] or key.endswith(f'.{n}') or base_name(key).endswith(f'.{n}') for n in names)
+        found = sc.obj({key:p for key,p in found.items() if named(key)})
+    raws = [ss.fit.entry(name, p, levels, elements) for name,p in found.items()]
+    x0, types = ss.fit.start_values(raws)
+    bounds = np.array([elements[name][2:4] if name in elements else [ss.fit.bound_value(b, raw) for b in p.bounds] if p.bounds is not None else [x, x] for name,p,raw,x in zip(found.keys(), found.values(), raws, x0)], dtype=float).T
+    keys = list(found.keys())
+    pars = sim.par_values
+
+    def set_pars(x):
+        sim.restart(pars=sc.mergedicts(pars, ss.fit.to_pars(keys, found, x, types, elements)))
+
+    return found, set_pars, x0, bounds
+
+
+def of_results(sim, results=None, pars=None):
+    """ The derivative of results, or of a function of the run sim, with respect to parameters: see `ss.Sim.gradient()` """
+    why = ss.solvers.why_not(sim, 'jax')
+    if why:
+        errormsg = f'Gradients need a sim that runs in JAX, and this one cannot, since {why}'
+        raise ss.CapabilityError(errormsg)
+    found, set_pars, x0, bounds = entries(sim, None if pars is None else sc.tolist(pars))
+
+    def read(sim):
+        out = sc.obj()
+        wanted = None if results is None else [sim.results.find(name) for name in sc.tolist(results)]
+        for mod in sim.declared:
+            for key,res in mod.results.items():
+                if isinstance(res, ss.Result) and np.ndim(res.values) == 1 and (wanted is None or any(res is want for want in wanted)):
+                    out.setdefault(mod.name, sc.obj())[key] = np.array(res.values, dtype=float)
+        return out
+
+    value, derivs = gradient(sim, set_pars, x0, results if callable(results) else read)
+    if not callable(results) and not value:
+        errormsg = f'Found no result named {sc.strjoin(sc.tolist(results))}'
+        raise ValueError(errormsg)
+    return sc.obj(zip(found.keys(), derivs))
+
+
+#%% The log-density in JAX
+
+class Unsupported(Exception):
+    """
+    Something in the model that the log-density in JAX does not cover yet
+
+    It exists so that the reason can be given to the user rather than a JAX error.
+    """
+    pass
+
+
+def several(p):
+    """ Whether a parameter has several values, each fitted on its own (see `ss.fit.expand()`) """
+    return isinstance(p.raw, (ss.by, np.ndarray, ss.timeseries))
+
+
+def fitted_index(names, fitted, mods, sim, external=None):
+    """
+    The position among the fitted parameters of each parameter object that stands for one (by id: the fitted parameter, and
+    the parameter of a module's graph that its name gives), and the names of those that a modifier changes, which neither the
+    log-density (`Density`) nor IF2 (`ss.fit.Swarm`) covers. A parameter that belongs to a likelihood (`external`) stands for itself only.
+    One with several values (a value for each level, an array, or a time series) stands for none: each of its values is one of the
+    numbers that change linearly in the run (see `Density.init_program()`).
+    """
+    index, modified = {}, []
+    for i,(name,p) in enumerate(zip(names, fitted)):
+        own = external is None or not external[i]
+        values = own and several(p)
+        if not values:
+            index[id(p)] = i
+        if own:
+            modname, _, key = (name.rpartition('[')[0] if values else name).rpartition('.')
+            for mod in mods:
+                if modname and mod.name != modname:
+                    continue
+                graph_par = mod.graph.pars.get(key)
+                if graph_par is not None and not values:
+                    index[id(graph_par)] = i
+                if sim.modifiers.get((mod.name, 'par', key)) and name not in modified:
+                    modified.append(name)
+    return index, modified
+
+
+def convert_fitted(raw, val, unit_base, xp=np):
+    """ A fitted value as the engine uses it, in the sim's unit (`unit_base`): a probability as a rate, and a duration or rate in that unit; xp is the array namespace (NumPy, or JAX's) """
+    if isinstance(raw, ss.prob):
+        period = 1.0 if raw.unit is None else raw.unit.to(unit_base).value
+        return -xp.log1p(-val)/period
+    elif isinstance(raw, ss.TimePar):
+        return val*ss.solvers.convert(type(raw)(1.0), unit_base)
+    return val
+
+
+def fixed_rate(flow, dw, ctx):
+    """ The rate of a flow before its multipliers, from the values in ctx (as `ss.solvers.Compartmental.flow_base()`): for a dwell time `dw`, its stages (each group's own, if ragged) over its mean; otherwise its expression """
+    if flow.expr is not None:
+        return ss.expressions.evaluate(flow.expr, ctx)
+    val = ctx.value(dw.par)
+    kg = dw.kg if flow.kind == 'stage' else None
+    return ((flow.stages if kg is None else kg) if flow.kind == 'stage' else 1)/(1/val if dw.is_rate else val)
+
+
+def table_years(engine, raw):
+    """ The year of each row of an engine's tables, for a value that varies in time, as `ss.solvers.Compartmental.tables()` works them out """
+    return engine.table_years(raw)
+
+
+def time_value(raw, ctx, years, values=None):
+    """ A value that varies in time (`ss.seasonal()` or `ss.timeseries()`), at each of the years, with the parameters inside it from ctx (as its series() works it out), or with the `values` of a time series fitted value by value """
+    jnp = ctx.xp
+    val = lambda v: ss.expressions.evaluate(v, ctx) if isinstance(v, ss.expressions.Expr) else ctx.engine.convert(v)
+    if any(isinstance(ss.parameters.const_value(v), ss.prob) for name in raw.fields for v in sc.tolist(getattr(raw, name))):
+        raise Unsupported(f'a fitted parameter inside {raw}, which is a probability')
+    if isinstance(raw, ss.seasonal):
+        return val(raw.mean)*jnp.maximum(0.0, 1 + val(raw.amplitude)*jnp.cos(2*np.pi*(years - raw.peak_frac)/raw.period_years))
+    elif isinstance(raw, ss.timeseries):
+        _, i, j, w = raw.weights(years, ctx.engine.sim)
+        vals = jnp.stack([jnp.asarray(val(v), dtype=float) for v in raw.values] if values is None else values)
+        return vals[i]*(1 - w) + vals[j]*w
+    raise Unsupported(f'a fitted parameter inside {raw}')
+
+
+class Context(sc.prettyobj):
+    """ What expressions are evaluated with in JAX: the fitted parameters as JAX values, the others as the engine has them, and (for results) the number in each state """
+    def __init__(self, density, engine, x, n=None, series=False):
+        self.density = density
+        self.engine = engine
+        self.x = x
+        self.n = n
+        self.series = series # Whether a value that varies in time is wanted at every row of the tables, rather than now
+        self.xp = jax().numpy
+        return
+
+    def value(self, p):
+        density = self.density
+        i = density.index.get(id(p))
+        if i is not None:
+            return density.convert(i, self.x[i])
+        levels = density.levels.get(id(p))
+        if levels is not None: # A value for each level: each group's, from the value of its level
+            if self.n is not None: # In a result, whose counts are summed over the groups
+                raise Unsupported(f'a result that uses a parameter with a value for each level ({p.raw})')
+            positions, M = levels
+            return self.xp.stack(density.values(positions, self.x, self.engine)) @ M
+        if self.n is not None and id(p) in density.arrays: # In a result, where its values are not among the numbers in the run
+            raise Unsupported(f'a result that uses a parameter whose value is an array ({p.raw})')
+        years = density.timed.get((id(self.engine), id(p)))
+        if years is not None: # A value that varies in time with fitted parameters inside it, or fitted value by value: at every row of the tables, or at every step for a result
+            positions = density.series_of.get(id(p))
+            val = time_value(p.raw, self, years, values=None if positions is None else density.values(positions, self.x, self.engine))
+            return val[:, None] if self.series else val
+        kept = self.engine.series.get(id(p)) if self.series else None
+        if kept is not None: # Rows by groups, as in the engine's tables
+            return kept[1]
+        return self.engine.value(p)
+
+    def prop(self, cond):
+        """ A property of people, which is fixed for each group: as the engine has it """
+        if self.n is not None: # In a result
+            return ss.solvers.engine.StockCtx.prop(self, cond)
+        return self.engine.prop(cond)
+
+    def stock(self, state):
+        return self.n[state.name]
+
+    def count(self, states):
+        return sum(self.stock(s) for s in states)
+
+    def frac(self, states):
+        jnp = self.xp
+        n = self.count(self.engine.graph.people_states)
+        return jnp.where(n > 0, self.count(states)/jnp.where(n > 0, n, 1.0), 0.0)
+
+    local_count = count
+    local_frac = frac
+
+    def total_count(self, states):
+        return self.xp.sum(self.count(states))
+
+    def exposure(self, state):
+        if self.n is None:
+            raise Unsupported(f'a rate that depends on "{state.name}" where only parameters were expected')
+        return self.stock(state)
+
+
+class Density(sc.prettyobj):
+    """
+    The log of the posterior density of a sim's fitted parameters, as one function in JAX, so that it can be compiled and differentiated whole (see `sim.fit()` with method='nuts')
+
+    The numbers in the run are worked out from the parameters in JAX: the values in the rates
+    by evaluating the model's own expressions, and the rest (e.g. the compartments at the start)
+    from the change in them as each parameter changes, which has to be linear (`sim.fit()` checks
+    the result against runs of the sim). Then the run, the results that have data, and the
+    likelihood and priors. If anything is not covered, `Unsupported` says what.
+
+    Args:
+        sim (`ss.Sim`): an initialized sim that `ss.solvers.why_not(sim, 'jax')` allows
+        fitted (dict): the fitted parameters, by name
+        x0 (array): their values to start from
+        set_pars (func): restarts the sim with an array of values
+        likelihood (dict): the likelihood of each data series, as for `ss.fit.loglik()`
+        weights (dict): a multiplier on each series' log-likelihood
+        external (list): for each parameter, whether it belongs to a likelihood given at calibration time (rather than to the model)
+        bounds (tuple): the lowest and highest value of each parameter, over which a step is allowed as many substeps as the run needs (default: each parameter's `bounds`)
+    """
+    def __init__(self, sim, fitted, x0, set_pars, likelihood=None, weights=None, external=None, bounds=None):
+        import starsim.fit # For its likelihoods and priors, which are worked out here in JAX
+        self.sim = sim
+        self.fitted = list(fitted.values())
+        self.names = list(fitted.keys())
+        self.x0 = np.asarray(x0, dtype=float)
+        self.set_pars = set_pars
+        self.likelihood = likelihood
+        self.weights = weights or {}
+        self.external = external or [False]*len(x0)
+        self.bounds = bounds
+        self.priors = True # Whether the priors are included, or only the likelihood (as a best fit takes them, through its own penalty)
+        self.mods = list(sim.declared)
+        self.engines = [mod.engine for mod in self.mods]
+        self.units = units(sim)
+        self.index, modified = fitted_index(self.names, self.fitted, self.mods, sim, self.external)
+        self.init_several()
+        if modified:
+            raise Unsupported(f'a modifier of the fitted parameter "{modified[0]}"')
+        self.init_program()
+        self.init_outputs()
+        for p,val in zip(self.fitted, self.x0): # A prior that is not covered says so now, not when the density is first traced
+            ss.fit.logprior(p, val, xp=jax().numpy)
+        return
+
+    def init_several(self):
+        """
+        For each parameter with several values (see `ss.fit.expand()`), how its value is worked out from the fitted ones: a value
+        for each level as each group's (`levels`, the matrix from the levels to the groups), and a time series by interpolating
+        them (`series_of`), both exactly, as a parameter with one value is; an array (`arrays`) as the numbers in the run that change
+        linearly with it. Also the value of each entry as the parameter holds it (`raws`), for `convert()`.
+        """
+        self.raws = [p.raw for p in self.fitted]
+        self.levels, self.series_of, self.arrays = {}, {}, set()
+        for p,ext in zip(self.fitted, self.external):
+            if ext or not several(p) or id(p) in self.levels or id(p) in self.series_of or id(p) in self.arrays:
+                continue
+            key = next(name for name,q in zip(self.names, self.fitted) if q is p).rpartition('[')[0]
+            raw = p.raw
+            if isinstance(raw, ss.by):
+                labels, values = ss.fit.vector_labels(self.sim, raw, key), sc.tolist(raw.values)
+            elif isinstance(raw, ss.timeseries):
+                labels, values = [str(t) for t in raw.times], raw.values
+            else:
+                self.arrays.add(id(p))
+                continue
+            positions = [(self.names.index(f'{key}[{label}]') if f'{key}[{label}]' in self.names else None, v) for label,v in zip(labels, values)] # Each value's position among the fitted ones (None if it is not fitted), and its value as given
+            for i,v in positions:
+                if i is not None:
+                    self.raws[i] = v
+            if isinstance(raw, ss.by):
+                n = len(positions)
+                M = np.array([ss.by(**{raw.dim:list(np.eye(n)[k])}).per_group(self.sim) for k in range(n)], dtype=float) # The levels by the groups: each group's value is the value of its level (or a mean of them)
+                self.levels[id(p)] = (positions, M)
+            else:
+                self.series_of[id(p)] = positions
+        return
+
+    def values(self, positions, x, engine):
+        """ The values of a parameter with several values, in the sim's unit: those fitted from x, the others as given """
+        return [self.convert(i, x[i]) if i is not None else engine.convert(raw) for i,raw in positions]
+
+    def convert(self, i, val):
+        """ A fitted value as the engine uses it: in the sim's unit (see `convert_fitted()`) """
+        raw = self.raws[i]
+        if not (isinstance(raw, ss.TimePar) or self.external[i] or sc.isnumber(raw)):
+            raise Unsupported(f'the fitted parameter "{self.names[i]}" is a {type(raw).__name__}')
+        return convert_fitted(raw, val, self.sim.unit_base, jax().numpy)
+
+    def corners(self):
+        """ The points where the substeps a step needs are worked out: the corners of the bounds (or with more than 4 parameters, each parameter at each of its bounds, the others at their initial values) """
+        if self.bounds is not None:
+            lows, highs = [np.asarray(b, dtype=float) for b in self.bounds]
+        else:
+            bound = ss.fit.bound_value
+            lims = [[bound(b, p.raw) for b in p.bounds] if p.bounds is not None else [x, x] for p,x in zip(self.fitted, self.x0)]
+            lows, highs = np.array(lims, dtype=float).T
+        if len(self.x0) <= 4:
+            return [np.array(corner) for corner in itertools.product(*zip(lows, highs))]
+        points = []
+        for i in range(len(self.x0)):
+            for lim in [lows, highs]:
+                x = self.x0.copy()
+                x[i] = lim[i]
+                points.append(x)
+        return points
+
+    #%% The numbers in the run
+
+    def capture(self, x):
+        """ The numbers in the run of each engine with some parameter values, worked out in Python """
+        self.set_pars(x)
+        return [capture(engine) for engine in self.engines]
+
+    def init_program(self):
+        """ Work out which numbers in the run depend on which parameters, and how """
+        captured = self.capture(self.x0)
+        self.timed = {} # The values that vary in time with fitted parameters inside them (e.g. the mean and amplitude of ss.seasonal()), which are not linear in them, so are worked out in JAX, by engine and parameter: the year of each row of the tables
+        for engine in self.engines:
+            for p in engine.time_pars:
+                if isinstance(p.raw, ss.parameters.TimeValue) and (id(p) in self.series_of or any(id(q) in self.index for q in p.raw.pars)):
+                    years = self.timed[(id(engine), id(p))] = table_years(engine, p.raw)
+                    with jax().enable_x64(True):
+                        same = np.allclose(np.asarray(Context(self, engine, self.x0, series=True).value(p)), engine.series[id(p)][1], rtol=1e-12, atol=0)
+                    if not same:
+                        raise Unsupported(f'how {p.raw} varies in time')
+        self.programs = [c[0] for c in captured]
+        self.hows = [c[1] for c in captured]
+        self.X0 = [c[2] for c in captured]
+        keys = [Run.key(program, *how) for program,how in zip(self.programs, self.hows)]
+        corners = [] # The numbers at the corners of the bounds, where the run is laid out as at the start
+        for x in self.corners():
+            captured = self.capture(x)
+            if all(Run.key(program, *how) == key for (program,how,X),key in zip(captured, keys)):
+                corners.append([c[2] for c in captured])
+
+        # The run of each set of engines that are run together, with room to spare for the substeps
+        self.runs = []
+        for unit in self.units:
+            if len(unit) == 1:
+                j = unit[0]
+                base = runner(self.engines[j], self.programs[j], self.hows[j])
+                args = self.X0[j]
+            else:
+                cross = self.engines[unit[0]].cross
+                base = joint_runner(cross, [(self.programs[j], self.hows[j]) for j in unit])
+                args = tuple(self.X0[j] for j in unit)
+            if not base.n_sub: # The most a step needs at the start and at the corners of the bounds, with room to spare, so that a draw anywhere within them gets the substeps it needs
+                need = np.asarray(call(base, 'run', args)[3]).max() # As NumPy, since a JAX array's max() outside x64 warns that it is truncated
+                for Xs in corners:
+                    need = max(need, np.asarray(call(base, 'run', Xs[unit[0]] if len(unit) == 1 else tuple(Xs[j] for j in unit))[3]).max())
+                n_max = int(2**np.ceil(np.log2(max(2*need, 1))))
+            else:
+                n_max = base.n_sub
+            if len(unit) == 1:
+                self.runs.append(Run(self.programs[unit[0]], *self.hows[unit[0]], n_max=n_max))
+            else:
+                self.runs.append(joint_runner(cross, [(self.programs[j], self.hows[j]) for j in unit], n_max=n_max))
+
+        # The values in the rates that are fitted, and the flows whose rate is worked out from fitted parameters alone
+        self.consts = []
+        self.fixed = []
+        for engine in self.engines:
+            self.consts.append({k:p for k,p in enumerate(engine.prog_pars) if id(p) in self.index or id(p) in self.levels or (id(engine), id(p)) in self.timed})
+            fitted = lambda leaf: id(leaf) in self.index or id(leaf) in self.levels or (id(engine), id(leaf)) in self.timed
+            fixed = []
+            for f,flow in enumerate(engine.flows):
+                if flow.dynamic or flow.kind == 'conveyor': # The flow out of a conveyor has no rate of its own (see ss.kernels.convey())
+                    continue
+                dw = engine.dwells.get(flow.tr.name) if flow.expr is None else None
+                leaves = flow.expr.leaves if flow.expr is not None else [dw.par] if dw is not None and dw.dist is None else []
+                if dw is not None and dw.dist is not None and any(fitted(leaf) for leaf in dw.par.leaves):
+                    raise Unsupported(f'a fitted parameter of the distribution of a dwell time ("{flow.tr.name}")')
+                if any(fitted(leaf) for leaf in leaves):
+                    mult = np.reshape(engine.flow_mult(flow), -1).astype(float) # For each group, or once for all (as the table is then kept: see capture())
+                    fixed.append((f, flow, dw, mult))
+            self.fixed.append(fixed)
+
+        # The rest, by how they change with each parameter
+        h = 1e-4*np.where(self.x0 != 0, np.abs(self.x0), 1.0)
+        self.slopes = [{} for engine in self.engines]
+        for i in range(len(self.x0)):
+            sides = []
+            for sign in [1, -1]:
+                x = self.x0.copy()
+                x[i] += sign*h[i]
+                captured = self.capture(x)
+                if any(Run.key(program, *how) != key for (program,how,X),key in zip(captured, keys)):
+                    raise Unsupported(f'the fitted parameter "{self.names[i]}" changes how the model is laid out')
+                sides.append([c[2] for c in captured])
+            for j,X0 in enumerate(self.X0):
+                for key in X0:
+                    slope = (sides[0][j][key] - sides[1][j][key])/(2*h[i])
+                    if np.any(slope != 0):
+                        self.slopes[j].setdefault(key, {})[i] = slope
+        self.set_pars(self.x0)
+        return
+
+    def numbers(self, x):
+        """ The numbers in the run of each engine, as JAX arrays, at some parameter values """
+        jnp = jax().numpy
+        out = []
+        for j,engine in enumerate(self.engines):
+            X = {}
+            for key,X0 in self.X0[j].items():
+                val = jnp.asarray(X0)
+                for i,slope in self.slopes[j].get(key, {}).items(): # Linear in each parameter (checked in sim.fit()); the values in the rates are replaced below by what they exactly are
+                    val = val + slope*(x[i] - self.x0[i])
+                X[key] = val
+            ctx = Context(self, engine, x, series=True)
+            for k,p in self.consts[j].items():
+                X['consts'] = X['consts'].at[:, k, :].set(ctx.value(p))
+            for f,flow,dw,mult in self.fixed[j]:
+                X['fixed'] = X['fixed'].at[:, f, :].set(fixed_rate(flow, dw, ctx)*mult)
+            out.append(X)
+        return out
+
+    #%% What is compared with the data
+
+    def init_outputs(self):
+        """ Which result each data series is compared with, and the matrix that lines it up with the data """
+        sim = self.sim
+        liks = ss.fit.likelihoods(sim, likelihood=self.likelihood)
+        for col,lik in liks.items():
+            if lik is not None and not isinstance(lik, ss.Dist):
+                raise Unsupported(f'the likelihood of "{col}", a function')
+        lined = ss.results.lineup(sim)
+        self.member = [np.array([[comp.state.name == name for comp in engine.comps] for name in engine.graph.states], dtype=float) for engine in self.engines] # Which compartments each state is
+        self.series = []
+        for col in sim.data.columns:
+            base, dims = ss.results.parse_column(col)
+            res = ss.results.match_name(sim, base)
+            owners = [j for j,mod in enumerate(self.mods) if mod.results.get(res.name) is res] # By the result itself, since its module is a label
+            keep = None
+            if dims: # The groups of a stratum
+                keep = np.ones(sim.groups.n_groups)
+                for dim,level in ss.results.column_levels(sim, dims).items():
+                    d = sim.groups.dim_index(dim)
+                    keep = keep*(sim.groups.group_levels[:, d] == sim.groups.strats[d].index(level))
+            if not owners:
+                raise Unsupported(f'the data series "{col}", which is not a result of a declared disease')
+            j = owners[0]
+            engine = self.engines[j]
+            graph = engine.graph
+            name = res.name
+            staying = name.startswith('n_') and name[2:] in engine.outcomes # The number in an outcome that people stay in
+            if name not in graph.states and not staying and name not in graph.transitions and name not in graph.outcomes and name not in graph.exprs:
+                raise Unsupported(f'the data series "{col}" is the result "{name}", which is not a state, a transition, an outcome, or an expression')
+            if (name in graph.outcomes and name not in engine.outcomes) or (staying and engine.outcomes[name[2:]].stay is None and engine.outcomes[name[2:]].p_leave is None):
+                raise Unsupported(f'the outcome "{name}"')
+            W, expected, rows = lined[col]
+            rows, cols = np.nonzero(W) # Each data point is a step's value, or the total over the steps since the last: kept as the entries that are not zero, since the whole matrix is the data points times the steps
+            self.series.append(sc.obj(col=col, j=j, name=name, keep=keep, W=(rows, cols, W[rows, cols], W.shape[0]), expected=expected, lik=liks[col], weight=ss.fit.series_weight(self.weights, col)))
+        return
+
+    def outcomes(self, engine, ctx, new, npts):
+        """ The outcomes, as `ss.solvers.Compartmental.derived_outcomes()` works them out """
+        jnp = jax().numpy
+        out = {}
+        for name,info in engine.outcomes.items():
+            amount = 0.0
+            for key,weight in info.sources:
+                if key not in new and key not in out: # The flow to one destination of a transition with several, e.g. cin.CA
+                    raise Unsupported(f'the outcome "{name}", from the flow to one destination ({key})')
+                flow = new[key] if key in new else out[key]
+                if isinstance(weight, ss.expressions.Expr):
+                    weight = ss.expressions.evaluate(weight, ctx)
+                if np.ndim(weight) > 0:
+                    raise Unsupported(f'the outcome "{name}", whose weight differs by group')
+                amount = amount + flow*weight
+            kernel = info.kernel
+            now = amount*kernel[0] if len(kernel) == 1 else jnp.convolve(amount, jnp.asarray(kernel))[:npts]
+            if info.stay is not None: # Each arrival leaves after a stay drawn for it
+                leaving = jnp.convolve(now, jnp.asarray(info.stay))[:npts]
+                out[f'n_{name}'] = jnp.cumsum(now - leaving)
+            elif info.p_leave is not None: # A share leaves at each step: the arrivals of each step, decaying since
+                decay = (1 - np.asarray(info.p_leave, dtype=float))**np.arange(npts)
+                out[f'n_{name}'] = jnp.convolve(now, jnp.asarray(decay))[:npts]
+            out[name] = now
+        return out
+
+    def results(self, x, stocks, flows):
+        """ The results that have data, from the run of each engine: a dict by data column """
+        out = {}
+        for j,engine in enumerate(self.engines):
+            graph = engine.graph
+            for keep in {None if s.keep is None else tuple(s.keep) for s in self.series if s.j == j}: # Everyone, or the groups of each stratum with data
+                series = [s for s in self.series if s.j == j and (None if s.keep is None else tuple(s.keep)) == keep]
+                weight = 1.0 if keep is None else np.array(keep)
+                counts = (stocks[j]*weight).sum(axis=-1) @ self.member[j].T # Steps by states
+                totals = (flows[j]*weight).sum(axis=-1)
+                n = {name:counts[:, s] for s,name in enumerate(graph.states)}
+                new = {name:totals[:, ind] for name,ind in engine.tr_index.items()}
+                ctx = Context(self, engine, x, n=n)
+                outcomes = self.outcomes(engine, ctx, new, counts.shape[0]) if any(s.name in graph.outcomes or s.name[2:] in graph.outcomes for s in series) else {}
+                for s in series:
+                    name = s.name
+                    if name in n:
+                        val = n[name]
+                    elif name in new:
+                        val = new[name]
+                    elif name in outcomes:
+                        val = outcomes[name]
+                    else:
+                        val = ss.expressions.evaluate(graph.exprs[name], ctx)
+                    out[s.col] = val
+        return out
+
+    def loglik(self, dist, observed, model, x):
+        """ As `ss.fit.logpdf()`, in JAX, with the fitted parameters of the likelihood at their values in x """
+        def par(val):
+            i = self.index.get(id(val)) if isinstance(val, ss.par) else None
+            return x[i] if i is not None else (val.raw if isinstance(val, ss.par) else val)
+        return ss.fit.logpdf(dist, observed, model, xp=jax().numpy, pars={key:par(val) for key,val in ss.fit.lik_pars(dist).items()})
+
+    #%% The whole of it
+
+    def reverse(self):
+        """ Make the runs differentiable in reverse mode (each step takes its most substeps), for `jax.grad`; forward mode, as NUTS uses, is faster without """
+        for run in self.runs:
+            for one in getattr(run, 'runs', [run]):
+                one.fixed = True
+        return self
+
+    def states(self, x):
+        """ The number in each state at each time point, at some parameter values: a dict of JAX arrays by 'module.state' """
+        Xs = self.numbers(x)
+        out = {}
+        for unit,run in zip(self.units, self.runs):
+            args = Xs[unit[0]] if len(unit) == 1 else tuple(Xs[j] for j in unit)
+            stocks = run.function(clamp=True)(args)[1]
+            for k,j in enumerate(unit):
+                st = stocks if len(unit) == 1 else stocks[k]
+                total = st.sum(axis=-1) # Over the groups
+                for i,name in enumerate(self.engines[j].graph.states):
+                    out[f'{self.mods[j].name}.{name}'] = total @ self.member[j][i]
+        return out
+
+    def __call__(self, x):
+        """ The log of the posterior density at some parameter values (a JAX array), up to a constant """
+        return self.evaluate(x)[0]
+
+    def evaluate(self, x):
+        """ The log of the posterior density at some parameter values, and the most substeps a step of any run needed (more than it took, if clamped by `n_max`) """
+        Xs = self.numbers(x)
+        stocks = [None]*len(self.engines)
+        flows = [None]*len(self.engines)
+        need = 0
+        for unit,run in zip(self.units, self.runs):
+            if len(unit) == 1:
+                y_end, stocks[unit[0]], flows[unit[0]], n = run.function(clamp=True)(Xs[unit[0]])
+            else:
+                y_end, unit_stocks, unit_flows, n = run.function(clamp=True)(tuple(Xs[j] for j in unit))
+                for k,j in enumerate(unit):
+                    stocks[j], flows[j] = unit_stocks[k], unit_flows[k]
+            need = jax().numpy.maximum(need, n)
+        results = self.results(x, stocks, flows)
+        total = 0.0
+        for s in self.series:
+            rows, cols, w, n_rows = s.W
+            model = jax().ops.segment_sum(w*results[s.col][cols], rows, num_segments=n_rows) # The matrix times the result
+            total = total + s.weight*self.loglik(s.lik, s.expected, model, x).sum()
+        if self.priors:
+            for i in range(len(self.fitted)):
+                total = total + ss.fit.logprior(self.fitted[i], x[i], xp=jax().numpy)
+        return total, need
+
+
+class LogDensity(sc.prettyobj):
+    """
+    The log of the posterior density of a sim's fitted parameters as a function of their values, in JAX, for use outside `sim.fit()`: see `ss.Sim.log_density()`
+
+    Attributes:
+        names (list): the parameters, in the order of the values
+        x0 (array): their current values
+        fn (func): the function itself, of a JAX array of values, which can be composed with JAX (`jax.grad`, `jax.vmap`, ...)
+    """
+    def __init__(self, sim, pars=None, likelihood=None):
+        why = ss.solvers.why_not(sim, 'jax')
+        if why:
+            errormsg = f'The log-density in JAX needs a sim that runs in JAX, and this one cannot, since {why}'
+            raise ss.CapabilityError(errormsg)
+        if sim.data is None:
+            raise ValueError('The log-density is of the data given the parameters, but the sim has no data; attach it with ss.Sim(..., data=df)')
+        fitted, set_pars, self.x0, bounds = entries(sim, None if pars is None else sc.tolist(pars))
+        self.names = list(fitted.keys())
+        try:
+            self.density = Density(sim, fitted, self.x0, set_pars, likelihood=likelihood, bounds=bounds).reverse()
+        except Unsupported as E:
+            errormsg = f'The log-density in JAX does not cover {E} yet'
+            raise ss.CapabilityError(errormsg) from E
+        self.fn = self.density
+        jx = jax()
+        with jx.enable_x64(True):
+            self._value = jx.jit(self.density)
+            self._grad = jx.jit(jx.grad(self.density))
+            self._states = jx.jit(self.density.states)
+        return
+
+    def apply(self, func, x):
+        """ One of the compiled functions, at some values (compiled the first time) """
+        ss.solvers.backends.compiling('the log-density', 'JAX', 0.5, 5)
+        with jax().enable_x64(True):
+            return func(jax().numpy.asarray(x, dtype=float))
+
+    def __call__(self, x):
+        """ The log-density at some values """
+        return float(self.apply(self._value, x))
+
+    def grad(self, x):
+        """ Its gradient, by reverse-mode automatic differentiation (one pass, whatever the number of parameters) """
+        return np.asarray(self.apply(self._grad, x))
+
+    def run(self, x):
+        """ The number in each state at each time point, at some values: a dict of arrays by 'module.state' """
+        return {key:np.asarray(val) for key,val in self.apply(self._states, x).items()}
+

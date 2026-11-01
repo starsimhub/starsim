@@ -1,38 +1,18 @@
 name: Publish Starsim to PyPI
 
+# For a version tag: builds and tests everything (build_wheels.yml), and publishes it if all of that passes. This is the only workflow that publishes.
 on:
   push:
     tags:
       - 'v*'
-  workflow_dispatch:
 
 jobs:
   build:
-    name: Build Starsim
-    runs-on: ubuntu-latest
-
-    steps:
-    - uses: actions/checkout@v7
-      with:
-        persist-credentials: false
-    - name: Set up Python
-      uses: actions/setup-python@v7
-      with:
-        python-version: "3.14"
-    - name: Install pypa/build
-      run: python3 -m pip install build --user
-    - name: Build a binary wheel and a source tarball
-      run: python3 -m build
-    - name: Store the distribution packages
-      uses: actions/upload-artifact@v7
-      with:
-        name: python-package-distributions
-        path: dist/
+    uses: ./.github/workflows/build_wheels.yml
 
   publish-to-pypi:
     name: Publish Starsim
-    needs:
-    - build
+    needs: build
     runs-on: ubuntu-latest
     environment:
       name: pypi
@@ -44,7 +24,8 @@ jobs:
     - name: Download all the dists
       uses: actions/download-artifact@v8
       with:
-        name: python-package-distributions
+        pattern: dist-*
+        merge-multiple: true
         path: dist/
     - name: Publish distribution 📦 to PyPI
       uses: pypa/gh-action-pypi-publish@release/v1

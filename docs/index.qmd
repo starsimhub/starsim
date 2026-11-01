@@ -1,23 +1,54 @@
+---
+authorship:
+  human: 90
+  ai: 10
+  note: Humans wrote everything, except some of the code examples were AI-generated
+---
+
 {{< include ../README.md >}}
 
 ## Learn more
 
 ::: {.grid}
 ::: {.g-col-4}
-[**Tutorials**](tutorials.qmd)
+[**Tour**](tour.qmd)
 
-An interactive tour of Starsim's key features.
+A ten-minute tour: an epidemic model built step by step, with age groups, interventions, calibration, and uncertainty.
 :::
 
 ::: {.g-col-4}
-[**API reference**](api/index.qmd)
+[**Gallery**](gallery.qmd)
 
-Full details on all classes and functions.
+Complete models built with Starsim, each with its diagram, parameters, code, and a result.
+:::
+
+::: {.g-col-4}
+[**Tutorials**](tutorials.qmd)
+
+Step-by-step lessons that build up one model, a simplified measles outbreak, and then cover agent-based modeling.
+:::
+
+::: {.g-col-4}
+[**User guide**](user_guide.qmd)
+
+Each topic in full: building models, populations, interventions, running, calibration, the model library, and how Starsim works inside.
 :::
 
 ::: {.g-col-4}
 [**What's new**](whatsnew.qmd)
 
-See what's in the latest Starsim releases.
+What's in the latest Starsim releases.
+:::
+
+::: {.g-col-4}
+[**Contributing**](contributing/index.qmd)
+
+How to report a bug, suggest a feature, or contribute code.
+:::
+
+::: {.g-col-4}
+[**API**](api/index.qmd)
+
+Full details on all classes and functions.
 :::
 :::

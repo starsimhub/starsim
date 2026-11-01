@@ -24,7 +24,7 @@ def run_pytest(cpus=None):
     files = sc.getfilelist('.', 'test_*.py', aspath=False)
     if cpus is None:
         cpus = sc.cpu_count()//2 # To avoid overloading/multithreading
-    args = ['-n', f'{cpus}', '--durations=0'] + files
+    args = ['-n', cpus, '--durations=0'] + files
 
     # Run the tests and capture the oupttus
     print(f'Benchmarking {len(files)} files on {cpus} cores:\n{sc.newlinejoin(files)}\n')
@@ -68,7 +68,7 @@ def parse_pytest(txt, perf_ratio):
                 data[m["name"]] = float(m["dur"])
 
     # Assemble data
-    data = sc.objdict(data)
+    data = sc.obj(data)
     data.sort('values', reverse=True)
     data[:] *= perf_ratio # Scale results by the performance ratio
     for k,v in data.items():
@@ -76,7 +76,7 @@ def parse_pytest(txt, perf_ratio):
     total = data[:].sum()
 
     # Tidy up
-    out = sc.objdict()
+    out = sc.obj()
     out.cpu_performance = round(perf_ratio, 3)
     out.scaled_time = round(total, 3)
     out.actual_time = round(total/perf_ratio, 3)

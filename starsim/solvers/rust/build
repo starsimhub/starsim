@@ -1,0 +1,12 @@
+#!/bin/bash
+# Build Starsim's Rust kernels (see starsim/solvers/backends/rust.py) and put them beside the Python code; needs a Rust toolchain (https://rustup.rs).
+# For CPUs with AVX2 (nearly all x86 CPUs since 2013), which makes a few kernels faster: RUSTFLAGS="-C target-cpu=x86-64-v3" ./build
+set -e
+cd "$(dirname "$0")"
+cargo build --release
+lib=$(ls target/release/lib_rs.so target/release/lib_rs.dylib target/release/_rs.dll 2>/dev/null | head -1) # Linux, macOS, or Windows (from Git Bash)
+name=_rs.abi3.so
+[[ $lib == *.dll ]] && name=_rs.pyd
+cp "$lib" ../backends/$name
+rm -f ../backends/_rs.cp* # What an editable install compiled, which Python would otherwise load instead of this
+echo "Built starsim/solvers/backends/$name; use it with ss.options(kernels='rust') or STARSIM_KERNELS=rust"

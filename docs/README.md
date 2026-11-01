@@ -16,11 +16,21 @@ To build the docs, follow these steps:
 
 1. Install Quarto: https://quarto.org/docs/get-started/
 
-2.  Make sure the Python dependencies are installed:
+2.  Make sure the Python dependencies are installed (as well as Starsim itself):
     ```
     pip install -r requirements.txt
     ```
 
-3.  Build the documents with `./build_docs.py` (requires Starsim to be installed as well).
+3.  Build the docs with `./render` (or `./preview` to view them with live reloading). Before rendering, Quarto runs `qpyd prerender` (from [quartopydoc](https://github.com/sciris/quartopydoc), configured in the `qpyd` section of `_quarto.yml`), which builds the API reference and the machine-readable API index (`api.json`, `llms.txt`, `llms-full.txt`), and writes the version from `_variables.py` to `_variables.yml`. It skips the API build if Starsim, quartodoc and `_quarto.yml` haven't changed since the last one; run `qpyd prerender --force` to rebuild it anyway, or `python make_api.py` to build only the index.
 
-4.  The built documents will be in `./_site`.
+4.  The built docs will be in `./_site`.
+
+Other commands:
+
+- `./check_notebooks.py` (or `qpynb check tutorials user_guide`) runs every tutorial and user guide page and reports any errors, without building the site.
+- `./clean_outputs.py` (or `qpyd clean`) removes the temporary files the notebooks write; this also runs after every full render.
+- `./publish` builds the site and publishes it to GitHub Pages.
+- `./publishv4` does the same for the v4 preview, at starsim.org/v4.
+- `./clean_all` deletes the build files and outputs.
+- `./qrender` is a faster `./render` for working on the docs: it runs notebooks and renders pages in parallel, keeps going if a notebook fails, and only re-renders pages that changed. It also retries the notebooks that failed last time. It needs a Quarto build with the `--jobs`, `--keep-going`, `--incremental` and `--retry-failed` options (set `QUARTO` to its path).
+- `quarto clean` (with the same Quarto build) removes the `*_files` folders that interrupted renders leave next to the pages.

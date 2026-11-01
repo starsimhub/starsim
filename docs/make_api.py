@@ -5,10 +5,10 @@ The whole public Starsim API fits in a single file, which makes it possible for 
 tool (an IDE, a documentation search, or an LLM agent) to load the entire map of
 the library in one shot. This script introspects `starsim` and `starsim.library`
 and projects them into three artifacts, all generated from the same data and all
-published with the docs (e.g. <https://docs.starsim.org/llms.txt>):
+published with the docs (e.g. <https://starsim.org/v4/llms.txt>):
 
 - `api.json`: the canonical index, as structured data
-- `llms.txt`: a compact Markdown index (name, signature, summary, default parameters, aliases)
+- `llms.txt`: a compact Markdown index (name, signature, summary, default parameters, aliases, and each class's own public methods)
 - `llms-full.txt`: as above, plus the canonical example for each entry
 
 This is a docs build tool: nothing here is part of the Starsim package itself.
@@ -37,25 +37,33 @@ llmsfullfile = thisdir / 'llms-full.txt'
 max_summary = 300 # Maximum number of characters in a summary
 max_par = 80 # Maximum number of characters in a default parameter value
 max_example = 12 # Maximum number of lines in an example
+max_method = 90 # Maximum number of characters in the summary of a method
+skip_methods = ['disp', 'brief', 'show', 'to_str'] # Display methods, which every class has
 
-description = 'A fast, flexible agent-based disease modeling framework' # Matches pyproject.toml
+description = 'A fast, flexible disease modeling framework, from compartments to agents'
 notes = [
-    'Starsim is an agent-based modeling framework for simulating disease spread among agents via dynamic transmission networks, including co-transmission of multiple diseases and the effect of interventions.',
+    'Starsim is a framework for modeling the spread of disease, as compartments (deterministic or stochastic, in one place or many) or as agents on dynamic transmission networks, including co-transmission of multiple diseases and the effect of interventions. A sim with `solver="auto"` (the default) runs as compartments if it can, and as agents if it needs them.',
     'Everything in the core package is available from the top level: `import starsim as ss`, then e.g. `ss.Sim()`. Do not import submodules directly.',
     'Example and reference modules (e.g. `ssl.Cholera`) are in the library: `import starsim.library as ssl`. They are illustrative rather than validated.',
     'Signatures are as introspected from the current version; summaries are the first paragraph of each docstring.',
     'Module arguments default to `None` in the signature; the actual defaults are listed as "Default pars", and can be overridden by keyword or via `pars=dict(...)`.',
     'Aliases are alternative names for the same object; the canonical name is the one listed, and is the one to prefer when writing new code.',
+    'Methods are listed under the class that defines them (e.g. `ss.Result.select()` under `ss.Result`), not under each subclass that inherits them, and only those that the documentation uses; the others are internal.',
+    'Any model that is not in the library (an SIRS, an SEIRS, a model with more states) is written as a declared disease: `S, I, R = ss.states(3)`, then `ss.Disease(S >> I @ beta * I, I >> R @ ss.days(7), R >> S @ ss.days(90))`. There a duration alone (`ss.days(7)`) is the mean of an exponential.',
+    'The library `ss.SIR`, `ss.SIS`, and `ss.SEIR` are the textbook models: a duration is the mean of an exponential, and nobody dies of the infection unless `p_death` is given. Starsim 3\'s versions (lognormal `dur_inf`, `p_death=0.01`) are `ssl.AgentSIR`, `ssl.AgentSIS`, and `ssl.AgentSEIR`.',
+    '`init_prev=` seeds the state a new infection enters (`E` in an SEIR, so nobody starts infectious); `init_n=dict(I=10)` starts people in a named state.',
+    'The population of a sim is `total_pop=`, under every solver. `n_agents=` is the number of agents: giving it makes `solver="auto"` run as agents, and a compartmental run uses it as `total_pop` if that is not given.',
+    'Many runs (`sim.run(n_runs=10)` or `ss.parallel(sim, n_runs=10)`) give an `ss.MultiSim`, whose results have a run axis first: `msim.results.sir.infection.values` has one row per run, and `.median()` and `.quantiles()` summarize over the runs. `msim.sims` has the sim of each run.',
 ]
 links = [ # Extra pointers, following the llms.txt convention
-    ('Documentation', 'https://docs.starsim.org', 'tutorials, user guide, and API reference'),
+    ('Documentation', 'https://starsim.org/v4', 'tutorials, user guide, and API reference'), # V4-PREVIEW: restore to https://docs.starsim.org (and in the docstring above) for normal publishing
     ('Source', 'https://github.com/starsimhub/starsim', 'the Starsim repository'),
     ('Style guide', 'https://github.com/starsimhub/styleguide', 'the Starsim style guide'),
     ('Sciris', 'https://docs.sciris.org/llms.txt', 'the equivalent index for Sciris (`sc`), which Starsim uses extensively'),
 ]
 
 # The order the modules are listed in, from most to least commonly used; anything else is appended alphabetically
-module_titles = sc.objdict(
+module_titles = sc.obj(
     sim           = 'Simulations',
     people        = 'People',
     modules       = 'Modules',
@@ -67,13 +75,16 @@ module_titles = sc.objdict(
     connectors    = 'Connectors',
     analyzers     = 'Analyzers',
     time          = 'Time, durations, and rates',
+    dates         = 'Dates',
     timeline      = 'Timelines',
     distributions = 'Distributions',
+    dists         = 'How distributions work',
     parameters    = 'Parameters',
     results       = 'Results',
     run           = 'Running multiple simulations',
-    calibration   = 'Calibration',
-    samples       = 'Samples',
+    fit           = 'Fitting to data',
+    geo           = 'Places and movement',
+    data          = 'Data by place',
     arrays        = 'Arrays and agent indexing',
     loop          = 'Integration loop',
     utils         = 'Utilities',
@@ -84,7 +95,7 @@ module_titles = sc.objdict(
 module_order = list(module_titles.keys())
 
 # The library subpackages, each listed after the core modules
-libraries = sc.objdict(
+libraries = sc.obj(
     diseases = 'Library: diseases',
     mnch     = 'Library: maternal, newborn, and child health',
     networks = 'Library: networks',
@@ -135,6 +146,8 @@ def _getpars(obj):
 
     out = {}
     for key,val in pars.items():
+        if isinstance(val, ss.par): # A declared parameter: its value
+            val = val.value
         valstr = ' '.join(repr(val).split()) # Collapse e.g. multiline array reprs
         valstr = re.sub(r' at 0x[0-9a-f]+', '', valstr) # Remove memory addresses, e.g. from functions, so the output is reproducible
         if type(val).__module__.startswith('starsim') and not valstr.startswith(('ss.', 'ssl.')):
@@ -142,6 +155,39 @@ def _getpars(obj):
         if len(valstr) > max_par:
             valstr = valstr[:max_par] + ' […]'
         out[key] = valstr
+    return out
+
+
+def _docnames():
+    """ The names that the tutorials, user guide, and examples use as attributes (`.name`) or define as methods (`def name(self`), which are what is public """
+    text = '\n'.join(path.read_text() for folder in ['tutorials', 'user_guide', 'examples'] for path in (thisdir/folder).rglob('*.qmd'))
+    return set(re.findall(r'\.(\w+)', text)) | set(re.findall(r'def (\w+)\(self', text))
+
+
+def _getmethods(obj, public):
+    """ The public methods (with `()`) and properties that a class defines itself (of `public`, the names to keep), each with the first sentence of its docstring """
+    if not inspect.isclass(obj):
+        return {}
+    out = {}
+    for name,attr in vars(obj).items():
+        if name.startswith('_') or name in skip_methods or name not in public:
+            continue
+        if isinstance(attr, (staticmethod, classmethod)):
+            attr = attr.__func__
+        if isinstance(attr, property):
+            func, sig = attr.fget, ''
+        elif inspect.isfunction(attr):
+            func, sig = attr, '()' # The signature is left out, to keep the file short
+        else:
+            continue
+        doc = inspect.cleandoc(func.__doc__) if isinstance(getattr(func, '__doc__', None), str) else ''
+        if not doc:
+            continue
+        summary = ' '.join(re.split(r'\n\s*\n', doc.strip())[0].split())
+        summary = re.split(r'(?<=[a-z0-9)`])(?<!e\.g)(?<!i\.e)\. ', summary)[0].rstrip('.') # The first sentence
+        if len(summary) > max_method:
+            summary = summary[:max_method].rsplit(' ', 1)[0] + ' […]'
+        out[f'{name}{sig}'] = summary
     return out
 
 
@@ -196,8 +242,9 @@ def _getnames(prefix):
     """ Get the public names to index for a namespace """
     if prefix == 'ss':
         return [name for name in dir(ss) if not name.startswith('_')]
-    else:
+    elif prefix == 'ssl':
         return [name for name in ssl.__all__ if name not in libraries]
+    return getattr(ss, prefix.removeprefix('ss.')).__all__ # e.g. ss.fit
 
 
 def make_index():
@@ -207,7 +254,7 @@ def make_index():
     The index has the keys `version`, `description`, `notes`, `links`, `n_entries`,
     `aliases` (a mapping of alias name to canonical name), and `entries` (a list of
     records, each with `name`, `kind`, `module`, `signature`, `summary`, `pars`,
-    `example`, `aliases`, and `deprecated`). Names include the namespace, e.g.
+    `methods`, `example`, `aliases`, and `deprecated`). Names include the namespace, e.g.
     `ss.SIR` or `ssl.Cholera`.
 
     Examples:
@@ -219,7 +266,8 @@ def make_index():
     """
     entries = []
     aliasmap = {}
-    for prefix, namespace in [('ss', ss), ('ssl', ssl)]:
+    public = _docnames()
+    for prefix, namespace in [('ss', ss), ('ss.fit', ss.fit), ('ss.geo', ss.geo), ('ss.data', ss.data), ('ssl', ssl)]:
 
         # Group names by object, so aliases collapse into one entry
         groups = {} # Map id(obj) to the list of names pointing at it
@@ -248,6 +296,7 @@ def make_index():
                 signature  = _getsignature(obj),
                 summary    = _getsummary(obj, doc),
                 pars       = _getpars(obj),
+                methods    = _getmethods(obj, public),
                 example    = _getexample(doc),
                 aliases    = aliases,
                 deprecated = _isdeprecated(doc),
@@ -331,6 +380,9 @@ def make_llms_txt(index=None, examples=False):
             if entry['pars']:
                 pars = ', '.join(f'`{key}={val}`' for key,val in entry['pars'].items())
                 lines += [f'  - Default pars: {pars}']
+            if entry.get('methods'):
+                methods = '; '.join(f'`.{name}`: {summary}' for name,summary in entry['methods'].items())
+                lines += [f'  - Methods: {methods}']
             if examples and entry['example']:
                 lines += ['', '  ```python']
                 lines += [f'  {line}'.rstrip() for line in entry['example'].splitlines()]

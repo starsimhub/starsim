@@ -1,191 +1,115 @@
 """
 Import all Starsim modules
+
+The order matters: each group builds on the ones before it, and within a group,
+later modules use earlier ones as they are imported.
 """
 
-# Time how long each import takes -- disabled by default, only used for developer debugging
-debug = False
-if debug:
-    print('Note: importing Starsim in debug mode')
-    from time import perf_counter as pytime
-    start = pytime()
-    timings = {}
-    def t(label):
-        timings[label] = pytime() - start
-else:
-    def t(label):
-        pass
+# Ask for one BLAS thread (see ss.options.num_threads) before Sciris imports NumPy, which starts them; if something else already has, the options limit them
+import os as _os
+_threads = _os.getenv('STARSIM_NUM_THREADS') or _os.getenv('SCIRIS_NUM_THREADS') or '1'
+if _threads != '0':
+    _os.environ['SCIRIS_NUM_THREADS'] = _threads
+del _os, _threads
 
 # Assign the root folder
-t('sciris') # Slow since importing NumPy, Matplotlib, etc.
 import sciris as sc
 root = sc.thispath(__file__).parent
 
-# Start imports: version and settings
-t('settings') # Slow since importing Numba
+#%% Setup: version, settings, utilities, and errors
 from .version import __version__, __versiondate__, __license__
-from .settings import dtypes, options, style, load_fonts
+from .settings import dtypes, options, style
+from .utils import ndict, warn, load, save, plot_args, show, return_fig
+from .internals import errors, debugtools
+from .internals.errors import *
 
-# Optionally print the license
-t('license')
-if options.license:
-    print(__license__)
+#%% Building blocks: arrays, distributions, time, and parameters
+from .internals import arrays
+from .internals.arrays import Arr, FloatArr, TimeArr, IntArr, BoolArr, BoolState, IndexArr, uids
 
-# Double-check key requirements -- should match pyproject.toml
-t('reqs')
-sc.require(reqs=['sciris>=3.2.8', 'pandas>=2.0.0'], die=False,
-    message = f'\n\nThe following dependencies for Starsim {__version__} were not met:\n  <MISSING>.\nYou can update with: pip install <MISSING> --upgrade\n'
-)
-
-# Finish imports
-t('utils')
-from .utils import (
-    ndict, warn, find_contacts, standardize_netkey, parse_age_range, apply_age_range,
-    standardize_data, validate_sim_data, load, save, shrink, plot_args, show,
-    return_fig,
-)
-
-t('debugtools')
-from .debugtools import (
-    Profile, Debugger, Diagnostics, check_requires, check_version,
-    metadata, mock_time, mock_sim, mock_people, mock_module,
-)
-
-t('arrays')
-from .arrays import (
-    BaseArr, Arr, FloatArr, IntArr, BoolArr, BoolState, IndexArr, uids,
-)
-
-t('distributions') # Slow import due to scipy.stats
+from .internals import dists
+from .internals.dists import Dist
 from .distributions import (
-    link_dists, make_dist, dist_list, scale_types, Dists, Dist,
-    random, uniform, normal, lognorm_ex, lognorm_im, expon,
-    poisson, nbinom, beta_dist, beta_mean, weibull, gamma, constant,
-    randint, rand_raw, bernoulli, choose_n, choice, histogram,
-    multi_random,
+    random, uniform, normal, truncnorm, lognorm_ex, lognorm_im, expon,
+    poisson, nbinom, binom, beta_dist, beta_mean, weibull, gamma, erlang, constant,
+    randint, bernoulli, choose_n, choice, histogram, multi_random,
 )
 
-t('time')
-from .time import (
-    DateArray, date, TimePar, dur, datedur, Rate, prob, per, freq,
+from .internals import time, dates, timeline, parameters
+from .internals.time import (
+    TimePar, dur, Rate, prob, per, freq, peract,
     years, months, weeks, days, year, month, week, day,
     perday, perweek, permonth, peryear,
     probperday, probperweek, probpermonth, probperyear,
     freqperday, freqperweek, freqpermonth, freqperyear,
-    rate, time_prob, rate_prob,
 )
+from .internals.dates import DateArray, date, datedur
+from .internals.timeline import Timeline
+from .internals.parameters import Pars, by, timeseries, seasonal
 
-t('timeline')
-from .timeline import Timeline
-
-t('parameters')
-from .parameters import Pars, SimPars
-
-t('people')
-from .people import People, Person
-
-t('modules')
-from .modules import (
-    module_map, module_types, register_modules, find_modules, required,
-    Base, Module,
-)
-
-t('networks')
+#%% People and modules
+from .people import People, people, ppl
+from .internals import modules
+from .internals.modules import register_modules, required, Base, Module
 from .networks import (
-    Route, Network, DynamicNetwork, SexualNetwork,
-    StaticNet, RandomExactNet, RandomNet, RandomSafeNet, ClusterNet, HybridNet, MFNet, MSMNet,
+    Network, DynamicNetwork,
+    RandomNet, DegreeNet, SexualNet,
     PrenatalNet, MaternalNet, PostnatalNet, BreastfeedingNet,
-    AgeGroup, MixingPools, MixingPool,
+    AgeGroup, MixingPools, MixingPool, contacts,
 )
+from . import geo
+from .results import Result, Results, simdata
+from .products import Product, Vaccine, Treatment, Diagnostic, box
+from .interventions import Intervention, Delivery, vaccinate, treat, screen
+from .analyzers import Analyzer, infection_log
+from .connectors import Connector, modify
 
-t('results')
-from .results import Result, Results
-
-t('demographics')
-from .demographics import (
-    Demographics, Births, Deaths, PregnancyPars, Pregnancy,
+#%% Declared models: conditions, expressions, transitions, and the solvers that run them
+from .internals import conditions
+from .internals.conditions import state
+from .solvers.backends import kernels
+from .solvers.backends.kernels import compile, compile_status
+from .internals import expressions
+from .internals.expressions import par, mother, attr
+from .transitions import (
+    State, states, pars, null, stay, on,
+    Transition, move, birth, death, lifetable, immigration, emigration, outcome,
 )
+from .internals import graph, display, dimensions
+from .internals.dimensions import transfer
+from . import solvers
 
-t('products')
-from .products import Product, Dx, Tx, Vx, simple_vx
+#%% Diseases and demographics
+from .diseases import Disease, Infection, SIR, SEIR, SIS
+from .strains import immunity, Strains
+from .demographics import Demographics, Births, Deaths, Pregnancy # After the diseases, since a pregnancy is one
 
-t('interventions')
-from .interventions import (
-    Intervention, RoutineDelivery, CampaignDelivery,
-    BaseTest, BaseScreening, routine_screening, campaign_screening,
-    BaseTriage, routine_triage, campaign_triage,
-    BaseTreatment, treat_num,
-    BaseVaccination, routine_vx, campaign_vx,
-)
+#%% Running: the loop, the sim, and many sims
+from .internals import loop
+from .internals.loop import Loop
+from . import data # starsim_data is imported only when this is used
+from .internals import gradients # JAX is imported only when this is used
+from .solvers.backends import jit
+from .sim import SimPars, Sim, demo
+from .run import MultiSim, parallel
 
-t('analyzers')
-from .analyzers import Analyzer, infection_log, dynamics_by_age
+#%% Importing from and exporting to other frameworks
+from . import converters
+from .converters import import_from, export_to
 
-t('connectors')
-from .connectors import Connector, seasonality
+def __getattr__(name):
+    """ Import ss.fit when it is first used, so that import starsim stays fast """
+    if name == 'fit':
+        import importlib
+        return importlib.import_module(f'.{name}', __name__)
+    hint = '; import it first: import starsim.library as ssl' if name == 'library' else ''
+    raise AttributeError(f'module "starsim" has no attribute "{name}"{hint}')
 
-t('diseases')
-from .diseases import Disease, Infection, InfectionLog, NCD, SIR, SEIR, SIS
+# The kernels: Rust if it has been built (or asked for by STARSIM_KERNELS), else Numba (see ss.options.kernels)
+options.set(kernels=options.kernels)
 
-t('loop')
-from .loop import Loop
-
-t('sim')
-from .sim import Sim, AlreadyRunError, demo, diff_sims, check_sims_match
-
-t('run')
-from .run import MultiSim, single_run, multi_run, parallel
-
-t('calibration') # Lazy import to save 500 ms
-from .calibration import (
-    Calibration, CalibComponent,
-    linear_interp, linear_accum, step_containing,
-    BetaBinomial, Binomial, DirichletMultinomial, GammaPoisson, Normal,
-)
-
-t('samples')
-from .samples import Dataset, Samples
-
-# The library of example/reference modules; not exported at the top level, access via e.g. ss.library.mnch.FetalHealth
-t('library')
-from . import library
-
-# Load fonts
-def _load_fonts(debug=debug):
-    """ Try installing and loading fonts, but fail silently if folder is not writable """
-    if options.install_fonts:
-        test_file = root / 'starsim' / 'assets' / 'fonts_installed_successfully'
-
-        # Check if fonts have already been installed
-        if not test_file.exists():
-            if debug: print(f'File {test_file} does not exist, continuing...')
-            try:
-                if debug: print('Checking write permissions...')
-                test_file.touch()  # Mark that fonts were installed
-                if debug: print('Rebuilding fonts...')
-                load_fonts(rebuild=True)
-                if options.verbose:
-                    print('\nNote: rebuilding the font cache only happens once on first import, or set the environment variable STARSIM_INSTALL_FONTS=0 to disable.')
-            except Exception as E: # Not writable or something else went wrong; ignore
-                if debug: print(f'File not writable or another error: {E}')
-        else:
-            if debug: print(f'File {test_file} exists, loading fonts...')
-            load_fonts(rebuild=False)
-    return
-
-# Try loading fonts
-t('fonts')
-_load_fonts()
-
-# If we're in debug mode, show the timings
-if debug:
-    t('') # Final timing, label is discarded
-    timing_keys = list(timings.keys())[:-1] # The labels happen *before* the code, so correct the offset here
-    timing_vals = list(timings.values())[1:]
-    lastval = 0
-    print('\nImport timings:')
-    for key,val in zip(timing_keys, timing_vals):
-        print(f'{key:15s} | Σ = {val:0.3f} s | Δ = {(val-lastval)*1000:0.1f} ms')
-        lastval = val
+# Say if Starsim has not been compiled yet
+kernels.note_uncompiled()
 
 # Don't keep these in the module
-del t, sc, debug
+del sc

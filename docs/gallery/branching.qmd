@@ -1,0 +1,68 @@
+---
+title: Hospitalization and death
+jupyter: python3
+authorship:
+  human: 0
+  ai: 100
+  note: Written by AI
+---
+
+Two different mechanisms decide what happens to people after a state, and a model needs the right one. In a **split on entry**, the outcome is decided when people enter the state: here, 10% of infectious people will go to hospital and the rest will recover, each after their infectious period. With **competing hazards**, two transitions out of a state run at the same time and whichever happens first wins: here, people in hospital are discharged after 10 days on average, but die at a rate of 0.02 per day while they are there, so the share who die depends on both rates. This page puts both in one model, a respiratory infection with hospitalization, and checks the share who die.
+
+## The model
+
+| Parameter | Value | Meaning |
+|---|---|---|
+| β | 0.3 per day | Rate of infection |
+| Infectious period | 8 days | Mean time in I (exponential), before recovery or hospitalization |
+| Hospitalized | 10% | Share of infectious people who go to hospital, decided on entry to I |
+| Stay in hospital | 10 days | Mean time to discharge |
+| Death in hospital | 0.02 per day | Rate of death while in hospital, competing with discharge |
+| R0 | 2.4 | β × the infectious period |
+| Population | 100,000 | |
+
+```{python}
+import starsim as ss
+
+S, I, R, H, D = ss.states('S I R H D')
+infection = S >> I @ 0.3*I
+course    = ss.Transition(I, [R, H], dur=ss.days(8), p=[None, 0.1])  # Split on entry: 10% to H, the rest to R
+discharge = H >> R @ ss.days(10)                                     # Competing hazards: discharge ...
+death     = H >> D @ ss.perday(0.02)                                 # ... and death
+covid = ss.Disease(infection, course, discharge, death, init=dict(I=0.001), name='covid')
+```
+
+In `p=[None, 0.1]`, `None` stands for the rest (here, 90%). The diagram, from `diagram()`:
+
+```{python}
+covid.diagram()
+```
+
+And the equations, in which the split appears as the shares (1 - 0.1) and 0.1 of the flow out of I, and the competing hazards as two flows out of H:
+
+```{python}
+covid.equations()
+```
+
+A rate given as a number is named by its transition, so the rate of death appears as a parameter called `rate_death`, and a duration by the state it is the time in (`dur_I` and `dur_H`). To give it a name of your own, write it as `ss.par(ss.perday(0.02), name='mu')` (see [Parameters](../user_guide/building_parameters.qmd)).
+
+## Result
+
+```{python}
+sim = ss.Sim(covid, total_pop=100_000, stop=ss.days(200))
+sim.run()
+sim.plot('covid')
+```
+
+Of the people admitted to hospital, the share who die is the rate of death over the sum of the two rates out of H: 0.02 / (0.02 + 1/10) = 1/6. The flow `course.H` is the number admitted to hospital:
+
+```{python}
+admitted = sim.results.covid['course.H'].sum()
+deaths = sim.results.covid.death.sum()
+print('Admitted:', round(admitted), 'Died:', round(deaths), 'Share:', round(deaths/admitted, 3))
+```
+
+## Going further
+
+- [Disease structure](../tutorials/t3_disease.qmd) adds branching to the measles model.
+- [Diseases: states, transitions, and rates](../user_guide/building_diseases.qmd) covers splits, competing hazards, and their durations.

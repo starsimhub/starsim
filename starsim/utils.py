@@ -1,10 +1,16 @@
 """
 Numerical utilities and other helper functions
+
+What is shared by the rest of the code, and doesn't belong to any one part of it: named dictionaries of modules (`ss.ndict`), warnings, cleaning input data, plotting arguments, and returning figures and tables.
+
+Used with: agents and compartments; declared and coded modules
 """
-import re
+import os
+import types
+import functools
+import sys
 import warnings
 import numpy as np
-import numba as nb
 import pandas as pd
 import sciris as sc
 import matplotlib.pyplot as plt
@@ -13,29 +19,72 @@ import starsim as ss
 
 # %% Helper functions
 
-class ndict(sc.objdict):
+class method_wrapper:
+    """
+    A method that Starsim wraps in a subclass (e.g. `init()`, see `outermost`); a subclass defines `__call__(self, obj, *args, **kwargs)`, which calls `self.func`
+
+    It is a class rather than a closure so that a class defined in a script, which dill pickles by value (e.g. to
+    send a sim to `ss.parallel()`'s workers), pickles with its own method and not with the globals of the module that
+    wrapped it: dill copies those, and with them, by value, any module not installed in site-packages (e.g. Sciris
+    or Starsim installed as editable), which may not pickle at all ("cannot pickle '_thread._local' object").
+    """
+    def __init__(self, func):
+        self.func = func
+        functools.update_wrapper(self, func) # Its name, docstring, and signature, as the method's
+        return
+
+    def __get__(self, obj, cls=None):
+        return self if obj is None else types.MethodType(self, obj)
+
+    def __call__(self, obj, *args, **kwargs):
+        raise NotImplementedError
+
+
+class skipkey(str):
+    """
+    The name of a key for `sc.search()` to skip, which is equal only to a string of that name
+
+    `sc.search()` compares each key it meets with the keys to skip, so a plain name would be compared with every key of every
+    dict in a module, including dates (e.g. an analyzer's results by date), and a date compared with a string that is not a
+    date raises (see `ss.date`). Use `skipkeys(names)` for a list of them.
+    """
+    def __eq__(self, other):
+        return isinstance(other, str) and str.__eq__(self, other)
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+    __hash__ = str.__hash__
+
+
+def skipkeys(names):
+    """ Names of keys for `sc.search(..., skip=dict(keys=...))` that are compared only with strings (see `skipkey`) """
+    return [skipkey(name) for name in names]
+
+
+class ndict(sc.obj):
     """
     A dictionary-like class that provides additional functionalities for handling named items.
 
+    Each item is added under its `name` (or the key given), and a key can be added only once.
+
     Args:
-        nameattr (str): The attribute of the item to use as the dict key (i.e., all items should have this attribute defined)
         type (type): The expected type of items.
-        strict (bool): If True, only items with the specified attribute will be accepted.
-        overwrite (bool): whether to allow adding a key when one has already been added
+        args (list): the items to add, each a named item, or a list or dict of them
+        kwargs (dict): more items to add, by key
 
     Examples:
         ```python
-        networks = ss.ndict(ss.MFNet(), ss.PrenatalNet())
-        networks = ss.ndict([ss.MFNet(), ss.PrenatalNet()])
-        networks = ss.ndict({'mf':ss.MFNet(), 'prenatal':ss.PrenatalNet()})
+        networks = ss.ndict(ss.SexualNet(), ss.PrenatalNet())
+        networks = ss.ndict([ss.SexualNet(), ss.PrenatalNet()])
+        networks = ss.ndict({'sexual':ss.SexualNet(), 'prenatal':ss.PrenatalNet()})
         ```
     """
-    def __init__(self, *args, nameattr='name', type=None, strict=True, overwrite=False, **kwargs):
+    __slots__ = ('_type',) # Since otherwise treated as keys
+
+    def __init__(self, *args, type=None, **kwargs):
         super().__init__()
-        self.setattribute('_nameattr', nameattr)  # Since otherwise treated as keys
         self.setattribute('_type', type)
-        self.setattribute('_strict', strict)
-        self.setattribute('_overwrite', overwrite)
         self.extend(*args, **kwargs)
         return
 
@@ -43,55 +92,51 @@ class ndict(sc.objdict):
         """ Shortcut for returning values """
         return self.values()
 
-    def append(self, arg, key=None, overwrite=None):
+    def append(self, arg, key=None):
+        """ Add an item, or a list or dict of them
+
+        Args:
+            arg (Module/list/dict): the item to add, or a list or dict of them
+            key (str): the key to add it under (default: its name)
+        """
         valid = False
         if arg is None:
             return  # Nothing to do
-        elif hasattr(arg, self._nameattr):
-            key = key or getattr(arg, self._nameattr)
+        elif hasattr(arg, 'name'):
+            key = key or arg.name
             valid = True
         elif isinstance(arg, dict):
-            if self._nameattr in arg:
-                key = key or arg[self._nameattr]
+            if 'name' in arg:
+                key = key or arg['name']
                 valid = True
             else:
                 for k, v in arg.items():
                     self.append(v, key=k)
                 valid = None  # Skip final processing
-        elif not self._strict:
-            key = key or f'item{len(self) + 1}'
-            valid = True
-        else:
-            valid = False
 
         if valid is True:
-            if self._strict:
-                self._check_type(arg)
-                self._check_key(key, overwrite=overwrite)
+            self._check_type(arg)
+            self._check_key(key)
             self[key] = arg # Actually add to the ndict!
         elif valid is None:
             pass  # Nothing to do
         else:
-            if isinstance(arg, ss.Module) and not hasattr(arg, self._nameattr):
+            if isinstance(arg, ss.Module):
                 # A Module missing its name attribute almost always means super().__init__() was not called
-                errormsg = (f'Could not add module of type "{type(arg).__name__}": it is missing the "{self._nameattr}" attribute. '
+                errormsg = (f'Could not add module of type "{type(arg).__name__}": it is missing the "name" attribute. '
                             f'This usually means super().__init__() was not called in the module\'s __init__() method; '
                             f'please ensure your __init__() calls super().__init__(*args, **kwargs).')
             else:
-                errormsg = f'Could not interpret argument {arg}: does not have expected attribute "{self._nameattr}"'
+                errormsg = f'Could not interpret argument {arg}: does not have expected attribute "name"'
             raise TypeError(errormsg)
         return self
 
-    def _check_key(self, key, overwrite=None):
-        """ Validate that a key can be added; raise ValueError or warn if it already exists """
-        if overwrite is None: overwrite = self._overwrite
+    def _check_key(self, key):
+        """ Validate that a key can be added; raise ValueError if it already exists """
         if key in self:
-            if not overwrite:
-                typestr = f' "{self._type}"' if self._type else ''
-                errormsg = f'Cannot add object "{key}" since already present in ndict{typestr} with keys:\n{sc.newlinejoin(self.keys())}'
-                raise ValueError(errormsg)
-            else:
-                ss.warn(f'Overwriting existing ndict entry "{key}"')
+            typestr = f' "{self._type}"' if self._type else ''
+            errormsg = f'Cannot add object "{key}" since already present in ndict{typestr} with keys:\n{sc.newlinejoin(self.keys())}'
+            raise ValueError(errormsg)
         return
 
     def _check_type(self, arg):
@@ -144,10 +189,13 @@ class ndict(sc.objdict):
             errormsg = f'Key must be a str or type, not {key}'
             raise TypeError(errormsg)
 
-        return # Unreachable
-
     def extend(self, *args, **kwargs):
-        """ Add new items to the ndict, by item, list, or dict """
+        """ Add new items to the ndict, by item, list, or dict
+
+        Args:
+            args (list): the items to add
+            kwargs (dict): more items to add, by key
+        """
         args = sc.mergelists(*args)
         for arg in args:
             self.append(arg)
@@ -156,14 +204,18 @@ class ndict(sc.objdict):
         return self
 
     def merge(self, other):
-        """ Merge another dictionary with this one """
+        """ Merge another dictionary with this one
+
+        Args:
+            other (dict): the dictionary to merge
+        """
         for key, arg in other.items():
             self.append(arg, key=key)
         return self
 
     def copy(self):
         """ Shallow copy """
-        new = self.__class__(nameattr=self._nameattr, type=self._type, strict=self._strict, overwrite=self._overwrite)
+        new = self.__class__(type=self._type)
         new.update(self)
         return new
 
@@ -187,7 +239,7 @@ class ndict(sc.objdict):
 
 def nlist_to_dict(nlist, die=True):
     """ Convert a list of named items (e.g. modules, states) to a dictionary; not for the user """
-    out = sc.objdict()
+    out = sc.obj()
     collisions = []
     for obj in nlist:
         key = obj.name
@@ -205,7 +257,14 @@ def nlist_to_dict(nlist, die=True):
 
 
 def warn(msg, category=None, verbose=None, die=None):
-    """ Helper function to handle warnings -- shortcut to warnings.warn """
+    """ Helper function to handle warnings -- shortcut to warnings.warn
+
+    Args:
+        msg (str): the text of the warning
+        category (Warning): the type of warning (default: `RuntimeWarning`)
+        verbose (bool): whether to print it, if `ss.options.warnings` is 'print' (default: `ss.options.verbose`)
+        die (bool): if True, raise it as an error, whatever `ss.options.warnings` is
+    """
 
     # Handle inputs
     warnopt = ss.options.warnings if not die else 'error'
@@ -234,179 +293,67 @@ def warn(msg, category=None, verbose=None, die=None):
     return
 
 
-@nb.jit(cache=True)
-def _mark_partners(p1, p2, is_ind, is_partner):
-    """ Mark the partners of the agents flagged in is_ind, in both directions of each edge; used by find_contacts() """
-    for i in range(len(p1)):
-        if is_ind[p1[i]]:
-            is_partner[p2[i]] = True
-        if is_ind[p2[i]]:
-            is_partner[p1[i]] = True
-    return
+def getframe(depth=1):
+    """ The frame `depth` levels above the caller, or None if the stack is not that deep (e.g. when called from R via reticulate) """
+    try:
+        return sys._getframe(depth+1)
+    except ValueError:
+        return None
 
 
-def find_contacts(p1, p2, inds, as_array=False):
+def assigned_name(obj):
     """
-    Find the partners of the specified agents in an edge list; see also `Network.find_contacts()`.
-
-    By default, a set is returned so that custom tracing interventions can efficiently add extra
-    people; with `as_array=True`, a sorted array of unique UIDs is returned instead, which is faster.
-
-    Args:
-        p1 (array): the first agent of each edge
-        p2 (array): the second agent of each edge
-        inds (array): the agents whose partners to find
-        as_array (bool): if True, return a sorted array rather than a set
+    The name of the variable an object being made is assigned to, e.g. "campaign" in `campaign = ss.vaccinate(...)`,
+    read from the code that made it (the frame above its constructors) as the instruction after the call; None if the
+    result is not stored straight in a variable (e.g. it is returned, put in a list, or passed on). It is read when the
+    object is made, so the name is that of its first variable, whatever variable holds it later (e.g. in a loop)
     """
-    p1 = np.asarray(p1)
-    p2 = np.asarray(p2)
-    inds = np.asarray(inds, dtype=np.int64)
+    import dis
+    frame = getframe(1)
+    while frame is not None and frame.f_locals.get('self') is obj: # Out of its constructors (__init__ and super().__init__())
+        frame = frame.f_back
+    if frame is None or frame.f_code.co_filename.startswith(os.path.dirname(ss.__file__)): # Made by Starsim itself (e.g. a disease the sim makes from transitions), not by the user's code
+        return None
+    try:
+        after = next((ins for ins in dis.get_instructions(frame.f_code) if ins.offset > frame.f_lasti), None)
+    except Exception: # Code that cannot be read, e.g. compiled
+        return None
+    if after is not None and after.opname in ['STORE_NAME', 'STORE_FAST', 'STORE_GLOBAL', 'STORE_DEREF'] and not after.argval.startswith('_'):
+        return after.argval
+    return None
 
-    # Make lookup tables of which people are in inds, and which are their partners (much faster than np.isin() or a set)
-    n = max(np.max(p1, initial=-1), np.max(p2, initial=-1), np.max(inds, initial=-1)) + 1
-    is_ind = np.zeros(n, dtype=bool)
-    is_ind[inds] = True
-    is_partner = np.zeros(n, dtype=bool)
-    _mark_partners(p1, p2, is_ind, is_partner)
 
-    partners = np.flatnonzero(is_partner).astype(ss.dtypes.int, copy=False)
-    if not as_array:
-        partners = set(partners.tolist())
-    return partners
+def caller_names(depth=1, skip=None):
+    """
+    The names of the variables in the code that called the caller (`depth` levels above it), as a dict of the name of
+    each object by its id: its local variables, else its global ones, and only for an object bound to exactly one of
+    them. A declared disease (`ss.Disease(infection, recovery)`) and a sim (`ss.Sim(diseases=sir)`, `sim.new(interventions=campaign)`) look up the names of
+    what they are given once, here; nothing else does. Empty if the stack is not that deep (e.g. from R via reticulate).
+    The code of the function `skip`, if that is the code above, does not count.
+    """
+    frame = getframe(depth + 1)
+    if frame is not None and skip is not None and frame.f_code is skip.__code__:
+        frame = frame.f_back
+    if frame is None:
+        return {}
+    out = {}
+    for space in [frame.f_globals, frame.f_locals]: # The local ones win
+        found = {}
+        for key,val in space.items():
+            if not key.startswith('_'):
+                found.setdefault(id(val), set()).add(key)
+        out.update({i:(keys.pop() if len(keys) == 1 else None) for i,keys in found.items()})
+    return out
+
+
+def n_args(func):
+    """ The number of positional arguments a function needs: `fn(sim)` is 1 and `fn(sim, uids)` is 2, and arguments with defaults (`fn(sim, years=5)`) do not count """
+    import inspect
+    kinds = [inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD]
+    return sum(1 for p in inspect.signature(func).parameters.values() if p.kind in kinds and p.default is inspect.Parameter.empty)
 
 
 # %% Data cleaning and processing
-
-def parse_age_range(age_string) -> tuple:
-    """
-    Parse an age range string into lower and upper bounds.
-
-    Extracts the numeric bounds from a variety of age range formats. Note that
-    bracket/interval notation (e.g. `[15,25)` vs `(15,25]`) is accepted but
-    the brackets are stripped — all formats return a plain `(lower, upper)`
-    tuple. To get a boolean mask that respects bracket semantics (inclusive vs
-    exclusive bounds), use :func:`apply_age_range` instead.
-
-    Example usage::
-
-        >>> ss.parse_age_range('5-9')
-        (5.0, 9.0)
-        >>> ss.parse_age_range('[15,25)')
-        (15.0, 25.0)
-        >>> ss.parse_age_range('(15,25]')
-        (15.0, 25.0)
-
-    Supported formats:
-        - `'5-9'` or `'5 to 9'`
-        - `'<5'` — returns `(0.0, 5.0)`
-        - `'95+'` — returns `(95.0, np.inf)`
-        - `'>95'` — returns `(95.0, np.inf)`
-        - `'[15,25)'`, `'(15,25]'`, `'[15,25]'`, `'(15,25)'` — bracket
-          notation; brackets are stripped, returns `(15.0, 25.0)` in all cases
-
-    Args:
-        age_string: a string specifying an age range
-
-    Returns:
-        A tuple `(lower, upper)` as floats.
-    """
-    s = str(age_string).strip()
-
-    # Bracket/interval notation: [15,25) or (15,25] etc.
-    if s and s[0] in '([' and s[-1] in ')]' and ',' in s:
-        inner = s[1:-1]
-        parts = inner.split(',', 1)
-        age_lower = float(parts[0].strip())
-        age_upper = float(parts[1].strip())
-    else:
-        s = s.lower()
-        if '+' in s:
-            age_lower = float(s.split('+')[0])
-            age_upper = np.inf
-        elif '-' in s:
-            age_lower = float(s.split('-')[0])
-            age_upper = float(s.split('-')[1])
-        elif s.startswith('<'):
-            age_lower = 0.0
-            age_upper = float(s[1:])
-        elif s.startswith('>'):
-            age_lower = float(s[1:])
-            age_upper = np.inf
-        elif 'to' in s:
-            parts = s.split('to')
-            age_lower = float(parts[0])
-            age_upper = float(parts[1])
-        else:
-            raise ValueError(f'Cannot parse age range: {age_string!r}')
-
-    if age_lower < 0 or age_upper < 0:
-        raise ValueError('Age bounds cannot be negative')
-    if age_lower >= age_upper:
-        raise ValueError(f'Lower bound ({age_lower}) must be less than upper bound ({age_upper}): {age_string!r}')
-
-    return age_lower, age_upper
-
-
-def apply_age_range(age_string, arr):
-    """
-    Return a boolean mask for values in `arr` that fall within the age range.
-
-    For bracket/interval notation, respects inclusive `[` `]` vs exclusive
-    `(` `)` bounds. For other formats, uses standard conventions:
-
-        - `'5-9'`, `'5 to 9'` → `[5, 9)` (inclusive lower, exclusive upper)
-        - `'<5'` → `[0, 5)`
-        - `'>95'` → `(95, inf)`
-        - `'95+'` → `[95, inf)`
-        - `'[15,25)'` → `>= 15` and `< 25`
-        - `'(15,25]'` → `> 15` and `<= 25`
-
-    Example usage::
-
-        >>> import numpy as np
-        >>> ages = np.array([14, 15, 20, 24, 25])
-        >>> ss.apply_age_range('[15,25)', ages)
-        array([False,  True,  True,  True, False])
-
-    Args:
-        age_string: a string specifying an age range
-        arr: a numeric array to filter
-
-    Returns:
-        A boolean array of the same shape as `arr`.
-    """
-    s = str(age_string).strip()
-
-    # Bracket/interval notation — respect the brackets
-    if s and s[0] in '([' and s[-1] in ')]' and ',' in s:
-        lo_inc = s[0] == '['
-        hi_inc = s[-1] == ']'
-        lo, hi = parse_age_range(s)
-        left  = (arr >= lo) if lo_inc else (arr > lo)
-        right = (arr <= hi) if hi_inc else (arr < hi)
-        return left & right
-
-    # Non-bracket formats — use conventional semantics
-    lo, hi = parse_age_range(s)
-    s_lower = s.lower()
-    if s_lower.startswith('>'):
-        return arr > lo  # Exclusive lower, no upper
-    else:
-        # '5-9', '5 to 9', '<5', '95+' all use [lo, hi)
-        return (arr >= lo) & (arr < hi)
-
-
-def standardize_netkey(key):
-    """ 
-    Standardize network key names
-    
-    Networks can be upper or lowercase, have a suffix 'net' or not, and may include
-    a number added to make the name unique; this function standardizes them. For
-    example, 'RandomNet', 'randomnet', and 'randomnet_1' would all be standardized
-    to 'random'.
-    """
-    return re.sub(r'net(_\d+)?$', r'\1', key.lower())
-
 
 # Alternative column names accepted for standard data columns, used only if the configured
 # column name is absent from the data (e.g. UN World Population Prospects data uses "Time"
@@ -474,6 +421,8 @@ def standardize_data(data=None, metadata=None, min_year=1800, out_of_range=0, de
         metadata (dict): Dictionary specifiying index columns, the value column, and optionally mapping for sex labels
         min_year (float): Optionally specify a minimum year allowed in the data. Default is 1800.
         out_of_range (float): Value to use for negative ages - typically 0 is a reasonable choice but other values (e.g., np.inf or np.nan) may be useful depending on the calculation. This will automatically be added to the dataframe with an age of `-np.inf`
+        default_age (float): the age to use if the data has no age column
+        default_year (float): the year to use if the data has no year column
 
     Returns:
 
@@ -500,7 +449,7 @@ def standardize_data(data=None, metadata=None, min_year=1800, out_of_range=0, de
         errormsg = f'The metadata is missing a column name for "value", which must be provided if the input data is in the form of a DataFrame, Series, or dict. Data columns are:\n{metadata["data_cols"]}'
         raise ValueError(errormsg)
     values = sc.promotetoarray(data[resolve_data_col(data, 'value', metadata['data_cols']['value'])])
-    index = sc.objdict()
+    index = sc.obj()
     for k, col in metadata['data_cols'].items():
         if k != 'value':
             index[k] = data[resolve_data_col(data, k, col)]
@@ -538,91 +487,104 @@ def standardize_data(data=None, metadata=None, min_year=1800, out_of_range=0, de
     return output
 
 
-def validate_sim_data(data=None, die=None):
-    """
-    Validate data intended to be compared to the sim outputs, e.g. for calibration
+# %% Helpers for the sim
 
-    Args:
-        data (df/dict): a dataframe (or dict) of data, with a column "time" plus data columns of the form "module.result", e.g. "hiv.new_infections"
-        die (bool): whether to raise an exception if the data cannot be converted (default: die if data is not None but cannot be converted)
+def same_value(a, b):
+    """ Whether two settings have the same value (e.g. 10000 and 10000.0); False if they cannot be compared to one True or False """
+    try:
+        return bool(a == b)
+    except Exception:
+        return False
 
-    """
-    success = False
-    if data is not None:
-        # Try loading the data
+
+def given_modules(*inputs):
+    """ The modules among a sim's inputs, alone or in lists or dicts (e.g. `diseases=[sir, sis]`) """
+    mods = []
+    for inp in inputs:
+        for val in (inp or {}).values():
+            vals = val.values() if isinstance(val, dict) else sc.tolist(val) if isinstance(val, (list, tuple, ss.Module)) else []
+            mods += [v for v in vals if isinstance(v, ss.Module)]
+    return mods
+
+
+def make_disease(arg, names):
+    """ Transitions given to the sim (alone or in a list, among modules) as one disease, named from its states (e.g. "sir"), whose results are also at the top of the sim's (`sim.results.I`) """
+    items = sc.tolist(arg) if isinstance(arg, (list, tuple)) or ss.transitions.is_declaration(arg) else None
+    if items is None:
+        return arg
+    flat = [obj for item in items for obj in (item if isinstance(item, (list, tuple)) else [item])]
+    transitions = [obj for obj in flat if ss.transitions.is_declaration(obj)]
+    if not transitions:
+        return arg
+    disease = ss.Disease(*transitions, _names=names)
+    disease.setattribute('_implicit', True)
+    return [obj for obj in flat if not ss.transitions.is_declaration(obj)] + [disease]
+
+
+def copy_given(*inputs):
+    """ The sim's inputs merged and copied together, so the modules given are never run themselves and can be given to other sims, and refer to each other as given """
+    for mod in given_modules(*inputs): # Marked, so that what is added to them later, which this sim would never see, raises (see ss.Module.check_not_given())
+        mod.setattribute('_given', True)
+    out = sc.mergedicts(*inputs, _copy=True)
+    for mod in given_modules(out): # The sim's own copies are its to change, and hold their own results (also if the module given was given to a sim before)
+        mod.setattribute('_given', False)
+        if isinstance(getattr(mod, 'results', None), ss.Results):
+            mod.results.setattribute('_given_to', None)
+    for mod in given_modules(*inputs): # The modules given hold no results (the sim runs its copies), so reading one says where they are
+        if isinstance(getattr(mod, 'results', None), ss.Results) and not len(mod.results):
+            mod.results.setattribute('_given_to', mod.name)
+    return out
+
+
+class outermost(method_wrapper):
+    """ The outermost call to a sim's init() (Sim's, or a subclass's that calls it) first keeps a copy of the sim as it is, which `sim.new()` copies """
+    def __call__(self, sim, *args, **kwargs):
+        if sim.initialized or sim.__dict__.get('_in_init'):
+            return self.func(sim, *args, **kwargs)
+        if '_before_init' not in sim.__dict__: # Not again after an init() that failed
+            try:
+                sim._before_init = sc.dcp(sim)
+            except Exception as E: # Something in the sim cannot be copied: it still runs, but new() says why it cannot copy it
+                sim._before_init = f'sim.new() copies the sim as it was before it was initialized, but this {type(sim).__name__} could not be copied ({type(E).__name__}: {E}); make it again instead'
+        sim._in_init = True
         try:
-            data = sc.dataframe(data) # Convert it to a dataframe
-            timecols = ['t', 'timevec', 'tvec', 'time', 'day', 'date', 'year'] # If a time column is supplied, use it as the index
-            found = False
-            for timecol in timecols:
-                if timecol in data.cols:
-                    if found:
-                        errormsg = f'Multiple time columns found: please ensure only one of {timecols} is present; you supplied {data.cols}.'
-                        raise ValueError(errormsg)
-                    data.set_index(timecol, inplace=True)
-                    found = True
-            success = True
-
-        # Data loading failed
-        except Exception as E:
-            errormsg = f'Failed to add data "{data}": expecting a dataframe-compatible object. Error:\n{E}'
-            if die == False:
-                print(errormsg)
-            else:
-                raise ValueError(errormsg)
-
-    # Validation
-    if not success and die == True:
-        errormsg = f'Data "{data}" could not be converted and die == True'
-        raise ValueError(errormsg)
-
-    return data
+            return self.func(sim, *args, **kwargs)
+        finally:
+            sim.__dict__.pop('_in_init', None)
 
 
-def combine_rands(a, b):
-    """
-    Efficient algorithm for combining two arrays of random integers into an array
-    of floats.
+def num_str(x):
+    """ A time as text: a number (or a duration, by its value) without a needless decimal point (100, not 100.0), or a date """
+    x = x.value if isinstance(x, ss.TimePar) else x
+    return f'{x:n}' if sc.isnumber(x) else str(x)
 
-    See ss.multi_random() for the user-facing version.
 
-    Inputs must be uint64: signed integers would produce output in [-0.5, 0.5] rather than
-    [0, 1], so they raise an error rather than being cast, since casting would silently copy
-    the array. To reinterpret existing bits for free, use `arr.view(np.uint64)`.
-
-    Args:
-        a (array): array of random uint64 integers between 0 and np.iinfo(np.uint64).max, as from ss.rand_raw()
-        b (array): ditto, same size as a
-
-    Returns:
-        A new array of uniformly distributed random numbers in [0, 1], the same size as a and b
-    """
-    a_dtype = getattr(a, 'dtype', type(a).__name__)
-    b_dtype = getattr(b, 'dtype', type(b).__name__)
-    if a_dtype != np.uint64 or b_dtype != np.uint64:
-        errormsg = f'combine_rands() requires uint64 arrays, not a={a_dtype} and b={b_dtype}. Signed integers give output in [-0.5, 0.5] instead of [0, 1]. Use ss.rand_raw(), or arr.view(np.uint64) to reinterpret the bits without copying.'
-        raise TypeError(errormsg)
-    c = np.bitwise_xor(a*b, a-b)
-    u = c / np.iinfo(np.uint64).max
-    return u
+def time_str(x, sim=None, plural=False):
+    """ A time point as text, for what a run prints: a date as a date (without a time of day, e.g. 2020-01-08), a duration with its own unit (e.g. year 2000.02, as on a timeline in calendar years), or a number in the sim's unit (e.g. day 27, or step 27 in a sim with no unit, whose times are days underneath) """
+    if isinstance(x, (ss.date, pd.Timestamp)):
+        return str(ss.date(x)).partition(' ')[0]
+    unitless = sim is not None and sim.t.unitless
+    unit_name = type(x).base.removesuffix('s') if isinstance(x, ss.dur) and not unitless else sim.unit_name
+    return f'{unit_name}{"s"*plural} {num_str(x)}'
 
 
 #%% Other helper functions
 
 def load(filename, **kwargs):
     """
-    Alias to Sciris `sc.loadany()`
+    Alias to Sciris `sc.loadany()`, for Starsim's own objects
 
     Since Starsim uses Sciris for saving objects, they can be loaded back using
-    this function. This can also be used to load other objects of known type
-    (e.g. JSON), although this usage is discouraged.
+    this function, e.g. a sim saved with `ss.save('run.sim', sim)`. Another
+    framework's model is read with `ss.import_from()`.
 
     Args:
         filename (str/path): the name of the file to load
         kwargs (dict): passed to `sc.loadany()`
 
-    Returns:
-        The loaded object
+    **Examples**:
+
+        sim = ss.load('run.sim') # A sim saved with ss.save()
     """
     return sc.loadany(filename, **kwargs)
 
@@ -633,17 +595,30 @@ def save(filename, obj, **kwargs):
 
     While some Starsim objects have their own save methods, this function can be
     used to save any arbitrary object. It can then be loaded with ss.load().
+    Another framework's format is written by `ss.export_to()`.
 
     Args:
         filename (str/path): the name of the file to save
         obj (any): the object to save
         kwargs (dict): passed to `sc.save()`
+
+    **Examples**:
+
+        ss.save('run.sim', sim) # The sim, with its results
     """
+    if 'format' in kwargs: # Otherwise passed on to pickling, which fails obscurely
+        errormsg = f'ss.save() writes Starsim\'s own formats; for another framework\'s, use ss.export_to(sim, "{kwargs["format"]}", filename="{filename}")'
+        raise ValueError(errormsg)
     return sc.save(filename=filename, obj=obj, **kwargs)
 
 
 class Shrunk:
-    """ Define a class to indicate an object has been shrunken """
+    """ Define a class to indicate an object has been shrunken
+
+    Args:
+        obj (object): the object that was shrunken
+        attr (str): the name of its attribute that was shrunken
+    """
     def __init__(self, obj=None, attr=None):
         try:
             self.obj_type = type(getattr(obj, attr))
@@ -681,7 +656,7 @@ def shrink(obj=None, attrs=None, verbose=False):
     numbers of sims. It is good practice to write `shrink()` methods for modules to remove
     any temporary arrays or other memory-intensive objects.
 
-    `ss.shrink()` can be used to either manually replace an object, or replace multiple attributes 
+    `ss.utils.shrink()` can be used to either manually replace an object, or replace multiple attributes 
     of an object in-place. It is used rather than simply deleting attributes or setting them to
      `None` to make it clear that the attributes were intentionally removed.
 
@@ -694,17 +669,17 @@ def shrink(obj=None, attrs=None, verbose=False):
         ```python
         # "Shrink" (remove) the People object
         sim = ss.Sim()
-        ss.shrink(sim, 'people')
+        ss.utils.shrink(sim, 'people')
 
         # Equivalent behavior, used manually
-        sim.people = ss.shrink()
+        sim.people = ss.utils.shrink()
         ```
     """
     none_count = sum([x is None for x in [obj, attrs]])
     if none_count == 2:
         return Shrunk()
     elif none_count == 1:
-        errormsg = 'You can call ss.shrink() with both obj and attrs, or with neither, but not one or the other'
+        errormsg = 'You can call ss.utils.shrink() with both obj and attrs, or with neither, but not one or the other'
         raise ValueError(errormsg)
     else:
         for attr in sc.tolist(attrs):
@@ -719,14 +694,14 @@ def shrink(obj=None, attrs=None, verbose=False):
 #%% Plotting helper functions
 
 # Specify known/common keywords
-plotting_kw = sc.objdict()
+plotting_kw = sc.obj()
 plotting_kw.fig = ['figsize', 'nrows', 'ncols', 'ratio', 'num', 'dpi', 'facecolor'] # For sc.getrowscols()
-plotting_kw.plot = ['alpha', 'c', 'lw', 'linewidth', 'marker', 'markersize', 'ms'] # For plt.plot()
+plotting_kw.plot = ['alpha', 'c', 'color', 'lw', 'linewidth', 'ls', 'linestyle', 'marker', 'markersize', 'ms'] # For plt.plot()
 plotting_kw.data = {'data_alpha':'alpha', 'data_color':'color', 'data_size':'markersize'} # For plt.scatter()
 plotting_kw.fill = {'fill_alpha':'alpha', 'fill_color':'color', 'fill_hatch':'hatch', 'fill_lw':'lw'}
 plotting_kw.legend = ['loc', 'bbox_to_anchor', 'ncols', 'reverse', 'frameon']
 plotting_kw.style = ['style', 'font', 'fontsize', 'interactive'] # For sc.options.with_style()
-plotting_kw.return_fig = ['do_show', 'is_jupyter', 'is_reticulate']
+plotting_kw.return_fig = ['do_show', 'is_jupyter', 'filename']
 
 def plot_args(kwargs=None, _debug=False, **defaults):
     """
@@ -754,11 +729,11 @@ def plot_args(kwargs=None, _debug=False, **defaults):
     Valid kwarg arguments are:
 
         - fig: 'figsize', 'nrows', 'ncols', 'ratio', 'num', 'dpi', 'facecolor'
-        - plot: 'alpha', 'c', 'lw', 'linewidth', 'marker', 'markersize', 'ms'
+        - plot: 'alpha', 'c', 'color', 'lw', 'linewidth', 'ls', 'linestyle', 'marker', 'markersize', 'ms'
         - data: 'data_alpha', 'data_color', 'data_size'
         - fill: 'fill_alpha', 'fill_color', 'fill_hatch', 'fill_lw'
         - style: 'font', 'fontsize', 'interactive'
-        - return_fig: 'do_show', 'is_jupyter', 'is_reticulate'
+        - return_fig: 'do_show', 'is_jupyter', 'filename' (see `ss.return_fig()`)
 
     Examples:
         ```python
@@ -769,10 +744,10 @@ def plot_args(kwargs=None, _debug=False, **defaults):
     suffix='_kw'
     _None = '<None>'
     kwargs = sc.mergedicts(defaults, kwargs) # Input arguments, e.g. ss.plot_args(kwargs, figsize=(8,6))
-    kw = sc.objdict() # Output arguments
+    kw = sc.obj() # Output arguments
     for subtype,args in plotting_kw.items():
         if _debug: print('Subtype & args:', subtype, args)
-        kw[subtype] = sc.objdict() # e.g. kw.fig
+        kw[subtype] = sc.obj() # e.g. kw.fig
 
         # Handle kwargs, e.g. "figsize"
         if isinstance(args, list): # Ensure everything's a dict, although only kw.data is
@@ -806,102 +781,56 @@ def plot_args(kwargs=None, _debug=False, **defaults):
     return kw
 
 
-def match_result_keys(results, key, show_skipped=False, flattened=False):
-    """ Ensure that the user-provided keys match available ones, and raise an exception if not """
-
-    def normkey(key):
-        """ Normalize the key: e.g. 'SIS.prevalence' becomes 'sis_prevalence' """
-        return key.replace('.','_').lower()
-
-    # Handle accessing subdicts
-    if isinstance(key, str) and key in results and isinstance(results[key], dict): # Key matches a subdict, use that directly, e.g. sim.plot('sis')
-        flat = results[key].flatten() # e.g. sim.results['sis']
-        key = None # We've already used the key, so reset it
-    else: # Main use case: flatten the dict, e.g. sim.plot()
-        flat = sc.objdict(results) if flattened else results.flatten() # Copy so the original results aren't modified below
-
-    # Configuration
-    flat_orig = flat # Copy reference before we modify in place
-    if not show_skipped: # Skip plots with auto_plot set to False
-        for k in list(flat.keys()): # NB: can't call it "key", shadows argument
-            res = flat[k]
-            if isinstance(res, ss.Result) and not res.auto_plot:
-                flat.pop(k)
-
-    if key is not None:
-        if isinstance(key, str):
-            if normkey(key) in flat: # Use an exact match if there is one, e.g. 'new_deaths' rather than 'cholera_new_deaths'
-                flat = {normkey(key):flat[normkey(key)]}
-            else:
-                flat = {k:v for k,v in flat.items() if (normkey(key) in k)} # Will match e.g. 'SIS.prevalence' and 'sis_prevalence'
-            if len(flat) != 1:
-                errormsg = f'Key "{key}" not found; valid keys are:\n{sc.newlinejoin(flat_orig.keys())}'
-                raise sc.KeyNotFoundError(errormsg)
-        else:
-            try:
-                flat = {k.lower():flat[normkey(k)] for k in key}
-            except sc.KeyNotFoundError as e:
-                errormsg = f'Not all keys could be matched.\nAvailable keys:\n{sc.newlinejoin(flat_orig.keys())}\n\nYour keys:\n{sc.newlinejoin(key)}'
-                raise sc.KeyNotFoundError(errormsg) from e
-
-    return flat
-
-
-def get_result_plot_label(res, show_module=None):
-    """ Helper function for getting the label to plot for a result; not for the user """
-    # Sanitize
-    if show_module is None:
-        show_module = 26 # Default maximum length
-    elif isinstance(show_module, bool):
-        if show_module is True:
-            show_module = 999
-        else:
-            show_module = 0
-    if not isinstance(show_module, int):
-        errormsg = f'"show_module" must be a bool or int, not {show_module}'
-        raise TypeError(errormsg)
-
-    # Decide how/if to show the module
-    if show_module == -1:
-        label = res.full_label.replace(':', '\n')
-    elif len(res.full_label) > show_module:
-        label = sc.ifelse(res.label, res.name)
-    else:
-        label = res.full_label
-
-    return label
-
-
-def format_axes(ax, res, n_ticks=None, show_module=None):
-    """ Standard formatting for axis results; not for the user """
-    if n_ticks is None:
-        n_ticks = (2,5)
-
-    # Set y axis -- commas
-    sc.commaticks(ax)
-
-    # Set the axes title
-    label = ss.utils.get_result_plot_label(res, show_module)
-    ax.set_title(label)
-    return
-
-
 def show(**kwargs):
-    """ Shortcut for matplotlib.pyplot.show() """
+    """ Shortcut for matplotlib.pyplot.show()
+
+    Args:
+        kwargs (dict): passed to `plt.show()`
+    """
     return plt.show(**kwargs)
 
 
-def return_fig(fig, **kwargs):
-    """ Do postprocessing on the figure: by default, don't return if in Jupyter, but show instead; not for the user """
-    do_show = kwargs.pop('do_show', ss.options.show) # TODO: make this more consistent with other implementations, e.g. plot_args()
+def return_fig(fig, given=False, **kwargs):
+    """
+    Do postprocessing on the figure: save it, show it, and return it; not for the user, but its arguments can be given to any plot of results
+
+    Args:
+        fig (Figure): the figure
+        given (bool): whether the figure (or axes) was given by the caller, who then shows it, so it is not shown unless `do_show=True`
+        do_show (bool): whether to show the figure (by default, `ss.options.show`, and in Jupyter, always)
+        is_jupyter (bool): whether in Jupyter (by default, `ss.options.is_jupyter`), where a figure that is shown is not also returned, so it is not displayed twice
+        filename (str): if given, save the figure to this file (with `sc.savefig()`)
+
+    Returns the figure, unless it is shown in Jupyter; so in Jupyter, `fig = sim.plot(do_show=False)` gives the figure, without showing it.
+    """
+    do_show = kwargs.pop('do_show', False if given else None)
     is_jupyter = kwargs.pop('is_jupyter', ss.options.is_jupyter)
-    is_reticulate = kwargs.pop('is_reticulate', ss.options.reticulate)
-    if is_jupyter or is_reticulate:
-        print(fig)
+    filename = kwargs.pop('filename', None)
+    if filename is not None:
+        sc.savefig(filename, fig=fig, die=False, verbose=False) # With metadata where the format allows it (e.g. not a JPG)
+    if is_jupyter:
         if do_show != False:
             plt.show()
-        return None
-    else:
-        if do_show:
-            plt.show()
-        return fig
+            return None
+    elif sc.ifelse(do_show, ss.options.show):
+        plt.show()
+    return fig
+
+
+def return_table(df, **kwargs):
+    """
+    Return a table to show it: in a notebook or at an interactive prompt, which show what is returned, it is only returned, so it
+    isn't shown twice; in a script, it is printed too (with `df.to_string(**kwargs)`). For summaries that print and return a table.
+
+    Args:
+        df (dataframe): the table
+        kwargs (dict): passed to `df.to_string()`
+    """
+    if not (ss.options.is_jupyter or hasattr(sys, 'ps1')): # sys.ps1 is the prompt of an interactive session (Python or IPython)
+        print(df.to_string(**kwargs))
+    return df
+
+
+def __getattr__(name):
+    hint = ': for a flat dict of results, use sim.results.flatten()' if name == 'match_result_keys' else ''
+    raise AttributeError(f'module "starsim.utils" has no attribute "{name}"{hint}')

@@ -1,0 +1,62 @@
+---
+title: The chance of a major outbreak
+jupyter: python3
+authorship:
+  human: 0
+  ai: 100
+  note: Written by AI
+---
+
+An epidemic with R0 above 1 doesn't always take off. Early on, when there are only a few cases, each one infects a random number of others, and by chance all of them can recover before passing the infection on. For an SIR model with an exponential infectious period, started by one infectious person, the chance that this happens (that the outbreak is minor) is 1 / R0, so the chance of a major outbreak is 1 − 1 / R0 (Whittle, 1955). A deterministic model can't show this, since in an ODE an epidemic with R0 above 1 always takes off; this page checks it with many stochastic runs.
+
+## The model
+
+An SIR in a population of 1,000, with an infectious period of 10 days and β = R0 / 10 per day, started by a single infectious person. Each model is run 300 times with the Gillespie algorithm, which follows each infection and recovery as an event at its own random time, as the theory does.
+
+```{python}
+import numpy as np
+import matplotlib.pyplot as plt
+import starsim as ss
+
+def make_sir(R0):
+    S, I, R = ss.states('S I R')
+    infection = S >> I @ (R0/10)*I
+    recovery  = I >> R @ ss.days(10)
+    return ss.Disease(infection, recovery, init_n=dict(I=1), name='sir')
+```
+
+```{python}
+make_sir(2).diagram()
+```
+
+## Result
+
+A run counts as a major outbreak if more than 10% of people are infected; the rest infect at most a few people each, so the exact threshold hardly matters. `infection.summarize()` gives the infections over the whole of each run:
+
+```{python}
+R0s = [1.25, 1.5, 2, 3, 4]
+major = []
+for R0 in R0s:
+    sim = ss.Sim(make_sir(R0), total_pop=1000, stop=ss.days(365), solver='gillespie', verbose=0)
+    msim = sim.run(n_runs=300, verbose=0)
+    infections = msim.results.sir.infection.summarize() # One total for each run
+    major.append(np.mean(infections > 100))
+
+R0_curve = np.linspace(1, 4.2, 100)
+plt.plot(R0_curve, 1 - 1/R0_curve, label='Theory: 1 − 1/R0')
+plt.plot(R0s, major, 'o', label='Starsim (300 Gillespie runs each)')
+plt.xlabel('R0')
+plt.ylabel('Share of runs with a major outbreak')
+plt.legend()
+plt.show()
+```
+
+Each point is a share of 300 runs, so it is uncertain by about ±0.05 (two standard errors), and within that the runs agree with the theory.
+
+The theory is for continuous time. A chain binomial model (`solver='binomial'`) moves people between states in steps of time, here a day, and gives higher shares for this model (about 0.56 for R0 = 2, against 0.5): in steps of a day, the chance that a person recovers before infecting anyone is lower than in continuous time. With a smaller step (`dt=ss.days(0.1)`), it agrees with the theory. Agents also take steps of a day, but draw each person's infectious period from the exponential distribution itself, and agree with the theory at steps of a day.
+
+## Going further
+
+- [Repeated runs and uncertainty](../tutorials/t5_interventions.qmd) covers stochastic runs, and why one run isn't enough.
+- [Uncertainty, seeds, and many runs](../user_guide/running_scenarios.qmd) covers the options.
+- Whittle P (1955). The outcome of a stochastic epidemic: a note on Bailey's paper. *Biometrika* 42:116–122.

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Remove auto-generated files
+Remove auto-generated files (the qpyd.clean patterns in _quarto.yml). Same as `qpyd clean`.
 """
-import quarto_utils as qu
-qu.clean_outputs()
+from quartodoc.qpyd.clean import clean_outputs
+clean_outputs()

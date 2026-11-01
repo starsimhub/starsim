@@ -1,0 +1,69 @@
+---
+title: Age groups and a contact matrix
+jupyter: python3
+authorship:
+  human: 0
+  ai: 100
+  note: Written by AI
+---
+
+People of different ages mix differently: children have the most contacts, and most of them with other children. An age-structured model splits each state by age group, and a contact matrix says how many contacts a day a person in each group has with people in each other group. With contacts, β is the chance of infection per contact, and the force of infection on group *i* is β times the sum over groups *j* of the contacts of *i* with *j* times the share of *j* who are infectious. This page builds an age-structured SIR, as in the age-structured models of Keeling and Rohani (2008, chapter 3).
+
+## The model
+
+| Parameter | Value | Meaning |
+|---|---|---|
+| β | 0.05 per contact | Chance of infection per contact with an infectious person, per day |
+| Infectious period | 10 days | Mean time in I (exponential) |
+| Age groups | 0–14, 15–64, 65+ | With 30%, 50%, and 20% of people |
+| Contacts | see the matrix | Contacts a day of a person in each group (rows) with each group (columns) |
+| Population | 100,000 | |
+| Infectious at the start | 0.1% | In each group |
+
+The contact matrix, with the rows and columns in the order 0–14, 15–64, 65+:
+
+| | 0–14 | 15–64 | 65+ |
+|---|---|---|---|
+| **0–14** | 8 | 5 | 2 |
+| **15–64** | 3 | 6 | 2 |
+| **65+** | 3 | 5 | 3 |
+
+```{python}
+import starsim as ss
+
+S, I, R = ss.states('S I R')
+infection = S >> I @ 0.05*I
+recovery  = I >> R @ ss.days(10)
+sir = ss.Disease(infection, recovery, init=dict(I=0.001), name='sir')
+sir.stratify(age={0: 0.3, 15: 0.5, 65: 0.2})  # The lower edge of each age group, and its share of people
+
+contacts = ss.contacts(ages=[0, 15, 65], matrix=[[8, 5, 2], [3, 6, 2], [3, 5, 3]])
+```
+
+The diagram, from `diagram()`, is the same as an SIR's: the age groups split each state, and don't change the transitions.
+
+```{python}
+sir.diagram()
+```
+
+## Result
+
+```{python}
+sim = ss.Sim(sir, networks=contacts, total_pop=100_000, stop=ss.days(100))
+sim.run()
+sim.results.sir.I.by('age').plot()
+```
+
+R0 is about 6, set by the largest eigenvalue of the matrix of contacts weighted by β and the infectious period, not by any one group's contacts. Children, who have the most contacts, drive the epidemic, but with an R0 this high, it reaches almost everyone in every age group. The total infected in each age group:
+
+```{python}
+sim.results.sir.infection.by('age').summarize()
+```
+
+Of 30,000 children, 50,000 adults under 65, and 20,000 people aged 65 and over, these are all but a few hundred in each group.
+
+## Going further
+
+- [Age groups and contacts](../tutorials/t4_ages.qmd) adds age groups and a contact matrix to the measles model, with data for real countries.
+- [Stratification](../user_guide/building_stratification.qmd) and [Contact matrices and data by place](../user_guide/populations_data.qmd) cover the options.
+- Keeling MJ, Rohani P (2008). *Modeling Infectious Diseases in Humans and Animals*. Princeton University Press.

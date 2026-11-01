@@ -1,62 +1,117 @@
 ---
 pagetitle: "Tutorials"
+authorship:
+  human: 20
+  ai: 80
+  note: Adapted by AI from the Starsim 3 tutorials page
 ---
 
 # Tutorials
 
-These tutorials will guide you through the main features of Starsim. Each tutorial is interactive and includes executable code examples.
+The tutorials teach Starsim through one example: a simplified measles outbreak in a town, which gains a latent period, age groups, vaccination, other towns, data to fit it to, and more. Each takes 10 to 20 minutes, starts with the model so far (so you can start at any one), and ends with exercises. The [user guide](user_guide.qmd) covers each topic in full.
+
+## Core tutorials
+
+The core tutorials build models of compartments: groups of people, by state and by age or place. Starsim runs them as equations, as stochastic models, or as agents.
 
 ::: {.grid}
-::: {.g-col-4}
-[**T1 - Introduction to Starsim**](tutorials/t1_intro.qmd)
+::: {.g-col-6}
+[**T1 – Getting started**](tutorials/t1_intro.qmd)
 
-A quick introduction to the Starsim framework.
+A measles outbreak as an SIR model: run it, plot it, and check what Starsim built.
 :::
 
-::: {.g-col-4}
-[**T2 - Building a simulation**](tutorials/t2_model.qmd)
+::: {.g-col-6}
+[**T2 – Building a model**](tutorials/t2_model.qmd)
 
-How to build your first simulation.
+The first model in more depth: states, transitions, parameters, time, and results.
 :::
 
-::: {.g-col-4}
-[**T3 - Demographics**](tutorials/t3_demographics.qmd)
+::: {.g-col-6}
+[**T3 – Building a disease**](tutorials/t3_disease.qmd)
 
-Implementing demographics: births, deaths, and population structure.
+A latent period, how long people stay in each state, waning immunity, and deaths, with the diagram and equations.
 :::
 
-::: {.g-col-4}
-[**T4 - Diseases**](tutorials/t4_diseases.qmd)
+::: {.g-col-6}
+[**T4 – Age groups and contacts**](tutorials/t4_ages.qmd)
 
-How to implement disease dynamics.
+Who mixes with whom: age groups, contact matrices, and real populations.
 :::
 
-::: {.g-col-4}
-[**T5 - Networks**](tutorials/t5_networks.qmd)
+::: {.g-col-6}
+[**T5 – Interventions and scenarios**](tutorials/t5_interventions.qmd)
 
-How diseases spread between agents: networks and mixing pools.
+Vaccination, school terms, and comparing scenarios across many runs.
 :::
 
-::: {.g-col-4}
-[**T6 - Interventions**](tutorials/t6_interventions.qmd)
+::: {.g-col-6}
+[**T6 – Geography and mixing**](tutorials/t6_places.qmd)
 
-It's not all doom and gloom: implementing interventions to save lives.
-:::
+Several towns, and how an outbreak travels between them.
 :::
 
+::: {.g-col-6}
+[**T7 – Data and calibration**](tutorials/t7_calibration.qmd)
 
-:::{.callout-note}
-You can download these tutorials as Jupyter notebooks to run them locally. Look for the download button at the top of each tutorial.
+Fitting the model to reported cases, and projecting from the fit.
 :::
+
+::: {.g-col-6}
+[**T8 – Stratification and co-transmission**](tutorials/t8_strata.qmd)
+
+Splitting a model by more than age, and two diseases that affect each other.
+:::
+
+::: {.g-col-6}
+[**T9 – Custom modules**](tutorials/t9_modules.qmd)
+
+Writing your own behavior as code, while keeping the model compartmental.
+:::
+
+:::
+
+## Agent-based modeling
+
+These tutorials are for models that need individual people: contact networks, individual histories, births and deaths, and interventions that target individuals.
+
+::: {.grid}
+::: {.g-col-6}
+[**A1 – Diseases**](tutorials/a1_diseases.qmd)
+
+A disease as agents: individual states, histories, and differences between people.
+:::
+
+::: {.g-col-6}
+[**A2 – Networks**](tutorials/a2_networks.qmd)
+
+Who meets whom, one contact at a time: random, sexual, and other networks.
+:::
+
+::: {.g-col-6}
+[**A3 – Demographics**](tutorials/a3_demographics.qmd)
+
+Births, deaths, and pregnancy for individual people.
+:::
+
+::: {.g-col-6}
+[**A4 – Interventions**](tutorials/a4_interventions.qmd)
+
+Interventions that target individuals: eligibility, testing, and treatment.
+:::
+
+::: {.g-col-6}
+[**A5 – Custom modules**](tutorials/a5_modules.qmd)
+
+Writing agent-level logic of your own, from a small change to a new module.
+:::
+
+:::
+
+The answers to the exercises are in the [solutions](tutorials/solutions.qmd).
 
 ::: {.callout-tip}
 ## Running tutorials locally
 
-To run these tutorials locally:
-
-1. Clone the Starsim repository
-2. Install Starsim and its dependencies
-3. Navigate to the `docs/tutorials` directory
-4. Convert to Jupyter: `./convert_notebooks.sh` (or just open them directly if `jupytext` is installed)
-5. Launch Jupyter: `jupyter lab`
+Each tutorial can be downloaded as a Jupyter notebook: look for the download button at the top of the page. Or, to run them all locally: clone the Starsim repository, install Starsim (`pip install -e .`), go to `docs/tutorials`, and open them in Jupyter (`jupyter lab`, with `jupytext` installed to open `.qmd` files directly, or run `./convert_notebooks` first).
 :::

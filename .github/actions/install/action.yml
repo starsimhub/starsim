@@ -1,0 +1,67 @@
+# Install Starsim with kernels that are known to be fresh, for a job to test: used by the workflows in this
+# folder's parent, after checking out Starsim and setting up Python.
+#
+# The Rust kernels are built once for each version of their source, then restored from the cache, since
+# nothing else in a job compiles them (CARGO=false makes the install skip it: they are optional there).
+# Afterwards STARSIM_KERNELS=rust, so that any import of Starsim is an error if the kernels are missing or
+# were built from other source than is here, rather than falling back to Numba's.
+#
+# With `numba`, Numba's compiled kernels are restored too. The key is every file that mentions Numba, and
+# Numba checks each cached function against the contents of its files (see starsim/solvers/backends/cache.py),
+# so a cache is only used for the code it came from; scheduled runs always compile, as a check on this. The CPU
+# is generic so that a cache can be used on any of GitHub's runners, which have several kinds.
+
+name: Install Starsim
+description: Install Starsim with fresh kernels
+inputs:
+  extras:
+    description: The extras to install, e.g. "[dev]"
+    default: ''
+  rust:
+    description: Whether the job needs the Rust kernels
+    default: 'true'
+  numba:
+    description: Whether the job runs Numba's kernels, so should restore them
+    default: 'false'
+runs:
+  using: composite
+  steps:
+    - uses: astral-sh/setup-uv@v6
+      with:
+        version: 0.13.0
+    - id: rust
+      if: inputs.rust == 'true'
+      uses: actions/cache@v4
+      with:
+        path: starsim/solvers/backends/_rs.abi3.so
+        key: kernels-${{ runner.os }}-${{ hashFiles('starsim/solvers/rust/**') }}
+    - name: Build the Rust kernels
+      if: inputs.rust == 'true' && steps.rust.outputs.cache-hit != 'true'
+      shell: bash
+      working-directory: starsim/solvers/rust
+      run: ./build # Rust is installed on GitHub's runners
+    - name: Install Starsim
+      shell: bash
+      run: |
+        echo "UV_SYSTEM_PYTHON=1" >> "$GITHUB_ENV"
+        echo "CARGO=false" >> "$GITHUB_ENV"
+        UV_SYSTEM_PYTHON=1 CARGO=false uv pip install -e ".${{ inputs.extras }}"
+    - name: Require the Rust kernels
+      if: inputs.rust == 'true'
+      shell: bash
+      run: |
+        echo "STARSIM_KERNELS=rust" >> "$GITHUB_ENV"
+        STARSIM_KERNELS=rust python -c "import starsim as ss; assert ss.solvers.backends.rust.on; print(ss.compile_status().summary)"
+    - name: Find Numba's cache
+      id: numba
+      if: inputs.numba == 'true'
+      shell: bash
+      run: |
+        echo "NUMBA_CACHE_DIR=$HOME/.numba" >> "$GITHUB_ENV"
+        echo "NUMBA_CPU_NAME=generic" >> "$GITHUB_ENV"
+        echo "key=$(python -c 'import sys, numba; print(f"py{sys.version_info.minor}-{numba.__version__}")')-$(git grep -lE 'numba|nb\.|ss\.jit' -- 'starsim/*.py' | sort | xargs sha256sum | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+    - if: inputs.numba == 'true' && github.event_name != 'schedule'
+      uses: actions/cache@v4
+      with:
+        path: ~/.numba
+        key: numba-${{ runner.os }}-${{ steps.numba.outputs.key }}
