@@ -43,7 +43,7 @@ recovery  = I >> R @ ss.days(10)  # Infectious for 10 days on average: R0 = 2
 flu = ss.Disease(infection, recovery, init_n=dict(I=1), name='flu') # One imported case
 
 sim = ss.Sim(flu, total_pop=1e6, stop=ss.days(100), solver='gillespie', branching=True, verbose=0)
-msim = sim.run(n_runs=300, until=flu.I.n + flu.R.n >= 100)
+msim = sim.run(n_runs=100, until=flu.I.n + flu.R.n >= 100)
 b = msim.branching
 print(f'Share of introductions that died out: {b.p_extinct:.2f} (95% interval {b.p_extinct_ci[0]:.2f} to {b.p_extinct_ci[1]:.2f}; theory: 1/R0 = 0.5)')
 ```
@@ -80,7 +80,7 @@ for label, extra in [('Same infectiousness', {}), (f'Overdispersed (k = {k})', d
     S, I, R = ss.states('S I R')
     flu_k = ss.Disease(S >> I @ 0.2*I, I >> R @ ss.constant(ss.days(10)), init_n=dict(I=20), name='flu', **extra)
     sim = ss.Sim(flu_k, total_pop=10e6, stop=ss.days(60), solver='abm', branching=True, verbose=0)
-    msim = sim.run(n_runs=20)
+    msim = sim.run(n_runs=8)
     b = msim.branching
     offspring[label] = b.offspring
     print(f'{label}: R = {b.R:.2f}, k = {b.k:.2g}')

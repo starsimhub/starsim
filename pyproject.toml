@@ -63,7 +63,6 @@ doc = [
     "quartopydoc", # Fork of quartodoc
     "sphobjinv",
     "jupyter",
-    "jupyter-cache",
     "jupytext",
 ]
 

@@ -96,7 +96,7 @@ Each of several chains starts from its own point, and the fit has converged if t
 | `cooling` | 0.5 | The share of the first step size that is left after 50 passes (pomp's `cooling.fraction.50`) |
 
 ```{python}
-fit = stochastic.fit(method='if2', likelihood=likelihood, particles=300, verbose=False)
+fit = stochastic.fit(method='if2', likelihood=likelihood, particles=100, iterations=25, verbose=False)
 fit.summarize()
 ```
 
@@ -124,7 +124,7 @@ The No-U-Turn sampler uses gradients to move through the posterior of a determin
 | `scan` | 10 per parameter, at most 100 | The number of points tried for the chains' starts |
 
 ```{python}
-fit = deterministic.fit(method='nuts', likelihood=likelihood, draws=200, warmup=200, chains=2, verbose=False)
+fit = deterministic.fit(method='nuts', likelihood=likelihood, draws=100, warmup=100, chains=2, verbose=False)
 fit.table
 ```
 
@@ -142,7 +142,7 @@ Particle MCMC takes a random walk over the parameters, with the likelihood at ea
 | `scan` | 10 per parameter, at most 100 | The number of points tried for the start |
 
 ```{python}
-fit = stochastic.fit(method='pmcmc', likelihood=likelihood, draws=200, warmup=200, chains=2, particles=100, verbose=False)
+fit = stochastic.fit(method='pmcmc', likelihood=likelihood, draws=100, warmup=100, chains=2, particles=50, verbose=False)
 fit.table
 ```
 
@@ -158,7 +158,7 @@ Approximate Bayesian computation keeps the parameter values whose runs come clos
 | `tolerance` | None | The distance to stop at |
 
 ```{python}
-fit = stochastic.fit(method='abc-smc', particles=100, generations=6, verbose=False)
+fit = stochastic.fit(method='abc-smc', particles=50, generations=4, verbose=False)
 fit.table
 ```
 

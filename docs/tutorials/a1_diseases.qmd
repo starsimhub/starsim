@@ -144,12 +144,12 @@ def make_sim(k=None):
     return ss.Sim(measles, connectors=superspreading, **pars)
 
 for label, k in {'Everyone equally infectious': None, 'k = 1': 1, 'k = 0.2': 0.2}.items():
-    msim = ss.parallel(make_sim(k), n_runs=100)
+    msim = ss.parallel(make_sim(k), n_runs=40)
     total = msim.results.measles.infection.values.sum(axis=1)
     print(label, '- share that die out:', np.mean(total < 20), '- median size of the outbreaks that take off:', np.median(total[total >= 20]))
 ```
 
-The average number each case infects is the same in all three, about 1.5, but the more transmission is concentrated, the more often an introduction dies out: with k = 0.2, nearly 9 in 10 do, since the first case is most likely one of the many who infect nobody. The outbreaks that do take off are about as large in all three. For control, this is the good news of superspreading; the bad news is that the outbreaks that occur can start explosively, from a single event. A compartmental model can't say this, since it has no individuals to differ.
+The average number each case infects is the same in all three, about 1.5, but the more transmission is concentrated, the more often an introduction dies out: with k = 0.2, about 4 in 5 do, since the first case is most likely one of the many who infect nobody. The outbreaks that do take off are of a similar size in all three. For control, this is the good news of superspreading; the bad news is that the outbreaks that occur can start explosively, from a single event. A compartmental model can't say this, since it has no individuals to differ.
 
 `ss.attr()` can also draw a value when something happens to a person (e.g. a severity at infection, with `on=infection`), or record one; see [Diseases](../user_guide/building_diseases.qmd). A person's susceptibility can differ in the same way, with `ss.modify(measles.rel_sus, ...)`.
 
