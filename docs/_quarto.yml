@@ -458,7 +458,7 @@ qpyd:
 
 execute:
   freeze: auto # Only re-execute notebooks that have changed
-  cache: true # NB, not sure if this is needed for Quarto notebooks
+  preload: [starsim] # With --jobs, import this once rather than for each notebook
   error: false # Do not continue if an error is encountered
   echo: true
   warning: true

@@ -120,7 +120,7 @@ S, I, R = ss.states('S I R')
 sir = ss.Disease(infection=ss.Transition(S, I, rate=beta * I), recovery=ss.Transition(I, R, rate=gamma), init_n=dict(I=5))
 sim = ss.Sim(sir, total_pop=1000, solver='gillespie', unit='day', start=1, stop=100, data=data, verbose=0)
 
-fit = sim.fit(method='abc-smc', rand_seed=1, verbose=0)
+fit = sim.fit(method='abc-smc', particles=100, generations=7, rand_seed=1, verbose=0)
 fit.table # The posterior median of each parameter and its 95% interval (lower, upper)
 ```
 

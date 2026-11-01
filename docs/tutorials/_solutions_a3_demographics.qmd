@@ -60,16 +60,13 @@ measles = ss.Disease(
     name        = 'measles',
 )
 demographics = [ss.birth(rate=ss.peryear(0.03)), ss.death(rate=ss.peryear(0.03))]
-pars = dict(demographics=demographics, start='2000-01-01', stop='2020-01-01', dt=ss.days(1), verbose=0)
+sim = ss.Sim(measles, n_agents=50_000, demographics=demographics, start='2000-01-01', stop='2012-01-01', dt=ss.days(1), verbose=0)
+sim.run()
 
 plt.figure()
-for label, n in {'20,000 people': 20_000, '50,000 people': 50_000}.items():
-    sim = ss.Sim(measles, n_agents=n, **pars)
-    sim.run()
-    plt.semilogy(sim.results.measles.timevec, sim.results.measles.I, label=label)
+plt.semilogy(sim.results.measles.timevec, sim.results.measles.I)
 plt.ylim(bottom=0.5)
-plt.ylabel('Number infectious')
-plt.legend();
+plt.ylabel('Number infectious');
 ```
 
 A: In the larger town, more children are born each year, so the susceptible people build up faster, and imported cases (which also come more often, since there are more susceptible people to be infected outside the town) start epidemics sooner: they come more often, and are larger. Measles still dies out between most of them, though: a town of 50,000 is still well below the critical community size of measles.

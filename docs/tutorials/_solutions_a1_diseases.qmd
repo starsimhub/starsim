@@ -80,7 +80,7 @@ def make_sim(k=None, immune=0.8):
     return ss.Sim(measles, connectors=superspreading, **sim_pars)
 
 for label, k in {'Everyone equally infectious': None, 'k = 0.2': 0.2}.items():
-    msim = ss.parallel(make_sim(k), n_runs=100)
+    msim = ss.parallel(make_sim(k), n_runs=40)
     total = msim.results.measles.infection.values.sum(axis=1)
     print(label, '- share that die out:', np.mean(total < 20))
 ```

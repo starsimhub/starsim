@@ -107,13 +107,12 @@ The fit here is good because the data was made with this model. With real data, 
 
 ## Testing the fit on data it wasn't given
 
-A model that matches the data it was fitted to may still predict badly: with two free parameters, many curves can pass near a dozen points. A stronger test is to fit the model to the data up to some date, and see how well it predicts the weeks after it, which it wasn't given. Here, the model is fitted to the data up to 12 March (during the rise), up to 26 March (around the peak), and up to 16 April (all of it), and each fit is run with all the data attached, so that its predictions can be compared with the weeks it didn't see:
+A model that matches the data it was fitted to may still predict badly: with two free parameters, many curves can pass near a dozen points. A stronger test is to fit the model to the data up to some date, and see how well it predicts the weeks after it, which it wasn't given. Here, the model is fitted to the data up to 12 March (during the rise) and up to 26 March (around the peak), and each fit is run with all the data attached, so that its predictions can be compared with the weeks it didn't see:
 
 ```{python}
 cutoffs = {
     'Fitted to 12 March': '2025-03-12',
     'Fitted to 26 March': '2025-03-26',
-    'Fitted to 16 April': '2025-04-16',
 }
 sims = {}
 for label, cutoff in cutoffs.items():
@@ -125,7 +124,7 @@ msim = ss.parallel(sims)
 msim.plot('measles.cases')
 ```
 
-All three fits match the data they were given, but they don't agree about what comes after. Fitted to the rise alone, the model finds a higher β and only 19% of infections reported, and predicts that the outbreak peaks within a week, at about 280 cases a week, when it went on to peak at about 470. Once the data includes the peak, the fit is close to the true values, and predicts the following weeks well.
+Both fits match the data they were given, but they don't agree about what comes after. Fitted to the rise alone, the model finds a higher β and only 19% of infections reported, and predicts that the outbreak peaks within a week, at about 280 cases a week, when it went on to peak at about 470. Once the data includes the peak, the fit is close to the true values, and predicts the following weeks well.
 
 The reason is that while an outbreak is growing, its rate of growth depends mostly on β, but the number of cases reported depends on both how many people are infected and the share of them reported: a smaller outbreak with more of it reported gives nearly the same rise as a larger outbreak with less of it reported. The outbreak turns when susceptible people run out, so only the peak says how many people have been infected, and so what share of them were reported. When two parameters can trade off like this, the data can't tell them apart (they are not *identifiable* from it); [Parameter identification](../user_guide/calibration_identification.qmd) shows how to check for this before trusting a fit.
 
