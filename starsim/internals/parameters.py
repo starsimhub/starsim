@@ -27,7 +27,7 @@ class Pars(sc.obj):
     """
     Dict-like container of parameters
 
-    Acts like an `sc.obj()`, except that adding new keys are disallowed by
+    Acts like an `sc.obj()`, except that adding new keys is disallowed by
     default, and auto-updates known types.
 
     Args:
@@ -233,8 +233,6 @@ class Pars(sc.obj):
                     self[key] = new
                 elif isinstance(old, dict):
                     self[key] = new # Take dictionaries directly, without warning the user
-                elif isinstance(old, (ss.dur, ss.Rate)):
-                    self[key] = new
                 else: # Everything else; not used currently but could be
                     warnmsg = f'No known mechanism for handling {type(old)} → {type(new)}; using default'
                     ss.warn(warnmsg)
@@ -252,7 +250,7 @@ class Pars(sc.obj):
         else: # Don't overwrite an existing ndict
             if isinstance(new, dict):
                 for newkey,newvals in new.items():
-                    old[newkey].pars.update(newvals) # e.g. pars = {'diseases": {'sir': {'dur_inf': 6}}}
+                    old[newkey].pars.update(newvals) # e.g. pars = {'diseases': {'sir': {'dur_inf': 6}}}
             else:
                 errormsg = f'Cannot update an ndict with {type(new)}: must be a dict to set new parameters'
                 raise TypeError(errormsg)
@@ -290,9 +288,6 @@ class Pars(sc.obj):
 
         # It's a dict, e.g. beta for different networks, just set it directly and trust the user
         elif isinstance(new, dict):
-            # for key,val in new.items(): # TODO: should we include validation like this?
-            #     if sc.isnumber(val):
-            #         new[key] = old.__class__(val)
             self[key] = new
 
         # It's a distribution, e.g. a duration that varies; replace it
@@ -343,7 +338,7 @@ class Pars(sc.obj):
             first = next(iter(old.pars), None)
             num = lambda v: v.value if isinstance(v, ss.TimePar) else v
             kept = [k for k,v in old.pars.items() if k != first and (sc.isfunc(v) or sc.isnumber(num(v)) and np.isfinite(num(v)) and not (k == 'loc' and num(v) == 0))] # The parameters that still shape it, e.g. the std of a lognormal; not a dtype, an infinite bound, or a zero shift
-            if kept: # 14b: only some of the distribution was set, which may not be what was meant (in a declared model, a duration alone is an exponential instead), so say so
+            if kept: # Only some of the distribution was set, which may not be what was meant (in a declared model, a duration alone is an exponential instead), so say so
                 val = f'ss.{new!r}' if isinstance(new, (ss.dur, ss.Rate)) else new.__name__ if sc.isfunc(new) else new
                 bare = [k for k in kept if k in (old.unit_pars or []) and sc.isnumber(old.pars[k])] if isinstance(new, ss.dur) else [] # E.g. the std of ss.lognorm_ex(mean=ss.years(6)): a number, in the unit of the mean, which is now that of the value given
                 units = f' in {new.base}' if bare else ''
@@ -353,7 +348,7 @@ class Pars(sc.obj):
         # Give up
         else:
             typed = [v for v in old.pars.values() if isinstance(v, ss.TimePar) and v.base is not None] if isinstance(old, ss.Dist) else []
-            base = typed[0].base if typed else None # FP68: a bare number is read in the default's unit, so the suggestion says it (20.27 months written as 20.27 would be years)
+            base = typed[0].base if typed else None # A bare number is read in the default's unit, so the suggestion says it (20.27 months written as 20.27 would be years)
             vals = ', '.join(f'ss.{base}({v})' if base and sc.isnumber(v) else str(v) for v in new) if isinstance(new, (list, tuple)) else None
             what = f'use pars.{key}.set({vals}), in the unit meant' if vals is not None else f'use pars.{key}.set(**{new})' if isinstance(new, dict) else 'give a distribution'
             errormsg = f'"{key}" is {old}; a {type(new).__name__} ({new}) is not a value for it. To change its parameters, {what}; to replace it, give a distribution (e.g. {type(old).__name__}(...)) or a single value'
@@ -390,7 +385,7 @@ def _restore_pars(cls, items, state):
 
 
 def replaced_dist(key, old, new):
-    """ Warn that a single value given for a declared parameter whose default is a distribution (not an exponential) replaces it, e.g. dur=ss.days(10) for a lognormal is an exponential (MS8) """
+    """ Warn that a single value given for a declared parameter whose default is a distribution (not an exponential) replaces it, e.g. dur=ss.days(10) for a lognormal is an exponential """
     if isinstance(old, ss.Dist) and not isinstance(old, (ss.expon, ss.constant)) and (isinstance(new, (ss.dur, ss.Rate)) or sc.isnumber(new)):
         first = next(iter(old.pars), 'mean')
         val = new if sc.isnumber(new) else f'ss.{new!r}'
@@ -406,8 +401,6 @@ def check_verbose(verbose):
     elif sc.isnumber(verbose) and 0 < verbose < 1:
         return verbose
     errormsg = f'verbose must be 0 (print nothing), a fraction (progress every that share of the run), 1 (the solver, notes, and progress), or 2 or more (everything), not {verbose!r}'
-    if verbose in ['brief', -1]:
-        errormsg += '. verbose="brief" (or -1) in Starsim 3 is now verbose=0, which the migration script rewrites (python -m starsim.converters.migrate mypackage/)'
     raise ValueError(errormsg)
 
 
@@ -496,7 +489,7 @@ class by:
         ```python
         beta = ss.by(age=[0.08, 0.05, 0.03])
         beta = ss.by(age=[0.08, 0.05, 0.03], sex=[1.0, 0.8]) # One per age group and sex: the product
-        init = ss.by(pd.DataFrame(age=['child', 'adult'], patch=['north', 'north'], value=[10, 5])) # Every other combination is 0
+        init = ss.by(dict(age=['child', 'adult'], patch=['north', 'north'], value=[10, 5])) # Every other combination is 0
         pop = ss.by([[3000, 1000], [5000, 2000]], dims=['age', 'patch']) # Ages by row, places by column
         beta = ss.by(age=[ss.timeseries({2020: 0.08, 2021: 0.04}), 0.05, 0.03]) # Children's value changes in 2021
         mu = ss.by(sex=dict(female=0.008, male=0.011)) # From people.female, with or without a dimension by sex
@@ -504,7 +497,7 @@ class by:
         ```
     """
     def __new__(cls, table=None, dims=None, **kwargs):
-        if table is None and dims is None and len(kwargs) == 1: # A function of the sim giving one value per level, e.g. ss.by(patch=fn) (MS2)
+        if table is None and dims is None and len(kwargs) == 1: # A function of the sim giving one value per level, e.g. ss.by(patch=fn)
             (dim, val), = kwargs.items()
             if callable(val) and not isinstance(val, (TimeValue, ss.Dist, ss.TimePar, by, Expr, type)):
                 return by_func(dim, val)
@@ -569,7 +562,6 @@ class by:
             known = cache[key] = (id(sim), func())
         return known[1]
 
-
     def to_json(self):
         """ The value as plain data, for `sim.to_json()` """
         if self.array is not None:
@@ -578,6 +570,7 @@ class by:
             return dict(by=self.dims, table={col:ss.display.quantity_json(list(vals), None, None) for col,vals in self.table.items()})
         values = {dim:dict(keyed={str(k):ss.display.quantity_json(v, None, None) for k,v in vals.items()}) if isinstance(vals, dict) else ss.display.quantity_json(list(vals), None, None) for dim,vals in self.given.items()}
         return dict(by=self.dims, values=values[self.dims[0]]) if len(self.dims) == 1 else dict(by=self.dims, product=values)
+
     def map(self, func):
         """
         A new ss.by with a function applied to each value, e.g. `1/by` (with several dimensions as keywords, only scaling, since the value of a group is their product)
@@ -1239,7 +1232,7 @@ class timeseries(TimeValue):
     def __init__(self, data, values=None, mode='constant', period=None):
         if isinstance(values, str): # ss.timeseries(data, 'linear'): the mode
             values, mode = None, values
-        if values is not None: # ss.timeseries(times, values), as np.interp() takes them (TL65: the values were read as mode=)
+        if values is not None: # ss.timeseries(times, values), as np.interp() takes them
             if len(data) != len(values):
                 errormsg = f'ss.timeseries() was given {len(data)} times but {len(values)} values; give one value for each time'
                 raise ValueError(errormsg)

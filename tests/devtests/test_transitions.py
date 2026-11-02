@@ -109,7 +109,7 @@ def test_counts():
         W = ss.State(people=False)
         ss.Disease(infection = S >> I @ 0.5 * W, shedding = ss.null >> W @ 10 * I.n)
 
-    # An inflow split between states of people (FPsim review: primary infertility, reached only from births)
+    # An inflow split between states of people (FPsim: primary infertility, reached only from births)
     S, X = ss.states('S X')
     d = ss.Disease(S, X, births=ss.Transition(ss.null, [S, X], rate=ss.peryear(100), p=[0.9, 0.1]), name='d')
     assert X.people
@@ -914,7 +914,7 @@ def test_time_values():
         return ss.Disease(infection=ss.Transition(S, I, rate=beta * I), recovery=ss.Transition(I, S, dur=10), init_prev=0.01, name='sis')
     dates = dict(start='2020-01-01', stop='2020-06-01', **kw)
 
-    # A time series is a step function by default, so matches the same changes made with ss.change()
+    # A time series is a step function by default, so matches the same changes made with ss.modify()
     series = ss.Sim(make(ss.timeseries({'2020-01-01': 0.3, '2020-02-01': 0.1, '2020-04-01': 0.3})), **dates).run()
     sis = make(0.3)
     changed = ss.Sim(sis, interventions=ss.modify(sis.pars.beta, set=ss.timeseries({'2020-02-01': 0.1, '2020-04-01': 0.3}), start='2020-02-01'), **dates).run()
@@ -1174,7 +1174,7 @@ def test_branches():
     with pytest.raises(ValueError):
         d.death.p = ss.by(age=[0.1, 0.01])
 
-    # Branches kept to one level each by move= sum to 1 within that level, not across levels (FPsim review: p= per parity)
+    # Branches kept to one level each by move= sum to 1 within that level, not across levels (FPsim: p= per parity)
     A, B, C = ss.states('A B C')
     trs = {f'{dst.name.lower()}{k}': ss.Transition(A, dst, p=p, dur=ss.months(1), move=dict(k=(k, '1'))) for dst,p in [(B, 0.9), (C, 0.1)] for k in '01'}
     d = ss.Disease(A, B, C, **trs, first='A', name='d').stratify(k=['0', '1']) # Everyone starts in A
@@ -1405,7 +1405,7 @@ def test_algebra():
 
 
 def test_init_expression():
-    """ TY2: init= takes an expression of people's properties and parameters, under every solver, and its parameters can be set by name """
+    """ Init= takes an expression of people's properties and parameters, under every solver, and its parameters can be set by name """
     class M(ss.Disease):
         A = ss.par(20.0)
         k = ss.par(1.0)
@@ -1437,7 +1437,7 @@ def test_init_expression():
 
 
 def test_class_helpers():
-    """ TY4, MS11: an expression per person as a class member is a helper, not a result; another name for a parameter is the same parameter; a parameter given as a result under its own name is an error """
+    """ An expression per person as a class member is a helper, not a result; another name for a parameter is the same parameter; a parameter given as a result under its own name is an error """
     class T(ss.Disease):
         S, I = ss.states('S I')
         p_gall = ss.par(ss.by(age={0: 0.1, 30: 0.2}))
@@ -1466,7 +1466,7 @@ def test_class_helpers():
 
 
 def test_describe_init_func():
-    """ MS10: describe() names a function that gives an initial value """
+    """ Describe() names a function that gives an initial value """
     class M(ss.Disease):
         S, I = ss.states('S I')
         inf = S >> I @ ss.peryear(0.1)
@@ -1480,7 +1480,7 @@ def test_describe_init_func():
 
 
 def test_counter_in_expression():
-    """ TY14: a counter's level is read in a rate as a property of people, as agents and as compartments """
+    """ A counter's level is read in a rate as a property of people, as agents and as compartments """
     out = {}
     for solver in ['abm', 'ode']:
         S, I = ss.states('S I')
@@ -1495,7 +1495,7 @@ def test_counter_in_expression():
 
 
 def test_inflow_add():
-    """ TY15: ss.modify(inflow, add=) adds an amount from outside the model to an inflow from ss.null, under every solver """
+    """ Ss.modify(inflow, add=) adds an amount from outside the model to an inflow from ss.null, under every solver """
     for solver in ['abm', 'ode']:
         S, I = ss.states('S I')
         cfu = ss.State(people=False)
@@ -1512,7 +1512,7 @@ def test_inflow_add():
 
 
 def test_gated_function():
-    """ FP12: a function rate times a condition is called only for the agents the condition holds for, and gives the same flows as the function taking care of it itself """
+    """ A function rate times a condition is called only for the agents the condition holds for, and gives the same flows as the function taking care of it itself """
     sc.heading('A function rate gated by a condition')
     asked = []
     def young_rate(sim, uids):
@@ -1570,7 +1570,7 @@ def test_compiled_eval():
 
 @sc.timer()
 def test_certain_and_substeps():
-    sc.heading('Testing a probability of 1 under every solver (FP1), and the chain binomial\'s default substeps near threshold (TB3)')
+    sc.heading('Testing a probability of 1 under every solver, and the chain binomial\'s default substeps near threshold')
     # Everyone moves in the step, shared equally between two certain exits; a finite rate competing with them takes nobody
     S, I, A, B, D = ss.states('S I A B D')
     def make():

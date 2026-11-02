@@ -328,7 +328,7 @@ With `max_strains=2`, people can carry two at once; `ss.Strains` lists the other
 
 ### Strains with courses of their own
 
-Some diseases don't fit this, because each strain moves through the states on its own: someone can have CIN from one HPV genotype and be clearing another. Starsim tried one way of writing that, `ss.strains.Family`, in which the strains of one disease each followed their own course, with immunity between them, and with results over all of them. It was tested on HPVsim, its main use case, and it isn't part of Starsim: the results were similar to HPVsim's coded genotypes, but a declared genotype took about 2.5 ms a step against about 0.75 ms coded, which made the whole model about 1.5× slower, and it needed agents anyway once the strains protected each other.
+Some diseases don't fit this, because each strain moves through the states on its own: someone can have CIN from one HPV genotype and be clearing another.
 
 If the strains can share one course, use `ss.Strains` as above. Otherwise, make each strain a disease of its own, and connect them with a [connector](interventions_connectors.qmd). For protection that depends only on which states people are in, that is one `ss.modify()` for each strain:
 
@@ -360,7 +360,7 @@ A disease written as code fills in some of these methods:
 | `set_prognoses(uids, sources)` | Sets what happens to the people just infected: when they recover, whether they die | Always, for an `ss.Infection`; call `super().set_prognoses()` first |
 | `step_state()` | Moves people between states each step, before transmission (e.g. those whose recovery is due) | When the disease has states of its own |
 | `step_die(uids)` | Clears the states of people who died | When the disease has states of its own |
-| `infect()` | Transmission over the networks | Rarely: the built-in version handles the networks, `beta`, `rel_sus`, and `rel_trans` |
+| `transmit()` | Transmission over the networks | Rarely: the built-in version handles the networks, `beta`, `rel_sus`, and `rel_trans` |
 
 In transmission, the chance that infection passes along a contact from an infectious person to a susceptible one is, in essence, β × `rel_trans` of the source × `rel_sus` of the target, where β is the transmission rate of that network. `rel_sus` and `rel_trans` are 1 by default, and are the levers that the rest of a model pulls: a vaccine lowers `rel_sus`, a treatment lowers `rel_trans`, and a connector between two diseases can raise one disease's `rel_sus` in people infected with the other. Because they are ordinary arrays, they can also be set directly. Here everyone under 20 is fully protected (`rel_sus = 0`), and compared with no protection:
 

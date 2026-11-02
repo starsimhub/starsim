@@ -126,7 +126,7 @@ def make_fseis(n_agents=10_000, years=2):
 #%% counts: a declared model with counts
 
 def make_counts(n_agents=10_000):
-    """ Ross-Macdonald malaria with mosquitoes as counts and humans as agents (malaria_recheck.md MA39), a year in days """
+    """ Ross-Macdonald malaria with mosquitoes as counts and humans as agents, a year in days """
     a, b, c = 0.3, 0.5, 0.5
     Sh, Eh, Ih, Rh = ss.states(4)
     Sv, Ev, Iv = ss.states(3, people=False)
@@ -167,7 +167,7 @@ prognoses = dict( # Covasim's defaults, rounded
 )
 
 def make_by_age(n_agents=20_000):
-    """ Covasim's natural history with its age tables of prognoses and susceptibility (CV11), and deaths by single year of age and sex times a trend (FP57), 120 days """
+    """ Covasim's natural history with its age tables of prognoses and susceptibility, and deaths by single year of age and sex times a trend, 120 days """
     by_age = lambda key: ss.by(dict(age=cutoffs, value=prognoses[key]))
     ages = np.arange(100)
     mx = 0.0005*np.exp(0.07*ages)
@@ -199,7 +199,7 @@ def make_tb(n_agents=10_000):
     """
     tbsim's declared TB (Schwalb et al. 2025) as agents: four transmissions (into infection from susceptible, cleared,
     recovered and treated), each over the same random network, with births and deaths as agents, 1990-2020 at
-    dt = 0.1 years, as tbsim's own benchmark (tests/profile_sim.py; TS4, TS5)
+    dt = 0.1 years, as tbsim's own benchmark
     """
     sus, inf, cle, rec, non, asy, sym, trt, trd = ss.states('susceptible infection cleared recovered non_infectious asymptomatic symptomatic treatment treated')
     foi = ss.peryear(2.4)*(0.82*asy + sym)
@@ -229,9 +229,9 @@ def make_tb(n_agents=10_000):
 
 def make_contra(n_agents=10_000):
     """
-    FPsim's contraceptive choice as declared (the 2026-10-22 review's contra_v4b.py, with made-up coefficients): one state
+    FPsim's contraceptive choice as declared (with made-up coefficients): one state
     per method, durations of use by age, and at each exit a choice whose chances are a logistic regression on traits and
-    age times a switching table by age and destination (one p= entry per destination), 2000-2010 monthly (FP82)
+    age times a switching table by age and destination (one p= entry per destination), 2000-2010 monthly
     """
     methods = ['pill', 'iud', 'inj', 'cond', 'implant', 'other']
     st = {n: ss.State(n) for n in ['young', 'male', 'never', 'none'] + methods}
@@ -277,7 +277,7 @@ def make_strains_ode(substeps=1):
     """
     Drug resistance as in tbsim with two drugs: four strains (drug-susceptible, resistant to either, and to both), up to
     two carried at once, so 16 sets of strains, with superinfection, cure by strain and resistance emerging at failure,
-    under the ODE, 2000-2020 in steps of 0.1 years (TR4); substeps=1 since the automatic substeps take minutes here (plan_b C2)
+    under the ODE, 2000-2020 in steps of 0.1 years; substeps=1 since the automatic substeps take minutes here
     """
     S, L, I, Tx, R = ss.states('S L I Tx R')
     strains = ss.Strains(['DS', 'RIF', 'INH', 'MDR'], max_strains=2, split=[0.85, 0.05, 0.05, 0.05], rel_trans=[1, 0.6, 0.8, 0.5], cure=[0.9, 0.4, 0.7, 0.3],

@@ -48,7 +48,7 @@ The sim itself holds what applies to the whole model: the population (`total_pop
 A disease can be written in two ways, and both kinds can be in the same sim:
 
 - **Declared**, as states and the transitions between them, as above. The model is then a description that Starsim can read: it can print the model's equations, draw its diagram, work out its R0, and run it either as a compartmental model (deterministic or stochastic) or as individual agents. This is the usual way to write a disease, and most of this section of the guide is about it.
-- **Written as code**, as a Python class with arrays for each person and a `step()` method that updates them. This is for what states and transitions can't say, such as a quantity that changes continuously in each person (a CD4 count, or a level of immunity). A module written as code runs as agents. See [Custom modules](building_modules.qmd). [Model declaration](architecture_declaration.qmd) explains how Starsim reads a declared model and fills in what was left out.
+- **Written as code**, as a Python class with arrays for each person and a `step()` method that updates them. This is for what states and transitions can't say, such as a quantity that changes continuously in each person (a CD4 count, or a level of immunity). A module written as code that keeps a value for each person runs as agents. See [Custom modules](building_modules.qmd). [Model declaration](architecture_declaration.qmd) explains how Starsim reads a declared model and fills in what was left out.
 
 ## Checking a model
 

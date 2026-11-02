@@ -11,8 +11,7 @@ They schedule each move in whole steps as the agent engine does a declared disea
 infection in a step happens at its end, so a course of `dur` steps after it is due at `self.ti + 1 + dur`, and is
 taken when `ss.TimeArr.due()`, at the start of a step, before transmission, rounding a time between steps up or
 down at random in proportion. So each case, seeds included, is infectious for `dur` steps on average, and with the
-same parameters these agree with `ss.SIR` and `ss.SEIR` run as agents at any step (Starsim 3's gave each case half
-a step less, and the seeds half a step more).
+same parameters these agree with `ss.SIR` and `ss.SEIR` run as agents at any step.
 """
 import numpy as np
 import sciris as sc
@@ -46,7 +45,7 @@ class AgentSIR(ss.Infection):
 
     Args:
         beta (float/`ss.prob`): the infectiousness
-        init_prev (float/s`s.bernoulli`): the fraction of people to start of being infected
+        init_prev (float/`ss.bernoulli`): the fraction of people to start off being infected
         dur_inf (float/`ss.dur`/`ss.Dist`): how long (in years) people are infected for
         p_death (float/`ss.bernoulli`): the probability of death from infection
     """
@@ -62,7 +61,7 @@ class AgentSIR(ss.Infection):
         )
         self.update_pars(pars, **kwargs)
 
-        # Example of defining all states, redefining those from ss.Infection, using overwrite=True
+        # Example of defining all states, redefining those from ss.Infection, using reset=True
         self.define_states(
             ss.BoolState('susceptible', default=True, label='Susceptible'),
             ss.BoolState('infected', label='Infected'),
@@ -245,9 +244,9 @@ class AgentSIS(ss.Infection):
 
     Args:
         beta (float/`ss.prob`): the infectiousness
-        init_prev (float/`ss.bernoulli`): the fraction of people to start of being infected
+        init_prev (float/`ss.bernoulli`): the fraction of people to start off being infected
         dur_inf (float/`ss.dur`/`ss.Dist`): how long (in years) people are infected for
-        waning (float/`ss.rate`): how quickly immunity wanes
+        waning (float/`ss.per`): how quickly immunity wanes
         imm_boost (float): how much an infection boosts immunity
     """
     def __init__(self, pars=None, beta=_, init_prev=_, dur_inf=_, waning=_, imm_boost=_, **kwargs):

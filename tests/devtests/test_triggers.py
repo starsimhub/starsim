@@ -1,5 +1,5 @@
 """
-Test triggered moves (ss.on), the rest staying (ss.stay), lazy handles (ss.people, ss.state, ss.any), and distributions by group
+Test triggered moves (ss.on), the rest staying (ss.stay), lazy handles (ss.ppl, ss.state), and distributions by group
 """
 import numpy as np
 import sciris as sc
@@ -11,7 +11,7 @@ kw = dict(verbose=0)
 
 @sc.timer()
 def test_bv_debut():
-    sc.heading('Port: BV debut as soon as women turn 15, with ss.on(), as agents and as compartments')
+    sc.heading('Testing BV debut as soon as women turn 15, with ss.on(), as agents and as compartments')
     adult_f = ss.ppl.female & (ss.ppl.age >= 15)
     def make():
         U, CST1, CST4 = ss.states('U CST1 CST4')

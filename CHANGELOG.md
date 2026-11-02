@@ -4,27 +4,27 @@ All notable changes to the codebase are documented in this file. Changes that ma
 
 ## Version 4.0.0 (2026-11-01)
 
-Starsim 4 adds a way to write a model as declared states and transitions, which can then be run as an ODE, as a stochastic compartmental model, or as agents. Models written as code (`ss.SIR`, custom `step()` methods) still run, but their results are one step later than in Starsim 3, so they agree with it statistically, not number for number. The [migration guide](https://starsim.org/v4/migration/v3_v4.html) maps Starsim 3 code to Starsim 4, and every change is listed in detail in the [full changelog](https://starsim.org/v4/migration/v4_changelog.html).
+Starsim 4 adds a way to write a model as declared states and transitions, which can then be run as an ODE, as a stochastic compartmental model, or as agents. Models written as code (custom `step()` methods, `ssl.AgentSIR`) still run, but their results are one step later than in Starsim 3, so they agree with it statistically, not number for number. The [migration guide](https://starsim.org/v4/migration/v3_v4.html) maps Starsim 3 code to Starsim 4, and every change is listed in detail in the [full changelog](https://starsim.org/v4/migration/v4_changelog.html).
 <!-- V4-PREVIEW: restore the two links above to docs.starsim.org for normal publishing -->
 
 ### New features
 - **States and transitions**: a disease can be declared from `ss.State` and `ss.Transition` objects, written with operators (`S >> I @ beta*I`), and shown with `describe()`, `diagram()` and `equations()`. Diseases can also be written as code, or as a mix of both.
-- **Solvers**: `ss.Sim(solver=...)` runs a declared model as an ODE (`'ode'`), a chain binomial (`'binomial'`), by Gillespie's method (`'gillespie'`), or as agents (`'abm'`). The default, `'auto'`, uses an ODE unless something in the model needs agents, and says why.
+- **Solvers**: `ss.Sim(solver=...)` runs a declared model as an ODE (`'ode'`), an integro-differential model (`'ide'`), a chain binomial (`'binomial'`), by Gillespie's method (`'gillespie'`), by tau-leaping (`'tau'`), or as agents (`'abm'`). The default, `'auto'`, uses an ODE unless something in the model needs agents, and says why.
 - **Stratification**: `sim.stratify(age=[0, 15, 65])`, and other properties, splits a model into groups with aging, transfers between levels (`ss.transfer()`), contact matrices (`ss.contacts()`), and results by group.
 - **Places**: a stratification by place (`ss.geo.geography()`) mixes people within each place, with commuting, visiting or migration between places (`ss.geo.gravity()`, `ss.geo.radiation()`), which can be fitted.
 - **Strains**: `ss.Disease(strains=ss.Strains(...))`, which people can carry several of at once, with immunity between them (`ss.immunity()`).
 - **Partnerships**: `ss.DegreeNet` and its subclass `ss.SexualNet` are partnerships with targets for the number of partners, matching by properties, and acts (`ss.peract`). They run as agents and, approximately, as compartments.
-- **Interventions**: `ss.vaccinate()`, `ss.screen()` and `ss.treat()` deliver products in rounds, routinely, at an age (`at_age=`), or on events. They take conditions (`where=ss.ppl.age < 5`), priorities, queues and delays, so whole care cascades can be written. `ss.modify()` and `ss.change()` change any named quantity while a condition holds.
+- **Interventions**: `ss.vaccinate()`, `ss.screen()` and `ss.treat()` deliver products in rounds, routinely, at an age (`at_age=`), or on events. They take conditions (`where=ss.ppl.age < 5`), priorities, queues and delays, so whole care cascades can be written. `ss.modify()` changes any named quantity while a condition holds.
 - **Pregnancy and demographics**: declared `ss.Pregnancy`, `ss.birth()` and `ss.death()`. Named data: `ss.people('Kenya')`, and birth, death and fertility rates by country (from `starsim_data`).
-- **Results and fitting**: `ss.outcome()` declares reported quantities. `sim.fit()` fits to data by optimization, MCMC (with gradients in JAX), particle MCMC, iterated filtering or ABC-SMC, with `fit.profile()` and `sim.sensitivity()`; `ss.fit.optimize()` allocates budgets.
+- **Results and fitting**: `ss.outcome()` declares reported quantities. `sim.fit()` fits to data by optimization, MCMC (with gradients in JAX), particle MCMC, iterated filtering or ABC-SMC, with `ss.fit.profile()` and `sim.sensitivity()`; `ss.fit.optimize()` allocates budgets.
 - **Scenarios and runs**: `ss.parallel()` and `sim.run(n_runs=)` return a MultiSim whose results have a run dimension, with summaries, bands and comparisons by scenario. Sims with different steps can be run together.
-- **Importing and exporting**: `ss.import_from()` reads models from EMULSION, odin, SBML, SimInf, flepiMoP, summer2, Atomica, camdl, EpiModel, epydemix and MEmilio; `ss.export_to()` writes SBML and odin. `python -m starsim.converters.migrate` rewrites Starsim 3 code.
+- **Importing and exporting**: `ss.import_from()` reads models from EMULSION, odin, SBML, SimInf, flepiMoP, summer2, Atomica, camdl, EpiModel, epipack, epydemix, epymorph and MEmilio; `ss.export_to()` writes SBML and odin. `python -m starsim.converters.migrate` rewrites Starsim 3 code.
 - **Library**: `starsim.library` (`ssl`) holds HIV, cholera, Ebola, measles, malaria, TB, COVID, influenza, dengue, and other simple disease models, maternal and newborn health, more networks, and health economics (`ssl.Costs`, `ssl.DALYs`, `ssl.discount()`, `ssl.ICER`).
 - **Lower variance**: `ss.Sim(even_draws=True)` spaces each call's random numbers evenly for agents, which reduces the variance between runs by about 3 to 10 times in final size for a simple SIR, though outbreaks die out less often than they should and means can shift.
 - **Command line and speed**: `starsim init` and `starsim compile`; Numba kernels throughout, with optional Rust copies that give the same numbers; optional JAX for gradients.
 
 ### Changes that may affect results
-- *Regression*: results follow the convention of other frameworks: `n_<state>[ti]` is the number at time point `ti`, and a flow at `ti` is the number during the step that ends there (0 at the start). A sim with `stop=T` ends at `T`, taking one step fewer than before.
+- *Regression*: results follow the convention of other frameworks: `<state>[ti]` is the number at time point `ti`, and a flow at `ti` is the number during the step that ends there (0 at the start). A sim with `stop=T` ends at `T`, taking one step fewer than before.
 - *Regression*: as agents, the engine schedules exits when people enter a state, and keys its random draws by stream, step and round, so runs don't depend on how work is batched.
 - *Regression*: `ss.SIR`, `ss.SIS` and `ss.SEIR` are the textbook models: exponential durations, and no deaths unless `p_death` is given. A disease with a transmission seeds 1% of people by default.
 - *Regression*: R0 is the basic reproduction number, with everyone not infected susceptible.
@@ -80,7 +80,6 @@ Starsim 4 adds a way to write a model as declared states and transitions, which 
 - Many fixes found by porting models (Covasim, STIsim, HPVsim, FPsim and others) and by reviewing the docs; see the [full changelog](https://starsim.org/v4/migration/v4_changelog.html). The main ones: coded and declared diseases now agree under the same solver, and so do agents and compartments; `ss.MixingPool` transmission is fixed; and `ss.parallel()` works from scripts.
 <!-- V4-PREVIEW: restore the link above to docs.starsim.org for normal publishing -->
 - Faster: `ss.by` tables are indexed with NumPy, time-varying values are tabulated once per run, and the agent engine runs compiled passes over the agents.
-
 - A condition on a count in `where=` (`where=d.I.n > 1000`) is worked out at each step under every solver.
 - `people.n_alive` and `len(people)` give the population under compartments, `people.auids` raises there, and `hasattr(sim.people, 'age')` is False.
 - A declared disease with transmission has a `prevalence` result, and `define_results()` works in `__init__()`.

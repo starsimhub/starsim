@@ -64,5 +64,5 @@ print('Admitted:', round(admitted), 'Died:', round(deaths), 'Share:', round(deat
 
 ## Going further
 
-- [Disease structure](../tutorials/t3_disease.qmd) adds branching to the measles model.
-- [Diseases: states, transitions, and rates](../user_guide/building_diseases.qmd) covers splits, competing hazards, and their durations.
+- [T3 – Building a disease](../tutorials/t3_disease.qmd) adds branching to the measles model.
+- [Diseases](../user_guide/building_diseases.qmd) covers splits, competing hazards, and their durations.

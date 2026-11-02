@@ -355,7 +355,7 @@ class Branching:
             ok = np.ones(len(trgs), dtype=bool)
             if superinfects: # Infected with a strain they carry already: no change
                 ok &= self.can_take(strain_raw[trgs], strain)
-            if protects: # Protected in part against the strain that reached them (HP14)
+            if protects: # Protected in part against the strain that reached them
                 ok &= self.unprotected(tr.name, trgs, self.protection(src, trgs, strain))
             if not ok.all():
                 drop = trgs[~ok]
@@ -372,7 +372,7 @@ class Branching:
 
     def transmit_together(self, pairs):
         """
-        Who is infected by each transmission (and source state) in `pairs`, in one pass over each network rather than one for each (TS5),
+        Who is infected by each transmission (and source state) in `pairs`, in one pass over each network rather than one for each,
         when that gives the same result: the transmissions take people from different states, which none of them transmits from, and have
         the same source states with coefficients in proportion (as tbsim's reinfections are, at a relative risk), with no strains and nothing
         that differs by transmission on a route. Each edge's chance is then the transmission's, and its random number is the same in every

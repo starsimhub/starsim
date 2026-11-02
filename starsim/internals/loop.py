@@ -72,6 +72,9 @@ class Loop:
         16. people:           finish_step()    # Clean up dead agents
         17. sim:              finish_step()    # Finish the step
 
+    A sim that is nothing but compartments the kernels can run from start to finish goes
+    through them in one call instead, not this order step by step (see `sim.kernel_reason()`).
+
     One time index holds for every function of a step, in every module: the step from time
     point k-1 to k is step k, and throughout it `sim.ti == k`, where its results go (so the
     first step has `ti == 1`): `self.results.x[self.ti]` is this step's value, in `step()` as
@@ -167,7 +170,6 @@ class Loop:
     def collect_funcs(self):
         """ Collect all the callable functions (methods) that comprise the step """
 
-        # Run the simulation step first (updates the distributions)
         self.funcs = [] # Reset, just in case
         sim = self.sim
 
@@ -520,7 +522,6 @@ class Loop:
             if self.profile:
                 self.store_time(start)
 
-        # Note: the plan DataFrame is now built lazily by to_df() when requested, not here
         return
 
     def plan_metadata(self):
@@ -601,7 +602,7 @@ class Loop:
 
         Args:
             func (func/Module): the function to insert, which must take a single argument, `sim`; or a module of the sim, whose `step()` is moved there
-            label (str): the label (module.name) of the function to match; see `sim.loop.to_df().label.unique() for choices`
+            label (str): the label (module.name) of the function to match; see `sim.loop.to_df().label.unique()` for choices
             match_fn (func): if supplied, use this function to perform the matching on the plan dataframe, returning a boolean array or list of indices of matching rows (see example below)
             before (bool): if true, insert the function before rather than after the match
 
@@ -619,13 +620,13 @@ class Loop:
             # Function-based matching with intervention-like functionality
             def match_fn(plan):
                 past_2010 = plan.time > ss.date(2010)
-                is_step = (plan.label == 'sir.step') | (plan.label == 'randomnet.step')
+                is_step = (plan.label == 'sis.step') | (plan.label == 'randomnet.step')
                 return past_2010 * is_step
 
             def update_betas(sim):
                 if not sim.metadata.get('updated'):
                     print(f'Updating beta values on {sim.now}')
-                    sim.diseases.sis.beta = 0.1
+                    sim.diseases.sis.pars.beta = 0.1
                     sim.networks.randomnet.edges.beta[:] = 0.5
                     sim.metadata.updated = True
                 return
@@ -724,7 +725,7 @@ class Loop:
         plt.scatter(x, y, c=colors[mod_int], **scatter_kw)
         plt.yticks(yticks, ylabels)
         plt.title(f'Integration plan ({len(df)} events)')
-        plt.xlabel('Time since simulation start')
+        plt.xlabel('Time')
         plt.grid(True)
         sc.figlayout()
         sc.boxoff()
@@ -736,6 +737,7 @@ class Loop:
 
         Args:
             bytime (bool): if True, order events by total time rather than actual order
+            max_entries (int): the number of events to show
             fig_kw (dict): passed to `plt.figure()`
             bar_kw (dict): passed to `plt.bar()`
         """

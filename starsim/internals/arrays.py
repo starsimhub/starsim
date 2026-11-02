@@ -95,7 +95,7 @@ class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
         elif self.columns is not None and attr in self.columns:
             return self.col(attr)
         else:
-            return object.__getattribute__(self, 'values').__getattribute__(attr) # Be explicit to avoid possible recurison
+            return object.__getattribute__(self, 'values').__getattribute__(attr) # Be explicit to avoid possible recursion
 
     def __setattr__(self, attr, value):
         """ Set the values of a named column, e.g. arr.alpha = 0; also needed so arr.alpha += 1 doesn't store the column as an attribute """
@@ -262,7 +262,7 @@ class Arr(BaseArr):
     returns the age of the last active agent.
 
     Note on terminology: the term "states" is often used to refer to *all* `ss.Arr` objects,
-    (e.g. in `module.define_states()`, whether or not they are BoolStates.
+    (e.g. in `module.define_states()`), whether or not they are BoolStates.
 
     Args:
         name (str): The name for the state (also used as the dictionary key, so should not have spaces etc.)
@@ -271,7 +271,7 @@ class Arr(BaseArr):
 
             * A scalar with the same dtype (or castable to the same dtype) as the Arr;
             * A callable, with a single argument for the number of values to produce;
-            * A [`ss.Dist`](`starsim.distributions.Dist`) instance.
+            * An `ss.Dist` instance.
         nan (any): the value to use to represent NaN (not a number); also used as the default value if not supplied (if None, inferred from the dtype, e.g. `int_nan` for integers)
         label (str): The human-readable name for the state
         raw (array): If provided, initialize the array with these raw values
@@ -550,9 +550,10 @@ class Arr(BaseArr):
         Returns:
             BoolArr: True wherever the array's value equals one of `values`.
 
-        **Example**:
-
+        Example:
+            ```python
             active = disease.state.isin([State.MILD, State.SEVERE]).uids
+            ```
         """
         if not self.initialized: # Before the sim exists, this builds a lazy condition instead: see ss.conditions.Cond
             return ss.conditions.from_arr(self).isin(sc.tolist(values))
@@ -797,7 +798,7 @@ class Arr(BaseArr):
         return
 
     def link_people(self, people):
-        """ Link a People object to this state, for access auids """
+        """ Link a People object to this state, to access auids """
         self.people = people # Link the people object to this state
         people._link_state(self) # Ensure the state is linked to the People object as well
         return
@@ -902,7 +903,7 @@ class Arr(BaseArr):
         """ Efficiently convert truthy values to UIDs """
         if self.ndim > 1: self._uids_error()
         auids = self.auids
-        if auids.size >= numba_indexing: # Branchless Numba compaction wins above ~1k elements
+        if auids.size >= numba_indexing: # Branchless Numba compaction wins above ~2k elements
             return uids(nb_true_raw(auids.view(np.ndarray), self.raw, True))
         return auids[self.values.astype(bool)]
 
@@ -953,12 +954,9 @@ class Arr(BaseArr):
 
 class FloatArr(Arr):
     """
-    Subclass of `ss.Arr` with defaults for floats and ints.
+    Subclass of `ss.Arr` with defaults for floats.
 
     It exists so that a state can be defined by name alone, e.g. `ss.FloatArr('cd4')`.
-
-    Note: Starsim does not support integer arrays by default since they introduce
-    ambiguity in dealing with NaNs, and float arrays are suitable for most purposes.
     """
     def __init__(self, name=None, **kwargs):
         super().__init__(name=name, dtype=ss_float, nan=np.nan, **kwargs) # Do not allow dtype or nan to be overwritten
@@ -986,7 +984,7 @@ class TimeArr(FloatArr):
 
     Example:
         ```python
-        sim = ss.Sim(ss.SIR(), unit='day', stop=100).run()
+        sim = ss.Sim(ss.SIR(), unit='day', stop=100, solver='abm').run()
         sir = sim.diseases.sir
         infected_today = sir.ti_I.isclose(sim.ti).uids
         years = sir.ti_I.years # The year of infection of each agent (NaN if never infected)
@@ -1282,7 +1280,7 @@ class BoolState(BoolArr):
     generate a result named "susceptible" (the number susceptible), for example.
 
     Note on terminology: the term "states" is often used to refer to *all* `ss.Arr` objects,
-    (e.g. in `module.define_states()`, whether or not they are BoolStates.
+    (e.g. in `module.define_states()`), whether or not they are BoolStates.
     """
     watch = None # What keeps count of the agents in the state (for a state of a declared disease run as agents, its engine), which is told of every change: see `Watch`
 
@@ -1634,17 +1632,20 @@ class uids(np.ndarray):
         """
         Concatenate uids into a single instance
 
-        Can be called as either an instance method or an unbound class method::
+        Can be called as either an instance method or an unbound class method.
 
+        Args:
+            *args (`ss.uids`): the UIDs to join, as arrays or as one list of arrays; None is treated as empty
+
+        Examples:
+            ```python
             x.concatenate(y)               # instance method
             x.concatenate(None)            # None is treated as empty
             ss.uids.concatenate(x, y)      # unbound; identical to instance call
             ss.uids.concatenate([x, y])    # single iterable of arrays
             ss.uids.concatenate([None, x]) # None elements are filtered out
             ss.uids.concatenate()          # returns empty ss.uids()
-
-        Args:
-            *args (`ss.uids`): the UIDs to join, as arrays or as one list of arrays; None is treated as empty
+            ```
         """
         # Handle a single input argument: my_uids.concatenate([uids1, uids2])
         if len(args) == 1 and np.iterable(args[0]) and (not isinstance(args[0], (uids, np.ndarray))):

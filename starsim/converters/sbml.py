@@ -105,7 +105,7 @@ def load_sbml(filename, unit=None, stop=None, solver='ode', verbose=None, **kwar
 
     Species become states, parameters (global, and those local to a reaction)
     parameters, and reactions transitions, with the kinetic law as the rate in
-    total, classified by the rules in 16-interop.md. SBML's time units are rarely
+    total, classified by the shared rules (see `ss.converters.core.Rates`). SBML's time units are rarely
     given, so the numbers are taken to be in `unit`: by default, the model's
     `timeUnits` if it is a day, week, month, or year (as Starsim's export writes), else a day.
 

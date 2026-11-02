@@ -27,7 +27,7 @@ debug_pars = dict(
 def test_profile():
     sc.heading('Testing sim.profile()')
 
-    prof = ss.Sim(**debug_pars).profile() # Based on advanced_profiling.ipynb
+    prof = ss.Sim(**debug_pars).profile() # As on the user guide page on profiling and debugging
     return prof
 
 
@@ -72,7 +72,7 @@ def test_mock_objects():
 
     # Initializing Arrs -- can use it, but cannot grow it since mock slots can't grow
     o.arr = ss.FloatArr('my_arr', default=o.dist, mock=mock)
-    assert len(o.arr) == mock, 'Arr did not have expected length of {mock}'
+    assert len(o.arr) == mock, f'Arr did not have expected length of {mock}'
     arr_atol = 3 * 2 / np.sqrt(mock) # 3 sigma of the sample mean (std=2, n=mock); atol=0.1 would be <1 sigma
     assert np.isclose(o.arr.mean(), μ, atol=arr_atol), f'Arr did not have expected mean value of {μ}'
 

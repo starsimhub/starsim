@@ -134,10 +134,11 @@ def convert(source, filename=None, format=None, **kwargs):
     Returns:
         The `ss.Sim`, as `import_from()` gives it, with `sim.imported.filename` the file the code was saved to
 
-    **Example**:
-
+    Example:
+        ```python
         sim = ss.converters.convert('tb_framework.xlsx', format='atomica', databook='IND.xlsx', filename='tb_india.py')
         sim.run() # Or later: python tb_india.py, or runpy.run_path('tb_india.py')['sim']
+        ```
     """
     if filename is None:
         if not isinstance(source, (str, os.PathLike)):

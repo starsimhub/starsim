@@ -1,5 +1,5 @@
 """
-Not for the user: the compartmental engine: a declared model run as groups of people (`ode`, `binomial`, `gillespie`, and tau-leaping)
+Not for the user: the compartmental engine: a declared model run as groups of people (`ode`, `ide`, `binomial`, `gillespie`, and `tau`)
 
 It exists so that a model with nothing per person can run faster than as agents, from the same declaration.
 
@@ -108,8 +108,8 @@ def run_many_parts(owner, rngs, ys, args, n_cols, outputs, state_of, rows, grp_s
 
 class Compartmental(Engine): # Never searched for distributions (see ss.dists.no_dists()): it draws from its own generator, and the distributions in the model are found through its graph
     """
-    Runs a graph as compartments: deterministically (`ode`) or stochastically
-    (`binomial`, `gillespie`, or `tau`, the exact solver's fallback for long runs)
+    Runs a graph as compartments: deterministically (`ode`, `ide`) or stochastically
+    (`binomial`, `gillespie`, or `tau`)
 
     It exists so that the deterministic and stochastic forms share one engine.
 
@@ -120,7 +120,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
     compartmental = True
     max_binomial = 100 # The most substeps the chain-binomial solver chooses in a step (see substeps())
     max_ngm = 1000 # The most compartments by groups for which binomial_substeps() works out R0 (the next-generation matrix takes two evaluations of the model for each)
-    binomial_bias = 0.05 # The most rate × substep (x) the chain-binomial solver takes by default: people who arrive in a compartment within a substep leave from the next, so it holds about x/2 too many (TC1, TB3; see binomial_substeps())
+    binomial_bias = 0.05 # The most rate × substep (x) the chain-binomial solver takes by default: people who arrive in a compartment within a substep leave from the next, so it holds about x/2 too many (see binomial_substeps())
     max_bytes = 500e6 # The most memory that run_many() may use for the values of each group, over all its runs; above it, they are kept every few steps (see ss.solvers.group_rows())
 
     def __init__(self, module, sim, solver=None):
@@ -384,7 +384,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
 
         def add_raced(state, j, track, exits, competing, stays):
             """
-            Several non-exponential dwell times out of a state for the same people (e.g. clearance against seeking care, ST61): each
+            Several non-exponential dwell times out of a state for the same people (e.g. clearance against seeking care): each
             is a clock of Erlang stages, and they run at once, so a compartment for each combination of their stages (k1 × k2 for
             two). A stage of one clock moves people along its own axis, and its last stage is its exit, whatever stage the others
             are in; this is the exact form of the race between the Erlang dwells that agents draw
@@ -480,7 +480,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
 
         for tr in graph.inflows:
             add_flow(tr, None, 'inflow')
-        if self.solver != 'ode': # The stochastic solvers draw in the order of the flows: by the names of their states and transitions, so the draws do not depend on the order these are declared in (the ODE keeps the order given, so its sums are as they were)
+        if self.solver != 'ode': # The stochastic solvers draw in the order of the flows: by the names of their states and transitions, so the draws do not depend on the order these are declared in (the ODE keeps the order given)
             rank = lambda c: (1, '', 0) if c is None else (0, self.comps[c].state.name, self.state_comps[self.comps[c].state.name].index(c))
             self.flows.sort(key=lambda flow: (*rank(flow.src), flow.tr.name, -1 if flow.strain is None else flow.strain))
 
@@ -551,7 +551,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             dw.exact = False
             self.tell(ss.note, f'{name} has a {dw.family} dwell time that differs by group, approximated by {sc.strjoin(sorted(set(dw.kg.tolist())), sep="|")} Erlang stages (each group keeps its mean)', sim=self.sim)
             cv = np.max(np.divide(dw.std, dw.mean, out=np.zeros(len(dw.mean)), where=np.asarray(dw.mean) > 0))
-            if cv > ss.solvers.choose.max_cv: # solver='auto' runs it as agents (FP53, FP83)
+            if cv > ss.solvers.choose.max_cv: # solver='auto' runs it as agents
                 self.tell(ss.warn, f'{name} has a {dw.family} dwell time whose coefficient of variation is up to {cv:.3g}, so one exponential stage keeps only its mean, and its long tail is lost; run with solver="abm" to keep it')
         dw.k = int(dw.kg.max())
         if np.all(dw.kg == dw.k):
@@ -576,7 +576,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         else:
             fixed = ' (nearly fixed, not exponential)' if dw.std < dw.mean/2 else '' # e.g. ss.SIR(dur_inf=ss.days(7)), whose std is 1 day
             self.tell(ss.note, f'{name} has a {dw.family} dwell time{fixed}, approximated by {what}', sim=sim, verbose=0 if approx else None)
-            if dw.std > ss.solvers.choose.max_cv*dw.mean: # solver='auto' runs it as agents (FP53)
+            if dw.std > ss.solvers.choose.max_cv*dw.mean: # solver='auto' runs it as agents
                 self.tell(ss.warn, f'{name} has a {dw.family} dwell time whose coefficient of variation is {dw.std/dw.mean:.3g}, so one exponential stage keeps only its mean, and its long tail is lost; run with solver="abm" to keep it')
         return
 
@@ -587,7 +587,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
     def whole_steps(self, tr, what, dur, lowest, nearest=False):
         """ A time as a number of whole steps (up, or to the nearest with `nearest=True`; at least `lowest`), with a note if it is not one """
         step = getattr(getattr(self.mod, 't', None), 'dt', None) or getattr(getattr(self.sim, 'pars', None), 'dt', None) # The sim's, if the module has no timeline yet (see init_crossings())
-        if not isinstance(step, ss.dur): # Laid out before the module is in a sim, for its equations (see ss.graph.Graph.flow_terms()): one slot
+        if not isinstance(step, ss.dur): # Laid out before the module is in a sim, for its equations (see ss.display.flow_terms()): one slot
             return max(lowest, 1)
         x = float(self.convert(dur))/step.to(self.sim.unit_base).value
         n = max(lowest, int(np.ceil(x - (0.5 if nearest else 0) - 1e-9)))
@@ -962,7 +962,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
     def force(self, frac, tr, dst, srcs=None, y=None):
         """ Move a fraction of the people in each state a transition leaves from (or in `srcs`), and each group, to a state, counted in the transition's flow if there is one (as when a treatment cures); a synchronized flow moves other modules' coordinates too; with `y`, of those people (by compartment and group) rather than the engine's """
         syn = self.syncs_of(tr, dst.name) if tr is not None else []
-        total, recorded = self.move_states(frac, tr.src if srcs is None else srcs, dst, syn=syn, y=y, move=self.moves(tr) if tr is not None else None) # With its change of level (ST30)
+        total, recorded = self.move_states(frac, tr.src if srcs is None else srcs, dst, syn=syn, y=y, move=self.moves(tr) if tr is not None else None) # With its change of level
         if tr is None:
             return total
         self.flowcounts[tr.name] += recorded.sum()
@@ -1146,7 +1146,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
 
     def init_syncs(self):
         """
-        Synchronized flows (proposal 03 §2.3): a transition of another module triggered by a transition of this one
+        Synchronized flows: a transition of another module triggered by a transition of this one
         (`ss.on(a.tr)`, or a branch, `ss.on(a.tr.to(X))`). The two modules are tracked jointly (`ss.solvers.Crossing`),
         so this module's flow also carries the other's coordinate from the source of its transition to its destination,
         in the same flow: exact. Each has a row of its own after the transitions, which the flow credits, and which the
@@ -1407,7 +1407,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                     syn = self.syncs_of(flow.tr, dst.name)
                     for ind,w in comps:
                         dim_map = self.synced(self.dim_map(src, self.comps[ind].state.name, flow.strain, move=self.moves(flow.tr)), syn) # Moving other modules' coordinates too (a synchronized flow)
-                        if dim_map is not None and np.ndim(w): # A branch share decided on entry, by the groups people land in, which can have a dimension the source lacks (TL16: it was read at the first level)
+                        if dim_map is not None and np.ndim(w): # A branch share decided on entry, by the groups people land in, which can have a dimension the source lacks
                             landed = dim_map*w
                             total = landed.sum(axis=1)
                             flow.targets.append((ind, p*total, np.divide(landed, total[:, None], out=np.zeros_like(landed), where=total[:, None] > 0)))
@@ -1663,7 +1663,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             mult = flow.rel_sus*self.mult_raw('rel_sus', state=flow.state)
         if self.adjust[tr.name] is not None:
             mult = mult*self.adjust[tr.name]
-        return mult*self.mult_raw('transition', tr.name, state=flow.state) # An inflow's too (MA36)
+        return mult*self.mult_raw('transition', tr.name, state=flow.state) # An inflow's too
 
     def rates(self):
         """ The rate of every flow, per unit time and per member of its source compartment (or in total, for an inflow) """
@@ -1824,11 +1824,11 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                 check(expr)
                 ops.append(kn.CONST)
                 args.append(add(pars, ('number', repr(float(expr.raw))) if expr.literal and sc.isnumber(expr.raw) else id(expr), expr)) # The same number, wherever it is written, once
-            elif isinstance(expr, ss.expressions.Count) and (self.split_states(expr.states)[1] or expr.weighted): # Another disease's states, or a weighted count (MS3, TY6), counted once a step, as a function of the sim is
+            elif isinstance(expr, ss.expressions.Count) and (self.split_states(expr.states)[1] or expr.weighted): # Another disease's states, or a weighted count, counted once a step, as a function of the sim is
                 if id(expr) not in self.foreign_pars:
                     self.foreign_pars[id(expr)] = ss.par((lambda e: lambda sim: self.count_expr(e))(expr), name=f'{ss.expressions.format_expr(expr)} (counted by its disease)', literal=True)
                 return flatten(self.foreign_pars[id(expr)], strain, routes, rtr)
-            elif isinstance(expr, ss.expressions.Coverage): # A product's coverage (MS4), worked out once a step
+            elif isinstance(expr, ss.expressions.Coverage): # A product's coverage, worked out once a step
                 if id(expr) not in self.foreign_pars:
                     self.foreign_pars[id(expr)] = ss.par((lambda e: lambda sim: self.coverage(e))(expr), name=f'{expr} (worked out each step)', literal=True)
                 return flatten(self.foreign_pars[id(expr)], strain, routes, rtr)
@@ -2840,8 +2840,8 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
 
         The chain-binomial solver takes enough substeps that its step bias is small, as far as
         the rates are known at the start (at most `max_binomial`): see `binomial_substeps()`.
-        Each substep is off the ODE by an amount of order rate × dt (ST55: an acute stage of 1.7
-        months at monthly steps took everyone infected from 9% to 51%). It moves people through as many stages of a dwell time as
+        Each substep is off the ODE by an amount of order rate × dt (an acute stage of 1.7
+        months at monthly steps can take everyone infected from 9% to 51%). It moves people through as many stages of a dwell time as
         they pass in a substep (see `ss.kernels.draw_chain()`), so it is the dwell's mean
         that counts, not its stages; a fixed delay is a conveyor of whole steps, so its length doesn't count. `substeps=1`
         takes whole steps, as most chain-binomial models (and frameworks' discrete-time
@@ -2859,10 +2859,10 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         The substeps the chain-binomial solver takes in each step, from the fastest total rate out of a compartment of people at the start (see `substeps()`)
 
         People who arrive in a compartment within a substep leave it from the next, so a compartment holds about x/2 too
-        many, with x its total rate out times the substep, and R is that much too high (TC1). So x is kept to
+        many, with x its total rate out times the substep, and R is that much too high. So x is kept to
         `binomial_bias` (5%), which bounds the bias in each compartment to about 2.5%; and near the epidemic threshold,
         where the prevalence moves by the bias in R over R0 - 1 (an SIS's endemic prevalence is 1 - 1/R0), to
-        0.1 × |R0 - 1|, for a bias of about 5% (TB3: TBsim's resistance model, +12% at 3 substeps a month, is +3% at
+        0.1 × |R0 - 1|, for a bias of about 5% (a model of TB resistance, +12% at 3 substeps a month, is +3% at
         12; an SIS with R0 = 1.05 gave 0.083 for 0.048 at whole steps). A fixed delay doesn't count, since its people
         don't leave at a rate: a model whose only exits are fixed delays takes whole steps, which keeps its final size
         but lowers its peak (by about 15% for an SIR at a fifth of the delay a step); `substeps=3` gives about 5%, for

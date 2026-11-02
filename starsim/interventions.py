@@ -16,8 +16,7 @@ class Intervention(ss.Module):
     """
     Base class for interventions.
 
-    The key method of the intervention is `step()`, which is called with the sim
-    on each timestep. Interventions can modify disease states (e.g. treating or vaccinating
+    The key method of the intervention is `step()`, which is called on each timestep. Interventions can modify disease states (e.g. treating or vaccinating
     agents); to deliver a product, see `ss.vaccinate()`, `ss.screen()`, and `ss.treat()`.
 
     Args:
@@ -49,7 +48,7 @@ class Intervention(ss.Module):
 
     def check_eligibility(self):
         """
-        Return an array of indices of agents eligible for screening at time t
+        Return the UIDs of the agents eligible now: those `eligibility` gives, or everyone
         """
         if self.eligibility is not None:
             is_eligible = self.eligibility(self.sim)
@@ -237,7 +236,7 @@ def order_steps(mods):
                         errormsg = f'"{m.name}" is triggered by {leaf}, but "{ss.conditions.modname(leaf.args[0])}" is not delivered in the sim: add it to interventions='
                         raise ValueError(errormsg)
                     deps[i] |= {index[id(d)] for d in found if d is not m}
-            if any(leaf.op == 'event' and (leaf.args[0] is m or (isinstance(leaf.args[0], Delivery) and id(leaf.args[0]) not in index and leaf.args[0].name == m.name)) for leaf in ss.conditions.event_leaves(m.trigger) if isinstance(m.trigger, ss.conditions.Cond)): # By name only for a copy: two steps made in a function share the default name (HP72), which the sim then makes unique
+            if any(leaf.op == 'event' and (leaf.args[0] is m or (isinstance(leaf.args[0], Delivery) and id(leaf.args[0]) not in index and leaf.args[0].name == m.name)) for leaf in ss.conditions.event_leaves(m.trigger) if isinstance(m.trigger, ss.conditions.Cond)): # By name only for a copy: two steps made in a function share the default name, which the sim then makes unique
                 errormsg = f'"{m.name}" is triggered by its own event ({m.trigger}), so would never happen; a delivery can read its own memory (e.g. who={m.name}.since >= ss.years(5)), but not be triggered by itself'
                 raise ValueError(errormsg)
     out, done = [], set()
@@ -459,7 +458,7 @@ class Delivery(ss.products.EventSource, Intervention):
         self.trace = trace
         self.priority = priority
         self.queue = None if queue is False else queue
-        self.disease_list = None # Several diseases (HP7): the product acts on each, as if its values were keyed by them (see init_pre())
+        self.disease_list = None # Several diseases: the product acts on each, as if its values were keyed by them (see init_pre())
         if isinstance(disease, (list, tuple)):
             self.disease_list = list(disease)
             if self.product is None or not self.disease_list:
@@ -623,7 +622,7 @@ class Delivery(ss.products.EventSource, Intervention):
         if self.holds:
             doses = self.product.doses
             levels = [False] + [f'dose {k+1}' for k in range(len(doses))] if doses else [False, True]
-            if self.boxed(sim): # Waning as a box (MS6): its levels
+            if self.boxed(sim): # Waning as a box: its levels
                 levels = [False] + self.product.box_form.levels()
             out.append(Strat(self.product.dim, levels, split=[1.0] + [0.0]*(len(levels) - 1)))
         for dim,level in (self.move or {}).items():
@@ -635,7 +634,7 @@ class Delivery(ss.products.EventSource, Intervention):
         return out
 
     def boxed(self, sim):
-        """ Whether holding the product has the levels of a box in this sim: in a compartmental run, for a product that wanes as an `ss.box` (see `ss.Held.box_form`) """
+        """ Whether holding the product has the levels of a box in this sim: in a compartmental run, for a product that wanes as an `ss.box` (see `ss.products.Held.box_form`) """
         return self.holds and sim is not None and sim.solver not in [None, 'abm'] and self.product.box_form is not None
 
     def dim_moves(self, sim=None):
@@ -696,7 +695,7 @@ class Delivery(ss.products.EventSource, Intervention):
         names = [d if isinstance(d, str) else d.name for d in self.disease_list]
         missing = [n for n in names if n not in declared]
         coded = [n for n in missing if coded_disease(sim, n) is not None]
-        if coded and (len(coded) < len(names) or not isinstance(self.product, (ss.Diagnostic, ss.Treatment))): # Several diseases written as code (HP70): a test or a cure by their states
+        if coded and (len(coded) < len(names) or not isinstance(self.product, (ss.Diagnostic, ss.Treatment))): # Several diseases written as code: a test or a cure by their states
             raise sc.KeyNotFoundError(f'disease= of "{self.name}" names {sc.strjoin(coded)}, written as code; a delivery for several diseases written as code is a test or a treatment of all of them (and none declared), so give one delivery for each (e.g. disease="{coded[0]}")')
         missing = [n for n in missing if n not in coded]
         if missing:
@@ -716,7 +715,7 @@ class Delivery(ss.products.EventSource, Intervention):
         declared = [mod.name for mod in sim.declared]
         ss.conditions.check_path_events(sim, self.trigger, self.name)
         for other in [self] + [iv for iv in sim.interventions() if isinstance(iv, Delivery) and iv is not self and iv.product is not None and iv.product is self.product]:
-            other.key_product(sim) # A product shared with a delivery for several diseases is keyed by them before any delivery initializes it, whatever the order (HP38)
+            other.key_product(sim) # A product shared with a delivery for several diseases is keyed by them before any delivery initializes it, whatever the order
         if isinstance(self.delay, ss.Dist) and not getattr(self.delay, '_numeric', False): # Durations in the sim's unit, however they are given
             self.delay = ss.transitions.numeric_dist(self.delay, lambda val: ss.solvers.convert(val, sim.unit_base))
             self.delay._numeric = True
@@ -736,7 +735,7 @@ class Delivery(ss.products.EventSource, Intervention):
             self.disease = self.trigger_disease(sim) or declared[0]
         if self.disease is None and len(declared) > 1: # The disease of the step that triggers it
             self.disease = self.trigger_disease(sim)
-        coded = [name for name in sim.diseases.keys() if coded_disease(sim, name) is not None] # PL2: a disease written as code, as agents
+        coded = [name for name in sim.diseases.keys() if coded_disease(sim, name) is not None] # Diseases written as code, run as agents
         if self.disease is None:
             own = self.product is not None and type(self.product).administer is not ss.Product.administer # A product written as code acts on what its code says, so any disease written as code can evaluate the conditions
             if len(declared) != 1 and not (not declared and (len(coded) == 1 or (own and coded))):
@@ -750,7 +749,7 @@ class Delivery(ss.products.EventSource, Intervention):
             self.check_coded(sim)
         if self.product is not None and self.product.disease is None:
             self.product.disease = self.disease
-        elif self.product is not None and self.product.disease != self.disease and not (self.holds and len(self.product.disease_effects(sim)) > 1): # One product for one disease, unless its efficacy is keyed by disease (HP7)
+        elif self.product is not None and self.product.disease != self.disease and not (self.holds and len(self.product.disease_effects(sim)) > 1): # One product for one disease, unless its efficacy is keyed by disease
             errormsg = (f'the product "{self.product.name}" of "{self.name}" acts on "{self.product.disease}", so "{self.name}" cannot deliver it for "{self.disease}" alone.\n'
                         f'     For a product that acts on both, deliver it once with disease=[\'{self.product.disease}\', \'{self.disease}\'] (or key its values by disease); otherwise make one product for each disease.')
             raise sc.KeyNotFoundError(errormsg)
@@ -843,13 +842,13 @@ class Delivery(ss.products.EventSource, Intervention):
         return
 
     def check_coded(self, sim):
-        """ For a disease written as code (PL2): agents only, and it has the parts the product uses, or this raises naming the missing one """
+        """ For a disease written as code: agents only, and it has the parts the product uses, or this raises naming the missing one """
         dis = coded_disease(sim, self.disease)
         if sim.solver != 'abm':
             raise ss.CapabilityError(f'"{self.name}" is for "{dis.name}", which is written as code, so it cannot run with solver="{sim.solver}". Run with solver="abm".')
         product = self.product
         needs = []
-        if isinstance(product, ss.Diagnostic) and product.detects is None and any('detects' in t for t in product.tables()): # Unless its results are by state (HP70)
+        if isinstance(product, ss.Diagnostic) and product.detects is None and any('detects' in t for t in product.tables()): # Unless its results are by state
             needs.append(('infected', 'a state, which the test detects (or give detects= to the test, or results by state)'))
         if isinstance(product, ss.Treatment) and product.curing:
             needs.append(('clear_infection', 'a method of the UIDs cured'))
@@ -886,7 +885,7 @@ class Delivery(ss.products.EventSource, Intervention):
         abm = self.sim.solver == 'abm'
         results = [
             ss.Result('delivered', dtype=float, scale=abm, label='Number delivered', kind='flow'),
-            ss.Result('eligible', dtype=float, scale=abm, label='Number eligible', kind='flow', auto_plot=False), # Those offered it in each step, so over the run the offers made, of which coverage is the share delivered (it was summarized as a mean over every step)
+            ss.Result('eligible', dtype=float, scale=abm, label='Number eligible', kind='flow', auto_plot=False), # Those offered it in each step, so over the run the offers made, of which coverage is the share delivered
             ss.Result('coverage', dtype=float, scale=False, label='Coverage of those eligible', auto_plot=False),
         ]
         if self.cost is not None:
@@ -1035,7 +1034,7 @@ class Delivery(ss.products.EventSource, Intervention):
         if self.product is not None: # Before anyone is offered anything: protection lost, and test results that have come
             self.product.step_waning()
         self.step_results()
-        for owner in [self] + ([self.product] if self.product is not None else []): # The results that have come are remembered before anyone is offered it (CV3)
+        for owner in [self] + ([self.product] if self.product is not None else []): # The results that have come are remembered before anyone is offered it
             if owner.__dict__.get('_pending'):
                 owner.flush(self.sim.ti)
         if not self.due():
@@ -1077,7 +1076,7 @@ class Delivery(ss.products.EventSource, Intervention):
         """
         For `at_age=`: the people already past the age are recorded as offered it, so only those who reach the age get it: on its
         first step, everyone past it (as agents, older by more than a step; in a compartmental run, everyone in an age group at or
-        above it); and as agents, on each step after, the agents who have arrived since (e.g. immigrants made by `people.grow()`, HP76)
+        above it); and as agents, on each step after, the agents who have arrived since (e.g. immigrants made by `people.grow()`)
         """
         selector = self.selector
         if self.started and not selector.abm:
@@ -1123,7 +1122,7 @@ class Delivery(ss.products.EventSource, Intervention):
         return out
 
     def infected_states(self):
-        """ The infected states of the disease, which a test with no detects= finds and a treatment with no where= is for; raises if there are none (TL52: nobody was found, with no message) """
+        """ The infected states of the disease, which a test with no detects= finds and a treatment with no where= is for; raises if there are none """
         if self.dis.graph is None: # Written as code: see check_coded()
             return ['infected']
         out = [s.name for s in self.dis.graph.infected if s.people]
@@ -1190,7 +1189,7 @@ class Delivery(ss.products.EventSource, Intervention):
             sel = sel*selector.in_states(self.move_states[0])
         if self.carriers is not None: # Only the people carrying strains, for a change of them
             sel = sel*selector.in_states(self.carriers)
-        if self.holds and held and not self.product.fades: # Not to people who already hold it (or every dose of it); a product that fades by a function is given again, restarting it (MA15)
+        if self.holds and held and not self.product.fades: # Not to people who already hold it (or every dose of it); a product that fades by a function is given again, restarting it
             level = selector.dim(self.product.dim)
             doses = self.product.doses
             sel = sel*((level < len(doses)) if doses else (level == 0))

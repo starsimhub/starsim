@@ -9,7 +9,6 @@ import starsim as ss
 import starsim.library as ssl
 import sciris as sc
 import matplotlib.pyplot as plt
-import pytest
 
 n_agents = 1_000
 do_plot = False

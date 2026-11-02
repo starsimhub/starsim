@@ -39,8 +39,8 @@ infection = S >> I @ beta * I     # exposure: the law over N, with S taken out
 recovery  = I >> R @ gamma
 ```
 
-which equals a hand-written model to 1e-6 (`tests/test_io_odin_sbml.py`).
+which equals a hand-written model to 1e-6 (`tests/devtests/io/test_io_odin_sbml.py`).
 
 ## Running the original
 
-There is no SBML environment in `lingua_franca_design/_envs`. A deterministic model runs with libRoadRunner (`pip install libroadrunner`, in its own environment: `rr = roadrunner.RoadRunner(path); out = rr.simulate(0, stop, stop + 1)`, with columns `time` and `[S]`, ...) or COPASI's `basico`. Compare each species with `res.n_<species>` at the same times to a relative tolerance of about 1e-6 (both are ODEs). A stochastic run (`rr.gillespie(...)`) compares as distributions with Starsim's `solver='gillespie'`.
+There is no SBML environment in `lingua_franca_design/_envs`. A deterministic model runs with libRoadRunner (`pip install libroadrunner`, in its own environment: `rr = roadrunner.RoadRunner(path); out = rr.simulate(0, stop, stop + 1)`, with columns `time` and `[S]`, ...) or COPASI's `basico`. Compare each species with `res.<species>` at the same times to a relative tolerance of about 1e-6 (both are ODEs). A stochastic run (`rr.gillespie(...)`) compares as distributions with Starsim's `solver='gillespie'`.

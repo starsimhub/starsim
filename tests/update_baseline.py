@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Run this script to regenerate the baseline.
+Run this script to regenerate the baseline, and the benchmark and performance guard of test_baselines.py.
 """
 
 import test_baselines

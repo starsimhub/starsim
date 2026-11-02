@@ -45,7 +45,7 @@ def combine_rands(a, b):
 
 # Common distributions, assigned to a variable since used in help messages
 dist_list = ['random', 'uniform', 'normal', 'truncnorm', 'lognorm_ex', 'lognorm_im', 'expon',
-             'poisson', 'nbinom', 'binom', 'beta_dist', 'beta_mean', 'weibull', 'gamma', 'constant',
+             'poisson', 'nbinom', 'binom', 'beta_dist', 'beta_mean', 'weibull', 'gamma', 'erlang', 'constant',
              'randint', 'bernoulli', 'choose_n', 'choice', 'histogram']
 
 
@@ -162,9 +162,9 @@ class truncnorm(Dist):
 class lognorm_im(Dist):
     """
     Lognormal distribution, parameterized in terms of the "implicit" (normal)
-    distribution, with mean=loc and std=scale (see lognorm_ex for comparison).
+    distribution (see lognorm_ex for comparison).
 
-    Note: the "loc" parameter here does *not* correspond to the mean of the resulting
+    Note: the `mean` parameter here does *not* correspond to the mean of the resulting
     random variates!
 
     Args:
@@ -173,7 +173,7 @@ class lognorm_im(Dist):
 
     Examples:
         ```python
-        ss.lognorm_im(mean=2, sigma=1, strict=False).rvs(1000).mean() # Should be roughly 10
+        ss.lognorm_im(mean=2, sigma=1, strict=False).rvs(1000).mean() # Should be roughly 12
         ```
     """
     scaling = 'postdraw'
@@ -199,9 +199,9 @@ class lognorm_im(Dist):
     def convert_timepars(self):
         for key, v in self._pars.items():
             if isinstance(v, ss.dur) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.dur):
-                raise NotImplementedError('lognormal_im parameters must be nondimensional')
+                raise NotImplementedError('lognorm_im parameters must be nondimensional')
             if isinstance(v, ss.Rate) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.Rate):
-                raise NotImplementedError('lognormal_im parameters must be nondimensional')
+                raise NotImplementedError('lognorm_im parameters must be nondimensional')
 
     def sync_pars(self, call=True):
         """ Translate between NumPy and SciPy parameters """
@@ -330,11 +330,11 @@ class poisson(Dist):
         """
         Fast inverse-CDF sampling for the common-random-number (ppf) path.
 
-        SciPy's generic discrete ``ppf`` is very slow (it root-finds per element),
-        and for CRN draws it is called every time an ``ss.poisson`` is sampled by
-        UID. For a scalar ``lam`` we instead precompute the CDF once and map each
-        uniform via ``np.searchsorted``, which is 30-60x faster and produces
-        bitwise-identical results. Array-valued ``lam`` is inverted by `ss.solvers.backends.draws`
+        SciPy's generic discrete `ppf` is very slow (it root-finds per element),
+        and for CRN draws it is called every time an `ss.poisson` is sampled by
+        UID. For a scalar `lam` we instead precompute the CDF once and map each
+        uniform via `np.searchsorted`, which is 30-60x faster and produces
+        bitwise-identical results. Array-valued `lam` is inverted by `ss.solvers.backends.draws`
         (SciPy's above a mean of 30, and for unusual values).
         """
         lam = self._pars.lam
@@ -369,12 +369,12 @@ class beta_dist(Dist):
 
 class beta_mean(Dist):
     """
-    Beta distribution paramterized by the mean
+    Beta distribution parameterized by the mean
 
     Note: the variance of a beta distribution must be 0 < var < mean*(1-mean)
 
     Args:
-        mean (float): mean of distribution, must be 0 < a < 1 (default 0.5)
+        mean (float): mean of distribution, must be 0 < mean < 1 (default 0.5)
         var (float): variance of distribution, must be > 0 (default 0.05)
         force (bool): if True, scale the parameters to the valid range
     """
@@ -411,7 +411,7 @@ class nbinom(Dist):
     Negative binomial distribution
 
     Args:
-        n (float): the number of successes, > 1 (default 1.0)
+        n (float): the number of successes, > 0 (default 1)
         p (float): the probability of success in [0,1], (default 0.5)
 
     """
@@ -459,7 +459,7 @@ class randint(Dist):
 
     Args:
         low (int): the lower bound of the distribution (default 0)
-        high (int): the upper bound of the distribution (default of maximum integer size: 9,223,372,036,854,775,807)
+        high (int): the upper bound of the distribution (default: the largest integer of `ss.dtypes.rand_int`, 2,147,483,647 by default)
         dtype (type): the data type of the values
     """
     scaling = 'predraw'
@@ -467,7 +467,7 @@ class randint(Dist):
     valid_pars = ['low', 'high', 'dtype']
 
     def __init__(self, *args, low=None, high=None, dtype=None, **kwargs):
-        # Handle input arguments # TODO: reconcile with how this is handled in uniform()
+        # Handle input arguments
         if len(args):
             if len(args) == 1:
                 high = args[0]
@@ -651,7 +651,7 @@ class bernoulli(Dist):
         return
 
     def __bool__(self):
-        if callable(self.pars.p) or np.any(sc.promotetoarray(self.pars.p) > 0):
+        if callable(self.pars.p) or np.any(sc.toarray(self.pars.p) > 0):
             return True
         else:
             return False
@@ -856,16 +856,16 @@ class choice(Dist):
         # For the (default) replace=True case, leave _use_ppf as None so that the
         # ppf path is used for UID draws. This maps each slot's uniform through the
         # inverse CDF (below), which is CRN-safe and, crucially, avoids the
-        # make_rvs "slot blowup" (drawing slots.max()+1 values and discarding most)
-        # -- the same issue hash-based CRN already fixed for bernoulli/poisson/etc.
+        # make_rvs path's drawing slots.max()+1 values and discarding most
+        # -- as for bernoulli, poisson, etc.
         return
 
     def process_size(self, n=1):
-        """ For replace=False, draw one value per UID (no slot blowup); not for the user """
+        """ For replace=False, draw one value per UID; not for the user """
         size, slots = super().process_size(n)
         if not self.pars.replace and slots is not None:
             # Without replacement can't be slot-indexed CRN (it's a joint draw), and
-            # requesting slots.max()+1 distinct items both blows up and errors once
+            # requesting slots.max()+1 distinct items is wasteful, and an error once
             # slots.max() >= len(a). Draw exactly one value per UID instead. Like
             # ss.options.crn=False, this is statistically valid but not CRN-safe
             # across scenarios -- which is inherent to sampling without replacement.
@@ -982,7 +982,7 @@ class histogram(Dist):
         # Leave _use_ppf as None (the default) so UID draws go through the hash-based
         # CRN path: one uniform per slot mapped through the histogram's inverse
         # CDF (ppf()). This is CRN-safe and draws exactly len(uids) numbers,
-        # avoiding the slot_scale "blowup" (drawing slots.max()+1 and discarding most).
+        # avoiding drawing slots.max()+1 values and discarding most.
         # The values/bins arrays are not treated as per-UID pars.
         return
 
@@ -1035,9 +1035,11 @@ class multi_random(sc.prettyobj):
         crn (bool): whether to use common random numbers; if None (default), follow `ss.options.crn` (note: only `crn=False` can override it, since `crn=True` has no effect if `ss.options.crn=False`)
         **kwargs: passed to each `ss.random()` instance
 
-    Usage:
+    Examples:
+        ```python
         multi = ss.multi_random('source', 'target')
         rvs = multi.rvs(source_uids, target_uids)
+        ```
     """
     def __init__(self, names, *args, crn=None, **kwargs):
         names = sc.mergelists(names, *args)

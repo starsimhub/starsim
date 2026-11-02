@@ -117,12 +117,12 @@ The same declaration runs as a stochastic compartmental model or as agents with 
 
 ## Timings
 
-Lines are lines of model code (not counting blank lines, comments, imports, or plotting, and counting a line over 100 characters twice); times are for one run. Both are measured by Starsim's north-star script, `tests/north_star/north_star.py` in the lingua_franca_design repo (see the [index page](../library_landscape.qmd#how-these-numbers-were-made)). MEmilio 2.4.1's times were recorded on the same machine, as a whole command, which is nearly all starting Python and importing; MEmilio's `simulate()` itself takes about 0.1 ms.
+Lines are lines of model code (not counting blank lines, comments, imports, or plotting, and counting a line over 100 characters twice); times are for one run, the first in a new process and a rerun of the same model. Both were measured as described on the [index page](../library_landscape.qmd#how-these-numbers-were-made). MEmilio 2.4.1's times were recorded on the same machine, in process, not counting starting Python or importing; a rerun is `simulate()` again on the same model. Both are in solvers built in advance in C++.
 
 | Model | Lines: MEmilio | Lines: Starsim | One run: MEmilio | One run: Starsim | |
 |---|---|---|---|---|---|
-| The SECIR | 44 | 14 | 0.63 s as a command; `simulate()` 0.08 ms | 0.020 s to build and run (0.061 s the first time in a new process) | Pass |
-| The age-resolved SECIR (above) | 45 | 21 | 0.47 s as a command; `simulate()` 0.1 ms | 0.021 s (0.063 s the first time); 0.2 ms to rerun a built sim | Pass |
+| The SECIR | 44 | 14 | first 0.00044 s, rerun 0.00002 s | first 0.014 s, rerun 0.0012 s | Pass |
+| The age-resolved SECIR (above) | 45 | 22 | first 0.00085 s, rerun 0.00006 s | first 0.025 s, rerun 0.0013 s | Pass |
 | 50 counties × 6 ages with commuting, 90 days | | | 0.17 s | 0.1 s | |
 | 400 counties × 6 ages with commuting, 90 days | | | 1.54 s to run, 13.4 s to build the graph in Python | 0.7 s | |
 

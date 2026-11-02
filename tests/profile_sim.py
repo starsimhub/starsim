@@ -14,7 +14,7 @@ to_run = [
     'profile', # Run the built-in line profiler
     'cprofile', # Run the built-in function profiler
     'time', # Simply time how long the sim takes to run
-    'plot_cpu', # Plot the CPU time ()
+    'plot_cpu', # Plot the CPU time
 ]
 
 if 'profile' in to_run:

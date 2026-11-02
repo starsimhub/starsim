@@ -271,7 +271,7 @@ def test_two_optima():
         data = pd.DataFrame(dict(cases=counts), index=pd.date_range('2020-01-08', periods=17, freq='7D'))
         return ss.Sim(sir, unit='day', start='2020-01-01', stop='2020-05-01', total_pop=1e5, data=data, verbose=0)
 
-    # From the review's simulation-based calibration: an optimizer started from the best point of a scan stopped at 58.86, and SciPy said it had converged
+    # From simulation-based calibration: an optimizer started from the best point of a scan stopped at 58.86, and SciPy said it had converged
     fit = make([408, 16683, 30842, 4196, 170, 58, 18, 5, 0, 1, 1, 0, 0, 0, 0, 0, 0]).fit(method='l-bfgs-b', rand_seed=57)
     assert fit.mismatch < 54.26 # The better optimum (b = 0.605, dur = 15.3)
     assert fit.converged is False # Only one of the searches from the scan's points found it

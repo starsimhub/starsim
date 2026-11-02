@@ -141,8 +141,8 @@ def choose_solver(sim):
 
     Agents are made only when something needs them, whether the model is declared or
     written as code: a sim of modules written as code with nothing per person (e.g. an
-    ODE of its own in NumPy) has no agents, and one with per-person arrays (Starsim 3's
-    diseases written as code) runs as agents. Which engine then takes a whole
+    ODE of its own in NumPy) has no agents, and one with per-person arrays (e.g. a
+    disease written as code) runs as agents. Which engine then takes a whole
     stochastic compartmental run, JAX or the kernels, is chosen when the sim is run, by
     `choose_engine()`.
 
@@ -812,7 +812,7 @@ def init_where(sim):
             if target is not None and p.name not in target.graph.pars:
                 target.graph.pars[p.name] = p
                 target.define_pars(**{p.name:p})
-    for m in list(sim.pars.interventions.values()) + list(sim.pars.connectors.values()): # An amount added to an inflow from outside the model (from ss.null), e.g. CFUs added to a reservoir: a parameter of 0 added to its rate, which the modifier adds to (TY15b)
+    for m in list(sim.pars.interventions.values()) + list(sim.pars.connectors.values()): # An amount added to an inflow from outside the model (from ss.null), e.g. CFUs added to a reservoir: a parameter of 0 added to its rate, which the modifier adds to
         if isinstance(m, ss.modify) and m.op == 'add' and m.target_kind in ['transition', None]:
             target = next((mod for mod in sim.declared if mod.name == ss.conditions.modname(m.target_module)), None)
             tr = target.graph.transitions.get(m.target_name) if target is not None else None
@@ -901,7 +901,7 @@ def check_betas(sim, nets):
                             hint = f'give ss.peract() with a value for each of its directions ({sc.strjoin(dirs) or "it has none, so one value"})'
                         else:
                             hint = f'"{net.name}" has no acts, so give one rate or probability per contact' + (', which goes from the mother to the child only' if getattr(net, 'one_way', False) else '')
-                        raise ValueError(f'{where} is a pair, {list(val)}, which has no direction names: {hint}. In Starsim 3, a pair was [p1 to p2, p2 to p1], which depends on who the network puts in p1.')
+                        raise ValueError(f'{where} is a pair, {list(val)}, which has no direction names: {hint}.')
                     if isinstance(val, ss.peract):
                         if not acts:
                             raise ValueError(f'{where} is {val}, a probability per act, but "{net.name}" has no acts, so there is no act to be per; give a probability (or rate) per contact as a bare number, or give the network acts=')
@@ -1055,14 +1055,14 @@ def init_crossings(sim, layouts=None):
     return
 
 
-max_cv = 3 # A dwell time whose coefficient of variation is above this runs as agents under solver='auto': Erlang stages have one of at most 1, so one exponential stage keeps only its mean (FP53)
+max_cv = 3 # A dwell time whose coefficient of variation is above this runs as agents under solver='auto': Erlang stages have one of at most 1, so one exponential stage keeps only its mean
 
 
 def dwell_cv(raw, sim):
     """ The coefficient of variation of a dwell time's distribution (NaN if it has no single value, as for parameters that are functions, or by group other than a Weibull's or gamma's scale) """
     try:
         mean, std = ss.transitions.dwell_stats(raw, lambda val: convert(val, sim.unit_base))
-    except ValueError: # A parameter by group: a Weibull's or a gamma's coefficient of variation depends only on its shape (FP83: FPsim's method durations, a Weibull scaled by age)
+    except ValueError: # A parameter by group: a Weibull's or a gamma's coefficient of variation depends only on its shape (e.g. a Weibull scaled by age)
         name = type(raw).__name__
         shape = raw.pars.get(dict(weibull='c', gamma='a').get(name))
         if not sc.isnumber(shape) or shape <= 0:
@@ -1158,9 +1158,10 @@ def solver_table():
     engine: `agents`, `compartments` (one step at a time), `kernels` (the whole run in one call), and `jax` (the ODE in JAX). In `compartments`, "if asked" is what `solver='auto'` runs as agents, but
     a compartmental solver that was asked for runs, approximating it.
 
-    **Example**:
-
+    Example:
+        ```python
         ss.solvers.solver_table()
+        ```
     """
     data = []
     for rule in rules:

@@ -51,7 +51,7 @@ def unnamed(named):
     return ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(10), init_prev=0.01, name='sir')
 
 
-# Each row of the "what is guessed" table in 03-states-and-transitions.md: a sim that makes the guess, one that does not, and what describe() says
+# Each guess that describe() marks: a sim that makes the guess, one that does not, and what describe() says
 guesses = dict(
     dwell      = (lambda: ss.Sim(plain_sir()),                      lambda: ss.Sim(declared_sir()),                       'time in I ~'),
     stages     = (lambda: ss.Sim(lognormal(None), solver='ode'),     lambda: ss.Sim(lognormal(4), solver='ode'),           'stages'),
@@ -63,10 +63,9 @@ guesses = dict(
     acquisition = (lambda: corpus.malaria(),                         lambda: ss.Sim(plain_sir()),                         'acquisition'),
     midpoint   = (lambda: ss.Sim(fitted_sir(ss.par(bounds=[0.1, 0.5]))), lambda: ss.Sim(fitted_sir(ss.par(0.3, bounds=[0.1, 0.5]))), 'middle of its bounds'),
 )
-not_marked = dict() # Guesses that describe() does not mark yet, with the reason
 
 
-@pytest.mark.parametrize('row', [pytest.param(row, marks=pytest.mark.xfail(reason=not_marked[row], strict=True)) if row in not_marked else row for row in guesses])
+@pytest.mark.parametrize('row', list(guesses))
 def test_guesses_marked(row):
     sc.heading(f'Testing that the guess of "{row}" is marked, and only when it is made')
     make_guess, make_given, key = guesses[row]
@@ -117,13 +116,13 @@ def test_streams(solver):
             sir = ss.Disease(infection=S >> I @ ss.perday(0.42) * I, recovery=I >> R @ ss.perday(0.09), vax=S >> V @ ss.perday(0.011), breakthrough=V >> I @ ss.perday(0.17) * I, init_n=dict(I=25), name='sir')
             return ss.Sim(sir, total_pop=10_000, stop=60, unit='day', solver=solver, rand_seed=587, verbose=0).run().results.sir.I.values
         siv, svi = declared('S I R V'), declared('S V I R')
-        assert np.array_equal(siv, svi), f'Declaring the states in another order changed n_I by up to {np.abs(siv - svi).max():n}' # 155 under binomial before
+        assert np.array_equal(siv, svi), f'Declaring the states in another order changed I by up to {np.abs(siv - svi).max():n}' # 155 under binomial before
 
         # A rate that varies in time takes the same values in a run stepped from Python as in a whole one, so the same draws
         def seasonal(solver):
             S, I, R, V = ss.states('S I R V')
             sir = ss.Disease(infection=S >> I @ ss.seasonal(mean=0.421, amplitude=0.46, peak=0.92) * I, recovery=I >> R @ ss.perday(0.0909), vax=S >> V @ ss.perday(0.011), init_n=dict(I=25), name='sir')
-            return ss.Sim(sir, total_pop=100_000, stop=60, unit='day', solver=solver, rand_seed=587, verbose=0, substeps=1 if solver == 'binomial' else None) # With 2 substeps, a whole binomial run and a stepped one differ (deferred.md)
+            return ss.Sim(sir, total_pop=100_000, stop=60, unit='day', solver=solver, rand_seed=587, verbose=0, substeps=1 if solver == 'binomial' else None) # With 2 substeps, a whole binomial run and a stepped one differ
         for s in [solver, 'ode']:
             whole, stepped = [seasonal(s).run(profile=profile).results.sir.vax.values for profile in [False, True]]
             if s == 'ode': # With more than one substep, the kernel compiled into a whole run and the one called from Python round differently, by about 1e-16
@@ -192,7 +191,7 @@ def mean_states(sim):
     return {f'{mod.name}.{key}':res.values.mean() for mod in sim.declared for key,res in mod.results.items() if key in mod.graph.states and isinstance(res, ss.Result) and np.ndim(res.values) == 1}
 
 
-simple = ['sir', 'seir', 'erlang', 'branching', 'ages'] # The models marked simple in 18-conformance.md
+simple = ['sir', 'seir', 'erlang', 'branching', 'ages'] # The simplest models of the corpus
 slow = bool(os.getenv('STARSIM_SLOW')) # Set to check every model of the corpus
 
 
@@ -229,7 +228,7 @@ def test_binomial_short_stay():
 
 
 def test_agents_match_ode():
-    sc.heading('Testing that agents match the ODE on the spec\'s models, and that R0() is the analytic value')
+    sc.heading('Testing that agents match the ODE on the corpus\'s models, and that R0() is the analytic value')
     analytic = dict( # From the corpus's parameters
         sir     = 0.3*10, # β·D
         seir    = 0.3*10, # β·D, since everyone exposed becomes infectious

@@ -17,7 +17,7 @@ def make_sis(cure=None):
     return ss.Disease(infection=S >> I @ 0.3*I, recovery=I >> S @ ss.days(20), cure=cure(S, I), init_prev=0.05, name='sis')
 
 
-def w209(sim):
+def undriven_warnings(sim):
     """ The warnings raised when a sim is initialized that a transition has nothing to drive it """
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter('always')
@@ -37,17 +37,17 @@ def test_undriven():
         sis = make_sis(form)
         assert sis.cure.undriven
         assert 'undriven: moved by products, deliveries, or code' in sis.describe(output=True)
-        assert len(w209(ss.Sim(sis, stop=10, **kw))) == 1, f'{key}: expected W209 for an undriven transition nothing names'
+        assert len(undriven_warnings(ss.Sim(sis, stop=10, **kw))) == 1, f'{key}: expected a warning for an undriven transition nothing names'
 
     # Named by a product, or by on=, it is not warned about; a rate of 0 is not undriven
     sis = make_sis(forms['op'])
     sim = ss.Sim(sis, interventions=ss.treat(ss.Treatment(transition='cure'), coverage=0.2, interval=5, name='tx'), stop=10, **kw)
-    assert not w209(sim)
+    assert not undriven_warnings(sim)
     assert 'undriven: moved by treatment' in sim.diseases.sis.describe(output=True)
     sis = make_sis(forms['op'])
-    assert not w209(ss.Sim(sis, interventions=ss.screen(ss.Diagnostic(), where=sis.cure), stop=10, **kw))
+    assert not undriven_warnings(ss.Sim(sis, interventions=ss.screen(ss.Diagnostic(), where=sis.cure), stop=10, **kw))
     sis = make_sis(lambda S, I: I >> S @ 0)
-    assert not sis.cure.undriven and not w209(ss.Sim(sis, stop=10, **kw))
+    assert not sis.cure.undriven and not undriven_warnings(ss.Sim(sis, stop=10, **kw))
 
     # Moved by a treatment, as agents and compartments
     for solver,pars in [('ode', dict(total_pop=10_000)), ('abm', dict(n_agents=10_000))]:

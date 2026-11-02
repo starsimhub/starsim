@@ -39,6 +39,8 @@ import numpy as np
 import starsim as ss
 from ..diseases.agents import AgentSIR
 
+__all__ = ['NeonatalSepsis']
+
 
 class NeonatalSepsis(AgentSIR):
     """

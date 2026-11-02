@@ -1,7 +1,7 @@
 """
 Fuller port of laser_example_orig.py, using Starsim's naming conventions
 
-Requires starsim>=3.0
+Requires starsim>=4.0
 """
 import sciris as sc
 import numpy as np

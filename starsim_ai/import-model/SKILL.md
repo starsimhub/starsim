@@ -1,6 +1,6 @@
 ---
 name: import-model
-description: Translate a disease model from another framework (EMULSION, odin, SimInf, flepiMoP, summer2, Atomica, SBML, EpiModel, epydemix, LASER, MEmilio, camdl, or Starsim v3) into Starsim v4. Use when someone wants to import, port, convert, or reimplement an existing model in Starsim, including the parts that do not map one to one. Pair with the validate-import skill to check the result against the original.
+description: Translate a disease model from another framework (EMULSION, odin, SimInf, flepiMoP, summer2, Atomica, SBML, EpiModel, epipack, epydemix, epymorph, LASER, MEmilio, camdl, or Starsim v3) into Starsim v4. Use when someone wants to import, port, convert, or reimplement an existing model in Starsim, including the parts that do not map one to one. Pair with the validate-import skill to check the result against the original.
 ---
 
 # Import a model into Starsim
@@ -18,7 +18,7 @@ A model is imported in two passes. The mechanical pass (`ss.import_from(..., for
    sim = ss.import_from('model.R', format='odin')         # or given
    sc.savetext('model.py', sim.imported.code)              # the model as Starsim code, to edit (the sim is this code run)
    ```
-   `ss.import_from()` writes the model as Starsim code (a declared `ss.Disease` and the `ss.Sim`) and runs it to make the sim. It prints how each rate was read (which rule of `16-interop.md` applied) and warns `ImportIncomplete` with each piece it could not translate. Both are kept in `sim.imported` (`choices`, `incomplete`) and are comments in the code: the reading at the top, the untranslated pieces at the end.
+   `ss.import_from()` writes the model as Starsim code (a declared `ss.Disease` and the `ss.Sim`) and runs it to make the sim. It prints how each rate was read and warns `ImportIncomplete` with each piece it could not translate. Both are kept in `sim.imported` (`choices`, `incomplete`) and are comments in the code: the reading at the top, the untranslated pieces at the end.
 3. **Check the guesses** in the printed reading and in `sim.describe()` (marked `[guessed]`):
    - A rate with another state divided by the total (`beta*S*I/N`) was read as exposure (`beta * I`, frequency-dependent). One without the total (`beta*S*I`) was kept as counts (`beta * I.n`, density-dependent). Make sure that is what the source meant, especially if the population changes.
    - Units: bare numbers are in the sim's unit (`unit=`). A per-step probability is not a rate: `-log(1 - p)/dt` is the rate that gives it. A probability per time unit is `ss.prob(p, "day")` and the like.
@@ -37,7 +37,7 @@ An import that could not translate everything is not refused: `ss.import_from()`
 1. **Get the list.** `sim = ss.import_from('<file>', format='<format>')`; `sim.imported.incomplete` is a list of `(name, why)`, one per missing part, and `sim.imported.prompt` is the instruction itself. Save the model's code with `sc.savetext('model.py', sim.imported.code)`: the parts are listed at its end under `Not translated (ImportIncomplete)`, and how each rate was read is in the comments at its top.
 2. **Find each part in the source** (the `name` says where: a transition, a state's duration, a level, a parameter, an output), and read the framework's guide in `references/` for the row that covers it.
 3. **Translate it in `model.py`** with the closest form, in the order of preference of step 4 of the workflow, using `references/idioms.md`. Keep the source's names. Mark a stand-in for something Starsim could declare with a `Workaround:` comment. Delete the part's line from the `Not translated` list when it is done, so the list is always what is left.
-4. **Report a gap instead of forcing it.** If the part is a feature Starsim does not have (e.g. Atomica's programs and optimization, or EMULSION's offspring by prototype across several machines), leave it out, keep its line in the list, and say in the report what it changes in the results and what Starsim would need.
+4. **Report a gap instead of forcing it.** If the part is a feature Starsim does not have (e.g. EMULSION's offspring by prototype across several machines), leave it out, keep its line in the list, and say in the report what it changes in the results and what Starsim would need.
 5. **Check that nothing else changed**: a text diff of `model.py` against `ss.import_from('<file>', format='<format>').imported.code` should show only the parts you translated.
 6. **Validate** the final model against the original with the validate-import skill, and explain any difference that is left, part by part.
 7. **Report** a table of the parts: how each was translated (declared, a function, custom code, or left out as a gap), and the validation's verdict.
@@ -52,12 +52,14 @@ An import that could not translate everything is not refused: `ss.import_from()`
 | SimInf | `format='siminf'` (`mparse` and the predefined models) | `references/siminf.md` |
 | flepiMoP | `format='flepimop'` (the config YAML) | `references/flepimop.md` |
 | summer2 | `format='summer2'` (a JSON dump of the model object) | `references/summer2.md` |
-| Atomica | `format='atomica'` (the framework and databook workbooks) | `references/atomica.md` |
+| Atomica | `format='atomica'` (the framework and databook workbooks, and any program book and calibration) | `references/atomica.md` |
 | EpiModel | `format='epimodel'` (a JSON dump from `dump_epimodel.R`; built-in models and networks, custom modules listed with their R source) | `references/epimodel.md` |
 | epydemix | `format='epydemix'` (a JSON dump from `starsim/converters/epydemix.py` run as a script, or a live model) | `references/epydemix.md` |
+| epipack | `format='epipack'` (a JSON dump from `starsim/converters/epipack.py` run as a script) | the user guide's conversion page |
+| epymorph | `format='epymorph'` (a JSON dump from `starsim/converters/epymorph.py` run as a script) | the user guide's conversion page |
 | LASER, laser-measles | by hand | `references/laser.md` |
 | MEmilio | `format='memilio'` (a JSON dump from `starsim/converters/memilio.py` run as a script; the ODE models `osir`, `oseir`, `oseirdb`, and `osecir`, alone, on a `MobilityGraph` (places with commuting), or in a parameter study (distributions as priors)); the other models (`osecirvvs`, IDE, LCT, SDE, agent-based) by hand | `references/memilio.md` |
-| camdl | `format='camdl'` (a `.camdl` file, camdlc's JSON, or a pycamdl model) | `references/camdl.md` |
+| camdl | `format='camdl'` (a `.camdl` file, or camdlc's JSON) | `references/camdl.md` |
 | Starsim v3 | upgrade first with the migrate-starsim3 skill (removed names, changed results); then declared transitions by hand | `references/starsim3.md` |
 
 `ss.converters.importers` lists the importers this version has. For a framework with no importer, it can still help to fill in an `ss.converters.Source` (states, parameters, flows as written in the source) and call `ss.converters.build(source)`, which classifies the rates by the same rules, prints how it read each one, and writes the model as code (`ss.converters.write(source)` gives the code alone).

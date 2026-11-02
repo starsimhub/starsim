@@ -3,7 +3,7 @@ Test connectors and custom interventions
 
 Demonstrates a connector mediating a bidirectional interaction between two diseases
 (HIV and SIS), plus a custom intervention that treats one of them. HIV provides a
-``cd4`` state (lower CD4 = more advanced disease); SIS provides a simple infected/
+`cd4` state (lower CD4 = more advanced disease); SIS provides a simple infected/
 susceptible cycle that stands in for a co-infection.
 """
 
@@ -87,8 +87,8 @@ class TreatSIS(ss.Intervention):
 def make_args():
     """ Make people, HIV, SIS, and network """
     pars = dict(n_agents=2000, verbose=0)
-    mf = ss.SexualNet(dur=ss.lognorm_ex(mean=5, std=0.5, unit=ss.years)) # TODO: think about whether these should be ss.dur(); currently they are not since stored in natural units with -self.dt
-    hiv = ssl.diseases.HIV(beta={'sexual': [0.0008, 0.0004]}, init_prev=0.2) # TODO: beta should wrap the other way
+    mf = ss.SexualNet(dur=ss.lognorm_ex(mean=5, std=0.5, unit=ss.years))
+    hiv = ssl.diseases.HIV(beta={'sexual': [0.0008, 0.0004]}, init_prev=0.2)
     sis = ssl.AgentSIS(name='sis', beta={'sexual': [0.02, 0.01]}, init_prev=0.05) # Written as code, since the connector and TreatSIS set its arrays directly; low enough per act for rel_sus to matter
     return dict(pars=pars, networks=mf, diseases=[hiv, sis])
 

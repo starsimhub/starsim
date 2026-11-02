@@ -61,8 +61,7 @@ class State(Nameable, Expr):
 
     def __init__(self, name=None, init=None, init_n=None, people=None, rel_sus=1.0, rel_trans=1.0, keep_time=False, label=None, **kwargs):
         if kwargs:
-            hint = '; infectious= is gone: a state is infectious when it is in a transmission rate (e.g. rate=beta*I)' if 'infectious' in kwargs else ''
-            raise TypeError(f'ss.State() got unexpected arguments: {sc.strjoin(kwargs)}{hint}')
+            raise TypeError(f'ss.State() got unexpected arguments: {sc.strjoin(kwargs)}')
         self.name = name
         self.init = init
         self.init_n = init_n
@@ -355,7 +354,7 @@ class Transition(Nameable):
         dur (any): a dwell time: a duration or a distribution of durations (instead of `rate`); with an event in `where=`, the time after it that people move
         p (float/list): branch probability
         stages (int): number of sub-stages used to realize the dwell time
-        where (Cond/Event/func): who it applies to: a condition (e.g. `ppl.age > 30`), as for `ss.modify(where=)`; for everyone else its rate is 0. With no `rate=` or `dur=`, a trigger
+        where (Cond/Event/func): who it applies to: a condition (e.g. `ss.ppl.age > 30`), as for `ss.modify(where=)`; for everyone else its rate is 0. With no `rate=` or `dur=`, a trigger
             (see `ss.on`): people move as soon as a condition holds. An event moves the people it happens to (`where=preg.delivery`), or `dur=` after it (a time drawn for each person), as agents; joined to a condition with `&`, those who meet it
         move (dict/StrainMove): a change of level in a dimension as well as of state: the dimension, and the level people move to, or a pair of
             levels (e.g. `move=dict(risk=('low', 'high'))`, which applies only to people at the first); or a change of strains (`move=DS >> (DS, RIF)`, see `ss.strains.Strain`)
@@ -379,7 +378,7 @@ class Transition(Nameable):
         infection = ss.Transition(S, I, rate=0.05 * I)
         cure      = ss.Transition(I, S) # No driver: only by treatment
         recovery  = ss.Transition(I, R, dur=ss.days(10))
-        maturing  = ss.Transition(J, A, rate=ss.perday(1), where=ppl.age > 1) # Only adults
+        maturing  = ss.Transition(J, A, rate=ss.perday(1), where=ss.ppl.age > 1) # Only adults
         failure   = ss.Transition(Tx, I, rate=ss.peryear(0.1), move=DS >> (DS, RIF)) # Treatment fails, and the strain acquires resistance (DS, RIF = strains)
         twins     = ss.Transition(P, PP, dur=ss.months(9), p=0.02, increment=dict(parity=2)) # Parity goes up by 2
         weaning   = ss.Transition(NB, W, rate=ss.perday(0.5), after=ss.days(21)) # At least 21 days old first, as EMULSION's duration
@@ -447,7 +446,7 @@ class Transition(Nameable):
         if alone and per is None:
             errormsg = 'alone=True is for an event of each strain carried, so it goes with per="strain"'
             raise ValueError(errormsg)
-        self.per_strain = per == 'strain' # An outcome for each strain carried: see ss.strains.per_strain()
+        self.per_strain = per == 'strain' # An outcome for each strain carried: see ss.strains.prepare()
         self.alone = bool(alone)
         self.increment = parse_increment(increment, 'a transition') # A relative move along some counters: {dim: amount}
         both = [dim for dim in (self.increment or {}) if dim in (self.move or {})]
@@ -511,9 +510,10 @@ class Transition(Nameable):
         Args:
             uids (array): the agents
 
-        **Example**::
-
+        Example:
+            ```python
             h = tb.death.hazard(uids) # The hazard of death from TB for each of these agents
+            ```
         """
         engine = getattr(self.module, 'engine', None)
         if engine is None or not engine.agents:
@@ -574,7 +574,7 @@ class Transition(Nameable):
     def immediate(self):
         """ Whether it has no wait (`dur=0`, or `ss.constant(0)`): people go through it in the step they arrive in its source, or, with `where=`, in the step the condition first holds for them """
         raw = getattr(self.dur, 'raw', None)
-        if isinstance(raw, ss.constant): # Under the compartmental solvers, a conveyor of no steps waited one (ST32)
+        if isinstance(raw, ss.constant): # Under the compartmental solvers, a conveyor of no steps would wait one
             raw = raw.pars.get('v')
         raw = raw.value if isinstance(raw, ss.dur) else raw
         return sc.isnumber(raw) and raw == 0
@@ -614,7 +614,7 @@ class Transition(Nameable):
             current[0].value = value
         elif value is None:
             self.__dict__['_p'] = None
-        elif current is None and getattr(self, 'module', None) is not None: # TL66: crashed deep in the build, or was ignored
+        elif current is None and getattr(self, 'module', None) is not None: # Too late to make it a branch
             errormsg = f'p= makes "{self.name}" a branch, which changes the model, so it is given when the transition is made, e.g. ss.Transition(..., p={value!r}), not set once its module is built'
             raise ValueError(errormsg)
         else: # Set before the model is built, as in the constructor
@@ -813,14 +813,15 @@ def move(*args, p=None, n=None, uids=None, where=None):
     Returns:
         The number of people moved
 
-    **Examples**::
-
+    Examples:
+        ```python
         ss.move(sir.I, sir.R, p=0.5) # Cure half of those infectious
         ss.move(sir.S, sir.I, n=5) # Five susceptible people become infectious
         ss.move(sir.S, sir.R, p=0.8, where=ss.ppl.age < 5) # Protect 80% of the susceptible children under 5
         sir.move(uids, sir.R) # These agents, from wherever they are (also ss.move(sir, uids, sir.R), or sir.move(uids, 'R'))
         self.move(self.I, self.R, uids=uids) # In a disease's own code: these agents, if they are infectious
         ss.move(mosq.Sv, ss.null, p=0.1) # A tenth of the mosquitoes die
+        ```
     """
     if p is not None and n is not None:
         raise ValueError('ss.move() moves a share of the people (p=) or a number of them (n=), not both')
@@ -1432,7 +1433,7 @@ def numeric_pars(dist, convert, per_agent=None):
         if not hasattr(dist, 'scaled_pars'):
             errormsg = f'The parameter "{unitless[0]}" of {dist} has no unit, so unit= cannot convert it; give the distribution with no unit, times a unit, e.g. dur=ss.{type(dist).__name__}(...)*ss.days(1)'
             raise ValueError(errormsg)
-        bare = type(dist)(**dist.pars) # Its numbers as they are, then its draws scaled from its unit to the sim's (TY5)
+        bare = type(dist)(**dist.pars) # Its numbers as they are, then its draws scaled from its unit to the sim's
         return dist.scaled_pars(numeric_pars(bare, convert, per_agent), float(convert(dist.unit(1))))
     pars = dict()
     for key,val in dist.pars.items():

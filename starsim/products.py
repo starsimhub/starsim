@@ -72,7 +72,7 @@ class EventSource:
         self._live = {} # Outcome (None for the event itself): the selections fired on the last step it was fired, as (time index, selection, people in each state and group then, engine)
         self._pending = [] # Fired, not yet in the memory: (outcome, entry)
         needs = ss.interventions.memory_needs(sim)
-        every = sim.solver == 'abm' and isinstance(self, ss.Delivery) # As agents, every event of a delivery, for reading after a run (HP73); a product's (any of its deliveries) only if read
+        every = sim.solver == 'abm' and isinstance(self, ss.Delivery) # As agents, every event of a delivery, for reading after a run; a product's (any of its deliveries) only if read
         self._needs = {o:needs.get((self.name, o), set()) for o in [None] + self.outcome_names() if every or (self.name, o) in needs}
         self._mem = {}
         if sim.solver == 'abm':
@@ -204,7 +204,7 @@ class Product(EventSource, ss.Module):
         return []
 
     def key_by(self, mods):
-        """ For a delivery with `disease=` several diseases (a list or an `ss.Strains`, HP7): the product's values as keyed by each, if they are not already (see the subclasses) """
+        """ For a delivery with `disease=` several diseases (a list or an `ss.Strains`): the product's values as keyed by each, if they are not already (see the subclasses) """
         return
 
     @staticmethod
@@ -264,7 +264,7 @@ class Effect(sc.prettyobj):
         selector = engine.selector
         level = selector.dim(product.dim)
         holds = level > 0
-        if product.during is not None: # Only while in some states (TY6)
+        if product.during is not None: # Only while in some states
             holds = holds*selector.select(product.during)
         efficacy = selector.per_person(self.efficacy)
         if getattr(product, 'doses', None): # Relative efficacy after each dose
@@ -395,7 +395,7 @@ class Held(Product):
             if isinstance(fn, ss.parameters.TimeValue): # Called with the sim, for the value at the current time
                 errormsg = f'waning= is a duration or a function of the time since delivery, not {type(fn).__name__}, which varies with the time of the sim; for protection that fades by a table, give e.g. waning=lambda t: np.interp(t.years, [0, 1, 2], [1, 0.5, 0])'
                 raise TypeError(errormsg)
-        if isinstance(waning, dict): # One for each effect (MS5): functions of time, or None for none
+        if isinstance(waning, dict): # One for each effect: functions of time, or None for none
             bad = [k for k,fn in waning.items() if fn is not None and not callable(fn)]
             if bad:
                 errormsg = f'waning= by effect gives each a function of the time since delivery (e.g. ss.box(...)) or None, not {sc.strjoin(f"{k}={waning[k]!r}" for k in bad)}; protection lost after a duration is lost for every effect at once, so give it as waning= alone'
@@ -427,7 +427,7 @@ class Held(Product):
 
     @property
     def coverage(self):
-        """ Its coverage, as a quantity in a rate: the share of the people in the same place who hold it, each by the protection they have left, e.g. `itn.coverage`, or `itn.coverage(fn)` by a function of the time since delivery (see `ss.expressions.Coverage`, MS4) """
+        """ Its coverage, as a quantity in a rate: the share of the people in the same place who hold it, each by the protection they have left, e.g. `itn.coverage`, or `itn.coverage(fn)` by a function of the time since delivery (see `ss.expressions.Coverage`) """
         return ss.expressions.Coverage(self)
 
     @property
@@ -539,7 +539,7 @@ class Held(Product):
             return
         for disname,effects in self.disease_effects(sim).items(): # One modifier per disease and quantity, all keyed on holding it
             coded = ss.interventions.coded_disease(sim, disname)
-            if coded is not None: # Written as code (PL2): its rel_sus and rel_trans, as for ss.modify()
+            if coded is not None: # Written as code: its rel_sus and rel_trans, as for ss.modify()
                 for key,eff in effects.items():
                     kind = dict(acquisition='rel_sus', transmission='rel_trans').get(key)
                     if kind is None:
@@ -615,7 +615,7 @@ class Held(Product):
             return
         if sim.solver != 'abm':
             return
-        if self.during is not None: # Held only while in some states (TY6)
+        if self.during is not None: # Held only while in some states
             arr = sim.people[self.dim]
             delivery = next(d for d in sim.interventions() if isinstance(d, ss.Delivery) and d.product is self)
             gone = (arr.raw > 0) & ~np.asarray(delivery.selector.select(self.during), dtype=bool)
@@ -840,7 +840,7 @@ class Treatment(Held):
         if self.moves is None and self.members and disease in self.members: # Each disease's infected, for a delivery with disease=[...]
             return self.resolve_each(sim)
         coded = ss.interventions.coded_disease(sim, disease) if self.moves is None else None
-        if coded is not None: # Written as code: its infected, or the people in each state named (HP70), are cured by its clear_infection()
+        if coded is not None: # Written as code: its infected, or the people in each state named, are cured by its clear_infection()
             cures = self.cure if isinstance(self.cure, dict) else {'infected':self.cure}
             states = coded_states(coded)
             unknown = [name for name in cures if name not in states]
@@ -951,7 +951,7 @@ class Treatment(Held):
 
 
 def coded_states(dis):
-    """ The states of a disease written as code, by name: its boolean states (`ss.BoolState`), e.g. `cin` (HP70) """
+    """ The states of a disease written as code, by name: its boolean states (`ss.BoolState`), e.g. `cin` """
     return {arr.name:arr for arr in dis.state_list if isinstance(arr, ss.BoolState)}
 
 
@@ -1027,7 +1027,7 @@ class Diagnostic(Product):
         """ Each disease's states: a value for its infected (or for detects=) becomes one for the infected of each, and one by state, for that state of each that has it; a person's result is the worst over the diseases """
         if self.detects is not None:
             return
-        states = lambda mod: mod.graph.states if mod.graph is not None else coded_states(mod) # Declared, or written as code (HP70)
+        states = lambda mod: mod.graph.states if mod.graph is not None else coded_states(mod) # Declared, or written as code
         infected = lambda mod: [st.name for st in mod.graph.infected if st.people] if mod.graph is not None else ['infected']
         def expand(vals):
             if not isinstance(vals, dict): # For the infected
@@ -1113,7 +1113,7 @@ class Diagnostic(Product):
                 if name not in sim.diseases:
                     raise sc.KeyNotFoundError(f'the test "{self.name}" has a {"sensitivity" if self.results_given is None else "result"} for "{name}.{state}", but "{name}" is not a disease in the sim; its diseases are {sc.strjoin(sim.diseases.keys())}.')
                 coded = ss.interventions.coded_disease(sim, name)
-                states = coded_states(coded) if coded is not None else sim.get_declared(name).graph.states # Written as code: its boolean states (HP70)
+                states = coded_states(coded) if coded is not None else sim.get_declared(name).graph.states # Written as code: its boolean states
                 if state not in states:
                     raise sc.KeyNotFoundError(f'the test "{self.name}" has a {"sensitivity" if self.results_given is None else "result"} for "{state}", which is not a state of "{name}". Its states are {sc.strjoin(states.keys())}.')
             vals = [t.get(key, 0.0) for t in tables]
@@ -1176,7 +1176,7 @@ class Diagnostic(Product):
     @staticmethod
     def test_together(groups, together=None):
         """
-        Diseases written as code that one delivery gives the test for (`together`, e.g. HPVsim's genotypes, HP70), given the same values by
+        Diseases written as code that one delivery gives the test for (`together`, e.g. HPVsim's genotypes), given the same values by
         state (a test keyed by a state's name, e.g. `{'CIN': 0.9}`), are one group, keyed by their names: a person is tested once, in the state
         that gives the most severe results (a woman with CIN of one genotype and susceptible to the others is tested as with CIN), rather than
         once for each disease

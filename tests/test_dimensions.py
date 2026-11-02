@@ -261,7 +261,7 @@ def test_property_values():
     assert np.isclose(sim.people.urban.mean(), 0.9, atol=0.02) and len(np.unique(sim.people.wealth[sim.people.auids])) > 100
     with pytest.raises(ValueError, match='split= would overwrite them'):
         make(split=[0.5, 0.5]).init()
-    with pytest.raises(ValueError, match="'age', 'space', 'plain'"): # An unknown kind, e.g. the removed 'clock'
+    with pytest.raises(ValueError, match="'age', 'space', 'plain'"): # An unknown kind
         make(kind='clock')
     return sim
 

@@ -1,8 +1,8 @@
 """
 Not for the user: the ODE run in JAX: gradients of results with respect to parameters, and many runs at once
 
-A compartmental engine flattens its flows into a `ss.kernels.Program`. The Numba
-kernels step through it; `run()` here takes the same program and runs the same
+A compartmental engine flattens its flows into a `ss.kernels.Program`. The kernels
+(Numba or Rust) step through it; `run()` here takes the same program and runs the same
 fourth-order Runge-Kutta (or Euler) steps in JAX, so that the run can be
 differentiated (`gradient()`) and many runs with different values can be taken in
 one call (`run_sets()`). JAX is imported only when one of these is used.
@@ -39,7 +39,7 @@ def jax():
 
     If JAX has not been imported yet, it is given a device for each core of the CPU (as
     `numpyro.set_host_device_count()` does), so that the chains of a posterior run on
-    cores of their own; everything else runs on the first, as before. The platform it runs
+    cores of their own; everything else runs on the first. The platform it runs
     on is `ss.options.jax` (e.g. "cpu"), if not "auto". The first time, its devices are
     started here, so that a GPU that fails to start (e.g. with a CUDA plugin of another
     version than jaxlib) says what to do.

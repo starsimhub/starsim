@@ -30,7 +30,7 @@ sim.plot()
 
 ## Performance
 
-Starsim compiles its numerical code with Numba once per install. If `import starsim` prints a note that it is not compiled yet, suggest that the user run `starsim compile` once (it takes a few minutes); don't run it yourself unprompted.
+Starsim's numerical code is in Rust kernels, already compiled in the wheels on PyPI, or otherwise Numba kernels, compiled once per install. If `import starsim` prints a note that the kernels are not compiled yet, suggest that the user run `starsim compile` once (it takes a few minutes); don't run it yourself unprompted.
 
 ## Skills
 

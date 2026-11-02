@@ -8,6 +8,8 @@ Original version by @alina-muellenmeister, @domdelport, and @RomeshA
 import starsim as ss
 from .agents import AgentSEIR
 
+__all__ = ['Measles']
+
 
 class Measles(AgentSEIR):
     """

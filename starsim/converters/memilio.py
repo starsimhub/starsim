@@ -77,10 +77,11 @@ def load_memilio(source, verbose=None, **kwargs):
     Returns:
         An `ss.Sim`, with `sim.imported` saying how it was read and what was not translated
 
-    **Example**:
-
+    Example:
+        ```python
         # In the MEmilio environment: python memilio.py ode_secir_simple.py model.json
         sim = ss.import_from('model.json', format='memilio')
+        ```
     """
     d = source if isinstance(source, dict) else sc.loadjson(source)
     kind = d['model']
@@ -266,7 +267,7 @@ def nodes_of(src, d, places, totals):
     split = ss.by(totals/totals.sum(), dims=['age', 'patch']) if n > 1 else (totals[0]/totals.sum()).tolist()
     src.stratify(patch=places, split=split, mobility=ss.geo.Mobility(matrix=away.tolist(), kind='commute'))
     src.notes.append(f'places        the {len(nodes)} nodes as the places "{places[0]}" to "{places[-1]}", and the {len(edges)} edges as commuting: MEmilio moves an edge\'s share of a node\'s people to the other node for every other step and back, so they spend half their time there (ss.geo.Mobility(kind="commute") with half the share); '
-                     f'MEmilio integrates the commuters in the other node, where Starsim weights each place\'s exposure by the time spent there, so counties whose epidemic starts from commuters can differ (switching/memilio.md)')
+                     f'MEmilio integrates the commuters in the other node, where Starsim weights each place\'s exposure by the time spent there, so counties whose epidemic starts from commuters can differ (see the import-model skill\'s guide to MEmilio)')
     if d['model'] == 'osecir':
         src.notes.append('commuting     MEmilio\'s commuters with symptoms commute less (by RiskOfInfectionFromSymptomatic, get_mobility_factors()); here everyone commutes alike, which carries infection between places faster '
                          '(in a test of three places with RiskOfInfectionFromSymptomatic 0.25, by 5 to 19% of each place\'s peak and 1% of the total; with 1, by 1 to 3%)')
@@ -295,7 +296,7 @@ def factor(src, c, n, t0):
         src.skip('contacts: school_holidays', f'{c["school_holidays"]} school holidays, which are not translated')
     times = sorted(points)
     for a,b in zip(times[:-1], times[1:]):
-        if b - a < 1 and points[a] != points[b] and b - a != 1:
+        if b - a < 1 and points[a] != points[b]:
             src.notes.append(f'contacts      two dampings less than a day apart (days {a:g} and {b:g}); the smoothing between them is not exactly MEmilio\'s')
     if len(set(points.values())) == 1:
         val = points[times[0]]

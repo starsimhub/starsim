@@ -13,7 +13,8 @@ A flepiMoP model is a configuration YAML plus CSV files beside it: `compartments
 | `subpop_setup.mobility` | `ss.geo.Mobility(matrix=0.5*amount/pop, kind='visit')` (travelers spend half the day away: gempyor's `percent_day_away`) | yes |
 | `initial_conditions` (`SetInitialConditions`, `Default`) | `init_n=dict(...)` (numbers of people), by place as `ss.by(subpop=[...])` | yes |
 | `seir.parameters` (numbers, arithmetic) | Parameters | yes |
-| A parameter drawn from a distribution | Its mean (listed); a prior, and a draw for each run, by hand | no |
+| A parameter drawn from a distribution (`truncnorm`, `norm`, `uniform`, `lognorm`) | Its mean, with the distribution as its prior, for `ss.parallel(sim, n_runs=, priors=True)` | yes |
+| One drawn from another distribution | Its mean (listed) | no |
 | A transition | One flow per combination of levels, written as flepiMoP's total, `rate × source^e × Π (group^e / N)`, then classified (so the force of infection is exposure, `beta * I`) | yes |
 | `integration.method` | `rk4` and `euler` → `'ode'`, `stochastic` → `'binomial'` | yes |
 | `SinglePeriodModifier`, `StackedModifier` | `ss.modify('<disease>.pars.<par>', multiply=..., start=..., stop=...)`, following `stacked_modifier_method` (`product`, `reduction_product`, `sum`) | yes |
@@ -35,7 +36,7 @@ A flepiMoP model is a configuration YAML plus CSV files beside it: `compartments
 
 ## Worked example
 
-`lingua_franca_design/vignettes/flepimop/vaccine_scenarios/model.py`: two provinces with vaccination and waning, three scenarios of stacked modifiers, and chained outcomes. The import of the two-province SEIR matches flepiMoP's reference to 1e-12 in every compartment of both provinces; the vaccine scenarios, run with the original's draws, match its means to 4e-12 in every stock, flow, and outcome. The draws, by hand:
+`lingua_franca_design/docs/models/flepimop/vaccine_scenarios/model.py`: two provinces with vaccination and waning, three scenarios of stacked modifiers, and chained outcomes. The import of the two-province SEIR matches flepiMoP's reference to 1e-12 in every compartment of both provinces; the vaccine scenarios, run with the original's draws, match its means to 4e-12 in every stock, flow, and outcome. The draws, by hand:
 
 ```python
 Ro = ss.par(2.5, prior=sps.truncnorm((1.1 - 2.5)/0.1, (3 - 2.5)/0.1, loc=2.5, scale=0.1))

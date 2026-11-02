@@ -12,7 +12,7 @@ named as flepiMoP names them, e.g. `S_unvaccinated`); the places become a strati
 mixes in the places its people visit for half the day); each transition becomes a flow,
 classified by the shared rules; the modifiers of a scenario become `ss.modify` interventions;
 and the outcomes become `ss.outcome`s. Parameters drawn from a distribution are imported at
-their mean, and listed as not translated.
+their mean, with the distribution as their prior; one with no prior in Starsim is listed as not translated.
 
 Used with: compartments; declared modules
 """

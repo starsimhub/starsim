@@ -24,7 +24,7 @@ The first five are *compartmental*: they only know how many people are in each c
 
 ## How Starsim chooses
 
-By default (`solver='auto'`), a model runs as an ODE if every part of it can be written as compartments, and as agents if anything in it needs individuals: a contact network, `n_agents=`, or a module written as code (other than an analyzer). `'auto'` never chooses a stochastic compartmental solver; ask for one by name.
+By default (`solver='auto'`), a model runs as an ODE if every part of it can be written as compartments, and as agents if anything in it needs individuals: a contact network, `n_agents=`, or a module written as code that keeps a value for each person. `'auto'` never chooses a stochastic compartmental solver; ask for one by name.
 
 Here is a measles outbreak in a town of 100,000 people. Measles has a basic reproduction number R0 of about 15 (β = 1.9 per day, infectious for 8 days), but in this town 90% of people are already immune, so at the start each case infects about 15 × 0.1 = 1.5 others:
 

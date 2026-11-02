@@ -189,7 +189,7 @@ class Counter(ss.Module):
     text, changes, todo = migrate_text("hiv = ssl.HIV(beta={'mf': [0.08, 0.04], 'prenatal': [0.2, 0], 'msm': [0.1, 0.1]})") # A beta pair has direction names
     assert text == "hiv = ssl.HIV(beta={'mf': ss.peract(m2f=0.08, f2m=0.04), 'prenatal': 0.2, 'msm': [0.1, 0.1]})" and any('"msm"' in msg for line,msg in todo)
 
-    # The names of results: Starsim's own counts renamed after results, and a package's own results left alone (CV5, ST4, HP80, MG10)
+    # The names of results: Starsim's own counts renamed after results, and a package's own results left alone
     text, changes, todo = migrate_text("a = sim.results.n_alive; b = res['sir.n_infected']; c = df['n_alive']")
     assert text == "a = sim.results.alive; b = res['sir.infected']; c = df['n_alive']" and len(todo) == 1 # A column of a dataframe could be anything's: listed
     own = "class Mosquito(ss.Module):\n    def init_results(self):\n        self.define_results(ss.Result('n_infected'))\n    def step(self):\n        self.results.n_infected[self.ti] = 5\nx = res['n_infected']"
@@ -233,7 +233,6 @@ class Counter(ss.Module):
     return new
 
 
-# %% Run as a script
 def test_cli(tmp_path, monkeypatch, capsys):
     """ The starsim command: installing the skill for AI agents (to a temporary home folder), and showing the guide and its skills """
     sc.heading('Testing the starsim command')
@@ -301,6 +300,7 @@ def test_no_numba_cache(tmp_path):
     return
 
 
+# %% Run as a script
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)

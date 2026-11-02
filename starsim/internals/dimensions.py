@@ -610,7 +610,7 @@ class Groups(sc.prettyobj):
             for i,d in enumerate(ds): # Each dimension's own split is the total over the others
                 if i not in within:
                     strat, total = self.strats[d], grid.sum(axis=tuple(j for j in range(len(ds)) if j != i))
-                    if strat.joint is None and strat.split_given and 'split' not in strat.guessed and not np.allclose(strat.split, total, atol=1e-6): # TL4: the given split was silently replaced
+                    if strat.joint is None and strat.split_given and 'split' not in strat.guessed and not np.allclose(strat.split, total, atol=1e-6): # The given split would otherwise be replaced
                         others = [self.strats[dd].name for dd in ds if dd != d]
                         raise ValueError(f'"{strat.name}" is given the split {np.round(strat.split, 4).tolist()}, but the split over {sc.strjoin(self.strats[dd].name for dd in ds)} gives it {np.round(total, 4).tolist()}: '
                                                        f'a split over several dimensions is the share at each combination of their levels. For rows that are the shares of {sc.strjoin(others)} given "{strat.name}", '
@@ -891,7 +891,6 @@ class Groups(sc.prettyobj):
         if kept is None:
             kept = self._level_cache = dict()
         levels = []
-        changed = False
         def level_of(strat, raw): # As 16-bit integers if they fit, to save memory
             return (np.clip(np.digitize(raw, strat.edges) - 1, 0, strat.n - 1) if strat.edges is not None else ss.solvers.backends.passes.levels(raw)).astype(level_dtype(strat.n), copy=False)
         dtype = level_dtype(self.n_groups)
@@ -985,9 +984,10 @@ class Groups(sc.prettyobj):
         Args:
             dim (str/int): the dimension, by name or position
 
-        **Example**:
-
+        Example:
+            ```python
             sim.groups.level('risk') # 0, 1, 2 for each risk group; -1 for people the risk groups don't apply to
+            ```
         """
         d = self.dim_index(dim) if isinstance(dim, str) else dim
         levels = self.level_raw(d)

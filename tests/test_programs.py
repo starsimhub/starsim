@@ -16,11 +16,11 @@ def make_sir():
     return ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=10), init_prev=0.01, name='sir')
 
 
-# %% Acceptance tests: the worked examples of proposal 02, small
+# %% Worked examples, small
 
 
 def test_hpv_algorithm():
-    sc.heading('Acceptance: HPV screen, then a treatment visit with a capacity of 10 a week and a queue (hpvsim_interventions/port.py algo_a, one genotype), as agents')
+    sc.heading('Testing HPV screen, then a treatment visit with a capacity of 10 a week and a queue (one genotype), as agents')
     def make(**kwargs):
         S, I, CIN, CA = ss.states('S I CIN CA')
         hpv = ss.Disease(
@@ -59,7 +59,7 @@ def test_hpv_algorithm():
 
 
 def test_rescreen():
-    sc.heading('Acceptance: rescreening every 5 years at most, at 30% a year, as agents')
+    sc.heading('Testing rescreening every 5 years at most, at 30% a year, as agents')
     def make(**kwargs):
         sir = make_sir()
         test = ss.Diagnostic()
@@ -75,7 +75,7 @@ def test_rescreen():
 
 
 def test_two_doses():
-    sc.heading('Acceptance: a two-dose vaccine, the second at least 6 months after the first (hpvsim_interventions/port.py), as agents')
+    sc.heading('Testing a two-dose vaccine, the second at least 6 months after the first, as agents')
     def make(**kwargs):
         S, I = ss.states('S I')
         sir = ss.Disease(infection=ss.Transition(S, I, rate=ss.peryear(1.5) * I), recovery=ss.Transition(I, S, dur=ss.years(1)), init_prev=0.05, name='sis').stratify(age=[0, 9, 15])

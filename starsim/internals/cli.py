@@ -1,7 +1,5 @@
 """
-The starsim command, available after installing Starsim:
-
-It exists for the setup done once, outside Python.
+The starsim command, available after installing Starsim, for the setup done once, outside Python:
 
     starsim init                # Both of the below: what most users run once, after pip install starsim
     starsim compile             # Compile Starsim's numerical code (once per install)

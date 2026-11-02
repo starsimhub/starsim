@@ -105,12 +105,12 @@ sim.run()
 
 ## Timings
 
-Lines are lines of model code (not counting blank lines, comments, imports, or plotting, and counting a line over 100 characters twice), against the lines of flepiMoP's YAML; times are for one run. Both are measured by Starsim's north-star script, `tests/north_star/north_star.py` in the lingua_franca_design repo (see the [index page](../library_landscape.qmd#how-these-numbers-were-made)). flepiMoP's times were recorded on the same machine, as a whole command (`flepimop simulate`), most of which is compiling its integrator with Numba, which it does on every run.
+Lines are lines of model code (not counting blank lines, comments, imports, or plotting, and counting a line over 100 characters twice), against the lines of flepiMoP's YAML; times are for one run, the first in a new process and a rerun of the same model. Both were measured as described on the [index page](../library_landscape.qmd#how-these-numbers-were-made). flepiMoP's times were recorded on the same machine, as a whole command (`flepimop simulate`), most of which is compiling its integrator with Numba, which it does on every run.
 
 | Model | Lines: flepiMoP | Lines: Starsim | One run: flepiMoP | One run: Starsim | |
 |---|---|---|---|---|---|
-| The two-population tutorial | 42, plus 10 lines of CSV | 14 | 8.4 s as a command | 0.015 s to build and run (0.052 s the first time in a new process) | Pass |
-| The vaccine scenarios tutorial, 30 runs (3 scenarios of 10) | 141, plus 10 lines of CSV | 36 | 96 s as a command (after the first, each run takes about 2.6 s) | 1.4 s (1.5 s the first time) | Pass |
+| The two-population tutorial | 42, plus 10 lines of CSV | 16 | first 8.6 s, rerun 8.6 s as a command | first 0.012 s, rerun 0.00092 s | Pass |
+| The vaccine scenarios tutorial, 30 runs (3 scenarios of 10) | 141, plus 10 lines of CSV | 33 | first 23 s, rerun 23 s as a command | first 0.76 s, rerun 0.54 s | Pass |
 | The 3,000-place configuration, one SEIR run with its outcomes | | | 34 s (58 s the first time, with compiling), plus 6 to 9 s for the outcomes | 5.0 s, plus 1.7 s to read the configuration | |
 
 The last row was measured on 17 October 2026, on a machine shared with other jobs.

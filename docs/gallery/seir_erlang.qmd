@@ -63,5 +63,5 @@ Both have the same R0, so the same share of people is infected in the end. But w
 
 ## Going further
 
-- [Disease structure](../tutorials/t3_disease.qmd) adds a latent period to the measles model, with durations and their distributions.
+- [T3 – Building a disease](../tutorials/t3_disease.qmd) adds a latent period to the measles model, with durations and their distributions.
 - [Distributions](../user_guide/mechanics_distributions.qmd) lists the distributions a duration can have; any of them can be used as agents, and as compartments they are represented by stages.

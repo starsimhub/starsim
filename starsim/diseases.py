@@ -13,7 +13,6 @@ import starsim as ss
 import matplotlib.pyplot as plt
 
 ss_int = ss.dtypes.int
-_ = None # For function signatures
 
 
 
@@ -152,7 +151,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
                 self.build_graph()
             else: # Built once the subclass's __init__() has declared the rest
                 self.set_metadata(**{key:kwargs.pop(key) for key in ['name', 'label'] if key in kwargs})
-        else: # Written as code: its own define_pars() and define_states() follow, as in Starsim 3; or declared by define_states() and define_transitions()
+        else: # Written as code: its own define_pars() and define_states() follow; or declared by define_states() and define_transitions()
             self.update_pars(pars, **kwargs)
         return
 
@@ -375,7 +374,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         return sc.dcp((args, members), memo=memo)
 
     def check_par_members(self, args, members, kwargs):
-        """ A parameter given by keyword under the name it already has (name=), and read by a transition, as if it were a result (e.g. eir=eir) is an error: a result needs a name of its own (MS11) """
+        """ A parameter given by keyword under the name it already has (name=), and read by a transition, as if it were a result (e.g. eir=eir) is an error: a result needs a name of its own """
         for key,val in kwargs.items():
             if isinstance(val, ss.par) and val.name_given and val.name == key:
                 exprs = [e for obj in list(args) + list(members.values()) + list(kwargs.values()) if isinstance(obj, ss.Transition) for e in [obj.rate, obj.dur] + sc.tolist(obj.p)]
@@ -562,11 +561,12 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         arrow is labeled with its transition's name and value (`recovery: 10 days`), and
         the share that takes it for a transition with `p=`. `print(sir.diagram())` gives the text.
 
-        **Example**:
-
+        Example:
+            ```python
             S, I, R = ss.states(3)
             sir = ss.Disease(infection=S >> I @ 0.3*I, recovery=ss.Transition(I, R, dur=ss.days(10)))
             sir.diagram()
+            ```
         """
         return ss.display.Diagram('\n'.join(['flowchart LR'] + ss.display.diagram(self.graph)))
 
@@ -594,11 +594,12 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         Args:
             matrix (bool): if True, return the next-generation matrix (over the infected compartments of every group) rather than its largest eigenvalue
 
-        **Example**:
-
+        Example:
+            ```python
             S, I, R = ss.states(3)
             sir = ss.Disease(infection=S >> I @ 0.3*I, recovery=ss.Transition(I, R, dur=10))
             sir.R0() # 3.0
+            ```
         """
         if self.sim is not None and self.sim.initialized:
             sim = self.sim.new(solver='ode', verbose=0).init()
@@ -621,7 +622,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         """
         if self.graph is not None and any(st.given_init for st in self.graph.states.values()): # A starting value set after the disease was made (e.g. by an importer) turns off the default seeding
             self.graph.unset_default_init_prev()
-        unknown = [key for key in self.pars if key not in self.graph.pars and key not in self.code_pars] if self.graph is not None else [] # Added after the disease was made, so nothing reads it (TL58: pars.init was ignored)
+        unknown = [key for key in self.pars if key not in self.graph.pars and key not in self.code_pars] if self.graph is not None else [] # Added after the disease was made, so nothing reads it
         if unknown:
             hint = ' The starting values are given when the disease is made, e.g. ss.Disease(..., init=dict(I=0.01)) or init_n=dict(I=100), and cannot be set through pars.' if 'init' in unknown or 'init_n' in unknown else ''
             raise sc.KeyNotFoundError(f'"{self.name}" has no parameter named {sc.strjoin(unknown)}, so nothing would read it. Its parameters are {sc.strjoin(self.graph.pars.keys())}{ss.expressions.did_you_mean(unknown[0], self.graph.pars.keys())}{hint}')
@@ -694,9 +695,10 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
             event (Transition/str): the transition or event, e.g. `preg.stillbirth`, `preg.loss`, or its name
             fn (func): called with the agents' UIDs (once for each time, so an agent can appear twice), only on a step when there are some
 
-        **Example**:
-
+        Example:
+            ```python
             preg.add_callback(preg.stillbirth, lambda uids: self.n_stillbirths.__setitem__(uids, self.n_stillbirths[uids] + 1))
+            ```
         """
         self.check_not_given('add_callback()')
         if isinstance(event, ss.Transition):
@@ -784,8 +786,8 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
             key (str): 'rel_sus', 'rel_trans', or the name of a parameter
             uids (uids): the agents to give the values of (default: an array of every agent, by UID)
 
-        **Example**::
-
+        Example:
+            ```python
             sim.diseases.sir.current_value('rel_sus') # With a vaccine's efficacy applied
 
             class Diabetes(ss.Disease):
@@ -793,6 +795,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
                 def step(self):
                     uids = self.at_risk.uids
                     onset = self.pars.p_onset.rvs(uids)*self.current_value('rel_sus', uids) # ...
+            ```
         """
         if key not in ['rel_sus', 'rel_trans']:
             if self.graph is not None and not self.abm and uids is not None:
@@ -816,11 +819,12 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
             args (list): passed to `ss.move()`: what to move, from where, and to where
             kwargs (dict): passed to `ss.move()`, e.g. `p` or `uids`
 
-        **Examples**::
-
+        Examples:
+            ```python
             sir.move(sir.I, sir.R, p=0.5) # Cure half of those infectious
             sir.move(uids, sir.R) # These agents, from wherever they are (or sir.move(uids, 'R'))
             self.move(self.I, self.R, uids=uids) # In the disease's own code: these agents, if they are infectious
+            ```
         """
         return ss.move(self, *args, **kwargs)
 
@@ -835,9 +839,10 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         Returns:
             The agents infected
 
-        **Example**::
-
+        Example:
+            ```python
             covid.infect(sim.people.auids[:20], strain='alpha') # 20 imported cases of alpha
+            ```
         """
         if self.engine is None:
             raise RuntimeError(f'"{self.name}" infects people once the sim is initialized (sim.init())')
@@ -854,10 +859,11 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         Args:
             states (list): the states to look in, as names or states (default: the module's states of people, in order)
 
-        **Example**::
-
+        Example:
+            ```python
             cs = sir.current_state() # 0 for S, 1 for I, 2 for R
             cs.labels[cs[uid]] # The name of an agent's state
+            ```
         """
         graph = self.graph
         if self.engine is None:
@@ -940,7 +946,7 @@ class Infection(Disease):
 
     A disease that can be written as states and transitions is declared instead, with
     `ss.Disease` (see `ss.SIR`), which gives it every solver and `describe()`, `equations()`,
-    and `R0()`. The v4 verbs that act on arrays work on both: `ss.modify(hiv.rel_trans, ...)`,
+    and `R0()`. The verbs that act on arrays work on both: `ss.modify(hiv.rel_trans, ...)`,
     conditions such as `hiv.cd4 < 200`, and fitting the values in `pars`.
 
     With `strains=ss.Strains(...)`, each person carries one strain at a time (`self.strain`, the index of the
@@ -1013,7 +1019,6 @@ class Infection(Disease):
         Args:
             strains (Strains): the strains
         """
-        n = len(strains)
         if strains.max_strains > 1:
             raise ss.CapabilityError(f'"{self.name}" is written as code, so its strains are carried one at a time, sharing its states, with protection on rel_sus due to its own states; but max_strains={strains.max_strains}. Declare the disease (see ss.Disease) for more.')
         self.strains = strains # Its arrays are added when the sim is initialized (see init_pre()), so a subclass may define its own states after this, even with reset=True
@@ -1159,7 +1164,7 @@ class Infection(Disease):
             return [β, β*0] if getattr(net, 'one_way', False) else [β, β]
 
         def as_pair(β, nkey):
-            """ A probability per act is one value for both [p1 to p2, p2 to p1], as Starsim 3's pair; with directions, an array of a value for each of the network's (see `transmit_route()`) """
+            """ A probability per act is one value for both [p1 to p2, p2 to p1]; with directions, an array of a value for each of the network's (see `transmit_route()`) """
             if not isinstance(β, ss.peract):
                 return β
             net = nets.get(nkey)
@@ -1261,9 +1266,10 @@ class Infection(Disease):
         Returns:
             The agents infected
 
-        **Example**::
-
+        Example:
+            ```python
             hiv.infect(sim.people.auids[:20]) # 20 imported cases
+            ```
         """
         if self.graph is not None and self.graph.transmissions:
             return super().infect(uids, strain)
@@ -1646,10 +1652,11 @@ class SIR(Disease):
     An SIR model written as code, with a lognormal `dur_inf` and `p_death=0.01`,
     is `ssl.AgentSIR`.
 
-    **Example**:
-
+    Example:
+        ```python
         sim = ss.Sim(diseases=ss.SIR(beta=0.1, dur_inf=ss.years(6)), networks='random', n_agents=5000)
         sim.run().plot()
+        ```
     """
     beta      = ss.par(ss.peryear(0.1))
     dur_inf   = ss.par(ss.years(6))
@@ -1670,7 +1677,7 @@ class SEIR(Disease):
     Args:
         beta (float/`ss.per`/dict): the transmission rate (per contact, if there are networks; a dict gives one per network, and `default=` for the networks it does not name)
         init_prev (float): the fraction of people who start infected, who start exposed, in `E` (or, above 1, a number of people); to start people infectious, give `init=dict(I=0.01)` or `init_n=dict(I=10)` instead
-        dur_exp (float/`ss.dur`/`ss.Dist`): the mean time that people are exposed (latent) for (by default 0.5 years; a number is in years), as an exponential
+        dur_exp (float/`ss.dur`/`ss.Dist`): the mean time that people are exposed (latent) for (by default 0.5 years; a number is in the model's unit), as an exponential
         dur_inf (float/`ss.dur`/`ss.Dist`): the mean time that people are infectious for (by default 6 years), as an exponential
         p_death (float): the probability of death from infection, at the end of the infection (by default 0)
         kwargs (dict): passed to `ss.Disease`, e.g. `name`

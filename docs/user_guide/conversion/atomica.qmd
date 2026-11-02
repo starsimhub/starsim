@@ -91,15 +91,15 @@ sim.run()
 
 ## Timings
 
-Lines are lines of model code (not counting blank lines, comments, imports, or plotting, and counting a line over 100 characters twice), against the rows of Atomica's spreadsheets plus its Python; times are for one run. Both are measured by Starsim's north-star script, `tests/north_star/north_star.py` in the lingua_franca_design repo (see the [index page](../library_landscape.qmd#how-these-numbers-were-made)). Atomica 1.32.4's times were recorded on the same machine, for `Project.run_sim()` with the spreadsheets already loaded.
+Lines are lines of model code (not counting blank lines, comments, imports, or plotting, and counting a line over 100 characters twice), against the rows of Atomica's spreadsheets plus its Python; times are for one run, the first in a new process and a rerun of the same model. Both were measured as described on the [index page](../library_landscape.qmd#how-these-numbers-were-made). Atomica 1.32.4's times were recorded on the same machine, for `Project.run_sim()` with the spreadsheets already loaded.
 
 | Model | Lines: Atomica | Lines: Starsim | One run: Atomica | One run: Starsim | |
 |---|---|---|---|---|---|
-| The SIR demo | 62 (59 spreadsheet rows, 3 lines of Python) | 16 | 0.0025 s | 0.016 s to build and run (0.07 s the first time in a new process); 0.5 ms to rerun a built sim | Pass |
-| The HIV demo | 217 (188 spreadsheet rows, 29 lines of Python) | 67 | 0.0047 to 0.0054 s | 0.11 s (0.16 s the first time) | Pass |
+| The SIR demo | 62 (59 spreadsheet rows, 3 lines of Python) | 16 | first 0.12 s, rerun 0.0024 s | first 0.011 s, rerun 0.0008 s | Pass |
+| The HIV demo | 217 (188 spreadsheet rows, 29 lines of Python) | 64 | first 0.15 s, rerun 0.0043 s | first 0.035 s, rerun 0.002 s | Pass |
 | Budget optimization of the HIV demo over its 7 programs | | | 1.3 s | 2.3 s | |
 
-A spreadsheet row that a program officer fills in is not the same as a line of Python, so the line counts compare unlike things. The first time Starsim runs after it is installed, its compiled code is compiled, which takes up to half a minute; this happens once.
+A spreadsheet row that a program officer fills in is not the same as a line of Python, so the line counts compare unlike things. Starsim's Numba kernels are compiled once after installing, which takes a couple of minutes (`starsim compile`); its Rust kernels need no such step.
 
 ## What works and what does not yet
 

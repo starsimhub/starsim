@@ -1,6 +1,6 @@
 """
 The model corpus: the conformance models of `docs/design/18-conformance.md` in the lingua_franca_design repo, and a small
-model of each standard pattern of the users in the switching review
+model of each standard pattern of the users of other frameworks
 
 Each model is a function that returns an unrun sim, sized to run in seconds; keyword
 arguments go to `ss.Sim`, e.g. `corpus.sir(solver='binomial')`. Under `solver='abm'`,
@@ -249,7 +249,7 @@ def seasonal(b=0.5, data=None, **kwargs):
 def age_vaccine(**kwargs):
     """ The epydemix pattern: an age-stratified model with a vaccine for the under-fives """
     sir = make_sir(beta=0.05).stratify(age=[0, 5, 20, 65], split=[0.15, 0.3, 0.45, 0.1])
-    vaccine = ss.vaccinate(ss.Vaccine(efficacy=0.9), where=ss.People(1).age < 5, coverage=0.8, at=[10], name='vaccinate')
+    vaccine = ss.vaccinate(ss.Vaccine(efficacy=0.9), where=ss.ppl.age < 5, coverage=0.8, at=[10], name='vaccinate')
     contacts = np.array([[6, 3, 2, 1], [3, 8, 3, 1], [2, 3, 6, 2], [1, 1, 2, 3]])
     return make_sim(sir, kwargs, unit='day', stop=100, total_pop=100_000, networks=ss.contacts(contacts), interventions=vaccine)
 
@@ -272,7 +272,7 @@ def poisson_weekly(**kwargs):
 
 
 def starsim3(**kwargs):
-    """ The Starsim 3 pattern: an SIR written as code over a random network """
+    """ The Starsim 3 pattern: `ss.SIR` with keywords, over a random network """
     return make_sim(None, kwargs, diseases=ss.SIR(beta=ss.perday(0.1), init_prev=0.01), networks=ss.RandomNet(n_contacts=4), n_agents=5_000, start=2000, stop=2002)
 
 

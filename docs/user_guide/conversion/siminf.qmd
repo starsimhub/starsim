@@ -79,15 +79,15 @@ In SISe3, what SimInf does in C (the environmental pressure, its decay, and its 
 
 ## Timings
 
-Lines are lines of model code (not counting blank lines, comments, imports, or plotting, and counting a line over 100 characters twice); times are for one run. Both are measured by Starsim's north-star script, `tests/north_star/north_star.py` in the lingua_franca_design repo (see the [index page](../library_landscape.qmd#how-these-numbers-were-made)). SimInf 11.1.0's times were recorded on the same machine. Starsim fails the north star's test of lines on both models, and its tests of time on SISe3.
+Lines are lines of model code (not counting blank lines, comments, imports, or plotting, and counting a line over 100 characters twice); times are for one run, the first in a new process and a rerun of the same model. Both were measured as described on the [index page](../library_landscape.qmd#how-these-numbers-were-made). SimInf 11.1.0's times were recorded on the same machine. Starsim fails the north star's test of lines on both models, and passes on time, being less than 1 s slower.
 
 | Model | Lines: SimInf | Lines: Starsim | One run: SimInf | One run: Starsim | |
 |---|---|---|---|---|---|
-| `events_SIR()`, 1,600 herds | 12 | 21 | 1.8 to 2.3 s as a command (starting R, loading the events, building, and running); the run itself 0.08 s | 0.9 s to build and run (1.2 s the first time in a new process) | **Fail** (lines) |
-| SISe3, 1,600 herds | 27 | 40 | 1.6 to 1.9 s as a command; the run itself 0.10 s | 5.2 s (5.5 s the first time) | **Fail** (lines, first run, repeated run) |
+| `events_SIR()`, 1,600 herds | 12 | 21 | first 0.17 s, rerun 0.076 s | first 0.27 s, rerun 0.13 s | **Fail** (lines) |
+| SISe3, 1,600 herds | 27 | 39 | first 0.29 s, rerun 0.093 s | first 1.0 s, rerun 0.74 s | **Fail** (lines) |
 | `events_SIR()` copied ten times: 16,000 herds and 4.7 million events | | | 1.9 s to run (2.0 s on 8 threads), 2.1 s to build | 3.1 s to run, 2.0 s to build | **Pass** |
 
-The times were measured on 18 October 2026 on a machine shared with other jobs. The last row is the switching demo's `test_siminf_scale()`, with the results kept for every herd on every day, as SimInf keeps them. Starsim's Gillespie solver steps only the herds that can have an event (a herd with nobody infected is skipped until the register moves animals into or out of it), and is always exact, however many events there are.
+The last row was measured on 18 October 2026 on a machine shared with other jobs, and is the switching demo's `test_siminf_scale()`, with the results kept for every herd on every day, as SimInf keeps them. Starsim's Gillespie solver steps only the herds that can have an event (a herd with nobody infected is skipped until the register moves animals into or out of it), and is always exact, however many events there are.
 
 ## What works and what does not yet
 

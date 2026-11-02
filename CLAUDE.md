@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-Starsim is an agent-based modeling framework for simulating disease spread among agents via dynamic transmission networks. It supports co-transmission of multiple diseases and detailed modeling of intervention strategies.
+Starsim is a fast, flexible disease modeling framework, from compartments to agents: the same model can run as an ODE, as a stochastic compartmental or metapopulation model, or as agents on dynamic transmission networks. It supports co-transmission of multiple diseases and detailed modeling of intervention strategies.
 
 For a compact index of the whole public API (signatures, summaries, and default parameters), see https://starsim.org/v4/llms.txt (or `llms-full.txt`, which adds an example for each entry). These are generated when the docs are built and are not committed; to generate them locally for the current branch (as `docs/llms.txt` etc.), run `cd docs && python make_api.py`. The equivalent for Sciris is at https://docs.sciris.org/llms.txt.
 <!-- V4-PREVIEW: while v4 is in development its docs are at starsim.org/v4 (see docs/publish); restore the link above to docs.starsim.org for normal publishing -->
@@ -16,8 +16,8 @@ The design record of v4 (the constitution, the spec, the current plan, and what 
 The framework follows a modular design with these key components:
 
 - **Sim**: Main simulation class that orchestrates all modules and runs simulations (`starsim/sim.py`)
-- **People**: Manages individual agents and their state updates (`starsim/people.py`)
-- **Networks**: Defines how agents interact with each other (`starsim/networks.py`)
+- **People**: Manages the population, as agents or as counts (`starsim/people.py`)
+- **Networks**: Defines who meets whom, as networks of agents or as mixing between groups (`starsim/networks.py`)
 - **Diseases**: Models disease transmission and progression (`starsim/diseases.py`)
 - **Interventions**: Implements prevention/treatment strategies (`starsim/interventions.py`)
 - **Demographics**: Handles population dynamics like births/deaths (`starsim/demographics.py`)
@@ -73,6 +73,8 @@ uv add starsim[dev]  # With dev dependencies
 ## Project structure
 
 ### Core modules (`starsim/`)
+- `interventions.py`: Interventions, and the deliveries of products (`ss.vaccinate`, `ss.screen`, `ss.treat`, ...)
+- `results.py`: Results (`ss.Result`, `ss.Results`)
 - `analyzers.py`: Analyzers for custom results (`ss.Analyzer`, the base class, and `ss.infection_log`)
 - `connectors.py`: Connectors between modules (e.g. `ss.modify`)
 - `data.py`: Data by place (`ss.data.population('Kenya')`, `ss.data.contacts(...)`), read by `ss.people('Kenya')`, `ss.contacts('Kenya')`, and `ss.geo.geography('Kenya')`
@@ -87,7 +89,7 @@ uv add starsim[dev]  # With dev dependencies
 - `run.py`: Running multiple simulations (`ss.MultiSim`, `ss.parallel`)
 - `settings.py`: Global options (`ss.options`) and plotting style
 - `sim.py`: The sim (`ss.Sim`)
-- `solvers/`: The engines that run declared models, and their kernels (below): `engine.py` (what they share), `mixing.py` (who meets whom in a compartmental run), `compartmental.py`, `agents.py` (with its mixins `agents_expressions.py`, `agents_moving.py`, `agents_stepping.py`, and `agents_branching.py`), `crossing.py` (diseases tracked jointly), and `choose.py` (which solver, and why: `ss.solvers.choose_solver()`); every name is also `ss.solvers.X`
+- `solvers/`: The engines that run declared models, and their kernels (below): `engine.py` (what they share), `mixing.py` (who meets whom in a compartmental run), `compartmental.py`, `agents.py` (with its mixins `agents_expressions.py`, `agents_moving.py`, `agents_stepping.py`, and `agents_branching.py`), `crossing.py` (diseases tracked jointly), `deliveries.py` (how interventions reach people or compartments), `particles.py` (the particle filter), and `choose.py` (which solver, and why: `ss.solvers.choose_solver()`); every name is also `ss.solvers.X`
 - `strains.py`: Strains (`ss.Strains`) and immunity between them (`ss.immunity`)
 - `transitions.py`: States and transitions (`ss.State`, `ss.states()`, `ss.Transition` and its `S >> I @ rate` spelling, ...); the names it builds on are spelled by their own modules (`ss.expressions.Expr`, `ss.graph.Graph`, `ss.dimensions.Strat`, ...)
 - `utils.py`: Helper functions
@@ -103,10 +105,10 @@ Example and reference modules that build on core Starsim but are not part of it,
 - `mnch/`: Maternal, newborn, and child health (fetal health, maternal infections, neonatal sepsis)
 - `networks/`: Household, cluster, spatial, and theoretical (e.g. Erdős–Rényi) networks
 
-Core disease base classes (Disease, Infection, NCD, SIR, SIS, SEIR) live in `starsim/diseases.py`.
+Core disease classes (Disease, Infection, SIR, SIS, SEIR) live in `starsim/diseases.py`.
 
 ### Testing (`tests/`)
-- `test_*.py`: Core test files (about 300 tests, under a minute in parallel); keep new tests here few and quick
+- `test_*.py`: Core test files (about 375 tests, under a minute in parallel); keep new tests here few and quick
 - `devtests/`: Developer tests (contracts, inference, errors, importers and exporters, and slower feature tests), in files named like the core ones
 - `run_tests`: Main test runner script
 - `pytest.ini`: Pytest configuration
@@ -126,7 +128,7 @@ Core disease base classes (Disease, Infection, NCD, SIR, SIS, SEIR) live in `sta
 - Follows Google Python style guide with project-specific exceptions
 - Tests use pytest with parallel execution via `pytest-xdist`
 - Documentation built with Quarto and executed via Jupyter
-- Random number generation is centralized in `distributions.py`, with Common Random Numbers (CRN) for reproducibility
+- Random number generation is centralized in `distributions.py` and `internals/dists.py`, with Common Random Numbers (CRN) for reproducibility
 
 ## Module architecture
 
@@ -141,10 +143,10 @@ The framework uses a modular architecture where all components inherit from base
 ## Key dependencies
 
 - **Sciris**: Core utility library for data structures, plotting, and utilities
-- **Numba**: Used for performance-critical code sections
+- **Numba**: Used for performance-critical code sections, with a Rust copy of its kernels (`solvers/rust/`), and optional JAX for gradients
 - **NetworkX**: Network analysis and manipulation
 - **Pandas/NumPy**: Data manipulation and numerical operations
-- **Matplotlib/Seaborn**: Plotting and visualization
+- **Matplotlib**: Plotting and visualization
 
 ## Important notes
 

@@ -43,11 +43,11 @@ Then, in Starsim, `sim = ss.import_from('model.json')`. If the source builds sev
 - summer2 splits the initial population by the population split, but Starsim's split of a partial stratification is its split on entry; the import starts such a compartment from `ss.by(<counts>, dims=[...])`.
 - Strain stratifications are imported as the disease's strains (`ss.Disease(..., strains=ss.Strains(...))`, then `dis.strains`), with the flow adjustments as values by strain; check the infection flows, since summer2 gives each strain its own force of infection.
 - summer2's flow outputs are rates: divide Starsim's transition results by `dt`. Its cumulative outputs add up those rates without multiplying by the step.
-- summer2's flow output at time `t` is the mean of the instantaneous rates at `t - dt` and `t` (the trapezoid rule), not the number that moved over the step, which is what Starsim's transition result is. They differ where a flow curves sharply within a step: in the TB model with a yearly step, notifications differ by 5% in 1955, early in the epidemic and the scale-up, and by 0.2% or less from 1980, while every compartment agrees. Compare compartments to validate an import; to reproduce summer2's numbers exactly, take the mean of `rate × n_<state>` at the two ends of each step.
+- summer2's flow output at time `t` is the mean of the instantaneous rates at `t - dt` and `t` (the trapezoid rule), not the number that moved over the step, which is what Starsim's transition result is. They differ where a flow curves sharply within a step: in the TB model with a yearly step, notifications differ by 5% in 1955, early in the epidemic and the scale-up, and by 0.2% or less from 1980, while every compartment agrees. Compare compartments to validate an import; to reproduce summer2's numbers exactly, take the mean of `rate × <state>` at the two ends of each step.
 
 ## Worked example
 
-`lingua_franca_design/vignettes/summer2/seir-age-clinical/model.py` (SEIR by age with a clinical stratification of `I` entered by age, infectiousness by level, and derived outputs) and `vignettes/summer2/sir-age-location/model.py` (mixing matrices for age and location). The imports agree with summer2 within 0.0005 people of 1,000 (every compartment and derived output) and 0.08 people of 1,000. The derived outputs, in hand-written code:
+`lingua_franca_design/docs/models/summer2/seir-age-clinical/model.py` (SEIR by age with a clinical stratification of `I` entered by age, infectiousness by level, and derived outputs) and `docs/models/summer2/sir-age-location/model.py` (mixing matrices for age and location). The imports agree with summer2 within 0.0005 people of 1,000 (every compartment and derived output) and 0.08 people of 1,000. The derived outputs, in hand-written code:
 
 ```python
 res = sim.results.sir
@@ -56,4 +56,4 @@ incidence_old = res.incidence.select(age='old').values / dt   # summer2's flow o
 
 ## Running the original
 
-In summer2's environment (`lingua_franca_design/_envs/summer2`): build the model, `model.run()`, then `model.get_outputs_df()` (one column per stratified compartment, e.g. `SXage_youngXlocation_urban`) and `model.get_derived_outputs_df()`; LFD's `examples/summer2/*/export.py` writes these in the long format. In Starsim, `res[f'{state}'].select(age=..., location=...)`. A stock at index `k` is the number at summer2's time `k`, with no shift.
+In summer2's environment (`lingua_franca_design/_envs/summer2`): build the model, `model.run()`, then `model.get_outputs_df()` (one column per stratified compartment, e.g. `SXage_youngXlocation_urban`) and `model.get_derived_outputs_df()`; LFD's `docs/models/summer2/*/export.py` writes these in the long format. In Starsim, `res[f'{state}'].select(age=..., location=...)`. A stock at index `k` is the number at summer2's time `k`, with no shift.

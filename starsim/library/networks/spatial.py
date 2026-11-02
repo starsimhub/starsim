@@ -1,7 +1,7 @@
 """
 Spatial networks, in which contacts are determined by where agents are.
 
-These exist for models in which distance matters. A compartmental run can use `GeoNet` and `GridNet` only by their mean number of contacts, which leaves out where people are; `DiskNet` runs as agents only.
+These exist for models in which distance matters. A compartmental run can use `GeoNet` only by its mean number of contacts, which leaves out where people are; `DiskNet` and `GridNet` run as agents only.
 
 Used with: agents and compartments; declared and coded modules
 """
@@ -9,6 +9,8 @@ import numpy as np
 import scipy.sparse as spsp
 import starsim as ss
 from .theoretical import StaticNet
+
+__all__ = ['DiskNet', 'GeoNet', 'GridNet']
 
 _ = None # Sentinel for "not provided" default arguments
 

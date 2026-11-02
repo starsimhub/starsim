@@ -1,4 +1,4 @@
-# MNCH Examples
+# MNCH examples
 
 Reusable example modules for Maternal, Newborn, and Child Health (MNCH) modeling in Starsim.
 
@@ -14,8 +14,9 @@ Reusable example modules for Maternal, Newborn, and Child Health (MNCH) modeling
 
 ### Fetal health (`fetal_health.py`)
 
-- **`fetal_infection`**: Connector that links a disease (default: SIR) to fetal health outcomes. Applies timing shifts (preterm birth) and growth restriction to pregnancies where the mother is infected. Also reverses damage when treatment occurs.
-- **`treat_pregnant`**: Intervention that treats infected pregnant women each timestep, curing infection and enabling `fetal_infection` to reverse damage.
+- **`FetalHealth`**: Module that tracks fetal growth and birth weight outcomes (LBW, VLBW, SGA) during pregnancy; other modules change them through its methods.
+- **`fetal_infection`**: Connector that links a disease (default: an SIR written as code, `ssl.AgentSIR(name='sir')`) to fetal health outcomes. Applies timing shifts (preterm birth) and growth restriction to pregnancies where the mother is infected.
+- **`treat_pregnant`**: Intervention that treats infected pregnant women each timestep, curing infection and partially reversing the fetal damage.
 
 ## Usage
 
@@ -32,7 +33,7 @@ sim = ss.Sim(
 
 # Fetal health example
 sim = ss.Sim(
-    diseases=ss.SIR(beta=0.1),
+    diseases=ssl.AgentSIR(name='sir', beta=0.1), # Written as code, since treat_pregnant() sets its states directly
     connectors=ssl.mnch.fetal_infection(),
     interventions=ssl.mnch.treat_pregnant(disease='sir'),
     custom=ssl.mnch.FetalHealth(),

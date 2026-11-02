@@ -300,7 +300,7 @@ def plain_seconds(p, y, npts, solver, n_sub=1):
     About how long a run would take as plain Python, in seconds, from the program's size alone, so that it is the same
     for a model whatever has run before and whatever else the machine is doing: 10 µs each time the rates are worked
     out (see `evals()`), plus 0.6 µs for each operation that takes (see `work()`); the exact solver takes about one
-    event for each person and flow. Measured once (W8, 2026-10-25) on 13 plain runs of the ODE (declared SIRs with 1
+    event for each person and flow. Measured once (2026-10-25) on 13 plain runs of the ODE (declared SIRs with 1
     to 100 groups, over 20 and 50 places, measles metapop over 260 districts, MEmilio's 50 counties, two SEIRs with
     stages tracked jointly, a stiff SIS, and an SIS with aging), it is within 0.75 to 1.6 times the time taken, and
     0.35 for the SIS with aging, whose epidemic needs more substeps than its rates at the start (see `substeps()`):
@@ -320,7 +320,7 @@ def compiled_seconds(p, y, npts, solver, n_sub=1):
     """
     About how long a run of the ODE would take in the compiled kernels, in seconds, from the program's size alone (as
     `plain_seconds()` is, and never timed): 0.5 ms a run, plus 0.1 µs each time the rates are worked out (see
-    `evals()`) and 2 ns for each operation that takes (see `work()`). Measured once (W8, 2026-10-25, on a quiet machine)
+    `evals()`) and 2 ns for each operation that takes (see `work()`). Measured once (2026-10-25, on a quiet machine)
     on 24 runs (the models of `plain_seconds()` and MEmilio's 100 to 400 counties, some with Euler steps), it is within
     0.93 to 1.6 times the time taken for the runs of more than 0.05 s (260 districts over 16 years: 3.7 s
     against 4.0 s; MEmilio's 400 counties: 0.95 s against 0.62 s), and 0.34 to 1.4 times for the shorter ones (the
@@ -386,9 +386,10 @@ def compile(verbose=True):
     `NUMBA_CACHE_DIR` if it is set). Until the kernels are compiled, small runs are taken as plain Python: see `ss.options.kernels`. With the
     Rust kernels in use, there is nothing to compile: they are compiled already. To see which is the case, use `ss.compile_status()`.
 
-    **Example**:
-
+    Example:
+        ```python
         ss.compile()
+        ```
     """
     if ss.solvers.backends.rust.on:
         if verbose:
@@ -433,9 +434,10 @@ def compile_status():
         An `sc.obj` of `engine` ('rust', 'numba', or 'python': what runs the kernels), `compiled` (True only if they run
         at full speed from the first run, from the current code), `missing` (the parts for which they don't), and `summary` (a line saying so)
 
-    **Example**:
-
+    Example:
+        ```python
         print(ss.compile_status().summary)
+        ```
     """
     from . import passes
     rust = ss.solvers.backends.rust
@@ -929,7 +931,7 @@ def binary(op, a, b):
 @jit
 def evaluate(y, t, consts, out, grouped):
     """
-    Every value of a tape (see `ss.solvers.Tape`) at the compartments y, by group, into out (values by groups); grouped is set to whether each differs by group
+    Every value of a tape (see `Tape`) at the compartments y, by group, into out (values by groups); grouped is set to whether each differs by group
 
     Each entry is a parameter's value (CONST, a row of consts, which differs by group if its row of t.const_grouped says so),
     a count (COUNT, TOTAL, FRAC: in the same place, the whole population, and as a share of the people in the same place),
@@ -1057,7 +1059,7 @@ def place_rates(ys, p, a, b, rates, stack, expo):
 
 @kernel(error_model='python', inline='always') # Inlined, as it is called for every event of the exact solver by place
 def uniform(z):
-    """ A number uniform on (0, 1) from the counter of a random stream, which the caller moves on by `golden` before each number: Starsim's hash (`draws.mix()`), with the bits taken to the middle of their step rather than as `draws.uniform()` takes them, so the exact solver's streams are as they were """
+    """ A number uniform on (0, 1) from the counter of a random stream, which the caller moves on by `golden` before each number: Starsim's hash (`draws.mix()`), with the bits taken to the middle of their step rather than as `draws.uniform()` takes them """
     return (float(draws.mix(z) >> np.uint64(11)) + 0.5)/9007199254740992.0
 
 
@@ -1528,7 +1530,7 @@ def settle(y, p, rates, dt, flows):
     that is filled at a steady rate and decays settles where it would in continuous time. As
     in the ODE, the step is split into enough substeps that no count turns over by more than
     a quarter in one: in one step, RK4 is unstable once a count turns over by more than 2.8,
-    and mosquitoes that live 10 days died out at a 30-day step (MA6).
+    and mosquitoes that live 10 days would die out at a 30-day step.
     """
     fastest = 0.0
     for f in range(len(p.src)):
@@ -1775,7 +1777,7 @@ def convey(rng, y, p, w, flows, release):
 @jit
 def certain(rng, y, p, w, rates, flows, move, solver):
     """
-    For `step()`, when a flow has an infinite rate (a probability of 1 over the step, FP1): everyone in its compartment leaves by it
+    For `step()`, when a flow has an infinite rate (a probability of 1 over the step): everyone in its compartment leaves by it
 
     At the start of each substep (`move`), the whole compartment moves, as a transfer: shared equally between
     the flows with an infinite rate out of it (a draw for the stochastic solvers), into their targets as the flows
@@ -2225,13 +2227,13 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, varying):
                 for c in range(nc):
                     for g in range(ng):
                         everyone += y[c, g]
-                least = 1e-9*everyone # Not a compartment that is only starting to fill, whose growth follows another's: of everyone, not of its group (TR4: a group of 1e-13 people, of a strain only starting to emerge, took 4 million substeps a step)
-                for g in range(ng): # Not through people moving in from other groups (a cohort moving through the stages of a box, MS6), which are linear and as fast as the movers' rates, which the substeps allow for already
+                least = 1e-9*everyone # Not a compartment that is only starting to fill, whose growth follows another's: of everyone, not of its group (a group of 1e-13 people, of a strain only starting to emerge, would take millions of substeps a step)
+                for g in range(ng): # Not through people moving in from other groups (a cohort moving through the stages of a box), which are linear and as fast as the movers' rates, which the substeps allow for already
                     for c in range(nc):
                         gain = dy[0, c, g] - (moved_in[c, g] if len(moved_in) else 0.0)
                         if gain > 0 and y[c, g] > least:
                             growing = max(growing, gain/y[c, g])
-                    for e in range(len(p.set_starts) - 1): # Nor a count that a rate reads, over all its compartments (RF1: the first slot of a conveyor fills from empty in each step, so the people infectious, I.n, grew tenfold in a step taken whole)
+                    for e in range(len(p.set_starts) - 1): # Nor a count that a rate reads, over all its compartments (the first slot of a conveyor fills from empty in each step, so the people infectious, I.n, can grow tenfold in a step taken whole)
                         tot = 0.0
                         grow = 0.0
                         for k in range(p.set_starts[e], p.set_starts[e+1]):
@@ -2793,8 +2795,8 @@ def fork_unsafe():
 def start_method():
     """
     How to start the workers of `ss.parallel()` and of a calibration: on Linux, by fork, the fastest, unless this process
-    has started threads that a fork can deadlock on (see `fork_unsafe()`); then by forkserver, whose workers start clean
-    (W17). Elsewhere (macOS, Windows), as the platform does. Python 3.14 made forkserver the default on Linux, so fork is
+    has started threads that a fork can deadlock on (see `fork_unsafe()`); then by forkserver, whose workers start clean.
+    Elsewhere (macOS, Windows), as the platform does. Python 3.14 made forkserver the default on Linux, so fork is
     asked for by name.
     """
     if sys.platform == 'darwin' or 'fork' not in mp.get_all_start_methods(): # Fork is not safe on macOS, and Windows has none

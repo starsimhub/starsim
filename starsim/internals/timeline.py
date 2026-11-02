@@ -21,7 +21,7 @@ class Timeline:
 
     Args:
         start (str/int/float/`ss.date`/`ss.dur`): when the simulation/module starts, e.g. '2000', '2000-01-01', 2000, ss.date(2000), or ss.years(2000)
-        stop (str/int/float/`ss.date`/`ss.dur`): when the simulation/module ends (note: if start is a date, stop must be too)
+        stop (str/int/float/`ss.date`/`ss.dur`): when the simulation/module ends (with a date as start, a calendar year or a date; a shorter duration is the length of the run)
         dt (int/float/`ss.dur`): Simulation step size
         dur (int/float/`ss.dur`): If "stop" is not provided, run for this duration
         name (str): if provided, name the `Timeline` object
@@ -36,7 +36,7 @@ class Timeline:
     - `timevec`: the "human-friendly" representation of `tvec`: same as `tvec` if using `ss.date`, else floats if using `ss.dur`
     - `yearvec`: time represented as floating-point years
     - `datevec`: time represented as `ss.date` instances
-    - `relvec`: relative time, in the sim's time units
+    - `relvec`: relative time, in the unit of the sim's step (`dt`)
 
     The `Timeline` object also has the following attributes/methods:
 
@@ -281,7 +281,7 @@ class Timeline:
         Update the time parameters, reinitializing the timeline if it was initialized and any changed
 
         Args:
-            kwargs: the time parameters to change (start, stop, dur, dt); those not given (or None) are kept
+            kwargs: the time parameters to change (start, stop, dt); those not given (or None) are kept
         """
         stale = False
         for key in self.time_args:
@@ -429,10 +429,6 @@ class Timeline:
                     errormsg = f'start={self.start}, stop={self.stop}, and dur={self.dur} disagree: from start to stop is {span}, not {given}. Give two of the three'
                     raise ValueError(errormsg)
 
-            case _: # This should not occur since we matched all 8 cases above
-                errormsg = f'Failed to match {self.start = }, {self.stop = }, and {self.dur = } to any known pattern. You can use numbers, strings, ss.date, or ss.dur objects.'
-                raise ValueError(errormsg)
-
         # Additional validation (the types were checked above)
         if start > stop:
             errormsg = f'Start must be before stop, not {start} and {stop}'
@@ -510,7 +506,7 @@ class Timeline:
                 self.tvec = ss.date.arange(self.start, self.stop, self.dt, allow_zero=True)
                 self.yearvec = self.tvec.years
             else:
-                errormsg = f'Unexpected start {self.start}: expecting ss.dur or ss.Date'
+                errormsg = f'Unexpected start {self.start}: expecting ss.dur or ss.date'
                 raise TypeError(errormsg)
 
         # Finalize the eager vectors: tvec (as a DateArray) and the time-index vector
@@ -526,7 +522,7 @@ class Timeline:
             ss.warn(warnmsg)
 
         # Capture the reference start and duration class so the lazy relvec property can be
-        # built later without needing the sim (relvec is expressed in the sim's time units)
+        # built later without needing the sim (relvec is in the unit of the sim's step)
         self._capture_relvec_context(sim)
 
         # Check that the eagerly-built vectors are the expected length (the lazy vectors are
@@ -546,7 +542,7 @@ class Timeline:
         Copy the time vectors from a matching (sim) timeline
 
         Eager vectors are shallow-copied into independent array containers (sharing the
-        immutable date/dur elements; see the deepcopy note in the rc3.6.0 performance work).
+        immutable date/dur elements).
         The lazy vectors are copied only if the source has already materialized them, so a
         module that never reads e.g. datevec does not force the sim to build it.
         """

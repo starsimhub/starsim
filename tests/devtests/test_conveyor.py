@@ -34,7 +34,7 @@ def dde(lag, beta=0.4, gamma=1/7, seed=0.001, stop=200, dt=0.01):
 
 @sc.timer()
 def test_fixed_delay():
-    sc.heading('Fixed delays: ss.constant as a conveyor of whole steps, exact on the step grid (odin, questions-oct12 #7)')
+    sc.heading('Fixed delays: ss.constant as a conveyor of whole steps, exact on the step grid (as in odin)')
 
     # A cohort with a competing death: exact, as agents
     mu = 0.01

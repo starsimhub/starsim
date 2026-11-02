@@ -14,7 +14,7 @@ published with the docs (e.g. <https://starsim.org/v4/llms.txt>):
 This is a docs build tool: nothing here is part of the Starsim package itself.
 
 The artifacts are not committed to the repository: they are generated when the
-docs are built. To generate them manually::
+docs are built. To generate them manually:
 
     cd docs && python make_api.py
 """
@@ -97,6 +97,7 @@ module_order = list(module_titles.keys())
 # The library subpackages, each listed after the core modules
 libraries = sc.obj(
     diseases = 'Library: diseases',
+    econ     = 'Library: health economics',
     mnch     = 'Library: maternal, newborn, and child health',
     networks = 'Library: networks',
 )

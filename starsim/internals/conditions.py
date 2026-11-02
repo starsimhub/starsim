@@ -544,7 +544,7 @@ def state_refs(obj):
         for val in (vars(holder).values() if holder is not None else []):
             if isinstance(val, (Cond, ss.State)):
                 walk(as_cond(val))
-            elif isinstance(val, ss.expressions.Expr): # e.g. a modifier's amount, multiply=1 - 0.9*m.on (FP89)
+            elif isinstance(val, ss.expressions.Expr): # e.g. a modifier's amount, multiply=1 - 0.9*m.on
                 for leaf in val.leaves:
                     if isinstance(leaf, ss.State):
                         walk(as_cond(leaf))
@@ -622,7 +622,7 @@ def as_cond(obj):
         return Event('tr', obj)
     elif isinstance(obj, ss.Arr):
         return from_arr(obj)
-    elif isinstance(obj, ss.expressions.Expr) and not isinstance(obj, ss.expressions.par): # A declared sum of states (infected = P + A + C): being in any of them (TY15)
+    elif isinstance(obj, ss.expressions.Expr) and not isinstance(obj, ss.expressions.par): # A declared sum of states (infected = P + A + C): being in any of them
         split = ss.expressions.linear(obj, die=False)
         if split is None:
             return obj
@@ -655,7 +655,7 @@ def group_reasons(cond, sim):
     """
     What in a condition only agents can evaluate, found from its structure without evaluating it: a mother's
     state, a function of uids, events combined (`a.positive | b.positive`), a property of people that is not a
-    dimension (`people.age` with no age groups, TC2), or a binned property compared with a number inside a bin
+    dimension (`people.age` with no age groups), or a binned property compared with a number inside a bin
     """
     if isinstance(cond, ss.expressions.mother):
         return [f'{cond} reads each person\'s mother, which only agents know']
@@ -983,7 +983,7 @@ class Selector(sc.prettyobj):
         if name in mod.graph.transfers: # The people who moved along a stratification this step
             raise ss.CapabilityError(f'the transfer "{name}" of "{mod.name}" as an event cannot run with solver="{self.sim.solver}" yet.\n'
                                      f'     Run with solver="abm", or leave the solver as "auto".')
-        if self.mod is not None and mod is not self.mod: # TL37: crashed with a broadcasting error, or with as many states in each, gave a wrong answer
+        if self.mod is not None and mod is not self.mod: # Its shares are of the states of another module
             raise ss.CapabilityError(f'the event {mod.name}.{name} cannot select people of "{self.mod.name}" with solver="{self.sim.solver}": a compartmental run does not follow which state of "{self.mod.name}" '
                                      f'the people who went through a transition of "{mod.name}" are in. Run with solver="abm", or use an event of "{self.mod.name}".')
         return engine.event_frac(name, to=to)

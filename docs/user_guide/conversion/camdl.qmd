@@ -94,12 +94,12 @@ With data attached (`ss.Sim(..., data=...)`, a table with columns `time` and `ca
 
 ## Timings
 
-Lines are lines of model code (not counting blank lines, comments, imports, or plotting, and counting a line over 100 characters twice), against the lines of the `.camdl` file; times are for one run. Both are measured by Starsim's north-star script, `tests/north_star/north_star.py` in the lingua_franca_design repo (see the [index page](../library_landscape.qmd#how-these-numbers-were-made)). camdl's times were recorded on the same machine.
+Lines are lines of model code (not counting blank lines, comments, imports, or plotting, and counting a line over 100 characters twice), against the lines of the `.camdl` file; times are for one run, the first in a new process and a rerun of the same model. Both were measured as described on the [index page](../library_landscape.qmd#how-these-numbers-were-made). camdl's times were recorded on the same machine.
 
 | Model | Lines: camdl | Lines: Starsim | One run: camdl | One run: Starsim | |
 |---|---|---|---|---|---|
-| The SIR, as an ODE | 30 | 13 | 0.0093 s as a command (`camdl simulate --backend ode`) | 0.020 s to build and run (0.10 s the first time in a new process); 0.6 ms to rerun a built sim | Pass |
-| The SEIR by age and patch, as an ODE | 35 (the pycamdl script; 41 as a `.camdl` file) | 15 | 0.10 s (pycamdl, with the model built) | 0.018 s (0.065 s the first time) | Pass |
+| The SIR, as an ODE | 30 | 13 | first 0.013 s, rerun 0.0066 s as a command (`camdl simulate --backend ode`) | first 0.0099 s, rerun 0.00071 s | Pass |
+| The SEIR by age and patch, as an ODE | 47 | 16 | first 0.021 s, rerun 0.014 s as a command | first 0.015 s, rerun 0.0011 s | Pass |
 | The SIR fitted by particle MCMC (4 chains) | | | 21 s (PMMH, 200 particles) | 79 s (50 particles, chosen in the warm-up) | |
 | The SIR fitted by IF2 (4 chains of 50 passes, 1,000 particles) | | | 11.9 s | 13 s | |
 
@@ -159,7 +159,7 @@ print('Infections with SIAs:', round(sia.infection.sum()), '(camdl: 863920)')
 
 ## Bringing your model in
 
-`ss.import_from('model.camdl', format='camdl')` reads a camdl model: a `.camdl` file is compiled with `camdlc` (from the `PATH`, or `CAMDLC`) into camdl's JSON intermediate representation, which is what is read; the IR itself and a pycamdl model (through `dump_pycamdl.py`) can be read too. Each transition becomes a transition, its rate classified by Starsim's import rules (`beta * S * I / N` is exposure to `I`), parameters keep their bounds and priors, and each observation of a flow becomes an outcome with its likelihood. `scenario=` chooses a scenario's parameter values. What is not translated (scheduled events and interventions, ODE compartments, forcing functions of time) is listed (`sim.imported.incomplete`), and `sim.imported.prompt` is a prompt for an AI assistant with Starsim's import-model skill to finish the job.
+`ss.import_from('model.camdl', format='camdl')` reads a camdl model: a `.camdl` file is compiled with `camdlc` (from the `PATH`, or `CAMDLC`) into camdl's JSON intermediate representation, which is what is read; the IR itself can be read too. Each transition becomes a transition, its rate classified by Starsim's import rules (`beta * S * I / N` is exposure to `I`), parameters keep their bounds and priors, and each observation of a flow becomes an outcome with its likelihood. `scenario=` chooses a scenario's parameter values. What is not translated (scheduled events and interventions, ODE compartments, forcing functions of time) is listed (`sim.imported.incomplete`), and `sim.imported.prompt` is a prompt for an AI assistant with Starsim's import-model skill to finish the job.
 
 See [Import/export](index.qmd) for importing in general: checking an import, keeping it as code, and finishing one that is incomplete.
 

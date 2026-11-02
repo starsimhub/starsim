@@ -185,7 +185,7 @@ def terms(node):
 
 class Rates(sc.prettyobj):
     """
-    Turn the rates of a source into the rates of transitions, by the rules in 16-interop.md
+    Turn the rates of a source into the rates of transitions, by the rules in `docs/design/16-interop.md` in the lingua_franca_design repo
 
     It exists so that every importer reads a rate the same way.
     """

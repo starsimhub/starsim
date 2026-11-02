@@ -283,9 +283,10 @@ def load_atomica(framework, databook=None, progbook=None, calibration=None, star
     Returns:
         An `ss.Sim`, with `sim.imported` saying how it was read and what was not translated
 
-    **Example**:
-
+    Example:
+        ```python
         sim = ss.import_from('sir_framework.xlsx', format='atomica', databook='sir_databook.xlsx', dt=1)
+        ```
     """
     sheets = pd.read_excel(framework, sheet_name=None, header=None)
     comps = table(sheets, 'Compartments')
@@ -303,7 +304,7 @@ def load_atomica(framework, databook=None, progbook=None, calibration=None, star
         for t in types[1:]:
             parts = [k for df in [comps, chars, pars] for k in df.index if get_type(df, k) == t]
             if parts:
-                    src.skip(f'population type {t}', f'only the first population type ({types[0]}) is imported; {t} and its {len(parts)} compartments, characteristics, and parameters ({sc.strjoin(parts[:6])}{", ..." if len(parts) > 6 else ""}) would be a disease of their own')
+                src.skip(f'population type {t}', f'only the first population type ({types[0]}) is imported; {t} and its {len(parts)} compartments, characteristics, and parameters ({sc.strjoin(parts[:6])}{", ..." if len(parts) > 6 else ""}) would be a disease of their own')
         comps, chars, pars = mine(comps), mine(chars), mine(pars)
 
     # Transition matrix: sources in the first column, destinations along the top, in a block for each population type

@@ -15,7 +15,6 @@ import matplotlib as mpl
 import starsim as ss
 
 
-
 class Profile(sc.profile):
     """
     Class to profile the performance of a simulation
@@ -27,6 +26,7 @@ class Profile(sc.profile):
         follow (func/list): a list of functions/methods to follow in detail
         do_run (bool): whether to immediately run the sim
         plot (bool): whether to plot time spent per module step
+        verbose (bool): whether to print the profile
         **kwargs (dict): passed to `sc.profile()`
 
     Examples:
@@ -312,7 +312,7 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
 
     Args:
         sim1 (Sim/MultiSim/dict): either a simulation/MultiSim object or a dict of its summary (e.g. sim.summary.value.to_dict())
-        sim2 (im/dict): ditto
+        sim2 (Sim/MultiSim/dict): ditto
         skip_key_diffs (bool): whether to skip keys that don't match between sims
         skip (list): a list of values to skip
         full (bool): whether to print out all values (not just those that differ)
@@ -337,7 +337,6 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
         if not isinstance(sim, dict):  # pragma: no cover
             errormsg = f'Cannot compare object of type {type(sim)}, must be a sim or a sim.summary dict'
             raise TypeError(errormsg)
-
 
     # Check if it's a multisim
     sim1 = sc.obj(sim1)

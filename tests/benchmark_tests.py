@@ -11,13 +11,13 @@ import re
 import sys
 import sciris as sc
 import pytest
+from timing import REF_MOPS
 sc.options(interactive=False)
 
 filename = sc.thisdir(__file__, 'benchmark_tests.yaml')
 
 def run_pytest(cpus=None):
-    """ Run  all the tests via pytest """
-    ref = 270 # Reference benchmark for sc.benchmark(which='numpy') on a Intel i7-12700H (for scaling performance)
+    """ Run all the tests via pytest """
     r1 = sc.benchmark(which='numpy')
 
     # Get files and construct the pytest command
@@ -26,7 +26,7 @@ def run_pytest(cpus=None):
         cpus = sc.cpu_count()//2 # To avoid overloading/multithreading
     args = ['-n', cpus, '--durations=0'] + files
 
-    # Run the tests and capture the oupttus
+    # Run the tests and capture the output
     print(f'Benchmarking {len(files)} files on {cpus} cores:\n{sc.newlinejoin(files)}\n')
     print('Please be patient ... (capturing output, though you may see some stderr output)')
     with sc.timer():
@@ -35,13 +35,13 @@ def run_pytest(cpus=None):
 
     # Test after and compute the performance ratio
     r2 = sc.benchmark(which='numpy')
-    perf_ratio = (r1+r2)/2/ref
+    perf_ratio = (r1+r2)/2/REF_MOPS
     return txt, perf_ratio
 
 
 def parse_pytest(txt, perf_ratio):
     """ Parses pytest output with duration and test name """
-    # With ChatGPT -- define the regex
+    # Define the regex
     duration_row = re.compile(
         r"""^          # start of line
             \s*        # optional leading spaces

@@ -4,7 +4,7 @@
 [![Downloads](https://static.pepy.tech/personalized-badge/starsim?period=total&units=international_system&left_color=grey&right_color=blue&left_text=Downloads)](https://pepy.tech/project/starsim)
 [![Tests](https://github.com/starsimhub/starsim/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/starsimhub/starsim/actions/workflows/tests.yml)
 
-[Starsim](https://starsim.org) is fast, flexible disease modeling framework. It supports modeling multiple co-transmitting diseases, including infectious and non-infectious diseases plus other health states (such as pregnancy and birth), and captures their biological and behavioral interactions. It lets users compare intervention strategies, such as vaccines or treatments, across delivery methods like mass campaigns or targeted outreach. It also includes built-in tools for scenario analyses and calibrating models to real-world data.
+[Starsim](https://starsim.org) is a fast, flexible disease modeling framework, from compartments to agents. It supports modeling multiple co-transmitting diseases, including infectious and non-infectious diseases plus other health states (such as pregnancy and birth), and captures their biological and behavioral interactions. It lets users compare intervention strategies, such as vaccines or treatments, across delivery methods like mass campaigns or targeted outreach. It also includes built-in tools for scenario analyses and calibrating models to real-world data.
 
 Starsim builds on our previous suite of disease-specific models, including [Covasim](https://covasim.org) and [HPVsim](https://hpvsim.org), as well as many other disease modeling frameworks (see below). It can model different levels of detail, including agent-based, metapopulation, and deterministic or stochastic compartmental modeling. It is designed to be simple and fast enough to enable rapid or exploratory analyses (from project start to calibrated model and scenario analyses in hours to days), while also being flexible enough to support complex, long-term research projects (such as intrahost immunity, data-driven spatial network transmission, and health economics optimization).
 
@@ -13,11 +13,11 @@ For more information, see the [documentation](https://docs.starsim.org) or the [
 
 ## Starsim features
 
-Starsim includes an extensive library of features aimed to support a broad diversity of disease modeling needs. The full set is listed in the [documentation](https://docs.starsim.org/user_guide/features). Because the features are modular and written in Python, you can mix-and-match Starsim features with custom-written code, and you only use what you need. Highlights include:
+Starsim includes an extensive library of features aimed to support a broad diversity of disease modeling needs. The full set is covered in the [documentation](https://docs.starsim.org/user_guide.html). Because the features are modular and written in Python, you can mix-and-match Starsim features with custom-written code, and you only use what you need. Highlights include:
 
 - **Modeling modalities:** Switch between compartmental, stochastic compartmental, metapopulation, and agent-based modeling using a flag (`solver='abm'`) without needing to rewrite any code;
-- **Performance:** Numeric kernels are heavily optimized, including just-in-time compilation and GPU support (via JAX);
-- **Diseases:** A large library of already-implemented diseases including HIV, TB, malaria, COVID, flu, measles, HPV, syphilis, gonorrhea, chlamydia, rotavirus, typhoid, cholera, Ebola and many others; diseases support coinfection between different diseases, as well as multiple strains of a single disease;
+- **Performance:** Numeric kernels are heavily optimized, with Numba and Rust kernels that give the same numbers, plus GPU support (via JAX);
+- **Diseases:** A large library of already-implemented diseases including HIV, TB, malaria, COVID, flu, measles, syphilis, gonorrhea, typhoid, cholera, Ebola and many others (plus HPV, chlamydia, rotavirus, and others in the models below); diseases support coinfection between different diseases, as well as multiple strains of a single disease;
 - **Networks:** Contact networks including age-stratified contact matrices, sexual (including male-female, male-male, and commercial), respiratory (household/workplace/school); also supports other forms of disease transmission including environmental and vector-borne;
 - **Interventions:** Flexible options for representing interventions, including screening, diagnostics, treatments, vaccination, and care cascades; health system considerations such as prioritization, capacity constraints, and clinic visits;
 - **Costing:** Support for intervention- and disease-related costs, health outcomes like disability-adjusted life years (DALYs), and budget optimization;
@@ -64,7 +64,7 @@ starsim init
 
 JAX is recommended, for gradients, fitting with them, and long runs. It is optional since it has no builds for Windows on Arm: there, use `pip install starsim`, and everything else works. Intel Macs are not supported.
 
-`starsim init` compiles Starsim (once, which takes a few minutes and makes the first runs faster) and installs its skill for AI coding agents such as Claude Code and Codex (type `/starsim` to use it). To do just one of these, run `starsim compile` or `starsim ai`.
+`starsim init` compiles Numba's kernels if the Rust ones are not available (which takes a few minutes, once, and makes the first runs faster; the wheels on PyPI include the Rust kernels, so there is usually nothing to compile) and installs its skill for AI coding agents such as Claude Code and Codex (type `/starsim` to use it). To do just one of these, run `starsim compile` or `starsim ai`.
 
 Or with [uv](https://github.com/astral-sh/uv):
 ```sh
@@ -73,7 +73,7 @@ cd example
 uv add "starsim[jax]"
 ```
 
-Starsim can also be installed locally (including optional dependencies for testing and documentation). To do this, clone first this repository, then run:
+Starsim can also be installed locally (including optional dependencies for testing and documentation). To do this, first clone this repository, then run:
 ```sh
 pip install -e .[dev]
 ```

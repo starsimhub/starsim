@@ -163,9 +163,10 @@ def load_camdl(filename, pars=None, scenario=None, solver='ode', camdlc=None, ve
         verbose (bool): whether to print how each flow was read
         kwargs (dict): passed to `ss.Sim()`
 
-    **Example**:
-
+    Example:
+        ```python
         sim = ss.import_from('sir.camdl', pars=dict(beta=0.4, gamma=0.15, rho=0.6, k=10))
+        ```
     """
     ir = read(filename, camdlc=camdlc)
     m = ir['model']

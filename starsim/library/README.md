@@ -28,7 +28,7 @@ Each disease says in its docstring where its structure and its default parameter
 | `Cholera` | `AgentSEIR` | SEIR-type cholera with symptomatic/asymptomatic infection plus indirect transmission through a decaying environmental (waterborne) reservoir | |
 | `AgentSIR`, `AgentSEIR`, `AgentSIS` | `ss.Infection` | Starsim 3's SIR, SEIR, and SIS (with waning immunity), written as code: examples of a disease written as code, and base classes for the diseases here (the core `ss.SIR`, `ss.SEIR`, and `ss.SIS` are declared) | |
 | `COVID` | `ss.Disease` | COVID-19 as a SECIR model: a chain of increasingly severe states, some of whom die | The simple SECIR example of MEmilio (Kühn et al. 2021) |
-| `Dengue` | `ss.Disease` | Several dengue serotypes (`ss.Strains`), each with mosquitoes of its own, with partial cross-protection between them | The Ross-Macdonald structure of Keeling and Rohani (2008) 4.4, with indicative dengue values |
+| `Dengue` | `ss.Disease` | Several dengue serotypes, each a disease with mosquitoes of its own, with partial cross-protection between them | The Ross-Macdonald structure of Keeling and Rohani (2008) 4.4, with indicative dengue values |
 | `Ebola` | `AgentSEIR` | Ebola with severe disease and continued transmission from unburied bodies | |
 | `Gonorrhea` | `ss.Disease` | Gonorrhea as an SIS model on a sexual network | STIsim's gonorrhea module |
 | `HIV` | `ss.Infection` | HIV with CD4 count dynamics, CD4-dependent mortality, and vertical transmission | |
@@ -42,7 +42,7 @@ Each disease says in its docstring where its structure and its default parameter
 | `Pertussis` | `ss.Disease` | Pertussis as a SEIRS model with slowly waning immunity | Wearing and Rohani (2009); the structure of Keeling and Rohani (2008) |
 | `Polio` | `ss.Disease` | Poliovirus with a paralytic fraction of about 1 in 200 infections | US CDC Pink Book; Fine and Carneiro (1999) |
 | `RSV` | `ss.Disease` | RSV as a seasonal MSEIRS model, with babies born protected by maternal antibodies | Weber et al. (2001) |
-| `Syphilis` | `ss.Disease` | Staged syphilis, with the infectiousness of latent syphilis written as code | STIsim's syphilis module |
+| `Syphilis` | `ss.Disease` | Staged syphilis, with the infectiousness of latent syphilis falling with the time in it | STIsim's syphilis module |
 | `TB` | `ss.Disease` | TB across the spectrum of disease, with reinfection | The LSHTM model (Schwalb et al. 2025), as TBsim's reference ODE |
 | `Typhoid` | `ss.Disease` | Typhoid with chronic carriers who shed for life | Pitzer et al. (2014) |
 
@@ -70,7 +70,7 @@ Maternal, newborn, and child health examples, demonstrating patterns that are mo
 | --- | --- | --- |
 | `CongenitalDisease` | `AgentSIR` | Congenital outcomes (stillbirth, congenital infection, normal), scheduled around delivery by its `set_congenital()` and `step_congenital()` |
 | `NeonatalSepsis` | `AgentSIR` | Infects newborns at birth and kills some within days, exercising the Pregnancy module's passive neonatal death detection |
-| `FetalHealth` | `ss.Module` | Tracks fetal growth and birth weight outcomes (LBW, VLBW, SGA); disease-agnostic, modified by other modules via callbacks |
+| `FetalHealth` | `ss.Module` | Tracks fetal growth and birth weight outcomes (LBW, VLBW, SGA); disease-agnostic, modified by other modules via its methods |
 | `fetal_infection` | `ss.Connector` | Links a disease to fetal health outcomes: preterm risk via delivery timing shifts, low birth weight via growth restriction |
 | `treat_pregnant` | `ss.Intervention` | Treats infected pregnant women and partially reverses accumulated fetal damage |
 
@@ -87,7 +87,7 @@ Health economics, which most sims don't need, so it is here rather than in core 
 
 ## Documentation
 
-- User guide: [Library modules](https://docs.starsim.org/user_guide/io_library.html)
+- User guide: [Library modules](https://docs.starsim.org/user_guide/library_landscape.html)
 - API reference: [starsim.library](https://docs.starsim.org/api/)
 
 ## Contributing
@@ -95,8 +95,7 @@ Health economics, which most sims don't need, so it is here rather than in core 
 New library modules are welcome, especially ones that demonstrate a modeling pattern that is otherwise hard to discover. Guidelines:
 
 1. Put the module in the most specific existing subfolder, or create a new one with an `__init__.py` that has a module docstring.
-2. Define `__all__` in each file, and re-export its contents explicitly from the subpackage `__init__.py` and from `library/__init__.py` — no star imports, so that the public API is unambiguous.
+2. Define `__all__` in each file, and re-export its contents explicitly from the subpackage `__init__.py` (no star imports, so that the public API is unambiguous); `library/__init__.py` and the API docs then pick it up automatically.
 3. Follow the [Starsim style guide](https://github.com/starsimhub/styleguide).
-4. Document each class with a short description, a `Pars:` section, a `States:` section, and a runnable `Examples:` block.
+4. Document each class with a short description, an `Args:` section, an `Attributes:` section for its states, and a runnable `Examples:` block.
 5. Add a test to `tests/test_library.py`, and a row to the tables above.
-6. Add the class to the relevant `library.*` page in the `quartodoc` section of `docs/_quarto.yml` so it appears in the API reference. (Members are listed explicitly there, since quartodoc's static analysis doesn't follow re-exports.)

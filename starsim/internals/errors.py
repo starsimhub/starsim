@@ -27,9 +27,10 @@ def note(msg, sim=None, verbose=None):
         sim (Sim): the sim to keep the note in
         verbose (int): whether to print it
 
-    **Example**:
-
+    Example:
+        ```python
         ss.note("unit='day' (from start and stop dates)", sim=sim)
+        ```
     """
     if sim is not None and not hasattr(sim, 'notes'): # A stand-in, e.g. for a disease's equations before it is in a sim
         sim = None

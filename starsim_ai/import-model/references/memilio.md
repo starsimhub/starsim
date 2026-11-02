@@ -55,7 +55,7 @@ It lists (`ImportIncomplete`): a parameter that differs by age group where it be
 
 - **The equations are not in the script.** Read the model's `get_derivatives()` in the C++ source for the exact flows (e.g. the flow from `INS` to `ISy` is `(1 - mu_CR)/TimeInfectedNoSymptoms * INS`). The rates are per day.
 - **The threshold is on a flow.** Test-and-trace capacity compares the number becoming symptomatic each day with the capacity; Starsim cannot name a transition's current flow in a rate, so write the flow as a count expression (`0.91/2*INS.n`, repeating the probability and the time), with a comment.
-- **Inside a function, a declared state's `.n` is symbolic.** Use NumPy functions of count expressions in the rate itself (`np.clip`, `np.cos`), which compile into the kernels; in a function of the sim, read `sim.diseases.<name>.<state>.n`.
+- **Inside a function, a declared state's `.n` is symbolic.** Use NumPy functions of count expressions in the rate itself (`np.clip`, `np.cos`), which run in the kernels; in a function of the sim, read `sim.diseases.<name>.<state>.n`.
 - **Dampings are smoothed.** MEmilio smooths every damping along half a cosine over the day before its time: `mode='cosine'` matches.
 - **Seasonality's day 0.** MEmilio's day 0 is `StartDay` of a 365-day year; with no dates, `ss.seasonal` starts at the beginning of a year, so the peak is `(-StartDay/365) % 1` (the peak is a fraction of the year from 0 to 1, or a time of year such as `ss.days(305)`).
 - **Age groups are labels.** Name them as MEmilio numbers them (`'0'`, `'1'`, `'2'`); Starsim treats strings as labels and does not age anyone.
@@ -66,7 +66,7 @@ It lists (`ImportIncomplete`): a parameter that differs by age group where it be
 
 ## Worked example
 
-`lingua_franca_design/vignettes/memilio/secir/model.py` (the simple SECIR) and `lingua_franca_design/vignettes/memilio/secir_ageres/model.py` (by age, with seasonality, a damping, and test-and-trace). The age-resolved version:
+`lingua_franca_design/docs/models/memilio/secir/model.py` (the simple SECIR) and `lingua_franca_design/docs/models/memilio/secir_ageres/model.py` (by age, with seasonality, a damping, and test-and-trace). The age-resolved version:
 
 ```python
 beta     = ss.seasonal(mean=0.05, amplitude=0.2, peak=ss.days(305)) # Highest on 1 Jan, day 305 (day 0 is 2 Mar)
@@ -91,7 +91,7 @@ sim = ss.Sim(secir, networks=ss.contacts(np.full((3, 3), 10/3)), total_pop=10_00
 
 ## Running the original
 
-- Environment: `lingua_franca_design/_envs/memilio` (a `uv` venv with Python 3.11 and the `memilio-simulation` 2.4.1 wheel, and matplotlib). Build with `python _envs/envs.py install memilio`.
+- Environment: `lingua_franca_design/_envs/memilio` (a `uv` venv with Python 3.11 and the `memilio-simulation` 2.4.1 wheel, and matplotlib). Build with `lingua_franca envs install memilio`.
 - The examples' `run.py` run the original script as it is through a driver in the env: the driver wraps `simulate` to keep its result and time it, calls the script's function with plotting off, interpolates the result to whole days with `memilio.simulation.osecir.interpolate_simulation_result`, sums the age groups, and prints JSON with the state names from `InfectionState`.
 - Series: each state's count at each whole day (time 0 is the initial state, the same as Starsim's start), and `Dead`, which Starsim has as the cumulative death flow. MEmilio is deterministic: one run, compared to a tolerance of about the interpolation error (1.5 people in 10,000 here).
-- Write the summary with `examples/tools.py`: `write_results(folder, rows)` writes `reference/results.csv` in the long format (`time, series, value, low, high`), and `read_results(folder)` reads it back as `{series: (times, values)}`.
+- Write the summary with `docs/models/tools.py`: `write_results(folder, rows)` writes `reference/results.csv` in the long format (`time, series, value, low, high`), and `read_results(folder)` reads it back as `{series: (times, values)}`.

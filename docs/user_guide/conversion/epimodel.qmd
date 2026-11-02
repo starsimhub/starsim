@@ -71,12 +71,12 @@ These are from the translations of two EpiModel examples, each run many times an
 
 ## Timings
 
-Lines are lines of model code (not counting blank lines, comments, imports, or plotting, and counting a line over 100 characters twice); times are for one run. Both are measured by Starsim's north-star script, `tests/north_star/north_star.py` in the lingua_franca_design repo, which is described on the [index page](../library_landscape.qmd#how-these-numbers-were-made). EpiModel's times were recorded with EpiModel 2.6.2 on the same machine, inside one R session.
+Lines are lines of model code (not counting blank lines, comments, imports, or plotting, and counting a line over 100 characters twice); times are for one run, the first in a new process and a rerun of the same model. Both were measured as described on the [index page](../library_landscape.qmd#how-these-numbers-were-made). EpiModel's times were recorded with EpiModel 2.6.2 on the same machine, inside one R session.
 
 | Model | Lines: EpiModel | Lines: Starsim | One run: EpiModel | One run: Starsim | |
 |---|---|---|---|---|---|
-| The introduction's SIS | 13 | 9 | 3.9 s, plus 0.66 s to estimate the network | 0.34 s (0.64 s the first time in a new process) | Pass |
-| The Gallery's HIV model | 405 | 59 | 54 s, plus 1.2 s to estimate the two networks | 2.3 s (4.4 s the first time) | Pass |
+| The introduction's SIS | 13 | 9 | first 6.4 s, rerun 5.5 s, the first with estimating the network (0.66 s) | first 0.56 s, rerun 0.33 s | Pass |
+| The Gallery's HIV model | 405 | 58 | first 48 s, rerun 48 s, the first with estimating the two networks (1.2 s) | first 2.2 s, rerun 2.0 s | Pass |
 | The SIS scaled to 100,000 people, 200 steps | | | 28 s, plus 233 s to estimate the network | 2.9 s | Pass |
 
 The last row's EpiModel times were measured on 17 October 2026 (with `tergmLite = TRUE`), on a machine shared with other jobs; Starsim's time is from 18 October 2026. Final prevalence there was 43.3% in EpiModel and 47% in Starsim.

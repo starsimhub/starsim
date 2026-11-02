@@ -384,7 +384,7 @@ def test_strain_carriers():
 
 @sc.timer()
 def test_strain_counts():
-    sc.heading('Testing results with strains carried together: each person once in n_I, and in each strain they carry')
+    sc.heading('Testing results with strains carried together: each person once in I, and in each strain they carry')
     for solver in ['abm', 'ode']:
         res = run(make_resistance(init=dict(I=0.05)), solver, start=2000, stop=2010, dt=1/12).results.tb
         by_strain = res.L.by('strain').values[-1]
@@ -698,7 +698,7 @@ def test_mixing():
         with pytest.raises(ValueError):
             ss.contacts(**bad)
 
-    # A split over two dimensions is the share in each level given the other, whose own split, if given, is kept (FPsim review: it was replaced by the table's totals)
+    # A split over two dimensions is the share in each level given the other, whose own split, if given, is kept (it was replaced by the table's totals)
     for solver in ['ode', 'abm']:
         A = ss.State('A')
         d = ss.Disease(A, stay=ss.Transition(A, A, rate=0), first='A', name='d')
@@ -708,7 +708,7 @@ def test_mixing():
         assert np.allclose(n_A.by('age').values[0], [9000, 1000], rtol=0.03)
         assert np.allclose([n_A.select(age=a, k='y')[0] for a in ['0-29', '30+']], [1800, 600], rtol=0.1)
 
-    # Where people start, given at levels where the split puts nobody, is an error, not zero (FPsim review: everyone starts at ever=False)
+    # Where people start, given at levels where the split puts nobody, is an error, not zero (FPsim: everyone starts at ever=False)
     def make_init(table):
         A, B = ss.states('A B')
         d = ss.Disease(A, B, ab=A >> B @ ss.peryear(0), init=dict(B=ss.by(np.array(table), dims=['age', 'ever'])), first='A', name='d')
@@ -777,7 +777,7 @@ def test_ragged():
 def test_properties_in_rates():
     sc.heading('Testing people\'s properties and conditions in rates, as a regression')
 
-    # A probability of use as a regression on a property, the same as agents and as compartments, and stopped by ss.change on its intercept (before, 3,531 starts with and without it)
+    # A probability of use as a regression on a property, the same as agents and as compartments, and stopped by ss.modify on its intercept (before, 3,531 starts with and without it)
     def make(solver, change=False):
         b0, b_urban = ss.par(-1.0, bounds=[-3, 1]), ss.par(1.0)
         none, on = ss.states('none on')
@@ -1071,7 +1071,7 @@ def test_by_series():
 
 
 def test_by_function():
-    """ MS2: ss.by(patch=fn), with fn(sim) one value per level, is read by every solver, also with another dimension added by a held product """
+    """ Ss.by(patch=fn), with fn(sim) one value per level, is read by every solver, also with another dimension added by a held product """
     def eir(sim):
         return ss.perday(np.array([0.001, 0.01, 0.05]))
     expected = np.array([0.001, 0.01, 0.05])/(np.array([0.001, 0.01, 0.05]) + 0.05) # At equilibrium

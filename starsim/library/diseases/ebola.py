@@ -9,6 +9,8 @@ import numpy as np
 import starsim as ss
 from .agents import AgentSEIR
 
+__all__ = ['Ebola']
+
 
 class Ebola(AgentSEIR):
     """
@@ -44,8 +46,8 @@ class Ebola(AgentSEIR):
         severe (BoolState):     currently severely ill
         buried (BoolState):     dead and buried (no longer infectious)
         ti_exposed (FloatArr):  timestep of exposure
-        ti_severe (FloatArr):   timestep severe symptoms began
-        ti_buried (FloatArr):   timestep of burial
+        ti_severe (TimeArr):    timestep severe symptoms began
+        ti_buried (TimeArr):    timestep of burial
 
     Examples:
         ```python

@@ -6,6 +6,8 @@ import numpy as np
 import sciris as sc
 import starsim as ss
 
+__all__ = ['HIV', 'ART', 'CD4_analyzer']
+
 
 class HIV(ss.Infection):
     """
@@ -57,7 +59,7 @@ class HIV(ss.Infection):
     def __init__(self, pars=None, **kwargs):
         super().__init__()
         self.define_pars(
-            beta = 0.0, # Placeholder value; replaced with a dict for acts
+            beta = 0.0, # Placeholder value: set it for transmission to occur
             cd4_min = 100,
             cd4_max = 500,
             cd4_rate = 5,
@@ -159,11 +161,6 @@ class ART(ss.Intervention):
 
         prob_art = lambda self, sim, uids: np.interp(self.t.now('year'), self.year, self.coverage)
         self.prob_art_at_infection = ss.bernoulli(p=prob_art)
-        return
-
-    def init_pre(self, sim):
-        super().init_pre(sim)
-        self.initialized = True
         return
 
     def init_results(self):

@@ -3,7 +3,7 @@ Run a Starsim port and compare its results with the original's, exactly or stati
 
 Both sides are long CSV files with columns `time`, `series`, `value`, and either `run`
 (one row per run, for replicates) or `low` and `high` (a summary of many runs, e.g.
-the 5% and 95% quantiles), as written by `lingua_franca_design/examples/tools.py`.
+the 5% and 95% quantiles), as written by `lingua_franca_design/docs/models/tools.py`.
 
     # Run the port's `sim` (or `make_sim()`) from a Python file, 100 times, and write its results
     python compare.py run model.py port.csv --runs 100
@@ -175,7 +175,7 @@ def compare(file_a, file_b, mapping=None, rtol=None, alpha=0.01, shift=0, plot=N
     """ Compare every matched series of the original (file_a) and the port (file_b) """
     a, b = read(file_a), read(file_b)
     mapping = dict(mapping or {})
-    if not mapping: # Series with the same name, or the same last part (I ~ sir.I is not guessed: give --map)
+    if not mapping: # Series with the same name (I ~ sir.I is not guessed: give --map)
         names_b = set(b.series)
         mapping = {s:s for s in a.series.unique() if s in names_b}
     if not mapping:

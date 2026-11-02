@@ -1,6 +1,6 @@
 # Solvers
 
-How a module's declared states and transitions are run. The same declared model can be run as compartments (`solver='ode'`, `'binomial'`, `'gillespie'`, or `'tau'`) or as agents (`'abm'`); each module with declared states gets one engine, which the sim's loop calls like any other module's code. Their names are all in `ss.solvers`, e.g. `ss.solvers.Compartmental`.
+How a module's declared states and transitions are run. The same declared model can be run as compartments (`solver='ode'`, `'ide'`, `'binomial'`, `'gillespie'`, or `'tau'`) or as agents (`'abm'`); each module with declared states gets one engine, which the sim's loop calls like any other module's code. Their names are all in `ss.solvers`, e.g. `ss.solvers.Compartmental`.
 
 - `choose.py`: which solver runs a model, and why (`ss.solvers.choose_solver()`), and the steps that build a declared model before it is run
 - `engine.py`: what the engines share

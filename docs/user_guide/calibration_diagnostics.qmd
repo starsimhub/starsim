@@ -137,7 +137,7 @@ NUTS also counts **divergent** draws (`fit.diagnostics.divergences`), where the 
 
 ## Looking at the search
 
-For a fit by Optuna, `fit.study` is Optuna's own record of the search, which its plots take: how the best score improved over the trials (has it levelled off?), which parameters mattered most to the score, and the score over each pair of parameters (a long diagonal valley is a ridge that the data can't resolve). These need Plotly:
+For a fit by Optuna, `fit.study` is Optuna's own record of the search, which its plots take: how the best score improved over the trials (has it leveled off?), which parameters mattered most to the score, and the score over each pair of parameters (a long diagonal valley is a ridge that the data can't resolve). These need Plotly:
 
 ```python
 import optuna

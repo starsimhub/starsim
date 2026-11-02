@@ -9,7 +9,7 @@ Run the original in its own framework and the port in Starsim, write both as the
 
 ## Workflow
 
-1. **Run the original** in the framework's own environment, never in Starsim's (don't install a framework without asking). The framework's guide in `../import-model/references/<framework>.md` says how, under "Running the original". For a stochastic model, save every run (e.g. 200), not only a summary, so the comparison can test distributions. In the `lingua_franca_design` repo, `examples/<framework>/<model>/run.py` already does this and writes `reference/results.csv`.
+1. **Run the original** in the framework's own environment, never in Starsim's (don't install a framework without asking). The framework's guide in `../import-model/references/<framework>.md` says how, under "Running the original". For a stochastic model, save every run (e.g. 200), not only a summary, so the comparison can test distributions. In the `lingua_franca_design` repo, `docs/models/<framework>/<model>/run.py` already does this and writes `reference/results.csv`.
 2. **Write the original's results as a long CSV**: columns `time`, `series`, `value`, and `run` for replicates (or `low` and `high` for a summary, e.g. the 5% and 95% quantiles). One row per run, time, and series. Use the source's own series names.
 3. **Run the port** with the same population, duration, step, and number of runs:
    ```bash
@@ -22,10 +22,10 @@ Run the original in its own framework and the port in Starsim, write both as the
    ```
    The mode is chosen from what the two files hold:
    - **exact**: one run on each side (both deterministic). Passes if the largest difference is within `--rtol` (default 1e-3) of the largest value. Use a tighter tolerance when both use the same integrator and step; ODE solvers that differ (RK4 against LSODA, a fixed step against an adaptive one) agree only to their error.
-   - **statistical**: runs on both sides. At each time, the difference of the means in standard errors (`frac_z3` is the share of times where it exceeds 3; passes at 5% or less), and two-sample Kolmogorov-Smirnov tests of each run's peak, time of the peak, and final value (pass at `--alpha`, default 0.01, as in the conformance spec).
+   - **statistical**: runs on both sides. At each time, the difference of the means in standard errors (`frac_z3` is the share of times where it exceeds 3; passes at 5% or less), and two-sample Kolmogorov-Smirnov tests of each run's peak, time of the peak, and final value (pass at `--alpha`, default 0.01).
    - **band**: the original is a summary (mean, low, high). The port's mean and the same quantiles of its runs are compared with them, within `--rtol` (default 0.1) of the largest value. This is weaker than the statistical mode: prefer raw runs.
 5. **Explain what differs.** Go through the usual causes below before concluding anything, and say which applied.
-6. **Report** a table of the series compared, the mode, the numbers, and the verdict, with the reason for every tolerance and every difference. Inside `lingua_franca_design`, also write the result into the vignette's `README.md` (agreement, lines of model code, and time of one run, as `examples/README.md` says to count them).
+6. **Report** a table of the series compared, the mode, the numbers, and the verdict, with the reason for every tolerance and every difference. Inside `lingua_franca_design`, also write the result into the vignette's `README.md` (agreement, lines of model code, and time of one run, as `docs/models/README.md` says to count them).
 
 ## Usual causes of a difference
 

@@ -231,6 +231,8 @@ Its "jointly" line says that measles and pneumococcus are tracked as 5 × 2 = 10
 2. Give the same number of catch-up doses (about 600) to unvaccinated people outside the community instead, using a transfer whose rate is 0 in the community. How many infections do they prevent, compared with the doses given in the community?
 3. In the model with two diseases, add a vaccination campaign against measles in children on 1 February (`ss.vaccinate(efficacy=0.93, where=measles.age < 15, coverage=0.8, at='2025-02-01')`); with two diseases in the sim, the vaccine is for the one whose age groups `where=` names (`measles.age`), and `disease=` says which one if it names none (e.g. `where=ss.ppl.age < 15`). How many pneumococcus acquisitions does it prevent over the three years, with and without the interaction? What does this mean for working out the benefit of measles vaccination?
 
+[Solutions](solutions.qmd#t8-stratification-and-co-transmission) · Next: [T9 – Custom modules](t9_modules.qmd)
+
 ## Further reading
 
 - [Glasser et al. (2016): The effect of heterogeneity in uptake of the measles, mumps, and rubella vaccine on the potential for outbreaks of measles](https://pubmed.ncbi.nlm.nih.gov/26852723/): a modeling study of how clustering of the unvaccinated raises the risk of measles outbreaks

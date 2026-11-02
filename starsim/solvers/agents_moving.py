@@ -123,7 +123,7 @@ class Moving:
                 if not items:
                     continue
                 got = self.send(items, ti)
-                if self._row is not None and self._backfill is None: # Births driven by a flow (e.g. at a delivery) before the arrivals face the rates of where they arrived, so those rates see the event that brought them (its children and records, e.g. ss.Pregnancy's since_birth: FP2)
+                if self._row is not None and self._backfill is None: # Births driven by a flow (e.g. at a delivery) before the arrivals face the rates of where they arrived, so those rates see the event that brought them (its children and records, e.g. ss.Pregnancy's since_birth)
                     if self._news: # The modules that react to the event first, as they would at the end of the step (e.g. a fetus that dies at the delivery is stillborn, not born)
                         self._news = False
                         self.notify(ti)
@@ -688,7 +688,7 @@ class Moving:
     def whole_steps(self, uids, dur, dt=None):
         """
         Dwell times (in a state, or before a delayed move or a transfer) as whole numbers of steps, rounded up or down at random in proportion
-        by each agent's phase, as `ss.TimeArr.due()` rounds a time (see `ss.People.phase()`; FP55: 0.2 steps is 0 steps for 80% of agents and
+        by each agent's phase, as `ss.TimeArr.due()` rounds a time (see `ss.People.phase()`; 0.2 steps is 0 steps for 80% of agents and
         1 step for 20%), so their mean is kept; a dwell of 0 (dur=0) stays 0, a move in the step people enter
         """
         return np.floor(np.asarray(dur, dtype=float)/(dt or self.dt) + self.sim.people.phase(uids))

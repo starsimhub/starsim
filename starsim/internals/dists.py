@@ -19,7 +19,6 @@ sps = sc.lazyimport('scipy.stats') # A third of the time `import starsim` would 
 ss_int = ss.dtypes.int
 
 
-
 def str2int(string, modulo=1_000_000_000):
     """
     Convert a string to an int to use as a random seed; not for the user
@@ -29,7 +28,7 @@ def str2int(string, modulo=1_000_000_000):
     only add a couple milliseconds to a typical sim.
     """
     integer = sc.sha(string, asint=True) # Hash the string to an integer
-    seed = integer % modulo # Ensure a user-friendly representation user-friendly
+    seed = integer % modulo # Keep it to a user-friendly size
     return seed
 
 
@@ -125,15 +124,13 @@ def hash_uniforms(seed, ind, slots, dtype=None, even=False):
     This is the engine behind Starsim's common random numbers (CRN). Because each output
     depends only on its slot (plus the per-draw key), the same slot always yields the same
     value regardless of how many other agents are drawn -- so structural differences between
-    scenarios don't ripple into unrelated agents. Unlike the stream-based approach (draw
-    `slots.max()+1` numbers and gather), this generates exactly `len(slots)` numbers, avoiding
-    the `slot_scale` blowup.
+    scenarios don't ripple into unrelated agents. It generates exactly `len(slots)` numbers.
 
     The result is returned at `dtype` (default `ss.dtypes.float`) so the CRN path matches the
     dtype of the native draw path (`Dist.rand`). The mantissa width is matched to the float
     width (24-bit for float32, 53-bit for float64) so every value stays strictly < 1 -- a plain
     float64->float32 cast would round the largest values up to exactly 1.0 and break the [0, 1)
-    contract (e.g. `expon.ppf(1.0)` is inf). The float64 stream is unchanged from earlier versions.
+    contract (e.g. `expon.ppf(1.0)` is inf).
     With `even`, the numbers of the call are evenly spaced (see `even_out()`).
     """
     if dtype is None:
@@ -148,7 +145,7 @@ def hash_uniforms(seed, ind, slots, dtype=None, even=False):
         slots = slots.astype(np.uint64)
 
     out = np.empty(slots.shape[0], dtype=dtype)
-    _hash_uniforms_fill(seed, ind, slots, out, *draws.crn_bits(dtype)) # The top 24 bits for float32, 53 for float64 (unchanged from earlier versions)
+    _hash_uniforms_fill(seed, ind, slots, out, *draws.crn_bits(dtype)) # The top 24 bits for float32, 53 for float64
     return even_out(out, seed, ind) if even else out
 
 
@@ -166,7 +163,7 @@ def no_dists():
     return (ss.Timeline, ss.Result, ss.Results, ss.arrays.Watch, ss.solvers.Compartmental, np.dtype, type)
 
 
-def link_dists(obj, sim, module=None, overwrite=False, init=False, skip=None, **kwargs): # TODO: actually link the distributions to the modules! Currently this only does the opposite, but should have mod.dists as well
+def link_dists(obj, sim, module=None, overwrite=False, init=False, skip=None, **kwargs):
     """ Link distributions to the sim and the module; used in module.init() and people.init() """
     if module is None and isinstance(obj, ss.Module):
         module = obj
@@ -288,7 +285,7 @@ class Dists(sc.prettyobj):
             out.append(dist.jump(to=to, delta=delta, force=force))
         return out
 
-    def jump_dt(self, ti=None, force=False): # Could this be simplified with jump(), or nice to have the parallel with Dist?
+    def jump_dt(self, ti=None, force=False):
         """
         Advance all RNGs to the next timestep
 
@@ -321,7 +318,7 @@ class Dists(sc.prettyobj):
             new = Dists() # Create an empty Dists object
             new.__dict__.update(self.__dict__) # Shallow-copy all values over
             new.obj = module # Replace the module
-            new.dists = sc.obj(matches) # Replace the dists with a shallow copy the matching dists
+            new.dists = sc.obj(matches) # Replace the dists with a shallow copy of the matching dists
             module.setattribute('dists', new) # Copy to the module
         else:
             new = None
@@ -506,7 +503,7 @@ class Dist:
                 if 'predraw' in self.scaling:
                     errormsg += f'{self} can only be scaled pre-draw, meaning you must convert the input parameters to TimePars.'
                 else:
-                    errormsg += f'Distributions ({type(self)} cannot be scaled.'
+                    errormsg += f'Distributions of type {type(self)} cannot be scaled.'
                 raise ValueError(errormsg)
 
         if mock:
@@ -861,8 +858,7 @@ class Dist:
             if len(uids):
                 if not ss.options.crn:
                     # Fast non-CRN path: draw exactly one number per UID directly, with no
-                    # slot gather. This avoids the slot_scale "blowup" (drawing slots.max()+1
-                    # numbers and discarding most of them). Statistically valid but not CRN-safe.
+                    # slot gather. Statistically valid but not CRN-safe.
                     slots = None
                     size = len(uids)
                 else:
@@ -970,7 +966,7 @@ class Dist:
         on the timestep of the parent module for this `Dist`. The conversion for these types is
 
         - Durations are divided by `dt` (so the result will be a number of timesteps)
-        - Rates are multiplied by `dt` (so the result will be a number of events, or else the equivalent multiplicate value for the timestep)
+        - Rates are multiplied by `dt` (so the result will be a number of events, or else the equivalent multiplicative value for the timestep)
         """
         # Check through and see if anything is a timepar
         timepar_dict = {key:type(tp) for key,val in self._pars.items() if (tp := timepar_of(val)) is not None}
@@ -1208,8 +1204,8 @@ class Dist:
         """
         Get random variates -- use this!
 
-        If the distribution is a duration, the values are rounded to a whole number
-        of timesteps (e.g. whole days if `dt=ss.days(1)`).
+        If the distribution is a duration, the values are in timesteps (e.g. in days
+        if `dt=ss.days(1)`), and are only whole numbers if `round` is used.
 
         Args:
             n (int/tuple/arr): if an int or tuple, return this many random variates; if an array, treat as UIDs
@@ -1251,14 +1247,12 @@ class Dist:
         # Actually get the random numbers
         if slots is not None and self._use_ppf is not False:
             # Common random numbers via hashing: one uniform per slot, keyed by (seed, ind).
-            # Generates exactly len(uids) numbers (no slot_scale blowup) while preserving CRN.
+            # Generates exactly len(uids) numbers while preserving CRN.
             # (choice/histogram set _use_ppf=False and keep the native path below.)
             rands = hash_uniforms(self.seed, self.ind, self._slots, dtype=self.hash_dtype, even=self.even)
             rvs = self.ppf(rands) # Convert to actual values via the PPF
         elif self._use_ppf:
             rands = self.rand(size)
-            if slots is not None: # In non-CRN mode, size == len(uids) and no gather is needed
-                rands = rands[slots] # Get random values
             rvs = self.ppf(rands) # Convert to actual values via the PPF
         else:
             if slots is not None: # For every slot up to the largest, so that each agent's draw is their slot's

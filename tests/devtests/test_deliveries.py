@@ -749,7 +749,7 @@ def test_branch_modifiers():
         assert np.isclose(share(halved), 0.1, rtol=0.05)
         assert np.isclose(share(vx), 0.05, rtol=0.1)
 
-    # A parameter in a branch probability changed by ss.change(), under every solver: 0.8 go to B after the change (not 0.2 as compartments)
+    # A parameter in a branch probability changed by ss.modify(), under every solver: 0.8 go to B after the change (not 0.2 as compartments)
     for multi in [True, False]:
         sB = ss.par(0.2, name='sB')
         A, B, C = ss.states('A B C')
@@ -898,7 +898,7 @@ def test_waning_as_states():
 
 
 def test_names_memory_at_age():
-    sc.heading('Testing steps made in a function (HP72), the memory of every delivery after a run (HP73), and at_age= for people who arrive older (HP76)')
+    sc.heading('Testing steps made in a function, the memory of every delivery after a run, and at_age= for people who arrive older')
     def step(who, **kwargs): # No variable to be named by
         return ss.screen(sensitivity=0.9, who=who, **kwargs)
     def cascades(): # Two chains of steps, all with the default name, each triggered by its own first step
@@ -962,7 +962,7 @@ class Lesions(ssl.AgentSIS):
 
 
 def test_coded_states():
-    sc.heading('Testing tests and cures by the states of diseases written as code (HP70)')
+    sc.heading('Testing tests and cures by the states of diseases written as code')
     def make(interventions, n=2):
         diseases = [Lesions(name=f'g{i}') for i in range(n)]
         return ss.Sim(diseases=diseases, networks='random', interventions=interventions, start=2000, stop=2006, dt=0.25, n_agents=5000, rand_seed=1, verbose=0).run()
@@ -995,7 +995,7 @@ def test_coded_states():
 
 
 def test_waning_functions():
-    sc.heading('Testing waning: ss.box() under agents and the ODE (MS6), the time a function is given (TY7), several wanings (MS5), and an effect while in some states (TY6)')
+    sc.heading('Testing waning: ss.box() under agents and the ODE, the time a function is given, several wanings, and an effect while in some states')
     def make(solver, waning, at=(20, 400), **kwargs):
         S, I = ss.states('S I')
         mal = ss.Disease(infection=S >> I @ ss.peryear(2.0), recovery=I >> S @ ss.days(100), name='mal')
@@ -1055,7 +1055,7 @@ def test_waning_functions():
 
 
 def test_weighted_counts():
-    sc.heading('Testing weighted counts (MS3), counts by infectiousness (TY6), and a product\'s coverage in a rate (MS4), under agents and the ODE')
+    sc.heading('Testing weighted counts, counts by infectiousness, and a product\'s coverage in a rate, under agents and the ODE')
     w = [0.2, 1.0, 2.6]
     def mosquitoes(solver, weighted=True, cov=None, kill=None):
         S, I = ss.states('S I')

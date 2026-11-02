@@ -247,7 +247,7 @@ def test_coded_par_modifiers():
 
 @sc.timer()
 def test_coded_modifiers():
-    sc.heading('Testing modifiers of rel_sus on a disease written as code that reads them (MG1), a property a module adds to the people (MG3), and the cause of death by hazard (MG8)')
+    sc.heading('Testing modifiers of rel_sus on a disease written as code that reads them, a property a module adds to the people, and the cause of death by hazard')
 
     class Condition(ss.Disease):
         allow_modifiers = ('rel_sus',)

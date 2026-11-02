@@ -350,7 +350,6 @@ def test_sim_start_stop_dur():
     return sim
 
 
-# Run as a script
 @sc.timer()
 def test_daily_dates():
     sc.heading('A daily step from a year as a number has whole days, all at once')

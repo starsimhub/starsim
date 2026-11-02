@@ -1,7 +1,7 @@
 """
 Minimal port of laser_example_orig.py, following LASER's naming conventions
 
-Requires starsim>=3.0
+Requires starsim>=4.0
 """
 import numpy as np
 import sciris as sc

@@ -16,9 +16,9 @@ To build the docs, follow these steps:
 
 1. Install Quarto: https://quarto.org/docs/get-started/
 
-2.  Make sure the Python dependencies are installed (as well as Starsim itself):
+2.  Install Starsim with the dependencies for building the docs, from the top of the repository:
     ```
-    pip install -r requirements.txt
+    pip install -e .[dev]
     ```
 
 3.  Build the docs with `./render` (or `./preview` to view them with live reloading). Before rendering, Quarto runs `qpyd prerender` (from [quartopydoc](https://github.com/sciris/quartopydoc), configured in the `qpyd` section of `_quarto.yml`), which builds the API reference and the machine-readable API index (`api.json`, `llms.txt`, `llms-full.txt`), and writes the version and date to `_variables.yml`. It skips the API build if Starsim, quartodoc and `_quarto.yml` haven't changed since the last one; run `qpyd prerender --force` to rebuild it anyway, or `python make_api.py` to build only the index.

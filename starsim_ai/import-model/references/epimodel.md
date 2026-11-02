@@ -12,7 +12,7 @@ The script is run in EpiModel's environment by `starsim/converters/dump_epimodel
 Rscript dump_epimodel.R intro_sis.R model.json
 ```
 
-Then, in Starsim, `sim = ss.import_from('model.json')`, or `ss.import_from('intro_sis.R', rscript='.../bin/Rscript')` to dump and load in one step. Choose a run with `run=` (a number, or a scenario's `.scenario.id`); the others are in `sim.imported.scenarios` as the parameters that differ. The script runs as `Rscript` would run it, so `interactive()` is false: the Gallery's HIV model dumps its small test size (300 people, 100 steps), not the 1,500 and 1,040 of an interactive run.
+Then, in Starsim, `sim = ss.import_from('model.json')`, or `ss.import_from('intro_sis.R')` to dump and load in one step, with the `Rscript` on the path. The first run is read; the others are in `sim.imported.scenarios` as the parameters that differ. The script runs as `Rscript` would run it, so `interactive()` is false: the Gallery's HIV model dumps its small test size (300 people, 100 steps), not the 1,500 and 1,040 of an interactive run.
 
 ## Mapping
 
@@ -53,7 +53,7 @@ Then, in Starsim, `sim = ss.import_from('model.json')`, or `ss.import_from('intr
 
 ## Worked example
 
-`lingua_franca_design/vignettes/epimodel/sis-network/model.py` (the introduction), which `ss.import_from()` imports completely (against 100 EpiModel runs: new infections agree statistically, prevalence is 3% higher for the reason above, and the network has 174 partnerships against 177 and 110 people with two or more against 111; a `dcm()` SIR with arrivals and departures agrees with EpiModel's LSODA run to 3e-7 of the largest value), and `lingua_franca_design/vignettes/epimodel/hiv/model.py` (the Gallery HIV model, with the cascade and PrEP), of which only the two networks and the parameters import mechanically: its six modules are R (`infect`, `progress`, `cascade`, `prep`, `dfunc`, `afunc`), listed with their source. The hand translation of those modules:
+`lingua_franca_design/docs/models/epimodel/sis-network/model.py` (the introduction), which `ss.import_from()` imports completely (against 100 EpiModel runs: new infections agree statistically, prevalence is 3% higher for the reason above, and the network has 174 partnerships against 177 and 110 people with two or more against 111; a `dcm()` SIR with arrivals and departures agrees with EpiModel's LSODA run to 3e-7 of the largest value), and `lingua_franca_design/docs/models/epimodel/hiv/model.py` (the Gallery HIV model, with the cascade and PrEP), of which only the two networks and the parameters import mechanically: its six modules are R (`infect`, `progress`, `cascade`, `prep`, `dfunc`, `afunc`), listed with their source. The hand translation of those modules:
 
 ```python
 week = ss.prob # EpiModel uses each rate as the probability of an event in a week (a step)
@@ -84,8 +84,8 @@ sim = ss.Sim(hiv, networks=dict(main=main, casual=casual), n_agents=1500, stop=1
 
 ## Running the original
 
-- Environment: `lingua_franca_design/_envs/epimodel` (R with a private library; `bin/Rscript` puts it first). Build it with `python _envs/envs.py install epimodel`.
+- Environment: `lingua_franca_design/_envs/epimodel` (R with a private library; `bin/Rscript` puts it first). Build it with `lingua_franca envs install epimodel`.
 - The examples' `run.py` call a small R driver (`reference.R`) that runs the original script and then repeats `netsim()` for `n_runs` simulations, writing every simulation's `as.data.frame(sim)` to CSV. Copy that pattern for a new model: `tools.run(['Rscript', driver, model, tmp, str(n_runs), str(seed), str(n_cores)], 'epimodel')`.
 - Series: EpiModel's `s.num`, `i.num`, `si.flow` (new infections in the step), `is.flow`, and the network diagnostics (`edges`, `meandeg`, `concurrent`, `duration`). EpiModel's times start at 1, which is the start: its time `t` is Starsim's `ti = t - 1` (as the vignette's `compare.py` says, index `k` is the number after `k` steps in both), so compare by index or use `--shift 1`. Flows have no value at the first step, where Starsim's are 0.
 - Stochastic: use 100 runs for an SIS, 10 to 20 for a large model (each HIV run takes about a minute), and compare means with their spread.
-- Write the summary with `examples/tools.py`: `write_results(folder, rows)` writes `reference/results.csv` in the long format (`time, series, value, low, high`, with `low` and `high` the 5% and 95% quantiles over runs), and `read_results(folder)` reads it back as `{series: (times, values)}`.
+- Write the summary with `docs/models/tools.py`: `write_results(folder, rows)` writes `reference/results.csv` in the long format (`time, series, value, low, high`, with `low` and `high` the 5% and 95% quantiles over runs), and `read_results(folder)` reads it back as `{series: (times, values)}`.

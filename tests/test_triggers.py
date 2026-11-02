@@ -1,5 +1,5 @@
 """
-Test triggered moves (ss.on), the rest staying (ss.stay), lazy handles (ss.people, ss.state, ss.any), and distributions by group
+Test triggered moves (ss.on), the rest staying (ss.stay), lazy handles (ss.ppl, ss.state), and distributions by group
 """
 import numpy as np
 import sciris as sc
@@ -11,7 +11,7 @@ kw = dict(verbose=0)
 
 @sc.timer()
 def test_lazy():
-    sc.heading('Testing lazy conditions on people, ss.state, and ss.any')
+    sc.heading('Testing lazy conditions on people and ss.state')
     def make(cond):
         S, I = ss.states('S I')
         d = ss.Disease(S, I, onset=ss.Transition(S, I, rate=ss.peryear(0.5), where=cond), name='d')
@@ -45,7 +45,7 @@ def check_cancel(sim, names=('hpv16', 'hpv18')):
 
 @sc.timer()
 def test_hpv_cancel():
-    sc.heading('Port: HPV, canceling the other genotypes when one reaches cancer, with ss.on(), as agents and as compartments')
+    sc.heading('Testing HPV, canceling the other genotypes when one reaches cancer, with ss.on(), as agents and as compartments')
     names = ['hpv16', 'hpv18']
     def make(g):
         S, P, C, X, Z = ss.states('S P C X Z')
@@ -69,7 +69,7 @@ def test_hpv_cancel():
 
 @sc.timer()
 def test_syphilis_stay():
-    sc.heading('Port: syphilis tertiary, with the rest staying, and ss.stay')
+    sc.heading('Testing syphilis tertiary, with the rest staying, and ss.stay')
     def make(form):
         LL, T, Sp = ss.states('LL T Sp')
         dur = ss.normal(ss.years(2), ss.years(0.2))
@@ -109,7 +109,7 @@ def test_syphilis_stay():
 
 @sc.timer()
 def test_ct_by_sex():
-    sc.heading('Port: CT with sex-specific durations in one transition, Dists with ss.by')
+    sc.heading('Testing CT with sex-specific durations in one transition, Dists with ss.by')
     ms = [[1, 0.5], [6, 1]] # Months: [mean, std] for women, then men
     def make(form='pars'):
         E, P, A, Y, S = ss.states('E P A Y S')

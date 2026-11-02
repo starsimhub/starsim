@@ -115,10 +115,11 @@ def load_epydemix(source, start=None, stop=None, verbose=None, **kwargs):
     Returns:
         An `ss.Sim`, with `sim.imported` saying how it was read and what was not translated
 
-    **Example**:
-
+    Example:
+        ```python
         # In the epydemix environment: python epydemix.py my_model.py model.json
         sim = ss.import_from('model.json', format='epydemix')
+        ```
     """
     d = read(source)
     file = source if isinstance(source, str) else None

@@ -161,7 +161,7 @@ def test_aging():
     sc.heading('Testing aging')
     n_agents = int(1e3)
 
-    # With no demograhpics, people shouldn't age
+    # With no demographics, people shouldn't age
     s1 = ss.Sim(n_agents=n_agents).init()
     orig_ages = s1.people.age.raw.copy()
     orig_age = orig_ages.mean()
@@ -209,7 +209,7 @@ def test_pregnancy():
     sim.run()
 
     # Tests
-    # Check that everyone in their 2nd trimester conceived 3-6 months ago
+    # Check that everyone pregnant conceived within the length of a pregnancy
     preg = sim.demographics.pregnancy
     weeks = ss.years((sim.ti - preg.ti_P[preg.P.uids]) * sim.t.dt_year).weeks # Since conception
     assert np.all((weeks >= 0) & (weeks <= 45)), 'Some pregnancies are longer than 45 weeks'

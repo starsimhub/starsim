@@ -338,7 +338,6 @@ class Edits:
         return ''.join(self.lines), sorted(notes)
 
 
-
 def find_analyzers(texts):
     """ The names of the classes that are analyzers, directly or through other classes in the code given """
     bases = {}
@@ -657,10 +656,11 @@ def migrate(*paths, check=False, verbose=True):
     Returns:
         A dict with the changes made and what needs a person, by file
 
-    **Example**:
-
+    Example:
+        ```python
         from starsim.converters.migrate import migrate
         migrate('mypackage') # Or from a shell: python -m starsim.converters.migrate mypackage
+        ```
     """
     files = []
     for path in paths:

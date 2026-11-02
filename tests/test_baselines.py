@@ -153,11 +153,11 @@ def perf_cases():
     - bare_run_no_people: the People-results opt-out (largest removable per-tick cost)
     - het_init: the heterogeneous-dt numeric-sort plan fallback
     - births_run: demographics (birth draw + grow)
-    - crn_false_run: the crn=False path (guards the distribution jumping gate; all other
-      cases run crn=True and so would not catch a reinstated per-step/per-draw RNG jump)
+    - crn_false_run: the crn=False path (guards the distribution jumping gate; most other
+      cases run crn=True and so would not catch a per-step or per-draw RNG jump)
     - fseis10, counts, coded, by_age (init and run): the models in benchmark_models.py, a model written as code
       beside a coded ODE (malariasim), counts stepped beside agents, a coded disease on a network, and ss.by age tables
-    - hpv, tb, contra (init and run), tb1k_run, strains_ode_run: strains as agents (HPVsim), the fixed cost of a declared
+    - tb, contra (init and run), tb1k_run, strains_ode_run: the fixed cost of a declared
       step as agents (tbsim, at two sizes), choices by tables (FPsim), and many sets of strains under the ODE; their
       init cases also guard the time to build a sim
 
@@ -219,10 +219,9 @@ def test_performance_guard(do_save=False, verbose=True):
 
     Measures a small matrix of CPU-normalized wall-clock times (each guarding a distinct cost
     term) and fails if any exceeds its recorded baseline by more than REGRESSION_FACTOR (1.5x).
-    Baselines track the *improved* state, so this catches only major regressions (e.g. reinstating
-    the timeline deepcopy or the object-key plan sort), not normal drift. Times use min-of-repeats
-    with CPU normalization (see test_benchmark) to cancel machine speed. Refresh with
-    ./update_benchmarks.py after an intended speedup.
+    Baselines are the current times, so this catches only major regressions, not normal drift.
+    Times use min-of-repeats with CPU normalization (see test_benchmark) to cancel machine speed.
+    Refresh with ./update_benchmarks.py after an intended speedup.
 
     Note: this test is timing-sensitive, so it is skipped when running under pytest-xdist
     (parallel contention makes per-test wall-clock unreliable). Run it serially to gate, e.g.

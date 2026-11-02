@@ -11,7 +11,7 @@ Understanding the impact of interventions is one of the most common reasons to u
 
 ## Products and interventions
 
-Starsim contains _products_, which can be thought of as the actual test, diagnostic, treatment, or vaccine product being used, as well as _interventions_ (deliveries), which are responsible for delivering the products to the population. Starsim includes three basic types of product, `ss.Vaccine`, `ss.Diagnostic`, and `ss.Treatment`, and a delivery for each: `ss.vaccinate()`, `ss.screen()`, and `ss.treat()`. A delivery says who receives the product (`where=` for who is eligible, `who=` or `on=` for something that has happened to them), when (`at=`, `interval=`, `start=`, `at_age=`), and how many (`coverage=`, `capacity=`). These are general enough that they rarely need to be tailored to a particular disease, and you can just use them directly. That being said, you are always welcome to write your own, to capture particular features of the intervention you're modeling (see [A5](a5_modules.qmd)).
+Starsim contains _products_, which can be thought of as the actual test, diagnostic, treatment, or vaccine product being used, as well as _interventions_ (deliveries), which are responsible for delivering the products to the population. Starsim includes three basic types of product, `ss.Vaccine`, `ss.Diagnostic`, and `ss.Treatment`, and a delivery for each: `ss.vaccinate()`, `ss.screen()`, and `ss.treat()`. A delivery says who receives the product (`where=` for who is eligible, `who=` for something that has happened to them), when (`at=`, `interval=`, `start=`, `at_age=`), and how many (`coverage=`, `capacity=`). These are general enough that they rarely need to be tailored to a particular disease, and you can just use them directly. That being said, you are always welcome to write your own, to capture particular features of the intervention you're modeling (see [A5](a5_modules.qmd)).
 
 ## Starting point
 
@@ -44,7 +44,7 @@ The infection is endemic, with about a third of people infected at any time.
 
 ## Treating people who seek care
 
-Some people with the infection notice symptoms and seek care. Suppose 30% of people seek care within a month of infection, on average, and are treated with a drug that cures 95% of them. The drug is the product; `ss.treat()` delivers it. `on=sti.infection` delivers it to the people who were just infected, `coverage=0.3` to 30% of them, and `delay=` a time after their infection, drawn for each person:
+Some people with the infection notice symptoms and seek care. Suppose 30% of people seek care within a month of infection, on average, and are treated with a drug that cures 95% of them. The drug is the product; `ss.treat()` delivers it. `where=sti.infection` delivers it to the people who were just infected, `coverage=0.3` to 30% of them, and `delay=` a time after their infection, drawn for each person:
 
 ```{python}
 drug = ss.Treatment(cure=0.95) # Cures 95% of the people it is given to
@@ -143,7 +143,7 @@ These deliveries cover most programs. When who receives something depends on a r
 
 1. In the scenario with partner notification, what happens if the partners of people who seek care are notified too (a second notification, with `who=care`)? Is the effect larger than notifying the partners of those found by screening?
 2. Screening reaches people aged 15 to 29. How much does the effect change if it reaches everyone aged 15 to 49 instead, and how many more tests does it take? Which gives more infections prevented per test?
-3. Add a catch-up campaign to the vaccination at age 15: a single round in 2010 () for everyone aged 15 to 29, with the same vaccine. How much sooner does vaccination make a difference, and how many more doses does it take?
+3. Add a catch-up campaign to the vaccination at age 15: a single round in 2010 (`at=['2010']`) for everyone aged 15 to 29, with the same vaccine. How much sooner does vaccination make a difference, and how many more doses does it take?
 
 ## Further reading
 

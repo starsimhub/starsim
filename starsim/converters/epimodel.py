@@ -6,8 +6,7 @@ they are read from the JSON written by `dump_epimodel.R`, which runs the script 
 EpiModel's own environment with the fitting and simulating functions replaced by ones
 that record their arguments. A model of a built-in type (`"SI"`, `"SIS"`, `"SIR"`)
 becomes a disease with its transitions; a network fitted by `netest()` becomes an
-`ss.DegreeNet` with the same targets (an approximation,
-since it is not an ERGM); and
+`ss.DegreeNet` with the same targets (an approximation, since it is not an ERGM); and
 modules written in R (`infection.FUN = infect`, ...) are listed, with their source in
 `sim.imported.modules`, to be written by hand.
 
@@ -174,10 +173,11 @@ def load_epimodel(source, unit='day', verbose=None, **kwargs):
     Returns:
         An `ss.Sim`, with `sim.imported` saying how it was read and what was not translated
 
-    **Example**:
-
+    Example:
+        ```python
         # In EpiModel's environment: Rscript dump_epimodel.R intro_sis.R model.json
         sim = ss.import_from('model.json', format='epimodel')
+        ```
     """
     d = read(source)
     file = source if isinstance(source, str) else d.get('file')
