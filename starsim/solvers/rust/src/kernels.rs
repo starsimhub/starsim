@@ -695,7 +695,7 @@ fn step_groups<const ONE: bool>(rng: Rng, y: A2<f64>, p: &Program, w: &Work, dt:
                     draw(rng, y, p, w, h, flows, solver == 3);
                 }
                 if p.has_det && !by_place {
-                    settle(y, p, rates, h, flows);
+                    settle(y, p, w, h, flows);
                 }
                 elapsed += h;
                 if pending && elapsed >= dt/2.0 + (if solver == 4 { -1e-12 } else { 1e-12 }) {
@@ -930,7 +930,7 @@ pub fn time_point(rng: Rng, y: A2<f64>, p: &Program, w: &Work, ti: usize, row: i
         }
     }
     if solver == 4 && p.local && p.has_det {
-        settle_places(y, p, dt, flows);
+        settle_places(y, p, w, dt, flows);
     }
     short
 }
@@ -1072,7 +1072,7 @@ pub fn advance(rngs: &[Rng], p: &Program, ys: A3<f64>, first: usize, last: usize
                 }
             }
             if a.solver == 4 && p.local && p.has_det {
-                settle_places(y, p, a.dt, now);
+                settle_places(y, p, &w, a.dt, now);
             }
             for s in 0..a.stocks.shape(2) {
                 for g in 0..a.stocks.shape(3) {
@@ -1110,13 +1110,12 @@ pub fn advance_threads(rngs: &[Rng], progs: &[Program], ys: A3<f64>, a: &Advance
 }
 
 /// For the exact solver by place: the counts settled over the step, with the people as they are at its end (`settle_places()`)
-pub fn settle_places(y: A2<f64>, p: &Program, dt: f64, flows: A2<f64>) {
-    let w = workspace(y.n0(), y.n1(), p);
+pub fn settle_places(y: A2<f64>, p: &Program, w: &Work, dt: f64, flows: A2<f64>) {
     let (_o, expo) = own1(p.exp_set.len().max(1), 0.0);
     for i in 0..p.pl_starts.len() - 1 {
-        place_rates(y, p, p.pl_starts.u(i), p.pl_starts.u(i + 1), w.rates, w.stack, expo);
+        place_rates(y, p, p.pl_starts.u(i), p.pl_starts.u(i + 1), w.rates, w.stack, expo, true);
     }
-    settle(y, p, w.rates, dt, flows);
+    settle(y, p, w, dt, flows);
 }
 
 pub mod bind;

@@ -107,8 +107,8 @@ Lines are lines of model code (not counting blank lines, comments, imports, or p
 
 | Model | Lines: odin | Lines: Starsim | One run: odin | One run: Starsim | |
 |---|---|---|---|---|---|
-| The stochastic SIR with arrays (100 replicates) | 27 | 8 | first 0.79 s, rerun 0.0010 s, the first with compiling | first 0.018 s, rerun 0.014 s for 100 runs in one process | Pass |
-| The age-structured SEIR with a 14-day delay | 53 | 17 | first 0.84 s, rerun 0.0014 s, the first with compiling | first 0.021 s, rerun 0.0041 s | Pass: the delay is a conveyor of 14 steps, which is not stiff (as 200 Erlang stages were, at 1.5 s a run) |
+| The stochastic SIR with arrays (100 replicates) | 27 | 8 | first 0.75 s, rerun 0.00096 s, the first with compiling | first 0.017 s, rerun 0.013 s for 100 runs in one process | Pass |
+| The age-structured SEIR with a 14-day delay | 53 | 17 | first 0.84 s, rerun 0.0015 s, the first with compiling | first 0.019 s, rerun 0.003 s | Pass: the delay is a conveyor of 14 steps, which is not stiff (as 200 Erlang stages were, at 1.5 s a run) |
 | The age-structured SEIR above, 1,000 runs | 46 | 10 | 1.98 s on one thread, plus 0.85 s to compile | 11.2 s | |
 
 The last row was measured on 17 October 2026, on a machine shared with other jobs.

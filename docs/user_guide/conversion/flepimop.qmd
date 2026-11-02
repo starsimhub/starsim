@@ -109,8 +109,8 @@ Lines are lines of model code (not counting blank lines, comments, imports, or p
 
 | Model | Lines: flepiMoP | Lines: Starsim | One run: flepiMoP | One run: Starsim | |
 |---|---|---|---|---|---|
-| The two-population tutorial | 42, plus 10 lines of CSV | 16 | first 8.6 s, rerun 8.6 s as a command | first 0.012 s, rerun 0.00092 s | Pass |
-| The vaccine scenarios tutorial, 30 runs (3 scenarios of 10) | 141, plus 10 lines of CSV | 33 | first 23 s, rerun 23 s as a command | first 0.76 s, rerun 0.54 s | Pass |
+| The two-population tutorial | 42, plus 10 lines of CSV | 16 | first 8.6 s, rerun 8.8 s as a command | first 0.018 s, rerun 0.00045 s | Pass |
+| The vaccine scenarios tutorial, 30 runs (3 scenarios of 10) | 141, plus 10 lines of CSV | 33 | first 23 s, rerun 23 s as a command | first 0.84 s, rerun 0.55 s | Pass |
 | The 3,000-place configuration, one SEIR run with its outcomes | | | 34 s (58 s the first time, with compiling), plus 6 to 9 s for the outcomes | 5.0 s, plus 1.7 s to read the configuration | |
 
 The last row was measured on 17 October 2026, on a machine shared with other jobs.

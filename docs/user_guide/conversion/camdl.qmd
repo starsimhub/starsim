@@ -98,8 +98,8 @@ Lines are lines of model code (not counting blank lines, comments, imports, or p
 
 | Model | Lines: camdl | Lines: Starsim | One run: camdl | One run: Starsim | |
 |---|---|---|---|---|---|
-| The SIR, as an ODE | 30 | 13 | first 0.013 s, rerun 0.0066 s as a command (`camdl simulate --backend ode`) | first 0.0099 s, rerun 0.00071 s | Pass |
-| The SEIR by age and patch, as an ODE | 47 | 16 | first 0.021 s, rerun 0.014 s as a command | first 0.015 s, rerun 0.0011 s | Pass |
+| The SIR, as an ODE | 30 | 13 | first 0.013 s, rerun 0.0056 s as a command (`camdl simulate --backend ode`) | first 0.0094 s, rerun 0.00029 s | Pass |
+| The SEIR by age and patch, as an ODE | 47 | 16 | first 0.023 s, rerun 0.013 s as a command | first 0.014 s, rerun 0.00052 s | Pass |
 | The SIR fitted by particle MCMC (4 chains) | | | 21 s (PMMH, 200 particles) | 79 s (50 particles, chosen in the warm-up) | |
 | The SIR fitted by IF2 (4 chains of 50 passes, 1,000 particles) | | | 11.9 s | 13 s | |
 

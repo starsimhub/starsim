@@ -324,7 +324,9 @@ fn py_apply_shifts(rng: &Bound<PyAny>, y: &Bound<PyAny>, sh: &Bound<PyAny>, ti: 
 fn py_settle_places(y: &Bound<PyAny>, p: &Bound<PyAny>, dt: f64, flows: &Bound<PyAny>) -> PyResult<()> {
     let mut k = Keep::new();
     let prog = program(p, &mut k)?;
-    super::settle_places(a2(y, &mut k, true)?, &prog, dt, a2(flows, &mut k, true)?);
+    let y = a2(y, &mut k, true)?;
+    let w = super::workspace(y.n0(), y.n1(), &prog);
+    super::settle_places(y, &prog, &w, dt, a2(flows, &mut k, true)?);
     Ok(())
 }
 

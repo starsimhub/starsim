@@ -121,8 +121,8 @@ Lines are lines of model code (not counting blank lines, comments, imports, or p
 
 | Model | Lines: MEmilio | Lines: Starsim | One run: MEmilio | One run: Starsim | |
 |---|---|---|---|---|---|
-| The SECIR | 44 | 14 | first 0.00044 s, rerun 0.00002 s | first 0.014 s, rerun 0.0012 s | Pass |
-| The age-resolved SECIR (above) | 45 | 22 | first 0.00085 s, rerun 0.00006 s | first 0.025 s, rerun 0.0013 s | Pass |
+| The SECIR | 44 | 14 | first 0.00045 s, rerun 0.00002 s | first 0.014 s, rerun 0.00043 s | Pass |
+| The age-resolved SECIR (above) | 45 | 22 | first 0.00082 s, rerun 0.00006 s | first 0.02 s, rerun 0.00056 s | Pass |
 | 50 counties × 6 ages with commuting, 90 days | | | 0.17 s | 0.1 s | |
 | 400 counties × 6 ages with commuting, 90 days | | | 1.54 s to run, 13.4 s to build the graph in Python | 0.7 s | |
 

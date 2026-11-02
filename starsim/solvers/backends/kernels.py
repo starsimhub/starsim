@@ -415,7 +415,7 @@ def compile(verbose=True):
         y, p = engine.y.copy(), engine.program # And those called on their own
         apply_events(engine.make_rng(), y, engine.register, 0, True)
         apply_shifts(engine.make_rng(), y, engine.shifts, 0, True, np.zeros((0, 2, y.shape[1])))
-        settle_places(y, p, engine.dt, np.zeros((p.n_trans + p.n_movers, y.shape[1])))
+        settle_places(y, p, workspace(y, p), engine.dt, np.zeros((p.n_trans + p.n_movers, y.shape[1])))
         make('abm').run() # The passes over the agents (ss.solvers.backends.passes), which are cached apart from the kernels
         for sim in typical_sims(): # And the rest of what sims with agents compile on their first run
             sim.run()
@@ -978,19 +978,26 @@ def evaluate(y, t, consts, out, grouped):
 
 
 @jit
-def place_rates(ys, p, a, b, rates, stack, expo):
-    """
-    The rate of every flow for the groups of one place (p.pl_groups[a:b]), when people mix only within their place
-
-    The same arithmetic as in `step()`, for one place: exposure is the prevalence in the place, and
-    a count is the number in the place.
-    """
-    nf = len(p.src)
+def place_people(ys, p, a, b):
+    """ The number of people in the groups of one place """
     n = 0.0
     for j in range(a, b):
         g = p.pl_groups[j]
         for c in p.people:
             n += ys[c, g]
+    return n
+
+
+@jit
+def place_rates(ys, p, a, b, rates, stack, expo, only_det=False):
+    """
+    The rate of every flow for the groups of one place (p.pl_groups[a:b]), when people mix only within their place, or only of the flows of counts (see `settle()`)
+
+    The same arithmetic as in `step()`, for one place: exposure is the prevalence in the place, and
+    a count is the number in the place.
+    """
+    nf = len(p.src)
+    n = place_people(ys, p, a, b) if len(p.exp_set) else -1.0 # Otherwise worked out if a share needs it
     for e in range(len(p.exp_set)):
         s = p.exp_set[e]
         if s < 0:
@@ -1006,6 +1013,8 @@ def place_rates(ys, p, a, b, rates, stack, expo):
         for t in range(len(p.sizes)):
             expo[e] += p.contacts[0, t, 0]*prev
     for f in range(nf):
+        if only_det and not p.det[f]:
+            continue
         for j in range(a, b):
             g = p.pl_groups[j]
             rates[f, g] = p.fixed[f, g]
@@ -1034,6 +1043,8 @@ def place_rates(ys, p, a, b, rates, stack, expo):
                     for jj in range(a, b):
                         for i in range(p.set_starts[arg], p.set_starts[arg+1]):
                             v += ys[p.set_comps[i], p.pl_groups[jj]]
+                    if op == FRAC and n < 0:
+                        n = place_people(ys, p, a, b)
                     stack[top, 0] = leaf_share(op, v, n)
                 elif op == GROUP:
                     top += 1
@@ -1505,23 +1516,22 @@ def wake(w):
 
 
 @jit
-def settle_places(y, p, dt, flows):
+def settle_places(y, p, w, dt, flows):
     """
     For the exact solver by place: the counts settled over the step, with the people as they are at its end, after the events of a movement register
 
     As SimInf updates its continuous state after each day's scheduled events, so that people
     who move count towards the place they arrive at; see `gillespie_places()` and `settle()`.
     """
-    w = workspace(y, p)
     expo = np.zeros(max(len(p.exp_set), 1))
     for i in range(len(p.pl_starts) - 1):
-        place_rates(y, p, p.pl_starts[i], p.pl_starts[i+1], w[0], w[2], expo)
-    settle(y, p, w[0], dt, flows)
+        place_rates(y, p, p.pl_starts[i], p.pl_starts[i+1], w[0], w[2], expo, True)
+    settle(y, p, w, dt, flows)
     return
 
 
 @jit
-def settle(y, p, rates, dt, flows):
+def settle(y, p, w, dt, flows):
     """
     For the solvers that draw whole events: the flows of states that are not people (a reservoir), as expected values over a time dt
 
@@ -1532,6 +1542,7 @@ def settle(y, p, rates, dt, flows):
     a quarter in one: in one step, RK4 is unstable once a count turns over by more than 2.8,
     and mosquitoes that live 10 days would die out at a 30-day step.
     """
+    rates = w[0]
     fastest = 0.0
     for f in range(len(p.src)):
         if p.det[f] and p.src[f] >= 0:
@@ -1539,20 +1550,42 @@ def settle(y, p, rates, dt, flows):
                 fastest = max(fastest, rates[f, g])
     n_sub = max(1, int(np.ceil(fastest*dt/0.25)))
     for sub in range(n_sub):
-        settle_step(y, p, rates, dt/n_sub, flows)
+        settle_step(y, p, w, dt/n_sub, flows)
     return
 
 
 @jit
-def settle_step(y, p, rates, dt, flows):
-    """ For `settle()`: one RK4 step of the counts over a time dt """
+def settle_step(y, p, w, dt, flows):
+    """ For `settle()`: one RK4 step of the counts over a time dt, in the compartments and flows that the counts' flows reach, since a step this is called on takes no others """
     nc, ng = y.shape
     nf = len(p.src)
     nflows = flows.shape[0]
-    k = np.zeros((4, nc, ng))
-    kf = np.zeros((4, nflows, ng))
-    y0 = y.copy()
-    yt = y.copy()
+    rates, k, kf, yt = w[0], w[5], w[6], w[7]
+    comps = np.zeros(nc, dtype=np.bool_)
+    rows = np.zeros(nflows, dtype=np.bool_)
+    for f in range(nf):
+        if p.det[f]:
+            if p.src[f] >= 0:
+                comps[p.src[f]] = True
+            if p.named[f]:
+                rows[p.index[f]] = True
+            for t in range(p.tgt_starts[f], p.tgt_starts[f+1]):
+                comps[p.tgt_comp[t]] = True
+                if p.tgt_rec[t] >= 0:
+                    rows[p.tgt_rec[t]] = True
+            for t in range(p.crd_starts[f], p.crd_starts[f+1]):
+                rows[p.crd_index[t]] = True
+    for c in range(nc):
+        if comps[c]:
+            for g in range(ng):
+                yt[c, g] = y[c, g]
+                for stage in range(4):
+                    k[stage, c, g] = 0.0
+    for r in range(nflows):
+        if rows[r]:
+            for g in range(ng):
+                for stage in range(4):
+                    kf[stage, r, g] = 0.0
     for stage in range(4):
         for f in range(nf):
             if not p.det[f]:
@@ -1583,14 +1616,17 @@ def settle_step(y, p, rates, dt, flows):
         if stage < 3:
             ahead = dt if stage == 2 else dt/2
             for c in range(nc):
-                for g in range(ng):
-                    yt[c, g] = max(y0[c, g] + ahead*k[stage, c, g], 0.0)
+                if comps[c]:
+                    for g in range(ng):
+                        yt[c, g] = max(y[c, g] + ahead*k[stage, c, g], 0.0)
     for c in range(nc):
-        for g in range(ng):
-            y[c, g] = max(y0[c, g] + dt/6*(k[0, c, g] + 2*k[1, c, g] + 2*k[2, c, g] + k[3, c, g]), 0.0)
-    for f in range(nflows):
-        for g in range(ng):
-            flows[f, g] += dt/6*(kf[0, f, g] + 2*kf[1, f, g] + 2*kf[2, f, g] + kf[3, f, g])
+        if comps[c]:
+            for g in range(ng):
+                y[c, g] = max(y[c, g] + dt/6*(k[0, c, g] + 2*k[1, c, g] + 2*k[2, c, g] + k[3, c, g]), 0.0)
+    for r in range(nflows):
+        if rows[r]:
+            for g in range(ng):
+                flows[r, g] += dt/6*(kf[0, r, g] + 2*kf[1, r, g] + 2*kf[2, r, g] + kf[3, r, g])
     return
 
 
@@ -2145,7 +2181,7 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, varying):
                         h = min(end - elapsed, 0.03/max(fastest, 1e-12))
                     draw(rng, y, p, w, h, flows, solver == 3)
                 if p.has_det and not by_place: # By place, the counts are settled after the step's events: see settle_places()
-                    settle(y, p, rates, h, flows)
+                    settle(y, p, w, h, flows)
                 elapsed += h
                 if pending and elapsed >= dt/2 + (-1e-12 if solver == 4 else 1e-12): # At it for the exact solver; otherwise after the first draws that pass it (see convey())
                     convey(rng, y, p, w, flows, True)
@@ -2494,7 +2530,7 @@ def time_point(rng, y, p, w, ti, row, dt, n_sub, solver, flows, tables, reg, sh,
         if solver == 4 and p.local:
             touch(reg, ti, p.places, w)
     if solver == 4 and p.local and p.has_det:
-        settle_places(y, p, dt, flows)
+        settle_places(y, p, w, dt, flows)
     return short
 
 
@@ -2652,7 +2688,7 @@ def advance(rngs, p, ys, first, last, dt, start, end, solver, n_sub, fixed, mult
                 if solver == 4 and p.local:
                     touch(reg, ti, p.places, w)
             if solver == 4 and p.local and p.has_det:
-                settle_places(y, p, dt, now)
+                settle_places(y, p, w, dt, now)
             for s in range(stocks.shape[2]):
                 for g in range(stocks.shape[3]):
                     stocks[r, ti, s, g] = 0

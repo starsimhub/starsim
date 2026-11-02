@@ -1610,12 +1610,18 @@ class Sim(ss.Base):
             self.progress = ss.display.Progress(self)
         try:
             # Main simulation loop
-            reason = self.kernel_reason() if until is None and not profile else None
+            restarted = self.__dict__.pop('_restarted', None)
+            reason = self.kernel_reason() if until is None and not profile and restarted is None else None
             kernels = until is None and not profile and reason is None
             if reason is not None and self.solver != 'abm' and getattr(self, 'declared', None): # Say once why a compartmental run is taken a step at a time (describe() says it too)
                 ss.note(f'run a step at a time, which is much slower than all at once, since {reason}', sim=self, verbose=self.verbose)
             if kernels: # JAX or the kernels: see ss.solvers.choose_engine()
-                use_jax, why = ss.solvers.choose_engine(self)
+                known = self.__dict__.get('_engine_known')
+                if restarted == 'same' and known is not None and known[0] is self.jax and not self.jax: # A choice from the model and its values, which are as they were
+                    use_jax, why = known[1:]
+                else:
+                    use_jax, why = ss.solvers.choose_engine(self)
+                    self._engine_known = (self.jax, use_jax, why)
                 sc.printv(f'engine: {why}', 2, self.verbose)
             if kernels: # Nothing needs to happen between the steps, so each module takes all of them at once
                 for mod in self.declared:
@@ -1797,7 +1803,9 @@ class Sim(ss.Base):
             self.init()
         self.loop.index = 0
         rebuild = lambda: self.new(pars=sc.mergedicts(self.par_values, pars), inplace=True, rand_seed=sc.ifelse(rand_seed, self.pars.rand_seed)) # With the values of earlier restarts
-        if not self.kernel_only() or any(isinstance(val, ss.Dist) or key in self.pars.bounded() for key,val in (pars or {}).items()): # Not run in one call to the kernels, a distribution the compartments were not laid out for, or a sim setting (e.g. n_agents)
+        same = not pars
+        numbers = all(isinstance(val, (int, float, np.number)) for val in (pars or {}).values()) # A number in place of a number does not change how the sim runs
+        if not (numbers and self.__dict__.get('_kernels_known') or self.kernel_only()) or any(isinstance(val, ss.Dist) or key in self.pars.bounded() for key,val in (pars or {}).items()): # Not run in one call to the kernels, a distribution the compartments were not laid out for, or a sim setting (e.g. n_agents)
             return rebuild()
         base = self.__dict__.get('_before_init') # The copy that sim.new() and a rerun start from, which takes the same values
         if rand_seed is not None:
@@ -1832,6 +1840,8 @@ class Sim(ss.Base):
             mod.engine.restart()
         for crossing in self.crossings: # As in init()
             crossing.init()
+        self._kernels_known = True
+        self._restarted = 'same' if same else 'new' # For the run that follows, which need not check the same things again
         return self
 
     def finalize(self):

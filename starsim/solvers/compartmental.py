@@ -128,7 +128,8 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         self.n_groups = sim.groups.n_groups
         self.laid_out = None # The groups it was laid out for, once it is: see build()
         self.last_flows = dict() # The flow along each transition in the last step, by group
-        self.steady = self.last_values = self.step_rows = self.watched = self.splits = self.state_matrix = None # See settled(), count_deaths(), and record_stocks()
+        self.steady = self.last_values = self.step_rows = self.watched = self.splits = self.state_matrix = None
+        self.start_deps = self.start_held = self.start_y = self.kept_tables = None # See start_key() and tables() # See settled(), count_deaths(), and record_stocks()
         self.fresh = False
         self.forced = dict() # People moved along a transition by an intervention (see force()) this step, by group, until the step is recorded
         self.program = None # The flows as arrays, for the kernels: see init_program()
@@ -679,14 +680,59 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         self.kernel_rng = self.make_rng(stream=1)
         self.compiled = None
         self.cache.clear()
-        self.y = np.zeros((self.n_comps, self.n_groups))
-        self.init_post()
+        key = self.start_key()
+        if key is not None and key == self.start_held: # As the last start: see start_key()
+            self.y = self.start_y.copy()
+            self.record_stocks()
+        else:
+            self.y = np.zeros((self.n_comps, self.n_groups))
+            self.init_post()
+            self.start_held, self.start_y = key, None if key is None else self.y.copy()
         for info in self.outcomes.values():
             info.update(now=0.0, n=0.0, total=0.0)
             info.pending[:] = 0
             if info.stay is not None:
                 info.leaving[:] = 0
         return
+
+    def start_key(self):
+        """
+        What the compartments at the start and the branches depend on, or None if that cannot be told: while it is the same, a
+        restart takes them as they were, and a sweep of a value that they do not read (e.g. a rate) need not work them out again
+        """
+        if self.start_deps is None:
+            self.start_deps = self.find_start_deps()
+        if self.start_deps is False:
+            return None
+        amounts = [held(m.efficacy if isinstance(m, ss.products.Effect) else m.amount) for mods in self.sim.modifiers.values() for m in mods]
+        return [amounts, *[held(p.raw) for p in self.start_deps]]
+
+    def find_start_deps(self):
+        """ The parameters read by the start and the branches (see `start_key()`), or False if something else can change them, or doing it has an effect of its own """
+        graph = self.graph
+        plain = [track for tracks in self.tracks.values() for track in tracks]
+        if self.cross is not None or self.triggers or self.sim.mixing.register is not None or self.mod.burnin_plan(self) is not None or self.branch_adjust:
+            return False
+        if any(getattr(track, 'apart', False) or getattr(track, 'trigger', False) or getattr(track.tr, 'where', None) is not None for track in plain):
+            return False
+        if any(kind == 'branch' for name,kind,*rest in self.sim.modifiers):
+            return False
+        found = []
+        def walk(obj): # Whether everything in a value is a number or a parameter
+            if isinstance(obj, ss.par):
+                found.append(obj)
+                return not isinstance(obj.raw, (ss.expressions.Expr, ss.Dist, ss.parameters.TimeValue, ss.by)) and not callable(obj.raw)
+            elif isinstance(obj, ss.expressions.Expr):
+                return all(isinstance(leaf, ss.par) and walk(leaf) for leaf in obj.leaves)
+            elif isinstance(obj, (list, tuple)):
+                return all(walk(val) for val in obj)
+            elif isinstance(obj, ss.by):
+                return not obj.varies and walk(list(obj.items))
+            return obj is None or isinstance(obj, (float, int, np.number, np.ndarray))
+        values = [track.p for track in plain]
+        values += [val for tr in graph.transitions.values() for val in [tr.p, tr.p_stay, tr.p_die]]
+        values += [val for state in graph.states.values() for val in [state.init, state.init_n]]
+        return found if all(walk(val) for val in values) else False
 
     def restart_movement(self):
         """
@@ -2340,8 +2386,14 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         mod = self.mod
         p = self.program
         npts = mod.t.npts
+        whole = start == 0 and stop is None
         stop = npts if stop is None else stop
         self.cache.clear()
+        changes = any(key[0] == mod.name and not getattr(m, 'constant', False) for key,mods in sim.modifiers.items() for m in mods) # Modifiers that depend on more than the parameters
+        values = self.par_values() if whole and not changes else None
+        if values is not None and self.kept_tables is not None and self.kept_tables[0] == values: # The same as for the last run
+            self.cache.update(self.kept_tables[2])
+            return list(self.kept_tables[1])
         for par in self.time_pars:
             raw = par.raw
             kept = self.series.get(id(par))
@@ -2366,7 +2418,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         consts    = table([self.prog_value(par) for par in self.prog_pars])
         rel_trans = table([state.rel_trans*self.mult_raw('rel_trans', state=state)*mask for state,mask in self.prog_exposures])
         series = {id(par):self.cache[id(par)] for par in self.time_pars}
-        if any(key[0] == mod.name and not getattr(m, 'constant', False) for key,mods in sim.modifiers.items() for m in mods): # Modifiers that depend only on time (see kernel_only()): work out every part of the program at each step (and stage), with them applied
+        if changes: # Modifiers that depend only on time (see kernel_only()): work out every part of the program at each step (and stage), with them applied
             rows = []
             for ti in range(start, stop):
                 sim.t.ti = mod.t.ti = min(ti + 1, npts - 1) # The step from ti, which is step ti+1 (see ss.Loop)
@@ -2387,7 +2439,10 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             vals = series[id(par)]
             self.cache[id(par)] = vals[:, 0] if vals.shape[1] == 1 else vals
             self.cache['series'] = True
-        return [np.ascontiguousarray(table) for table in [fixed, mult, consts, rel_trans]]
+        tables = [np.ascontiguousarray(table) for table in [fixed, mult, consts, rel_trans]]
+        if values is not None:
+            self.kept_tables = (values, tables, dict(self.cache))
+        return list(tables)
 
     def table_years(self, raw):
         """ The year of each row of the tables, one a step, for a value that varies in time: the middle of the step, or its start for a step function, which is held from there, and for Euler's method, which reads everything there """
@@ -2405,7 +2460,9 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
     def run_args(self, tables=True):
         """ What the kernels need for a whole run, apart from the seed (and the tables, unless `tables=False`) """
         sim = self.sim
-        self.update_targets()
+        key = self.start_key()
+        if key is None or key != self.start_held: # Otherwise, as worked out at the start
+            self.update_targets()
         self._mover_rates = self.mover_rates()
         for i,matrix in enumerate(self._mover_rates):
             self.program.mov_rate[self.program.mov_starts[1, i]:self.program.mov_starts[1, i+1]] = matrix.data

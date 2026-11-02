@@ -12,6 +12,7 @@ import collections
 import importlib
 import importlib.util
 import math
+import functools
 import numpy as np
 import sciris as sc
 import starsim as ss
@@ -383,6 +384,12 @@ def kernel_seconds(sim):
     return seconds
 
 
+@functools.cache
+def has_jax():
+    """ Whether JAX is installed, which is looked for once a session """
+    return importlib.util.find_spec('jax') is not None
+
+
 def choose_engine(sim):
     """
     Whether JAX takes the sim's whole run of the ODE, as `ss.gradients` runs it, rather than the kernels, and why
@@ -404,7 +411,7 @@ def choose_engine(sim):
         why = f'kernels: JAX does not run solver="{sim.solver}"'
         if sim.jax:
             ss.note(f'JAX does not run solver="{sim.solver}", so it is run by the kernels', sim=sim)
-    elif sim.jax is None and importlib.util.find_spec('jax') is None:
+    elif sim.jax is None and not has_jax():
         why = 'kernels: JAX is not installed'
     else:
         seconds = kernel_seconds(sim) if sim.jax is None else None

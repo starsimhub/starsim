@@ -103,8 +103,8 @@ Lines are lines of model code (not counting blank lines, comments, imports, or p
 
 | Model | Lines: summer2 | Lines: Starsim | One run: summer2 | One run: Starsim | |
 |---|---|---|---|---|---|
-| The mixing-matrix example | 35 | 12 | first 0.84 s, rerun 0.00023 s, the first with building and compiling | first 0.012 s, rerun 0.00088 s | Pass |
-| The SEIR with clinical status | 134 (55 for the model alone) | 16 | first 3.0 s, rerun 0.00029 s, the first with compiling all seven models | first 0.018 s, rerun 0.0011 s | Pass |
+| The mixing-matrix example | 35 | 12 | first 0.8 s, rerun 0.00023 s, the first with building and compiling | first 0.012 s, rerun 0.0004 s | Pass |
+| The SEIR with clinical status | 134 (55 for the model alone) | 16 | first 2.9 s, rerun 0.0003 s, the first with compiling all seven models | first 0.014 s, rerun 0.00052 s | Pass |
 | A COVID model in 384 compartments (16 age groups, five clinical levels, three levels of protection) | | | 3.6 to 4.3 s the first time; 0.23 to 0.41 s after that | 0.2 to 0.56 s the first time; 0.08 to 0.5 s after that | |
 
 The last row was measured on 17 October 2026, on a machine shared with other jobs. Starsim's compiled code is the same for every model, and is compiled once, so there is no wait for each new model.
