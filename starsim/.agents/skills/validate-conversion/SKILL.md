@@ -1,15 +1,17 @@
 ---
-name: validate-import
-description: Check a Starsim port of a model from another framework against the original, by running both and comparing their results exactly (deterministic models) or statistically (stochastic ones), and explain any difference. Use after the import-model skill, or whenever someone asks whether a translated model matches its original.
+name: validate-conversion
+description: Check a model converted to or from Starsim against the original, by running both and comparing their results exactly (deterministic models) or statistically (stochastic ones), and explain any difference. Use after the convert-model skill, or whenever someone asks whether a translated model matches its original.
 ---
 
-# Validate an imported model
+# Validate a converted model
+
+This page is written for an import, where the original is in another framework and the port is in Starsim. For an export, swap the two: the Starsim model is the original, and the export is run in the target framework and compared with it.
 
 Run the original in its own framework and the port in Starsim, write both as the same long CSV, and compare them with `scripts/compare.py`. Then explain every difference that is left: a difference is either a bug in the port, a known difference of convention (stated, with the reason), or a finding about Starsim.
 
 ## Workflow
 
-1. **Run the original** in the framework's own environment, never in Starsim's (don't install a framework without asking). The framework's guide in `../import-model/references/<framework>.md` says how, under "Running the original". For a stochastic model, save every run (e.g. 200), not only a summary, so the comparison can test distributions. In the `lingua_franca_design` repo, `docs/models/<framework>/<model>/run.py` already does this and writes `reference/results.csv`.
+1. **Run the original** in the framework's own environment, never in Starsim's (don't install a framework without asking). The framework's guide in `../convert-model/references/<framework>.md` says how, under "Running the original". For a stochastic model, save every run (e.g. 200), not only a summary, so the comparison can test distributions. The [worked examples](https://github.com/starsimhub/lingua_franca_design/tree/main/docs/models) have a `run.py` for each model that does this.
 2. **Write the original's results as a long CSV**: columns `time`, `series`, `value`, and `run` for replicates (or `low` and `high` for a summary, e.g. the 5% and 95% quantiles). One row per run, time, and series. Use the source's own series names.
 3. **Run the port** with the same population, duration, step, and number of runs:
    ```bash
@@ -25,7 +27,7 @@ Run the original in its own framework and the port in Starsim, write both as the
    - **statistical**: runs on both sides. At each time, the difference of the means in standard errors (`frac_z3` is the share of times where it exceeds 3; passes at 5% or less), and two-sample Kolmogorov-Smirnov tests of each run's peak, time of the peak, and final value (pass at `--alpha`, default 0.01).
    - **band**: the original is a summary (mean, low, high). The port's mean and the same quantiles of its runs are compared with them, within `--rtol` (default 0.1) of the largest value. This is weaker than the statistical mode: prefer raw runs.
 5. **Explain what differs.** Go through the usual causes below before concluding anything, and say which applied.
-6. **Report** a table of the series compared, the mode, the numbers, and the verdict, with the reason for every tolerance and every difference. Inside `lingua_franca_design`, also write the result into the vignette's `README.md` (agreement, lines of model code, and time of one run, as `docs/models/README.md` says to count them).
+6. **Report** a table of the series compared, the mode, the numbers, and the verdict, with the reason for every tolerance and every difference.
 
 ## Usual causes of a difference
 

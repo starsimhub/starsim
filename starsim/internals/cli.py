@@ -123,7 +123,7 @@ def project_root():
     for folder in [cwd, *cwd.parents]:
         if folder == home:
             break
-        if any((folder/name).exists() for name in ['.git', '.agents', '.claude', 'pyproject.toml']):
+        if folder != agents_folder.parent and any((folder/name).exists() for name in ['.git', '.agents', '.claude', 'pyproject.toml']): # Starsim's own folder isn't a project, though it has .agents
             return folder
     return cwd
 

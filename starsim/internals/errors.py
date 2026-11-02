@@ -105,5 +105,5 @@ class LossyExport(RuntimeWarning):
 class ImportIncomplete(RuntimeWarning):
     """
     An import could not translate something in the source. Lists each item by name, says what to ask an AI assistant with the
-    `import-model` skill to finish it, and warns again when the sim is first run
+    `convert-model` skill to finish it, and warns again when the sim is first run
     """

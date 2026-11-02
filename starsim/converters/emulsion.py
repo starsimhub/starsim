@@ -8,7 +8,7 @@ probabilities (per time unit, as EMULSION reads them) are translated, and a stat
 a duration whose only way out has a probability of 1 becomes a fixed dwell time. What
 is listed as not translated (conditions, calendars, actions on crossing, offspring and
 productions, levels above the population, and variables of individuals) is left for a
-person, or the import-model skill, to add; a minimum stay (a state's duration) becomes
+person, or the convert-model skill, to add; a minimum stay (a state's duration) becomes
 `after=` on the ways out of it.
 
 Used with: agents and compartments; declared modules

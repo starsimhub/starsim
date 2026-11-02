@@ -15,7 +15,7 @@ rate classified by the import rules (`beta * S * I / N` is exposure to `I`); eac
 observation of a flow becomes an outcome with its likelihood. What is listed as not
 translated (scheduled events, ODE compartments, forcing functions of time, and
 transitions that are not one state to another) is left for a person, or the
-import-model skill, to add.
+convert-model skill, to add.
 
 Used with: compartments; declared modules
 """

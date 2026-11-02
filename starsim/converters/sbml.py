@@ -8,7 +8,7 @@ that is both used and made, such as I in S + I -> 2 I, as unchanged) a transitio
 whose kinetic law is its rate in total. Assignment rules become named expressions,
 and function definitions are written out where they are called. What is listed as
 not translated (events, rate rules, algebraic rules, reversible reactions, and
-reactions with other stoichiometries) is left for a person, or the import-model
+reactions with other stoichiometries) is left for a person, or the convert-model
 skill, to add. Only the standard library is used to read the file.
 
 Used with: compartments; declared modules

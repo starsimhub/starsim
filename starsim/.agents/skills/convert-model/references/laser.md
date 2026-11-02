@@ -39,7 +39,7 @@ LASER (`laser-core`, `laser-generic`, and the measles-specific `laser-measles`) 
 
 ## Worked example
 
-`lingua_franca_design/docs/models/laser/hub_spoke_seir/model.py` (an SEIR on a hub and spokes), `lingua_franca_design/docs/models/laser/england_wales/model.py` (measles in England and Wales, with the life-table and importation workarounds), and `lingua_franca_design/docs/models/measles_metapop/seir_districts/model.py` (260 districts). The hub and spoke:
+[`laser/hub_spoke_seir/model.py`](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/models/laser/hub_spoke_seir/model.py) (an SEIR on a hub and spokes), [`laser/england_wales/model.py`](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/models/laser/england_wales/model.py) (measles in England and Wales, with the life-table and importation workarounds), and [`measles_metapop/seir_districts/model.py`](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/models/measles_metapop/seir_districts/model.py) (260 districts). The hub and spoke:
 
 ```python
 angles = 2*np.pi*np.arange(5)/5
@@ -62,8 +62,8 @@ sim = ss.Sim(seir, total_pop=sum(pop), n_agents=175_000, stop=ss.days(365))
 
 ## Running the original
 
-- Environment: `lingua_franca_design/_envs/laser` (a `uv` venv with `laser-generic` 1.1.0 and `laser-core` 1.0.5; Numba compiles on the first run). Build with `lingua_franca envs install laser`. The England and Wales data (`EnglandWalesMeasles`, `EnglandWalesDistances.npy`) is in the installed `laser-generic` source under `_envs/laser/src/`.
-- The examples run a `simulate.py` in the env (`tools.run(['python', 'simulate.py', str(n_runs)], 'laser')`), which builds and runs the model `n_runs` times and prints the time series of each node's compartments as JSON (`model.nodes.S[:, node]`, and so on, indexed by tick).
+- Environment: a venv of its own, with `laser-generic` 1.1.0 and `laser-core` 1.0.5; Numba compiles on the first run. The England and Wales data (`EnglandWalesMeasles`, `EnglandWalesDistances.npy`) is in the `laser-generic` source.
+- The worked examples run a `simulate.py` in that environment, which builds and runs the model `n_runs` times and prints the time series of each node's compartments as JSON (`model.nodes.S[:, node]`, and so on, indexed by tick).
 - Series: counts by place and tick (`S`, `E`, `I`, `R` per node; or summed), and summaries such as total infections, final recovered, peak size and time by place, and the share of weeks with no infections. LASER's `nodes.X[t]` is the count at the start of tick `t` (for comparison with Starsim's `X[t-1]`); check the first row against the initial conditions.
 - Stochastic: 5 to 50 runs, depending on cost; compare means and ranges, and run-to-run spread for fade-outs.
-- Write the summary with `docs/models/tools.py`: `write_results(folder, rows)` writes `reference/results.csv` in the long format (`time, series, value, low, high`), and `read_results(folder)` reads it back as `{series: (times, values)}`.
+- Write the summary as a CSV in the long format of the validate-conversion skill (`time, series, value, low, high`).

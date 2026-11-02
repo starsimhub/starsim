@@ -87,7 +87,7 @@ def load_memilio(source, verbose=None, **kwargs):
     kind = d['model']
     readers = dict(osir=sir, oseir=sir, oseirdb=sir, osecir=secir)
     if kind not in readers:
-        errormsg = f'The MEmilio model "{kind}" has no importer; those that do are {sc.strjoin(readers)}. See the import-model skill\'s guide to MEmilio for writing it by hand'
+        errormsg = f'The MEmilio model "{kind}" has no importer; those that do are {sc.strjoin(readers)}. See the convert-model skill\'s guide to MEmilio for writing it by hand'
         raise NotImplementedError(errormsg)
     src = Source(name=kind, format='memilio', file=source if isinstance(source, str) else None)
     src.totals = ['N']
@@ -267,7 +267,7 @@ def nodes_of(src, d, places, totals):
     split = ss.by(totals/totals.sum(), dims=['age', 'patch']) if n > 1 else (totals[0]/totals.sum()).tolist()
     src.stratify(patch=places, split=split, mobility=ss.geo.Mobility(matrix=away.tolist(), kind='commute'))
     src.notes.append(f'places        the {len(nodes)} nodes as the places "{places[0]}" to "{places[-1]}", and the {len(edges)} edges as commuting: MEmilio moves an edge\'s share of a node\'s people to the other node for every other step and back, so they spend half their time there (ss.geo.Mobility(kind="commute") with half the share); '
-                     f'MEmilio integrates the commuters in the other node, where Starsim weights each place\'s exposure by the time spent there, so counties whose epidemic starts from commuters can differ (see the import-model skill\'s guide to MEmilio)')
+                     f'MEmilio integrates the commuters in the other node, where Starsim weights each place\'s exposure by the time spent there, so counties whose epidemic starts from commuters can differ (see the convert-model skill\'s guide to MEmilio)')
     if d['model'] == 'osecir':
         src.notes.append('commuting     MEmilio\'s commuters with symptoms commute less (by RiskOfInfectionFromSymptomatic, get_mobility_factors()); here everyone commutes alike, which carries infection between places faster '
                          '(in a test of three places with RiskOfInfectionFromSymptomatic 0.25, by 5 to 19% of each place\'s peak and 1% of the total; with 1, by 1 to 3%)')

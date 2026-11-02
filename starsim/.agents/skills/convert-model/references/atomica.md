@@ -33,12 +33,12 @@ An Atomica model is a framework workbook (compartments, characteristics, paramet
 ## What needs care
 
 - Atomica moves `value × dt` (or `dt / duration`, or `number × dt`) each step, capped at everyone: the Euler step. The import uses `integrator='euler', substeps=1` so that it agrees to rounding error; a finer Starsim run is closer to the continuous model but not to Atomica.
-- Run with the same `dt` as the reference (`ss.import_from(..., dt=1)` for the LFD examples): at a different step the numbers differ by order `dt`.
+- Run with the same `dt` as the reference (`ss.import_from(..., dt=1)` for the worked examples): at a different step the numbers differ by order `dt`.
 - Atomica runs from the first year of data to five years after the last (or to 2035 if the model has births); the import does the same unless `start=` and `stop=` are given.
 
 ## Worked example
 
-`lingua_franca_design/docs/models/atomica/hiv_dyn/model.py`: the HIV care cascade by sex, with programs and three budget scenarios. `ss.import_from('hiv_dyn_framework.xlsx', databook='hiv_dyn_databook.xlsx', dt=1)` gives the baseline, which agrees with Atomica to 3e-14 in all 78 compartments, flows, and characteristics (the SIR demo to 1e-15). The vignette writes the programs by hand:
+[`atomica/hiv_dyn/model.py`](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/models/atomica/hiv_dyn/model.py): the HIV care cascade by sex, with programs and three budget scenarios. `ss.import_from('hiv_dyn_framework.xlsx', databook='hiv_dyn_databook.xlsx', dt=1)` gives the baseline, which agrees with Atomica to 3e-14 in all 78 compartments, flows, and characteristics (the SIR demo to 1e-15). The worked example writes the programs by hand:
 
 ```python
 coverage = ss.par(lambda sim: np.minimum(budget * spend / cost / eligible.n, 1))
@@ -48,4 +48,4 @@ sims     = dict(baseline=sim, double=sim.new(pars=dict(budget=ss.timeseries({201
 
 ## Running the original
 
-In Atomica's environment (`lingua_franca_design/_envs/atomica`): `P = at.Project(framework=..., databook=..., do_run=False); P.settings.sim_dt = dt; result = P.run_sim()`. For each population, `comp.vals` for each compartment, `link.vals / dt` for each link (people per year), and `pop.get_variable(name)[0].vals` for characteristics; LFD's `docs/models/atomica/*/simulate.py` writes these in the long format. Stocks agree at the same index. Atomica records a link's flow at the start of a step and Starsim at its end, so compare Starsim's `res[transition].values[1:]` with Atomica's `link.vals[:-1] / dt` (`--shift -1`), adding the transitions of a link with several parameters. Expect agreement to rounding error; more means a format was translated wrongly.
+In Atomica's own environment: `P = at.Project(framework=..., databook=..., do_run=False); P.settings.sim_dt = dt; result = P.run_sim()`. For each population, `comp.vals` for each compartment, `link.vals / dt` for each link (people per year), and `pop.get_variable(name)[0].vals` for characteristics; the [worked examples](https://github.com/starsimhub/lingua_franca_design/tree/main/docs/models/atomica)' `simulate.py` write these in the long format. Stocks agree at the same index. Atomica records a link's flow at the start of a step and Starsim at its end, so compare Starsim's `res[transition].values[1:]` with Atomica's `link.vals[:-1] / dt` (`--shift -1`), adding the transitions of a link with several parameters. Expect agreement to rounding error; more means a format was translated wrongly.

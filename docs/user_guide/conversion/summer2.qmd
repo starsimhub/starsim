@@ -128,7 +128,7 @@ These are from Starsim's switching demo for summer2 users (`tests/switching/test
 
 ## Bringing your model in
 
-`ss.import_from(model, pars=params)` reads a live summer2 `CompartmentalModel` (if summer2 is installed alongside Starsim), and `ss.import_from('model.json', format='summer2')` reads the JSON written by `starsim/converters/summer2.py` run as a script, which runs in summer2's own environment. Each flow becomes one transition with the matching kind of rate, and each `stratify_with()` a stratification, with its population split, flow adjustments, infectiousness adjustments, and mixing matrix. `ss.converters.summer2.outputs(sim)` works out summer2's derived outputs from the results. What is not translated is listed (`sim.imported.incomplete`), and `sim.imported.prompt` is a prompt for an AI assistant with Starsim's import-model skill to finish the job.
+`ss.import_from(model, pars=params)` reads a live summer2 `CompartmentalModel` (if summer2 is installed alongside Starsim), and `ss.import_from('model.json', format='summer2')` reads the JSON written by `starsim/converters/summer2.py` run as a script, which runs in summer2's own environment. Each flow becomes one transition with the matching kind of rate, and each `stratify_with()` a stratification, with its population split, flow adjustments, infectiousness adjustments, and mixing matrix. `ss.converters.summer2.outputs(sim)` works out summer2's derived outputs from the results. What is not translated is listed (`sim.imported.incomplete`), and `sim.imported.prompt` is a prompt for an AI assistant with Starsim's convert-model skill to finish the job.
 
 See [Import/export](index.qmd) for importing in general: checking an import, keeping it as code, and finishing one that is incomplete.
 

@@ -264,9 +264,9 @@ def test_cli(ai_home, capsys):
     assert 'Someone else' in other.read_text() # Not overwritten without --force
     cli.main(['ai', 'show'])
     out = capsys.readouterr().out
-    assert all(f'`{name}`' in out for name in ['import-model', 'migrate-starsim3', 'validate-import']) # The guide lists the skills
-    cli.main(['ai', 'show', 'import-model'])
-    assert 'name: import-model' in capsys.readouterr().out
+    assert all(f'`{name}`' in out for name in ['convert-model', 'migrate-starsim3', 'validate-conversion']) # The guide lists the skills
+    cli.main(['ai', 'show', 'convert-model'])
+    assert 'name: convert-model' in capsys.readouterr().out
     cli.main(['ai', 'uninstall', '--global'])
     assert not skill.exists() and other.exists()
     return
@@ -282,7 +282,7 @@ def test_cli_project(ai_home, monkeypatch, capsys):
     sub = project/'analysis'
     sub.mkdir()
     monkeypatch.chdir(sub) # From a subfolder, it's still the project that gets them
-    theirs = project/'.agents'/'skills'/'import-model'
+    theirs = project/'.agents'/'skills'/'convert-model'
     theirs.mkdir(parents=True)
     cli.main(['ai'])
     linked = project/'.claude'/'skills'/'starsim'/'SKILL.md'
@@ -295,6 +295,11 @@ def test_cli_project(ai_home, monkeypatch, capsys):
     cli.main(['ai']) # Again, to repair or update
     cli.main(['ai', 'uninstall'])
     assert not linked.parent.is_symlink() and theirs.exists()
+
+    package = cli.agents_folder.parent
+    monkeypatch.chdir(package) # Starsim's own folder has .agents, but must never be taken for a project
+    assert cli.project_root() != package
+    monkeypatch.chdir(sub)
 
     def fail(*args, **kwargs):
         raise OSError('no links here')

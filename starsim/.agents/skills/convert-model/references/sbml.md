@@ -32,7 +32,7 @@ An SBML model is an XML file (from BioModels, COPASI, libRoadRunner, and many ot
 
 ## Worked example
 
-There is no SBML vignette yet. A minimal SIR in SBML (species `S`, `I`, `R`; parameters `beta`, `gamma`; an assignment rule `N = S + I + R`; reactions `S + I -> 2 I` with law `beta * S * I / N` and `I -> R` with `gamma * I`) imports as:
+There is no SBML worked example yet. A minimal SIR in SBML (species `S`, `I`, `R`; parameters `beta`, `gamma`; an assignment rule `N = S + I + R`; reactions `S + I -> 2 I` with law `beta * S * I / N` and `I -> R` with `gamma * I`) imports as:
 
 ```python
 infection = S >> I @ beta * I     # exposure: the law over N, with S taken out
@@ -43,4 +43,4 @@ which equals a hand-written model to 1e-6 (`tests/devtests/io/test_io_odin_sbml.
 
 ## Running the original
 
-There is no SBML environment in `lingua_franca_design/_envs`. A deterministic model runs with libRoadRunner (`pip install libroadrunner`, in its own environment: `rr = roadrunner.RoadRunner(path); out = rr.simulate(0, stop, stop + 1)`, with columns `time` and `[S]`, ...) or COPASI's `basico`. Compare each species with `res.<species>` at the same times to a relative tolerance of about 1e-6 (both are ODEs). A stochastic run (`rr.gillespie(...)`) compares as distributions with Starsim's `solver='gillespie'`.
+A deterministic model runs with libRoadRunner (`pip install libroadrunner`, in its own environment: `rr = roadrunner.RoadRunner(path); out = rr.simulate(0, stop, stop + 1)`, with columns `time` and `[S]`, ...) or COPASI's `basico`. Compare each species with `res.<species>` at the same times to a relative tolerance of about 1e-6 (both are ODEs). A stochastic run (`rr.gillespie(...)`) compares as distributions with Starsim's `solver='gillespie'`.

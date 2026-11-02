@@ -4,8 +4,8 @@ What Starsim gives AI coding agents (Claude Code, Codex, and others), installed 
 
 - `skills/`: the skills, in the layout that tools for reading skills from installed packages look for (e.g. `uvx library-skills --claude`)
   - `starsim/`: what an agent reads first: how to write, check, and run a Starsim model
-  - `import-model/`: importing a model from another framework, with notes on each in `references/`
-  - `validate-import/`: checking an imported model against the original's results
+  - `convert-model/`: importing a model from another framework or exporting one to it, with notes on each in `references/`
+  - `validate-conversion/`: checking a converted model against the original's results
   - `migrate-starsim3/`: rewriting Starsim 3 code for Starsim 4
 - `meta-skill/starsim/`: the short skill that `starsim ai --global` installs for all projects, which loads the skills above from the project's Starsim (`starsim ai show`). It is kept out of `skills/` so that those tools don't list it.
 

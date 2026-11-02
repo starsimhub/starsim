@@ -43,7 +43,7 @@ msim.summarize()
 - **Declared or coded.** Declare a model as states and transitions where possible: it can then run under any solver, be described, drawn, fitted with gradients, and exported. Write a module as code only for what can't be declared, and declare the rest.
 - **Compartments or agents.** Leave `solver` unset at first. Use agents (`n_agents=`, or `solver='abm'`) when the question depends on individuals: a contact network, histories, or who infected whom. Use compartments for large populations and for fitting. Say which was chosen, and why, if it matters to the question.
 - **Built-in or new.** Check `import starsim.library as ssl` for an existing disease or network (HIV, cholera, measles, household networks, ...) before writing one, and read what it assumes: these are simple models. Everything else public is at the top level (`ss.Sim`, `ss.Disease`); don't import submodules.
-- **An existing model.** To bring one in from another framework, use the `import-model` skill. For Starsim 3 code, use `migrate-starsim3`.
+- **An existing model.** To bring one in from another framework, or take one out to another tool, use the `convert-model` skill. For Starsim 3 code, use `migrate-starsim3`.
 
 ## How to work
 
@@ -86,6 +86,7 @@ https://starsim.org/v4/llms.txt is the map: every tutorial and user guide page, 
 | Places and movement between them | `populations_geography` |
 | Vaccines, screening, treatment | `interventions_products`, `interventions_interventions` |
 | Cost-effectiveness | `interventions_costs` |
+| Import or export a model | The `convert-model` skill |
 | Scenarios and many runs | `running_scenarios` |
 | Which solver, and why | `running_solvers` |
 | Something looks wrong, or is slow | `running_debugging` |
@@ -102,8 +103,8 @@ Starsim's numerical code is in Rust kernels, already compiled in the wheels on P
 
 Load one of these only when the task needs it (`starsim ai show <skill>`). The files a skill refers to (e.g. `references/`) are beside it, in the folder that `starsim ai show` names.
 
-- `import-model`: translate a model from another framework into Starsim, including the parts that do not map one to one
-- `validate-import`: check a port against the original, by running both and comparing their results
+- `convert-model`: translate a model to or from another framework, including the parts that do not map one to one
+- `validate-conversion`: check a converted model against the original, by running both and comparing their results
 - `migrate-starsim3`: upgrade Starsim 3 code to Starsim 4
 
 <!-- V4-PREVIEW: restore the link above to docs.starsim.org/llms.txt for normal publishing -->
