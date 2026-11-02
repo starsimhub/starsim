@@ -116,7 +116,7 @@ The value is a parameter like any other: `fit.pars.symp_prob`, `ss.Sim(pars=dict
 
 ## The data
 
-The data has a time column (`date`, `year`, `t`, or `time`; an integer `year` is a calendar year) and one column for each data series, named like the result it is compared with: here `cases`. With several modules, a column that could match more than one result is named with its module, e.g. `measles.cases`. Any result can have data, including an analyzer's (`by_age.cancers_0_15`), a result nested deeper in `sim.results` (`hpv.genotype.cancers`), and a column of a result with columns (`sis.infection.alpha`), so `gof=` is needed only for targets worked out from the results, such as a share.
+The data has a time column (`date`, `year`, `t`, or `time`; an integer `year` is a calendar year), or dates as its index, and one column for each data series, named like the result it is compared with: here `cases`. With several modules, a column that could match more than one result is named with its module, e.g. `measles.cases`. Any result can have data, including an analyzer's (`by_age.cancers_0_15`), a result nested deeper in `sim.results` (`hpv.genotype.cancers`), and a column of a result with columns (`sis.infection.alpha`), so `gof=` is needed only for targets worked out from the results, such as a share.
 
 The data need not be on the model's time step, and nothing needs to say how to line the two up, since each result knows what kind of quantity it is:
 

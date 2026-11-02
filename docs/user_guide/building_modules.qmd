@@ -241,7 +241,7 @@ def check_states(sim):
     """ Check that everyone alive is in exactly one state of measles """
     m = sim.diseases.measles
     in_states = m.S.sum() + m.I.sum() + m.R.sum()
-    assert in_states == len(sim.people), f'{in_states} people in states, but {len(sim.people)} alive'
+    assert in_states == sim.people.n_alive, f'{in_states} people in states, but {sim.people.n_alive} alive'
     return
 
 sim = ss.Sim(measles, analyzers=check_states, n_agents=10_000, stop=ss.days(50), verbose=0)
@@ -249,12 +249,12 @@ sim.run()
 print(sim.analyzers[0].name)
 ```
 
-A function module is called at every step, so it has to check the time itself if it should act only at some (e.g. `if sim.now >= ss.date('2025-03-01'):`). Its keyword arguments with defaults are its parameters, passed to it at each call, so one given as `ss.par` with bounds can be fitted and set by name like any other parameter (`def close_schools(sim, start=2025, share=ss.par(0.5, bounds=[0.2, 0.8])):`; see [Fitting a model](calibration_fitting.qmd#a-value-that-isnt-a-parameter)). It has no states or results of its own; as soon as it needs them, write a class instead. `ss.Intervention.from_func(fn)` (and likewise for the other types) makes the module from a function explicitly. For analyzers, see [Analyzers](interventions_analyzers.qmd).
+A function module is called at every step, so it has to check the time itself if it should act only at some (e.g. `if sim.now >= ss.date('2025-03-01'):`; not `==`, which a date between two steps never meets). Its keyword arguments with defaults are its parameters, passed to it at each call, so one given as `ss.par` with bounds can be fitted and set by name like any other parameter (`def close_schools(sim, start=2025, share=ss.par(0.5, bounds=[0.2, 0.8])):`; see [Fitting a model](calibration_fitting.qmd#a-value-that-isnt-a-parameter)). It has no states or results of its own; as soon as it needs them, write a class instead. `ss.Intervention.from_func(fn)` (and likewise for the other types) makes the module from a function explicitly. For analyzers, see [Analyzers](interventions_analyzers.qmd).
 
 ## Pitfalls
 
 - **Writing code for something that is declared.** Check the table at the top of this page first: a declared part runs under every solver and shows in `describe()`.
-- **Forgetting `super()`.** Call `super().__init__()` with no arguments as the first line of `__init__()`, and the base class's method whenever you override `init_results()`, `update_results()`, `init_post()`, and the like.
+- **Forgetting `super()`.** Call `super().__init__()` with no arguments as the first line of `__init__()`, and the base class's method whenever you override `init_results()`, `update_results()`, `init_post()`, and the like. Leaving one out gives a warning that a required method was not called, not an error.
 - **Keeping per-person values outside a state.** A plain array doesn't grow when agents are born; a state does, and appears in `sim.people.to_df()`.
 - **Keeping a reference to another module.** A sim copies the modules it is given when it is built, so reach the rest of the sim through `self.sim` in `step()` (e.g. `self.sim.diseases.cold`), not through an object kept from before.
 - **Comparing `self.ti` across modules with their own timelines.** A module given `start=`, `stop=`, or a `dt=` of its own runs only on its own steps, and its `self.ti` counts those steps, not the sim's. To compare times between modules, use dates or durations (`self.now`), not step indices.

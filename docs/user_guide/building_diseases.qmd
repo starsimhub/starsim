@@ -385,7 +385,7 @@ for protect in [False, True]:
 
 The few under-20s infected even when protected were infected at the start (`init_prev`). Protecting them also protects older people, a little under a third of whom now escape infection, since there are fewer people to pass it on. In a model with a vaccine, the same protection would come from a [product](interventions_products.qmd), and between diseases from a [connector](interventions_connectors.qmd), rather than by setting `rel_sus` by hand.
 
-**Infected and infectious** are different things once a disease has a latent period. In `ssl.AgentSEIR`, people in `E` and `I` are both infected (and count towards prevalence), but only those in `I` are infectious; `infectious` drives transmission, and `infected` is worked out from the two. A disease whose latent people transmit too would give the exposed a `rel_trans` above 0 instead.
+**Infected and infectious** are different things once a disease has a latent period. In `ssl.AgentSEIR`, people in `E` and `I` are both infected (and count towards prevalence), but only those in `I` are infectious; `infectious` drives transmission, and `infected` is worked out from the two. A disease whose latent people transmit too would give the exposed a `rel_trans` above 0 instead. In both classes, `set_prognoses()` calls `set_infection()` and then `set_progression()`, which can be overridden one at a time. A stage of your own after a latent period is timed from `ti_infectious`, not from the time of infection, or the latent period takes the place of part of the infectious period rather than delaying it.
 
 The parts of a module written as code (its parameters, states, results, and the order in which Starsim calls its methods) are covered in [Custom modules](building_modules.qmd), and [A1 – Diseases](../tutorials/a1_diseases.qmd) builds a disease among agents step by step.
 
@@ -394,6 +394,7 @@ The parts of a module written as code (its parameters, states, results, and the 
 - **A bare number after `@` is a rate.** `I >> R @ 8` is a rate of 8 per day, not 8 days; write `ss.days(8)`.
 - **A rate with no state in it is not transmission.** `S >> I @ 0.2` infects everyone in `S` at 0.2 per day whether or not anyone is infectious. Transmission names its source: `S >> I @ beta*I`.
 - **`init_prev` in an SEIR model starts people in `E`.** To start some people infectious, give `init=dict(I=...)`.
+- **`set_prognoses()` without `super()`.** In a disease written as code, people are still infected, but the result `infection` stays at 0, with no error. Call `super().set_prognoses(uids, sources)`.
 
 ## Further reading
 

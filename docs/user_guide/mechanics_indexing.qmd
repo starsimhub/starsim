@@ -80,7 +80,7 @@ print('Recovered:', m.R.true()) # The UIDs of active agents in R
 print('Not recovered:', m.R.false())
 ```
 
-A boolean state, such as `female` or a disease's `I`, has `.uids` (the UIDs for which it is true), and `.true()` and `.false()` (the active agents for which it is true or false). Comparisons give boolean arrays with the same methods, e.g. `(ppl.age < 15).uids`. The sim's own copy of a module is the one that ran: use `sim.diseases.measles`, not the `measles` given to the sim, whose arrays are empty.
+A boolean state, such as `female` or a disease's `I`, has `.uids` (the UIDs for which it is true), and `.true()` and `.false()` (the active agents for which it is true or false). `.uids` is the same as `.true()`, so it leaves out the dead, and `& ppl.alive` isn't needed; only `ppl.dead` looks beyond the active agents. Comparisons give boolean arrays with the same methods, e.g. `(ppl.age < 15).uids`. The sim's own copy of a module is the one that ran: use `sim.diseases.measles`, not the `measles` given to the sim, whose arrays are empty.
 
 ## Combining and changing selections
 
@@ -104,7 +104,7 @@ ppl.age[women] += 1 # A year older
 print('Ages after:', ppl.age[women])
 ```
 
-`&`, `|`, and `~` are only for true-or-false arrays; on an array of numbers they raise an error, since they would mean something else (bitwise operations). Compare first: `(ppl.age > 15) & (ppl.age < 50)`, not `ppl.age & ...`.
+`&`, `|`, and `~` are only for true-or-false arrays; on an array of numbers they raise an error, since they would mean something else (bitwise operations). Compare first: `(ppl.age > 15) & (ppl.age < 50)`, not `ppl.age & ...`. To compare with several values, `arr.isin([2, 3])` is shorter than `(arr == 2) | (arr == 3)`.
 
 ## Indexing in a module
 

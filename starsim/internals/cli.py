@@ -5,10 +5,12 @@ The starsim command, available after installing Starsim, for the setup done once
     starsim init dev            # The same for a clone of Starsim: also the dev dependencies, Rust if it is missing, and all the kernels
     starsim compile             # Compile Starsim's numerical code (once per install)
     starsim compile --check     # Say whether it is compiled, and exit with 1 if not
-    starsim ai                  # Install the Starsim skill for AI coding agents (Claude Code, Codex, Kimi, ...)
+    starsim ai                  # Link the skills for AI coding agents (Claude Code, Codex, Kimi, ...) into this project, so that they follow the installed Starsim
+    starsim ai --global         # Or install a short skill for all projects, which loads the skills of the Starsim in use
     starsim ai show [skill]     # Show the guide for AI agents, or one of its skills
     starsim ai status           # Where the skill is installed
-    starsim ai uninstall        # Remove it
+    starsim ai uninstall        # Remove them
+    starsim ai off              # Stop importing Starsim from suggesting them (`starsim ai on` undoes it)
 
 `python -m starsim` does the same, e.g. where the command is not on the path.
 
@@ -18,24 +20,27 @@ import os
 import sys
 import shutil
 import argparse
+import multiprocessing as mp
 import subprocess
 import importlib.util
 from pathlib import Path
 import sciris as sc
 import starsim as ss
-import starsim_ai
 
 __all__ = ['main']
 
-ai_folder = starsim_ai.folder # The skills, and the guide that the installed skill points to
-skill_name = 'starsim' # The one skill that is installed; the others are served from ai_folder by "starsim ai show"
-placeholder = '<!-- The list of skills is added here by `starsim ai show` -->' # In guide.md
+agents_folder = Path(ss.__file__).parent / '.agents' # Where tools that read installed packages look for skills (e.g. library-skills)
+ai_folder = agents_folder / 'skills' # The skills, by folder
+meta_folder = agents_folder / 'meta-skill' # The short skill for all projects, which loads the others with "starsim ai show"; apart, so that those tools don't list it
+skill_name = 'starsim' # The name of both the short skill and the main skill (the guide)
 marker = 'installed by `starsim ai`' # In the installed SKILL.md, so that a skill of the same name from elsewhere is not overwritten
 
-# Where coding agents look for a user's skills: each is a folder of skills, one per subfolder with a SKILL.md
+off_file = '.starsim/skill_note_off' # In the home folder: if there, importing Starsim doesn't suggest the skills (see note_skills())
+
+# Where coding agents look for skills, in a project and in the home folder: each is a folder of skills, one per subfolder with a SKILL.md
 targets = sc.obj(
-    claude = sc.obj(folder='~/.claude/skills', agents='Claude Code (as /starsim)', needs='~/.claude'),
-    agents = sc.obj(folder='~/.agents/skills', agents='Codex ($starsim), Kimi Code (/skill:starsim), Deep Code, and other agents that read the shared folder', needs=None),
+    claude = sc.obj(folder='.claude/skills', agents='Claude Code (as /starsim)', needs=sc.obj(paths=['~/.claude', '~/.claude.json'], command='claude')),
+    agents = sc.obj(folder='.agents/skills', agents='Codex ($starsim), Kimi Code (/skill:starsim), Deep Code, and other agents that read the shared folder', needs=None),
 )
 
 
@@ -76,10 +81,9 @@ def frontmatter(text):
 def show(args):
     """ Print the guide for AI agents (with the skills it can load), or one of those skills """
     if not args.skill:
-        guide = (ai_folder / 'guide.md').read_text(encoding='utf-8')
-        listing = '\n'.join(f'- `{name}`: {desc}' for name,desc in skills().items())
+        guide = (ai_folder / skill_name / 'SKILL.md').read_text(encoding='utf-8')
         print(f'<!-- Starsim {ss.__version__}; skills folder: {ai_folder} -->\n')
-        print(guide.replace(placeholder, listing))
+        print(guide)
         return
     file = ai_folder / args.skill / 'SKILL.md'
     if args.skill == skill_name or not file.exists():
@@ -97,14 +101,82 @@ def chosen(args):
         if unknown:
             sys.exit(f'Unknown target(s) {sc.strjoin(unknown)}; choose from {sc.strjoin(targets.keys())}')
         return {k:targets[k] for k in keys}
-    return {k:t for k,t in targets.items() if t.needs is None or Path(t.needs).expanduser().exists()}
+    return {k:t for k,t in targets.items() if present(t)}
+
+
+def present(target):
+    """ Whether the agent of a target is installed; the shared folder always counts """
+    needs = target.needs
+    return needs is None or shutil.which(needs.command) is not None or any(Path(path).expanduser().exists() for path in needs.paths)
+
+
+def user_folder(target):
+    """ The folder of a target for all of a user's projects """
+    return Path.home() / target.folder
+
+
+def project_root():
+    """ The folder of the current project: the nearest one that looks like a project's, or else the current folder; None if that's the home folder, which holds every project """
+    cwd, home = Path.cwd(), Path.home()
+    if cwd == home:
+        return None
+    for folder in [cwd, *cwd.parents]:
+        if folder == home:
+            break
+        if any((folder/name).exists() for name in ['.git', '.agents', '.claude', 'pyproject.toml']):
+            return folder
+    return cwd
+
+
+def project_folder(target):
+    """ The folder of a target for the current project, if there is one """
+    root = project_root()
+    return root / target.folder if root else None
+
+
+def is_link(dest):
+    """ Whether a project's skill is a link to Starsim's, even if the Starsim it pointed to has since moved """
+    return dest.is_symlink() and '.agents' in dest.readlink().parts
+
+
+def install_project(args):
+    """ Link each skill into the current project, so that it follows the installed Starsim; with no project, or if links can't be made, install for all projects instead """
+    if project_root() is None:
+        print('No project here (this is the home folder), so installing for all projects')
+        return install_global(args)
+    linked = []
+    for key,target in chosen(args).items():
+        for source in sorted(path.parent for path in ai_folder.glob('*/SKILL.md')):
+            dest = project_folder(target) / source.name
+            if dest.is_symlink() or dest.exists():
+                if not (args.force or is_link(dest)):
+                    print(f'Skipped {dest}: it was not installed by starsim (use --force to replace it)')
+                    continue
+                dest.unlink() if dest.is_symlink() else shutil.rmtree(dest)
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                dest.symlink_to(source, target_is_directory=True)
+            except OSError as e: # E.g. on Windows without Developer Mode
+                print(f'Could not make links in this project ({e}), so installing for all projects')
+                return install_global(args)
+            linked.append(dest)
+            print(f'Linked {dest}, for {target.agents}')
+    if linked:
+        print('\nThese links are specific to this Python environment, so they generally should not be committed. For .gitignore:')
+        print(sc.newlinejoin(path.relative_to(project_root()).as_posix() for path in linked))
+    return
 
 
 def install(args):
-    """ Install the Starsim skill for AI coding agents: a short skill that loads the guide from the installed package when used """
-    source = ai_folder / skill_name
+    """ Link the skills for AI coding agents into this project; with --global, install a short skill for all projects instead """
+    return install_global(args) if args.all else install_project(args)
+
+
+def install_global(args):
+    """ Install a short skill for all projects, which loads the guide from the installed package when used """
+    source = meta_folder / skill_name
     for key,target in chosen(args).items():
-        dest = Path(target.folder).expanduser() / skill_name
+        dest = user_folder(target) / skill_name
         file = dest / 'SKILL.md'
         if file.exists() and marker not in file.read_text(encoding='utf-8') and not args.force:
             print(f'Skipped {dest}: it has a skill named "{skill_name}" that starsim did not install (use --force to replace it)')
@@ -116,9 +188,15 @@ def install(args):
 
 
 def uninstall(args):
-    """ Remove the Starsim skill installed by "starsim ai" """
+    """ Remove the links in this project, or with --global, the short skill for all projects """
     for key,target in chosen(args).items():
-        dest = Path(target.folder).expanduser() / skill_name
+        if not args.all:
+            for dest in sorted(project_folder(target).glob('*')) if project_root() else []:
+                if is_link(dest):
+                    dest.unlink()
+                    print(f'Removed {dest}')
+            continue
+        dest = user_folder(target) / skill_name
         file = dest / 'SKILL.md'
         if file.exists() and marker in file.read_text(encoding='utf-8'):
             shutil.rmtree(dest)
@@ -128,9 +206,9 @@ def uninstall(args):
 
 def status(args):
     """ Say where the Starsim skill is installed, and whether it is current """
-    current = (ai_folder / skill_name / 'SKILL.md').read_text(encoding='utf-8')
+    current = (meta_folder / skill_name / 'SKILL.md').read_text(encoding='utf-8')
     for key,target in targets.items():
-        file = Path(target.folder).expanduser() / skill_name / 'SKILL.md'
+        file = user_folder(target) / skill_name / 'SKILL.md'
         if not file.exists():
             state = 'not installed'
         elif marker not in (text := file.read_text(encoding='utf-8')):
@@ -138,7 +216,52 @@ def status(args):
         else:
             state = 'installed' if text == current else 'installed, out of date (run "starsim ai" to update)'
         print(f'{key:8s} {file.parent}: {state}')
+        links = [dest for dest in sorted(project_folder(target).glob('*')) if is_link(dest)] if project_root() else []
+        if links:
+            broken = sum(not dest.exists() for dest in links)
+            note = f', {broken} broken (run "starsim ai" to repair)' if broken else ''
+            print(f'{key:8s} {project_folder(target)}: {len(links)} linked in this project{note}')
     print(f'Guide and skills: {ai_folder}')
+    print(f'Suggesting them on import: {"off" if note_off() else "on"}')
+    return
+
+
+def off(args):
+    """ Stop importing Starsim from suggesting the skills, on this computer """
+    file = Path.home() / off_file
+    file.parent.mkdir(exist_ok=True)
+    file.touch()
+    print(f'Starsim won\'t suggest the skills; "starsim ai on" undoes this')
+    return
+
+
+def on(args):
+    """ Let importing Starsim suggest the skills again """
+    (Path.home() / off_file).unlink(missing_ok=True)
+    return
+
+
+def note_off():
+    """ Whether suggesting the skills has been switched off, by "starsim ai off" or `STARSIM_SKILL_NOTE=0` """
+    return not ss.options.skill_note or (Path.home() / off_file).exists()
+
+
+def skills_found():
+    """ Whether an agent would find the Starsim skill here, however it got there """
+    folders = [user_folder(target) for target in targets.values()]
+    if project_root():
+        folders += [project_folder(target) for target in targets.values()]
+    return any((folder/skill_name).exists() for folder in folders)
+
+
+def note_skills():
+    """
+    On import, say that an AI coding agent here has no Starsim skills: a few checks of files, so quick. Only where an agent is
+    installed; not if switched off (see `note_off()`), nor in the workers of `ss.parallel()`, nor for the `starsim` command
+    """
+    command = os.path.basename(getattr(sys, 'argv', [''])[0]) in ['-m', 'starsim', 'starsim.exe', 'starsim-script.py'] # As in kernels.note_uncompiled()
+    if mp.parent_process() is None and not command and not note_off() and present(targets.claude) and not skills_found():
+        print('Using an AI coding agent? Run "starsim ai" to give it Starsim\'s skills ("starsim ai off" to stop this note)')
     return
 
 
@@ -217,10 +340,11 @@ def main(argv=None):
 
     def add_target_args(p):
         p.add_argument('--to', help=f'Where to install the skill, as a comma-separated list of: {sc.strjoin(targets.keys())} (default: each whose agent is installed)')
-        p.add_argument('--force', action='store_true', help='Replace a skill named "starsim" that was not installed by starsim')
+        p.add_argument('--force', action='store_true', help='Replace a skill of the same name that was not installed by starsim')
+        p.add_argument('--global', dest='all', action='store_true', help='Install a short skill for all projects, rather than linking the skills into this project')
         return
 
-    p = commands.add_parser('init', help='Install the skill for AI agents and compile Starsim (once, after installing it)')
+    p = commands.add_parser('init', help='Install the skills for AI agents and compile Starsim (once, after installing it)')
     p.add_argument('what', nargs='?', choices=['dev'], help='"dev" to set up a clone of Starsim for development: also the dev dependencies, Rust if it is missing, and both sets of kernels')
     add_target_args(p)
     p.set_defaults(func=init)
@@ -229,14 +353,16 @@ def main(argv=None):
     p.add_argument('--check', action='store_true', help='Say whether it is compiled, rather than compiling it, and exit with 1 if not')
     p.set_defaults(func=compile)
 
-    p = commands.add_parser('ai', help='Install the Starsim skill for AI coding agents, or show its guide')
+    p = commands.add_parser('ai', help='Install the Starsim skills for AI coding agents, or show the guide')
     actions = p.add_subparsers(dest='action')
-    p.set_defaults(func=install, to=None, force=False)
+    add_target_args(p)
+    p.set_defaults(func=install)
     for name,func in dict(install=install, uninstall=uninstall).items():
         a = actions.add_parser(name, help=func.__doc__.strip())
         add_target_args(a)
         a.set_defaults(func=func)
-    actions.add_parser('status', help=status.__doc__.strip()).set_defaults(func=status)
+    for name,func in dict(status=status, off=off, on=on).items():
+        actions.add_parser(name, help=func.__doc__.strip()).set_defaults(func=func)
     a = actions.add_parser('show', help=show.__doc__.strip())
     a.add_argument('skill', nargs='?', help='The skill to show (default: the guide, which lists them)')
     a.set_defaults(func=show)

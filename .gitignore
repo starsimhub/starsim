@@ -157,3 +157,7 @@ dmypy.json
 
 # Node.js and NPM
 node_modules
+
+# Skills linked by "starsim ai"; specific to each environment
+/.agents/
+/.claude/skills/

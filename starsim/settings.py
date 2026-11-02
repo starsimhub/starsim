@@ -149,6 +149,9 @@ class Options(sc.obj):
         optdesc.uncompiled_warning = 'If True (default), say on import when Starsim has not been compiled yet (see ss.compile()) -- NOTE, only has effect via the environment variable since executed on load'
         options.uncompiled_warning = sc.parse_env('STARSIM_UNCOMPILED_WARNING', True, bool)
 
+        optdesc.skill_note = 'If True (default), say on import when an AI coding agent is installed but has no Starsim skills here (see "starsim ai") -- NOTE, only has effect via the environment variable since executed on load'
+        options.skill_note = sc.parse_env('STARSIM_SKILL_NOTE', True, bool)
+
         optdesc.crn = 'If True (default), use common random numbers (CRN) for reproducibility across scenarios. Set False for faster draws (one plain uniform per agent/edge, skipping the slot machinery); statistically valid but not CRN-safe across scenarios.'
         options.crn = sc.parse_env('STARSIM_CRN', True, bool)
 

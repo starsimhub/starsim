@@ -155,8 +155,7 @@ exclude = ["starsim.solvers.rust*"] # The Rust kernels' source: compiled into wh
 "starsim.solvers" = ["rust/*", "rust/**/*"]
 
 [tool.setuptools.package-data]
-starsim = ["*.ipynb", "*.rst", "*.csv"]
-starsim_ai = ["**/*"]
+starsim = ["*.ipynb", "*.rst", "*.csv", ".agents/skills/**/*", ".agents/meta-skill/**/*"] # The skills for AI agents named in full, since "**" leaves out hidden folders
 
 [tool.setuptools.dynamic]
 version = {attr = "starsim.version.__version__"}

@@ -296,7 +296,17 @@ Rename the column to match the result (`data.rename(columns={'reported': 'cases'
 
 **Counts over a period are compared with totals over the same period.** A result that counts events, such as infections or reported cases, is compared with the data as its total since the previous data point, so weekly data is compared with weekly totals, whatever the model's time step. A result that counts people at a time, such as the number infectious, is compared at the time of each data point. Data on prevalence (people infectious at a time) given as a count of events, or the other way round, fits the wrong thing; check which kind each column is. [Fitting a model](calibration_fitting.qmd) has more on data.
 
+### Code of your own
+
+**`len(sim.people)` still counts those who died this step.** People who die in a step stay among the active agents until the step ends, so that analyzers can look at them, so a share worked out in an analyzer with `len(sim.people)` as its denominator is off by that step's deaths. Use `sim.people.n_alive`.
+
+**A date between two steps never equals `sim.now`.** `if sim.now == ss.date('2025-03-01'):` in a sim with weekly steps does nothing, with no error, unless a step happens to fall on that date. Compare with `>=`, or give a module written as code `start=`, and it runs only from then on.
+
+More of these are in the pitfalls of [Custom modules](building_modules.qmd#pitfalls) and [Interventions](interventions_interventions.qmd#pitfalls).
+
 ## Looking inside a run
+
+To look at a run partway through, `sim.run(until=...)` stops at that time, with the people and their states as they are then (`sim.people.to_df()`); a later `sim.run()` carries on (see [Running sims](running_sim.qmd#running-part-of-the-way)).
 
 A model run as agents, or one with modules written as code, is run one step at a time, and within each step the modules are run in a fixed order: the loop. `sim.loop.to_df()` lists every call in it, in order, for the whole run; the first rows are the start and the first step:
 

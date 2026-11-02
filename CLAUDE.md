@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Starsim is a fast, flexible disease modeling framework, from compartments to agents: the same model can run as an ODE, as a stochastic compartmental or metapopulation model, or as agents on dynamic transmission networks. It supports co-transmission of multiple diseases and detailed modeling of intervention strategies.
 
-For a compact index of the whole public API (signatures, summaries, and default parameters), see https://starsim.org/v4/llms.txt (or `llms-full.txt`, which adds an example for each entry). These are generated when the docs are built and are not committed; to generate them locally for the current branch (as `docs/llms.txt` etc.), run `cd docs && python make_api.py`. The equivalent for Sciris is at https://docs.sciris.org/llms.txt.
+For a compact index of the docs and the whole public API (every tutorial and user guide page with a summary and a link to its source; every name with its signature, summary, and default parameters), see https://starsim.org/v4/llms.txt (or `llms-full.txt`, which adds an example for each entry). These are generated when the docs are built and are not committed; to generate them locally for the current branch (as `docs/llms.txt` etc.), run `cd docs && python make_api.py`. The equivalent for Sciris is at https://docs.sciris.org/llms.txt.
 <!-- V4-PREVIEW: while v4 is in development its docs are at starsim.org/v4 (see docs/publish); restore the link above to docs.starsim.org for normal publishing -->
 
 The design record of v4 (the constitution, the spec, the current plan, and what was deferred or decided against) is in the [lingua_franca_design](https://github.com/starsimhub/lingua_franca_design) repo (`../lingua_franca_design` beside this checkout); start at its `README.md`.
@@ -100,6 +100,9 @@ uv add starsim[dev]  # With dev dependencies
 - `internals/assets/`: The fonts for plots
 - `converters/`: Importing and exporting: `ss.import_from()` (each importer reads its format into `ss.converters.Source`, which `ss.converters.write()` writes as Starsim code, run to make the sim), `ss.export_to()`, and `migrate.py` (rewrites Starsim 3 code: `python -m starsim.converters.migrate`). The importers for epipack, epydemix, epymorph, MEmilio, and summer2, run as scripts in those frameworks' own environments, write their models as JSON (EpiModel's is `dump_epimodel.R`)
 
+### AI skills (`starsim/.agents/`)
+Skills for AI coding agents, installed with Starsim so that they match its version, and managed by `starsim ai` (`starsim/internals/cli.py`). Skills are in `skills/<skill>/SKILL.md`, the standard layout for skills in Python packages, with `meta-skill/starsim/` being the short skill for `starsim ai --global`. Facts about Starsim belong in the docs, not in skills: a skill says how to work and which page to read.
+
 ### Library (`starsim/library/`)
 Example and reference modules that build on core Starsim but are not part of it, available via `import starsim.library as ssl` (e.g. `ssl.Cholera` or `ssl.diseases.Cholera`):
 - `diseases/`: Simple models of diseases, mostly declared: HIV, cholera, Ebola, measles, malaria, TB, COVID, influenza, RSV, pertussis, dengue, typhoid, polio, syphilis, and gonorrhea
@@ -120,7 +123,7 @@ Core disease classes (Disease, Infection, SIR, SIS, SEIR) live in `starsim/disea
 - `examples/`: Worked examples
 - `migration/`: Migration guides between versions
 - `api/`: API documentation source files (`.qmd`)
-- `make_api.py`: Generates the machine-readable API index (`api.json`, `llms.txt`, `llms-full.txt`)
+- `make_api.py`: Generates the machine-readable index of the docs and API (`api.json`, `llms.txt`, `llms-full.txt`)
 - Quarto-based documentation system
 
 ## Key conventions

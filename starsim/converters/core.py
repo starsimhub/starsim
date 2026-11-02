@@ -875,4 +875,4 @@ def handoff(imported):
     source = sc.path(imported.file).name if imported.file else 'the model'
     prompt = (f'Finish importing {source} ({imported.format}) into Starsim: save its code, sim.imported.code, to a file, translate each part listed in '
               f'sim.imported.incomplete (the code\'s "Not translated" comments), and check the result against the original with the validate-import skill.')
-    return f'To finish the import, ask an AI assistant with the import-model skill loaded (printed by `starsim ai show import-model`, or starsim_ai/import-model in the Starsim repo; see "Finishing an incomplete import"): "{prompt}"'
+    return f'To finish the import, ask an AI assistant with the import-model skill loaded (printed by `starsim ai show import-model`, or starsim/.agents/skills/import-model in the Starsim repo; see "Finishing an incomplete import"): "{prompt}"'

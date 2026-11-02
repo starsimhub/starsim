@@ -326,7 +326,7 @@ self.ti_clearance[uids] = self.ti_infected[uids] + 1 + self.pars.dur_persist
 
 Declare such a state as an `ss.TimeArr`, and take the move when `self.ti_clearance.due()`, which rounds a time between steps up or down at random in proportion, so the duration keeps its mean, as a declared disease's does (see `ss.Infection`).
 
-`.to_dt()` also takes a step, to convert to: `ss.years(100).to_dt(ss.months(1))` is 1,200 monthly steps. A duration or rate is never silently a plain number: `float(ss.peryear(0.1))` is an error, since `ss.peryear(1)`, `ss.permonth(1)`, and `ss.perday(1)` would all give 1, though they differ by a factor of 365. Use `.to_dt()`, `.to_prob()`, `.to('year')` (or `.years`, e.g. to compare with an agent's age), or `.value` (the number in its own unit) if you really do want it. Values drawn from a distribution of durations (`self.pars.dur_inf.rvs(uids)`) are already in steps. See [Custom modules](building_modules.qmd).
+`.to_dt()` also takes a step, to convert to: `ss.years(100).to_dt(ss.months(1))` is 1,200 monthly steps. A duration or rate is never silently a plain number: `float(ss.peryear(0.1))` is an error, since `ss.peryear(1)`, `ss.permonth(1)`, and `ss.perday(1)` would all give 1, though they differ by a factor of 365. Use `.to_dt()`, `.to_prob()`, `.to('year')` (or `.years`, e.g. to compare with an agent's age), or `.value` (the number in its own unit) if you really do want it. Durations also work on arrays, so `ss.years(sim.people.age[uids]).days` gives ages in days, with no factor such as 365.25 to get wrong (a year is 365 days here). Values drawn from a distribution of durations (`self.pars.dur_inf.rvs(uids)`) are already in steps. See [Custom modules](building_modules.qmd).
 
 ## Pitfalls
 
