@@ -2,7 +2,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
 
 <meta charset="utf-8">
-<meta name="generator" content="quarto-1.10.18">
+<meta name="generator" content="quarto-1.10.20">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
@@ -45,14 +45,14 @@ ul.task-list li input[type="checkbox"] {
 <script src="site_libs/quarto-html/tippy.umd.min.js"></script>
 <script src="site_libs/quarto-html/anchor.min.js"></script>
 <link href="site_libs/quarto-html/tippy.css" rel="stylesheet">
-<link href="site_libs/quarto-html/quarto-syntax-highlighting-bb62276ab45c84d9efd712f51ff97b5a.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
-<link href="site_libs/quarto-html/quarto-syntax-highlighting-dark-5a1953863e1f72ef3b996ef827f01ca7.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
-<link href="site_libs/quarto-html/quarto-syntax-highlighting-bb62276ab45c84d9efd712f51ff97b5a.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
+<link href="site_libs/quarto-html/quarto-syntax-highlighting-29e00c98bbba659d91ab3844292f79dc.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
+<link href="site_libs/quarto-html/quarto-syntax-highlighting-dark-86fc916b84669629367aabb2a24c5117.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
+<link href="site_libs/quarto-html/quarto-syntax-highlighting-29e00c98bbba659d91ab3844292f79dc.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
 <script src="site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="site_libs/bootstrap/bootstrap-f147ff0edcba14fc1363cea39731a244.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
-<link href="site_libs/bootstrap/bootstrap-dark-9d73b2f327211b430cd3ecc299e40db5.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
-<link href="site_libs/bootstrap/bootstrap-f147ff0edcba14fc1363cea39731a244.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
+<link href="site_libs/bootstrap/bootstrap-f4ff4a45f4580244642e9ec65f57a742.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
+<link href="site_libs/bootstrap/bootstrap-dark-9b66b12dae93b55349be7cd4ce3c6b85.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
+<link href="site_libs/bootstrap/bootstrap-f4ff4a45f4580244642e9ec65f57a742.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "navbar",
   "copy-button": false,
@@ -662,6 +662,8 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
   <ul>
   <li><a href="#whats-new" id="toc-whats-new" class="nav-link active" data-scroll-target="#whats-new">What’s new</a>
   <ul>
+  <li><a href="#version-3.7.3-2026-11-01" id="toc-version-3.7.3-2026-11-01" class="nav-link" data-scroll-target="#version-3.7.3-2026-11-01">Version 3.7.3 (2026-11-01)</a></li>
+  <li><a href="#version-3.7.2-2026-10-06" id="toc-version-3.7.2-2026-10-06" class="nav-link" data-scroll-target="#version-3.7.2-2026-10-06">Version 3.7.2 (2026-10-06)</a></li>
   <li><a href="#version-3.7.1-2026-10-03" id="toc-version-3.7.1-2026-10-03" class="nav-link" data-scroll-target="#version-3.7.1-2026-10-03">Version 3.7.1 (2026-10-03)</a>
   <ul>
   <li><a href="#new-features" id="toc-new-features" class="nav-link" data-scroll-target="#new-features">New features</a></li>
@@ -859,6 +861,20 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="whats-new" class="level1">
 <h1>What’s new</h1>
 <p>All notable changes to the codebase are documented in this file. Changes that may result in differences in model output are flagged with the term “Regression”. Changes that may require update to downstream code are flagged with the term “Migration”.</p>
+<section id="version-3.7.3-2026-11-01" class="level2">
+<h2 class="anchored" data-anchor-id="version-3.7.3-2026-11-01">Version 3.7.3 (2026-11-01)</h2>
+<ul>
+<li><a href="./api/interventions.html#starsim.interventions.RoutineDelivery" title="0"><code>ss.RoutineDelivery</code></a> no longer raises an <a href="https://docs.python.org/3/builtins/exceptions.html#IndexError" title="1"><code>IndexError</code></a> when the start or end year is close to, but not on, the time grid (e.g.&nbsp;<code>dt=7/365</code>).</li>
+<li><em>GitHub info</em>: PR <a href="https://github.com/starsimhub/starsim/pull/1515">1515</a></li>
+</ul>
+</section>
+<section id="version-3.7.2-2026-10-06" class="level2">
+<h2 class="anchored" data-anchor-id="version-3.7.2-2026-10-06">Version 3.7.2 (2026-10-06)</h2>
+<ul>
+<li><a href="./api/networks.html#starsim.networks.ClusterNet" title="0"><code>ss.ClusterNet</code></a> (and so <a href="./api/networks.html#starsim.networks.HybridNet" title="0"><code>ss.HybridNet</code></a>) and <a href="./api/networks.html#starsim.networks.MSMNet" title="0"><code>ss.MSMNet</code></a> now shuffle agents using <code>float64</code> random numbers and a stable sort. Previously, tied <code>float32</code> random numbers were ordered differently on different CPUs, so the same seed could give slightly different results on different machines.</li>
+<li><em>GitHub info</em>: PR <a href="https://github.com/starsimhub/starsim/pull/1435">1435</a></li>
+</ul>
+</section>
 <section id="version-3.7.1-2026-10-03" class="level2">
 <h2 class="anchored" data-anchor-id="version-3.7.1-2026-10-03">Version 3.7.1 (2026-10-03)</h2>
 <section id="new-features" class="level3">
@@ -2759,7 +2775,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.7.1 (2026-10-03).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.7.3 (2026-11-01).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">

@@ -1,5 +1,5 @@
 {
-  "version": "3.7.1",
+  "version": "3.7.3",
   "description": "A fast, flexible agent-based disease modeling framework",
   "notes": [
     "Starsim is an agent-based modeling framework for simulating disease spread among agents via dynamic transmission networks, including co-transmission of multiple diseases and the effect of interventions.",
@@ -2219,7 +2219,7 @@
         "dur_inf": "ss.lognorm_ex(mean=6, std=1.0)",
         "p_death": "ss.bernoulli(p=0.01)",
         "birth_outcome_keys": "['stillborn', 'congenital', 'normal']",
-        "birth_outcomes": "#0. 'default': ss.choice(a=3, p=[0.3 0.4 0.3], replace=True)"
+        "birth_outcomes": "sc.objdict(default=ss.choice(a=3, p=[0.3 0.4 0.3], replace=True))"
       },
       "example": "",
       "aliases": [],

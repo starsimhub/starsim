@@ -2,7 +2,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
 
 <meta charset="utf-8">
-<meta name="generator" content="quarto-1.10.18">
+<meta name="generator" content="quarto-1.10.20">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
@@ -80,14 +80,14 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
 <script src="../site_libs/quarto-html/anchor.min.js"></script>
 <link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-bb62276ab45c84d9efd712f51ff97b5a.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-5a1953863e1f72ef3b996ef827f01ca7.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-bb62276ab45c84d9efd712f51ff97b5a.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-29e00c98bbba659d91ab3844292f79dc.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-86fc916b84669629367aabb2a24c5117.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-29e00c98bbba659d91ab3844292f79dc.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-f147ff0edcba14fc1363cea39731a244.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
-<link href="../site_libs/bootstrap/bootstrap-dark-9d73b2f327211b430cd3ecc299e40db5.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
-<link href="../site_libs/bootstrap/bootstrap-f147ff0edcba14fc1363cea39731a244.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-f4ff4a45f4580244642e9ec65f57a742.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-dark-9b66b12dae93b55349be7cd4ce3c6b85.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
+<link href="../site_libs/bootstrap/bootstrap-f4ff4a45f4580244642e9ec65f57a742.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "navbar",
   "copy-button": false,
@@ -738,7 +738,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <section id="setting-up-the-model" class="level3">
 <h3 class="anchored" data-anchor-id="setting-up-the-model">Setting up the model</h3>
 <p>Here we will define a simple compartmental susceptible-infectious-susceptible (SIS) model. The model definition here is quite similar to the agent-based implementation in Starsim’s <a href="https://github.com/starsimhub/starsim/blob/main/starsim/diseases/sir.py">SIR module</a>; differences are noted in comments. Note that the model runs extremely fast, since a three-state compartmental model (susceptible, infecious, and immunity) runs as fast as an agent-based model with three agents!</p>
-<div id="3ee5ef79" class="cell" data-execution_count="1">
+<div id="3b7426c4" class="cell" data-execution_count="1">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">"""</span></span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="co">Example compartmental SIS model for Starsim</span></span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="co">"""</span></span>
@@ -833,16 +833,16 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 10000 agents
   Running 2000 ( 0/1001) (0.00 s)  ———————————————————— 0%
-  Running 2010 (100/1001) (0.03 s)  ••—————————————————— 10%
-  Running 2020 (200/1001) (0.05 s)  ••••———————————————— 20%
-  Running 2030 (300/1001) (0.07 s)  ••••••—————————————— 30%
-  Running 2040 (400/1001) (0.09 s)  ••••••••———————————— 40%
-  Running 2050 (500/1001) (0.11 s)  ••••••••••—————————— 50%
-  Running 2060 (600/1001) (0.14 s)  ••••••••••••———————— 60%
-  Running 2070 (700/1001) (0.16 s)  ••••••••••••••—————— 70%
-  Running 2080 (800/1001) (0.18 s)  ••••••••••••••••———— 80%
-  Running 2090 (900/1001) (0.20 s)  ••••••••••••••••••—— 90%
-  Running 2100 (1000/1001) (0.22 s)  •••••••••••••••••••• 100%
+  Running 2010 (100/1001) (0.02 s)  ••—————————————————— 10%
+  Running 2020 (200/1001) (0.04 s)  ••••———————————————— 20%
+  Running 2030 (300/1001) (0.06 s)  ••••••—————————————— 30%
+  Running 2040 (400/1001) (0.08 s)  ••••••••———————————— 40%
+  Running 2050 (500/1001) (0.10 s)  ••••••••••—————————— 50%
+  Running 2060 (600/1001) (0.12 s)  ••••••••••••———————— 60%
+  Running 2070 (700/1001) (0.14 s)  ••••••••••••••—————— 70%
+  Running 2080 (800/1001) (0.16 s)  ••••••••••••••••———— 80%
+  Running 2090 (900/1001) (0.18 s)  ••••••••••••••••••—— 90%
+  Running 2100 (1000/1001) (0.20 s)  •••••••••••••••••••• 100%
 </code></pre>
 </div>
 <div class="cell-output cell-output-display">
@@ -854,7 +854,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </div>
 </div>
 <p>Let’s compare to our standard agent-based SIS model with similar parameters:</p>
-<div id="e72717f8" class="cell" data-execution_count="2">
+<div id="0462b655" class="cell" data-execution_count="2">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Run the model</span></span>
@@ -866,16 +866,16 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 10000 agents
   Running 2000 ( 0/1001) (0.00 s)  ———————————————————— 0%
-  Running 2010 (100/1001) (0.36 s)  ••—————————————————— 10%
-  Running 2020 (200/1001) (0.73 s)  ••••———————————————— 20%
-  Running 2030 (300/1001) (1.10 s)  ••••••—————————————— 30%
-  Running 2040 (400/1001) (1.48 s)  ••••••••———————————— 40%
-  Running 2050 (500/1001) (1.85 s)  ••••••••••—————————— 50%
-  Running 2060 (600/1001) (2.31 s)  ••••••••••••———————— 60%
-  Running 2070 (700/1001) (2.68 s)  ••••••••••••••—————— 70%
-  Running 2080 (800/1001) (3.05 s)  ••••••••••••••••———— 80%
-  Running 2090 (900/1001) (3.42 s)  ••••••••••••••••••—— 90%
-  Running 2100 (1000/1001) (3.79 s)  •••••••••••••••••••• 100%
+  Running 2010 (100/1001) (0.33 s)  ••—————————————————— 10%
+  Running 2020 (200/1001) (0.68 s)  ••••———————————————— 20%
+  Running 2030 (300/1001) (1.03 s)  ••••••—————————————— 30%
+  Running 2040 (400/1001) (1.49 s)  ••••••••———————————— 40%
+  Running 2050 (500/1001) (1.84 s)  ••••••••••—————————— 50%
+  Running 2060 (600/1001) (2.19 s)  ••••••••••••———————— 60%
+  Running 2070 (700/1001) (2.54 s)  ••••••••••••••—————— 70%
+  Running 2080 (800/1001) (2.89 s)  ••••••••••••••••———— 80%
+  Running 2090 (900/1001) (3.24 s)  ••••••••••••••••••—— 90%
+  Running 2100 (1000/1001) (3.59 s)  •••••••••••••••••••• 100%
 
 Figure(672x480)</code></pre>
 </div>
@@ -895,7 +895,7 @@ Figure(672x480)</code></pre>
 <p>This example adapts the example from the <em>Epidemics</em> v0.4.0 R package:</p>
 <p><a href="https://epiverse-trace.github.io/epidemics/">https://epiverse-trace.github.io/epidemics/</a></p>
 <p>Note that it does not use the same level of detail as the original in terms of the population or contact matrices, but produces similar results.</p>
-<div id="19cc3011" class="cell" data-execution_count="3">
+<div id="9d3e73ce" class="cell" data-execution_count="3">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
 <span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sciris <span class="im">as</span> sc</span>
@@ -1001,7 +1001,7 @@ Figure(672x480)</code></pre>
 <section id="setting-up-the-model-1" class="level3">
 <h3 class="anchored" data-anchor-id="setting-up-the-model-1">Setting up the model</h3>
 <p>We could define the wealth model as any type of module, since they all can store states and update them. Here we will define wealth as a subclass of <a href="../api/interventions.html#starsim.interventions.Intervention" title="0"><code>ss.Intervention</code></a> (though it could equally well be a subclass of <a href="../api/demographics.html#starsim.demographics.Demographics" title="0"><code>ss.Demographics</code></a> or even <a href="../api/diseases.html#starsim.diseases.Disease" title="0"><code>ss.Disease</code></a>, if you are so inclined). All we need to do is update the <code>wealth</code> state (which we can store inside the “intervention”), and we can also use this class to track the wealth distribution over time and plot it. The full model looks like this:</p>
-<div id="1ea0e7a2" class="cell" data-execution_count="4">
+<div id="6383d7ca" class="cell" data-execution_count="4">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="co">"""</span></span>
 <span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="co">Define the classic agent-based "wealth model" in Starsim</span></span>
 <span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="co">"""</span></span>
@@ -1554,7 +1554,7 @@ Figure(672x480)</code></pre>
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.7.1 (2026-10-03).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.7.3 (2026-11-01).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">
