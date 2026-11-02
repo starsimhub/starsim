@@ -445,6 +445,9 @@ interlinks:
     starsim.library: [ssl]
 
 qpyd:
+  variables: # For {{< var version >}}, read from the Starsim source
+    version: {attr: __version__}
+    versiondate: {attr: __versiondate__}
   prerender:
     commands: [python make_api.py] # The machine-readable API index (api.json, llms.txt, llms-full.txt)
     inputs: [make_api.py]

@@ -241,7 +241,7 @@ def test_restart():
 def test_compile():
     sc.heading('Testing that the kernels can be compiled ahead of time')
     ss.compile(verbose=False)
-    assert ss.kernels.is_compiled()
+    assert ss.compile_status().compiled # Not is_compiled(), which is only about Numba's copy, and so is False on a fresh install with Rust
     return
 
 
