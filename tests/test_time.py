@@ -418,6 +418,7 @@ def test_arithmetic():
     ops = {'+':operator.add, '-':operator.sub, '*':operator.mul, '/':operator.truediv}
     d, r, f, p = ss.days, ss.perday, ss.time.freqperday, ss.time.probperday
     assert sum([d(1), d(2)]) == d(3) # sum() starts from 0
+    assert ss.days(14).weeks == 2 # Exactly
     rows = [ # Left, op, right, and the result: a value, or the code of the error
         (d(3), '+', ss.weeks(1), d(10)),  (d(10), '-', ss.weeks(1), d(3)), # Units are converted
         (d(3), '*', 2, d(6)),  (d(6), '/', 2, d(3)),

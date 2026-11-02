@@ -75,7 +75,7 @@ class DistNotInitializedError(RuntimeError):
     """ A distribution made with `strict=True` is sampled before it is initialized (by the sim, or with `dist.init()` or `dist.mock()`) """
     def __init__(self, dist=None, msg=None):
         if msg is None:
-            msg = f'{dist} has not been initialized; please set strict=False when creating the distribution, or call dist.mock() or dist.init().'
+            msg = f'{dist} has not been initialized. In a module, make it in __init__() (e.g. self.dist = {dist}), where the sim finds it; on its own, outside a sim, call dist.mock() or dist.init().'
         super().__init__(msg)
 
 class DistSeedRepeatError(RuntimeError):

@@ -428,8 +428,9 @@ class SimPars(ss.Pars):
                     mod = expected_cls.from_func(mod)
 
                 # Do final check
-                if isinstance(expected_cls, type) and not isinstance(mod, (expected_cls, ss.Module)):
-                    errormsg = f'Was expecting {modkey} entry {i} to be class {expected_cls} or Module, but was {type(mod)} instead'
+                structural = modkey in ['networks', 'diseases'] # The sim relies on what these are; a module in any other slot only needs to step, e.g. ss.modify() in interventions=
+                if isinstance(expected_cls, type) and not isinstance(mod, expected_cls if structural else (expected_cls, ss.Module)):
+                    errormsg = f'Was expecting {modkey} entry {i} to be {expected_cls.__name__}, but was {type(mod).__name__} instead'
                     raise TypeError(errormsg)
 
                 out.append((modkey, mod))
@@ -2161,7 +2162,7 @@ class Sim(ss.Base):
         as JSON, see `sim.to_json()`.
 
         Args:
-            filename (str): the name or path of the file to save to
+            filename (str): the name or path of the file to save to (default: the sim's label, or "starsim", with ".sim")
             shrink (bool or None): whether to shrink the sim prior to saving (reduces size by ~99%)
             kwargs: passed to sc.makefilepath()
 
@@ -2179,7 +2180,8 @@ class Sim(ss.Base):
 
         # Handle the filename
         if filename is None:
-            filename = self.simfile
+            label = self.label or 'starsim'
+            filename = f'{label}.sim'
         filename = sc.makefilepath(filename=filename, **kwargs)
         self.filename = filename  # Store the actual saved filename
 

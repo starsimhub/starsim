@@ -237,6 +237,7 @@ and any of:
 | `where=` | Who it applies to: a condition, or a function of the sim (by default, everyone) |
 | `when=` | A condition on time: a function of the timeline that returns `True` on the steps it applies |
 | `hold=` | Once `where=` or `when=` selects someone, it stays on for them for at least this long |
+| `until=` | Once `where=` selects someone, it stays on for them until this condition holds |
 | `share=` | With `multiply=` or `efficacy=`, the share of acts (or contacts) it applies to, e.g. condom use in 30% of acts |
 | `route=` | For a change to transmission, the network or networks it applies on (by default, all) |
 
@@ -309,7 +310,16 @@ sim.run()
 sim.results.flu_towns.I.by('patch').plot()
 ```
 
-Each town's measures keep its epidemic near the threshold. Any other rule that remembers what it did (a lockdown that lasts until cases fall below a lower threshold, say) is a module written as code: a subclass of `ss.Intervention` whose `step()` decides, and an `ss.modify()` whose `when=` reads its decision, so that the base value is never overwritten. See [below](#writing-an-intervention-as-code).
+Each town's measures keep its epidemic near the threshold. A lockdown that starts at one level and ends at a lower one, which stops it switching on and off around a single threshold, takes `until=`. Here it starts when 2% of people are infectious and ends when 1% are:
+
+```{python}
+lockdown = ss.modify(flu.pars.beta, multiply=0.5, where=flu.I.n >= 2000, until=flu.I.n <= 1000)
+sim = ss.Sim(flu, interventions=lockdown, **kw)
+sim.run()
+sim.plot('flu')
+```
+
+Any other rule that remembers what it did is a module written as code: a subclass of `ss.Intervention` whose `step()` decides, and an `ss.modify()` whose `when=` reads its decision, so that the base value is never overwritten. See [below](#writing-an-intervention-as-code).
 
 ### How changes combine
 

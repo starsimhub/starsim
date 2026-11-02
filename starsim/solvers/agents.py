@@ -448,7 +448,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
 
     def lifelong_mods(self, mods):
         """ Whether modifiers only say who a quantity is for, by something that never changes (e.g. a transition with `where=ss.ppl.female`), so each person's multiplier stays the same for the whole run """
-        return all(type(m) is ss.modify and m.op == 'multiply' and m.start is None and m.stop is None and m.when is None and m.hold is None and m.share is None and sc.isnumber(m.amount) and m.where is not None and self.is_fixed(m.where) for m in mods)
+        return all(type(m) is ss.modify and m.op == 'multiply' and m.start is None and m.stop is None and m.when is None and not m.holding and m.share is None and sc.isnumber(m.amount) and m.where is not None and self.is_fixed(m.where) for m in mods)
 
     def mult(self, kind, name, uids):
         """ The multiplier on a quantity for some agents, from its modifiers """

@@ -449,6 +449,9 @@ def test_period_rates():
 def test_lifetable_deaths():
     """ Life tables by year and sex in ss.Deaths, and a death rate by its own ages, or a function, under both solvers """
     sc.heading('Testing life tables by year and sex, and death rates by single year of age...')
+    infer = ss.demographics.infer_rate_units
+    assert infer(None, pd.Series([0.01, 0.02, 0.05, 1.2]), 'mx') == 1 # One rate above 1 doesn't make a table per 1,000
+    assert infer(None, pd.Series([0, 0, 50, 100, 80, 0, 0, 0]), 'asfr') == 1e-3 # Nor do zeros make one per person
     ages = np.arange(0, 105, 5)
     table = lambda mx: ss.lifetable(ages, -np.diff(np.append(np.exp(-mx*ages), 0))) # A constant hazard, to age 105
     tables = {2000: dict(female=table(0.01), male=table(0.03)), 2005: dict(female=table(0.02), male=table(0.06))}

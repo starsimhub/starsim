@@ -34,7 +34,7 @@ def test_manual():
     nw1 = ss.Network(p1=p1, p2=p2, beta=beta, label='rand')
 
     # Create a maternal network
-    sim = ss.Sim(n_agents=n_agents)
+    sim = ss.Sim(n_agents=n_agents, demographics='pregnancy')
     sim.init()
     nw2 = ss.PrenatalNet()
     nw2.init_pre(sim)
@@ -641,7 +641,7 @@ def test_beta_default():
         return ss.Disease(infection=ss.Transition(S, I, rate=betas * I), recovery=ss.Transition(I, S, dur=ss.years(1)), init_prev=0.1, name='d')
 
     # A library disease names routes the sim may not have: those are dropped with a note, and the routes it does not name take the default
-    sim = ss.Sim(make(sexualnet=ss.peract(m2f=m2f, f2m=0.5*m2f), msm=ss.peract(0.1), default=0), networks=[ss.SexualNet(), ss.MaternalNet()], **kw).run()
+    sim = ss.Sim(make(sexualnet=ss.peract(m2f=m2f, f2m=0.5*m2f), msm=ss.peract(0.1), default=0), networks=[ss.SexualNet(), ss.MaternalNet()], demographics='pregnancy', **kw).run()
     assert sim.results.d.I[-1] > 0
     assert any('msm' in note and 'default' in note for note in sim.notes), sim.notes
     assert 'beta on maternalnet' in sim.diseases.d.describe(output=True)

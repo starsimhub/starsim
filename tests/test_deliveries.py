@@ -606,6 +606,21 @@ def test_age_and_birth():
     return sims
 
 
+
+def test_modify_until():
+    """ until= keeps a modifier on from where= until a lower level, under each kind of solver """
+    def run(solver, pop=1e6, until=True):
+        S, I, R = ss.states('S I R')
+        sir = ss.Disease(infection=S >> I @ 0.3*I, recovery=I >> R @ ss.days(10), init_prev=1e-3, name='sir')
+        kw = dict(until=sir.I.frac <= 0.05) if until else {}
+        measure = ss.modify(sir.pars.beta, multiply=0.6, where=sir.I.frac >= 0.1, **kw)
+        return ss.Sim(sir, interventions=measure, total_pop=pop, stop=ss.days(200), solver=solver, verbose=0).run().results.sir.infection.values.sum()
+    assert run('ode') < run('ode', until=False) # It stays on longer than the bare threshold
+    assert run('abm', pop=20_000) < 20_000
+    with pytest.raises(ValueError):
+        ss.modify('sir.pars.beta', multiply=0.5, until=lambda sim: True)
+
+
 if __name__ == '__main__':
     sc.options(interactive=False)
     change = test_change()

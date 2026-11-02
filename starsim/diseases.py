@@ -438,6 +438,9 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         for key in ['rel_sus', 'rel_trans']: # So they can be the target of ss.modify() before the sim exists
             self.setattribute(key, ss.connectors.Target(self, key))
         self.define_pars(**self.graph.pars) # The parameters themselves, so e.g. sir.pars.beta can be the target of ss.modify()
+        for name,par in self.pars.items(): # So sir.beta is this module's parameter, not the one of the class it was copied from
+            if isinstance(par, ss.par) and isinstance(getattr(type(self), name, par), ss.par):
+                self.setattribute(name, par)
         for name,modifier in self.graph.modifiers.items():
             modifier.own(self, name)
         for key in sc.mergedicts(pars):

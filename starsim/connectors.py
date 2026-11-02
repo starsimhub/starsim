@@ -196,7 +196,7 @@ def route_mult(engine, name, route, inds, trg):
         mult = 1 - share*(1 - amount)
         if m.where is not None:
             mask = engine.selector.select(m.where)
-            if m.hold is not None:
+            if m.holding:
                 mask = m.held_mask(mask, engine)
             mult = np.where(at(mask) > 0, mult, 1.0)
         out = out*mult
@@ -291,6 +291,7 @@ class modify(Connector):
         start (date/float): when the modifier starts to apply, within the sim (default: the start of the sim); a number is a calendar year from 1900 on, and otherwise a time in the sim's unit
         stop (date/float): when it stops applying (default: never); a stop after the end of the sim never stops it
         when (func): a condition on time: a function of the timeline returning True on the steps it applies (e.g. `lambda t: t.ti % 7 == 0`); a condition on anything else goes in `where=`
+        until (Cond/func): once `where=` selects someone, the modifier stays on for them until this holds, as for a lockdown that starts at one level of cases and ends at a lower one (with `where=`, not with `hold=`); while both hold, `where=` wins
         hold (dur): once `where=` (or `when=`) selects someone, the modifier stays on for them for at least this long, as a rule that is lifted only after a while; a bare number is in the sim's unit
         name (str): the name of the modifier
 
@@ -307,6 +308,9 @@ class modify(Connector):
         # Each place on its own: contacts cut by 40% for at least 14 days once a week's cases pass 200 per 100,000
         npi = ss.modify(sir.pars.beta, multiply=0.6, where=sir.infection.incidence(over=ss.days(7), by='patch') > 200e-5, hold=ss.days(14))
 
+        # A lockdown that starts when 2% of people are infectious and ends when 1% are
+        lockdown = ss.modify(sir.pars.beta, multiply=0.5, where=sir.I.frac >= 0.02, until=sir.I.frac <= 0.01)
+
         # Condoms, 90% effective against gonorrhea, used in a share of acts that grows over time, on one network
         use = ss.timeseries({2000: 0.05, 2020: 0.3})
         condoms = ss.modify(ng.infection, efficacy=0.9, share=use, route='sexualnet')
@@ -321,9 +325,9 @@ class modify(Connector):
     """
     compartmental = True # It works on groups as well as on agents
 
-    timepar_skip = ['where', 'when', 'target_module', 'hold'] # These refer to other modules, which hold their own time parameters (see Module.link_timepars()); hold is converted to steps at init
+    timepar_skip = ['where', 'until', 'when', 'target_module', 'hold'] # These refer to other modules, which hold their own time parameters (see Module.link_timepars()); hold is converted to steps at init
 
-    def __init__(self, target, multiply=None, add=None, set=None, efficacy=None, share=None, route=None, where=None, start=None, stop=None, when=None, hold=None, name=None, **kwargs):
+    def __init__(self, target, multiply=None, add=None, set=None, efficacy=None, share=None, route=None, where=None, start=None, stop=None, when=None, hold=None, until=None, name=None, **kwargs):
         super().__init__(name=name, **kwargs)
         given = [key for key,val in dict(multiply=multiply, add=add, set=set, efficacy=efficacy).items() if val is not None]
         if len(given) != 1:
@@ -357,7 +361,11 @@ class modify(Connector):
         if hold is not None and where is None and when is None:
             errormsg = f'hold= of ss.modify() keeps the modifier on for a while after its condition holds, so it needs where= or when='
             raise ValueError(errormsg)
+        if until is not None and (where is None or hold is not None):
+            errormsg = f'until= of ss.modify() keeps the modifier on after where= selects someone, until the condition holds, so it needs where=, and not hold= as well'
+            raise ValueError(errormsg)
         self.hold = hold
+        self.until = None if until is None else ss.conditions.as_cond(until)
         self.held = {} # With hold=: for each engine, the step until which each agent or group is held, and the value it was held at
         self.when_until = -1 # With hold= and when=: the step until which it is held
         self.writer = None # For a parameter of a module written as code that is not a disease: see init_post()
@@ -483,9 +491,14 @@ class modify(Connector):
         return self.where is None and self.when is None and self.fixed_amount
 
     @property
+    def holding(self):
+        """ Whether it stays on for people after `where=` selects them: for a while (`hold=`), or until a condition holds (`until=`) """
+        return self.hold is not None or self.until is not None
+
+    @property
     def tabulated(self):
         """ Whether the engines can work out the modifier for every step before a run (see `ss.solvers.Compartmental.tables()`): one that depends only on time, and on who it applies to only through states and stratifications """
-        return self.when is None and self.hold is None and self.fixed_amount and ss.conditions.is_static(self.where, self.sim)
+        return self.when is None and not self.holding and self.fixed_amount and ss.conditions.is_static(self.where, self.sim)
 
     @property
     def fixed_amount(self):
@@ -514,7 +527,7 @@ class modify(Connector):
         return on
 
     def held_mask(self, mask, engine):
-        """ With hold=: who the modifier applies to, including those it applied to within the hold """
+        """ With hold= or until=: who the modifier applies to, including those it still holds for """
         ti = self.sim.ti
         until, value = self.held.get(id(engine), (None, None))
         if until is None or until.shape != mask.shape: # As agents, people born since grow the arrays
@@ -524,7 +537,10 @@ class modify(Connector):
                 new_until[:n], new_value[:n] = until[:n], value[:n]
             until, value = new_until, new_value
         on = mask > 0
-        until = np.where(on, ti + self.hold_steps, until)
+        if self.until is None:
+            until = np.where(on, ti + self.hold_steps, until)
+        else: # Held with no end, until the condition holds
+            until = np.where(on, np.iinfo(until.dtype).max, np.where(engine.selector.select(self.until) > 0, -1, until))
         value = np.where(on, mask, value)
         self.held[id(engine)] = (until, value)
         out = np.where(until > ti, np.maximum(mask, value), mask)
@@ -557,14 +573,14 @@ class modify(Connector):
     def apply(self, value, engine):
         """ Apply the modifier to a value, for the people it applies to """
         mask = None if self.where is None else engine.selector.select(self.where)
-        amount = self.current(engine, mask=mask if self.hold is None else None)
+        amount = self.current(engine, mask=mask if not self.holding else None)
         if np.ndim(amount) and np.isnan(amount).any(): # A clock or an attribute read where it has no value: see ss.conditions.check_clocks()
             check = amount if mask is None else np.where(mask > 0, amount, 0.0)
             if engine.selector.abm: # Only the people alive now: the spare slots in the arrays, for people not yet born, hold NaN
                 check = check[engine.sim.people.auids]
             if np.isnan(check).any():
                 raise ValueError(f'the amount of the modifier "{self.name}" is NaN for some of the people it applies to: {self.nan_sources()}')
-        if mask is not None and self.hold is not None:
+        if mask is not None and self.holding:
             mask = self.held_mask(mask, engine)
         if mask is None:
             return amount + value*0 if self.op == 'set' else value*amount if self.op == 'multiply' else value + amount
@@ -607,6 +623,8 @@ class modify(Connector):
             out += f'   when={getattr(self.when, "__name__", "function")}'
         if self.hold is not None:
             out += f'   hold={self.hold}'
+        if self.until is not None:
+            out += f'   until={getattr(self.until, "__name__", self.until)}'
         return out
 
     def step(self):

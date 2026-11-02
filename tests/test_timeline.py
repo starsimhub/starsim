@@ -347,6 +347,9 @@ def test_sim_start_stop_dur():
     sim = ss.Sim(start=2000, stop=2010, dur=10, **kw).init() # Three that agree are fine
     with pytest.raises(ValueError, match='disagree'):
         ss.Sim(start=2000, stop=2035, dur=10, **kw).init()
+    t = ss.Timeline(start=2000, stop=2020, dt=1.0)
+    t.update(dur=5) # A new dur replaces the stop
+    assert t.stop == ss.years(2005) and len(t.tvec) == 6
     return sim
 
 

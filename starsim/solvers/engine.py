@@ -1412,7 +1412,7 @@ class Engine(Telling, Effects):
         for i,m in enumerate(mods):
             if m.op != 'set':
                 continue
-            if m.where is not None or m.hold is not None:
+            if m.where is not None or m.holding:
                 raise ss.CapabilityError(f'the modifier "{m.name}" sets {path}, the dwell time of "{name}", with where= or hold=, which is not supported yet for a dwell time that is a distribution; set it for everyone, or use multiply= with where=.')
             new = m.amount if isinstance(m.amount, ss.Dist) else ss.expon(scale=m.amount) if isinstance(m.amount, ss.TimePar) or sc.isnumber(m.amount) else None
             if new is None or ss.transitions.varying_pars(new):
