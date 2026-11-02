@@ -48,6 +48,18 @@ def test_guide_code():
     return
 
 
+def test_guide_pages():
+    """ The pages that the guide sends agents to exist """
+    sc.heading('Testing the pages in the guide')
+    text = (cli.ai_folder/'starsim'/'SKILL.md').read_text(encoding='utf-8')
+    table = text.split('| Task | Pages |')[1].split('\n\n')[0]
+    pages = re.findall(r'`([a-z0-9_]+)`', table)
+    assert pages
+    missing = [page for page in pages if not list(docs.glob(f'*/{page}.qmd'))]
+    assert not missing, f'No such pages: {missing}'
+    return
+
+
 def test_docs_index():
     """ The index for agents lists every tutorial and user guide page, each with a summary """
     sc.heading('Testing the docs index')
