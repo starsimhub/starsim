@@ -4,7 +4,7 @@ All notable changes to the codebase are documented in this file. Changes that ma
 
 ## Version 3.7.3 (2026-11-01)
 - `ss.RoutineDelivery` no longer raises an `IndexError` when the start or end year is close to, but not on, the time grid (e.g. `dt=7/365`).
-- *GitHub info*: PR [x](https://github.com/starsimhub/starsim/pull/x)
+- *GitHub info*: PR [1515](https://github.com/starsimhub/starsim/pull/1515)
 
 
 ## Version 3.7.2 (2026-10-06)
