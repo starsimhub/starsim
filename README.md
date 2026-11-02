@@ -73,10 +73,13 @@ cd example
 uv add "starsim[jax]"
 ```
 
-Starsim can also be installed locally (including optional dependencies for testing and documentation). To do this, first clone this repository, then run:
+To work on Starsim itself, clone this repository, then run:
 ```sh
-pip install -e .[dev]
+pip install -e .
+starsim init dev
 ```
+
+This installs the optional dependencies for testing and documentation, and JAX; installs Rust if it is missing; and builds Starsim's kernels. See the [developer guide](https://docs.starsim.org/contributing/developer.html) for details.
 
 ### R
 

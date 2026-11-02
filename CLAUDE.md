@@ -59,10 +59,11 @@ cd docs && python make_api.py
 
 ### Installation
 ```bash
-# Development installation
+# Development installation, then the full setup: dev dependencies, Rust if it is missing, both sets of kernels
 pip install -e .
+starsim init dev
 
-# With dev dependencies
+# Or just the dev dependencies
 pip install -e .[dev]
 
 # Using uv for faster installs

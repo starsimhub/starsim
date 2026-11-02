@@ -257,6 +257,32 @@ def test_cli(tmp_path, monkeypatch, capsys):
     return
 
 
+def test_cli_dev(tmp_path, monkeypatch):
+    """ `starsim init dev` installs Rust only if it is missing, and then builds the kernels with it; run with the commands faked, since the real ones take minutes """
+    sc.heading('Testing starsim init dev')
+    from starsim.internals import cli
+    monkeypatch.setenv('HOME', str(tmp_path))
+    commands = []
+    def run(cmd, **kwargs):
+        commands.append(cmd if isinstance(cmd, str) else ' '.join(map(str, cmd)))
+        return sc.objdict(returncode=0, stdout='cargo 1.0')
+    monkeypatch.setattr(cli.subprocess, 'run', run)
+    cargo = [None, '/fake/bin/cargo'] # No Rust the first time it looks, and Rust once installed
+    monkeypatch.setattr(cli, 'find_cargo', lambda: cargo.pop(0))
+    monkeypatch.setattr(sys, 'platform', 'linux')
+    monkeypatch.setattr(cli.shutil, 'which', lambda *args, **kwargs: '/fake/bin/tool')
+    cli.main(['init', 'dev'])
+    names = ['[dev]', 'sh.rustup.rs', 'bash build', 'starsim compile', 'starsim compile --check']
+    where = [next(i for i,cmd in enumerate(commands) if name in cmd) for name in names]
+    assert where == sorted(where), f'Wrong order: {commands}'
+
+    commands.clear()
+    monkeypatch.setattr(cli, 'find_cargo', lambda: '/fake/bin/cargo')
+    cli.main(['init', 'dev'])
+    assert not any('rustup' in cmd for cmd in commands) # Rust was there already
+    return
+
+
 def test_jax_platform(monkeypatch):
     """ ss.options.jax chooses JAX's platform, and a GPU plugin of another version than jaxlib is warned of before JAX starts (it can crash XLA) """
     sc.heading('Testing the platform of JAX')
