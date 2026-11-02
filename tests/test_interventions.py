@@ -260,6 +260,19 @@ def test_routine_delivery_window():
 
 
 @sc.timer()
+def test_routine_delivery_off_grid():
+    """ RoutineDelivery should accept end years that are close to, but not on, the time grid """
+    sc.heading('Testing RoutineDelivery with an off-grid end year...')
+
+    pars = make_delivery_pars(start=2000, stop=2002)
+    screening = ss.routine_screening(product=make_dx(), prob=1.0)
+    sim = ss.Sim(pars, dt=7/365, interventions=screening).run()
+    assert sim.results.routine_screening.n_screened.sum() > 0, 'Expected nonzero screenings'
+
+    return sim
+
+
+@sc.timer()
 def test_routine_delivery_prob_array():
     """ RoutineDelivery should accept a per-year prob array matching the year window """
     sc.heading('Testing RoutineDelivery prob-array scaling...')

@@ -127,8 +127,9 @@ class RoutineDelivery(Intervention):
 
         # Determine the timepoints at which the intervention will be applied.
         # self.yearvec is sliced from sim.t.yearvec so it stays length-aligned with self.timepoints.
-        self.start_point = sc.findfirst(yearvec, start_year)
-        self.end_point   = sc.findfirst(yearvec, end_year) + adj_factor
+        # Use the nearest timepoint since the check above allows years that are close to, but not on, the time grid
+        self.start_point = sc.findnearest(yearvec, start_year)
+        self.end_point   = sc.findnearest(yearvec, end_year) + adj_factor
         if self.years is None: self.years = sc.inclusiverange(start_year, end_year)
         self.timepoints  = sc.inclusiverange(self.start_point, self.end_point)
         self.yearvec     = yearvec[self.start_point:self.end_point + 1]
