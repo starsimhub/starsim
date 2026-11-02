@@ -49,9 +49,9 @@ def nb_transmit(src, trg, rel_trans, rel_sus, beta, randvals):
     """ Optimized transmission kernel: returns the (source, target) UIDs of transmitting edges.
 
     Fuses the gather/multiply/compare *and* the UID extraction into a single branchless pass.
-    This avoids the full-length boolean temporary and the two separate gather passes
-    (`trg[mask]`, `src[mask]`) of the previous approach -- ~1.4x faster at typical transmission
-    rates, more when transmission is common. UIDs are emitted in edge order, preserving CRN behavior.
+    This avoids a full-length boolean temporary and two separate gather passes
+    (`trg[mask]`, `src[mask]`) -- ~1.4x faster at typical transmission rates, more when
+    transmission is common. UIDs are emitted in edge order, preserving CRN behavior.
     """
     n = src.shape[0]
     src_out = np.empty(n, dtype=np.int64) # int64 = uid dtype, so the caller can .view(uids) without a copy
@@ -197,7 +197,7 @@ class Network(Route):
         edges (dict/dataframe): the edges of the network, as an alternative to passing them as keyword arguments
         p1 (array): an array of length N, the number of connections in the network, with the indices of people on one side of the connection.
         p2 (array): an array of length N, the number of connections in the network, with the indices of people on the other side of the connection.
-        beta (array): an array representing relative transmissibility of each connection for this network - TODO, do we need this?
+        beta (array): an array representing relative transmissibility of each connection for this network
         kwargs (dict): standard module arguments (e.g. `name`, `label`, `dt`) are passed to `update_pars()`; other keys are copied directly into the network as edges
 
     Note that all edge arguments must be arrays of the same length,
@@ -616,7 +616,7 @@ class Network(Route):
         Examples:
             ```python
             import networkx as nx
-            sim = ss.Sim(n_agents=100, networks='sexual').init()
+            sim = ss.Sim(n_agents=100, networks='random').init()
             G = sim.networks.randomnet.to_graph()
             nx.draw(G)
             ```
@@ -735,7 +735,7 @@ class Network(Route):
         Example: If there were a network with
         - p1 = [1,2,3,4]
         - p2 = [2,3,1,4]
-        Then find_edges([1,3]) would return {1,2,3}
+        Then find_contacts([1,3]) would return the array [1,2,3] (or the set {1,2,3}, with `as_array=False`)
         """
         contact_inds = find_contacts(self.edges.p1, self.edges.p2, sc.toarray(inds), as_array=as_array)
         return contact_inds
@@ -747,7 +747,7 @@ class Network(Route):
     def remove_uids(self, uids):
         """
         Remove interactions involving specified UIDs
-        This method is typically called via `People.remove()` and
+        This method is typically called via `People.remove_dead()` and
         is specifically used when removing agents from the simulation.
 
         Args:
@@ -915,7 +915,7 @@ class RandomNet(DynamicNetwork):
         age_range (list): if supplied, only agents with `age_range[0] <= age < age_range[1]` are included
         dynamic (bool): if True (default), edges are replaced once their duration ends; if False, edges are created once and never change
             (so agents who join later, e.g. newborns, are not added)
-        method (str): how the other end of each contact is drawn: 'fast' (the default), 'exact', or 'uniform' (see above)
+        method (str): how the other end of each contact is drawn: 'fast' (the default), 'exact', 'uniform', or 'safe' (see above)
         remove_self_loops (bool): if True, drop the few edges that join an agent to itself (as any of the methods can make; e.g. about 1 in 25 edges with 50 agents, and far fewer in larger populations), so agents have slightly fewer contacts; off by default since such edges transmit nothing anyway. The same pair of agents can still be joined by more than one edge.
         pars (dict): the same parameters, as a dict
 
@@ -1070,7 +1070,7 @@ class RandomNet(DynamicNetwork):
 
     @property
     def one_step(self):
-        """ With `dur=0` (the default), and stepping with the sim, every edge ends at the next step, before anything transmits over it, so the dead's edges need not be removed before then (see `ss.Route.one_step`) """
+        """ With `dur=0` (the default), and stepping with the sim, every edge ends at the next step, before anything transmits over it, so the dead's edges need not be removed before then (see `ss.networks.Route.one_step`) """
         p = self.pars
         return p.dynamic and p.get('memory') is None and not isinstance(p.dur, ss.Dist) and p.dur == 0 and self.on_sim_time
 
@@ -1356,7 +1356,7 @@ class DegreeNet(DynamicNetwork):
         if sc.isnumber(n_contacts):
             n_contacts = ss.poisson(lam=n_contacts)
         pars = {k:v for k,v in n_contacts.pars.items()}
-        top = max_contacts if max_contacts is not None else None
+        top = max_contacts
         if isinstance(n_contacts, ss.poisson):
             mean = pars['lam']
             k = np.arange(sc.ifelse(top, int(mean + 10*np.sqrt(mean) + 10)) + 1)
@@ -1716,7 +1716,7 @@ class SexualNet(DegreeNet):
     number of partners (`n_contacts` as a dict). With `match=`, a share of partnerships is
     between people at the same level of a property of people, such as a risk group.
 
-    Each partnership has a number of acts per step (`acts`), so a disease's beta on it is
+    Each partnership has a number of acts per unit time (`acts`), so a disease's beta on it is
     a probability per act (see `ss.peract`), and the share of them in which a condom is used
     (`condoms`, 0 unless set, e.g. by a subclass in `add_pairs()`), which a modifier of the
     transmission on the network reads, e.g.
@@ -1757,13 +1757,13 @@ class SexualNet(DegreeNet):
         if not self.forms_own: # A subclass that forms its own partnerships uses none of these
             self.define_pars(
                 n_contacts = None,
-                dur = ss.lognorm_ex(mean=ss.years(15), std=ss.years(1)),  # Can vary by age, year, and individual pair. Set scale=exp(mu) and s=sigma where mu,sigma are of the underlying normal distribution.
+                dur = ss.lognorm_ex(mean=ss.years(15), std=ss.years(1)),  # Can vary by age, year, and individual pair
                 acts = ss.lognorm_ex(ss.freqperyear(80), ss.freqperyear(30)), # Acts per unit time, drawn once for each partnership
                 debut = ss.normal(loc=16),  # Age of debut can vary by using callable parameter values
                 participation = ss.bernoulli(p=0.9),  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
             )
         if not self.forms_own and isinstance(dur, ss.dur): # A single duration is a mean, and partnerships end at a constant rate (not the default's standard deviation of a year)
-            dur = ss.expon(scale=dur) # Given as the distribution, rather than as the mean of the default (MS8)
+            dur = ss.expon(scale=dur) # Given as the distribution, rather than as the mean of the default
         elif not self.forms_own and isinstance((pars or {}).get('dur'), ss.dur):
             pars = dict(pars) | dict(dur=ss.expon(scale=pars['dur']))
         self.update_pars(pars, **kwargs)
@@ -1858,7 +1858,7 @@ class PostnatalNet(DynamicNetwork):
     This network automatically has edges added between mothers and infants upon birth if
     a `Pregnancy` module is present in the simulation. The edges persist until the specified
     duration has elapsed, at which point they are automatically removed. This allows
-    different `PostnatalNet` instances have different postnatal periods specific to
+    different `PostnatalNet` instances to have different postnatal periods specific to
     what is being modeled. Transmission along this network is possible if a beta
     value >0 is specified. Otherwise, transmission will be skipped.
 
@@ -1985,15 +1985,13 @@ class MixingPools(Route):
     """
     A container for creating a rectangular array of MixingPool instances
 
-    By default, separates the population into <15 and >15 age groups.
-
     Note: CRN safe as agents.
 
     Args:
         diseases (str): the diseases that transmit via these mixing pools
         src (inds): source agents; can be AgeGroup(), ss.uids(), or lambda(sim); None indicates all alive agents
         dst (inds): destination agents; as above
-        beta (float): overall transmission via these mixing pools
+        beta (float): overall transmission via these mixing pools, for a disease written as code (a declared disease's beta is in its transmission)
         n_contacts (array): the number of contacts of each destination group with each source group: a number is the same for everyone in the group, and a `ss.Dist` is drawn once for each person in the group, which is much slower (a state for each pair of groups, and a draw for each pair for each new person)
         pars (dict): the same parameters, as a dict
 
@@ -2002,7 +2000,6 @@ class MixingPools(Route):
         import starsim as ss
         mps = ss.MixingPools(
             diseases = 'sis',
-            beta = 0.1,
             src = {'0-15': ss.AgeGroup(0, 15), '15+': ss.AgeGroup(15, None)},
             dst = {'0-15': ss.AgeGroup(0, 15), '15+': ss.AgeGroup(15, None)},
             n_contacts = [[2.4, 0.49], [0.91, 0.16]],  # Illustrative contact matrix
@@ -2057,10 +2054,10 @@ class MixingPools(Route):
 
         # Validate src and dst
         if not isinstance(p.src, dict):
-            errormsg = f'src must be a provided as a dictionary, not {type(self.pars.src)}'
+            errormsg = f'src must be provided as a dictionary, not {type(self.pars.src)}'
             raise TypeError(errormsg)
         if not isinstance(p.dst, dict):
-            errormsg = f'dst must be a provided as a dictionary, not {type(p.dst)}'
+            errormsg = f'dst must be provided as a dictionary, not {type(p.dst)}'
             raise TypeError(errormsg)
         p.src = sc.obj(p.src)
         p.dst = sc.obj(p.dst)
@@ -2248,7 +2245,7 @@ def pool_diseases(route):
     diseases = []
     for d in names:
         if not isinstance(d, str):
-            raise TypeError(f'Diseases can be specified as disease objects or strings, not {type(d)}')
+            raise TypeError(f'Diseases are given by name, as strings, not {type(d)}')
         if d not in sim.diseases:
             raise KeyError(f'Could not find disease with name {d} in the list of diseases.')
         dis = sim.diseases[d]
@@ -2286,7 +2283,7 @@ class MixingPool(Route):
         diseases (str): the diseases that transmit via this mixing pool
         src (inds): source agents; can be AgeGroup(), ss.uids(), or lambda(sim); None indicates all alive agents
         dst (inds): destination agents; as above
-        beta (float): overall transmission (note: use a float, not a TimePar; the time component is usually handled by the disease beta)
+        beta (float): overall transmission, for a disease written as code (a declared disease's beta is in its transmission) (note: use a float, not a TimePar; the time component is usually handled by the disease beta)
         n_contacts (Dist): the number of effective contacts of the destination agents
 
     Examples:
@@ -2297,13 +2294,12 @@ class MixingPool(Route):
         mp_pars = dict(
             src = lambda sim: sim.people.male, # only males are infectious
             dst = None, # all agents are susceptible
-            beta = 0.2,
             n_contacts = ss.poisson(lam=4),
         )
 
         # Seed 5% of the male population
-        def p_init(self, sim, uids):
-            return 0.05*sim.people.male
+        def p_init(sim, uids):
+            return 0.05*sim.people.male[uids]
 
         # Create and run the sim
         sis = ss.SIS(init_prev=p_init)
@@ -2568,5 +2564,5 @@ def contacts(matrix=None, ages=None, dims=None, name=None, source=None, layer='a
     out = MixingPools(src=groups, dst=sc.dcp(groups), n_contacts=matrix.T, name=name) # ss.MixingPools is indexed [source, destination]
     out.ref = ref # Where a named matrix came from
     out.edges = np.asarray(ages, dtype=float)
-    out.unit = unit or ('day' if ref is not None else None) # S7.8: a country's matrix is contacts a day, whatever the sim's unit
+    out.unit = unit or ('day' if ref is not None else None) # A country's matrix is contacts a day, whatever the sim's unit
     return out

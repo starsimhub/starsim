@@ -175,7 +175,7 @@ finished.plot('measles.I')
 
 This gives the two-year cycle of measles epidemics, as births replenish the susceptible people. Checking it against the original model, run in odin, would be the last step.
 
-For a longer model, with more that isn't translated, `sim.imported.prompt` is a prompt for an AI assistant with Starsim's `import-model` skill (installed with `starsim ai install`), which can finish the job in the same way: write the code, translate what is listed, and check the result against the original.
+For a longer model, with more that isn't translated, `sim.imported.prompt` is a prompt for an AI assistant with Starsim's `convert-model` skill (installed with `starsim ai install`), which can finish the job in the same way: write the code, translate what is listed, and check the result against the original.
 
 ## The formats
 
@@ -243,7 +243,7 @@ A Starsim model is written as Python, and that code is the model: it is what is 
 print(ss.export_to(sim, 'odin'))
 ```
 
-`filename=` writes it to a file too. A format that can't carry part of the model (such as a network, a module written as code, or a function) leaves it out, and the export lists what it left out or changed in a warning (`ss.errors.LossyExport`), one line for each. An exported model can be read back in:
+`filename=` writes it to a file too. A format that can't carry part of the model (such as a network, a module written as code, or a function) leaves it out, and the export lists what it left out or changed in a warning (`ss.errors.LossyExport`), one line for each. The `convert-model` skill for AI assistants helps with what is left out. An exported model can be read back in:
 
 ```{python}
 sbml_file = os.path.join(folder, 'measles.xml')

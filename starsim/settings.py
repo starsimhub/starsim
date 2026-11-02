@@ -82,7 +82,7 @@ class Options(sc.obj):
 
     Examples:
         ```python
-        ss.options(verbose=True) # Set more verbosity
+        ss.options(verbose=2) # Print everything
         ss.options(warnings='error') # Be more strict about warnings
         ```
     """
@@ -113,7 +113,7 @@ class Options(sc.obj):
         optdesc.verbose = 'Set default level of verbosity: 0 prints nothing, 1 the solver, notes, and progress, and 2 everything (e.g. each step).'
         options.verbose = sc.parse_env('STARSIM_VERBOSE', 1, int)
 
-        optdesc.warnings = 'How warnings are handled: options are "warn" (default), "print", and "error"'
+        optdesc.warnings = 'How warnings are handled: options are "warn" (default), "print", "error", and "ignore"'
         options.warnings = sc.parse_env('STARSIM_WARNINGS', 'warn', str)
 
         optdesc.max_steps = 'The number of timesteps above which a sim warns that it may be slow (0 to never warn)'
@@ -140,7 +140,7 @@ class Options(sc.obj):
         optdesc.num_threads = 'The number of threads for BLAS, the linear algebra in NumPy and SciPy (for the threads of Starsim itself, see "threads"): 1 (default), or 0 to leave BLAS as it is. See the "Deployment" page of the user guide.'
         options.num_threads = sc.parse_env('STARSIM_NUM_THREADS', int(os.getenv('SCIRIS_NUM_THREADS') or 0), int)
 
-        optdesc.kernels = 'Which kernels run the solvers (all give the same results, except as said for "python"): "auto" (default) for Rust if it is there (in the wheels, or built: see starsim/solvers/rust/README.md), and otherwise Numba, with compartmental runs taken as plain Python until Numba has compiled (if a run, or the runs of a session, would take longer as plain Python than compiling takes, about two minutes once per install, Numba compiles first; a note says which); "rust" for Rust, compiled ahead of time, so a first run takes no compiling; "numba" to always compile with Numba first (see ss.compile()); "python" for the compartmental kernels as plain Python (and the kernels, not JAX, for the chain binomial, whose draws in JAX are compiled, so a long seeded chain-binomial run gives other numbers than with the others; the passes over agents are Numba). JAX is chosen by the run (see sim.jax), and ss.jit is always Numba'
+        optdesc.kernels = 'Which kernels run the solvers (all give the same results): "auto" (default) for Rust if it is there (in the wheels, or built: see starsim/solvers/rust/README.md), and otherwise Numba, with compartmental runs taken as plain Python until Numba has compiled (if a run, or the runs of a session, would take longer as plain Python than compiling takes, about two minutes once per install, Numba compiles first; a note says which); "rust" for Rust, compiled ahead of time, so a first run takes no compiling; "numba" to always compile with Numba first (see ss.compile()); "python" for the compartmental kernels as plain Python (the passes over agents are Numba). JAX is chosen by the run (see sim.jax), and ss.jit is always Numba'
         options.kernels = sc.parse_env('STARSIM_KERNELS', 'auto', str)
 
         optdesc.jax = 'The platform that JAX runs on where Starsim uses it (sim.gradient(), posteriors, and long ODE runs; see sim.jax): "auto" (default) for JAX\'s own choice (a GPU if it finds one), or a platform, e.g. "cpu" (for a GPU that JAX cannot use) or "cuda". It sets JAX_PLATFORMS, so it applies to everything in the session that uses JAX, and must be set before JAX is first used'
@@ -148,6 +148,9 @@ class Options(sc.obj):
 
         optdesc.uncompiled_warning = 'If True (default), say on import when Starsim has not been compiled yet (see ss.compile()) -- NOTE, only has effect via the environment variable since executed on load'
         options.uncompiled_warning = sc.parse_env('STARSIM_UNCOMPILED_WARNING', True, bool)
+
+        optdesc.skill_note = 'If True (default), say on import when an AI coding agent is installed but has no Starsim skills here (see "starsim ai") -- NOTE, only has effect via the environment variable since executed on load'
+        options.skill_note = sc.parse_env('STARSIM_SKILL_NOTE', True, bool)
 
         optdesc.crn = 'If True (default), use common random numbers (CRN) for reproducibility across scenarios. Set False for faster draws (one plain uniform per agent/edge, skipping the slot machinery); statistically valid but not CRN-safe across scenarios.'
         options.crn = sc.parse_env('STARSIM_CRN', True, bool)
@@ -245,7 +248,7 @@ class Options(sc.obj):
             ss.options.help(detailed=True)
             ```
         """
-        # If not detailed, just print the docstring for sc.options
+        # If not detailed, just print the docstring for ss.options
         if not detailed and not len(args):
             print(self.__doc__)
             return
@@ -296,7 +299,7 @@ class Options(sc.obj):
 
     def set(self, key=None, value=None, use=False, **kwargs):
         """
-        Actually change the style. See `ss.options.help()` for more information.
+        Set one or more options. See `ss.options.help()` for more information.
 
         Args:
             key    (str):    the parameter to modify, or 'defaults' to reset everything to default
@@ -328,7 +331,7 @@ class Options(sc.obj):
             else:
                 if value in [None, 'default']:
                     value = self.orig_options[key]
-                if key == 'kernels': # Checked here rather than at the first run (CB-9), and swapped before the option is set, so it is not set if the Rust kernels have not been built
+                if key == 'kernels': # Checked here rather than at the first run, and swapped before the option is set, so it is not set if the Rust kernels have not been built
                     if value not in ['auto', 'rust', 'numba', 'python']:
                         errormsg = f'ss.options.kernels must be "auto", "rust", "numba", or "python", not {value!r}'
                         raise ValueError(errormsg)
@@ -366,7 +369,7 @@ class Options(sc.obj):
 
             # Convert warnings to errors
             with ss.options.context(warnings='error'):
-                ss.Sim(location='not a location').init()
+                ss.Sim().init()
 
             # Use ss.style(), not context(), for plotting options
             with ss.style(dpi=50):

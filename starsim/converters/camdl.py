@@ -15,7 +15,7 @@ rate classified by the import rules (`beta * S * I / N` is exposure to `I`); eac
 observation of a flow becomes an outcome with its likelihood. What is listed as not
 translated (scheduled events, ODE compartments, forcing functions of time, and
 transitions that are not one state to another) is left for a person, or the
-import-model skill, to add.
+convert-model skill, to add.
 
 Used with: compartments; declared modules
 """
@@ -163,9 +163,10 @@ def load_camdl(filename, pars=None, scenario=None, solver='ode', camdlc=None, ve
         verbose (bool): whether to print how each flow was read
         kwargs (dict): passed to `ss.Sim()`
 
-    **Example**:
-
+    Example:
+        ```python
         sim = ss.import_from('sir.camdl', pars=dict(beta=0.4, gamma=0.15, rho=0.6, k=10))
+        ```
     """
     ir = read(filename, camdlc=camdlc)
     m = ir['model']

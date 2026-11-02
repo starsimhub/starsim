@@ -117,12 +117,12 @@ The same declaration runs as a stochastic compartmental model or as agents with 
 
 ## Timings
 
-Lines are lines of model code (not counting blank lines, comments, imports, or plotting, and counting a line over 100 characters twice); times are for one run. Both are measured by Starsim's north-star script, `tests/north_star/north_star.py` in the lingua_franca_design repo (see the [index page](../library_landscape.qmd#how-these-numbers-were-made)). MEmilio 2.4.1's times were recorded on the same machine, as a whole command, which is nearly all starting Python and importing; MEmilio's `simulate()` itself takes about 0.1 ms.
+Lines are lines of model code (not counting blank lines, comments, imports, or plotting, and counting a line over 100 characters twice); times are for one run, the first in a new process and a rerun of the same model. Both were measured as described on the [index page](../library_landscape.qmd#how-these-numbers-were-made). MEmilio 2.4.1's times were recorded on the same machine, in process, not counting starting Python or importing; a rerun is `simulate()` again on the same model. Both are in solvers built in advance in C++.
 
 | Model | Lines: MEmilio | Lines: Starsim | One run: MEmilio | One run: Starsim | |
 |---|---|---|---|---|---|
-| The SECIR | 44 | 14 | 0.63 s as a command; `simulate()` 0.08 ms | 0.020 s to build and run (0.061 s the first time in a new process) | Pass |
-| The age-resolved SECIR (above) | 45 | 21 | 0.47 s as a command; `simulate()` 0.1 ms | 0.021 s (0.063 s the first time); 0.2 ms to rerun a built sim | Pass |
+| The SECIR | 44 | 14 | first 0.00045 s, rerun 0.00002 s | first 0.014 s, rerun 0.00043 s | Pass |
+| The age-resolved SECIR (above) | 45 | 22 | first 0.00082 s, rerun 0.00006 s | first 0.02 s, rerun 0.00056 s | Pass |
 | 50 counties × 6 ages with commuting, 90 days | | | 0.17 s | 0.1 s | |
 | 400 counties × 6 ages with commuting, 90 days | | | 1.54 s to run, 13.4 s to build the graph in Python | 0.7 s | |
 
@@ -146,7 +146,7 @@ These are from Starsim's switching demo for MEmilio users (`tests/switching/test
 
 ## Bringing your model in
 
-`ss.import_from('model.json', format='memilio')` reads a MEmilio ODE model. Since a MEmilio script only sets the parameters of a model built in C++, the script is first run in MEmilio's own environment by `starsim/converters/memilio.py` (run as a script), which records the model it simulates and writes a JSON file. The equations of the supported models (`osir`, `oseir`, `oseirdb`, and `osecir`) are written in Starsim as MEmilio's C++ has them; the parameters, the initial populations by age group, and the contact matrices with their dampings come from the file. A graph (`MobilityGraph`, or the graph of a `GraphParameterStudy`) becomes a stratification by place with its edges as commuting, and the distributions of a parameter study become the parameters' priors, for `ss.parallel(sim, n_runs=, priors=True)`. What is not translated is listed (`sim.imported.incomplete`), and `sim.imported.prompt` is a prompt for an AI assistant with Starsim's import-model skill to finish the job.
+`ss.import_from('model.json', format='memilio')` reads a MEmilio ODE model. Since a MEmilio script only sets the parameters of a model built in C++, the script is first run in MEmilio's own environment by `starsim/converters/memilio.py` (run as a script), which records the model it simulates and writes a JSON file. The equations of the supported models (`osir`, `oseir`, `oseirdb`, and `osecir`) are written in Starsim as MEmilio's C++ has them; the parameters, the initial populations by age group, and the contact matrices with their dampings come from the file. A graph (`MobilityGraph`, or the graph of a `GraphParameterStudy`) becomes a stratification by place with its edges as commuting, and the distributions of a parameter study become the parameters' priors, for `ss.parallel(sim, n_runs=, priors=True)`. What is not translated is listed (`sim.imported.incomplete`), and `sim.imported.prompt` is a prompt for an AI assistant with Starsim's convert-model skill to finish the job.
 
 See [Import/export](index.qmd) for importing in general: checking an import, keeping it as code, and finishing one that is incomplete.
 

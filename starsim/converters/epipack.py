@@ -82,10 +82,11 @@ def load_epipack(source, stop=None, solver=None, pars=None, verbose=None, **kwar
     Returns:
         An `ss.Sim`, with `sim.imported` saying how it was read and what was not translated
 
-    **Example**:
-
+    Example:
+        ```python
         # In the epipack environment: python epipack.py my_model.py model.json
         sim = ss.import_from('model.json', format='epipack')
+        ```
     """
     d = read(source)
     src = Source(name='epipack', format='epipack', file=source if isinstance(source, str) else None)
@@ -117,7 +118,7 @@ def load_epipack(source, stop=None, solver=None, pars=None, verbose=None, **kwar
         below = '/N'
     elif size == 1:
         below = ''
-        src.notes.append(f'population    epipack\'s population size is 1, so its quadratic terms are products of the numbers in the states, which are not divided by anything')
+        src.notes.append('population    epipack\'s population size is 1, so its quadratic terms are products of the numbers in the states, which are not divided by anything')
     else:
         below = f'/{size:n}'
         src.notes.append(f'population    epipack divides its quadratic terms by {size:n} throughout, which is not the number of people as the model runs ({people:n} at the start)')

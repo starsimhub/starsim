@@ -394,6 +394,7 @@ An intervention's effect is the difference between a run with it and a run witho
 - **Susceptibility and infectiousness only multiply.** `add=` and `set=` are for parameters; on `rel_sus` and `rel_trans`, use `multiply=`.
 - **A trigger with no memory flickers.** `where=` on a threshold switches the modifier on and off as the quantity crosses it; give `hold=` for a measure that stays in place once begun.
 - **Read results from before this step.** A function given as `where=` runs before the step's results are written; read `[sim.ti - 1]`, not `[sim.ti]`.
+- **A function made in a loop sees the loop's last value.** Python reads a variable when a function runs, not when it is made, so every `where=lambda sim: sim.people.age >= lower` made in `for lower in [0, 15]:` uses 15. Use a condition (`where=ss.ppl.age >= lower`), which keeps the value it was written with, or pass the value in (`lambda sim, lower=lower: ...`).
 
 The API reference for this page: [Interventions](../api/interventions.qmd), [Connectors](../api/connectors.qmd) (for `ss.modify()`).
 

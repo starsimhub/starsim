@@ -108,9 +108,6 @@ def test_any():
     return sims
 
 
-# %% Acceptance: hpvsim_interventions/port.py, with genotypes as diseases
-
-
 def test_own_product():
     sc.heading('Testing a product written as code: administer() is given the UIDs reached, its outcomes trigger a step, and delivery.reached() is who it reached')
 

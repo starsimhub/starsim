@@ -105,7 +105,7 @@ def test_combine_merge():
 
 @sc.timer()
 def test_quiet_quantiles():
-    """ Runs of a quiet sim print nothing (TB4), and the quantiles of several scenarios unpack by quantile (HP74) """
+    """ Runs of a quiet sim print nothing, and the quantiles of several scenarios unpack by quantile """
     sc.heading('Testing quiet runs and quantiles by scenario')
     kw = dict(diseases='sis', networks='random', n_agents=300, verbose=0)
     with sc.capture() as text:

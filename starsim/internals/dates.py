@@ -80,7 +80,7 @@ class DateArray(np.ndarray):
         except: return ss.date
 
     def __add__(self, other):
-        return NotImplemented # Delegate to the other class - typically Date__radd__ or Dur.__radd__
+        return NotImplemented # Delegate to the other class - typically date.__radd__() or dur.__radd__()
 
     def __radd__(self, other):
         return self.__add__(other)
@@ -207,10 +207,11 @@ class DateArray(np.ndarray):
         Args:
             start (`ss.date`/str): the date to count from
 
-        **Example**:
-
+        Example:
+            ```python
             dates = ss.DateArray(['2000-01-01', '2000-02-01', '2000-03-01'])
             dates.days_since('2000-01-01') # Returns array([ 0., 31., 60.])
+            ```
         """
         if not self.is_date:
             errormsg = f'days_since() requires an array of dates, not {self.unit}'
@@ -554,9 +555,9 @@ class date(pd.Timestamp):
                    <2024-01-01>, <2025-01-01>], dtype=object)
 
         Args:
-                    start (float/ss.date/ss.dur): Lower bound - can be a date or a numerical year
-        stop (float/ss.date/ss.dur): Upper bound - can be a date or a numerical year
-        step (float/ss.dur): Assumes 1 calendar year steps by default
+            start (float/ss.date/ss.dur): Lower bound - can be a date or a numerical year
+            stop (float/ss.date/ss.dur): Upper bound - can be a date or a numerical year
+            step (float/ss.dur): Assumes 1 calendar year steps by default
             inclusive (bool): Whether to include "stop" in the output
             day_round (bool): Whether to round to the nearest day (by default, True if step > 1 day)
             allow_zero (bool): if True, allow a year 0 by creating a duration (ss.years) instead; if False, raise an exception; if None, give a warning

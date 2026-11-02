@@ -120,8 +120,6 @@ class MultiSim:
         unknown = set(kwargs) - set(self.run_options)
         if unknown:
             errormsg = f'Unknown argument{"s" if len(unknown) > 1 else ""} {sc.strjoin(sorted(unknown))} for running many sims; the options are n_runs, pars, priors, inplace, debug, and {sc.strjoin(self.run_options)}'
-            if 'iterpars' in unknown:
-                errormsg += ' (iterpars is now pars, e.g. pars=dict(rand_seed=[1, 2, 3]))'
             raise TypeError(errormsg)
 
         # Set properties

@@ -74,8 +74,8 @@ def test_classes():
     assert np.isclose(tp0*ss.years(1), tpval), 'Multiplication by the base denominator should not change the value'
     assert np.isclose(tp0*ss.years(0.5), tpval/2, rtol=0.1) # These should be close, but not match exactly
     assert np.isclose(tp0*ss.years(2), tpval*2, rtol=0.1)
-    assert tp0*ss.years(0.5) == -np.expm1(np.log1p(-0.1) * ss.years(0.5)/ss.years(1)) # These should be close, but not match exactly
-    assert tp0*ss.years(2) == -np.expm1(np.log1p(-0.1) * ss.years(2)/ss.years(1)) # These should be close, but not match exactly
+    assert tp0*ss.years(0.5) == -np.expm1(np.log1p(-0.1) * ss.years(0.5)/ss.years(1)) # These should match exactly
+    assert tp0*ss.years(2) == -np.expm1(np.log1p(-0.1) * ss.years(2)/ss.years(1)) # These should match exactly
 
     # The unit factors survive pickling, as parallel workers unpickle them
     import pickle
@@ -108,7 +108,7 @@ def test_syntax():
     assert ss.datedur(weeks=1)/ss.datedur(days=1) == 7
     assert np.isclose((ss.datedur(weeks=1) - ss.datedur(days=1)).years, 6/365)
     assert np.isclose((ss.date(2050)-ss.date(2020)).years, ss.years(30).years, rtol=1/365) # Not exact due to leap years
-    assert np.isclose((ss.time.freq(1, 'week')+ss.time.freq(1, 'day')).value, ss.time.freq(8, 'week').value) # CKTODO: would be nice if this were exact
+    assert np.isclose((ss.time.freq(1, 'week')+ss.time.freq(1, 'day')).value, ss.time.freq(8, 'week').value) # Not exact
     assert np.isclose((ss.peryear(1)+ss.permonth(1)).value, 13) # Rates add directly, not via probabilities
 
     assert ss.date('2020-01-01') + ss.datedur(weeks=52) == ss.date('2020-12-30') # Should give us 30th December 2020
@@ -128,13 +128,6 @@ def test_syntax():
     ss.dur.arange(ss.years(0), ss.years(10), ss.datedur(years=1)) + ss.years(1)
     ss.dur.arange(ss.years(0), ss.datedur(years=10), ss.datedur(years=1)) + ss.years(1)
 
-    # Datedur calculations -- these are not all currently working
-    # ss.dur.arange(ss.datedur(years=0), ss.datedur(years=10), ss.datedur(years=1)) + ss.years(1)
-    # ss.dur.arange(ss.datedur(years=0), ss.datedur(years=10), ss.datedur(years=1)) + ss.datedur(years=1)
-    # ss.dur.arange(ss.datedur(years=0), ss.datedur(years=10), ss.datedur(years=1)) + ss.date(2000)
-    # ss.dur.arange(ss.years(0), ss.years(10), ss.years(1)) + ss.datedur(years=1)
-    # ss.dur.arange(ss.years(0), ss.years(10), ss.datedur(years=1)) + ss.datedur(years=1)
-    # ss.dur.arange(ss.years(0), ss.datedur(years=10), ss.datedur(years=1)) + ss.datedur(years=1)
     ss.dur.arange(ss.years(0), ss.years(10), ss.years(1)) + ss.date(2000)
     ss.dur.arange(ss.years(0), ss.years(10), ss.datedur(years=1)) + ss.date(2000)
     ss.dur.arange(ss.years(0), ss.datedur(years=10), ss.datedur(years=1)) + ss.date(2000)
@@ -232,7 +225,7 @@ def test_datearray_operations():
     with pytest.raises(TypeError):
         b.days_since('2020-01-01')
 
-    # A date compares with a string as with the date it names, and a string that is not a date raises, for == as for < (HP79)
+    # A date compares with a string as with the date it names, and a string that is not a date raises, for == as for <
     assert d0 == '2020-01-01' and d0 != '2020-01-02' and d0 < '2020-02-01'
     for func in [lambda: d0 == 'sim', lambda: d0 != '2020-13-01', lambda: d0 < 'sim']:
         with pytest.raises(ValueError):
@@ -290,7 +283,7 @@ def test_timepar_float():
 
 @sc.timer()
 def test_years_conversion():
-    """ float() on a dur gives the magnitude, so code that needs years must ask for years """
+    """ float() on a duration raises, so code that needs years asks for .years """
     sc.heading('Test the years conversion and the sites that depend on it')
 
     # Dates, durations and datedurs all define .years
@@ -356,10 +349,10 @@ def test_link_timepars():
                  networks=ss.RandomNet(), verbose=0)
     sim.init()
     sis = sim.diseases.sis
-    assert sis.pars.beta.default_dur == sis.t.dt # Rates were already linked
+    assert sis.pars.beta.default_dur == sis.t.dt # Rates are linked
     assert sis.pars.waning.default_dur == sis.t.dt
 
-    # Durations are now linked too
+    # So are durations
     dur = ss.years(100)
     sis.pars.update(dur_test=dur, create=True) # Parameters are locked after initialization, so need create=True
     sis.link_timepars()
@@ -382,15 +375,15 @@ def test_prob_conversion():
     """ Probabilities are not linear in time, so converting one between units must go via the rate """
     sc.heading('Test converting probabilities between units')
 
-    # to() used to rescale the value linearly, giving 0.5/12 rather than 1-(1-0.5)**(1/12)
+    # to() goes via the rate, giving 1-(1-0.5)**(1/12), not the linear 0.5/12
     p = ss.prob(0.5, 'year')
     expected = 1 - (1 - 0.5)**(1/12)
     for target in [ss.time.probpermonth, ss.months, 'month']:
         assert np.isclose(p.to(target).value, expected)
-    assert np.isclose(p.to_prob(ss.months(1)), expected) # to() and to_prob() now agree
+    assert np.isclose(p.to_prob(ss.months(1)), expected) # to() and to_prob() agree
     assert np.isclose(ss.prob(ss.prob(0.5, 'year'), 'month').value, expected) # As does direct construction
 
-    # Scaling up used to raise, since 0.5*365 fails the prob range check
+    # Scaling up stays a probability, although 0.5*365 would fail the prob range check
     assert ss.prob(0.5, 'day').to(ss.time.probperyear).value == 1
     assert ss.prob(ss.prob(0.5, 'day'), 'year').value == 1
 
@@ -420,7 +413,7 @@ def test_prob_conversion():
 
 @sc.timer()
 def test_arithmetic():
-    """ The arithmetic table in 02-types.md, row by row, and the check of the slot a typed value lands in """
+    """ The arithmetic of typed values, and the check of the slot a typed value lands in """
     sc.heading('Testing the arithmetic of typed values')
     ops = {'+':operator.add, '-':operator.sub, '*':operator.mul, '/':operator.truediv}
     d, r, f, p = ss.days, ss.perday, ss.time.freqperday, ss.time.probperday
@@ -467,7 +460,6 @@ def test_arithmetic():
     return sir
 
 
-# Run as a script
 @sc.timer()
 def test_bare_units():
     sc.heading('Testing the units of bare numbers beside typed ones')
@@ -501,7 +493,7 @@ def test_bare_units():
         ss.seasonal(peak=142)
     assert np.isclose(ss.seasonal(peak=ss.days(142)).peak_frac, 142/365)
 
-    # A cycle of another period (TY15f): two peaks a year, in a declared rate
+    # A cycle of another period: two peaks a year, in a declared rate
     rains = ss.seasonal(mean=ss.perday(0.2), amplitude=0.5, peak='April', period=ss.years(0.5))
     assert np.allclose(rains.factor(np.array([3.5, 9.5])/12), 1.5) and np.allclose(rains.factor(np.array([0.5, 6.5])/12), 0.5)
     sis = ss.Disease(S >> I @ rains*I, I >> S @ ss.days(10), init_prev=0.1, name='sis')

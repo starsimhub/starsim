@@ -248,16 +248,16 @@ def test_disease_list():
     return sim
 
 
-# %% Acceptance: hpvsim_interventions/port.py, with genotypes as diseases
+# %% HPV vaccination and screening, with genotypes as diseases
 
 def hpv_vaccine(name, genos):
-    """ port.py vaccine(): one product over the genotype diseases, efficacy by genotype (HPVsim's products_vx.csv) times the dose """
+    """ One product over the genotype diseases, efficacy by genotype (HPVsim's products_vx.csv) times the dose """
     rel = dict(bivalent=dict(hpv16=1.0, hpv18=1.0, hi5=0.5), nonavalent=dict(hpv16=1.0, hpv18=1.0, hi5=1.0))[name]
     return ss.Vaccine(efficacy={g:0.95*rel[g.name] for g in genos}, doses=[0.85, 1.0], name=name)
 
 
 def test_hpv_vaccines():
-    sc.heading('Acceptance: bivalent against nonavalent over genotype diseases, two doses 6 months apart (port.py vaccination()), as agents')
+    sc.heading('Testing bivalent against nonavalent over genotype diseases, two doses 6 months apart, as agents')
     def make(product=None, **kwargs):
         genos = [make_hpv('hpv16'), make_hpv('hpv18', beta=1.3), make_hpv('hi5', beta=1.1)]
         progs = []
@@ -279,10 +279,10 @@ def test_hpv_vaccines():
 
 
 def test_hpv_screen_treat():
-    sc.heading('Acceptance: HPV DNA across genotypes, then a treatment visit with a capacity and a queue, then ablation or excision across genotypes (port.py algo_a), as agents')
+    sc.heading('Testing HPV DNA across genotypes, then a treatment visit with a capacity and a queue, then ablation or excision across genotypes, as agents')
     def make(**kwargs):
         genos = [make_hpv('hpv16'), make_hpv('hpv18', beta=1.3)]
-        tx = lambda name, eff: ss.Treatment(moves={g.excised: eff for g in genos}, name=name) # port.py treat_all_genotypes(), with no fan-out
+        tx = lambda name, eff: ss.Treatment(moves={g.excised: eff for g in genos}, name=name) # One treatment over all the genotypes
         hpv_dna = ss.Diagnostic(sensitivity={g[x]:p for g in genos for x,p in dict(I=0.9, CIN=0.95).items()}, specificity=0.97)
         any_ca = genos[0].CA | genos[1].CA
         primary = ss.screen(hpv_dna, who=hpv_dna.since >= ss.years(5), coverage=ss.probperyear(0.3), start=2005, name='primary')

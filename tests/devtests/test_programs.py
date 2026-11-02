@@ -1,5 +1,5 @@
 """
-Test programs: numbers are people, priority, queues, shared resources, stock targets, memory and doses, and steps at the same visit
+Test programs: numbers are people, priority, queues, memory and doses, and steps at the same visit
 """
 
 # %% Imports and settings
@@ -221,10 +221,10 @@ def test_same_visit():
     return sims
 
 
-# %% Acceptance tests: the worked examples of proposal 02, small
+# %% Worked examples, small
 
 def test_hiv_art():
-    sc.heading('Acceptance: HIV ART within a capacity, lowest CD4 first (hiv/port.py art_deliver)')
+    sc.heading('Testing HIV ART within a capacity, lowest CD4 first')
     def make(prioritize=True, **kwargs):
         S, acute, cd4_hi, cd4_mid, cd4_lo, on_art, post_art = ss.states('S acute cd4_hi cd4_mid cd4_lo on_art post_art') # CD4 as states, so it runs both ways
         hiv = ss.Disease(
@@ -253,7 +253,7 @@ def test_hiv_art():
 
 
 def make_sti(name='ng', beta=0.015, init_prev=0.1):
-    """ A bacterial STI as in STIsim (stisim_bacterial/port.py), with treatment as an undriven transition """
+    """ A bacterial STI as in STIsim, with treatment as an undriven transition """
     S, E, A, P, Y, C = ss.states('S E A P Y C')
     return ss.Disease(
         infection = S >> E @ beta*(A + P + Y + C),
@@ -268,7 +268,7 @@ def make_sti(name='ng', beta=0.015, init_prev=0.1):
 
 
 def test_clinic():
-    sc.heading('Acceptance: one clinic for syndromic treatment and screening, symptomatic first (stisim_bacterial), as agents')
+    sc.heading('Testing one clinic for syndromic treatment and screening, symptomatic first, as agents')
     def make(**kwargs):
         ng, ct = make_sti('ng', beta=0.015), make_sti('ct', beta=0.012)
         discharge = ss.Treatment(moves={ng.cure: 0.95, ct.cure: 0.95})

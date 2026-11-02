@@ -54,11 +54,12 @@ Each of the [conversion](user_guide/conversion/index.qmd) pages starts with a sh
 
 ## Library modules
 
-Starsim also comes with a library of example modules, written as code, which are illustrative rather than validated: their parameter values are indicative, and some are placeholders. Use them as starting points to copy and adapt. They are imported with `import starsim.library as ssl`:
+Starsim also comes with a library of example modules, which are illustrative rather than validated: their parameter values are indicative, and some are placeholders. Use them as starting points to copy and adapt. They are imported with `import starsim.library as ssl`:
 
-- **Diseases** (`ssl.diseases`): HIV with CD4 counts (with `ssl.diseases.ART` for treatment), cholera with an environmental reservoir, Ebola with transmission from unburied bodies, measles as an SEIR, and a non-communicable disease.
+- **Diseases** (`ssl.diseases`): HIV with CD4 counts (with `ssl.diseases.ART` for treatment), cholera with an environmental reservoir, Ebola with transmission from unburied bodies, measles as an SEIR, a non-communicable disease, and simple models of malaria, TB, COVID, influenza, RSV, pertussis, dengue, typhoid, polio, syphilis, and gonorrhea.
 - **Networks** (`ssl.networks`): households from survey data, people who move in space and connect to those nearby (`DiskNet`), and theoretical networks such as Erdős–Rényi.
 - **Maternal, newborn, and child health** (`ssl.mnch`): fetal health, neonatal sepsis, and congenital disease.
+- **Health economics** (`ssl.econ`): costs, disability-adjusted life years, discounting, and incremental cost-effectiveness ratios.
 
 [Library modules](user_guide/library_diseases.qmd) in the user guide describes them, and how to use them.
 

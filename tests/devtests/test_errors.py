@@ -342,7 +342,7 @@ def test_trigger(match):
 
 # %% Run as a script
 def test_unknown_par_set():
-    """ MG7: a parameter set before init() that the module never defined raises, with a did-you-mean """
+    """ A parameter set before init() that the module never defined raises, with a did-you-mean """
     net = ss.RandomNet()
     net.pars.n_contact = 4
     with pytest.raises(KeyError, match='did you mean n_contacts'):
@@ -358,7 +358,7 @@ def test_unknown_par_set():
 
 
 def test_rebound_par():
-    """ FP13: a subclass that rebinds a declared parameter to a method or a value raises, since its transitions never read it """
+    """ A subclass that rebinds a declared parameter to a method or a value raises, since its transitions never read it """
     with pytest.raises(ss.CapabilityError, match='as a method'):
         class P(ss.Pregnancy):
             def loss_rate(self, sim, uids):

@@ -3,7 +3,7 @@ Run a Starsim port and compare its results with the original's, exactly or stati
 
 Both sides are long CSV files with columns `time`, `series`, `value`, and either `run`
 (one row per run, for replicates) or `low` and `high` (a summary of many runs, e.g.
-the 5% and 95% quantiles), as written by `lingua_franca_design/examples/tools.py`.
+the 5% and 95% quantiles).
 
     # Run the port's `sim` (or `make_sim()`) from a Python file, 100 times, and write its results
     python compare.py run model.py port.csv --runs 100
@@ -148,7 +148,7 @@ def compare_series(a, b, name_a, name_b, rtol=None, alpha=0.01, shift=0):
     if ka == 'summary': # The original is a mean and a band: the port's mean and the same quantiles of its runs, like for like
         sub = a[a.series == name_a].sort_values('time')
         low, high = [np.interp(t, sub.time.values, sub[k].values) for k in ['low', 'high']]
-        qlow, qhigh = [np.quantile(mb, q, axis=0, method='lower') for q in quantiles] # As tools.py's summaries: the sorted value at int(q*(n - 1))
+        qlow, qhigh = [np.quantile(mb, q, axis=0, method='lower') for q in quantiles] # The sorted value at int(q*(n - 1))
         rtol = 0.1 if rtol is None else rtol
         row.update(mode='band', max_rel=np.abs(ma[0] - mb.mean(axis=0)).max()/scale, low_rel=np.abs(low - qlow).max()/scale, high_rel=np.abs(high - qhigh).max()/scale, tol=rtol)
         row['ok'] = bool(max(row['max_rel'], row['low_rel'], row['high_rel']) <= rtol)
@@ -175,7 +175,7 @@ def compare(file_a, file_b, mapping=None, rtol=None, alpha=0.01, shift=0, plot=N
     """ Compare every matched series of the original (file_a) and the port (file_b) """
     a, b = read(file_a), read(file_b)
     mapping = dict(mapping or {})
-    if not mapping: # Series with the same name, or the same last part (I ~ sir.I is not guessed: give --map)
+    if not mapping: # Series with the same name (I ~ sir.I is not guessed: give --map)
         names_b = set(b.series)
         mapping = {s:s for s in a.series.unique() if s in names_b}
     if not mapping:

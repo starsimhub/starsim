@@ -9,6 +9,8 @@ import numpy as np
 import sciris as sc
 import starsim as ss
 
+__all__ = ['ClusterNet', 'HybridNet']
+
 ss_float = ss.dtypes.float
 ss_int = ss.dtypes.int
 _ = None # Sentinel for "not provided" default arguments
@@ -166,7 +168,7 @@ class HybridNet(ss.Network):
         """ Create the four networks; called automatically when added to a sim """
         p = self.pars
         n = {k: ss.poisson(lam=v) if sc.isnumber(v) else v for k,v in p.contacts.items()}
-        kw = dict(dynamic=p.dynamic, dt=self.t.dt, start=self.t.start, stop=self.t.stop) # Pass the timeline to each network # TODO: make this more general for one module creating another
+        kw = dict(dynamic=p.dynamic, dt=self.t.dt, start=self.t.start, stop=self.t.stop) # Pass the timeline to each network
         rkw = dict(method=p.method, **kw)
 
         def group(name, label, ages):

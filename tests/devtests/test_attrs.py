@@ -8,7 +8,7 @@ import starsim as ss
 
 kw = dict(verbose=0)
 
-# HIV (proposal 01 §7.4), with the parameters of the STIsim port
+# HIV, with the parameters of the STIsim port
 cd4_max, cd4_healthy, art_cd4_growth = 1000, 500, 0.1 # art_cd4_growth is per month
 eff_art, time_to_eff, rel_trans_aids, rel_art_mort = 0.99, 0.5, 8.0, 0.25
 
@@ -175,7 +175,7 @@ def test_attr_in_rate_with_births():
 
 
 def test_attr_by_event():
-    """ TY1: a dict by event records each event's own value, which a dwell time can read (Typhoid's prepatent period by dose) """
+    """ A dict by event records each event's own value, which a dwell time can read (Typhoid's prepatent period by dose) """
     class M(ss.Disease):
         S, R = ss.states('S R')
         E, I = ss.State(keep_time=True), ss.State(keep_time=True)
@@ -202,7 +202,7 @@ def test_attr_by_event():
 
 
 def test_attr_init():
-    """ TY3: an attribute's value before any event can be a distribution or an expression, drawn for each person when they are made """
+    """ An attribute's value before any event can be a distribution or an expression, drawn for each person when they are made """
     class M(ss.Disease):
         S, I = ss.states('S I')
         seroprev = ss.par(0.5)

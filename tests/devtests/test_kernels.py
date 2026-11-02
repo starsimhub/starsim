@@ -160,6 +160,25 @@ def test_restart():
     new = [sim.new(pars=dict(beta=beta)).run().results.sir.I.max() for beta in [0.2, 0.3, 0.4]]
     assert np.allclose(peaks, new) and peaks[0] < peaks[1] < peaks[2]
 
+    # What a restart keeps from the last start is worked out again if a value it reads changes, and only then
+    def splits():
+        S, E, I, R, D = ss.states(5)
+        sir = ss.Disease(S >> E @ ss.par(0.3, name='beta')*I, E >> I @ ss.days(3), ss.Transition(I, [R, D], dur=ss.days(8), p=[ss.par(0.9, name='p_R'), None], name='end'),
+                         init=dict(I=ss.par(0.01, name='I0'), E=0.02), name='sir')
+        return ss.Sim(sir, unit='day', stop=40, verbose=0)
+    kept = splits().init()
+    kept.run()
+    engine = kept.diseases.sir.engine
+    values = dict()
+    for change in [dict(beta=0.4), dict(p_R=0.5), dict(I0=0.05), dict(beta=0.3, p_R=0.9, I0=0.01)]:
+        values = values | change # A restart keeps the values of those before it
+        kept.restart(pars=change).run()
+        assert np.array_equal(kept.results.sir.D, splits().new(pars=values).run().results.sir.D), f'A restart with {values} differs from a new sim'
+    kept.restart()
+    start = engine.start_y
+    assert kept.restart(pars=dict(beta=0.2)).run() and engine.start_y is start, 'A value the start does not read should keep it'
+    assert kept.restart(pars=dict(p_R=0.7)).run() and engine.start_y is not start, 'A value the branches read should not keep it'
+
     # Many runs are restarts of one sim
     base = ss.Sim(make(), solver='binomial', **pars, **kw)
     msim = base.run(n_runs=20)

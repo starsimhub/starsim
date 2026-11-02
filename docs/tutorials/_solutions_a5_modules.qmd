@@ -93,7 +93,7 @@ With half of the 4 contacts at random, the epidemic is almost the same as with a
 
 **Q: Write an `SIRS` in which immunity is lost with a constant chance each step, using an `ss.bernoulli` distribution in `step_state()`. Does it give the same epidemic?**
 
-A: A constant chance each step gives an exponential (or, in whole steps, geometric) duration of immunity, with the same mean as `ss.expon(scale=ss.days(180))` if the chance per day is 1/180, so the waning works the same way. Run with daily steps, the first wave is smaller than in the tutorial, which used steps of a quarter of a day, for the reason given there:
+A: A constant chance each step gives an exponential (or, in whole steps, geometric) duration of immunity, with the same mean as `ss.expon(scale=ss.days(180))` if the chance per day is 1/180, so the waning works the same way, and the epidemic is the same up to chance:
 
 ```{python}
 class SIRS(ssl.AgentSIR):

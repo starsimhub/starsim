@@ -14,7 +14,7 @@ published with the docs (e.g. <https://starsim.org/v4/llms.txt>):
 This is a docs build tool: nothing here is part of the Starsim package itself.
 
 The artifacts are not committed to the repository: they are generated when the
-docs are built. To generate them manually::
+docs are built. To generate them manually:
 
     cd docs && python make_api.py
 """
@@ -62,6 +62,9 @@ links = [ # Extra pointers, following the llms.txt convention
     ('Sciris', 'https://docs.sciris.org/llms.txt', 'the equivalent index for Sciris (`sc`), which Starsim uses extensively'),
 ]
 
+source_url = 'https://raw.githubusercontent.com/starsimhub/starsim/v4/docs' # V4-PREVIEW: use the tag of the version, f'.../v{ss.__version__}/docs', so each index links its own version's pages
+guide_sections = ['tutorials', 'user_guide'] # The parts of the site to list, by sidebar and folder; a page's source is Markdown, so that is what agents are linked to
+
 # The order the modules are listed in, from most to least commonly used; anything else is appended alphabetically
 module_titles = sc.obj(
     sim           = 'Simulations',
@@ -97,6 +100,7 @@ module_order = list(module_titles.keys())
 # The library subpackages, each listed after the core modules
 libraries = sc.obj(
     diseases = 'Library: diseases',
+    econ     = 'Library: health economics',
     mnch     = 'Library: maternal, newborn, and child health',
     networks = 'Library: networks',
 )
@@ -308,6 +312,7 @@ def make_index():
         description = description,
         notes       = notes,
         links       = [dict(title=title, url=url, description=desc) for title,url,desc in links],
+        guide       = make_guide(),
         n_entries   = len(entries),
         aliases     = dict(sorted(aliasmap.items())),
         entries     = entries,
@@ -333,6 +338,46 @@ def _moduletitle(module):
         return f'{module_titles[module]} (ss.{module})'
     else:
         return module_titles.get(module, module)
+
+
+def _pagetext(path):
+    """ The title and summary of a page: its `description` if it has one, or else its first sentence """
+    text = path.read_text(encoding='utf-8')
+    _, front, body = text.split('---\n', 2)
+    meta = sc.loadyaml(string=front)
+    summary = meta.get('description', '')
+    body = re.sub(r'^(```|:::).*?^\1.*?$', '', body, flags=re.M | re.S) # Without code and callouts
+    if not summary:
+        paragraph = next((line for line in body.splitlines() if re.match(r'[A-Za-z`*\[]', line) and not line.startswith('* ')), '')
+        paragraph = re.sub(r'!?\[([^\]]*)\]\([^)]*\)', r'\1', paragraph) # Links, as their text
+        summary = re.split(r'(?<=[.:?!])\s', paragraph)[0].rstrip(':') # Up to the end of the first sentence
+    return meta.get('title', path.stem), summary
+
+
+def _guidepages(contents, folder):
+    """ The pages within a sidebar's contents, in order, including those in nested sections """
+    pages = []
+    for item in sc.tolist(contents):
+        if isinstance(item, dict):
+            pages += _guidepages(item.get('contents', []), folder)
+            item = item.get('href', '')
+        if isinstance(item, str) and item.startswith(f'{folder}/') and item.endswith('.qmd') and item not in pages:
+            pages.append(item)
+    return pages
+
+
+def make_guide():
+    """ List the tutorials and user guide, from the site's sidebars, so that the index is a map of the prose docs as well as of the API """
+    sidebars = sc.loadyaml(thisdir/'_quarto.yml')['website']['sidebar']
+    guide = []
+    for section in guide_sections:
+        sidebar = next(bar for bar in sidebars if bar['id'] == section)
+        pages = []
+        for page in _guidepages(sidebar['contents'], section):
+            title, summary = _pagetext(thisdir/page)
+            pages.append(dict(title=title, url=f'{source_url}/{page}', summary=summary))
+        guide.append(dict(title=section.replace('_', ' ').capitalize(), pages=pages))
+    return guide
 
 
 def make_llms_txt(index=None, examples=False):
@@ -361,6 +406,11 @@ def make_llms_txt(index=None, examples=False):
     for link in index['links']:
         lines += [f'- [{link["title"]}]({link["url"]}): {link["description"]}']
     lines += ['']
+
+    for section in index['guide']:
+        lines += [f'## {section["title"]}', '']
+        lines += [f'- [{page["title"]}]({page["url"]}): {page["summary"]}' for page in section['pages']]
+        lines += ['']
 
     bymodule = {}
     for entry in index['entries']:

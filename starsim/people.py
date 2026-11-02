@@ -43,9 +43,10 @@ class LazyPeople:
             name (str): the name of the property
             default (float): the value for everyone if nothing adds the property
 
-        **Example**::
-
+        Example:
+            ```python
             onset = S >> D @ ss.peryear(0.01)*(1 + 0.5*ss.ppl.get('unstable_housing', 0))
+            ```
         """
         return ss.conditions.Cond('people', name, default)
 
@@ -57,7 +58,7 @@ ppl = LazyPeople()
 
 class AgentScale(ss.FloatArr):
     """ The number of people each agent stands for relative to the others (`people.scale`); setting it other than 1 makes results, and the counts in a declared model's rates (`I.n`, `I.frac`, and the share infectious in a transmission), add up the agents' weights """
-    weighted = False # Set once any agent's scale is set other than 1, so that results are worked out as before until then
+    weighted = False # Set once any agent's scale is set other than 1, so that results are unweighted until then
 
     def __setitem__(self, key, value):
         super().__setitem__(key, value)
@@ -89,13 +90,13 @@ class MadeOnUse:
 class People:
     """
     A class to perform all the operations on the people
-    This class is usually created automatically by the sim. The only required input
-    argument is the population size, but typically the full parameters dictionary
-    will get passed instead since it will be needed before the People object is
-    initialized.
+
+    This class is usually created automatically by the sim; the only required input
+    argument is the population size. In a compartmental run, each row is a group of
+    people rather than an agent.
 
     Note that this class handles the mechanics of updating the actual people,
-    as well as the additional housekeeping methods (saving, loading, exporting, etc.).
+    as well as the additional housekeeping methods (exporting, plotting, etc.).
 
     Args:
         n_agents (int): the initial number of agents in the model
@@ -134,9 +135,9 @@ class People:
         # The four fundamental arrays (auids, uid, slot, and parent) are made on first use: see make_uids()
 
         # Handle additional states
-        extra_states = sc.promotetolist(extra_states)
+        extra_states = sc.tolist(extra_states)
         states = [
-            ss.BoolState('alive', default=True),  # Time index for death
+            ss.BoolState('alive', default=True),  # Whether the agent is alive
             ss.FloatArr('age', default=self.get_age_dist(age_data)),  # NaN until conceived
             ss.BoolState('female', default=ss.bernoulli(name='female', p=p_female)),
             ss.TimeArr('ti_dead'),  # Time index for death
@@ -384,7 +385,7 @@ class People:
         Args:
             age_data: An array/series/dataframe with an index corresponding to age values, and a value corresponding to histogram counts
                          or relative proportions. A distribution will be estimated based on the histogram. The histogram will be
-                         assumed to correspond to probability densitiy if the sum of the histogram values is equal to 1, otherwise
+                         assumed to correspond to probability density if the sum of the histogram values is equal to 1, otherwise
                          it will be assumed to correspond to counts.
 
         Note: `age_data` can also be provided as a string (interpreted as a filename).
@@ -393,7 +394,7 @@ class People:
         with no named population.
 
         Returns:
-            An [`ss.Dist`](`starsim.distributions.Dist`) instance that returns an age for newly created agents
+            An `ss.Dist` instance that returns an age for newly created agents
         """
         if age_data is None:
             age_data = ss.data.age('world')
@@ -426,7 +427,7 @@ class People:
     def link_sim(self, sim, init=False):
         """ Initialization """
         if self.initialized:
-            errormsg = 'Cannot re-initialize a People object directly; use sim.init(reset=True)'
+            errormsg = 'Cannot re-initialize a People object directly; use sim.new() to make the sim again'
             raise RuntimeError(errormsg)
         self.sim = sim # Store the sim
         for arr in [self.ti_dead, self.ti_removed]:
@@ -445,7 +446,7 @@ class People:
         For a list of all states, see `People.states`.
         """
         # Only include BoolStates that belong directly to People, not module states
-        # Module states have combined names like "sir.susceptible" with a dot
+        # Module states have combined names like "sir.S" with a dot
         return [state for key, state in self.states.items()
                 if isinstance(state, ss.BoolState) and '.' not in key]
 
@@ -490,8 +491,8 @@ class People:
         This method is used to add a module to the People. It will register any module states with this
         people instance for dynamic resizing, and expose the module via People, in two ways
 
-        - `People.<module>` will be a reference to the module itself, enabling access via `people.hiv.susceptible`
-        - `People.states['<module>.<state>']` will be a reference to the state, enabling access via `people.states['hiv.susceptible']`
+        - `People.<module>` will be a reference to the module itself, enabling access via `people.sir.S`
+        - `People.states['<module>.<state>']` will be a reference to the state, enabling access via `people.states['sir.S']`
 
         Args:
             module (Module): the module to add
@@ -510,7 +511,7 @@ class People:
                 state.link_people(self)
                 if isinstance(state, ss.TimeArr) and state.t is None: # Times as steps of the module's timeline (see due())
                     state.t = module.t
-                combined_name = module.name + '.' + state.name  # We will have to resolve how this works with multiple instances of the same module (e.g., for strains). The underlying machinery should be fine though, with People._states being flat and keyed by ID
+                combined_name = module.name + '.' + state.name
                 self.states[combined_name] = state # Register the state on the user-facing side using the combined name. Within the original module, it can still be referenced by its original name
         return
 
@@ -528,11 +529,12 @@ class People:
         Returns:
             The property's array (the one given, or the one added before)
 
-        **Example**::
-
+        Example:
+            ```python
             def init_pre(self, sim):
                 super().init_pre(sim)
                 self.housing = sim.people.add_state(ss.BoolArr('housing', default=ss.bernoulli(0.8)))
+            ```
         """
         name = state.name
         if name in self.states:
@@ -659,7 +661,7 @@ class People:
             sim.groups.set_sex(new_uids)
             if not placed and getattr(sim.groups, 'vals_set', False) and sim.groups.strats: # E.g. newborns from ss.Births (or ss.Pregnancy's before the start), who would otherwise all be at the first level
                 sim.groups.place_new(new_uids)
-            if not placed and age is None: # Made by code that sets their age (and the rest) itself afterwards, as Starsim 3's pregnancy did: their traits are drawn at the next step, from what it set (FP91: a fetus's trait by age was drawn from a default adult age)
+            if not placed and age is None: # Made by code that sets their age (and the rest) itself afterwards, so their traits are drawn at the next step, from what it set (rather than, say, a fetus's trait by age from a default adult age)
                 self.untraited.append((start_uid, stop_uid))
             elif not placed: # Their traits (ss.attr(dist)), as states get their defaults; people placed by a declared module get them there (see ss.solvers.Agents.add_people())
                 for mod in sim.declared:
@@ -713,8 +715,7 @@ class People:
         call this method, with itself as the cause.
 
         The actual deaths are resolved after modules have all run, but before analyzers. That way,
-        regardless of whether removing dead agents is enabled or not, analyzers will be able to
-        see and record outcomes for agents that died this timestep.
+        analyzers will be able to see and record outcomes for agents that died this timestep.
 
         Each person dies once, of one cause: if several modules request the death of the same person
         in the same step, one of them is chosen at random (whatever the order of the modules, with
@@ -727,9 +728,6 @@ class People:
             uids: Agent IDs to request deaths for
             cause (Module/str): what they die of: a module (by its name) or a name (default: none)
             hazard (float/array): the hazard of this death, one number or one per agent (in any unit, the same for every module, e.g. per year), to weight the choice of cause among the claims on the same person in the step (e.g. `dis.death.hazard(uids)` for a declared transition)
-
-        Returns:
-            UIDs of agents that have been scheduled to die on this timestep
         """
         self.ti_dead[uids] = self.sim.ti
         if len(uids):
@@ -769,7 +767,7 @@ class People:
         people, start, counts = np.unique(uids, return_index=True, return_counts=True)
         pick = start.copy()
         several = counts > 1
-        if several.any(): # One of the causes: in proportion to their hazards if every claim on the person gave one (MG8), else each equally likely
+        if several.any(): # One of the causes: in proportion to their hazards if every claim on the person gave one, else each equally likely
             u = self._cause_dist.rvs(ss.uids(people[several]))
             if np.isnan(hazards).all():
                 pick[several] += np.minimum((u*counts[several]).astype(int), counts[several] - 1)
@@ -1048,7 +1046,7 @@ class People:
         ax.barh(y_pos,  m_vals, color='skyblue', label='Male')
 
         # Annotate
-        y_labels = [f'{bins[i]:n}–{bins[i+1]-1:n}' if i < len(bins)-1 else f'{bins[i]:n}+' for i in range(len(bins)-1)]
+        y_labels = [f'{bins[i]:n}–{bins[i+1]-1:n}' for i in range(len(bins)-1)]
         ax.set_yticks(y_pos)
         ax.set_yticklabels(y_labels)
         ax.set_xlabel(xlabel)
@@ -1073,7 +1071,7 @@ class People:
         Examples:
             ```python
             sim = ss.Sim(diseases='sir', networks='random', n_agents=100).run()
-            print(sim.people.person(5)) # The 5th agent in the simulation
+            print(sim.people.person(5)) # The agent with UID 5
             ```
         """
         person = Person()
@@ -1103,10 +1101,11 @@ def people(place, year=None, n_agents=None, revision=None):
     Returns:
         An `ss.People`, with `ppl.named` saying where it came from
 
-    **Examples**:
-
+    Examples:
+        ```python
         sim = ss.Sim(sir, people=ss.people('Kenya', year=2024), networks=ss.contacts('Kenya'))
         ss.people('NG').named.total # The population of Nigeria in 2024
+        ```
     """
     pop = ss.data.population(place, year=year, revision=revision)
     ages = np.array(ss.data.age_edges(pop.index))
@@ -1123,7 +1122,7 @@ class Person(sc.obj):
     Examples:
         ```python
         sim = ss.Sim(diseases='sir', networks='random', n_agents=100).run()
-        print(sim.people.person(5)) # The 5th agent in the simulation
+        print(sim.people.person(5)) # The agent with UID 5
         ```
     """
     def to_df(self):

@@ -99,10 +99,11 @@ def load_summer2(source, pars=None, verbose=None):
     Returns:
         An `ss.Sim`, with `sim.imported` saying how it was read and what was not translated
 
-    **Example**:
-
+    Example:
+        ```python
         # In the summer2 environment: python summer2.py my_model.py:build_model model.json
         sim = ss.import_from('model.json', format='summer2')
+        ```
     """
     d = read(source, pars=pars)
     values = {**d.get('parameters', {}), **(pars or {})}
@@ -306,7 +307,6 @@ def load_summer2(source, pars=None, verbose=None):
 
 def arithmetic(text, get):
     """ Evaluate arithmetic of named outputs (e.g. "(a / b)"), allowing nothing else """
-    import ast
     def ev(node):
         if isinstance(node, ast.Constant) and sc.isnumber(node.value):
             return node.value

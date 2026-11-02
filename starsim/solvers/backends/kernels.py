@@ -300,7 +300,7 @@ def plain_seconds(p, y, npts, solver, n_sub=1):
     About how long a run would take as plain Python, in seconds, from the program's size alone, so that it is the same
     for a model whatever has run before and whatever else the machine is doing: 10 µs each time the rates are worked
     out (see `evals()`), plus 0.6 µs for each operation that takes (see `work()`); the exact solver takes about one
-    event for each person and flow. Measured once (W8, 2026-10-25) on 13 plain runs of the ODE (declared SIRs with 1
+    event for each person and flow. Measured once (2026-10-25) on 13 plain runs of the ODE (declared SIRs with 1
     to 100 groups, over 20 and 50 places, measles metapop over 260 districts, MEmilio's 50 counties, two SEIRs with
     stages tracked jointly, a stiff SIS, and an SIS with aging), it is within 0.75 to 1.6 times the time taken, and
     0.35 for the SIS with aging, whose epidemic needs more substeps than its rates at the start (see `substeps()`):
@@ -320,7 +320,7 @@ def compiled_seconds(p, y, npts, solver, n_sub=1):
     """
     About how long a run of the ODE would take in the compiled kernels, in seconds, from the program's size alone (as
     `plain_seconds()` is, and never timed): 0.5 ms a run, plus 0.1 µs each time the rates are worked out (see
-    `evals()`) and 2 ns for each operation that takes (see `work()`). Measured once (W8, 2026-10-25, on a quiet machine)
+    `evals()`) and 2 ns for each operation that takes (see `work()`). Measured once (2026-10-25, on a quiet machine)
     on 24 runs (the models of `plain_seconds()` and MEmilio's 100 to 400 counties, some with Euler steps), it is within
     0.93 to 1.6 times the time taken for the runs of more than 0.05 s (260 districts over 16 years: 3.7 s
     against 4.0 s; MEmilio's 400 counties: 0.95 s against 0.62 s), and 0.34 to 1.4 times for the shorter ones (the
@@ -386,9 +386,10 @@ def compile(verbose=True):
     `NUMBA_CACHE_DIR` if it is set). Until the kernels are compiled, small runs are taken as plain Python: see `ss.options.kernels`. With the
     Rust kernels in use, there is nothing to compile: they are compiled already. To see which is the case, use `ss.compile_status()`.
 
-    **Example**:
-
+    Example:
+        ```python
         ss.compile()
+        ```
     """
     if ss.solvers.backends.rust.on:
         if verbose:
@@ -414,7 +415,7 @@ def compile(verbose=True):
         y, p = engine.y.copy(), engine.program # And those called on their own
         apply_events(engine.make_rng(), y, engine.register, 0, True)
         apply_shifts(engine.make_rng(), y, engine.shifts, 0, True, np.zeros((0, 2, y.shape[1])))
-        settle_places(y, p, engine.dt, np.zeros((p.n_trans + p.n_movers, y.shape[1])))
+        settle_places(y, p, workspace(y, p), engine.dt, np.zeros((p.n_trans + p.n_movers, y.shape[1])))
         make('abm').run() # The passes over the agents (ss.solvers.backends.passes), which are cached apart from the kernels
         for sim in typical_sims(): # And the rest of what sims with agents compile on their first run
             sim.run()
@@ -433,9 +434,10 @@ def compile_status():
         An `sc.obj` of `engine` ('rust', 'numba', or 'python': what runs the kernels), `compiled` (True only if they run
         at full speed from the first run, from the current code), `missing` (the parts for which they don't), and `summary` (a line saying so)
 
-    **Example**:
-
+    Example:
+        ```python
         print(ss.compile_status().summary)
+        ```
     """
     from . import passes
     rust = ss.solvers.backends.rust
@@ -929,7 +931,7 @@ def binary(op, a, b):
 @jit
 def evaluate(y, t, consts, out, grouped):
     """
-    Every value of a tape (see `ss.solvers.Tape`) at the compartments y, by group, into out (values by groups); grouped is set to whether each differs by group
+    Every value of a tape (see `Tape`) at the compartments y, by group, into out (values by groups); grouped is set to whether each differs by group
 
     Each entry is a parameter's value (CONST, a row of consts, which differs by group if its row of t.const_grouped says so),
     a count (COUNT, TOTAL, FRAC: in the same place, the whole population, and as a share of the people in the same place),
@@ -976,19 +978,26 @@ def evaluate(y, t, consts, out, grouped):
 
 
 @jit
-def place_rates(ys, p, a, b, rates, stack, expo):
-    """
-    The rate of every flow for the groups of one place (p.pl_groups[a:b]), when people mix only within their place
-
-    The same arithmetic as in `step()`, for one place: exposure is the prevalence in the place, and
-    a count is the number in the place.
-    """
-    nf = len(p.src)
+def place_people(ys, p, a, b):
+    """ The number of people in the groups of one place """
     n = 0.0
     for j in range(a, b):
         g = p.pl_groups[j]
         for c in p.people:
             n += ys[c, g]
+    return n
+
+
+@jit
+def place_rates(ys, p, a, b, rates, stack, expo, only_det=False):
+    """
+    The rate of every flow for the groups of one place (p.pl_groups[a:b]), when people mix only within their place, or only of the flows of counts (see `settle()`)
+
+    The same arithmetic as in `step()`, for one place: exposure is the prevalence in the place, and
+    a count is the number in the place.
+    """
+    nf = len(p.src)
+    n = place_people(ys, p, a, b) if len(p.exp_set) else -1.0 # Otherwise worked out if a share needs it
     for e in range(len(p.exp_set)):
         s = p.exp_set[e]
         if s < 0:
@@ -1004,6 +1013,8 @@ def place_rates(ys, p, a, b, rates, stack, expo):
         for t in range(len(p.sizes)):
             expo[e] += p.contacts[0, t, 0]*prev
     for f in range(nf):
+        if only_det and not p.det[f]:
+            continue
         for j in range(a, b):
             g = p.pl_groups[j]
             rates[f, g] = p.fixed[f, g]
@@ -1032,6 +1043,8 @@ def place_rates(ys, p, a, b, rates, stack, expo):
                     for jj in range(a, b):
                         for i in range(p.set_starts[arg], p.set_starts[arg+1]):
                             v += ys[p.set_comps[i], p.pl_groups[jj]]
+                    if op == FRAC and n < 0:
+                        n = place_people(ys, p, a, b)
                     stack[top, 0] = leaf_share(op, v, n)
                 elif op == GROUP:
                     top += 1
@@ -1057,7 +1070,7 @@ def place_rates(ys, p, a, b, rates, stack, expo):
 
 @kernel(error_model='python', inline='always') # Inlined, as it is called for every event of the exact solver by place
 def uniform(z):
-    """ A number uniform on (0, 1) from the counter of a random stream, which the caller moves on by `golden` before each number: Starsim's hash (`draws.mix()`), with the bits taken to the middle of their step rather than as `draws.uniform()` takes them, so the exact solver's streams are as they were """
+    """ A number uniform on (0, 1) from the counter of a random stream, which the caller moves on by `golden` before each number: Starsim's hash (`draws.mix()`), with the bits taken to the middle of their step rather than as `draws.uniform()` takes them """
     return (float(draws.mix(z) >> np.uint64(11)) + 0.5)/9007199254740992.0
 
 
@@ -1503,23 +1516,22 @@ def wake(w):
 
 
 @jit
-def settle_places(y, p, dt, flows):
+def settle_places(y, p, w, dt, flows):
     """
     For the exact solver by place: the counts settled over the step, with the people as they are at its end, after the events of a movement register
 
     As SimInf updates its continuous state after each day's scheduled events, so that people
     who move count towards the place they arrive at; see `gillespie_places()` and `settle()`.
     """
-    w = workspace(y, p)
     expo = np.zeros(max(len(p.exp_set), 1))
     for i in range(len(p.pl_starts) - 1):
-        place_rates(y, p, p.pl_starts[i], p.pl_starts[i+1], w[0], w[2], expo)
-    settle(y, p, w[0], dt, flows)
+        place_rates(y, p, p.pl_starts[i], p.pl_starts[i+1], w[0], w[2], expo, True)
+    settle(y, p, w, dt, flows)
     return
 
 
 @jit
-def settle(y, p, rates, dt, flows):
+def settle(y, p, w, dt, flows):
     """
     For the solvers that draw whole events: the flows of states that are not people (a reservoir), as expected values over a time dt
 
@@ -1528,8 +1540,9 @@ def settle(y, p, rates, dt, flows):
     that is filled at a steady rate and decays settles where it would in continuous time. As
     in the ODE, the step is split into enough substeps that no count turns over by more than
     a quarter in one: in one step, RK4 is unstable once a count turns over by more than 2.8,
-    and mosquitoes that live 10 days died out at a 30-day step (MA6).
+    and mosquitoes that live 10 days would die out at a 30-day step.
     """
+    rates = w[0]
     fastest = 0.0
     for f in range(len(p.src)):
         if p.det[f] and p.src[f] >= 0:
@@ -1537,20 +1550,42 @@ def settle(y, p, rates, dt, flows):
                 fastest = max(fastest, rates[f, g])
     n_sub = max(1, int(np.ceil(fastest*dt/0.25)))
     for sub in range(n_sub):
-        settle_step(y, p, rates, dt/n_sub, flows)
+        settle_step(y, p, w, dt/n_sub, flows)
     return
 
 
 @jit
-def settle_step(y, p, rates, dt, flows):
-    """ For `settle()`: one RK4 step of the counts over a time dt """
+def settle_step(y, p, w, dt, flows):
+    """ For `settle()`: one RK4 step of the counts over a time dt, in the compartments and flows that the counts' flows reach, since a step this is called on takes no others """
     nc, ng = y.shape
     nf = len(p.src)
     nflows = flows.shape[0]
-    k = np.zeros((4, nc, ng))
-    kf = np.zeros((4, nflows, ng))
-    y0 = y.copy()
-    yt = y.copy()
+    rates, k, kf, yt = w[0], w[5], w[6], w[7]
+    comps = np.zeros(nc, dtype=np.bool_)
+    rows = np.zeros(nflows, dtype=np.bool_)
+    for f in range(nf):
+        if p.det[f]:
+            if p.src[f] >= 0:
+                comps[p.src[f]] = True
+            if p.named[f]:
+                rows[p.index[f]] = True
+            for t in range(p.tgt_starts[f], p.tgt_starts[f+1]):
+                comps[p.tgt_comp[t]] = True
+                if p.tgt_rec[t] >= 0:
+                    rows[p.tgt_rec[t]] = True
+            for t in range(p.crd_starts[f], p.crd_starts[f+1]):
+                rows[p.crd_index[t]] = True
+    for c in range(nc):
+        if comps[c]:
+            for g in range(ng):
+                yt[c, g] = y[c, g]
+                for stage in range(4):
+                    k[stage, c, g] = 0.0
+    for r in range(nflows):
+        if rows[r]:
+            for g in range(ng):
+                for stage in range(4):
+                    kf[stage, r, g] = 0.0
     for stage in range(4):
         for f in range(nf):
             if not p.det[f]:
@@ -1581,14 +1616,17 @@ def settle_step(y, p, rates, dt, flows):
         if stage < 3:
             ahead = dt if stage == 2 else dt/2
             for c in range(nc):
-                for g in range(ng):
-                    yt[c, g] = max(y0[c, g] + ahead*k[stage, c, g], 0.0)
+                if comps[c]:
+                    for g in range(ng):
+                        yt[c, g] = max(y[c, g] + ahead*k[stage, c, g], 0.0)
     for c in range(nc):
-        for g in range(ng):
-            y[c, g] = max(y0[c, g] + dt/6*(k[0, c, g] + 2*k[1, c, g] + 2*k[2, c, g] + k[3, c, g]), 0.0)
-    for f in range(nflows):
-        for g in range(ng):
-            flows[f, g] += dt/6*(kf[0, f, g] + 2*kf[1, f, g] + 2*kf[2, f, g] + kf[3, f, g])
+        if comps[c]:
+            for g in range(ng):
+                y[c, g] = max(y[c, g] + dt/6*(k[0, c, g] + 2*k[1, c, g] + 2*k[2, c, g] + k[3, c, g]), 0.0)
+    for r in range(nflows):
+        if rows[r]:
+            for g in range(ng):
+                flows[r, g] += dt/6*(kf[0, r, g] + 2*kf[1, r, g] + 2*kf[2, r, g] + kf[3, r, g])
     return
 
 
@@ -1775,7 +1813,7 @@ def convey(rng, y, p, w, flows, release):
 @jit
 def certain(rng, y, p, w, rates, flows, move, solver):
     """
-    For `step()`, when a flow has an infinite rate (a probability of 1 over the step, FP1): everyone in its compartment leaves by it
+    For `step()`, when a flow has an infinite rate (a probability of 1 over the step): everyone in its compartment leaves by it
 
     At the start of each substep (`move`), the whole compartment moves, as a transfer: shared equally between
     the flows with an infinite rate out of it (a draw for the stochastic solvers), into their targets as the flows
@@ -2143,7 +2181,7 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, varying):
                         h = min(end - elapsed, 0.03/max(fastest, 1e-12))
                     draw(rng, y, p, w, h, flows, solver == 3)
                 if p.has_det and not by_place: # By place, the counts are settled after the step's events: see settle_places()
-                    settle(y, p, rates, h, flows)
+                    settle(y, p, w, h, flows)
                 elapsed += h
                 if pending and elapsed >= dt/2 + (-1e-12 if solver == 4 else 1e-12): # At it for the exact solver; otherwise after the first draws that pass it (see convey())
                     convey(rng, y, p, w, flows, True)
@@ -2225,13 +2263,13 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, varying):
                 for c in range(nc):
                     for g in range(ng):
                         everyone += y[c, g]
-                least = 1e-9*everyone # Not a compartment that is only starting to fill, whose growth follows another's: of everyone, not of its group (TR4: a group of 1e-13 people, of a strain only starting to emerge, took 4 million substeps a step)
-                for g in range(ng): # Not through people moving in from other groups (a cohort moving through the stages of a box, MS6), which are linear and as fast as the movers' rates, which the substeps allow for already
+                least = 1e-9*everyone # Not a compartment that is only starting to fill, whose growth follows another's: of everyone, not of its group (a group of 1e-13 people, of a strain only starting to emerge, would take millions of substeps a step)
+                for g in range(ng): # Not through people moving in from other groups (a cohort moving through the stages of a box), which are linear and as fast as the movers' rates, which the substeps allow for already
                     for c in range(nc):
                         gain = dy[0, c, g] - (moved_in[c, g] if len(moved_in) else 0.0)
                         if gain > 0 and y[c, g] > least:
                             growing = max(growing, gain/y[c, g])
-                    for e in range(len(p.set_starts) - 1): # Nor a count that a rate reads, over all its compartments (RF1: the first slot of a conveyor fills from empty in each step, so the people infectious, I.n, grew tenfold in a step taken whole)
+                    for e in range(len(p.set_starts) - 1): # Nor a count that a rate reads, over all its compartments (the first slot of a conveyor fills from empty in each step, so the people infectious, I.n, can grow tenfold in a step taken whole)
                         tot = 0.0
                         grow = 0.0
                         for k in range(p.set_starts[e], p.set_starts[e+1]):
@@ -2492,7 +2530,7 @@ def time_point(rng, y, p, w, ti, row, dt, n_sub, solver, flows, tables, reg, sh,
         if solver == 4 and p.local:
             touch(reg, ti, p.places, w)
     if solver == 4 and p.local and p.has_det:
-        settle_places(y, p, dt, flows)
+        settle_places(y, p, w, dt, flows)
     return short
 
 
@@ -2650,7 +2688,7 @@ def advance(rngs, p, ys, first, last, dt, start, end, solver, n_sub, fixed, mult
                 if solver == 4 and p.local:
                     touch(reg, ti, p.places, w)
             if solver == 4 and p.local and p.has_det:
-                settle_places(y, p, dt, now)
+                settle_places(y, p, w, dt, now)
             for s in range(stocks.shape[2]):
                 for g in range(stocks.shape[3]):
                     stocks[r, ti, s, g] = 0
@@ -2793,8 +2831,8 @@ def fork_unsafe():
 def start_method():
     """
     How to start the workers of `ss.parallel()` and of a calibration: on Linux, by fork, the fastest, unless this process
-    has started threads that a fork can deadlock on (see `fork_unsafe()`); then by forkserver, whose workers start clean
-    (W17). Elsewhere (macOS, Windows), as the platform does. Python 3.14 made forkserver the default on Linux, so fork is
+    has started threads that a fork can deadlock on (see `fork_unsafe()`); then by forkserver, whose workers start clean.
+    Elsewhere (macOS, Windows), as the platform does. Python 3.14 made forkserver the default on Linux, so fork is
     asked for by name.
     """
     if sys.platform == 'darwin' or 'fork' not in mp.get_all_start_methods(): # Fork is not safe on macOS, and Windows has none

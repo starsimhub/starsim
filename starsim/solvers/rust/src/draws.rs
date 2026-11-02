@@ -95,13 +95,13 @@ pub fn mix(z: u64) -> u64 {
     z ^ (z >> 31)
 }
 
-/// The key of a stream of uniforms, from a seed and the index of a call (as `ss.distributions.hash_uniforms()`): the bits of the Numba one's int64
+/// The key of a stream of uniforms, from a seed and the index of a call (as `ss.dists.hash_uniforms()`): the bits of the Numba one's int64
 #[inline(always)]
 pub fn key(seed: i64, ind: i64) -> u64 {
     mix((seed as u64 ^ (ind as u64).wrapping_mul(GOLDEN)).wrapping_add(GOLDEN))
 }
 
-/// Uniform i in (0, 1) of the stream with key k (as `ss.distributions.hash_uniforms()` gives for slot i)
+/// Uniform i in (0, 1) of the stream with key k (as `ss.dists.hash_uniforms()` gives for slot i)
 #[inline(always)]
 pub fn uniform(k: u64, i: u64) -> f64 {
     ((mix(i.wrapping_add(k).wrapping_mul(GOLDEN)) >> U11) as f64).max(0.5)*INV53

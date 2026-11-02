@@ -243,13 +243,9 @@ class Mixing(Telling):
         if sexual: # Among people who take part, after their debut (on ss.SexualNet): one partner each, or the target
             part = p.participation.pars.get('p', 1.0) if isinstance(p.get('participation'), ss.bernoulli) else 1.0
             debut = self.mean(p.debut, ss.years) if 'debut' in p else 0 # An age, in years
-            pyramid = ss.data.age_pyramid(sim)
-            if pyramid is not None:
-                ages, counts = pyramid
-                ends = np.append(ages, ages[-1] + 5)
-                older = 1 - np.interp(debut, ends, np.append(0, np.cumsum(counts))/np.sum(counts))
-            else: # Agents' ages with no age data: uniform from 0 to 60
-                older = np.clip(1 - debut/60, 0, 1)
+            ages, counts = ss.data.age_pyramid(sim)
+            ends = np.append(ages, ages[-1] + 5)
+            older = 1 - np.interp(debut, ends, np.append(0, np.cumsum(counts))/np.sum(counts))
             per = [1.0] if p.get('n_contacts') is None else [mean(p.n_contacts[g]) for g in net.groups] if isinstance(p.n_contacts, dict) else [mean(p.n_contacts)] # One target, or one for each side
             k = float(part)*older*np.array(per)[cell_side if len(per) > 1 else np.zeros(size, dtype=int)]
         elif by is not None:

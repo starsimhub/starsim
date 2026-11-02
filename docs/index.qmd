@@ -1,4 +1,5 @@
 ---
+description-meta: "A fast, flexible disease modeling framework, from compartments to agents"
 authorship:
   human: 90
   ai: 10

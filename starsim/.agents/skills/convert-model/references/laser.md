@@ -34,12 +34,12 @@ LASER (`laser-core`, `laser-generic`, and the measles-specific `laser-measles`) 
 - **The original's order of components changes the durations.** With `Exposed` before `Infectious` in the component list, someone who becomes infectious counts down that same day, so the infectious period is a day shorter than written (`round(normal(8, 2)) − 1`). Check the component order and set the Starsim duration to what the original actually does; say so in a comment.
 - **Bare stops are in the sim's unit.** Write `unit='day', stop=years*365`.
 - **Speed.** Starsim is much slower per agent than LASER (about 20 to 110 ns per agent-step against 1 ns, on one core against all of them). Run a scaled-down version (fewer places, fewer years, or `n_agents` below the population) for the comparison, and run the original at the same scale.
-- **Deaths outside a declared transition** (the life-table function) appear in `sim.results.new_deaths`, not in the disease's results.
+- **Deaths outside a declared transition** (the life-table function) appear in `sim.results.died`, not in the disease's results.
 - **Importation into `E` from outside** cannot be `ss.null >> E`, which adds people; write it as a rate per susceptible.
 
 ## Worked example
 
-`lingua_franca_design/vignettes/laser/hub_spoke_seir/model.py` (an SEIR on a hub and spokes), `lingua_franca_design/vignettes/laser/england_wales/model.py` (measles in England and Wales, with the life-table and importation workarounds), and `lingua_franca_design/vignettes/measles_metapop/seir_districts/model.py` (260 districts). The hub and spoke:
+[`laser/hub_spoke_seir/model.py`](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/models/laser/hub_spoke_seir/model.py) (an SEIR on a hub and spokes), [`laser/england_wales/model.py`](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/models/laser/england_wales/model.py) (measles in England and Wales, with the life-table and importation workarounds), and [`measles_metapop/seir_districts/model.py`](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/models/measles_metapop/seir_districts/model.py) (260 districts). The hub and spoke:
 
 ```python
 angles = 2*np.pi*np.arange(5)/5
@@ -62,8 +62,8 @@ sim = ss.Sim(seir, total_pop=sum(pop), n_agents=175_000, stop=ss.days(365))
 
 ## Running the original
 
-- Environment: `lingua_franca_design/_envs/laser` (a `uv` venv with `laser-generic` 1.1.0 and `laser-core` 1.0.5; Numba compiles on the first run). Build with `python _envs/envs.py install laser`. The England and Wales data (`EnglandWalesMeasles`, `EnglandWalesDistances.npy`) is in the installed `laser-generic` source under `_envs/laser/src/`.
-- The examples run a `simulate.py` in the env (`tools.run(['python', 'simulate.py', str(n_runs)], 'laser')`), which builds and runs the model `n_runs` times and prints the time series of each node's compartments as JSON (`model.nodes.S[:, node]`, and so on, indexed by tick).
+- Environment: a venv of its own, with `laser-generic` 1.1.0 and `laser-core` 1.0.5; Numba compiles on the first run. The England and Wales data (`EnglandWalesMeasles`, `EnglandWalesDistances.npy`) is in the `laser-generic` source.
+- The worked examples run a `simulate.py` in that environment, which builds and runs the model `n_runs` times and prints the time series of each node's compartments as JSON (`model.nodes.S[:, node]`, and so on, indexed by tick).
 - Series: counts by place and tick (`S`, `E`, `I`, `R` per node; or summed), and summaries such as total infections, final recovered, peak size and time by place, and the share of weeks with no infections. LASER's `nodes.X[t]` is the count at the start of tick `t` (for comparison with Starsim's `X[t-1]`); check the first row against the initial conditions.
 - Stochastic: 5 to 50 runs, depending on cost; compare means and ranges, and run-to-run spread for fade-outs.
-- Write the summary with `examples/tools.py`: `write_results(folder, rows)` writes `reference/results.csv` in the long format (`time, series, value, low, high`), and `read_results(folder)` reads it back as `{series: (times, values)}`.
+- Write the summary as a CSV in the long format of the validate-conversion skill (`time, series, value, low, high`).

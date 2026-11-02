@@ -103,12 +103,12 @@ msim = sim.run(n_runs=20)
 
 ## Timings
 
-Lines are lines of model code (not counting blank lines, comments, imports, or plotting, and counting a line over 100 characters twice); times are for one run. Both are measured by Starsim's north-star script, `tests/north_star/north_star.py` in the lingua_franca_design repo (see the [index page](../library_landscape.qmd#how-these-numbers-were-made)). odin 1.2.7's times were recorded on the same machine, as a whole command (`Rscript`), which includes starting R and compiling the generated C code.
+Lines are lines of model code (not counting blank lines, comments, imports, or plotting, and counting a line over 100 characters twice); times are for one run, the first in a new process and a rerun of the same model. Both were measured as described on the [index page](../library_landscape.qmd#how-these-numbers-were-made). odin 1.2.7's times were recorded on the same machine, in one R session, not counting starting R or loading odin; its first run includes compiling the generated C code.
 
 | Model | Lines: odin | Lines: Starsim | One run: odin | One run: Starsim | |
 |---|---|---|---|---|---|
-| The stochastic SIR with arrays (100 replicates) | 27 | 6 | 0.93 s as a command; the run itself 2 ms | 0.012 s for one run (0.057 s the first time in a new process); 100 runs in about 0.04 s | Pass |
-| The age-structured SEIR with a 14-day delay | 53 | 17 | 1.2 s as a command; the run itself 2 ms | the run itself 5 to 8 ms | Pass: the delay is a conveyor of 14 steps, which is not stiff (as 200 Erlang stages were, at 1.5 s a run) |
+| The stochastic SIR with arrays (100 replicates) | 27 | 8 | first 0.75 s, rerun 0.00096 s, the first with compiling | first 0.017 s, rerun 0.013 s for 100 runs in one process | Pass |
+| The age-structured SEIR with a 14-day delay | 53 | 17 | first 0.84 s, rerun 0.0015 s, the first with compiling | first 0.019 s, rerun 0.003 s | Pass: the delay is a conveyor of 14 steps, which is not stiff (as 200 Erlang stages were, at 1.5 s a run) |
 | The age-structured SEIR above, 1,000 runs | 46 | 10 | 1.98 s on one thread, plus 0.85 s to compile | 11.2 s | |
 
 The last row was measured on 17 October 2026, on a machine shared with other jobs.
@@ -135,7 +135,7 @@ These are from Starsim's switching demo for odin users (`tests/switching/test_od
 
 ## Bringing your model in
 
-`ss.import_from('model.R', format='odin')` reads a model in odin's language, in odin 1's syntax (`user()`, `rbinom()`) or odin2's (`parameter()`, `Binomial()`, `data()` with `~`). The file is parsed in Python, so neither R nor odin is needed. Each equation is split into its terms, and a term that leaves one state and enters another becomes a flow between them. Arrays of independent copies (replicates) become one model run many times; arrays with flows from each level to the next (aging) become an age stratification; arrays coupled through a matrix become a stratification with `ss.contacts()`; and `delay()` of a flow into a state becomes a fixed dwell time. Values given with `user()` or `parameter()` can be passed as `pars=`, the `initial()` equations give the initial states, and a comparison with data (`cases ~ Poisson(incidence)`) becomes an outcome with its likelihood. What is not translated is listed (`sim.imported.incomplete`), and `sim.imported.prompt` is a prompt for an AI assistant with Starsim's import-model skill to finish the job.
+`ss.import_from('model.R', format='odin')` reads a model in odin's language, in odin 1's syntax (`user()`, `rbinom()`) or odin2's (`parameter()`, `Binomial()`, `data()` with `~`). The file is parsed in Python, so neither R nor odin is needed. Each equation is split into its terms, and a term that leaves one state and enters another becomes a flow between them. Arrays of independent copies (replicates) become one model run many times; arrays with flows from each level to the next (aging) become an age stratification; arrays coupled through a matrix become a stratification with `ss.contacts()`; and `delay()` of a flow into a state becomes a fixed dwell time. Values given with `user()` or `parameter()` can be passed as `pars=`, the `initial()` equations give the initial states, and a comparison with data (`cases ~ Poisson(incidence)`) becomes an outcome with its likelihood. What is not translated is listed (`sim.imported.incomplete`), and `sim.imported.prompt` is a prompt for an AI assistant with Starsim's convert-model skill to finish the job.
 
 See [Import/export](index.qmd) for importing in general: checking an import, keeping it as code, and finishing one that is incomplete.
 

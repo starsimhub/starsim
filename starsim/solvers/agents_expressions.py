@@ -1,5 +1,5 @@
 """
-Not for the user: the agent engine, continued: the rates of a declared model run as agents, compiled once into functions, and the attributes of its agents (see `ss.solvers.Agents`)
+Not for the user: the agent engine, continued: the rates of a declared model run as agents, made once into functions, and the attributes of its agents (see `ss.solvers.Agents`)
 
 Used with: agents; declared modules
 """
@@ -25,14 +25,14 @@ def power(a, b):
 
 class Expressions:
     """
-    The part of the agent engine for the rates of a declared model run as agents, compiled once into functions, and the attributes of its agents
+    The part of the agent engine for the rates of a declared model run as agents, made once into functions, and the attributes of its agents
 
     It exists so that the rates of the agent engine (`Agents`) can be read apart from how it moves people.
     """
-    #%% Expressions, compiled once
+    #%% Expressions, made into functions once
 
     def __getstate__(self):
-        """ Copied or saved without the compiled expressions (functions that hold this engine), which are made again when first used """
+        """ Copied or saved without the functions made from expressions (which hold this engine), which are made again when first used """
         state = self.__dict__.copy()
         state['compiled'] = dict()
         state['_memo'] = None
@@ -77,7 +77,7 @@ class Expressions:
         return self.compile_leaf(expr)
 
     def compile_op(self, expr, compile=None):
-        """ Arithmetic or a NumPy function of the parts of an expression, each compiled with `compile` (by default `compile()`) """
+        """ Arithmetic or a NumPy function of the parts of an expression, each made with `compile` (by default `compile()`) """
         E = ss.expressions
         compile = compile or self.compile
         if isinstance(expr, E.Func):
@@ -118,7 +118,7 @@ class Expressions:
         return lambda: ss.expressions.evaluate(expr, self) # Anything else (a share of a row, a mother's value) as it evaluates itself
 
     def memoized(self, expr, func):
-        """ A compiled part of an expression whose value is kept in `self._memo`, while it is kept, for the same agents and the same route and strain """
+        """ A part of an expression, as a function, whose value is kept in `self._memo`, while it is kept, for the same agents and the same route and strain """
         key = id(expr)
         def memoized():
             memo = self._memo
@@ -189,7 +189,7 @@ class Expressions:
         return grouped
 
     def compile_plain(self, expr):
-        """ As `compile()`, for the parts inside a part worked out by group (see `compile_grouped()`), which are compiled as they are """
+        """ As `compile()`, for the parts inside a part worked out by group (see `compile_grouped()`), which are made as they are """
         E = ss.expressions
         if isinstance(expr, (E.BinOp, E.Func)):
             return self.compile_op(expr, compile=self.compile_plain)
@@ -461,7 +461,7 @@ class Expressions:
                 if not mask.any():
                     continue
                 sel = uids if mask.all() else uids[mask]
-                if a.by_event is not None: # Each event's own value (TY1)
+                if a.by_event is not None: # Each event's own value
                     new = np.full(len(sel), np.nan)
                     for events,value in a.by_event:
                         case = self.event_mask(events, tr, srcs[mask], dst)
@@ -506,7 +506,7 @@ class Expressions:
                 uids = uids[~np.isin(uids, self.moved_early)]
             if not len(uids):
                 continue
-            if not paths.get(state.name): # The first state, or one no transition leads to: placement is entering it (spec 03)
+            if not paths.get(state.name): # The first state, or one no transition leads to: placement is entering it
                 self.fire(None, uids, -1, self.state_index[state.name])
             for tr,src,dst in paths.get(state.name, []):
                 self.new_round() # One for each transition, as each can set an attribute again

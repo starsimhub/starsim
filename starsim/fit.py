@@ -2521,7 +2521,7 @@ def fit_nuts(problem, draws=500, warmup=500, chains=4, scan=None):
     optima = [p.decode(spo.minimize(fun, p.encode(x), method='l-bfgs-b', jac=True, bounds=bounds).x) for x in p.scan(scan, top=max(chains, 3))] # The optimum near each of the best points of the scan that are apart
     scores = np.array([p.objective(x) - p.logprior(x) for x in optima]) # Minus the log of the posterior density at each
     starts = []
-    for i in np.argsort(scores, kind='stable'): # The chains start at the best optimum, and at others only if they are nearly as good, so they cannot all sit in a mode far below the best (A4), while chains in modes that compete disagree
+    for i in np.argsort(scores, kind='stable'): # The chains start at the best optimum, and at others only if they are nearly as good, so they cannot all sit in a mode far below the best, while chains in modes that compete disagree
         if scores[i] - scores.min() <= 5 and all(np.abs(p.share_of(optima[i]) - p.share_of(x)).max() >= 0.01 for x in starts):
             starts.append(optima[i])
     z0 = np.array([p.to_z(starts[c % len(starts)]) for c in range(chains)])

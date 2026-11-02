@@ -23,7 +23,7 @@ class Influenza(ss.Disease):
     (https://doi.org/10.1093/aje/kwm375): about 2 days from infection to shedding, and about 5 days of shedding.
     `beta` gives an R0 of 1.3 on average over the year, the median estimate for seasonal influenza in the review of
     Biggerstaff M et al., *BMC Infect Dis* 2014;14:480 (https://doi.org/10.1186/1471-2334-14-480); `R0()` reports
-    1.8, since it reads the cycle at the start of the run, which is its January peak. The amplitude of the cycle
+    1.7, since it reads the cycle at the start of the run, which is its January peak. The amplitude of the cycle
     and the duration of immunity are illustrative, and since everyone here becomes fully susceptible again, the
     epidemics infect more people each year than real seasons do.
 

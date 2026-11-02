@@ -7,7 +7,7 @@ authorship:
   note: The household and spatial network sections are adapted from the Starsim 3 user guide page on library modules; the rest, and every comparison, written by AI
 ---
 
-Core Starsim has the networks most models need: random contacts (`ss.RandomNet`), partnerships (`ss.DegreeNet`, `ss.SexualNet`), mother and child (`ss.PrenatalNet` and its relatives), mixing pools, and contact matrices; they, and how to write a network of your own, are on [Contact networks](populations_networks.qmd). The Starsim library (`import starsim.library as ssl`; see [Library: diseases](library_diseases.qmd) for what the library is) has eight more, for households and other clusters, for space, and for theoretical work:
+Core Starsim has the networks most models need: random contacts (`ss.RandomNet`), partnerships (`ss.DegreeNet`, `ss.SexualNet`), mother and child (`ss.PrenatalNet` and its relatives), mixing pools, and contact matrices; they, and how to write a network of your own, are on [Contact networks](populations_networks.qmd). The Starsim library (`import starsim.library as ssl`; see [Library: diseases](library_diseases.qmd) for what the library is) has eleven more, for households and other clusters, for space, and for theoretical work:
 
 | Class | Based on | What it is | Main parameters |
 | --- | --- | --- | --- |
@@ -149,7 +149,7 @@ msim.plot('sir.I')
 
 The small world's clustering (a person's contacts are also each other's) slows the epidemic and lowers its peak, though nearly everyone is infected in both.
 
-The other three are for theory, testing, and development:
+Two more are for theory, testing, and development:
 
 - `ssl.ErdosRenyiNet` is the classic random graph: each possible pair of people is connected with probability `p` (by default 0.1) at each step, so each person's number of contacts is binomial, with a mean of `p` times the population. It is useful for comparison with analytic results; for random mixing in general, `ss.RandomNet` is much faster, since it doesn't consider every pair. With `dur` greater than 0, contacts last, and new ones keep accumulating.
 - `ssl.NullNet` connects each agent only to themselves, with a weight of 0, so it never transmits. It is a placeholder while developing a model whose real network isn't written yet, or for testing a disease's natural history alone.

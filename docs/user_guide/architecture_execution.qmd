@@ -39,7 +39,7 @@ Errors are raised at the earliest point that can detect them: a mistake in the m
 
 ## Units and time
 
-Starsim has four time types: durations (`ss.days(10)`), hazard rates (`ss.perday(0.1)`), probabilities per period (`ss.probperday(0.1)`), and frequencies (`ss.freqperday(0.1)`). Converting one to a timestep is the type's job: a hazard `r` becomes the probability `1 − exp(−r·dt)`, and a frequency the expected count `f·dt`. Since mixing them up is a common quiet error, adding a rate to a frequency raises a `TypeError`. The types are in `starsim/time.py`, and dates in `starsim/dates.py`.
+Starsim has four time types: durations (`ss.days(10)`), hazard rates (`ss.perday(0.1)`), probabilities per period (`ss.probperday(0.1)`), and frequencies (`ss.freqperday(0.1)`). Converting one to a timestep is the type's job: a hazard `r` becomes the probability `1 − exp(−r·dt)`, and a frequency the expected count `f·dt`. Since mixing them up is a common quiet error, adding a rate to a frequency raises a `TypeError`. The types are in `starsim/internals/time.py`, and dates in `starsim/internals/dates.py`.
 
 **A bare number is typed by its slot.** Above, `0.3` is a rate and `dur=10` a duration. After `@` a bare number is always a rate: `I >> R @ 10` recovers at 10 a day, while a 10-day dwell time is `@ ss.days(10)`. Its unit is **the sim's unit**, from the first of: `unit=`, the typed values in the model's diseases, dates for `start` and `stop`, a typed `dt` or `stop`, years for `start` and `stop`, and the typed values in other modules. With none, time is in timesteps, as in a textbook model. The unit is never guessed from the size of a number (0.05 is plausible per day and per year), and when it is inferred, a note says from what:
 
@@ -121,7 +121,7 @@ There are three levels:
 
 A note is said once: the same note isn't kept twice, and notes made while a sim is being initialized are held and printed after the line that starts the run, so they read as part of it. Since the notes are kept, they survive into a saved sim, and a test can check for them.
 
-Five errors and four warnings are classes of their own, in `starsim/internals/errors.py`, since code catches or filters them by kind: `ss.CapabilityError` (the solver asked for can't run part of the model, which `solver='auto'` catches to run as agents; it is a `ValueError`), `ss.AlreadyRunError` (a sim or module run twice), the distribution errors `ss.errors.DistNotInitializedError` and `DistSeedRepeatError`, and `BooleanOperationError`; and the warnings `ss.errors.AtBound` (a best fit at a bound), `NotConverged`, `LossyExport`, and `ImportIncomplete`. The tests check each error, warning, and note by its message (`tests/devtests/test_errors.py`), so a change to a message is a deliberate one.
+Six errors and four warnings are classes of their own, in `starsim/internals/errors.py`, since code catches or filters them by kind: `ss.CapabilityError` (the solver asked for can't run part of the model, which `solver='auto'` catches to run as agents; it is a `ValueError`), its subclass `ss.errors.NoAgentAttribute`, `ss.AlreadyRunError` (a sim or module run twice), the distribution errors `ss.errors.DistNotInitializedError` and `DistSeedRepeatError`, and `BooleanOperationError`; and the warnings `ss.errors.AtBound` (a best fit at a bound), `NotConverged`, `LossyExport`, and `ImportIncomplete`. The tests check each error, warning, and note by its message (`tests/devtests/test_errors.py`), so a change to a message is a deliberate one.
 
 ## Limits
 

@@ -17,7 +17,7 @@ from unittest import mock
 
 @sc.timer()
 def test_best_trial():
-    sc.heading('Testing that a search of a deterministic sim that ends short of its best point gives that point, and the methods that were removed')
+    sc.heading('Testing that a search of a deterministic sim that ends short of its best point gives that point, and that an unknown method is refused')
     beta = ss.par(0.3, bounds=[0.1, 1])
     S, I, R = ss.states(3)
     sir = ss.Disease(S >> I @ beta*I, I >> R @ ss.days(8), init=dict(I=0.01), name='sir')

@@ -192,14 +192,14 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         self._for_uids = False
         self._memo = None # Values of parts of expressions kept while several are evaluated for the same agents: see compile()
         self.compiled = dict() # Each expression evaluated, as a function: see eval()
-        arrs = [ss.FloatArr('rel_sus', default=1.0, label='Relative susceptibility', shared=True), # No memory until something sets them; the modifiers on them are applied by effective()
+        arrs = [ss.FloatArr('rel_sus', default=1.0, label='Relative susceptibility', shared=True), # No memory until something sets them; the modifiers on them are applied by current_value()
                 ss.FloatArr('rel_trans', default=1.0, label='Relative transmission', shared=True)]
         self.exits_of = {state.name: graph.exits[state.name].branches + sc.tolist(graph.exits[state.name].remainder) + graph.exits[state.name].timed for state in graph.people_states} # The exits scheduled when people enter each state: its branches, and its timed exits (the earliest is taken), by index
         self.scheduled = [name for name,exits in self.exits_of.items() if exits] # The states with exits that are scheduled when people enter them
         self.loops_of = {name:np.array([any(getattr(dst, 'name', None) == name for dst in (tr.dst or [])) for tr in exits], dtype=bool) for name,exits in self.exits_of.items()} # Which exits lead back to the state: a decision taken again, e.g. FPsim's choice of method
         self._rescaled = None # Which exits of each state are rescaled when their speed changes: see rescaled_of()
         self.init_dwells()
-        modifies = lambda m: isinstance(m, ss.modify) or bool(getattr(getattr(m, 'product', None), 'effects', None)) # A modifier, or a delivery of a product with an efficacy (TL17: these were left out, so a product did nothing against a dwell time)
+        modifies = lambda m: isinstance(m, ss.modify) or bool(getattr(getattr(m, 'product', None), 'effects', None)) # A modifier, or a delivery of a product with an efficacy
         rescalable = any(modifies(m) for m in list(self.sim.interventions()) + list(self.sim.connectors())) or any(self.varies(dw) for dw in self.dwells.values()) # Whether a dwell time can change after it is drawn: see rescale_exits()
         strats = list(graph.strats) + [s for s in self.sim.groups.sim_strats if s not in graph.strats]
         adjusted = {self.sim.groups.dim_index(s.name) for s in strats if any(key.rpartition('.')[2] in graph.transitions for key in s.adjust)}
@@ -361,8 +361,8 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
                     add(f'sex_{tr.name}', copy(tr.sex) if isinstance(tr.sex, ss.Dist) else ss.bernoulli(p=tr.sex))
         self.attr_dists = dict() # Each distribution an attribute is drawn from, and the key of its copy: see draw_attr()
         for a in self.attrs.values():
-            values = [('', a.value)] if a.kind in ['drawn', 'trait'] else [(f'event{j}_', v) for j,(_,v) in enumerate(a.by_event or [])] # Each event's own (TY1)
-            values += [('init_', a.init_value)] if a.init_value is not None else [] # And the value before any event, if drawn (TY3)
+            values = [('', a.value)] if a.kind in ['drawn', 'trait'] else [(f'event{j}_', v) for j,(_,v) in enumerate(a.by_event or [])] # Each event's own
+            values += [('init_', a.init_value)] if a.init_value is not None else [] # And the value before any event, if drawn
             for prefix,value in values:
                 for i,p in enumerate(ss.expressions.dists_in(value)):
                     key = f'attr_{a.name}_{prefix}{i}'
@@ -476,7 +476,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         return
 
     def force(self, uids, tr, dst, srcs=None, ti=None):
-        """ Move agents who are in a state a transition leaves from (or in `srcs`) to a state, counted in the transition's flow if there is one (as when a treatment cures), with its change of level (ST30); dated at the step's start, or at `ti` """
+        """ Move agents who are in a state a transition leaves from (or in `srcs`) to a state, counted in the transition's flow if there is one (as when a treatment cures), with its change of level; dated at the step's start, or at `ti` """
         self.new_round()
         if tr is not None and self.moves(tr): # Their new levels, before they enter (as for a move by the transition itself)
             inside = np.logical_or.reduce([self.mod[s.name].raw[uids] for s in (tr.src if srcs is None else srcs) if s.people]) if len(uids) else np.zeros(0, dtype=bool)
@@ -611,7 +611,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
                     self.stamp(name, chosen, self.seed_ti(name))
             for state in self.graph.people_states: # A share given for each person's own properties (e.g. init=dict(I=ss.by(dict(age=[0, 15], value=[0, 0.1])))): drawn for each agent of the first state
                 init = state.init.raw if isinstance(state.init, ss.par) else state.init
-                per_person = isinstance(init, ss.expressions.Expr) and ss.expressions.per_person_in(init) # e.g. init=dict(S=1 - (A - age)/(k*age + A)) (TY2)
+                per_person = isinstance(init, ss.expressions.Expr) and ss.expressions.per_person_in(init) # e.g. init=dict(S=1 - (A - age)/(k*age + A))
                 if per_person or (isinstance(init, ss.by) and init.on_people(self.sim)):
                     first = self.members(self.graph.first)
                     share = self.values_for(init, first) if per_person else init.lookup(self.sim, self.convert)[first]
@@ -768,11 +768,11 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
     def seed_ti(self, name):
         """
         The time of entering a state for someone put in it at the start: as if they had entered it in the step before the
-        first, so that a seed with a dwell of d steps is a source for d steps, as anyone who enters later is (HP62).
+        first, so that a seed with a dwell of d steps is a source for d steps, as anyone who enters later is.
         Contacts (a network, a mixing pool, or `beta*I` well mixed) are made after the step's state changes, and a rate
         (`beta*I.n`) reads the people at its start, so a source by contact entered at 0 (in the first step's contacts,
         leaving at the start of the second), and anyone else at -1 if they are where an infection puts people (in the first
-        step's rates, then counted at the start only, as under the ODE: CR4), else at 0
+        step's rates, then counted at the start only, as under the ODE), else at 0
         """
         state = self.graph.states[name]
         counted = any(s is state for tr in self.graph.transitions.values() if tr.rate is not None
@@ -856,7 +856,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
             first = self.graph.first.name
             mod[first][new] = True
             self.stamp(first, new, self.ti)
-            self.fire(None, new, -1, self.state_index[first]) # Placement is entering the state (spec 03)
+            self.fire(None, new, -1, self.state_index[first]) # Placement is entering the state
         return
 
     #%% The context used to evaluate expressions
@@ -1169,7 +1169,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         return np.array([w.sum()]) if ng == 1 else np.bincount(self.groups(uids), weights=w, minlength=ng).astype(float)
 
     def call(self, func, p=None):
-        """ As `Engine.call()`; a function of the sim may give one value per living agent (as `sim.people.age` does), which is put in place by UID (TL8: it was indexed by UID, so crashed once anyone had died) """
+        """ As `Engine.call()`; a function of the sim may give one value per living agent (as `sim.people.age` does), which is put in place by UID """
         out = super().call(func, p)
         if isinstance(out, ss.Arr):
             out = out.raw
@@ -1300,7 +1300,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
             return self.by_agent(p.raw, self._uids)
         if isinstance(p.raw, ss.by) and self._route is None: # Depends on which agents are being evaluated, so is not cached (on a route, a beta is worked out by group: see Engine.route_value())
             return self.by_people(p.raw) if p.raw.on_people(self.sim) else self.by_group(p.raw)
-        if isinstance(p.raw, ss.parameters.by_func) and self._route is None: # From a function of the sim, one value per level (MS2): as a value by level
+        if isinstance(p.raw, ss.parameters.by_func) and self._route is None: # From a function of the sim, one value per level: as a value by level
             out = self.by_levels(p.raw)
             return self.by_group(out) if isinstance(out, ss.by) else out
         key = id(p)

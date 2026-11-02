@@ -8,7 +8,7 @@ that is both used and made, such as I in S + I -> 2 I, as unchanged) a transitio
 whose kinetic law is its rate in total. Assignment rules become named expressions,
 and function definitions are written out where they are called. What is listed as
 not translated (events, rate rules, algebraic rules, reversible reactions, and
-reactions with other stoichiometries) is left for a person, or the import-model
+reactions with other stoichiometries) is left for a person, or the convert-model
 skill, to add. Only the standard library is used to read the file.
 
 Used with: compartments; declared modules
@@ -105,7 +105,7 @@ def load_sbml(filename, unit=None, stop=None, solver='ode', verbose=None, **kwar
 
     Species become states, parameters (global, and those local to a reaction)
     parameters, and reactions transitions, with the kinetic law as the rate in
-    total, classified by the rules in 16-interop.md. SBML's time units are rarely
+    total, classified by the shared rules (see `ss.converters.core.Rates`). SBML's time units are rarely
     given, so the numbers are taken to be in `unit`: by default, the model's
     `timeUnits` if it is a day, week, month, or year (as Starsim's export writes), else a day.
 

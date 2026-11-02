@@ -8,7 +8,7 @@ import starsim as ss
 
 kw = dict(verbose=0)
 
-# HIV (proposal 01 §7.4), with the parameters of the STIsim port
+# HIV, with the parameters of the STIsim port
 cd4_max, cd4_healthy, art_cd4_growth = 1000, 500, 0.1 # art_cd4_growth is per month
 eff_art, time_to_eff, rel_trans_aids, rel_art_mort = 0.99, 0.5, 8.0, 0.25
 

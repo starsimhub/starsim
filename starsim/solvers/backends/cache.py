@@ -32,7 +32,7 @@ slow = {
     'starsim.solvers.backends.kernels.one_step':        ('a step of the compartmental solvers', 3, 10),
     'starsim.solvers.backends.kernels.advance':         ("the particle filter's steps", 10, 30),
     'starsim.solvers.backends.kernels.advance_threads': ("the particle filter's steps in threads", 15, 45),
-    'starsim.solvers.backends.passes':         ('the agent solver', 2, 10),
+    'starsim.solvers.backends.passes':                  ('the agent solver', 2, 10),
 }
 said = set() # What has been said to be compiling, this session
 

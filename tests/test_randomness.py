@@ -1,5 +1,5 @@
 """
-Test the Dists object from distributions.py
+Test the Dists object in internals/dists.py
 """
 
 # %% Imports and settings
@@ -39,7 +39,7 @@ def test_seed():
     sim = ss.Sim(n_agents=100, diseases='sis', networks='random', demographics=True).init()
     seeds = {k:d.seed for k,d in sim.dists.dists.items()}
     sim._init_dists()
-    assert seeds == {k:d.seed for k,d in sim.dists.dists.items()} # Previously found the dists again via sim.dists
+    assert seeds == {k:d.seed for k,d in sim.dists.dists.items()}
     return dist0, dist1
 
 

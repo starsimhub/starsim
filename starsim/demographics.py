@@ -138,7 +138,7 @@ def period_year(years, year):
 
 
 def note_sparse(rows, years, sim, name):
-    """ A note when rates by year that apply during the run are further apart than 5 years: each holds until the next label (see `period_year()`), which is right for data by period (the UN's 5-year labels) but not for estimates for single years (ST58) """
+    """ A note when rates by year that apply during the run are further apart than 5 years: each holds until the next label (see `period_year()`), which is right for data by period (the UN's 5-year labels) but not for estimates for single years """
     if rows is None or years is None:
         return
     labels = rows[1]
@@ -163,7 +163,6 @@ class Demographics(ss.Module):
     (e.g. to add newborns to contact networks).
     """
     sets_unit = False # Its typed defaults (e.g. rates per year) do not set the unit of the model's bare numbers: see ss.solvers.choose.init_unit()
-    pass
 
 
 class Flows(Demographics):
@@ -221,10 +220,10 @@ class Births(Demographics):
     Note: CRN safe.
 
     Args:
-        birth_rate (float/rate/dataframe): value for birth rate, or birth rate data
+        birth_rate (float/rate/dataframe/str): value for birth rate, birth rate data, or a place by name, for its UN rates (e.g. 'Kenya')
         rel_birth (float): constant used to scale all birth rates
         min_age (float): the youngest age of a mother (default 15)
-        max_age (float): the age before which a mother is younger (default 50)
+        max_age (float): the age that mothers are younger than (default 50)
         rate_units (float): what the rates are per: 1000 (or 1e-3) for per 1,000 people, 1 for per person; by default, per 1,000 if the largest rate is above 1, otherwise per person, with a warning if it could be either (see `ss.demographics.infer_rate_units()`). The crude birth rate result (`cbr`) is in the same units.
         metadata (dict): dict with data column mappings for birth rate data (if birth_rate is a dataframe)
         pars (dict): the same parameters, as a dict
@@ -252,7 +251,7 @@ class Births(Demographics):
         self.update_pars(pars, **kwargs)
 
         # Process metadata. The year column may equivalently be labeled "Time" (as in UN data);
-        # see ss.col_synonyms
+        # see ss.utils.col_synonyms
         self.metadata = sc.mergedicts(
             sc.obj(data_cols=dict(year='Year', value='CBR')),
             metadata,
@@ -278,7 +277,7 @@ class Births(Demographics):
         return [] if getattr(self, 'compartmental', None) else [f'"{self.name}" ({type(self).__name__}) adds and removes agents; ss.birth() and ss.death() in the disease are its compartmental form']
 
     def standardize_birth_data(self):
-        """ Standardize/validate birth rates - handled in an external file due to shared functionality """
+        """ Standardize/validate birth rates; see `ss.utils.standardize_data()` """
         birth_rate = ss.utils.standardize_data(data=self.pars.birth_rate, metadata=self.metadata)
         if isinstance(birth_rate, (pd.Series, pd.DataFrame)):
             return birth_rate.xs(0,level='age')
@@ -416,31 +415,24 @@ class Deaths(Demographics):
     Configure disease-independent "background" deaths.
 
     The probability of death for each agent on each timestep is determined
-    by the `death_rate` parameter and the time step. The default value of
-    this parameter is 0.01, indicating that all agents will
-    face a 1% chance of death per year.
+    by the `death_rate` parameter and the time step. By default, this is
+    10 per 1,000 people per year, so all agents face about a 1% chance of
+    death per year.
 
     However, this function can be made more realistic by using a dataframe
     for the `death_rate` parameter, to allow it to vary by year, sex, and
     age.  The separate 'metadata' argument can be used to configure the
     details of the input datafile.
 
-    Alternatively, it is possible to override the `death_rate` parameter
-    with a bernoulli distribution containing a constant value of function of
-    your own design.
-
     Note: CRN safe.
 
     Args:
-        pars: dict with arguments including:
-            rel_death: constant used to scale all death rates
-            death_rate: float, dict, or pandas dataframe/series containing mortality data
-            lifetable: instead of death_rate, life tables (`ss.lifetable`): one, one for each sex (`dict(female=..., male=...)`), or one (or one for each sex) for each year from which it holds (`{2000: ..., 2010: ...}`); each is the death rate of each of its age bands, per person, so deaths follow the table of the year and each person's sex and age as time goes on (`ss.death(lifetable=)` instead draws each person's age at death once, from one table)
-            rate_units: what the rates are per: 1000 (or 1e-3) for per 1,000 people, 1 for per person; by default, per 1,000 if the largest rate is above 1, otherwise per person, with a warning if it could be either (see `ss.demographics.infer_rate_units()`). The crude mortality rate result (`cmr`) is in the same units.
-
-        metadata: data about the data contained within the data input.
-            "data_cols" is is a dictionary mapping standard keys, like "year" to the
-            corresponding column name in data. Similar for "sex_keys".
+        rel_death (float): constant used to scale all death rates
+        death_rate (float/rate/dict/dataframe/series/str): the death rate, mortality data, or a place by name, for its UN rates (e.g. 'Kenya')
+        lifetable (`ss.lifetable`/dict): instead of `death_rate`, life tables (`ss.lifetable`): one, one for each sex (`dict(female=..., male=...)`), or one (or one for each sex) for each year from which it holds (`{2000: ..., 2010: ...}`); each is the death rate of each of its age bands, per person, so deaths follow the table of the year and each person's sex and age as time goes on (`ss.death(lifetable=)` instead draws each person's age at death once, from one table)
+        rate_units (float): what the rates are per: 1000 (or 1e-3) for per 1,000 people, 1 for per person; by default, per 1,000 if the largest rate is above 1, otherwise per person, with a warning if it could be either (see `ss.demographics.infer_rate_units()`). The crude mortality rate result (`cmr`) is in the same units.
+        metadata (dict): data about the data contained within the data input: "data_cols" maps standard keys, like "year", to the corresponding column name in the data, and "sex_keys" does the same for the sexes
+        pars (dict): the same parameters, as a dict
     """
     def __init__(self, pars=None, rel_death=_, death_rate=_, rate_units=_, metadata=None, lifetable=None, **kwargs):
         self.named_data = isinstance(death_rate, str) # A named place's UN rates, which are every ten years: see note_sparse()
@@ -485,12 +477,12 @@ class Deaths(Demographics):
     agent_reasons = Births.agent_reasons
 
     def standardize_death_data(self):
-        """ Standardize/validate death rates - handled in an external file due to shared functionality """
+        """ Standardize/validate death rates; see `ss.utils.standardize_data()` """
         death_rate = ss.utils.standardize_data(data=self.pars.death_rate, metadata=self.metadata)
         if isinstance(death_rate, (pd.Series, pd.DataFrame)):
             death_rate = death_rate.unstack(level='age')
             if death_rate.isna().any(axis=None):
-                errormsg = 'Death rate data has missing values; age bins must be consistent across all years. Data:\n{death_rate}'
+                errormsg = f'Death rate data has missing values; age bins must be consistent across all years. Data:\n{death_rate}'
                 raise ValueError(errormsg)
         return death_rate
 
@@ -625,6 +617,7 @@ class Pregnancy(Demographics, ss.Disease):
     Args:
         fertility (rate/func): the hazard of conception: by default `conception_rate()`, from `fertility_rate`; or a rate, or a function of `(sim, uids)` giving a rate for those agents
         fertility_rate (rate/dataframe/str): age-specific fertility rates, or one rate (default per 1000: see `rate_units`), or a country by name, for its UN rates (e.g. 'Nigeria')
+        rate_units (float): what `fertility_rate` is per: 1000 (or 1e-3) for per 1,000 women, 1 for per woman; by default, per 1,000 if the largest rate is above 1 (see `ss.demographics.infer_rate_units()`)
         rel_fertility (float): multiplier on the fertility rate
         p_infertile (bernoulli): primary infertility
         min_age (float): minimum age of conception
@@ -632,11 +625,13 @@ class Pregnancy(Demographics, ss.Disease):
         dur_pregnancy (dur/Dist): duration of pregnancy; a number is in weeks
         loss_rate (rate/func): hazard of a spontaneous loss, or a function of `(sim, uids)`
         loss_threshold (dur): gestational age that separates a miscarriage from a stillbirth
+        maternal_rate (rate): hazard of a maternal death while pregnant
         infant_rate (rate/func): hazard of death before the age of 1, for the children (a function of the sim and the agents is called only for the children aged 0 to 1); `ss.mother(x)` in it reads each child's mother (so fetuses need not be agents)
         p_breastfeed (bernoulli): chance a mother breastfeeds a newborn
         dur_breastfeed (dur/Dist): duration of breastfeeding
         p_abortion (float): chance a pregnancy ends in an abortion, at conception
         burnin (bool): whether women are pregnant at the start, at the gestational ages they would have reached (default True; see `burnin_plan()`); agents only
+        fetus (bool/str): whether fetuses are agents from conception: 'auto' (the default), if something reads them (a prenatal network, or `ss.mother()` in a module); agents only
         metadata (dict): data column mappings for fertility rate data if a dataframe is supplied
         pars (dict): the same parameters, as a dict
 
@@ -746,7 +741,7 @@ class Pregnancy(Demographics, ss.Disease):
         self._mothers = [] # The ages of the women who delivered in the step, for the ASFR (agents)
         self.asfr_bins = np.array([0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 100])
         self.asfr_width = self.asfr_bins[1] - self.asfr_bins[0]
-        self.asfr = None # Age-specific fertility rates per 1000 women, by bin and time point (rolling annual sums once finalized), as in Starsim 3
+        self.asfr = None # Age-specific fertility rates per 1000 women, by bin and time point (rolling annual sums once finalized)
         self.fetus_reason = None
         self._gate_infant() # Before the solver is chosen, which reads the rate
         return
@@ -819,7 +814,7 @@ class Pregnancy(Demographics, ss.Disease):
         """ Infant mortality is `infant_rate` for the children (age 0 to 1, not fetuses); when it is 0, ages are not read (which is faster, and lets a compartmental run have no age group ending at 1) """
         rate = self.graph.pars.infant_rate
         unborn = [node for node in ss.expressions.nodes(rate.raw) if isinstance(node, ss.expressions.mother) and not node.born]
-        if unborn: # Read on the mothers of the children, who are born, so it needs no fetuses as agents (FP10)
+        if unborn: # Read on the mothers of the children, who are born, so it needs no fetuses as agents
             rate.value = ss.expressions.substitute(rate.raw, {id(node):ss.expressions.mother(node.x, born=True) for node in unborn})
         zero = isinstance(rate.raw, ss.TimePar) and not np.any(np.asarray(rate.raw.value) > 0)
         self.graph.transitions.infant_mortality.rate = rate if zero else rate*((ss.ppl.age >= 0) & (ss.ppl.age < 1))
@@ -1006,9 +1001,10 @@ class Pregnancy(Demographics, ss.Disease):
             uids (uids): the women
             rel (float/array): a relative risk for this draw only, one number or one per woman
 
-        **Example**::
-
+        Example:
+            ```python
             preg.preterm_risk(uids, rel=2.0) # Twice the risk of preterm birth, for the pregnancies these women have now
+            ```
         """
         uids = ss.uids(uids)
         if self.abm:
@@ -1047,12 +1043,12 @@ class Pregnancy(Demographics, ss.Disease):
         return
 
     def _classify_births(self, newborns, ti):
-        """ Starsim 3: the gestational age at birth of each newborn (weeks since the mother conceived), and whether preterm or very preterm """
+        """ The gestational age at birth of each newborn (weeks since the mother conceived), and whether preterm or very preterm """
         if not len(newborns):
             return
         moms = self.sim.people.parent.raw[newborns]
         drawn = self.dur_gestation.raw[moms]
-        ga = np.where(np.isfinite(drawn), drawn, (ti - self.ti_P.raw[moms])*self.t.dt.weeks) # As drawn, as in Starsim 3; otherwise the steps since conception
+        ga = np.where(np.isfinite(drawn), drawn, (ti - self.ti_P.raw[moms])*self.t.dt.weeks) # As drawn; otherwise the steps since conception
         self.gestation_at_birth[newborns] = ga
         pre, very = ga < self.pars.preterm_threshold.weeks, ga < self.pars.very_preterm_threshold.weeks
         self.preterm[newborns] = pre
@@ -1098,7 +1094,7 @@ class Pregnancy(Demographics, ss.Disease):
                 net.add_pairs(ppl.parent.raw[kids], kids)
         self._classify_births(new, ti)
         engine.record_event('live_birth', moms)
-        p_md = self.pars.p_maternal_death # At delivery, as in Starsim 3 (agents only)
+        p_md = self.pars.p_maternal_death # At delivery (agents only)
         if not isinstance(p_md, ss.bernoulli) or np.any(np.asarray(p_md.pars.p) > 0):
             dead = p_md.filter(parents) if isinstance(p_md, ss.bernoulli) else parents[self.rng_md.rvs(parents) < p_md]
             ppl.request_death(dead)
@@ -1196,7 +1192,7 @@ class Pregnancy(Demographics, ss.Disease):
         inds = self.match_time_inds()
         units = self.pars.rate_units*self.t.dt_year
         res.cbr[:] = sc.safedivide(res.birth[:], self.sim.results.alive[inds], default=0)/units if 'alive' in self.sim.results else 0
-        tdim = min(int(1/self.t.dt_year), self.t.npts) # The ASFR as rolling annual sums, as in Starsim 3
+        tdim = min(int(1/self.t.dt_year), self.t.npts) # The ASFR as rolling annual sums
         cs = np.cumsum(self.asfr, axis=1)
         asfr = np.zeros_like(self.asfr)
         asfr[:, tdim-1:] = cs[:, tdim-1:] - np.hstack([np.zeros((len(cs), 1)), cs[:, :-tdim]])
@@ -1291,9 +1287,7 @@ class Pregnancy(Demographics, ss.Disease):
             fertile = fecund*(1 - p_inf) # The mean, since infertility is not a dimension
         frd = self.fertility_rate_data
         scale = pars.rate_units*pars.rel_fertility
-        if sc.isnumber(frd):
-            raise TypeError('Fertility rate should be specified as a rate (or with time-varying data)')
-        if isinstance(frd, ss.Rate): # One rate, as data with one value: per woman-year (the hazard, for a probability), rescaled as the data are (ST2)
+        if isinstance(frd, ss.Rate): # One rate, as data with one value: per woman-year (the hazard, for a probability), rescaled as the data are
             vals = np.array([ss.solvers.convert(frd, 'year')], dtype=float)
             bins = np.zeros(len(age), dtype=int)
         else:

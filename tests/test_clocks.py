@@ -91,8 +91,8 @@ class BV(ss.Disease):
 
 @sc.timer()
 def test_bv_recurrence():
-    sc.heading('Port: BV recurrence hazard decays with time since treatment, P.time')
-    def recur_rate(sim, uids): # The workaround (bv_gud_connectors/port.py)
+    sc.heading('Testing BV recurrence hazard decays with time since treatment, P.time')
+    def recur_rate(sim, uids): # The same hazard as a function of the time of entering
         bv = sim.diseases.bv
         months = (sim.ti - bv.ti_P[uids]) * sim.t.dt.months # The steps since the step of entering P
         return ss.permonth(0.06 * np.exp(-months / 3))

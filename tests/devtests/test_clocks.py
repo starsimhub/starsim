@@ -61,7 +61,7 @@ def test_events():
 
 @sc.timer()
 def test_syphilis_latent():
-    sc.heading('Port: syphilis latent infectiousness decays with time since latent onset, (EL | LL).time')
+    sc.heading('Testing syphilis latent infectiousness decays with time since latent onset, (EL | LL).time')
     hl = 1.0 # Years
     def make(form, ll=True):
         S, E, EL, LL = ss.states('S E EL LL')
@@ -115,7 +115,7 @@ def test_entry_hazard():
 
 
 def test_keep_time():
-    """ MG2: ss.State(keep_time=True) keeps the time of entering it for code to read; a clock as a class member is a helper, not a result """
+    """ Ss.State(keep_time=True) keeps the time of entering it for code to read; a clock as a class member is a helper, not a result """
     def make(keep):
         class C(ss.Disease):
             S = ss.State()

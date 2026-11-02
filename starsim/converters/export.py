@@ -473,10 +473,11 @@ def export_to(sim, format, filename=None, verbose=None):
     Returns:
         The text of the export
 
-    **Examples**:
-
+    Examples:
+        ```python
         ss.export_to(sim, 'sbml', filename='sir.xml')
         print(ss.export_to(sim, 'odin'))
+        ```
     """
     key = str(format).lower()
     if key not in exporters:
@@ -518,10 +519,11 @@ def to_hub(msim, targets, origin_date=None, by=None, every='week', output_type='
     Returns a long dataframe with columns `origin_date`, `scenario_id`, `location`, `target`, `horizon`,
     `output_type`, `output_type_id`, and `value`.
 
-    **Example**:
-
+    Example:
+        ```python
         msim = ss.parallel(baseline=s1, lockdown=s2, n_runs=20)
         hub = ss.converters.to_hub(msim, targets=dict(infection=['inc inf', 'cum inf']), origin_date='2020-03-01', by='patch')
+        ```
     """
     msim.check_run('to_hub')
     steps = dict(day=1, week=7)[every]

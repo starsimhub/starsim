@@ -185,7 +185,7 @@ def terms(node):
 
 class Rates(sc.prettyobj):
     """
-    Turn the rates of a source into the rates of transitions, by the rules in 16-interop.md
+    Turn the rates of a source into the rates of transitions, by the rules in `docs/design/16-interop.md` in the lingua_franca_design repo
 
     It exists so that every importer reads a rate the same way.
     """
@@ -870,9 +870,9 @@ def handoff(imported):
 
     Starsim cannot finish an import itself: the parts it lists in `sim.imported.incomplete`
     need judgment (the closest Starsim form, or a gap to report), which is what the
-    import-model skill is for.
+    convert-model skill is for.
     """
     source = sc.path(imported.file).name if imported.file else 'the model'
     prompt = (f'Finish importing {source} ({imported.format}) into Starsim: save its code, sim.imported.code, to a file, translate each part listed in '
-              f'sim.imported.incomplete (the code\'s "Not translated" comments), and check the result against the original with the validate-import skill.')
-    return f'To finish the import, ask an AI assistant with the import-model skill loaded (printed by `starsim ai show import-model`, or starsim_ai/import-model in the Starsim repo; see "Finishing an incomplete import"): "{prompt}"'
+              f'sim.imported.incomplete (the code\'s "Not translated" comments), and check the result against the original with the validate-conversion skill.')
+    return f'To finish the import, ask an AI assistant with the convert-model skill loaded (printed by `starsim ai show convert-model`, or starsim/.agents/skills/convert-model in the Starsim repo; see "Finishing an incomplete import"): "{prompt}"'

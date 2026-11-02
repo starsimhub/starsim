@@ -1,7 +1,7 @@
 """
 Theoretical networks, useful for comparison against analytic results and for debugging.
 
-A compartmental run can use `StaticNet` and those built on it only by their mean number of contacts; the others run as agents only.
+A compartmental run can use `StaticNet` only by its mean number of contacts; the others run as agents only.
 
 Used with: agents and compartments; declared and coded modules
 """
@@ -9,6 +9,8 @@ import inspect
 import numpy as np
 import sciris as sc
 import starsim as ss
+
+__all__ = ['ErdosRenyiNet', 'NullNet', 'StaticNet', 'SmallWorldNet', 'ScaleFreeNet']
 
 ss_float = ss.dtypes.float
 _ = None # Sentinel for "not provided" default arguments
@@ -19,7 +21,7 @@ class ErdosRenyiNet(ss.DynamicNetwork):
     being created on each time step.
 
     The degree of each node will have a binomial distribution, considering each
-    of the N-1 possible edges connection this node to the others will be created
+    of the N-1 possible edges connecting this node to the others will be created
     with probability p.
 
     Please be careful with the `dur` parameter. When set to 0, new edges will be
@@ -73,7 +75,7 @@ class ErdosRenyiNet(ss.DynamicNetwork):
         # far cheaper than drawing a random number for each of the O(N^2) possible edges
         i1 = ints[idx1]
         i2 = ints[idx2]
-        r = ss.distributions.combine_rands(i1, i2) # Uniform on [0, 1] # TODO: use ss.multi_rand()
+        r = ss.distributions.combine_rands(i1, i2) # Uniform on [0, 1]
         edge = r <= self.pars.p
 
         p1 = born_uids[idx1[edge]]
@@ -97,12 +99,8 @@ class NullNet(ss.Network):
 
     Guarantees there's one (1) contact per agent (themselves), and that their connection weight is zero.
 
-    For an empty network (ie, no edges) use
-    >> import starsim as ss
-    >> import starsim.library as ssl
-    >> import networkx as nx
-    >> empty_net_static = ssl.StaticNet(nx.empty_graph)
-    >> empty_net_rand = ss.RandomNet(n_contacts=0)
+    For an empty network (i.e., no edges), use
+    `ss.RandomNet(n_contacts=0)`.
 
     Note: CRN safe.
 
@@ -127,7 +125,7 @@ class NullNet(ss.Network):
             self.n = popsize
         else:
             if self.n > popsize:
-                errormsg = f'Please ensure the size of the network ({self.n} is less than or equal to the population size ({popsize}).'
+                errormsg = f'Please ensure the size of the network ({self.n}) is less than or equal to the population size ({popsize}).'
                 raise ValueError(errormsg)
         self.get_edges()
         return
@@ -216,7 +214,7 @@ class StaticNet(ss.Network):
             try:
                 self.nx_graph = self.nx_graph(n=self.n_agents, **kw, **self.graph_kwargs)
             except TypeError as e:
-                ss.warn(f"{str(e)}: networkx {self.nx_graph.name} not supported. Try using ssl.StaticNet() instead.")
+                ss.warn(f"{e}: the graph generator {self.nx_graph.__name__} is not supported: make the graph first, and pass it as graph=")
                 raise e
         self.validate_pop(self.n_agents)
         self.get_edges()

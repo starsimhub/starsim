@@ -28,7 +28,7 @@ class SimPars(ss.Pars):
         rescale (bool): If True, start with a scale factor of 1 and increase it to pop_scale as the agents stop being naive, making some of them naive again each time (dynamic rescaling, as in Covasim; default False)
         rescale_threshold (float): If rescaling, the fraction of agents who are not naive that triggers rescaling (default 0.05)
         rescale_factor (float): If rescaling, the minimum factor by which to increase the scale each time (default 1.2)
-        unit (str): The time unit for the simulation (default 'year'; other choices are 'day', 'week', 'month')
+        unit (str): The unit of time, and of bare numbers in declared transitions, e.g. 'day', 'week', 'month', or 'year' (by default, the model's; if nothing in the model has a unit, time is in timesteps)
         start (float/str/date): The starting date for the simulation (default 2000); can be a year or date
         stop (float/str/date): If provided, the ending date for the simulation (if not provided, calculate from "dur")
         dur (int): How many timesteps to simulate, if "stop" is not provided (default 50)
@@ -206,7 +206,7 @@ class SimPars(ss.Pars):
 
     def validate_total_pop(self):
         """ Ensure one but not both of total_pop and pop_scale are defined """
-        if self.total_pop is not None:  # In future, if no pop_scale has been provided, try to get it from the location
+        if self.total_pop is not None:
             if self.pop_scale is not None:
                 errormsg = f'You can define total_pop ({self.total_pop}) or pop_scale ({self.pop_scale}), but not both, since one is calculated from the other'
                 raise ValueError(errormsg)
@@ -383,7 +383,7 @@ class SimPars(ss.Pars):
             else:
                 # If it is a dict with a single entry, then we wrap this in a list assuming that it is a dict
                 # representation of a single module (as opposed to a dict containing modules)
-                modlist = sc.promotetolist(self[modkey])
+                modlist = sc.tolist(self[modkey])
 
             for i,mod in enumerate(modlist):
 
@@ -423,15 +423,12 @@ class SimPars(ss.Pars):
                     # Create the module and store it in the list
                     mod = modcls(**mod)
 
-                # Convert class and function to class instance (for any module type). expected_cls is the
-                # parent class for this key (e.g. ss.Disease), or ss.Module for 'modules'/'custom'.
-                if isinstance(mod, type) and issubclass(mod, expected_cls):
-                    mod = mod()  # Convert from a class to an instance of a class
-                elif not isinstance(mod, ss.Module) and callable(mod):
+                # Convert a function to a module of this type
+                if not isinstance(mod, ss.Module) and callable(mod):
                     mod = expected_cls.from_func(mod)
 
                 # Do final check
-                if isinstance(expected_cls, type) and not isinstance(mod, (expected_cls, ss.Module)): # TEMP: check if this check still works?
+                if isinstance(expected_cls, type) and not isinstance(mod, (expected_cls, ss.Module)):
                     errormsg = f'Was expecting {modkey} entry {i} to be class {expected_cls} or Module, but was {type(mod)} instead'
                     raise TypeError(errormsg)
 
@@ -444,10 +441,11 @@ class Sim(ss.Base):
     """
     The Sim object
 
-    All Starsim simulations run via the Sim class. It is responsible for initializing
-    and running all modules and generating results. The sim orchestrates `ss.People`,
-    `ss.Network`, `ss.Disease`, `ss.Intervention`, `ss.Demographics`, and other
-    modules via the `ss.Loop` integration loop.
+    All Starsim simulations run via the Sim class, whatever the kind of model. It is
+    responsible for initializing and running all modules and generating results. The
+    sim orchestrates `ss.People`, `ss.Network`, `ss.Disease`, `ss.Intervention`,
+    `ss.Demographics`, and other modules, via the `ss.Loop` integration loop, or all at
+    once in the solvers' kernels if nothing needs to happen between the steps.
 
     Args:
         model (Module/list/dict): the model: a module or a list of modules, which are sorted by type as for `modules`; transitions, alone or in a list (or in `diseases=`), are one disease, named from its states (e.g. `sim.sir`).
@@ -485,7 +483,9 @@ class Sim(ss.Base):
 
     Examples:
         ```python
-        sim = ss.Sim(diseases='sir', networks='random') # Simplest Starsim sim; equivalent to ss.demo()
+        S, I, R = ss.states(3)
+        sim = ss.Sim(ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(10), init_prev=0.01)) # A declared model; here run as an ODE, or give solver= (e.g. solver='abm')
+        sim = ss.Sim(diseases='sir', networks='random') # Agents on a network; equivalent to ss.demo()
         sim = ss.Sim(diseases=ss.SIR(), networks=ss.RandomNet()) # Equivalent using objects instead of strings
         sim = ss.Sim(diseases=['sir', ss.SIS()], networks=['random', 'degree']) # Example using list inputs; can mix and match types
         sim = ss.Sim(modules=[ss.SIR(), ss.RandomNet()]) # Can supply multiple types of module with the 'modules' argument
@@ -501,7 +501,7 @@ class Sim(ss.Base):
     def __init__(self, *models, label=None, people=None, demographics=None, connectors=None,
                  networks=None, diseases=None, interventions=None, analyzers=None, custom=None,
                  modules=None, data=None, pars=None, **kwargs):
-        self.pars = ss.SimPars() # Make default parameters (using values from parameters.py)
+        self.pars = ss.SimPars() # Make default parameters
         models = [arg for arg in models if arg is not None]
         given = dict(label=label, people=people, demographics=demographics, connectors=connectors, networks=networks, diseases=diseases,
                      interventions=interventions, analyzers=analyzers, custom=custom, modules=modules, data=data)
@@ -589,7 +589,7 @@ class Sim(ss.Base):
                             obj._default_name = False
         steps = [mod for arg in args for mod in sc.tolist(arg) if isinstance(mod, ss.Delivery)]
         used = [mod.name for mod in steps if not mod._default_name]
-        for mod in steps: # Steps made in a function, with no variable to be named by (HP72): numbered, e.g. screen, screen_1, here rather than when the sim copies them, since a condition refers to a step by its name
+        for mod in steps: # Steps made in a function, with no variable to be named by: numbered, e.g. screen, screen_1, here rather than when the sim copies them, since a condition refers to a step by its name
             if mod._default_name:
                 mod.name = mod.label = sc.uniquename(mod.name, used, style='_%d')
             used.append(mod.name)
@@ -692,8 +692,7 @@ class Sim(ss.Base):
         Return an iterator over all Module instances (stored in standard places) in the Sim
 
         This is the order they are initialized in: custom modules come after the others they
-        may read (TL54: a custom module came first, so it read a demography's properties before
-        they were set), and before the analyzers. Their step() still runs first: see `ss.Loop`.
+        may read, and before the analyzers. Their step() still runs first: see `ss.Loop`.
         """
         for module in itertools.chain(
             self.demographics(),
@@ -1173,7 +1172,7 @@ class Sim(ss.Base):
         # Return all modules if no query
         if query is None:
             if as_dict:
-                return ss.utils.nlist_as_dict(modules)
+                return ss.utils.nlist_to_dict(modules)
             else:
                 return list(modules)
 
@@ -1240,7 +1239,7 @@ class Sim(ss.Base):
                 if strat.name in self.groups.kept and strat.split_given:
                     raise ValueError(f'"{strat.name}" is a property the people already have, so their own values are kept and binned into its levels; split= would overwrite them. Leave out split=, or set people.{strat.attr} instead.')
                 if strat.name in self.groups.kept:
-                    strat.guessed.pop('split', None) # Not "everyone at the first level" (TL3): the people's own values are used
+                    strat.guessed.pop('split', None) # Not "everyone at the first level": the people's own values are used
                 if strat.attr not in people.states:
                     state = strat.people_arr()
                     people.states.append(state)
@@ -1591,11 +1590,11 @@ class Sim(ss.Base):
 
         # Initialization steps
         if verbose is not None and not self.initialized: # So that initializing says as much
-            self.pars.verbose = ss.parameters.ss.parameters.check_verbose(verbose)
+            self.pars.verbose = ss.parameters.check_verbose(verbose)
         if not self.initialized: self.init() # Automatically initialize if not initialized
         if verbose is not None:
             self._orig_verbose = self.verbose
-            self.verbose = ss.parameters.ss.parameters.check_verbose(verbose)
+            self.verbose = ss.parameters.check_verbose(verbose)
         unsaid = self.__dict__.pop('_unsaid', None) # The start line, if sim.describe() initialized the sim
         if unsaid is not None and self.verbose:
             print('\n'.join(self.start_lines(unsaid)))
@@ -1610,13 +1609,19 @@ class Sim(ss.Base):
         if self.verbose: # Otherwise none, or how far it has got for a MultiSim's progress (see ss.run.single_run())
             self.progress = ss.display.Progress(self)
         try:
-            # Main simulation loop -- just one line!!!
-            reason = self.kernel_reason() if until is None and not profile else None
+            # Main simulation loop
+            restarted = self.__dict__.pop('_restarted', None)
+            reason = self.kernel_reason() if until is None and not profile and restarted is None else None
             kernels = until is None and not profile and reason is None
             if reason is not None and self.solver != 'abm' and getattr(self, 'declared', None): # Say once why a compartmental run is taken a step at a time (describe() says it too)
                 ss.note(f'run a step at a time, which is much slower than all at once, since {reason}', sim=self, verbose=self.verbose)
             if kernels: # JAX or the kernels: see ss.solvers.choose_engine()
-                use_jax, why = ss.solvers.choose_engine(self)
+                known = self.__dict__.get('_engine_known')
+                if restarted == 'same' and known is not None and known[0] is self.jax and not self.jax: # A choice from the model and its values, which are as they were
+                    use_jax, why = known[1:]
+                else:
+                    use_jax, why = ss.solvers.choose_engine(self)
+                    self._engine_known = (self.jax, use_jax, why)
                 sc.printv(f'engine: {why}', 2, self.verbose)
             if kernels: # Nothing needs to happen between the steps, so each module takes all of them at once
                 for mod in self.declared:
@@ -1798,7 +1803,9 @@ class Sim(ss.Base):
             self.init()
         self.loop.index = 0
         rebuild = lambda: self.new(pars=sc.mergedicts(self.par_values, pars), inplace=True, rand_seed=sc.ifelse(rand_seed, self.pars.rand_seed)) # With the values of earlier restarts
-        if not self.kernel_only() or any(isinstance(val, ss.Dist) or key in self.pars.bounded() for key,val in (pars or {}).items()): # Not run in one call to the kernels, a distribution the compartments were not laid out for, or a sim setting (e.g. n_agents)
+        same = not pars
+        numbers = all(isinstance(val, (int, float, np.number)) for val in (pars or {}).values()) # A number in place of a number does not change how the sim runs
+        if not (numbers and self.__dict__.get('_kernels_known') or self.kernel_only()) or any(isinstance(val, ss.Dist) or key in self.pars.bounded() for key,val in (pars or {}).items()): # Not run in one call to the kernels, a distribution the compartments were not laid out for, or a sim setting (e.g. n_agents)
             return rebuild()
         base = self.__dict__.get('_before_init') # The copy that sim.new() and a rerun start from, which takes the same values
         if rand_seed is not None:
@@ -1833,6 +1840,8 @@ class Sim(ss.Base):
             mod.engine.restart()
         for crossing in self.crossings: # As in init()
             crossing.init()
+        self._kernels_known = True
+        self._restarted = 'same' if same else 'new' # For the run that follows, which need not check the same things again
         return self
 
     def finalize(self):
@@ -1944,9 +1953,8 @@ class Sim(ss.Base):
     def shrink(self, inplace=True, full=True, size_limit=1.0, base_size=30, die=True):
         """
         "Shrinks" the simulation by removing the people and other memory-intensive
-        attributes (e.g., some interventions and analyzers), and returns a copy of
-        the "shrunken" simulation. Used to reduce the memory required for RAM or
-        for saved files.
+        attributes (e.g., some interventions and analyzers), in place by default.
+        Used to reduce the memory required for RAM or for saved files.
 
         After shrinking, each module is expected to be smaller than
         `size_limit*(base_size + n_timesteps)` KB. The `base_size` term covers the
@@ -2124,7 +2132,7 @@ class Sim(ss.Base):
         Profile the performance of the simulation using a function profiler (`sc.cprofile()`)
 
         Args:
-            sort (str): default sort column; common choices are 'cumtime' (total time spent in a function, includin subfunctions) and 'selftime' (excluding subfunctions)
+            sort (str): default sort column; common choices are 'cumtime' (total time spent in a function, including subfunctions) and 'selftime' (excluding subfunctions)
             mintime (float): exclude function calls less than this time in seconds
             **kwargs (dict): passed to `sc.cprofile()`
 
@@ -2153,7 +2161,7 @@ class Sim(ss.Base):
         as JSON, see `sim.to_json()`.
 
         Args:
-            filename (str or None): the name or path of the file to save to; if None, uses stored
+            filename (str): the name or path of the file to save to
             shrink (bool or None): whether to shrink the sim prior to saving (reduces size by ~99%)
             kwargs: passed to sc.makefilepath()
 
@@ -2162,7 +2170,7 @@ class Sim(ss.Base):
 
         Examples:
             ```python
-            sim.save() # Saves to a .sim file
+            sim.save('my.sim')
             ```
         """
         # Set shrink based on whether we're in the middle of a run
@@ -2208,7 +2216,7 @@ class Sim(ss.Base):
         # Handle keys
         if keys is None:
             keys = ['pars', 'summary', 'results']
-        keys = sc.promotetolist(keys)
+        keys = sc.tolist(keys)
 
         # Convert to JSON-compatible format
         d = sc.obj()
@@ -2294,7 +2302,7 @@ def demo(run=True, plot=True, summary=True, show=None, **kwargs):
     Examples:
         ```python
         ss.demo() # Run, plot, and show results
-        ss.demo(diseases='hiv', networks='sexual') # Run with different defaults
+        ss.demo(diseases='sis', networks='degree') # Run with different defaults
         ```
     """
     pars = sc.mergedicts(dict(diseases='sir', networks='random'), kwargs)

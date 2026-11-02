@@ -62,7 +62,7 @@ def test_groups_kept(monkeypatch, tmp_path):
 
 
 def test_daily_dates_plot():
-    """ A daily sim of one year plots with no warning from Matplotlib's date ticks, even on small axes (TY15e) """
+    """ A daily sim of one year plots with no warning from Matplotlib's date ticks, even on small axes """
     sc.heading('Testing date ticks on small axes')
     import warnings
     sim = ss.Sim(diseases=['sis', 'sir', 'seir'], networks='random', demographics=True, n_agents=small, start='2020-01-01', stop='2021-01-01', dt=ss.days(1), verbose=0).run()
@@ -82,6 +82,7 @@ if __name__ == '__main__':
     T = sc.tic()
 
     # Run tests
+    test_daily_dates_plot()
 
     sc.toc(T)
     plt.show()

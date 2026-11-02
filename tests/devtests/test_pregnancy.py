@@ -129,7 +129,7 @@ def test_burnin():
     assert np.isclose(r.birth[1], r.delivery[1] - r.stillbirth[1], rtol=0.1), 'The first deliveries have their births'
     assert r.conception[0] == 0 and r.abortion[0] == 0, 'Burn-in events are not counted in the results'
 
-    # The TFR and ASFR, as in Starsim 3: about the fertility rate over the ages women can conceive at (against compartments once P.time can run as them: Phase B1)
+    # The TFR and ASFR, as in Starsim 3: about the fertility rate over the ages women can conceive at
     tfr = abm.results.pregnancy.tfr[13:25].mean() # Per year at each step, whatever the step (with monthly steps, it was the TFR of the month)
     assert 2.5 < tfr < 3.5, f'TFR {tfr}'
     assert abm.results.pregnancy.tfr.kind == 'ratio' # So it is averaged over time, not summed
@@ -350,7 +350,7 @@ def make_hiv_vertical(bf=True):
 
 @sc.timer()
 def test_hiv_vertical():
-    sc.heading('Port: HIV vertical transmission, in utero over MaternalNet and by breastfeeding (04 §5.3)')
+    sc.heading('Testing HIV vertical transmission, in utero over MaternalNet and by breastfeeding')
     common = dict(stratify=strat, use_aging=False, **kw)
     inf = [ss.Sim(**make_hiv_vertical(bf), n_agents=50_000, **common).run().results.hiv.infection.sum() for bf in [False, True]]
     utero, post = inf[0], inf[1] - inf[0]
@@ -360,7 +360,7 @@ def test_hiv_vertical():
 
 @sc.timer()
 def test_starsim3():
-    sc.heading('Testing back-compatibility: ss.Pregnancy has the Starsim 3 names, results, and callbacks')
+    sc.heading('Testing the names, results, and callbacks of ss.Pregnancy that code reads')
     preg = ss.Pregnancy(fertility_rate=ss.freqperyear(100), p_maternal_death=ss.bernoulli(0.01), burnin=False)
     S, I, C, F = ss.states('S I C F')
     d = ss.Disease(S, I, C, F,
@@ -419,7 +419,7 @@ syph_keys = ['mtct', 'stillbirth', 'nnd', 'born_cs', 'born_ok']
 
 @sc.timer()
 def test_syphilis():
-    sc.heading('Port: syphilis congenital outcomes by maternal stage, with ss.mother() and ss.on(preg.delivery/birth) (03 §4.2)')
+    sc.heading('Testing syphilis congenital outcomes by maternal stage, with ss.mother() and ss.on(preg.delivery/birth)')
     sim = ss.Sim(**make_syphilis(), n_agents=50_000, **syph_kw).run()
     r, p = sim.results, sim.demographics.pregnancy
     assert p.fetus and 'ss.mother' in p.fetus_reason
@@ -454,7 +454,7 @@ def make_postpartum(**kwargs):
 
 @sc.timer()
 def test_postpartum():
-    sc.heading('Port: FPsim postpartum, the time since the last birth surviving later losses, and parity as a counter moved on delivery')
+    sc.heading('Testing FPsim postpartum, the time since the last birth surviving later losses, and parity as a counter moved on delivery')
     seen = sc.obj(n=0)
     def check(sim): # Every loss after a birth leaves the time since it running
         p = sim.demographics.pregnancy
@@ -473,7 +473,7 @@ def test_postpartum():
 
 def test_postpartum_ode():
     by = lambda sim: sum(np.asarray(sim.results.pregnancy[k].select(sex='female').by('parity').values)[-1] for k in ['NP', 'P'])
-    abm = ss.Sim(demographics=make_postpartum(burnin=False), n_agents=20_000, stratify=strat, use_aging=False, **kw).run() # Burn-in as compartments is B5's
+    abm = ss.Sim(demographics=make_postpartum(burnin=False), n_agents=20_000, stratify=strat, use_aging=False, **kw).run() # Without burn-in, which compartments don't have here
     ode = ss.Sim(demographics=make_postpartum(burnin=False), solver='ode', total_pop=20_000, stratify=strat, use_aging=False, **kw).run()
     a, o = by(abm), by(ode)
     assert np.allclose(a[1:], o[1:], rtol=0.1), (a, o)
@@ -498,7 +498,7 @@ def test_save_load():
 
 
 def test_fertility_function():
-    """ FP13: each of the three rates is a parameter, which can be a function of (sim, uids); conception_rate() is fertility's default """
+    """ Each of the three rates is a parameter, which can be a function of (sim, uids); conception_rate() is fertility's default """
     def fert(sim, uids):
         ppl = sim.people
         return ss.peryear(np.where(ppl.female[uids] & (ppl.age[uids] > 15) & (ppl.age[uids] < 45), 0.3, 0.0))
@@ -512,7 +512,7 @@ def test_fertility_function():
 
 @sc.timer()
 def test_coded_reads():
-    sc.heading('Testing what code reads of the pregnancy: the delivery before the step\'s conceptions (FP2), its memory as an array (FP9), ss.mother() of children (FP10), one rate as data (ST2), and a preterm redraw (ST5)')
+    sc.heading('Testing what code reads of the pregnancy: the delivery before the step\'s conceptions, its memory as an array, ss.mother() of children, one rate as data, and a preterm redraw')
     # A woman who delivers faces conception again in the step, after the delivery's records
     preg = ss.Pregnancy(fertility_rate=ss.freqperyear(300))
     lam = ss.modify(preg.conception, multiply=0, where=preg.since_birth < ss.months(3))
@@ -524,7 +524,7 @@ def test_coded_reads():
         sim.run_one_step()
         same.append((p.P & p.ti_P.eq(p.ti_delivered)).sum())
     assert sum(same) == 0 and p.results.birth.sum() > 300, same
-    assert not any('delivery: people leave after' in str(note) for note in sim.notes) # A dwell of 32 to 42 weeks loses nobody to monthly steps (FP7)
+    assert not any('delivery: people leave after' in str(note) for note in sim.notes) # A dwell of 32 to 42 weeks loses nobody to monthly steps
 
     # Its memory and conditions as arrays, with the names declarations use
     uids = p.ti_live_birth.notnan.uids

@@ -67,14 +67,14 @@ msim.plot()
 
 ## Timings
 
-Lines are lines of model code (not counting blank lines, comments, imports, or plotting, and counting a line over 100 characters twice); times are for one run. Both are measured by Starsim's north-star script, `tests/north_star/north_star.py` in the lingua_franca_design repo (see the [index page](../library_landscape.qmd#how-these-numbers-were-made)). epydemix 1.4.0's times were recorded on the same machine, in process, without the import or the data download.
+Lines are lines of model code (not counting blank lines, comments, imports, or plotting, and counting a line over 100 characters twice); times are for one run, the first in a new process and a rerun of the same model. Both were measured as described on the [index page](../library_landscape.qmd#how-these-numbers-were-made). epydemix 1.4.0's times were recorded on the same machine, in process, without the import or the data download.
 
 | Model | Lines: epydemix | Lines: Starsim | One run: epydemix | One run: Starsim | |
 |---|---|---|---|---|---|
-| The Kenya tutorial | 7 | 13 | 0.0063 s (100 runs: 0.56 s) | 0.014 s to build and run (0.054 s the first time in a new process); 100 runs in about 0.1 to 0.2 s | **Fail** on lines; pass on time |
-| The COVID tutorial, one run of the calibration period | 161 | 33 | 0.037 s | 0.028 s (0.069 s the first time) | Pass |
+| The Kenya tutorial | 7 | 14 | first 0.0072 s, rerun 0.0066 s (100 runs: 0.58 s) | first 0.01 s, rerun 0.00039 s | **Fail** on lines; pass on time |
+| The COVID tutorial, one run of the calibration period | 161 | 39 | first 0.037 s, rerun 0.036 s | first 0.025 s, rerun 0.0013 s | Pass |
 
-The Kenya row fails the lines test because the translation the north star measures reads epydemix's downloaded population from a file, which takes 13 lines; the version above, with Starsim's bundled data, is 8 lines (one over 100 characters), against epydemix's 7.
+The Kenya row fails the lines test because the translation the north star measures reads epydemix's downloaded population from a file, which takes 14 lines; the version above, with Starsim's bundled data, is 8 lines (one over 100 characters), against epydemix's 7.
 
 ## What works and what does not yet
 

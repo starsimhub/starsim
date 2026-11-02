@@ -55,6 +55,8 @@ import sciris as sc
 import starsim as ss
 from ..diseases.agents import AgentSIR
 
+__all__ = ['CongenitalDisease']
+
 
 class CongenitalDisease(AgentSIR):
     """

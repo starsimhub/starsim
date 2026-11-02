@@ -9,7 +9,7 @@ authorship:
 
 Most of the science in a Starsim model lives in its **modules**. Diseases, networks, demographics, interventions, analyzers, and connectors are all modules, and they all share the same structure. Most of a model can be declared: states, transitions, rates, deliveries, and modifiers, as in the tutorials so far. Sooner or later, though, a model of individual people needs something none of these say: a quantity that each person carries and that changes continuously, a rule of your own for who meets whom, or a disease whose course is easiest to say step by step. Then you write a module as code: a Python class whose methods Starsim calls at each step, which can read and change anything in the sim.
 
-[T9](t9_modules.qmd) wrote an analyzer and an intervention as code. This tutorial writes the other kinds that agent-based models most often need, each a small step from what can be declared:
+[T9](t9_modules.qmd) wrote an intervention as code. This tutorial writes the other kinds that agent-based models most often need, each a small step from what can be declared:
 
 1. **A disease written as code**: the waning immunity of [A1](a1_diseases.qmd), as Starsim 3 wrote it, to compare with the declared version.
 2. **A quantity for each person**: immunity that fades gradually, which a declared model can't say, in a module of its own.

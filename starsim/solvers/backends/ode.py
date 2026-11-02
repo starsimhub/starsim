@@ -103,7 +103,6 @@ class Layout:
         np.add.at(self.share, (p.sh_pair[0], p.sh_pair[1]), p.sh_val)
         return
 
-
     def tape(self, p):
         """
         The operations of every rate as one graph, each part once (a part used by many rates, or twice in one, is worked out once),

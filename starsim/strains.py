@@ -437,7 +437,7 @@ class Strains:
         return strat
 
     def describe(self, graph, out):
-        """ The strains of a disease, as rows of its description (`out`, an `ss.Description`): how they are run, their values, and the protection between them """
+        """ The strains of a disease, as rows of its description (`out`, an `ss.display.Description`): how they are run, their values, and the protection between them """
         sets = f'sets of up to {self.max_strains} carried at once ({sc.strjoin(self.labels)}), a new strain replacing the oldest once full' if self.max_strains > 1 else 'one carried at a time'
         out.add('strains', f'{sc.strjoin(self.names)} ("{self.name}"): one course; {sets}; carried in {sc.strjoin(self._carriers(graph))}')
         per = {tr.name:tr.per_given for tr in graph.transitions.values() if getattr(tr, 'per_given', None)}

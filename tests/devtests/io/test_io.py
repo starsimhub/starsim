@@ -147,7 +147,7 @@ def test_emulsion(tmp_path):
         weekly = ss.import_from(tmp_path/'weekly.yaml', format='emulsion', **kw)
     listed = [name for name,why in weekly.imported.incomplete]
     assert 'levels: metapop' in listed and 'health_state: production R -> S' in listed # Listed, not dropped
-    assert 'import-model' in weekly.imported.prompt # What to ask an AI assistant to finish it
+    assert 'convert-model' in weekly.imported.prompt # What to ask an AI assistant to finish it
     left = weekly.new(solver='ode', substeps=None).run().results.weekly.I[1]/1000 # The ODE with its own substeps (EMULSION's compartments take whole steps)
     assert np.isclose(left, 0.9**7, rtol=1e-3) # 47.8% still infectious after a 7-day step, as in EMULSION (90% if the probability were per step)
     return sim

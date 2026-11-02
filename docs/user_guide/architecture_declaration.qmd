@@ -51,7 +51,7 @@ class SIRS(ss.Disease):
             self.define_transitions(waning=self.R >> self.S @ ss.days(100))
 ```
 
-The first three are the same model, and give the same results. This is a rule of the design: a keyword means the same thing in every form, and subclassing adds behavior, not vocabulary. A transition takes the state objects themselves, never their names as strings, so nothing is inferred from a name. In the fourth form, what is declared in `__init__()` is collected as it is given and built once, when the outermost `__init__()` returns (`built_after()` in `starsim/diseases.py`), so a subclass can add to its parent's states before anything is built; after that, declaring more raises an error.
+The first three are the same model, and give the same results. This is a rule of the design: a keyword means the same thing in every form, and subclassing adds behavior, not vocabulary. A transition takes the state objects themselves, never their names as strings, so nothing is inferred from a name. In the fourth form, what is declared in `__init__()` is collected as it is given and built once, when the outermost `__init__()` returns (`BuiltAfterInit` in `starsim/diseases.py`), so a subclass can add to its parent's states before anything is built; after that, declaring more raises an error.
 
 ## Rates are expressions
 
@@ -80,7 +80,7 @@ sim = ss.Sim(sir, stratify=dict(age=[0, 15, 65]))   # or sim.stratify(age=...), 
 sir.stratify(risk=['low', 'high'], adjust={'infection': [1, 3]})  # one disease's own dimension
 ```
 
-Stratifying doesn't copy the states: `sir` still has `S`, `I`, and `R`, and the dimension becomes an axis. In a compartmental run each state has one row per group; as agents the property is an array on the people, and the groups are used for adjustments, conditions, and results. The base model and the stratification don't refer to each other, which is what lets one disease be reused with different structures. A stratified result is still one result (`res.I.select(age='0-14')`, `res.I.by('age')`). Properties of people are normally stratified on the sim, because every disease has to agree on them. The code is in `starsim/dimensions.py` (`ss.dimensions.Strat`), and the groups a sim ends up with are `sim.groups`. See [Stratification](building_stratification.qmd).
+Stratifying doesn't copy the states: `sir` still has `S`, `I`, and `R`, and the dimension becomes an axis. In a compartmental run each state has one row per group; as agents the property is an array on the people, and the groups are used for adjustments, conditions, and results. The base model and the stratification don't refer to each other, which is what lets one disease be reused with different structures. A stratified result is still one result (`res.I.select(age='0-14')`, `res.I.by('age')`). Properties of people are normally stratified on the sim, because every disease has to agree on them. The code is in `starsim/internals/dimensions.py` (`ss.dimensions.Strat`), and the groups a sim ends up with are `sim.groups`. See [Stratification](building_stratification.qmd).
 
 ## The graph: resolve, complete, check
 
@@ -144,7 +144,7 @@ Every importer reads another framework's model into one intermediate object, `ss
 ```{mermaid}
 %%| echo: false
 flowchart LR
-  F["odin, SBML, EMULSION, SimInf,<br>flepiMoP, summer2, Atomica, camdl,<br>EpiModel, epydemix, MEmilio"] --> R[reader] --> S["ss.converters.Source"] --> W["ss.converters.write()"] --> C["Starsim code"] --> Sim[sim]
+  F["odin, SBML, EMULSION, SimInf,<br>flepiMoP, summer2, Atomica, camdl,<br>EpiModel, epipack, epydemix, epymorph, MEmilio"] --> R[reader] --> S["ss.converters.Source"] --> W["ss.converters.write()"] --> C["Starsim code"] --> Sim[sim]
   Sim --> E["SBML, odin"]
 ```
 
@@ -168,9 +168,9 @@ The flow `beta * S * I / (S + I + R)` was read as frequency-dependent exposure, 
 print(ss.export_to(sim, 'odin'))
 ```
 
-An importer keeps the source's names, marks what it guessed (as `[guessed]` in `describe()`, like a hand-written model), keeps going when something doesn't map onto a built-in piece, and lists what it couldn't translate by name (`ss.errors.ImportIncomplete`, also in `sim.imported.incomplete`). An incomplete import still runs, without the listed parts, and the warning says how to finish it with the `import-model` skill for AI assistants (in `starsim_ai/`). Exporters work the other way: SBML and odin are written from the built model (each disease's graph and engine, in its compartmental form), and each export lists what it left out or changed (`ss.errors.LossyExport`), one line per declaration. A network, a module written as code, and a function are always listed as left out. `ss.converters.to_hub()` writes the runs of a MultiSim as a forecast-hub submission.
+An importer keeps the source's names, marks what it guessed (as `[guessed]` in `describe()`, like a hand-written model), keeps going when something doesn't map onto a built-in piece, and lists what it couldn't translate by name (`ss.errors.ImportIncomplete`, also in `sim.imported.incomplete`). An incomplete import still runs, without the listed parts, and the warning says how to finish it with the `convert-model` skill for AI assistants (in `starsim/.agents/skills/`). Exporters work the other way: SBML and odin are written from the built model (each disease's graph and engine, in its compartmental form), and each export lists what it left out or changed (`ss.errors.LossyExport`), one line per declaration. A network, a module written as code, and a function are always listed as left out. `ss.converters.to_hub()` writes the runs of a MultiSim as a forecast-hub submission.
 
-The code is in `starsim/converters/`: `core.py` holds `Source`, `write()`, and `build()`, there is one file per framework, and `export.py` has the exporters. The files for epydemix, MEmilio, and summer2 also run as scripts in those frameworks' own environments (needing neither Starsim nor Sciris), where they write the model as JSON for the importer to read; EpiModel's equivalent is an R script (`dump_epimodel.R`). Each importer is tested against its framework's own examples (`tests/devtests/io/`) and in a scaled-down demo per framework (`tests/switching/` in the lingua_franca_design repo). For the modeler's view, see [Import and export](conversion/index.qmd) and the conversion pages for each framework.
+The code is in `starsim/converters/`: `core.py` holds `Source`, `write()`, and `build()`, there is one file per framework, and `export.py` has the exporters. The files for epipack, epydemix, epymorph, MEmilio, and summer2 also run as scripts in those frameworks' own environments (needing neither Starsim nor Sciris), where they write the model as JSON for the importer to read; EpiModel's equivalent is an R script (`dump_epimodel.R`). Each importer is tested against its framework's own examples (`tests/devtests/io/`) and in a scaled-down demo per framework (`tests/switching/` in the lingua_franca_design repo). For the modeler's view, see [Import and export](conversion/index.qmd) and the conversion pages for each framework.
 
 ## The vocabulary
 

@@ -208,7 +208,7 @@ class Graph:
                 self.add(self.outcomes, obj.name, obj)
             elif isinstance(obj, par):
                 self._add_par(obj, name=obj.name)
-            elif isinstance(obj, Expr) and ss.expressions.per_person_in(obj): # A helper with a value for each person, e.g. gain = cd4_potential - cd4_preart, age = ss.ppl.age/A, or duration = affected.time, used through the objects; not a result (TY4)
+            elif isinstance(obj, Expr) and ss.expressions.per_person_in(obj): # A helper with a value for each person, e.g. gain = cd4_potential - cd4_preart, age = ss.ppl.age/A, or duration = affected.time, used through the objects; not a result
                 continue
             elif isinstance(obj, Expr): # A sum or ratio of states is a result
                 name = name or self.names.get(id(obj))
@@ -446,7 +446,7 @@ class Graph:
 
     def check_counts(self):
         """
-        Refuse a forgotten `people=False` (MA35): a group of states of people that no transition links to the first state
+        Refuse a forgotten `people=False`: a group of states of people that no transition links to the first state
         and that only an inflow (not a birth) fills, as mosquitoes are, would otherwise silently become agents
         """
         links = {id(s):set() for s in self.people_states}
@@ -619,7 +619,7 @@ class Graph:
         used += [(name, expr) for name,a in self.attrs.items() for expr in ([e for names,e in a.cases] if a.cases is not None else [e for _,e in a.by_event] if a.by_event is not None else [a.value]) if isinstance(expr, Expr) and not isinstance(expr, ss.expressions.attr)] # And in an attribute
         used += [(name, val) for name,a in self.attrs.items() for _,v in (a.by_event or []) for p in ss.expressions.dists_in(v) for val in p.value.pars.values() if isinstance(val, par)]
         used += [(name, val) for name,a in self.attrs.items() if a.kind in ['drawn', 'trait'] for p in ss.expressions.dists_in(a.value) for val in p.value.pars.values() if isinstance(val, par)] # And a parameter of a distribution an attribute is drawn from, e.g. ss.bernoulli(ss.par(0.6, name='sero'))
-        used += [(name, a.init_value) for name,a in self.attrs.items() if isinstance(a.init_value, Expr)] # And in its value before any event (TY3)
+        used += [(name, a.init_value) for name,a in self.attrs.items() if isinstance(a.init_value, Expr)] # And in its value before any event
         used += [(name, val) for name,a in self.attrs.items() if a.init_value is not None for p in ss.expressions.dists_in(a.init_value) for val in p.value.pars.values() if isinstance(val, par)]
         used += [(name, leaf.value) for name,expr in list(used) if expr is not None for leaf in expr.leaves if isinstance(leaf, par) and isinstance(leaf.value, Expr)] # And inside a dwell time given as an expression (of attributes)
         used += [(name, inner) for name,expr in list(used) if expr is not None for leaf in expr.leaves if isinstance(leaf, par) for inner in inner_pars(leaf.value)] # And a parameter inside a value that varies in time, a probability per act, or a beta for each route
@@ -809,7 +809,7 @@ class Graph:
                             raise ValueError(f'Could not find a name for {leaf} in "{tr.name}"; give it one, e.g. ss.attr(..., name="frailty"), or pass it as a keyword, e.g. ss.Disease(..., frailty=ss.attr(...))')
                         self.add(self.attrs, leaf.name, leaf)
         for name,a in self.attrs.items():
-            if a.module is not None and a.module is not self.module: # HP43: it would be drawn for each module separately, not shared
+            if a.module is not None and a.module is not self.module: # It would be drawn for each module separately, not shared
                 raise ValueError(f'the attribute "{name}" is given to two modules, "{a.module.name}" and "{self.module.name}"; an attribute belongs to one module, and each would draw its own values. '
                                                      f'For one value per person read by both, give it to one and read it from the other in a function of the sim.')
             a.module = self.module
@@ -818,7 +818,7 @@ class Graph:
                     errormsg = f'The attribute "{name}" of "{self.module.name}" records "{a.value}", which is not one of its attributes ({sc.strjoin(self.attrs.keys())})'
                     raise ValueError(errormsg)
                 a.value = self.attrs[a.value]
-            if isinstance(a.value, dict) and all(ss.expressions.is_event(key) for key in a.value): # A value for each event (TY1)
+            if isinstance(a.value, dict) and all(ss.expressions.is_event(key) for key in a.value): # A value for each event
                 a.by_event = [(ss.expressions.events_in(key, self), val if isinstance(val, ss.Dist) else as_expr(val)) for key,val in a.value.items()]
             elif isinstance(a.value, dict):
                 if a.on is not None:
@@ -963,8 +963,7 @@ class Graph:
         The states counted in prevalence: the states people are infected into, and the sources of infection (of people by contact, as `I` in `beta*I`, or density-dependent, in `beta*I.n`; or of a count, as `Ih` in a bite rate `Ih.n / N` of mosquitoes)
 
         In a model where nobody is a source of infection (a staged condition such as a cancer), also every state that
-        people reach from those without passing through a state they can be in without having been infected (TL52: only
-        the first stage was counted, so a test found 649 of 1,637 people with cancer)
+        people reach from those without passing through a state they can be in without having been infected
         """
         sources = {id(s):s for s in self.infectious + self.density_sources}
         for tr in self.transitions.values():
@@ -990,7 +989,6 @@ class Graph:
         vals = [p.raw for p in self.all_pars()] + [val for oc in self.outcomes.values() for val in [oc.delay, oc.duration]]
         return unit_values(vals)
 
-
     def modifier_kind(self, name):
         """ What a modifier on a transition acts on: its probability if it is one branch of several with p= (chosen on entry) or one destination of a transition with several (`'recovery.R'`), and otherwise its rate """
         tr = self.transitions.get(name)
@@ -1001,7 +999,7 @@ class Graph:
         return 'transition'
 
     def dwell_not_branch(self, name, how, modname):
-        """ For a multiplier (`how`, e.g. 'the modifier "m"') on a transition with several destinations chosen with p= and a dwell time: a note that it changes the dwell, not a branch (TL16), naming the destinations that would; otherwise None """
+        """ For a multiplier (`how`, e.g. 'the modifier "m"') on a transition with several destinations chosen with p= and a dwell time: a note that it changes the dwell, not a branch, naming the destinations that would; otherwise None """
         tr = self.transitions.get(name)
         if tr is None or tr.p is None or tr.dst is None or len(tr.dst) < 2 or tr.dur is None:
             return None

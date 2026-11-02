@@ -42,7 +42,7 @@ infection = S >> I @ upsilon * phi.n # phi.n, not phi: phi is a count, not peopl
 
 ## Worked example
 
-`lingua_franca_design/examples/siminf/sir_herds` (SIR in 1,600 herds with births, deaths, and movements) and `examples/siminf/sise3` (SISe3, three age categories with the environment). With `u0` and the events written by R, both import with nothing listed. Over 96 runs of the SIR, the mean of every compartment and of the number of infected herds is within about 1.4 standard errors of SimInf's at days 100, 365, 700, 1,000, and 1,450 (`I` on day 700: 47,303 ± 1,888 against 49,853); over 24 runs of SISe3, `I` in each age category is within about 1 standard error (all `I` on day 1,450: 3,273 ± 537 against 3,692).
+[`siminf/sir_herds`](https://github.com/starsimhub/lingua_franca_design/tree/main/docs/models/siminf/sir_herds) (SIR in 1,600 herds with births, deaths, and movements) and [`siminf/sise3`](https://github.com/starsimhub/lingua_franca_design/tree/main/docs/models/siminf/sise3) (SISe3, three age categories with the environment). With `u0` and the events written by R, both import with nothing listed. Over 96 runs of the SIR, the mean of every compartment and of the number of infected herds is within about 1.4 standard errors of SimInf's at days 100, 365, 700, 1,000, and 1,450 (`I` on day 700: 47,303 ± 1,888 against 49,853); over 24 runs of SISe3, `I` in each age category is within about 1 standard error (all `I` on day 1,450: 3,273 ± 537 against 3,692).
 
 ```python
 sim = ss.import_from('events_SIR.R', u0='reference/u0.csv', events='reference/events.csv.gz')
@@ -50,4 +50,4 @@ sim = ss.import_from('events_SIR.R', u0='reference/u0.csv', events='reference/ev
 
 ## Running the original
 
-In SimInf's environment (`lingua_franca_design/_envs/siminf`; `bin/Rscript` sets `R_LIBS_USER`): source the script (with `pdf(NULL)` first, since the examples plot), run `run(model)` n times, and write `trajectory(result, format = "matrix")` (one row per node and compartment, one column per `tspan` time), summed over nodes, as one row per run and time. `examples/siminf/sir_herds/run.py` is a complete driver, which also writes `u0.csv` and `events.csv.gz`. SimInf's record at `tspan` time t matches Starsim's `n_<state>[t]`, with no shift. Compare statistically.
+In SimInf's own environment: source the script (with `pdf(NULL)` first, since the examples plot), run `run(model)` n times, and write `trajectory(result, format = "matrix")` (one row per node and compartment, one column per `tspan` time), summed over nodes, as one row per run and time. [`siminf/sir_herds/run.py`](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/models/siminf/sir_herds/run.py) is a complete driver, which also writes `u0.csv` and `events.csv.gz`. SimInf's record at `tspan` time t matches Starsim's `<state>[t]`, with no shift. Compare statistically.

@@ -32,7 +32,7 @@ def convert(val, unit, cache=None):
     if isinstance(val, ss.TimePar):
         if isinstance(val, ss.prob): # A probability per period becomes the hazard that gives it
             period = 1.0 if val.unit is None else val.unit.to(unit).value # With no unit, the probability is per unit of the sim's time
-            with np.errstate(divide='ignore'): # A probability of 1 is an infinite hazard: certain within the step (FP1)
+            with np.errstate(divide='ignore'): # A probability of 1 is an infinite hazard: certain within the step
                 return -np.log1p(-np.asarray(val.value, dtype=float))[()]/period
         return val.to(unit).value
     return val
@@ -225,7 +225,7 @@ class CountState:
         return self.engine.count([self.state], total=False)
 
     def no_agents(self, what):
-        """ A read of agents, which a compartmental run does not have (TC3: a module that reads each person's state, run beside the compartments) """
+        """ A read of agents, which a compartmental run does not have (e.g. a module that reads each person's state, run beside the compartments) """
         raise ss.CapabilityError(f'{self.engine.mod.name}.{self.name}{what} was asked for, but a compartmental run has the number in each state ({self.engine.mod.name}.{self.name}.n), not agents.\n'
                                  f'     Run with solver="abm", e.g. ss.Sim(..., solver="abm") or sim.run(solver="abm"); a module written as code that reads agents can say so with compartmental = False, so that solver="auto" runs them.')
 
@@ -708,7 +708,7 @@ class Engine(Telling, Effects):
             out = None
             if strain is not None or moved or not np.array_equal(a, b):
                 ng = self.sim.groups.n_groups
-                if self.solver != 'abm' and 8*ng**2 > self.max_map_bytes: # A dense matrix of groups by groups (FP84: 25.7 GB for 3,264 × 18 groups)
+                if self.solver != 'abm' and 8*ng**2 > self.max_map_bytes: # A dense matrix of groups by groups
                     raise ss.CapabilityError(f'"{self.mod.name}" cannot run with solver="{self.solver}": people moving from {src or "outside"} to {dst} change group, and the map between its {ng:,} groups would take {8*ng**2/1e9:.3g} GB (a dense matrix of groups by groups).\n'
                                              f'     Run with solver="abm", or with fewer groups (fewer dimensions, or fewer diseases tracked jointly).')
                 out = np.ones((1, 1))
@@ -766,10 +766,10 @@ class Engine(Telling, Effects):
         """
         The protection between the strains of a disease with shared states (`ss.Strains(immunity=...)`, see `ss.immunity`)
 
-        - Due to a state (`due_to=R`): its people are protected by the strains they carry in it, against each
-          strain; a multiplier for each level of the strain dimension and strain, in `protect`. A state people
-          are not infected in (R) can be infected again, moving on as from the first state (`immune_states`);
-          one they are infected in (L) can carry another strain as well (see `ss.strains.add_superinfection()`).
+        The people in a state given by `due_to=R` are protected by the strains they carry in it, against each
+        strain: a multiplier for each level of the strain dimension and strain, in `protect`. A state people
+        are not infected in (R) can be infected again, moving on as from the first state (`immune_states`);
+        one they are infected in (L) can carry another strain as well (see `ss.strains.add_superinfection()`).
         """
         self.immune_states = []
         self.protect = {}
@@ -786,7 +786,7 @@ class Engine(Telling, Effects):
         for imm in strains.immunity:
             for name in imm.names:
                 state = graph.states[name]
-                self.protect[name] = self.protect.get(name, 1.0)*(1 - strains.level_protection(imm)) # On every transmission out of the state (e.g. a reinfection R >> I of its own, HP46)
+                self.protect[name] = self.protect.get(name, 1.0)*(1 - strains.level_protection(imm)) # On every transmission out of the state (e.g. a reinfection R >> I of its own)
                 if id(state) not in infected and id(state) not in sources and state not in self.immune_states:
                     self.immune_states.append(state)
         return
@@ -884,7 +884,7 @@ class Engine(Telling, Effects):
         raw = p.raw
         if route:
             out = self.route_value(p, raw)
-        elif isinstance(raw, ss.parameters.by_func): # A value for each level of a dimension, from a function of the sim (MS2)
+        elif isinstance(raw, ss.parameters.by_func): # A value for each level of a dimension, from a function of the sim
             out = self.by_levels(raw)
             out = self.by_group(out) if isinstance(out, ss.by) else out
         elif isinstance(raw, ss.Dist): # Not a dwell time (those are handled separately), so use the mean
@@ -1000,7 +1000,7 @@ class Engine(Telling, Effects):
             stay (float): the probability of `ss.stay` among the destinations, if given, which the one that takes the rest does not get
         """
         given = sum(p if m is None else np.where(np.asarray(m) == 0, 0.0, p) for p,m in zip(ps, mults) if p is not None) + stay # A branch its modifiers rule out (e.g. one for another level of a move= arrow) does not count
-        if np.any(np.asarray(given) > 1 + 1e-9) or any(np.any(np.asarray(p) < 0) for p in ps if p is not None): # TL13: was used as 1 (or as a negative remainder) with no note
+        if np.any(np.asarray(given) > 1 + 1e-9) or any(np.any(np.asarray(p) < 0) for p in ps if p is not None): # Refused, rather than used as 1 (or as a negative remainder)
             names = sc.strjoin([getattr(tr, 'name', tr) for tr,p in zip(trs, ps) if p is not None])
             raise ValueError(f'the branch probabilities of {self.mod.name}.{names} come to as much as {np.max(given):n}, more than 1 (or one is negative); each must be between 0 and 1, and together at most 1')
         rest = 1.0 - given
@@ -1032,7 +1032,7 @@ class Engine(Telling, Effects):
         if self.sim.modifiers.get((self.mod.name, kind, name)):
             key = (kind, name, state.name if state is not None else None)
             if key not in self.cache:
-                with self.evaluating(for_uids=False): # For everyone, even when asked while a rate is evaluated for some agents (CV23)
+                with self.evaluating(for_uids=False): # For everyone, even when asked while a rate is evaluated for some agents
                     self.cache[key] = super().mult_raw(kind, name, state)
             out = self.cache[key]
         if getattr(self, 'rel_adjust', None) and self.rel_adjust.get(kind):
@@ -1090,7 +1090,7 @@ class Engine(Telling, Effects):
         sim = self.sim
         self.check_counted_strains()
         self.adjust = sc.obj({name:None for name in self.graph.transitions})
-        self.branch_adjust = dict() # For a branch chosen with p=: a multiplier on its probability, as for a modifier on it (TL16: the dwell time was divided instead)
+        self.branch_adjust = dict() # For a branch chosen with p=: a multiplier on its probability, as for a modifier on it
         self.adjust_dims = sc.obj({name:set() for name in self.graph.transitions}) # The dimensions each transition's multiplier is by
         self.strain_adjust = sc.obj({name:None for name in self.graph.transitions}) # For a transmission: a multiplier for each strain, which is the strain of the person it comes from
         self.rel_adjust = dict(rel_trans=[], rel_sus=[]) # Multipliers on infectiousness and susceptibility, as (dimension, value for each level), for the states the dimension applies to
@@ -1126,7 +1126,7 @@ class Engine(Telling, Effects):
                         current = 1.0 if self.adjust[name] is None else self.adjust[name]
                         self.adjust[name] = current*sim.groups.group_vals(d, vals)
                         self.adjust_dims[name].add(d)
-        for name,tr in self.graph.transitions.items(): # A value by level of a dimension that the states moved have no level of: there is no level to take (it took the first)
+        for name,tr in self.graph.transitions.items(): # A value by level of a dimension that the states moved have no level of: there is no level to take
             ends = tr.src or tr.dst or []
             for expr in [tr.rate, tr.dur] + sc.tolist(tr.p):
                 for leaf in (expr.leaves if isinstance(expr, ss.expressions.Expr) else []):
@@ -1263,7 +1263,7 @@ class Engine(Telling, Effects):
         return self.sim.pars.unit is None and self.sim.unit_source == 'the typed values in the model'
 
     def bare_return(self, p, func, out):
-        """ ST33: a function for a rate or a duration that returns a bare number, when the unit is inferred from the typed values, raises rather than guess its unit (0 is 0 in any unit) """
+        """ A function for a rate or a duration that returns a bare number, when the unit is inferred from the typed values, raises rather than guess its unit (0 is 0 in any unit) """
         if np.any(np.asarray(out, dtype=float) != 0):
             name, unit = getattr(func, '__name__', 'function'), self.sim.unit
             example = f'ss.per{unit}(...)' if p.slot == 'rate' else f'ss.{unit}s(...)'
@@ -1301,7 +1301,7 @@ class Engine(Telling, Effects):
     def count_expr(self, expr):
         """ The value of a count in a rate (`I.n`, `I.total`, `I.frac`), with another disease's states counted by that disease """
         own, others = self.split_states(expr.states)
-        if expr.weighted: # Each person counted by a value of theirs (MS3, TY6)
+        if expr.weighted: # Each person counted by a value of theirs
             out = self.count_weighted(own, expr) if own else 0.0
             for name,states in others.items():
                 out = out + self.sim.get_declared(name).engine.count_weighted(states, expr)
@@ -1339,7 +1339,7 @@ class Engine(Telling, Effects):
             scaled = trans.scaled_dist(raw) if tr.dur is not None and isinstance(raw, trans.Expr) else None # A distribution times a factor: each draw is scaled, so it keeps its shape
             if scaled is not None:
                 raw = trans.by_dist(scaled[0].raw)
-            if tr.dur is not None and callable(raw) and not isinstance(raw, (ss.Dist, ss.TimePar, ss.by, trans.TimeValue)): # ST18: a function's value is the mean of an exponential, not each person's own time
+            if tr.dur is not None and callable(raw) and not isinstance(raw, (ss.Dist, ss.TimePar, ss.by, trans.TimeValue)): # A function's value is the mean of an exponential, not each person's own time
                 fname = getattr(raw, '__name__', 'the function')
                 self.tell(ss.warn, f'"{self.mod.name}.{name}" has dur={fname}, whose value is the mean of an exponential dwell time, so people leave at a constant rate; for each person to leave at the time it gives, write dur=ss.constant({fname})')
             dw = Bunch(par=p, raw=raw, dist=None, k=tr.stages or 1, exact=True, is_rate=tr.dur is None, family='exponential', std=None, fixed=False, kg=None, scale=None if scaled is None else scaled[1])
@@ -1353,7 +1353,7 @@ class Engine(Telling, Effects):
                 if np.isnan(mean): # A parameter is a function of the agents
                     if self.solver != 'abm':
                         raise ss.CapabilityError(f'"{name}" cannot run with solver="{self.solver}": its dwell time {raw} has a parameter that is a function of the agents. Run with solver="abm".')
-                    typed_factor = scaled is not None and any(isinstance(getattr(leaf, 'raw', None), ss.TimePar) for leaf in trans.as_expr(scaled[1]).leaves) # e.g. dur=d*ss.days(1), whose numbers are days (TY5)
+                    typed_factor = scaled is not None and any(isinstance(getattr(leaf, 'raw', None), ss.TimePar) for leaf in trans.as_expr(scaled[1]).leaves) # e.g. dur=d*ss.days(1), whose numbers are days
                     if getattr(raw, 'unit', None) is None and not typed_factor and not any(isinstance(v, ss.TimePar) for v in raw.pars.values()): # What the function returns has no unit to say otherwise
                         funcs = sc.strjoin(getattr(v, '__name__', 'a function') if callable(v) else str(v) for v in raw.pars.values() if callable(v) or isinstance(v, (ss.conditions.Cond, ss.expressions.Expr)))
                         self.tell(ss.note, f'the dwell time of "{name}" comes from {funcs}, whose numbers are read in {self.sim.unit_base}s, the sim\'s unit; if they are in another unit, give it on the distribution, e.g. unit="month"', sim=self.sim)
@@ -1482,7 +1482,7 @@ class Engine(Telling, Effects):
             if dw.dist is None and (callable(dw.par.raw) or isinstance(dw.par.raw, (ss.by, ss.expressions.Expr))): # Not known until the sim runs, or not one number
                 continue
             mean = dw.mean if dw.dist is not None else self.dwell_mean(name)
-            if sim.solver == 'abm' and dw.dist is not None and dw.family != 'exponential' and mean is not None and getattr(dw, 'std', None) is not None and np.all(np.asarray(mean, dtype=float) - 2*np.asarray(dw.std, dtype=float) >= dt): # As agents, a dwell drawn from a distribution that seldom reaches below a step (e.g. a pregnancy of 32 to 42 weeks, at a monthly step) loses nobody to whole steps (FP7)
+            if sim.solver == 'abm' and dw.dist is not None and dw.family != 'exponential' and mean is not None and getattr(dw, 'std', None) is not None and np.all(np.asarray(mean, dtype=float) - 2*np.asarray(dw.std, dtype=float) >= dt): # As agents, a dwell drawn from a distribution that seldom reaches below a step (e.g. a pregnancy of 32 to 42 weeks, at a monthly step) loses nobody to whole steps
                 continue
             if mean is not None and np.ndim(mean) == 0 and mean > 0: # The chain-binomial solver moves people through the stages exactly (see ss.kernels.draw_chain()), and agents draw the whole dwell time, so it is the mean that matters
                 x = dt/mean
@@ -1567,7 +1567,7 @@ class Engine(Telling, Effects):
                     raise ss.CapabilityError(f'init= of "{state.name}" in "{self.mod.name}" reads the number in another state, but a state of people starts with a share of them; give a share or a number, which only a state that is not people (ss.State(people=False)) can read')
                 by_count[state.name] = init
                 continue
-            if isinstance(init, ss.expressions.Expr) and ss.expressions.per_person_in(init): # An expression of people's properties and parameters, e.g. 1 - (A - age)/(k*age + A) (TY2)
+            if isinstance(init, ss.expressions.Expr) and ss.expressions.per_person_in(init): # An expression of people's properties and parameters, e.g. 1 - (A - age)/(k*age + A)
                 if state.people and not is_n and self.solver == 'abm': # Read for each person, as agents: see Agents.init_post()
                     continue
                 init = np.asarray(self.eval(init), dtype=float)[()] # For each group
@@ -1768,7 +1768,7 @@ class Engine(Telling, Effects):
     #%% Results
 
     def init_results(self):
-        """ One count per state, one flow per transition (`res.infection.cum` is its cumulative total), and for the library's diseases, Starsim's standard disease results """
+        """ One count per state, one flow per transition (`res.infection.cum` is its cumulative total), and a result for each expression, outcome, and transfer """
         mod = self.mod
         graph = self.graph
         abm = self.solver == 'abm'
@@ -1989,7 +1989,7 @@ class Engine(Telling, Effects):
                     if own is not None: # Each person's own weight
                         amount += own
                         continue
-                    with self.evaluating(by_group=True): # One weight for each group, as the flows are (TL51: as agents, a weight by age crashed)
+                    with self.evaluating(by_group=True): # One weight for each group, as the flows are
                         weight = self.eval(weight)
                 amount += self.outcome_share(flow, weight, integer)
             info.now = self.report_outcome(info, info, amount, ti, integer)
@@ -2149,7 +2149,7 @@ class Engine(Telling, Effects):
         if scale != 1:
             for r in people: # The values written this step
                 r[ti] = r[ti]*scale
-        if self.coded: # The module's own ss.BoolStates (and derived states), counted as for a module written as code
+        if self.coded: # The module's own `ss.BoolState`s (and derived states), counted as for a module written as code
             ss.Module.update_results(mod, names=self.coded)
         return
 
@@ -2213,8 +2213,7 @@ class Engine(Telling, Effects):
         return
 
     def finalize_results(self):
-        """ Cumulative results, computed after scaling """
-        res = self.mod.results # Already scaled, by group too: see ss.Result.apply_scale()
+        """ Once the results are final (and scaled: see `ss.Result.apply_scale()`), say where chance would matter """
         self.note_chance()
         return
 

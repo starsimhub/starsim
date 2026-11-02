@@ -52,7 +52,7 @@ The settings of a sim are its keywords. The ones most models use:
 | `demographics` | Births, deaths, and migration (see [Demographics](populations_demographics.qmd)) |
 | `interventions`, `analyzers`, `connectors` | Interventions, analyzers, and connectors between modules (see [Interventions](interventions_interventions.qmd)) |
 | `data` | Data to compare the results with, by name (see [Results](building_results.qmd)) |
-| `solver` | How to run: `'auto'` (the default), `'ode'`, `'binomial'`, `'gillespie'`, `'tau'`, or `'abm'` |
+| `solver` | How to run: `'auto'` (the default), `'ode'`, `'ide'`, `'binomial'`, `'gillespie'`, `'tau'`, or `'abm'` |
 | `rand_seed` | The random seed, for a stochastic run (default 1; see [Scenarios](running_scenarios.qmd)) |
 | `label` | A name for the sim, used in plots and comparisons |
 | `verbose` | How much to print (above) |
@@ -170,7 +170,7 @@ Copying a sim takes some time too, so a shared start saves time only when it is 
 For a declared model, Starsim works out the order of everything in a step from the model itself. For modules written as code it matters, because each module's code runs at a fixed point in the step:
 
 1. Each module's `start_step()`, which mostly moves the random number generators on.
-2. Births, deaths, and other demographics.
+2. Modules of your own (`custom=`), then births, deaths, and other demographics.
 3. Progression of each disease (`step_state()`: recoveries, deaths, and other moves that don't depend on contact).
 4. Connectors (which change one module according to another).
 5. Networks (contacts form and end).
@@ -220,8 +220,8 @@ def make_sim(seed=1, n_agents=10_000, start=1990, stop=2030, scenario='baseline'
 
     # Networks, disease, and interventions
     sexual = ss.SexualNet()
-    maternal = ss.MaternalNet()
-    hiv = ssl.HIV(beta={'sexualnet': [0.008, 0.004], 'maternalnet': [0.2, 0]})
+    prenatal = ss.PrenatalNet()
+    hiv = ssl.HIV(beta={'sexualnet': ss.peract(m2f=0.008, f2m=0.004), 'prenatalnet': 0.2})
     interventions = []
     if scenario == 'treat':
         interventions.append(ssl.ART(year=[2004, 2020], coverage=[0.1, 0.8]))
@@ -229,7 +229,7 @@ def make_sim(seed=1, n_agents=10_000, start=1990, stop=2030, scenario='baseline'
     sim = ss.Sim(
         people = people,
         diseases = hiv,
-        networks = [sexual, maternal],
+        networks = [sexual, prenatal],
         demographics = [pregnancy, deaths],
         interventions = interventions,
         start = start,

@@ -2,9 +2,11 @@
 Test Starsim features not covered by other test files
 """
 import os
+import re
 import sys
 import shutil
 import subprocess
+from pathlib import Path
 import pytest
 import numpy as np
 import sciris as sc
@@ -189,7 +191,7 @@ class Counter(ss.Module):
     text, changes, todo = migrate_text("hiv = ssl.HIV(beta={'mf': [0.08, 0.04], 'prenatal': [0.2, 0], 'msm': [0.1, 0.1]})") # A beta pair has direction names
     assert text == "hiv = ssl.HIV(beta={'mf': ss.peract(m2f=0.08, f2m=0.04), 'prenatal': 0.2, 'msm': [0.1, 0.1]})" and any('"msm"' in msg for line,msg in todo)
 
-    # The names of results: Starsim's own counts renamed after results, and a package's own results left alone (CV5, ST4, HP80, MG10)
+    # The names of results: Starsim's own counts renamed after results, and a package's own results left alone
     text, changes, todo = migrate_text("a = sim.results.n_alive; b = res['sir.n_infected']; c = df['n_alive']")
     assert text == "a = sim.results.alive; b = res['sir.infected']; c = df['n_alive']" and len(todo) == 1 # A column of a dataframe could be anything's: listed
     own = "class Mosquito(ss.Module):\n    def init_results(self):\n        self.define_results(ss.Result('n_infected'))\n    def step(self):\n        self.results.n_infected[self.ti] = 5\nx = res['n_infected']"
@@ -233,28 +235,158 @@ class Counter(ss.Module):
     return new
 
 
-# %% Run as a script
-def test_cli(tmp_path, monkeypatch, capsys):
-    """ The starsim command: installing the skill for AI agents (to a temporary home folder), and showing the guide and its skills """
+@pytest.fixture
+def ai_home(tmp_path, monkeypatch):
+    """ A temporary home folder, with a project in it as the current folder, and no agent on the path """
+    from starsim.internals import cli
+    home = tmp_path/'home'
+    project = home/'project'
+    project.mkdir(parents=True)
+    monkeypatch.setenv('HOME', str(home))
+    monkeypatch.setenv('USERPROFILE', str(home)) # The home folder on Windows
+    monkeypatch.chdir(project)
+    monkeypatch.setattr(cli.shutil, 'which', lambda *args, **kwargs: None)
+    return sc.objdict(home=home, project=project)
+
+
+def test_cli(ai_home, capsys):
+    """ The starsim command: the short skill for all projects, and showing the guide and its skills """
     sc.heading('Testing the starsim command')
     from starsim.internals import cli
-    monkeypatch.setenv('HOME', str(tmp_path))
-    monkeypatch.setenv('USERPROFILE', str(tmp_path)) # The home folder on Windows
-    cli.main(['ai'])
-    skill = tmp_path / '.agents' / 'skills' / 'starsim' / 'SKILL.md'
-    assert skill.exists() and not (tmp_path / '.claude' / 'skills').exists() # Only for Claude Code if it is installed
-    other = tmp_path / '.claude' / 'skills' / 'starsim' / 'SKILL.md'
+    home = ai_home.home
+    cli.main(['ai', '--global'])
+    skill = home/'.agents'/'skills'/'starsim'/'SKILL.md'
+    assert skill.exists() and not (home/'.claude'/'skills').exists() # Only for Claude Code if it is installed
+    other = home/'.claude'/'skills'/'starsim'/'SKILL.md'
     other.parent.mkdir(parents=True)
     other.write_text('---\nname: starsim\n---\nSomeone else\'s skill')
-    cli.main(['ai', 'install', '--to', 'claude'])
+    cli.main(['ai', 'install', '--global', '--to', 'claude'])
     assert 'Someone else' in other.read_text() # Not overwritten without --force
     cli.main(['ai', 'show'])
     out = capsys.readouterr().out
-    assert all(f'`{name}`' in out for name in ['import-model', 'migrate-starsim3', 'validate-import']) # The guide lists the skills
-    cli.main(['ai', 'show', 'import-model'])
-    assert 'name: import-model' in capsys.readouterr().out
-    cli.main(['ai', 'uninstall'])
+    assert all(f'`{name}`' in out for name in ['convert-model', 'migrate-starsim3', 'validate-conversion']) # The guide lists the skills
+    cli.main(['ai', 'show', 'convert-model'])
+    assert 'name: convert-model' in capsys.readouterr().out
+    cli.main(['ai', 'uninstall', '--global'])
     assert not skill.exists() and other.exists()
+    return
+
+
+def test_cli_project(ai_home, monkeypatch, capsys):
+    """ `starsim ai` links the skills into the project, and installs for all projects where it can't """
+    sc.heading('Testing project skills')
+    from starsim.internals import cli
+    home, project = ai_home.home, ai_home.project
+    (home/'.claude').mkdir() # As if Claude Code were installed
+    (project/'pyproject.toml').touch()
+    sub = project/'analysis'
+    sub.mkdir()
+    monkeypatch.chdir(sub) # From a subfolder, it's still the project that gets them
+    theirs = project/'.agents'/'skills'/'convert-model'
+    theirs.mkdir(parents=True)
+    cli.main(['ai'])
+    linked = project/'.claude'/'skills'/'starsim'/'SKILL.md'
+    assert linked.read_text() == (cli.ai_folder/'starsim'/'SKILL.md').read_text() # The whole skill, not the short one
+    assert (project/'.agents'/'skills'/'starsim').is_symlink()
+    assert not theirs.is_symlink() # Someone else's folder is left alone
+
+    cli.main(['ai', 'status'])
+    assert 'linked in this project' in capsys.readouterr().out
+    cli.main(['ai']) # Again, to repair or update
+    cli.main(['ai', 'uninstall'])
+    assert not linked.parent.is_symlink() and theirs.exists()
+
+    package = cli.agents_folder.parent
+    monkeypatch.chdir(package) # Starsim's own folder has .agents, but must never be taken for a project
+    assert cli.project_root() != package
+    monkeypatch.chdir(sub)
+
+    def fail(*args, **kwargs):
+        raise OSError('no links here')
+    monkeypatch.setattr(Path, 'symlink_to', fail)
+    cli.main(['ai'])
+    assert (home/'.agents'/'skills'/'starsim'/'SKILL.md').exists() # Installed for all projects instead
+    (home/'.agents'/'skills'/'starsim'/'SKILL.md').unlink()
+    monkeypatch.chdir(home) # The home folder isn't a project
+    cli.main(['ai'])
+    assert (home/'.agents'/'skills'/'starsim'/'SKILL.md').exists()
+    return
+
+
+def test_skill_note(ai_home, monkeypatch, capsys):
+    """ Importing Starsim suggests the skills only if an agent is installed and has none, and until switched off """
+    sc.heading('Testing the note about skills')
+    from starsim.internals import cli
+    home = ai_home.home
+    ss.options.set(skill_note=True)
+    def noted():
+        cli.note_skills()
+        return 'starsim ai' in capsys.readouterr().out
+    try:
+        assert not noted() # No agent
+        (home/'.claude').mkdir()
+        assert noted()
+        cli.main(['ai'])
+        capsys.readouterr()
+        assert not noted() # Has them
+        cli.main(['ai', 'uninstall'])
+        cli.main(['ai', 'off'])
+        capsys.readouterr()
+        assert not noted() # Switched off
+        cli.main(['ai', 'on'])
+        assert noted()
+        ss.options.set(skill_note=False)
+        assert not noted()
+    finally:
+        ss.options.set(skill_note=False)
+    return
+
+
+def test_skills():
+    """ The skills meet the Agent Skills specification (https://agentskills.io/specification), and the guide lists them """
+    sc.heading('Testing the skills for AI agents')
+    from starsim.internals import cli
+    files = sorted(cli.ai_folder.glob('*/SKILL.md')) + sorted(cli.meta_folder.glob('*/SKILL.md'))
+    assert len(files) > 3
+    for file in files:
+        text = file.read_text(encoding='utf-8')
+        meta = cli.frontmatter(text)
+        name = meta['name']
+        assert name == file.parent.name and re.fullmatch(r'[a-z0-9]+(-[a-z0-9]+)*', name) and len(name) <= 64, f'Invalid name: {file}'
+        assert 0 < len(meta['description']) <= 1024, f'Invalid description: {file}'
+        assert len(text.splitlines()) < 500, f'Too long: {file}'
+        for link in re.findall(r'\]\(((?:references|scripts|assets)/[^)#]+)', text):
+            assert (file.parent/link).exists(), f'Broken link to {link} in {file}'
+    guide = (cli.ai_folder/'starsim'/'SKILL.md').read_text(encoding='utf-8')
+    assert all(f'`{name}`' in guide for name in cli.skills())
+    return
+
+
+def test_cli_dev(tmp_path, monkeypatch):
+    """ `starsim init dev` installs Rust only if it is missing, and then builds the kernels with it; run with the commands faked, since the real ones take minutes """
+    sc.heading('Testing starsim init dev')
+    from starsim.internals import cli
+    monkeypatch.setenv('HOME', str(tmp_path))
+    (tmp_path/'clone').mkdir()
+    monkeypatch.chdir(tmp_path/'clone') # So that the skills are linked here
+    commands = []
+    def run(cmd, **kwargs):
+        commands.append(cmd if isinstance(cmd, str) else ' '.join(map(str, cmd)))
+        return sc.objdict(returncode=0, stdout='cargo 1.0')
+    monkeypatch.setattr(cli.subprocess, 'run', run)
+    cargo = [None, '/fake/bin/cargo'] # No Rust the first time it looks, and Rust once installed
+    monkeypatch.setattr(cli, 'find_cargo', lambda: cargo.pop(0))
+    monkeypatch.setattr(sys, 'platform', 'linux')
+    monkeypatch.setattr(cli.shutil, 'which', lambda *args, **kwargs: '/fake/bin/tool')
+    cli.main(['init', 'dev'])
+    names = ['[dev]', 'sh.rustup.rs', 'bash build', 'starsim compile', 'starsim compile --check']
+    where = [next(i for i,cmd in enumerate(commands) if name in cmd) for name in names]
+    assert where == sorted(where), f'Wrong order: {commands}'
+
+    commands.clear()
+    monkeypatch.setattr(cli, 'find_cargo', lambda: '/fake/bin/cargo')
+    cli.main(['init', 'dev'])
+    assert not any('rustup' in cmd for cmd in commands) # Rust was there already
     return
 
 
@@ -301,6 +433,7 @@ def test_no_numba_cache(tmp_path):
     return
 
 
+# %% Run as a script
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)

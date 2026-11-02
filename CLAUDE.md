@@ -4,9 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-Starsim is an agent-based modeling framework for simulating disease spread among agents via dynamic transmission networks. It supports co-transmission of multiple diseases and detailed modeling of intervention strategies.
+Starsim is a fast, flexible disease modeling framework, from compartments to agents: the same model can run as an ODE, as a stochastic compartmental or metapopulation model, or as agents on dynamic transmission networks. It supports co-transmission of multiple diseases and detailed modeling of intervention strategies.
 
-For a compact index of the whole public API (signatures, summaries, and default parameters), see https://starsim.org/v4/llms.txt (or `llms-full.txt`, which adds an example for each entry). These are generated when the docs are built and are not committed; to generate them locally for the current branch (as `docs/llms.txt` etc.), run `cd docs && python make_api.py`. The equivalent for Sciris is at https://docs.sciris.org/llms.txt.
+For a compact index of the docs and the whole public API (every tutorial and user guide page with a summary and a link to its source; every name with its signature, summary, and default parameters), see https://starsim.org/v4/llms.txt (or `llms-full.txt`, which adds an example for each entry). These are generated when the docs are built and are not committed; to generate them locally for the current branch (as `docs/llms.txt` etc.), run `cd docs && python make_api.py`. The equivalent for Sciris is at https://docs.sciris.org/llms.txt.
 <!-- V4-PREVIEW: while v4 is in development its docs are at starsim.org/v4 (see docs/publish); restore the link above to docs.starsim.org for normal publishing -->
 
 The design record of v4 (the constitution, the spec, the current plan, and what was deferred or decided against) is in the [lingua_franca_design](https://github.com/starsimhub/lingua_franca_design) repo (`../lingua_franca_design` beside this checkout); start at its `README.md`.
@@ -16,8 +16,8 @@ The design record of v4 (the constitution, the spec, the current plan, and what 
 The framework follows a modular design with these key components:
 
 - **Sim**: Main simulation class that orchestrates all modules and runs simulations (`starsim/sim.py`)
-- **People**: Manages individual agents and their state updates (`starsim/people.py`)
-- **Networks**: Defines how agents interact with each other (`starsim/networks.py`)
+- **People**: Manages the population, as agents or as counts (`starsim/people.py`)
+- **Networks**: Defines who meets whom, as networks of agents or as mixing between groups (`starsim/networks.py`)
 - **Diseases**: Models disease transmission and progression (`starsim/diseases.py`)
 - **Interventions**: Implements prevention/treatment strategies (`starsim/interventions.py`)
 - **Demographics**: Handles population dynamics like births/deaths (`starsim/demographics.py`)
@@ -59,10 +59,11 @@ cd docs && python make_api.py
 
 ### Installation
 ```bash
-# Development installation
+# Development installation, then the full setup: dev dependencies, Rust if it is missing, both sets of kernels
 pip install -e .
+starsim init dev
 
-# With dev dependencies
+# Or just the dev dependencies
 pip install -e .[dev]
 
 # Using uv for faster installs
@@ -73,6 +74,8 @@ uv add starsim[dev]  # With dev dependencies
 ## Project structure
 
 ### Core modules (`starsim/`)
+- `interventions.py`: Interventions, and the deliveries of products (`ss.vaccinate`, `ss.screen`, `ss.treat`, ...)
+- `results.py`: Results (`ss.Result`, `ss.Results`)
 - `analyzers.py`: Analyzers for custom results (`ss.Analyzer`, the base class, and `ss.infection_log`)
 - `connectors.py`: Connectors between modules (e.g. `ss.modify`)
 - `data.py`: Data by place (`ss.data.population('Kenya')`, `ss.data.contacts(...)`), read by `ss.people('Kenya')`, `ss.contacts('Kenya')`, and `ss.geo.geography('Kenya')`
@@ -87,7 +90,7 @@ uv add starsim[dev]  # With dev dependencies
 - `run.py`: Running multiple simulations (`ss.MultiSim`, `ss.parallel`)
 - `settings.py`: Global options (`ss.options`) and plotting style
 - `sim.py`: The sim (`ss.Sim`)
-- `solvers/`: The engines that run declared models, and their kernels (below): `engine.py` (what they share), `mixing.py` (who meets whom in a compartmental run), `compartmental.py`, `agents.py` (with its mixins `agents_expressions.py`, `agents_moving.py`, `agents_stepping.py`, and `agents_branching.py`), `crossing.py` (diseases tracked jointly), and `choose.py` (which solver, and why: `ss.solvers.choose_solver()`); every name is also `ss.solvers.X`
+- `solvers/`: The engines that run declared models, and their kernels (below): `engine.py` (what they share), `mixing.py` (who meets whom in a compartmental run), `compartmental.py`, `agents.py` (with its mixins `agents_expressions.py`, `agents_moving.py`, `agents_stepping.py`, and `agents_branching.py`), `crossing.py` (diseases tracked jointly), `deliveries.py` (how interventions reach people or compartments), `particles.py` (the particle filter), and `choose.py` (which solver, and why: `ss.solvers.choose_solver()`); every name is also `ss.solvers.X`
 - `strains.py`: Strains (`ss.Strains`) and immunity between them (`ss.immunity`)
 - `transitions.py`: States and transitions (`ss.State`, `ss.states()`, `ss.Transition` and its `S >> I @ rate` spelling, ...); the names it builds on are spelled by their own modules (`ss.expressions.Expr`, `ss.graph.Graph`, `ss.dimensions.Strat`, ...)
 - `utils.py`: Helper functions
@@ -97,16 +100,19 @@ uv add starsim[dev]  # With dev dependencies
 - `internals/assets/`: The fonts for plots
 - `converters/`: Importing and exporting: `ss.import_from()` (each importer reads its format into `ss.converters.Source`, which `ss.converters.write()` writes as Starsim code, run to make the sim), `ss.export_to()`, and `migrate.py` (rewrites Starsim 3 code: `python -m starsim.converters.migrate`). The importers for epipack, epydemix, epymorph, MEmilio, and summer2, run as scripts in those frameworks' own environments, write their models as JSON (EpiModel's is `dump_epimodel.R`)
 
+### AI skills (`starsim/.agents/`)
+Skills for AI coding agents, installed with Starsim so that they match its version, and managed by `starsim ai` (`starsim/internals/cli.py`). Skills are in `skills/<skill>/SKILL.md`, the standard layout for skills in Python packages, with `meta-skill/starsim/` being the short skill for `starsim ai --global`. Facts about Starsim belong in the docs, not in skills: a skill says how to work and which page to read.
+
 ### Library (`starsim/library/`)
 Example and reference modules that build on core Starsim but are not part of it, available via `import starsim.library as ssl` (e.g. `ssl.Cholera` or `ssl.diseases.Cholera`):
 - `diseases/`: Simple models of diseases, mostly declared: HIV, cholera, Ebola, measles, malaria, TB, COVID, influenza, RSV, pertussis, dengue, typhoid, polio, syphilis, and gonorrhea
 - `mnch/`: Maternal, newborn, and child health (fetal health, maternal infections, neonatal sepsis)
 - `networks/`: Household, cluster, spatial, and theoretical (e.g. Erdős–Rényi) networks
 
-Core disease base classes (Disease, Infection, NCD, SIR, SIS, SEIR) live in `starsim/diseases.py`.
+Core disease classes (Disease, Infection, SIR, SIS, SEIR) live in `starsim/diseases.py`.
 
 ### Testing (`tests/`)
-- `test_*.py`: Core test files (about 300 tests, under a minute in parallel); keep new tests here few and quick
+- `test_*.py`: Core test files (about 375 tests, under a minute in parallel); keep new tests here few and quick
 - `devtests/`: Developer tests (contracts, inference, errors, importers and exporters, and slower feature tests), in files named like the core ones
 - `run_tests`: Main test runner script
 - `pytest.ini`: Pytest configuration
@@ -117,7 +123,7 @@ Core disease base classes (Disease, Infection, NCD, SIR, SIS, SEIR) live in `sta
 - `examples/`: Worked examples
 - `migration/`: Migration guides between versions
 - `api/`: API documentation source files (`.qmd`)
-- `make_api.py`: Generates the machine-readable API index (`api.json`, `llms.txt`, `llms-full.txt`)
+- `make_api.py`: Generates the machine-readable index of the docs and API (`api.json`, `llms.txt`, `llms-full.txt`)
 - Quarto-based documentation system
 
 ## Key conventions
@@ -126,7 +132,7 @@ Core disease base classes (Disease, Infection, NCD, SIR, SIS, SEIR) live in `sta
 - Follows Google Python style guide with project-specific exceptions
 - Tests use pytest with parallel execution via `pytest-xdist`
 - Documentation built with Quarto and executed via Jupyter
-- Random number generation is centralized in `distributions.py`, with Common Random Numbers (CRN) for reproducibility
+- Random number generation is centralized in `distributions.py` and `internals/dists.py`, with Common Random Numbers (CRN) for reproducibility
 
 ## Module architecture
 
@@ -141,10 +147,10 @@ The framework uses a modular architecture where all components inherit from base
 ## Key dependencies
 
 - **Sciris**: Core utility library for data structures, plotting, and utilities
-- **Numba**: Used for performance-critical code sections
+- **Numba**: Used for performance-critical code sections, with a Rust copy of its kernels (`solvers/rust/`), and optional JAX for gradients
 - **NetworkX**: Network analysis and manipulation
 - **Pandas/NumPy**: Data manipulation and numerical operations
-- **Matplotlib/Seaborn**: Plotting and visualization
+- **Matplotlib**: Plotting and visualization
 
 ## Important notes
 

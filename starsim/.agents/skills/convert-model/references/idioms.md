@@ -27,7 +27,7 @@ What to write for the pieces that `ss.import_from()` lists as not translated (`I
 | A condition on another state machine or disease (`cond: is_A`, `escape: is_I`) | `where=` on the transition: `ss.Transition(NG, G, rate=..., where=lambda sim: sim.diseases.growth.A)` |
 | A condition on age, sex, or another property | `where=ppl.age >= 15` (with `ppl = ss.People(n)` in scope); for a compartmental run, a bin edge at 15 in the age stratification |
 | A capacity (fewer than K in a state) | A comparison of counts in the rate: `I >> Q @ 0.01 * (Q.n < K)` |
-| A minimum stay before the other ways out apply | `after=` on each way out (`ss.Transition(E, I, rate=0.3, after=ss.days(10))`); `before=` for a way out that applies only during the stay (EMULSION's escape) |
+| A minimum stay before the other ways out apply | `after=` on each way out (`ss.Transition(E, I, rate=0.3, after=ss.days(10))`); a way out with no `after=` applies throughout (EMULSION's escape) |
 | A variable that is not a flow (odin's `update()` of a lag, a running maximum, a switch) | A module written as code keeps it in its `step()` (a connector with `self.peak = max(self.peak, I.n/N)`), and a function in the rate reads it (`lambda sim: np.exp(-5*sim.connectors.track.peak)`); agents only |
 | Groups (age, place, risk) | `dis.stratify(age=[0, 15, 65], split=..., adjust={'infection': [...]})`; places with `ss.geo.geography(...)` and `ss.geo.Mobility(...)` |
 
@@ -93,4 +93,4 @@ A numeric variable that only gates transitions (age, a counter) is either a stra
 | A reported quantity with a delay or fraction | `cases = ss.outcome(0.3 * infection, delay=ss.days(5))`; weekly data is compared with the total over each week, so a reporting period needs no translation |
 | Data with a likelihood | `ss.outcome(0.6 * infection, likelihood=ss.nbinom(n=k))` (or `ss.poisson()`), then `sim.fit()` with the data |
 
-When comparing with the source, check what time each value is for: Starsim's `X[ti]` is the number at time point `ti` (`X[0]` the start) and a flow at `ti` the number in the step that ends there; a source that labels steps by their start needs shifting by one step (see the validate-import skill).
+When comparing with the source, check what time each value is for: Starsim's `X[ti]` is the number at time point `ti` (`X[0]` the start) and a flow at `ti` the number in the step that ends there; a source that labels steps by their start needs shifting by one step (see the validate-conversion skill).

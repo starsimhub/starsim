@@ -368,7 +368,7 @@ def resolve_data_col(data, key, col):
     """
     Find the column to use for a given data key, allowing for known synonyms
 
-    The configured column name always takes precedence; synonyms (see `ss.col_synonyms`)
+    The configured column name always takes precedence; synonyms (see `ss.utils.col_synonyms`)
     are only consulted if it is absent from the data.
 
     Args:
@@ -407,7 +407,7 @@ def standardize_data(data=None, metadata=None, min_year=1800, out_of_range=0, de
     - `metadata['data_cols'][<arbitrary>]` optionally specifying any other columns to use as indices. These will form part of the multi-index for the standardized Series output.
 
     If a configured column is not present in the data, a known synonym is used instead if one is
-    available (see `ss.col_synonyms`); for example, year data labeled "Time" (as in UN World
+    available (see `ss.utils.col_synonyms`); for example, year data labeled "Time" (as in UN World
     Population Prospects data) is used for a data column configured as "Year". Explicitly configured
     column names always take precedence over synonyms.
 
@@ -417,8 +417,8 @@ def standardize_data(data=None, metadata=None, min_year=1800, out_of_range=0, de
     'Female' and 'Male' in the original data into 'm'/'f' for Starsim.
 
     Args:
-        data (pandas.DataFrame, pandas.Series, dict, int, float): An associative array  or a number, with the input data to be standardized.
-        metadata (dict): Dictionary specifiying index columns, the value column, and optionally mapping for sex labels
+        data (pandas.DataFrame, pandas.Series, dict, int, float): An associative array or a number, with the input data to be standardized.
+        metadata (dict): Dictionary specifying index columns, the value column, and optionally mapping for sex labels
         min_year (float): Optionally specify a minimum year allowed in the data. Default is 1800.
         out_of_range (float): Value to use for negative ages - typically 0 is a reasonable choice but other values (e.g., np.inf or np.nan) may be useful depending on the calculation. This will automatically be added to the dataframe with an age of `-np.inf`
         default_age (float): the age to use if the data has no age column
@@ -441,14 +441,14 @@ def standardize_data(data=None, metadata=None, min_year=1800, out_of_range=0, de
 
     # Check that the input is now a dict (scalar types have already been handled above)
     if not isinstance(data, dict):
-        errormsg = f'Supported inputs are ss.Dict, scalar numbers, DataFrames, Series, or dictionaries, not {type(data)}'
+        errormsg = f'Supported inputs are ss.Dist, scalar numbers, DataFrames, Series, or dictionaries, not {type(data)}'
         raise TypeError(errormsg)
 
     # Extract the values and index columns
     if 'value' not in metadata['data_cols']:
         errormsg = f'The metadata is missing a column name for "value", which must be provided if the input data is in the form of a DataFrame, Series, or dict. Data columns are:\n{metadata["data_cols"]}'
         raise ValueError(errormsg)
-    values = sc.promotetoarray(data[resolve_data_col(data, 'value', metadata['data_cols']['value'])])
+    values = sc.toarray(data[resolve_data_col(data, 'value', metadata['data_cols']['value'])])
     index = sc.obj()
     for k, col in metadata['data_cols'].items():
         if k != 'value':
@@ -582,9 +582,10 @@ def load(filename, **kwargs):
         filename (str/path): the name of the file to load
         kwargs (dict): passed to `sc.loadany()`
 
-    **Examples**:
-
+    Examples:
+        ```python
         sim = ss.load('run.sim') # A sim saved with ss.save()
+        ```
     """
     return sc.loadany(filename, **kwargs)
 
@@ -594,7 +595,7 @@ def save(filename, obj, **kwargs):
     Alias to Sciris `sc.save()`
 
     While some Starsim objects have their own save methods, this function can be
-    used to save any arbitrary object. It can then be loaded with ss.load().
+    used to save any arbitrary object. It can then be loaded with `ss.load()`.
     Another framework's format is written by `ss.export_to()`.
 
     Args:
@@ -602,9 +603,10 @@ def save(filename, obj, **kwargs):
         obj (any): the object to save
         kwargs (dict): passed to `sc.save()`
 
-    **Examples**:
-
+    Examples:
+        ```python
         ss.save('run.sim', sim) # The sim, with its results
+        ```
     """
     if 'format' in kwargs: # Otherwise passed on to pickling, which fails obscurely
         errormsg = f'ss.save() writes Starsim\'s own formats; for another framework\'s, use ss.export_to(sim, "{kwargs["format"]}", filename="{filename}")'
@@ -656,9 +658,9 @@ def shrink(obj=None, attrs=None, verbose=False):
     numbers of sims. It is good practice to write `shrink()` methods for modules to remove
     any temporary arrays or other memory-intensive objects.
 
-    `ss.utils.shrink()` can be used to either manually replace an object, or replace multiple attributes 
+    `ss.utils.shrink()` can be used to either manually replace an object, or replace multiple attributes
     of an object in-place. It is used rather than simply deleting attributes or setting them to
-     `None` to make it clear that the attributes were intentionally removed.
+    `None` to make it clear that the attributes were intentionally removed.
 
     Args:
         obj (object): the object to shrink in-place (optional)
@@ -737,7 +739,7 @@ def plot_args(kwargs=None, _debug=False, **defaults):
 
     Examples:
         ```python
-        kw = ss.plot_args(kwargs, fig_kw=dict(figsize=(10,10)) # Explicit way to set figure size, passed to `plt.figure()` eventually
+        kw = ss.plot_args(kwargs, fig_kw=dict(figsize=(10,10))) # Explicit way to set figure size, passed to `plt.figure()` eventually
         kw = ss.plot_args(kwargs, figsize=(10,10)) # Shortcut since known keyword
         ```
     """
@@ -830,7 +832,3 @@ def return_table(df, **kwargs):
         print(df.to_string(**kwargs))
     return df
 
-
-def __getattr__(name):
-    hint = ': for a flat dict of results, use sim.results.flatten()' if name == 'match_result_keys' else ''
-    raise AttributeError(f'module "starsim.utils" has no attribute "{name}"{hint}')

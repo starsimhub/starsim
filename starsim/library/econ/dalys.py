@@ -276,7 +276,7 @@ class ICER(ss.Analyzer):
         Plot the cost-effectiveness acceptability curve: the share of runs in which each scenario is the best, by willingness to pay
 
         Args:
-            wtp (array): the values of willingness to pay (default: 50 up to twice the largest ICER)
+            wtp (array): the values of willingness to pay (default: 50 values from 0 up to twice the largest ICER)
             kwargs (dict): passed to `ss.plot_args()`
         """
         kw = ss.plot_args(kwargs)

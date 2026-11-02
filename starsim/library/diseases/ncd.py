@@ -4,6 +4,8 @@ An example non-communicable disease, written as code
 import numpy as np
 import starsim as ss
 
+__all__ = ['NCD']
+
 _ = None # Sentinel for "not provided" default arguments
 
 

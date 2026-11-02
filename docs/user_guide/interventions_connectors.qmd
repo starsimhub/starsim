@@ -129,7 +129,7 @@ A connector that sets an array directly (`hiv.rel_sus[uids] = 2.7`) erases whate
 
 ## Under compartments and agents
 
-Modifiers work under every solver. A condition on a disease's state (`sti.I`) in a compartmental run needs the diseases to be tracked jointly, so that there is a compartment for each combination of their states; Starsim does this itself when a modifier of one declared disease reads the states of another, and says so in a note (`the states of a × b are tracked jointly`). A condition on a quantity that only agents have, such as a CD4 count of a disease written as code, or on how long ago something happened, runs as agents. A connector written as code runs as agents.
+Modifiers work under every solver. A condition on a disease's state (`sti.I`) in a compartmental run needs the diseases to be tracked jointly, so that there is a compartment for each combination of their states; Starsim does this itself when a modifier of one declared disease reads the states of another, and says so in a note (`the states of a × b are tracked jointly`). A condition on a quantity that only agents have, such as a CD4 count of a disease written as code, or on how long ago something happened, runs as agents. So does a connector written as code that keeps a value for each person, as `Inflammation` does.
 
 ## Pitfalls
 

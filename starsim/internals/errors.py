@@ -27,9 +27,10 @@ def note(msg, sim=None, verbose=None):
         sim (Sim): the sim to keep the note in
         verbose (int): whether to print it
 
-    **Example**:
-
+    Example:
+        ```python
         ss.note("unit='day' (from start and stop dates)", sim=sim)
+        ```
     """
     if sim is not None and not hasattr(sim, 'notes'): # A stand-in, e.g. for a disease's equations before it is in a sim
         sim = None
@@ -104,5 +105,5 @@ class LossyExport(RuntimeWarning):
 class ImportIncomplete(RuntimeWarning):
     """
     An import could not translate something in the source. Lists each item by name, says what to ask an AI assistant with the
-    `import-model` skill to finish it, and warns again when the sim is first run
+    `convert-model` skill to finish it, and warns again when the sim is first run
     """

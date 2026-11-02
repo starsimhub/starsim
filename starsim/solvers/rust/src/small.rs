@@ -1,4 +1,4 @@
-//! The small kernels of `arrays.py`, `networks.py`, `distributions.py`, `people.py` and `utils.py`: the same arguments and results as the Numba functions they replace
+//! The small kernels of `internals/arrays.py`, `networks.py`, `internals/dists.py`, `distributions.py` and `people.py`: the same arguments and results as the Numba functions they replace
 
 use crate::draws;
 

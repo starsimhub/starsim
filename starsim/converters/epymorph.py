@@ -68,10 +68,11 @@ def load_epymorph(source, solver='tau', verbose=None, **kwargs):
     Returns:
         An `ss.Sim`, with `sim.imported` saying how it was read and what was not translated
 
-    **Example**:
-
+    Example:
+        ```python
         # In the epymorph environment: python epymorph.py my_model.py model.json
         sim = ss.import_from('model.json', format='epymorph')
+        ```
     """
     d = source if isinstance(source, dict) else sc.loadjson(source)
     src = Source(name='epymorph', format='epymorph', file=source if isinstance(source, str) else None)

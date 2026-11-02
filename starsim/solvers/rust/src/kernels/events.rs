@@ -687,7 +687,8 @@ pub fn release_rates(y: A2<f64>, p: &Program, rates: A2<f64>, dt: f64) {
 }
 
 /// For the solvers that draw whole events: the flows of states that are not people, as expected values over a time dt, by RK4 in enough substeps (`settle()`)
-pub fn settle(y: A2<f64>, p: &Program, rates: A2<f64>, dt: f64, flows: A2<f64>) {
+pub fn settle(y: A2<f64>, p: &Program, w: &Work, dt: f64, flows: A2<f64>) {
+    let rates = w.rates;
     let mut fastest = 0.0;
     for f in 0..p.src.len() {
         if p.det.b(f) && p.src.at(f) >= 0 {
@@ -698,21 +699,56 @@ pub fn settle(y: A2<f64>, p: &Program, rates: A2<f64>, dt: f64, flows: A2<f64>) 
     }
     let n_sub = to_int((fastest*dt/0.25).ceil()).max(1);
     for _ in 0..n_sub {
-        settle_step(y, p, rates, dt/n_sub as f64, flows);
+        settle_step(y, p, w, dt/n_sub as f64, flows);
     }
 }
 
-/// For `settle()`: one RK4 step of the counts over a time dt (`settle_step()`)
-pub fn settle_step(y: A2<f64>, p: &Program, rates: A2<f64>, dt: f64, flows: A2<f64>) {
+/// For `settle()`: one RK4 step of the counts over a time dt, in the compartments and flows that the counts' flows reach (`settle_step()`)
+pub fn settle_step(y: A2<f64>, p: &Program, w: &Work, dt: f64, flows: A2<f64>) {
     let (nc, ng) = (y.n0(), y.n1());
     let nf = p.src.len();
     let nflows = flows.n0();
-    let (_o1, k) = own3(4, nc, ng, 0.0);
-    let (_o2, kf) = own3(4, nflows, ng, 0.0);
-    let (_o3, y0) = own2(nc, ng, 0.0);
-    let (_o4, yt) = own2(nc, ng, 0.0);
-    y0.copy_from(y);
-    yt.copy_from(y);
+    let (rates, k, kf, yt) = (w.rates, w.dy, w.df, w.yt);
+    let mut comps = vec![false; nc];
+    let mut rows = vec![false; nflows];
+    for f in 0..nf {
+        if p.det.b(f) {
+            if p.src.at(f) >= 0 {
+                comps[p.src.u(f)] = true;
+            }
+            if p.named.b(f) {
+                rows[p.index.u(f)] = true;
+            }
+            for t in p.tgt_starts.u(f)..p.tgt_starts.u(f + 1) {
+                comps[p.tgt_comp.u(t)] = true;
+                if p.tgt_rec.at(t) >= 0 {
+                    rows[p.tgt_rec.u(t)] = true;
+                }
+            }
+            for t in p.crd_starts.u(f)..p.crd_starts.u(f + 1) {
+                rows[p.crd_index.u(t)] = true;
+            }
+        }
+    }
+    for c in 0..nc {
+        if comps[c] {
+            for g in 0..ng {
+                yt.set(c, g, y.at(c, g));
+                for stage in 0..4 {
+                    k.plane(stage).set(c, g, 0.0);
+                }
+            }
+        }
+    }
+    for r in 0..nflows {
+        if rows[r] {
+            for g in 0..ng {
+                for stage in 0..4 {
+                    kf.plane(stage).set(r, g, 0.0);
+                }
+            }
+        }
+    }
     for stage in 0..4 {
         let (ks, kfs) = (k.plane(stage), kf.plane(stage));
         for f in 0..nf {
@@ -757,20 +793,26 @@ pub fn settle_step(y: A2<f64>, p: &Program, rates: A2<f64>, dt: f64, flows: A2<f
         if stage < 3 {
             let ahead = if stage == 2 { dt } else { dt/2.0 };
             for c in 0..nc {
-                for g in 0..ng {
-                    yt.set(c, g, mx(y0.at(c, g) + ahead*ks.at(c, g), 0.0));
+                if comps[c] {
+                    for g in 0..ng {
+                        yt.set(c, g, mx(y.at(c, g) + ahead*ks.at(c, g), 0.0));
+                    }
                 }
             }
         }
     }
     for c in 0..nc {
-        for g in 0..ng {
-            y.set(c, g, mx(y0.at(c, g) + dt/6.0*(k.at(0, c, g) + 2.0*k.at(1, c, g) + 2.0*k.at(2, c, g) + k.at(3, c, g)), 0.0));
+        if comps[c] {
+            for g in 0..ng {
+                y.set(c, g, mx(y.at(c, g) + dt/6.0*(k.at(0, c, g) + 2.0*k.at(1, c, g) + 2.0*k.at(2, c, g) + k.at(3, c, g)), 0.0));
+            }
         }
     }
-    for f in 0..nflows {
-        for g in 0..ng {
-            flows.add(f, g, dt/6.0*(kf.at(0, f, g) + 2.0*kf.at(1, f, g) + 2.0*kf.at(2, f, g) + kf.at(3, f, g)));
+    for r in 0..nflows {
+        if rows[r] {
+            for g in 0..ng {
+                flows.add(r, g, dt/6.0*(kf.at(0, r, g) + 2.0*kf.at(1, r, g) + 2.0*kf.at(2, r, g) + kf.at(3, r, g)));
+            }
         }
     }
 }

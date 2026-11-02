@@ -41,7 +41,7 @@ Then, in Starsim, `sim = ss.import_from('model.json')`. The dump records the las
 | Seasonality from a sine with a peak date | The array passed to the run is imported; by hand, `ss.seasonal(mean=(1 + smin)/2, amplitude=(1 - smin)/(1 + smin), peak=14/365)` | no |
 | Initial numbers drawn at random in each run | The recorded draw, fixed | no |
 | Scenarios (contacts higher from a date) | `ss.modify(dis.S_to_E, multiply=1.3, start='2020-06-01')` | no |
-| `ABCSampler` (ABC-SMC) | `ss.par(..., bounds=[...])`, `data=ss.simdata(...)`, `sim.fit()`: a point estimate, no posterior | no |
+| `ABCSampler` (ABC-SMC) | `ss.par(..., bounds=[...])`, `data=ss.simdata(...)`, `sim.fit(method='abc-smc')`, or by default a point estimate | no |
 
 ## What needs care
 
@@ -49,13 +49,12 @@ Then, in Starsim, `sim = ss.import_from('model.json')`. The dump records the las
 - **Initial numbers are rounded down by age.** `percentage_in_agents` spreads the infections over the age groups and rounds each down (10 became 8 in Kenya); the dump records the actual numbers. The COVID tutorial's own initial conditions lose the odd person in each group (`(infected/2).astype(int)` twice), so they add up to 4 fewer than the population; the import makes the sim's population the initial numbers (epydemix still divides by `Nk` in the force of infection, a difference of 6e-7).
 - **A branch has one result.** `I_to_D_or_R` counts everyone leaving `I`; the number dying is the flow into `D` (`D0_to_D1` and `D0`), or write the two exits as separate transitions to keep both.
 - **Weeks end a day apart.** A Starsim flow summed weekly to a data date covers the week to the end of the day before (the date is the start of that day); epydemix's weeks end on Sunday. Sum the original's daily transitions to the same weeks before comparing.
-- **No posterior.** ABC-SMC is not implemented; the Starsim fit is a point estimate inside the original's posterior, and projections from one point can differ a lot from projections averaged over a posterior. Compare at fixed parameter values first; the calibration is a separate, looser check.
+- **A default fit is a point.** Unless `sim.fit(method='abc-smc')` is asked for, the Starsim fit is a point estimate inside the original's posterior, and projections from one point can differ a lot from projections averaged over a posterior. Compare at fixed parameter values first; the calibration is a separate, looser check.
 - **Results by age group.** `res.I.select(age=0)` is the first group; select run by run in a multisim.
-- `ss.simdata()` wants a `str` path, not a `Path`.
 
 ## Worked example
 
-`lingua_franca_design/examples/epydemix/sir_kenya` (the SIR in Kenya, dumped from the original script as it is) and `examples/epydemix/covid19` (COVID-19 in Massachusetts, dumped from a short script that builds the model at the posterior medians, in the persistence scenario). Against 200 runs of each original (the same initial numbers, `compare.py`): every series agrees, 30 for Kenya (each compartment and transition in each of the 5 age groups; `frac_z3` 0, every KS p ≥ 0.039, means within 1.1% of the peak) and 40 for COVID-19 (all 9 compartments, 4 transitions, and infections, deaths, and new deaths in each of the 9 age groups; `frac_z3` ≤ 0.025, every KS p ≥ 0.02, means within 5% of the peak, 1.7% for the totals). Final deaths: 10,480 (10,279 to 10,705) against the stored reference's 10,525 (10,324 to 10,737), which draws new initial numbers in each run. The import of the COVID model:
+[`epydemix/sir_kenya`](https://github.com/starsimhub/lingua_franca_design/tree/main/docs/models/epydemix/sir_kenya) (the SIR in Kenya, dumped from the original script as it is) and [`epydemix/covid19`](https://github.com/starsimhub/lingua_franca_design/tree/main/docs/models/epydemix/covid19) (COVID-19 in Massachusetts, dumped from a short script that builds the model at the posterior medians, in the persistence scenario). Against 200 runs of each original (the same initial numbers, `compare.py`): every series agrees, 30 for Kenya (each compartment and transition in each of the 5 age groups; `frac_z3` 0, every KS p ≥ 0.039, means within 1.1% of the peak) and 40 for COVID-19 (all 9 compartments, 4 transitions, and infections, deaths, and new deaths in each of the 9 age groups; `frac_z3` ≤ 0.025, every KS p ≥ 0.02, means within 5% of the peak, 1.7% for the totals). Final deaths: 10,480 (10,279 to 10,705) against the stored reference's 10,525 (10,324 to 10,737), which draws new initial numbers in each run. The import of the COVID model:
 
 ```python
 beta = ss.par(ss.timeseries({'2020-02-23': 0.0626, '2020-02-24': 0.0626, ...}))  # The array the run was given
@@ -68,11 +67,11 @@ I_to_D0_or_R = ss.Transition(I, [D0, R], rate=mu, p=[IFR, None])
 D0_to_D1     = D0 >> D1 @ 4.0 / Delta  # ... to D3_to_D4
 ```
 
-The hand-written vignette (`vignettes/epydemix/covid19/model.py`) instead writes `beta` from `R0` and `ss.seasonal`, and the death chain with `stages=4`, so that `R0`, `Delta`, and the seasonality can be fitted.
+The hand-written worked example ([`epydemix/covid19/model.py`](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/models/epydemix/covid19/model.py)) instead writes `beta` from `R0` and `ss.seasonal`, and the death chain with `stages=4`, so that `R0`, `Delta`, and the seasonality can be fitted.
 
 ## Running the original
 
-- Environment: `lingua_franca_design/_envs/epydemix` (a `uv` venv with epydemix 1.4.0; needs a network connection the first time a population is loaded). Build with `python _envs/envs.py install epydemix`.
-- The examples run the original through a `simulate.py` in the epydemix env (`tools.run(['python', 'simulate.py'], 'epydemix')`), which `exec`s the original script with `run_simulations` wrapped to pass a seed (the scripts set none), and prints JSON: summarized runs plus the population (`Nk`, the contact matrices by setting). For `compare.py`, write every run instead: `simulate(model, rng=rng, **run)` in a loop, with `tr.compartments` and `tr.transitions` (with a `new_` prefix) in the long format with a `run` column.
-- Series: each compartment by age (`I_0-4`, ..., `I_total`) at the end of each day, and the number moving during each day. The initial state is not in epydemix's output: write it at time 0, and the end of day `t` (from 0) at time `t + 1`. Then a count at time `k` is Starsim's `n_<state>[k]` (`compare.py run --time index`), and a transition at `k` is Starsim's flow at `k`, with no shift.
+- Environment: a venv of its own, with epydemix 1.4.0; needs a network connection the first time a population is loaded.
+- The worked examples run the original through a `simulate.py` in that environment, which `exec`s the original script with `run_simulations` wrapped to pass a seed (the scripts set none), and prints JSON: summarized runs plus the population (`Nk`, the contact matrices by setting). For `compare.py`, write every run instead: `simulate(model, rng=rng, **run)` in a loop, with `tr.compartments` and `tr.transitions` (with a `new_` prefix) in the long format with a `run` column.
+- Series: each compartment by age (`I_0-4`, ..., `I_total`) at the end of each day, and the number moving during each day. The initial state is not in epydemix's output: write it at time 0, and the end of day `t` (from 0) at time `t + 1`. Then a count at time `k` is Starsim's `<state>[k]` (`compare.py run --time index`), and a transition at `k` is Starsim's flow at `k`, with no shift.
 - Stochastic: 200 runs; compare statistically, with the same initial numbers on both sides.

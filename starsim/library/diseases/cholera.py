@@ -9,6 +9,8 @@ import numpy as np
 import starsim as ss
 from .agents import AgentSEIR
 
+__all__ = ['Cholera']
+
 
 class Cholera(AgentSEIR):
     """
@@ -48,9 +50,9 @@ class Cholera(AgentSEIR):
         symptomatic (BoolState):    currently symptomatic
         recovered (BoolState):      recovered and immune
         ti_exposed (FloatArr):      timestep of exposure
-        ti_symptomatic (FloatArr):  timestep symptoms began
-        ti_recovered (FloatArr):    timestep of recovery
-        ti_dead (FloatArr):         timestep of death
+        ti_symptomatic (TimeArr):   timestep symptoms began
+        ti_recovered (TimeArr):     timestep of recovery
+        ti_dead (TimeArr):          timestep of death
 
     Examples:
         ```python
@@ -74,10 +76,10 @@ class Cholera(AgentSEIR):
             # Natural history parameters, all specified in days
             dur_exp       = ss.lognorm_ex(mean=ss.days(2.772), std=ss.days(4.737)), # Calculated from Azman et al. estimates https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3677557/
             dur_asymp2rec = ss.uniform(low=ss.days(1), high=ss.days(10)), # From WHO cholera fact sheet, asymptomatic individuals shed bacteria for 1-10 days (https://www.who.int/news-room/fact-sheets/detail/cholera)
-            dur_symp2rec  = ss.lognorm_ex(mean=ss.days(5), std=ss.days(1.8)), # According to Fung most modelling studies assume 5 days of symptoms (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3926264/), but found a range of 2.9-14 days. Distribution approximately fit to these values
+            dur_symp2rec  = ss.lognorm_ex(mean=ss.days(5), std=ss.days(1.8)), # According to Fung most modeling studies assume 5 days of symptoms (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3926264/), but found a range of 2.9-14 days. Distribution approximately fit to these values
             dur_symp2dead = ss.lognorm_ex(mean=ss.days(1), std=ss.days(0.5)), # There does not appear to be differences in timing/duration of mild vs severe disease, but death from severe disease happens rapidly https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5767916/
             p_death       = ss.bernoulli(p=0.005), # Probability of death is typically less than 1% when treated
-            p_symp        = ss.bernoulli(p=0.5), # Proportion of infected which are symptomatic, mid range of ~25% and 57% estimates from Jaclson et al (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3795095/) and Nelson et al (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3842031/), respectively
+            p_symp        = ss.bernoulli(p=0.5), # Proportion of infected which are symptomatic, mid range of ~25% and 57% estimates from Jackson et al (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3795095/) and Nelson et al (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3842031/), respectively
             asymp_trans   = 0.01, # Reduction in transmission probability for asymptomatic infection, asymptomatic carriers shed 100-1000 times less bacteria than symptomatic carriers (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3084143/ and https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3842031/). Previous models assume a 10% relative transmissibility (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4238032/)
 
             # Environmental parameters

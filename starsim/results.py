@@ -775,7 +775,7 @@ class Result(ss.arrays.BaseArr):
     def get_kind(cls, name, kind='auto', summarize_by='auto', dtype=None):
         """
         The kind of a result: as given (None for one with no meaning over time), or else ('auto') from how it is summarized, if that is given,
-        or else its name, as in Starsim 3 (`new_...` is a flow; `n_...`, `cum_...`, and `cumulative` are stocks), or else its dtype: an integer
+        or else its name (`new_...` is a flow; `n_...`, `cum_...`, and `cumulative` are stocks), or else its dtype: an integer
         is a count, so a flow (a count over each step, e.g. doses), a dtype that is not numbers (e.g. `list`) has none, and anything else is a ratio
         """
         if kind == 'auto':
@@ -1023,10 +1023,10 @@ class Result(ss.arrays.BaseArr):
             sep (str): separator for the column names
             col_names (str or None): if None, uses the name of the result. Default is 'vlh' which uses value, low, high
             set_date_index (bool): if True, use the times as the index
-            bounds (bool): include high and low bounds as well (if and only if they exist, e.g. from a MultiSim)
+            bounds (bool): include high and low bounds as well (if and only if they exist)
             resample (str): if provided, resample the data to this frequency
             quantiles (list): for a result across runs, the quantiles over the runs of each scenario
-            kwargs: passed to the resample method if resample=True
+            kwargs: passed to the resample method, if resample is given
 
         For a 2D result, there is one set of dataframe columns per result column, e.g. `alpha` and `alpha_low`
         (or `infection_alpha` and `infection_alpha_low` if `col_names='infection'`).
@@ -1660,7 +1660,7 @@ def validate_sim_data(data=None, die=None):
     Validate data intended to be compared to the sim outputs, e.g. for calibration
 
     Args:
-        data (df/dict): a dataframe (or dict) of data, with a column "time" plus data columns of the form "module.result", e.g. "hiv.infection"
+        data (df/dict): a dataframe (or dict) of data, with a time column (see `ss.simdata`) plus one column per result, e.g. "cases" or "hiv.infection"
         die (bool): whether to raise an exception if the data cannot be converted (default: die if data is not None but cannot be converted)
 
     """

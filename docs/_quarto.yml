@@ -14,8 +14,11 @@ project:
 
 website:
   title: "Starsim"
+  description: "A fast, flexible disease modeling framework, from compartments to agents"
   site-url: https://starsim.org/v4 # V4-PREVIEW: restore to https://docs.starsim.org for normal publishing
   image: /assets/starsim-logo.png
+  open-graph: true
+  twitter-card: true
   favicon: /assets/favicon.ico
   google-analytics: "G-SVDSQH04EM"
 
@@ -49,7 +52,7 @@ website:
       - icon: envelope-at-fill
         href: mailto:info@starsim.org
       - icon: slack
-        href: https://starsim-idm.slack.com
+        href: https://starsimhub.slack.com
       - icon: globe
         href: https://starsim.org
 

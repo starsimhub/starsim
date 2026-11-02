@@ -199,12 +199,12 @@ class Expr:
 
     @property
     def n(self):
-        """ The number in these states, e.g. (S + I + R).n; or a weighted count, each person counted by a value of theirs, e.g. (ss.by(biting=w)*I).n (MS3) """
+        """ The number in these states, e.g. (S + I + R).n; or a weighted count, each person counted by a value of theirs, e.g. (ss.by(biting=w)*I).n """
         return Count(*self._sum_states(weights=True), kind='n')
 
     @property
     def n_trans(self):
-        """ The number in these states, each counted by their infectiousness (`rel_trans`, with the products and modifiers on it, times the state's), e.g. what people shed into an environment: shedding*A.n_trans (TY6) """
+        """ The number in these states, each counted by their infectiousness (`rel_trans`, with the products and modifiers on it, times the state's), e.g. what people shed into an environment: shedding*A.n_trans """
         return Count(*self._sum_states(weights=True), kind='n', trans=True)
 
     @property
@@ -254,6 +254,7 @@ class par(Nameable, Expr):
         doc (str): a description of the parameter (likewise)
         name (str): the name; if not given, taken from the keyword or variable it is assigned to
         label (str): a human-readable name
+        literal (bool): whether it is an anonymous value written inline, e.g. the 0.5 in `0.5*A`, rather than a parameter of the module
 
     Examples:
         ```python
@@ -353,7 +354,7 @@ class Count(Expr):
     """
     The number of people (or things) in one or more states (`I.n`), that number as a fraction of the module's people (`I.frac`), or the number in the whole population (`I.total`, which in a model with places is not only the same place)
 
-    A weighted count (`(ss.by(biting=w)*I).n`, MS3; `A.n_trans`, TY6) counts each person by a value of theirs: `weights` by state (a value per person, e.g. an `ss.by`), and with `trans`, their infectiousness.
+    A weighted count (`(ss.by(biting=w)*I).n`; `A.n_trans`) counts each person by a value of theirs: `weights` by state (a value per person, e.g. an `ss.by`), and with `trans`, their infectiousness.
     """
     def __init__(self, states, weights=None, kind='n', trans=False):
         self.states = states
@@ -489,7 +490,7 @@ class Func(Expr):
 
 class Coverage(Expr):
     """
-    A product's coverage, as a quantity in a rate (`itn.coverage`, MS4): the share of the people in the same place who hold it,
+    A product's coverage, as a quantity in a rate (`itn.coverage`): the share of the people in the same place who hold it,
     each counted by how much protection they have left (the product's `waning=`, if it is a function of time), or by a function
     of the time since delivery: `itn.coverage(lambda t: ...)`, as `waning=` takes it (`fn(t)` or `fn(t, sim, uids)`)
 
@@ -695,7 +696,7 @@ class attr(Expr):
             errormsg = f'combine= is one of {sc.strjoin(combines)}, or a function of (old, new); not {combine!r}'
             raise ValueError(errormsg)
         self.value = ss.transitions.by_dist(value) # A distribution for each group, e.g. ss.by(urban={False: h0, True: h1}), is one distribution
-        self.by_event = None # For a dict by event: (events, value) for each, set in ss.graph.Graph.resolve_attrs() (TY1)
+        self.by_event = None # For a dict by event: (events, value) for each, set in ss.graph.Graph.resolve_attrs()
         if isinstance(value, dict) and value and all(is_event(key) for key in value):
             if on is not None:
                 errormsg = f'The attribute {name or ""} is a dict by event, whose keys are the events that set it, so it takes no on='
@@ -738,7 +739,7 @@ class attr(Expr):
 
     @property
     def init_value(self):
-        """ The distribution or expression the value before any event is drawn from or worked out from for each person, if it is one (TY3) """
+        """ The distribution or expression the value before any event is drawn from or worked out from for each person, if it is one """
         return self.init if isinstance(self.init, (ss.Dist, Expr, ss.conditions.Cond)) else None
 
     def combined(self, old, new):

@@ -685,7 +685,7 @@ def event_register(ev, compartments, E, N):
         sel = selected(select) or compartments
         return ','.join(compartments[compartments.index(c) + int(N[compartments.index(c), int(shift) - 1])] for c in sel)
     sel = {s:selected(s) for s in ev['select'].unique()}
-    sel = {s:(None if v is not None and len(v) == len(compartments) else v) for s,v in sel.items()} # Every compartment is the register's default (naming them all gives different results: see the report)
+    sel = {s:(None if v is not None and len(v) == len(compartments) else v) for s,v in sel.items()} # Every compartment is the register's default (naming them all gives different results)
     states = ev['select'].map(lambda s: ','.join(sel[s]) if sel[s] else None)
     first = ev['select'].map(lambda s: sel[s][0] if sel[s] else compartments[0]) # Entering individuals go to the first compartment selected
     states = states.where(ev.event != 'enter', first)

@@ -234,9 +234,9 @@ def test_erdosrenyi():
     def test_ER(n, p, nw, alpha=0.01):
         """
         Because each edge exists i.i.d. with probability p, the degree
-        distribution of an Erdos-Renyi network should be Binomally distributed.
+        distribution of an Erdos-Renyi network should be binomially distributed.
         Here, we test if the observed degree distribution, f_obs, matches the
-        expected distribution, f_exp, which comes from the binomial probabiltiy
+        expected distribution, f_exp, which comes from the binomial probability
         mass function from the scipy stats library.
 
         Args:
@@ -248,7 +248,7 @@ def test_erdosrenyi():
         Returns:
             Chi-Squared p-value and asserts if the statistical test fails,
             indicating that the observed degree distribution is unlikely to come
-            from the the correct binomial.
+            from the correct binomial.
         """
         p12 = np.concatenate([nw.edges['p1'], nw.edges['p2']]) # p1 and p2 are the UIDs of agents, used here to determine degree
         upper = sps.binom.ppf(n=n-1, p=p, q=0.999) # Figure out the 99.9th percentile expected upper bound on the degree
@@ -306,7 +306,7 @@ def test_disk():
         for i in range(s1.t.npts):
             ax.plot([0,1,1,0,0], [0,0,1,1,0], 'k-', lw=1)
             ax.quiver(nw1.x, nw1.y, vdt * np.cos(nw1.theta), vdt * np.sin(nw1.theta), color=colors)
-            ax.set_aspect('equal', adjustable='box') #ax.set_xlim([0,1]); ax.set_ylim([0,1])
+            ax.set_aspect('equal', adjustable='box')
             s1.run_one_step()
 
     # Simulate SIR on a DiskNet

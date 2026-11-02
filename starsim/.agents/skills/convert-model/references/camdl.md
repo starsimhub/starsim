@@ -6,14 +6,7 @@ camdl is a compartmental modeling language (a compiler, `camdlc`, in OCaml; a ru
 
 ## Getting the model out
 
-`ss.import_from('model.camdl', pars=dict(...))` compiles the file with `camdlc` (from the PATH, `CAMDLC`, or `camdlc=`) and reads the IR; `ss.import_from('model.json')` reads an IR written by `camdlc model.camdl --no-state-grad > model.json`. Give parameter values that the model leaves to the command line (`--param beta=0.4`) as `pars=`; a model's scenarios fill in values too (`scenario=`, default the first). A pycamdl model is written in the same form by `starsim/converters/dump_pycamdl.py`, which needs only pycamdl:
-
-```bash
-python dump_pycamdl.py stratified.py model.json        # a module that makes a model called m or model
-python dump_pycamdl.py my_model.py:build model.json    # a function that returns one
-```
-
-or `ss.import_from(m)` on a live pycamdl model, if pycamdl can be imported where Starsim is.
+`ss.import_from('model.camdl', pars=dict(...))` compiles the file with `camdlc` (from the PATH, `CAMDLC`, or `camdlc=`) and reads the IR; `ss.import_from('model.json')` reads an IR written by `camdlc model.camdl --no-state-grad > model.json`. Give parameter values that the model leaves to the command line (`--param beta=0.4`) as `pars=`; a model's scenarios fill in values too (`scenario=`, default the first). A pycamdl model has no IR, so there is no mechanical import of one: write it as a `.camdl` file, or translate it by hand.
 
 ## Mapping
 
@@ -40,7 +33,7 @@ or `ss.import_from(m)` on a live pycamdl model, if pycamdl can be imported where
 
 ## What needs care
 
-- **Rewrite a stratified import as `stratify()`.** The IR has the dimensions spelled out, so the import is flat: right, but long. For a model like the stratified SEIR, the declared form is `seir.stratify(age=[0, 5, 50])`, `seir.stratify(patch=[...], kind='space', split=pop, mobility=ss.geo.Mobility(matrix=..., kind='migrate'))`, and `networks=ss.contacts(contacts, ages=[0, 5, 50])` (see the worked example). Check it against the flat import with the validate-import skill before replacing one with the other.
+- **Rewrite a stratified import as `stratify()`.** The IR has the dimensions spelled out, so the import is flat: right, but long. For a model like the stratified SEIR, the declared form is `seir.stratify(age=[0, 5, 50])`, `seir.stratify(patch=[...], kind='space', split=pop, mobility=ss.geo.Mobility(matrix=..., kind='migrate'))`, and `networks=ss.contacts(contacts, ages=[0, 5, 50])` (see the worked example). Check it against the flat import with the validate-conversion skill before replacing one with the other.
 - **A one-off move between states is a delivery that moves people.** camdl's `transfer(S --> R, fraction=0.6, at=20)` is listed; write it as `ss.Delivery(move=S >> R, coverage=0.6, at=[20])`, which moves that share of `S` at that time, under every solver.
 - **Interventions are off unless enabled**, in camdl as in pycamdl (`--enable vaccinate`, `run(enable=[...])`); events always happen.
 - **Give the solver.** The import runs as an ODE (`solver='ode'`, camdl's `--backend ode`); camdl's default backend is chain-binomial (`solver='binomial'`). At a step of a day the binomial import's mean infectious curve is within 0.9% of camdl's 200 runs; at a quarter of a day it is 12% away, since the two schemes differ by order dt.
@@ -49,7 +42,7 @@ or `ss.import_from(m)` on a live pycamdl model, if pycamdl can be imported where
 
 ## Worked example
 
-`lingua_franca_design/vignettes/camdl/sir/sir.py` (an SIR with weekly cases and a negative-binomial likelihood) and `lingua_franca_design/vignettes/camdl/stratified/model.py` (SEIR by age and patch). `ss.import_from('sir.camdl', pars=dict(beta=0.4, gamma=0.15, rho=0.6, k=10))` gives the vignette's model, with its priors, and agrees with camdl's ODE to camdl's rounding (its compartments are written as whole numbers: within 0.5 people) and to 1e-7 in the daily infections and weekly cases. The pycamdl SEIR by age and patch (24 states, 58 transitions, with aging and movement), written with `dump_pycamdl.py`, agrees with pycamdl's ODE to 3e-16 in every compartment; its vaccination is an intervention, off unless enabled, and listed. The declared form of the stratified model, by hand:
+[`camdl/sir/model.py`](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/models/camdl/sir/model.py) (an SIR with weekly cases and a negative-binomial likelihood) and [`camdl/stratified/model.py`](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/models/camdl/stratified/model.py) (SEIR by age and patch). `ss.import_from('sir.camdl', pars=dict(beta=0.4, gamma=0.15, rho=0.6, k=10))` gives the worked example's model, with its priors, and agrees with camdl's ODE to camdl's rounding (its compartments are written as whole numbers: within 0.5 people) and to 1e-7 in the daily infections and weekly cases. The SEIR by age and patch has 24 states and 58 transitions, with aging and movement; its vaccination is an intervention, off unless enabled, and listed. The declared form of the stratified model, by hand:
 
 ```python
 contacts = [[12, 4, 1], [4, 8, 2], [1, 2, 3]]
@@ -71,7 +64,7 @@ Over camdl's own test models (85 files), 84 import and run; 54 with nothing list
 
 ## Running the original
 
-- Environment: `lingua_franca_design/_envs/camdl` (`bin/camdl` and `bin/camdlc`, built from the camdl repository at a fixed commit). Another `camdlc` on the PATH may be older and fail on newer syntax; give `camdlc=` to choose.
-- A `.camdl` model runs from the command line: `camdl simulate model.camdl --backend ode --no-progress --output-dir <store> -o traj.tsv --obs obs.tsv --param beta=0.4 ...` (or `--scenario baseline`). The stochastic backend is the default; `--replicates 200` gives many runs in one command (see `examples/camdl/sir/run.py`). A pycamdl model runs in Python: `m.run(backend='ode')`, `m.run(n=200, seed=1)`.
-- Series: the trajectory TSV has `t`, each compartment (as whole numbers), and `flow_<transition>` (the flow in the step ending at `t`); the observations TSV has each observed series at its emit times. A compartment at `t` is Starsim's `n_<state>[t]`, and a flow at `t` is Starsim's transition result at the same index, with no shift.
+- Environment: `camdl` and `camdlc`, built from the camdl repository. A `camdlc` on the PATH may be older and fail on newer syntax; give `camdlc=` to choose.
+- A `.camdl` model runs from the command line: `camdl simulate model.camdl --backend ode --no-progress --output-dir <store> -o traj.tsv --obs obs.tsv --param beta=0.4 ...` (or `--scenario baseline`). The stochastic backend is the default; `--replicates 200` gives many runs in one command (see [`camdl/sir/run.py`](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/models/camdl/sir/run.py)). A pycamdl model runs in Python: `m.run(backend='ode')`, `m.run(n=200, seed=1)`.
+- Series: the trajectory TSV has `t`, each compartment (as whole numbers), and `flow_<transition>` (the flow in the step ending at `t`); the observations TSV has each observed series at its emit times. A compartment at `t` is Starsim's `<state>[t]`, and a flow at `t` is Starsim's transition result at the same index, with no shift.
 - Stochastic: 200 runs; compare means and the 5% to 95% range.

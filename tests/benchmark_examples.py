@@ -3,15 +3,17 @@
 Benchmark a few representative simulation scenarios.
 
 Examples:
-    ./benchmark_examples.py
-    ./benchmark_examples.py repeats=2
-    ./benchmark_examples.py case=complex_30
+    python benchmark_examples.py
+    python benchmark_examples.py repeats=2
+    python benchmark_examples.py case=complex
 """
 import sciris as sc
 import starsim as ss
 import starsim.library as ssl
 
 sc.options(interactive=False)
+
+beta = dict(randomnet=ss.peryear(0.05), sexualnet=ss.peract(0.05)) # A rate on the random network, and a probability per act on the sexual one
 
 
 def make_simple_setup():
@@ -31,7 +33,7 @@ def make_simple_setup():
 def make_complex_30():
     """A shorter run with substantially more model structure."""
     hiv = ssl.diseases.HIV()
-    hiv.pars['beta'] = {'sexual': [0.15, 0.10], 'maternal': [0.2, 0], 'random': [0, 0]}
+    hiv.pars['beta'] = {'sexual': [0.15, 0.10], 'prenatal': [0.2, 0], 'random': [0, 0]}
 
     return ss.Sim(
         n_agents=80_000,
@@ -39,7 +41,7 @@ def make_complex_30():
         dt=0.5,  # 30 timesteps
         rand_seed=1,
         verbose=0,
-        diseases=[ss.SIS(), hiv],
+        diseases=[ss.SIS(beta=dict(beta, prenatalnet=0)), hiv],
         networks=[ss.RandomNet(), ss.SexualNet(), ss.PrenatalNet()],
         demographics=ss.Pregnancy(),
         label='complex_30',
@@ -54,7 +56,7 @@ def make_moderate():
         dt=0.1,  # 300 timesteps
         rand_seed=1,
         verbose=0,
-        diseases=[ss.SIR(), ss.SIS()],
+        diseases=[ss.SIR(beta=beta), ss.SIS(beta=beta)],
         networks=[ss.RandomNet(), ss.SexualNet()],
         demographics=True,
         label='moderate_300',
@@ -76,7 +78,7 @@ CASES = sc.obj(
     ),
     moderate=sc.obj(
         label='Moderate-complexity simulation with 300 timesteps',
-        timesteps=100,
+        timesteps=300,
         repeats=3,
         factory=make_moderate,
     ),
@@ -142,5 +144,5 @@ def benchmark_examples(repeats=None, case='all'):
 
 
 if __name__ == '__main__':
-    args = sc.argparse(repeats=None, case='all')
-    benchmark_examples(repeats=args.repeats, case=args.case)
+    args = sc.argparse(repeats=0, case='all')
+    benchmark_examples(repeats=args.repeats or None, case=args.case)

@@ -335,7 +335,7 @@ def describe_graph(graph, sim=None, out=None):
     infected = [s.name for s in graph.infected if s.people]
     if infected and not graph.transmissions: # With a transmission, they are its destination and its source, as above
         add('', f'infected: {", ".join(infected)}', 'counted in prevalence, and cured by ss.treat')
-    init_str = lambda v: f'{value_str(v)}(sim)' if callable(v) and not isinstance(v, (ss.Dist, Expr, ss.by, ss.parameters.TimeValue)) else v # A function by its name (MS10), e.g. Sv = mosquito_start(sim)
+    init_str = lambda v: f'{value_str(v)}(sim)' if callable(v) and not isinstance(v, (ss.Dist, Expr, ss.by, ss.parameters.TimeValue)) else v # A function by its name, e.g. Sv = mosquito_start(sim)
     inits = {s.name:init_str(s.init) for s in graph.states.values() if s.init is not None} | {s.name:f'{s.init_n} {"person" if s.init_n == 1 else "people"}' for s in graph.states.values() if s.init_n is not None}
     if graph.init_prev is not None and not (sc.isnumber(graph.init_prev) and graph.init_prev == 0):
         inits['init_prev'] = value_str(graph.init_prev.raw) if isinstance(graph.init_prev, par) else graph.init_prev
@@ -442,7 +442,7 @@ def describe_graph(graph, sim=None, out=None):
         if oc.likelihood is not None:
             text += f'; likelihood {getattr(oc.likelihood, "__name__", type(oc.likelihood).__name__)}'
         add(name, text)
-    if graph.transmissions and getattr(sim, 'solver', 'abm') in ['abm', 'binomial']: # The timing contract of spec 02, where modelers look (CV5, ST4), for the solvers that take whole steps
+    if graph.transmissions and getattr(sim, 'solver', 'abm') in ['abm', 'binomial']: # How infections are dated and states counted, for the solvers that take whole steps
         add('timing', 'an infection is dated at the end of its step, so what follows it starts then')
         add('', 'a state\'s count (the result X) includes the step people enter it; they stay for the whole time drawn for them')
     fitted = [p for p in graph.all_pars() if p.bounds is not None and id(p) not in shown] # The other parameters that can be fitted, e.g. a share of an outcome
@@ -728,7 +728,7 @@ def describe_sim(sim, output=False, verbose=False):
             if stops:
                 add('', f'auto would stop: {stops[0]}')
             else:
-                add('', f'auto would choose: ' + (f'abm ({reasons[0]})' if reasons else 'ode (every part of the model has a compartmental form)'))
+                add('', 'auto would choose: ' + (f'abm ({reasons[0]})' if reasons else 'ode (every part of the model has a compartmental form)'))
         if sim.solver == 'abm':
             scale = f', each standing for {pars.pop_scale:n} people' if pars.pop_scale != 1 else ''
             add('', f'{pars.n_agents:,} agents{scale}', None if 'n_agents' in sim.given else 'guessed')
@@ -753,7 +753,7 @@ def describe_sim(sim, output=False, verbose=False):
                     ref = strat.geo.ref
                     text += f"; places from starsim_data {ref['version']} ({ref.get('boundaries', '?')} boundaries; population: {ref.get('population', '?')})"
             elif strat.kind == 'age':
-                text += (f'; split as the population of {named.place}' if named is not None else '; split as the ages of the people given') if getattr(strat, 'split_from', None) == 'people' else '' # A named population, or ss.People(age_data=...) (MA29)
+                text += (f'; split as the population of {named.place}' if named is not None else '; split as the ages of the people given') if getattr(strat, 'split_from', None) == 'people' else '' # A named population, or ss.People(age_data=...)
                 text += '; people do not age (use_aging=False)' if not pars.use_aging else '; nobody ages, since time is in timesteps' if sim.unit is None else '; people age between the groups'
             text += sim.groups.moved_by(strat)
             if strat.name in getattr(sim.groups, 'kept', set()):
@@ -856,7 +856,7 @@ def describe_steps(sim, desc):
                 continue
             val = dw.mean if dw.dist is not None else plain(dw.par.raw)
             if val is None or not np.isfinite(val):
-                desc.add(name, f'varies (by group, by person, or in time)')
+                desc.add(name, 'varies (by group, by person, or in time)')
                 continue
             if dw.is_rate and val == 0:
                 desc.add(name, 'a rate of 0: nobody leaves this way')
@@ -909,7 +909,7 @@ def branch_shares(tr):
 
 
 def edge_label(tr, p, unit):
-    """ A transition's name and value, for an arrow of a diagram, e.g. "infection: 1.9 × I", "recovery: 8 days, p = 0.998" (`p` as given by `edges()`) """
+    """ A transition's name and value, for an arrow of a diagram, e.g. "infection: 1.9 × I", "recovery: 8 days, p = 0.998" (`p` as given by `graph_edges()`) """
     kind = lambda k: None if unit == 'time unit' else k # A bare number in a model with no unit is shown as it is
     val = tr.dur if tr.dur is not None else tr.rate
     if val is None:
@@ -1102,7 +1102,7 @@ def quantity_json(raw, kind, unit):
         return dict(type='peract') | {k:quantity_json(v, None, unit) for k,v in items.items()}
     elif isinstance(raw, Expr):
         return format_expr(raw, exact=True)
-    elif isinstance(raw, ss.box): # Waning as a box, then a decay (MS6)
+    elif isinstance(raw, ss.box): # Waning as a box, then a decay
         return dict(box=quantity_json(raw.dur, None, unit), decay=None if raw.decay is None else quantity_json(raw.decay, None, unit), stages=raw.stages)
     elif callable(raw):
         return func_json(raw)

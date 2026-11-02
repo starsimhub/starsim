@@ -46,7 +46,7 @@ def test_exit_split():
 
 @sc.timer()
 def test_syphilis_clock():
-    sc.heading('A clock of a set of states as agents only: syphilis latent infectiousness by (EL | LL).time (run in test_clocks.py::test_syphilis_latent)')
+    sc.heading('A clock of a set of states as agents only: syphilis latent infectiousness by (EL | LL).time (run in devtests/test_clocks.py::test_syphilis_latent)')
     def make(**kwargs):
         S, E, EL, LL = ss.states('S E EL LL')
         syph = ss.Disease(S, E, EL, LL,

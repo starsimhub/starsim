@@ -96,7 +96,7 @@ def test_layers():
         nets = [ss.contacts('Kenya', layer=layer) for layer in layers]
         sim = ss.Sim(sir, networks=nets, stratify=dict(age=[0, 5, 18, 65]), unit='day', stop=100, solver=solver, total_pop=10_000, verbose=0, **(dict(n_agents=10_000) if solver == 'abm' else {}))
         return sim.run().results.sir.infection.cum[-1]
-    ode = run(dict(home=0.03, school=0.02), 'ode') # The spec's layered example, which crashed under both engines
+    ode = run(dict(home=0.03, school=0.02), 'ode') # A layered example
     assert np.isclose(run(dict(home=0.03, school=0.02), 'abm'), ode, rtol=0.1)
     assert np.isclose(run(dict(home=0.03, school=0.0), 'ode'), run(0.03, 'ode', layers=['home'])) < 0.9*ode # No transmission at school is home contacts only
     for bad in [dict(home=0.03, school=0.02, wrok=0.1), dict(home=0.03)]: # A key with no route, and a route with no key

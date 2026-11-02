@@ -209,7 +209,7 @@ With the same number of doses, vaccinating the children who carry most of the tr
 - **A distribution as a value or as a prior.** A distribution as a parameter's value is variation between people; uncertainty about one value is a prior.
 - **The exponential default.** A single duration is exponential, with a lot of spread. For a latent or infectious period, an Erlang or lognormal distribution is usually closer to the data.
 - **A unit given twice, or not at all.** Give a distribution's unit on its parameters or with `unit=`; a bare number takes the model's unit.
-- **Making distributions at every step** in a module written as code, which breaks common random numbers. Make them once.
+- **Making distributions at every step** in a module written as code. One made in `step()` is not initialized, so drawing from it raises an error, and initializing it there would break common random numbers. Make them once, in `__init__()`.
 
 ## Further reading
 

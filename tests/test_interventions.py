@@ -1,5 +1,5 @@
 """
-Run tests of what Starsim 3's delivery classes did, with the deliveries: routine and campaign delivery by year, products shared between deliveries, tests with several results, and treatment with a capacity and a queue
+Test deliveries: routine and campaign delivery by year, products shared between deliveries, tests with several results, and treatment with a capacity and a queue
 """
 import warnings
 import sciris as sc
@@ -104,7 +104,7 @@ def test_two_products():
         assert 'campaign' in ss.Sim(make_pars(), interventions=intervention).init().interventions
         assert 'campaign' in ss.Sim(make_pars()).new(interventions=intervention).init().interventions
 
-    # Two products of the same default name: the warning names the product's own class (HP85b)
+    # Two products of the same default name: the warning names the product's own class
     t1, t2 = [ss.treat(ss.Treatment(cure=c), coverage=0.5, at=2005) for c in [0.5, 0.9]]
     with pytest.warns(Warning, match=r"ss\.Treatment\(\.\.\., name="):
         ss.Sim(make_pars(), interventions=[t1, t2]).init()

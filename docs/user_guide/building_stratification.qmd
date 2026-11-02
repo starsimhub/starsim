@@ -143,7 +143,7 @@ sis.stratify(infections=[0, 1, 2, 3, 4]) # 0, 1, 2, 3, 4+
 
 - **Interventions.** A delivery can move people between levels too, e.g. to vaccinate them on a date ([Products](interventions_products.qmd)).
 
-[T8 – Stratification and co-transmission](../tutorials/t8_strata.qmd) works through transfers, including migration and vaccination as a transfer.
+[T8 – Stratification and co-transmission](../tutorials/t8_strata.qmd) works through a transfer, catch-up vaccination.
 
 ## Values by group
 

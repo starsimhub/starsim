@@ -14,7 +14,7 @@ def op(name, left, right):
 
 par, pop = lambda name: {'param': name}, lambda name: {'pop': name}
 
-# The IR camdlc writes for examples/camdl/sir/original/sir.camdl, trimmed of what the importer does not read
+# The IR camdlc writes for docs/models/camdl/sir/original/sir.camdl in the lingua_franca_design repo, trimmed of what the importer does not read
 sir_ir = {'ir_version': '0.40', 'model': {
     'name': 'sir',
     'time_unit': 'days',
@@ -51,7 +51,7 @@ def test_camdl_ir():
     assert pars.beta.doc == 'transmission rate'
     assert isinstance(sim.diseases.sir.graph.outcomes.cases.likelihood, ss.nbinom), 'the likelihood should be kept'
 
-    # By hand, as in vignettes/camdl/sir/sir.py
+    # By hand, as in the camdl SIR translation in the lingua_franca_design repo
     beta, gamma, rho, k = ss.par(0.4), ss.par(0.15), ss.par(0.6), ss.par(10)
     S, I, R = ss.states(3)
     infection = S >> I @ beta * I

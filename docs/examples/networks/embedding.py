@@ -60,7 +60,7 @@ class EmbeddingNet(ss.SexualNet):
         # Finalize pairs
         p1 = available_m[ind_m]
         p2 = available_f[ind_f]
-        beta = np.ones(n_pairs) # TODO: Allow custom beta
+        beta = np.ones(n_pairs)
         dur_vals = self.pars.dur.rvs(p1)
         act_vals = self.pars.acts.rvs(p1)
 

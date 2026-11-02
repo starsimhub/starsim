@@ -64,6 +64,6 @@ Of 30,000 children, 50,000 adults under 65, and 20,000 people aged 65 and over, 
 
 ## Going further
 
-- [Age groups and contacts](../tutorials/t4_ages.qmd) adds age groups and a contact matrix to the measles model, with data for real countries.
-- [Stratification](../user_guide/building_stratification.qmd) and [Contact matrices and data by place](../user_guide/populations_data.qmd) cover the options.
+- [T4 – Age groups and contacts](../tutorials/t4_ages.qmd) adds age groups and a contact matrix to the measles model, with data for real countries.
+- [Stratification](../user_guide/building_stratification.qmd) and [Population data](../user_guide/populations_data.qmd) cover the options.
 - Keeling MJ, Rohani P (2008). *Modeling Infectious Diseases in Humans and Animals*. Princeton University Press.

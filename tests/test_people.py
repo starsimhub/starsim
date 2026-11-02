@@ -64,7 +64,7 @@ def test_people():
     res = sim.run().results.sis
     assert res.infection.sum() > 0 and np.isclose(res.cases.sum(), res.infection.sum())
 
-    # Memory: a People not yet in a sim (as in the copy of the sim before it was initialized, for sim.new()) has no arrays per agent; arrays nothing sets take none (the UIDs are made when read, slot reads them; parent, scale, rel_sus, and rel_trans are their defaults); times of death are 16-bit (the active UIDs are 64-bit, which index arrays faster)
+    # Memory: a People not yet in a sim (as in the copy of the sim before it was initialized, for sim.new()) has no arrays per agent; arrays nothing sets take none (the UIDs are made when read, slot reads them; parent, scale, rel_sus, and rel_trans are their defaults); times of death are 32-bit (the active UIDs are 64-bit, which index arrays faster)
     sim = ss.Sim(ss.SIR(), people=ss.People(small), networks='random', verbose=0)
     sim.run()
     assert 'auids' not in sim._before_init.pars.people.__dict__

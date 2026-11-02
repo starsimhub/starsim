@@ -154,7 +154,7 @@ msim.summarize().loc[['measles_infection', 'vaccinedemand_doses']]
 
 With demand met in full, the outbreak infects about 5,400 people rather than 9,400: about 4,900 doses prevent about 4,000 infections. The doses rise with the cases, and peak in mid-March, during the steep rise of the outbreak, when each person protected breaks the most chains of infection; after that, fewer people are left susceptible to seek a dose, although people remember more cases than ever until April. With clinics that can give at most 30 doses a day, they run at capacity for two months, from late February to late April, and the people who can't be served in March, when it matters most, are often infected while they wait: about 6,600 people are infected, and fewer doses are given, since fewer people are left to seek them. Even met in full, the demand prevents less than half of the infections, because it is driven by the outbreak, and so only starts once the outbreak is under way; vaccination before an outbreak, or a campaign at its start ([T5](t5_interventions.qmd)), doesn't have to wait for it.
 
-`sim.describe()` lists the module, but can't say what it does, since that is in its code; this is the price of writing a part of the model as code. A module's parameters can be fitted to data like any other ([T7](t7_calibration.qmd)), if they are given as `ss.par` with bounds, e.g. `VaccineDemand(half=ss.par(300, bounds=[50, 2000]))`.
+`sim.describe()` lists the module, but can't say what it does, since that is in its code; this is the cost of writing a part of the model as code. A module's parameters can be fitted to data like any other ([T7](t7_calibration.qmd)), if they are given as `ss.par` with bounds, e.g. `VaccineDemand(half=ss.par(300, bounds=[50, 2000]))`.
 
 ## What changes with a module written as code
 
@@ -169,6 +169,8 @@ With demand met in full, the outbreak infects about 5,400 people rather than 9,4
 1. How much does it matter how long people remember the cases they hear about? Run `VaccineDemand()` with a memory of 10 days and of 90 days, and compare the infections and doses with the 30 days above. Does each extra dose prevent as many infections as the ones before? Why not?
 2. People who hear about an outbreak may also avoid contact with others. Add a second effect of the cases remembered: a modifier, `ss.modify(measles.rel_sus, multiply=...)`, whose `multiply=` is a function of the sim that returns 1 − 0.3 × the share used for demand (so contacts fall by up to 30%). Read the cases remembered from the module, as `sim.interventions.vaccinedemand.remembered`. How much smaller is the outbreak?
 3. Run the model with demand met in full as agents, one for each person (`n_agents=100_000`), and compare the infections and doses with those of the ODE. Does the module need any change? Why not?
+
+[Solutions](solutions.qmd#t9-custom-modules) · Next: [A1 – Diseases](a1_diseases.qmd)
 
 ## Further reading
 

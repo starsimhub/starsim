@@ -1,5 +1,5 @@
 """
-Test the Dist object from distributions.py
+Test the Dist object in internals/dists.py, and the distributions in distributions.py
 """
 
 import numpy as np
@@ -23,7 +23,7 @@ def test_hist_plotting():
     """ Test that histogram plotting works """
     sc.heading('Test plotting of distribution histograms')
 
-    # Based on the advanced distributions user guide
+    # Based on the distributions page of the user guide
     sir = ss.SIR(
         init_prev = 0.15,
         dur_inf = ss.weibull(c=2, loc=1, scale=2)
@@ -37,7 +37,7 @@ def test_hist_plotting():
 
 
 def test_lognorm_im_unit():
-    """ TY5: unit= on ss.lognorm_im() (whose parameters are of the log) scales its draws, as a dwell time """
+    """ Unit= on ss.lognorm_im() (whose parameters are of the log) scales its draws, as a dwell time """
     def mean_dwell(dur):
         class M(ss.Disease):
             S, I, R = ss.states('S I R')
@@ -56,7 +56,7 @@ def test_lognorm_im_unit():
 
 
 def test_dist_default_warnings():
-    """ MS8: a typed duration for a distribution default sets its mean, and says so; in a declared model, a single value replaces the distribution, and says so """
+    """ A typed duration for a distribution default sets its mean, and says so; in a declared model, a single value replaces the distribution, and says so """
     defaults = dict(dur=ss.lognorm_ex(mean=ss.days(200), std=ss.days(200)))
     with pytest.warns(RuntimeWarning, match='set only the mean'):
         p = ss.pars(defaults, dur=ss.days(100))

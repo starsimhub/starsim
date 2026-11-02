@@ -45,14 +45,14 @@ def jit(func=None, *, nopython=True):
     can be differentiated; otherwise it is compiled by Numba, which suits loops. The function as written is
     `.py_func`.
 
-    For a module, write the loop at the heart of a step as a function, and call it from the step (see tutorial G8).
+    For a module, write the loop at the heart of a step as a function, and call it from the step (see the user guide's page on custom modules).
 
     Args:
         func (function): the function
         nopython (bool): if False, run it as Python when Numba can't compile it, rather than raise an error
 
-    **Examples**:
-
+    Examples:
+        ```python
         @ss.jit
         def total(x):
             out = 0.0
@@ -63,6 +63,7 @@ def jit(func=None, *, nopython=True):
         @ss.jit(nopython=False) # Compiled if it can be, else run as Python
         def positive(x):
             return sc.findinds(x > 0)
+        ```
     """
     if func is None: # Called with options, as @ss.jit(nopython=False)
         return lambda func: Function(func, nopython=nopython)

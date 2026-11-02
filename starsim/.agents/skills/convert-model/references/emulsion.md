@@ -14,7 +14,7 @@ An EMULSION model is one YAML file: `time_info` (unit, `delta_t`, `total_duratio
 | `duration:` on a state whose only way out is `proba: 1` or `amount-all-but: 0` | A fixed dwell, `ss.constant(ss.days(d))` | yes |
 | `duration:` on a state with other ways out | A minimum stay: `after=` on the ways out (and nothing on an escape), as agents or compartments | yes |
 | `autoremove: yes` (a dead state) | An outflow to `ss.null` | yes |
-| `escape: yes` | Nothing: once the minimum stay is not translated, every way out applies throughout | yes |
+| `escape: yes` | Nothing: a way out with no `after=` applies throughout | yes |
 | `escape: cond`, `cond: is_X` | `where=` on the transition, against the other machine's state | no |
 | `when: calendar_period` | A parameter that is an `ss.timeseries` of 0 and 1, multiplying the rate | no |
 | `StrictLessThan(total_Q, K)` and the like | A comparison of counts: `(Q.n < K)` | yes |
@@ -30,15 +30,15 @@ An EMULSION model is one YAML file: `time_info` (unit, `delta_t`, `total_duratio
 
 ## What needs care
 
-- EMULSION applies the processes of a step in the order of `processes:`; Starsim takes each disease's transitions together. With several machines, check whether the order matters (it did for the quickstart's gestation and health machines, where the vignette runs gestation first).
+- EMULSION applies the processes of a step in the order of `processes:`; Starsim takes each disease's transitions together. With several machines, check whether the order matters (it did for the quickstart's gestation and health machines, where the worked example runs gestation first).
 - A duration is rounded to whole steps by EMULSION. With `delta_t: 7` a 10-day stay is one step, not 10/7.
-- Animals in the initial conditions start in their state before the first step, so their time in it counts from step -1, not 0 (the vignette sets `ti_NG = -1`).
+- Animals in the initial conditions start in their state before the first step, so their time in it counts from step -1, not 0 (the worked example sets `ti_NG = -1`).
 - `adult_age` and other parameters can be defined twice in a file; YAML (and so EMULSION) keeps the last one, and so does the import.
 - `random`/`randint` in a parameter (initial ages) are not numbers; the import leaves them out and lists anything that uses them. Give ages with `ss.People(n, age_data=ss.uniform(...))`.
 
 ## Worked example
 
-`lingua_franca_design/vignettes/emulsion/quickstart/model.py`: three state machines (age group, gestation, health), with the minimum stays, conditions on another machine, the quarantine calendar and capacity, and births on farrowing. The import (`ss.import_from('quickstart.yaml')`) gives the health machine's 13 transitions directly, and lists the 16 pieces that the vignette writes by hand:
+[`emulsion/quickstart/model.py`](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/models/emulsion/quickstart/model.py): three state machines (age group, gestation, health), with the minimum stays, conditions on another machine, the quarantine calendar and capacity, and births on farrowing. The import (`ss.import_from('quickstart.yaml')`) gives the health machine's 13 transitions directly, and lists the 16 pieces that the worked example writes by hand:
 
 ```python
 dates = {'2021-01-01': 0, '2021-04-01': 1, '2021-09-02': 0, '2022-04-01': 1, '2022-09-02': 0}
@@ -59,4 +59,4 @@ life = Life(
 
 ## Running the original
 
-`emulsion run model.yaml --runs 200 --seed 1 --quiet --output-dir out` writes `out/counts.csv`, one row per run (`simu_id`) and step (`step`), with a column for each state and each extra output. For the SIR, the vignette's `compare.py` found that a stock at index `k` is the number on day `k` in both, so the rows line up as they are; check this for each model, since it depends on how the steps are labelled. EMULSION's compartments and individuals are stochastic: compare the means and spreads over many runs. See `lingua_franca_design/examples/emulsion/sir/run.py`, which runs it in its environment (`_envs/emulsion`) and writes the long CSV that `validate-import` reads.
+`emulsion run model.yaml --runs 200 --seed 1 --quiet --output-dir out` writes `out/counts.csv`, one row per run (`simu_id`) and step (`step`), with a column for each state and each extra output. For the SIR, the worked example's `compare.py` found that a stock at index `k` is the number on day `k` in both, so the rows line up as they are; check this for each model, since it depends on how the steps are labelled. EMULSION's compartments and individuals are stochastic: compare the means and spreads over many runs. See [`emulsion/sir/run.py`](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/models/emulsion/sir/run.py), which runs it in its own environment and writes the long CSV that `validate-conversion` reads.

@@ -162,6 +162,8 @@ These projections use the best-fitting values only. Other values fit the data ne
 2. Fit only β, keeping the reported share at 50% (`sim.fit(pars=['beta'])`). How does the fit look, and how does the projected size of the outbreak compare with that of the fit of both parameters?
 3. Project a campaign on 1 April instead of 1 May (using the fit of the data to mid-April). How many reported cases would it have prevented?
 
+[Solutions](solutions.qmd#t7-data-and-calibration) · Next: [T8 – Stratification and co-transmission](t8_strata.qmd)
+
 ## Further reading
 
 - [pomp: Simulation-based inference for epidemiological dynamics](https://kingaa.github.io/sbied/): a full course on fitting stochastic epidemic models to case data, with a [case study of measles](https://kingaa.github.io/sbied/measles/index.html)

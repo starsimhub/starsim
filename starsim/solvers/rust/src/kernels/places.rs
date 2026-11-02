@@ -2,10 +2,8 @@
 
 use super::*;
 
-/// The rate of every flow for the groups of one place (p.pl_groups[a:b]), when people mix only within their place (`place_rates()`)
-pub fn place_rates(ys: A2<f64>, p: &Program, a: usize, b: usize, rates: A2<f64>, stack: A2<f64>, expo: A1<f64>) {
-    let nf = p.src.len();
-    let top_reg = stack.n0().wrapping_sub(1);
+/// The number of people in the groups of one place (`place_people()`)
+fn place_people(ys: A2<f64>, p: &Program, a: usize, b: usize) -> f64 {
     let mut n = 0.0;
     for j in a..b {
         let g = p.pl_groups.u(j);
@@ -13,6 +11,14 @@ pub fn place_rates(ys: A2<f64>, p: &Program, a: usize, b: usize, rates: A2<f64>,
             n += ys.at(p.people.u(i), g);
         }
     }
+    n
+}
+
+/// The rate of every flow for the groups of one place (p.pl_groups[a:b]), when people mix only within their place (`place_rates()`)
+pub fn place_rates(ys: A2<f64>, p: &Program, a: usize, b: usize, rates: A2<f64>, stack: A2<f64>, expo: A1<f64>, only_det: bool) {
+    let nf = p.src.len();
+    let top_reg = stack.n0().wrapping_sub(1);
+    let mut n = if p.exp_set.len() > 0 { place_people(ys, p, a, b) } else { -1.0 }; // Otherwise worked out if a share needs it
     for e in 0..p.exp_set.len() {
         let s = p.exp_set.at(e);
         if s < 0 {
@@ -34,6 +40,9 @@ pub fn place_rates(ys: A2<f64>, p: &Program, a: usize, b: usize, rates: A2<f64>,
         }
     }
     for f in 0..nf {
+        if only_det && !p.det.b(f) {
+            continue;
+        }
         for j in a..b {
             let g = p.pl_groups.u(j);
             rates.set(f, g, p.fixed.at(f, g));
@@ -66,6 +75,9 @@ pub fn place_rates(ys: A2<f64>, p: &Program, a: usize, b: usize, rates: A2<f64>,
                         for i in p.set_starts.u(arg)..p.set_starts.u(arg + 1) {
                             v += ys.at(p.set_comps.u(i), p.pl_groups.u(jj));
                         }
+                    }
+                    if op == FRAC && n < 0.0 {
+                        n = place_people(ys, p, a, b);
                     }
                     stack.set(top as usize, 0, leaf_share(op, v, n));
                 } else if op == GROUP {
@@ -179,7 +191,7 @@ pub fn place_events(y: A2<f64>, p: &Program, w: &Work, active: &[usize], dt: f64
         let mut t = 0.0;
         let mut z: u64 = 0;
         loop {
-            place_rates(y, p, a, b, rates, stack, expo);
+            place_rates(y, p, a, b, rates, stack, expo, false);
             let mut total = 0.0;
             for f in 0..nf {
                 if p.det.b(f) {

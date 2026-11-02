@@ -416,7 +416,7 @@ def test_time():
     df = ss.Sim(make_sir(), stop=10, **kw).run().results.sir.to_df()
     assert df.time.iloc[1] == 1 # Not a date in year 1
 
-    # A number times a probability scales its rate: 0.275 of people a year, not 0.16; a probability of 1 is an infinite rate (so still 1 when scaled), which moves everyone in the step, under every solver (FP1)
+    # A number times a probability scales its rate: 0.275 of people a year, not 0.16; a probability of 1 is an infinite rate (so still 1 when scaled), which moves everyone in the step, under every solver
     S, I = ss.states('S I')
     res = ss.Sim(ss.Disease(S, I, onset=S >> I @ ss.probperyear(0.8)*0.2, name='d'), total_pop=10_000, solver='ode', start=2000, stop=2001, **kw).run().results.d
     assert np.isclose(res.I[-1], 10_000*(1 - 0.2**0.2), rtol=1e-3)
@@ -444,8 +444,7 @@ def test_solvers(do_plot=False):
     # Compare with the known final size of an SIR epidemic
     sim = ss.Sim(make_sir(), total_pop=100_000, dt=0.25, stop=100, solver='ode', **kw).run()
     final = sim.results.sir.R[-1]/100_000
-    R0 = 3.0
-    expected = sc.findroot(lambda z: z - (1 - 0.99*np.exp(-R0*z)), 0.9) if hasattr(sc, 'findroot') else 0.9405
+    expected = 0.9405 # The root of z = 1 - 0.99*exp(-3*z), with R0 = 3
     assert np.isclose(final, expected, atol=0.005), f'Expected the final size to be {expected:n}, not {final:n}'
 
     # The default ODE follows a fast epidemic at a daily step (K&R program 2.1): the substeps follow how fast the infected grow, not only how fast they recover
@@ -908,6 +907,8 @@ def test_level_change_dwell():
         out[solver] = ss.Sim(d, unit='day', dt=0.25, stop=20, total_pop=20_000, n_agents=20_000, solver=solver, verbose=0).run().results.d.I[-1]/20_000
     assert np.isclose(out['abm'], out['ode'], atol=0.03)
     return
+
+
 def test_dwell_expressions():
     """ A dwell time that is an expression of named parameters keeps their names: two of them clashed with the name made for the slot (DuplicateDeclaration), and ss.par(dist)*1 raised AttributeError """
     sc.heading('Testing dwell times as expressions of parameters')
@@ -956,7 +957,7 @@ def test_schedule():
         infection = ss.Transition(S, A, rate=0.4 * A),
         severe    = ss.Transition(A, H, p=early, dur=3),
         mild      = ss.Transition(A, R, p=lambda sim: 1 - early(sim), dur=3),
-        relapse   = ss.Transition(R, A, dur=20), # Re-entered at row 5, so an exit is needed the same step
+        relapse   = ss.Transition(R, A, dur=20), # Re-entered in the state-change row, so an exit is needed the same step
         check     = check,
         init_prev = 0.01, name='d',
     )
@@ -964,7 +965,7 @@ def test_schedule():
     res = sim.results.d
     assert res.severe.sum() == res.severe[0] + res.A[0] + res.infection[1:6].sum() + res.relapse[1:6].sum() # Seeds whose dwell rounds to no steps leave at the start, counted at 0
 
-    # Where= on a branch that is closed to everyone at entry: they wait until it opens (FPsim review)
+    # Where= on a branch that is closed to everyone at entry: they wait until it opens (FPsim)
     A, B = ss.states('A B')
     clock = ss.Disease(A, B, tick=A >> B @ ss.constant(ss.months(3)), first='A', name='clock') # Everyone starts in the first state
     X, Y, Z = ss.states('X Y Z')
@@ -1046,7 +1047,7 @@ def test_cascade():
         S, X, E, P, A, Q, R = ss.states('S X E P A Q R')
         return ss.Disease(S, X, E, P, A, Q, R,
             infection = S >> E @ 0.4*(P + A + Q),
-            onset     = ss.Transition(S, X, rate=ss.perday(0.002)), # Into an immediate split at row 5, not by transmission
+            onset     = ss.Transition(S, X, rate=ss.perday(0.002)), # Into an immediate split in the state-change row, not by transmission
             entry     = ss.Transition(X, E, dur=2),
             split_p   = ss.Transition(E, P, p=0.3), # No driver: split on entry, at once
             split_a   = ss.Transition(E, A, p=0.7),
@@ -1074,7 +1075,7 @@ def test_cascade():
         assert res.seek.delivered.sum() == 100, 'Each seed is news to the deliveries once'
         assert np.array_equal(res.ng.onset.values[:-1], res.seek.delivered.values[1:]), 'The flow (at the start) should count the moves the deliveries saw, in the first step'
 
-    # A dwell time competing with a hazard, for people who enter during the run (FPsim review: the hazard missed a step per entrant)
+    # A dwell time competing with a hazard, for people who enter during the run (the hazard missed a step per entrant)
     S, A, B, C = ss.states('S A B C')
     d = ss.Disease(S, A, B, C, sa=S >> A @ ss.peryear(0.2), ab=ss.Transition(A, B, dur=ss.months(3)), ac=A >> C @ ss.permonth(0.04), name='d')
     res = ss.Sim(d, n_agents=50_000, start=2000, stop=2010, dt=ss.months(1), unit='year', use_aging=False, **kw).run().results.d
@@ -1098,7 +1099,7 @@ def test_cascade_binomial():
         S, X, E, P, A, Q, R = ss.states('S X E P A Q R')
         return ss.Disease(S, X, E, P, A, Q, R,
             infection = S >> E @ 0.4*(P + A + Q),
-            onset     = ss.Transition(S, X, rate=ss.perday(0.002)), # Into an immediate split at row 5, not by transmission
+            onset     = ss.Transition(S, X, rate=ss.perday(0.002)), # Into an immediate split in the state-change row, not by transmission
             entry     = ss.Transition(X, E, dur=2),
             split_p   = ss.Transition(E, P, p=0.3), # No driver: split on entry, at once
             split_a   = ss.Transition(E, A, p=0.7),
@@ -1290,7 +1291,7 @@ def test_split_null():
     with pytest.raises(TypeError, match=r'\[E, P, A\].*E \+ P \+ A'):
         ss.Sim(ss.Disease(S, E, P, A, x=ss.Transition(E | P | A, S, rate=0.1), name='x'), n_agents=100, verbose=0).init()
 
-    # ST48: a split to one destination is a plain transition, so several out of one state compete as rates rather than summing as branches
+    # A split to one destination is a plain transition, so several out of one state compete as rates rather than summing as branches
     S, I, R, F = ss.states('S I R F')
     d = ss.Disease(S >> I @ 0.3*I, a=ss.Transition(I, [F], p=[1.0], rate=0.1), b=ss.Transition(I, [R], p=[1.0], rate=0.05), name='d')
     assert d.a.p is None and len(ss.Sim(d, n_agents=100, verbose=0).init().diseases.d.graph.exits.I.hazards) == 2

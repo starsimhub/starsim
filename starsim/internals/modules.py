@@ -105,10 +105,10 @@ def find_modules(key=None, flat=False, verbose=False):
             if verbose: print(f'  Checking {attr}')
 
             # Handle modules or a list of objects being provided
-            if pymodule is not None: # Main use case: pymodule=ss, attr='HIV'
+            if pymodule is not None: # Main use case: pymodule=ss, attr='SIR'
                 item = getattr(pymodule, attr)
                 low_attr = attr.lower()
-            else: # Alternate use case: pymodule=None, attr=HIV
+            else: # Alternate use case: pymodule=None, attr=SIR
                 if is_module(attr): # It's a module, proceed
                     item = attr
                     low_attr = item.__name__.lower()
@@ -216,7 +216,7 @@ class Base:
 
     @property
     def ti(self):
-        """ Get the current module timestep """
+        """ Get the current module time index """
         try:    return self.t.ti
         except: return None
 
@@ -275,7 +275,7 @@ class Module(Base):
     Args:
         name (str): a short, key-like name for the module (e.g. "randomnet")
         label (str): the full, human-readable name for the module (e.g. "Random network")
-        kwargs (dict): passed to `ss.Timeline()` (e.g. start, stop, unit, dt)
+        kwargs (dict): passed to `ss.Timeline()` (e.g. start, stop, dt)
 
     Examples:
         ```python
@@ -354,7 +354,7 @@ class Module(Base):
         if getattr(self, '_lock_attrs', False) and attr in self._locked_attrs:
             if value is getattr(self, attr, None): # Allow assigning the same object back - this happens automatically with some in-place operators (e.g., +=)
                 return
-            if attr == 't': # Common in Covasim v3 analyzers, e.g. self.t = []
+            if attr == 't': # An easy slip in an analyzer, e.g. self.t = []
                 errormsg = f'"t" is reserved for the module\'s Timeline; store your own time data under another name, e.g. self.tvec'
                 raise AttributeError(errormsg)
             errormsg = f'Cannot modify attribute "{attr}"; locked attributes are {sc.strjoin(self._locked_attrs)}.\n'
@@ -415,7 +415,7 @@ class Module(Base):
     @property
     def _debug_name(self):
         """ The module name and class shown as a string, used in debugging/error messages """
-        out = f'"{self.name}" ({type(self)}'
+        out = f'"{self.name}" ({type(self)})'
         return out
 
     def _reconcile(self, key, value=None, default=None):
@@ -523,8 +523,8 @@ class Module(Base):
         Returns:
             mod (Module): an instance of `cls` whose `step()` calls `func(sim)`
 
-        **Example**::
-
+        Example:
+            ```python
             import starsim as ss
 
             def knockdown(sim): # Halve transmission for one year starting in 2015
@@ -542,6 +542,7 @@ class Module(Base):
             def knockdown(sim, share=ss.par(0.5, bounds=[0.1, 1])):
                 if sim.now == 2015:
                     sim.diseases.sis.rel_trans[:] *= share
+            ```
         """
         def step(mod): # TODO: see if this can be done more simply
             return mod.func(mod.sim, **mod.pars)
@@ -559,9 +560,6 @@ class Module(Base):
     def define_pars(self, inherit=True, **kwargs): # TODO: think if inherit should default to true or false
         """
         Create or merge Pars objects
-
-        Note: this method also automatically pulls in keyword arguments from the
-        calling function (which is almost always a module's `__init__()` method)
 
         Args:
             inherit (bool): whether to merge with the parameters already defined, rather than replace them
@@ -660,13 +658,14 @@ class Module(Base):
             overwrite (bool): if True, replace any existing state or alias of the same name, rather than raising
             kwargs (dict): passed to `define_aliases()`
 
-        **Examples**:
-
+        Examples:
+            ```python
             self.define_states(ss.BoolState('exposed'), reset='ti_infected') # Add a state and remove an inherited one
             self.define_states(ss.BoolState('infectious'), overwrite=True) # Replace an inherited state or alias
+            ```
         """
         # Optionally remove existing states and aliases: all of them (reset=True), or just the named
-        # ones (note: does not remove them from the people object or others if already added); see example in ss.SIR()
+        # ones (note: does not remove them from the people object or others if already added)
         if reset:
             names = ([state.name for state in self.state_list] + list(self._state_aliases)) if reset is True else sc.tolist(reset)
             for name in names:
@@ -735,11 +734,12 @@ class Module(Base):
             overwrite (bool): if True, replace any existing state or alias of the same name, rather than raising
             kwargs (dict): mapping of alias name to either the name of a state, or a callable
 
-        **Examples**:
-
+        Examples:
+            ```python
             self.define_aliases(infectious='infected') # Everyone infected is infectious
             self.define_aliases(infected=lambda self: self.exposed | self.infectious) # Both E and I are infected
             self.define_states(ss.BoolState('exposed'), infectious='infected') # Aliases can also be defined alongside states
+            ```
         """
         for key in kwargs:
             if overwrite:
@@ -824,7 +824,7 @@ class Module(Base):
         Perform initialization steps
 
         This method is called once, as part of initializing a Sim. Note: after
-        initialization, initialized=False until init_vals() is called (which is after
+        initialization, initialized=False until init_post() is called (which is after
         distributions are initialized).
 
         Args:
@@ -838,7 +838,7 @@ class Module(Base):
             self.link_timepars() # Add module dt to the timepars
             self.check_bare_units(sim)
             if isinstance(self.pars, ss.Pars) and getattr(self, 'graph', None) is None: # A declared module checks its own, against its graph (see ss.Disease.init_pre())
-                self.pars.check_added(self.name) # A parameter set but never defined, e.g. renamed (MG7)
+                self.pars.check_added(self.name) # A parameter set but never defined, e.g. renamed
             if isinstance(self.pars, ss.Pars):
                 self.pars.bind(self) # Arithmetic on a value that varies is on its value now, once the sim is initialized
             if self.name not in sim.pars: # Add a new key, which is allowed even if the sim's parameters are locked

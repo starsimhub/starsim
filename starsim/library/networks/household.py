@@ -10,6 +10,8 @@ import pandas as pd
 import sciris as sc
 import starsim as ss
 
+__all__ = ['HouseholdNet']
+
 _ = None # Sentinel for "not provided" default arguments
 
 
@@ -60,8 +62,7 @@ class HouseholdNet(ss.Network):
         3       3  52, 13, 12, 64, 53     1, 2, 1, 2
         4       4              30, 66           1, 1
 
-    Data in this format can be obtained from the `DHS Program
-    <https://dhsprogram.com>`_. To prepare a DHS household dataset:
+    Data in this format can be obtained from the [DHS Program](https://dhsprogram.com). To prepare a DHS household dataset:
 
     1. Register and request access at https://dhsprogram.com
     2. Download a Household Recode (HR) dataset in Stata format
@@ -70,7 +71,7 @@ class HouseholdNet(ss.Network):
 
         import starsim as ss; import starsim.library as ssl
         dhs_data = ssl.networks.HouseholdNet.load_dhs('XXHR7xDT/XXHR7xFL.DTA')
-        sim = ss.Sim(networks=ssl.networks.HouseholdNet(dhs_data=dhs_data))
+        sim = ss.Sim(networks=ssl.networks.HouseholdNet(dhs_data=dhs_data, dynamic=False))
         sim.run()
 
     If real data are not available, synthetic data can be constructed::
@@ -87,7 +88,7 @@ class HouseholdNet(ss.Network):
             age_strings.append(sc.strjoin(ages))
         dhs_data = sc.dataframe(hh_id=np.arange(n), ages=age_strings)
 
-        household = ssl.networks.HouseholdNet(dhs_data=dhs_data)
+        household = ssl.networks.HouseholdNet(dhs_data=dhs_data, dynamic=False)
         sim = ss.Sim(diseases='sis', networks=household)
         sim.run()
         sim.plot()
@@ -179,10 +180,8 @@ class HouseholdNet(ss.Network):
         """ Generate contacts by assigning agents to households sampled from the data.
 
         Households are drawn uniformly at random (with replacement) until they cover the whole
-        population, exactly as the reference algorithm, but sampling, age/sex assignment, edge
-        creation, and head-of-household selection are all vectorized rather than looped per
-        household. Results are statistically equivalent but not bit-identical to the loop version
-        (the random draws differ).
+        population. Sampling, age/sex assignment, edge creation, and head-of-household selection
+        are all vectorized rather than looped per household.
         """
         ppl = self.sim.people
         all_uids = (ppl.age >= 0).uids # Exclude unborn agents (e.g. from ss.Pregnancy(burnin=True)); they join their mother's household at birth
@@ -291,7 +290,7 @@ class HouseholdNet(ss.Network):
         lo = np.searchsorted(sorted_h, mat_hids, side='left')
         hi = np.searchsorted(sorted_h, mat_hids, side='right')
         counts = hi - lo
-        counts[np.isnan(mat_hids)] = 0  # Mother has no household; no contacts to add (matches prior behavior)
+        counts[np.isnan(mat_hids)] = 0  # Mother has no household; no contacts to add
 
         # Ragged gather: newborn i connects to sorted_uids[lo_i : lo_i+counts_i]
         total = int(counts.sum())
@@ -320,8 +319,7 @@ class HouseholdNet(ss.Network):
         # only when her current `ti_P` is newer than that. This is dt-agnostic: comparing
         # against `ti_P` (rather than the sim timestep vs. the scheduled delivery) avoids mis-timed,
         # repeated move-outs when the pregnancy module runs on a coarser dt than the sim (e.g.
-        # ss.Pregnancy(dt=ss.months(3))), which otherwise over-fragments households. Bit-identical
-        # to the previous logic when pregnancy dt == sim dt.
+        # ss.Pregnancy(dt=ss.months(3))), which otherwise over-fragments households.
         preg = self.sim.get_module(ss.Pregnancy)
         potential_movers = ss.uids(~self.fhoh & preg.P & (self.ti_move_out_check < preg.ti_P))
         moving_out = self.pars['prob_move_out'].filter(potential_movers)
@@ -392,11 +390,10 @@ class HouseholdNet(ss.Network):
             ```python
             import starsim as ss; import starsim.library as ssl
             dhs_data = ssl.networks.HouseholdNet.load_dhs('ZZHR62FL.DTA')
-            sim = ss.Sim(networks=ssl.networks.HouseholdNet(dhs_data=dhs_data))
+            sim = ss.Sim(networks=ssl.networks.HouseholdNet(dhs_data=dhs_data, dynamic=False))
             sim.run()
             ```
         """
-        import pandas as pd
         hr = pd.read_stata(str(path), convert_categoricals=False)
 
         rows = []

@@ -150,7 +150,7 @@ class TimePar:
     def __new__(cls, *args, **kwargs):
         """ Special handling for an ss.by of values (see `_check_by_arg()`) and a function whose numbers are in this unit """
         by = cls._check_by_arg(*args)
-        if by is None and args and isinstance(args[0], (types.FunctionType, ft.partial)): # A function whose numbers are in this unit, e.g. ss.peryear(fn): the unit times it, as ss.peryear(1) * fn (MA20)
+        if by is None and args and isinstance(args[0], (types.FunctionType, ft.partial)): # A function whose numbers are in this unit, e.g. ss.peryear(fn): the unit times it, as ss.peryear(1) * fn
             return cls(1, *args[1:], **kwargs) * args[0]
         return by if by is not None else super().__new__(cls)
 
@@ -339,9 +339,10 @@ Examples:
         Args:
             value (float/array): the value to use
 
-        **Example**:
-
+        Example:
+            ```python
             ss.years(5).replace(6) # Returns ss.years(6)
+            ```
         """
         out = sc.dcp(self)
         out.value = value if sc.isnumber(value) else sc.toarray(value)
@@ -396,8 +397,7 @@ Examples:
         Args:
             dt (`ss.dur`): the timestep to resolve against; if not supplied, use the module's `dt` (set during initialization)
 
-        **Examples**:
-
+        Examples:
             ```python
             # Inside a module with dt = ss.months(1)
             self.ti_clearance[uids] = self.ti_infected[uids] + self.pars.dur_persist.to_dt() # ✓ Right
@@ -413,7 +413,7 @@ Examples:
     @classmethod
     def to_base(cls, other):
         """
-        Class method to convert another TimePar object to this TimePar's base units; in most cases
+        Class method to convert another TimePar object to this TimePar's base units
 
         Args:
             other (`ss.TimePar`): the value to convert
@@ -446,7 +446,7 @@ class dur(TimePar):
             if kwargs:
                 errormsg = f'Invalid arguments {kwargs} for ss.dur; valid arguments are "value" and "base". If you are trying to construct a datedur, call it directly.'
                 raise ValueError(errormsg)
-            if base is not None: # e.g. ss.dur(3, 'years'
+            if base is not None: # e.g. ss.dur(3, 'years')
                 new_cls = get_dur_class(base)
             elif isinstance(value, dur) and type(value) is not dur: # e.g. ss.dur(ss.days(3))
                 new_cls = type(value)
@@ -945,7 +945,7 @@ class Rate(TimePar):
 
         Args:
             dur (`ss.dur`): the duration over which to convert the probability to
-            scale (float): an optional additional mutliplicative scale factor to incorporate in the calculation
+            scale (float): an optional additional multiplicative scale factor to incorporate in the calculation
 
         Examples:
             ```python
@@ -1013,13 +1013,13 @@ class prob(Rate):
 
     The class is designed to allow conversion of a probability from one
     duration to another through multiplication. However, the behavior of this
-    conversion depends on the data type of the the object being multiplied.
+    conversion depends on the data type of the object being multiplied.
 
     When multiplied by a duration (type ss.dur), the underlying constant rate is
     calculated as
         `rate = -np.log(1 - self.value)`.
     Then, the probability over the new duration is
-        `p = 1 - np.exp(-rate/factor)`,
+        `p = 1 - np.exp(-rate*factor)`,
     where `factor` is the ratio of the new duration to the original duration.
 
     For example,
@@ -1046,7 +1046,7 @@ class prob(Rate):
     the step too; in compartments, the whole compartment at the start of each
     step or substep).
 
-    Use `per` instead if `prob` if you would prefer to directly
+    Use `per` instead of `prob` if you would prefer to directly
     specify the instantaneous rate.
     """
     base = None # Can inherit, but clearer to specify
@@ -1172,13 +1172,13 @@ class per(Rate):
     When a `per` is multiplied by a scalar or array, the rate is simply
     scaled. Such multiplication occurs frequently in epidemiological models,
     where the base rate is multiplied by "rate ratio" or "relative rate" to
-    represent agents experiencing higher (multiplier > 1) or lower (multiplier <
+    represent people experiencing higher (multiplier > 1) or lower (multiplier <
     1) event rates.
 
     Alternatively, when a `per` is multiplied by a duration (type
     ss.dur), a probability is calculated. The conversion from rate to
     probability on multiplication by a duration is
-        `1 - np.exp(-rate/factor)`,
+        `1 - np.exp(-rate*factor)`,
     where `factor` is the ratio of the multiplied duration to the original
     period (denominator).
 
@@ -1197,7 +1197,7 @@ class per(Rate):
     * per: rate -> probability
     * prob: probability -> rate -> probability
 
-    The behavior of both classes is depending on the data type of the object being multiplied.
+    The behavior of both classes depends on the data type of the object being multiplied.
 
     `ss.per` is identical to `ss.freq`, except by default multiplication returns
     a probability rather than a number of events. Use `ss.per` for probabilities
@@ -1500,7 +1500,7 @@ def get_rate_class(unit):
     return get_unit_class('rate', unit)
 
 
-#%% Dates, which are now in dates.py, are also found here (e.g. by files saved before they moved); imported last, since dates.py imports the classes above
+#%% Dates, for the converter below; imported last, since dates.py imports the classes above
 
 from .dates import DateArray, date, datedur
 
@@ -1509,10 +1509,10 @@ from .dates import DateArray, date, datedur
 
 class MockAxis():
     """
-    Emulator for Axis.get_view_internal() to return converted values
+    Emulator for Axis.get_view_interval() to return converted values
 
     Matplotlib's date locators (AutoDateLocator, YearLocator, MonthLocator etc.)
-    call Axis.get_view_internal() to get the current axis limits. These locators all
+    call Axis.get_view_interval() to get the current axis limits. These locators all
     expect the values to be returned in matplotlib dates (i.e., days since 1970-01-01).
     This helper class is bound to the actual axis, and emulates `Axis.get_view_interval()`
     performing the conversion to return the values in the expected units. That way, the
@@ -1529,9 +1529,7 @@ class MockAxis():
 
     def get_view_interval(self):
         """
-        Return converted axis limits
-
-        :return: Tuple with (min, max) axis limits in matplotlib date units (days since 1970-01-01)
+        Return converted axis limits, as a tuple of (min, max) in matplotlib date units (days since 1970-01-01)
         """
         ymin, ymax = self.axis.get_view_interval()
         vmin, vmax = matplotlib.dates.date2num(ss.date(ymin)), matplotlib.dates.date2num(ss.date(ymax))
@@ -1544,7 +1542,7 @@ class FloatYearLocator(matplotlib.ticker.Locator):
 
     It exists so that a plot against decimal years gets tick marks at sensible dates.
 
-    Matplotlib's AutoDateLocator is the standard way to calculating date-based tick
+    Matplotlib's AutoDateLocator is the standard way of calculating date-based tick
     positions, incorporating a lot of functionality around sensibly setting the tick intervals
     e.g., to whole months. This class wraps AutoDateLocator to allow it to be used
     with float year axis values, by converting the float year values to matplotlib date values

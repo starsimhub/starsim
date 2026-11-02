@@ -5,11 +5,11 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "starsim"
 dynamic = ["version"]
-description = "A fast, flexible agent-based disease modeling framework"
+description = "A fast, flexible disease modeling framework, from compartments to agents"
 readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"
-keywords = ["agent-based model", "simulation", "disease", "epidemiology"]
+keywords = ["disease modeling", "epidemiology", "infectious disease", "simulation", "compartmental model", "stochastic model", "metapopulation model", "agent-based model"]
 
 authors = [
   { name = "Starsim Development Team", email = "info@starsim.org" },
@@ -25,6 +25,11 @@ classifiers = [
   "Intended Audience :: Science/Research",
   "Operating System :: OS Independent",
   "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Scientific/Engineering :: Medical Science Apps.",
   "Topic :: Software Development :: Libraries :: Python Modules",
   "Development Status :: 5 - Production/Stable",
 ]
@@ -150,8 +155,7 @@ exclude = ["starsim.solvers.rust*"] # The Rust kernels' source: compiled into wh
 "starsim.solvers" = ["rust/*", "rust/**/*"]
 
 [tool.setuptools.package-data]
-starsim = ["*.ipynb", "*.rst", "*.csv"]
-starsim_ai = ["**/*"]
+starsim = ["*.ipynb", "*.rst", "*.csv", ".agents/skills/**/*", ".agents/meta-skill/**/*"] # The skills for AI agents named in full, since "**" leaves out hidden folders
 
 [tool.setuptools.dynamic]
 version = {attr = "starsim.version.__version__"}

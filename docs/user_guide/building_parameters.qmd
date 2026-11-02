@@ -129,7 +129,7 @@ Here the values are per day, and mixing is homogeneous, so a higher β means a h
 
 ### Values that change over time
 
-Contact patterns, reporting, and treatment change over time, and so do the parameters that stand for them. A value can be a time series (`ss.timeseries()`), held or interpolated between given dates; a smooth yearly cycle (`ss.seasonal()`); or a function of the sim, worked out at each step. Each goes wherever a number would, in a rate, a share, or a starting value. [Time](building_time.qmd#values-that-change-over-time) covers them, with examples of measles with and without school terms. A change made by an intervention, from a date or when a condition holds (`ss.change()`, `ss.modify()`), is covered in [Interventions](interventions_interventions.qmd).
+Contact patterns, reporting, and treatment change over time, and so do the parameters that stand for them. A value can be a time series (`ss.timeseries()`), held or interpolated between given dates; a smooth yearly cycle (`ss.seasonal()`); or a function of the sim, worked out at each step. Each goes wherever a number would, in a rate, a share, or a starting value. [Time](building_time.qmd#values-that-change-over-time) covers them, with examples of measles with and without school terms. A change made by an intervention, from a date or when a condition holds (`ss.modify()`), is covered in [Interventions](interventions_interventions.qmd).
 
 ## Values that vary between people
 

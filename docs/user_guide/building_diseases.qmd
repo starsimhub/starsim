@@ -328,7 +328,7 @@ With `max_strains=2`, people can carry two at once; `ss.Strains` lists the other
 
 ### Strains with courses of their own
 
-Some diseases don't fit this, because each strain moves through the states on its own: someone can have CIN from one HPV genotype and be clearing another. Starsim tried one way of writing that, `ss.strains.Family`, in which the strains of one disease each followed their own course, with immunity between them, and with results over all of them. It was tested on HPVsim, its main use case, and it isn't part of Starsim: the results were similar to HPVsim's coded genotypes, but a declared genotype took about 2.5 ms a step against about 0.75 ms coded, which made the whole model about 1.5× slower, and it needed agents anyway once the strains protected each other.
+Some diseases don't fit this, because each strain moves through the states on its own: someone can have CIN from one HPV genotype and be clearing another.
 
 If the strains can share one course, use `ss.Strains` as above. Otherwise, make each strain a disease of its own, and connect them with a [connector](interventions_connectors.qmd). For protection that depends only on which states people are in, that is one `ss.modify()` for each strain:
 
@@ -360,7 +360,7 @@ A disease written as code fills in some of these methods:
 | `set_prognoses(uids, sources)` | Sets what happens to the people just infected: when they recover, whether they die | Always, for an `ss.Infection`; call `super().set_prognoses()` first |
 | `step_state()` | Moves people between states each step, before transmission (e.g. those whose recovery is due) | When the disease has states of its own |
 | `step_die(uids)` | Clears the states of people who died | When the disease has states of its own |
-| `infect()` | Transmission over the networks | Rarely: the built-in version handles the networks, `beta`, `rel_sus`, and `rel_trans` |
+| `transmit()` | Transmission over the networks | Rarely: the built-in version handles the networks, `beta`, `rel_sus`, and `rel_trans` |
 
 In transmission, the chance that infection passes along a contact from an infectious person to a susceptible one is, in essence, β × `rel_trans` of the source × `rel_sus` of the target, where β is the transmission rate of that network. `rel_sus` and `rel_trans` are 1 by default, and are the levers that the rest of a model pulls: a vaccine lowers `rel_sus`, a treatment lowers `rel_trans`, and a connector between two diseases can raise one disease's `rel_sus` in people infected with the other. Because they are ordinary arrays, they can also be set directly. Here everyone under 20 is fully protected (`rel_sus = 0`), and compared with no protection:
 
@@ -385,7 +385,7 @@ for protect in [False, True]:
 
 The few under-20s infected even when protected were infected at the start (`init_prev`). Protecting them also protects older people, a little under a third of whom now escape infection, since there are fewer people to pass it on. In a model with a vaccine, the same protection would come from a [product](interventions_products.qmd), and between diseases from a [connector](interventions_connectors.qmd), rather than by setting `rel_sus` by hand.
 
-**Infected and infectious** are different things once a disease has a latent period. In `ssl.AgentSEIR`, people in `E` and `I` are both infected (and count towards prevalence), but only those in `I` are infectious; `infectious` drives transmission, and `infected` is worked out from the two. A disease whose latent people transmit too would give the exposed a `rel_trans` above 0 instead.
+**Infected and infectious** are different things once a disease has a latent period. In `ssl.AgentSEIR`, people in `E` and `I` are both infected (and count towards prevalence), but only those in `I` are infectious; `infectious` drives transmission, and `infected` is worked out from the two. A disease whose latent people transmit too would give the exposed a `rel_trans` above 0 instead. In both classes, `set_prognoses()` calls `set_infection()` and then `set_progression()`, which can be overridden one at a time. A stage of your own after a latent period is timed from `ti_infectious`, not from the time of infection, or the latent period takes the place of part of the infectious period rather than delaying it.
 
 The parts of a module written as code (its parameters, states, results, and the order in which Starsim calls its methods) are covered in [Custom modules](building_modules.qmd), and [A1 – Diseases](../tutorials/a1_diseases.qmd) builds a disease among agents step by step.
 
@@ -394,6 +394,7 @@ The parts of a module written as code (its parameters, states, results, and the 
 - **A bare number after `@` is a rate.** `I >> R @ 8` is a rate of 8 per day, not 8 days; write `ss.days(8)`.
 - **A rate with no state in it is not transmission.** `S >> I @ 0.2` infects everyone in `S` at 0.2 per day whether or not anyone is infectious. Transmission names its source: `S >> I @ beta*I`.
 - **`init_prev` in an SEIR model starts people in `E`.** To start some people infectious, give `init=dict(I=...)`.
+- **`set_prognoses()` without `super()`.** In a disease written as code, people are still infected, but the result `infection` stays at 0, with no error. Call `super().set_prognoses(uids, sources)`.
 
 ## Further reading
 

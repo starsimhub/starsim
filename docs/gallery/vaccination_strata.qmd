@@ -60,6 +60,6 @@ msim.summarize().loc['sir_infection']
 
 ## Going further
 
-- [Vaccination and scenarios](../tutorials/t5_interventions.qmd) vaccinates with a vaccine product instead, which is simpler when the vaccine is the topic.
-- [Stratification in depth](../tutorials/t8_strata.qmd) covers transfers between strata, of which vaccination is one.
-- [Coming from summer2](../user_guide/conversion/summer2.qmd) and [Coming from Atomica](../user_guide/conversion/atomica.qmd) show models from those frameworks, which use this pattern.
+- [T5 – Interventions and scenarios](../tutorials/t5_interventions.qmd) vaccinates with a vaccine product instead, which is simpler when the vaccine is the topic.
+- [T8 – Stratification and co-transmission](../tutorials/t8_strata.qmd) covers transfers between strata, of which vaccination is one.
+- [summer2](../user_guide/conversion/summer2.qmd) and [Atomica](../user_guide/conversion/atomica.qmd) show models from those frameworks, which use this pattern.

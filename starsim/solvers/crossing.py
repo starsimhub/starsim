@@ -111,7 +111,7 @@ class Crossing:
         return self._lead
 
     def reset(self):
-        """ Forget any step half taken, and any whole run not yet handed out, before the run starts again """
+        """ Forget the kernels chosen, before the run starts again """
         self.compiled = None
         return
 

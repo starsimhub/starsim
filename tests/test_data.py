@@ -81,7 +81,7 @@ def test_geo():
     assert np.allclose(home(ss.geo.gravity()), 0.9) and np.allclose(home(ss.geo.gravity(away=0.2)), 0.8)
     assert ss.Sim(make_sir().stratify(patch=kenya), unit='day', stop=60, **kw).init().pars.total_pop == kenya.pop.sum() # Places with populations give the population size
     with pytest.warns(RuntimeWarning, match='capped'):
-        assert np.allclose(home(ss.geo.gravity(k=0.5)), 0) # Everyone away all the time, as the spec's example had it
+        assert np.allclose(home(ss.geo.gravity(k=0.5)), 0) # Everyone away all the time
     with np.errstate(divide='ignore'): # As LASER scales its gravity: the share away is 5% on average, and at most 7%, given as the matrix
         G = kenya.pop[None, :]**0.25/kenya.distances**1.56
     np.fill_diagonal(G, 0)

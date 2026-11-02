@@ -64,5 +64,5 @@ A function that needs each person (one that takes `uids`, the people it applies 
 
 ## Going further
 
-- [Modules written as code](../tutorials/t9_modules.qmd) goes further, with modules that have a `step()` of their own.
-- [Modules written as code](../user_guide/building_modules.qmd), in the user guide, covers functions in rates and probabilities, and when a model can still run as compartments.
+- [T9 – Custom modules](../tutorials/t9_modules.qmd) goes further, with modules that have a `step()` of their own.
+- [Custom modules](../user_guide/building_modules.qmd), in the user guide, covers functions in rates and probabilities, and when a model can still run as compartments.

@@ -15,7 +15,7 @@ Architecture:
 
 Both modules require `ssl.mnch.FetalHealth()` in the sim's `custom` modules and
 `ss.Pregnancy()` in demographics. The connector also requires the target
-disease (default: SIR) to be present.
+disease (default: an `ssl.AgentSIR` named "sir") to be present.
 
 Usage::
 
@@ -42,6 +42,8 @@ Used with: agents; coded modules
 
 import numpy as np
 import starsim as ss
+
+__all__ = ['FetalHealth', 'treat_pregnant', 'fetal_infection']
 
 
 class FetalHealth(ss.Module):
@@ -94,10 +96,11 @@ class FetalHealth(ss.Module):
     Examples:
         ```python
         import starsim as ss
+        import starsim.library as ssl
 
         sim = ss.Sim(
             demographics=[ss.Pregnancy(fertility_rate=10), ss.Deaths(death_rate=10)],
-            modules=ssl.mnch.FetalHealth(),
+            custom=ssl.mnch.FetalHealth(),
             networks=ss.PrenatalNet(),
         )
         sim.run()
@@ -342,7 +345,7 @@ class FetalHealth(ss.Module):
         interpolation function can be swapped via `pars.interp_fn`.
 
         Args:
-            uids (array): the newborns
+            uids (array): the mother of each newborn
 
         Returns:
             tuple: (birth_weights, ga_weeks) arrays
@@ -466,7 +469,7 @@ class fetal_infection(ss.Connector):
     1. At conception, if the mother is already infected (via a conception callback
        registered with the pregnancy, after FetalHealth's).
     2. During pregnancy, when a new infection occurs (detected in `step()`
-       by checking `ti_infected == self.ti`: an infection in the previous step is dated at its end, which is this step's start).
+       by checking `ti_infected == self.ti - 1`, since transmission happens after connectors).
 
     Requires `ssl.mnch.FetalHealth()` in `custom` and an SIR disease written as code (`ssl.AgentSIR(name="sir")`) in `diseases`.
 

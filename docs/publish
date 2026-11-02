@@ -2,6 +2,7 @@
 # Build & publish site to GitHub Pages
 set -euo pipefail # Fail fast if needed
 
+export STARSIM_SKILL_NOTE=0 # No note from Starsim in the output of the pages
 quarto render --jobs ${DOCS_JOBS:-4}
 
 # Publish the site as a single commit with no history, replacing the gh-pages

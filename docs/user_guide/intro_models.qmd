@@ -34,7 +34,7 @@ Note: the Starsim suite also includes [Covasim](https://github.com/instituteford
 
 ## The built-in library
 
-Starsim itself comes with a small library of example modules, imported with `import starsim.library as ssl`: diseases (HIV with CD4 counts, cholera with an environmental reservoir, Ebola, measles), networks (households, networks in space, and theoretical networks such as Erdős–Rényi), and maternal, newborn, and child health (fetal health, neonatal sepsis). They are illustrative rather than validated: their parameter values are indicative, and they are meant to be copied and adapted. See [Library: Diseases](library_diseases.qmd), [Library: Networks](library_networks.qmd), and [Library: Maternal-child health](library_mnch.qmd).
+Starsim itself comes with a library of example modules, imported with `import starsim.library as ssl`: diseases (HIV with CD4 counts, cholera with an environmental reservoir, malaria with its mosquitoes, TB, measles, and others), networks (households, networks in space, and theoretical networks such as Erdős–Rényi), and maternal, newborn, and child health (fetal health, neonatal sepsis). They are illustrative rather than validated: their parameter values are indicative, and they are meant to be copied and adapted. See [Library: Diseases](library_diseases.qmd), [Library: Networks](library_networks.qmd), and [Library: Maternal-child health](library_mnch.qmd).
 
 The core of Starsim also includes the classic compartmental structures, `ss.SIR`, `ss.SIS`, and `ss.SEIR`, as declared diseases with named parameters (see [Diseases](building_diseases.qmd#built-in-sir-sis-and-seir)).
 

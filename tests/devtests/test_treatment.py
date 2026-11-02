@@ -35,7 +35,7 @@ def check_close(sims, func, rtol=0.1):
 
 
 def make_sti(name='ng', beta=0.015, fail=None, init_prev=0.1, p_fail=None):
-    """ A bacterial STI as in STIsim (stisim_bacterial/port.py), with treatment as an undriven transition and no treated state; `fail` is the event of a treatment failing """
+    """ A bacterial STI as in STIsim, with treatment as an undriven transition and no treated state; `fail` is the event of a treatment failing """
     S, E, A, P, Y, C = ss.states('S E A P Y C')
     trs = dict(
         infection = S >> E @ beta*(A + P + Y + C),
