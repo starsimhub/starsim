@@ -1389,7 +1389,16 @@ def restart_runs(sims, n_runs, pars=None, draws=False):
             strata, denom = [join(d[modname, key]) if (modname, key) in d else None for d in [groups, denoms]]
             strata = strata if strata is not None and len(strata) == len(runs) else None
             arrays[modname, key] = dict(like=res, values=vals, strata=strata, denom=denom if strata is not None else None, group_ti=group_ti.get(modname))
-    return RestartedSims(runners, sets, n_runs, seeds), MultiResults.build(arrays, runs, order=runners[0].results), runs
+    sim = runners[0]
+    if 'alive' in sim.results: # The sim's own results (alive, died, emigrated), as one run gives them
+        try:
+            counts = ss.solvers.people_counts(sim, lambda mod, key: np.asarray(arrays[mod.name, key]['values'], dtype=float))
+        except KeyError: # A result some runs don't have
+            counts = None
+        for key,vals in (counts or {}).items():
+            arrays[None, key] = dict(like=sim.results[key], values=vals, strata=None, denom=None)
+    timevec = sim.results.get('timevec')
+    return RestartedSims(runners, sets, n_runs, seeds), MultiResults.build(arrays, runs, timevec=timevec, order=sim.results), runs
 
 
 def parallel(*args, n_runs=None, pars=None, priors=False, **kwargs):
