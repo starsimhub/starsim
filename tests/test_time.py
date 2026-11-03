@@ -110,6 +110,16 @@ def test_syntax():
     assert ss.date('2020-01-01') + 52*ss.years(1/52) == ss.date('2021-01-01') # Should give us 1st Jan 2021
     assert ss.date('2020-01-01') + ss.datedur(years=1) == ss.date('2021-01-01') # Should give us 1st Jan 2021
 
+    # Whole days, weeks, months, and years follow the calendar, even around a leap day (these used to be a day out)
+    d = ss.date('2020-03-05')
+    assert d + ss.days(301) == ss.days(301) + d == ss.date('2020-12-31')
+    assert d - ss.days(301) == ss.date('2019-05-09')
+    assert d + ss.weeks(52) == ss.date('2021-03-04')
+    assert d + ss.years(1) == ss.date('2021-03-05')
+    assert d - ss.years(1) == ss.date('2019-03-05')
+    assert ss.date('2020-01-31') + ss.months(1) == ss.date('2020-02-29')
+    assert len(ss.Timeline(start=d, dur=ss.days(301), dt=ss.days(1)).init()) == 302 # Ends on 2020-12-31, not 2021-01-01
+
     # Operations on date vectors
     ss.date.arange(2020,2030)+ss.years(1) # add years to date array
     ss.date.arange(2020,2030)+ss.datedur(years=1) # add datedur to date array
@@ -174,7 +184,7 @@ def test_datearray_operations():
     b = ss.DateArray([ss.years(1), ss.years(2)])
     c = ss.years([1, 2])
 
-    expected_dates_plus_month = ss.DateArray([ss.date('2020-01-31'), ss.date('2021-01-31')])
+    expected_dates_plus_month = ss.DateArray([ss.date('2020-02-01'), ss.date('2021-02-01')]) # Whole months follow the calendar
     assert np.array_equal(a + ss.months(1), expected_dates_plus_month)
     assert np.array_equal(ss.months(1) + a, expected_dates_plus_month)
 
@@ -198,7 +208,7 @@ def test_datearray_operations():
     assert np.array_equal(c + ss.date('2020-01-01'), expected_dates_plus)
     assert np.array_equal(ss.date('2020-01-01') + c, expected_dates_plus)
 
-    expected_dates_minus_month = ss.DateArray([ss.date('2019-12-02'), ss.date('2020-12-02')])
+    expected_dates_minus_month = ss.DateArray([ss.date('2019-12-01'), ss.date('2020-12-01')])
     assert np.array_equal(a - ss.months(1), expected_dates_minus_month)
 
     with pytest.raises(TypeError):

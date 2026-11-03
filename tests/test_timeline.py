@@ -59,7 +59,7 @@ def test_timeline_combinations():
     assert len(tl5) == 53   # 365 days / 7 days per week + 1 inclusive
     assert len(tl6) == 121  # 10 years * 12 months + 1 inclusive
     assert len(tl7) == int(np.floor(100*365/7)) + 1
-    assert len(tl8) == 366  # 2000 is a leap year: 366 days, but float-year path uses 365.25
+    assert len(tl8) == 366  # Numeric years are 365 days, so 365 steps +1 inclusive, even though 2000 is a leap year
 
     return tl1
 
@@ -94,7 +94,7 @@ def test_timeline():
     t2.init(sim=s2)
     assert np.array_equal(s2.t.timevec, s2.t.datevec)
     assert isinstance(s2.t.start, ss.date)
-    assert t2.npts*7 == s2.t.npts + 1
+    assert t2.npts == (s2.t.npts - 1)//7 + 1 # Whole weeks in the span, +1 inclusive
 
     print('Testing different units and dt')
     s3 = sim(start=2001, stop=2003, dt=ss.years(0.1))
@@ -207,7 +207,7 @@ def test_timeline_syntax():
 
     # Test multiple
     kw.h1 = [dict(start=ss.years(1990), stop=ss.date(2010), dur=None, dt='month') , dict(start=ss.date(1990), stop=ss.date(2010), dur=dd20, dt=ss.months(1))]
-    kw.h2 = [dict(start=1990, stop=2010, dur=None, dt=ss.datedur(months=1))       , dict(start=ss.date(1990), stop=ss.years(2010), dur=dd20, dt=ss.datedur(months=1))]
+    kw.h2 = [dict(start=1990, stop=2010, dur=None, dt=ss.datedur(months=1))       , dict(start=ss.date(1990), stop=ss.date(2010), dur=dd20, dt=ss.datedur(months=1))]
     kw.h3 = [dict(start=1990, dur=40, dt='month')                                 , dict(start=ss.years(1990), stop=ss.years(1990)+ss.months(40), dur=ss.months(40), dt=ss.months(1))]
 
 

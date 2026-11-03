@@ -2,6 +2,11 @@
 
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output are flagged with the term "Regression". Changes that may require update to downstream code are flagged with the term "Migration".
 
+## Version 3.7.4 (2026-11-03)
+- Arithmetic between dates and days no longer involves a conversion to years; this fixes bugs due to rounding errors (especially in leap years). Adding durations to a date is also faster.
+- *GitHub info*: PR [1532](https://github.com/starsimhub/starsim/pull/1532)
+
+
 ## Version 3.7.3 (2026-11-01)
 - `ss.RoutineDelivery` no longer raises an `IndexError` when the start or end year is close to, but not on, the time grid (e.g. `dt=7/365`).
 - *GitHub info*: PR [1515](https://github.com/starsimhub/starsim/pull/1515)
