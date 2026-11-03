@@ -550,7 +550,7 @@ class dur(TimePar):
         elif isinstance(other, Rate):
             incompatible(self, '+', other)
         elif isinstance(other, ss.date): # If adding to a date, convert to years (or, for days, add them; see ss.date.__add__())
-            if self.is_array:
+            if self.is_array and self.base not in ['days', 'weeks', 'months', 'years']: # Whole calendar units are added exactly by ss.date.__add__()
                 return ss.DateArray([ss.date.from_year(x) for x in other.to_year() + self.years]) # Seems to profile slightly faster than np.vectorize
             else:
                 return other + self

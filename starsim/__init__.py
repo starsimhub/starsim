@@ -111,9 +111,5 @@ options.set(kernels=options.kernels)
 # Say if Starsim has not been compiled yet
 kernels.note_uncompiled()
 
-# Say if an AI coding agent here has no Starsim skills
-from .internals import cli
-cli.note_skills()
-
 # Don't keep these in the module
 del sc

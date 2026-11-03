@@ -581,7 +581,7 @@ class Sim(ss.Base):
     @staticmethod
     def _name_modules(names, *args):
         """ A module built with the plain ss.Disease() constructor takes its name from the variable it is assigned to """
-        taken = set(ss.SimPars()) | set(dir(ss.Sim)) # Names the sim already uses, e.g. interventions in def run(interventions): ss.Sim(interventions=interventions)
+        taken = set(ss.SimPars()) | set(dir(ss.Sim)) | ss.People.taken_names() # Names the sim or the people already use, e.g. interventions in def run(interventions): ss.Sim(interventions=interventions), or version
         for arg in args:
             mods = list(sc.tolist(arg))
             for mod in mods:

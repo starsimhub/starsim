@@ -277,7 +277,7 @@ A target named "cum ..." is the total since the start, and "peak size ..." the l
 
 ## Appendix: every importer and exporter
 
-Every format that `ss.import_from()` reads and `ss.export_to()` writes, generated from their registries, `ss.converters.importers` and `ss.converters.exporters`, with the first line of each function's documentation (the table in [The formats](#the-formats) says what each reads and how). `ss.converters.sniff(filename)` tells which format a file is in, if it can. Three conversion pages have no importer, since there is no file to read: [LASER](laser.qmd) and [NumPy](numpy.qmd) models are translated by hand, and Starsim 3 code is rewritten by `python -m starsim.converters.migrate` (see [Starsim v3](starsim3.qmd)).
+Every format that `ss.import_from()` reads and `ss.export_to()` writes, generated from their registries, `ss.converters.importers` and `ss.converters.exporters`, with the first line of each function's documentation, and the version of the framework it was tested with (`ss.converters.tested`; another version may work too, and importing from or exporting to one installed alongside Starsim notes the difference) (the table in [The formats](#the-formats) says what each reads and how). `ss.converters.sniff(filename)` tells which format a file is in, if it can. Three conversion pages have no importer, since there is no file to read: [LASER](laser.qmd) and [NumPy](numpy.qmd) models are translated by hand, and Starsim 3 code is rewritten by `python -m starsim.converters.migrate` (see [Starsim v3](starsim3.qmd)).
 
 ```{python}
 import inspect
@@ -293,6 +293,7 @@ for name in sorted(set(importers) | set(exporters)):
         format = name,
         imports = summary(importers[name]) if name in importers else '',
         exports = summary(exporters[name]) if name in exporters else '',
+        tested_with = ss.converters.core.tested_with(name),
     ))
 
 pd.set_option('display.max_colwidth', None) # Show each entry in full

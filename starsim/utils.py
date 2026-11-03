@@ -8,6 +8,7 @@ Used with: agents and compartments; declared and coded modules
 import os
 import types
 import functools
+import weakref
 import sys
 import warnings
 import numpy as np
@@ -348,9 +349,20 @@ def caller_names(depth=1, skip=None):
 
 def n_args(func):
     """ The number of positional arguments a function needs: `fn(sim)` is 1 and `fn(sim, uids)` is 2, and arguments with defaults (`fn(sim, years=5)`) do not count """
+    try:
+        return _arities[func] # Worked out once for each function, since it can be asked at every step
+    except (KeyError, TypeError):
+        pass
     import inspect
     kinds = [inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD]
-    return sum(1 for p in inspect.signature(func).parameters.values() if p.kind in kinds and p.default is inspect.Parameter.empty)
+    out = sum(1 for p in inspect.signature(func).parameters.values() if p.kind in kinds and p.default is inspect.Parameter.empty)
+    try:
+        _arities[func] = out
+    except TypeError: # A callable that can't be weakly referenced, or hashed
+        pass
+    return out
+
+_arities = weakref.WeakKeyDictionary() # The functions of n_args(), kept only while the function is, so that a sim in a closure can be freed
 
 
 # %% Data cleaning and processing

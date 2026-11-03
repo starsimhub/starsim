@@ -8,5 +8,5 @@ How Starsim works under the hood, for developers rather than modelers. Each modu
 - `gradients.py`: the ODE run in JAX, for gradients (`sim.gradient()`), log-densities (`sim.log_density()`), and many runs at once
 - `errors.py`: the errors and warnings that are classes (e.g. `ss.CapabilityError`, `ss.errors.AtBound`), and `ss.note()`
 - `debugtools.py`: profiling, debugging, and mock objects for testing
-- `cli.py`: the `starsim` command (`starsim init`, `starsim compile`, `starsim ai`)
+- The `starsim` command is not here but in `starsim_cli/`, beside the package, so that it starts without importing Starsim
 - `assets/`: the fonts for plots (see its README)

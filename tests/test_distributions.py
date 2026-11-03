@@ -595,8 +595,8 @@ def test_round():
 
 @sc.timer()
 def test_shape_scale():
-    """ Test that gamma and Weibull take a shape and a scale, and gamma a mean and a standard deviation """
-    sc.heading('Testing shape, scale, and mean for gamma and Weibull')
+    """ Test that gamma and Weibull take a shape and a scale, gamma a mean and a standard deviation, and the negative binomial a mean and a dispersion """
+    sc.heading('Testing shape, scale, and mean for gamma, Weibull, and negative binomial')
     assert ss.gamma(2, 3).pars.scale == 3 and ss.weibull(2, 5).pars.scale == 5 # The second number is the scale; loc is by keyword
     with pytest.raises(TypeError):
         ss.gamma(2, 0, 3)
@@ -605,6 +605,14 @@ def test_shape_scale():
     assert isinstance(ss.gamma(mean=ss.days(10), std=ss.days(5)).pars.scale, ss.days)
     with pytest.raises(ValueError):
         ss.gamma(a=2, mean=10, std=5)
+
+    # The negative binomial can be given by its mean, with n as the dispersion: the variance is mean + mean²/n
+    counts = ss.nbinom(mean=20, n=0.5, strict=False).rvs(n)
+    assert np.isclose(counts.mean(), 20, rtol=0.05) and np.isclose(counts.var(), 20 + 20**2/0.5, rtol=0.1)
+    same = ss.nbinom(n=0.5, p=0.5/20.5, strict=False, seed=1).rvs(100)
+    assert np.array_equal(ss.nbinom(mean=20, n=0.5, strict=False, seed=1).rvs(100), same) # The same as the equivalent p
+    with pytest.raises(ValueError):
+        ss.nbinom(mean=20, p=0.5)
     return vals
 
 

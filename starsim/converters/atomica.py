@@ -16,8 +16,18 @@ y-factors Atomica saves with `ParameterSet.save_calibration()`) scales the value
 A program book's programs become parameters of spending, whose coverage changes the
 parameters they affect (see `read_progbook()`).
 
+Exporting: `to_atomica(sim)` (`ss.export_to(sim, 'atomica')`) writes the compartmental
+form of a sim (see `ss.converters.export.flatten()`) as a framework workbook, returned as
+the bytes of the .xlsx: its compartments, with their initial numbers; the sums of them
+(such as `N`) as characteristics; its parameters; and a parameter on the transition matrix
+for each flow, a rate a year per person in the compartment it leaves (or a number of births
+a year, from a source compartment, with deaths into a sink). The values are the defaults of
+the databook's pages, so a databook made from the framework (`at.ProjectData.new()`) has them,
+and `load_atomica()` reads the framework alone.
+
 Used with: compartments; declared modules
 """
+import io
 import ast
 import re
 import datetime
@@ -28,7 +38,7 @@ import sciris as sc
 import starsim as ss
 from .core import Source, Code, build
 
-__all__ = ['load_atomica']
+__all__ = ['load_atomica', 'to_atomica']
 
 yes = lambda v: str(v).strip().lower() in ['y', 'yes', 'true', '1']
 aggregations = dict(SRC_POP_AVG='an average over the populations that interact with each one', SRC_POP_SUM='a sum over the populations that interact with each one', TGT_POP_AVG='an average over the populations each one interacts with', TGT_POP_SUM='a sum over the populations each one interacts with', POP_AVG='an average over the populations of a type', POP_SUM='a sum over the populations of a type') # Atomica's functions across populations
@@ -730,3 +740,133 @@ class FloorOfName(ast.NodeTransformer):
                 return node.args[0]
             self.other = True
         return node
+
+
+#%% Exporting a sim to Atomica
+
+def atomica_func(text, start):
+    """ An expression of the compartmental form as an Atomica function: with Atomica's functions, and its time, `t`, the year """
+    class Sub(ast.NodeTransformer):
+        def visit_Call(self, n):
+            self.generic_visit(n)
+            name = n.func.id
+            args = [ast.unparse(a) for a in n.args]
+            if name == 'where': # Atomica has no if: the condition is 0 or 1
+                cond, yes, no = args
+                return ast.parse(f'(({cond}) * ({yes}) + (1 - ({cond})) * ({no}))', mode='eval').body
+            elif name in ['abs', 'absolute']:
+                return ast.parse(f'max({args[0]}, -({args[0]}))', mode='eval').body
+            elif name == 'ceiling':
+                return ast.parse(f'-floor(-({args[0]}))', mode='eval').body
+            n.func.id = dict(minimum='min', maximum='max', log='ln').get(name, name)
+            return n
+        def visit_Name(self, n):
+            if n.id == 'pi': # As a number, which every reader knows
+                return ast.Constant(np.pi)
+            return ast.parse(f'(t - {start!r})', mode='eval').body if n.id == 't' else n # The time since the start, in years
+    return ast.unparse(Sub().visit(ast.parse(text, mode='eval').body))
+
+
+def per_person(text, name):
+    """ A rate in total as one per person in the compartment `name`: the rate with one factor of `name` taken out, or else over `name` """
+    def drop(n):
+        """ The node with a factor of `name` taken out, or None if it has none """
+        one = lambda node: isinstance(node, ast.Constant) and node.value == 1
+        if isinstance(n, ast.Name) and n.id == name:
+            return ast.Constant(1)
+        elif isinstance(n, ast.BinOp) and isinstance(n.op, ast.Mult):
+            left = drop(n.left)
+            if left is not None:
+                return n.right if one(left) else ast.BinOp(left, n.op, n.right)
+            right = drop(n.right)
+            if right is not None:
+                return n.left if one(right) else ast.BinOp(n.left, n.op, right)
+        elif isinstance(n, ast.BinOp) and isinstance(n.op, ast.Div):
+            new = drop(n.left)
+            if new is not None:
+                return ast.BinOp(left=new, op=n.op, right=n.right)
+        return None
+    out = drop(ast.parse(text, mode='eval').body)
+    return ast.unparse(out) if out is not None else f'({text}) / {name}'
+
+
+def sum_of(text, names):
+    """ The parts of an expression that is a sum of the names given (e.g. compartments), or None if it is not """
+    node = ast.parse(text, mode='eval').body
+    parts = []
+    def walk(n):
+        if isinstance(n, ast.BinOp) and isinstance(n.op, ast.Add):
+            return walk(n.left) and walk(n.right)
+        elif isinstance(n, ast.Name) and n.id in names:
+            parts.append(n.id)
+            return True
+        return False
+    return parts if walk(node) else None
+
+
+def to_atomica(sim):
+    """
+    The compartmental form of a sim as an Atomica framework workbook (.xlsx), as bytes
+
+    Each compartment of the compartmental form is a compartment, with its initial number as
+    its default value; a sum of compartments (such as `N`) is a characteristic; and each flow is a
+    parameter on the transition matrix: a rate per person a year, from a function of the
+    compartments, characteristics, and parameters, or for births, a number a year from a source
+    compartment, with deaths into a sink. The initial numbers and the parameters are on the
+    databook's pages, with the sim's values as their defaults, so a databook made from the
+    framework (`at.ProjectData.new()`) has them. Time is in years, as in Atomica.
+
+    Args:
+        sim (`ss.Sim`): the sim
+    """
+    from .export import in_unit # Here, since export.py imports this module
+    flat = in_unit(sim, 'year')
+    first = flat.year
+    lost = list(flat.lost)
+    comps = list(flat.comps)
+    source = 'births' if any(f.src is None for f in flat.flows) else None
+    sink = 'deaths' if any(f.dst is None for f in flat.flows) else None
+    taken = set(comps) | set(flat.pars) | set(flat.exprs) | {source, sink}
+
+    # Compartments, with births from a source and deaths into a sink
+    rows = [['Code Name', 'Display Name', 'Is Source', 'Is Sink', 'Is Junction', 'Databook Page', 'Default Value', 'Setup Weight']]
+    rows += [[c, c, 'n', 'n', 'n', 'state_variables', v, 1] for c,v in flat.comps.items()]
+    rows += [[name, name.title(), 'y' if name == source else 'n', 'y' if name == sink else 'n', 'n', None, None, 0] for name in [source, sink] if name]
+    sheets = dict(About=[['Name', 'Description'], [flat.name, f'Exported from Starsim {ss.__version__} (tested with {ss.converters.core.tested_with("atomica")}); time is in years']], Compartments=rows,
+                  **{'Databook Pages': [['Datasheet Code Name', 'Datasheet Title'], ['state_variables', 'State Variables'], ['parameters', 'Parameters']]})
+
+    # Characteristics: the sums of compartments; the other expressions are parameters with functions
+    chars = {}
+    for name,text in flat.exprs.items():
+        parts = sum_of(text, set(comps) | set(chars))
+        if parts:
+            chars[name] = parts
+    sheets['Characteristics'] = [['Code Name', 'Display Name', 'Components', 'Setup Weight']] + [[name, name, ', '.join(parts), 0] for name,parts in chars.items()]
+    rows = [['Code Name', 'Display Name', 'Format', 'Databook Page', 'Default Value', 'Function']]
+    rows += [[name, name, None, 'parameters', value, None] for name,value in flat.pars.items()]
+    rows += [[name, name, None, None, None, atomica_func(text, first)] for name,text in flat.exprs.items() if name not in chars]
+
+    # A parameter on the transition matrix for each flow, as a rate per person in the compartment it leaves, or a number of births
+    links = sc.ddict(list)
+    for flow in flat.flows:
+        name = flow.name if flow.name not in taken else f'{flow.name}_rate'
+        taken.add(name)
+        func = per_person(flow.rate, flow.src) if flow.src else flow.rate
+        rows.append([name, name, 'Rate' if flow.src else 'Number', None, None, atomica_func(func, first)])
+        links[(flow.src or source, flow.dst or sink)].append(name)
+    sheets['Parameters'] = rows
+    sheets['Cascades'] = [['Cascade', 'Constituents'], ['Everyone', ', '.join(comps)]] # Without one, Atomica makes one from the characteristics, which must then nest
+    every = comps + [name for name in [source, sink] if name]
+    sheets['Transitions'] = [[None, *every]] + [[a, *[', '.join(links.get((a, b), [])) or None for b in every]] for a in every]
+
+    # The workbook
+    buffer = io.BytesIO()
+    with pd.ExcelWriter(buffer, engine='openpyxl') as w:
+        for name,rows in sheets.items():
+            pd.DataFrame(rows).to_excel(w, sheet_name=name, header=False, index=False)
+    lost.append(f'not exported: the years the sim runs ({first:n} to {first + flat.dur:n}) and its step, which are an Atomica project\'s settings (P.settings.update_time_vector(start=, end=, dt=)), not its framework\'s')
+    lost.append('changed: Atomica steps the model with Euler\'s method at the project\'s step (0.25 years by default), not as an ODE; a model whose rates are of days needs a small step (e.g. dt=1/365)')
+    if flat.start is None:
+        lost.append(f'changed: the sim has no dates, so its times are read as years from {first:n}')
+    summary = f'exported to Atomica: {flat.n_states} states, {flat.n_transitions} transitions, as {len(comps)} compartments, {len(chars)} characteristics, and {len(flat.flows)} transition parameters (time in years)'
+    return buffer.getvalue(), summary, lost

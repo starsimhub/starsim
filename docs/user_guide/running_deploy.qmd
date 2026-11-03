@@ -173,7 +173,7 @@ msim.summarize()
 Three things matter more on a cluster than on a laptop:
 
 - **One level of parallelism.** When the scheduler already runs many tasks at once, don't have each task start a pool of its own: use `ss.parallel(..., parallel=False)` within a task, or limit it with `n_cpus=`. Within one sim, Starsim uses several threads only for passes over very large populations (200,000 agents or more), and never in the workers of `ss.parallel()`; `ss.options.threads = 1` (or the environment variable `STARSIM_THREADS=1`) turns them off. NumPy's linear algebra (OpenBLAS or MKL) has threads of its own, which the workers of `ss.parallel()` divide among themselves; to keep them to one, set `SCIRIS_NUM_THREADS=1` in the task's environment (e.g. in the job script), or call `sc.limit_threads(1)`. None of these limits the Numba threads that Starsim's passes use; `STARSIM_THREADS=1` does.
-- **Compile once, before the runs.** Starsim's compiled code (see [Solvers and backends](running_solvers.qmd#backends)) is compiled on first use and kept on disk. Run `starsim compile` (or `ss.compile()`) once after installing, in the shared environment or when building a container image, so that hundreds of tasks don't each compile it, or wait for each other to; `starsim compile --check` says whether it has been done. `starsim init` compiles too, and also installs the skills for AI coding agents (see the [appendix](#appendix-the-starsim-command)).
+- **Compile once, before the runs.** Starsim's compiled code (see [Solvers and backends](running_solvers.qmd#backends)) is compiled on first use and kept on disk. Run `starsim init compile` (or `ss.compile()`) once after installing, in the shared environment or when building a container image, so that hundreds of tasks don't each compile it, or wait for each other to; `starsim compile --check` says whether it has been done. `starsim init` compiles too, and also installs the skills for AI coding agents (see the [appendix](#appendix-the-starsim-command)).
 - **Settings from the environment.** Every option in `ss.options` can be set by an environment variable, `STARSIM_` and its name in capitals (`STARSIM_THREADS=1`, `STARSIM_VERBOSE=0`, `STARSIM_WARNINGS=error`), which is the easiest way to set it for every task of a job; the full list, with each variable, is in [Getting the most speed](running_performance.qmd#appendix-every-option).
 - **The same code everywhere.** Install the same versions of Starsim and of your own modules on every node (a container image, or a shared environment), since a saved sim needs them to load.
 
@@ -223,13 +223,17 @@ Saved as `app.py`, it runs (after `pip install streamlit`) with `streamlit run a
 
 ## Appendix: the starsim command
 
-Installing Starsim also installs a `starsim` command, for setting up an environment (`starsim --help` lists these, and `starsim <command> --help` the options of each):
+Installing Starsim also installs a `starsim` command, for setting up an environment and converting models (`starsim` lists these, and `starsim <command> --help` the options of each):
 
 | Command | What it does |
 |---|---|
-| `starsim init` | Once, after installing: compiles Starsim's numerical code and installs the skills for AI coding agents |
+| `starsim init` | Once, after installing: `starsim init ai` if an AI coding agent is installed, then `starsim init compile` unless the Rust kernels are in use |
+| `starsim init compile` | Compiles the Numba kernels ahead of time, as `ss.compile()` does (once per install; a few minutes). Optional: they are otherwise compiled on first use, and with the Rust kernels in use (as from the wheels on PyPI) they are needed only to compare the two |
+| `starsim init compile --check` | Says which kernels are in use and whether they are compiled, and exits with 1 if not (for a build script) |
+| `starsim init ai` | Links the Starsim skills for AI coding agents into this project, after asking (`-y` not to ask), as `starsim ai install` does (`--global` for all projects) |
 | `starsim init dev` | For a clone of Starsim: also the development dependencies, Rust if it is missing, and both sets of kernels |
-| `starsim compile` | Compiles Starsim's numerical code (once per install; a few minutes), as `ss.compile()` does |
-| `starsim compile --check` | Says whether it is compiled, and exits with 1 if not (for a build script) |
-| `starsim ai` | Installs the Starsim skills for AI coding agents in this project (`--global` for all projects), or shows the guide; `starsim ai status`, `show`, `uninstall`, `off`, and `on` manage them |
+| `starsim ai` | Where the skills are installed; `starsim ai show`, `install`, `uninstall`, `off`, and `on` manage them |
+| `starsim convert model.R` | Converts a model to Starsim code (`model.py`), telling the format from the file; `--to=` another format, `--out=` the file, `--ai` to have an AI coding agent do it. `starsim convert` lists the formats |
+| `starsim import model.camdl` | The same as `starsim convert model.camdl --to=starsim` |
+| `starsim export model.py sbml` | Writes the sim that `model.py` makes (as `sim`, or `--sim=`) in another format |
 | `starsim --version` | The version of Starsim |

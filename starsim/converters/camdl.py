@@ -1,5 +1,5 @@
 """
-Import a camdl model (a .camdl file, or camdl's JSON IR)
+Import a camdl model (a .camdl file, or camdl's JSON IR), and export a sim as one
 
 camdl (https://github.com/vsbuffalo/camdl) declares compartments, parameters (with
 bounds and priors), named expressions, transitions whose rates are total flows
@@ -17,9 +17,18 @@ translated (scheduled events, ODE compartments, forcing functions of time, and
 transitions that are not one state to another) is left for a person, or the
 convert-model skill, to add.
 
+`to_camdl()` (`ss.export_to(sim, 'camdl')`) is the reverse: it writes the compartmental
+form of a sim (`ss.converters.export.flatten()`) as a .camdl file, with its compartments,
+parameters (kinds from their Starsim types, and bounds, priors, and docs), named
+expressions as `let`, transitions with their total rates, initial numbers, the time to
+simulate, and the parameters' values in a scenario, `baseline`, as camdl keeps them out
+of the model itself. A rate that varies in time is carried (in camdl's `t`); what is
+stratified is summed into one group, and results and outcomes are not carried.
+
 Used with: compartments; declared modules
 """
 import os
+import ast
 import json
 import keyword
 import shutil
@@ -29,7 +38,7 @@ import sciris as sc
 import starsim as ss
 from .core import Source, build
 
-__all__ = ['load_camdl']
+__all__ = ['load_camdl', 'to_camdl']
 
 ops = dict(add='+', sub='-', mul='*', div='/', pow='**', gt='>', lt='<', ge='>=', le='<=')
 funcs = dict(exp='exp', log='log', sqrt='sqrt', abs='abs', sin='sin', cos='cos')
@@ -384,3 +393,114 @@ def load_camdl(filename, pars=None, scenario=None, solver='ode', camdlc=None, ve
     sim = build(src, verbose=verbose, **kwargs)
     sim.imported.scenarios = {k:s.get('params', {}) for k,s in scens.items()} # The parameter values of each; the interventions each enables are listed in sim.imported.incomplete
     return sim
+
+
+#%% Export
+
+reserved = {'t', 't_start', 't_end', 'dt', 'pi', 'e', 'rate', 'probability', 'positive', 'count', 'real', 'integer', 'instant', 'duration', 'sum', 'where', 'let', 'if', 'then', 'else',
+            'and', 'or', 'not', 'in', 'by', 'from', 'to', 'every', 'until', 'at', 'when', 'action', 'origin', 'init', 'simulate', 'scenarios', 'via', 'covers'} # Names camdl keeps for itself
+camdl_funcs = dict(minimum='min', maximum='max', absolute='abs', ceiling='ceil')
+camdl_units = dict(day='days', week='weeks', month='months', year='years')
+priors = dict( # Each Starsim prior as camdl's, the reverse of prior()
+    lognorm_im = lambda p: f'log_normal(mu = {p.mean!r}, sigma = {p.sigma!r})',
+    normal     = lambda p: f'normal(mu = {p.loc!r}, sigma = {p.scale!r})',
+    beta_dist  = lambda p: f'beta(alpha = {p.a!r}, beta = {p.b!r})',
+    gamma      = lambda p: f'gamma(shape = {p.a!r}, rate = {1/p.scale!r})',
+    truncnorm  = lambda p: f'truncated_normal(mean = {p.loc!r}, sd = {p.scale!r})',
+    expon      = lambda p: f'exponential(rate = {1/p.scale!r})',
+    uniform    = lambda p: f'uniform(lower = {p.low!r}, upper = {p.high!r})',
+)
+
+
+def camdl_name(name):
+    """ A name that camdl keeps for itself, with an underscore added """
+    return f'{name}_' if name in reserved else name
+
+
+def camdl_expr(text, unit):
+    """ An expression in Python syntax, as `ss.converters.export.flatten()` writes it, in camdl's syntax (with the time `t` a number in the unit) """
+    class Sub(ast.NodeTransformer):
+        def visit_Call(self, n):
+            self.generic_visit(n)
+            if n.func.id == 'where': # camdl's if, written whole as a name, since Python's expressions have no such form
+                cond, yes, no = [ast.unparse(a) for a in n.args]
+                return ast.Name(f'(if {cond} then {yes} else {no})')
+            n.func.id = camdl_funcs.get(n.func.id, n.func.id)
+            return n
+        def visit_Name(self, n):
+            return ast.Name(f"(t * 1 'per_{unit[:-1]})") if n.id == 't' else n if n.id == 'pi' else ast.Name(camdl_name(n.id)) # camdl's t is a time, not a number
+    return ast.unparse(Sub().visit(ast.parse(text, mode='eval').body)).replace('**', '^')
+
+
+def par_decl(name, p, lost):
+    """ The declaration of a parameter: its kind (from its Starsim type), bounds, and prior """
+    raw = getattr(p, 'raw', None)
+    kind = 'rate' if isinstance(raw, ss.per) else 'duration' if isinstance(raw, (ss.dur, ss.Dist)) else 'real'
+    out = f'{camdl_name(name)} : {kind}'
+    prior = getattr(p, 'prior', None)
+    bounds = getattr(p, 'bounds', None)
+    if bounds is None and isinstance(prior, ss.truncnorm): # camdl's truncated normal takes its bounds from the parameter's
+        bounds = [prior.pars.low, prior.pars.high]
+    if bounds is not None and np.isfinite(bounds).all():
+        out += f' in [{float(bounds[0])!r}, {float(bounds[1])!r}]'
+    if prior is not None:
+        try:
+            out += f' ~ {priors[type(prior).__name__](sc.objdict({k:float(v) for k,v in prior.pars.items()}))}'
+        except (KeyError, TypeError, ValueError):
+            lost.append(f'not exported: the prior of "{name}" ({prior}), which camdl has no form for')
+    return out
+
+
+def to_camdl(sim):
+    """
+    The compartmental form of a sim as a camdl model (a .camdl file): compartments, parameters, named expressions (let), transitions, initial numbers, and the time to simulate
+
+    The parameters' values are in a scenario, `baseline` (camdl keeps values out of its
+    model, except in a scenario), so it is run with
+    `camdl simulate model.camdl --scenario baseline --backend ode`; their bounds and
+    priors, if any, are carried as camdl's.
+
+    Args:
+        sim (`ss.Sim`): the sim
+    """
+    sim = ss.converters.export.initialized(sim) # Once, for each of these
+    flat = ss.converters.export.flatten(sim)
+    times = ss.converters.export.timing(sim)
+    lost = list(flat.lost)
+    pars = ss.converters.export.declared_pars(sim)
+    unit = camdl_units[flat.unit]
+    e = lambda text: camdl_expr(text, unit)
+    lines = [f"#' {flat.name}, exported from Starsim {ss.__version__} (tested with {ss.converters.core.tested_with("camdl")})", '#  Run with: camdl simulate <this file> --scenario baseline --backend ode', '', f"time_unit = '{unit}", '']
+    n = camdl_name
+    lines += ['compartments { ' + ', '.join(n(c) for c in flat.comps) + ' }', '', 'parameters {']
+    for name in flat.pars:
+        p = pars.get(name)
+        doc = getattr(p, 'doc', None)
+        if doc:
+            lines.append(f"  #' {' '.join(str(doc).split())}")
+        lines.append(f'  {par_decl(name, p, lost)}')
+    lines += ['}', '']
+    lines += [f'let {n(name)} = {e(text)}' for name,text in flat.exprs.items()]
+    lines += ['', 'transitions {']
+    names = lambda text: {n.id for n in ast.walk(ast.parse(text, mode='eval')) if isinstance(n, ast.Name)}
+    with_pars = set(flat.pars) | {name for name,text in flat.exprs.items() if names(text) & set(flat.pars)}
+    for flow in flat.flows:
+        rate = e(flow.rate)
+        if not names(flow.rate) & with_pars: # A rate of numbers and counts alone has no time in it for camdl's check of dimensions to find
+            rate = f'unchecked_dim({rate}, dim = population_rate, reason = "a rate in numbers per {flat.unit}, from Starsim")'
+        src = '' if flow.src is None else f'{n(flow.src)} '
+        dst = '' if flow.dst is None else f' {n(flow.dst)}'
+        lines.append(f'  {n(flow.name)} : {src}-->{dst} @ {rate}')
+    lines += ['}', '', 'init {']
+    lines += [f'  {n(name)} = {init:.15g}' for name,init in flat.comps.items() if init]
+    lines += ['}', '', 'simulate {', f"  from = {times.start:.15g} '{unit}", f"  to   = {times.stop:.15g} '{unit}"]
+    if times.dt != 1:
+        lines.append(f'  dt   = {times.dt:.15g}')
+    lines.append('}')
+    values = [f'      {n(name)} = {value:.15g}' for name,value in flat.pars.items() if np.isfinite(value)]
+    if values:
+        lines += ['', 'scenarios {', '  baseline {', '    set = {', *values, '    }', '  }', '}']
+    if times.date is not None:
+        lost.append(f'changed: the dates (from {times.date}) are written as times from 0, in {flat.unit}s')
+    summary = f'exported to camdl: {flat.n_states} states, {flat.n_transitions} transitions, as {len(flat.comps)} compartments and {len(flat.flows)} transitions (time in {flat.unit}s)'
+    return '\n'.join(lines) + '\n', summary, lost

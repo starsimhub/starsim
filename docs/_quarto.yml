@@ -127,11 +127,13 @@ website:
         - section: "Introduction"
           contents:
             - user_guide/intro_starsim.qmd
+            - user_guide/intro_why.qmd
             - user_guide/intro_models.qmd
             - user_guide/intro_concepts.qmd
         - section: "Building models"
           contents:
             - user_guide/building_writing.qmd
+            - user_guide/building_declared.qmd
             - user_guide/building_diseases.qmd
             - user_guide/building_parameters.qmd
             - user_guide/building_time.qmd

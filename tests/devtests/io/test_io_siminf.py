@@ -1,11 +1,19 @@
 """
-Test importing SimInf models
+Test importing SimInf models, and exporting to SimInf (run in SimInf's environment, if it is there)
 """
+import os
 import tempfile
+import subprocess
+import pytest
 import numpy as np
 import pandas as pd
 import sciris as sc
-from starsim.converters.siminf import load_siminf, read_script, event_register, as_matrix, predefined
+import starsim as ss
+import paths
+from starsim.converters.siminf import load_siminf, read_script, event_register, as_matrix, predefined, to_siminf
+
+lfd = sc.path(os.getenv('STARSIM_LFD', paths.root/'lingua_franca_design')) # The lingua_franca_design repo, for SimInf's environment
+rscript = lfd/'_envs'/'siminf'/'bin'/'Rscript'
 
 kw = dict(verbose=False)
 
@@ -83,10 +91,48 @@ def test_events():
     return reg
 
 
+def make_seird():
+    """ Births, deaths from every state, a branch, and a lognormal dwell time, which is written as Erlang stages """
+    S, E, I, R, D = ss.states('S E I R D')
+    seird = ss.Disease(
+        births    = ss.birth(S, rate=ss.peryear(0.02)),
+        infection = ss.Transition(S, E, rate=ss.perday(0.4) * I),
+        onset     = ss.Transition(E, I, dur=ss.days(4)),
+        outcome   = ss.Transition(I, [R, D], dur=ss.lognorm_ex(ss.days(8), ss.days(3)), p=[None, 0.1]),
+        deaths    = ss.death([S, E, I, R], rate=ss.peryear(0.01)),
+        init_prev = 0.01, name='seird')
+    return ss.Sim(seird, total_pop=1e4, unit='day', stop=100, verbose=0)
+
+
+def test_export(tmp_path):
+    sc.heading('Testing export to SimInf, read back, and run in SimInf')
+    sim = make_seird()
+    text, summary, lost = to_siminf(sim)
+    sc.savetext(tmp_path/'seird.R', text)
+    assert '"(double)N <- S + E + I + R + D"' in text and '"I_7 -> 0.1 * 7.0 * I_7 / dur_I -> D"' in text and 'tspan <- 1:100' in text
+    assert '7 exponential stages' in lost[0]
+    back = load_siminf(tmp_path/'seird.R', solver='ode', verbose=False) # Read back as Starsim, as an ODE
+    sim.run(); back.run()
+    res = sim.results.seird
+    I = sum(back.results.seird[f'I_{k}'].values for k in range(1, 8))
+    assert np.allclose(I, res.I.values, rtol=1e-9) and np.allclose(back.results.seird.S.values, res.S.values, rtol=1e-9), 'the round trip should give the same ODE'
+    if not rscript.exists():
+        pytest.skip(f'needs SimInf\'s environment ({rscript}; set STARSIM_LFD)')
+    code = f'pdf(NULL); source("{tmp_path/"seird.R"}"); set.seed(1); m <- mparse(transitions = transitions, compartments = compartments, gdata = gdata, u0 = u0[rep(1, 100), ], tspan = tspan); ' \
+           f'write.csv(aggregate(. ~ time, trajectory(run(m))[, -1], mean), "{tmp_path/"seird.csv"}", row.names = FALSE)' # The mean of 100 nodes
+    out = subprocess.run([str(rscript), '-e', code], capture_output=True, text=True)
+    assert out.returncode == 0, out.stderr
+    df = pd.read_csv(tmp_path/'seird.csv')
+    I = df[[f'I_{k}' for k in range(1, 8)]].sum(axis=1).values
+    assert np.abs(I - res.I.values[df.time]).max() < 0.03*res.I.values.max(), 'the mean of SimInf\'s runs should be near the ODE' # 0.4% with this seed
+    return back
+
+
 if __name__ == '__main__':
     T = sc.timer()
     args = test_r_reader()
     sim1 = test_mparse()
     sim2 = test_dict()
     reg = test_events()
+    sim3 = test_export(sc.path(tempfile.mkdtemp()))
     T.toc()

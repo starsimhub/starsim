@@ -10,9 +10,9 @@ import subprocess
 import importlib.util
 from pathlib import Path
 import sciris as sc
-from starsim.internals import cli
+from starsim_cli import ai as cli
 
-root = Path(cli.__file__).parents[2]
+root = Path(cli.__file__).parents[1]
 docs = root / 'docs'
 
 

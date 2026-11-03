@@ -1,5 +1,5 @@
 """
-Import an epipack model
+Import an epipack model, and export a sim as one
 
 epipack (https://github.com/benmaier/epipack) builds a model in Python as a list of
 reaction processes, so it is read either as a live model (if epipack is installed
@@ -28,6 +28,11 @@ function that builds the model, or on a script that makes one called `model`:
 or call `dump(model, 'model.json')` from Python. A script is run as it is, and its last
 call to `integrate()` or `simulate()` gives the solver and the end time.
 
+Exporting: `to_epipack(sim)` (or `ss.export_to(sim, 'epipack')`) writes the compartmental
+form of a sim as a script that builds a `SymbolicEpiModel` and integrates it, with the
+rates in sympy, so that every flow is carried; the script is read back by running this
+file on it, as above.
+
 Used with: compartments; declared modules
 """
 import os
@@ -36,14 +41,16 @@ if __name__ == '__main__': # Run as a script, this folder would hide epipack its
     here = os.path.dirname(os.path.abspath(__file__))
     sys.path = [p for p in sys.path if os.path.abspath(p or '.') != here]
 import re
+import ast
 import json
 import runpy
 import numpy as np
 if __package__: # As part of Starsim; run as a script in epipack's environment, the rest needs neither Sciris nor Starsim
     import sciris as sc
-    from .core import Source, build
+    import starsim as ss
+    from .core import Source, build, factors, product, names
 
-__all__ = ['load_epipack', 'dump', 'model_dict', 'record']
+__all__ = ['load_epipack', 'to_epipack', 'dump', 'model_dict', 'record']
 
 default_stop = 100 # epipack's models don't say how long they run
 
@@ -148,6 +155,124 @@ def load_epipack(source, stop=None, solver=None, pars=None, verbose=None, **kwar
     solver = sc.ifelse(solver, run.get('solver'), 'ode')
     src.config.update(unit='day', dt=1, start=0, stop=stop, solver=solver, total_pop=people, use_aging=False)
     return build(src, verbose=verbose, **kwargs)
+
+
+#%% Exporting a sim as an epipack script
+
+sympy_funcs = dict(exp='sympy.exp', log='sympy.log', sqrt='sympy.sqrt', sin='sympy.sin', cos='sympy.cos', floor='sympy.floor', abs='sympy.Abs', absolute='sympy.Abs', maximum='sympy.Max', minimum='sympy.Min')
+
+
+def sympy_code(node):
+    """ An expression of `flatten()` (an AST) as code for sympy """
+    class Sub(ast.NodeTransformer):
+        def visit_Call(self, n):
+            self.generic_visit(n)
+            if n.func.id == 'where':
+                cond, yes, no = n.args
+                return ast.Call(ast.Name('sympy.Piecewise'), [ast.Tuple([yes, cond]), ast.Tuple([no, ast.Constant(True)])], [])
+            n.func = ast.Name(sympy_funcs.get(n.func.id, n.func.id))
+            return n
+        def visit_Name(self, n):
+            return ast.Name('sympy.pi') if n.id == 'pi' else n
+    return ast.unparse(Sub().visit(node))
+
+
+def per_person(flow):
+    """ The rate of a flow per person in its source """
+    rate = ast.parse(flow.rate, mode='eval').body
+    num, den = factors(rate)
+    for i,f in enumerate(num):
+        if isinstance(f, ast.Name) and f.id == flow.src: # The source is a factor of the rate
+            return product(num[:i] + num[i+1:], den)
+    return ast.BinOp(rate, ast.Div(), ast.Name(flow.src))
+
+
+def to_epipack(sim):
+    """
+    The compartmental form of a sim as an epipack script, which builds a `SymbolicEpiModel` and integrates it
+
+    An infection (frequency-dependent, by the infectious compartments) is a transmission
+    process for each infectious compartment, a flow from a compartment a transition (or
+    death) process at its rate per person, and a flow into the model a birth process, with
+    the rates in sympy, in named parameters. epipack's rates may depend on the compartments
+    and the time, so every flow is carried. The quadratic terms are divided by the number in
+    every compartment as the model runs (`correct_for_dynamical_population_size`).
+    `load_epipack()` reads the model back, from the JSON that this file writes when run on
+    the script in epipack's environment, except a rate that varies in time.
+
+    Args:
+        sim (`ss.Sim`): the sim
+    """
+    from .export import flow_form # Here, since export.py imports this module
+    flat = ss.converters.export.flatten(sim)
+    lost = list(flat.lost)
+    t = ss.converters.export.initialized(sim).t
+    dt = float(t.dt.to(flat.unit).value)
+    if isinstance(t.start, ss.date):
+        lost.append(f'changed: the dates are written as {flat.unit}s from the start, {t.start}')
+    elif float(t.tvec[0].value):
+        lost.append(f'changed: the time is counted from the start, {t.tvec[0]}, as 0')
+    if flat.unit != 'day':
+        lost.append(f'changed: epipack has no unit of time; the times and rates are in {flat.unit}s, which load_epipack() reads as days')
+
+    # Each flow as a process
+    processes = []
+    used = set()
+    ignore = False # Whether a rate depends on the compartments or the time where epipack expects a number
+    for flow in flat.flows:
+        form = flow_form(flow, flat)
+        src, dst = [repr(None) if c is None else c for c in [flow.src, flow.dst]]
+        if form.kind == 'infection' and flow.dst is not None:
+            rate = form.coef
+            procs = [f'({src}, {agent}, {sympy_code(rate)}, {dst}, {agent})' for agent in form.agents] # src + agent -> dst + agent
+        else:
+            rate = per_person(flow) if flow.src is not None else ast.parse(flow.rate, mode='eval').body
+            procs = [f'({src}, {sympy_code(rate)}, {dst})']
+            ignore |= bool(names(rate) - set(flat.pars))
+        used |= names(rate)
+        processes += [f'    {proc}, # {flow.name}' for proc in procs]
+
+    # The names the rates use: the compartments, the parameters, and the expressions they use in turn
+    exprs = []
+    for name in reversed(flat.exprs):
+        if name in used:
+            used |= names(ast.parse(flat.exprs[name], mode='eval'))
+            exprs.insert(0, f'{name} = {sympy_code(ast.parse(flat.exprs[name], mode="eval").body)}')
+    pars = [k for k in flat.pars if k in used]
+    symbols = lambda keys: f'{", ".join(keys)}{"," if len(keys) == 1 else ""} = sympy.symbols({" ".join(keys)!r}, seq=True)'
+    number = lambda v: "float('nan')" if np.isnan(v) else repr(float(v))
+    open_ended = any(flow.src is None or flow.dst is None for flow in flat.flows)
+    options = (', allow_nonzero_column_sums=True' if open_ended else '') + (', ignore_rate_position_checks=True' if ignore else '')
+    lines = [
+        '"""',
+        f'{flat.name}, exported from Starsim {ss.__version__} (tested with {ss.converters.core.tested_with("epipack")}); time is in {flat.unit}s',
+        '',
+        'An epipack model (https://github.com/benmaier/epipack), with its rates in sympy. Run this file to integrate it and print the number in each compartment over time.',
+        '"""',
+        'import numpy as np',
+        'import sympy',
+        'from epipack import SymbolicEpiModel',
+        '',
+        symbols(list(flat.comps)),
+        *([symbols(pars)] if pars else []),
+        *(['t = sympy.Symbol(\'t\') # The time, as epipack names it'] if 't' in used else []),
+        *exprs,
+        '',
+        f'model = SymbolicEpiModel([{", ".join(flat.comps)}], initial_population_size={sum(flat.comps.values())!r}, correct_for_dynamical_population_size=True)',
+        'model.set_processes([',
+        *processes,
+        f']{options})',
+        *([f'model.set_parameter_values({{{", ".join(f"{k}: {number(flat.pars[k])}" for k in pars)}}}) # Rates per {flat.unit}, and durations in {flat.unit}s'] if pars else []),
+        f'model.set_initial_conditions({{{", ".join(f"{k}: {number(v)}" for k,v in flat.comps.items())}}})',
+        f'times = np.linspace(0, {(len(t.tvec) - 1)*dt!r}, {len(t.tvec)})',
+        '',
+        "if __name__ == '__main__':",
+        '    result = model.integrate(times)',
+        '    for name,values in result.items():',
+        '        print(name, values)',
+    ]
+    summary = f'exported to epipack: {flat.n_states} states, {flat.n_transitions} transitions, as {len(flat.comps)} compartments and {len(processes)} processes (time in {flat.unit}s)'
+    return '\n'.join(lines) + '\n', summary, lost
 
 
 #%% Writing the model to JSON, in epipack's own environment (needs neither Sciris nor Starsim)

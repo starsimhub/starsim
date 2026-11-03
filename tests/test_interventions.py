@@ -142,6 +142,11 @@ def test_routine_delivery():
     n_screened = sim.results.screening.delivered
     assert n_screened[1:].min() > 0, 'Expected screening on every step when no window is given'
     assert np.isclose(n_screened[1]/2000, 1 - 0.5**0.5, atol=0.05), 'Expected the probability per year to be per step'
+
+    # A window whose years are close to, but not on, the time grid (Starsim 3 raised an IndexError)
+    screening = ss.screen(make_dx(), coverage=1.0, start=2000, stop=2002, interval=ss.years(1), name='screening')
+    sim = ss.Sim(make_pars(start=2000, stop=2002), dt=7/365, interventions=screening).run()
+    assert sim.results.screening.delivered.sum() > 0, 'Expected screenings with a weekly step'
     return sim
 
 

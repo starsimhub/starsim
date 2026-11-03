@@ -1481,13 +1481,28 @@ layouts = [ # What the layout of the compartments refuses, found by making it (s
 ]
 
 
+def modifier_steps(mod):
+    """ Why a modifier needs a step of its own, as words for own_steps() """
+    def has_op(cond, op):
+        return isinstance(cond, ss.conditions.Cond) and (cond.op == op or (cond.op not in ss.conditions.leaves and any(has_op(arg, op) for arg in cond.args)))
+    if mod.hold is not None or mod.until is not None:
+        return 'a modifier with until= or hold=, which remembers whether it is on'
+    elif callable(mod.where) and not isinstance(mod.where, ss.conditions.Cond):
+        return 'a modifier with a function as its where='
+    elif has_op(mod.where, 'incidence'):
+        return 'a modifier with a condition on incidence over a period, which is counted in Python'
+    elif callable(mod.amount) and not isinstance(mod.amount, ss.parameters.TimeValue):
+        return 'a modifier with a function as its amount'
+    return 'a modifier with until= or hold=, a function as its where= or amount, a condition on incidence over a period, or a time series that does not hold its value'
+
+
 def own_steps(sim):
     """ A module with a step of its own: any written as code (an intervention, analyzer, connector, network, ...), or a modifier the engines cannot tabulate """
     names = {func['module'] for func in sim.loop.funcs} - {'sim', 'people'} - {mod.name for mod in sim.modules if getattr(mod, 'tabulated', False)} # A modifier that depends only on time and on states is tabulated by the engines: see ss.solvers.Compartmental
     others = [mod for mod in sim.modules if mod.name in names and mod not in sim.declared]
     if not others:
         return None
-    kinds = list(dict.fromkeys('a modifier with until= or hold=, a function as its where= or amount, or a time series that does not hold its value' if isinstance(mod, ss.modify) else 'a module written as code' for mod in others))
+    kinds = list(dict.fromkeys(modifier_steps(mod) if isinstance(mod, ss.modify) else 'a module written as code' for mod in others))
     one = len(others) == 1
     return dict(names=sc.strjoin(mod.name for mod in others), has='has' if one else 'have', its='its' if one else 'their', kinds=' or '.join(kinds))
 

@@ -1,5 +1,6 @@
 """
-Where the tests find files from other repos: the R package. It is looked for next to this
+Where the tests find files from other repos: the R package, and the lingua_franca_design repo
+(for the other frameworks' environments, in its `_envs/`). Each is looked for next to this
 repo unless an environment variable says where it is; tests that need it are skipped
 if it is not there.
 """
@@ -8,3 +9,4 @@ import sciris as sc
 
 root = sc.path(__file__).parent.parent.parent # The folder this repo is in
 rstarsim = sc.path(os.getenv('STARSIM_RSTARSIM', root/'rstarsim')) # The R package, for its R layer
+lfd = sc.path(os.getenv('STARSIM_LFD', root/'lingua_franca_design')) # The design repo, whose _envs/ has the other frameworks installed

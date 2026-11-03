@@ -1,5 +1,5 @@
 """
-Import an EpiModel model
+Import an EpiModel model, and export to EpiModel
 
 EpiModel (https://www.epimodel.org) is an R package, and its models are R scripts, so
 they are read from the JSON written by `dump_epimodel.R`, which runs the script in
@@ -8,11 +8,17 @@ that record their arguments. A model of a built-in type (`"SI"`, `"SIS"`, `"SIR"
 becomes a disease with its transitions; a network fitted by `netest()` becomes an
 `ss.DegreeNet` with the same targets (an approximation, since it is not an ERGM); and
 modules written in R (`infection.FUN = infect`, ...) are listed, with their source in
-`sim.imported.modules`, to be written by hand.
+`sim.imported.modules`, to be written by hand. A model function of `dcm()` (`new.mod`),
+written as in EpiModel's tutorials, is read as its flows.
+
+`to_epimodel()` writes a sim the other way, as an R script that runs its compartmental
+form with `dcm()` and a model function, which this reads back.
 
 Used with: agents and compartments; declared modules
 """
 import os
+import re
+import ast
 import shutil
 import subprocess
 import tempfile
@@ -20,8 +26,9 @@ import numpy as np
 import sciris as sc
 import starsim as ss
 from .core import Source, Code, build
+from . import odin
 
-__all__ = ['load_epimodel']
+__all__ = ['load_epimodel', 'to_epimodel']
 
 here = os.path.dirname(os.path.abspath(__file__))
 probs = {unit:(lambda v, unit=unit: ss.prob(v, unit)) for unit in ['day', 'week', 'month', 'year']} # A probability per step, by the unit of a step
@@ -80,6 +87,98 @@ def value(par):
     if isinstance(par, list) and len(par) == 1:
         return par[0]
     return None
+
+
+def rname(name):
+    """ An R name in a model function as a Python one: a compartment S.num is S, and inf.prob is inf_prob """
+    return pyname(name.removesuffix('.num'))
+
+
+def rpy(text):
+    """ An R expression in a model function in Python syntax, with its names as Python's """
+    text = re.sub(rf'\b({"|".join(odin.reserved)})\b', r'\1_', odin.r2py(text))
+    return re.sub(r'(?<![\w.])[A-Za-z_][\w.]*', lambda m: rname(m.group()), text)
+
+
+def split_args(text):
+    """ The arguments of a call, split at its commas """
+    out, depth, buf = [], 0, ''
+    for c in text:
+        depth += c in '(['
+        depth -= c in ')]'
+        if c == ',' and depth == 0:
+            out.append(buf.strip())
+            buf = ''
+        else:
+            buf += c
+    return out + [buf.strip()] if buf.strip() else out
+
+
+def summands(node, sign=1):
+    """ An expression as a list of (sign, term), split at its additions and subtractions (a product of sums is one term, as a flow is written) """
+    if isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Add, ast.Sub)):
+        return summands(node.left, sign) + summands(node.right, sign if isinstance(node.op, ast.Add) else -sign)
+    elif isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.USub, ast.UAdd)):
+        return summands(node.operand, -sign if isinstance(node.op, ast.USub) else sign)
+    return [(sign, node)]
+
+
+def model_function(src, func, init):
+    """
+    The flows of a model function of dcm() (`new.mod`), written as in EpiModel's tutorials:
+    `with(as.list(c(t0, parms)), {...})` with assignments, ending in `list(c(dS, dI, ...))`
+    with the derivatives in the order of `init`
+
+    Each derivative is split into its signed terms, and a term that leaves one compartment
+    and enters another is a flow between them (as in an odin model, though a product of
+    sums is not multiplied out); a term with no partner is an inflow or an outflow. The
+    other assignments are named expressions.
+
+    Returns whether the function could be read (if not, it is listed as not translated).
+
+    Args:
+        src (Source): the model being read
+        func (str): the R source of the function
+        init (dict): the initial values, of the compartments (X.num) and of the flows (X.flow), which dcm() reports
+    """
+    m = re.search(r'with\s*\(', func)
+    end = func.rfind('list(')
+    if m is None or end < 0 or '{' not in func[m.end():end]:
+        return False
+    body = func[func.index('{', m.end()) + 1:end]
+    assigns = {rname(left):rpy(right) for left,sign,right in odin.statements(body)}
+    out = func[end + len('list('):odin.closing(func, end + len('list'))]
+    first = split_args(out)[0]
+    derivs = split_args(first[first.index('(') + 1:odin.closing(first, first.index('('))]) if first.startswith('c(') else [first]
+    comps = [k for k in init if '.flow' not in k]
+    for k in comps:
+        src.add_state(rname(k), init=value(init[k]))
+
+    # Each derivative as signed terms; a term is a flow, by its name if it is a variable
+    terms = {}
+    used = set()
+    for comp,text in zip(comps, derivs):
+        text = rpy(text.split('=', 1)[-1])
+        if text in assigns:
+            used.add(text)
+            text = assigns[text]
+        for sign,term in summands(ast.parse(text, mode='eval').body):
+            sign, term = odin.unsign(sign, term)
+            key = term.id if isinstance(term, ast.Name) and term.id in assigns else odin.canonical(term)
+            t = terms.setdefault(key, sc.obj(term=term, src=[], dst=[]))
+            (t.dst if sign > 0 else t.src).append(rname(comp))
+    for key,t in terms.items():
+        if len(t.src) > 1 or len(t.dst) > 1:
+            src.skip(f'new.mod: {key}', f'a term that leaves {t.src or "nothing"} and enters {t.dst or "nothing"}, which is not one person moving between two compartments')
+            continue
+        named = key in assigns
+        if named:
+            used.add(key)
+        src.add_flow(t.src[0] if t.src else None, t.dst[0] if t.dst else None, assigns[key] if named else ast.unparse(t.term), per='total', name=key.removesuffix('_flow') if named else None)
+    for name,text in assigns.items():
+        if name not in used:
+            src.exprs[name] = text
+    return True
 
 
 def network(net, src, name, acts=None):
@@ -187,12 +286,13 @@ def load_epimodel(source, unit='day', verbose=None, **kwargs):
     kind, typ = r['kind'], r['type']
     param, init, control = mapping(r['param']), mapping(r['init']), mapping(r['control'])
     prob, rate = probs[unit], rates[unit]
-    src = Source(name=pyname(typ or 'epimodel').lower(), format='epimodel', file=file)
-    src.totals = ['N']
     custom = sc.obj({k:sc.obj(m) for k,m in mapping(r['modules']).items() if not m['builtin']})
+    new_mod = custom.get('new.mod') if kind == 'dcm' else None # A model function, which dcm() runs in place of a built-in model
+    src = Source(name=pyname((new_mod or {}).get('name') or typ or 'epimodel').lower(), format='epimodel', file=file)
+    src.totals = ['N']
 
     # States, as EpiModel's status: s, i, and r (a model of custom modules has whatever its modules give it)
-    builtin = typ in ('SI', 'SIS', 'SIR')
+    builtin = typ in ('SI', 'SIS', 'SIR') and not new_mod
     states = [] if not builtin else ['S', 'I'] + (['R'] if typ == 'SIR' else [])
     i_num = value(init.get('i.num', 0)) or 0
     r_num = value(init.get('r.num', 0)) or 0
@@ -245,6 +345,12 @@ def load_epimodel(source, unit='day', verbose=None, **kwargs):
         for k in modules.get(kind, []):
             if k in custom:
                 src.skip(k, f'replaced by {custom[k].name}(), which is written in R; its rates are imported as the built-in ones')
+    elif new_mod and model_function(src, new_mod.source, init):
+        for k,v in param.items():
+            if value(v) is not None and not k.startswith('.') and not isinstance(v, str):
+                src.add_par(pyname(k), value(v))
+            elif not k.startswith('.'):
+                src.skip(f'param {k}', 'a parameter that is not one number (e.g. several values for a sensitivity analysis)')
     else:
         src.skip(f'type {typ}', 'not a built-in model: every module is written in R, so only the networks are imported (the parameters are in sim.imported.pars, and the scenarios in sim.imported.scenarios)')
         src.notes.append(f'init {init} (for the custom modules)')
@@ -254,7 +360,7 @@ def load_epimodel(source, unit='day', verbose=None, **kwargs):
 
     # Custom modules, written in R
     for k,m in custom.items():
-        if not (k in modules.get(kind, []) and builtin):
+        if not (k in modules.get(kind, []) and builtin) and not (k == 'new.mod' and src.states):
             src.skip(k, f'{m.name}(), a module written in R: write it as transitions, products, and deliveries (its source is in sim.imported.modules)')
 
     # Networks
@@ -303,3 +409,74 @@ def load_epimodel(source, unit='day', verbose=None, **kwargs):
         changed = {k:v for k,v in mapping(other['param']).items() if not k.startswith('.') and param.get(k) != v}
         sim.imported.scenarios[id] = changed
     return sim
+
+
+#%% Exporting
+
+def r_code(text, comps):
+    """ An expression (Python syntax) in R, as the model function of `to_epimodel()` reads it: each compartment X is X.num, and the time is counted from EpiModel's first, 1 """
+    class Sub(ast.NodeTransformer):
+        def visit_Name(self, n):
+            if n.id in comps:
+                return ast.Name(f'{n.id}.num')
+            elif n.id == 't':
+                return ast.Name('(t - 1)')
+            return n
+    return ss.converters.export.odin_expr(ast.unparse(Sub().visit(ast.parse(text, mode='eval'))))
+
+
+def to_epimodel(sim):
+    """
+    The compartmental form of a sim as an R script that runs it with EpiModel's `dcm()`
+
+    The model is a function of the derivatives (`new.mod`), as in EpiModel's tutorial
+    on new models: each compartment X is `X.num`, each flow a variable `name.flow`
+    (kept in `init` too, so that `dcm()` reports it), each named expression a variable,
+    and each parameter a value in `param.dcm()`. EpiModel's time starts at 1, and its
+    rates are per step of time, the sim's unit. The script is read back by `load_epimodel()`.
+
+    Args:
+        sim (`ss.Sim`): the sim
+    """
+    flat = ss.converters.export.flatten(sim)
+    t = ss.converters.export.initialized(sim).t
+    unit = flat.unit
+    lost = list(flat.lost)
+    start = t.start if isinstance(t.start, ss.date) else t.start.to(unit).value
+    dt = float(t.dt.to(unit).value)
+    if start != 0:
+        lost.append(f'changed: the start ({start}) is written as EpiModel\'s time 1, in {unit}s')
+    nsteps = 1 + (t.npts - 1)*dt # EpiModel's time 1 is the start
+    r = lambda text: r_code(text, flat.comps)
+    flows = [f'{flow.name}.flow' for flow in flat.flows]
+    num = lambda v: 'NA' if np.isnan(v) else f'{v:.15g}'
+    name = flat.name if flat.name.isidentifier() else 'model'
+
+    lines = [
+        f'## {flat.name}, exported from Starsim {ss.__version__} (tested with {ss.converters.core.tested_with("epimodel")}); time is in {unit}s, starting at 1',
+        'library(EpiModel)',
+        '',
+        f'{name} <- function(t, t0, parms) {{',
+        '  with(as.list(c(t0, parms)), {',
+    ]
+    for key in ss.converters.siminf.in_order(flat.exprs): # Each named expression, after the ones it uses
+        lines.append(f'    {key} <- {r(flat.exprs[key])}')
+    for flow,var in zip(flat.flows, flows):
+        lines.append(f'    {var} <- {r(flow.rate)}')
+    for comp in flat.comps:
+        terms = [f'+ {v}' for f,v in zip(flat.flows, flows) if f.dst == comp] + [f'- {v}' for f,v in zip(flat.flows, flows) if f.src == comp]
+        rhs = ' '.join(terms).removeprefix('+ ') if terms else '0'
+        lines.append(f'    d{comp} <- {"-" + rhs[2:] if rhs.startswith("- ") else rhs}')
+    lines += [
+        f'    list(c({", ".join([f"d{comp}" for comp in flat.comps] + flows)}))',
+        '  })',
+        '}',
+        '',
+        f'param <- param.dcm({", ".join(f"{k} = {num(v)}" for k,v in flat.pars.items())})',
+        f'init <- init.dcm({", ".join([f"{k}.num = {v:.15g}" for k,v in flat.comps.items()] + [f"{v} = 0" for v in flows])})',
+        f'control <- control.dcm(nsteps = {nsteps:.15g}, dt = {dt:.15g}, new.mod = {name})',
+        'mod <- dcm(param, init, control)',
+        f'plot(mod, y = c({", ".join(f'"{k}.num"' for k in flat.comps)}))',
+    ]
+    summary = f'exported to EpiModel: {flat.n_states} states, {flat.n_transitions} transitions, as {len(flat.comps)} compartments and {len(flat.flows)} flows of a dcm() (rates per {unit})'
+    return '\n'.join(lines) + '\n', summary, lost

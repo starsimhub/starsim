@@ -379,7 +379,7 @@ def choose(seconds=0.0):
 
 def compile(verbose=True):
     """
-    Compile the kernels now (those of the compartmental solvers, the passes over the agents and the rest of what sims with agents use), so that no run waits for them: e.g. after installing Starsim (as `starsim compile` does), in a Docker image, in CI, or before a calibration
+    Compile the kernels now (those of the compartmental solvers, the passes over the agents and the rest of what sims with agents use), so that no run waits for them: e.g. after installing Starsim (as `starsim init compile` does), in a Docker image, in CI, or before a calibration
 
     Compiling takes about five minutes (`compile_all_seconds`), once per install (and after an upgrade); the result is kept in Numba's cache,
     beside the package (or, if that cannot be written to, in the user's cache folder, then a temporary folder, or in
@@ -428,7 +428,7 @@ def compile_status():
     """
     Whether Starsim's numerical code is compiled, without compiling anything (it takes a few milliseconds)
 
-    From the shell, `starsim compile --check` says the same, and exits with 1 if it isn't compiled.
+    From the shell, `starsim init compile --check` says the same, and exits with 1 if it isn't compiled.
 
     Returns:
         An `sc.obj` of `engine` ('rust', 'numba', or 'python': what runs the kernels), `compiled` (True only if they run
@@ -459,7 +459,7 @@ def compile_status():
     else:
         engine = 'numba'
         missing = cold
-        summary = f'Starsim kernels: Numba, NOT COMPILED ({sc.strjoin(cold)}), so the first runs are slow: run "starsim compile" or ss.compile()' if cold else 'Starsim kernels: Numba, compiled'
+        summary = f'Starsim kernels: Numba, NOT COMPILED ({sc.strjoin(cold)}), so the first runs are slow: run "starsim init compile" or ss.compile()' if cold else 'Starsim kernels: Numba, compiled'
     return sc.obj(engine=engine, compiled=not missing, missing=missing, summary=summary)
 
 

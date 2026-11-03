@@ -1,13 +1,13 @@
 ---
 name: convert-model
-description: Translate a disease model between Starsim v4 and another framework (EMULSION, odin, SimInf, flepiMoP, summer2, Atomica, SBML, EpiModel, epipack, epydemix, epymorph, LASER, MEmilio, camdl, the Pandemic Simulator, or Starsim v3), in either direction. Use when someone wants to import, export, port, convert, or reimplement a model, or share a Starsim model with people who use another tool, including the parts that do not map one to one. Pair with the validate-conversion skill to check the result against the original.
+description: Translate a disease model between Starsim v4 and another framework (EMULSION, odin, SimInf, flepiMoP, summer2, Atomica, SBML, EpiModel, epipack, epydemix, epymorph, LASER, MEmilio, camdl, the Pandemic Simulator, or Starsim v3), in either direction. Use when someone wants to import, export, port, convert, or reimplement a model, or share a Starsim model with people who use another tool, including the parts that do not map one to one; and check a converted model against its original, by running both and comparing their results.
 ---
 
 # Convert a model to or from Starsim
 
 To bring a model into Starsim, read on. To take one out, see "Exporting a model" below.
 
-A model is imported in two passes. The mechanical pass (`ss.import_from(..., format=...)`) translates everything with an obvious one-to-one mapping and lists what it could not translate. The second pass is yours: translate each listed item by hand into the closest Starsim form, and write the frameworks with no importer by hand from the start. Then check the result with the validate-conversion skill.
+A model is imported in two passes. The mechanical pass (`ss.import_from(..., format=...)`) translates everything with an obvious one-to-one mapping and lists what it could not translate. The second pass is yours: translate each listed item by hand into the closest Starsim form, and write the frameworks with no importer by hand from the start. Then check the result against the original (`references/validate.md`).
 
 ## Workflow
 
@@ -29,7 +29,7 @@ A model is imported in two passes. The mechanical pass (`ss.import_from(..., for
 4. **Translate each untranslated piece** (see "Finishing an incomplete import" below) with the closest Starsim form, using `references/idioms.md` (minimum stays, conditions, calendars, capacities, actions on crossing, births and offspring, variables of individuals, scheduled events, interventions, networks, outputs) and the framework's guide. In order of preference: a declared form (a transition, `where=`, `ss.timeseries`, `ss.outcome`, `ss.modify`), then a function in a slot (`rate=fn`), then custom code (a subclass with `step_state()`). Say why in a comment wherever you used a function or custom code, starting the comment with `Workaround:` if it stands in for something Starsim could declare.
 5. **Keep names** from the source (states, parameters, transitions) so the two can be compared, and keep the source's values: do not tidy a parameter into a "nicer" one unless the result is identical.
 6. **Compare the final model with the mechanical import**: a text diff of `model.py` against `sim.imported.code` lists what you changed. Everything it lists should be one of the untranslated pieces or a deliberate fix.
-7. **Validate** with the validate-conversion skill: run both, compare exactly (deterministic) or statistically (stochastic), and explain any difference.
+7. **Validate** as `references/validate.md` says: run both, compare exactly (deterministic) or statistically (stochastic), and explain any difference.
 8. **Report** what was translated mechanically, what by hand, each workaround and why, and anything that does not translate well. A gap is a finding to report, not something to hide or force.
 9. **Say what the model is for.** If others will run it, its docstring says what it answers, its key assumptions, its known biases, and what it should not be used for, taken from the source where the source says so.
 
@@ -42,7 +42,7 @@ An import that could not translate everything is not refused: `ss.import_from()`
 3. **Translate it in `model.py`** with the closest form, in the order of preference of step 4 of the workflow, using `references/idioms.md`. Keep the source's names. Mark a stand-in for something Starsim could declare with a `Workaround:` comment. Delete the part's line from the `Not translated` list when it is done, so the list is always what is left.
 4. **Report a gap instead of forcing it.** If the part is a feature Starsim does not have (e.g. EMULSION's offspring by prototype across several machines), leave it out, keep its line in the list, and say in the report what it changes in the results and what Starsim would need.
 5. **Check that nothing else changed**: a text diff of `model.py` against `ss.import_from('<file>', format='<format>').imported.code` should show only the parts you translated.
-6. **Validate** the final model against the original with the validate-conversion skill, and explain any difference that is left, part by part.
+6. **Validate** the final model against the original (`references/validate.md`), and explain any difference that is left, part by part.
 7. **Report** a table of the parts: how each was translated (declared, a function, custom code, or left out as a gap), and the validation's verdict.
 
 ## Frameworks
@@ -70,12 +70,13 @@ An import that could not translate everything is not refused: `ss.import_from()`
 
 ## Exporting a model
 
-An export is also two passes. `ss.export_to()` writes what it can, and lists the rest; what it left out is then yours to translate or report. It carries less than an import: there are exporters only for SBML and odin, and each writes the compartmental form of the declared diseases.
+An export is also two passes. `ss.export_to()` writes what it can, and lists the rest; what it left out is then yours to translate or report. Each exporter writes the compartmental form of the declared diseases, so it carries less than an import (`ss.converters.exporters` lists them; `starsim convert --to=<format>` from the shell).
 
 | To share | How |
 |---|---|
 | The model, for SBML tools such as COPASI | `ss.export_to(sim, 'sbml', filename='model.xml')` |
 | The model, for odin | `ss.export_to(sim, 'odin', filename='model.R')` |
+| The model, for EpiModel, SimInf, summer2, epydemix, epipack, epymorph, MEmilio, or Atomica | `ss.export_to(sim, '<format>', filename=...)`: an R or Python script that builds and runs it in the framework, or for Atomica, a framework workbook |
 | The model, for any other framework | By hand, from `sim.diseases.x.equations()`, reading the framework's guide in `references/` from right to left |
 | Results | `sim.to_json()`, or `sim.to_df()` |
 | Forecasts for a hub | `ss.converters.to_hub()` |
@@ -85,7 +86,7 @@ An export is also two passes. `ss.export_to()` writes what it can, and lists the
 2. **Export, and read every line of the `ss.errors.LossyExport` warning.** An export doesn't fail for what it can't carry. Lines starting `not exported:` were dropped (a network is written as homogeneous mixing; interventions, code, and functions are left out), and lines starting `changed:` were altered (a sim run as agents is written as an ODE; a stratified disease is written as the sum of its groups, with the base values of its parameters). Each line is a difference between the two models.
 3. **Translate what was dropped by hand** in the target's language where it has a form for it, and keep the Starsim names so the two can be compared. Otherwise, leave it out and report it.
 4. **Check the units.** The export says its unit of time in its first lines. Bare numbers in the target are in that unit.
-5. **Validate.** `ss.import_from()` reads an export back, which checks the file, not the target's reading of it: run the export in the target itself, if it is available, and compare with the validate-conversion skill. Compare with the Starsim model solved the same way (`solver='ode'`), so that the difference isn't the solver.
+5. **Validate.** `ss.import_from()` reads an export back, which checks the file, not the target's reading of it: run the export in the target itself, if it is available, and compare as `references/validate.md` says. Compare with the Starsim model solved the same way (`solver='ode'`), so that the difference isn't the solver.
 6. **Report** what was exported, each line of the warning, what you translated by hand, and what the differences do to the question the model is for.
 
 ## Rules
@@ -93,5 +94,5 @@ An export is also two passes. `ss.export_to()` writes what it can, and lists the
 - Never drop part of a model silently. Everything not translated is listed (by `ImportIncomplete`, or by you in the report). A model with parts still listed in `sim.imported.incomplete` is not finished, even though it runs.
 - The same goes for exports: an export isn't finished while a line of its `LossyExport` warning is unexplained.
 - Don't change the model to make it fit. If Starsim cannot say something, translate the closest thing, mark it as a workaround, and report the gap.
-- Don't install a framework into someone's environment without asking; running the original is the validate-conversion skill's job, in the framework's own environment.
+- Don't install a framework into someone's environment without asking; the original is run in the framework's own environment (`references/validate.md`).
 - The source's expressions are parsed, never run as they are: `ss.import_from()` checks each rate before writing it as code, allowing only arithmetic, comparisons, a few functions, and the names the model declares; a rate that is anything else is listed as not translated.

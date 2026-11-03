@@ -18,10 +18,10 @@ Starsim 4 adds a way to write a model as declared states and transitions, which 
 - **Pregnancy and demographics**: declared `ss.Pregnancy`, `ss.birth()` and `ss.death()`. Named data: `ss.people('Kenya')`, and birth, death and fertility rates by country (from `starsim_data`).
 - **Results and fitting**: `ss.outcome()` declares reported quantities. `sim.fit()` fits to data by optimization, MCMC (with gradients in JAX), particle MCMC, iterated filtering or ABC-SMC, with `ss.fit.profile()` and `sim.sensitivity()`; `ss.fit.optimize()` allocates budgets.
 - **Scenarios and runs**: `ss.parallel()` and `sim.run(n_runs=)` return a MultiSim whose results have a run dimension, with summaries, bands and comparisons by scenario; plots mark when each scenario's interventions act. Sims with different steps can be run together.
-- **Importing and exporting**: `ss.import_from()` reads models from EMULSION, odin, SBML, SimInf, flepiMoP, summer2, Atomica, camdl, EpiModel, epipack, epydemix, epymorph and MEmilio; `ss.export_to()` writes SBML and odin. `python -m starsim.converters.migrate` rewrites Starsim 3 code.
+- **Importing and exporting**: `ss.import_from()` reads models from EMULSION, odin, SBML, SimInf, flepiMoP, summer2, Atomica, camdl, EpiModel, epipack, epydemix, epymorph and MEmilio; `ss.export_to()` writes to each of them too (`starsim convert` from the shell). `ss.converters.tested` gives the version of each framework they were tested with. `python -m starsim.converters.migrate` rewrites Starsim 3 code.
 - **Library**: `starsim.library` (`ssl`) holds HIV, cholera, Ebola, measles, malaria, TB, COVID, influenza, dengue, and other simple disease models, maternal and newborn health, more networks, and health economics (`ssl.Costs`, `ssl.DALYs`, `ssl.discount()`, `ssl.ICER`).
 - **Lower variance**: `ss.Sim(even_draws=True)` spaces each call's random numbers evenly for agents, which reduces the variance between runs by about 3 to 10 times in final size for a simple SIR, though outbreaks die out less often than they should and means can shift.
-- **Command line and speed**: `starsim init` and `starsim compile`; Numba kernels throughout, with optional Rust copies that give the same numbers; optional JAX for gradients.
+- **Command line and speed**: `starsim init` (with `init compile` and `init ai`), and `starsim convert`, `import` and `export`; Numba kernels throughout, with optional Rust copies that give the same numbers; optional JAX for gradients.
 
 ### Changes that may affect results
 - *Regression*: results follow the convention of other frameworks: `<state>[ti]` is the number at time point `ti`, and a flow at `ti` is the number during the step that ends there (0 at the start). A sim with `stop=T` ends at `T`, taking one step fewer than before.
@@ -73,6 +73,7 @@ Starsim 4 adds a way to write a model as declared states and transitions, which 
 - In `init_post()`, diseases come before networks, so a disease that seeds from a network's states has to call that network's `init_post()` first (or seed later). This silently gave no infections in STIsim and HPVsim until they were changed.
 
 ### Bugfixes and performance
+- `ss.nbinom()` can be given by its mean and dispersion, `ss.nbinom(mean=20, n=0.5)`, as well as by `n` and `p`; `n` is the dispersion, so the variance is mean + mean²/n.
 - `sim.run(n_runs=)` restarts one built sim again; a stray argument had turned that off.
 - `sim.fit()` raises an error for a setting the method does not take, instead of ignoring it, as does `Result.resample()`. With a list of methods, a setting goes to the stages that take it.
 - A module named like a setting of the sim (e.g. `name='branching'`) no longer overwrites that setting, which had silently turned a model into a branching process.
@@ -112,6 +113,17 @@ Starsim 4 adds a way to write a model as declared states and transitions, which 
 - `sim.summary` is made the first time it is read, not at the end of every run.
 - A modifier whose amount reads a clock (e.g. `multiply=0.5**(El.time/half_life)`) is worked out only for the people in its `where=`, so a declared `ssl.Syphilis` runs within about 6% of the version with `step()`.
 - As agents, a transition with no driver (moved only by an intervention) is no longer drawn each step, a `where=` by sex no longer makes dwell times rescale, and the one-pass exit check applies per state.
+
+
+## Version 3.7.4 (2026-11-03)
+- Arithmetic between dates and days no longer involves a conversion to years; this fixes bugs due to rounding errors (especially in leap years). Adding durations to a date is also faster.
+- *GitHub info*: PR [1532](https://github.com/starsimhub/starsim/pull/1532)
+
+
+## Version 3.7.3 (2026-11-01)
+- `ss.RoutineDelivery` no longer raises an `IndexError` when the start or end year is close to, but not on, the time grid (e.g. `dt=7/365`).
+- *GitHub info*: PR [1515](https://github.com/starsimhub/starsim/pull/1515)
+
 
 ## Version 3.7.2 (2026-10-06)
 - `ss.ClusterNet` (and so `ss.HybridNet`) and `ss.MSMNet` now shuffle agents using `float64` random numbers and a stable sort. Previously, tied `float32` random numbers were ordered differently on different CPUs, so the same seed could give slightly different results on different machines.

@@ -66,4 +66,4 @@ sim = ss.Sim(seir, total_pop=sum(pop), n_agents=175_000, stop=ss.days(365))
 - The worked examples run a `simulate.py` in that environment, which builds and runs the model `n_runs` times and prints the time series of each node's compartments as JSON (`model.nodes.S[:, node]`, and so on, indexed by tick).
 - Series: counts by place and tick (`S`, `E`, `I`, `R` per node; or summed), and summaries such as total infections, final recovered, peak size and time by place, and the share of weeks with no infections. LASER's `nodes.X[t]` is the count at the start of tick `t` (for comparison with Starsim's `X[t-1]`); check the first row against the initial conditions.
 - Stochastic: 5 to 50 runs, depending on cost; compare means and ranges, and run-to-run spread for fade-outs.
-- Write the summary as a CSV in the long format of the validate-conversion skill (`time, series, value, low, high`).
+- Write the summary as a CSV in the long format of `validate.md` (`time, series, value, low, high`).

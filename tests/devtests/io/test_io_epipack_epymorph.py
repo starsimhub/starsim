@@ -1,20 +1,48 @@
 """
-Test importing epipack and epymorph models
+Test importing epipack and epymorph models, and exporting to epipack and epymorph
 
 The models are as `starsim/converters/epipack.py` and `epymorph.py` write them, run as
 scripts in those frameworks' own environments (`_envs/` in the lingua_franca_design repo);
-the reference numbers are from epipack 0.1.5 and epymorph 1.2.0.
+the reference numbers are from epipack 0.1.5 and epymorph 1.2.0. The exports are run in
+those environments, if they are there.
 """
+import json
+import warnings
+import subprocess
 import numpy as np
 import pytest
 import sciris as sc
 import starsim as ss
+import paths
 from scipy.integrate import solve_ivp
 from starsim.converters import sniff
-from starsim.converters.epipack import load_epipack, split
-from starsim.converters.epymorph import load_epymorph
+from starsim.converters.epipack import load_epipack, split, to_epipack
+from starsim.converters.epymorph import load_epymorph, to_epymorph
 
 kw = dict(verbose=False)
+epipack_python = paths.lfd/'_envs'/'epipack'/'bin'/'python'
+epymorph_python = paths.lfd/'_envs'/'epymorph'/'bin'/'python'
+has_epymorph = epymorph_python.exists()
+
+
+def sir_sim():
+    """ An SIR, in days """
+    S, I, R = ss.states('S I R')
+    dis = ss.Disease(infection=ss.Transition(S, I, rate=ss.perday(0.3) * I), recovery=ss.Transition(I, R, dur=ss.days(7)), init_prev=0.01, name='sir')
+    return ss.Sim(dis, total_pop=1000, unit='day', stop=60, verbose=0)
+
+
+def seird_sim():
+    """ Births, deaths from every state, a branch, and a lognormal dwell time, which is written as Erlang stages """
+    S, E, I, R, D = ss.states('S E I R D')
+    dis = ss.Disease(
+        births    = ss.birth(S, rate=ss.peryear(0.02)),
+        infection = ss.Transition(S, E, rate=ss.perday(0.4) * I),
+        onset     = ss.Transition(E, I, dur=ss.days(4)),
+        outcome   = ss.Transition(I, [R, D], dur=ss.lognorm_ex(ss.days(8), ss.days(3)), p=[None, 0.1]),
+        deaths    = ss.death([S, E, I, R], rate=ss.peryear(0.01)),
+        init_prev = 0.01, name='seird')
+    return ss.Sim(dis, total_pop=1e5, unit='day', stop=120, verbose=0)
 
 
 def sirs_epipack():
@@ -60,6 +88,50 @@ def births_epipack():
         run = dict(tmax=60.0, solver='ode'),
         incomplete = [],
     )
+
+
+def math_rate():
+    """ A rate of no usual form, and one that varies in time, which epipack carries as they are """
+    S, I, R = ss.states('S I R')
+    dis = ss.Disease(infection=ss.Transition(S, I, rate=ss.perday(0.5)*I.frac*np.maximum(np.exp(-2*I.frac), 0.2)), recovery=ss.Transition(I, R, rate=ss.seasonal(ss.perday(0.1), amplitude=0.2)), init_prev=0.01, name='behavior')
+    return ss.Sim(dis, total_pop=1000, unit='day', stop=60, verbose=0)
+
+
+def test_epipack_export():
+    sc.heading('Testing export to epipack')
+    text, summary, lost = to_epipack(seird_sim()) # Births, deaths, a branch, and Erlang stages
+    compile(text, 'seird.py', 'exec')
+    assert text.count('beta, E, I_') == 7, 'An infection should be a transmission process for each stage of I'
+    assert '(None, 5.479452054794521e-05 * (S + E + I + R + D), S), # births' in text
+    assert 'allow_nonzero_column_sums=True' in text
+    text, summary, lost = to_epipack(math_rate())
+    assert lost == [], 'Every rate should be carried'
+    assert 'sympy.Max(sympy.exp(-2 * (I / N)), 0.2)' in text and "t = sympy.Symbol('t')" in text and 'ignore_rate_position_checks=True' in text
+    return text
+
+
+@pytest.mark.skipif(not epipack_python.exists(), reason='needs epipack\'s environment (_envs/epipack in the lingua_franca_design repo; set STARSIM_LFD)')
+def test_epipack_export_run(tmp_path):
+    sc.heading('Testing export to epipack, run in epipack and read back')
+    dumper = sc.path(ss.__file__).parent/'converters'/'epipack.py'
+    run = 'import sys, json, runpy; ns = runpy.run_path(sys.argv[1]); res = ns["model"].integrate(ns["times"]); json.dump({str(k):v.tolist() for k,v in res.items()}, open(sys.argv[2], "w"))'
+    for make in [sir_sim, seird_sim, math_rate]:
+        sim = make()
+        script, dumped, ran = [tmp_path/f'{make.__name__}.{ext}' for ext in ['py', 'json', 'out.json']]
+        sc.savetext(script, to_epipack(sim)[0])
+        for args in [[dumper, script, dumped], ['-c', run, script, ran]]: # The JSON that load_epipack() reads, and epipack's own integration
+            out = subprocess.run([str(epipack_python), '-W', 'ignore', *map(str, args)], capture_output=True, text=True, cwd=tmp_path, timeout=300)
+            assert out.returncode == 0, out.stderr
+        sim.run()
+        ours, theirs = sim.results[sim.diseases[0].name], json.load(open(ran))
+        for state in ['S', 'R']:
+            assert np.allclose(ours[state], theirs[state], rtol=1e-4, atol=1e-3), f'{state} should be the same in epipack'
+        if make is not math_rate: # Which load_epipack() reads but for the time
+            back = load_epipack(str(dumped), **kw).run()
+            assert back.imported.incomplete == []
+            for state in ['S', 'R']:
+                assert np.allclose(ours[state], back.results.epipack[state], rtol=1e-9, atol=1e-9), f'{state} should be the same read back'
+    return
 
 
 def sirs_epymorph():
@@ -192,6 +264,60 @@ def test_epymorph_places():
     return sim
 
 
+def sir_births(**kwargs):
+    """ An SIR with births and deaths, to export """
+    pars = dict(diseases=ss.SIR(beta=ss.perday(0.3), dur_inf=ss.days(10), init_prev=0.01), demographics=[ss.birth(rate=ss.peryear(0.5)), ss.death(rate=ss.peryear(0.5))],
+                total_pop=10_000, unit='day', dur=60, solver='ode', verbose=0)
+    return ss.Sim(**(pars | kwargs))
+
+
+def stages(res, state):
+    """ A state's counts, summed over its stages (I_1, I_2, ...) where it was written as them """
+    return res[state].values if state in res else sum(res[k].values for k in res.keys() if k.startswith(f'{state}_') and k[len(state)+1:].isdigit())
+
+
+def test_epymorph_export():
+    sc.heading('Testing exporting to epymorph')
+    text, summary, lost = to_epymorph(sir_births())
+    compile(text, 'sir.py', 'exec')
+    assert 'N = Max(1, S + I + R)' in text, 'The total should be guarded as epymorph guards it'
+    assert 'edge(BIRTH, S' in text and 'edge(S, DEATH' in text
+    assert any('Poisson' in line for line in lost)
+
+    # A seasonal beta is a parameter by day; a sim in years has its rates in days
+    sim = sir_births(diseases=ss.SIR(beta=ss.seasonal(mean=ss.perday(0.3), amplitude=0.3), dur_inf=ss.days(10)), demographics=None, start='2020-01-01', stop='2020-03-01')
+    text, summary, lost = to_epymorph(sim)
+    assert 't = np.arange(days)' in text and "TimeFrame.of('2020-01-01', days)" in text
+    assert any('"beta", which varies in time' in line for line in lost)
+    text, summary, lost = to_epymorph(ss.Sim(diseases=ss.SIR(beta=36.5, dur_inf=0.1), total_pop=1000, unit='year', start=2000, stop=2001, solver='ode', verbose=0))
+    assert 'beta * S * I / N / 365.0' in text, 'The rates should be in days, with the parameters as the sim has them'
+    return text
+
+
+@pytest.mark.skipif(not has_epymorph, reason='needs epymorph\'s environment (STARSIM_LFD)')
+def test_epymorph_roundtrip(tmp_path):
+    sc.heading('Testing an export to epymorph, run in epymorph and read back')
+    sim = sir_births()
+    text, summary, lost = to_epymorph(sim)
+    script, dumped = tmp_path/'sir.py', tmp_path/'sir.json'
+    script.write_text(text)
+    subprocess.run([epymorph_python, ss.converters.epymorph.__file__, f'{script}:build_rume', str(dumped)], check=True, capture_output=True)
+    back = load_epymorph(str(dumped), solver='ode', **kw).run()
+    res = sim.run().results.sir
+    for state in ['S', 'I', 'R']:
+        assert np.allclose(stages(back.results.epymorph, state), res[state].values, rtol=1e-9), f'{state} should be the same once read back'
+
+    # epymorph's own runs: on average, Euler's method with a step of a day
+    code = f'import runpy, json, numpy as np; from epymorph.kit import BasicSimulator, default_rng; rume = runpy.run_path({str(script)!r}, run_name="x")["rume"]; ' \
+           'print(json.dumps(np.mean([BasicSimulator(rume).run(rng_factory=default_rng(i)).compartments[:, 0, 1:3].sum(axis=1) for i in range(10)], axis=0).tolist()))'
+    out = subprocess.run([epymorph_python, '-c', code], check=True, capture_output=True, text=True)
+    infected = np.array(json.loads(out.stdout.splitlines()[-1]))
+    euler = sim.new(integrator='euler', substeps=1).run().results.sir.I.values[1:] # epymorph's values are at the end of each day
+    assert abs(infected.max()/euler.max() - 1) < 0.03, 'The peak should match Euler\'s method with a step of a day'
+    assert abs(infected.argmax() - euler.argmax()) <= 2
+    return back
+
+
 def test_sniff():
     sc.heading('Testing telling epipack and epymorph files apart')
     for format,make in dict(epipack=sirs_epipack, epymorph=sirs_epymorph).items():
@@ -209,7 +335,9 @@ if __name__ == '__main__':
     test_epipack()
     test_epipack_population()
     test_epipack_reading()
+    test_epipack_export()
     test_epymorph()
     test_epymorph_places()
+    test_epymorph_export()
     test_sniff()
     T.toc()

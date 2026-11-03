@@ -1,17 +1,23 @@
 """
-Test importing models from other frameworks (ss.import_from()), as the Starsim code it writes
+Test importing models from other frameworks (ss.import_from()), as the Starsim code it writes; and exporting a sim to EMULSION
+
+The EMULSION export is run with EMULSION from its environment in the lingua_franca_design repo (`_envs/emulsion`; set STARSIM_LFD to say where the repo is), and skipped if it is not there.
 """
 
 # %% Imports and settings
+import csv
 import tempfile
+import subprocess
 import pytest
 import numpy as np
 import pandas as pd
 import sciris as sc
 import starsim as ss
 import corpus
+import paths
 
 kw = dict(verbose=0)
+emulsion_bin = paths.lfd/'_envs'/'emulsion'/'bin'/'emulsion'
 
 # An EMULSION model with a fixed stay, a per-step probability, deaths, a capacity, and things that are not translated
 emulsion_yaml = """
@@ -153,6 +159,53 @@ def test_emulsion(tmp_path):
     return sim
 
 
+def emulsion_export_sims():
+    """ An SEIR with a dwell time written as Erlang stages and deaths from I, and an SIR with births and deaths """
+    S, E, I, R = ss.states('S E I R')
+    seir = ss.Disease(infection=S >> E @ ss.perday(0.4)*I, onset=E >> I @ ss.days(3), recovery=ss.Transition(I, R, dur=ss.lognorm_ex(ss.days(8), ss.days(3))), deaths=ss.death(I, rate=ss.perday(0.01)), init_prev=0.01, name='seir')
+    S, I, R = ss.states('S I R')
+    sir = ss.Disease(births=ss.birth(S, rate=ss.peryear(0.5)), infection=S >> I @ ss.perday(0.3)*I, recovery=I >> R @ ss.days(10), deaths=ss.death([S, I, R], rate=ss.peryear(0.2)), init_prev=0.01, name='sir')
+    return dict(seir=ss.Sim(seir, total_pop=1000, unit='day', stop=80, verbose=0), sir=ss.Sim(sir, total_pop=1000, unit='day', stop=60, verbose=0))
+
+
+def test_emulsion_export(tmp_path):
+    sc.heading('Testing an export to EMULSION, read back')
+    sims = emulsion_export_sims()
+    text, summary, lost = ss.converters.emulsion.to_emulsion(sims['seir'])
+    assert '{from: S, to: E, rate: beta * I / N, desc: infection}' in text # The rate for each person, the source taken out
+    assert '{from: I_1, to: removed, rate: rate_deaths, desc: deaths_1}' in text and 'autoremove: true' in text
+    assert 'I: {desc: the expression I, value: total_I_1 + total_I_2' in text and 'aggregation_type: compartment' in text
+    sc.savetext(tmp_path/'seir.yaml', text)
+    back = ss.import_from(tmp_path/'seir.yaml', format='emulsion', **kw)
+    assert back.pars.solver == 'binomial' and back.pars.substeps == 1 # As EMULSION runs it
+    ref = sims['seir'].new(solver='ode').run().results.seir
+    res = back.new(solver='ode', substeps=None).run().results.seir
+    for k in ['S', 'E', 'R']:
+        assert np.allclose(ref[k].values, res[k].values, rtol=1e-9, atol=1e-9), f'{k} should be the same read back'
+    text, summary, lost = ss.converters.emulsion.to_emulsion(sims['sir'])
+    assert '{from: R, to: S, rate: \'0.0013698630136986301\', desc: births}' in text # Births, from the people in every state
+    return back
+
+
+@pytest.mark.skipif(not emulsion_bin.exists(), reason='needs EMULSION (its environment in the lingua_franca_design repo; set STARSIM_LFD)')
+def test_emulsion_export_run(tmp_path):
+    sc.heading('Testing an export to EMULSION, run in EMULSION')
+    n_runs = 20
+    for name,sim in emulsion_export_sims().items():
+        file = tmp_path/f'{name}.yaml'
+        sc.savetext(file, ss.converters.emulsion.to_emulsion(sim)[0])
+        subprocess.run([str(emulsion_bin), 'run', str(file), '--runs', str(n_runs), '--seed', '1', '--quiet', '--output-dir', str(tmp_path/name)], check=True, capture_output=True, cwd=tmp_path)
+        rows = list(csv.DictReader(open(tmp_path/name/'counts.csv')))
+        steps = sorted({int(r['step']) for r in rows})
+        I = np.array([np.mean([sum(float(v) for c,v in r.items() if c == 'I' or c.startswith('I_')) for r in rows if int(r['step']) == s]) for s in steps])
+        ref = np.mean([sim.new(solver='binomial', substeps=1, rand_seed=i).run().results[name].I.values for i in range(n_runs)], axis=0) # As EMULSION runs it: in whole steps
+        if name == 'seir': # The Erlang stages in whole steps are not the lognormal dwell time in whole steps: compare with the import, whose stages are states
+            back = ss.import_from(file, format='emulsion', **kw)
+            ref = np.mean([sum(r[c].values for c in r.keys() if c.startswith('I_') and c[2:].isdigit()) for r in [back.new(rand_seed=i).run().results.seir for i in range(n_runs)]], axis=0)
+        assert np.abs(I - ref).max() < 0.1*ref.max(), f'{name}: the mean number infectious in EMULSION should be close to Starsim\'s'
+    return I
+
+
 def test_code(tmp_path):
     sc.heading('Testing the code of an import: it builds the sim, and stands alone')
     def check(sim):
@@ -274,6 +327,9 @@ if __name__ == '__main__':
         folder = sc.path(tmp)
         test_rates()
         test_emulsion(folder)
+        test_emulsion_export(folder)
+        if emulsion_bin.exists():
+            test_emulsion_export_run(folder)
         test_code(folder)
         test_save_load(folder)
         test_hand(folder)

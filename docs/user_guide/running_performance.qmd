@@ -42,7 +42,7 @@ What stays in the kernels, and what does not:
 | In the kernels | A step at a time |
 |---|---|
 | Parameters that vary in time (`ss.timeseries`, `ss.seasonal`) | A parameter that is a function of the sim (`lambda sim: ...`), called at each step |
-| `ss.modify()` with dates (`start=`, `stop=`), `when=` (a condition on time alone), `where=` on a stratum (or on a state, for a transition), or `where=` comparing the module's counts (`I.n >= 1000`) | `ss.modify()` with `until=` or `hold=`, a function as its amount, or `where=` as a function of the sim |
+| `ss.modify()` with dates (`start=`, `stop=`), `when=` (a condition on time alone), `where=` on a stratum (or on a state, for a transition), or `where=` comparing the module's counts (`I.n >= 1000`) | `ss.modify()` with `until=` or `hold=`, a function as its amount, `where=` as a function of the sim, or `where=` on incidence over a period (`infection.incidence(over=ss.days(7))`) |
 | Deliveries such as `ss.vaccinate()` at fixed times or on a schedule, including coverage given as a rate (`ss.peryear(0.5)`) | Deliveries with `where=` on a count, and `ss.treat()` |
 | Outcomes, including those with a delay | Triggers (`ss.on(...)`) |
 | Births and deaths declared with `ss.birth()` and `ss.death()` | Interventions, analyzers, or connectors written as code with a `step()` of their own |

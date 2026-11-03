@@ -1008,6 +1008,8 @@ class Engine(Telling, Effects):
             mults (list): the multiplier of each, or None for those with no modifiers
             stay (float): the probability of `ss.stay` among the destinations, if given, which the one that takes the rest does not get
         """
+        if len(ps) == 1 and ps[0] is None and mults[0] is None and not stay: # One way out, as for most states: everyone takes it
+            return [1.0]
         given = sum(p if m is None else np.where(np.asarray(m) == 0, 0.0, p) for p,m in zip(ps, mults) if p is not None) + stay # A branch its modifiers rule out (e.g. one for another level of a move= arrow) does not count
         if np.any(np.asarray(given) > 1 + 1e-9) or any(np.any(np.asarray(p) < 0) for p in ps if p is not None): # Refused, rather than used as 1 (or as a negative remainder)
             names = sc.strjoin([getattr(tr, 'name', tr) for tr,p in zip(trs, ps) if p is not None])
@@ -1283,14 +1285,16 @@ class Engine(Telling, Effects):
         return
 
     def frac(self, states):
-        return self.count(states)/self.n_people()
+        with np.errstate(invalid='ignore', divide='ignore'): # A share of nobody (before there are people) is NaN, with no warning
+            return self.count(states)/self.n_people()
 
     def local_count(self, states):
         """ The number in some states as it is used in a rate: in a model with places, the number in the same place """
         return self.count(states)
 
     def local_frac(self, states):
-        return self.local_count(states)/self.local_count(self.graph.people_states)
+        with np.errstate(invalid='ignore', divide='ignore'): # As frac()
+            return self.local_count(states)/self.local_count(self.graph.people_states)
 
     def total_count(self, states):
         """ The number in some states in the whole population, wherever they are (`I.total`) """

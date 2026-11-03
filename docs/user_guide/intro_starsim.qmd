@@ -78,7 +78,7 @@ Starsim is suitable for many use cases, but not all. Some examples of suitable S
 
 However, there are other cases where Starsim may not be suitable. These include:
 
-- If you are doing a very simple modeling task, such as a single run of a simple SIR or SEIR model, plain Python or R may be all you need: Starsim is fast and concise, but is unlikely to be faster than well-written custom code. But if your script starts getting longer than about 100 lines, and if you want to do calibration or handle different time units, there is a good chance that Starsim would be able to make things easier.
+- If you are doing a very simple modeling task, such as a single run of a simple SIR or SEIR model, plain Python or R may be all you need: Starsim is fast and concise, but is unlikely to be faster than well-written custom code. But if your script starts getting longer than about 100 lines, and if you want to do calibration or handle different time units, there is a good chance that Starsim would be able to make things easier. [Why use a framework?](intro_why.qmd) goes through where code of your own starts to strain, and the problems that are easy to miss.
 - If your current model is highly specialized to a given context, the switching cost of moving to Starsim may not be worthwhile. Starsim can import models from several other frameworks (see [Import and export](conversion/index.qmd)), and AI tools make translating a model much easier than it used to be, so get in touch if this is of interest to you.
 
 ## Finding your way around
@@ -90,7 +90,7 @@ These docs are organized by what you want to do:
 - **To look something up**, use this user guide. Each page is a complete reference for one topic, such as [writing models](building_writing.qmd), [time](building_time.qmd), or [running scenarios](running_scenarios.qmd), and links to the tutorial that introduces it. The [Architecture](architecture_index.qmd) pages explain how Starsim works under the hood.
 - **For the exact arguments of a function**, see the [API reference](../api/index.qmd).
 - **If you are coming from another framework** (Starsim 3, EpiModel, odin, epydemix, and others), see [Conversion](conversion/index.qmd), which has a page for each.
-- **If you work with an AI coding agent** (Claude Code, Codex, and others), run `starsim ai` in your project: it gives the agent Starsim's skills, which match the installed version, for writing, checking, and running models, and for converting them (see [ai.starsim.org](https://ai.starsim.org)).
+- **If you work with an AI coding agent** (Claude Code, Codex, and others), run `starsim init ai` in your project: it gives the agent Starsim's skills, which match the installed version, for writing, checking, and running models, and for converting them (see [ai.starsim.org](https://ai.starsim.org)).
 
 A runnable example is a starting point, not a calibrated model of a particular population: a model's scientific validity depends on its assumptions, the evidence behind its parameters, and the checks made against data.
 

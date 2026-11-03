@@ -1,0 +1,103 @@
+---
+title: Why use a framework?
+jupyter: python3
+authorship:
+  human: 0
+  ai: 100
+  note: Written by AI from a short prompt, with the problems found while building Starsim taken from its changelogs and design record
+---
+
+The question most people ask first is a fair one: a disease model is a few equations, so why not write them in Python or R yourself? For many models that is the right answer. This page says when it is, where code of your own starts to strain, and what Starsim takes care of that is easy to miss.
+
+## When your own code is enough
+
+A single deterministic SIR model is about 15 lines of Python with SciPy. Here is the measles outbreak used throughout these docs, with β = 1.9 per day and 8 days infectious, in a town of 100,000 people:
+
+```{python}
+import numpy as np
+from scipy.integrate import solve_ivp
+
+beta, gamma, N = 1.9, 1/8, 100_000
+
+def deriv(t, y):
+    S, I, R = y
+    infection = beta*S*I/N
+    recovery = gamma*I
+    return [-infection, infection - recovery, recovery]
+
+days = np.arange(51)
+out = solve_ivp(deriv, [0, 50], [N - 100, 100, 0], t_eval=days, rtol=1e-8)
+print('Most infectious at once:', round(out.y[1].max()))
+```
+
+And here is the same model in Starsim:
+
+```{python}
+import starsim as ss
+
+S, I, R = ss.states('S I R')
+measles = ss.Disease(S >> I @ 1.9*I, I >> R @ ss.days(8), init_n=dict(I=100))
+sim = ss.Sim(measles, total_pop=N, stop=ss.days(50), verbose=0).run()
+print('Most infectious at once:', round(sim.results.measles.I.max()))
+```
+
+The two agree to within a couple of people. If this is the whole job (one model, run deterministically, read by you), the plain version is fine: there is nothing to install or learn, and nothing between you and the equations. The same is true in R with deSolve or odin. Starsim is not faster than good code of your own for a model like this, and it doesn't try to be.
+
+## Where your own code starts to strain
+
+A model rarely stays that small. These are the changes that tend to turn a short script into a long one, and what each takes in Starsim:
+
+| The model grows to need | In code of your own | In Starsim |
+|---|---|---|
+| Age groups with a contact matrix | Rewrite every equation as a vector, and the force of infection as a matrix product | `sim.stratify(age=[0, 5, 15, 65])` and `ss.contacts('Kenya')` ([Stratification](building_stratification.qmd)) |
+| A latent period that isn't exponential | Add the right number of stages, and keep their rates consistent | `ss.erlang(k=4, mean=ss.days(10))` ([Diseases](building_diseases.qmd#durations)) |
+| A stochastic version, or agents | A second model, written and tested again | `solver='binomial'`, or `n_agents=` ([Solvers](running_solvers.qmd)) |
+| Rates in different units (daily transmission, yearly births) | Convert each by hand, and again whenever the step changes | Each value carries its unit (`ss.peryear(0.02)`) ([Time](building_time.qmd)) |
+| Vaccination campaigns and routine immunization | Code for eligibility, coverage, timing, and waning | `ss.vaccinate()` with a product ([Products](interventions_products.qmd)) |
+| Reported cases, with delays and under-reporting | A second set of results worked out from the first | `ss.outcome(0.5*onset, delay=ss.days(4))` ([Outcomes](building_outcomes.qmd)) |
+| Fitting to data | A likelihood, an optimizer or sampler, and code tying parameters to the model | `ss.par(bounds=...)` and `sim.fit()` ([Fitting](calibration_fitting.qmd)) |
+| Comparing scenarios fairly | Seeds managed so the scenarios differ by the intervention, not by chance | Common random numbers, on by default ([Random numbers](mechanics_random.qmd)) |
+| A second disease that interacts with the first | Combined states, or two models coupled step by step | Two diseases in one sim, and `ss.modify()` between them ([Connectors](interventions_connectors.qmd)) |
+| Someone else checking the model | Reading the code | `describe()`, `equations()`, `diagram()`, and `R0()` ([Writing models](building_writing.qmd)) |
+
+None of these is hard on its own. The difficulty is that each one touches the others: adding age groups changes the force of infection, which changes what the vaccine acts on, which changes the results the fit compares with data. After a few rounds of this, most of a script is bookkeeping, and the bookkeeping is where the mistakes are. A rough guide: once a script is past about 100 lines, or needs calibration, more than one unit of time, or both a deterministic and a stochastic version, a framework is likely to save time.
+
+## Performance
+
+For a small deterministic model, code of your own is as fast as anything: SciPy integrates the model above in milliseconds. Starsim's speed matters in other cases:
+
+- **Many runs.** Fitting, uncertainty analysis, and scenario sweeps run a model thousands of times. A declared compartmental model in Starsim runs in compiled code, a year of daily steps in under a millisecond, and many runs can be taken together (see [Getting the most speed](running_performance.qmd)).
+- **Agents.** An agent-based model written as a loop over people in plain Python is slow: a year's run of 50,000 agents with an update of each person's immunity at each step took about 3 seconds with that update as a loop in Python, and under half a second with it written for whole arrays, or compiled, with the rest of the run in Starsim's compiled code (see [What can be declared](building_declared.qmd#performance)). Writing a fast agent-based model yourself is possible, but it is a project of its own.
+- **Large populations.** Starsim's compartmental solvers cost the same whatever the size of the population, and its agents can each stand for many people (see [Branching and rescaling](running_branching.qmd)).
+
+## Problems that are easy to miss
+
+The hardest mistakes in a model are the ones that give plausible numbers. Each of the problems below was found while building Starsim, sometimes in Starsim itself, and each is now handled and tested. A model written from scratch would most likely run into several of them, and nothing would say so.
+
+| The problem | How big it can be | What Starsim does |
+|---|---|---|
+| **Competing exits drawn one after the other.** Deaths are drawn among those infectious, and then recovery among the survivors, so whichever comes first in the code gets more people | Of the order of the rates times the step | Draws who leaves a state once, from the total rate, and then which way each person goes, in proportion to the rates |
+| **People infected during a step are given a whole step to recover** at their first chance, rather than the half step they have on average | An SIR with 8 days infectious, in 8-day steps: an attack rate of 7% instead of 77% (the ODE gives 80%) | People who arrive in a state during a step face half a step of its exits |
+| **A step that is long for the disease.** Someone infected in a step can't infect anyone until the next one | Measles in daily steps peaks about 3 days late (see the [conceptual overview](intro_concepts.qmd#how-the-solver-is-chosen)) | Compartmental solvers take as many substeps as they need; agents get a note when the step is long, and `sim.check_dt()` measures the effect |
+| **Converting a probability between periods by dividing.** An annual probability of 0.5 is not 0.5/12 a month | 0.042 a month instead of 0.056; scaling the other way gives probabilities above 1 | Probabilities, rates, and durations are typed, and converted through the rate |
+| **Losing the unit of time.** A rate or duration becomes a bare number, and the unit is forgotten | A country's contact matrix, in contacts a day, used 365 times too low in a model in years | Values carry their units, and arithmetic that mixes them wrongly raises an error |
+| **Seed cases infectious for an extra step** | The chance that an outbreak in the Reed–Frost model stops at the first case: 0.013 instead of the exact 0.131 | People infectious at the start are treated as infected in the step before |
+| **A death rate that misses the start of a fixed stay** (e.g. mosquitoes dying during a fixed incubation) | A one-month stay with deaths at 1 per year lost nobody, instead of 8% | The rate acts over the whole stay |
+| **Rounding durations to whole steps**, so that every stay shorter than half a step ends at once | The mean duration shifts | Rounds up or down at random, in proportion, so that the mean is kept |
+| **A seasonal rate held at its value at the start of each step** | A seasonal model in quarterly steps: 5–6% too many infections | Takes the value at the middle of each substep |
+| **People who died in the step counted in the denominator of prevalence** | Prevalence 3.5% too low in an SIR with a 20% chance of death (this was in Starsim 3) | Prevalence is the number infected over the number alive |
+| **Transmission per step worked out in the wrong order** (the contact rate turned into a probability before multiplying by the share infectious) | 0.33 per day instead of 0.4, for β = 0.4 per day | One expression of the force of infection, used by every solver |
+| **Scenarios that differ by chance.** With one stream of random numbers, one extra draw in a scenario changes every draw after it | Differences between scenarios that the intervention didn't cause, which need many more runs to average out | Common random numbers: each person's draws stay the same between scenarios unless the scenario changes them |
+| **Several causes of death for one person in one step** | Deaths by cause that depend on the order of the code | Deaths are settled at the end of the step, with one cause for each person, chosen in proportion to the hazards when they are given |
+| **Compartments that go negative** when the outflows in a step are larger than the compartment | Negative numbers of people, or runs that stop | In steps that are taken whole, outflows that would take more than everyone in a compartment are scaled down together; the stochastic solvers draw no more people than there are |
+
+Most of these are of the order of the rates times the length of the step, so they are small with short steps and slow diseases, and large with long steps or fast diseases. That is also why they are easy to miss: a model checked with daily steps can go wrong when it is run in weeks to save time.
+
+A framework is not a guarantee of correctness. The model's structure, its assumptions, and the evidence behind its parameters are still yours to get right; what Starsim can do is take the bookkeeping off your hands, and say what it assumed (`sim.describe()` lists every value it filled in itself).
+
+## Further reading
+
+- [Appropriate models for the management of infectious diseases](https://doi.org/10.1371/journal.pmed.0020174): how the assumption of exponential durations changes a model's predictions
+- [Simulation-based inference for epidemiological dynamics](https://kingaa.github.io/sbied/): stochastic compartmental models and fitting them, with pomp
+- [odin](https://mrc-ide.github.io/odin/) and [deSolve](https://cran.r-project.org/package=deSolve): writing compartmental models as equations in R
+- [Covasim: An agent-based model of COVID-19 dynamics and interventions](https://doi.org/10.1371/journal.pcbi.1009149): the design of Starsim's predecessor, and when agent-based models are worth their cost

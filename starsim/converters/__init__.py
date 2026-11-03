@@ -13,8 +13,12 @@ Used with: agents and compartments; declared and coded modules
 """
 import os
 import re
+import sys
+import tempfile
+import subprocess
+import importlib.util
 import sciris as sc
-from .core import Source, Code, write, build
+from .core import Source, Code, write, build, tested, check_version
 from .camdl import load_camdl
 from .emulsion import load_emulsion
 from .epimodel import load_epimodel
@@ -28,9 +32,9 @@ from .odin import load_odin
 from .sbml import load_sbml
 from .siminf import load_siminf
 from .summer2 import load_summer2
-from .export import exporters, export_to, to_hub
+from .export import exporters, extensions, export_to, to_hub
 
-__all__ = ['Source', 'Code', 'write', 'build', 'importers', 'sniff', 'import_from', 'convert', 'exporters', 'export_to', 'to_hub']
+__all__ = ['Source', 'Code', 'write', 'build', 'importers', 'tested', 'sniff', 'import_from', 'convert', 'exporters', 'extensions', 'export_to', 'to_hub']
 
 importers = dict(
     atomica  = load_atomica,
@@ -47,6 +51,10 @@ importers = dict(
     siminf   = load_siminf,
     summer2  = load_summer2,
 )
+
+# The Python packages of the frameworks, as imported in a file of their models, by format; LASER has no importer, but is named so that the error can say so
+py_modules = dict(starsim='starsim', summer2='summer2', epydemix='epydemix', epipack='epipack', epymorph='epymorph', memilio='memilio', laser_core='laser', laser='laser')
+scripted = ['summer2', 'epydemix', 'epipack', 'epymorph', 'memilio'] # The formats whose importer reads a JSON file, written by running the importer's module as a script in the framework's environment
 
 
 def sniff(source):
@@ -72,6 +80,12 @@ def sniff(source):
         return 'atomica' if {'compartments', 'transitions'} <= {name.lower() for name in sheets} else None # In any case, as Atomica reads them
     elif ext == '.camdl':
         return 'camdl'
+    elif ext == '.py': # By what it imports: Starsim, or a framework with an importer (which reads the model by running the file; see import_from()), or one without
+        names = set(re.findall(r'^\s*(?:import|from)\s+(\w+)', path.read_text(errors='ignore'), re.M))
+        found = {fmt for module,fmt in py_modules.items() if module in names}
+        if len(found) > 1:
+            found -= {'starsim'} # E.g. a script that compares a model with Starsim's copy of it
+        return found.pop() if len(found) == 1 else None
     text = path.read_text(errors='ignore') if ext in ['.yaml', '.yml', '.r', '.xml', '.sbml', '.json'] else ''
     top = lambda key: re.search(rf'^{key}\s*:', text, re.M) # A key at the top level of a YAML file
     if ext in ['.yaml', '.yml']:
@@ -118,7 +132,22 @@ def import_from(source, format=None, **kwargs):
     if key not in importers:
         errormsg = f'Cannot import format "{format}"; the formats are {sc.strjoin(importers)}'
         raise ValueError(errormsg)
+    check_version(key)
+    if key in scripted and isinstance(source, (str, os.PathLike)) and sc.path(source).suffix == '.py': # The model's own script: read by running it
+        with tempfile.TemporaryDirectory() as folder:
+            return importers[key](dump(source, key, sc.path(folder)/'model.json'), **kwargs)
     return importers[key](source, **kwargs)
+
+
+def dump(source, format, filename):
+    """ Write the JSON that the importer of a framework reads (see `scripted`) by running its module on a script of the model, which needs the framework installed in this Python """
+    script = sc.thispath() / f'{format}.py'
+    if importlib.util.find_spec(format) is None:
+        errormsg = (f'{source} is a model for {format}, which is read by running it, but {format} is not installed in this Python. '
+                    f'In an environment that has it, run:\n  python {script} {source} model.json\nand then import model.json')
+        raise ValueError(errormsg)
+    subprocess.run([sys.executable, str(script), str(source), str(filename)], check=True)
+    return str(filename)
 
 
 def convert(source, filename=None, format=None, **kwargs):
