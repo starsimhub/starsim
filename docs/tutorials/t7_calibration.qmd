@@ -4,19 +4,20 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Written by AI, from the earlier AI-written calibration tutorials, with a new section on testing the fit against data it was not given
+  note: Written by AI, from the earlier AI-written calibration tutorials; its data, the posterior, and the check against what happened next rewritten by AI
 ---
 
-**Which values of the model's parameters are consistent with the cases reported so far, and what do they say about what comes next?**
+**How big will this outbreak get, and would a vaccination campaign now make a difference?**
 
 A model's parameters are rarely all known. The rate of infection per contact, or the share of cases that are reported, can't be measured directly, but they shape what the model predicts. Calibration is fitting a model's parameters to data: finding the values that make the model's results match what was observed. A model calibrated to an outbreak so far can then be used to ask what happens next, and what an intervention would do.
 
-In this tutorial, it is mid-April, and measles cases have been reported each week since January. By the end, you will be able to:
+In this tutorial, it is late March. Measles cases have been reported each week since January, and they are still rising. The health office is weighing a vaccination campaign for children, and asks how many cases it would prevent, and how much it matters how soon it starts. By the end, you will be able to:
 
 - say what the data measure, as an outcome of the model;
 - load data from a file and attach it to the model's results by name;
-- fit the model's parameters to the data, and check the fit, including against data it wasn't given;
-- project from the fitted model, with and without a vaccination campaign.
+- fit the model's parameters to the data, and check the fit;
+- find the range of values consistent with the data, and project from it, with and without a campaign;
+- judge the projection against what happened next.
 
 ## The model and what the data measure
 
@@ -28,7 +29,7 @@ import pandas as pd
 
 S, E, I, R = ss.states('S E I R')
 beta = ss.par(0.14, bounds=[0.05, 0.5])  # The rate of infection per contact with an infectious person, per day
-reported = ss.par(0.5, bounds=[0.05, 1]) # The share of infections that are reported
+reported = ss.par(0.5, bounds=[0.05, 1], prior=ss.beta_mean(mean=0.35, var=0.01)) # The share of infections that are reported: about a third, from earlier outbreaks
 
 infection   = S >> E @ beta*I         # Infection, at a rate of β times the contacts with infectious people
 progression = E >> I @ ss.days(10)   # Latent for 10 days on average
@@ -41,7 +42,7 @@ measles = ss.Disease(infection, progression, recovery, cases,
 measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1}) # Ages 0-14, 15-64, and 65+
 
 contacts = ss.contacts(ages=[0, 15, 65], matrix=[[10, 6, 1], [3, 8, 1], [3, 6, 3]]) # Contacts a day, between age groups
-settings = dict(networks=contacts, total_pop=100_000, start='2025-01-01', stop='2026-01-01')
+settings = dict(networks=contacts, total_pop=100_000, start='2025-01-01', stop='2025-09-01')
 ```
 
 Two things are new. First, data rarely measure a model's states directly. A health office doesn't count everyone infected, only the cases that are reported: people who saw a doctor, whose measles was recognized, and whose case was notified. For measles, this is often less than half of all infections. An **outcome** is a result that the model computes from its states and transitions, to be compared with what was observed (see [Outcomes](../user_guide/building_outcomes.qmd)). Here, `cases` is a share of new infections (`reported*infection`): on each day, the number of reported cases is `reported` times the number of people infected that day. Like any result, it is in `sim.results.measles.cases` after a run.
@@ -50,22 +51,27 @@ Second, neither β nor the share reported is known, so each is a parameter with 
 
 ## The data
 
-The file `data/measles_cases.csv` has the number of measles cases reported each week, from the week ending 8 January to the week ending 16 April:
+The file `data/measles_cases.csv` has the number of measles cases reported each week, from the week ending 8 January to the week ending 19 March:
 
 ```{python}
 data = pd.read_csv('data/measles_cases.csv')
 data
 ```
 
+The counts jump around from week to week, as real counts do: by chance, and because reporting itself varies (a clinic closed for a holiday, a backlog cleared the week after).
+
 ::: {.callout-note}
 ## Where this data comes from
-This data is illustrative, not real: it was made once, from this model, with β = 0.16 and 40% of infections reported, so that we can see whether a fit finds those values. The weekly totals of the model's reported cases were drawn as Poisson counts, as real counts vary by chance, with `to_data()`, using its own random seed:
+This data is illustrative, not real. It was made once, from an agent-based run of this model (in which each infection is a chance event, so the outbreak is not the smooth curve of the ODE), with β = 0.16 and 40% of infections reported, and its weekly totals were then drawn with more variation than Poisson counts would have, as reported counts usually do. So, as with real data, no values of the model's parameters fit it exactly:
 
 ```python
-truth = ss.Sim(measles, pars=dict(beta=0.16, reported=0.4), rand_seed=2, **settings).run()
-data = truth.to_data('cases', resample='week') # Weekly cases, as Poisson counts
-data = data[data.date <= ss.date('2025-04-16')] # Up to mid-April
-data.to_csv('data/measles_cases.csv', index=False)
+import numpy as np
+truth = ss.Sim(measles, pars=dict(beta=0.16, reported=0.4), n_agents=100_000, rand_seed=3, **settings).run()
+weekly = truth.to_data('cases', resample='week', noise=None) # Weekly reported cases
+rng = np.random.default_rng(3)
+weekly['cases'] = rng.negative_binomial(30, 30/(30 + weekly.cases)) # With extra variation (negative binomial counts)
+weekly[weekly.date <= ss.date('2025-03-19')].to_csv('data/measles_cases.csv', index=False)
+weekly[weekly.date > ss.date('2025-03-19')].to_csv('data/measles_cases_after.csv', index=False) # What happens next
 ```
 :::
 
@@ -77,7 +83,7 @@ sim.run()
 sim.plot('measles.cases')
 ```
 
-The plot shows the model's cases as weekly totals, as they are compared with the data. With the starting guesses, the model's outbreak rises more slowly than the data's, and is still rising in mid-April, after the data has peaked.
+With the starting guesses, the model's outbreak rises more slowly than the data's.
 
 ## Fitting and checking the fit
 
@@ -95,72 +101,70 @@ A fit always finds some values, so check that they make sense. First, the values
 fit.summarize()
 ```
 
-The fit finds β close to 0.16 and a reported share close to 40%, the values the data was made with, and the mismatch falls from 0.29 with the starting guesses to 0.04. Second, look at the model against the data, before and after fitting:
+Second, look at the model against the data, before and after fitting:
 
 ```{python}
 fit.plot()
 ```
 
-The fitted model ("After") follows the rise, the peak, and the start of the fall of the data, and the data scatters around it about as much as Poisson counts should; the model with the starting guesses ("Before") peaks too late. Look for departures that are systematic rather than random: a peak that comes too early or too late, a fall that is too slow, or residuals that are all on one side for weeks at a time. Third, check what the values imply. R0 is in proportion to β, so with β = 0.16 rather than 0.14, R0 is about 16 × 0.16 / 0.14 ≈ 18, at the top of the range usually given for measles (12 to 18). If a value had ended at the edge of its bounds, or had implied an R0 of 50, the model or the bounds would need another look.
+The fitted model ("After") follows the rise of the data, with the data scattered around it. Look for departures that are systematic rather than random: a rise that is too steep or too slow, or residuals that are all on one side for weeks at a time. Here, the data scatter on both sides of the model, so the departures look like chance. Third, check what the values imply. R0 is in proportion to β, so with β ≈ 0.17 rather than 0.14, R0 is about 16 × 0.17 / 0.14 ≈ 19, a little above the range usually given for measles (12 to 18), and about a quarter of infections are reported, which is plausible. If a value had ended at the edge of its bounds, or had implied an R0 of 50, the model or the bounds would need another look.
 
-The fit here is good because the data was made with this model. With real data, the model is never exactly right, and these checks are how you find out where it falls short. [Fit diagnostics](../user_guide/calibration_diagnostics.qmd) in the user guide goes further.
+## How sure is the fit?
 
-## Testing the fit on data it wasn't given
+The fit gives one set of values, but others may fit the data almost as well: in its report above, one of its searches ended at β ≈ 0.145 with about half of infections reported, with a mismatch nearly as small. The data so far cover only the rise of the outbreak, and while an outbreak is growing, a smaller outbreak with more of it reported looks much like a larger outbreak with less of it reported: both give the same rise in reported cases. Only the peak, when susceptible people start to run out, says how many have been infected. When the data can't tell two parameters apart like this, they are not *identifiable* from it (see [Parameter identification](../user_guide/calibration_identification.qmd)).
 
-A model that matches the data it was fitted to may still predict badly: with two free parameters, many curves can pass near a dozen points. A stronger test is to fit the model to the data up to some date, and see how well it predicts the weeks after it, which it wasn't given. Here, the model is fitted to the data up to 12 March (during the rise) and up to 26 March (around the peak), and each fit is run with all the data attached, so that its predictions can be compared with the weeks it didn't see:
+The range of values consistent with the data is a **posterior**. Finding it takes two more things. A **likelihood** says how the data vary around the model: here, as counts that vary more than Poisson counts (`ss.nbinom(n=20)`, a negative binomial). A **prior** says what is known about a parameter before seeing the data: the share reported was given one above (`prior=`), from earlier outbreaks: about a third of infections, give or take 10 percentage points (a beta distribution with mean 0.35 and variance 0.01, so a standard deviation of 0.1). β has none, so its prior is uniform over its bounds. The best fit above ignored the prior, since it doesn't use a likelihood. The sampler, NUTS, then draws values in proportion to how probable they are, given both:
 
 ```{python}
-cutoffs = {
-    'Fitted to 12 March': '2025-03-12',
-    'Fitted to 26 March': '2025-03-26',
-}
-sims = {}
-for label, cutoff in cutoffs.items():
-    early = ss.Sim(measles, data=data[data.date <= cutoff], **settings).fit(verbose=False)
-    print(label, '- beta:', round(early.pars.beta, 3), '- reported:', round(early.pars.reported, 2))
-    sims[label] = ss.Sim(measles, pars=early.pars, data=data, **settings)
-
-msim = ss.parallel(sims)
-msim.plot('measles.cases')
+post = sim.fit(method='nuts', likelihood=dict(cases=ss.nbinom(n=20)), draws=1000, warmup=1000)
+post.summarize()
 ```
 
-Both fits match the data they were given, but they don't agree about what comes after. Fitted to the rise alone, the model finds a higher β and only 19% of infections reported, and predicts that the outbreak peaks within a week, at about 280 cases a week, when it went on to peak at about 470. Once the data includes the peak, the fit is close to the true values, and predicts the following weeks well.
-
-The reason is that while an outbreak is growing, its rate of growth depends mostly on β, but the number of cases reported depends on both how many people are infected and the share of them reported: a smaller outbreak with more of it reported gives nearly the same rise as a larger outbreak with less of it reported. The outbreak turns when susceptible people run out, so only the peak says how many people have been infected, and so what share of them were reported. When two parameters can trade off like this, the data can't tell them apart (they are not *identifiable* from it); [Parameter identification](../user_guide/calibration_identification.qmd) shows how to check for this before trusting a fit.
+The table gives, for each parameter, the median and the 95% interval (`lower` and `upper`) of the posterior, with checks that the sampler's chains agree (`rhat` at most 1.01). The interval for the share reported is wide, from under a fifth to almost half: the data so far can't say much more about it than the prior did.
 
 ## Projecting from the fit
 
-The data ends in mid-April, but the fitted sim, `fit.sim`, runs to the end of the year, so it projects the rest of the outbreak. To ask what a vaccination campaign on 1 May would do, make a scenario from it. `sim.new()` makes a new sim from the same inputs as an existing one, with whatever is given changed: here, the fitted sim with a campaign added.
+The data ends in mid-March, but the fitted model runs to September, so it projects the rest of the outbreak. `post.project()` runs the model under each scenario, once for each of a number of draws from the posterior, so that the spread of the runs carries the uncertainty in the values. The scenarios are a campaign that vaccinates 80% of children under 15 on 1 April, two weeks from now, or on 1 May, if it takes six weeks to organize:
 
 ```{python}
-campaign = ss.vaccinate(efficacy=0.93, where=measles.age < 15, coverage=0.8, at='2025-05-01')
+def campaign(date):
+    return ss.vaccinate(efficacy=0.93, where=measles.age < 15, coverage=0.8, at=date)
 
-sims = {
-    'No intervention': fit.sim,
-    'Campaign':        fit.sim.new(interventions=campaign),
+scenarios = {
+    'No campaign':         None,
+    'Campaign on 1 April': campaign('2025-04-01'),
+    'Campaign on 1 May':   campaign('2025-05-01'),
 }
-msim = ss.parallel(sims)
-```
-
-To see the whole year, plot the cases with the data. Since the data is weekly, the plot shows the model's weekly totals, as the fit compares them, over the weeks with data and the rest of the year:
-
-```{python}
-msim.plot('measles.cases')
+proj = post.project(scenarios, n=100)
+proj.plot('measles.cases')
 ```
 
 ```{python}
-msim.summarize().loc['measles_cases']
+proj.summarize().loc['measles_cases']
 ```
 
-By 1 May, the outbreak has already peaked, so the campaign prevents only about 120 reported cases, 3% of them, much less than a campaign on 1 March did in [T5](t5_interventions.qmd). The data says how far the outbreak has gone, and so how much is left for an intervention to prevent.
+Without a campaign, the model projects about 2,800 reported cases in all, with a 95% interval of 1,800 to 4,100: the share reported, and so the size of the outbreak, is still uncertain. A campaign on 1 April prevents about 600 of them, since it comes before the peak, when most infections are still to come; a campaign on 1 May, after the peak, prevents only about 100. The projection is uncertain about how big the outbreak will be, but not about the decision: the sooner the campaign, the more it prevents.
 
-These projections use the best-fitting values only. Other values fit the data nearly as well, so a projection is uncertain too; [Fitting a model](../user_guide/calibration_fitting.qmd) in the user guide shows how to find the range of values that fit (a posterior), and how to carry it into projections with `fit.project()`. It also covers fitting stochastic and agent-based models, likelihoods, and other ways to measure the mismatch.
+## What happened next
+
+Since this data is illustrative, we can see what the coming weeks would have brought, with no campaign. `project()` passes other arguments on to the sims it makes, so it can give them all the data, to plot the projection against it:
+
+```{python}
+after = pd.read_csv('data/measles_cases_after.csv')
+everything = pd.concat([data, after])
+proj = post.project({'No campaign': None}, n=100, data=everything)
+proj.plot('measles.cases')
+```
+
+The outbreak peaked in the week ending 9 April, at 465 reported cases, well above the projection's median of about 350, and 3,470 cases were reported in all, against a median of about 2,800. Both are within the projection's range, near its top: about 40% of infections were in fact reported, which the data up to March couldn't tell from a smaller share. A decision based on the median alone would have underestimated the outbreak, and what the campaign would prevent; one based on the range would not.
+
+This is the usual situation: data from early in an outbreak say how fast it is growing, but not how big it will get, and a projection from them is only as good as its range. [Fitting a model](../user_guide/calibration_fitting.qmd) in the user guide covers fitting stochastic and agent-based models, other ways to measure the mismatch, and the choice of method; [Fit diagnostics](../user_guide/calibration_diagnostics.qmd) covers what else to check.
 
 ## Exercises
 
-1. Start the fit from different guesses, e.g. β = 0.3 and 20% reported (`ss.Sim(measles, pars=dict(beta=0.3, reported=0.2), data=data, **settings)`). Does it find the same values? Then fit to the data up to 12 March from both starting points. What does the difference say?
-2. Fit only β, keeping the reported share at 50% (`sim.fit(pars=['beta'])`). How does the fit look, and how does the projected size of the outbreak compare with that of the fit of both parameters?
-3. Project a campaign on 1 April instead of 1 May (using the fit of the data to mid-April). How many reported cases would it have prevented?
+1. Start the fit from different guesses, e.g. β = 0.3 and 20% reported (`ss.Sim(measles, pars=dict(beta=0.3, reported=0.2), data=data, **settings)`). Does it find the same values?
+2. Find the posterior without the prior on the share reported (make `reported` again with no `prior=`, and the disease from it). How do the interval for the share reported, and the range of the projection, change? What does this say about where the narrower range came from?
+3. How many reported cases would a campaign on 15 April prevent? And one on 1 April that reaches only 50% of children?
 
 [Solutions](solutions.qmd#t7-data-and-calibration) · Next: [T8 – Stratification and co-transmission](t8_strata.qmd)
 

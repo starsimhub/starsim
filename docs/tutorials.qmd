@@ -48,13 +48,13 @@ Vaccination, school terms, and comparing scenarios across many runs.
 ::: {.g-col-6}
 [**T6 – Geography and mixing**](tutorials/t6_places.qmd)
 
-Several towns, and how an outbreak travels between them.
+Several towns, how an outbreak travels between them, and maps and animations of its spread.
 :::
 
 ::: {.g-col-6}
 [**T7 – Data and calibration**](tutorials/t7_calibration.qmd)
 
-Fitting the model to reported cases, and projecting from the fit.
+Fitting the model to reported cases, the range of values the data allow, and projecting a campaign from them.
 :::
 
 ::: {.g-col-6}

@@ -5,6 +5,7 @@ import warnings
 from unittest import mock
 import sciris as sc
 import numpy as np
+import matplotlib.pyplot as plt
 import starsim as ss
 import starsim.library as ssl
 import pytest
@@ -167,6 +168,18 @@ def test_campaign_delivery():
     # A campaign after the sim ends
     with pytest.raises(ValueError):
         ss.Sim(pars, interventions=ss.screen(make_dx(), coverage=0.5, at=[2030], name='screening')).init()
+
+    # Plots mark the rounds, and the start and stop of a modifier; not a delivery on a condition
+    sis = sim.diseases.sis
+    halve = ss.modify(sis.pars.beta, multiply=0.5, start=2012, stop=2016)
+    when = ss.screen(make_dx(), coverage=0.5, when=lambda t: t.ti % 2 == 0, name='when')
+    marked = ss.Sim(pars, interventions=[ss.screen(make_dx(), coverage=coverage, at=years, name='screening'), halve, when]).run()
+    marks = ss.results.intervention_marks(marked)
+    assert len(marks) == 4 and isinstance(marks[-1], tuple), 'Expected a mark at each of the 3 rounds, and a span for the modifier'
+    fig = marked.plot('sis.prevalence', do_show=False)
+    assert len(fig.axes[0].lines) == 1 + 3 and len(fig.axes[0].patches) == 1
+    assert len(marked.plot('sis.prevalence', show_interventions=False, do_show=False).axes[0].lines) == 1
+    plt.close('all')
     return sim
 
 

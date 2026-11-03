@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 10
   ai: 90
-  note: Based on the Claude drafts on scenarios and on uncertainty, merged, with comparing, combining, and copying runs adapted from the Starsim 3 user guide page on multiple runs
+  note: Based on the Claude drafts on scenarios and on uncertainty, merged, with comparing, combining, and copying runs adapted from the Starsim 3 user guide page on multiple runs; examples tidied and appendices added by AI
 ---
 
 A scenario is a sim with something changed: an intervention added, a parameter set to another value, a different population. Comparing scenarios is how most models answer policy questions: how many infections would a campaign avert, and does it matter when it happens? And since a single stochastic run is one draw of what could happen, most comparisons also need many runs of each scenario. This page covers making scenarios and running them together, running a model many times and reading the spread, comparing scenarios fairly, sweeping a parameter, carrying uncertainty in parameter values into the results, and the random seeds that make it all reproducible. [T5 – Interventions and scenarios](../tutorials/t5_interventions.qmd) teaches the same through one example; [Running sims](running_sim.qmd) covers single sims.
@@ -27,11 +27,11 @@ february = ss.vaccinate(efficacy=0.95, coverage=0.5, at='2025-02-01')
 march    = ss.vaccinate(efficacy=0.95, coverage=0.5, at='2025-03-01')
 ```
 
-`sim.new()` makes a new sim from the same inputs, with whatever is given changed, so each scenario is the base sim with its intervention. `ss.parallel()` runs a dict of sims by label, at the same time on the computer's cores:
+`sim.new()` makes a new sim from the same inputs, with whatever is given changed, so each scenario is the base sim with its intervention, and the base itself is left as it was (`ss.parallel()` runs the sims it is given and labels them, so a sim given to it directly comes back run and relabeled). `ss.parallel()` runs a dict of sims by label, at the same time on the computer's cores:
 
 ```{python}
 scenarios = {
-    'No campaign': base,
+    'No campaign': base.new(),
     'Campaign in February': base.new(interventions=february),
     'Campaign in March': base.new(interventions=march),
 }
@@ -55,7 +55,7 @@ msim.compare(t='2025-03-01')
 
 On 1 March, a month after the February campaign, about 28 people are infectious with it and 106 without. `output=True` returns the table as a dataframe instead of printing it.
 
-`ss.parallel()` also takes a list of sims (each labeled by its own `label`), or several sims as arguments. It is a shortcut for `ss.MultiSim(sims).run()`; options given to it, such as `verbose=0`, are passed to every run.
+`ss.parallel()` also takes a list of sims (each labeled by its own `label`), or several sims as arguments. Sims with different time points (different steps, or a solver that keeps its own) can't be put together as runs at each time point; `msim.plot()` then draws each run on its own time axis (with `msim.plot_each()`), if each scenario has one run or with `lines=True`. It is a shortcut for `ss.MultiSim(sims).run()`; options given to it, such as `verbose=0`, are passed to every run.
 
 ## Many runs of one model
 
@@ -73,8 +73,6 @@ msim.plot('measles.I')
 ```
 
 `sim.run(n_runs=50)` runs it 50 times, each with its own random seed (the same as `ss.parallel(sim, n_runs=50)`). The ODE gave one outbreak peaking at about 137 infectious on day 74. The plot of the runs shows their median at each time point, and the range that holds 95% of them. `lines=True` shows each run instead, which shows what the median hides:
-
-For many runs of a small compartmental model, replicates can be far faster as places nobody moves between, in a single run: `sir.stratify(run=list(map(str, range(100))), kind='space')` holds 100 replicates, read with `sim.results.sir.I.by('run')`. A chain binomial SIR of 1,001 people took 1.1 ms this way, against 13 ms for 100 separate runs. `kind='space'` is what keeps them apart: without it, the groups mix as one population.
 
 ```{python}
 msim.plot('measles.I', lines=True)
@@ -178,7 +176,7 @@ The estimate of the effect is about the same, but its interval is wider when the
 To see how a result depends on a parameter, run the sim with each of a set of values. `pars=` takes a list of values for each parameter, and each value is a scenario of its own, labeled with it. Here the outbreak with β from 1.5 to 2.3 per day (R0 from 12 to 18):
 
 ```{python}
-sim = base.new(label='', verbose=0) # Back to 50 infectious at the start; base took the label 'No campaign' from ss.parallel() above
+sim = base.new(verbose=0) # Back to the base sim, with 50 infectious at the start
 msim = ss.parallel(sim, pars=dict(beta=[1.5, 1.9, 2.3]))
 msim.plot('measles.I')
 ```
@@ -189,7 +187,7 @@ msim.summarize().loc['measles_infection']
 
 The parameter is named as it is in the model: here `beta`, the name of the `ss.par()` it was given (`describe()` lists the names). When there is more than one disease, give the disease too, e.g. `pars={'measles.beta': [1.5, 2.3]}`. The values become columns of `msim.runs`, the table of runs, and a result can be picked by value: `msim.results.measles.I.select(beta=2.3)`.
 
-Several parameters given together are taken value by value (the first value of each together, then the second, and so on), so each needs the same number of values; for other sets, give a list of dicts, one per set (`pars=[dict(beta=1.5, dur=ss.days(6)), dict(beta=2.3, dur=ss.days(8))]`, where `dur` is the infectious period). For a full grid of two parameters, build the list of dicts with a loop. `n_runs=` runs each set that many times, with the same seeds for each set, so the sets are compared with the same chance events. A seed given in `pars=` (`rand_seed=[1, 2, 1, 2]` next to `beta=[1.5, 1.5, 2.3, 2.3]`) is a run of its scenario, not a scenario of its own.
+Several parameters given together are taken value by value (the first value of each together, then the second, and so on), so each needs the same number of values; for other sets, give a list of dicts, one per set (`pars=[dict(beta=1.5, dur=ss.days(6)), dict(beta=2.3, dur=ss.days(8))]`, where `dur` is the infectious period). For a full grid of two parameters, build the list of dicts with a loop, e.g. `[dict(beta=b, dur=d) for b in betas for d in durs]`. `n_runs=` runs each set that many times, with the same seeds for each set, so the sets are compared with the same chance events. A seed given in `pars=` (`rand_seed=[1, 2, 1, 2]` next to `beta=[1.5, 1.5, 2.3, 2.3]`) is a run of its scenario, not a scenario of its own.
 
 A sweep gives each value equal space, but that does not say they are equally likely. To carry the uncertainty in a parameter into the results instead, draw its value afresh for each run (next).
 
@@ -220,7 +218,7 @@ both.plot('measles.I')
 both.summarize().loc['measles_infection']
 ```
 
-The medians are much the same, but with β uncertain the upper end of the interval rises from about 1,330 infections to about 1,500: outbreaks with a higher β are larger. The band now holds both the chance in each run and the uncertainty in β.
+The medians are much the same, but with β uncertain the upper end of the interval rises from about 1,330 infections to about 1,530: outbreaks with a higher β are larger. The band now holds both the chance in each run and the uncertainty in β.
 
 After a model is fitted to data, the values found by the fit can be carried into a projection the same way (`fit.project()`; see [Fitting a model](calibration_fitting.qmd)). To see how the results depend on each value in turn, rather than all at once, sweep the parameter instead (above).
 
@@ -236,7 +234,7 @@ c = binomial.new(rand_seed=2).run()
 print('Infections with seeds 1, 1, and 2:', a.results.measles.infection.sum(), b.results.measles.infection.sum(), c.results.measles.infection.sum())
 ```
 
-`n_runs=k` uses the seeds `rand_seed`, `rand_seed + 1`, ..., `rand_seed + k − 1`, so the first of many runs is the same as a single run, and any run can be made again on its own: run *i* (counting from 0) of a sim with seed 1 is the sim with `rand_seed=1 + i`. To run particular seeds, give them as a sweep: `ss.parallel(sim, pars=dict(rand_seed=[1, 5, 9]))`, which gives three runs of the sim's scenario (not three scenarios). `msim.runs`, the table of runs, gives the seed of each run (`rand_seed`), so a run that stands out can be made again on its own. An ODE has no random numbers, so its seed changes nothing.
+`n_runs=k` uses the seeds `rand_seed`, `rand_seed + 1`, ..., `rand_seed + k − 1`, so the first of many runs is the same as a single run, and any run can be made again on its own: run *i* (counting from 0) of a sim with seed 1 is the sim with `rand_seed=1 + i`. To run particular seeds, give them as a sweep: `ss.parallel(sim, pars=dict(rand_seed=[1, 5, 9]))`, which gives three runs of the sim's scenario (not three scenarios). `msim.runs`, the table of runs, gives the seed of each run (`rand_seed`), so a run that stands out can be made again on its own. An ODE has no random numbers, so its seed changes nothing. To check that two runs match, or to see which results differ and by how much, `ss.debugtools.diff_sims(a, c)` compares their summaries, and `ss.debugtools.check_sims_match(a, b)` gives True if they match (see [Profiling and debugging](running_debugging.qmd#runs-that-should-match-but-dont)).
 
 ## Combining runs, copies, and memory
 
@@ -255,6 +253,7 @@ By default, `ss.parallel()` keeps the results of each run but not the people in 
 - **The median curve is not a typical epidemic.** For the size or timing of the peak, summarize each run's peak.
 - **Runs that die out pull the summary down.** If the question is about outbreaks that take off, look at those runs (e.g. `lines=True`), and report the chance of dying out separately.
 - **Too few runs for the ends of an interval.** Use a few hundred for a 95% interval that you will report.
+- **Running the base sim itself as a scenario.** `ss.parallel()` runs the sims it is given in place and gives each the label of its key, so `{'No campaign': base}` leaves `base` run and labeled 'No campaign'; give `base.new()` instead, as above, or `inplace=False`.
 - **Reading a band as a confidence interval for a parameter.** The band over runs with fixed values is the spread due to chance alone; it says nothing about how well β is known unless the runs drew β too (`priors=True`).
 
 ## Further reading
@@ -263,3 +262,46 @@ By default, `ss.parallel()` keeps the results of each run but not the people in 
 - [EpiModel: Training materials](https://epimodel.github.io/sismid/): stochastic network models and their simulation-based uncertainty in R
 - [Epiverse epidemics: Modelling scenarios](https://epiverse-trace.github.io/epidemics/articles/modelling_scenarios.html): comparing intervention scenarios, with parameter uncertainty, in an R package
 - [Epiverse epidemics: Parameter uncertainty](https://epiverse-trace.github.io/epidemics/articles/modelling_param_uncertainty.html): drawing parameter values for each run, as `priors=True` does here
+
+## Appendix: what a MultiSim has
+
+The methods of an `ss.MultiSim` that a modeler uses, each with the first line of its docstring (see [ss.MultiSim](../api/run.qmd) for the rest):
+
+```{python}
+import inspect
+import pandas as pd
+pd.set_option('display.max_colwidth', None) # Show each entry in full
+
+names = ['plot', 'plot_each', 'summarize', 'compare', 'diff', 'to_df', 'combine', 'merge', 'split', 'shrink', 'copy', 'branching', 'run_pars']
+docs = {name: inspect.getdoc(getattr(ss.MultiSim, name)).split('\n')[0] for name in names}
+pd.DataFrame.from_dict(docs, orient='index', columns=['What it gives'])
+```
+
+Its attributes are `msim.results` (every result with a run axis first), `msim.runs` (one row per run: its scenario, the values swept or drawn, and its seed), and `msim.sims` (the sims that were run, by position or by scenario). A result across runs has these methods of its own:
+
+```{python}
+names = ['median', 'mean', 'quantiles', 'take', 'select', 'cum', 'plot']
+docs = {name: inspect.getdoc(getattr(ss.Result, name)).split('\n')[0] for name in names}
+pd.DataFrame.from_dict(docs, orient='index', columns=['What it gives'])
+```
+
+## Appendix: the keywords of ss.parallel()
+
+`ss.parallel()` and `ss.MultiSim()` take the same keywords (`ss.parallel()` is `ss.MultiSim(...).run()`), and `msim.run()` takes them again to change them:
+
+| Keyword | Default | What it does |
+|---|---|---|
+| the sims | | One sim, a list of sims, a dict of them by label, or sims as keywords (`ss.parallel(baseline=s1, vaccine=s2)`) |
+| `n_runs` | 1 (4 for `ss.MultiSim()` of one sim) | Run each sim this many times, with the seeds `rand_seed`, `rand_seed + 1`, ... |
+| `pars` | none | Sets of values of the model's parameters, each a scenario of its own: a dict of lists, taken value by value, or a list of dicts |
+| `priors` | False | Draw `n_runs` sets of values from the parameters' priors (or bounds), on a Latin hypercube; or the draws themselves, e.g. from a posterior |
+| `parallel` | True | Run in separate processes; False runs one after the other |
+| `n_cpus` | all of them | The number of processes |
+| `shrink` | True | Remove the people from each sim once it has run, keeping the results |
+| `inplace` | True | Update the sims given (with no `n_runs` or `pars`) with their results; False runs copies |
+| `verbose` | the sims' own | How much each run prints; by default the MultiSim shows the progress of the runs |
+| `run_args` | none | Passed to each `sim.run()` |
+| `par_args` | none | Passed to `sc.Parallel()`, which runs the processes |
+| `label` | none | A name for the MultiSim |
+| `initialize` | False | Make and initialize the sim of each run now, rather than when it runs |
+| `debug` | False | Run one after the other, as `parallel=False` |

@@ -4,27 +4,29 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Based on the AI-written v4 drafts (Claude's page on contact matrices and data by place, with the table of source data and the advice on using data of your own from Codex's)
+  note: Based on the AI-written v4 drafts (Claude's page on contact matrices and data by place, with the table of source data and the advice on using data of your own from Codex's); the coverage of the data, looking up a place, and the appendices of places and datasets added by AI
 ---
 
-A model of a particular setting needs data about its people: how many there are and of what ages, how fast they are born and die, and who has contact with whom. Starsim has these for every country, by name, and takes data of your own in the same forms. This page covers the data that comes with Starsim, contact matrices (by age and by other groups, under compartments and agents), and using data of your own.
+A model of a particular setting needs data about its people: how many there are and of what ages, how fast they are born and die, and who has contact with whom. Starsim has these for 187 countries and territories, by name, and takes data of your own in the same forms. This page covers the data that comes with Starsim, contact matrices (by age and by other groups, under compartments and agents), and using data of your own.
 
 These data describe a setting; they don't set the disease's parameters, and a model that uses them still needs checking against data on the disease itself (see [Fitting a model](calibration_fitting.qmd)). Networks of individual contacts are on [Contact networks](populations_networks.qmd), places and the movement between them on [Geography](populations_geography.qmd), and the tutorial [T4 – Age groups and contacts](../tutorials/t4_ages.qmd) uses a contact matrix for measles.
 
 ## Data by place
 
-Starsim has data for each country, from the package `starsim_data`: populations by age and sex, birth and death rates, contact matrices, and administrative units (counties, provinces, and states). What is small and common (the contact matrices of 177 countries, populations, and the first two administrative levels of every country) is bundled with it; the rest is downloaded on first use. The model objects that use a place take its name, and `ss.data` gives the data itself, for looking at or using elsewhere:
+The data by place comes from the package `starsim_data`: populations by age and sex, rates of birth, death, fertility, and migration, contact matrices, and administrative units (counties, provinces, and states). Coverage differs by dataset: the UN's demographic data is there for 187 countries and territories, the default contact matrices for 177 of them, and the first-level administrative units for 184. What is small and common is bundled with the package, so it needs no download: the UN data, the contact matrices of Prem et al., and administrative units at levels 0 (the country) and 1 (its counties, provinces, or states). The rest (the units at level 2, populations for another year, and the other contact matrices) is downloaded on first use and kept in a cache. Which places have which data is in the [appendix](#appendix-every-place-and-its-data). The model objects that use a place take its name, and `ss.data` gives the data itself, for looking at or using elsewhere:
 
 | What | In a model | The data itself |
 |---|---|---|
 | Population by age and sex (UN World Population Prospects) | `ss.people('Kenya')` | `ss.data.population('Kenya')`, `ss.data.age('Kenya')` |
 | Contact matrix by 5-year age group (Prem et al. 2021) | `ss.contacts('Kenya')` | `ss.data.contacts('Kenya')` |
 | Birth and death rates by year (and by age and sex, for deaths) | `ss.Births(birth_rate='Kenya')`, `ss.Deaths(death_rate='Kenya')` | `ss.data.rates('Kenya', 'births')`, `ss.data.rates('Kenya', 'deaths')` |
+| Fertility rates by year and 5-year age group of the mother | `ss.Pregnancy(fertility_rate='Kenya')` | `ss.data.rates('Kenya', 'fertility')` |
+| Net migration rates by year | (see [Demographics](populations_demographics.qmd#migration)) | `ss.data.rates('Kenya', 'migration')` |
 | Administrative units, with their populations and positions | `ss.geo.geography('Kenya', level=1)` | `ss.data.geography('Kenya', level=1)` |
 
 A named population gives the sim its size (`total_pop`) and the share of people in each age group, so a model stratified by age needs no shares of its own; as agents, it gives the agents their ages and sex (see [People and agents](populations_people.qmd)). Birth and death rates are on [Demographics](populations_demographics.qmd), and administrative units on [Geography](populations_geography.qmd).
 
-`ss.people()` and `ss.contacts()` take a year and a source: `ss.people('Kenya', year=2030)` (from 1950 to 2100, with the years between the UN's decadal values interpolated), and `ss.contacts('Kenya', source='mistry2021')` for the matrices of Mistry et al. (2021), by single year of age, for 36 countries. A US state is named with its country, `ss.people('United States:Massachusetts')` and `ss.contacts('United States:Massachusetts')`, from the US Census and Mistry et al. The data is given as tables (dataframes), with the age groups labeled as a stratification by age labels them (`'0-4'`, `'5-9'`, ..., `'100+'`) and where the data came from in `.attrs['ref']`:
+`ss.people()` and `ss.contacts()` take a year and a source: `ss.people('Kenya', year=2030)` (from 1950 to 2100, with the years between the UN's decadal values interpolated), and `ss.contacts('Japan', source='mistry2021')` for the matrices of Mistry et al. (2021), by single year of age, for 36 countries (the sources are listed in the [appendix](#appendix-every-dataset)). A US state is named with its country, `ss.people('United States:Massachusetts')` and `ss.contacts('United States:Massachusetts')`, from the US Census and Mistry et al. The data is given as tables (dataframes), with the age groups labeled as a stratification by age labels them (`'0-4'`, `'5-9'`, ..., `'100+'`) and where the data came from in `.attrs['ref']`:
 
 ```{python}
 import starsim as ss
@@ -39,6 +41,23 @@ print('Source:', pop.attrs['ref']['study'])
 ```
 
 Every piece of data records where it came from, which `describe()` shows. Record the source and year with an analysis: the data don't all have the same reference year.
+
+### Looking up a place
+
+A place can be named in several ways: by its name (`'Kenya'`), its ISO code (`'KE'` or `'KEN'`), its official name, or a common alias (`'Czechia'` for the Czech Republic), without regard to case or accents. `starsim_data` can say what it has for a place, and plot it as a check before it goes into a model, here an age pyramid, the crude birth rate over time, death rates by age, and the contact matrix:
+
+```{python}
+import starsim_data as ssd
+
+info = ssd.location_info('KEN') # The name, codes, aliases, and sources of the contact matrices
+print(info.location, info.iso3, info.official_name, '- contact matrices:', info.contact_sources)
+print('Places with a contact matrix of Prem et al. 2021:', len(ssd.list_locations('prem2021')))
+ssd.plot('Kenya');
+```
+
+`ssd.list_locations(dataset)` lists the places in a dataset, and `ssd.list_datasets(detailed=True)` the datasets, as in the appendices below. The data that is downloaded is kept in a cache (`ssd.cache_dir()`; `ssd.cache_info()` lists what is in it), so it is downloaded once; on a computer with no connection to the internet, a dataset that is not bundled or already in the cache raises a `ConnectionError` that says so.
+
+The UN's net migration rates (`ss.data.rates('Kenya', 'migration')`, per 1,000 people a year, positive for more people arriving than leaving) are part of the UN's estimates of the population, so a model with births and deaths but no migration drifts from the UN's totals where migration is large. [Demographics](populations_demographics.qmd#migration) shows how to use them.
 
 ## A contact matrix by age
 
@@ -132,7 +151,7 @@ The entries of a matrix are contacts per unit time, in the sim's unit unless `un
 
 ## Contact matrices by setting
 
-A country's contact matrix can be split by setting: `ss.contacts('Kenya', layer=['home', 'school', 'work', 'community'])` gives a matrix for each, named after it, which together make up the whole. Each can then be changed on its own with `ss.modify()`; here schools close from day 10:
+A country's contact matrix can be split by setting: `ss.contacts('Kenya', layer=['home', 'school', 'work', 'community'])` gives a matrix for each, named after it, which together make up the whole (`layer='all'`, the default, is the whole). Every source has these four settings. By default, a country's matrix is from Prem et al. (2021), which is bundled; for the 10 places it lacks, including Japan and Australia, it is from their earlier matrices (2017), downloaded on first use, so every one of the 187 places has a matrix. `source=` picks one study (`'prem2021'`, `'prem2017'`, or `'mistry2021'`), and the reference of a matrix (`.attrs['ref']`) says which it came from. Each can then be changed on its own with `ss.modify()`; here schools close from day 10:
 
 ```{python}
 S, I, R = ss.states('S I R')
@@ -183,6 +202,8 @@ Data of your own takes the same forms as the data by place. Ages are a table of 
 ppl = ss.People(10_000, age_data=ss.data.age('Kenya', year=2000))
 ```
 
+For data by 5-year age group and a model with other age groups, `ss.data.age_split(edges, ages, counts)` gives the share of people in each of the model's groups (with ages spread evenly within each 5-year group), and `ss.data.age_labels(edges)` labels groups as Starsim does (`'0-14'`, `'15-64'`, `'65+'`).
+
 Birth and death rates are tables by year (and by sex and age for deaths), for `ss.Births()` and `ss.Deaths()` (see [Demographics](populations_demographics.qmd#data-of-your-own)); a contact matrix is an array, with the lower edges of its age groups, for `ss.contacts(matrix, ages=...)`, as above, or a table labeled by age group (`'0-14'`, `'15-64'`, `'65+'`), as `ss.data.contacts()` gives, for `ss.contacts(table)`; and places are a table of names, populations, and positions, for `ss.geo.geography()` (see [Geography](populations_geography.qmd)).
 
 Data on the disease itself (cases, deaths, prevalence) is a different input: it is given to the sim with `data=`, to plot with the results and fit the model to (see [Fitting a model](calibration_fitting.qmd)). Before using any data, check its units, its denominators, and the period it covers: a contact survey gives contacts a day, a crude birth rate is per 1,000 people a year, and a blank cell means not observed, while a zero is a count of none.
@@ -203,3 +224,48 @@ The API reference for this page: [ss.data](../api/data.qmd).
 - [Prem et al. 2021: Projecting contact matrices in 177 geographical regions](https://doi.org/10.1371/journal.pcbi.1009098): the source of the contact matrices by country
 - [socialmixr: Contact matrices from surveys](https://epiforecasts.io/socialmixr/): an R package for making contact matrices from the POLYMOD and other contact surveys
 - [epydemix: Populations](https://epydemix.readthedocs.io/en/latest/guide/populations.html): populations and contact matrices by place, for compartmental models
+
+## Appendix: every dataset
+
+The datasets of `starsim_data`, with how each is reached: bundled with the package, fetched (downloaded on first use from the files published with it), or downloaded from the original source (here, the UN), and the administrative levels and number of places each has:
+
+```{python}
+datasets = ssd.list_datasets(detailed=True)
+datasets[['dataset', 'description', 'access', 'levels', 'locations', 'license']]
+```
+
+The contact matrices (`prem2021`, `prem2017`, `prem`, `mistry2021`, and, for US states, `mistry2021_us`) are the `source=` of `ss.contacts()` and `ss.data.contacts()`. Those of Prem et al. are by 5-year age group, from 0-4 to 75+; those of Mistry et al. by single year of age, from 0 to 84+. Each has the settings `'home'`, `'school'`, `'work'`, and `'community'` (`layer=`), and their sum, `'all'`. The administrative units at level 2 and below are not in a dataset of their own: `ss.geo.geography(place, level=2)` downloads the boundaries (from geoBoundaries or UN OCHA, where they have that level for the place) and the populations, and needs the optional geopandas (`pip install starsim_data[spatial]`). `indicators` and `life_table` are the UN's other tables, which `ssd.download(place, which='life_table')` gives.
+
+## Appendix: every place and its data
+
+Every place that has data, with its ISO code, the contact matrices it has, and its number of first-level administrative units (blank where there are none bundled). Every place listed has the UN's population, birth, death, fertility, and migration data:
+
+```{python}
+import pandas as pd
+
+places = ssd.list_all_locations()
+sources = ['prem2021', 'prem2017', 'mistry2021']
+has = {source: set(ssd.list_locations(source)) for source in sources}
+with_units = set(ssd.list_locations('nodes'))
+un_data = all(set(ssd.list_locations(ds)) == set(places) for ds in ['population', 'births', 'deaths', 'fertility', 'migration'])
+print('Every place has all the UN data:', un_data)
+
+rows = []
+for place in places:
+    row = dict(place=place.replace('_', ' '), code=ssd.location_info(place).iso3)
+    row['contact matrices'] = ', '.join(source for source in sources if place in has[source])
+    row['level-1 units'] = len(ssd.load_nodes(place, level=1)) if place in with_units else None
+    rows.append(row)
+table = pd.DataFrame(rows).set_index('place')
+table['level-1 units'] = table['level-1 units'].astype('Int64')
+print(len(table), 'places')
+```
+
+::: {.callout-note collapse="true" title="The table of places"}
+```{python}
+pd.set_option('display.max_rows', 250)
+table
+```
+:::
+
+US states are named with their country, e.g. `'United States:Massachusetts'`, and have their own populations (from the US Census) and contact matrices (Mistry et al.); `ssd.list_locations('population_us')` lists them.

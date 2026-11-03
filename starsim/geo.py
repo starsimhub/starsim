@@ -21,8 +21,8 @@ class geography:
     A geography: named places with populations and positions, used as the levels of a spatial stratification
 
     A country's administrative units come from `starsim_data` by name (`ss.geo.geography('Kenya', level=1)`):
-    their names, populations, centroids, areas, p-codes, and which share a border. The first
-    two levels of every country are bundled, so this needs no download.
+    their names, populations, centroids, areas, p-codes, and which share a border. Levels 0 and 1
+    are bundled (for 184 countries and territories), so they need no download; level 2 is downloaded on first use.
 
     Args:
         data (dataframe/str/list): a country (or a list of them) by name or code, e.g. 'Kenya' or 'KE'; or a table (or the name of a file holding one) with a column `name`, and optionally `pop` (or `population`), and `x` and `y` or `lat` and `lon`;
@@ -83,8 +83,11 @@ class geography:
         if names is None:
             errormsg = 'ss.geo.geography() needs the names of the places: names=[...], or a table with a column called "name"'
             raise ValueError(errormsg)
+        self.shapes = data.geometry if data is not None and 'geometry' in data.columns else None # Kept for drawing maps
         self.names = list(names)
         self.pop = None if pop is None else np.array(pop, dtype=float)
+        self.x = None if x is None else np.array(x, dtype=float)
+        self.y = None if y is None else np.array(y, dtype=float)
         self.lat = None if lat is None else np.array(lat, dtype=float)
         self.lon = None if lon is None else np.array(lon, dtype=float)
         self.adjacency = None if adjacency is None else np.array(adjacency, dtype=bool)
@@ -111,6 +114,203 @@ class geography:
 
     def __len__(self):
         return len(self.names)
+
+    def by_place(self, values):
+        """ Values in the order of the places, from an array, or a dict or series by name """
+        if isinstance(values, (dict, pd.Series)):
+            missing = [name for name in self.names if name not in values]
+            if missing:
+                errormsg = f'The values have none for {sc.strjoin(missing[:5])}{" ..." if len(missing) > 5 else ""}; give one for each place'
+                raise ValueError(errormsg)
+            values = [values[name] for name in self.names]
+        values = np.asarray(values, dtype=float)
+        if len(values) != len(self):
+            errormsg = f'{len(values)} values were given for {len(self)} places'
+            raise ValueError(errormsg)
+        return values
+
+    def get_shapes(self, shapes=None):
+        """ The shapes of the places to draw, if any: those the geography was made from, or for a country, its boundaries (`shapes=True`, which downloads them, and needs geopandas) """
+        if shapes is False or (shapes is None and self.shapes is None):
+            return None
+        if self.shapes is None:
+            if self.ref is None:
+                errormsg = 'shapes=True needs a geography of a country (e.g. ss.geo.geography("Kenya")) or one made from shapes (a .shp, .geojson, or .gpkg file, or a GeoDataFrame)'
+                raise ValueError(errormsg)
+            ssd = ss.data.provider()
+            found = pd.concat([ssd.download_shapes(place, level=self.ref['level']) for place in sc.tolist(self.ref['place'])]) # Keeps them a GeoDataFrame
+            found = found.drop_duplicates('pcode').set_index('pcode')
+            missing = [name for name,code in zip(self.names, self.codes) if code not in found.index]
+            if missing:
+                errormsg = f'The boundaries found have no shapes for {len(missing)} of the {len(self)} places (e.g. {missing[0]}), so they are drawn as points instead'
+                ss.warn(errormsg)
+                return None
+            self.shapes = found.geometry.loc[self.codes].reset_index(drop=True)
+        return self.shapes
+
+    def positions(self):
+        """ Where each place is, as x and y: the positions given, or longitudes and latitudes """
+        if self.lon is not None:
+            return self.lon, self.lat
+        if self.x is not None:
+            return self.x, self.y
+        errormsg = 'This geography has no positions to draw it with: give x and y, or lat and lon'
+        raise ValueError(errormsg)
+
+    def draw(self, ax, colors=None, shapes=None, names=None):
+        """ Draw the places into axes, as shapes or as points sized by population, for `plot()` and maps of results; returns what was drawn, whose colors `map()` updates """
+        shapes = self.get_shapes(shapes)
+        if shapes is not None:
+            shapes.plot(ax=ax, color='0.85' if colors is None else colors, edgecolor='white', linewidth=0.4)
+            drawn = ax.collections[-1]
+            centers = shapes.representative_point()
+            x, y = centers.x.values, centers.y.values
+        else:
+            x, y = self.positions()
+            biggest = 1500/max(1, len(self)/5)**0.5 # Smaller points for more places, so they overlap less
+            sizes = biggest/4 if self.pop is None else 10 + biggest*self.pop/self.pop.max() # Area in proportion to population
+            drawn = ax.scatter(x, y, s=sizes, c='0.6' if colors is None else colors, edgecolor='white', linewidth=0.8, zorder=2)
+        if self.lon is not None or shapes is not None: # Degrees of longitude are shorter away from the equator
+            ax.set_aspect(1/np.cos(np.radians(np.nanmean(y))))
+        else:
+            ax.set_aspect('equal')
+        if sc.ifelse(names, len(self) <= 15):
+            for name,xi,yi in zip(self.names, x, y):
+                ax.annotate(name, (xi, yi), xytext=(6, 4), textcoords='offset points', fontsize=8, color='0.25')
+        ax.margins(0.15)
+        ax.set_axis_off()
+        return drawn
+
+    def plot(self, values=None, label=None, shapes=None, names=None, cmap='Reds', vmin=None, vmax=None, ax=None, **kwargs):
+        """
+        Draw a map of the places, colored by a value for each place if given
+
+        Places are drawn as shapes if the geography has them (it was made from shapes, or `shapes=True` for a country),
+        and otherwise as points at their positions, with areas in proportion to their populations.
+        For a map of a result over time, use the result's `map()`, e.g. `sim.results.sir.prevalence.map()`.
+
+        Args:
+            values (array/dict/series): a value for each place, in order or by name, e.g. a summary of a result by place
+            label (str): what the values are, for the color bar
+            shapes (bool): whether to draw shapes (by default, if the geography has them); `True` for a country downloads its boundaries, which needs geopandas
+            names (bool): whether to label the places by name (by default, if there are 15 or fewer)
+            cmap (str): the colormap of the values
+            vmin (float): the value at the bottom of the color scale (by default, 0, or the smallest value if it is negative)
+            vmax (float): the value at the top of the color scale (by default, the largest value)
+            ax (Axes): if given, draw into these axes
+            kwargs (dict): passed to `ss.plot_args()`, e.g. `figsize` or `filename`
+
+        Examples:
+            ```python
+            towns = ss.geo.geography(names=['a', 'b', 'c'], pop=[50_000, 30_000, 20_000], x=[0, 0, 40], y=[0, 30, 0])
+            towns.plot() # Where the places are, and their populations
+            towns.plot(values=sim.results.sir.infection.by('patch').summarize(), label='Infections') # A summary of a result
+            ss.geo.geography('Kenya').plot(shapes=True) # Kenya's counties, with their boundaries
+            ```
+        """
+        import matplotlib.pyplot as plt
+        kw = ss.plot_args(kwargs, figsize=(6, 5))
+        given = ax is not None
+        with ss.style(**kw.style):
+            if ax is None:
+                fig, ax = plt.subplots(**kw.fig)
+            colors = None
+            if values is not None:
+                values = self.by_place(values)
+                norm = plt.Normalize(sc.ifelse(vmin, min(0, np.nanmin(values))), sc.ifelse(vmax, np.nanmax(values))) # From 0, so that small differences don't look large
+                colors = plt.get_cmap(cmap)(norm(values))
+                ax.figure.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, shrink=0.7, label=label)
+            self.draw(ax, colors=colors, shapes=shapes, names=names)
+        return ss.return_fig(ax.figure, given=given, **kw.return_fig)
+
+
+def draw_map(res, t=None, animate=False, shapes=None, names=None, cmap='Reds', vmin=0, vmax=None, n=None, fps=8, ax=None, **kwargs):
+    """
+    Draw a result by place on a map, at several times or as an animation: the function behind `Result.map()`, which documents the arguments
+
+    The result needs a spatial stratification with a geography (`stratify(patch=ss.geo.geography(...))`).
+    """
+    import matplotlib.pyplot as plt
+    if res.runs is not None:
+        errormsg = f'"{res.name}" is a result across runs; map one of them, e.g. res.select(run=0)'
+        raise ValueError(errormsg)
+    if res.split is not None: # Already split by a dimension: map the result it came from
+        res = res.split[0]
+    strat = next((s for s in (getattr(res, 'strats', None) or []) if s.geo is not None), None)
+    if strat is None:
+        errormsg = 'A map needs a result stratified by place, with a geography: e.g. sir.stratify(patch=ss.geo.geography(...))'
+        raise ValueError(errormsg)
+    geo = strat.geo
+    byplace = res.by(strat.name)
+    values = np.asarray(byplace.values, dtype=float) # Time points by places
+    times = np.array([float(t) for t in byplace.timevec])
+
+    # What to draw: the summary over the run (by default), the times given, or several across the time when something is happening
+    dated = isinstance(byplace.timevec[0], ss.date)
+    if t is None and n is None and not animate: # The summary of each place, as summarize() gives it
+        values = np.asarray(byplace.summarize(), dtype=float)[None, :]
+        inds = [0]
+        labels = [dict(sum='Total over the run', last='At the end of the run', mean='Mean over the run').get(byplace.summarize_by, 'Over the run')]
+    elif t is not None:
+        if not dated and any(isinstance(ti, (str, ss.date)) for ti in sc.tolist(t)):
+            errormsg = f'The times of "{res.name}" are not dates, so give t= as times like those of the result, e.g. t={times[len(times)//2]:g}'
+            raise ValueError(errormsg)
+        targets = [float(ss.date(ti)) if isinstance(ti, str) else float(ti) for ti in sc.tolist(t)]
+        inds = [int(np.argmin(np.abs(times - target))) for target in targets]
+    else:
+        active = np.nonzero(np.nanmax(np.abs(values), axis=1) > 0.01*np.nanmax(np.abs(values)))[0]
+        first, last = (active[0], active[-1]) if len(active) else (0, len(times)-1)
+        n = sc.ifelse(n, 60 if animate else 6)
+        inds = np.unique(np.linspace(first, last, min(n, last - first + 1)).round().astype(int))
+    if t is not None or n is not None or animate:
+        labels = [str(byplace.timevec[i]) if dated else f'{times[i]:g}' for i in inds]
+
+    single = animate or len(inds) == 1
+    kw = ss.plot_args(kwargs, **(dict(figsize=(6, 5)) if single else {}))
+    norm = plt.Normalize(vmin, sc.ifelse(vmax, np.nanmax(values[inds])))
+    colormap = plt.get_cmap(cmap)
+    title = res.full_label
+    with ss.style(**kw.style):
+        if single:
+            given = ax is not None
+            if ax is None:
+                fig, ax = plt.subplots(**kw.fig)
+            axes = [ax]
+        else:
+            given = False
+            ncols = 2 if len(inds) == 4 else min(len(inds), 3)
+            nrows = int(np.ceil(len(inds)/ncols))
+            fig_kw = sc.mergedicts(dict(figsize=(3*ncols + 1.5, 2.8*nrows), layout='constrained'), kw.fig)
+            fig, axes = plt.subplots(nrows, ncols, **fig_kw)
+            axes = np.atleast_1d(axes).ravel()
+            for extra in axes[len(inds):]:
+                extra.remove()
+            axes = axes[:len(inds)]
+        fig = axes[0].figure
+        drawn = [geo.draw(a, colors=colormap(norm(values[i])), shapes=shapes, names=names if len(axes) == 1 else sc.ifelse(names, False)) for a,i in zip(axes, inds)]
+        fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=colormap), ax=list(axes), shrink=0.7, label=title)
+        if not animate:
+            for a,label in zip(axes, labels):
+                a.set_title(label)
+            return ss.return_fig(fig, given=given, **kw.return_fig)
+
+        # Animate: recolor the places at each time point
+        from matplotlib import animation
+        def frame(j):
+            drawn[0].set_facecolor(colormap(norm(values[inds[j]])))
+            axes[0].set_title(labels[j])
+            return drawn
+        frame(0)
+        anim = animation.FuncAnimation(fig, frame, frames=len(inds), interval=1000/fps)
+        filename = kw.return_fig.get('filename')
+        if filename is not None: # E.g. spread.gif (with Pillow, which comes with Matplotlib) or spread.mp4 (with ffmpeg)
+            anim.save(filename, fps=fps)
+        if ss.options.is_jupyter and kw.return_fig.get('do_show') is not False: # Shown in the notebook, with controls to play it
+            from IPython.display import HTML, display
+            display(HTML(anim.to_jshtml()))
+            plt.close(fig)
+            return None
+        return anim
 
 
 class gravity:

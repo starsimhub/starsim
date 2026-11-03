@@ -732,7 +732,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             return obj is None or isinstance(obj, (float, int, np.number, np.ndarray))
         values = [track.p for track in plain]
         values += [val for tr in graph.transitions.values() for val in [tr.p, tr.p_stay, tr.p_die]]
-        values += [val for state in graph.states.values() for val in [state.init, state.init_n]]
+        values += [val for state in graph.states.values() for val in [state.init, state.init_n]] + [graph.init_prev]
         return found if all(walk(val) for val in values) else False
 
     def restart_movement(self):
@@ -823,7 +823,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         return
 
     def n_people(self, total=True):
-        out = self.y[self.people_comps].sum(axis=0)
+        out = self.y[self.people_comps].sum(axis=0) if getattr(self, 'held_n', None) is None else self.held_n # Held while the next-generation matrix is worked out at a given state
         return out.sum() if total else out
 
     def local_count(self, states):
@@ -1615,6 +1615,10 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         if betas:
             raw = betas[0].raw
             def route(term, state=None): # The keys of a dict are checked when the sim is initialized
+                if term.name is None: # Mixing of everyone with everyone, with no network
+                    what = 'a beta per act (ss.peract), which needs a network with acts, e.g. ss.SexualNet()' if isinstance(raw, ss.peract) else 'a beta for each route (a dict), which needs those networks'
+                    errormsg = f'"{flow.tr.name}" has {what}, but the sim has no network: give one with networks='
+                    raise ValueError(errormsg)
                 key = ss.networks.standardize_netkey(term.name)
                 val = ss.networks.route_beta(raw, term.name) if isinstance(raw, dict) else raw
                 net = nets.get(key)
@@ -2300,7 +2304,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                     dy[b] += moved
         return dy
 
-    def next_generation(self, start=False):
+    def next_generation(self, start=False, y=None):
         """
         The next-generation matrix at the disease-free state, `F V⁻¹`, over the infected compartments of every group
 
@@ -2311,8 +2315,9 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         compartment into one of these. At the disease-free state, everyone is in the first
         state (so R0 is in a population with no immunity; with `start=True`, only the infected
         are moved there, for the reproduction number at the start), each group keeping its size, the infected counts are empty, and the other counts
-        that are filled by an inflow (mosquitoes not infected) are at their equilibrium. The matrices are worked out by perturbing each infected
-        compartment in turn. Returns None if nothing moves people into an infected state.
+        that are filled by an inflow (mosquitoes not infected) are at their equilibrium. Given the compartments `y` (one row per compartment, one
+        column per group), the matrix is instead at that state as it is, for the reproduction number at that time (see `ss.Disease.Rt()`).
+        The matrices are worked out by perturbing each infected compartment in turn. Returns None if nothing moves people into an infected state.
         See `ss.Disease.R0()`.
         """
         graph = self.graph
@@ -2334,14 +2339,19 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         if not any(flow.new for flow in self.flows): # Not an infection
             return None
 
-        first = self.state_comps[graph.first.name][0]
-        people = [i for i,comp in enumerate(self.comps) if comp.state.people and i != first and (not start or i in infected)] # At the start, only the infected; otherwise everyone, so immunity at the start is left out
         y_now = self.y # Working out the rates sets the compartments, so they are put back afterwards
-        y0 = self.y.copy()
-        y0[first] += y0[people].sum(axis=0) # Each group keeps its size
-        y0[people] = 0
-        y0[infected] = 0
-        counts = [i for i,comp in enumerate(self.comps) if not comp.state.people and i not in infected]
+        if y is not None: # At a given state, as it is, with the size of each group held, so that one more infected person adds to the infected rather than to the people (R0 × S/N in an SIR)
+            y0 = np.array(y, dtype=float)
+            self.held_n = y0[self.people_comps].sum(axis=0)
+            counts = []
+        else:
+            first = self.state_comps[graph.first.name][0]
+            people = [i for i,comp in enumerate(self.comps) if comp.state.people and i != first and (not start or i in infected)] # At the start, only the infected; otherwise everyone, so immunity at the start is left out
+            y0 = self.y.copy()
+            y0[first] += y0[people].sum(axis=0) # Each group keeps its size
+            y0[people] = 0
+            y0[infected] = 0
+            counts = [i for i,comp in enumerate(self.comps) if not comp.state.people and i not in infected]
         if counts: # Their equilibrium, from the rates at the disease-free state
             self.y = y0
             self.cache.clear()
@@ -2368,6 +2378,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             F[:, b] = [new[c] for c in cells]
             V[:, b] = [-other[c] for c in cells]
         self.y = y_now
+        self.held_n = None
         self.cache.clear()
         return F @ np.linalg.inv(V)
 

@@ -193,7 +193,7 @@ for solver in ['binomial', 'tau', 'gillespie']:
     ss.Sim(measles, total_pop=1_000_000, stop=ss.days(50), solver=solver).run()
 ```
 
-Each says how long it took. Gillespie handled about two million events here in well under a second; with tens of millions of events, use tau-leaping. Agents take time in proportion to the number of agents and the number of steps; a population larger than the number of agents is represented by having each agent stand for several people (see [Branching and rescaling](running_branching.qmd)).
+Each says how long it took. Gillespie handled about two million events here in well under a second; with tens of millions of events, use tau-leaping. Agents take time in proportion to the number of agents and the number of steps; a population larger than the number of agents is represented by having each agent stand for several people (see [Branching and rescaling](running_branching.qmd)). What keeps a run fast, and how to find what slows one down, is in [Getting the most speed](running_performance.qmd).
 
 ## Backends
 
@@ -231,3 +231,47 @@ Two settings of the sim change the numerical method itself rather than the engin
 - [GillesPy2 documentation](https://gillespy2.readthedocs.io/en/latest/): a library of Gillespie and tau-leaping solvers for the same kind of model
 - [Epiverse epidemics](https://epiverse-trace.github.io/epidemics/articles/epidemics.html): deterministic and stochastic compartmental models in R
 - [odin.dust](https://mrc-ide.github.io/odin.dust/): one model compiled as an ODE or as a stochastic discrete-time model
+
+## Appendix: every solver
+
+The properties of each solver, for looking up; the table at the top of the page says what each is for. `ss.solvers.solver_names` lists them, and `ss.solvers.integrators` the ODE's schemes.
+
+| Solver | Deterministic | Time | Settings that apply | Chosen by `'auto'` | Whole run in the kernels | JAX and gradients |
+|---|---|---|---|---|---|---|
+| `'ode'` | Yes | Continuous, integrated in substeps | `integrator=` (`'rk4'` or `'euler'`), `substeps=` | When nothing in the model needs agents | Yes, unless something needs a step of its own | Yes |
+| `'ide'` | Yes | Whole steps, with each dwell time as a conveyor of steps | | No | Yes, as for `'ode'` | Yes |
+| `'binomial'` | No | Whole steps, split into substeps | `substeps=` (1 takes each step whole) | No | Yes, as for `'ode'` | No |
+| `'gillespie'` | No | Continuous, one event at a time (exact) | | No | Yes, as for `'ode'` | No |
+| `'tau'` | No | Continuous, many events at a time (close to exact) | | No | Yes, as for `'ode'` | No |
+| `'abm'` | No | Whole steps | `n_agents=`, `dt=`, `rescale=`, `even_draws=`, `ss.options.crn` | When anything in the model needs agents | No: a step at a time, with compiled passes over the agents | No |
+
+## Appendix: every set of kernels
+
+The kernels are the compiled code under every solver. All the sets give the same numbers, so the choice is about speed and convenience, not the answer; `ss.options.kernels` sets it (or the environment variable `STARSIM_KERNELS`), and `ss.compile_status().summary` says which is in use and whether it is compiled. Speeds and how each is built are in [Solvers and backends](architecture_solvers.qmd#the-kernels) in the architecture section.
+
+| `ss.options.kernels` | What it is | When `'auto'` uses it | Use it for |
+|---|---|---|---|
+| `'auto'` (default) | Rust where it is installed, otherwise Numba, with short compartmental runs taken as plain Python until Numba has compiled | | Every model: there is rarely a reason to change it |
+| `'rust'` | Kernels in Rust, compiled ahead of time and included in the wheels that `pip install starsim` gets | Always, where installed | Every kind of model, with no compiling on the first run: notebooks, dashboards, and clusters where many tasks start at once |
+| `'numba'` | Kernels in Numba, compiled on first use (a few minutes, once per install, kept on disk; `ss.compile()` or `starsim compile` does it ahead of time) | Without Rust: always for agents, and for compartmental runs once compiled, or long enough to be worth compiling first | An install from source without Rust; and comparing with Rust's, since Numba's are the reference. Your own `@ss.jit` code is compiled by Numba with any setting |
+| `'python'` | The compartmental kernels run as plain Python (the passes over agents are still compiled) | Without Rust, for a compartmental run too short to be worth compiling for (with a note) | Stepping through a compartmental run in a debugger; it is slow |
+
+JAX is not one of these sets: it is chosen run by run (`sim.jax`, `True` or `False` to force it), for a long ODE run, many ODE runs with different values, and gradients (`sim.gradient()`, and fits that use them). `ss.options.jax` (`STARSIM_JAX`) is the platform it runs on: `'auto'`, JAX's own choice, which is a GPU if it finds one, or a platform such as `'cpu'` or `'cuda'`; set it before JAX is first used in the session.
+
+## Appendix: what needs agents
+
+The rules that decide which engine runs a model are in `ss.solvers.solver_table()` (all of them are in [Solvers and backends](architecture_solvers.qmd#what-decides-which-engine-runs-a-model) in the architecture section). A model with any of these runs as agents, and a compartmental solver asked for by name raises an `ss.CapabilityError` that says what to do:
+
+```{python}
+import pandas as pd
+pd.set_option('display.max_colwidth', None) # Show each entry in full
+
+rules = ss.solvers.solver_table()
+rules[rules.compartments == 'no'][['what']].style.hide(axis='index')
+```
+
+And a model with any of these runs as agents under `solver='auto'`, but a compartmental solver asked for by name runs it, approximately, with a note (an error with `approx=False`):
+
+```{python}
+rules[rules.compartments == 'if asked'][['what']].style.hide(axis='index')
+```

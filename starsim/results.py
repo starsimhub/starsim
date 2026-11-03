@@ -1112,6 +1112,41 @@ class Result(ss.arrays.BaseArr):
             ax.set_xlabel('Time')
         return ss.return_fig(ax.figure, given=given, **kw.return_fig)
 
+    def map(self, t=None, animate=False, shapes=None, names=None, cmap='Reds', vmin=0, vmax=None, n=None, fps=8, ax=None, **kwargs):
+        """
+        Draw the result on a map of its places: its summary over the run (as `summarize()` gives it), at given times, at several, or as an animation
+
+        The result needs to be stratified by place, with a geography (`sir.stratify(patch=ss.geo.geography(...))`).
+        Each place is drawn as its shape, if the geography has one, or else as a point sized by its population, and colored
+        by the result there. Since places differ in size, a share (e.g. `prevalence`) usually shows the spread better than a count.
+
+        Args:
+            t (date/list): the time (or times) to draw, e.g. `'2025-03-01'`; by default, one map of the summary of each place over the run (the total of a flow, the mean of a ratio, the final value of a stock)
+            animate (bool): draw an animation instead; in a notebook it is shown with controls to play it, and otherwise returned (a Matplotlib `FuncAnimation`)
+            shapes (bool): whether to draw shapes (see `ss.geo.geography.plot()`)
+            names (bool): whether to label the places by name (by default, on a single map with 15 places or fewer)
+            cmap (str): the colormap
+            vmin (float): the value at the bottom of the color scale
+            vmax (float): the value at the top of the color scale (by default, the largest value drawn)
+            n (int): the number of times to draw, evenly across the period when anything happens, instead of the summary (e.g. `n=6`); for an animation, 60 frames by default
+            fps (int): for an animation, the frames per second
+            ax (Axes): for a single map or an animation, draw into these axes
+            kwargs (dict): passed to `ss.plot_args()`, e.g. `figsize`, or `filename` to save it (for an animation, e.g. 'spread.gif' or 'spread.mp4', which needs ffmpeg)
+
+        Examples:
+            ```python
+            towns = ss.geo.geography(names=['a', 'b', 'c'], pop=[50_000, 30_000, 20_000], x=[0, 0, 40], y=[0, 30, 0])
+            S, I, R = ss.states(3)
+            sir = ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(10), init_n=dict(I=ss.by(patch=[10, 0, 0])))
+            sir.stratify(patch=towns, mobility=ss.geo.gravity(away=0.01))
+            sim = ss.Sim(sir, start='2025-01-01', stop='2025-07-01').run()
+            sim.results.sir.prevalence.map() # The mean prevalence in each town over the run
+            sim.results.sir.prevalence.map(n=6) # Six maps, from the start of the outbreak to its end
+            sim.results.sir.prevalence.map(animate=True, filename='spread.gif') # As an animation, saved to a file
+            ```
+        """
+        return ss.geo.draw_map(self, t=t, animate=animate, shapes=shapes, names=names, cmap=cmap, vmin=vmin, vmax=vmax, n=n, fps=fps, ax=ax, **kwargs)
+
     def _draw(self, ax, kw, label=None, lines=False, floor=True, colors=None):
         """
         Draw the result into axes, for `plot()` and `ss.Results.plot()`, with the arguments from `ss.plot_args()`; returns whether it drew several lines that need a legend
@@ -1162,6 +1197,14 @@ class Result(ss.arrays.BaseArr):
         if (self.values.min() >= 0) and (ax.get_ylim()[0] < 0):
             ax.set_ylim(bottom=0)
         return
+
+
+def period_totals(times):
+    """ What the totals of a flow over the periods of its data are, for the titles of plots: e.g. 'weekly totals, as in the data' """
+    days = np.median(np.diff([float(t) for t in times]))*365.25 if isinstance(times[0], ss.date) else None # Dates are in years
+    names = {1:'daily', 7:'weekly', 14:'fortnightly', 30.4:'monthly', 365.25:'yearly'}
+    name = next((name for length,name in names.items() if days is not None and abs(days/length - 1) < 0.1), None)
+    return f'{name} totals, as in the data' if name else 'totals over each period of the data'
 
 
 def resamplable(res, kwargs=None):
@@ -1449,7 +1492,7 @@ class Results(ss.ndict):
             elif isinstance(val, Result):
                 yield None, key, val
 
-    def plot(self, key=None, fig=None, data=None, label=None, title=None, lines=False, legend=True, show_skipped=False, annualize=False, log=False, **kwargs):
+    def plot(self, key=None, fig=None, data=None, label=None, title=None, lines=False, legend=True, show_skipped=False, annualize=False, log=False, marks=None, **kwargs):
         """
         Plot the results, each in its own axes; see `sim.plot()` and `msim.plot()`
 
@@ -1466,6 +1509,7 @@ class Results(ss.ndict):
             show_skipped (bool): show even results that are not plotted by default
             annualize (bool): if True, resample the results to annual values first (each by its `summarize_by`; see `ss.Result.resample()`)
             log (bool): if True, use a log scale for the y axes
+            marks (dict): times to mark on each axes, by scenario (None for those of every scenario, in gray): a time as a dashed line, a (start, stop) pair as a shaded span (see `intervention_marks()`)
             kwargs (dict): known arguments (e.g. figsize, font, do_show, or filename) split between the plotting dicts; see `ss.plot_args()`
 
         Returns the figure, unless it is shown in Jupyter (see `ss.return_fig()`); a figure given is not shown, unless `do_show=True`.
@@ -1513,9 +1557,11 @@ class Results(ss.ndict):
                     group[0]._floor(ax)
                 if len(group) > 1 or group[0].columns is not None: # One line per result, or per column
                     ax.legend(**kw.legend)
+                if marks and not annualize and group[0].timevec is not None:
+                    draw_marks(ax, marks, colors)
                 format_axes(ax, group[0])
                 if summed:
-                    ax.set_title(ax.get_title() + '\n(total over each period of the data)')
+                    ax.set_title(ax.get_title() + f'\n({period_totals(entry[2])})')
                 if len(group) > 1: # Titled by what the results have in common
                     ax.set_title(group[0].module if len({res.module for res in group}) == 1 else '')
             if legend and many: # Every scenario, even if the first axes have only some of them
@@ -1534,6 +1580,30 @@ class Results(ss.ndict):
             return None
         cycle = plt.rcParams['axes.prop_cycle'].by_key().get('color', ['k'])
         return {scenario:cycle[i % len(cycle)] for i,scenario in enumerate(scenarios)}
+
+
+def intervention_marks(sim):
+    """ When the interventions and modifiers of a sim act, for marking on plots: those with fixed times (see `ss.Delivery.marks()` and `ss.modify.marks()`; an intervention written as code can define its own `marks()`) """
+    mods = list(sim.interventions.values()) + [m for mods in sim.modifiers.values() for m in mods if isinstance(m, ss.modify)]
+    out = []
+    for mod in {id(m):m for m in mods}.values():
+        marks = getattr(mod, 'marks', None)
+        for mark in (marks() if callable(marks) else []):
+            if mark not in out:
+                out.append(mark)
+    return out
+
+
+def draw_marks(ax, marks, colors=None):
+    """ Mark times on axes: a time as a dashed line, a (start, stop) pair as a shaded span, in each scenario's color (gray for those of every scenario; see `Results.plot()`) """
+    for scenario,items in marks.items():
+        color = (colors or {}).get(scenario, 'k')
+        for mark in items:
+            if isinstance(mark, tuple):
+                ax.axvspan(*mark, color=color, alpha=0.08, lw=0, zorder=0)
+            else:
+                ax.axvline(mark, color=color, ls='--', lw=1.2, alpha=0.8 if scenario is not None else 0.5, zorder=1.5) # Above the bands of scenarios, below their lines
+    return
 
 
 def summary_funcs(how, results):

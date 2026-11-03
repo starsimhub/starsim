@@ -616,6 +616,65 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
             raise ValueError(errormsg)
         return ngm if matrix else float(np.max(np.abs(np.linalg.eigvals(ngm))))
 
+    def Rt(self):
+        """
+        The reproduction number over the course of a run, as a result: the number one infectious person infects at each time point
+
+        This is R0 at the state of the run at each time point: the largest eigenvalue of the next-generation matrix with the
+        people in each state of each group as they were then (so fewer when some are immune), and the rates as they were then
+        (so lower while an `ss.modify()` halves β). It falls below 1 as an outbreak peaks. As in `R0()`, the model is laid out
+        as an ODE, a copy of the sim with `solver='ode'`, stepped alongside the run; a run as agents is taken by the counts in
+        each state of each group. A state with several compartments (the stages of a dwell time) is split among them as in the
+        copy; and the copy is what an intervention triggered by the state of the run sees.
+
+        Example:
+            ```python
+            S, I, R = ss.states(3)
+            sir = ss.Disease(infection=S >> I @ 0.3*I, recovery=ss.Transition(I, R, dur=10), name='sir')
+            sim = ss.Sim(sir, total_pop=10_000, stop=150).run()
+            sim.diseases.sir.Rt().plot() # From 3 at the start, below 1 after the peak
+            ```
+        """
+        sim = self.sim
+        if sim is None or not sim.results_ready:
+            errormsg = f'"{self.name}" has no run to take R over time from: run the sim first, e.g. sim.run(), then sim.diseases.{self.name}.Rt() (for the start alone, see R0())'
+            raise RuntimeError(errormsg)
+        copy = sim.new(solver='ode', verbose=0).init()
+        engine = copy.diseases[self.name].engine
+        results = sim.results[self.name]
+        stored = {} # The people in each state of each group at each kept time point
+        group_ti = None
+        for name in engine.state_comps.keys():
+            res = results.get(name) if name in results else None
+            if res is None:
+                continue
+            elif getattr(res, 'strata', None) is not None:
+                stored[name], group_ti = res.strata, res.group_ti
+            elif engine.n_groups == 1:
+                stored[name] = np.asarray(res.values, dtype=float)[:, None]
+        if not stored:
+            errormsg = f'"{self.name}" keeps no counts of its states by group, so its R over time cannot be worked out'
+            raise ValueError(errormsg)
+        tis = np.arange(copy.t.npts) if group_ti is None else np.asarray(group_ti)
+        values = np.full(len(tis), np.nan)
+        for row,ti in enumerate(tis):
+            while copy.t.ti <= ti and copy.t.ti < copy.t.npts - 1: # The step that starts at this time point, so its rates are those of the run's
+                copy.run_one_step()
+            y = engine.y.copy()
+            for name,vals in stored.items():
+                comps = engine.state_comps[name]
+                now = y[comps]
+                total = now.sum(axis=0)
+                share = np.divide(now, total, out=np.full_like(now, 1/len(comps)), where=total > 0)
+                y[comps] = share*vals[row]
+            ngm = engine.next_generation(y=y)
+            if ngm is None:
+                errormsg = f'Nothing in "{self.name}" moves people into an infected state, so it has no R'
+                raise ValueError(errormsg)
+            values[row] = float(np.max(np.abs(np.linalg.eigvals(ngm))))
+        timevec = sim.results.timevec[tis]
+        return ss.Result(name='Rt', label=f'R over time ({self.name})', module=self.name, scale=False, timevec=timevec, values=values)
+
     @ss.required()
     def init_pre(self, sim):
         """ Link the disease to the sim, create its engine and objects, initialize results, and start its infection log if there is an `ss.infection_log` analyzer; see Module.init_pre() for details

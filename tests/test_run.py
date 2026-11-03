@@ -66,6 +66,11 @@ def test_restarted():
     sir = ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(8), init=dict(I=0.01), name='sir')
     msim = ss.Sim(sir, unit='day', stop=30, total_pop=1000, solver='binomial', verbose=0).run(n_runs=4)
     assert len(msim.sims.runners) == 1
+
+    # A restart starts from the swept starting values, including init_prev (which a restart once kept as it was)
+    sir = ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(8), init_prev=0.001, name='sir')
+    sweep = ss.parallel(ss.Sim(sir, total_pop=10_000, stop=30, verbose=0), pars=dict(init_prev=[0.001, 0.01]))
+    assert np.allclose(sweep.results.sir.I.values[:, 0], [10, 100])
     return
 
 
@@ -178,7 +183,7 @@ def test_other():
     averted = msim.summarize(baseline='Base').loc[('sir_infection', 'Vaccine')]
     paired = msim.results.sir.infection.diff('Base').Vaccine.summarize()
     assert averted['median'] < 0 and np.isclose(float(averted['median']), np.median(paired), rtol=1e-3) # The paired differences, as msim.diff() gives
-    ax = next(ax for ax in msim.plot().axes if 'infection' in ax.get_title())
+    ax = next(ax for ax in msim.plot(show_interventions=False).axes if 'infection' in ax.get_title())
     assert len(ax.collections) >= 2 and all(len(line.get_xdata()) == len(weekly) for line in ax.lines) # The data, and the model summed over its weeks
     return s1,s2
 

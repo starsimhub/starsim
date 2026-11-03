@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Written by AI
+  note: Written by AI; the intervention, fitting, and uncertainty examples made more realistic by AI
 ---
 
 This page is a ten-minute tour of Starsim. It builds one model step by step: a simple epidemic, then the same epidemic with age groups, an intervention, data to fit it to, and many runs to show the uncertainty. Each step is a few lines of code, and each step says what the code means in the terms of an epidemiological model. The parameters are illustrative, not estimates for any particular disease or setting.
@@ -70,14 +70,15 @@ sim.describe()
 
 ## Age groups and contacts
 
-Most respiratory infections spread differently between age groups. `stratify()` splits each state by age: here into three groups, with the share of the population in each. `ss.contacts()` says how much each group mixes with each other one: a contact matrix, in which row *i*, column *j* is the number of contacts a day that a person in group *i* has with people in group *j*. With contacts, β is the chance of infection per contact. This model also has an outcome, `cases`: the infections that are reported, here one in five.
+Most respiratory infections spread differently between age groups. `stratify()` splits each state by age: here into three groups, with the share of the population in each. `ss.contacts()` says how much each group mixes with each other one: a contact matrix, in which row *i*, column *j* is the number of contacts a day that a person in group *i* has with people in group *j*. With contacts, β is the chance of infection per contact. The infectious period is a parameter too, `dur_inf`, so that it can be changed later. This model also has an outcome, `cases`: the infections that are reported, here one in five.
 
 ```{python}
 S, I, R = ss.states('S I R')
 beta = ss.par(0.02, bounds=[0.005, 0.1]) # A parameter that can be fitted, between these bounds
+dur_inf = ss.par(ss.days(10))            # The mean infectious period
 
 infection = S >> I @ beta*I
-recovery  = I >> R @ ss.days(10)
+recovery  = I >> R @ dur_inf
 cases     = ss.outcome(0.2*infection) # One infection in five is reported
 sir = ss.Disease(infection, recovery, cases, init_prev=0.0001)
 sir.stratify(age={0: 0.3, 15: 0.6, 65: 0.1}) # Ages 0-14, 15-64, and 65+, with the share of people in each
@@ -93,10 +94,10 @@ Every state and transition has a result of the same name (`S`, `I`, `R`, `infect
 
 ## Interventions
 
-An intervention changes the course of the epidemic from some point on. Here are two: vaccinating 80% of people aged 65 and over on 1 February, with a vaccine that cuts their chance of infection by 90%, and masks, which cut transmission by 40% from the same day:
+An intervention changes the course of the epidemic from some point on. Here are two, both starting on 1 February, as the epidemic grows towards its peak: vaccinating 80% of children under 15, who have the most contacts and so carry the most transmission, with a vaccine that cuts their chance of infection by 90%; and masks, which cut transmission by 40%:
 
 ```{python}
-vaccination = ss.vaccinate(efficacy=0.9, where=sir.age >= 65, coverage=0.8, at='2025-02-01')
+vaccination = ss.vaccinate(efficacy=0.9, where=sir.age < 15, coverage=0.8, at='2025-02-01')
 masks = ss.modify(sir.pars.beta, multiply=0.6, start='2025-02-01')
 ```
 
@@ -109,47 +110,62 @@ for label, intervention in scenarios.items():
     sims[label] = ss.Sim(sir, interventions=intervention, **pars)
 
 msim = ss.parallel(sims)
-msim.plot()
+msim.plot(['sir.I', 'sir.cases'])
 ```
 
-`msim.summarize()` gives each result over the whole run (the total of a flow, such as infections, and the final value of a state) for each scenario:
+`msim.summarize()` gives each result over the whole run (the total of a flow, such as infections, and the final value of a state) for each scenario; here, the infections:
 
 ```{python}
-msim.summarize()
+msim.summarize('sir.infection')
 ```
+
+Each prevents about a quarter of the infections, and halves the peak or more. Since R0 is about 3 without them, two thirds of people are still infected in the end with either; what they do most is flatten and delay the epidemic, which matters for the number who are ill at once.
 
 ## Data and fitting
 
-A model is fitted by finding the values of its parameters that make its results match data. To try this where the right answer is known, make data from the model itself: run it with β = 0.025, and draw weekly counts of cases from it, with random noise as in real reporting. The noise is drawn with the true sim's own random seed (`rand_seed=2`), not the default seed of the sims being fitted, since the noise in real data has nothing to do with the model's.
+A model is fitted by finding the values of its parameters that make its results match data. To try this where the right answer is known, make data from a model: run it with β = 0.025, and draw weekly counts of cases from it, with random noise as in real reporting. Real data never come from exactly the model being fitted, so here the data come from a slightly different one, in which the infectious period varies less from person to person (an Erlang distribution with 3 stages, rather than the exponential of the model). The noise is drawn with the true sim's own random seed (`rand_seed=2`), not the default seed of the sims being fitted, since the noise in real data has nothing to do with the model's.
 
 ```{python}
-truth = ss.Sim(sir, pars=dict(beta=0.025), rand_seed=2, **pars)
+truth = ss.Sim(sir, pars=dict(beta=0.025, dur_inf=ss.erlang(k=3, mean=ss.days(10))), rand_seed=2, **pars)
 truth.run()
 data = truth.to_data('cases', resample='week')
 data.head()
 ```
 
-Data is matched to results by name: the column `cases` is compared with the result `cases`, and since the data is weekly, each row is compared with the total of the model's cases over its week. `sim.fit()` then fits every parameter that has bounds (here, β) to every result that has data:
+A forecast is made from the data so far. Here, the first four weeks of cases, up to 1 February, are the data, and the sim stops when they do. Data is matched to results by name: the column `cases` is compared with the result `cases`, and since the data is weekly, each row is compared with the total of the model's cases over its week. `sim.fit()` then fits every parameter that has bounds (here, β) to every result that has data:
 
 ```{python}
-sim = ss.Sim(sir, data=data, **pars)
+early = data[data.date < '2025-02-01']
+sim = ss.Sim(sir, data=early, **(pars | dict(stop='2025-02-01')))
 fit = sim.fit()
 fit.plot()
 ```
 
-The plot shows the model's cases with the starting value of β (before) and the fitted one (after), against the data. As in the fit, the model's cases are added up over each week, so that each point is compared with a week of data. `fit.pars` has the values found: β is close to the 0.025 the data was made with.
+The plot shows the model's cases with the starting value of β (before) and the fitted one (after), against the data. `fit.pars` has the values found:
 
 ```{python}
 fit.pars
 ```
 
-## Uncertainty and many runs
+The fitted β is higher than the 0.025 the data was made with: the fitted model's exponential infectious period gives a slower growth for the same β than the data's less variable one, so it makes up for it with more transmission. A fit finds the values that make the model match the data, which are only the true values when the model is the true one.
 
-The ODE gives one answer: the epidemic as expected on average. A real epidemic varies by chance from one outbreak to the next, and more so in a small population or when there are few cases. To see this, run the model as a stochastic model, in which the number of people who move between states each day is random, and run it many times. `solver='binomial'` runs the same model this way (as a chain-binomial model), and `n_runs=20` runs it 20 times, each with its own random seed:
+`fit.project()` runs the fitted model on, here to 1 July, for the forecast; given all the data, its plot shows the cases that were still to come:
 
 ```{python}
-msim = fit.sim.run(solver='binomial', n_runs=20)
-msim.plot()
+forecast = fit.project(stop='2025-07-01', data=data)
+forecast.plot('sir.cases')
+```
+
+From the first four weeks alone, the forecast gets the timing and size of the peak about right.
+
+## Uncertainty and many runs
+
+The ODE gives one answer: the epidemic as expected on average. A real epidemic varies by chance from one outbreak to the next, and more so in a small population or when there are few cases. To see this, run the fitted model in a town of 20,000, which starts with 2 infectious people (the same 0.01%), as a stochastic model, in which the number of people who move between states each day is random. `solver='binomial'` runs the same model this way (as a chain-binomial model), and `n_runs=20` runs it 20 times, each with its own random seed:
+
+```{python}
+town = ss.Sim(sir, pars=fit.pars, **(pars | dict(total_pop=20_000)))
+msim = town.run(solver='binomial', n_runs=20)
+msim.plot(['sir.I', 'sir.cases'])
 ```
 
 The plot shows the median of the runs, and the range that holds 95% of them. `msim.summarize()` gives the same for each result over the whole run: the median, the low and high ends of that range, the mean, and the standard deviation:
@@ -157,6 +173,8 @@ The plot shows the median of the runs, and the range that holds 95% of them. `ms
 ```{python}
 msim.summarize()
 ```
+
+In every run, nearly everyone in the town is infected, so the size of the epidemic hardly varies; what chance changes is when it happens. In these runs, the peak comes anywhere from 3 to 14 February, depending on how quickly the first few chains of transmission took off.
 
 The model can also be run as agents, one for each person (`solver='abm'`), which is what a model needs when people differ in ways that compartments can't hold, such as their contacts in a network. The [agent-based tutorials](tutorials/a1_diseases.qmd) show how.
 

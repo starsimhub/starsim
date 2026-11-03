@@ -108,7 +108,7 @@ print('Ages after:', ppl.age[women])
 
 ## Indexing in a module
 
-The rules are the same inside a [module written as code](building_modules.qmd), where indexing is used most: at each step, a module picks out the agents it acts on, by UID, and reads or changes their values. Here an analyzer records the mean age of the people infectious with measles at each step. It finds them with the disease's `I.uids`, reads their ages by UID, and checks for an empty selection, since nobody may be infectious:
+The rules are the same inside a [module written as code](building_modules.qmd), where indexing is used most: at each step, a module picks out the agents it acts on, by UID, and reads or changes their values. Here an analyzer records the mean age of the people infectious with measles at each step, in a population where children meet at school (10 contacts a day, for ages 5 to 15) as well as in the community (2 a day). It finds them with the disease's `I.uids`, reads their ages by UID, and checks for an empty selection, since nobody may be infectious:
 
 ```{python}
 import numpy as np
@@ -129,14 +129,16 @@ class AgeOfInfectious(ss.Analyzer):
         return
 
 S, I, R = ss.states('S I R')
-measles = ss.Disease(S >> I @ 1.9*I, I >> R @ ss.days(8), init_prev=0.001, name='measles')
-sim = ss.Sim(measles, analyzers=AgeOfInfectious(), n_agents=5000, stop=ss.days(60), verbose=0)
+measles = ss.Disease(S >> I @ 0.04*I, I >> R @ ss.days(8), init_prev=0.01, name='measles')
+school = ss.RandomNet(name='school', n_contacts=10, age_range=[5, 15])
+community = ss.RandomNet(name='community', n_contacts=2)
+sim = ss.Sim(measles, networks=[school, community], analyzers=AgeOfInfectious(), n_agents=5000, stop=ss.days(100), verbose=0)
 sim.run()
-print('Mean age of everyone:', sim.people.age.mean())
-print('Mean age of the infectious, by day:', sim.results.ageofinfectious.mean_age[:10])
+print('Mean age of everyone:', sim.people.age.mean().round(1))
+print('Mean age of the infectious, every 10 days:', sim.results.ageofinfectious.mean_age[::10].round(1))
 ```
 
-With everyone mixing equally, infection has nothing to do with age, so the mean age of the infectious stays close to that of everyone. [Analyzers](interventions_analyzers.qmd) and [Custom modules](building_modules.qmd) have more examples of modules that index agents.
+The first cases are of any age, but within two or three weeks the mean age of the infectious falls to about 17, since most transmission is at school; later, as the children become immune, more of the cases are adults infected in the community, and it rises again. [Analyzers](interventions_analyzers.qmd) and [Custom modules](building_modules.qmd) have more examples of modules that index agents.
 
 ## Indexing that doesn't
 

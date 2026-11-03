@@ -349,7 +349,7 @@ class Delivery(ss.products.EventSource, Intervention):
             of the ones before (e.g. `[due, ss.ppl.age]`, those due first, and among them the oldest); other ties are broken at random
         queue (bool/dur): what happens to people not served for lack of capacity (agents only): None (the default), they are lost; True, they wait until
             served; a duration, they wait at most that long, and those still waiting then are the outcome `never_ran`. Those waiting are served
-            before anyone newly reached in their class (longest first), and leave the queue if they stop being eligible (`left`)
+            before anyone newly reached in their class (longest first), and leave the queue if they stop being eligible
         delay (dur/Dist): for a triggered step, the time from the trigger to delivery (agents only): a duration, or a distribution of
             durations, drawn per person (e.g. `ss.uniform(ss.months(1), ss.months(8))`). The people triggered receive it then if they are
             eligible then (who='s condition, and coverage=, are applied when it is due); someone waiting is not triggered again
@@ -1008,6 +1008,20 @@ class Delivery(ss.products.EventSource, Intervention):
             return self.in_compartments.follow(sel, chosen, changes, mover)
         self.shift(sel, changes)
         return chosen
+
+    def marks(self):
+        """
+        When the delivery acts, as times on the results' time axis, for marking on plots (see `sim.plot()`): a list of times
+        (for each round, up to 10 of them) or of (start, stop) pairs (for routine delivery, or more rounds, from a start or
+        to a stop within the run); none for delivery on an event, a condition, or a function, whose times are not fixed
+        """
+        if self.trigger is not None or self.when is not None or self.deliver is not None or self.round_tis is None and self.start is None and self.stop is None:
+            return []
+        timevec = self.sim.results.timevec
+        tis = sorted(ti for ti in self.round_tis or [] if ti < len(timevec))
+        if self.round_tis is not None and len(tis) <= 10:
+            return [timevec[ti - 1] for ti in tis] # Step ti starts at time point ti-1
+        return [(timevec[self.ti_start - 1], timevec[min(self.ti_stop, len(timevec)) - 1])]
 
     #%% Stepping
 

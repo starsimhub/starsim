@@ -1,0 +1,123 @@
+---
+title: Getting the most speed
+jupyter: python3
+authorship:
+  human: 0
+  ai: 100
+  note: Written by Claude from measurements of the kernels, JAX, and the agents, made while speeding them up
+---
+
+Most Starsim models run fast with no help: a compartmental model of a year in daily steps reruns in under a millisecond, and agents take time in proportion to the number of agents and steps. When a run is slower than that, it is nearly always for one of a few reasons, and this page covers how to find them and what to do. How the solvers and backends work is in [Solvers and backends](running_solvers.qmd).
+
+```{python}
+import starsim as ss
+
+S, I, R = ss.states('S I R')
+beta = ss.par(0.3, bounds=[0.1, 0.5])
+sir = ss.Disease(infection=S >> I @ beta*I, recovery=I >> R @ ss.days(10), init_n=dict(I=100), name='sir')
+pars = dict(total_pop=1_000_000, start='2026-01-01', stop='2026-12-31', dt=ss.days(1), solver='ode', verbose=0)
+```
+
+## A compartmental run in one call
+
+A compartmental run is fastest when the compiled kernels can take every step in one call, with nothing in Python between the steps. Anything that needs Python at each step takes the run a step at a time, which is typically 30 to 100 times slower. `sim.kernel_reason()` says why a run is taken a step at a time, or gives `None` if it is not:
+
+```{python}
+masks = ss.modify(sir.pars.beta, multiply=0.75, where=sir.I.n >= 20_000) # Fewer contacts while prevalence is high
+sim = ss.Sim(sir, interventions=masks, **pars).init()
+print(sim.kernel_reason())
+
+late = ss.modify(sir.pars.beta, multiply=0.75, where=sir.I.n >= 20_000, until=sir.I.n <= 10_000) # As above, ending at a lower level
+print(ss.Sim(sir, interventions=late, **pars).init().kernel_reason())
+```
+
+The first runs in one call: a condition on a count is worked out within the kernels as part of the rate. The second needs to remember whether the measure is on, so it is taken a step at a time. To be told rather than slowed, give the sim `nopython=True`, as with Numba: a run that would fall back to Python then raises `ss.CapabilityError`, with the reason.
+
+```{python}
+sim = ss.Sim(sir, interventions=masks, nopython=True, **pars).run() # Fine: the whole run is in the kernels
+```
+
+What stays in the kernels, and what does not:
+
+| In the kernels | A step at a time |
+|---|---|
+| Parameters that vary in time (`ss.timeseries`, `ss.seasonal`) | A parameter that is a function of the sim (`lambda sim: ...`), called at each step |
+| `ss.modify()` with dates (`start=`, `stop=`), `when=` (a condition on time alone), `where=` on a stratum (or on a state, for a transition), or `where=` comparing the module's counts (`I.n >= 1000`) | `ss.modify()` with `until=` or `hold=`, a function as its amount, or `where=` as a function of the sim |
+| Deliveries such as `ss.vaccinate()` at fixed times or on a schedule, including coverage given as a rate (`ss.peryear(0.5)`) | Deliveries with `where=` on a count, and `ss.treat()` |
+| Outcomes, including those with a delay | Triggers (`ss.on(...)`) |
+| Births and deaths declared with `ss.birth()` and `ss.death()` | Interventions, analyzers, or connectors written as code with a `step()` of their own |
+| `verbose=0` or `1` | `verbose=2`, `until=` and `profile=True` in `sim.run()`, and diagnostics |
+
+A module written as code is always taken a step at a time, since its `step()` is Python. If it only needs to act at a few times, or on a condition that one of the declared forms above can say, writing it that way keeps the run in the kernels.
+
+## Many runs
+
+Running the same model many times is fastest with `ss.parallel()` (or `sim.run(n_runs=...)`): with `n_runs=`, `pars=`, or `priors=`, a sim that runs in one call is built once, and all its runs are taken together by the kernels. A loop that builds each sim again, such as `[sim.new(rand_seed=i).run() for i in range(100)]`, rebuilds the model each time, which takes about 10 milliseconds, many times the run itself.
+
+```{python}
+msim = ss.parallel(ss.Sim(sir, **pars), pars=dict(beta=[0.2, 0.3, 0.4]), n_runs=10, parallel=False) # 30 runs, taken together
+```
+
+For the same reason, rerun a sim with `sim.restart()` and `sim.run()` (or just `sim.run()` again on a finished sim) rather than `sim.new()`, unless the model itself has changed. Fitting does this already.
+
+## Substeps
+
+The ODE and the chain binomial take as many substeps in each time step as they need, by default: enough that no compartment turns over by more than a quarter in one. Working out how many costs about as much as a substep itself. `substeps=1` takes each step whole: it changes the results by an amount that grows with the step (of order the rates times `dt`), so it suits models whose rates are slow compared with the step, and models that are written in discrete time. It makes little difference to the kernels, but a run in JAX takes about half the time.
+
+## JAX and gradients
+
+How Starsim chooses between the kernels and JAX is in [Solvers and backends](running_solvers.qmd#backends). On a CPU, a small model is faster in the kernels: a run of a year of an SIR in daily steps takes about 0.3 ms in the kernels and about 18 ms in JAX, since JAX's cost for each step of a loop dominates when each step is a handful of numbers. JAX gains on large models, on a GPU, and on many runs at once. Starsim chooses for you; `sim.jax = True` or `False` forces it. For a fit, `method='nelder-mead'` works with the kernels alone, and is chosen by default for one or two fitted parameters; L-BFGS-B uses gradients from JAX.
+
+## Agents
+
+An agent-based run takes time in proportion to the number of agents and the number of steps. For speed:
+
+- **Use fewer agents than people.** `total_pop=` with a smaller `n_agents=` lets each agent stand for several people (see [Branching and rescaling](running_branching.qmd)).
+- **Use compartments if nothing needs individuals.** If a model needs no network, no per-person values, and no histories, `solver='ode'` or a stochastic compartmental solver is far faster at any population size.
+- **Threads.** The passes over the agents of a large sim (more than about 200,000 agents) use several threads; `ss.options.threads` sets how many, and `ss.options.num_threads` the threads of NumPy's linear algebra. When running many sims at once on one machine, one thread each (`SCIRIS_NUM_THREADS=1`) avoids them competing for the cores.
+- **Common random numbers.** `ss.options.crn = False` gives faster draws, at the cost of runs no longer matching across scenarios agent for agent (see [Random numbers](mechanics_random.qmd)).
+
+## Code of your own
+
+A module written as code runs its `step()` in Python, once a step. Starsim then stays out of the way: a compartmental model written as a module that holds its own numbers runs a year of daily steps in about a millisecond, about as fast as the same model declared, though it can't be taken in one call to the kernels, run in JAX, or differentiated. What decides the speed of your own code is how it handles the people.
+
+- **Work on arrays, not people.** A loop over the agents in Python is many times slower than the same work on the whole array at once (see [Array indexing](mechanics_indexing.qmd)).
+- **Compile a loop that can't be written as array operations.** `@ss.jit` compiles a function with Numba, keeps it on disk between sessions, and says why if it can't (see [Custom modules](building_modules.qmd)). Called with JAX arrays, the same function is traced by JAX instead, so it can be differentiated. A function compiled with Numba's own `@nb.njit` works as well, and is as fast.
+- **Compiled code is compatible with either set of kernels.** Your functions are compiled with Numba whether Starsim's own kernels are Rust or Numba, and the two don't interact: Starsim passes NumPy arrays to your code, and takes NumPy arrays back.
+- **Draw random numbers from Starsim's distributions** (`ss.bernoulli`, `ss.normal`, and the others) rather than `np.random`, so that runs stay reproducible and scenarios share their random numbers (see [Random numbers](mechanics_random.qmd)); their draws are compiled already.
+
+As an example, a module that updates a value for each of 50,000 agents at each step, run for 20 steps alongside an SIR on a random network:
+
+| How the update is written | Whole run |
+|---|---|
+| A loop over the agents in Python | 0.38 s |
+| NumPy operations on the whole array | 0.073 s |
+| The same loop, with `@ss.jit` | 0.062 s |
+| The same loop, with `@nb.njit` | 0.058 s |
+| No such module | 0.053 s |
+
+The compiled loop costs about a tenth of the rest of the run, close to what Starsim's own compiled code would take for the same work. Fused kernels are faster still for a compartmental model, since the whole run is one call, but for agents most of the time is in the network and the disease, which are compiled already.
+
+## Finding where the time goes
+
+`sim.run(profile=True)` records how long each part of each step takes, and `sim.profile()` how long each line of a function takes; [Profiling and debugging](running_debugging.qmd#profiling) shows how to use them. Profiling takes the run a step at a time, so use it to find the slow part, not to time the run; `sim.elapsed` gives the seconds of the last run.
+
+## Compiling first
+
+If a first run after installing is slow, the Numba kernels are being compiled; `ss.compile()` does it once ahead of time (see [Solvers and backends](running_solvers.qmd#backends)).
+
+## Appendix: every option
+
+Starsim's global options are in `ss.options`: set one for the session with `ss.options(threads=1)`, for a block with `with ss.options.context(threads=1):`, or before Python starts with the environment variable `STARSIM_` and the option's name in capitals (`STARSIM_THREADS=1`), which is the way to set it for every worker or every task of a cluster job. `ss.options.disp()` shows the current values, and `ss.options.help(detailed=True)` each option's value, default, and variable. Here is each option with its description:
+
+```{python}
+import pandas as pd
+pd.set_option('display.max_colwidth', None) # Show each entry in full
+
+rows = {key: dict(variable=f'STARSIM_{key.upper()}', description=ss.options.optdesc[key]) for key in ss.options.keys()}
+pd.DataFrame.from_dict(rows, orient='index')
+```
+
+Those that affect speed or memory are `threads` and `num_threads` (threads for the agents and for linear algebra), `kernels` and `jax` (which code runs the solvers; see [Solvers and backends](running_solvers.qmd#appendix-every-set-of-kernels)), `crn` (faster draws for agents, without common random numbers), `keep_times` and `max_joint` (memory), `precision` (32, the default, keeps agents' values as 32-bit floats, and 64 as 64-bit, which doubles their memory), and `max_steps` (when to warn that a run is long). Starsim also reads `SCIRIS_NUM_THREADS`, as it reads `STARSIM_NUM_THREADS`, for the threads of linear algebra (see [Deployment](running_deploy.qmd#threads-for-linear-algebra)), and `STARSIM_CHECK_COUNTS` and `STARSIM_CHECK_DRAWS`, which turn on checks of the agent engine for testing it, at a cost in speed.
+
+The settings of a sim that affect speed or memory are `n_agents` and `pop_scale`, `dt` and `substeps`, `solver`, `nopython`, `results` (which results are kept by group), and `people_results` (whether the people's results are recorded at each step); they are all in [Running sims](running_sim.qmd#appendix-every-sim-setting). The rules that decide whether a compartmental run is taken in one call are in [Solvers and backends](running_solvers.qmd#appendix-what-needs-agents), as `ss.solvers.solver_table()`.

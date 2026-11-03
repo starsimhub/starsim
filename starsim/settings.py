@@ -131,7 +131,7 @@ class Options(sc.obj):
         optdesc.reticulate = 'Whether a NumPy integer array indexes a state by UIDs, as for a module written in R (through reticulate), which cannot keep ss.uids'
         options.reticulate = sc.parse_env('STARSIM_RETICULATE', False, bool)
 
-        optdesc.precision = 'Set arithmetic precision'
+        optdesc.precision = 'The precision of the floating-point arrays of agents and kernels: 32 (the default, float32) or 64 (float64)'
         options.precision = sc.parse_env('STARSIM_PRECISION', 32, int)
 
         optdesc.threads = 'The number of threads that the passes over the agents of a large sim, and the particles of a particle filter, take: 0 (default) for as many as Numba has (by default, one per core), 1 for none. Each worker of ss.parallel() and of a calibration takes one, since the workers share the cores already'

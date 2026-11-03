@@ -3,7 +3,7 @@ Data by place: ages, populations, birth and death rates, contact matrices, and a
 
     ss.data.age('Kenya')                    # The age_data of ss.People: counts by 5-year age group ('world' needs no download)
     ss.data.population('Kenya', year=2020)  # By age and sex (also for a US state, e.g. 'United States:Massachusetts')
-    ss.data.rates('Kenya', 'deaths')        # Birth, death, or fertility rates, by year
+    ss.data.rates('Kenya', 'deaths')        # Birth, death, fertility, or net migration rates, by year
     ss.data.contacts('Kenya', layer='home') # A contact matrix by age
     ss.data.geography('Kenya', level=1)     # Administrative units, with populations and positions
 
@@ -234,11 +234,11 @@ def geography(place, level=1, year=None, places=None):
 
 def rates(place, which, revision=None):
     """
-    The UN World Population Prospects birth, death, or fertility rates of a named place, for `ss.Births(birth_rate='Kenya')`, `ss.Deaths(death_rate='Kenya')`, and `ss.Pregnancy(fertility_rate='Kenya')`
+    The UN World Population Prospects birth, death, fertility, or net migration rates of a named place, for `ss.Births(birth_rate='Kenya')`, `ss.Deaths(death_rate='Kenya')`, and `ss.Pregnancy(fertility_rate='Kenya')`
 
     Args:
         place (str): a country, by name or code
-        which (str): 'births' (crude birth rates per 1,000, by year), 'deaths' (death rates per person, by year, sex, and age), or 'fertility' (age-specific fertility rates per 1,000 women, by year and 5-year age group)
+        which (str): 'births' (crude birth rates per 1,000, by year), 'deaths' (death rates per person, by year, sex, and age), 'fertility' (age-specific fertility rates per 1,000 women, by year and 5-year age group), or 'migration' (crude net migration rates per 1,000, by year: arrivals less departures)
         revision (str): the WPP revision (default: the latest bundled)
     """
     ssd = provider()
@@ -325,7 +325,7 @@ def contacts(place, source=None, layer='all'):
 
     Args:
         place (str): a country, by name or code; or a US state, e.g. 'United States:Massachusetts'
-        source (str): the study: 'prem2021' (the default for a country; bundled; 177 places), 'prem2017' (152), 'mistry2021' (36, by single year of age), or 'mistry2021_us' (the default for a US state; the 50 states and DC, by single year of age); all but the first are fetched on first use
+        source (str): the study: 'prem2021' (bundled; 177 places), 'prem' (Prem 2021, with Prem 2017 for the places it lacks; 187), 'prem2017' (152), 'mistry2021' (36, by single year of age), or 'mistry2021_us' (the default for a US state; the 50 states and DC, by single year of age); all but the first are fetched on first use. The default for a country is 'prem': the bundled 'prem2021' where it has the country, else Prem 2017 (e.g. for Japan and Australia)
         layer (str): the setting: 'all', 'home', 'school', 'work', or 'community'
 
     Returns:
@@ -340,7 +340,14 @@ def contacts(place, source=None, layer='all'):
         ```
     """
     ssd = provider()
-    source = sc.ifelse(source, 'mistry2021_us' if subnational(ssd, place) else 'prem2021')
+    if source is None and subnational(ssd, place):
+        source = 'mistry2021_us'
+    elif source is None: # Prem 2021, bundled, where it has the place; else Prem 2017, fetched
+        try:
+            key = ssd.resolve(place)
+        except KeyError as E:
+            unknown(place, E)
+        source = 'prem2021' if key in ssd.list_locations('prem2021') else 'prem'
     if layer not in layers:
         errormsg = f'layer="{layer}" is not one of the settings of the contact matrices: {sc.strjoin(layers)}'
         raise ValueError(errormsg)
@@ -356,7 +363,7 @@ def contacts(place, source=None, layer='all'):
             key = ssd.resolve(place)
         except KeyError:
             unknown(place, E)
-        others = [s for s in ['prem2021', 'prem2017', 'mistry2021', 'mistry2021_us'] if s != source and key in ssd.list_locations(s)]
+        others = [s for s in ['prem', 'prem2021', 'prem2017', 'mistry2021', 'mistry2021_us'] if s != source and key in ssd.list_locations(s)]
         hint = f'; it is in {sc.strjoin(others)}, e.g. ss.contacts("{place}", source="{others[0]}")' if others else ''
         raise sc.KeyNotFoundError(f'"{source}" has no contact matrix for {key}{hint}.')
     labels = age_labels([float(a) for a in df.index])

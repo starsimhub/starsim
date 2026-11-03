@@ -4,10 +4,10 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Based on the AI-written v4 drafts (Claude's page on places and movement, with checks of spatial models from Codex's); the comparison with and without movement written by AI
+  note: Based on the AI-written v4 drafts (Claude's page on places and movement, with checks of spatial models from Codex's); the comparison with and without movement written by AI; the Kenya example made realistic, and movement between neighbors and the appendix added, by AI
 ---
 
-An outbreak in one town reaches the next through the people who travel between them. In Starsim, places are a stratification of the model (a **spatial** one, with each place a level), and movement between them is optional: without it, each place has its own epidemic, and with it, infection passes from place to place. This is the metapopulation model, with each place a subpopulation that mixes within itself and is linked to the others by movement. It works the same under compartments and agents. The tutorial [T6 – Geography and mixing](../tutorials/t6_places.qmd) builds up a model of several towns step by step; this page is for looking things up. The data on places that comes with Starsim is on [Population data](populations_data.qmd).
+An outbreak in one town reaches the next through the people who travel between them. In Starsim, places are a stratification of the model (a **spatial** one, with each place a level), and movement between them is optional: without it, each place has its own epidemic, and with it, infection passes from place to place. This is the metapopulation model, with each place a subpopulation that mixes within itself and is linked to the others by movement. It works the same under compartments and agents, and its results can be drawn on maps, as [below](#maps). The tutorial [T6 – Geography and mixing](../tutorials/t6_places.qmd) builds up a model of several towns step by step; this page is for looking things up. The data on places that comes with Starsim is on [Population data](populations_data.qmd).
 
 ## Towns linked by commuting
 
@@ -63,26 +63,58 @@ ss.geo.geography('districts.shp')               # Shapes (.shp, .geojson, or .gp
 ss.geo.geography('Kenya', level=1)              # Kenya's 47 counties, with populations and positions
 ss.geo.geography('Kenya', level=1, places=['Nairobi', 'Kiambu']) # Some of them
 ss.geo.geography(['Kenya', 'Uganda'], level=1)  # Several countries, with places named e.g. 'Kenya:Busia'
+ss.geo.geography(['Kenya', 'Uganda', 'Tanzania'], level=0) # Each country as one place
+ss.geo.geography('Kenya', level=2)              # The units below the counties (downloaded the first time)
+ss.geo.geography('Kenya', level=1, year=2010)   # The counties' populations in another year (downloaded the first time)
 ```
 
-A country's administrative units come from `starsim_data`: level 1 is its counties, provinces, or states, and level 2 the units below them. The first two levels of every country are bundled, so they need no download. Here measles starts in Nairobi and spreads across Kenya's counties:
+A country's administrative units come from `starsim_data`: level 0 is the country itself, level 1 its counties, provinces, or states, and level 2 the units below them. Levels 0 and 1 are bundled for 184 countries and territories, so they need no download; level 2, and populations for a year other than 2020, are downloaded the first time (level 2 needs the optional package geopandas: `pip install starsim_data[spatial]`). The places that have units, and how many, are listed on [Population data](populations_data.qmd#appendix-every-place-and-its-data). Each unit comes with its population, position, area (`kenya.area`, in km²), and p-code (`kenya.codes`, e.g. `'KE047'` for Nairobi), the standard code of an administrative unit, which is the reliable way to join surveillance data reported by unit to the places of a model, since names are spelled in different ways.
+
+Here measles starts in Nairobi and spreads across Kenya's counties, in a population that is 90% immune (as from vaccination), so that R0 = 15 gives an effective reproduction number of about 1.5:
 
 ```{python}
 kenya = ss.geo.geography('Kenya', level=1)
 
-measles_kenya = ss.Disease(infection, recovery, init_n=dict(I=ss.by(patch={'Nairobi': 10}))) # 10 infectious people in Nairobi, and none in the other 46 counties
+measles_kenya = ss.Disease(infection, recovery,
+    init   = dict(R=0.9),                         # 90% immune at the start
+    init_n = dict(I=ss.by(patch={'Nairobi': 10})), # 10 infectious people in Nairobi, and none in the other 46 counties
+)
 measles_kenya.stratify(patch=kenya, mobility=ss.geo.gravity(away=0.001))
 
-sim = ss.Sim(measles_kenya, stop=ss.days(60), verbose=0)
+sim = ss.Sim(measles_kenya, start='2025-01-01', stop='2026-01-01', verbose=0)
 sim.run()
+res = sim.results.measles_kenya
 for county in ['Nairobi', 'Kiambu', 'Mombasa', 'Turkana']:
-    peak = sim.results.measles_kenya.I.select(patch=county).values.argmax()
-    print(county, '- infectious people peak on day', peak)
+    peak = res.I.select(patch=county).values.argmax()
+    print(county, '- infectious people peak on', res.timevec[peak])
 ```
 
-Kiambu borders Nairobi, Mombasa is the second city, 440 km away, and Turkana is a remote county in the northwest; as an ODE, the outbreak reaches all of them within days (see [below](#under-compartments-and-agents) for why agents differ).
+Kiambu borders Nairobi, Mombasa is the second city, 440 km away, and Turkana is a remote county in the northwest. Nairobi's outbreak peaks first, in June; Kiambu's follows in July, and Mombasa's and Turkana's in September, near the peaks of most other counties. The gravity model sends Nairobi's travelers to every county, near or far, in proportion to its population, so distance matters less than it might: Turkana, remote as it is, peaks within days of Mombasa. As an ODE, a county's outbreak starts as soon as the first fraction of an infected person arrives (see [below](#under-compartments-and-agents) for why agents differ).
 
 A geography with no populations (`names=` only) gives places of equal size, unless the stratification is given a `split=`. A place's population sets the share of people who start there.
+
+## Maps
+
+A result of a model stratified by place can be drawn on a map of the places, with the result's `map()`. Each place is colored by the result there, and drawn as its shape, if the geography has shapes, or else as a point at its position, with an area in proportion to its population. Since places differ in size, a share, such as the prevalence, usually shows the spread better than a count. `shapes=True` draws a country's units as their boundaries, which are downloaded the first time (this needs geopandas: `pip install starsim_data[spatial]`). Here is the outbreak above, on the first of May, July, and September:
+
+```{python}
+res.prevalence.map(t=['2025-05-01', '2025-07-01', '2025-09-01'], shapes=True)
+```
+
+In May, the outbreak is in Nairobi alone; by July it has spread to the counties around it, and by September, when it is over in Nairobi, it is at its height across the rest of the country. The options:
+
+| Call | What it draws |
+|---|---|
+| `res.map()` | One map of the result's summary in each place over the run, as `summarize()` gives it (the total of a flow, the mean of a ratio, the final value of a stock) |
+| `res.map(n=6)` | Six maps, evenly spaced from the start of the outbreak to its end |
+| `res.map(t='2025-02-01')` | The map on one date, or on each of a list of dates (or times, e.g. `t=[15, 25]`, for a sim without dates) |
+| `res.map(animate=True)` | An animation, shown in a notebook with controls to play it; elsewhere, it is returned as a Matplotlib animation |
+| `res.map(animate=True, filename='spread.gif')` | The same, saved to a file (a GIF, or an MP4, which needs ffmpeg) |
+| `res.map(shapes=True)` | For a country, its units' boundaries, downloaded the first time (this needs geopandas: `pip install starsim_data[spatial]`); a geography read from shapes always draws them |
+| `geo.plot()` | The places of a geography, with their populations |
+| `geo.plot(values=..., label=...)` | The places colored by a value for each one, in order or by name, e.g. a summary of a result: `kenya.plot(values=res.infection.by('patch').summarize()/kenya.pop, label='Share infected')` |
+
+Both take `cmap=` (the colors, by default from white to red), `vmin=` and `vmax=` (the range of the color scale), and `names=` (whether to label the places, by default when there are 15 or fewer). A result of agents is mapped the same way; for the runs of a MultiSim, map one run (`res.select(run=0)`).
 
 ## Movement
 
@@ -93,6 +125,7 @@ Movement has three parts: its shape (which places people go to), its amount (how
 - `ss.geo.gravity(a=1, b=1, c=2)`: the movement from place *i* to place *j* is proportional to *pop*~i~^*a*−1^ × *pop*~j~^*b*^ / *distance*~ij~^*c*^, so people go more to bigger and nearer places.
 - `ss.geo.radiation()`: the radiation model (Simini et al. 2012), which has no parameters to fit: of the people who travel from a place, the share who go to each other one depends on the populations of the places nearer to it.
 - `ss.geo.Mobility(matrix=M)`: a matrix that you already have, with the movement from each place (rows) to each place (columns), e.g. from commuting data. For many places, a SciPy sparse array keeps only the pairs that share anyone.
+- `ss.geo.Mobility(matrix=kenya.adjacency)`: movement only between places that share a border, split evenly between each place's neighbors (`adjacency` is true for each pair of units that share a border, and is there for a country's units at level 1, or given to `ss.geo.geography(adjacency=...)`). This is the classic model of spread from district to district.
 
 **The amount** is `away=`, the share of their time that people spend away from home, split between the other places by the shape. With neither `away=` nor `k=`, it is 10%, which `describe()` marks as guessed. `k=` instead gives the amount as a constant in the gravity formula; its units depend on `a`, `b`, and `c`, so no value fits both three towns and a country, and it is for an amount that has been fitted to data.
 
@@ -117,6 +150,25 @@ ss.geo.Mobility(ss.geo.gravity(), away=0.2, kind='visit')      # Visiting
 ss.geo.Mobility(ss.geo.gravity(k=2e-5), kind='migrate')        # Migration, at rates from the gravity model
 ss.geo.Mobility(ss.geo.radiation(), away=0.1, kind='force')    # A moving force of infection, as in LASER
 ```
+
+### Movement between neighbors
+
+With movement only across borders, infection spreads as a wave, from each county to its neighbors, rather than from Nairobi to everywhere at once. Here is the Kenya model above, with the same amount of movement, but only between counties that share a border:
+
+```{python}
+measles_borders = ss.Disease(infection, recovery, init=dict(R=0.9), init_n=dict(I=ss.by(patch={'Nairobi': 10})))
+measles_borders.stratify(patch=kenya, mobility=ss.geo.Mobility(matrix=kenya.adjacency, away=0.001))
+
+borders = ss.Sim(measles_borders, start='2025-01-01', stop='2026-01-01', verbose=0)
+borders.run()
+res_borders = borders.results.measles_borders
+for county in ['Nairobi', 'Kiambu', 'Mombasa', 'Turkana']:
+    share = res_borders.infection.select(patch=county).values.sum()/kenya.pop[kenya.names.index(county)]
+    print(county, '- share infected in 2025:', round(share, 3))
+res_borders.prevalence.map(t=['2025-07-01', '2025-09-01', '2025-11-01'], shapes=True)
+```
+
+The outbreak in Nairobi is the same, but it now reaches only the counties next to it, and then theirs: by the end of the year, it is still growing in Mombasa, on the coast, and has barely begun in Turkana, in the far northwest: 1.4% and 0.4% of their people are infected in the year, against 6% in each with movement by gravity. Which shape fits a setting is a question for data on travel, such as surveys, mobile phone data, or the timing of past outbreaks in each place.
 
 ### A movement register
 
@@ -182,3 +234,22 @@ The API reference for this page: [ss.geo](../api/geo.qmd).
 - [flepiMoP: Model description](https://iddynamics.gitbook.io/flepimop/gempyor/model-description): metapopulation models of US states and counties, with mobility between them
 - [MEmilio: Metapopulation models](https://memilio.readthedocs.io/en/latest/cpp/metapop.html): compartmental models of regions joined by commuting
 - [Simini et al. 2012: A universal model for mobility and migration patterns](https://doi.org/10.1038/nature10856): the radiation model
+
+## Appendix: what a geography has
+
+The attributes of a geography (`kenya = ss.geo.geography('Kenya', level=1)`), for making maps, movement matrices of your own, or joining data by place:
+
+| Attribute | What it is |
+|---|---|
+| `names` | The name of each place, in order: the levels of the stratification |
+| `pop` | The population of each place (None if not given) |
+| `lat`, `lon` | The latitude and longitude of each place, in degrees (for a country's units, the center of each unit) |
+| `x`, `y` | The positions of the places, for a geography given by hand with `x=` and `y=` |
+| `distances` | The distance between each pair of places (in km, from latitudes and longitudes) |
+| `adjacency` | Whether each pair of places shares a border (for a country's units at level 1 or below, or as given) |
+| `area` | The area of each place, in km² (for a country's units) |
+| `codes` | The p-code of each place (for a country's units), e.g. `'KE047'` |
+| `shapes` | The shapes of the places, for a geography read from shapes (None otherwise; `res.map(shapes=True)` downloads a country's) |
+| `ref` | Where a country's units came from, which `describe()` shows |
+
+`len(kenya)` is the number of places, and `kenya.plot()` draws them (see [Maps](#maps)).

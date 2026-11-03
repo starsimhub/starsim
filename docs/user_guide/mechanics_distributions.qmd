@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 25
   ai: 75
-  note: Adapted from the Starsim 3 user guide page on distributions; ported to v4, with new sections on durations and on variation between people, and the vaccination example rewritten, by AI
+  note: Adapted from the Starsim 3 user guide page on distributions; ported to v4, with new sections on durations and on variation between people, and the vaccination example rewritten, by AI; SciPy distributions and the appendix added by AI
 ---
 
 Distributions appear in a model in three ways: as the distribution of a **duration** (how long people stay in a state, or the delay before an event is reported), as **variation between people** (each person's own value of a parameter), and, in modules written as code, as the **random draws** that decide what happens to each person (who is infected, who tests positive). This page covers the distributions Starsim has, how to choose one for a duration, and how to use them in each of these ways.
@@ -70,6 +70,7 @@ A value that differs by group, rather than at random between people, is better g
 | Beta, by its mean | `ss.beta_mean` | `mean`, `var` | E.g. a probability that varies |
 | Poisson | `ss.poisson` | `lam` (the mean) | A count |
 | Negative binomial | `ss.nbinom` | `n`, `p` | A count with more spread than a Poisson |
+| Binomial | `ss.binom` | `n`, `p` | The number of successes in `n` trials; as a likelihood in [fitting](calibration_fitting.qmd), e.g. the positives among those tested |
 | Constant | `ss.constant` | `v` | The same value for everyone; a fixed duration |
 | Random integer | `ss.randint` | `low`, `high` | |
 | Bernoulli | `ss.bernoulli` | `p` | True with probability `p`: whether something happens to each person |
@@ -78,7 +79,22 @@ A value that differs by group, rather than at random between people, is better g
 | Histogram | `ss.histogram` | `values`, `bins` | From a histogram of data |
 | Random | `ss.random` | | Between 0 and 1 |
 
-See the [API reference](../api/distributions.qmd) for each. A distribution of your own can be written by subclassing `ss.Dist`.
+See the [API reference](../api/distributions.qmd) for each, and the [appendix](#appendix-every-distribution) for the full list with their parameters. The names are also in `ss.distributions.dist_list`, and a parameter of a module written as code can be given one as a dict, with its name as `type`: `ss.RandomNet(n_contacts=dict(type='poisson', lam=5))` is `ss.RandomNet(n_contacts=ss.poisson(lam=5))`, which is useful when parameters come from a file.
+
+### Any SciPy distribution
+
+Any distribution in [`scipy.stats`](https://docs.scipy.org/doc/scipy/reference/stats.html) that is not in the table can be used through `ss.Dist`, by giving it as `dist=` with its parameters. It draws from the sim's random numbers like the others, so it keeps common random numbers ([Random numbers](mechanics_random.qmd)). Here a log-logistic distribution (`scipy.stats.fisk`), sometimes used for incubation periods, whose `scale` is its median:
+
+```{python}
+import scipy.stats as sps
+
+incubation = ss.Dist(dist=sps.fisk, c=4, scale=ss.days(5), name='Log-logistic incubation')
+draws = incubation.rvs(10_000) # In days, the unit of its scale
+print('Median:', np.median(draws).round(1), 'days')
+print('95% of draws are between', np.percentile(draws, [2.5, 97.5]).round(1), 'days')
+```
+
+Its time unit is given on its parameters, as here; `unit=` is refused, since Starsim can't tell how to rescale an arbitrary distribution. It can be the value of a parameter of a module written as code (e.g. `ssl.AgentSEIR(dur_exp=incubation)`), the duration of a declared transition (`ss.Transition(E, I, dur=incubation)`, which runs as agents, or as matched stages in compartments), and drawn from with `rvs()` and the rest.
 
 ## A fixed number of people
 
@@ -216,3 +232,34 @@ With the same number of doses, vaccinating the children who carry most of the tr
 - [SciPy: statistical functions](https://docs.scipy.org/doc/scipy/reference/stats.html): the distributions that Starsim's are built on, with their parameters
 - [NumPy: random generator](https://numpy.org/doc/stable/reference/random/generator.html): how random numbers are drawn from them
 - [Stan functions reference: positive continuous distributions](https://mc-stan.org/docs/functions-reference/positive_continuous_distributions.html): the lognormal, gamma, Weibull, and others, with their parameterizations
+
+## Appendix: every distribution
+
+Every distribution in `ss.distributions.dist_list`, generated from the classes: its parameters with their defaults (each also takes the arguments of `ss.Dist`, such as `name`, `unit`, and `round`), and how it can carry a time unit (its `scaling`): with `unit=` or typed parameters if it can be scaled after the draw ("after" or "either"), only through typed parameters if only before ("before", e.g. a Poisson count given a rate), or not at all ("none").
+
+```{python}
+import re
+import inspect
+import pandas as pd
+import sciris as sc
+
+def how_scaled(dist):
+    """ When a distribution can be scaled to a time unit: after the draw, before it, either, or not at all """
+    scaling = set(sc.tolist(dist.scaling))
+    return 'either' if scaling == {'predraw', 'postdraw'} else 'after' if 'postdraw' in scaling else 'before' if 'predraw' in scaling else 'none'
+
+rows = []
+for name in ss.distributions.dist_list:
+    make = getattr(ss, name)
+    args = [str(arg) for arg in inspect.signature(make).parameters.values() if arg.kind is not arg.VAR_KEYWORD]
+    sentences = re.split(r'(?<=\.)\s+(?=[A-Z])', ' '.join(inspect.getdoc(make).split('\n\n')[0].split()))
+    rows.append(dict(
+        distribution = f'ss.{name}',
+        parameters = ', '.join(args),
+        scaling = how_scaled(make()), # ss.erlang() makes a gamma distribution
+        description = sentences[0].rstrip('.'),
+    ))
+
+pd.set_option('display.max_colwidth', None) # Show each entry in full
+pd.DataFrame(rows).set_index('distribution')
+```

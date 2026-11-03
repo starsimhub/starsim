@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Written by AI, merging the earlier user guide page on importing, the tutorial "Bringing a model in", and the user-facing parts of the architecture page on importing and exporting
+  note: Written by AI, merging the earlier user guide page on importing, the tutorial "Bringing a model in", and the user-facing parts of the architecture page on importing and exporting; appendix of importers and exporters added by AI
 ---
 
 A model written for another framework can be read into Starsim, and a Starsim model can be written out in formats other tools read. Importing is useful for checking a model against its original, for running it in ways the original can't (as agents, say, or fitted with gradients), or for building on it in Starsim: adding age groups, interventions, or a fit to data. This page covers how importing works, how to check an import and finish one that is incomplete, the formats, and the exports. The pages for each framework ([Starsim v3](starsim3.qmd), [odin](odin.qmd), [EpiModel](epimodel.qmd), and the others in this section) show a model from that framework written both ways, and how closely the results agree; [Modeling landscape](../library_landscape.qmd) compares the frameworks.
@@ -274,3 +274,27 @@ A target named "cum ..." is the total since the start, and "peak size ..." the l
 - [SBML: the Systems Biology Markup Language](https://sbml.org/): the exchange format for models of reactions, read and written by many tools
 - [COPASI](https://copasi.org/): a tool that simulates and analyzes SBML models
 - [The hubverse: documentation](https://hubverse.io/): the format of forecast and scenario hub submissions
+
+## Appendix: every importer and exporter
+
+Every format that `ss.import_from()` reads and `ss.export_to()` writes, generated from their registries, `ss.converters.importers` and `ss.converters.exporters`, with the first line of each function's documentation (the table in [The formats](#the-formats) says what each reads and how). `ss.converters.sniff(filename)` tells which format a file is in, if it can. Three conversion pages have no importer, since there is no file to read: [LASER](laser.qmd) and [NumPy](numpy.qmd) models are translated by hand, and Starsim 3 code is rewritten by `python -m starsim.converters.migrate` (see [Starsim v3](starsim3.qmd)).
+
+```{python}
+import inspect
+import pandas as pd
+
+def summary(func):
+    return inspect.getdoc(func).split('\n')[0].rstrip('.')
+
+importers, exporters = ss.converters.importers, ss.converters.exporters
+rows = []
+for name in sorted(set(importers) | set(exporters)):
+    rows.append(dict(
+        format = name,
+        imports = summary(importers[name]) if name in importers else '',
+        exports = summary(exporters[name]) if name in exporters else '',
+    ))
+
+pd.set_option('display.max_colwidth', None) # Show each entry in full
+pd.DataFrame(rows).set_index('format')
+```

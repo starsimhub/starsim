@@ -328,7 +328,13 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
     '''
 
     # Convert to dict
-    as_dict = lambda sim: sc.obj(sim.summarize().value.to_dict()) if isinstance(sim, ss.Sim) else sc.obj(sim.summarize().to_dict('index')) # A MultiSim's: each result's mean, std, ...
+    def as_dict(sim):
+        if isinstance(sim, ss.Sim):
+            return sc.obj(sim.summarize().value.to_dict())
+        df = sim.summarize() # A MultiSim's: each result's median, mean, std, ...
+        n = len(sim.runs)/sim.runs['scenario'].nunique() # Runs per scenario
+        df['sem'] = df['std']/np.sqrt(n) # The standard error of each mean
+        return sc.obj(df.to_dict('index'))
     if isinstance(sim1, (ss.Sim, ss.MultiSim)):
         sim1 = as_dict(sim1)
     if isinstance(sim2, (ss.Sim, ss.MultiSim)):

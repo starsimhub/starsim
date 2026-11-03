@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Based on the Claude draft, with the table of error patterns and the list of what to report from the Codex draft, and Optuna's plots as in the Starsim 3 calibration page
+  note: Based on the Claude draft, with the table of error patterns and the list of what to report from the Codex draft, and Optuna's plots as in the Starsim 3 calibration page; the model comparison made to predict the peak, and appendices added by AI
 ---
 
 `sim.fit()` always returns values. Whether to trust them is a separate question, with several parts: does the model match the data, did the search find the best values, are the values determined by the data, and would the fitted model predict data it hasn't seen? This page goes through the checks, in the order worth making them. It assumes the basics of [Fitting a model](calibration_fitting.qmd).
@@ -80,14 +80,7 @@ print(seir_fit.converged)
 print(seir_fit.why)
 ```
 
-What "converged" means depends on the method:
-
-| Method | Converged when | If not |
-|---|---|---|
-| SciPy optimizers (`'nelder-mead'`, `'l-bfgs-b'`) | The searches from the best few starting points of a scan end at the same value | More starting points (`scan=`) or searches (`restarts=`); a sign of several local optima, or a ridge |
-| Optuna | The best score improved by less than 1% over the last quarter of the trials | More trials (`n_trials=`) |
-| NUTS, particle MCMC | The chains agree (R-hat at most 1.01) and no draws diverged | More warm-up (`warmup=`); check identifiability |
-| Iterated filtering (`'if2'`) | Chains from different starts end within 2 of the best log-likelihood | More iterations or particles |
+What "converged" means depends on the method: for an optimizer, that searches from different starts end at the same value, or that the best score has stopped improving; for a sampler, that its chains agree. The rule of every method, and what to do if it fails, is in the [appendix](#appendix-when-each-method-has-converged).
 
 A fit that has not converged is not necessarily wrong, but it can't be trusted until it has been run longer, or until the reason it didn't is understood.
 
@@ -108,13 +101,13 @@ import pandas as pd
 
 stochastic = ss.Sim(make_seir(), data=data, solver='binomial', **pars)
 rows = []
-for seed in [1, 4]:
+for seed in [1, 2]:
     fit = stochastic.fit(n_trials=100, rand_seed=seed, verbose=False)
     rows.append(dict(rand_seed=seed, beta=fit.pars.beta, report=fit.pars.report, converged=fit.converged))
 pd.DataFrame(rows).round(3)
 ```
 
-The two fits differ: β by about 1% (1.90 and 1.88, against a true 1.9) and the share reported by about 9% (0.47 and 0.51, against 0.5), and neither says it converged, since the best score was still improving at the end of the search. Even a fit that says it has converged has only stopped improving; that doesn't make the answer precise. The noise in the scores is large compared with the difference that `report` makes to them. More trials, or more runs for each trial (`n_runs=`, 4 by default for a stochastic compartmental model), reduce this; so does a likelihood, which weighs the data by how much they vary. The fit also reruns its best values with the same seeds as the search, and warns when they then score worse than the starting values: the best trial may have been a lucky run.
+The two fits differ, by more in the share reported than in β (against true values of 1.9 and 0.5), and the `converged` column says whether each search had stopped improving by its end. Even a fit that says it has converged has only stopped improving; that doesn't make the answer precise. The noise in the scores is large compared with the difference that `report` makes to them. More trials, or more runs for each trial (`n_runs=`, 4 by default for a stochastic compartmental model), reduce this; so does a likelihood, which weighs the data by how much they vary. The fit also reruns its best values with the same seeds as the search, and warns when they then score worse than the starting values: the best trial may have been a lucky run.
 
 For a stochastic model, also check the fit against many runs, not one: `fit.sim.run(n_runs=20)`, as in [Fitting a model](calibration_fitting.qmd#a-stochastic-model). The data should lie within the range of the runs about as often as the interval says.
 
@@ -150,16 +143,16 @@ For any method, `fit.to_df()` has every evaluation, with the values tried and th
 
 ## Does the model predict?
 
-A model with more parameters usually fits better, without necessarily being better. A fairer test is how well a model fitted to the start of the data predicts the rest. `ss.fit.compare_models()` fits each model to all but the last 25% of each data series (`holdout=`), runs it forward, and scores it on the part held out:
+A model with more parameters usually fits better, without necessarily being better. A fairer test is how well a model fitted to the start of the data predicts the rest. `ss.fit.compare_models()` fits each model to the data before a cut, runs it forward, and scores it on the part held out. By default the last 25% of each series is held out, but here that would be the decline after the August peak, which is easy to predict once the peak has been fitted. The question a modeler usually faces is whether a model fitted to the rise of an outbreak predicts its peak, so `holdout=` gives a date instead: two months, and then one month, before the peak:
 
 ```{python}
-comparison = ss.fit.compare_models({'SIR': ss.Sim(make_sir(), data=data, **pars),
-                                    'SEIR': ss.Sim(make_seir(), data=data, **pars)},
-                                   method='nelder-mead')
-comparison.summarize();
+models = {'SIR': ss.Sim(make_sir(), data=data, **pars), 'SEIR': ss.Sim(make_seir(), data=data, **pars)}
+for cut in ['2025-06-01', '2025-07-01']:
+    comparison = ss.fit.compare_models(models, method='nelder-mead', holdout=cut, verbose=False)
+    comparison.summarize()
 ```
 
-The SEIR model fits better and predicts better. `folds=` repeats the comparison over several cut points, which shows whether the difference is larger than the spread from one cut point to another; `comparison.plot()` shows each model's fit and prediction against the data.
+With data to the start of July, the SEIR model predicts the rest of the outbreak much better than the SIR model. With data only to the start of June, both predict it badly: two months before the peak, the rise of the outbreak says too little about how high it will go for either model, the right one included. A good fit to the data so far is not a good prediction. `folds=` repeats the comparison over several cut points, which shows whether the difference is larger than the spread from one cut point to another; `comparison.plot()` shows each model's fit and prediction against the data (here, for the last cut). Both models were fitted to data made by the SEIR model, so the right one is known here; with real data, every model is wrong to some extent, and this comparison says which predicts better.
 
 ## A checklist
 
@@ -184,3 +177,38 @@ When reporting a fit, say enough for someone else to repeat it and judge it: wha
 - [Optuna: Visualization](https://optuna.readthedocs.io/en/stable/reference/visualization/index.html): the plots of a search that `fit.study` takes
 - [ArviZ](https://python.arviz.org/en/stable/): R-hat, effective sample size, and plots for checking a posterior
 - [pomp: Getting started](https://kingaa.github.io/pomp/vignettes/getting_started.html): diagnostics of fits of stochastic models, including iterated filtering
+
+## Appendix: when each method has converged
+
+The rule by which each method sets `fit.converged` (and says why in `fit.why`), and what to try if it hasn't:
+
+| Method | Converged when | If not |
+|---|---|---|
+| SciPy optimizers (`'nelder-mead'`, `'powell'`, `'l-bfgs-b'`, `'slsqp'`) | The two best searches, from the best few points of a scan that are apart, end at the same value (with a single search, SciPy's own stopping rule) | More starting points (`scan=`) or searches (`restarts=`), or more iterations (`maxiter=`); a sign of several local optima, or a ridge |
+| Optuna (`'optuna'`) | The best score improved by less than 1% over the last quarter of the trials, and the best trial is not one of the first 10 (which are random) or the starting values | More trials (`n_trials=`) |
+| Iterated filtering (`'if2'`) | Chains from different starts end within 2 of the best log-likelihood | More passes (`iterations=`) or particles (`particles=`); better bounds, if a chain has wandered off where the outbreak dies out |
+| NUTS (`'nuts'`) | The chains agree (R-hat at most 1.01) and no draws diverged | More warm-up (`warmup=`) and draws; check identifiability |
+| Particle MCMC (`'pmcmc'`) | The chains agree (R-hat at most 1.01) | More draws and warm-up; more particles, if the acceptance is low |
+| ABC-SMC (`'abc-smc'`) | The tolerance has stopped shrinking: the last generation's is more than 90% of the one before | More generations (`generations=`) or particles |
+| A list of methods | Its last stage converged; a stage that doesn't stops the list, with a warning, and its fit (or the last that converged) is returned | Make that stage converge, by its own rule |
+
+A best fit of a stochastic model that converged is also marked as not converged if, rerun with the same seeds, its best values score worse than the starting values: the best trial may have been a lucky run.
+
+## Appendix: the warnings and notes a fit gives
+
+Each message a fit can print, what it means, and what to do. Warnings are Python warnings (some of a class of their own, which `warnings.filterwarnings()` can select); notes are printed, and are silenced with `verbose=False`.
+
+| Message | Kind | Means | What to do |
+|---|---|---|---|
+| The best-fit value is at one of its bounds | Warning, `ss.errors.AtBound` | The best value may lie beyond the bound, or the data don't determine the parameter, or it is making up for something missing | [Above](#is-a-best-value-at-a-bound): widen the bounds only if larger (or smaller) values are plausible |
+| The profile stays within the threshold up to a bound | Warning, `ss.errors.AtBound` | A profile likelihood's interval may extend beyond the bounds | Wider bounds, or more values |
+| Not converged, with the reason | Printed, and in `fit.why` | The method's own rule (above) was not met | As in the table above |
+| The chains disagree (R-hat above 1.01), or draws diverged | Warning, `ss.errors.NotConverged` | A posterior that is not yet reliable | More warm-up; check identifiability ([above](#is-the-posterior-reliable)) |
+| A stage did not converge, so the stages after it were not run | Warning | A list of methods stopped early | Make that stage converge (e.g. more trials) |
+| Rerun with the same seeds, the best values score worse than the initial values | Printed, and in `fit.why` | In a stochastic fit, the best trial may have been a lucky run | More trials (`n_trials=`) or runs per trial (`n_runs=`) |
+| Two parameters appear in the model only multiplied together (or one divided by the other) | Note | Structurally unidentifiable: the data determine only their product | Fit one and fix the other ([Parameter identification](calibration_identification.qmd)) |
+| Two parameters are almost perfectly correlated in the posterior (r above 0.95), or change the fitted results in almost the same way | Note | Practically unidentifiable from these data | More data, or data of another kind, or fix one |
+| The scan tries fewer than 10 points for each parameter | Note | With more than 10 parameters, the scan is capped at 100 points | `scan=` to change it |
+| The R-hat and effective sample size need JAX | Note | Without BlackJAX, they are NaN, so a posterior can't be checked | `pip install "starsim[jax]"` |
+| The fit would take the gradients (or the posterior) with Python in the loop | Error, `ss.CapabilityError` | A method with gradients was asked for, but something in the model or the likelihood can't be run in JAX (e.g. a likelihood given as a function), so they would be much slower (the default method falls back to Nelder-Mead by itself) | A method without gradients (e.g. `method='nelder-mead'`, or no `method=`), or `nopython=False` to accept the slower way |
+| A data column matches no result | Note when the sim is initialized, and an error when it is fitted | A typo in a header, or a result that doesn't exist | Rename the column (`ss.simdata(aliases=...)`) |

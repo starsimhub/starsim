@@ -49,6 +49,7 @@ The user guide is organized by topic: each page covers one in full, to read thro
 - [Running sims](user_guide/running_sim.qmd): making and running a sim, and its settings
 - [Scenarios](user_guide/running_scenarios.qmd): comparing scenarios, repeated runs, and uncertainty
 - [Solvers and backends](user_guide/running_solvers.qmd): ODEs, stochastic compartments, and agents, and how one is chosen
+- [Getting the most speed](user_guide/running_performance.qmd): keeping runs in the compiled kernels, many runs at once, and fast code of your own
 - [Branching and rescaling](user_guide/running_branching.qmd): large populations and small outbreaks
 - [Profiling and debugging](user_guide/running_debugging.qmd): finding what is slow or wrong, and common pitfalls
 - [Deployment](user_guide/running_deploy.qmd): running Starsim on clusters and in the cloud

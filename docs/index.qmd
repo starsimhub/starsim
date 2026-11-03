@@ -36,6 +36,18 @@ Each topic in full: building models, populations, interventions, running, calibr
 :::
 
 ::: {.g-col-4}
+[**Import and export**](user_guide/conversion/index.qmd)
+
+Bring in a model from another framework (EpiModel, odin, SBML, and a dozen more), or move from Starsim 3.
+:::
+
+::: {.g-col-4}
+[**AI tools**](https://ai.starsim.org)
+
+Skills for AI coding agents, matched to the installed version: run `starsim ai` in your project.
+:::
+
+::: {.g-col-4}
 [**What's new**](whatsnew.qmd)
 
 What's in the latest Starsim releases.

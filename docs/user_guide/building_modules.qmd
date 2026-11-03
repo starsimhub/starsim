@@ -24,8 +24,12 @@ Many things that once needed a module of their own are declared, and a declared 
 | A change to a parameter for some people or some time (masks, school closures) | `ss.modify()` | [Interventions](interventions_interventions.qmd) |
 | One disease changing the risk of another | `ss.modify(sti.rel_sus, multiply=3, where=hiv.I)` | [Connectors](interventions_connectors.qmd) |
 | A number to report, such as cases from infections | `ss.outcome()` | [Outcomes](building_outcomes.qmd) |
+| A value for each person, drawn or recorded at an event, or a trait (a CD4 count at infection, each person's infectiousness) | `ss.attr()`, e.g. `ss.attr(ss.normal(500, 50), on=infection)` | [`ss.attr`](../api/expressions.qmd) |
+| A move as soon as a condition holds, or when an event happens to the person (debut at 15, a change at diagnosis) | A trigger, `ss.on()` | [Diseases](building_diseases.qmd#other-rates) |
+| Moving people between groups, such as vaccination or a change of risk | `ss.transfer()` | [Stratification](building_stratification.qmd#moving-between-groups) |
+| Counting events in each person, such as past infections or doses | `increment=` on a transition | [Stratification](building_stratification.qmd#moving-between-groups) |
 
-Write a module as code when the model needs something none of these can say. A module that keeps a value for each person, like the one below, works on agents, so a sim with one runs as agents by itself (`n_agents=` says how many); it works with declared diseases in the same sim. A module that keeps nothing per person, such as an ODE of its own, runs with no agents, and costs the loop only its own methods; [Measles in London, four ways](../gallery/measles_london.qmd) works through an example, from declared to compiled code.
+Write a module as code when the model needs something none of these can say. A module that keeps a value for each person, like the one below, works on agents, so a sim with one runs as agents by itself (`n_agents=` says how many); it works with declared diseases in the same sim. A module can also say so in its class: `compartmental = False` says that it needs agents, and `compartmental = True` that its code works on groups too, so that a compartmental run can include it ([Modules](architecture_modules.qmd)). A module that keeps nothing per person, such as an ODE of its own, runs with no agents, and costs the loop only its own methods; [Measles in London, four ways](../gallery/measles_london.qmd) works through an example, from declared to compiled code.
 
 ## An example: immunity that fades gradually
 
@@ -136,7 +140,7 @@ A module subclasses one of Starsim's module types, so that it runs at the right 
 | `ss.Analyzer` | Recording results without changing anything | `analyzers=` |
 | `ss.Connector` | Links between modules, such as interactions between diseases | `connectors=` |
 
-The sim keeps each kind in its own list, e.g. `sim.custom.antibodies` and `sim.interventions[0]`. A module is named after its class in lower case (`antibodies`), unless it is given `name=`.
+The sim keeps each kind in its own list, e.g. `sim.custom.antibodies` and `sim.interventions[0]`. A module is named after its class in lower case (`antibodies`), unless it is given `name=`. To give a module of your own to a sim by name, as a string (`diseases='mydisease'`), as Starsim's own can be, register the Python module it is in with `ss.register_modules(my_package)` ([`ss.register_modules`](../api/internals.modules.qmd)).
 
 ## Parameters: `define_pars()` and `update_pars()`
 
@@ -164,7 +168,7 @@ self.define_states(
 )
 ```
 
-Each state becomes an attribute of the module (`self.level`) and is added to the people (`sim.people.antibodies.level`). States grow as agents are born, and a dead agent's values are kept but left out of sums and means. Keep every value that belongs to a person in a state, never in a plain NumPy array of your own, which wouldn't grow with the population. Each `ss.BoolState` also gives a result of the same name, the number of people for whom it is true. A state can also have several columns, e.g. immunity to each of several strains: see [People](populations_people.qmd#states-with-several-columns). To read and write states, see [Array indexing](mechanics_indexing.qmd).
+Each state becomes an attribute of the module (`self.level`) and is added to the people (`sim.people.antibodies.level`). A state that most agents never change from its default, such as a relative risk of 1, can be made with `shared=True`, so that it takes no memory per agent until a value is set. [People and agents](populations_people.qmd#appendix-the-kinds-of-array) lists the kinds of array, and what each is for. States grow as agents are born, and a dead agent's values are kept but left out of sums and means. Keep every value that belongs to a person in a state, never in a plain NumPy array of your own, which wouldn't grow with the population. Each `ss.BoolState` also gives a result of the same name, the number of people for whom it is true. A state can also have several columns, e.g. immunity to each of several strains: see [People](populations_people.qmd#states-with-several-columns). To read and write states, see [Array indexing](mechanics_indexing.qmd).
 
 A property of each person that several modules read, rather than a state of one module (e.g. a social determinant of health that two conditions depend on), is added to the people themselves, from `init_pre()`, with `sim.people.add_state(ss.BoolArr('housing', default=ss.bernoulli(0.2)))`. Adding one that is there already returns it, so each module that reads it can add it. A declared rate reads it as `ss.ppl.housing`, or as `ss.ppl.get('housing', 0)` to have a value when no module adds it.
 
@@ -254,7 +258,7 @@ A function module is called at every step, so it has to check the time itself if
 ## Pitfalls
 
 - **Writing code for something that is declared.** Check the table at the top of this page first: a declared part runs under every solver and shows in `describe()`.
-- **Forgetting `super()`.** Call `super().__init__()` with no arguments as the first line of `__init__()`, and the base class's method whenever you override `init_results()`, `update_results()`, `init_post()`, and the like. Leaving one out gives a warning that a required method was not called, not an error.
+- **Forgetting `super()`.** Call `super().__init__()` with no arguments as the first line of `__init__()`, and the base class's method whenever you override `init_results()`, `update_results()`, `init_post()`, and the like. Leaving one out gives a warning that a required method was not called, not an error; `sim.check_method_calls()`, which `sim.run()` calls, lists any that weren't.
 - **Keeping per-person values outside a state.** A plain array doesn't grow when agents are born; a state does, and appears in `sim.people.to_df()`.
 - **Keeping a reference to another module.** A sim copies the modules it is given when it is built, so reach the rest of the sim through `self.sim` in `step()` (e.g. `self.sim.diseases.cold`), not through an object kept from before.
 - **Comparing `self.ti` across modules with their own timelines.** A module given `start=`, `stop=`, or a `dt=` of its own runs only on its own steps, and its `self.ti` counts those steps, not the sim's. To compare times between modules, use dates or durations (`self.now`), not step indices.

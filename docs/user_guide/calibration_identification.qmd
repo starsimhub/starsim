@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Based on the Claude draft
+  note: Based on the Claude draft; the plot of the ridge fixed, and fixing a known value at its true and at a wrong value, by AI
 ---
 
 A parameter is *identifiable* if the data determine its value. A fit always returns some value for each parameter, but that value is only meaningful if the data could not equally well be explained by quite different values. There are two ways this can fail:
@@ -76,10 +76,11 @@ worse = np.log10(1 + trials.objective - trials.objective.min()) # 0 at the best 
 fig, ax = plt.subplots()
 points = ax.scatter(trials.beta, trials.dur_inf, c=worse, cmap='viridis_r', s=15)
 d = np.linspace(4, 15, 50)
-ax.plot(d, 1.9*8/d, 'k--', label='beta × dur_inf = 15.2 (the true R0)')
+ax.plot(1.9*8/d, d, 'k--', label='beta × dur_inf = 15.2 (the true R0)')
 ax.scatter(1.9, 8, marker='x', s=100, color='red', zorder=10, label='True values')
 ax.set_xlabel('beta (per day)')
 ax.set_ylabel('dur_inf (days)')
+ax.set_xlim(0.5, 4) # The bounds of each
 ax.set_ylim(3, 15)
 plt.colorbar(points, ax=ax, label='How much worse than the best (log10)')
 ax.legend();
@@ -96,14 +97,20 @@ early = sim.fit(data=data.iloc[:16], method='nelder-mead')
 early.table
 ```
 
-The fit shows the problem in three ways. The searches from different starting points end at different values and different scores, so it reports that it did not converge; the infectious period ends at its upper bound (with an `AtBound` warning), which here doesn't mean the true value is beyond the bound, only that nothing in the data stops it from going there; and the values are far from the truth. Wider bounds would not help. What helps is more information: more data, data of another kind (such as a serosurvey of who was infected), or fixing a parameter that is known from elsewhere. Measles' infectious period is well known, so in practice it would be fixed rather than fitted:
+The fit shows the problem in three ways. The searches from different starting points end at different values and different scores, so it reports that it did not converge; the infectious period ends at its upper bound (with an `AtBound` warning), which here doesn't mean the true value is beyond the bound, only that nothing in the data stops it from going there; and the values are far from the truth. Wider bounds would not help. What helps is more information: more data, data of another kind (such as a serosurvey of who was infected), or fixing a parameter that is known from elsewhere. Measles' infectious period is well known, so in practice it would be fixed rather than fitted. `pars=` fits only the parameters named, and the others keep their values in the sim: here, the infectious period fixed at its true value of 8 days, and at a wrong value of 6 days:
 
 ```{python}
-early_fixed = sim.fit(data=data.iloc[:16], pars=['beta', 'report'], verbose=False)
-early_fixed.table
+import pandas as pd
+
+rows = []
+for days in [8, 6]:
+    fixed = ss.Sim(measles, pars=dict(dur_inf=ss.days(days)), **pars) # The infectious period, fixed
+    est = fixed.fit(data=data.iloc[:16], pars=['beta', 'report'], verbose=False)
+    rows.append(dict(dur_inf=days, beta=est.pars.beta, report=est.pars.report, converged=est.converged))
+pd.DataFrame(rows).round(3)
 ```
 
-With `dur_inf` fixed (at 6 days, its value in the model, which is wrong), β and the share reported are determined, but β is biased to make up for the wrong infectious period. Fixing a parameter moves its uncertainty into the others, so fix only what is known.
+With the infectious period fixed at its true value, the 16 weeks of data determine β and the share reported, and the search converges, near their true values (β of 1.96 against 1.9, and 45% reported against 50%, with only the noise of 16 weeks of counts between them): fixing what is known restores identification. With it fixed at 6 days, the fit is just as determined, and wrong: β is biased upwards, to make up for the shorter infectious period, so that R0 (and the rise of the outbreak) stays about the same. Fixing a parameter moves its uncertainty into the others, so fix only what is known, and at its best estimate.
 
 ## Parameters that appear only together
 
@@ -129,8 +136,6 @@ The fit converges, since every search reaches the same best score, but at differ
 Even when the parameters are identifiable, a real epidemic is one realization of a chance process, and a different realization would give somewhat different estimates. To see how much, make several data sets from a stochastic version of the model (a chain binomial, `solver='binomial'`), each with its own seed, and fit each one with the deterministic model. Here the infectious period is fixed at its true value, 8 days, and β and the share reported are fitted:
 
 ```{python}
-import pandas as pd
-
 known = ss.Sim(measles, pars=dict(dur_inf=ss.days(8)), **pars) # The infectious period fixed at its true value
 rows = []
 for seed in range(1, 7):

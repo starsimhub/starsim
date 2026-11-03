@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Written by AI
+  note: Written by AI; appendix added by AI
 ---
 
 What a model tracks is not what is observed. A model of measles tracks who is susceptible, latent, infectious, and immune; a surveillance system sees reported cases, some days after infection, and only some of them. This page covers the results a model has, how to declare more (such as prevalence or the share immune), how to declare **outcomes**, the reported quantities worked out from the model's flows (cases, hospital admissions, deaths), and how data is attached to the results by name, so that it can be plotted and fitted.
@@ -119,7 +119,7 @@ An outcome is a result, so anything can read it: an intervention can be triggere
 
 ## Data attached by name
 
-Data is attached to a sim with `data=`: a table with a time column (`date`, `year`, `t`, or `time`) and a column for each result there is data for, **named like the result**. A column called `cases` is compared with the result `cases`, and plotted with it. To try this where the answer is known, make data from the model: `to_data()` draws weekly counts of reported cases from a run, with Poisson noise as in real reporting, from a sim with its own random seed:
+Data is attached to a sim with `data=`: a table with a time column (`date`, `year`, `t`, or `time`) and a column for each result there is data for, **named like the result**. A column called `cases` is compared with the result `cases`, and plotted with it. To try this where the answer is known, make data from the model: `to_data()` draws weekly counts of reported cases from a run, with Poisson noise as in real reporting (`noise=None` gives the model's values themselves), from a sim with its own random seed:
 
 ```{python}
 truth = ss.Sim(measles, total_pop=100_000, start='2025-01-01', stop='2025-05-01', rand_seed=2, verbose=0)
@@ -134,7 +134,7 @@ sim.run()
 sim.plot('cases')
 ```
 
-The plot shows the model's cases summed over each week of the data, as they are compared in a fit.
+The plot shows the model's cases summed over each week of the data, as they are compared in a fit, and its title says so ("weekly totals, as in the data"). Since the data was made by the same model, the two match but for the noise; real data won't, since no model is the process that made it, which is what fitting is for.
 
 - **Data need not be on the model's time step.** A flow, such as weekly reported cases, is compared with the model's total over each week of the data; a stock or a ratio, such as the share immune in a serosurvey, with the model's value on the date of the data. The result already knows which it is.
 - **With several diseases**, a column is matched to the one that has a result of that name, or is named with its disease, `measles.cases`.
@@ -153,13 +153,13 @@ Data attached this way is what [calibration](calibration_fitting.qmd) fits to: `
 
 ## Likelihoods
 
-Nothing needs a likelihood to be compared with data or fitted to it: by default, a fit compares each result with its data by their normalized absolute difference. Where a likelihood is wanted, for example for Bayesian methods, it is given with the outcome, as the distribution of the data around the model's value:
+Nothing needs a likelihood to be compared with data or fitted to it: by default, a fit compares each result with its data by their normalized absolute difference, and `sim.fit(gof=...)` takes another measure, or a function of your own ([Measuring the fit](calibration_fitting.qmd#measuring-the-fit)). Where a likelihood is wanted, for example for Bayesian methods, it is given with the outcome, as the distribution of the data around the model's value:
 
 ```python
 cases = ss.outcome(0.5*onset, delay=ss.days(4), likelihood=ss.nbinom(n=ss.par(10, bounds=[1, 100])))
 ```
 
-The model's value is the mean of the distribution, and the rest (here the dispersion of a negative binomial) is given, or fitted as a parameter. See [Fitting a model](calibration_fitting.qmd) and [Gradients](calibration_gradients.qmd).
+The model's value is the mean of the distribution, and the rest (here the dispersion of a negative binomial) is given, or fitted as a parameter. The [appendix](#appendix-every-likelihood) lists the likelihoods there are, and the data each suits. See [Fitting a model](calibration_fitting.qmd) and [Gradients](calibration_gradients.qmd).
 
 ## Pitfalls
 
@@ -173,3 +173,17 @@ The model's value is the mean of the distribution, and the rest (here the disper
 - [Practical considerations for measuring the effective reproductive number, Rt](https://doi.org/10.1371/journal.pcbi.1008409): why the delays between infection and observation matter, and how to account for them
 - [pomp](https://kingaa.github.io/pomp/): stochastic models with an explicit measurement model linking the process to the data, in R
 - [Simulation-based inference for epidemiological dynamics](https://kingaa.github.io/sbied/): course notes on measurement models and likelihoods for epidemic data
+
+## Appendix: every likelihood
+
+A likelihood is given with an outcome (`ss.outcome(..., likelihood=...)`), or to the fit by the name of the data series (`sim.fit(likelihood=dict(cases=...))`). In each, the model's value at the data is the mean (or the probability), and the other parameters can be numbers or fitted `ss.par()`s. See [`ss.fit`](../api/fit.qmd).
+
+| Likelihood | The model's value is | Suits |
+|---|---|---|
+| `ss.poisson()` | The mean count | Counts with no more spread than chance gives: cases or deaths, reported in full or at a steady rate |
+| `ss.nbinom(n=...)` | The mean count; `n` is the dispersion (smaller means more spread) | Overdispersed counts, as most surveillance data are: reporting that varies from week to week |
+| `ss.binom(n=...)` | The probability; `n` is the number of trials | The positives among `n` people tested, e.g. a prevalence survey or a serosurvey |
+| `ss.bernoulli()` | The probability | Whether something happened, as 0 or 1, e.g. whether an outbreak was reported |
+| `ss.normal(scale=...)` | The mean; `scale` is the standard deviation | A continuous measure with noise of a known size, e.g. a share estimated with a standard error |
+| `ss.lognorm_ex(std=...)` | The mean; `std` is the standard deviation | A positive measure whose noise grows with its size, e.g. a concentration in wastewater |
+| A function `fn(observed, model)` | Whatever the function says: it returns the log-likelihood of each value | Anything else, e.g. a normal whose variance grows with the mean (not available for NUTS in JAX, which then runs with Python in the loop) |

@@ -13,7 +13,7 @@ This tutorial takes the measles model from one town to four. By the end, you wil
 
 - give a model several places, with their populations and positions;
 - say how much people move between them, with a gravity model or a matrix;
-- read the results for each place, and see how an outbreak spreads from one to the next;
+- read the results for each place, and see how an outbreak spreads from one to the next, on a map and as an animation;
 - see how much the answer depends on the amount of movement, and on chance.
 
 ## The model so far
@@ -47,7 +47,7 @@ sim.plot('measles.I')
 
 ## Several towns
 
-The town, Riverton, has three smaller neighbors. A **geography** ([`ss.geo.geography()`](../api/geo.qmd)) gives the places: their names, their populations, and where they are (here, positions on a map in kilometers, from which Starsim works out the distance between each pair):
+The town, Riverton, has three smaller neighbors. A **geography** ([`ss.geo.geography()`](../api/geo.qmd)) gives the places: their names, their populations, and where they are (here, positions on a map in kilometers, from which Starsim works out the distance between each pair, `towns.distances`). `plot()` draws them, each with an area in proportion to its population:
 
 ```{python}
 towns = ss.geo.geography(
@@ -56,7 +56,7 @@ towns = ss.geo.geography(
     x     = [0, 20, 35, 60], # Kilometers east of Riverton
     y     = [0, 10, -15, 5], # Kilometers north of Riverton
 )
-towns.distances.round()
+towns.plot()
 ```
 
 Places are a stratification, as age groups are: `stratify(patch=towns)` splits each state by town (a "patch" is a place in a metapopulation model), so that each town has its own susceptible, exposed, infectious, and recovered people, and the contact matrix applies within each town. The populations of the towns give the population of the model, so `total_pop` isn't needed. The outbreak starts in Riverton only: `ss.by(patch=[10, 0, 0, 0])` gives the number infectious at the start in each town.
@@ -99,6 +99,33 @@ round(sim.results.measles.infection.select(patch='Fairfield').sum())
 
 When the movement between places is known, from a survey or from mobile phone data, it can be given as a matrix instead, with `ss.geo.Mobility(matrix=..., kind='commute')`: row *i*, column *j* is the share of their time that the people of place *i* spend in place *j*. [Geography](../user_guide/populations_geography.qmd) covers this, the radiation model, and coupling places through the force of infection rather than through movement.
 
+## On a map
+
+A line for each place shows when each outbreak happens, but not where. `map()` draws a result on a map of the places. By default, it maps the result's summary over the run, as `summarize()` gives it: here the share of each town's people who are infectious (the prevalence), on average over the year:
+
+```{python}
+sim.results.measles.prevalence.map()
+```
+
+The prevalence is the better result to map than the number infectious, since the towns differ in size: Fairfield's outbreak is small in numbers, but as intense, for its size, as Riverton's. `n=6` draws six maps instead, across the outbreak, which show where it is at each time:
+
+```{python}
+sim.results.measles.prevalence.map(n=6)
+```
+
+With `animate=True`, the map is an animation instead, with a frame every few days (press play):
+
+```{python}
+sim.results.measles.prevalence.map(animate=True)
+```
+
+The outbreak moves outward from Riverton, reaching Fairfield last. `map(t='2025-05-15')` draws one date, and `filename='spread.gif'` saves an animation, e.g. for a presentation. To map any other value for each place, such as the share of each town infected over the whole year, give it to the geography's `plot()`:
+
+```{python}
+infected = sim.results.measles.infection.by('patch').summarize() # Infections in each town over the year
+towns.plot(values=infected/towns.pop, label='Share infected')
+```
+
 ## How much movement matters
 
 The share of time away is the least certain number in this model. To see how much it matters, run the model with several values of it. `ss.parallel()` with `pars=` runs a sim once for each value given (a parameter sweep), labeling each run with its value:
@@ -139,7 +166,21 @@ Each agent has a home town, and is exposed in the other towns for the share of t
 
 ## Real places
 
-Places can also be a country's regions, by name: `ss.geo.geography('Kenya', level=1)` gives Kenya's 47 counties, with their populations, positions, and which share a border. Movement can come from a gravity model, from the radiation model (`ss.geo.radiation()`, which needs no parameters), from a matrix of movement you supply, or from a register of moves on given dates (e.g. of livestock between farms), and it can be commuting, as here, or migration. See [Geography](../user_guide/populations_geography.qmd) and [Population data](../user_guide/populations_data.qmd).
+Places can also be a country's regions, by name: `ss.geo.geography('Kenya', level=1)` gives Kenya's 47 counties, with their populations, positions, and which share a border, from data that comes with Starsim. Here is the same model, starting with 10 infectious people in Nairobi:
+
+```{python}
+kenya = ss.geo.geography('Kenya', level=1)
+measles = make_measles(init_n=ss.by(patch={'Nairobi': 10})) # 10 infectious people in Nairobi, and none elsewhere
+measles.stratify(patch=kenya, mobility=ss.geo.gravity(away=away))
+
+sim = ss.Sim(measles, **settings)
+sim.run()
+sim.results.measles.prevalence.map(n=6, shapes=True)
+```
+
+`shapes=True` draws each county as its boundaries, which are downloaded the first time (this needs the optional package geopandas: `pip install starsim_data[spatial]`); without it, each county is drawn at its center, with an area in proportion to its population. Measles grows in Nairobi until July, and then in the other counties, most of which peak together in September, far ones as well as near ones: the gravity model sends Nairobi's visitors everywhere, and at a prevalence of 2%, even a small share of them is enough to start an outbreak.
+
+Movement can come from a gravity model, from the radiation model (`ss.geo.radiation()`, which needs no parameters), from a matrix of movement you supply, or from a register of moves on given dates (e.g. of livestock between farms), and it can be commuting, as here, or migration. See [Geography](../user_guide/populations_geography.qmd) and [Population data](../user_guide/populations_data.qmd).
 
 ## Exercises
 

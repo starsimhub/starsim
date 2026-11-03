@@ -159,6 +159,7 @@ website:
             - user_guide/running_sim.qmd
             - user_guide/running_scenarios.qmd
             - user_guide/running_solvers.qmd
+            - user_guide/running_performance.qmd
             - user_guide/running_branching.qmd
             - user_guide/running_debugging.qmd
             - user_guide/running_deploy.qmd

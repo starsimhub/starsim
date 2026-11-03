@@ -1494,8 +1494,11 @@ def numeric_dist(dist, convert, per_agent=None):
                 raise ValueError(errormsg)
             group = per_agent(group)
         return ss.histogram.by_group([rebuild(*part) for part in dist.parts], group)
+    pars = numeric_pars(dist, convert, per_agent)
+    if type(dist) is ss.Dist: # A SciPy distribution given as ss.Dist(dist=...), which its parameters alone don't rebuild
+        return ss.Dist(dist=dist.dist, distname=dist.distname, **pars)
     cls = ss.beta_dist if isinstance(dist, ss.beta_mean) else type(dist) # Whose parameters are those of a beta distribution
-    return cls(**numeric_pars(dist, convert, per_agent))
+    return cls(**pars)
 
 
 def varying_pars(dist):

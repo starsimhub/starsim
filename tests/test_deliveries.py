@@ -263,7 +263,7 @@ def test_deliver():
     diff = msim.diff('baseline').vaccine.sir.infection.cum
     assert diff.values.shape == (3, 101)
     assert np.all(diff.values[:, -1] < 0) # Fewer infections in every run
-    fig = msim.plot('sir.I') # The median and an interval for each scenario
+    fig = msim.plot('sir.I', show_interventions=False) # The median and an interval for each scenario
     assert len(fig.axes[0].lines) == 2
     return msim
 

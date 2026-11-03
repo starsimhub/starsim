@@ -46,6 +46,13 @@ class SimPars(ss.Pars):
         interventions (str/list/Module): As above
         analyzers (str/list/Module): As above
         nopython (bool): whether to raise `ss.CapabilityError`, rather than fall back to Python, if a compartmental run cannot be taken whole in the kernels, as with Numba's `nopython=True` (see `sim.kernel_reason()`)
+        solver (str): how a declared model is run: 'auto' (the default: chosen from the model; see `sim.solver_reason`), 'ode', 'ide' (dwell times as they are, not as stages), 'binomial' (chain binomial), 'gillespie' (exact), 'tau' (tau-leaping), or 'abm' (agents)
+        branching (bool): whether to run as a branching process, in which infection takes no one from the uninfected, nor gives anyone back (default False)
+        approx (bool): what to do about an approximation of the model: None (default) prints a note for each, True keeps the notes in `sim.notes` without printing them, and False makes each an error
+        integrator (str): the ODE integration scheme: 'rk4' (the default) or 'euler'
+        substeps (int): the number of substeps per timestep, for the 'rk4' and 'euler' integrators and the 'binomial' solver (default: enough that no compartment changes by more than about a quarter, or a tenth for the binomial solver, in one)
+        stratify (dict): people dimensions for every module, e.g. `dict(age=[0, 15, 65])`
+        results (list): the results to keep by group, by name, e.g. `['I', 'cases']` or `['sir.I']`; the others keep only their totals (default: all, every few steps if every step would take more than about 100 MB)
         verbose (int/float): How much to print: 0 nothing, 1 the solver, notes, and progress (default), 2 everything (e.g. each step); a fraction is as 1, with progress every that share of the run (e.g. 0.1 for every 10%)
         create (bool): whether a key that doesn't exist yet can be added
     """
@@ -914,7 +921,7 @@ class Sim(ss.Base):
             likelihood (dict): the likelihood of a data series, by its name (e.g. `dict(prevalence=ss.normal(scale=0.02))`), for series whose outcome does not declare one. If every series has a likelihood, the fit maximizes their sum (plus the log of the priors of the parameters that have one, for the methods that find a best fit: the most probable values)
             gof (str/func): the goodness of fit: 'nae' (normalized absolute error, the default), 'rmse', or a function of the sim; any other name is an error
             penalty (func): a function of the parameter values (a dict by name, an array whole) returning a number added to what a best fit minimizes, e.g. a smoothness penalty, `lambda pars: 10*np.sum(np.diff(pars['knots'], 2)**2)`
-            method (str/list): by default, a best fit (a point estimate), by the method that suits the sim, which is printed with the reason: 'l-bfgs-b' for a deterministic sim with gradients (from JAX; see `ss.gradients`), 'nelder-mead' for one without them, or with one or two fitted parameters (where it is faster than gradients), and 'optuna' for a stochastic sim, including an agent-based one. A posterior is asked for by name: 'nuts' (the No-U-Turn sampler, for a deterministic sim with gradients whose data series all have a likelihood, with each chain started from one of the best points of a scan over the bounds that are apart), 'pmcmc' (particle MCMC, for a stochastic compartmental sim whose data series all have a likelihood: a random-walk Metropolis sampler on the likelihood estimated by a particle filter; see `ss.fit.ParticleFilter`), or 'abc-smc' (approximate Bayesian computation by sequential Monte Carlo, for any sim, with no likelihood needed); the priors are the parameters' `prior=`, or uniform over their bounds. Also: 'if2' (iterated filtering, for the sims that 'pmcmc' fits: the maximum-likelihood values, from passes of a particle filter in which each particle's values are perturbed by a shrinking random walk; see `ss.fit.Swarm`), 'powell' (no gradients) or 'slsqp' (with gradients, like 'l-bfgs-b'), or a list of methods, each started from the best fit of the one before (a stage that does not converge stops the list; see `ss.fit.fit_stages()`)
+            method (str/list): by default, a best fit (a point estimate), by the method that suits the sim, which is printed with the reason: 'l-bfgs-b' for a deterministic sim with gradients (from JAX; see `ss.gradients`), 'nelder-mead' for one without them (including one whose likelihood or priors JAX does not cover, e.g. a likelihood given as a function), or with one or two fitted parameters (where it is faster than gradients), and 'optuna' for a stochastic sim, including an agent-based one. A posterior is asked for by name: 'nuts' (the No-U-Turn sampler, for a deterministic sim with gradients whose data series all have a likelihood, with each chain started from one of the best points of a scan over the bounds that are apart), 'pmcmc' (particle MCMC, for a stochastic compartmental sim whose data series all have a likelihood: a random-walk Metropolis sampler on the likelihood estimated by a particle filter; see `ss.fit.ParticleFilter`), or 'abc-smc' (approximate Bayesian computation by sequential Monte Carlo, for any sim, with no likelihood needed); the priors are the parameters' `prior=`, or uniform over their bounds. Also: 'if2' (iterated filtering, for the sims that 'pmcmc' fits: the maximum-likelihood values, from passes of a particle filter in which each particle's values are perturbed by a shrinking random walk; see `ss.fit.Swarm`), 'powell' (no gradients) or 'slsqp' (with gradients, like 'l-bfgs-b'), or a list of methods, each started from the best fit of the one before (a stage that does not converge stops the list; see `ss.fit.fit_stages()`)
             scan (int): for the SciPy methods, NUTS, and particle MCMC, the number of points spread over the bounds to try first (default: 10 per parameter, at most 100); the search starts from each of the best `restarts=3` of them that are apart (for SciPy; 1 for a single parameter of a deterministic sim), each NUTS chain from one of the best that are apart, and particle MCMC from the best
             n_runs (int): runs per evaluation, for a stochastic sim (default 4 for a stochastic compartmental sim, and 1 for agents and for a deterministic one); every point is scored by the mean over the same seeds (common random numbers), except under Optuna, where each point takes fresh seeds so that its search averages over chance (see `reseed=`); `fit.mismatch` is the score at the best fit over the first seeds
             reseed (bool): whether each point takes fresh seeds (default: True for Optuna, False otherwise); `reseed=False` with Optuna scores every point with the same seeds, e.g. for a rare outcome, where with fresh seeds the search favors values whose runs were lucky
@@ -2253,7 +2260,7 @@ class Sim(ss.Base):
             sc.savejson(filename=filename, obj=d, indent=indent)
         return d
 
-    def plot(self, key=None, fig=None, show_data=True, show_skipped=False, annualize=False, **kwargs):
+    def plot(self, key=None, fig=None, show_data=True, show_skipped=False, annualize=False, show_interventions=True, **kwargs):
         """
         Plot all results in the Sim object
 
@@ -2264,6 +2271,7 @@ class Sim(ss.Base):
             show_data (bool): plot the data, if available
             show_skipped (bool): show even results that are skipped by default
             annualize (bool): if True, resample results to annual values before plotting (each by its `summarize_by`; see `ss.Result.resample()`)
+            show_interventions (bool): mark when interventions and modifiers act: a dashed line at each round of a delivery, and a shaded span from the start to the stop of routine delivery or of an `ss.modify()` (those on an event or condition are not marked)
             fig_kw (dict): passed to `sc.getrowscols()`, then `plt.subplots()` and `plt.figure()`
             plot_kw (dict): passed to `plt.plot()`
             data_kw (dict): passed to `plt.scatter()`, for plotting the data
@@ -2290,7 +2298,8 @@ class Sim(ss.Base):
             own = [k for k,res in self.results.items() if isinstance(res, ss.Result)]
             flat = ss.results.match_result_keys(self.results, None)
             key = [k for k,res in flat.items() if not (k in own and np.allclose(res.values, res.values[0]))] or None
-        return self.results.plot(key=key, fig=fig, data=data, label=self.label, show_skipped=show_skipped, annualize=annualize, **kwargs)
+        marks = {None:ss.results.intervention_marks(self)} if show_interventions else None
+        return self.results.plot(key=key, fig=fig, data=data, label=self.label, show_skipped=show_skipped, annualize=annualize, marks=marks, **kwargs)
 
 
 

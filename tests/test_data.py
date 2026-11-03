@@ -42,7 +42,8 @@ def test_contacts():
 
     # A place a source does not have says which do
     with pytest.raises(KeyError, match='mistry2021'):
-        ss.contacts('Japan')
+        ss.contacts('Japan', source='prem2021')
+    assert ss.data.contacts('Japan').attrs['ref']['study'] == 'Prem et al. 2017' # By default, Prem 2021 where it has the place, else Prem 2017
     with pytest.raises(KeyError, match='the place "Kenyaa" was not found'):
         ss.contacts('Kenyaa')
     return sims
@@ -92,6 +93,20 @@ def test_geo():
     # The places say where they came from
     ref = sim.diseases.sir.graph.strats[0].geo.ref
     assert ref['place'] == 'Kenya' and ref['level'] == 1
+
+    # Maps: of the places, colored by a value by name; of a result at several times, at one, and as an animation
+    import matplotlib.pyplot as plt
+    from matplotlib.animation import FuncAnimation
+    infections = sim.results.sir.infection.by('patch').summarize()
+    assert kenya.plot(values=infections/kenya.pop, label='Share infected', do_show=False) is not None
+    with pytest.raises(ValueError, match='none for'):
+        kenya.plot(values=dict(Nairobi=1), do_show=False)
+    assert len(sim.results.sir.prevalence.map(n=4, do_show=False).axes) == 5 # Four maps and a color bar
+    fig = sim.results.sir.prevalence.map(do_show=False) # By default, one map of the summary
+    assert len(fig.axes) == 2 and fig.axes[0].get_title() == 'Mean over the run'
+    assert len(sim.results.sir.prevalence.by('patch').map(t=30, do_show=False).axes) == 2
+    assert isinstance(sim.results.sir.prevalence.map(animate=True, do_show=False), FuncAnimation)
+    plt.close('all')
     return sim
 
 

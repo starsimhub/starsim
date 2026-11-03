@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 10
   ai: 90
-  note: Based on the Claude drafts on debugging and on common pitfalls, merged, with profiling and the loop adapted from the Starsim 3 user guide page on profiling and debugging
+  note: Based on the Claude drafts on debugging and on common pitfalls, merged, with profiling and the loop adapted from the Starsim 3 user guide page on profiling and debugging; comparing sims and appendices of tools and errors added by AI
 ---
 
 A model can go wrong in three ways: it stops with an error, it runs but gives an answer that looks wrong, or it runs too slowly. This page goes through the tools Starsim has for each, in roughly the order to reach for them, and then the mistakes that are known to catch people out, most of which don't raise an error at all. Most of the examples use the measles model from the [tutorials](../tutorials/t1_intro.qmd): an SIR with β = 1.9 per day and an infectious period of 8 days, so R0 = 1.9 × 8 ≈ 15.
@@ -43,7 +43,7 @@ except KeyError as error:
     print(error)
 ```
 
-Most errors are Python's own: a `KeyError` for a name that is not found, as here, a `TypeError` for a value of the wrong kind, and a `ValueError` for the rest. The message is what says what went wrong, so search for it, or catch the error by its type as above. The few that code may want to catch by kind are classes of their own, such as `ss.CapabilityError`, raised when the solver asked for can't run part of the model. Most mistakes are caught when the sim is built (`sim.init()`, which `sim.run()` calls first), before any time step is taken, so an error usually comes at once rather than after a long run.
+Most errors are Python's own: a `KeyError` for a name that is not found, as here, a `TypeError` for a value of the wrong kind, and a `ValueError` for the rest. The message is what says what went wrong, so search for it, or catch the error by its type as above. The few that code may want to catch by kind are classes of their own, such as `ss.CapabilityError`, raised when the solver asked for can't run part of the model. Most mistakes are caught when the sim is built (`sim.init()`, which `sim.run()` calls first), before any time step is taken, so an error usually comes at once rather than after a long run. A few are caught at the end: `sim.check_finite()`, called when a run finishes, raises a `ValueError` if the number of people in a declared state stopped being a number (usually a rate too fast for the step), rather than return results that aren't numbers. Every error and warning that is a class of its own is in the [appendix](#appendix-errors-and-warnings).
 
 A run prints what it is running and how, the R0 of each disease, any notes, and a closing line with the size and timing of the peak. Read these first: most surprises are explained there. A note is something Starsim assumed or noticed that is worth knowing, and doesn't stop the run. For example, in an SEIR model, `init_prev` puts people in E, where a new infection starts, so nobody is infectious at first:
 
@@ -83,17 +83,32 @@ sim.describe()
 measles.equations()
 ```
 
-When two sims that should agree don't, compare what each says about itself: the `describe()` of each, side by side, shows where their states, transitions, parameters, and settings differ (and the code of each can be compared in a text editor). Here the second sim has a lower β and a shorter step:
+### Runs that should match but don't
+
+When two sims that should agree don't, compare what each says about itself: `describe(output=True)` gives the text of each, and a diff of the two shows only the lines where their states, transitions, parameters, and settings differ. Here a second sim has a lower β and a shorter step:
 
 ```{python}
+import difflib
+
 S, I, R = ss.states('S I R')
 infection = S >> I @ 1.5*I
 recovery  = I >> R @ ss.days(8)
 other = ss.Disease(infection, recovery, init_prev=0.001, name='measles')
 other_sim = ss.Sim(other, total_pop=100_000, stop=ss.days(50), dt=ss.days(0.5), verbose=0)
 
-other_sim.describe()
+before = sim.describe(output=True).splitlines()
+after = other_sim.describe(output=True).splitlines()
+print('\n'.join(difflib.unified_diff(before, after, 'sim', 'other_sim', lineterm='', n=0)))
 ```
+
+The lines marked `-` are the first sim's and those marked `+` the second's: β is 1.5 rather than 1.9, and the disease takes a step every half day. To compare the results of two runs, `ss.debugtools.diff_sims()` lists each summary result that differs, with the ratio of the two, and `ss.debugtools.check_sims_match()` gives True if every result matches (see [debugtools](../api/debugtools.qmd)):
+
+```{python}
+other_sim.run()
+ss.debugtools.diff_sims(sim, other_sim);
+```
+
+Each value is the final one, on day 50: with the lower β, the epidemic is later, so more people are still infectious at the end, and a few more have escaped infection. Where two runs of what should be the same model differ only from some step on (after a change to code written as a module, say), `sim.set_diagnostics()` before the run records every random draw and every agent's states at every step, in `sim.diagnostics`, so the step where the two runs diverge can be found. It slows the run a great deal, so use it on a small sim.
 
 ### Checking the numbers
 
@@ -298,6 +313,8 @@ Rename the column to match the result (`data.rename(columns={'reported': 'cases'
 
 ### Code of your own
 
+**A method that forgot to call `super()`.** A module written as code that overrides `init_pre()`, `init_results()`, `init_post()`, `start_step()`, `finish_step()`, or `finalize()` without calling the base class's version leaves part of the module unset. At the end of a run, Starsim warns with the methods that were never called (`sim.check_method_calls()`, which can also be called by hand), so read that warning rather than the results.
+
 **`len(sim.people)` still counts those who died this step.** People who die in a step stay among the active agents until the step ends, so that analyzers can look at them, so a share worked out in an analyzer with `len(sim.people)` as its denominator is off by that step's deaths. Use `sim.people.n_alive`.
 
 **A date between two steps never equals `sim.now`.** `if sim.now == ss.date('2025-03-01'):` in a sim with weekly steps does nothing, with no error, unless a step happens to fall on that date. Compare with `>=`, or give a module written as code `start=`, and it runs only from then on.
@@ -370,3 +387,55 @@ If none of this finds the problem, cut it down to the smallest script that shows
 - [line_profiler](https://github.com/pyutils/line_profiler): the line-by-line profiler behind `sim.profile()`
 - [Python: The Python profilers](https://docs.python.org/3/library/profile.html): `cProfile`, behind `sim.cprofile()`
 - [Python: pdb](https://docs.python.org/3/library/pdb.html): the debugger, for stepping through a module written as code
+
+## Appendix: every diagnostic tool
+
+The tools on this page and elsewhere, by the question each answers. "Builds" means it calls `sim.init()` if the sim hasn't been built, without running it.
+
+| Tool | What it answers | Runs the sim? |
+|---|---|---|
+| The lines a run prints, and `sim.notes` | What Starsim assumed, approximated, or wants checked | Notes are made as the sim is built and run |
+| `sim.describe()` | The model as built: every state, transition, parameter, and setting, with each guess marked | Builds |
+| `disease.equations()` | The model as the equations of an ODE | No |
+| `disease.diagram()` | The states and transitions, drawn | No |
+| `sim.solver`, `sim.solver_reason` | Which solver was chosen, and why | Builds |
+| `sim.kernel_reason()`, `nopython=True` | Why a compartmental run is taken a step at a time rather than in one call (see [Getting the most speed](running_performance.qmd)) | Builds |
+| `ss.solvers.solver_table()` | Every rule that decides which engine runs a model (see [Solvers and backends](running_solvers.qmd#appendix-what-needs-agents)) | No |
+| `sim.check_dt()` | How much each result changes with a step half as long | Runs two copies |
+| `sim.what_modifies()` | Everything that changes a parameter during the run | Builds |
+| `describe(output=True)` with `difflib` | Where two models differ | Builds |
+| `ss.debugtools.diff_sims()`, `check_sims_match()` | Which results of two runs differ, and by how much | No (give it sims that have run) |
+| `sim.set_diagnostics()` | Every random draw and agent state at every step, to find where two runs diverge | Records during the next run |
+| `sim.check_finite()` | Whether a declared state's count stopped being a number | No; called at the end of every run |
+| `sim.check_method_calls()` | Which required methods of a module written as code were never called (a missing `super()`) | No; called at the end of a run taken a step at a time |
+| `ss.options(warnings='error')` | Stops at the first warning | No |
+| `sim.run(until=...)`, `sim.people.to_df()` | The people and their states partway through a run | Runs part of the way |
+| `sim.run_one_step()` | One step at a time, for a debugger | Runs one step |
+| `sim.loop.to_df()`, `sim.loop.plot()` | Every call in every step, in order | Builds |
+| `sim.loop.insert()` | Runs a function of your own at any point in the step | No (it runs with the sim) |
+| `sim.run(profile=True)`, `sim.loop.plot_cpu()` | How long each call of the loop takes | Runs |
+| `sim.profile(follow=...)` | How long each line of the functions given takes | Runs a copy |
+| `sim.cprofile()` | How long every function the run calls takes | Runs |
+| `sim.elapsed` | The seconds the last run took | No |
+| `STARSIM_CHECK_COUNTS=1` (environment variable) | Checks, at every step, the counts the agent engine keeps against a new count (for testing the engine) | Applies to every run as agents |
+
+## Appendix: errors and warnings
+
+Most errors are Python's own (`KeyError`, `TypeError`, `ValueError`); these are the ones that are classes of their own, in `starsim/internals/errors.py`, so that code can catch or filter them by kind (see [Model execution](architecture_execution.qmd#errors-warnings-and-notes) for the policy behind them):
+
+```{python}
+import inspect
+import pandas as pd
+pd.set_option('display.max_colwidth', None) # Show each entry in full
+
+rows = []
+for name, cls in inspect.getmembers(ss.errors, inspect.isclass):
+    if issubclass(cls, (Exception, Warning)) and cls.__module__ == ss.errors.__name__:
+        rows.append(dict(
+            name = ('ss.' if name in ss.errors.__all__ else 'ss.errors.') + name,
+            kind = 'warning' if issubclass(cls, Warning) else 'error',
+            subclass_of = ', '.join(base.__name__ for base in cls.__bases__),
+            what = ' '.join(inspect.getdoc(cls).split()),
+        ))
+pd.DataFrame(rows).set_index('name')
+```

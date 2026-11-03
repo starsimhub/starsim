@@ -107,8 +107,9 @@ def logpdf(dist, observed, model, xp=np, pars=None):
     A likelihood can also be a function of the observed and the model's values,
     `fn(observed, model)`, returning the log-likelihood of each, for one the list above
     lacks (e.g. a normal whose variance grows with the mean). It is worked out with
-    NumPy, so the log-density in JAX (for NUTS) does not cover it, and NUTS samples
-    with Python in the loop instead.
+    NumPy, so the log-density in JAX does not cover it: the default fit then uses
+    Nelder-Mead, which needs no gradients, and NUTS samples with Python in the loop,
+    which is much slower, only with `sim.fit(method='nuts', nopython=False)`.
 
     Args:
         dist (`ss.Dist`/func): the likelihood
@@ -1020,7 +1021,7 @@ class Fit(sc.prettyobj):
                 if self.diagnostics.band is not None:
                     ax.fill_between(x, *self.diagnostics.band[col], alpha=0.3, label='95% of the posterior')
                 ax.scatter(times, self.sim.data[col], s=15, label='Data', zorder=10, **kw.data)
-                ax.set_title(col + (' (total over each period of the data)' if summed is not None else ''))
+                ax.set_title(col + (f' ({ss.results.period_totals(times)})' if summed is not None else ''))
                 ax.legend(frameon=False)
             sc.figlayout(fig=fig)
         return ss.return_fig(fig, **kw.return_fig)
@@ -1805,6 +1806,7 @@ class Problem(sc.prettyobj):
         self.no_grad = ss.solvers.why_not(runner, 'jax') or (f'{contacts[0]} sets the mixing when the sim is built' if contacts else None) or (f'{settings[0]} is a setting of the sim' if settings else None) # Why there are no gradients, if there are not
         self.trials = [] # Every evaluation
         self._density = None # The log-likelihood in JAX, once built: see jax_density()
+        self.built_density = None # And the object it is built from: see build_density()
         return
 
     def choose(self, method=None):
@@ -1812,6 +1814,9 @@ class Problem(sc.prettyobj):
         verbose = self.verbose
         if method is None:
             method, why = default_method(self.runner, self.use_lik, no_grad=self.no_grad, n_pars=len(self.fitted))
+            uncovered = self.jax_uncovered() if method == 'l-bfgs-b' and self.use_lik else None
+            if uncovered: # E.g. a likelihood given as a function: gradients would take Python in the loop
+                method, why = 'nelder-mead', f'no gradients, since the log-likelihood in JAX does not cover {uncovered} yet'
             if verbose:
                 print(f'Fitting by {method} ({why}; override with method=)')
         self.use_map = self.use_lik and any(self.priors) and method not in sampling_methods and method != 'if2' # A posterior method uses the priors itself, and IF2 finds the maximum likelihood
@@ -1886,7 +1891,7 @@ class Problem(sc.prettyobj):
             self._density = False
             if self.use_lik:
                 try:
-                    density = ss.gradients.Density(self.runner, self.fitted, self.x0, self.restart, likelihood=self.likelihood, weights=self.weights, external=self.external, bounds=(self.lows, self.highs))
+                    density = self.built_density or self.build_density()
                 except ss.gradients.Unsupported as E:
                     self.python_in_loop(f'the log-likelihood in JAX does not cover {E} yet', 'the gradients')
                     return None
@@ -1923,6 +1928,19 @@ class Problem(sc.prettyobj):
                             compiled.clear()
                 self._density = call
         return self._density or None
+
+    def build_density(self):
+        """ The log-likelihood in JAX (see `ss.gradients.Density`), kept for `jax_density()`; raises `ss.gradients.Unsupported` if it does not cover the model """
+        self.built_density = ss.gradients.Density(self.runner, self.fitted, self.x0, self.restart, likelihood=self.likelihood, weights=self.weights, external=self.external, bounds=(self.lows, self.highs))
+        return self.built_density
+
+    def jax_uncovered(self):
+        """ What the log-likelihood in JAX does not cover (e.g. a likelihood given as a function), or None if it covers the model, for choosing the default method """
+        try:
+            self.built_density or self.build_density()
+        except ss.gradients.Unsupported as E:
+            return str(E)
+        return None
 
     def python_in_loop(self, why, what):
         """ Take something (e.g. the gradients) with Python in the loop, which is much slower, only if `nopython=False`; otherwise say why it can't be taken in JAX """
@@ -2489,7 +2507,7 @@ def fit_abc_smc(problem, particles=None, generations=8, quantile=0.5, tolerance=
 
 def fit_nuts(problem, draws=500, warmup=500, chains=4, scan=None):
     """
-    The No-U-Turn sampler, each chain from an optimum found from one of the best points of a scan that are apart: the best, and others nearly as good (so that chains caught in different modes disagree, and none starts in a mode far below the best), on the log-density as one function in JAX if the model allows (see `ss.gradients.Density`), else with Python in the loop
+    The No-U-Turn sampler, each chain from an optimum found from one of the best points of a scan that are apart: the best, and others nearly as good (so that chains caught in different modes disagree, and none starts in a mode far below the best), on the log-density as one function in JAX if the model allows (see `ss.gradients.Density`), else with Python in the loop (only with `nopython=False`)
 
     For a deterministic sim with gradients, with a likelihood for every data series. It gives a posterior (`fit.samples`), and needs JAX and BlackJAX.
 

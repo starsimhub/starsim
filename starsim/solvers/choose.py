@@ -1487,7 +1487,7 @@ def own_steps(sim):
     others = [mod for mod in sim.modules if mod.name in names and mod not in sim.declared]
     if not others:
         return None
-    kinds = list(dict.fromkeys('a modifier with where=, when=, or a function as its amount' if isinstance(mod, ss.modify) else 'a module written as code' for mod in others))
+    kinds = list(dict.fromkeys('a modifier with until= or hold=, a function as its where= or amount, or a time series that does not hold its value' if isinstance(mod, ss.modify) else 'a module written as code' for mod in others))
     one = len(others) == 1
     return dict(names=sc.strjoin(mod.name for mod in others), has='has' if one else 'have', its='its' if one else 'their', kinds=' or '.join(kinds))
 
@@ -1551,7 +1551,7 @@ kernels = [ # What stops the kernels taking a whole run in one call: something i
     Rule('declared', lambda sim, mod: dict(sync=mod.engine.syncs[0]) if mod.engine.syncs else None, STEPPED, '"{sync.mod.name}.{sync.otr.name}" is a synchronized flow of "{mod.name}.{sync.tr.name}"'), # Recorded in the other module after each step
     Rule('declared', lambda sim, mod: dict(tr=mod.engine.triggers[0]) if mod.engine.triggers else None, STEPPED, '"{tr.name}" is triggered by {tr.trigger}, which is applied at each step'), # In Python, for those who come to meet them other than by a transition
     Rule('declared', lambda sim, mod: dict(tr=mod.engine.event_triggers[0]) if mod.engine.event_triggers else None, STEPPED, '"{tr.name}" is triggered by {tr.trigger}, which is applied at each step'), # Moved in Python at the end of each step
-    Rule('declared', stepped_modifier, STEPPED, 'the modifier "{m.name}" is applied each step (it has where=, when=, or a function as its amount, or changes a value that varies by person)'),
+    Rule('declared', stepped_modifier, STEPPED, 'the modifier "{m.name}" is applied each step (it has until= or hold=, a function as its where= or amount, or changes a value that varies by person)'),
     Rule('declared', lambda sim, mod: bool(mod.engine.net_mods), STEPPED, 'a modifier changes the contacts of a network'), # The contacts are set once for a whole run
     Rule('declared', weighted_rate, STEPPED, '{leaf} is {what}, which is worked out at each step'),
     Rule('declared', lambda sim, mod: modified_key(sim, mod, 'route'), STEPPED, 'a modifier acts on a transmission of "{mod.name}" on one route'),

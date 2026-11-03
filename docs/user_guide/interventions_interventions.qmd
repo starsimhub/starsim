@@ -4,28 +4,29 @@ jupyter: python3
 authorship:
   human: 5
   ai: 95
-  note: Based on the AI-written v4 drafts on deliveries and on changing parameters, with ideas on eligibility and naming from the Starsim 3 user guide page on interventions; the overview, custom intervention, and advice on comparisons written by AI
+  note: Based on the AI-written v4 drafts on deliveries and on changing parameters, with ideas on eligibility and naming from the Starsim 3 user guide page on interventions; the overview, custom intervention, and advice on comparisons written by AI; examples made realistic, delivery without a product, and appendices added by AI
 ---
 
 An intervention is anything done to change the course of an epidemic. Most are one of two kinds. Some **deliver a product** to people: a vaccine, a test, or a drug, given to the people who are eligible, at given times or when something happens to them. Others **change a quantity** in the model, giving nothing to anyone: masks, distancing, and school closures change transmission, faster diagnosis shortens the time people are infectious. This page covers both: how products are delivered (who, when, and how many), and how parameters are changed (when, for whom, and how changes combine), and then interventions written as code, for anything else.
 
 What a vaccine, test, or treatment does is on [Products](interventions_products.qmd), and what interventions cost on [Costs](interventions_costs.qmd). The same `ss.modify()` that changes parameters is how one module changes another, on [Connectors](interventions_connectors.qmd). The tutorial [T5 – Interventions and scenarios](../tutorials/t5_interventions.qmd) compares interventions against measles, and [A4 – Interventions](../tutorials/a4_interventions.qmd) uses deliveries that need agents; running the scenarios of a comparison is on [Scenarios](running_scenarios.qmd).
 
-Here are the two kinds side by side, against measles in a town of 100,000: a vaccination campaign that reaches 90% of people on day 5, and distancing that halves transmission from day 5 to day 30:
+Here are the two kinds side by side, against an outbreak of measles in a town of 100,000 people, 90% of whom are immune (an SEIR model with an R0 of about 15, latent for 10 days and infectious for 8, as on [Products](interventions_products.qmd)): a vaccination campaign that reaches 80% of people on 1 May, three months before the outbreak would peak, and distancing that halves transmission from 1 May to 1 July:
 
 ```{python}
 import numpy as np
 import starsim as ss
 
-S, I, R = ss.states('S I R')
-infection = S >> I @ 1.9*I        # β = 1.9 per day
-recovery  = I >> R @ ss.days(8)   # Infectious for 8 days on average
-measles = ss.Disease(infection, recovery, init_prev=0.0001)
+S, E, I, R = ss.states('S E I R')
+infection   = S >> E @ 1.9*I        # β = 1.9 per day
+progression = E >> I @ ss.days(10)  # Latent for 10 days on average
+recovery    = I >> R @ ss.days(8)   # Infectious for 8 days on average
+measles = ss.Disease(infection, progression, recovery, init=dict(R=0.9), init_n=dict(I=10)) # 90% immune, 10 infectious
 
-vaccination = ss.vaccinate(efficacy=0.95, leaky=False, coverage=0.9, at=[ss.days(5)])                 # Delivers a product
-distancing = ss.modify(measles.pars.beta, multiply=0.5, start=ss.days(5), stop=ss.days(30))           # Changes a parameter
+vaccination = ss.vaccinate(efficacy=0.93, leaky=False, coverage=0.8, at='2025-05-01')                   # Delivers a product
+distancing = ss.modify(measles.pars.beta, multiply=0.5, start='2025-05-01', stop='2025-07-01')           # Changes a parameter
 
-kw = dict(total_pop=100_000, stop=ss.days(60), verbose=0)
+kw = dict(total_pop=100_000, start='2025-01-01', stop='2026-07-01', verbose=0)
 msim = ss.parallel({
     'No intervention': ss.Sim(measles, **kw),
     'Vaccination':     ss.Sim(measles, interventions=vaccination, **kw),
@@ -35,7 +36,7 @@ msim.plot('measles.I')
 msim.summarize().loc['measles_infection']
 ```
 
-The campaign (with an all-or-nothing vaccine, `leaky=False`, as measles vaccine roughly is) protects those it reaches for good, and halves the number infected; by day 5, measles is already spreading fast, and many are infected before it starts. Halving transmission of a disease with an R0 of 15 hardly helps: R0 is still above 7, and when distancing ends, the people it protected are still susceptible. A disease with an R0 of 2, as in the examples below, responds very differently.
+The campaign (with an all-or-nothing vaccine, `leaky=False`, as measles vaccine roughly is, protecting 93% of those vaccinated) protects those it reaches for good, and cuts the outbreak from about 6,000 infections to under 800. Distancing stops the outbreak growing while it lasts, since halving transmission brings the number each case infects below one; but when it ends, the people it protected are still susceptible, and the outbreak resumes, peaking in the winter instead of the summer, and infecting nearly as many in the end. The run is 18 months long so that this shows: a run that ended in December would credit distancing with infections it only delayed.
 
 ## Delivering products
 
@@ -59,6 +60,8 @@ A delivery says who can receive the product, when, and how many. There is one de
 | `deliver=` | A function of the sim that returns who receives it, instead of `where=`, `coverage=`, and the rounds |
 | `disease=` | The disease the product acts on, if there is more than one |
 
+The product is the first argument (`ss.vaccinate(vaccine, ...)`, or `what=`), or is made from the product's own keywords. A delivery can also move people between states with no product (`move=`; see [below](#delivery-without-a-product)). The [appendices](#appendix-every-delivery) list every delivery, every keyword, and every event and condition a delivery can be given.
+
 The examples in this section use a curable infection with no lasting immunity, over 20 years, as an SIS model run as agents (since some of what follows depends on each person's own history):
 
 ```{python}
@@ -72,38 +75,56 @@ kw = dict(n_agents=5000, start=2000, stop=2020, dt=ss.months(1), verbose=0)
 
 ### Rounds and routine delivery
 
-With `at=` or `interval=`, delivery is in **rounds**: in each round, every eligible person is offered the product once. With neither, delivery is **routine**: each person is offered it once, at the first step on which they are eligible. `at_age=` is routine delivery as people reach an age: `at_age=ss.months(9)` vaccinates children as they turn 9 months old, and not everyone older on the first day.
+With `at=` or `interval=`, delivery is in **rounds**: in each round, every eligible person is offered the product once. With neither, delivery is **routine**: each person is offered it once, at the first step on which they are eligible. `at_age=` is routine delivery as people reach an age: `at_age=ss.months(9)` vaccinates children as they turn 9 months old, and not everyone older on the first day. Routine delivery needs people to become eligible over time, by being born, aging, or something happening to them: in a population with no births, routine delivery to everyone is a single round on its first step. So these examples add births and deaths, of 3% a year, and compare routine vaccination of children as they turn one, yearly rounds that reach 20% of everyone, and two campaigns:
 
 ```{python}
-routine  = ss.vaccinate(efficacy=0.8, coverage=0.8, start='2005')                         # Once per person, when first eligible
+kw_births = dict(kw, demographics=[ss.birth(rate=ss.peryear(0.03)), ss.death(rate=ss.peryear(0.03))])
+
+routine  = ss.vaccinate(efficacy=0.8, coverage=0.8, at_age=ss.years(1), start='2005')     # Once per child, as they turn one
 yearly   = ss.vaccinate(efficacy=0.8, coverage=0.2, interval=ss.years(1), start='2005')   # A round every year
 campaign = ss.vaccinate(efficacy=0.8, coverage=0.6, at=['2005', '2010'])                  # Two rounds
 
 scenarios = {
-    'No vaccination':       ss.Sim(sis, **kw),
-    'Routine, 80%':         ss.Sim(sis, interventions=routine, **kw),
-    'Yearly rounds, 20%':   ss.Sim(sis, interventions=yearly, **kw),
-    'Two campaigns, 60%':   ss.Sim(sis, interventions=campaign, **kw),
+    'No vaccination':             ss.Sim(sis, **kw_births),
+    'Routine at age one, 80%':    ss.Sim(sis, interventions=routine, **kw_births),
+    'Yearly rounds, 20%':         ss.Sim(sis, interventions=yearly, **kw_births),
+    'Two campaigns, 60%':         ss.Sim(sis, interventions=campaign, **kw_births),
 }
 msim = ss.parallel(scenarios)
 msim.plot('sis.I')
+for sim in msim.sims[1:]:
+    delivery = sim.interventions[0]
+    print(sim.label, '- doses:', round(sim.results[delivery.name].delivered.sum()))
 ```
 
-As agents, each person has an age, so `at_age=` can be any age. As compartments, people have only an age group, and reach an age by aging from the group below it into the one it starts, so `at_age=` needs age groups with an edge at that age; otherwise it is an error (it never runs the model as agents instead). To compare several ages of delivery with the same compartments, give fine age groups once, with an edge at each age to try:
+Routine vaccination of children acts slowly, since it reaches only each new birth cohort (about 3% of people a year); rounds of everyone protect much of the population at once, for more doses. Which is realistic depends on the program: routine childhood vaccination is the usual way of reaching each new cohort, and campaigns the way to reach those it missed.
+
+As agents, each person has an age, so `at_age=` can be any age. As compartments, people have only an age group, and reach an age by aging from the group below it into the one it starts, so `at_age=` needs age groups with an edge at that age; otherwise it is an error (it never runs the model as agents instead). To compare several ages of delivery with the same compartments, give fine age groups once, with an edge at each age to try. The age at which to give the first dose of measles vaccine (MCV1) is a trade-off: maternal antibodies protect infants for their first months, but also stop the vaccine from working, so a dose at 6 months protects only about 60% of infants, at 9 months about 85%, and at 12 months or later over 90%; the later the dose, the longer infants go unprotected once their maternal antibodies wane. Here maternal immunity (`M`) lasts 6 months on average, and 80% of infants are vaccinated at each age, over 30 years in a population of a million:
 
 ```{python}
-S, I, R = ss.states('S I R')
-measles = ss.Disease(S, I, R, infection=S >> I @ ss.peryear(500)*I, recovery=I >> R @ ss.days(8), births=ss.birth(S, rate=ss.peryear(0.03)), init=dict(I=0.001, R=0.85), name='measles')
+M, S, E, I, R = ss.states('M S E I R')
+measles = ss.Disease(M, S, E, I, R,
+    infection   = S >> E @ ss.peryear(700)*I,   # R0 of about 15
+    progression = E >> I @ ss.days(10),
+    recovery    = I >> R @ ss.days(8),
+    waning      = M >> S @ ss.months(6),        # Maternal immunity, for 6 months on average
+    births      = ss.birth(M, rate=ss.peryear(0.03)),
+    init        = dict(I=0.001, R=0.85),
+    name        = 'measles',
+)
 measles.stratify(age=[0, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 5, 15]) # Edges every 3 months up to 18 months
 
+protected = {6: 0.6, 9: 0.85, 12: 0.93, 15: 0.95} # The share of infants protected by a dose at each age, in months
 sims = {}
-for months in [6, 9, 12, 15]:
-    mcv1 = ss.vaccinate(efficacy=0.85, coverage=0.8, at_age=ss.months(months), name='mcv1')
-    sims[f'At {months} months'] = ss.Sim(measles, interventions=mcv1, total_pop=1e6, start=2000, stop=2005, dt=ss.weeks(1), verbose=0)
+for months, share in protected.items():
+    mcv1 = ss.vaccinate(efficacy=share, leaky=False, coverage=0.8, at_age=ss.months(months), name='mcv1')
+    sims[f'At {months} months'] = ss.Sim(measles, interventions=mcv1, total_pop=1e6, start=2000, stop=2030, dt=ss.weeks(1), verbose=0)
 msim = ss.parallel(sims)
 for label in sims:
-    print(f'{label}: {msim.sims[label].results.measles.infection.sum():,.0f} infections')
+    print(label, '- infections over 30 years:', round(msim.sims[label].results.measles.infection.sum()))
 ```
+
+Here a dose at 6 months, which protects too few, does worst, a dose at 9 months better, and doses at 12 and 15 months best, by about the same: in this model, the gain in the share protected outweighs the infections of infants before they are vaccinated. Where measles circulates intensely among infants, the balance shifts towards earlier doses, which is why WHO recommends MCV1 at 9 months where measles is common, and at 12 to 15 months where it is rare. With 80% coverage, measles is not eliminated at any age, and comes back in epidemics every few years as susceptible children accumulate.
 
 ### Coverage and capacity
 
@@ -116,7 +137,9 @@ sim.run()
 print('Doses delivered:', sim.results.limited.delivered.sum())
 ```
 
-With `queue=True`, those not served for lack of capacity wait, longest first, until they are served or are no longer eligible; a duration, such as `queue=ss.months(6)`, limits the wait.
+`priority=` can also be a list of conditions, served in order (`priority=[sis.I, ss.ppl.age >= 65]`: everyone infected first, then those 65 and over), a score, highest first (`priority=-hiv.cd4`, the lowest CD4 count first), or a list of conditions and scores, each breaking the ties of the ones before (`[due, ss.ppl.age]`: those due first, and among them the oldest); other ties are broken at random.
+
+With `queue=True`, those not served for lack of capacity wait, longest first, until they are served or are no longer eligible; a duration, such as `queue=ss.months(6)`, limits the wait, and those still waiting at the end of it are the delivery's outcome `never_ran` (an event, and a result: the people lost to follow-up for lack of capacity).
 
 ### Who is eligible
 
@@ -136,16 +159,22 @@ Each of these deliveries makes its own vaccine. The first is named `vaccine`; si
 
 ### Delivery when something happens
 
-An event in `where=` delivers to the people something has just happened to, instead of on a schedule: a transition (the people who went through it on this step), or the outcome of another delivery. A transition can also be given by its path, `where='sis.infection'`. Here half of people are treated when they are infected, up to 30 treatments a month:
+An event in `where=` delivers to the people something has just happened to, instead of on a schedule: a transition (the people who went through it on this step), or the outcome of another delivery. A transition can also be given by its path, `where='sis.infection'`. Here half of people are treated when they are infected, with no limit, or with up to 30 treatments a month:
 
 ```{python}
-on_infection = ss.treat(cure=0.9, where=sis.infection, coverage=0.5, capacity=30)
-sim = ss.Sim(sis, interventions=on_infection, **kw)
-sim.run()
-sim.plot('sis')
+unlimited = ss.treat(cure=0.9, where=sis.infection, coverage=0.5, name='on_infection')
+limited   = ss.treat(cure=0.9, where=sis.infection, coverage=0.5, capacity=30, name='on_infection')
+msim = ss.parallel({
+    'No treatment':                    ss.Sim(sis, **kw),
+    'Treatment on infection':          ss.Sim(sis, interventions=unlimited, **kw),
+    'Treatment, at most 30 a month':   ss.Sim(sis, interventions=limited, **kw),
+})
+msim.plot('sis.I')
 ```
 
-A condition can also be read on someone's mother: `ss.mother(cond, born=True)` holds for a person whose mother meets `cond`. Each event remembers, per person, whether it ever happened (`.ever`), how often (`.count`), and how long ago (`.since`). Here newborns are tested if their mother tested positive at antenatal care within the past year:
+With no limit, treating half of the people soon after they are infected keeps prevalence at under a fifth of its level without treatment. With at most 30 treatments a month, a little fewer than are needed even at the start, infections outgrow what the program can treat, and prevalence rises, more slowly than without treatment, to nearly its level without it: a capacity a little short of the need early on lets an epidemic grow far beyond it.
+
+A condition can also be read on someone's mother: `ss.mother(cond, born=True)` holds for a person whose mother meets `cond`. Each event remembers, per person, whether it ever happened (`.ever`), how often (`.count`), and how long ago (`.since`). Here newborns are tested if their mother tested positive at antenatal care within the past year (this SIS model has no transmission from mother to child, so the newborns tested are infected only by chance; a model of mother-to-child transmission, such as the congenital infections on [Maternal, newborn, and child health](library_mnch.qmd), is where this matters):
 
 ```{python}
 pregnancy = ss.Pregnancy(fertility_rate=ss.freqperyear(100)) # Births a year per 1,000 women
@@ -156,7 +185,7 @@ sim.run()
 print('Newborns tested:', sim.results.newborn.delivered.sum())
 ```
 
-As agents, every delivery keeps the memory of its events (who it reached, and each outcome), so it can be read after a run: `sim.interventions.screening.ever.uids` is everyone ever screened, and `(sim.interventions.screening.positive.since <= ss.years(1)).uids` everyone positive within the past year.
+As agents, every delivery keeps the memory of its events (who it reached, and each outcome), so it can be read after a run (and during it, `delivery.reached()` gives the UIDs of the people it reached on this step): `sim.interventions.screening.ever.uids` is everyone ever screened, and `(sim.interventions.screening.positive.since <= ss.years(1)).uids` everyone positive within the past year.
 
 `trace=` is contact tracing: it delivers to the contacts, on a network, of the people that the event in `who=` selects. A network with `memory=` reaches recent past partners too (see [Contact networks](populations_networks.qmd#working-with-edges)).
 
@@ -180,6 +209,35 @@ sim.plot('sis')
 ```
 
 `when=` is a condition on time, a function of the timeline that returns `True` or `False`, and delivers only on steps where it is `True`. A function of the sim goes in `where=`, e.g. once prevalence passes a threshold (see [below](#changes-triggered-by-the-epidemic)).
+
+### Delivery without a product
+
+`ss.Delivery()` is the delivery that the others are made from, and with `move=` it moves the people it reaches between states, with no product. It takes every keyword above, and runs under every solver. Here measles is brought into the town of the first example from outside, by two infections a month (`move=S >> E`, with `capacity=2` per round), and the campaign of the first example is a move of the susceptible people it protects (80% reached, of whom 93% are protected) to the recovered state:
+
+```{python}
+S, E, I, R = ss.states('S E I R')
+infection   = S >> E @ 1.9*I
+progression = E >> I @ ss.days(10)
+recovery    = I >> R @ ss.days(8)
+measles = ss.Disease(infection, progression, recovery, init=dict(R=0.9), name='measles') # Nobody infected at the start
+
+imports  = ss.Delivery(move=S >> E, capacity=2, interval=ss.days(30))       # Two susceptible people infected each month
+campaign = ss.Delivery(move=S >> R, coverage=0.8*0.93, at='2025-05-01')     # Protection as a move between states
+
+kw_town = dict(total_pop=100_000, start='2025-01-01', stop='2026-07-01', verbose=0)
+msim = ss.parallel({
+    'Imported cases':                ss.Sim(measles, interventions=imports, **kw_town),
+    'Imported cases and a campaign':  ss.Sim(measles, interventions=[imports, campaign], **kw_town),
+})
+msim.plot('measles.I')
+```
+
+With imports, the outbreak is not a single event: after the campaign, imported cases go on arriving, but each infects too few others for an outbreak to take off. The other forms of a delivery with no product:
+
+- `move=dict(vaccinated=True)` moves people along a stratification of the model (to a level), and `move=dict(risk=('low', 'high'))` from one level to another, e.g. a campaign that leaves a mark, or a program that changes people's risk group (see [Stratification](building_stratification.qmd)).
+- `strain=` gives the strain people arrive with in a move into an infected state: `ss.Delivery(move=S >> E, strain='alpha', at=['2021-01-01'], capacity=20)` brings a new strain in on a date; `move=DS >> RIF` changes the strain people carry, e.g. to a drug-resistant one (see [Diseases](building_diseases.qmd#strains)).
+- `increment='doses'` adds one to a counter for each person reached (with the model stratified by `doses=[0, 1, 2, 3]`), and `dict(doses=2)` adds two.
+- With no product, move, or increment, a delivery is a step people attend, such as a clinic visit: it is an event (who attended), which several products can follow with `who=visit`, so that they are given at the same visit.
 
 ## Changing parameters
 
@@ -238,7 +296,7 @@ and any of:
 | `when=` | A condition on time: a function of the timeline that returns `True` on the steps it applies |
 | `hold=` | Once `where=` or `when=` selects someone, it stays on for them for at least this long |
 | `until=` | Once `where=` selects someone, it stays on for them until this condition holds |
-| `share=` | With `multiply=` or `efficacy=`, the share of acts (or contacts) it applies to, e.g. condom use in 30% of acts |
+| `share=` | With `multiply=` or `efficacy=`, the share of acts (or contacts) it applies to, e.g. condom use in 30% of acts; with `route=`, as agents, a function of the network giving a share for each partnership, e.g. `share=lambda net: net.edges.condoms` |
 | `route=` | For a change to transmission, the network or networks it applies on (by default, all) |
 
 The amount can itself vary: `multiply=` takes anything a parameter takes, such as `ss.seasonal()` or `ss.timeseries()` (see [Parameters](building_parameters.qmd)).
@@ -388,7 +446,7 @@ The lockdown stays in place for 38 days, until fewer than 1,000 people are infec
 
 ## Comparing scenarios
 
-An intervention's effect is the difference between a run with it and a run without, so every comparison needs a baseline that shares everything else: the same population, parameters, and, for a stochastic model, random numbers. Make the scenarios from one sim, with `sim.new(interventions=...)`, and run them together with `ss.parallel()`, as on this page. Some things to keep in mind:
+An intervention's effect is the difference between a run with it and a run without, so every comparison needs a baseline that shares everything else: the same population, parameters, and, for a stochastic model, random numbers. Make the scenarios from the same model and settings, as on this page (or from one sim, with `sim.new(interventions=...)`), and run them together with `ss.parallel()`. Some things to keep in mind:
 
 - **Run long enough.** An intervention that delays infections can look like one that prevents them if the run ends too soon; run until the epidemics of all scenarios are over, or long enough to see the endemic level.
 - **Run more than once.** For a model run as agents or as a stochastic model, the difference between two single runs is partly chance; run each scenario several times (`n_runs=`), with the same seeds for each, and compare the differences run by run (`msim.diff()`). See [Scenarios](running_scenarios.qmd).
@@ -413,3 +471,90 @@ The API reference for this page: [Interventions](../api/interventions.qmd), [Con
 - [Covasim: Interventions](https://docs.covasim.org/tutorials/tut_interventions.html): changing transmission, testing, tracing, and vaccination in an agent-based model
 - [epydemix: Modeling interventions](https://epydemix.readthedocs.io/en/latest/tutorials/03_Modeling_Interventions.html): changing contacts over time in a compartmental model
 - [EMOD: Creating campaigns](https://emod.idmod.org/EMOD-Generic/md_model/model-campaign/): another framework's approach to events, eligibility, and coverage of interventions
+
+## Appendix: every delivery
+
+The ways to give something to people, or change something for them, and when to use each:
+
+| Delivery | What it delivers | Use it for |
+|---|---|---|
+| [`ss.vaccinate()`](../api/interventions.qmd) | A vaccine (`ss.Vaccine`): protection against infection, infectiousness, death, or a transition, for as long as it is held | Vaccination, prophylaxis such as PrEP, bed nets: anything that protects those who hold it |
+| [`ss.screen()`](../api/interventions.qmd) | A test (`ss.Diagnostic`), whose results (`positive`, `negative`, or those of `results=`) trigger what follows | Screening, diagnosis, triage: anything that sorts people for the next step |
+| [`ss.treat()`](../api/interventions.qmd) | A treatment (`ss.Treatment`): a cure when it is given (`cure=`, `moves=`), effects while it is held (`efficacy=`), or both | Cures, and treatment that suppresses infection, such as ART |
+| [`ss.Delivery()`](../api/interventions.qmd) | Any product, including one written as code; or no product: a move between states or levels (`move=`), a counter (`increment=`), or a visit | Importations and seeding, protection as states of a disease, changes of risk group, visits that several products follow |
+| [`ss.modify()`](../api/connectors.qmd) | Nothing: a change to a parameter, a transition, susceptibility, infectiousness, or contacts | Distancing, masks, school closures, faster diagnosis, condoms |
+| An `ss.Intervention` written as code | Anything | Rules no delivery or modifier can say; see [above](#writing-an-intervention-as-code) |
+
+The library has interventions for its own diseases: `ssl.ART` (antiretroviral therapy for `ssl.HIV`; see [Diseases in the library](library_diseases.qmd)) and `ssl.mnch.treat_pregnant` (treatment in pregnancy that reverses some fetal damage; see [Maternal, newborn, and child health](library_mnch.qmd)).
+
+## Appendix: every keyword of a delivery
+
+The keywords of `ss.Delivery()`, which `ss.vaccinate()`, `ss.screen()`, and `ss.treat()` share, and of `ss.modify()`, from their documentation (the full text of each is in the API reference, [Interventions](../api/interventions.qmd) and [Connectors](../api/connectors.qmd)):
+
+```{python}
+import inspect, re
+import pandas as pd
+
+def keywords(cls):
+    """ Each keyword in the Args of a class's docstring (and its bases'), with its meaning up to the first semicolon outside brackets """
+    rows = {}
+    for base in inspect.getmro(cls):
+        if base in [ss.Module, ss.Product, ss.Intervention, ss.Connector]:
+            break
+        args = (inspect.getdoc(base) or '').partition('Args:\n')[2].split('\n\n')[0]
+        for key, desc in re.findall(r'^    (\w+) \([^)]*\): (.*(?:\n {8,}.*)*)', args, flags=re.M):
+            desc = ' '.join(desc.split())
+            depth = 0
+            for i, char in enumerate(desc):
+                depth += (char in '([') - (char in ')]')
+                if char == ';' and depth == 0:
+                    desc = desc[:i]
+                    break
+            if key != 'kwargs':
+                rows.setdefault(key, desc)
+    return pd.DataFrame(rows.items(), columns=['Keyword', 'Meaning']).set_index('Keyword')
+
+pd.set_option('display.max_colwidth', None)
+pd.concat({'ss.Delivery': keywords(ss.Delivery), 'ss.modify': keywords(ss.modify)})
+```
+
+## Appendix: who and when
+
+The events a delivery can be triggered by (in `who=` or `where=`), and the conditions it can be given (in `who=`, `where=`, or `priority=`, and in a modifier's `where=`). Conditions combine with `&`, `|`, and `~`, with brackets.
+
+| Kind | Examples | Who it is |
+|---|---|---|
+| A transition | `sis.infection`, `'sis.infection'`, a branch `tb.progression.to(tb.active)` | The people who went through it on this step |
+| Entering or leaving a set of states | `(sis.I \| sis.R).enter`, `ss.state('ng.C').enter` | The people who entered (or left) it from outside it on this step |
+| A delivery, or its outcomes | `screening`, `screening.positive`, `treatment.failed`, `clinic.never_ran` | The people it reached, or with that outcome, on this step (see [Products](interventions_products.qmd#appendix-the-outcomes-of-products-and-deliveries)) |
+| An event of pregnancy | `pregnancy.birth`, `pregnancy.conception`, `pregnancy.delivery`, `pregnancy.live_birth` | The children born; the women who conceived, who delivered, or who had a child born alive |
+| The memory of an event | `screening.positive.ever`, `.count >= 2`, `.since <= ss.years(1)` | Whether, how often, and how long ago it happened to each person (`.count` and `.since` as agents only) |
+| A state | `sis.I`, `~sis.I`, `ss.state('hpv18.X')` | The people in it now |
+| The time in a set of states | `(sis.I \| sis.R).time > ss.years(1)` | The time since each person entered it |
+| A property of people | `ss.ppl.age < 15`, `ss.ppl.female`, any stratification, e.g. `measles.age < 15` | The people with it |
+| A product held | `vaccine.held`, `ss.Vaccine.held` | The people who hold it (or any vaccine) now |
+| Someone's mother | `ss.mother(anc.positive.ever, born=True)` | The people whose mother meets the condition (agents only) |
+| A count, or a share | `sis.I.n > 1000`, `sis.I.frac > 0.02` | Everyone, on the steps when it holds |
+| Recent incidence | `flu.infection.incidence(over=ss.days(7), by='patch') > 200e-5` | Everyone in the groups where it holds, on the steps when it does |
+| A function of the sim | `lambda sim: sim.people.age >= 15`, `lambda sim: sim.results.flu.I[sim.ti - 1] > 5000` | Whatever it returns: a boolean array, UIDs, or one value for everyone |
+| A function of the timeline (`when=`) | `lambda t: t.ti % 7 == 0` | Everyone, on the steps when it returns `True` |
+
+And the ways to time a delivery: `start=` and `stop=` (an interval of time), `at=` (rounds at given times), `interval=` (rounds this far apart), `at_age=` (as people reach an age), `when=` (on the steps a function of time selects), `delay=` (after its trigger), and none of these (routine, as people become eligible).
+
+## Appendix: what needs agents
+
+Deliveries and modifiers run under every solver, except for what follows each person's own history or contacts. A model with any of these runs as agents, unless a solver is asked for, when it is an error that names the reason (see [Solvers](running_solvers.qmd)):
+
+| Feature | Why it needs agents |
+|---|---|
+| `delay=` on a delivery, or on a test | People wait from the trigger (or test) to delivery (or result) |
+| `queue=` | People wait to be served |
+| `trace=` | Only a network of agents knows who someone's contacts are |
+| `.since` and `.count` of an event (`.ever` runs under every solver) | Only agents keep the time and number of events per person |
+| `ss.mother()` | Only agents know who someone's mother is |
+| `disease=[...]` with several diseases (a product keyed by the diseases runs under every solver) | Each person is tested or treated for each disease |
+| A function of `(sim, uids)` in `where=`, `coverage=`, `deliver=`, or `priority=` | It reads particular people |
+| Waning by a function of the time since delivery (an `ss.box()` runs under every solver) | Only agents keep the time since delivery |
+| A product written as code (`administer()`), or an intervention that acts on particular people | It acts on agents |
+| A condition on a property of people the model is not stratified by (e.g. `ss.ppl.age` in a model without age groups) | Only agents have it |
+
