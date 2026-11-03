@@ -31,7 +31,7 @@ class Wealth(ss.Module):
             ss.FloatArr('wealth', default=1.0, label='Wealth'),
         )
         self.update_pars(**kwargs)
-        self.recipient = ss.randint(low=0, high=lambda self, sim, uids: len(sim.people)) # Whom each giver gives to
+        self.recipient = ss.randint(low=0, high=lambda self, sim, uids: len(sim.people)) # Whom each giver gives to: a position, the same as a UID only since nobody is born or dies here
         return
 
     def init_results(self):

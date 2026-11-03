@@ -690,7 +690,8 @@ class dur(TimePar):
 
 class Rate(TimePar):
     """
-    Store a value per unit time e.g., 2 per day
+    A value per unit of time, e.g. 2 per day: the base class of rates, probabilities, and frequencies
+
     - self.value - the numerator (e.g., 2) - a scalar float
     - self.unit - the denominator (e.g., 1 day) - a dur object
 

@@ -18,7 +18,7 @@ Starsim is a framework for modeling the spread of diseases: as deterministic or 
 - Different intervention types, such as vaccines or treatments, and showing their impact through different delivery methods such as mass campaigns or targeted outreach
 - Calibration to data, and common random numbers, so that two scenarios differ by what was changed rather than by chance
 
-Starsim is available for both Python and R, and is fully open-source under the MIT license.
+Starsim is available for both Python and R (see [R-Starsim](https://r.starsim.org)), and is fully open-source under the MIT license.
 
 ## Types of disease modeling
 
@@ -90,6 +90,7 @@ These docs are organized by what you want to do:
 - **To look something up**, use this user guide. Each page is a complete reference for one topic, such as [writing models](building_writing.qmd), [time](building_time.qmd), or [running scenarios](running_scenarios.qmd), and links to the tutorial that introduces it. The [Architecture](architecture_index.qmd) pages explain how Starsim works under the hood.
 - **For the exact arguments of a function**, see the [API reference](../api/index.qmd).
 - **If you are coming from another framework** (Starsim 3, EpiModel, odin, epydemix, and others), see [Conversion](conversion/index.qmd), which has a page for each.
+- **If you work with an AI coding agent** (Claude Code, Codex, and others), run `starsim ai` in your project: it gives the agent Starsim's skills, which match the installed version, for writing, checking, and running models, and for converting them (see [ai.starsim.org](https://ai.starsim.org)).
 
 A runnable example is a starting point, not a calibrated model of a particular population: a model's scientific validity depends on its assumptions, the evidence behind its parameters, and the checks made against data.
 

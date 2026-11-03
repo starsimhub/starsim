@@ -35,7 +35,7 @@ R0 = 1.9 × 8 ≈ 15, so the outbreak infects nearly everyone, and since nobody 
 
 There are a few basic ways to add vital dynamics to your model. The simplest is `ss.birth()` and `ss.death()`, which give births and deaths at a constant rate per person: a crude birth rate of 30 per 1,000 people per year is `ss.birth(rate=ss.peryear(0.03))`. People are born into each disease's first state (`S`) and die from every state at the same rate, so with equal rates the population stays the same size. They are given to the sim in `demographics=`. You can even simply set `demographics=True` to use default rates. By default, agents age if and only if the population has births or deaths; you can override this by setting `use_aging`, e.g. `ss.Sim(use_aging=False)`.
 
-Births and deaths are rates per year, while β and the infectious period are per day. When a model's rates have different units, Starsim needs every rate to say its own, so β is written `ss.perday(1.9)`; the sim then steps by one day (`dt=ss.days(1)`). Here is the measles model with births and deaths, as an ODE, over 20 years:
+Births and deaths are rates per year, while β and the infectious period are per day. A bare number in a disease, such as the 1.9 in `1.9*I`, is in the model's unit, which Starsim takes from the disease's own typed values (here days, from `ss.days(8)`), not from the births and deaths; but when a model's rates have different units, it is clearer for each rate to say its own, so here β is written `ss.perday(1.9)`. The sim steps by one day (`dt=ss.days(1)`). Here is the measles model with births and deaths, as an ODE, over 20 years:
 
 ```{python}
 def make_measles(importation=False):
@@ -98,7 +98,7 @@ As agents, measles dies out after the first epidemic, and with no one to bring i
 
 ## A country's population
 
-Constant rates are enough for a town over a few years. For more realistic demographics, birth and death rates change from year to year, and death rates differ by age and sex. Starsim includes the UN World Population Prospects for every country: `ss.people('Nigeria')` gives agents with the ages, sex ratio, and size of Nigeria's population in the year the sim starts; `ss.Births(birth_rate='Nigeria')` gives births at Nigeria's crude birth rate in each year; and `ss.Deaths(death_rate='Nigeria')` gives deaths at its death rates by year, age, and sex.
+Constant rates are enough for a town over a few years. For more realistic demographics, birth and death rates change from year to year, and death rates differ by age and sex. Starsim includes the UN World Population Prospects for 187 countries and territories (listed on [Population data](../user_guide/populations_data.qmd#appendix-every-place-and-its-data)): `ss.people('Nigeria')` gives agents with the ages, sex ratio, and size of Nigeria's population in the year the sim starts; `ss.Births(birth_rate='Nigeria')` gives births at Nigeria's crude birth rate in each year; and `ss.Deaths(death_rate='Nigeria')` gives deaths at its death rates by year, age, and sex.
 
 To check the model, compare its population with the UN's, for the same years. A result is compared with data of the same name, so a column called `alive` is plotted with the result `alive`:
 
@@ -114,7 +114,7 @@ sim.run()
 sim.plot('alive')
 ```
 
-The population grows from 126 million to about 260 million, as the UN projects. The ages change too, and `sim.people.plot_ages()` shows the age pyramid at the end of the run:
+The population grows from 126 million to about 260 million, as the UN projects. (The UN's estimates include migration, which this model leaves out; for Nigeria it is small, under 1 per 1,000 people a year, as `ss.data.rates('Nigeria', 'migration')` shows. For a country where it is large, see [Demographics](../user_guide/populations_demographics.qmd#migration).) The ages change too, and `sim.people.plot_ages()` shows the age pyramid at the end of the run:
 
 ```{python}
 sim.people.plot_ages()
@@ -139,7 +139,7 @@ sim.plot('alive')
 
 The population grows much as it did with crude birth rates, but now each birth comes from a pregnancy of a particular woman, so it can be linked to her: her age, her infections, and the care she receives. The pregnancy model supplies the births, so don't also add `ss.Births()` (or `ss.birth()`) unless it stands for a separate source of people: the same births would be counted twice.
 
-Rates of your own work too: `fertility_rate` takes a table with a column for the year, one for the age, and one for the rate, e.g. `pd.read_csv('test_data/nigeria_asfr.csv')` (columns `Time`, `AgeGrp`, and `ASFR`), or one rate, e.g. `ss.freqperyear(100)`.
+Rates of your own work too: `fertility_rate` takes a table with a column for the year, one for the age, and one for the rate, e.g. `pd.read_csv('test_data/nigeria_asfr.csv')` (columns `Time`, `AgeGrp`, and `ASFR`), or one rate, e.g. `ss.peryear(100)` (100 births a year per 1,000 women, since a rate above 1 is read as per 1,000, as for births).
 
 ## Agents standing for many people
 

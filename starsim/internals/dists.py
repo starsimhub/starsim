@@ -361,7 +361,7 @@ class Dist:
     cases they're the same).
 
     Distributions scale in different ways, such as converting between time units, given by `scaling`.
-    Some distributions can't be scaled at all (e.g. `ss.beta_dist()` or `ss.choice()`).
+    Some distributions can't be scaled at all (e.g. `ss.beta_dist()`, whose values are shares).
     For distributions that can be scaled, some distributions can only be (linearly)
     scaled *before* the random numbers are generated (called "predraw"), some can only be
     scaled after (called "postdraw"), and some can be scaled in either way (both).

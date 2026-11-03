@@ -21,46 +21,11 @@ Classes can be accessed either at the top level (`ssl.Measles`) or via their sub
 
 ### Diseases (`diseases/`)
 
-Each disease says in its docstring where its structure and its default parameters came from.
-
-| Class | Base | Description | Source of the model |
-| --- | --- | --- | --- |
-| `Cholera` | `AgentSEIR` | SEIR-type cholera with symptomatic/asymptomatic infection plus indirect transmission through a decaying environmental (waterborne) reservoir | |
-| `AgentSIR`, `AgentSEIR`, `AgentSIS` | `ss.Infection` | Starsim 3's SIR, SEIR, and SIS (with waning immunity), written as code: examples of a disease written as code, and base classes for the diseases here (the core `ss.SIR`, `ss.SEIR`, and `ss.SIS` are declared) | |
-| `COVID` | `ss.Disease` | COVID-19 as a SECIR model: a chain of increasingly severe states, some of whom die | The simple SECIR example of MEmilio (Kühn et al. 2021) |
-| `Dengue` | `ss.Disease` | Several dengue serotypes, each a disease with mosquitoes of its own, with partial cross-protection between them | The Ross-Macdonald structure of Keeling and Rohani (2008) 4.4, with indicative dengue values |
-| `Ebola` | `AgentSEIR` | Ebola with severe disease and continued transmission from unburied bodies | |
-| `Gonorrhea` | `ss.Disease` | Gonorrhea as an SIS model on a sexual network | STIsim's gonorrhea module |
-| `HIV` | `ss.Infection` | HIV with CD4 count dynamics, CD4-dependent mortality, and vertical transmission | |
-| `ART` | `ss.Intervention` | Scales up antiretroviral therapy over time; requires `HIV` | |
-| `CD4_analyzer` | `ss.Analyzer` | Records every agent's CD4 count at every timestep | |
-| `Influenza` | `ss.Disease` | Seasonal influenza as a SEIRS model with a yearly cycle in transmission | Carrat et al. (2008) and Biggerstaff et al. (2014) |
-| `Malaria` | `ss.Disease` | Malaria as humans and mosquitoes, the mosquitoes as counts | The Ross-Macdonald model, as Keeling and Rohani (2008), Program 4.4 |
-| `MalariaImmunity` | `ss.Disease` | Malaria with immunity: saturating inoculation, superinfection, and a fast recovery rate once immune | The Garki model: Dietz, Molineaux and Thomas (1974); Molineaux and Gramiccia (1980) |
-| `Measles` | `AgentSEIR` | Measles as an SEIR model, with CDC natural history parameters | |
-| `NCD` | `ss.Disease` | A non-communicable disease: a risk factor, the condition, and death from it; not transmitted | |
-| `Pertussis` | `ss.Disease` | Pertussis as a SEIRS model with slowly waning immunity | Wearing and Rohani (2009); the structure of Keeling and Rohani (2008) |
-| `Polio` | `ss.Disease` | Poliovirus with a paralytic fraction of about 1 in 200 infections | US CDC Pink Book; Fine and Carneiro (1999) |
-| `RSV` | `ss.Disease` | RSV as a seasonal MSEIRS model, with babies born protected by maternal antibodies | Weber et al. (2001) |
-| `Syphilis` | `ss.Disease` | Staged syphilis, with the infectiousness of latent syphilis falling with the time in it | STIsim's syphilis module |
-| `TB` | `ss.Disease` | TB across the spectrum of disease, with reinfection | The LSHTM model (Schwalb et al. 2025), as TBsim's reference ODE |
-| `Typhoid` | `ss.Disease` | Typhoid with chronic carriers who shed for life | Pitzer et al. (2014) |
+About twenty diseases: outbreak diseases written as code (measles, Ebola, cholera), HIV with treatment and CD4 counts, a non-communicable disease, Starsim 3's SIR, SIS, and SEIR written as code, and declared models of malaria, TB, COVID, influenza, RSV, pertussis, dengue, typhoid, polio, syphilis, and gonorrhea. Each says in its docstring where its structure and its default parameters came from. The user guide page [Library: diseases](https://starsim.org/v4/user_guide/library_diseases.html) describes them, with their sources, and its appendix lists every one, generated from the classes: whether it is declared or written as code, its default parameters (flagging placeholders), and its results.
 
 ### Networks (`networks/`)
 
-| Class | Base | Description |
-| --- | --- | --- |
-| `HouseholdNet` | `ss.Network` | Households built from DHS-style survey data, optionally evolving over time as women move out and give birth |
-| `ClusterNet` | `ss.Network` | Fully connected clusters, such as households |
-| `HybridNet` | `ss.Network` | Covasim's households, schools, workplaces, and community |
-| `DiskNet` | `ss.Network` | Agents move within a unit square and connect to others within a given radius |
-| `GeoNet` | `ss.RandomNet` | Agents in real places, with most contacts near home and the rest in places that are large and near |
-| `GridNet` | `StaticNet` | Agents on a square grid, in contact with their neighbors |
-| `SmallWorldNet` | `StaticNet` | A Watts-Strogatz graph: mostly local contacts, with a few long-range ones |
-| `ScaleFreeNet` | `StaticNet` | A Barabási-Albert graph: a few agents have many contacts |
-| `ErdosRenyiNet` | `ss.DynamicNetwork` | Every possible edge is created with probability `p` each timestep |
-| `NullNet` | `ss.Network` | Self-connections only, with zero transmission; useful as a placeholder or for debugging |
-| `StaticNet` | `ss.Network` | A fixed network from a NetworkX graph, or a function that makes one |
+Households (`HouseholdNet`, `ClusterNet`, and Covasim's `HybridNet`), space (`DiskNet`, `GridNet`, and `GeoNet` for real places), and theoretical networks (`StaticNet` from any NetworkX graph, `SmallWorldNet`, `ScaleFreeNet`, `ErdosRenyiNet`, and `NullNet`). See [Library: networks](https://starsim.org/v4/user_guide/library_networks.html), whose appendix lists every one with its parameters and whether it keeps common random numbers.
 
 ### MNCH (`mnch/`)
 
@@ -87,7 +52,7 @@ Health economics, which most sims don't need, so it is here rather than in core 
 
 ## Documentation
 
-- User guide: [Library modules](https://docs.starsim.org/user_guide/library_landscape.html)
+- User guide: [Library: diseases](https://starsim.org/v4/user_guide/library_diseases.html), [Library: networks](https://starsim.org/v4/user_guide/library_networks.html), and [Library: maternal-child health](https://starsim.org/v4/user_guide/library_mnch.html)
 - API reference: [starsim.library](https://docs.starsim.org/api/)
 
 ## Contributing
@@ -98,4 +63,4 @@ New library modules are welcome, especially ones that demonstrate a modeling pat
 2. Define `__all__` in each file, and re-export its contents explicitly from the subpackage `__init__.py` (no star imports, so that the public API is unambiguous); `library/__init__.py` and the API docs then pick it up automatically.
 3. Follow the [Starsim style guide](https://github.com/starsimhub/styleguide).
 4. Document each class with a short description, an `Args:` section, an `Attributes:` section for its states, and a runnable `Examples:` block.
-5. Add a test to `tests/test_library.py`, and a row to the tables above.
+5. Add a test to `tests/test_library.py`. The appendices of the user guide pages are generated from the subpackages, so a new disease or network appears there by itself; add it to the descriptions on the page, and to the tables above for MNCH and economics.

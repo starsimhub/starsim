@@ -4,16 +4,16 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Written by AI, extending the short section on allocating a budget in the Claude draft of the calibration page
+  note: Written by AI, extending the short section on allocating a budget in the Claude draft of the calibration page; bed nets replaced by masks, to suit a directly transmitted infection, by AI
 ---
 
-Calibration asks which values of a model's parameters fit the data. Optimization asks a different question of a calibrated model: given a budget, how should it be divided between programs to do the most good? If testing, bed nets, and vaccination each reduce transmission, with diminishing returns as each reaches more people, there is an allocation of a fixed total between them that averts the most infections, and it is rarely all to the program that looks best on its own. `ss.fit.optimize()` finds it, using the same machinery as fitting: the spending on each program is a parameter of the model, and the search runs the model at each allocation it tries.
+Calibration asks which values of a model's parameters fit the data. Optimization asks a different question of a calibrated model: given a budget, how should it be divided between programs to do the most good? If testing, masks, and vaccination each reduce transmission of a respiratory infection, with diminishing returns as each reaches more people, there is an allocation of a fixed total between them that averts the most infections, and it is rarely all to the program that looks best on its own. `ss.fit.optimize()` finds it, using the same machinery as fitting: the spending on each program is a parameter of the model, and the search runs the model at each allocation it tries.
 
 This page covers how spending is put into a model, the search itself, limits on each program, a different total, the least total that reaches a target, and reading the result. Where costs come from, and how to count what interventions cost, is in [Costs](interventions_costs.qmd); fitting the model first is in [Fitting a model](calibration_fitting.qmd).
 
 ## Spending as parameters
 
-`ss.fit.optimize()` needs the spending on each program as a named parameter of the model (`ss.par`), and the model has to say what the spending buys: here, how the share of people a program reaches depends on what is spent on it, and how much that reduces transmission. In this SIR model of an infection with R0 = 2, two programs reduce transmission, each with diminishing returns: the share of people reached rises as 1 − exp(−spend / (cost per person × population)), so the first dollars reach many people and later ones fewer. Testing (and isolating those who test positive) costs $10 a person and, at full reach, cuts transmission by 60%; bed nets cost $5 a person and cut it by 30%. The current budget is $100,000, split evenly:
+`ss.fit.optimize()` needs the spending on each program as a named parameter of the model (`ss.par`), and the model has to say what the spending buys: here, how the share of people a program reaches depends on what is spent on it, and how much that reduces transmission. In this SIR model of a respiratory infection with R0 = 2, two programs reduce transmission, each with diminishing returns: the share of people reached rises as 1 − exp(−spend / (cost per person × population)), so the first dollars reach many people and later ones fewer. Testing (and isolating those who test positive) costs $10 a person and, at full reach, cuts transmission by 60%; masks (handed out, with advice on wearing them) cost $5 a person and cut it by 30%. The current budget is $100,000, split evenly:
 
 ```{python}
 import numpy as np
@@ -21,42 +21,42 @@ import starsim as ss
 
 S, I, R = ss.states('S I R')
 tests = ss.par(50e3, name='tests') # Spending on testing, in dollars
-nets  = ss.par(50e3, name='nets')  # Spending on bed nets
+masks = ss.par(50e3, name='masks') # Spending on masks
 
 N = (S + I + R).total
 reach = lambda spend, cost: 1 - np.exp(-spend/cost/N) # The share of people reached, at a cost per person
-beta = ss.perday(0.2)*(1 - 0.6*reach(tests, 10))*(1 - 0.3*reach(nets, 5))
+beta = ss.perday(0.2)*(1 - 0.6*reach(tests, 10))*(1 - 0.3*reach(masks, 5))
 sir = ss.Disease(S >> I @ beta*I.frac, I >> R @ ss.days(10), init_prev=0.001, name='sir')
 
 sim = ss.Sim(sir, total_pop=10_000, start=2025, stop=2026, verbose=0) # One year, in daily steps
 ```
 
-`ss.par(..., name=)` gives each parameter the name it is found by. Since the spending is in the rates of the model, a change in it is a change in the model like any other: `sim.new(pars=dict(tests=100e3, nets=0))` is the sim with everything spent on testing. Before optimizing, it helps to see the range of outcomes. `sir.R` at the end of the run is the number of people ever infected:
+`ss.par(..., name=)` gives each parameter the name it is found by. Since the spending is in the rates of the model, a change in it is a change in the model like any other: `sim.new(pars=dict(tests=100e3, masks=0))` is the sim with everything spent on testing. Before optimizing, it helps to see the range of outcomes. `sir.R` at the end of the run is the number of people ever infected:
 
 ```{python}
 allocations = {
-    'No spending':  dict(tests=0,     nets=0),
-    'All testing':  dict(tests=100e3, nets=0),
-    'All bed nets': dict(tests=0,     nets=100e3),
-    'Even split':   dict(tests=50e3,  nets=50e3),
+    'No spending':  dict(tests=0,     masks=0),
+    'All testing':  dict(tests=100e3, masks=0),
+    'All masks':    dict(tests=0,     masks=100e3),
+    'Even split':   dict(tests=50e3,  masks=50e3),
 }
 for label, spend in allocations.items():
     run = sim.new(pars=spend).run()
     print(label, round(run.results.sir.R[-1]))
 ```
 
-Testing does more for the money than bed nets, but its returns diminish, so the even split does better than either alone.
+Testing does more for the money than masks, but its returns diminish, so the even split does better than either alone.
 
 ## Finding the best allocation
 
 `ss.fit.optimize()` keeps the total fixed (by default, the total of the current values, $100,000 here) and searches over its division between the programs, with `minimize=` the result to make as small as possible (or `maximize=` one to make as large as possible):
 
 ```{python}
-best = ss.fit.optimize(sim, spend=['tests', 'nets'], minimize='sir.R')
+best = ss.fit.optimize(sim, spend=['tests', 'masks'], minimize='sir.R')
 best.summarize()
 ```
 
-The best allocation puts about three quarters on testing and a quarter on bed nets, which brings the infections down from about 3,530 with the even split to about 3,090: some 440 infections averted for the same money. The best allocation's run is `best.sim`, which can be compared with the others:
+The best allocation puts about three quarters on testing and a quarter on masks, which brings the infections down from about 3,530 with the even split to about 3,090: some 440 infections averted for the same money. The best allocation's run is `best.sim`, which can be compared with the others:
 
 ```{python}
 compare = ss.MultiSim([
@@ -71,7 +71,7 @@ How it works: the search (SciPy's SLSQP) is over the shares of the total, which 
 
 - **Use a deterministic model.** With a stochastic model, each run of the same allocation gives a different answer, and the search can't tell a better allocation from a lucky run. Optimize the ODE form of the model (`solver='ode'`), or give a function of the sim that averages many runs.
 - **Make returns diminish.** If every program's effect grows in proportion to its spending, the best allocation is to put everything into the program with the best ratio; the answer is then obvious, and the search adds nothing. Real programs saturate, and the model should say how.
-- **Check that the answer is not one of several.** With more than a few programs, the search can stop at an allocation that is better than those near it but not the best; starting from another allocation (other values of the spending parameters) and comparing is a quick check.
+- **Check that the answer is not one of several.** With more than a few programs, the search can stop at an allocation that is better than those near it but not the best; starting from another allocation (other values of the spending parameters) and comparing is a quick check. If the search stops before it has settled (`converged` is False), `maxiter=` (50 by default) lets it run longer.
 
 ## What to optimize, and when
 
@@ -82,7 +82,7 @@ def peak_infectious(sim):
     """ The most people infectious at once """
     return sim.results.sir.I.max()
 
-peak = ss.fit.optimize(sim, spend=['tests', 'nets'], minimize=peak_infectious, verbose=False)
+peak = ss.fit.optimize(sim, spend=['tests', 'masks'], minimize=peak_infectious, verbose=False)
 peak.summarize()
 ```
 
@@ -91,7 +91,7 @@ The best allocation for the peak is much the same as for the total here, but nee
 `start=` says when the new allocation takes effect: before it, each program keeps its current spending, and from then on, the allocation being tried. This is the usual question for a program that is already running: given what has been spent until now, how should next year's budget be divided?
 
 ```{python}
-from_april = ss.fit.optimize(sim, spend=['tests', 'nets'], minimize='sir.R', start='2025-04-01', verbose=False)
+from_april = ss.fit.optimize(sim, spend=['tests', 'masks'], minimize='sir.R', start='2025-04-01', verbose=False)
 from_april.summarize()
 ```
 
@@ -102,18 +102,18 @@ The best allocation from April is the same, but it averts fewer infections (abou
 Programs can rarely be cut to nothing or grown without limit: a program may have contracts to honor, or be unable to expand faster than it can hire staff. `bounds=` gives the least and most each program can have, in dollars, by name, with `None` for no limit (a program not named has none beyond 0 and the total):
 
 ```{python}
-limited = ss.fit.optimize(sim, spend=['tests', 'nets'], minimize='sir.R', bounds=dict(tests=(None, 60e3)), verbose=False)
+limited = ss.fit.optimize(sim, spend=['tests', 'masks'], minimize='sir.R', bounds=dict(tests=(None, 60e3)), verbose=False)
 limited.summarize()
 ```
 
-With testing capped at $60,000, the rest goes to bed nets, and the result is between the even split and the unconstrained best. A single pair, `bounds=(10e3, None)`, applies to every program.
+With testing capped at $60,000, the rest goes to masks, and the result is between the even split and the unconstrained best. A single pair, `bounds=(10e3, None)`, applies to every program.
 
 ## A different total
 
 `total=` sets the total to divide, for the question "what if the budget were larger (or smaller)?"; the search starts from the current shares of the spending, scaled to the total. Here, the best allocation of twice the budget:
 
 ```{python}
-double = ss.fit.optimize(sim, spend=['tests', 'nets'], minimize='sir.R', total=200e3, verbose=False)
+double = ss.fit.optimize(sim, spend=['tests', 'masks'], minimize='sir.R', total=200e3, verbose=False)
 double.summarize()
 ```
 
@@ -125,7 +125,7 @@ import matplotlib.pyplot as plt
 totals = [25e3, 50e3, 100e3, 200e3, 400e3]
 infections = []
 for total in totals:
-    opt = ss.fit.optimize(sim, spend=['tests', 'nets'], minimize='sir.R', total=total, verbose=False)
+    opt = ss.fit.optimize(sim, spend=['tests', 'masks'], minimize='sir.R', total=total, verbose=False)
     infections.append(opt.value)
 
 plt.plot(np.array(totals)/1e3, infections, 'o-')
@@ -141,7 +141,7 @@ Each further dollar averts fewer infections until, past a certain budget, transm
 The reverse question, how much money is needed to reach a target, is answered with `target=`: the least total whose best allocation brings the result to the target (at most the target with `minimize=`, at least with `maximize=`). The search doubles the total until it reaches the target, then halves the gap between a total that does and one that doesn't, to within 1%:
 
 ```{python}
-needed = ss.fit.optimize(sim, spend=['tests', 'nets'], minimize='sir.R', target=1000, verbose=False)
+needed = ss.fit.optimize(sim, spend=['tests', 'masks'], minimize='sir.R', target=1000, verbose=False)
 needed.summarize()
 ```
 

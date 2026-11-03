@@ -516,6 +516,16 @@ class modify(Connector):
         values = [leaf.raw if isinstance(leaf, ss.par) else leaf for val in [self.amount, self.share] for leaf in (val.leaves if isinstance(val, ss.expressions.Expr) else [val])]
         return all(plain(val) for val in values)
 
+    def marks(self):
+        """ When the modifier acts, for marking on plots (see `sim.plot()`): its start and stop on the results' time axis, if it has either and no condition (`when=`); else none """
+        if self.when is not None or (self.start is None and self.stop is None):
+            return []
+        sim = self.sim
+        timevec = sim.results.timevec
+        start = 1 if self.start is None else to_ti(sim, self.start)
+        stop = len(timevec) if self.stop is None else min(to_ti(sim, self.stop, after=True), len(timevec))
+        return [(timevec[start - 1], timevec[stop - 1])]
+
     @property
     def active(self):
         """ Whether the modifier applies on the current step """

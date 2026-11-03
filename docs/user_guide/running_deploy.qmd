@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 40
   ai: 60
-  note: Based on the Claude draft, itself adapted from the Starsim 3 user guide page on deployment, with new sections on scripts, compiling, and job schedulers written by AI
+  note: Based on the Claude draft, itself adapted from the Starsim 3 user guide page on deployment, with new sections on scripts, compiling, and job schedulers written by AI; an appendix of the starsim command added by AI
 ---
 
 A study with thousands of runs, or a model that others use through a web page, needs more than a laptop and a notebook. Starsim is plain Python, so it runs anywhere Python does: on one large computer, on a cluster, or behind a dashboard. This page covers moving an analysis from a notebook into a script, and then each of these. Making many sims and comparing them is in [Scenarios](running_scenarios.qmd); this page is about where they run.
@@ -70,7 +70,7 @@ def make_sim(seed, coverage):
     campaign = ss.vaccinate(efficacy=0.95, coverage=coverage, at=ss.days(30))
     return ss.Sim(measles, interventions=campaign, total_pop=20_000, stop=ss.days(180), solver='binomial', rand_seed=seed, label='Campaign', verbose=0)
 
-sims = sc.parallelize(make_sim, iterarg=range(8), coverage=0.5) # One sim for each seed, 0 to 7
+sims = sc.parallelize(make_sim, iterarg=range(1, 9), coverage=0.5) # One sim for each seed, 1 to 8
 msim = ss.parallel(sims)
 msim.plot('measles.I')
 ```
@@ -119,7 +119,7 @@ def run_sim(seed, beta):
 
 if __name__ == '__main__':
     client = dd.Client(n_workers=4)
-    tasks = [dask.delayed(run_sim)(seed, beta) for seed in range(10) for beta in [1.5, 1.9, 2.3]]
+    tasks = [dask.delayed(run_sim)(seed, beta) for seed in range(1, 11) for beta in [1.5, 1.9, 2.3]]
     sims = list(dask.compute(*tasks))
     msim = ss.MultiSim(sims) # Collects the results of sims that have run
     msim.plot()
@@ -132,7 +132,7 @@ import coiled
 
 cluster = coiled.Cluster(n_workers=50, workspace='<your_coiled_workspace>')
 client = cluster.get_client()
-futures = [client.submit(run_sim, seed, 1.9) for seed in range(1000)]
+futures = [client.submit(run_sim, seed, 1.9) for seed in range(1, 1001)]
 sims = client.gather(futures)
 msim = ss.MultiSim(sims)
 msim.plot()
@@ -173,7 +173,8 @@ msim.summarize()
 Three things matter more on a cluster than on a laptop:
 
 - **One level of parallelism.** When the scheduler already runs many tasks at once, don't have each task start a pool of its own: use `ss.parallel(..., parallel=False)` within a task, or limit it with `n_cpus=`. Within one sim, Starsim uses several threads only for passes over very large populations (200,000 agents or more), and never in the workers of `ss.parallel()`; `ss.options.threads = 1` (or the environment variable `STARSIM_THREADS=1`) turns them off. NumPy's linear algebra (OpenBLAS or MKL) has threads of its own, which the workers of `ss.parallel()` divide among themselves; to keep them to one, set `SCIRIS_NUM_THREADS=1` in the task's environment (e.g. in the job script), or call `sc.limit_threads(1)`. None of these limits the Numba threads that Starsim's passes use; `STARSIM_THREADS=1` does.
-- **Compile once, before the runs.** Starsim's compiled code (see [Solvers and backends](running_solvers.qmd#backends)) is compiled on first use and kept on disk. Run `starsim compile` (or `ss.compile()`) once after installing, in the shared environment or when building a container image, so that hundreds of tasks don't each compile it, or wait for each other to.
+- **Compile once, before the runs.** Starsim's compiled code (see [Solvers and backends](running_solvers.qmd#backends)) is compiled on first use and kept on disk. Run `starsim compile` (or `ss.compile()`) once after installing, in the shared environment or when building a container image, so that hundreds of tasks don't each compile it, or wait for each other to; `starsim compile --check` says whether it has been done. `starsim init` compiles too, and also installs the skills for AI coding agents (see the [appendix](#appendix-the-starsim-command)).
+- **Settings from the environment.** Every option in `ss.options` can be set by an environment variable, `STARSIM_` and its name in capitals (`STARSIM_THREADS=1`, `STARSIM_VERBOSE=0`, `STARSIM_WARNINGS=error`), which is the easiest way to set it for every task of a job; the full list, with each variable, is in [Getting the most speed](running_performance.qmd#appendix-every-option).
 - **The same code everywhere.** Install the same versions of Starsim and of your own modules on every node (a container image, or a shared environment), since a saved sim needs them to load.
 
 ## Interactive dashboards
@@ -219,3 +220,16 @@ Saved as `app.py`, it runs (after `pip install streamlit`) with `streamlit run a
 - [Slurm: Job arrays](https://slurm.schedmd.com/job_array.html): running the same script many times with a task number
 - [Streamlit: Get started](https://docs.streamlit.io/get-started): building a dashboard around a model
 - [Sciris: Parallelization](https://docs.sciris.org/tutorials/tut_parallel.html): `sc.parallelize()`, which `ss.parallel()` is built on
+
+## Appendix: the starsim command
+
+Installing Starsim also installs a `starsim` command, for setting up an environment (`starsim --help` lists these, and `starsim <command> --help` the options of each):
+
+| Command | What it does |
+|---|---|
+| `starsim init` | Once, after installing: compiles Starsim's numerical code and installs the skills for AI coding agents |
+| `starsim init dev` | For a clone of Starsim: also the development dependencies, Rust if it is missing, and both sets of kernels |
+| `starsim compile` | Compiles Starsim's numerical code (once per install; a few minutes), as `ss.compile()` does |
+| `starsim compile --check` | Says whether it is compiled, and exits with 1 if not (for a build script) |
+| `starsim ai` | Installs the Starsim skills for AI coding agents in this project (`--global` for all projects), or shows the guide; `starsim ai status`, `show`, `uninstall`, `off`, and `on` manage them |
+| `starsim --version` | The version of Starsim |

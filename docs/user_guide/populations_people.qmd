@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 15
   ai: 85
-  note: Based on the AI-written v4 draft, with the sections on arrays and multi-column states adapted from the Starsim 3 user guide page on people
+  note: Based on the AI-written v4 draft, with the sections on arrays and multi-column states adapted from the Starsim 3 user guide page on people; the example of a property made realistic, deaths by cause and the appendices added, by AI
 ---
 
 Every model has a population: how many people there are, their ages and sex, and anything else about them that the model needs, such as where they live. This page covers the size of the population, its ages (including the population of a named country), other properties of people and how a model uses them, and, for a model run as agents, the [`People`](../api/people.qmd) object that holds what each agent is and has, and the arrays it keeps them in. Births, deaths, and migration are in [Demographics](populations_demographics.qmd), and who meets whom is in [Contact networks](populations_networks.qmd).
@@ -41,7 +41,7 @@ The two runs differ a little, since as agents the epidemic is a stochastic proce
 
 ## Ages and sex
 
-As agents, each person has an age and a sex. Unless told otherwise, Starsim gives agents the ages of the world's population in 2024, and an even chance of being female. A compartmental model split into age groups without a share for each takes the shares from the same ages, and `describe()` marks them as guessed.
+As agents, each person has an age and a sex. Unless told otherwise, Starsim gives agents the ages of the world's population in 2024, and an even chance of being female; `ss.People(n_agents, p_female=0.49)` gives another share of women (`p_female=0` makes a population of men only, e.g. for a model of men who have sex with men). A compartmental model split into age groups without a share for each takes the shares from the same ages, and `describe()` marks them as guessed.
 
 The population of a country is `ss.people()`: its size, its ages, and its share of women, from the UN World Population Prospects (or, for a US state, the US Census), which come with Starsim. The sim takes its size from it, so a compartmental model can use a named population as well as agents can:
 
@@ -71,39 +71,50 @@ A sim copies the people it is given when it is built, so look at `sim.people` af
 
 A model refers to a property of people with `ss.ppl`: `ss.ppl.age`, `ss.ppl.female`, or a property of your own. `ss.ppl.age < 5` is a condition, which picks out people, for example to say who an intervention reaches:
 
-```{python}
-vaccination = ss.vaccinate(efficacy=0.9, coverage=0.8, where=ss.ppl.age < 5, at=ss.days(10))
+```python
+ss.vaccinate(efficacy=0.9, coverage=0.8, where=ss.ppl.age < 5, at=ss.days(10)) # Vaccinates children under 5
 ```
 
-A property of your own is given to `ss.People` as a state, with a value for each agent; it can be drawn from a distribution. Here 30% of people live in towns:
+A property of your own is given to `ss.People` as a state, with a value for each agent; it can be drawn from a distribution. A property can be in a rate as well as in a condition. Here 30% of people live in towns, where crowding doubles the rate at which a susceptible person is infected, and 92% of people are immune (as from routine vaccination), so that measles can still spread. Two campaigns give the same number of doses, to 27% of people: one to anyone, and one to 90% of the people in towns:
 
 ```{python}
 urban = ss.BoolState('urban', default=ss.bernoulli(p=0.3))
 ppl = ss.People(10_000, extra_states=urban)
 
-vaccination = ss.vaccinate(efficacy=0.9, coverage=0.9, where=ss.ppl.urban, at=ss.days(1))
-base = ss.Sim(measles, people=ppl, stop=ss.days(50), verbose=0)
-msim = ss.parallel({'No vaccination': base, 'Vaccinating towns': base.new(interventions=vaccination)})
+infection = S >> I @ 1.9*(1 + ss.ppl.urban)*I # Twice the rate in towns
+measles_towns = ss.Disease(infection, recovery, init=dict(R=0.92), init_prev=0.001, name='measles')
+
+anyone = ss.vaccinate(efficacy=0.9, coverage=0.27, at=ss.days(1), name='campaign')
+towns = ss.vaccinate(efficacy=0.9, coverage=0.9, where=ss.ppl.urban, at=ss.days(1), name='campaign')
+base = ss.Sim(measles_towns, people=ppl, stop=ss.days(150), verbose=0)
+msim = ss.parallel({
+    'No campaign': base,
+    'Campaign, anyone': base.new(interventions=anyone),
+    'Campaign, towns': base.new(interventions=towns),
+})
 msim.plot('measles.I')
-print('Share of people in towns:', msim.sims[1].people.urban.mean())
-print('Vaccinated:', msim.results.vaccination.delivered.sum())
+for sim in msim.sims:
+    print(sim.label, '- infections:', round(sim.results.measles.infection.sum()))
 ```
 
-Vaccinating the 30% of people who live in towns slows the epidemic and lowers its peak, but with an R0 of about 15, measles still reaches nearly everyone else: a reminder that a property such as `urban` matters only as much as who it picks out.
+With no campaign, measles infects about 470 of the 800 people who are not immune. A campaign for anyone cuts that by more than half, and the same doses given in towns cut it further, since each of them goes to someone at twice the risk, and it is the people at most risk who keep the outbreak going. A property such as `urban` matters in a model as much as it changes who is infected and who is reached.
 
-A property can also be in a rate: `infection = S >> I @ beta*(1 + 0.5*ss.ppl.urban)*I` has transmission 50% higher in towns. `ss.ppl` is read when the sim is built, so the property can be given after the model is written.
+`ss.ppl` is read when the sim is built, so the property can be given after the model is written.
 
-In a compartmental model, people have no properties of their own, only the groups the model is split into. The same property is a stratification, and the same condition then picks out a group:
+In a compartmental model, people have no properties of their own, only the groups the model is split into. The same property is a stratification, and the same model and conditions then work on groups, with the people in towns as 30% of the population:
 
 ```{python}
-S, I, R = ss.states('S I R')
-measles2 = ss.Disease(S >> I @ 1.9*I, I >> R @ ss.days(8), init_prev=0.001, name='measles')
-measles2.stratify(urban={False: 0.7, True: 0.3}) # 70% rural, 30% in towns
+measles_groups = ss.Disease(infection, recovery, init=dict(R=0.92), init_prev=0.001, name='measles')
+measles_groups.stratify(urban={False: 0.7, True: 0.3}) # 70% rural, 30% in towns
 
-sim = ss.Sim(measles2, interventions=vaccination, total_pop=100_000, stop=ss.days(50), verbose=0)
-sim.run()
+for label, campaign in {'No campaign': None, 'Campaign, anyone': anyone, 'Campaign, towns': towns}.items():
+    sim = ss.Sim(measles_groups, interventions=campaign, total_pop=10_000, stop=ss.days(150), verbose=0)
+    sim.run()
+    print(label, '- infections:', round(sim.results.measles.infection.sum()))
 sim.results.measles.I.by('urban').plot()
 ```
+
+The compartmental model gives much the same numbers as the agents with no campaign, and with a campaign for anyone; with the campaign in towns, it gives about half as many infections as the agents did. Near the threshold for an outbreak (here, the campaign in towns brings the effective reproduction number close to 1), the course of an outbreak depends on chance, which agents have and an ODE does not, so a single run of agents is not the whole answer: see [Scenarios](running_scenarios.qmd).
 
 ## States and arrays
 
@@ -232,6 +243,26 @@ df.groupby('female').age.mean()
 sim.people.person(10)
 ```
 
+`sim.people.plot()` draws a histogram of each state of the people (`key=` for some of them), and `sim.people.plot_ages()` the age pyramid, as above.
+
+### Deaths by cause
+
+Each agent who dies has one cause, the module whose death it was: its name is in `people.causes`, and its position in that list in `people.cause_of_death`. Here measles kills about 1.6% of the people it infects (a death rate of 0.002 a day over 8 days infectious), alongside deaths from other causes:
+
+```{python}
+measles_deaths = ss.Disease(S >> I @ 1.9*I, I >> R @ ss.days(8), ss.death(I, rate=ss.perday(0.002)), init_prev=0.001, name='measles')
+deaths = ss.Deaths(death_rate=ss.peryear(10), name='other') # Deaths from other causes, 10 per 1,000 people a year
+sim = ss.Sim(measles_deaths, demographics=deaths, n_agents=10_000, stop=ss.days(50), verbose=0)
+sim.run()
+
+ppl = sim.people
+codes = ppl.cause_of_death[ppl.dead.uids] # The cause of each death
+for code, cause in enumerate(ppl.causes):
+    print('Deaths from', cause, '-', (codes == code).sum())
+```
+
+If two modules would kill the same person in the same step, one of them is chosen as the cause (see `request_death()` in [People](../api/people.qmd)), so no death is counted twice. In a module written as code, `people.died_of(module)` gives the agents who died of that module in the step just finished, e.g. to count deaths in a result of its own.
+
 ## In a compartmental run
 
 In a compartmental run there are no agents. `sim.people` then has one row for each group the model is split into, and asking for a property of each person, such as `sim.people.age` in a model not split by age, raises an error saying to stratify by it or to run as agents. Results, `describe()`, and conditions such as `where=ss.ppl.age < 5` (for a model stratified by age) work the same either way.
@@ -243,3 +274,39 @@ The API reference for this page: [People](../api/people.qmd), [Arrays](../api/in
 - [Mesa: AgentSet](https://mesa.readthedocs.io/latest/apis/agent.html): agents as Python objects, the alternative to keeping agents in arrays
 - [LASER: Getting started](https://laser.idmod.org/laser-generic/): another framework that keeps agents' properties in arrays, one per property
 - [NumPy: Indexing on ndarrays](https://numpy.org/doc/stable/user/basics.indexing.html): the indexing that Starsim's arrays build on
+
+## Appendix: looking at people
+
+The properties and methods of `sim.people` for looking at the agents (see [People](../api/people.qmd) for all of them):
+
+| Name | What it gives |
+|---|---|
+| `len(people)`, `people.n_alive` | The number of agents taking part, and the number of people they stand for |
+| `people.auids` | The UIDs of the agents taking part (alive and not removed) |
+| `people.alive`, `people.dead`, `people.female`, `people.male` | Who is alive, has died, is female, or is male, as states (`.uids` for their UIDs) |
+| `people.age` | Each agent's age, in years |
+| `people.parent` | The UID of each agent's mother, for agents born in the run (-1 for none) |
+| `people.causes`, `people.cause_of_death` | The causes of death by name, and the cause of each agent's death (see [above](#deaths-by-cause)) |
+| `people.died_of(module)` | The agents who died of a module in the step just finished, for code in a module |
+| `people.keys()` | The names of the states of the people |
+| `people.to_df()` | A table with a row for each agent and a column for each state |
+| `people.person(uid)` | Everything about one agent |
+| `people.brief()` | A one-line summary |
+| `people.plot()` | A histogram of each state |
+| `people.plot_ages()` | The age pyramid (`absolute=True` for numbers rather than shares) |
+
+## Appendix: the kinds of array
+
+The kinds of array that hold what agents are and have (see [Arrays](../api/internals.arrays.qmd)), for the states of `ss.People(extra_states=...)` and of modules:
+
+| Array | Holds | Default |
+|---|---|---|
+| `ss.BoolState` | True or false, for a state people are in that is worth counting (such as `alive`, `female`, or a disease's `I`): a module records the number in each of its states as a result | False |
+| `ss.BoolArr` | True or false, for a flag used inside a module (such as `preterm`), with no result of its own; otherwise the same, with `.uids` for the agents for whom it is true | False |
+| `ss.FloatArr` | A number, such as an age or a relative risk | NaN |
+| `ss.IntArr` | A whole number, such as a count | -999999 (for none, since whole numbers have no NaN) |
+| `ss.TimeArr` | The step on which something happened (such as `ti_dead`) | NaN |
+| `ss.IndexArr` | The UID of another agent (such as `parent`), made by Starsim rather than by models | -1 |
+| `ss.uids` | A set of UIDs, as from `(people.age < 5).uids`, for indexing any array | |
+
+Each takes `default=`, a value or a distribution to draw each agent's value from, and `label=`, the name used in plots.

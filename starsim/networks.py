@@ -2474,7 +2474,7 @@ def contacts(matrix=None, ages=None, dims=None, name=None, source=None, layer='a
         dims (str/list): the model's stratifications the matrix is over (default: age); for several, `matrix[i, k, j, l]` is the number of contacts per unit time
             that one person at levels `(i, k)` has with people at levels `(j, l)`, or the same as a square matrix over the combinations of levels, the first stratification slowest
         name (str): the name of the mixing (default: 'contacts', or the layer, e.g. 'home')
-        source (str): for a country, the study: 'prem2021' (the default; bundled, 177 countries), 'prem2017' (152), or 'mistry2021' (36, by single year of age); for a US state, 'mistry2021_us' (the default; by single year of age); all but the first are downloaded on first use
+        source (str): for a country, the study: 'prem' (the default: Prem 2021, bundled, for 177 countries, with Prem 2017 for 10 more, e.g. Japan and Australia), 'prem2021' (177), 'prem2017' (152), or 'mistry2021' (36, by single year of age); for a US state, 'mistry2021_us' (the default; by single year of age); all but Prem 2021 are downloaded on first use
         layer (str/list): for a country, the setting: 'all' (the default), 'home', 'school', 'work', or 'community'; or a list of them, for a list of layers, each named by its setting
         unit (str): the unit of time the contacts are counted over, e.g. 'day' for contacts a day; by default 'day' for a country's matrix (as the studies give them), and otherwise the sim's unit, as for any bare number
 

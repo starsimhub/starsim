@@ -34,7 +34,7 @@ Note: the Starsim suite also includes [Covasim](https://github.com/instituteford
 
 ## The built-in library
 
-Starsim itself comes with a library of example modules, imported with `import starsim.library as ssl`: diseases (HIV with CD4 counts, cholera with an environmental reservoir, malaria with its mosquitoes, TB, measles, and others), networks (households, networks in space, and theoretical networks such as Erdős–Rényi), and maternal, newborn, and child health (fetal health, neonatal sepsis). They are illustrative rather than validated: their parameter values are indicative, and they are meant to be copied and adapted. See [Library: Diseases](library_diseases.qmd), [Library: Networks](library_networks.qmd), and [Library: Maternal-child health](library_mnch.qmd).
+Starsim itself comes with a library of example modules, imported with `import starsim.library as ssl`: diseases (HIV with CD4 counts, cholera with an environmental reservoir, malaria with its mosquitoes, TB, measles, and others), networks (households, networks in space, and theoretical networks such as Erdős–Rényi), maternal, newborn, and child health (fetal health, neonatal sepsis), and health economics (costs, DALYs, and cost-effectiveness; see [Costs](interventions_costs.qmd)). They are illustrative rather than validated: their parameter values are indicative, and they are meant to be copied and adapted. See [Library: Diseases](library_diseases.qmd), [Library: Networks](library_networks.qmd), and [Library: Maternal-child health](library_mnch.qmd).
 
 The core of Starsim also includes the classic compartmental structures, `ss.SIR`, `ss.SIS`, and `ss.SEIR`, as declared diseases with named parameters (see [Diseases](building_diseases.qmd#built-in-sir-sis-and-seir)).
 
@@ -45,13 +45,18 @@ Start from the smallest model that represents the mechanism your question depend
 | Question | Starting point |
 |---|---|
 | How does a closed outbreak progress? | [SIR, four ways](../gallery/sir.qmd) |
+| How many people are infected in the end? | [Final size](../gallery/final_size.qmd) |
+| Will a single imported case start an epidemic? | [The chance of a major outbreak](../gallery/major_outbreak.qmd) |
 | Does the distribution of the latent or infectious period affect the timing? | [SEIR with a realistic infectious period](../gallery/seir_erlang.qmd) |
 | How many hospital beds will be occupied, and how many people die? | [Hospitalization and death](../gallery/branching.qmd) |
 | Does an environmental reservoir matter? | [Cholera with a water reservoir](../gallery/cholera.qmd) |
 | Which age groups are most affected? | [Age groups and a contact matrix](../gallery/age_contacts.qmd), [T4 – Age groups and contacts](../tutorials/t4_ages.qmd) |
 | What is the effect of vaccination? | [Vaccination as a stratification](../gallery/vaccination_strata.qmd), [T5 – Interventions and scenarios](../tutorials/t5_interventions.qmd) |
 | How does infection move between towns? | [T6 – Geography and mixing](../tutorials/t6_places.qmd) |
+| Does closing schools help? | [Closing schools](../gallery/school_closures.qmd) |
+| Does severity depend on age, in a way that is easiest to write as a function? | [Severity by age, as a function](../gallery/custom_code.qmd) |
 | What do surveillance data say about the parameters? | [Cases, hospitalizations, and deaths, fitted to data](../gallery/outcomes_fit.qmd), [T7 – Data and calibration](../tutorials/t7_calibration.qmd) |
+| What drives recurring epidemics, such as those of measles? | [Measles in London, four ways](../gallery/measles_london.qmd) |
 | Do individual partnerships matter? | [An STI on a sexual network](../gallery/sexual_network.qmd), [A2 – Networks](../tutorials/a2_networks.qmd) |
 
 When adapting a model, first reproduce its baseline, then change one assumption at a time, and compare the results with and without each change. Record where each parameter value came from (`ss.par(..., source=...)` keeps it with the model; see [Parameters](building_parameters.qmd)), and which outputs were checked against data. If you already have a model in another framework, see [Conversion](conversion/index.qmd), and check that the translated model gives the same results as the original.

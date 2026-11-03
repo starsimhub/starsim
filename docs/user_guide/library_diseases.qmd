@@ -4,10 +4,10 @@ jupyter: python3
 authorship:
   human: 50
   ai: 50
-  note: Adapted from the Starsim 3 user guide page on library modules; ported to v4, with new examples comparing each disease with and without a feature written by AI
+  note: Adapted from the Starsim 3 user guide page on library modules; ported to v4, with new examples comparing each disease with and without a feature written by AI; examples made realistic and the catalog appendix added by AI
 ---
 
-Core Starsim (`import starsim as ss`) provides the framework and its generic building blocks: `ss.Disease`, `ss.SIR`, `ss.RandomNet`, `ss.Pregnancy`, and so on. The **Starsim library** (`import starsim.library as ssl`) is a separate collection of specific modules built on those: particular diseases such as measles and cholera (this page), specialized networks such as households ([Library: networks](library_networks.qmd)), and worked examples of harder modeling patterns such as congenital infection ([Library: maternal-child health](library_mnch.qmd)).
+Core Starsim (`import starsim as ss`) provides the framework and its generic building blocks: `ss.Disease`, `ss.SIR`, `ss.RandomNet`, `ss.Pregnancy`, and so on. The **Starsim library** (`import starsim.library as ssl`) is a separate collection of specific modules built on those: particular diseases such as measles and cholera (this page), specialized networks such as households ([Library: networks](library_networks.qmd)), worked examples of harder modeling patterns such as congenital infection ([Library: maternal-child health](library_mnch.qmd)), and health economics: costs, DALYs, and cost-effectiveness (`ssl.econ`; see [Costs](interventions_costs.qmd)).
 
 The library ships with Starsim, but is held to a lower bar than the core package. Its modules are *illustrative rather than validated*: parameter values are indicative, some are placeholders, and their interfaces may change between versions. Treat them as starting points to copy and adapt, not as ready-made models of a particular setting.
 
@@ -90,12 +90,12 @@ With these values, transmission from person to person alone barely sustains itse
 - `ssl.ART` is an intervention that scales up treatment coverage over the years given, reducing transmission by `art_efficacy` and raising CD4 counts back towards `cd4_max`.
 - `ssl.CD4_analyzer` is an analyzer that records every agent's CD4 count at every step, in a dense array of steps by agents (so it suits small sims).
 
-Since deaths from HIV depend on CD4 counts, treatment reduces deaths as well as transmission. Unlike the outbreak diseases above, HIV plays out over years, so steps of a year and a span of decades suit it:
+Since deaths from HIV depend on CD4 counts, treatment reduces deaths as well as transmission. Unlike the outbreak diseases above, HIV plays out over years, so steps of a year and a span of decades suit it. It is passed on in sexual partnerships, so it runs on `ss.SexualNet`, where `beta` is a probability per act, from men to women and from women to men (`ss.peract`); with partnerships lasting two years on average and the network's default of about 80 acts a year, these values, at the upper end of the estimates, stand in for the higher infectiousness early in infection that this simple model leaves out:
 
 ```{python}
 endemic = dict(start='2000', stop='2030', dt=ss.years(1), n_agents=2000)
-hiv = lambda: ssl.HIV(beta=ss.peryear(0.05), init_prev=0.05)
-net = lambda: ss.RandomNet(n_contacts=ss.poisson(2))
+hiv = lambda: ssl.HIV(beta=ss.peract(m2f=0.004, f2m=0.002), init_prev=0.05)
+net = lambda: ss.SexualNet(dur=ss.years(2))
 art = ssl.ART(year=[2005, 2015], coverage=[0, 0.9]) # Coverage rising from 0 in 2005 to 90% in 2015
 
 scenarios = {
@@ -106,12 +106,14 @@ msim = ss.parallel(scenarios, parallel=False)
 msim.plot(['hiv.prevalence', 'hiv.death'])
 ```
 
-The deaths over the whole run, and the prevalence in 2030 (the final value), for each scenario:
+The deaths and new infections over the whole run, and the prevalence in 2030 (its last value, rather than its mean over the run, which is what `summarize()` gives a prevalence by default), for each scenario:
 
 ```{python}
-summary = msim.summarize()
-summary.loc[['hiv_death', 'hiv_prevalence']]
+summary = msim.summarize(how=dict(hiv_prevalence='last'))
+summary.loc[['hiv_death', 'hiv_infection', 'hiv_prevalence']]
 ```
+
+Without treatment, the prevalence rises from about 4% to about 30%, a generalized epidemic; scaling up treatment to 90% coverage roughly halves both the new infections and the deaths over the run.
 
 Each sim's analyzer holds the CD4 counts of every agent. The mean count among those infected falls without treatment, and recovers as treatment is scaled up:
 
@@ -137,19 +139,25 @@ plt.show()
 
 ## A non-communicable disease
 
-`ssl.NCD` is not transmitted, so it needs no network. Each agent starts at risk with probability `initial_risk`; those at risk develop the condition after a time drawn from `dur_risk`, and die of it after a time drawn from `prognosis`. Its results are the number at risk, the prevalence of the condition, and the deaths from it. Halving the share who start at risk, as a stand-in for a policy on a risk factor such as smoking, halves the cases and deaths that follow:
+`ssl.NCD` is not transmitted, so it needs no network. Each agent starts at risk with probability `initial_risk`; those at risk develop the condition after a time drawn from `dur_risk`, and die of it after a time drawn from `prognosis`. Its results are the number at risk, the prevalence of the condition, and the deaths from it. A treatment that doubles the time people survive with the condition (`prognosis`, a Weibull distribution whose `scale` is the typical survival) shows a familiar result of chronic disease epidemiology: it delays deaths, and so raises the prevalence, since people live longer with the condition:
 
 ```{python}
 chronic = dict(start='2000', stop='2040', dt=ss.years(1), n_agents=2000, demographics=[ss.Births(), ss.Deaths()])
 scenarios = {
-    '30% at risk': ss.Sim(diseases=ssl.NCD(initial_risk=0.3),  **chronic),
-    '15% at risk': ss.Sim(diseases=ssl.NCD(initial_risk=0.15), **chronic),
+    'Current care':                ss.Sim(diseases=ssl.NCD(), **chronic),
+    'Treatment doubling survival': ss.Sim(diseases=ssl.NCD(prognosis=ss.weibull(c=2, scale=ss.years(10))), **chronic),
 }
 msim = ss.parallel(scenarios, parallel=False)
 msim.plot(['ncd.prevalence', 'ncd.death'])
 ```
 
-Only the starting population is ever at risk here, so the condition dies out with them; a model of a real risk factor would put newborns and others at risk too, which is a change of `init_post()` and `step()` (see [Adapting a library module](#adapting-a-library-module)).
+The peak prevalence, and the deaths over the whole run:
+
+```{python}
+msim.summarize(how=dict(ncd_prevalence='max')).loc[['ncd_prevalence', 'ncd_death']]
+```
+
+Over 40 years, nearly everyone affected dies of the condition either way, so the treatment moves deaths later more than it prevents them. Only the starting population is ever at risk here, so the condition dies out with them; a model of a real risk factor would put newborns and others at risk too, which is a change of `init_post()` and `step()` (see [Adapting a library module](#adapting-a-library-module)).
 
 ## SIR, SIS, and SEIR written as code
 
@@ -190,7 +198,7 @@ The rest of the library's diseases are declared, as states and transitions ([Dis
 | `ssl.Dengue` | Several serotypes, each a disease with its own vector, and partial cross-protection between them | The Ross-Macdonald structure above, with indicative dengue values; cross-protection as found by Reich NG et al., *J R Soc Interface* 2013;10:20130414 |
 | `ssl.Typhoid` | Chronic carriers: a few people shed for life, at a hundredth of the infectiousness of an acute case | Pitzer VE et al., *PLoS Negl Trop Dis* 2014;8(1):e2642, for the carriers, waning, and R0 of 2.8 |
 | `ssl.Polio` | A rare outcome as a branch: about 1 infection in 200 causes paralysis | US CDC *Pink Book* for the paralytic fraction; Fine PEM, Carneiro IAM, *Am J Epidemiol* 1999;150:1001-1021, for R0 |
-| `ssl.Syphilis` | Stages, with the one thing that cannot be declared (infectiousness that falls with time since the latent stage began) written as code | STIsim's syphilis module, which cites its own sources |
+| `ssl.Syphilis` | Stages, with infectiousness that falls with the time each person has spent in the latent stage, which needs agents | STIsim's syphilis module, which cites its own sources |
 | `ssl.Gonorrhea` | An SIS infection on a sexual network | STIsim's gonorrhea module |
 
 Malaria is the clearest example of what declaring buys: mosquitoes are states like any other, declared with `people=False` so that they are counts rather than people, and `R0()` works out the reproduction number from the model itself:
@@ -225,7 +233,7 @@ Since these are declared, `describe()`, `diagram()`, and `equations()` work on a
 ssl.Typhoid().equations()
 ```
 
-One of them needs agents rather than compartments: `ssl.Syphilis`, because the falling infectiousness of latent syphilis is a quantity each person carries, set in its `step()`. The rest run under any solver.
+One of them needs agents rather than compartments: `ssl.Syphilis`, because the falling infectiousness of latent syphilis depends on the time each person has spent in that stage (`El.time`, in two modifiers of `rel_trans` declared in the class), a clock that is kept for each person. The two sexually transmitted infections, `ssl.Syphilis` and `ssl.Gonorrhea`, also take a probability of transmission per act (`ss.peract`), so they need a sexual network such as `ss.SexualNet`, whose partnerships run as agents. The rest run under any solver.
 
 ## Adapting a library module
 
@@ -235,20 +243,20 @@ Library modules are ordinary Starsim modules, so they can be changed in the usua
 measles = ssl.Measles(beta=ss.perday(0.4), dur_exp=ss.normal(loc=ss.days(10)), p_death=0.01)
 ```
 
-For a change to how the disease works, build on the class. Here measles gets waning immunity: recovered agents become susceptible again after a delay, `dur_immune`. The new class adds a parameter and a state in `__init__()`, schedules the loss of immunity when each agent is infected (`set_prognoses()`), and makes the agents whose time has come susceptible again at each step (`step_state()`):
+For a change to how the disease works, build on the class. Measles immunity is lifelong, but immunity to many respiratory infections is not: reinfection with the seasonal coronaviruses that cause colds is common within a year or two. Here `ssl.AgentSEIR` gets immunity that wanes, after a time drawn for each person from `dur_immune` (exponential, with a mean of a year), and a small daily chance that a susceptible person is infected from outside the population (`p_import`). The new class adds two parameters and a state in `__init__()`, schedules the loss of immunity when each agent is infected (`set_prognoses()`), and at each step makes the agents whose time has come susceptible again and infects the imported cases (`step_state()`):
 
 ```{python}
-class WaningMeasles(ssl.Measles):
-    def __init__(self, dur_immune=ss.years(1), **kwargs):
+class WaningSEIR(ssl.AgentSEIR):
+    def __init__(self, dur_immune=ss.expon(scale=ss.years(1)), p_import=ss.bernoulli(p=1e-4), **kwargs):
         super().__init__(**kwargs)
-        self.define_pars(dur_immune=dur_immune)
+        self.define_pars(dur_immune=dur_immune, p_import=p_import)
         self.update_pars(**kwargs)
         self.define_states(ss.TimeArr('ti_susceptible', label='Time of losing immunity'))
         return
 
     def set_prognoses(self, uids, sources=None):
         super().set_prognoses(uids, sources)
-        self.ti_susceptible[uids] = self.ti_recovered[uids] + self.pars.dur_immune / self.t.dt
+        self.ti_susceptible[uids] = self.ti_recovered[uids] + self.pars.dur_immune.rvs(uids)
         return
 
     def step_state(self):
@@ -256,17 +264,32 @@ class WaningMeasles(ssl.Measles):
         waned = (self.recovered & self.ti_susceptible.due()).uids
         self.recovered[waned] = False
         self.susceptible[waned] = True
+        imported = self.pars.p_import.filter(self.susceptible.uids) # Infections from outside
+        self.set_prognoses(imported)
         return
 
+cold = dict( # A cold: a latent period of 3 days, infectious for a week, and an R0 of about 2
+    beta = ss.perday(0.03),
+    dur_exp = ss.lognorm_ex(mean=ss.days(3)),
+    dur_inf = ss.lognorm_ex(mean=ss.days(7)),
+    p_death = 0,
+    init_prev = 0.01,
+    name = 'cold',
+)
+pars = dict(start='2000', dur=ss.years(4), n_agents=5000, networks=ss.RandomNet())
 scenarios = {
-    'Lifelong immunity':     ss.Sim(diseases=ssl.Measles(beta=ss.perday(0.3)), networks=ss.RandomNet(), **outbreak),
-    'Immunity for 60 days':  ss.Sim(diseases=WaningMeasles(dur_immune=ss.days(60), beta=ss.perday(0.3), name='measles'), networks=ss.RandomNet(), **outbreak),
+    'Lifelong immunity':              ss.Sim(diseases=WaningSEIR(dur_immune=ss.constant(ss.years(100)), **cold), **pars),
+    'Immunity for a year on average': ss.Sim(diseases=WaningSEIR(**cold), **pars),
 }
 msim = ss.parallel(scenarios, parallel=False)
-msim.plot(['measles.susceptible', 'measles.recovered'])
+msim.plot(['cold.infectious', 'cold.susceptible'])
 ```
 
-Giving the new disease `name='measles'` keeps its results under the same name as the original's, so the two can be plotted together. With waning, the recovered agents return to being susceptible, as intended. This alone doesn't produce a second wave: the outbreak burns out before immunity wanes, so there is no one infectious left to start one. Recurring waves need a continuing source of infection: importation, births (bringing in new susceptible people), or a slower disease.
+Both scenarios have the same first epidemic and the same imported cases; they differ only in how long immunity lasts. With lifelong immunity, the epidemic leaves too few people susceptible for the imported cases to start another, so infection all but disappears. With immunity that wanes, people return to being susceptible, and the infection becomes endemic, with recurring smaller waves. Without the imported cases, it would not: in a population this small, the first epidemic burns out before immunity wanes, and there is no one infectious left to start a second. The total infections over the four years:
+
+```{python}
+msim.summarize('cold_infection')
+```
 
 Copying a library module and editing it is also a good way to use it; that is what these modules are for. See [Custom modules](building_modules.qmd) for writing modules from scratch, and the tutorial [A5 – Custom modules](../tutorials/a5_modules.qmd) for a worked example.
 
@@ -281,3 +304,46 @@ New library modules are welcome, particularly ones that show a modeling pattern 
 - [HPVsim: repository](https://github.com/starsimhub/hpvsim): an agent-based model of HPV and cervical cancer
 - [Covasim: documentation](https://docs.covasim.org/): the agent-based COVID-19 model that Starsim grew out of
 - [The Epiverse: tools](https://epiverse-trace.github.io/): R packages for outbreak analytics, including natural history parameters of many diseases
+
+## Appendix: every library disease
+
+Every disease in `ssl.diseases`, generated from the classes themselves: whether it is declared (so it runs under any solver, except as noted [above](#declared-diseases)) or written as code (so it runs as agents), its first line of documentation, its default parameters (those its source marks as placeholders, to be set for the network, are flagged), and its results. `ssl.Dengue` makes one disease per serotype (`den1` to `den4`); the first is shown.
+
+```{python}
+#| warning: false
+import re
+import inspect
+import pandas as pd
+
+def placeholders(cls):
+    """ The parameters that a class's source marks as placeholders """
+    return re.findall(r'(\w+)\s*=.*# Placeholder', inspect.getsource(cls))
+
+def network_for(disease):
+    """ A network the disease can be initialized on, to list its results """
+    beta = getattr(disease.pars.get('beta'), 'raw', disease.pars.get('beta'))
+    if isinstance(beta, ss.peract): # A probability per act needs partnerships
+        return ss.SexualNet()
+    return None if isinstance(disease, ssl.NCD) else ss.RandomNet()
+
+rows = []
+for name, obj in vars(ssl.diseases).items():
+    if name.startswith('_') or inspect.ismodule(obj) or (inspect.isclass(obj) and not issubclass(obj, ss.Disease)):
+        continue # Not a disease: ssl.ART is an intervention and ssl.CD4_analyzer an analyzer
+    disease = obj()
+    if isinstance(disease, list): # ssl.Dengue: one disease per serotype
+        disease = disease[0]
+    marked = placeholders(obj)
+    pars = [f'{k}={getattr(v, "raw", v)}' + (' (placeholder)' if k in marked else '') for k,v in disease.pars.items()]
+    sim = ss.Sim(diseases=disease, networks=network_for(disease), n_agents=100, verbose=0).init()
+    rows.append(dict(
+        disease = f'ssl.{name}',
+        written_as = 'declared' if disease.graph is not None else 'code',
+        description = inspect.getdoc(obj).split('\n')[0].rstrip('.'),
+        parameters = ', '.join(pars),
+        results = ', '.join(k for k in sim.results[disease.name].keys() if k != 'timevec'),
+    ))
+
+pd.set_option('display.max_colwidth', None) # Show each entry in full
+pd.DataFrame(rows).sort_values(['written_as', 'disease']).set_index('disease')
+```

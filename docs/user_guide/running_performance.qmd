@@ -105,3 +105,19 @@ The compiled loop costs about a tenth of the rest of the run, close to what Star
 ## Compiling first
 
 If a first run after installing is slow, the Numba kernels are being compiled; `ss.compile()` does it once ahead of time (see [Solvers and backends](running_solvers.qmd#backends)).
+
+## Appendix: every option
+
+Starsim's global options are in `ss.options`: set one for the session with `ss.options(threads=1)`, for a block with `with ss.options.context(threads=1):`, or before Python starts with the environment variable `STARSIM_` and the option's name in capitals (`STARSIM_THREADS=1`), which is the way to set it for every worker or every task of a cluster job. `ss.options.disp()` shows the current values, and `ss.options.help(detailed=True)` each option's value, default, and variable. Here is each option with its description:
+
+```{python}
+import pandas as pd
+pd.set_option('display.max_colwidth', None) # Show each entry in full
+
+rows = {key: dict(variable=f'STARSIM_{key.upper()}', description=ss.options.optdesc[key]) for key in ss.options.keys()}
+pd.DataFrame.from_dict(rows, orient='index')
+```
+
+Those that affect speed or memory are `threads` and `num_threads` (threads for the agents and for linear algebra), `kernels` and `jax` (which code runs the solvers; see [Solvers and backends](running_solvers.qmd#appendix-every-set-of-kernels)), `crn` (faster draws for agents, without common random numbers), `keep_times` and `max_joint` (memory), `precision` (32, the default, keeps agents' values as 32-bit floats, and 64 as 64-bit, which doubles their memory), and `max_steps` (when to warn that a run is long). Starsim also reads `SCIRIS_NUM_THREADS`, as it reads `STARSIM_NUM_THREADS`, for the threads of linear algebra (see [Deployment](running_deploy.qmd#threads-for-linear-algebra)), and `STARSIM_CHECK_COUNTS` and `STARSIM_CHECK_DRAWS`, which turn on checks of the agent engine for testing it, at a cost in speed.
+
+The settings of a sim that affect speed or memory are `n_agents` and `pop_scale`, `dt` and `substeps`, `solver`, `nopython`, `results` (which results are kept by group), and `people_results` (whether the people's results are recorded at each step); they are all in [Running sims](running_sim.qmd#appendix-every-sim-setting). The rules that decide whether a compartmental run is taken in one call are in [Solvers and backends](running_solvers.qmd#appendix-what-needs-agents), as `ss.solvers.solver_table()`.

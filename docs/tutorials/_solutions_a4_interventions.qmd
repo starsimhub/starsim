@@ -12,9 +12,9 @@ recovery  = I >> S @ ss.months(6)
 sti = ss.Disease(infection, recovery, init_prev=0.05)
 
 settings = dict(
-    networks     = ss.SexualNet(dur=ss.months(1), memory=ss.years(1)),
+    networks     = ss.SexualNet(dur=ss.months(1), memory=ss.years(1), participation=ss.bernoulli(0.15)),
     demographics = [ss.birth(rate=ss.peryear(0.02)), ss.death(rate=ss.peryear(0.02))],
-    n_agents     = 5000,
+    n_agents     = 10_000,
     start        = 2000,
     stop         = 2020,
     dt           = ss.months(1),
@@ -33,7 +33,7 @@ notification = ss.treat(drug, who=screening.positive, trace='sexualnet', coverag
 
 **Q: What happens if the partners of people who seek care are notified too (a second notification, with `who=care`)? Is the effect larger than notifying the partners of those found by screening?**
 
-A: A delivery is an event too, so `who=care` is the people treated after seeking care. Notifying their partners starts in 2000, rather than 2010, and starts from far more people than screening finds, so it has a much larger effect: here it keeps the infection at a low level from the start, and nearly eliminates it once screening begins.
+A: A delivery is an event too, so `who=care` is the people treated after seeking care. Notifying their partners starts in 2000, rather than 2010, and starts from far more people than screening finds, so it has a much larger effect: here it eliminates the infection within about five years, before screening begins.
 
 ```{python}
 care_notification = ss.treat(drug, who=care, trace='sexualnet', coverage=0.5)
@@ -75,7 +75,7 @@ for label in ['Screening 15-29', 'Screening 15-49']:
     print(label, '- tests:', tests, '- infections prevented:', prevented, '- per 100 tests:', round(100*prevented/tests, 1))
 ```
 
-Screening everyone aged 15 to 49 takes a little over twice as many tests, and prevents about three times as many infections, so it prevents more per test. In this model, partnerships don't depend on age beyond sexual debut, so people over 30 are as much at risk as younger people; in a real setting, where infection is concentrated in young people, the answer could well be the reverse. Since each run is a single stochastic run, the infections prevented are uncertain; with several runs of each (`n_runs=`), the comparison per test would be clearer.
+Screening everyone aged 15 to 49 takes a little over twice as many tests, and prevents about twice as many infections, so it prevents about as many per test. In this model, partnerships don't depend on age beyond sexual debut, so people over 30 are as much at risk as younger people; in a real setting, where infection is concentrated in young people, the answer could well be the reverse. Since each run is a single stochastic run, the infections prevented are uncertain; with several runs of each (`n_runs=`), the comparison per test would be clearer.
 
 ### Question 3
 
@@ -88,10 +88,11 @@ vaccine = ss.Vaccine(efficacy=0.35)
 vaccination = ss.vaccinate(vaccine, at_age=15, coverage=0.8, start='2010')
 catch_up = ss.vaccinate(vaccine, where=young, coverage=0.8, at=['2010'])
 
+long = dict(settings, stop=2040) # As in the tutorial, to 2040
 sims = {
-    'Treatment when seeking care': ss.Sim(sti, interventions=care, **settings),
-    'And vaccination at age 15':   ss.Sim(sti, interventions=[care, vaccination], **settings),
-    'And a catch-up campaign':     ss.Sim(sti, interventions=[care, vaccination, catch_up], **settings),
+    'Treatment when seeking care': ss.Sim(sti, interventions=care, **long),
+    'And vaccination at age 15':   ss.Sim(sti, interventions=[care, vaccination], **long),
+    'And a catch-up campaign':     ss.Sim(sti, interventions=[care, vaccination, catch_up], **long),
 }
 msim = ss.parallel(sims)
 msim.plot('sti.I')
@@ -100,4 +101,4 @@ print('Doses at age 15:', sim.results.vaccination.delivered.sum())
 print('Doses in the catch-up campaign:', sim.results.catch_up.delivered.sum())
 ```
 
-The catch-up campaign protects many of the people at risk at once, rather than waiting for them to be replaced by vaccinated cohorts, so the effect comes years sooner, for about two and a half times as many doses in all.
+The catch-up campaign protects many of the people at risk at once, rather than waiting for them to be replaced by vaccinated cohorts, so the effect comes a few years sooner, for about half as many doses again as vaccination at 15 alone. In a single run of each, the difference is partly chance; with several runs (`n_runs=`) it would be clearer.

@@ -11,7 +11,7 @@ Diseases are the cornerstone of almost any Starsim analysis. In the core tutoria
 
 By the end of this tutorial, you'll understand how to:
 
-- run a disease as agents, and change the parameters of a disease from the library;
+- run a disease as agents, and change the parameters of a built-in disease;
 - look at the state and history of each person;
 - see how chance decides whether one imported case starts an outbreak;
 - give people different infectiousness, so that a few cause most infections (superspreading);
@@ -42,7 +42,7 @@ msim.plot('measles.I')
 
 The two agree closely: with 5,000 people and 5 infectious at the start, chance plays only a small part, and the agents give nearly the same epidemic as the ODE. They differ a little because agents take whole daily steps (the run prints a note saying how much this can matter), and because each agent's course is drawn at random. Everything you learned in the core tutorials (`describe()`, results, interventions, scenarios) works the same way for agents.
 
-Starsim also has a few diseases ready-made. Much like sims or networks, a disease can be customized by passing in parameters. Here is the library SIR model, with parameters close to measles:
+Starsim also has a few diseases ready-made. Much like sims or networks, a disease can be customized by passing in parameters. Here is the built-in SIR model, `ss.SIR`, with parameters close to measles:
 
 ```{python}
 sir = ss.SIR(dur_inf=ss.days(8), beta=ss.perday(1.9), init_prev=0.001, p_death=0.002)
@@ -58,7 +58,7 @@ Notice how we modified several key parameters:
 - `init_prev=0.001`: starting with 0.1% of the population infected
 - `p_death=0.002`: 0.2% of infected people die
 
-The results are stored in `sim.results.sir`, and can also be directly accessed via `sim.diseases.sir.results`. `ss.SIR`, `ss.SIS`, and `ss.SEIR` are the textbook models, with exponential durations. For more detail on any of the diseases in the Starsim library of diseases (`import starsim.library as ssl`), please refer to the [Diseases page of the model library](../user_guide/library_diseases.qmd).
+The results are stored in `sim.results.sir`, and can also be directly accessed via `sim.diseases.sir.results`. `ss.SIR`, `ss.SIS`, and `ss.SEIR` are the textbook models, with exponential durations. The Starsim library (`import starsim.library as ssl`) has fuller models of about twenty particular diseases, such as `ssl.Measles`, `ssl.Influenza`, and `ssl.TB`, which are used in the same way, e.g. `ss.Sim(ssl.Measles(), networks=ss.RandomNet(), n_agents=5000)`; see the [Diseases page of the model library](../user_guide/library_diseases.qmd) for all of them.
 
 ## Step 2: Looking at individual people
 

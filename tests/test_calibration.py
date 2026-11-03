@@ -33,6 +33,16 @@ def test_best_trial():
     assert np.isclose(fit.pars.beta, 0.5, rtol=0.01) and fit.mismatch <= fit.trials.objective.min()*1.001
     with pytest.raises(ValueError, match='Unknown fitting method'):
         ss.Sim(sir, data=data, **pars).fit(method='cg', verbose=0)
+
+    # By default, a likelihood that JAX does not cover (a function) is fitted without gradients, rather than raising
+    dur = ss.par(ss.days(8), bounds=[3, 15])
+    k = ss.par(0.5, bounds=[0.1, 1])
+    infection = S >> I @ beta*I
+    sir = ss.Disease(infection, I >> R @ dur, ss.outcome(k*infection, name='seen'), init=dict(I=0.01), name='sir')
+    data = ss.Sim(sir, pars=dict(beta=0.5), **pars).run().to_data('seen')
+    normal = lambda observed, model: -0.5*((observed - model)/(0.1*model + 1))**2
+    fit = ss.Sim(sir, data=data, **pars).fit(likelihood=dict(seen=normal), verbose=0)
+    assert fit.method == 'nelder-mead' and np.isclose(fit.pars.beta, 0.5, rtol=0.05)
     return fit
 
 

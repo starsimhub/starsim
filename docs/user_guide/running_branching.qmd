@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 20
   ai: 80
-  note: Based on the Claude draft on rescaling, with text adapted from the Starsim 3 user guide page on population rescaling and a new section on branching processes written by AI
+  note: Based on the Claude draft on rescaling, with text adapted from the Starsim 3 user guide page on population rescaling and a new section on branching processes written by AI; examples corrected and made realistic, and an appendix added, by AI
 ---
 
 Many questions are about a small part of a large population: the first cases of an outbreak in a city, or an epidemic in a country of tens of millions. Simulating every person is then often unnecessary and slow. There are two ways round it. While an outbreak is small compared with the population, the susceptible people are hardly depleted, and it can be treated as a **branching process**: each case infects a random number of others, independently of every other case, and the rest of the population hardly matters. Once an epidemic is large, a run as agents can instead let each agent stand for several people: **population rescaling**. This page covers both. A compartmental model holds numbers of people, so it can be any size at no cost; a branching process can be run by any solver, and population rescaling is for runs of agents.
@@ -30,7 +30,7 @@ With `solver='auto'`, the solver is chosen as it would be without branching. Wha
 
 ### The chance that an outbreak dies out
 
-Here is an influenza-like infection with R0 = 2 (β = 0.2 per day, infectious for 10 days), introduced by one case into a city of a million people. An ODE always takes off, so the question needs a stochastic solver and many runs (see [Solvers and backends](running_solvers.qmd#whether-an-outbreak-takes-off)). Gillespie's algorithm is exact for this model, and as a branching process its cost is the number of events, not the size of the population. Each run stops once 100 people have been infected, by when its chain has taken off:
+Here is an SIR infection with R0 = 2 (β = 0.2 per day, infectious for 10 days), introduced by one case into a city of a million people. An ODE always takes off, so the question needs a stochastic solver and many runs (see [Solvers and backends](running_solvers.qmd#whether-an-outbreak-takes-off)). Gillespie's algorithm is exact for this model, and as a branching process its cost is the number of events, not the size of the population. Each run stops once 100 people have been infected, by when its chain has taken off:
 
 ```{python}
 import numpy as np
@@ -40,10 +40,10 @@ import starsim as ss
 S, I, R = ss.states('S I R')
 infection = S >> I @ 0.2*I        # β = 0.2 per day
 recovery  = I >> R @ ss.days(10)  # Infectious for 10 days on average: R0 = 2
-flu = ss.Disease(infection, recovery, init_n=dict(I=1), name='flu') # One imported case
+sir = ss.Disease(infection, recovery, init_n=dict(I=1), name='sir') # One imported case
 
-sim = ss.Sim(flu, total_pop=1e6, stop=ss.days(100), solver='gillespie', branching=True, verbose=0)
-msim = sim.run(n_runs=100, until=flu.I.n + flu.R.n >= 100)
+sim = ss.Sim(sir, total_pop=1e6, stop=ss.days(100), solver='gillespie', branching=True, verbose=0)
+msim = sim.run(n_runs=100, until=sir.I.n + sir.R.n >= 100)
 b = msim.branching
 print(f'Share of introductions that died out: {b.p_extinct:.2f} (95% interval {b.p_extinct_ci[0]:.2f} to {b.p_extinct_ci[1]:.2f}; theory: 1/R0 = 0.5)')
 ```
@@ -55,8 +55,8 @@ print(f'Share of introductions that died out: {b.p_extinct:.2f} (95% interval {b
 For chains of transmission, run the same model as agents. A branching process of agents makes agents only for the people infected, so a city of 10 million costs no more than a village: here, 100 imported cases, followed for 60 days:
 
 ```{python}
-flu = ss.Disease(infection, recovery, init_n=dict(I=100), name='flu') # 100 imported cases, for enough chains to count
-sim = ss.Sim(flu, total_pop=10e6, stop=ss.days(60), solver='abm', branching=True, verbose=0)
+sir = ss.Disease(infection, recovery, init_n=dict(I=100), name='sir') # 100 imported cases, for enough chains to count
+sim = ss.Sim(sir, total_pop=10e6, stop=ss.days(60), solver='abm', branching=True, verbose=0)
 sim.run()
 b = sim.branching
 print(f'{len(sim.people):,} agents for {sim.pars.total_pop:,.0f} people; {b.length} generations')
@@ -71,15 +71,15 @@ print('Cases:', len(n), ' Mean offspring:', n.mean().round(2), ' Variance:', n.v
 
 The mean is close to R0 = 2. With an exponential infectious period, the offspring distribution is geometric, with a variance of R0(1 + R0) = 6 and a third of cases infecting nobody: one reason why so many introductions die out.
 
-To give the cases different infectiousness, give the disease `rel_trans` as an attribute drawn for each person, `ss.attr()`. With a fixed infectious period, a gamma distribution with mean 1 and shape *k* gives a negative binomial offspring distribution with dispersion *k*; *k* = 0.2 is about what has been estimated for SARS and other infections with superspreading. Comparing the offspring with and without it, each over 20 runs:
+To give the cases different infectiousness, give the disease `rel_trans` as an attribute drawn for each person, `ss.attr()`. With a fixed infectious period, a gamma distribution with mean 1 and shape *k* gives a negative binomial offspring distribution with dispersion *k*; *k* = 0.2 is about what has been estimated for SARS and other infections with superspreading. For a SARS-like infection (R0 = 2, infectious for a fixed 10 days), comparing the offspring with and without it, each over 8 runs of 20 imported cases:
 
 ```{python}
 k = 0.2
 offspring = {}
 for label, extra in [('Same infectiousness', {}), (f'Overdispersed (k = {k})', dict(rel_trans=ss.attr(ss.gamma(a=k, scale=1/k))))]: # Each person's infectiousness, with mean 1
     S, I, R = ss.states('S I R')
-    flu_k = ss.Disease(S >> I @ 0.2*I, I >> R @ ss.constant(ss.days(10)), init_n=dict(I=20), name='flu', **extra)
-    sim = ss.Sim(flu_k, total_pop=10e6, stop=ss.days(60), solver='abm', branching=True, verbose=0)
+    sars = ss.Disease(S >> I @ 0.2*I, I >> R @ ss.constant(ss.days(10)), init_n=dict(I=20), name='sars', **extra)
+    sim = ss.Sim(sars, total_pop=10e6, stop=ss.days(60), solver='abm', branching=True, verbose=0)
     msim = sim.run(n_runs=8)
     b = msim.branching
     offspring[label] = b.offspring
@@ -100,12 +100,14 @@ With the same infectiousness and a fixed infectious period, the offspring are Po
 
 ```{python}
 S, E, I, R = ss.states('S E I R')
-seir = ss.Disease(S >> E @ 0.4*I, E >> I @ ss.lognorm_ex(mean=ss.days(5), std=ss.days(3)), I >> R @ ss.days(5), init_n=dict(I=10), name='seir')
-sims = {solver: ss.Sim(seir, total_pop=1e6, branching=True, solver=solver, stop=ss.days(60), verbose=0) for solver in ['ide', 'ode']}
+latent = ss.lognorm_ex(mean=ss.days(5), std=ss.days(10)) # Most become infectious within a few days, a few only after weeks
+seir = ss.Disease(S >> E @ 0.4*I, E >> I @ latent, I >> R @ ss.days(5), init_n=dict(I=10), name='seir')
+solvers = {'Renewal equation (ide)': 'ide', 'Erlang stages (ode)': 'ode'}
+sims = {label: ss.Sim(seir, total_pop=1e6, branching=True, solver=solver, stop=ss.days(60), verbose=0) for label, solver in solvers.items()}
 ss.parallel(sims).plot('seir.I')
 ```
 
-The latent period here is lognormal. `'ide'` keeps it as it is, as a conveyor of whole steps with the distribution's own chance of leaving after each one; `'ode'` approximates it with Erlang stages that match its mean and standard deviation, so the two are close but not the same. For a reproduction number that varies in time, give `beta` as an `ss.timeseries`, which `sim.fit()` can fit.
+The latent period here is lognormal, with a long tail: a mean of 5 days and a standard deviation of 10. `'ide'` keeps it as it is, as a conveyor of whole steps with the distribution's own chance of leaving after each one; `'ode'` approximates it with Erlang stages that match its mean and standard deviation, but Erlang stages can be no more variable than an exponential, so it keeps the mean and gives a standard deviation of 5 days (the sim notes this). With the same R0, a more variable generation interval means more of the infections come early, so the epidemic grows faster under `'ide'`: by day 60 it has about half as many again infectious as under `'ode'`. For a latent period no more variable than an exponential (a lognormal with a standard deviation of 3 days, say), the two are close. For a reproduction number that varies in time, give `beta` as an `ss.timeseries`, which `sim.fit()` can fit.
 
 ## Population rescaling
 
@@ -118,16 +120,16 @@ Two settings say how big the population is:
 
 If neither is given, the population is 10,000. If only `n_agents` is given, `total_pop` is the same. If only `total_pop` is given and the sim runs as agents, there are as many agents as people, up to 10,000.
 
-Here is an influenza-like infection (R0 = 0.3 per day × 10 days = 3) in a city of a million people, as compartments and as 10,000 agents. (This page uses a slower infection than measles, whose fast rates need short steps when run as agents; see [Solvers and backends](running_solvers.qmd#the-length-of-a-step).)
+Here is an SIR infection with R0 = 3 (β = 0.3 per day, infectious for 10 days) in a city of a million people, as compartments and as 10,000 agents. (This page uses a slower infection than measles, whose fast rates need short steps when run as agents; see [Solvers and backends](running_solvers.qmd#the-length-of-a-step).)
 
 ```{python}
 S, I, R = ss.states('S I R')
 infection = S >> I @ 0.3*I        # β = 0.3 per day
 recovery  = I >> R @ ss.days(10)  # Infectious for 10 days on average
-flu = ss.Disease(infection, recovery, init_prev=0.001)
+sir = ss.Disease(infection, recovery, init_prev=0.001)
 
-ode    = ss.Sim(flu, total_pop=1e6, stop=ss.days(150)).run()               # A million people, as compartments
-agents = ss.Sim(flu, total_pop=1e6, stop=ss.days(150), solver='abm').run() # The same, as 10,000 agents
+ode    = ss.Sim(sir, total_pop=1e6, stop=ss.days(150)).run()               # A million people, as compartments
+agents = ss.Sim(sir, total_pop=1e6, stop=ss.days(150), solver='abm').run() # The same, as 10,000 agents
 print('People per agent:', agents.pars.pop_scale)
 ```
 
@@ -140,16 +142,16 @@ The number of people each agent stands for is `pop_scale`, which is `total_pop /
 The cost is resolution. With 5,000 agents for a million people, each agent is 200 people, so an epidemic can't start from fewer than 200 people, and an outbreak started by 10 people can't be represented at all:
 
 ```{python}
-flu = ss.Disease(infection, recovery, init_n=dict(I=10)) # 10 people infectious at the start
-static = ss.Sim(flu, total_pop=1e6, n_agents=5_000, stop=ss.days(150), label='Static')
+sir = ss.Disease(infection, recovery, init_n=dict(I=10)) # 10 people infectious at the start
+static = ss.Sim(sir, total_pop=1e6, n_agents=5_000, stop=ss.days(150), label='Static')
 static.run();
 ```
 
-Starsim notes the problem: 10 people are 0.05 of an agent, so the run starts with one agent infectious, which is 200 people, and its epidemic is that of 200 cases, not 10. The initial infections can instead be given as a number of agents, with `ss.choose_n()`, here 10 agents, each of whom stands for 200 people, so 2,000 people are infectious at the start:
+Starsim notes the problem: 10 people are 0.05 of an agent, so the run starts with one agent infectious, which is 200 people: if it takes off, its epidemic is that of 200 cases, not 10, and here, by chance, that one agent recovers without infecting anyone, so there is no epidemic at all. With static scaling, a seed is a whole number of agents: to seed 10 agents, give 10 times as many people as each agent stands for, here 2,000 people (`init_prev=2000` would do the same, since an `init_prev` above 1 is a number of people, not of agents):
 
 ```{python}
-flu = ss.Disease(infection, recovery, init_prev=10) # 10 agents infectious at the start
-static = ss.Sim(flu, total_pop=1e6, n_agents=5_000, stop=ss.days(150), label='Static')
+sir = ss.Disease(infection, recovery, init_n=dict(I=2000)) # 2,000 people, 10 agents of 200, infectious at the start
+static = ss.Sim(sir, total_pop=1e6, n_agents=5_000, stop=ss.days(150), label='Static')
 static.run();
 ```
 
@@ -161,10 +163,11 @@ With `rescale=True`, each agent starts by standing for one person, and the numbe
 2. if that share is more than `rescale_threshold` (5% by default), multiplies the number of people per agent by at least `rescale_factor` (1.2 by default), without going past `pop_scale`;
 3. makes enough of the agents who are not naive naive again (if the number of people per agent doubles, half of them), so that the infected people are spread over fewer agents.
 
-So every agent always stands for the same number of people, and agents are freed to stand for the part of the population that has not been infected yet. With dynamic rescaling, the 10 agents infectious at the start are 10 people:
+So every agent always stands for the same number of people, and agents are freed to stand for the part of the population that has not been infected yet. With dynamic rescaling, each agent stands for one person at the start, so the 10 people infectious at the start, as in the first static sim, are 10 agents:
 
 ```{python}
-dynamic = ss.Sim(flu, total_pop=1e6, n_agents=5_000, stop=ss.days(150), rescale=True, label='Dynamic')
+sir = ss.Disease(infection, recovery, init_n=dict(I=10)) # 10 people infectious at the start, as above
+dynamic = ss.Sim(sir, total_pop=1e6, n_agents=5_000, stop=ss.days(150), rescale=True, label='Dynamic')
 dynamic.run()
 dynamic.results.pop_scale.plot()
 ```
@@ -174,11 +177,11 @@ The number of people per agent (`sim.results.pop_scale`) starts at 1, and grows 
 ```{python}
 import matplotlib.pyplot as plt
 
-ten = ss.Disease(infection, recovery, init_n=dict(I=10), name='flu') # 10 people infectious, as compartments
+ten = ss.Disease(infection, recovery, init_n=dict(I=10), name='sir') # 10 people infectious, as compartments
 ode = ss.Sim(ten, total_pop=1e6, stop=ss.days(150), label='ODE', verbose=0).run()
 
 for sim in [ode, static, dynamic]:
-    res = sim.results.flu.I
+    res = sim.results.sir.I
     plt.plot(res.timevec, res.values, label=sim.label)
 plt.xlabel('Day')
 plt.ylabel('Number infectious')
@@ -194,8 +197,8 @@ While each agent stands for fewer people than `pop_scale`, part of the populatio
 ```{python}
 res = dynamic.results
 print('Alive at the start:', res.alive[0])
-print('Susceptible at the start:', res.flu.S[0])
-print('Infectious at the start:', res.flu.I[0])
+print('Susceptible at the start:', res.sir.S[0])
+print('Infectious at the start:', res.sir.I[0])
 ```
 
 #### Diseases written as code
@@ -213,7 +216,7 @@ A count that is added up during the run would mix steps with different numbers o
 
 ## Pitfalls
 
-- **Too few agents for the start of an epidemic.** Starsim notes when the initial number of people rounds to too few agents; use more agents, `ss.choose_n()`, or `rescale=True`.
+- **Too few agents for the start of an epidemic.** Starsim notes when the initial number of people rounds to too few agents; use more agents, give the seed as a whole number of agents' worth of people, or use `rescale=True`.
 - **Results during a run are in agents.** Counts are scaled when the run ends; an analyzer that reads a count during the run sees agents.
 - **Rare events.** An event that happens to fewer people than an agent stands for (a rare complication) happens to whole agents or not at all; such a model needs more agents.
 - **Too few agents for a few seeds.** A model started by a few people, run with each agent standing for several, starts from fewer agents than people, or from none: give `n_agents` equal to `total_pop` at least until the outbreak is large, or use `rescale=True`.
@@ -229,3 +232,24 @@ A count that is added up during the run would mix steps with different numbers o
 - [Epiverse: superspreading](https://epiverse-trace.github.io/superspreading/): offspring distributions, overdispersion, and the probability that an outbreak takes off
 - [Epiverse: epichains](https://epiverse-trace.github.io/epichains/): simulating and fitting transmission chains as branching processes
 - [Lloyd-Smith et al. (2005): Superspreading and the effect of individual variation on disease emergence](https://www.nature.com/articles/nature04153): the negative binomial offspring distribution and its dispersion *k*
+
+## Appendix: what a branching process gives
+
+`sim.branching` is what came of one run, and `msim.branching` (an `ss.run.Branching`) what came of several together; see [ss.Sim](../api/sim.qmd) and [ss.MultiSim](../api/run.qmd). The attributes marked "agents" are there only for `solver='abm'`.
+
+| Attribute | Of | Solvers | What it is |
+|---|---|---|---|
+| `size` | `sim.branching` | all | The people infected, the seeds included |
+| `outcome` | `sim.branching` | all | `'extinct'` if no one is infected at the end, `'stopped'` if `until=` stopped the run, or else `'ongoing'` |
+| `length` | `sim.branching` | agents | The most generations of the chain |
+| `infector` | `sim.branching` | agents | For each agent, by UID, who infected it (−1 for a seed) |
+| `generation` | `sim.branching` | agents | For each agent, its generation (0 for a seed) |
+| `ti` | `sim.branching` | agents | For each agent, the time point it was infected |
+| `offspring` | `sim.branching` | agents | For each agent, the number it infected |
+| `complete` | `sim.branching` | agents | For each agent, whether it was infected long enough before the end that all its offspring are counted |
+| `sizes`, `outcomes` | `msim.branching` | all | The `size` and `outcome` of each run |
+| `p_extinct`, `p_extinct_ci` | `msim.branching` | all | The share of runs that went extinct, and its 95% interval (Wilson's) |
+| `lengths` | `msim.branching` | agents | The `length` of each run |
+| `offspring` | `msim.branching` | agents | The offspring of every agent counted in full, over all runs; None if a run was stopped by `until=` |
+| `R`, `k` | `msim.branching` | agents | The mean of the offspring and their dispersion, as a negative binomial fitted by maximum likelihood (`k` is infinite for offspring no more variable than a Poisson's); None if a run was stopped by `until=` |
+| `plot()` | `msim.branching` | all | The distribution of the chains' sizes and, as agents, of their lengths in generations |

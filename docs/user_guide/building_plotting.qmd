@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 0
   ai: 100
-  note: Written by AI, from the plotting functions in the Starsim code
+  note: Written by AI, from the plotting functions in the Starsim code; appendix added by AI
 ---
 
 Starsim's results know what they are (their labels, their time points, whether they are counts or shares, and any data they are compared with), so most plots take one line. This page covers plotting a sim, a module, and a single result; comparing scenarios and many runs; choosing what to plot; styles and fonts; saving figures; and falling back to Matplotlib for anything else. For what the results themselves are, see [Results](building_results.qmd).
@@ -54,7 +54,7 @@ A module plots its own results with `plot()`, which by default puts its states t
 sim.diseases.measles.plot('I', 'prevalence') # Two axes: the number and the share infectious
 ```
 
-A model run over years can be plotted as yearly values with `annualize=True`, which adds up each result by its kind: the total of a flow over each year, the value of a stock at its end, and a ratio worked out again from its parts. If the sim has data (see [Outcomes](building_outcomes.qmd#data-attached-by-name)), `sim.plot()` shows it as points with the result of the same name, with a flow summed over each period of the data, as a fit compares them; `show_data=False` leaves it out.
+A model run over years can be plotted as yearly values with `annualize=True`, which adds up each result by its kind: the total of a flow over each year, the value of a stock at its end, and a ratio worked out again from its parts. If the sim has data (see [Outcomes](building_outcomes.qmd#data-attached-by-name)), `sim.plot()` shows it as points with the result of the same name, with a flow summed over each period of the data, as a fit compares them, and the title says so (e.g. "weekly totals, as in the data"); `show_data=False` leaves it out.
 
 ## Plotting results
 
@@ -94,7 +94,22 @@ runs.plot('measles.I')                # The median and the range of 95% of the r
 runs.plot('measles.I', lines=True)    # Every run
 ```
 
-The band says how much chance alone changes the course of the outbreak: the date of the peak varies by several weeks between runs. See [Scenarios](running_scenarios.qmd) for running scenarios and many runs, and [Results](building_results.qmd#results-of-many-runs) for their summaries.
+The band says how much chance alone changes the course of the outbreak: the date of the peak varies by several weeks between runs.
+
+Plots mark when interventions act: a dashed line at each round of a delivery, and a shaded span from the start to the stop of an `ss.modify()` or of routine delivery. In a comparison, the marks of every scenario are gray, and those of one scenario alone are in its color, so it is clear which change made which difference. Deliveries on an event or a condition are not marked, since they have no fixed times; `show_interventions=False` leaves the marks out. Here, in the town with 85% immune, a campaign that vaccinates half of everyone on 15 January or on 1 February:
+
+```{python}
+def campaign(date=None):
+    vaccination = ss.vaccinate(efficacy=0.93, coverage=0.5, at=date) if date else None
+    return ss.Sim(make_measles(0.85), interventions=vaccination, total_pop=100_000, start='2025-01-01', stop='2025-07-01', verbose=0)
+
+msim = ss.parallel({'No campaign': campaign(), '15 January': campaign('2025-01-15'), '1 February': campaign('2025-02-01')})
+msim.plot('measles.I')
+```
+
+A campaign two weeks into the outbreak brings R from 2.3 down to 1.2, so the outbreak smolders rather than taking off, and about 3,100 people are infected by July rather than 12,900 (though it is not quite over); one two weeks later, as cases rise steeply, still prevents more than half of the infections (about 5,700). `sim.diseases.measles.Rt()` gives R over each run (see [Writing models](building_writing.qmd#the-reproduction-number)).
+
+See [Scenarios](running_scenarios.qmd) for running scenarios and many runs, and [Results](building_results.qmd#results-of-many-runs) for their summaries.
 
 ## Styles and fonts
 
@@ -151,16 +166,7 @@ The results are also tables: `res.to_df()` gives a dataframe, which can be plott
 
 ## Other plots
 
-Besides results over time, Starsim plots these:
-
-| Plot | What it shows |
-|---|---|
-| `disease.diagram()` | A declared disease's states and transitions, as a Mermaid flowchart ([Writing models](building_writing.qmd#equations-diagram-and-transitions)) |
-| `sim.people.plot()`, `sim.people.plot_ages()` | Agents' attributes, as histograms; the age pyramid ([People and agents](populations_people.qmd)) |
-| `network.plot()` | The contacts of a network of agents ([Contact networks](populations_networks.qmd)) |
-| `dist.plot_hist()` | Draws from a distribution, as a histogram ([Distributions](mechanics_distributions.qmd)) |
-| `sim.loop.plot()` | The order in which modules are called in each step ([Model execution](architecture_execution.qmd)) |
-| `fit.plot()` | A fit: the data against the fitted model, and how the fit went ([Fitting a model](calibration_fitting.qmd)) |
+Besides results over time, Starsim draws maps: a result stratified by place, drawn on a map of its places at several times or as an animation (`res.prevalence.map()`), and a map of the places themselves, colored by any value for each place (`geo.plot(values=...)`, e.g. a summary of a result by place); see [Geography](populations_geography.qmd#maps). It also plots a disease's diagram, the people and their contacts, distributions, fits, and how long a run took; the [appendix](#appendix-every-plotting-function) lists every plotting function.
 
 ## Further reading
 
@@ -168,3 +174,28 @@ Besides results over time, Starsim plots these:
 - [Matplotlib: customizing Matplotlib with style sheets and rcParams](https://matplotlib.org/stable/users/explain/customizing.html): setting fonts, sizes, and colors for every plot
 - [Seaborn](https://seaborn.pydata.org/): statistical plots from tables, such as those `to_df()` gives
 - [Ten simple rules for better figures](https://doi.org/10.1371/journal.pcbi.1003833): advice on making figures that communicate
+
+## Appendix: every plotting function
+
+Every plotting function takes the settings of `ss.plot_args()` (`figsize`, `filename`, `do_show`, `style`, and the others above).
+
+| Plot | What it shows | See |
+|---|---|---|
+| `sim.plot()` | The results of a sim, each in its own axes, with any data | [Plotting a sim](#plotting-a-sim) |
+| `module.plot()` | The results of one module, its states together by default | [Plotting a sim](#plotting-a-sim) |
+| `res.plot()` | One result (one line per column or group), or across runs, the median and a 95% interval | [Plotting results](#plotting-results) |
+| `res.map()` | A result stratified by place, on a map of its places, at several times or as an animation | [Geography](populations_geography.qmd#maps) |
+| `geo.plot()` | A map of the places of a geography, colored by a value for each place if given (`values=`) | [Geography](populations_geography.qmd#maps) |
+| `msim.plot()` | The results of many runs or scenarios: the median and a 95% interval of each, or every run (`lines=True`) | [Comparing scenarios and runs](#comparing-scenarios-and-runs) |
+| `msim.plot_each()` | Each run on its own time axis, for sims with different time points | [Scenarios](running_scenarios.qmd) |
+| `msim.branching.plot()` | For a branching process, the distribution of the chains' sizes (and, as agents, their lengths in generations) | [Branching and rescaling](running_branching.qmd) |
+| `disease.diagram()` | A declared disease's states and transitions, as a Mermaid flowchart | [Writing models](building_writing.qmd#equations-diagram-and-transitions) |
+| `sim.people.plot()`, `sim.people.plot_ages()` | Agents' attributes, as histograms; the age pyramid | [People and agents](populations_people.qmd) |
+| `network.plot()` | The contacts of a network of agents | [Contact networks](populations_networks.qmd) |
+| `dist.plot_hist()` | Draws from a distribution, as a histogram | [Distributions](mechanics_distributions.qmd) |
+| `fit.plot()` | A fit: the data against the model before and after fitting, and with `residuals=True`, the differences | [Fitting a model](calibration_fitting.qmd), [Fit diagnostics](calibration_diagnostics.qmd) |
+| `comparison.plot()` | Each model's fit and prediction against held-out data, from `ss.fit.compare_models()` | [Fit diagnostics](calibration_diagnostics.qmd) |
+| `infection_log.plot()` | When each agent was infected, from the `ss.infection_log` analyzer (and `animate()`, as an animation) | [Analyzers](interventions_analyzers.qmd#the-infection-log) |
+| `icer.plot()`, `icer.plot_ceac()` | The cost-effectiveness plane, and the cost-effectiveness acceptability curve, from `ssl.econ.ICER` | [Costs](interventions_costs.qmd) |
+| `sim.loop.plot()` | The order in which modules are called in each step | [Model execution](architecture_execution.qmd) |
+| `sim.loop.plot_cpu()` | The time spent on each event of the loop (each module's methods) during a run | [Debugging](running_debugging.qmd) |

@@ -4,23 +4,23 @@ jupyter: python3
 authorship:
   human: 15
   ai: 85
-  note: Based on the AI-written v4 draft, which ports the HIV and STI examples and the timing of connectors from the Starsim 3 user guide page on connectors
+  note: Based on the AI-written v4 draft, which ports the HIV and STI examples and the timing of connectors from the Starsim 3 user guide page on connectors; examples made realistic, and modifiers as members of a disease, added by AI
 ---
 
-A **connector** links modules: it lets one part of a model change another. The common case is an interaction between diseases (people with HIV are more likely to acquire other sexually transmitted infections, and the reverse), but a connector can link any modules, such as pregnancy raising the risk of a disease. Most connectors are a single `ss.modify()`, the same call that [changes parameters](interventions_interventions.qmd#changing-parameters), given to the sim with `connectors=`; anything a modifier can't say is a connector written as code. The tutorial [T8 – Stratification and co-transmission](../tutorials/t8_strata.qmd) builds up a model of two interacting diseases, and [Strains](building_diseases.qmd) covers several strains of one disease, with immunity between them.
+A **connector** links modules: it lets one part of a model change another. The common case is an interaction between diseases (people with HIV are more likely to acquire other sexually transmitted infections, and the reverse), but a connector can link any modules, such as a disease lowering fertility. Most connectors are a single `ss.modify()`, the same call that [changes parameters](interventions_interventions.qmd#changing-parameters), given to the sim with `connectors=`; anything a modifier can't say is a connector written as code. The tutorial [T8 – Stratification and co-transmission](../tutorials/t8_strata.qmd) builds up a model of two interacting diseases, and [Strains](building_diseases.qmd) covers several strains of one disease, with immunity between them.
 
 ## Two diseases that interact
 
-Measles, the running example of the tutorials, is a poor fit here: its interactions with other infections are not the usual reason to model it. HIV and a curable sexually transmitted infection (STI) are the classic case, since each raises the risk of the other. HIV here is the library's (`ssl.HIV`, a disease written as code, with a CD4 count for each person), and the STI is declared, with no lasting immunity. Both pass through a sexual network, with β per sex act (see [Contact networks](populations_networks.qmd#transmission-that-differs-by-route)):
+Measles, the running example of the tutorials, is a poor fit here: its interactions with other infections are not the usual reason to model it. HIV and a curable sexually transmitted infection (STI) are the classic case, since each raises the risk of the other. HIV here is the library's (`ssl.HIV`, a disease written as code, with a CD4 count for each person), and the STI is declared, with no lasting immunity. Both pass through a sexual network, with β per sex act, and are chosen so that without the interactions HIV is roughly stable at about 4% of people, and the STI at 5–10% (see [Contact networks](populations_networks.qmd#transmission-that-differs-by-route)):
 
 ```{python}
 import starsim as ss
 import starsim.library as ssl
 
-hiv = ssl.HIV(beta={'sexualnet': ss.peract(m2f=0.0008, f2m=0.0004)}, init_prev=0.2)
+hiv = ssl.HIV(beta={'sexualnet': ss.peract(m2f=0.001, f2m=0.0005)}, init_prev=0.05) # About 1 in 1,000 acts, from men to women
 
 S, I = ss.states('S I')
-infection = S >> I @ dict(sexualnet=ss.peract(m2f=0.1, f2m=0.05))*I
+infection = S >> I @ dict(sexualnet=ss.peract(m2f=0.07, f2m=0.035))*I
 recovery  = I >> S @ ss.years(1) # Infected for a year on average, then susceptible again
 sti = ss.Disease(infection, recovery, init_prev=0.05)
 ```
@@ -46,7 +46,7 @@ msim = ss.parallel(scenarios)
 msim.plot(['hiv.infected', 'sti.I'])
 ```
 
-Each disease spreads further with the other: the two amplify each other, which neither model shows on its own.
+Each disease spreads further with the other: the STI raises HIV transmission, and people with HIV, more susceptible to the STI, keep it circulating, so the two amplify each other, which neither model shows on its own. The interactions here are at the high end of estimates, and their effect compounds over the 30 years; the numbers are illustrative, and a model of a real setting would take the interactions from studies and fit the prevalence of both to data.
 
 ## Modifiers as connectors
 
@@ -54,24 +54,48 @@ Each disease spreads further with the other: the two amplify each other, which n
 
 Several modifiers on one quantity combine by multiplying (set, then multiply, then add), whatever order they were given in, and none overwrites the quantity's own value: the multipliers active for each person are applied on top of it. So when a condition stops holding (an STI is cured, say), its effect ends with it, and nothing has to be reset.
 
-Connectors need not be between diseases. Here pregnancy, a module of its own, doubles susceptibility to the STI:
+Connectors need not be between diseases. Here the STI lowers fertility, a quantity of pregnancy, a module of its own: women with the STI conceive half as often (untreated gonorrhea and chlamydia cause infertility, though mostly through damage that lasts after the infection, which a fuller model would give a state of its own). The runs are of 10,000 agents, so that the difference is not lost in chance:
 
 ```{python}
 pregnancy = ss.Pregnancy(fertility_rate=ss.freqperyear(100)) # Births a year per 1,000 women
-during_pregnancy = ss.modify(sti.rel_sus, multiply=2, where=pregnancy.P)
+infertility = ss.modify(pregnancy.conception, multiply=0.5, where=sti.I)
 
+kw_big = dict(kw, n_agents=10_000)
 scenarios = {
-    'No effect of pregnancy': ss.Sim([hiv, sti], demographics=pregnancy, **kw),
-    'Susceptibility doubled in pregnancy': ss.Sim([hiv, sti], demographics=pregnancy, connectors=during_pregnancy, **kw),
+    'No effect on fertility':        ss.Sim([hiv, sti], demographics=pregnancy, **kw_big),
+    'Fertility halved with the STI': ss.Sim([hiv, sti], demographics=pregnancy, connectors=infertility, **kw_big),
 }
 msim = ss.parallel(scenarios)
 for sim in msim.sims:
-    print(sim.label, '– share of pregnant women with the STI:', round(sim.diseases.sti.I[sim.demographics.pregnancy.P].mean(), 3))
+    print(sim.label, '– pregnancies:', round(sim.results.pregnancy.conception.sum()), '– STI prevalence at the end:', round(sim.results.sti.prevalence[-1], 3))
 ```
 
-The share of pregnant women with the STI is only a little higher, at the end of this run: pregnancy is short, the STI is already common, and whether someone is infected depends as much on their partners as on their susceptibility. A modifier gives the effect of a condition on a quantity; how much that matters to the epidemic is for the model to say.
+There are about 5% fewer pregnancies over the 30 years, about what halving the fertility of the share of women with the STI at any time gives. A modifier gives the effect of a condition on a quantity; how much that matters to the population is for the model to say.
 
 A modifier can be given as a connector (`connectors=`) or as an intervention (`interventions=`); the two differ only in where they run in each step. By convention, what is part of the biology goes in `connectors=`, and policy in `interventions=`.
+
+A modifier that is part of one disease's own natural history can be a member of the disease, declared with its states and transitions, so that it goes wherever the disease goes. Its target is then the disease's own (`'rel_trans'`, `beta`, or a transition), and its condition can read the disease's states. Here infectiousness halves every 3 days of an infection (see [Diseases](building_diseases.qmd#diseases-as-classes) for diseases as classes):
+
+```{python}
+class FadingSIR(ss.Disease):
+    S, I, R = ss.states('S I R')
+    infection = S >> I @ 0.5*I
+    recovery  = I >> R @ ss.days(10)
+    fading    = ss.modify('rel_trans', multiply=0.5**(I.time/ss.days(3)), where=I) # Half as infectious after 3 days, a quarter after 6, ...
+
+class PlainSIR(ss.Disease):
+    S, I, R = ss.states('S I R')
+    infection = S >> I @ 0.5*I
+    recovery  = I >> R @ ss.days(10)
+
+for disease in [PlainSIR(init_prev=0.01), FadingSIR(init_prev=0.01)]:
+    sim = ss.Sim(disease, n_agents=5000, stop=ss.days(150), verbose=0)
+    sim.run()
+    res = sim.results[disease.name]
+    print(type(disease).__name__, '– infected in all:', round(res.infection.sum()), '– peak infectious:', round(res.I.max()), 'on day', round(res.I.timevec[res.I.values.argmax()]))
+```
+
+With constant infectiousness, β = 0.5 per day for 10 days gives an R0 of 5. With fading, each case is mostly infectious in its first few days, and R0 falls to under 2 (β/(1/10 + ln 2/3) ≈ 1.5, in continuous time), so the epidemic infects fewer people, and peaks later and lower.
 
 ## Interactions and interventions together
 
@@ -87,11 +111,11 @@ msim = ss.parallel(scenarios)
 msim.plot(['hiv.infected', 'sti.I'])
 ```
 
-Treating the STI also slows HIV, since fewer people have the STI that raises their HIV risk.
+Treating 80% of people with the STI each year clears it within a few years here, and HIV stops growing, since nobody is left with the STI that raises their HIV risk.
 
 ## Connectors written as code
 
-A connector written as code is a subclass of `ss.Connector` with a `step()` method, which runs on every step (after demographics and the progression of diseases, and before networks, interventions, and transmission) and can read and change anything in the sim. It is for what conditions can't say. Many things that look as if they need code don't: a condition can read how long ago something happened (`where=sti.I | (sti.recovery.since <= ss.months(3))`, as agents), and a multiplier can vary in time (`multiply=ss.seasonal(...)`).
+A connector written as code is a subclass of `ss.Connector` with a `step()` method, which runs on every step (after demographics and the progression of diseases, and before networks, interventions, and transmission) and can read and change anything in the sim. It is for what conditions can't say. The library has one, `ssl.mnch.fetal_infection`, which links a disease in pregnancy to fetal growth and the timing of birth (see [Maternal, newborn, and child health](library_mnch.qmd)). Many things that look as if they need code don't: a condition can read how long ago something happened (`where=sti.I | (sti.recovery.since <= ss.months(3))`, as agents), and a multiplier can vary in time (`multiply=ss.seasonal(...)`).
 
 The safe pattern is for the code to work out a quantity, and for a modifier to apply it, so that nothing is overwritten. Here inflammation from the STI raises the risk of HIV while the STI lasts, and fades with a half-life of three months once it clears; the connector keeps each person's level of inflammation, and a modifier multiplies HIV susceptibility by the factor it works out:
 
@@ -116,12 +140,18 @@ class Inflammation(ss.Connector):
 
 inflammation = Inflammation()
 effect = ss.modify(hiv.rel_sus, multiply=inflammation.factor)
-sim = ss.Sim([hiv, sti], connectors=[inflammation, effect], **kw)
-sim.run()
-print('New HIV infections:', sim.results.hiv.infection.sum())
+while_infected = ss.modify(hiv.rel_sus, multiply=2.7, where=sti.I) # The same factor, ending when the STI clears
+
+msim = ss.parallel({
+    'No interaction':                         ss.Sim([hiv, sti], **kw_big),
+    'Raised risk while the STI lasts':        ss.Sim([hiv, sti], connectors=while_infected, **kw_big),
+    'And fading over months after it clears': ss.Sim([hiv, sti], connectors=[inflammation, effect], **kw_big),
+})
+for sim in msim.sims:
+    print(sim.label, '– new HIV infections:', round(sim.results.hiv.infection.sum()))
 ```
 
-A connector's parameters (`define_pars()`) can be changed when it is made, `Inflammation(half_life=ss.months(6))`, and fitted like any other. [Custom modules](building_modules.qmd) covers parameters, states, and results of a module's own.
+Raising the risk of HIV while the STI lasts adds about a quarter to the HIV infections in this run, and the inflammation that lingers after the STI clears adds a little more: it fades within months, while the STI lasts a year on average. A connector's parameters (`define_pars()`) can be changed when it is made, `Inflammation(half_life=ss.months(6))`, and fitted like any other. [Custom modules](building_modules.qmd) covers parameters, states, and results of a module's own.
 
 ::: {.callout-warning}
 A connector that sets an array directly (`hiv.rel_sus[uids] = 2.7`) erases whatever any other module did to it, such as a vaccine's protection or another interaction, and has to undo its own change when the condition ends. Let the code work out a value or a state, and let a modifier apply it, as above.

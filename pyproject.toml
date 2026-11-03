@@ -69,6 +69,7 @@ doc = [
     "sphobjinv",
     "jupyter",
     "jupytext",
+    "starsim_data[spatial]", # geopandas, for maps with the boundaries of places
 ]
 
 # Everything needed for development (tests + docs)

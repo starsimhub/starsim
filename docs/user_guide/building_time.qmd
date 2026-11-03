@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 35
   ai: 65
-  note: Combines the Starsim 3 user guide page on time (its philosophy, dates, timepars, and their use in code) with an AI-written page on units, steps, and values that change over time
+  note: Combines the Starsim 3 user guide page on time (its philosophy, dates, timepars, and their use in code) with an AI-written page on units, steps, and values that change over time; appendix added by AI
 ---
 
 Every rate in a model is per some unit of time, every duration is in some unit, and a sim runs over a span of time in steps. This page covers how to give each of these, how Starsim converts between them, and the conventions it uses for calendars. The short version: give rates and durations with their units (`ss.perday(1.9)`, `ss.days(8)`), give the span as dates or durations, and Starsim does the rest.
@@ -199,7 +199,7 @@ print(sim.t.relvec[:4]) # Weeks since the start
 
 Contact patterns, reporting, and treatment change over time, and so do the parameters that stand for them. Any value in a model (a rate, a share, a starting value, an intervention's coverage) can change over time, in one of three ways.
 
-**A time series**, `ss.timeseries()`, gives the value at some times, and holds each until the next (or, with `mode='linear'`, interpolates between them). With `period=`, it repeats. Measles in children spreads mostly at school, and its epidemics have long followed the school year. Here, in the endemic measles model of [Diseases](building_diseases.qmd#births-and-deaths-in-a-disease), β is higher during school terms than in the summer holiday, with the same mean over the year:
+**A time series**, `ss.timeseries()`, gives the value at some times, and holds each until the next (`mode='constant'`, the default), interpolates between them (`mode='linear'`), or changes smoothly from each to the next in an S-shaped curve (`mode='cosine'`, as for a gradual change in contacts). With `period=`, it repeats. Measles in children spreads mostly at school, and its epidemics have long followed the school year. Here, in the endemic measles model of [Diseases](building_diseases.qmd#births-and-deaths-in-a-disease), β is higher during school terms than in the summer holiday, with the same mean over the year:
 
 ```{python}
 def make_measles(beta):
@@ -230,7 +230,7 @@ msim.results.measles.infection.resample('month').plot()
 
 With β constant, the epidemics die down to a steady level. With school terms, they don't: the yearly forcing keeps them going, and after some years of smaller, irregular epidemics, they settle into a large epidemic every other year, as measles did in England and Wales before vaccination.
 
-**A seasonal cycle**, `ss.seasonal()`, is a smooth yearly cycle, `mean × (1 + amplitude × cos(2π(t − peak)))`: `ss.seasonal(mean=ss.perday(1.9), amplitude=0.2, peak='March')` is highest in March, at 1.2 times the mean, and lowest in September. A cycle of another length takes `period=`: `ss.seasonal(amplitude=0.5, peak='April', period=ss.years(0.5))` peaks in April and October, as with two rainy seasons. Here is the same endemic measles model with a smooth cycle of ±10% around the same mean, peaking in winter, against constant transmission, as yearly totals of infections:
+**A seasonal cycle**, `ss.seasonal()`, is a smooth yearly cycle, `mean × (1 + amplitude × cos(2π(t − peak)))`: `ss.seasonal(mean=ss.perday(1.9), amplitude=0.2, peak='March')` is highest in March, at 1.2 times the mean, and lowest in September. `peak=` can be a month (its middle is used), a fraction of the year (`peak=0.2`), or a time of year (`peak=ss.days(60)`). A cycle of another length takes `period=`: `ss.seasonal(amplitude=0.5, peak='April', period=ss.years(0.5))` peaks in April and October, as with two rainy seasons. Here is the same endemic measles model with a smooth cycle of ±10% around the same mean, peaking in winter, against constant transmission, as yearly totals of infections:
 
 ```{python}
 seasonal = ss.seasonal(mean=ss.perday(1.9), amplitude=0.1, peak='January')
@@ -245,7 +245,7 @@ msim.results.measles.infection.resample('year').plot()
 
 Even a small seasonal change in transmission is enough: without it, the yearly number of infections settles towards a constant; with it, a year of many infections alternates with a year of few, since each large epidemic leaves too few susceptible people for another the next winter.
 
-**A function of the sim** is worked out at each step, and can use anything the sim knows: the date, the number of people in a state, or a result. Measles spreads too fast for a change partway through to show, so this example is an influenza-like SIR (R0 = 3), whose transmission falls by half from 1 February. Written as a time series and as a function, it gives the same answer:
+**A function of the sim** is worked out at each step, and can use anything the sim knows: the date, the number of people in a state, or a result. Measles spreads too fast for a change partway through to show, so this example is a slower respiratory infection, such as the first strain of COVID-19 (R0 = 3, infectious for 10 days), whose transmission falls by half from 1 February, as with distancing. The same change is written as a time series and as a function, so those two runs agree by design, and both are compared with no change:
 
 ```{python}
 def make_sir(beta):
@@ -288,7 +288,7 @@ These are Starsim's answers, although different answers would also be valid:
 2. **A year is 365 days** (with some stretching where needed to make whole years and calendar dates line up).
 3. **A number given as `start` is a year if it looks like one** (`2025`), and a time since the start otherwise (`0`, or `stop=ss.days(50)`), in which case results are in time since the start rather than dated. The same goes for any number given as a time, such as `at=2030` or a time of an `ss.timeseries()`: from 1900 on it is a calendar year, even in a sim with dates, and below that a time in the sim's unit after the start (for 2,000 days, write `ss.days(2000)`).
 4. **Dates are whole days**, unless a smaller step is asked for explicitly (`dt=ss.days(0.25)`).
-5. **Units are loose when compared with plain numbers** (`ss.days(5) == 5` is true), **but strict between units** (`ss.years(1) == ss.days(365)` is true).
+5. **Units are loose when compared with plain numbers** (`ss.days(5) == 5` is true), **and compared by value between units** (`ss.years(1) == ss.days(365)` is true, and `ss.years(1) == 1` is true too).
 6. **A rate is per person-time**: of 1,000 people with a death rate of `ss.peryear(0.1)`, about 95 die in a year. If 100 is what the data means, it is a probability, `ss.prob(0.1, 'year')`.
 7. **A probability stays between 0 and 1**: `ss.prob(0.5)*2` is 0.75 (the chance of at least one of two events), which also means that `ss.prob(0.1)*2` is 0.19, not 0.2.
 
@@ -341,3 +341,23 @@ Declare such a state as an `ss.TimeArr`, and take the move when `self.ti_clearan
 - [Appropriate models for the management of infectious diseases](https://doi.org/10.1371/journal.pmed.0020174): how the distribution of time spent in a state, not just its mean, shapes an epidemic
 - [pandas: time series and date functionality](https://pandas.pydata.org/docs/user_guide/timeseries.html): dates, offsets, and resampling, on which `ss.date` and `ss.datedur` are built
 - [pandas.tseries.offsets.DateOffset](https://pandas.pydata.org/docs/reference/api/pandas.tseries.offsets.DateOffset.html): calendar arithmetic, as `ss.datedur` does it
+
+## Appendix: every time parameter
+
+The classes of time parameters, with the first paragraph of each one's description, listed from the code. Each class with a unit in its name (`perday`, `years`) is also made by its family with the unit as a string, e.g. `ss.prob(0.1, 'day')`:
+
+```{python}
+def show(cls, depth=0):
+    doc = ' '.join((cls.__doc__ or '').split('\n\n')[0].split()) # The first paragraph, on one line
+    print(('    '*depth + cls.__name__).ljust(24), doc)
+    for sub in cls.__subclasses__():
+        show(sub, depth+1)
+
+show(ss.TimePar)
+```
+
+A unit given as a string, wherever one is (`unit='day'`, `ss.prob(0.1, 'week')`, `.to('years')`, `resample('month')`), is one of these, in the singular or the plural:
+
+```{python}
+print(ss.time.valid_bases)
+```

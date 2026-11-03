@@ -219,6 +219,18 @@ def test_sis(do_plot=do_plot):
     assert np.isclose(sis.R0(), 2.5) # beta × the mean duration
     ode = ss.Sim(sis, stop=100).run()
     assert ode.solver == 'ode' and np.isclose(ode.results.sis.prevalence[-1], 0.6, atol=0.01) # Endemic at 1 - 1/R0
+    rt = ode.diseases.sis.Rt()
+    assert np.isclose(rt[0], 2.5, rtol=0.01) and np.isclose(rt[-1], 1, atol=0.01) # R0 at the start, 1 at the endemic state
+
+    # R over time is R0 × S/N in an SIR, and is lowered by a modifier while it acts
+    S, I, R = ss.states(3)
+    sir = ss.Disease(infection=S >> I @ ss.par(0.3, name='beta')*I, recovery=ss.Transition(I, R, dur=10), name='sir')
+    half = ss.modify(sir.pars.beta, multiply=0.5, start=60, stop=80)
+    for solver in ['ode', 'abm']:
+        run = ss.Sim(sir, interventions=half, total_pop=10_000, n_agents=2000, stop=100, solver=solver, verbose=0).run()
+        rt, res = run.diseases.sir.Rt(), run.results.sir
+        expected = 3*res.S/(res.S + res.I + res.R)*np.where((res.timevec >= 60) & (res.timevec < 80), 0.5, 1)
+        assert np.allclose(rt, expected, rtol=1e-3), f'Expected R over time of R0 × S/N, halved by the modifier, as {solver}'
     return sim
 
 

@@ -4,7 +4,7 @@ jupyter: python3
 authorship:
   human: 5
   ai: 95
-  note: Written by AI, with a little from the Starsim 3 user guide page on model structure
+  note: Written by AI, with a little from the Starsim 3 user guide page on model structure; appendix added by AI
 ---
 
 A Starsim model is a sim (`ss.Sim`) that holds a population and a set of modules: one or more diseases, and whatever else the model needs (contacts, births and deaths, interventions). This page covers how those parts fit together, and how to check that the model Starsim built is the one you meant: what it filled in for you, its equations, its diagram, and its reproduction number.
@@ -41,7 +41,7 @@ A sim can hold these kinds of modules, each given to it by keyword (a disease ca
 | Connectors | Links between modules, such as one disease making another more likely | `connectors=` | [Connectors](interventions_connectors.qmd) |
 | Analyzers | Extra results, collected as the sim runs | `analyzers=` | [Analyzers](interventions_analyzers.qmd) |
 
-The sim itself holds what applies to the whole model: the population (`total_pop=`, or `n_agents=` for a model run as agents), the period (`start=`, `stop=`, and the time step `dt=`), and the random seed. See [Running sims](running_sim.qmd) for these, and [Time](building_time.qmd) for the span and the step.
+The sim itself holds what applies to the whole model: the population (`total_pop=`, or `n_agents=` for a model run as agents), the period (`start=`, `stop=`, and the time step `dt=`), and the random seed, as well as how the model is run (`solver=`) and what the sim records of its own (`people_results=False` skips the people's own results, such as the number alive, in a light model that doesn't need them). See [Running sims](running_sim.qmd) for these, and its [appendix of every sim setting](running_sim.qmd#appendix-every-sim-setting); see [Time](building_time.qmd) for the span and the step.
 
 ## Declared modules and modules written as code
 
@@ -64,7 +64,7 @@ Three things here were guessed:
 - **How people mix.** With no contacts given, everyone is equally likely to meet everyone else (homogeneous mixing), with one contact per day, so β is the classical transmission rate. With a contact matrix or a network, β is per contact instead; see [Stratification](building_stratification.qmd).
 - **How the model is run.** Nothing in this model is about individual people, so Starsim runs it as a deterministic compartmental model (an ODE). The same model runs as agents with `n_agents=` or `solver='abm'`; see [Solvers and backends](running_solvers.qmd).
 
-Other common guesses are the population size (10,000 people, if no size is given), the length of the run (50 units of time), the unit of time (from the values in the model, such as the days of `ss.days(8)`), and how the epidemic starts (1% of people infectious, if nothing is said). A guess is not an error: it is a choice you didn't make, listed so you can check it. Each one goes away when the value is given. Here the infectious period has an Erlang distribution with less spread, and the model is to be run as an ODE, so the only guess left is the mixing:
+Other common guesses are the population size (10,000 people, if no size is given), the length of the run (50 units of time), the unit of time (from the values in the model, such as the days of `ss.days(8)`), and how the epidemic starts (1% of people infectious, if nothing is said); the [appendix](#appendix-what-starsim-guesses) lists them all. A guess is not an error: it is a choice you didn't make, listed so you can check it. Each one goes away when the value is given. Here the infectious period has an Erlang distribution with less spread, and the model is to be run as an ODE, so the only guess left is the mixing:
 
 ```{python}
 S, I, R = ss.states('S I R')
@@ -121,6 +121,13 @@ measles.R0()
 The sim prints R0 when it starts. If some people start immune (e.g. `init=dict(I=0.001, R=0.9)`), it also gives the reproduction number in the population as it starts (often called the effective reproduction number, R): "R0 = 15.2 (R = 1.52 at the start, with 10% susceptible)".
 :::
 
+Over a run, the reproduction number falls as people become immune. After a run, `Rt()` gives it at each time point, as a result to plot: R0 at the state of the run at that time, with the people in each state of each group as they were then, and the rates as they were then (so it drops while an `ss.modify()` lowers β). It works for a run of any solver, including agents, and falls below 1 as the outbreak peaks:
+
+```{python}
+sim = ss.Sim(measles, total_pop=100_000, stop=ss.days(50), verbose=0).run()
+sim.diseases.measles.Rt().plot()
+```
+
 ## Where the parts of a sim go
 
 A sim runs a copy of each module it is given, so that the same disease can go into several sims (for example, one for each scenario) without one run changing another. After a sim is initialized (by `sim.init()`, or by `sim.run()`, which initializes it if needed), its copy of each module is in `sim.diseases`, `sim.networks`, and so on, by name. A module takes its name from the variable it was assigned to (here `measles`), or from `name=`.
@@ -139,7 +146,7 @@ print(sim.results.measles.keys())       # Its results
 - In a model run as agents, the people are in `sim.people`, with each person's age, sex, and the states of each disease; see [People and agents](populations_people.qmd). Each module adds its states to the people, so `sim.people.to_df()` gives a table with a row for each agent and a column for each of their attributes and states:
 
 ```{python}
-sim = ss.Sim(measles, n_agents=1000, total_pop=100_000, stop=ss.days(50), verbose=0)
+sim = ss.Sim(measles, n_agents=1000, total_pop=100_000, stop=ss.days(50), dt=ss.days(0.25), verbose=0) # A quarter-day step, short enough for measles as agents
 sim.run()
 sim.people.to_df().head()
 ```
@@ -165,3 +172,29 @@ A model that runs is not necessarily the model you meant, and a plausible plot i
 - [epydemix](https://epydemix.readthedocs.io/): compartmental models with transitions declared by name, in Python
 - [SimInf: an R package for data-driven stochastic disease spread simulations](https://cran.r-project.org/web/packages/SimInf/vignettes/SimInf.pdf): models declared as compartments and transitions, run as continuous-time Markov chains
 - [Compartmental models in epidemiology](https://en.wikipedia.org/wiki/Compartmental_models_in_epidemiology): the SIR family, with their equations and R0
+
+## Appendix: what Starsim guesses
+
+Each value that Starsim fills in itself is marked as guessed in `describe()`, with the rule it used. Giving the value removes the guess.
+
+| What | The guess | The rule | To give it |
+|---|---|---|---|
+| The population | 10,000 people | No size given | `total_pop=`, or `n_agents=` as agents |
+| The length of the run | 50 units of time | No `stop=` or `dur=` | `stop=` or `dur=` |
+| The unit of time | From the model's typed values, then dates, a typed `dt`, or years, in that order | Bare numbers need a unit (see [Time](building_time.qmd#units)) | `unit=`, or type every value |
+| The solver | An ODE, or agents if anything in the model needs them | `solver='auto'` (see [Solvers](running_solvers.qmd)) | `solver=`, or `n_agents=` for agents |
+| Mixing | Homogeneous, one contact per unit of time | No network or contacts given | `networks=` |
+| A duration's distribution | Exponential, with the mean given | A single duration (`ss.days(8)`) | A distribution, e.g. `ss.erlang(k=4, mean=ss.days(8))` |
+| The stages of a duration | As many Erlang stages as match its mean and standard deviation | A non-Erlang distribution run as compartments | `stages=` on the transition |
+| How the epidemic starts | 1% of people infected (`init_prev=0.01`) | A disease with transmission and no `init`, `init_prev`, or `init_n` | `init_prev=`, `init=`, or `init_n=` |
+| Where people start | The state people are infected from, or else the first state made | Nobody placed in a state | `first=` (a state's name) on the disease, or `init=` |
+| The state of the rest | The only state with no starting value | One state with none, when the first state has one | `init=` for every state |
+| A transition's name | `infection` for a disease's only transmission, else from its states (`I_to_R`) | No variable or keyword names it | A variable, a keyword, or `name=` |
+| Which transitions are acquisitions | Every transmission, or else the transitions out of the first state | `acquisition=` not given | `acquisition=True` or `False` |
+| The share of the last branch | 1 minus the others | One branch's `p=` is `None` or left out | `p=` on every branch |
+| A parameter given only bounds | The middle of its bounds | `ss.par(bounds=[...])` with no value | A value |
+| The shares of a dimension | From the population, the world's ages, everyone at the first level, or equal shares | No shares given to `stratify()` (see [Stratification](building_stratification.qmd#levels-and-shares)) | `split=`, or a dict of shares |
+| The kind of a dimension | Age for ages, a place for a geography, and otherwise plain groups | `kind=` not given | `kind=` on `stratify()` |
+| Aging | People age only if anyone is born or dies | `use_aging` not given | `use_aging=True` or `False` |
+| A named population's ages | The year the sim starts | No year given for `ss.people('Kenya')` | `ss.people('Kenya', year=...)` |
+| Results by group | Every step, or every few steps if every step would take more than about 100 MB | A stratified model with no `results=` | `results=` on the sim |
