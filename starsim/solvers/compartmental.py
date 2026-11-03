@@ -2420,7 +2420,11 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         series = {id(par):self.cache[id(par)] for par in self.time_pars}
         if changes: # Modifiers that depend only on time (see kernel_only()): work out every part of the program at each step (and stage), with them applied
             rows = []
+            changing = self.changing_steps(start, stop)
             for ti in range(start, stop):
+                if changing is not None and rows and ti not in changing: # As on the step before
+                    rows.append(rows[-1])
+                    continue
                 sim.t.ti = mod.t.ti = min(ti + 1, npts - 1) # The step from ti, which is step ti+1 (see ss.Loop)
                 self.at_middle()
                 self.cache.clear()
@@ -2443,6 +2447,24 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         if values is not None:
             self.kept_tables = (values, tables, dict(self.cache))
         return list(tables)
+
+    def changing_steps(self, start, stop):
+        """ The steps on which the modifiers of this module change, if all they do is switch on and off at a date, so the tables need working out only on those steps; or None if they could change on any step """
+        sim = self.sim
+        mods = [m for key,mods in sim.modifiers.items() if key[0] == self.mod.name for m in mods]
+        if self.time_pars or any(not getattr(m, 'timed', False) or isinstance(m.amount, ss.parameters.TimeValue) for m in mods):
+            return None
+        steps = set()
+        for time in [ss.connectors.to_time(sim, val) for m in mods for val in [m.start, m.stop] if val is not None]: # A time is passed once, so it is found by bisection
+            lo, hi = start, stop # The first step of these whose time has reached it, or `stop`
+            while lo < hi:
+                mid = (lo + hi)//2
+                if ss.connectors.reached(sim.t.tvec[min(mid + 1, self.mod.t.npts - 1)], time):
+                    hi = mid
+                else:
+                    lo = mid + 1
+            steps.add(lo)
+        return steps
 
     def table_years(self, raw):
         """ The year of each row of the tables, one a step, for a value that varies in time: the middle of the step, or its start for a step function, which is held from there, and for Euler's method, which reads everything there """

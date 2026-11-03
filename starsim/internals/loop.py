@@ -81,8 +81,8 @@ class Loop:
     in `update_results()`, and a time recorded as `self.ti` in one is `self.ti` in the other.
     `sim.now` is when the step starts, time point k-1, which it reads time-varying inputs and
     dates at. At the first time point (`ti == 0`, `now` the start) there is no step: only the
-    results of the start are recorded (people's and every module's but the interventions',
-    which have done nothing yet), and the analyzers run (`at_start`).
+    results of the start are recorded (people's and every module's, though an intervention, which
+    has done nothing yet, only counts its states), and the analyzers run (`at_start`).
 
     Args:
         sim (Sim): the sim to run (usually made by the sim itself)
@@ -90,7 +90,7 @@ class Loop:
     def __init__(self, sim):
         self.sim = sim
         self.funcs = None
-        self.at_start = None # The functions that also run at the first time point, by function order: those that record the start
+        self.at_start = None # The functions that run at the first time point, to record the start, by the function order of the one each stands for
         self.shared_timelines = [] # The timelines of the modules on the sim's timeline, which the sim's advance() moves
         self.abs_tvecs = None
         self.abs_numvecs = None # Canonical numeric (float-year) time arrays, parallel to abs_tvecs, used for sorting/uniformity
@@ -229,7 +229,7 @@ class Loop:
         if self._keep(sim.people.step_die):
             self += sim.people.step_die
 
-        first = len(self.funcs) # From here to the analyzers, the functions also run at the first time point, to record the start (except the interventions')
+        first = len(self.funcs) # From here to the analyzers, the functions also run at the first time point, to record the start (see below for the interventions)
 
         # Update results. A module's update_results is skipped only when it is the inherited
         # base method (not overridden anywhere in the MRO) and the module has no auto-generated
@@ -245,8 +245,15 @@ class Loop:
         for ana in sim.analyzers():
             if self._keep(ana.step):
                 self += ana.step
-        intvs = {intv.name for intv in sim.interventions()} # Which have done nothing before the first step, so record nothing at the start
-        self.at_start = {i for i in range(first, len(self.funcs)) if self.funcs[i]['module'] not in intvs}
+        self.at_start = {}
+        intvs = {intv.name: intv for intv in sim.interventions()}
+        for i in range(first, len(self.funcs)):
+            func = self.funcs[i]
+            intv = intvs.get(func['module'])
+            if intv is None:
+                self.at_start[i] = func['func']
+            elif len(intv.auto_state_list) or len(intv.derived_state_names): # Its states have values at the start, but its own update_results() may read what its first step sets
+                self.at_start[i] = ft.partial(ss.Module.update_results, intv)
 
         # Clean up dead agents, and perform other housekeeping tasks
         for func in [mod.finish_step for mod in sim.modules] + [sim.people.finish_step]:
@@ -395,7 +402,7 @@ class Loop:
             t = tvec[ti]
             for func_order, func, label, module, func_name in specs:
                 if ti or func_order in self.at_start:
-                    append(LoopEntry(t, ti, func_order, func, label, module, func_name)) # By position, which is quicker for the many entries
+                    append(LoopEntry(t, ti, func_order, func if ti else self.at_start[func_order], label, module, func_name)) # By position, which is quicker for the many entries
         return plan
 
     def _make_plan_sorted(self):
@@ -419,7 +426,7 @@ class Loop:
             tvec = self.abs_tvecs[module]
             numvec = self.abs_numvecs[module]
             for j in range(0 if func_order in self.at_start else 1, len(tvec)): # At its first time point, a module has no step, and only records the start
-                r_append(LoopEntry(time=tvec[j], ti=0, func_order=func_order, func=func, label=label, module=module, func_name=func_name))
+                r_append(LoopEntry(time=tvec[j], ti=0, func_order=func_order, func=func if j else self.at_start[func_order], label=label, module=module, func_name=func_name))
                 t_append(numvec[j])
                 f_append(func_order)
 

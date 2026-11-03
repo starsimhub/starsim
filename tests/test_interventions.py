@@ -170,6 +170,34 @@ def test_campaign_delivery():
 
 
 @sc.timer()
+def test_state_results_at_start():
+    """ An intervention's states are counted at the first time point, and its own results are left for its first step """
+    class Program(ss.Intervention):
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            self.define_states(ss.BoolState('never_reached', default=True))
+            self.define_aliases(reached=lambda mod: ~mod.never_reached)
+
+        def init_results(self):
+            super().init_results()
+            self.define_results(ss.Result('new_reached', dtype=int))
+
+        def step(self):
+            self.new_reached = 1
+
+        def update_results(self):
+            super().update_results()
+            self.results.new_reached[self.ti] = self.new_reached # Would fail at the start, before the first step
+
+    pars = dict(n_agents=100, diseases='sis', networks='random', verbose=0)
+    for kw in [dict(), dict(dt=ss.years(2))]:
+        res = ss.Sim(interventions=Program(**kw), **pars).run().results.program
+        assert np.all(res.never_reached == 100)
+        assert np.all(res.reached == 0)
+        assert res.new_reached[0] == 0 and res.new_reached[1] == 1
+    return
+
+
 def test_disease_resolved_once():
     sc.heading('The disease of a delivery is worked out once, when it is initialized')
     S, I, R = ss.states(3)

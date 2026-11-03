@@ -76,6 +76,8 @@ This version adds a way to write a model as declared states and transitions, whi
 - *Migration*: `ss.options.kernels` (`'auto'`, `'rust'`, `'numba'` or `'python'`; `STARSIM_KERNELS`) replaces `ss.options.compile`: `'always'` is `'numba'`, and `'never'` is `'python'`. `@ss.jit` raises when Numba can't compile a function, rather than running it as Python, unless given `nopython=False`.
 
 ## Fixes
+- A delivery with a timestep of its own (`ss.vaccinate(..., dt=ss.years(2))`) records its results on that timeline, rather than failing or putting them at the wrong times, and a compartmental run with one is taken a step at a time.
+- The automatic count of an intervention's `ss.BoolState` has its value at the first time point, rather than 0; an `update_results()` written for an intervention still starts at the first step.
 - A binomial or Poisson draw with a NaN input or a count too large for exact draws (2^53 or more, on the side of the draw: n·p or n·(1−p) for a binomial) gives NaN: `binomial(inf, p)` looped forever, `poisson(1e19)` gave -2^63, and a NaN n or p gave 0.
 - A modifier's `set=` of a dwell time that is a distribution gave different results run to run with the same seed (its stream's seed held a memory address).
 - `S >> I @ ss.gamma(...)*I` works (it raised `WrongDimension`), as does `ss.by(herd=np.array(...))` (it raised `ShapeError`); a one-destination split (`ss.Transition(I, [F], p=[1.0], rate=...)`) is a plain transition, so several compete as rates (it raised `BadBranchSplit`).

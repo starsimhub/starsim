@@ -51,7 +51,7 @@ Starsim has four time types: durations (`ss.days(10)`), hazard rates (`ss.perday
 | `ss.Sim(sir, start=2020, stop=2030)` | year | `unit='year' (from start and stop years)` |
 | `ss.Sim(sir, stop=100, dt=ss.weeks(1))` | week | `unit='week' (from dt)` |
 
-**One time index per step.** Step `k` goes from time point `k − 1` to `k`. Throughout it, in every module, `sim.ti` is `k`, where its results go, and `sim.now` is its start, when values that vary in time are read. At `ti == 0` there is no step: the loop records the starting values, and the analyzers run once to see them. See [Time](building_time.qmd).
+**One time index per step.** Step `k` goes from time point `k − 1` to `k`. Throughout it, in every module, `sim.ti` is `k`, where its results go, and `sim.now` is its start, when values that vary in time are read. At `ti == 0` there is no step: the loop records the starting values (for an intervention, only the counts of its states, not its own `update_results()`), and the analyzers run once to see them. See [Time](building_time.qmd).
 
 ## The loop
 

@@ -177,7 +177,7 @@ class CompartmentalDelivery(sc.prettyobj):
         """ Add the people selected to a result, in total and by group; returns the total """
         d = self.delivery
         res = d.results[key]
-        ti = self.sim.ti
+        ti = d.ti
         n = self.n_selected(sel)*weight
         res[ti] += n
         if getattr(res, 'strata', None) is not None and n:
