@@ -408,18 +408,44 @@ class beta_mean(Dist):
 
 class nbinom(Dist):
     """
-    Negative binomial distribution
+    Negative binomial distribution, given by `n` and `p`, or by `n` and the mean
+
+    With the mean, `n` is the dispersion: the variance is mean + mean²/n, so a smaller `n`
+    is more overdispersed, and a large `n` is close to a Poisson distribution.
 
     Args:
-        n (float): the number of successes, > 0 (default 1)
+        n (float): the number of successes, > 0 (default 1); with `mean`, the dispersion
         p (float): the probability of success in [0,1], (default 0.5)
+        mean (float): the mean, instead of `p` (which is then n/(n + mean))
 
+    Examples:
+        ```python
+        ss.nbinom(n=3, p=0.5) # A mean of 3
+        ss.nbinom(mean=20, n=0.5) # A mean of 20 and a variance of 820
+        ```
     """
     scaling = 'predraw'
     unitless_pars = ('n',)
-    def __init__(self, n=1, p=0.5, **kwargs):
-        super().__init__(distname='negative_binomial', dist='nbinom', n=n, p=p, **kwargs)
+    def __init__(self, n=1, p=None, mean=None, **kwargs):
+        if mean is None:
+            pars = dict(n=n, p=sc.ifelse(p, 0.5))
+        elif p is None:
+            pars = dict(n=n, mean=mean)
+        else:
+            errormsg = f'ss.nbinom() is given by n and p, or by n and mean, not by both p ({p}) and mean ({mean})'
+            raise ValueError(errormsg)
+        super().__init__(distname='negative_binomial', dist='nbinom', **pars, **kwargs)
         return
+
+    def sync_pars(self):
+        """ Convert the mean (if given) to p, then translate to SciPy """
+        p = self._pars
+        if 'mean' in p: # Converted on each draw, since the mean may be a function, an array, or a parameter being fitted
+            if any(callable(v) and not isinstance(v, type) for v in p.values()): # Functions can't be converted, so call them first, as for ss.lognorm_ex()
+                self.call_pars()
+            mean = p.pop('mean')
+            p.p = p.n/(p.n + mean)
+        return super().sync_pars()
 
     def ppf(self, rands):
         """ The inverse CDF, compiled (see `ss.solvers.backends.draws`); SciPy's above a mean of 30, and for unusual parameters """
