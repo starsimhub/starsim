@@ -365,6 +365,8 @@ class Module(Base):
             except:
                 pass
             raise AttributeError(errormsg)
+        elif isinstance(self.__dict__.get(attr), ss.par) and attr in self.pars: # A declared parameter (e.g. sir.beta = 0.1), the same object as sir.pars.beta
+            self.pars[attr] = value
         else:
             super().__setattr__(attr, value)
         return

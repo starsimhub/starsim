@@ -410,6 +410,8 @@ def migrate_ast(text, analyzers=None):
         else:
             continue
         for key, val in items:
+            if isinstance(val, ast.Constant) and type(val.value) in (int, float) and val.value and str(key).lower() not in mf_keys:
+                found.append((val.lineno, f'the beta {val.value} on "{key}" is a bare number: Starsim 3 used it as a probability per step, but Starsim 4 reads it as a rate per unit of time, which at monthly steps is about 12 times too low. Give its meaning, e.g. ss.prob({val.value}, "month") for monthly steps'))
             if not (isinstance(val, (ast.List, ast.Tuple)) and len(val.elts) == 2):
                 continue
             a, b = [ast.unparse(e) for e in val.elts]

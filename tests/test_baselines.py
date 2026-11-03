@@ -31,9 +31,9 @@ def make_sim(run=False, **kwargs):
     Define a default simulation for testing the baseline. If run directly (not
     via pytest), also plot the sim by default.
     """
-    diseases = [dict(type='sir', beta=dict(random=ss.peryear(0.1), sexual=ss.peract(0.02), prenatal=ss.peryear(0.1))), # A probability per act on ss.SexualNet, about the default rate's chance in a step of 0.2 years
-                dict(type='sis', beta=dict(random=ss.peryear(0.05), sexual=ss.peract(0.01), prenatal=ss.peryear(0.05)))]
-    networks = ['random', 'sexual', 'prenatal']
+    diseases = [dict(type='sir', beta=dict(random=ss.peryear(0.1), sexual=ss.peract(0.02))), # A probability per act on ss.SexualNet, about the default rate's chance in a step of 0.2 years
+                dict(type='sis', beta=dict(random=ss.peryear(0.05), sexual=ss.peract(0.01)))]
+    networks = ['random', 'sexual']
     sim = ss.Sim(pars=pars | kwargs, networks=networks, diseases=diseases, demographics=True)
 
     # Optionally run and plot

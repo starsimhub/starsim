@@ -1810,6 +1810,14 @@ class SexualNet(DegreeNet):
         return
 
 
+def find_pregnancy(net):
+    """ The sim's `ss.Pregnancy`, which makes the edges of a prenatal or postnatal network; raises an error if it does not have exactly one """
+    pregs = [mod for mod in net.sim.modules if isinstance(mod, ss.Pregnancy)]
+    if len(pregs) != 1:
+        raise RuntimeError(f'{type(net).__name__} requires one ss.Pregnancy, which makes its edges; the sim has {len(pregs)}')
+    return pregs[0]
+
+
 class PrenatalNet(Network):
     """
     Prenatal transmission network
@@ -1822,6 +1830,16 @@ class PrenatalNet(Network):
     """
     sides = dict(mother='p1', child='p2') # Where they are in an edge
     one_way = True
+
+    def init_pre(self, sim):
+        """ Check that the sim has the ss.Pregnancy that makes the edges
+
+        Args:
+            sim (Sim): the sim being initialized
+        """
+        super().init_pre(sim)
+        find_pregnancy(self)
+        return
 
     def step(self):
         # Adding/removing edges is managed by ss.Pregnancy
@@ -1883,6 +1901,16 @@ class PostnatalNet(DynamicNetwork):
         self.update_pars(pars, **kwargs)
         return
 
+    def init_pre(self, sim):
+        """ Find the sim's ss.Pregnancy, which makes the edges
+
+        Args:
+            sim (Sim): the sim being initialized
+        """
+        super().init_pre(sim)
+        self.pregnancy = find_pregnancy(self)
+        return
+
     def add_pairs(self, mother_uids=None, infant_uids=None):
         """ Add an edge from each mother to her infant
 
@@ -1922,19 +1950,6 @@ class BreastfeedingNet(PostnatalNet):
     def __init__(self, pars=None, **kwargs):
         super().__init__(pars=pars, **kwargs)
         assert self.pars.dur is None, 'BreastfeedingNet does not accept a `dur` parameter as breastfeeding duration is determined by the Pregnancy module'
-        return
-
-    def init_pre(self, sim):
-        """ Find the sim's ss.Pregnancy, which pairs each newborn with a mother who breastfeeds (see `ss.Pregnancy.lactate()`)
-
-        Args:
-            sim (Sim): the sim being initialized
-        """
-        super().init_pre(sim)
-        pregs = [mod for mod in self.sim.modules if isinstance(mod, ss.Pregnancy)]
-        if len(pregs) != 1:
-            raise RuntimeError(f'BreastfeedingNet requires one ss.Pregnancy, which tracks breastfeeding; the sim has {len(pregs)}')
-        self.pregnancy = pregs[0]
         return
 
     def end_pairs(self):

@@ -281,7 +281,7 @@ class Timeline:
         Update the time parameters, reinitializing the timeline if it was initialized and any changed
 
         Args:
-            kwargs: the time parameters to change (start, stop, dt); those not given (or None) are kept
+            kwargs: the time parameters to change (start, stop, dt, dur); those not given (or None) are kept, except that a new dur replaces the stop (or, if the stop is given too, the start)
         """
         stale = False
         for key in self.time_args:
@@ -291,8 +291,17 @@ class Timeline:
                 setattr(self, key, val)
                 stale = True
 
+        dur = kwargs.get('dur')
+        if dur is not None: # Any two of the start, stop, and dur define the third; if all three are given and disagree, reconcile_args() raises an error
+            self.dur = dur
+            stale = True
+            replaced = 'start' if kwargs.get('stop') is not None else 'stop'
+            if kwargs.get(replaced) is None:
+                setattr(self, replaced, None)
+
         if stale and self.initialized:
-            self.dur = None # Recalculated from the new start and stop
+            if dur is None:
+                self.dur = None # Recalculated from the new start and stop
             self._timevec = self._datevec = self._relvec = None # Clear the lazy vectors
             self.init(force=True)
         return

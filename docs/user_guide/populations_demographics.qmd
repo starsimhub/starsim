@@ -110,15 +110,13 @@ The model follows the UN's estimates to within 2%. The UN's rates that come with
 
 Rates of your own are given as a table. Crude birth rates have a column for the year and one for the rate (`ss.Births(birth_rate=df)`, with columns `Year` and `CBR`); death rates have columns for the year, sex, age group, and rate (`ss.Deaths(death_rate=df)`, with columns `Time`, `Sex`, `AgeGrpStart`, and `mx`, and `Sex` being `Male` or `Female`). `Time` and `Year` can be used for each other; for other names, give `metadata=`, e.g. `metadata=dict(data_cols=dict(value='rate'))`. Each rate holds from its year until the next year given.
 
-Crude birth and death rates are usually given per 1,000 people, and death rates by age per person. A rate above 1 is read as per 1,000, and a rate below 1 as per person; a rate that could be either (from 0.1 to 1, or above 1,000) gives a warning saying which was assumed. `rate_units=1000` (per 1,000) or `rate_units=1` (per person) says which, and silences it:
+Crude birth and death rates are usually given per 1,000 people, and death rates by age per person. A rate above 1 is read as per 1,000, and a rate below 1 as per person; a table is read by its median, so a death rate above 1 at the oldest ages doesn't change how the rest are read. A rate that could be either (from 0.1 to 1, or above 1,000) gives a warning saying which was assumed. `rate_units=1000` (per 1,000) or `rate_units=1` (per person) says which, and silences it:
 
 ```python
 births = ss.Births(birth_rate=35)                   # 35 per 1,000 people per year
 births = ss.Births(birth_rate=0.035)                # The same, per person
 deaths = ss.Deaths(death_rate=df, rate_units=1)     # Death rates by age, per person
 ```
-
-A table is read by its largest rate, so death rates by age per person with any rate above 1, as there can be at the oldest ages, are taken as per 1,000, with no warning, and almost nobody dies. Give `rate_units=1` with rates by age.
 
 Declared rates (`ss.birth()`, `ss.death()`) are always per person.
 
@@ -167,7 +165,7 @@ About 500 people leave each year (0.5% of 100,000) and 500 arrive, so the popula
 
 ## Pregnancy
 
-`ss.Pregnancy` models pregnancy itself, for models where it matters: mother-to-child transmission, maternal health, or contraception. Women conceive at age-specific fertility rates; a pregnancy ends in a delivery, a miscarriage, a stillbirth, an abortion, or a maternal death; and each delivery adds a child, whose mother is known. It runs as agents, and takes the place of `ss.Births`: given both, the births of the two add up, with no warning. Fertility rates by age come from the UN for a place by name, as for births and deaths (`fertility_rate='Nigeria'`, per 1,000 women in each 5-year age group, by year), or as a table of your own (with columns `Time`, `AgeGrp`, and `ASFR`), here also per 1,000 women:
+`ss.Pregnancy` models pregnancy itself, for models where it matters: mother-to-child transmission, maternal health, or contraception. Women conceive at age-specific fertility rates; a pregnancy ends in a delivery, a miscarriage, a stillbirth, an abortion, or a maternal death; and each delivery adds a child, whose mother is known. It runs as agents, and takes the place of `ss.Births`: given both, the births of the two add up, with a warning. Fertility rates by age come from the UN for a place by name, as for births and deaths (`fertility_rate='Nigeria'`, per 1,000 women in each 5-year age group, by year), or as a table of your own (with columns `Time`, `AgeGrp` or `AgeGrpStart`, and `ASFR`), here also per 1,000 women:
 
 ```{python}
 import pandas as pd

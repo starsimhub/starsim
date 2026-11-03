@@ -20,9 +20,10 @@ def infer_rate_units(units, rates, name, hint=None):
     """
     What the rates of `ss.Births`, `ss.Deaths`, or `ss.Pregnancy` are per, as a factor to multiply them by: 1e-3 for per 1,000 people, 1 for per person
 
-    With `rate_units=None` (the default), it is worked out from the largest rate: above 1, per 1,000 (e.g.
-    `ss.Births(birth_rate=35)`); otherwise per person (e.g. `ss.Births(birth_rate=0.035)`). A warning says
-    which was assumed when the largest rate could be either (from 0.1 to 1, or above 1,000); give `rate_units`
+    With `rate_units=None` (the default), it is worked out from the typical rate, the median of those above 0:
+    above 1, per 1,000 (e.g. `ss.Births(birth_rate=35)`); otherwise per person (e.g. `ss.Births(birth_rate=0.035)`).
+    The median, since a table of rates per person can have one above 1, at the oldest ages. A warning says
+    which was assumed when the typical rate could be either (from 0.1 to 1, or above 1,000); give `rate_units`
     to say which, and silence it.
 
     Args:
@@ -40,14 +41,16 @@ def infer_rate_units(units, rates, name, hint=None):
     else:
         values = rates
     try:
-        largest = np.nanmax(np.asarray(values, dtype=float))
+        values = np.asarray(values, dtype=float)
     except (TypeError, ValueError): # E.g. a distribution, which is not scaled by units in a way that can be checked
         return 1e-3
-    units = 1e-3 if largest > 1 else 1.0
-    if 0.1 <= largest <= 1 or largest > 1000:
+    positive = values[values > 0] # Not the zeros of a fertility table, at the ages with no births
+    typical = np.median(positive) if positive.size else 0.0
+    units = 1e-3 if typical > 1 else 1.0
+    if 0.1 <= typical <= 1 or typical > 1000:
         what = 'per 1,000 people' if units == 1e-3 else 'per person'
         hint = sc.ifelse(hint, 'Give rate_units=1000 (per 1,000) or rate_units=1 (per person) to say which.')
-        ss.warn(f'{name} has rates up to {largest:n}, which could be per person or per 1,000 people; assuming {what}. {hint}')
+        ss.warn(f'{name} has a typical rate of {typical:n}, which could be per person or per 1,000 people; assuming {what}. {hint}')
     return units
 
 
@@ -224,7 +227,7 @@ class Births(Demographics):
         rel_birth (float): constant used to scale all birth rates
         min_age (float): the youngest age of a mother (default 15)
         max_age (float): the age that mothers are younger than (default 50)
-        rate_units (float): what the rates are per: 1000 (or 1e-3) for per 1,000 people, 1 for per person; by default, per 1,000 if the largest rate is above 1, otherwise per person, with a warning if it could be either (see `ss.demographics.infer_rate_units()`). The crude birth rate result (`cbr`) is in the same units.
+        rate_units (float): what the rates are per: 1000 (or 1e-3) for per 1,000 people, 1 for per person; by default, per 1,000 if the typical rate is above 1, otherwise per person, with a warning if it could be either (see `ss.demographics.infer_rate_units()`). The crude birth rate result (`cbr`) is in the same units.
         metadata (dict): dict with data column mappings for birth rate data (if birth_rate is a dataframe)
         pars (dict): the same parameters, as a dict
 
@@ -430,7 +433,7 @@ class Deaths(Demographics):
         rel_death (float): constant used to scale all death rates
         death_rate (float/rate/dict/dataframe/series/str): the death rate, mortality data, or a place by name, for its UN rates (e.g. 'Kenya')
         lifetable (`ss.lifetable`/dict): instead of `death_rate`, life tables (`ss.lifetable`): one, one for each sex (`dict(female=..., male=...)`), or one (or one for each sex) for each year from which it holds (`{2000: ..., 2010: ...}`); each is the death rate of each of its age bands, per person, so deaths follow the table of the year and each person's sex and age as time goes on (`ss.death(lifetable=)` instead draws each person's age at death once, from one table)
-        rate_units (float): what the rates are per: 1000 (or 1e-3) for per 1,000 people, 1 for per person; by default, per 1,000 if the largest rate is above 1, otherwise per person, with a warning if it could be either (see `ss.demographics.infer_rate_units()`). The crude mortality rate result (`cmr`) is in the same units.
+        rate_units (float): what the rates are per: 1000 (or 1e-3) for per 1,000 people, 1 for per person; by default, per 1,000 if the typical rate is above 1, otherwise per person, with a warning if it could be either (see `ss.demographics.infer_rate_units()`). The crude mortality rate result (`cmr`) is in the same units.
         metadata (dict): data about the data contained within the data input: "data_cols" maps standard keys, like "year", to the corresponding column name in the data, and "sex_keys" does the same for the sexes
         pars (dict): the same parameters, as a dict
     """
@@ -617,7 +620,7 @@ class Pregnancy(Demographics, ss.Disease):
     Args:
         fertility (rate/func): the hazard of conception: by default `conception_rate()`, from `fertility_rate`; or a rate, or a function of `(sim, uids)` giving a rate for those agents
         fertility_rate (rate/dataframe/str): age-specific fertility rates, or one rate (default per 1000: see `rate_units`), or a country by name, for its UN rates (e.g. 'Nigeria')
-        rate_units (float): what `fertility_rate` is per: 1000 (or 1e-3) for per 1,000 women, 1 for per woman; by default, per 1,000 if the largest rate is above 1 (see `ss.demographics.infer_rate_units()`)
+        rate_units (float): what `fertility_rate` is per: 1000 (or 1e-3) for per 1,000 women, 1 for per woman; by default, per 1,000 if the typical rate is above 1 (see `ss.demographics.infer_rate_units()`)
         rel_fertility (float): multiplier on the fertility rate
         p_infertile (bernoulli): primary infertility
         min_age (float): minimum age of conception
@@ -796,6 +799,9 @@ class Pregnancy(Demographics, ss.Disease):
         Args:
             sim (Sim): the sim being initialized
         """
+        declared = [tr for mod in sim.modules if isinstance(mod, Flows) for tr in mod.transitions]
+        if any(isinstance(mod, Births) for mod in sim.modules) or any(hasattr(tr, 'n_born') for tr in declared):
+            ss.warn(f'{self.name} makes births, and so does the sim\'s ss.Births or ss.birth(): the two add up. Keep only one, unless both are meant.')
         pars = self.pars
         if pars.fertility_rate is not None:
             self.fertility_rate_data = standardize_fertility_data(self)

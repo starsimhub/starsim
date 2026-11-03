@@ -361,6 +361,7 @@ def n_args(func):
 # supplying `metadata=dict(data_cols=...)` explicitly.
 col_synonyms = dict(
     year = ['Year', 'Time', 'year', 'time'],
+    age = ['AgeGrpStart', 'AgeGrp'],
 )
 
 
@@ -467,7 +468,12 @@ def standardize_data(data=None, metadata=None, min_year=1800, out_of_range=0, de
     # Map sex values
     if 'sex' in index:
         if 'sex_keys' in metadata:
-            index['sex'] = [metadata['sex_keys'][x] for x in index['sex']]
+            keys = metadata['sex_keys']
+            unknown = set(index['sex']) - set(keys)
+            if unknown:
+                errormsg = f'Column "{metadata["data_cols"]["sex"]}" has the values {sc.strjoin(unknown)}, but accepts only {sc.strjoin(keys)}. Change them, or map them with e.g. metadata=dict(sex_keys=dict(F="f", M="m")).'
+                raise ValueError(errormsg)
+            index['sex'] = [keys[x] for x in index['sex']]
         assert set(index['sex']) == {'f','m'}, 'If standardized data contains a "sex" column, it should use "m" and "f" to specify the sex.'
 
     # Create the series

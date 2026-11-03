@@ -29,6 +29,12 @@ Run the original in its own framework and the port in Starsim, write both as the
 5. **Explain what differs.** Go through the usual causes below before concluding anything, and say which applied.
 6. **Report** a table of the series compared, the mode, the numbers, and the verdict, with the reason for every tolerance and every difference.
 
+## Auditing against the source
+
+Comparing runs can't catch a mistake the two models share, and a model from a paper has no code to run. So when the source is a paper, or the results agree only after changes, audit the port against the source as well. Do this in a fresh session with no memory of the conversion, or give it to a subagent, and tell it which departures from the source were deliberate, so that it doesn't report them.
+
+Make a table with one row for each facet of the model (assumption, state, parameter, equation, initial condition, intervention, output), giving the verdict (true, false, ambiguous, or unsupported), the exact quotation from the source, where it is (section, equation, table, or page), and the Starsim code that implements it. Use "true" only with a quotation to show for it. Fix what is false, and report what is ambiguous or unsupported for the modeler to decide.
+
 ## Usual causes of a difference
 
 - **Time labels.** Starsim's `X[ti]` is the number at time point `ti` (`X[0]` is the start), and a flow at `ti` is the number during the step that ends there (0 at `ti = 0`). Most frameworks do the same, but some label a step by its start, or report a flow at the start of its step. If the port looks one step early or late, check with `--shift 1` (or `-1`), and say which convention each side uses rather than leaving the shift unexplained.

@@ -66,13 +66,13 @@ def normalize_unit(base):
 
 
 # Conversion factors from each base to every unit, e.g. factors.years.days = 365
-base_factors = dict(
-    years   = 1, # Note 'years' instead of 'year', since referring to a quantity instead of a unit
-    months  = 12,
-    weeks   = 365/7, # If 52, then day/week conversion is incorrect
-    days    = 365,
+twelfths_of_a_day = dict( # Whole numbers, so that each factor is as exact as a float can be
+    years   = 365*12, # Note 'years' instead of 'year', since referring to a quantity instead of a unit
+    months  = 365,
+    weeks   = 7*12, # If 52 per year, then day/week conversion is incorrect
+    days    = 12,
 )
-factors = sc.dictobj({base:sc.dictobj({k:v/base_factors[base] for k,v in base_factors.items()}) for base in valid_bases}) # Use dictobj since slightly faster than objdict
+factors = sc.dictobj({base:sc.dictobj({k:twelfths_of_a_day[base]/v for k,v in twelfths_of_a_day.items()}) for base in valid_bases}) # Use dictobj since slightly faster than objdict
 
 # Single-input ufuncs whose result does not depend on a rate's denominator, and so are
 # safe to apply to the numerator alone; everything else (np.exp, np.log, ...) raises

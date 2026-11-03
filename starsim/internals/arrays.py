@@ -1039,6 +1039,9 @@ class TimeArr(FloatArr):
     def __ne__(self, other):
         return self.__eq__(other)
 
+    def isin(self, values):
+        return self.__eq__(values) # Exact matches, so refused as == is
+
     @property
     def years(self):
         """ The values as years (e.g. 2020.5), with NaN where not set """

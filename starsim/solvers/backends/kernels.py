@@ -991,7 +991,7 @@ def place_people(ys, p, a, b):
 @jit
 def place_rates(ys, p, a, b, rates, stack, expo, only_det=False):
     """
-    The rate of every flow for the groups of one place (p.pl_groups[a:b]), when people mix only within their place, or only of the flows of counts (see `settle()`)
+    The rate of each flow for the groups of one place (p.pl_groups[a:b]), when people mix only within their place: of the flows that are events, or only of the flows of counts (see `settle()`)
 
     The same arithmetic as in `step()`, for one place: exposure is the prevalence in the place, and
     a count is the number in the place.
@@ -1013,7 +1013,7 @@ def place_rates(ys, p, a, b, rates, stack, expo, only_det=False):
         for t in range(len(p.sizes)):
             expo[e] += p.contacts[0, t, 0]*prev
     for f in range(nf):
-        if only_det and not p.det[f]:
+        if p.det[f] != only_det:
             continue
         for j in range(a, b):
             g = p.pl_groups[j]

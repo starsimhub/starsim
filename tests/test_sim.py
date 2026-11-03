@@ -244,7 +244,7 @@ def test_complex_api():
     assert out.count('%') == 4, out
     with pytest.raises(ValueError):
         ss.Sim(n_agents=100, verbose=-1).init()
-    assert len(ss.Sim(n_agents=100, networks=[['random', 'sexual'], 'maternal'], verbose=0).init().networks) == 3 # One level of nested lists, e.g. from a helper that returns several modules
+    assert len(ss.Sim(n_agents=100, networks=[['random', 'sexual'], 'maternal'], demographics='pregnancy', verbose=0).init().networks) == 3 # One level of nested lists, e.g. from a helper that returns several modules
 
     return s1
 
@@ -320,8 +320,8 @@ def test_creation_syntax():
         custom = [mod1, dem],
         demographics = 'deaths',
         connectors = mod2,
-        diseases = net,
-        analyzers = dis,
+        diseases = dis,
+        networks = net,
     )
     sim.run()
     
@@ -329,8 +329,10 @@ def test_creation_syntax():
     assert isinstance(sim.custom[1], ss.Demographics)
     assert isinstance(sim.demographics[0], ss.Demographics)
     assert isinstance(sim.connectors[0], SecondClass)
-    assert isinstance(sim.diseases[0], ss.Network)
-    assert isinstance(sim.analyzers[0], ss.Disease)
+    assert isinstance(sim.diseases[0], ss.Disease)
+    assert isinstance(sim.networks[0], ss.Network)
+    with pytest.raises(TypeError, match='Was expecting'):
+        ss.Sim(diseases=ss.RandomNet()).init() # A module of another type
     
     # Test 2: check that the order is intuited when not specified
     sim2 = ss.Sim(
@@ -403,6 +405,9 @@ def test_locked_pars():
     with pytest.raises(sc.KeyNotFoundError):
         sim.diseases.sis.pars.bta = 0.1 # Typo in a module parameter
     sim.diseases.sis.pars.beta = 0.1 # Existing parameters of a module can be set
+    sim.diseases.sis.beta = 0.2 # Directly too
+    assert sim.diseases.sis.pars.beta.value == 0.2
+    assert ss.SIS(beta=0.3).beta.value == 0.3 # Each module has its own, not the class's
     with pytest.raises(RuntimeError, match='sim.new'):
         sim.pars.rand_seed = 2 # But not the sim's settings, which are its run's: sim.new(rand_seed=2)
     sim.pars.update(my_par=3, create=True) # New parameters can be added explicitly
