@@ -193,7 +193,7 @@ for solver in ['binomial', 'tau', 'gillespie']:
     ss.Sim(measles, total_pop=1_000_000, stop=ss.days(50), solver=solver).run()
 ```
 
-Each says how long it took. Gillespie handled about two million events here in well under a second; with tens of millions of events, use tau-leaping. Agents take time in proportion to the number of agents and the number of steps; a population larger than the number of agents is represented by having each agent stand for several people (see [Branching and rescaling](running_branching.qmd)).
+Each says how long it took. Gillespie handled about two million events here in well under a second; with tens of millions of events, use tau-leaping. Agents take time in proportion to the number of agents and the number of steps; a population larger than the number of agents is represented by having each agent stand for several people (see [Branching and rescaling](running_branching.qmd)). What keeps a run fast, and how to find what slows one down, is in [Getting the most speed](running_performance.qmd).
 
 ## Backends
 
