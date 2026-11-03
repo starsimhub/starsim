@@ -2,6 +2,7 @@
 Test deliveries: routine and campaign delivery by year, products shared between deliveries, tests with several results, and treatment with a capacity and a queue
 """
 import warnings
+from unittest import mock
 import sciris as sc
 import numpy as np
 import starsim as ss
@@ -206,6 +207,41 @@ def test_disease_resolved_once():
     sim = ss.Sim(sir, interventions=treatment, unit='day', stop=5, solver='ode', verbose=0).init()
     assert sim.interventions.treatment.__dict__['_disease'] == 'sir'
     return
+
+
+@sc.timer()
+def test_modify_fast_paths():
+    """ Dated modifiers, and modifiers on a comparison of counts, stay in the kernels, with the same results """
+    S, I, R = ss.states('S I R')
+    kw = dict(total_pop=1e6, start='2026-01-01', stop='2026-12-31', dt=ss.days(1), solver='ode', verbose=0)
+
+    def make(**mod):
+        beta = ss.par(0.3, name='beta')
+        sir = ss.Disease(infection=S >> I @ beta*I, recovery=I >> R @ ss.days(10), init_n=dict(I=100), name='sir')
+        return ss.Sim(sir, interventions=ss.modify(sir.pars.beta, multiply=0.75, **mod) if mod else None, **kw).run()
+
+    # The tables of dated modifiers, worked out where they change, are those of every step
+    dates = dict(start='2026-03-01', stop='2026-05-02')
+    fast = make(**dates)
+    with mock.patch.object(ss.solvers.Compartmental, 'changing_steps', lambda *args: None):
+        slow = make(**dates)
+    assert fast.kernel_only() and np.array_equal(fast.results.sir.I.values, slow.results.sir.I.values)
+    assert not np.array_equal(fast.results.sir.I.values, make().results.sir.I.values) # They had an effect
+
+    # A comparison of counts is part of the rate: the same as writing it there
+    beta = ss.par(0.3, name='beta')
+    sir = ss.Disease(infection=S >> I @ beta*I, recovery=I >> R @ ss.days(10), init_n=dict(I=100), name='sir')
+    sim = ss.Sim(sir, interventions=ss.modify(sir.pars.beta, multiply=0.75, where=sir.I.n >= 20_000), **kw).run()
+    beta2 = ss.par(0.3, name='beta')
+    written = ss.Sim(ss.Disease(infection=S >> I @ (beta2*(1 - 0.25*(I.n >= 20_000)))*I, recovery=I >> R @ ss.days(10), init_n=dict(I=100), name='sir'), **kw).run()
+    assert sim.kernel_only() and sim.interventions()[0].inlined
+    assert np.allclose(sim.results.sir.I.values, written.results.sir.I.values, rtol=1e-12)
+
+    # What needs memory is applied each step, and the other sim from the same disease is unchanged
+    held = ss.Sim(sir, interventions=ss.modify(sir.pars.beta, multiply=0.75, where=sir.I.n >= 20_000, until=sir.I.n <= 10_000), **kw).run()
+    assert not held.interventions()[0].inlined and not held.kernel_only()
+    assert ss.Sim(sir, **kw).run().results.sir.I.values.max() > 2.9e5
+    return sim
 
 
 if __name__ == '__main__':

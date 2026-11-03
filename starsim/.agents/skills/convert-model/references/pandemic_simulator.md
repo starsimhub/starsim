@@ -29,5 +29,5 @@ The World Health Organization's [Pandemic Simulator](https://github.com/WHO-Coll
 - **Percentages.** `infected_population`, thresholds, adherence, and reductions are percentages. An `infected_population` of 0.0015 is 0.0015%, and the number is rounded to two decimals.
 - **The default solver forgets.** With `odeint`, `end_threshold` is ignored, so a measure ends as soon as prevalence falls below `start_threshold`. Leave `until=` out to match the original's results.
 - **Dates in float32.** A measure can start up to 1/16 of a day from its date, because the date is compared in JAX's default float32. To compare results closely, run the original with `JAX_ENABLE_X64=1`.
-- **Steps.** Output is daily up to 365 days and coarser after that, and an adaptive solver takes its own steps. A measure on a threshold is checked once a step in Starsim, so use a smaller `dt` to compare it closely.
+- **Steps.** Output is daily up to 365 days and coarser after that, and an adaptive solver takes its own steps, so a measure on a threshold switches at a slightly different time than with Starsim's fixed steps.
 - **The model card.** `set_model_metadata()` has the assumptions, biases, and `not_for` that belong in the docstring.

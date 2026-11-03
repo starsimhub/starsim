@@ -630,6 +630,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
 
     def init_post(self):
         """ Set the initial conditions """
+        self.inline_modifiers()
         fracs, counts = self.init_fractions()
         self.update_targets()
         amounts = sc.obj({name:frac*self.total_pop*self.state_split[name] for name,frac in fracs.items()})
@@ -1738,6 +1739,47 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         self.kernel_rng = self.make_rng(stream=1) # As a whole run starts with, so stepping gives the same run
         return
 
+    def inline_modifiers(self):
+        """
+        Make each modifier that multiplies a rate while a comparison of this module's counts holds (`where=I.n >= 1000`) part of the rate, as `1 + (multiply - 1)*(I.n >= 1000)`
+
+        The kernels work this out as they do any rate, so the run needs no Python between its steps. The ODE reads the
+        comparison at each stage of a step, not once a step. Anything else about the modifier leaves it to be applied each step.
+        """
+        sim, graph = self.sim, self.graph
+        for key,mods in list(sim.modifiers.items()):
+            if key[0] != self.mod.name or self.cross is not None or any(m.op == 'add' for m in mods):
+                continue
+            for m in list(mods):
+                expr = getattr(m, 'where', None)
+                simple = isinstance(m, ss.modify) and isinstance(expr, ss.expressions.Func) and expr.name in ss.expressions.comparisons and m.op == 'multiply'
+                if not simple or m.holding or m.start is not None or m.stop is not None or m.share is not None or m.when is not None or not m.fixed_amount:
+                    continue
+                if any(isinstance(leaf, ss.expressions.Count) and any(all(state is not own for own in graph.states.values()) for state in leaf.states) for leaf in expr.leaves):
+                    continue
+                amount = 1 - m.amount if m.efficacy is not None else m.amount
+                factor = 1 + (amount - 1)*expr
+                named = lambda e: [leaf for leaf in getattr(e, 'leaves', []) if isinstance(leaf, ss.par) and leaf.name == key[2]]
+                if key[1] == 'par':
+                    if any(named(e) for tr in graph.transitions.values() for e in [tr.dur] + sc.tolist(tr.p)):
+                        continue
+                    change = lambda e: ss.expressions.substitute(e, {id(leaf):leaf*factor for leaf in named(e)})
+                    flows = [flow for flow in self.flows if flow.expr is not None and named(flow.expr)]
+                else:
+                    change = lambda e: e*factor
+                    flows = [flow for flow in self.flows if flow.tr is graph.transitions.get(key[2]) and flow.expr is not None]
+                if key[1] not in ['par', 'transition'] or not flows or any(flow.strain or (self.solver == 'binomial' and not flow.dynamic) for flow in flows): # The substeps of the chain binomial are chosen from the rates known at the start
+                    continue
+                for flow in flows:
+                    flow.expr, flow.dynamic = change(flow.expr), True
+                    if flow.tr.rate is not None:
+                        flow.tr.rate = flow.expr
+                        flow.tr.const, flow.tr.terms = ss.expressions.linear(flow.expr)
+                mods.remove(m)
+                m.inlined = True
+                self.whole = None # Worked out again
+        return
+
     def init_func_exprs(self):
         """ Call each value that is a function of the sim, to find those that give an expression of the model's states, which are worked out within the step """
         self.time_pars = [] # The parameters whose value changes over time
@@ -2420,11 +2462,13 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         series = {id(par):self.cache[id(par)] for par in self.time_pars}
         if changes: # Modifiers that depend only on time (see kernel_only()): work out every part of the program at each step (and stage), with them applied
             rows = []
+            which = [] # The row of each step
             changing = self.changing_steps(start, stop)
             for ti in range(start, stop):
                 if changing is not None and rows and ti not in changing: # As on the step before
-                    rows.append(rows[-1])
+                    which.append(len(rows) - 1)
                     continue
+                which.append(len(rows))
                 sim.t.ti = mod.t.ti = min(ti + 1, npts - 1) # The step from ti, which is step ti+1 (see ss.Loop)
                 self.at_middle()
                 self.cache.clear()
@@ -2436,7 +2480,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             self.year = None
             self.cache.clear()
             shape = (self.n_groups,)
-            fixed, mult, consts, rel_trans = [np.array([[np.broadcast_to(val, shape) for val in row[k]] for row in rows], dtype=float).reshape(len(rows), len(rows[0][k]), self.n_groups) for k in range(4)]
+            fixed, mult, consts, rel_trans = [np.array([[np.broadcast_to(val, shape) for val in row[k]] for row in rows], dtype=float).reshape(len(rows), len(rows[0][k]), self.n_groups)[which] for k in range(4)]
             grouped = [True]*4
         self.tables_by_group = grouped
         for par in self.time_pars: # For the results, a value is a series over the steps (and over the groups, for an ss.by)
@@ -2459,11 +2503,13 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             lo, hi = start, stop # The first step of these whose time has reached it, or `stop`
             while lo < hi:
                 mid = (lo + hi)//2
-                if ss.connectors.reached(sim.t.tvec[min(mid + 1, self.mod.t.npts - 1)], time):
+                sim.t.ti = min(mid + 1, self.mod.t.npts - 1) # As tables() reads it
+                if ss.connectors.reached(sim.t.now(), time):
                     hi = mid
                 else:
                     lo = mid + 1
             steps.add(lo)
+        sim.t.ti = 0
         return steps
 
     def table_years(self, raw):
