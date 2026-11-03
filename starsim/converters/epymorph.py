@@ -35,6 +35,13 @@ function that builds the RUME, or on a script that makes one called `rume`:
 
 or call `dump(rume, 'model.json')` from Python.
 
+Exporting: `to_epymorph(sim)` (`ss.export_to(sim, 'epymorph')`) writes the compartmental
+form of a sim (see `ss.converters.export.flatten()`) as an epymorph script: a
+`CompartmentModel` with an edge for each flow, and a RUME of it in one place with no
+movement, which the script simulates when it is run. Rates are in days, a parameter that
+varies in time is its value on each day, and the initial numbers are whole people. The
+script's RUME is read back as above (`python epymorph.py exported.py:build_rume model.json`).
+
 Used with: compartments; declared modules
 """
 import os
@@ -42,6 +49,7 @@ import sys
 if __name__ == '__main__': # Run as a script, this folder would hide epymorph itself (with this file, epymorph.py)
     here = os.path.dirname(os.path.abspath(__file__))
     sys.path = [p for p in sys.path if os.path.abspath(p or '.') != here]
+import ast
 import json
 import runpy
 import numpy as np
@@ -50,7 +58,7 @@ if __package__: # As part of Starsim; run as a script in epymorph's environment,
     import starsim as ss
     from .core import Source, build
 
-__all__ = ['load_epymorph', 'dump', 'rume_dict']
+__all__ = ['load_epymorph', 'to_epymorph', 'dump', 'rume_dict']
 
 sampled_days = 28 # The days over which movement is averaged: whole weeks, for clauses that differ by the day
 
@@ -126,6 +134,156 @@ def load_epymorph(source, solver='tau', verbose=None, **kwargs):
     # Run settings
     src.config.update(unit='day', dt=1, start=d['start'], stop=str(dates[-1] + np.timedelta64(1, 'D')), solver=solver, total_pop=float(totals.sum()), use_aging=False)
     return build(src, verbose=verbose, **kwargs)
+
+
+#%% Exporting a sim to epymorph
+
+sympy_funcs = dict(minimum='Min', maximum='Max', min='Min', max='Max', abs='Abs', absolute='Abs') # Starsim's names in a rate, as sympy's
+numpy_funcs = dict(min='minimum', max='maximum', absolute='abs', ceiling='ceil') # And as NumPy's, for a parameter that varies in time
+
+
+def sympy_expr(text):
+    """ A rate of the compartmental form as sympy, as epymorph's edges are written: where() is Piecewise() """
+    class Sub(ast.NodeTransformer):
+        def visit_Call(self, n):
+            self.generic_visit(n)
+            if n.func.id == 'where':
+                cond, yes, no = n.args
+                return ast.Call(ast.Name('Piecewise'), [ast.Tuple([yes, cond]), ast.Tuple([no, ast.Constant(True)])], [])
+            n.func.id = sympy_funcs.get(n.func.id, n.func.id)
+            return n
+    return ast.unparse(Sub().visit(ast.parse(text, mode='eval').body))
+
+
+def numpy_expr(text):
+    """ An expression in the time as NumPy, for a parameter's value on each day """
+    class Sub(ast.NodeTransformer):
+        def visit_Call(self, n):
+            self.generic_visit(n)
+            n.func = ast.Attribute(ast.Name('np'), numpy_funcs.get(n.func.id, n.func.id))
+            return n
+        def visit_Name(self, n):
+            return ast.Attribute(ast.Name('np'), 'pi') if n.id == 'pi' else n
+    return ast.unparse(Sub().visit(ast.parse(text, mode='eval').body))
+
+
+def to_epymorph(sim):
+    """
+    The compartmental form of a sim as an epymorph script: a `CompartmentModel` with an edge for each flow, and a RUME of it in one place
+
+    The script builds the RUME (`build_rume()`, also run as `rume`), and run, simulates it
+    with epymorph's `BasicSimulator`. The rates are in days, as in epymorph (the parameters
+    keep the sim's unit); a parameter that varies in time is its value on each day (worked
+    out in the script), and the total, `N`, is written `Max(1, ...)`, epymorph's guard
+    against dividing by zero.
+
+    Args:
+        sim (`ss.Sim`): the sim
+    """
+    from .export import in_unit, names_in # Here, since export.py imports this module
+    flat = in_unit(sim, 'day')
+    days, start = flat.dur, flat.start
+    lost = list(flat.lost)
+    comps = list(flat.comps)
+
+    # Expressions: those of the time are parameters, worked out for each day; the rest are written in the edges
+    timed = []
+    for name,text in flat.exprs.items():
+        used = names_in(text)
+        if not used & set(['t'] + timed):
+            continue
+        elif used & (set(comps) | set(flat.exprs) - set(timed)):
+            lost.append(f'changed: "{name}" depends on the time and the compartments, which an epymorph rate cannot; it is taken at the start ({text})')
+        else:
+            timed.append(name)
+    local = {name:text for name,text in flat.exprs.items() if name not in timed}
+    used = set().union(*[names_in(f.rate) for f in flat.flows], *[names_in(text) for text in local.values()])
+    reqs = [name for name in list(flat.pars) + timed if name in used]
+    for name in timed:
+        lost.append(f'changed: "{name}", which varies in time, is written as its value at the start of each day')
+
+    # The model
+    value = lambda v: 'np.nan' if np.isnan(v) else repr(v)
+    lines = [
+        '"""',
+        f'{flat.name}, exported from Starsim {ss.__version__} (tested with {ss.converters.core.tested_with("epymorph")}): an epymorph model and a RUME of it in one place, with no movement; time is in days',
+        '',
+        'Run it to simulate it with epymorph. To read it back into Starsim, write its RUME to JSON',
+        '(python epymorph.py this_file.py:build_rume model.json, with epymorph.py from starsim/converters)',
+        'and read that with ss.import_from(\'model.json\', format=\'epymorph\').',
+        '"""',
+        'import numpy as np',
+        'from sympy import Abs, Max, Min, Piecewise, ceiling, cos, exp, floor, log, pi, sin, sqrt',
+        'from epymorph.kit import *',
+        '',
+        '',
+        'class Model(CompartmentModel):',
+        f'    """ {flat.name}, exported from Starsim """',
+        '    compartments = [',
+        *[f'        compartment({c!r}),' for c in comps],
+        '    ]',
+        '    requirements = [',
+        *[f'        AttributeDef({r!r}, type=float, shape=Shapes.TxN),' for r in reqs],
+        '    ]',
+        '',
+        '    def edges(self, symbols):',
+        f'        [{", ".join(comps)}] = symbols.all_compartments',
+    ]
+    if reqs:
+        lines.append(f'        [{", ".join(reqs)}] = symbols.all_requirements')
+    if any('t' in names_in(text) for text in local.values()) or any('t' in names_in(f.rate) for f in flat.flows):
+        lines.append('        t = 0 # A rate in epymorph has no time')
+    for name,text in local.items():
+        is_total = name.rsplit('_', 1)[-1] == 'N' # A disease's total, as epymorph guards it
+        lines.append(f'        {name} = ' + (f'Max(1, {sympy_expr(text)})' if is_total else sympy_expr(text)))
+    lines.append('        return [')
+    for flow in flat.flows:
+        lines.append(f'            edge({flow.src or "BIRTH"}, {flow.dst or "DEATH"}, rate={sympy_expr(flow.rate)}),')
+    lines += ['        ]', '', '']
+
+    # The RUME
+    init = [round(v) for v in flat.comps.values()]
+    if any(abs(a - b) > 1e-9 for a,b in zip(init, flat.comps.values())):
+        lost.append('changed: the initial numbers are rounded to whole people, as epymorph counts them')
+    n_days = max(1, round(days))
+    if abs(n_days - days) > 1e-9:
+        lost.append(f'changed: the run of {days:n} days is written as {n_days} whole days')
+    if start is None:
+        lost.append('changed: the sim has no dates, so the RUME starts on 2000-01-01')
+    start = str(start) if start is not None else '2000-01-01'
+    lines += [
+        'def build_rume():',
+        '    """ The RUME: the model in one place, with no movement """',
+        f'    days = {n_days}',
+    ]
+    if timed:
+        lines.append('    t = np.arange(days) # The day of each value of a parameter that varies in time')
+        for name in sorted(set().union(*[names_in(flat.exprs[n]) for n in timed]) & set(flat.pars), key=list(flat.pars).index):
+            lines.append(f'    {name} = {value(flat.pars[name])}')
+        for name in timed:
+            lines.append(f'    {name} = {numpy_expr(flat.exprs[name])}')
+    lines += [
+        '    return SingleStrataRUME.build(',
+        '        ipm = Model(),',
+        '        mm = mm.No(),',
+        f'        init = init.Explicit(initials=np.array([{init}])),',
+        "        scope = CustomScope(['node']),",
+        f'        time_frame = TimeFrame.of({start!r}, days),',
+        '        params = dict(',
+        *[f'            {r} = {r if r in timed else value(flat.pars[r])},' for r in reqs],
+        '        ),',
+        '    )',
+        '',
+        '',
+        'rume = build_rume()',
+        '',
+        "if __name__ == '__main__':",
+        '    out = BasicSimulator(rume).run(rng_factory=default_rng(0))',
+        "    print(out.dataframe.drop(columns=['tick', 'node']).set_index('date'))",
+    ]
+    lost.append('changed: epymorph draws each event as Poisson in steps of a day, so its runs are stochastic, and on average close to Euler\'s method with a step of a day rather than to the ODE')
+    summary = f'exported to epymorph: {flat.n_states} states, {flat.n_transitions} transitions, as {len(comps)} compartments and {len(flat.flows)} edges (time in days)'
+    return '\n'.join(lines) + '\n', summary, lost
 
 
 #%% Writing the RUME to JSON, in epymorph's own environment (needs neither Sciris nor Starsim)

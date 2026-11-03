@@ -227,10 +227,10 @@ Installing Starsim also installs a `starsim` command, for setting up an environm
 
 | Command | What it does |
 |---|---|
-| `starsim init` | Once, after installing: `starsim init ai` if an AI coding agent is installed, then `starsim init compile` |
-| `starsim init compile` | Compiles the Numba kernels ahead of time, as `ss.compile()` does (once per install; a few minutes). Optional: they are otherwise compiled on first use, and with the Rust kernels (in the wheels on PyPI) there is nothing to compile |
+| `starsim init` | Once, after installing: `starsim init ai` if an AI coding agent is installed, then `starsim init compile` unless the Rust kernels are in use |
+| `starsim init compile` | Compiles the Numba kernels ahead of time, as `ss.compile()` does (once per install; a few minutes). Optional: they are otherwise compiled on first use, and with the Rust kernels in use (as from the wheels on PyPI) they are needed only to compare the two |
 | `starsim init compile --check` | Says which kernels are in use and whether they are compiled, and exits with 1 if not (for a build script) |
-| `starsim init ai` | Links the Starsim skills for AI coding agents into this project (the same as `starsim ai install`; `--global` for all projects) |
+| `starsim init ai` | Links the Starsim skills for AI coding agents into this project, after asking (`-y` not to ask), as `starsim ai install` does (`--global` for all projects) |
 | `starsim init dev` | For a clone of Starsim: also the development dependencies, Rust if it is missing, and both sets of kernels |
 | `starsim ai` | Where the skills are installed; `starsim ai show`, `install`, `uninstall`, `off`, and `on` manage them |
 | `starsim convert model.R` | Converts a model to Starsim code (`model.py`), telling the format from the file; `--to=` another format, `--out=` the file, `--ai` to have an AI coding agent do it. `starsim convert` lists the formats |

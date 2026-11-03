@@ -1,13 +1,20 @@
 """
-Test importing MEmilio models
+Test importing MEmilio models, and exporting to MEmilio
+
+The exports are run in MEmilio's environment, if `STARSIM_LFD` gives the lingua_franca_design repo.
 """
+import os
+import subprocess
 import numpy as np
 import pytest
 import sciris as sc
 import starsim as ss
-from starsim.converters.memilio import load_memilio
+from starsim.converters.memilio import load_memilio, to_memilio
 
 kw = dict(verbose=False)
+lfd = os.environ.get('STARSIM_LFD')
+memilio_python = os.path.join(lfd, '_envs', 'memilio', 'bin', 'python') if lfd else None
+has_memilio = memilio_python is not None and os.path.exists(memilio_python)
 
 def seir_model():
     """ An SEIR in two age groups, with a damping on day 10, as memilio.py writes it """
@@ -123,9 +130,59 @@ def test_graph_json():
     return sim
 
 
+def seir_sim(**kwargs):
+    """ An SEIR to export """
+    pars = dict(diseases=ss.SEIR(beta=ss.perday(0.4), dur_exp=ss.days(4), dur_inf=ss.days(8), init_prev=0.01), total_pop=10_000, unit='day', dur=100, solver='ode', verbose=0)
+    return ss.Sim(**(pars | kwargs))
+
+
+def test_memilio_export():
+    sc.heading('Testing exporting to MEmilio')
+    text, summary, lost = to_memilio(seir_sim())
+    compile(text, 'seir.py', 'exec')
+    assert 'memilio.simulation.oseir' in text and 'TimeExposed[A0] = 4.0' in text and 'TimeInfected[A0] = 8.0' in text
+    assert 'TransmissionProbabilityOnContact[A0] = 0.4' in text
+
+    # Contacts from a network; births and deaths are not in MEmilio's SIR; an SIS is none of its models
+    text, summary, lost = to_memilio(seir_sim(diseases=ss.SEIR(beta=ss.perday(0.05), dur_exp=ss.days(4), dur_inf=ss.days(8)), networks=ss.RandomNet(n_contacts=8)))
+    assert 'np.full((1, 1), 8.0)' in text and 'TransmissionProbabilityOnContact[A0] = 0.05' in text
+    sir = seir_sim(diseases=ss.SIR(beta=ss.perday(0.3), dur_inf=ss.days(10)), demographics=[ss.birth(rate=ss.peryear(0.5)), ss.death(rate=ss.peryear(0.5))])
+    text, summary, lost = to_memilio(sir)
+    assert 'memilio.simulation.osir' in text
+    assert sum('not exported: the flow' in line for line in lost) == 4, 'The births and the three deaths should be listed'
+    with pytest.raises(NotImplementedError, match='osir'):
+        to_memilio(seir_sim(diseases=ss.SIS(beta=ss.perday(0.3), dur_inf=ss.days(10))))
+    return text
+
+
+@pytest.mark.skipif(not has_memilio, reason='needs MEmilio\'s environment (STARSIM_LFD)')
+def test_memilio_roundtrip(tmp_path):
+    sc.heading('Testing an export to MEmilio, run in MEmilio and read back')
+    sim = seir_sim()
+    text, summary, lost = to_memilio(sim)
+    script, dumped = tmp_path/'seir.py', tmp_path/'seir.json'
+    script.write_text(text)
+    subprocess.run([memilio_python, ss.converters.memilio.__file__, str(script), str(dumped)], check=True, capture_output=True) # Runs the script, and records the model it simulates
+    back = load_memilio(str(dumped), **kw).run()
+    res = sim.run().results.seir
+    pairs = dict(S='Susceptible', E='Exposed', I='Infected', R='Recovered')
+    for a,b in pairs.items():
+        assert np.allclose(back.results.oseir[b].values, res[a].values, rtol=1e-9), f'{a} should be the same once read back'
+
+    # MEmilio's own run, as the script prints it
+    out = subprocess.run([memilio_python, str(script)], check=True, capture_output=True, text=True).stdout.splitlines()
+    rows = [line.split() for line in out if line[:1].isdigit()]
+    head = next(line.split() for line in out if line.startswith('Day'))
+    vals = np.array(rows, dtype=float)
+    for a,b in pairs.items():
+        assert np.allclose(vals[:, head.index(b)], res[a].values, rtol=0, atol=1e-4*res[a].values.max()), f'MEmilio\'s {b} should match the ODE'
+    return back
+
+
 if __name__ == '__main__':
     T = sc.timer()
     sim1 = test_seir()
     sim2 = test_secir()
     sim3 = test_graph_json()
+    test_memilio_export()
     T.toc()

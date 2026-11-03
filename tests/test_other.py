@@ -257,17 +257,17 @@ def test_cli(ai_home, capsys):
     import starsim_cli as cli
     from starsim_cli import ai, build
     home = ai_home.home
-    cli.main(['ai', 'install', '--global'])
+    cli.main(['ai', 'install', '--global', '-y'])
     skill = home/'.agents'/'skills'/'starsim'/'SKILL.md'
     assert skill.exists() and not (home/'.claude'/'skills').exists() # Only for Claude Code if it is installed
     other = home/'.claude'/'skills'/'starsim'/'SKILL.md'
     other.parent.mkdir(parents=True)
     other.write_text('---\nname: starsim\n---\nSomeone else\'s skill')
-    cli.main(['ai', 'install', '--global', '--to', 'claude'])
+    cli.main(['ai', 'install', '--global', '--to', 'claude', '-y'])
     assert 'Someone else' in other.read_text() # Not overwritten without --force
     cli.main(['ai', 'show'])
     out = capsys.readouterr().out
-    assert all(f'`{name}`' in out for name in ['convert-model', 'migrate-starsim3', 'validate-conversion']) # The guide lists the skills
+    assert all(f'`{name}`' in out for name in ['convert-model', 'migrate-starsim3']) # The guide lists the skills
     cli.main(['ai', 'show', 'convert-model'])
     assert 'name: convert-model' in capsys.readouterr().out
     cli.main(['ai', 'uninstall', '--global'])
@@ -288,7 +288,7 @@ def test_cli_project(ai_home, monkeypatch, capsys):
     monkeypatch.chdir(sub) # From a subfolder, it's still the project that gets them
     theirs = project/'.agents'/'skills'/'convert-model'
     theirs.mkdir(parents=True)
-    cli.main(['init', 'ai'])
+    cli.main(['init', 'ai', '-y'])
     linked = project/'.claude'/'skills'/'starsim'/'SKILL.md'
     assert linked.read_text() == (ai.ai_folder/'starsim'/'SKILL.md').read_text() # The whole skill, not the short one
     assert (project/'.agents'/'skills'/'starsim').is_symlink()
@@ -296,7 +296,7 @@ def test_cli_project(ai_home, monkeypatch, capsys):
 
     cli.main(['ai', 'status'])
     assert 'linked in this project' in capsys.readouterr().out
-    cli.main(['ai', 'install']) # Again, to repair or update (the same as init ai)
+    cli.main(['ai', 'install', '-y']) # Again, to repair or update (the same as init ai)
     cli.main(['ai', 'uninstall'])
     assert not linked.parent.is_symlink() and theirs.exists()
 
@@ -308,11 +308,11 @@ def test_cli_project(ai_home, monkeypatch, capsys):
     def fail(*args, **kwargs):
         raise OSError('no links here')
     monkeypatch.setattr(Path, 'symlink_to', fail)
-    cli.main(['init', 'ai'])
+    cli.main(['init', 'ai', '-y'])
     assert (home/'.agents'/'skills'/'starsim'/'SKILL.md').exists() # Installed for all projects instead
     (home/'.agents'/'skills'/'starsim'/'SKILL.md').unlink()
     monkeypatch.chdir(home) # The home folder isn't a project
-    cli.main(['init', 'ai'])
+    cli.main(['init', 'ai', '-y'])
     assert (home/'.agents'/'skills'/'starsim'/'SKILL.md').exists()
     return
 
@@ -339,32 +339,30 @@ def test_cli_convert(tmp_path, monkeypatch, capsys):
 
 
 def test_skill_note(ai_home, monkeypatch, capsys):
-    """ Importing Starsim suggests the skills only if an agent is installed and has none, and until switched off """
+    """ The starsim command suggests the skills only if an agent is installed and has none, and until switched off """
     sc.heading('Testing the note about skills')
     import starsim_cli as cli
     from starsim_cli import ai, build
     home = ai_home.home
-    ss.options.set(skill_note=True)
-    def noted():
-        ai.note_skills(ss.options.skill_note)
+    monkeypatch.delenv('STARSIM_SKILL_NOTE', raising=False)
+    def noted(command=('convert',)):
+        cli.main(list(command)) # "starsim convert" with no file lists the formats
         return 'starsim init ai' in capsys.readouterr().out
-    try:
-        assert not noted() # No agent
-        (home/'.claude').mkdir()
-        assert noted()
-        cli.main(['init', 'ai'])
-        capsys.readouterr()
-        assert not noted() # Has them
-        cli.main(['ai', 'uninstall'])
-        cli.main(['ai', 'off'])
-        capsys.readouterr()
-        assert not noted() # Switched off
-        cli.main(['ai', 'on'])
-        assert noted()
-        ss.options.set(skill_note=False)
-        assert not noted()
-    finally:
-        ss.options.set(skill_note=False)
+    assert not noted() # No agent
+    (home/'.claude').mkdir()
+    assert noted()
+    cli.main(['init', 'ai', '-y'])
+    capsys.readouterr()
+    assert not noted() # Has them
+    cli.main(['ai', 'uninstall'])
+    cli.main(['ai', 'off'])
+    capsys.readouterr()
+    assert not noted() # Switched off
+    cli.main(['ai', 'on'])
+    assert noted()
+    assert not noted(['ai']) # Not after the commands for the skills themselves
+    monkeypatch.setenv('STARSIM_SKILL_NOTE', '0')
+    assert not noted()
     return
 
 
@@ -406,14 +404,14 @@ def test_cli_dev(tmp_path, monkeypatch):
     monkeypatch.setattr(build, 'find_cargo', lambda: cargo.pop(0))
     monkeypatch.setattr(sys, 'platform', 'linux')
     monkeypatch.setattr(build.shutil, 'which', lambda *args, **kwargs: '/fake/bin/tool')
-    cli.main(['init', 'dev'])
+    cli.main(['init', 'dev', '-y'])
     names = ['[dev]', 'sh.rustup.rs', 'bash build', 'starsim init compile', 'starsim init compile --check']
     where = [next(i for i,cmd in enumerate(commands) if name in cmd) for name in names]
     assert where == sorted(where), f'Wrong order: {commands}'
 
     commands.clear()
     monkeypatch.setattr(build, 'find_cargo', lambda: '/fake/bin/cargo')
-    cli.main(['init', 'dev'])
+    cli.main(['init', 'dev', '-y'])
     assert not any('rustup' in cmd for cmd in commands) # Rust was there already
     return
 

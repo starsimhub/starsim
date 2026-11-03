@@ -5,18 +5,17 @@ Starsim's skills are in its package, in `.agents/skills/` (one folder per skill)
 the folders where coding agents look for skills, so that they always match the Starsim installed; for all projects,
 a short skill is installed instead, which loads them from the Starsim in use (with `starsim ai show`).
 
-This module doesn't import Starsim (or Sciris), so that the command starts at once; importing Starsim calls
-`note_skills()` from here.
+This module doesn't import Starsim (or Sciris), so that the command starts at once. The starsim command calls
+`note_skills()` from here after its other commands, to suggest the skills where an agent has none.
 """
 import os
 import sys
 import shutil
 import subprocess
 import importlib.util
-import multiprocessing as mp
 from pathlib import Path
 
-__all__ = ['skills', 'show', 'install', 'uninstall', 'status', 'off', 'on', 'note_skills']
+__all__ = ['skills', 'list_skills', 'show', 'install', 'uninstall', 'status', 'off', 'on', 'note_skills']
 
 package_folder = Path(importlib.util.find_spec('starsim').submodule_search_locations[0]) # Found without importing it
 agents_folder = package_folder / '.agents' # Where tools that read installed packages look for skills (e.g. library-skills)
@@ -24,7 +23,7 @@ ai_folder = agents_folder / 'skills' # The skills, by folder
 meta_folder = agents_folder / 'meta-skill' # The short skill for all projects, which loads the others with "starsim ai show"; apart, so that those tools don't list it
 skill_name = 'starsim' # The name of both the short skill and the main skill (the guide)
 marker = 'installed by `starsim ai`' # In the installed SKILL.md, so that a skill of the same name from elsewhere is not overwritten
-off_file = '.starsim/skill_note_off' # In the home folder: if there, importing Starsim doesn't suggest the skills (see note_skills())
+off_file = '.starsim/skill_note_off' # In the home folder: if there, the starsim command doesn't suggest the skills (see note_skills())
 
 
 class Target:
@@ -69,6 +68,18 @@ def skill_folders():
 def skills():
     """ The skills that "starsim ai show" serves, by name, with their descriptions (the guide lists them) """
     return {folder.name: frontmatter((folder/'SKILL.md').read_text(encoding='utf-8')).get('description', '') for folder in skill_folders() if folder.name != skill_name}
+
+
+def list_skills(args=None):
+    """ List the skills, each with its description """
+    import textwrap
+    width = min(shutil.get_terminal_size().columns, 100)
+    print(f'Skills (from {ai_folder.relative_to(package_folder.parent).as_posix()}; "starsim ai show <skill>" shows one):')
+    for folder in skill_folders():
+        description = frontmatter((folder/'SKILL.md').read_text(encoding='utf-8')).get('description', '')
+        print(f'\n    {folder.name}')
+        print(textwrap.fill(description, width=width, initial_indent=' '*8, subsequent_indent=' '*8))
+    return
 
 
 def version():
@@ -142,6 +153,18 @@ def unignored(root, paths):
     return [path for path in paths if path not in ignored]
 
 
+def proceed(args):
+    """ Whether to go ahead: yes with --yes, else as the user answers (no if there is no one to ask) """
+    if getattr(args, 'yes', False):
+        return True
+    if not sys.stdin.isatty():
+        print('Not installed: there is no terminal to ask "Proceed?" in (--yes installs without asking)')
+        return False
+    answer = input('Proceed? [Y/n] ').strip().lower()
+    args.yes = answer in ['', 'y', 'yes'] # So that falling back to all projects doesn't ask again
+    return args.yes
+
+
 def install_project(args):
     """ Link each skill into the current project, so that it follows the installed Starsim; with no project, or if links can't be made, install for all projects instead """
     root = project_root()
@@ -149,33 +172,45 @@ def install_project(args):
         print('No project here (this is the home folder), so installing for all projects')
         return install_global(args)
     use = chosen(args)
-    linked, skipped = [], []
+    current = [folder.name for folder in skill_folders()]
+    links, skipped = [], []
+    stale = [dest for target in use.values() for dest in sorted((root/target.folder).glob('*')) if is_link(dest) and dest.name not in current] # Skills this Starsim no longer has
     for target in use.values():
         for source in skill_folders():
             dest = root / target.folder / source.name
-            if dest.is_symlink() or dest.exists():
-                if not (args.force or is_link(dest)):
-                    skipped.append(dest.relative_to(root).as_posix())
-                    continue
-                dest.unlink() if dest.is_symlink() else shutil.rmtree(dest)
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            try:
-                dest.symlink_to(source, target_is_directory=True)
-            except OSError as e: # E.g. on Windows without Developer Mode
-                print(f'Could not make links in this project ({e}), so installing for all projects')
-                return install_global(args)
-            linked.append(dest.relative_to(root).as_posix())
-    names = sorted({Path(path).name for path in linked})
+            if (dest.is_symlink() or dest.exists()) and not (args.force or is_link(dest)):
+                skipped.append(dest.relative_to(root).as_posix())
+            else:
+                links.append((source, dest))
     print(f'Root: {root}')
-    print(f'Installed in: {where(use)}')
-    print(f'Linked skills (from {ai_folder.relative_to(package_folder.parent).as_posix()}):')
-    for name in names:
+    print(f'Installing in: {where(use)}')
+    print(f'Skills to link (from {ai_folder.relative_to(package_folder.parent).as_posix()}):')
+    for name in sorted({source.name for source,dest in links}):
         print(f'    {name}')
     if skipped:
-        print('Skipped, since they were not installed by starsim (--force replaces them):')
+        print('Skipping, since they were not installed by starsim (--force replaces them):')
         for path in skipped:
             print(f'    {path}')
-    new = unignored(root, linked)
+    if stale:
+        print('Removing links to skills that this Starsim no longer has:')
+        for dest in stale:
+            print(f'    {dest.relative_to(root).as_posix()}')
+    if not links or not proceed(args):
+        return
+
+    for dest in stale:
+        dest.unlink()
+    for source,dest in links:
+        if dest.is_symlink() or dest.exists():
+            dest.unlink() if dest.is_symlink() else shutil.rmtree(dest)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            dest.symlink_to(source, target_is_directory=True)
+        except OSError as e: # E.g. on Windows without Developer Mode
+            print(f'Could not make links in this project ({e}), so installing for all projects')
+            return install_global(args)
+    print('Linked')
+    new = unignored(root, [dest.relative_to(root).as_posix() for source,dest in links])
     if new:
         print('The links are specific to this Python environment, so they generally should not be committed. For .gitignore:')
         for path in new:
@@ -185,19 +220,21 @@ def install_project(args):
 
 def install_global(args):
     """ Install a short skill for all projects, which loads the guide from the installed package when used """
-    source = meta_folder / skill_name
     use = {}
     for key,target in chosen(args).items():
-        dest = Path.home() / target.folder / skill_name
-        file = dest / 'SKILL.md'
+        file = Path.home() / target.folder / skill_name / 'SKILL.md'
         if file.exists() and marker not in file.read_text(encoding='utf-8') and not args.force:
-            print(f'Skipped ~/{target.folder}/{skill_name}: a skill named "{skill_name}" that starsim did not install is there (--force replaces it)')
-            continue
-        shutil.copytree(source, dest, dirs_exist_ok=True)
-        use[key] = target
-    if use:
-        print(f'Installed in: {where(use, lambda t: f"~/{t.folder}/{skill_name}")}')
-        print('Start a new session of your agent to load it; it adds one line to the agent\'s context until used.')
+            print(f'Skipping ~/{target.folder}/{skill_name}: a skill named "{skill_name}" that starsim did not install is there (--force replaces it)')
+        else:
+            use[key] = target
+    if not use:
+        return
+    print(f'Installing in: {where(use, lambda t: f"~/{t.folder}/{skill_name}")}')
+    if not proceed(args):
+        return
+    for target in use.values():
+        shutil.copytree(meta_folder/skill_name, Path.home()/target.folder/skill_name, dirs_exist_ok=True)
+    print('Installed. Start a new session of your agent to load it; it adds one line to the agent\'s context until used.')
     return
 
 
@@ -224,13 +261,15 @@ def uninstall(args):
     return
 
 
-#%% Status, and the note on import
+#%% Status, and the note about the skills
 
 def status(args=None):
     """ Say where the Starsim skills are installed, and whether they are current """
     current = (meta_folder/skill_name/'SKILL.md').read_text(encoding='utf-8')
     root = project_root()
-    print(f'Skills (from {ai_folder}): {", ".join(folder.name for folder in skill_folders())}')
+    print(f'Skills (from {ai_folder}):')
+    for folder in skill_folders():
+        print(f'    {folder.name}')
     if root:
         print(f'Root: {root}')
     for target in targets.values():
@@ -246,12 +285,12 @@ def status(args=None):
             else:
                 states.append(f'installed for all projects' + ('' if text == current else ', out of date (run "starsim ai install --global" to update)'))
         print(f'{target.folder.split("/")[0]} (for {target.label}): {"; ".join(states) or "not installed"}')
-    print(f'Suggesting them on import: {"off" if note_off() else "on"}')
+    print(f'Suggesting them after other starsim commands: {"off" if note_off() else "on"}')
     return
 
 
 def off(args=None):
-    """ Stop importing Starsim from suggesting the skills, on this computer """
+    """ Stop the starsim command from suggesting the skills, on this computer """
     file = Path.home() / off_file
     file.parent.mkdir(exist_ok=True)
     file.touch()
@@ -260,15 +299,14 @@ def off(args=None):
 
 
 def on(args=None):
-    """ Let importing Starsim suggest the skills again """
+    """ Let the starsim command suggest the skills again """
     (Path.home() / off_file).unlink(missing_ok=True)
     return
 
 
-def note_off(enabled=None):
-    """ Whether suggesting the skills has been switched off, by "starsim ai off", or by `ss.options.skill_note` (`enabled`; if not given, read as it is, from `STARSIM_SKILL_NOTE`) """
-    if enabled is None:
-        enabled = os.environ.get('STARSIM_SKILL_NOTE', '1').strip().lower() not in ['0', 'false', 'no', 'off']
+def note_off():
+    """ Whether suggesting the skills has been switched off, by "starsim ai off" or `STARSIM_SKILL_NOTE=0` """
+    enabled = os.environ.get('STARSIM_SKILL_NOTE', '1').strip().lower() not in ['0', 'false', 'no', 'off']
     return not enabled or (Path.home() / off_file).exists()
 
 
@@ -279,13 +317,11 @@ def skills_found():
     return any((folder/skill_name).exists() for folder in folders)
 
 
-def note_skills(enabled=True):
+def note_skills():
     """
-    On import, say that an AI coding agent here has no Starsim skills: a few checks of files, so quick. Only where an agent is
-    installed; not if switched off (`enabled`, which is `ss.options.skill_note`, or see `note_off()`), nor in the workers of
-    `ss.parallel()`, nor for the `starsim` command
+    After a starsim command, say that an AI coding agent here has no Starsim skills: a few checks of files, so quick. Only
+    where an agent is installed, and not if switched off (see `note_off()`)
     """
-    command = os.path.basename(getattr(sys, 'argv', [''])[0]) in ['-m', 'starsim', 'starsim.exe', 'starsim-script.py'] # As in kernels.note_uncompiled()
-    if mp.parent_process() is None and not command and not note_off(enabled) and targets['claude'].present and not skills_found():
-        print('Using an AI coding agent? Run "starsim init ai" to give it Starsim\'s skills ("starsim ai off" to stop this note)')
+    if not note_off() and targets['claude'].present and not skills_found():
+        print('\nUsing an AI coding agent? Run "starsim init ai" to give it Starsim\'s skills ("starsim ai off" to stop this note)')
     return

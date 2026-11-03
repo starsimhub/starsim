@@ -111,6 +111,7 @@ class People:
         kids = ss.ppl.age < 15 # A lazy condition, for a sim run as agents or as compartments (see ss.ppl)
         ```
     """
+    _taken = None # See taken_names()
     auids  = MadeOnUse() # The four fundamental arrays, made on first use: see make_uids()
     uid    = MadeOnUse()
     slot   = MadeOnUse()
@@ -484,6 +485,13 @@ class People:
         # Add results to the sim
         self.sim.results += results
         return
+
+    @classmethod
+    def taken_names(cls):
+        """ The names of the attributes every People has (e.g. "age", "version"), which a module can't take from its variable """
+        if cls._taken is None:
+            cls._taken = set(dir(cls)) | set(vars(cls(n_agents=1)))
+        return cls._taken
 
     def add_module(self, module):
         """

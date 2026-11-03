@@ -7,18 +7,26 @@ Exports use the compartmental form of declared diseases, turning a sim run as ag
 format; see `docs/design/16-interop.md` in the lingua_franca_design repo. Each is read from the built model (each
 disease's graph and engine). The formats carry less than a sim, and what is left out or
 changed is listed as `ss.errors.LossyExport`. An export does not fail because something
-cannot be carried.
+cannot be carried (except MEmilio's, whose models are fixed: an SIR or SEIR, or an error).
 
 - `sbml`: the compartmental form as species and reactions (https://sbml.org), for any SBML tool
 - `odin`: the compartmental form as `deriv()` equations (https://mrc-ide.github.io/odin)
 
+The other formats have importers too, and each exporter is beside its importer, as its
+reverse: `epimodel` and `siminf` (R scripts), `summer2`, `epydemix`, `epipack`,
+`epymorph` and `memilio` (Python scripts that build the model with the framework),
+`camdl` and `emulsion` (their model files), `flepimop` (a config and the data files it
+names), and `atomica` (a framework workbook, as bytes). The helpers they share are here: `in_unit()`
+(the compartmental form in another unit of time), `flow_form()` (each flow as one of
+the usual kinds, for formats that have kinds of flow), `timing()`, `declared_pars()`, and `counted()`.
+
 The runs of a MultiSim are written as a submission to a hub (by scenario, as quantiles or samples) by `ss.converters.to_hub()`.
 
-SBML and odin are written from the compartmental form of the model (what
+All are written from the compartmental form of the model (what
 `sir.equations()` prints), with the numbers in the sim's unit of time: a dwell time
 that is not exponential is its Erlang stages, each stratification is summed into one
 group, a network is its mean contacts, and a parameter that varies in time is its formula
-in the time. Both are read back by `ss.import_from()`, except a rate that varies in
+in the time (where the format can carry it). Each is read back by `ss.import_from()`, except a rate that varies in
 time, which the importers list as not translated.
 
 Used with: agents and compartments; declared and coded modules
@@ -30,8 +38,20 @@ import numpy as np
 import pandas as pd
 import sciris as sc
 import starsim as ss
+from .core import terms, factors, product, names
+from .epimodel import to_epimodel
+from .siminf import to_siminf
+from .summer2 import to_summer2
+from .epydemix import to_epydemix
+from .epipack import to_epipack
+from .epymorph import to_epymorph
+from .camdl import to_camdl
+from .emulsion import to_emulsion
+from .flepimop import to_flepimop
+from .memilio import to_memilio
+from .atomica import to_atomica
 
-__all__ = ['exporters', 'extensions', 'export_to', 'flatten', 'to_sbml', 'to_odin', 'to_hub']
+__all__ = ['exporters', 'extensions', 'export_to', 'flatten', 'in_unit', 'flow_form', 'timing', 'declared_pars', 'counted', 'to_sbml', 'to_odin', 'to_hub']
 
 math_funcs = dict(exp='exp', log='ln', sqrt='root', abs='abs', absolute='abs', sin='sin', cos='cos', floor='floor', ceiling='ceiling')
 odin_funcs = dict(absolute='abs', minimum='min', maximum='max')
@@ -274,6 +294,134 @@ def flatten(sim):
     return out
 
 
+def names_in(text):
+    """ The names an expression uses """
+    return {n.id for n in ast.walk(ast.parse(text, mode='eval')) if isinstance(n, ast.Name)}
+
+
+def in_unit(sim, unit='day'):
+    """
+    The compartmental form of a sim (see `flatten()`) with its rates in a unit of time, for a format that has one
+
+    The parameters keep the sim's unit, since a number given without one is read in it; each
+    rate, and the time, `t`, in the expressions, are converted. The compartmental form also has
+    how long the sim runs in that unit (`dur`), its first year (`year`), and its start date
+    (`start`, None if it has no dates).
+    """
+    sim = initialized(sim)
+    t = sim.t
+    flat = flatten(sim)
+    flat.dur = (t.npts - 1)*float(ss.solvers.convert(t.dt, unit))
+    flat.year = float(t.yearvec[0])
+    flat.start = t.datevec[0] if isinstance(t.datevec[0], ss.date) else None
+    if flat.unit != unit:
+        up = float(ss.solvers.convert(ss.dur(1, base=flat.unit), unit)) # The new unit in each of the sim's, e.g. 365 days in a year
+        down = float(ss.solvers.convert(ss.dur(1, base=unit), flat.unit)) # The sim's unit in each of the new one, e.g. 365 days in a year for a sim in days
+        per = (lambda text: f'{text} / {up!r}') if up >= 1 else (lambda text: f'{text} * {down!r}') # A rate in the new unit from one in the sim's, and the time in the sim's from the time in the new one
+        class Time(ast.NodeTransformer):
+            def visit_Name(self, n):
+                return ast.parse(f'({per("t")})', mode='eval').body if n.id == 't' else n
+        convert = lambda text: ast.unparse(Time().visit(ast.parse(text, mode='eval').body))
+        for name,text in flat.exprs.items():
+            flat.exprs[name] = convert(text)
+        for flow in flat.flows:
+            flow.rate = per(f'({convert(flow.rate)})')
+        flat.unit = unit
+    return flat
+
+
+def summed(node, flat):
+    """ The compartments an expression adds up (a compartment, a named sum of them such as a state's stages or N, or a sum written out), or None if it is not such a sum """
+    if isinstance(node, ast.Name) and node.id in flat.exprs:
+        node = ast.parse(flat.exprs[node.id], mode='eval').body
+    out = []
+    for term in terms(node):
+        if isinstance(term, ast.Name) and term.id in flat.comps:
+            out.append(term.id)
+        elif isinstance(term, ast.Name) and term.id in flat.exprs and summed(term, flat) is not None:
+            out += summed(term, flat)
+        else:
+            return None
+    return out
+
+
+def flow_form(flow, flat):
+    """
+    A flow of `ss.converters.export.flatten()` as one of the usual forms of compartmental models
+
+    Returns an `sc.obj` with the kind, the coefficient (an AST of the factors of the rate that
+    do not depend on the compartments, or None), and the compartments of the agents (the infectious):
+
+    - 'linear': coef * source (a transition, or a death if it has no destination)
+    - 'infection': coef * source * agents / N, with N every compartment (frequency-dependent)
+    - 'density': coef * source * agents (mass action)
+    - 'births': coef * N, with N every compartment, and no source
+    - 'constant': coef (an import if it has no source, else an absolute flow)
+    - 'other': anything else
+
+    Args:
+        flow (`sc.obj`): a flow of the flattened sim, with its source, destination, and rate in total
+        flat (`sc.obj`): the flattened sim
+    """
+    every = sorted(flat.comps)
+    stateful = set(flat.comps) | {name for name in flat.exprs if summed(ast.Name(name), flat) is not None}
+    num, den = factors(ast.parse(flow.rate, mode='eval').body)
+    is_source = lambda f: flow.src is not None and isinstance(f, ast.Name) and f.id == flow.src
+    while any(map(is_source, num)) and any(map(is_source, den)): # The source above and below the line, as in a total rate written per person (rate / S * S)
+        num.pop(next(i for i,f in enumerate(num) if is_source(f)))
+        den.pop(next(i for i,f in enumerate(den) if is_source(f)))
+    per_source = any(map(is_source, num))
+    if per_source:
+        num.pop(next(i for i,f in enumerate(num) if is_source(f)))
+    above = [summed(f, flat) for f in num]
+    below = [summed(f, flat) for f in den]
+    coef = product([f for f,s in zip(num, above) if s is None], [f for f,s in zip(den, below) if s is None])
+    above, below = [s for s in above if s is not None], [s for s in below if s is not None]
+    out = sc.obj(kind='other', coef=None, agents=[])
+    if names(coef) & stateful:
+        return out
+    if per_source and not above and not below:
+        out.kind = 'linear'
+    elif per_source and len(above) == 1 and len(below) == 1 and sorted(below[0]) == every:
+        out.kind, out.agents = 'infection', above[0]
+    elif per_source and len(above) == 1 and not below:
+        out.kind, out.agents = 'density', above[0]
+    elif flow.src is None and len(above) == 1 and sorted(above[0]) == every and not below:
+        out.kind = 'births'
+    elif not per_source and not above and not below:
+        out.kind = 'constant'
+    else:
+        return out
+    out.coef = coef
+    return out
+
+
+def timing(sim):
+    """ The times of a sim for an export, as numbers in its unit (start, stop, and dt; a sim with dates starts at 0), and its start date, if any """
+    sim = initialized(sim)
+    t, unit = sim.t, sim.unit_base
+    dt = float(t.dt.to(unit).value)
+    start = 0.0 if t.is_absolute else float(t.start.value)
+    return sc.obj(unit=unit, start=start, stop=start + (t.npts - 1)*dt, dt=dt, date=t.start if t.is_absolute else None)
+
+
+def declared_pars(sim):
+    """ The parameters (`ss.par`) of a sim's declared diseases, by the name `flatten()` gives them """
+    sim = initialized(sim)
+    diseases = [mod for mod in sim.diseases.values() if getattr(mod, 'graph', None) is not None]
+    many = len(diseases) > 1
+    return {(f'{mod.name}_' if many else '') + name:p for mod in diseases for name,p in mod.graph.pars.items()}
+
+
+def counted(name, exprs):
+    """ The compartments a named expression counts (`N`, or a state with several stages), with the expressions in it written out """
+    out = set()
+    for n in ast.walk(ast.parse(exprs.get(name, name), mode='eval')):
+        if isinstance(n, ast.Name):
+            out |= counted(n.id, exprs) if n.id in exprs and n.id != name else {n.id}
+    return out
+
+
 #%% SBML
 
 def mathml(node):
@@ -421,7 +569,7 @@ def to_odin(sim):
     """
     flat = flatten(sim)
     r = odin_expr
-    lines = [f'## {flat.name}, exported from Starsim {ss.__version__}; time is in {flat.unit}s', '']
+    lines = [f'## {flat.name}, exported from Starsim {ss.__version__} (tested with {ss.converters.core.tested_with("odin")}); time is in {flat.unit}s', '']
     taken = set(flat.comps) | set(flat.pars) | set(flat.exprs)
     flow_names = []
     for flow in flat.flows: # Each flow is its own variable, so the equations pair up when read back
@@ -452,14 +600,36 @@ def to_odin(sim):
 #%% Exporting
 
 exporters = dict(
-    sbml    = to_sbml,
-    odin    = to_odin,
+    sbml     = to_sbml,
+    odin     = to_odin,
+    epimodel = to_epimodel,
+    siminf   = to_siminf,
+    summer2  = to_summer2,
+    epydemix = to_epydemix,
+    epipack  = to_epipack,
+    epymorph = to_epymorph,
+    memilio  = to_memilio,
+    atomica  = to_atomica,
+    camdl    = to_camdl,
+    emulsion = to_emulsion,
+    flepimop = to_flepimop,
 )
 
 extensions = dict( # The extension of each format's files, for `starsim convert` (Starsim's own is its code)
-    starsim = '.py',
-    sbml    = '.xml',
-    odin    = '.R',
+    starsim  = '.py',
+    sbml     = '.xml',
+    odin     = '.R',
+    epimodel = '.R',
+    siminf   = '.R',
+    summer2  = '.py',
+    epydemix = '.py',
+    epipack  = '.py',
+    epymorph = '.py',
+    memilio  = '.py',
+    atomica  = '.xlsx',
+    camdl    = '.camdl',
+    emulsion = '.yaml',
+    flepimop = '.yml',
 )
 
 
@@ -472,12 +642,12 @@ def export_to(sim, format, filename=None, verbose=None):
 
     Args:
         sim (`ss.Sim`): the sim, with declared diseases
-        format (str): one of `ss.converters.exporters`: 'sbml' or 'odin'
+        format (str): one of `ss.converters.exporters` (e.g. 'sbml', 'odin', 'epimodel', 'summer2')
         filename (str): the file to write, if any
         verbose (bool): whether to print what was exported (by default, unless something was lost)
 
     Returns:
-        The text of the export
+        The text of the export (bytes for Atomica's workbook; for flepiMoP, a dict of its files by name, the config first)
 
     Examples:
         ```python
@@ -489,13 +659,20 @@ def export_to(sim, format, filename=None, verbose=None):
     if key not in exporters:
         errormsg = f'Cannot export to format "{format}"; the formats are {sc.strjoin(exporters)}'
         raise ValueError(errormsg)
+    ss.converters.check_version(key)
     text, summary, lost = exporters[key](sim)
     if lost:
         ss.warn(f'{summary}\n' + '\n'.join(f'  {line}' for line in lost), ss.errors.LossyExport)
     elif verbose is not False:
         print(summary)
     if filename is not None:
-        sc.savetext(filename, text)
+        files = text if isinstance(text, dict) else {None: text} # Several files (flepiMoP's config and its data): the first is the filename, the rest beside it
+        for i,(name,content) in enumerate(files.items()):
+            path = sc.path(filename) if i == 0 else sc.path(filename).parent/name
+            if isinstance(content, bytes): # A workbook (Atomica's)
+                path.write_bytes(content)
+            else:
+                sc.savetext(path, content)
     return text
 
 

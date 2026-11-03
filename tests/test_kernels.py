@@ -297,7 +297,6 @@ def test_blas_threads():
     sc.heading('Testing the BLAS threads, even with Starsim imported last')
     env = {k:v for k,v in os.environ.items() if k not in ['SCIRIS_NUM_THREADS', 'STARSIM_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'OMP_NUM_THREADS', 'MKL_NUM_THREADS']}
     env['STARSIM_UNCOMPILED_WARNING'] = '0'
-    env['STARSIM_SKILL_NOTE'] = '0'
     code = 'import numpy, scipy.linalg, sciris as sc, starsim as ss; print(ss.options.num_threads, *(getter() for setter,getter in sc.limit_threads.find_libs()))'
     for extra,threads in [({}, 1), (dict(STARSIM_NUM_THREADS='3'), 3), (dict(SCIRIS_NUM_THREADS='2'), 2), (dict(STARSIM_NUM_THREADS='3', SCIRIS_NUM_THREADS='2'), 3)]:
         out = subprocess.run([sys.executable, '-c', code], env=env | extra, capture_output=True, text=True, check=True).stdout.strip().splitlines()[-1]

@@ -1,5 +1,5 @@
 """
-Import an epydemix model
+Import an epydemix model, and export a sim as one
 
 epydemix (https://github.com/epistorm/epydemix) builds a model in Python, so it is read
 either as a live `EpiModel` (if epydemix is installed alongside Starsim) or as the JSON
@@ -25,6 +25,11 @@ the last call to `simulate()` or `run_simulations()` with the model gives the ru
 settings: the dates, the step, the initial numbers in each compartment and age group,
 and any parameters passed to the run (such as `beta` in a calibration wrapper).
 
+Exporting: `to_epydemix(sim)` (or `ss.export_to(sim, 'epydemix')`) writes the compartmental
+form of a sim as a script that builds the `EpiModel` (spontaneous and mediated
+transitions, in a population of one group) and runs it; the script is read back by
+running this file on it, as above.
+
 Used with: compartments; declared modules
 """
 import os
@@ -41,9 +46,9 @@ import numpy as np
 if __package__: # As part of Starsim; run as a script in epydemix's environment, the rest needs neither Sciris nor Starsim
     import sciris as sc
     import starsim as ss
-    from .core import Source, Code, build, factors, product
+    from .core import Source, Code, build, factors, product, names
 
-__all__ = ['load_epydemix', 'dump', 'model_dict', 'record']
+__all__ = ['load_epydemix', 'to_epydemix', 'dump', 'model_dict', 'record']
 
 
 def read(source):
@@ -276,6 +281,103 @@ def load_epydemix(source, start=None, stop=None, verbose=None, **kwargs):
     if edges is not None:
         src.config.use_aging = False
     return build(src, verbose=verbose, **kwargs)
+
+
+#%% Exporting a sim as an epydemix script
+
+def over_time(text, flat, times):
+    """ A parameter that varies in time (an expression of `flatten()` in the time, `t`) as its values at the given times """
+    space = dict(np=np, where=np.where, maximum=np.maximum, minimum=np.minimum, cos=np.cos, sin=np.sin, exp=np.exp, log=np.log, sqrt=np.sqrt, floor=np.floor, abs=np.abs, absolute=np.abs, pi=np.pi)
+    values = eval(compile(text, '<flatten>', 'eval'), space, dict(**flat.pars, t=times)) # An expression written by flatten(), in numbers and the time
+    return np.broadcast_to(np.asarray(values, dtype=float), times.shape)
+
+
+def to_epydemix(sim):
+    """
+    The compartmental form of a sim as an epydemix script, which builds the `EpiModel` and runs it
+
+    A flow out of a compartment at a rate per person is a spontaneous transition, and an
+    infection (frequency-dependent, by the infectious compartments) a mediated transition
+    for each infectious compartment, in a population of one group. The rates are per day,
+    with the step in days, and a parameter that varies in time is its value at each step.
+    epydemix runs the model as a chain binomial, and moves people only between
+    compartments: flows into or out of the model, and flows of other forms, are listed as
+    not exported. `load_epydemix()` reads the model back, from the JSON that this file
+    writes when run on the script in epydemix's environment.
+
+    Args:
+        sim (`ss.Sim`): the sim
+    """
+    from .export import flow_form # Here, since export.py imports this module
+    flat = ss.converters.export.flatten(sim)
+    lost = list(flat.lost) + ['changed: epydemix runs the model as a chain binomial, in steps of the sim\'s dt']
+    t = ss.converters.export.initialized(sim).t
+    days = float(ss.dur(1, flat.unit).to('day').value) # Days in the sim's unit of time
+    dt = float(t.dt.to(flat.unit).value)
+    n = len(t.tvec) - 1 # epydemix's steps, each recorded at its end, on its date
+    start = np.datetime64(str(t.start), 'D') if isinstance(t.start, ss.date) else np.datetime64('2020-01-01')
+    end = start + np.timedelta64(int(round((n - 1)*dt*days)), 'D') # The date of the last step
+
+    # Each flow as a transition
+    calls = []
+    used = set()
+    varying = {} # Parameters that vary in time, as their values at each step
+    for flow in flat.flows:
+        form = flow_form(flow, flat)
+        src, dst, name = flow.src, flow.dst, flow.name
+        uses = set() if form.coef is None else names(form.coef)
+        if form.kind not in ['linear', 'infection'] or src is None or dst is None:
+            why = 'which moves people into or out of the model' if src is None or dst is None else 'which is not one of epydemix\'s kinds of transition'
+            lost.append(f'not exported: the flow "{name}" ({flow.rate}), {why}')
+            continue
+        elif not uses <= set(flat.pars) | set(flat.exprs) or any(isinstance(node, ast.Call) for node in ast.walk(form.coef)):
+            lost.append(f'not exported: the flow "{name}" ({flow.rate}), whose rate uses more than parameters and numbers')
+            continue
+        rate = ast.unparse(form.coef)
+        if days != 1:
+            rate = f'({rate}) / {days:n}'
+        for key in uses & set(flat.exprs):
+            varying[key] = over_time(flat.exprs[key], flat, np.arange(n)*dt)
+        used |= uses
+        if form.kind == 'linear':
+            calls.append(f'model.add_transition(source={src!r}, target={dst!r}, kind=\'spontaneous\', params={rate!r})')
+        else:
+            for agent in form.agents:
+                calls.append(f'model.add_transition(source={src!r}, target={dst!r}, kind=\'mediated\', params=({rate!r}, {agent!r}))')
+
+    # The script
+    number = lambda v: "float('nan')" if np.isnan(v) else repr(float(v))
+    pars = [f'    {k} = {number(v)},' for k,v in flat.pars.items() if k in used] + [f'    {k} = np.array({v.tolist()!r}),' for k,v in varying.items()]
+    init = ', '.join(f'{k}=np.array([{float(v)!r}])' for k,v in flat.comps.items())
+    total = sum(flat.comps.values())
+    lines = [
+        '"""',
+        f'{flat.name}, exported from Starsim {ss.__version__} (tested with {ss.converters.core.tested_with("epydemix")}); time is in days, from {start}',
+        '',
+        'An epydemix model (https://github.com/epistorm/epydemix). Run this file to simulate it and print the median number in each compartment over time.',
+        '"""',
+        'import numpy as np',
+        'from epydemix import EpiModel',
+        'from epydemix.population import Population',
+        '',
+        f'model = EpiModel(name={flat.name!r}, compartments={list(flat.comps)!r})',
+        f'model.add_parameter(parameters_dict=dict( # Rates per {flat.unit}, and durations in {flat.unit}s' + (f', with the rates divided by {days:n} days' if days != 1 else ''),
+        *pars,
+        '))',
+        f'population = Population(name={flat.name!r})',
+        f'population.add_population(Nk=[{total!r}], Nk_names=[\'all\'])',
+        'population.add_contact_matrix(np.array([[1.0]]), layer_name=\'all\') # One group, which meets itself',
+        'model.set_population(population)',
+        *calls,
+        '',
+        f'run = dict(start_date={str(start)!r}, end_date={str(end)!r}, dt={dt*days!r}, initial_conditions_dict=dict({init}))',
+        '',
+        "if __name__ == '__main__':",
+        '    results = model.run_simulations(**run, Nsim=10)',
+        '    print(results.get_quantiles_compartments(quantiles=[0.5]))',
+    ]
+    summary = f'exported to epydemix: {flat.n_states} states, {flat.n_transitions} transitions, as {len(flat.comps)} compartments and {len(calls)} transitions (rates per day)'
+    return '\n'.join(lines) + '\n', summary, lost
 
 
 #%% Writing the model to JSON, in epydemix's own environment (needs neither Sciris nor Starsim)

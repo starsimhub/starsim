@@ -1,5 +1,5 @@
 """
-Import a SimInf model (an R script, or its pieces as Python data)
+Import a SimInf model (an R script, or its pieces as Python data), and export to SimInf
 
 SimInf (https://github.com/stewid/SimInf) writes a model as transitions in `mparse()`
 ("S -> beta*S*I/(S+I+R) -> I"), or as one of its predefined models (`SIR()`, `SIS()`,
@@ -11,6 +11,9 @@ that is not people. The R is read, not run: what the script computes (e.g. `u0_S
 or a data file) can be passed in instead, e.g. `load_siminf('model.R', u0='u0.csv',
 events='events.csv')`, and C code (`pts_fun`) is listed as not translated.
 
+`to_siminf()` writes a sim the other way, as an R script that builds its compartmental
+form with `mparse()` and runs it, which this reads back.
+
 Used with: compartments; declared modules
 """
 import re
@@ -21,7 +24,7 @@ import sciris as sc
 import starsim as ss
 from .core import Source, build
 
-__all__ = ['load_siminf']
+__all__ = ['load_siminf', 'to_siminf']
 
 
 #%% Reading R
@@ -709,3 +712,100 @@ def event_register(ev, compartments, E, N):
     if to_states.notna().any():
         register['to_states'] = to_states.values
     return register, notes
+
+
+
+#%% Exporting
+
+def c_code(text, origin):
+    """ An expression (Python syntax) as a SimInf propensity in C: numbers as doubles, powers as pow(), and the time `t` counted from `origin`, SimInf's time at the start """
+    class Sub(ast.NodeTransformer):
+        def visit_Call(self, n):
+            self.generic_visit(n)
+            if n.func.id == 'where': # C's ternary, written whole as a name, since Python's expressions have no such form
+                cond, yes, no = [ast.unparse(a) for a in n.args]
+                return ast.Name(f'(({cond}) ? ({yes}) : ({no}))')
+            n.func.id = dict(minimum='fmin', maximum='fmax', absolute='fabs').get(n.func.id, n.func.id)
+            return n
+        def visit_BinOp(self, n):
+            self.generic_visit(n)
+            return ast.Call(ast.Name('pow'), [n.left, n.right], []) if isinstance(n.op, ast.Pow) else n
+        def visit_Constant(self, n):
+            return ast.Constant(float(n.value)) if type(n.value) in [int, float] else n # In C, 1/2 is 0
+        def visit_Name(self, n):
+            if n.id == 'pi':
+                return ast.Constant(np.pi)
+            elif n.id == 't':
+                return ast.Name(f'(t - {origin!r})')
+            return n
+    return ast.unparse(Sub().visit(ast.parse(text, mode='eval').body))
+
+
+def in_order(exprs):
+    """ The names of the expressions, each after the ones it uses (as SimInf's variables must be) """
+    order = []
+    while len(order) < len(exprs):
+        for name,text in exprs.items():
+            used = {n.id for n in ast.walk(ast.parse(text, mode='eval')) if isinstance(n, ast.Name)} & set(exprs)
+            if name not in order and used <= set(order) | {name}:
+                order.append(name)
+                break
+        else: # A cycle, which SimInf rejects
+            order += [name for name in exprs if name not in order]
+    return order
+
+
+def to_siminf(sim):
+    """
+    The compartmental form of a sim as an R script that builds it with SimInf's `mparse()` and runs it
+
+    Each flow is a transition ("S -> beta*S*I/N -> I"), each named expression a variable
+    ("(double)N <- S + I + R"), and each parameter a value in `gdata`, in one node. SimInf
+    runs it as a stochastic process in whole people (the Gillespie solver), whose mean is
+    the ODE. The script is read back by `load_siminf()`.
+
+    Args:
+        sim (`ss.Sim`): the sim
+    """
+    flat = ss.converters.export.flatten(sim)
+    t = ss.converters.export.initialized(sim).t
+    unit = flat.unit
+    lost = list(flat.lost)
+
+    # Time: SimInf reports the numbers at the end of each unit of time, so its first time (in tspan, and in the propensities) is the sim's start plus one
+    dated = isinstance(t.start, ss.date)
+    start = 0.0 if dated else float(t.start.to(unit).value)
+    dt = float(t.dt.to(unit).value)
+    stop = start + (t.npts - 1)*dt
+    if dated:
+        lost.append(f'changed: the start date ({t.start}) is written as time 0, in {unit}s')
+    if dt != 1:
+        lost.append(f'changed: the step of {dt:n} {unit}s is not carried: SimInf runs in continuous time, and reports every {unit}')
+    if not (start.is_integer() and stop.is_integer()):
+        lost.append(f'changed: the times {start:n} to {stop:n} are written as whole {unit}s, as SimInf reports them')
+    u0 = {name:round(n) for name,n in flat.comps.items()}
+    if any(u0[name] != n for name,n in flat.comps.items()):
+        lost.append('changed: the initial numbers are rounded to whole people, as SimInf counts them')
+
+    value = lambda v: 'NA' if np.isnan(v) else f'{v:.15g}'
+    transitions = [f'(double){name} <- {c_code(flat.exprs[name], start + 1)}' for name in in_order(flat.exprs)]
+    transitions += [f'{flow.src or "@"} -> {c_code(flow.rate, start + 1)} -> {flow.dst or "@"}' for flow in flat.flows]
+    lines = [
+        f'## {flat.name}, exported from Starsim {ss.__version__} (tested with {ss.converters.core.tested_with("siminf")}); time is in {unit}s',
+        '## SimInf runs the model as a stochastic process in whole people; the ODE in Starsim is its mean',
+        'library(SimInf)',
+        '',
+        'transitions <- c(',
+        ',\n'.join(f'    "{tr}"' for tr in transitions),
+        ')',
+        f'compartments <- c({", ".join(f'"{name}"' for name in flat.comps)})',
+        f'gdata <- c({", ".join(f"{name} = {value(v)}" for name,v in flat.pars.items())})',
+        f'u0 <- data.frame({", ".join(f"{name} = {n}" for name,n in u0.items())})',
+        f'tspan <- {np.floor(start) + 1:.0f}:{np.floor(stop):.0f} # The numbers at the end of each {unit}, from the start',
+        '',
+        'model <- mparse(transitions = transitions, compartments = compartments, gdata = gdata, u0 = u0, tspan = tspan)',
+        'result <- run(model)',
+        'plot(result)',
+    ]
+    summary = f'exported to SimInf: {flat.n_states} states, {flat.n_transitions} transitions, as {len(flat.comps)} compartments and {len(flat.flows)} transitions (time in {unit}s)'
+    return '\n'.join(lines) + '\n', summary, lost

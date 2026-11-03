@@ -103,8 +103,7 @@ Starsim's numerical code is in Rust kernels, already compiled in the wheels on P
 
 Load one of these only when the task needs it (`starsim ai show <skill>`). The files a skill refers to (e.g. `references/`) are beside it, in the folder that `starsim ai show` names.
 
-- `convert-model`: translate a model to or from another framework, including the parts that do not map one to one
-- `validate-conversion`: check a converted model against the original, by running both and comparing their results
+- `convert-model`: translate a model to or from another framework, including the parts that do not map one to one, and check it against the original
 - `migrate-starsim3`: upgrade Starsim 3 code to Starsim 4
 
 <!-- V4-PREVIEW: restore the link above to docs.starsim.org/llms.txt for normal publishing -->

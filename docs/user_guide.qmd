@@ -13,12 +13,14 @@ The user guide is organized by topic: each page covers one in full, to read thro
 ## Introduction
 
 - [What is Starsim?](user_guide/intro_starsim.qmd): what Starsim is for, and what it does
+- [Why use a framework?](user_guide/intro_why.qmd): when code of your own is enough, and when a framework helps
 - [Starsim models](user_guide/intro_models.qmd): models and frameworks built with Starsim
 - [Conceptual overview](user_guide/intro_concepts.qmd): sims, modules, states, transitions, and solvers in one page
 
 ## Building models
 
 - [Writing models](user_guide/building_writing.qmd): states, transitions, and rates, and checking what was built
+- [What can be declared](user_guide/building_declared.qmd): the vocabulary of a declared model, mixing it with code, and what each costs in speed
 - [Diseases](user_guide/building_diseases.qmd): the built-in diseases and writing your own
 - [Parameters](user_guide/building_parameters.qmd): values, bounds, priors, and parameters that vary by group
 - [Time](user_guide/building_time.qmd): dates, durations, rates, time steps, and values that change over time

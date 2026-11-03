@@ -1,5 +1,5 @@
 """
-Import a summer2 model
+Import a summer2 model, and export a sim as one
 
 summer2 (https://github.com/monash-emu/summer2) builds a model in Python, so it is read
 either as a live `CompartmentalModel` (if summer2 is installed alongside Starsim) or as
@@ -22,6 +22,11 @@ stratification), the stratifications in the order they were applied, and the ini
 number in every stratified compartment. A function of time (summer2's linear and
 sigmoidal interpolations) is written as its values over time.
 
+Exporting: `to_summer2(sim)` (or `ss.export_to(sim, 'summer2')`) writes the compartmental
+form of a sim as a script that builds the `CompartmentalModel`, with each flow one of
+summer2's kinds and its rate in named `Parameter`s; the script is read back by running
+this file on it, as above.
+
 Used with: compartments; declared modules
 """
 import os
@@ -37,9 +42,9 @@ import numpy as np
 if __package__: # As part of Starsim; run as a script in summer2's environment, the rest needs neither Sciris nor Starsim
     import sciris as sc
     import starsim as ss
-    from .core import Source, Code, build
+    from .core import Source, Code, build, names
 
-__all__ = ['load_summer2', 'outputs', 'dump', 'model_dict']
+__all__ = ['load_summer2', 'outputs', 'to_summer2', 'dump', 'model_dict']
 
 skipped_kinds = dict(ReplacementBirthFlow='births that replace the deaths in each step, which have no rate of their own')
 
@@ -373,6 +378,110 @@ def outputs(sim):
     for name in reqs:
         get(name)
     return out
+
+
+#%% Exporting a sim as a summer2 script
+
+def summer2_rate(node, pars):
+    """ A coefficient (an AST) as summer2 code, with each parameter a `Parameter` (so that its value can be given when the model is run); None if it uses anything but parameters and numbers """
+    class Sub(ast.NodeTransformer):
+        def visit_Name(self, n):
+            return ast.Call(ast.Name('Parameter'), [ast.Constant(n.id)], [])
+        def visit_UnaryOp(self, n): # computegraph has no negation
+            self.generic_visit(n)
+            return ast.BinOp(ast.Constant(-1.0), ast.Mult(), n.operand) if isinstance(n.op, ast.USub) else n
+    if any(isinstance(n, ast.Call) for n in ast.walk(node)) or not names(node) <= set(pars):
+        return None
+    return ast.unparse(Sub().visit(node))
+
+
+def to_summer2(sim):
+    """
+    The compartmental form of a sim as a summer2 script, which builds the `CompartmentalModel` and runs it
+
+    Each flow is one of summer2's: a transition, death, infection (frequency- or
+    density-dependent, by the infectious compartments), crude birth, importation, or
+    absolute flow, with its rate in named `Parameter`s whose default values are the sim's.
+    A flow of any other form, or whose rate varies in time, is listed as not exported.
+    `load_summer2()` reads the model back, from the JSON that this file writes when run on
+    the script in summer2's environment.
+
+    Args:
+        sim (`ss.Sim`): the sim
+    """
+    from .export import flow_form # Here, since export.py imports this module
+    flat = ss.converters.export.flatten(sim)
+    lost = list(flat.lost)
+    t = ss.converters.export.initialized(sim).t
+    dt = float(t.dt.to(flat.unit).value)
+    dated = isinstance(t.start, ss.date)
+    t0 = 0.0 if dated else float(t.tvec[0].value)
+    if dated:
+        lost.append(f'changed: the dates are written as {flat.unit}s from the start, {t.start}')
+    if flat.unit != 'day':
+        lost.append(f'changed: summer2 has no unit of time; the times and rates are in {flat.unit}s, which load_summer2() reads as days')
+
+    # Each flow as summer2's kind of flow
+    calls = []
+    used = set()
+    infectious = None
+    for flow in flat.flows:
+        form = flow_form(flow, flat)
+        uses = set() if form.coef is None else names(form.coef)
+        rate = None if form.coef is None else summer2_rate(form.coef, flat.pars)
+        src, dst, name = flow.src, flow.dst, flow.name
+        call = None
+        if form.kind == 'linear' and dst is None:
+            call = f'add_death_flow(name={name!r}, death_rate={rate}, source={src!r})'
+        elif form.kind == 'linear':
+            call = f'add_transition_flow(name={name!r}, fractional_rate={rate}, source={src!r}, dest={dst!r})'
+        elif form.kind in ['infection', 'density'] and dst is not None and infectious in [None, form.agents]: # summer2 has one list of the infectious
+            infectious = form.agents
+            kind = dict(infection='frequency', density='density')[form.kind]
+            call = f'add_infection_{kind}_flow(name={name!r}, contact_rate={rate}, source={src!r}, dest={dst!r})'
+        elif form.kind == 'births' and dst is not None:
+            call = f'add_crude_birth_flow(name={name!r}, birth_rate={rate}, dest={dst!r})'
+        elif form.kind == 'constant' and src is None and dst is not None:
+            call = f'add_importation_flow(name={name!r}, num_imported={rate}, dest={dst!r}, split_imports=False)'
+        elif form.kind == 'constant' and dst is not None:
+            call = f'add_transition_flow(name={name!r}, fractional_rate={rate}, source={src!r}, dest={dst!r}, absolute=True)'
+        if call is None:
+            lost.append(f'not exported: the flow "{name}" ({flow.rate}), which is not one of summer2\'s kinds of flow')
+        elif rate is None:
+            why = 'varies in time' if uses & set(flat.exprs) else 'uses more than parameters and numbers'
+            lost.append(f'not exported: the flow "{name}" ({flow.rate}), whose rate {why}')
+        else:
+            calls.append(call)
+            used |= uses
+
+    # The script
+    number = lambda v: "float('nan')" if np.isnan(v) else repr(float(v))
+    pars = [f'    {k} = {number(v)},' for k,v in flat.pars.items() if k in used]
+    init = ', '.join(f'{k!r}: {number(v)}' for k,v in flat.comps.items())
+    lines = [
+        '"""',
+        f'{flat.name}, exported from Starsim {ss.__version__} (tested with {ss.converters.core.tested_with("summer2")}); time is in {flat.unit}s',
+        '',
+        'A summer2 model (https://github.com/monash-emu/summer2). Run this file to integrate it and print the number in each compartment over time.',
+        '"""',
+        'from summer2 import CompartmentalModel',
+        'from summer2.parameters import Parameter',
+        '',
+        f'parameters = dict( # Rates per {flat.unit}, and durations in {flat.unit}s',
+        *pars,
+        ')',
+        '',
+        f'model = CompartmentalModel(times=[{t0!r}, {t0 + (len(t.tvec) - 1)*dt!r}], compartments={list(flat.comps)!r}, infectious_compartments={infectious or []!r}, timestep={dt!r})',
+        f'model.set_initial_population(distribution={{{init}}})',
+        *[f'model.{call}' for call in calls],
+        'model.set_default_parameters(parameters)',
+        '',
+        "if __name__ == '__main__':",
+        '    model.run()',
+        '    print(model.get_outputs_df())',
+    ]
+    summary = f'exported to summer2: {flat.n_states} states, {flat.n_transitions} transitions, as {len(flat.comps)} compartments and {len(calls)} flows (time in {flat.unit}s)'
+    return '\n'.join(lines) + '\n', summary, lost
 
 
 #%% Writing the model to JSON, in summer2's own environment (needs neither Sciris nor Starsim)

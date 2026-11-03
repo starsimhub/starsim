@@ -111,9 +111,5 @@ options.set(kernels=options.kernels)
 # Say if Starsim has not been compiled yet
 kernels.note_uncompiled()
 
-# Say if an AI coding agent here has no Starsim skills
-from starsim_cli import ai as _ai # The starsim command, which is apart from the package so that it starts at once
-_ai.note_skills(options.skill_note)
-
 # Don't keep these in the module
 del sc

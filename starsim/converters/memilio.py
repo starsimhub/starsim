@@ -35,6 +35,14 @@ damping), and the run's times. For a graph, it is the first node's model, plus e
 node's model and each edge's mobility coefficients (`graph`); for a parameter study,
 also the number of runs (`study`).
 
+Exporting: `to_memilio(sim)` (`ss.export_to(sim, 'memilio')`) writes a sim whose
+compartmental form is an SIR or SEIR (a transmission proportional to the infectious over
+the total, and exponential stays) as a MEmilio script that builds MEmilio's `osir` or
+`oseir` in one age group, with the sim's rates in days and its initial numbers, and
+simulates it when run. Flows that these models do not have (births, deaths, waning) are
+listed as not exported; a model that is neither is refused. The script is read back as
+above (`python memilio.py exported.py model.json`).
+
 Used with: compartments; declared modules
 """
 import os
@@ -52,7 +60,7 @@ if __package__: # As part of Starsim; run as a script in MEmilio's environment, 
     import starsim as ss
     from .core import Source, Code, build
 
-__all__ = ['load_memilio', 'dump', 'model_dict', 'graph_dict', 'record']
+__all__ = ['load_memilio', 'to_memilio', 'dump', 'model_dict', 'graph_dict', 'record']
 
 unlimited = 1e300 # MEmilio's default capacities are the largest double
 pi = '3.141592653589793'
@@ -401,6 +409,168 @@ def secir(src, d, par, force):
     src.add_flow('InfectedCritical', 'Recovered', f'(1 - {dpc})/{tcr}', name='critical_recovery')
     src.add_flow('InfectedCritical', None, f'{dpc}/{tcr}', name='death')
     return
+
+
+#%% Exporting a sim to MEmilio
+
+math_funcs = dict(exp=np.exp, log=np.log, sqrt=np.sqrt, abs=np.abs, absolute=np.abs, sin=np.sin, cos=np.cos, floor=np.floor, ceiling=np.ceil, minimum=np.minimum, maximum=np.maximum, min=np.minimum, max=np.maximum, where=np.where, pi=np.pi)
+exported = dict(osir=['Susceptible', 'Infected', 'Recovered'], oseir=['Susceptible', 'Exposed', 'Infected', 'Recovered']) # MEmilio's models that a sim is exported to, and their states
+
+
+def flow_rates(flat, comps):
+    """ The rate of each flow of the compartmental form per person in the compartment it leaves (an inflow's in total), and the total, N, with the compartments at the numbers given """
+    ns = dict(math_funcs, t=0.0, **flat.pars, **comps)
+    for name,text in flat.exprs.items():
+        ns[name] = eval(text, {'__builtins__': {}}, ns)
+    rates = [float(eval(f.rate, {'__builtins__': {}}, ns))/(comps[f.src] if f.src else 1) for f in flat.flows]
+    return np.array(rates), float(ns.get('N', np.nan))
+
+
+def read_flows(flat):
+    """
+    What each flow of the compartmental form is, from its rates at random numbers in the compartments
+
+    Returns {flow index: (kind, value)}, leaving out flows that are always empty (such as deaths
+    with no chance of dying): 'linear' with its rate per person, 'contact' with the coefficient of
+    each compartment in the force of infection (the rate per person times N, as a sum of the compartments),
+    or 'other'.
+    """
+    names = list(flat.comps)
+    rng = np.random.default_rng(0)
+    points = [dict(zip(names, rng.uniform(1, 2, len(names)))) for _ in range(2)]
+    (r0, n0), (r1, n1) = [flow_rates(flat, c) for c in points]
+    plus = [flow_rates(flat, {**points[0], name:points[0][name] + 1}) for name in names] # One more in each compartment
+    out = {}
+    for i,f in enumerate(flat.flows):
+        if r0[i] == 0 and r1[i] == 0:
+            continue
+        elif f.src is not None and np.isclose(r0[i], r1[i], rtol=1e-9, atol=0):
+            out[i] = ('linear', r0[i])
+            continue
+        coefs = dict(zip(names, [r[i]*n - r0[i]*n0 for r,n in plus])) # The force of infection times N, if it is a sum of the compartments
+        is_sum = all(np.isclose(r[i]*n, sum(coefs[k]*c[k] for k in names), rtol=1e-9, atol=1e-12) for r,n,c in [(r0, n0, points[0]), (r1, n1, points[1])])
+        out[i] = ('contact', {k:v for k,v in coefs.items() if abs(v) > 1e-12}) if f.src is not None and is_sum else ('other', None)
+    return out
+
+
+def match_memilio(flat):
+    """ The model as MEmilio's osir or oseir: its name, its compartment for each of MEmilio's states, its rates, and the flows and compartments that are not in it; None if it is neither """
+    flows = read_flows(flat)
+    live = {c for c in flat.comps if flat.comps[c] > 0}
+    while True: # The compartments that people can be in: not the stages that no one enters, such as the dying with no chance of dying
+        more = {flat.flows[i].dst for i in flows if flat.flows[i].src in live | {None}} - {None} - live
+        if not more:
+            break
+        live |= more
+    flows = {i:v for i,v in flows.items() if flat.flows[i].src in live | {None}}
+    live = [c for c in flat.comps if c in live]
+    contacts = [i for i,(kind,v) in flows.items() if kind == 'contact']
+    if len(contacts) != 1:
+        return None
+    first = contacts[0]
+    infectious = {c:v for c,v in flows[first][1].items() if c in live}
+    def onward(c):
+        """ The only flow from a compartment to another, if it is a linear one (outflows, such as deaths, are not in MEmilio's models) """
+        out = [i for i in flows if flat.flows[i].src == c and flat.flows[i].dst is not None]
+        return out[0] if len(out) == 1 and flows[out[0]][0] == 'linear' else None
+    S, X = flat.flows[first].src, flat.flows[first].dst
+    k = onward(X)
+    if k is None:
+        return None
+    elif set(infectious) == {X}: # SIR
+        kind, comps, chain = 'osir', [S, X, flat.flows[k].dst], [first, k]
+    else: # SEIR, if the exposed become infectious
+        I = flat.flows[k].dst
+        k2 = onward(I)
+        if k2 is None or set(infectious) != {I}:
+            return None
+        kind, comps, chain = 'oseir', [S, X, I, flat.flows[k2].dst], [first, k, k2]
+    if len(set(comps)) < len(comps):
+        return None
+    rounded = lambda x: float(f'{x:.12g}') # Rates read from the flows have rounding errors
+    times = {name:rounded(1/flows[i][1]) for name,i in zip(['TimeExposed', 'TimeInfected'] if kind == 'oseir' else ['TimeInfected'], chain[1:])}
+    return sc.objdict(kind=kind, comps=dict(zip(exported[kind], comps)), beta=rounded(infectious[comps[-2]]), times=times,
+                      other_flows=[flat.flows[i] for i in flows if i not in chain], other_comps=[c for c in live if c not in comps])
+
+
+def to_memilio(sim):
+    """
+    The compartmental form of a sim as a MEmilio script: an ODE SIR (`osir`) or SEIR (`oseir`) in one age group, with its parameters and initial numbers
+
+    MEmilio's ODE models are fixed in C++, and a script sets their parameters, so the sim's
+    model is read as one of them from its flows: a transmission, proportional to those
+    infectious over the total, and then exponential stays in the exposed (for an SEIR) and the
+    infected. The transmission is MEmilio's contacts (the sim's, if it has a number of them)
+    times its `TransmissionProbabilityOnContact`. Time is in days, as in MEmilio. The script
+    builds the model (`build_model()`) and, run, simulates it.
+
+    Args:
+        sim (`ss.Sim`): the sim
+    """
+    from .export import in_unit, names_in # Here, since export.py imports this module
+    flat = in_unit(sim, 'day')
+    days, start = flat.dur, flat.start
+    m = match_memilio(flat)
+    if m is None:
+        flows = sc.strjoin(f'{f.src or "(in)"} -> {f.dst or "(out)"}' for f in flat.flows)
+        errormsg = f'MEmilio\'s ODE models are fixed in C++, and this model is not one that is exported to MEmilio: an SIR (osir) or SEIR (oseir) with a transmission proportional to the infectious over the total, and exponential stays. Its flows are {flows}'
+        raise NotImplementedError(errormsg)
+    lost = list(flat.lost)
+    for f in m.other_flows:
+        lost.append(f'not exported: the flow "{f.name}" ({f.src or "in"} to {f.dst or "out"}, {f.rate}), which MEmilio\'s {m.kind} does not have')
+    for c in m.other_comps:
+        lost.append(f'not exported: the compartment "{c}", which MEmilio\'s {m.kind} does not have')
+    timed = [name for name,text in list(flat.exprs.items()) + [(f.name, f.rate) for f in flat.flows] if 't' in names_in(text)]
+    for name in timed:
+        lost.append(f'changed: "{name}" varies in time, which MEmilio\'s parameters do not (its dampings, which change the contacts, are not written); its value at the start is used')
+    contacts = float(flat.pars.get('mixing_contacts', flat.pars.get('contacts', 1.0))) # The mixing's contacts, as flatten() names them
+    prob = m.beta/contacts
+    if prob > 1: # MEmilio's probability is at most 1
+        contacts, prob = m.beta, 1.0
+        lost.append(f'changed: the transmission, {m.beta:n} a day, is written as {contacts:n} contacts a day with a probability of 1, as MEmilio\'s probability is at most 1')
+    n_days = float(days)
+    if start is not None:
+        lost.append(f'not exported: the start date ({start}); MEmilio\'s time starts at 0')
+
+    states = exported[m.kind]
+    lines = [
+        '"""',
+        f'{flat.name}, exported from Starsim {ss.__version__} (tested with {ss.converters.core.tested_with("memilio")}): a MEmilio ODE {m.kind[1:].upper()} model ({m.kind}) in one age group; time is in days',
+        '',
+        'Run it to simulate it with MEmilio. To read it back into Starsim, write the model it simulates',
+        '(python memilio.py this_file.py model.json, with memilio.py from starsim/converters)',
+        'and read that with ss.import_from(\'model.json\', format=\'memilio\').',
+        '"""',
+        'import numpy as np',
+        'from memilio.simulation import AgeGroup, RKIntegratorCore',
+        f'from memilio.simulation.{m.kind} import InfectionState as State',
+        f'from memilio.simulation.{m.kind} import Model, interpolate_simulation_result, simulate',
+        '',
+        f'days = {n_days!r} # The days to simulate',
+        'dt = 0.1 # The step: the most MEmilio\'s integrator takes, so that the values interpolated to each day are exact',
+        '',
+        '',
+        'def build_model():',
+        '    """ The model, with its parameters and initial numbers """',
+        '    model = Model(1)',
+        '    A0 = AgeGroup(0)',
+        *[f'    model.parameters.{name}[A0] = {value!r}' for name,value in m.times.items()],
+        f'    model.parameters.TransmissionProbabilityOnContact[A0] = {prob!r}',
+        f'    model.parameters.ContactPatterns.cont_freq_mat[0].baseline = np.full((1, 1), {contacts!r})',
+        '    model.parameters.ContactPatterns.cont_freq_mat[0].minimum = np.zeros((1, 1))',
+        *[f'    model.populations[A0, State.{state}] = {flat.comps[c]!r} # {c}' for state,c in m.comps.items()],
+        '    model.check_constraints()',
+        '    return model',
+        '',
+        '',
+        "if __name__ == '__main__':",
+        '    result = interpolate_simulation_result(simulate(0, days, dt, build_model(), integrator=RKIntegratorCore(dt_max=dt)))',
+        f'    print(\'Day {" ".join(states)}\')',
+        '    for i in range(result.get_num_time_points()):',
+        "        print(f'{result.get_time(i):g}', *[f'{v:.6g}' for v in result.get_value(i)])",
+    ]
+    summary = f'exported to MEmilio: {flat.n_states} states, {flat.n_transitions} transitions, as its {m.kind} model (time in days)'
+    return '\n'.join(lines) + '\n', summary, lost
 
 
 #%% Writing the model to JSON, in MEmilio's own environment (needs neither Sciris nor Starsim)

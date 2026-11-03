@@ -3,7 +3,7 @@ Converting models between Starsim and other frameworks: `starsim convert`, `star
 
 The conversion itself is `ss.converters`: the model is read into a sim (`ss.import_from()`, or for Starsim, by running
 the file), then written out as Starsim code (`sim.imported.code`) or in another format (`ss.export_to()`). With `--ai`,
-an AI coding agent does it instead, with Starsim's convert-model and validate-conversion skills, for what has no
+an AI coding agent does it instead, with Starsim's convert-model skill, for what has no
 mechanical conversion (e.g. LASER) or needs judgment.
 """
 import os
@@ -30,6 +30,7 @@ def formats():
     lines = [
         f'Import from (--from):  {", ".join(conv.importers)}, or starsim (a Python file that makes a sim)',
         f'Export to (--to):      starsim (the default), {", ".join(conv.exporters)}',
+        f'Tested with:           {", ".join(conv.core.tested_with(key) for key in conv.tested)} (other versions may work too)',
         '',
         'With --from=auto (the default), the format is told from the file. Options this help doesn\'t list are passed to the importer (e.g. --databook=IND.xlsx for atomica).',
         'Frameworks without an importer (e.g. LASER), and parts the importer can\'t translate, can be converted by an AI coding agent with --ai.',
@@ -110,8 +111,8 @@ def convert(args, extra=()):
     else:
         try:
             sim = conv.import_from(source, format=fmt, **kwargs)
-        except ValueError as e:
-            sys.exit(f'{e}\n(Or have an AI agent convert it: starsim convert {source} --ai)')
+        except Exception as e: # E.g. a format without an importer, or a framework that isn't installed; shown without the traceback, which is Starsim's
+            sys.exit(f'Could not import {source} ({type(e).__name__}): {e}\n(Or have an AI agent convert it: starsim convert {source} --ai)')
     if to == 'starsim':
         sc.savetext(out, sim.imported.code)
         incomplete = getattr(sim.imported, 'incomplete', None)
@@ -154,7 +155,7 @@ def prompt(args):
     sim = f' The sim is the variable "{args.sim}".' if args.sim != 'sim' else ''
     return (f'Convert the model in {source}{fmt} to {to}{out}.{sim} Use Starsim\'s convert-model skill (if it isn\'t loaded, '
             f'run "starsim ai show convert-model"): use the mechanical conversion where there is one (starsim convert), and translate '
-            f'by hand what it can\'t. Then check the result against the original with the validate-conversion skill, and finish '
+            f'by hand what it can\'t. Then check the result against the original, as the skill says, and finish '
             f'by summarizing what was converted, what changed, and what could not be.')
 
 

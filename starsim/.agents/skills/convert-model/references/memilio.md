@@ -94,4 +94,4 @@ sim = ss.Sim(secir, networks=ss.contacts(np.full((3, 3), 10/3)), total_pop=10_00
 - Environment: a venv of its own, with Python 3.11 and the `memilio-simulation` 2.4.1 wheel, and matplotlib.
 - The worked examples' `run.py` run the original script as it is through a driver in that environment: the driver wraps `simulate` to keep its result and time it, calls the script's function with plotting off, interpolates the result to whole days with `memilio.simulation.osecir.interpolate_simulation_result`, sums the age groups, and prints JSON with the state names from `InfectionState`.
 - Series: each state's count at each whole day (time 0 is the initial state, the same as Starsim's start), and `Dead`, which Starsim has as the cumulative death flow. MEmilio is deterministic: one run, compared to a tolerance of about the interpolation error (1.5 people in 10,000 here).
-- Write the summary as a CSV in the long format of the validate-conversion skill (`time, series, value, low, high`).
+- Write the summary as a CSV in the long format of `validate.md` (`time, series, value, low, high`).

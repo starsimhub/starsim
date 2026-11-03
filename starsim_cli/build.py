@@ -12,14 +12,21 @@ from . import ai
 __all__ = ['compile', 'init_dev']
 
 
-def compile(args=None):
-    """ Compile Starsim's Numba kernels now, so that no run waits for them (see `ss.compile()`), or with --check, say whether they are compiled """
+def compile(args=None, needed=False):
+    """
+    Compile Starsim's Numba kernels now, so that no run waits for them (see `ss.compile()`), even if the Rust kernels are in use;
+    or with --check, say whether they are compiled. With `needed` (as for "starsim init"), only if Numba's are the ones in use.
+    """
     import starsim as ss
     if getattr(args, 'check', False):
         status = ss.compile_status()
         print(status.summary)
         sys.exit(0 if status.compiled else 1)
-    ss.compile()
+    if needed and ss.solvers.backends.rust.on:
+        print('Nothing to compile: the Rust kernels are in use, and are compiled already ("starsim init compile" compiles Numba\'s too)')
+        return
+    with ss.options.context(kernels='numba'): # Called for, so Numba's, even if the Rust ones are in use
+        ss.compile()
     return
 
 

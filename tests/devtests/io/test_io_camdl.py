@@ -1,13 +1,19 @@
 """
-Test importing camdl models from camdl's IR (the tests against camdl itself are downstream, in the lingua_franca_design repo)
+Test importing camdl models from camdl's IR (the tests against camdl itself are downstream, in the lingua_franca_design repo), and exporting sims as camdl models
+
+The exports are compiled and run with camdl from its environment in the lingua_franca_design repo (`_envs/camdl`; set STARSIM_LFD to say where the repo is), and skipped if it is not there.
 """
+import subprocess
 import numpy as np
 import sciris as sc
 import pytest
 import starsim as ss
-from starsim.converters.camdl import load_camdl
+import paths
+from starsim.converters.camdl import load_camdl, to_camdl
 
 kw = dict(verbose=False)
+camdl_bin = paths.lfd/'_envs'/'camdl'/'bin'
+has_camdl = (camdl_bin/'camdlc').exists() and (camdl_bin/'camdl').exists()
 
 def op(name, left, right):
     return {'bin_op': {'op': name, 'left': left, 'right': right}}
@@ -103,8 +109,68 @@ def test_camdl_flat():
     return sim
 
 
+def export_sims():
+    """ An SIR with bounds and a prior on beta, and an SEIRD with births, deaths, and a lognormal dwell time (written as Erlang stages) """
+    S, I, R = ss.states('S I R')
+    beta = ss.par(ss.perday(0.3), bounds=[0.1, 0.9], prior=ss.lognorm_im(mean=-1, sigma=0.5), doc='transmission rate')
+    sir = ss.Sim(ss.Disease(infection=S >> I @ beta*I, recovery=I >> R @ ss.days(10), init_n=dict(I=10), name='sir'), total_pop=1e4, unit='day', stop=80, verbose=0)
+    S, E, I, R, D = ss.states('S E I R D')
+    seird = ss.Disease(births=ss.birth(S, rate=ss.peryear(0.02)), infection=ss.Transition(S, E, rate=ss.perday(0.4)*I), onset=ss.Transition(E, I, dur=ss.days(4)),
+                       outcome=ss.Transition(I, [R, D], dur=ss.lognorm_ex(ss.days(8), ss.days(3)), p=[None, 0.1]), deaths=ss.death([S, E, I, R], rate=ss.peryear(0.01)), init_prev=0.01, name='seird')
+    return dict(sir=sir, seird=ss.Sim(seird, total_pop=1e5, unit='day', stop=120, verbose=0))
+
+
+def test_camdl_export():
+    """ A sim as a camdl model: its transitions as total rates, the kinds, bounds, and prior of its parameters, and their values in a scenario """
+    sc.heading('Testing export to camdl')
+    sims = export_sims()
+    text, summary, lost = to_camdl(sims['sir'])
+    assert "time_unit = 'days" in text and 'compartments { S, I, R }' in text
+    assert 'beta : rate in [0.1, 0.9] ~ log_normal(mu = -1.0, sigma = 0.5)' in text and "#' transmission rate" in text
+    assert 'infection : S --> I @ beta * S * I / N' in text and 'dur_I : duration' in text
+    assert 'scenarios {' in text and '      beta = 0.3' in text and "to   = 80 'days" in text
+    text, summary, lost = to_camdl(sims['seird'])
+    assert 'births : --> S @ unchecked_dim(' in text and 'deaths_1 : S --> @ rate_deaths * S' in text # A rate of numbers alone is declared to be in people per day
+    assert any('Erlang' in line for line in lost)
+    return text
+
+
+@pytest.mark.skipif(not has_camdl, reason='needs camdl (its environment in the lingua_franca_design repo; set STARSIM_LFD)')
+def test_camdl_export_run(tmp_path, monkeypatch):
+    """ The export read back (compiled with camdlc), and run in camdl, against the sim run as an ODE with one RK4 step a day, as camdl takes """
+    sc.heading('Testing export to camdl, read back and run in camdl')
+    monkeypatch.setenv('CAMDLC', str(camdl_bin/'camdlc'))
+    for name,sim in export_sims().items():
+        file = tmp_path/f'{name}.camdl'
+        sc.savetext(file, to_camdl(sim)[0])
+        ref = sim.new(solver='ode', substeps=1).run().results[name]
+        back = ss.import_from(file, format='camdl', **kw).run()
+        res = back.results[name]
+        stages = lambda r, k: sum(r[c].values for c in r.keys() if c == k or (c.startswith(f'{k}_') and c[len(k)+1:].isdigit()))
+        for k in ['S', 'I', 'R']:
+            assert np.allclose(ref[k].values, stages(res, k), rtol=1e-9, atol=1e-6), f'{name}: {k} should be the same read back'
+        if name == 'sir':
+            p = back.diseases.sir.graph.pars.beta
+            assert p.bounds == [0.1, 0.9] and isinstance(p.prior, ss.lognorm_im) and p.doc == 'transmission rate'
+
+        # In camdl itself, which writes counts as whole numbers
+        traj = tmp_path/f'{name}.tsv'
+        subprocess.run([str(camdl_bin/'camdl'), 'simulate', str(file), '--no-progress', '--scenario', 'baseline', '--backend', 'ode', '-o', str(traj), '--output-dir', str(tmp_path/'store')], check=True, capture_output=True)
+        rows = [line.rstrip('\n').split('\t') for line in sc.loadtext(traj).splitlines() if not line.startswith('#')]
+        data = {c:np.array([float(r[i]) for r in rows[1:]]) for i,c in enumerate(rows[0])}
+        for k in ['S', 'I', 'R']:
+            got = sum(v for c,v in data.items() if c == k or (c.startswith(f'{k}_') and c[len(k)+1:].isdigit()))
+            assert np.abs(ref[k].values - got).max() <= 0.5*sum(c == k or c.startswith(f'{k}_') for c in data) + 1e-6, f'{name}: {k} should be the same in camdl, to its rounding'
+    return back
+
+
 if __name__ == '__main__':
     T = sc.timer()
     sim1 = test_camdl_ir()
     sim2 = test_camdl_flat()
+    text = test_camdl_export()
+    if has_camdl:
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp, pytest.MonkeyPatch.context() as mp:
+            test_camdl_export_run(sc.path(tmp), mp)
     T.toc()

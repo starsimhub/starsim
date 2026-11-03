@@ -1,5 +1,5 @@
 """
-Import a flepiMoP model (a configuration YAML file)
+Import a flepiMoP model (a configuration YAML file), and export a sim as one
 
 flepiMoP (https://github.com/HopkinsIDD/flepiMoP) describes compartments as a product of
 named dimensions, transitions as rates with `proportional_to` terms, places with their
@@ -14,18 +14,27 @@ classified by the shared rules; the modifiers of a scenario become `ss.modify` i
 and the outcomes become `ss.outcome`s. Parameters drawn from a distribution are imported at
 their mean, with the distribution as their prior; one with no prior in Starsim is listed as not translated.
 
+`to_flepimop()` (`ss.export_to(sim, 'flepimop')`) is the reverse: it writes the
+compartmental form of a sim (`ss.converters.export.flatten()`) as a configuration and the
+two files it reads, the place (geodata) and the initial numbers: the compartments as one
+dimension, each flow a transition whose rate is in parameters, proportional to its source
+and to the sums of compartments it is exposed to, in one place, in days. What flepiMoP's
+configuration has no form for (flows into the model, rates that vary in time, and
+stratifications) is listed as not exported or changed.
+
 Used with: compartments; declared modules
 """
 import ast
+import yaml
 import itertools
 import numpy as np
 import pandas as pd
 import sciris as sc
 import starsim as ss
-from .core import Source, Code, build, code_value
+from .core import Source, Code, build, code_value, factors, product, names, terms
 from .emulsion import number
 
-__all__ = ['load_flepimop']
+__all__ = ['load_flepimop', 'to_flepimop']
 
 solvers = dict(rk4='ode', rk4jit='ode', bestcurrent='ode', euler='ode', stochastic='binomial')
 total = '__N__' # The population of the place, which flepiMoP divides each term of the force of infection by
@@ -387,3 +396,141 @@ def outcome(name, o, dims, src, notes):
         notes.append(f'outcomes: {name} has a duration of {kw["duration"]}; the number in it is n_{name} (flepiMoP\'s {o["duration"].get("name", name + "_curr")})')
     src.add_outcome(name, flows, p=p, doc=f'the probability of {name}', **kw)
     return
+
+
+#%% Export
+
+def group_of(node, comps, exprs):
+    """ The compartments a factor of a rate sums (a compartment, a named sum of them such as `N`, or a sum of these), or None if it is not such a sum """
+    out = []
+    for term in terms(node):
+        if not isinstance(term, ast.Name):
+            return None
+        elif term.id in comps:
+            out.append(term.id)
+        elif term.id in exprs:
+            sub = group_of(ast.parse(exprs[term.id], mode='eval').body, comps, exprs)
+            if sub is None:
+                return None
+            out += sub
+        else:
+            return None
+    return sorted(out)
+
+
+def at_start(node, flat):
+    """ An expression of parameters (an AST node) with each named expression in it written out, and one that varies in time at its value at the start """
+    class Sub(ast.NodeTransformer):
+        def visit_Name(self, n):
+            if n.id in flat.exprs:
+                return self.visit(ast.parse(flat.exprs[n.id], mode='eval').body)
+            return n
+    node = Sub().visit(sc.dcp(node))
+    if 't' in {n.id for n in ast.walk(node) if isinstance(n, ast.Name)}:
+        space = dict(t=0.0, pi=np.pi, where=np.where, minimum=np.minimum, maximum=np.maximum, cos=np.cos, sin=np.sin, exp=np.exp, log=np.log, floor=np.floor, sqrt=np.sqrt, abs=np.abs, **flat.pars)
+        return ast.Constant(float(eval(compile(ast.Expression(node), '<flepimop>', 'eval'), {'__builtins__':{}}, space))), True # Numbers and arithmetic only
+    return node, False
+
+
+def flepimop_flow(flow, flat, pop, scale, lost):
+    """ A flow as a flepiMoP transition (a rate of parameters, the source, and the groups it is proportional to, each divided by the population), or None if it has no such form """
+    comps = list(flat.comps)
+    totals = [sorted(ss.converters.export.counted(k, flat.exprs)) for k in flat.exprs if k.split('_')[-1] == 'N'] # The people of each disease (N, or sir_N with several)
+    num, den = factors(ast.parse(flow.rate, mode='eval').body)
+    above = [(f, group_of(f, comps, flat.exprs)) for f in num]
+    below = [(f, group_of(f, comps, flat.exprs)) for f in den]
+    src = next((i for i,(f,g) in enumerate(above) if g == [flow.src]), None)
+    if src is None or any(g is not None and g not in totals for f,g in below): # flepiMoP divides by the population, not by another count
+        return None
+    above.pop(src)
+    rate, timed = at_start(product([f for f,g in above if g is None], [f for f,g in below if g is None]), flat)
+    if names(rate) & set(comps): # A count inside a function, a power, or a sum with other terms
+        return None
+    if timed:
+        lost.append(f'changed: the rate of "{flow.name}" varies in time, which a flepiMoP configuration carries only from a file; written at its value at the start')
+    groups = [g for f,g in above if g is not None]
+    extra = len(groups) - len([g for f,g in below if g is not None]) # flepiMoP divides each group after the source by the population once
+    rate = ast.unparse(rate)
+    if extra:
+        rate = f'({rate}) * {pop!r}**{extra}'
+    if extra < 0:
+        lost.append(f'changed: "{flow.name}" divides by the number of people living, written as the population at the start ({pop:n}), which flepiMoP divides by')
+    if scale != 1:
+        rate = f'({rate}) / {scale!r}'
+    dst = flow.dst if flow.dst is not None else 'removed'
+    return dict(source=[flow.src], destination=[dst], rate=[rate], proportional_to=[[flow.src]] + [g if len(g) == 1 else [[g]] for g in groups], proportion_exponent=['1']*(len(groups) + 1)) # A sum of several is a list in the list of the dimension
+
+
+def to_flepimop(sim, subpop='all'):
+    """
+    The compartmental form of a sim as a flepiMoP configuration, with the files it reads: the places (geodata) and the initial numbers
+
+    The compartments are one dimension (`infection_stage`) and one place, whose
+    population is the sim's at the start; each flow is a transition whose rate is in
+    parameters, proportional to its source and to the sums it is exposed to (each of
+    which flepiMoP divides by the population); a flow out of the model is a move into a
+    compartment `removed`. flepiMoP's time is in days and dated, so a sim without dates
+    starts on 2020-01-01. It is run with `flepimop simulate <config>` from the folder of
+    the files.
+
+    Args:
+        sim (`ss.Sim`): the sim
+        subpop (str): the name of the one place
+
+    Returns:
+        The files as a dict of their names and texts, the configuration first; and the summary and what was lost, as for the other exporters
+    """
+    sim = ss.converters.export.initialized(sim) # Once, for each of these
+    flat = ss.converters.export.flatten(sim)
+    times = ss.converters.export.timing(sim)
+    lost = list(flat.lost)
+    scale = float(ss.dur(1, base=flat.unit).to('day').value) # Days in the sim's unit
+    if scale != 1:
+        lost.append(f'changed: the time in {flat.unit}s is written in days (as flepiMoP\'s is), with the rates divided by {scale:n}')
+    start = pd.Timestamp(str(times.date)[:10] if times.date is not None else '2020-01-01')
+    if times.date is None:
+        lost.append('changed: the sim has no dates, which flepiMoP needs; it starts on 2020-01-01')
+    days = (times.stop - times.start)*scale
+    totals = [k for k in flat.exprs if k.split('_')[-1] == 'N'] # The people of each disease (N, or sir_N with several), the same people
+    pop = float(sum(flat.comps[c] for c in ss.converters.export.counted(totals[0], flat.exprs))) if totals else float(sum(flat.comps.values()))
+    if len(totals) > 1:
+        lost.append(f'changed: the {len(totals)} diseases are written as compartments of one dimension, so that each disease\'s add up to the population')
+
+    # Transitions
+    transitions = []
+    for flow in flat.flows:
+        if flow.src is None:
+            lost.append(f'not exported: the flow "{flow.name}" into the model ({flow.rate}), which flepiMoP has no form for')
+            continue
+        t = flepimop_flow(flow, flat, pop, scale, lost)
+        if t is None:
+            lost.append(f'not exported: the flow "{flow.name}" ({flow.rate}), whose rate is not a product of parameters, its source, and sums of compartments over the population')
+            continue
+        transitions.append(t)
+    comps = list(flat.comps)
+    if any(t['destination'] == ['removed'] for t in transitions):
+        comps.append('removed')
+        lost.append('changed: the flows out of the model are moves into a compartment "removed", since flepiMoP\'s population is fixed')
+    used = set().union(*[names(ast.parse(t['rate'][0], mode='eval')) for t in transitions]) if transitions else set()
+    pars = {name:dict(value=float(value)) for name,value in flat.pars.items() if name in used}
+
+    # The configuration and its files
+    name = flat.name
+    geo, init = f'{name}_geodata.csv', f'{name}_initial_conditions.csv'
+    config = dict(
+        name = name,
+        setup_name = name,
+        start_date = str(start.date()),
+        end_date = str((start + pd.Timedelta(days=days - 1)).date()), # flepiMoP's output includes its end date
+        nslots = 1,
+        subpop_setup = dict(geodata=geo),
+        initial_conditions = dict(method='SetInitialConditions', initial_conditions_file=init, allow_missing_subpops=True, allow_missing_compartments=True, ignore_population_checks=len(totals) > 1), # With several diseases, the people are counted once in each
+        compartments = dict(infection_stage=comps),
+        seir = dict(integration=dict(method='rk4', dt=times.dt*scale), parameters=pars, transitions=transitions),
+    )
+    text = f'# {name}, exported from Starsim {ss.__version__} (tested with {ss.converters.core.tested_with("flepimop")}); run with: flepimop simulate {name}.yml\n' + yaml.safe_dump(config, sort_keys=False, default_flow_style=None, width=1000)
+    files = {f'{name}.yml': text,
+             geo: pd.DataFrame(dict(subpop=[subpop], population=[int(pop) if pop.is_integer() else pop])).to_csv(index=False),
+             init: pd.DataFrame(dict(subpop=subpop, mc_name=list(flat.comps), amount=list(flat.comps.values()))).to_csv(index=False)}
+    summary = f'exported to flepiMoP: {flat.n_states} states, {flat.n_transitions} transitions, as {len(comps)} compartments and {len(transitions)} transitions (time in days)'
+    return files, summary, lost

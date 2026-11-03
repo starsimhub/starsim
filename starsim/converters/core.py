@@ -11,10 +11,48 @@ import pandas as pd
 import sciris as sc
 import starsim as ss
 
-__all__ = ['Source', 'Code', 'write', 'build']
+__all__ = ['Source', 'Code', 'write', 'build', 'tested', 'tested_with', 'check_version']
 
 funcs = dict(exp='exp', log='log', sqrt='sqrt', abs='absolute', fabs='absolute', sin='sin', cos='cos', min='minimum', max='maximum', pmin='minimum', pmax='maximum') # Names in other languages, and the names allowed in a rate
 total = '__total__' # A placeholder for the number of people in the model
+
+# The version of each framework that its converter was written and tested with (the lingua_franca_design repo's docs/models/<framework>/requirements.txt), by format: (the framework, its version, its Python package, if it has one, for checking the one installed)
+tested = dict(
+    atomica  = ('Atomica',  '1.32.4',  'atomica'),
+    camdl    = ('camdl',    'commit e8219d1', None),
+    emulsion = ('EMULSION', '1.1.1',   'emulsion'),
+    epimodel = ('EpiModel', '2.6.2',   None), # R packages, not checked
+    epipack  = ('epipack',  '0.1.5',   'epipack'),
+    epydemix = ('epydemix', '1.4.0',   'epydemix'),
+    epymorph = ('epymorph', '1.2.0',   'epymorph'),
+    flepimop = ('flepiMoP', '2.1',     'gempyor'),
+    memilio  = ('MEmilio',  '2.4.1',   'memilio-simulation'),
+    odin     = ('odin',     '1.2.7',   None),
+    sbml     = ('SBML',     'Level 3 Version 1', None),
+    siminf   = ('SimInf',   '11.1.0',  None),
+    summer2  = ('summer2',  '1.3.6',   'summerepi2'),
+)
+
+
+def tested_with(format):
+    """ The framework and version that a format's converter was tested with, as text, e.g. 'epydemix 1.4.0' """
+    name, version, _ = tested[format]
+    return f'{name} {version}'
+
+
+def check_version(format):
+    """ Note if the framework installed in this Python is not the version its converter was tested with: it may still work, but if a conversion fails or looks wrong, that may be why """
+    import importlib.metadata as im
+    if format not in tested or tested[format][2] is None:
+        return
+    name, version, package = tested[format]
+    try:
+        installed = im.version(package)
+    except im.PackageNotFoundError: # Not needed in this Python (e.g. only exporting, or reading a file it wrote)
+        return
+    if installed != version:
+        ss.note(f'{name} {installed} is installed, but Starsim\'s converter for it was tested with {version}; if the conversion fails or looks wrong, that may be why')
+    return
 
 
 class Source:
@@ -874,5 +912,5 @@ def handoff(imported):
     """
     source = sc.path(imported.file).name if imported.file else 'the model'
     prompt = (f'Finish importing {source} ({imported.format}) into Starsim: save its code, sim.imported.code, to a file, translate each part listed in '
-              f'sim.imported.incomplete (the code\'s "Not translated" comments), and check the result against the original with the validate-conversion skill.')
+              f'sim.imported.incomplete (the code\'s "Not translated" comments), and check the result against the original, as the skill says.')
     return f'To finish the import, ask an AI assistant with the convert-model skill loaded (printed by `starsim ai show convert-model`, or starsim/.agents/skills/convert-model in the Starsim repo; see "Finishing an incomplete import"): "{prompt}"'

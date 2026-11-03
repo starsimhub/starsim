@@ -1,5 +1,5 @@
 """
-Import an EMULSION model (a YAML file)
+Import an EMULSION model (a YAML file), and export a sim as one
 
 EMULSION (https://sourcesup.renater.fr/www/emulsion-public) describes a model as state
 machines in YAML. Each state machine becomes a disease, whose states are the machine's
@@ -11,15 +11,25 @@ productions, levels above the population, and variables of individuals) is left 
 person, or the convert-model skill, to add; a minimum stay (a state's duration) becomes
 `after=` on the ways out of it.
 
+`to_emulsion()` (`ss.export_to(sim, 'emulsion')`) is the reverse: it writes the
+compartmental form of a sim (`ss.converters.export.flatten()`) as one state machine run as
+compartments, each flow a transition with its rate for each person (a flow out of the
+model goes to a state that is removed, and a flow into it is the births, `productions`,
+of the people in every state), the parameters and named expressions as EMULSION's
+parameters, and the initial numbers. EMULSION's compartments are stochastic, in whole
+steps, so the export runs as the sim would with `solver='binomial', substeps=1`.
+
 Used with: agents and compartments; declared modules
 """
 import ast
 import math
+import yaml
+import numpy as np
 import sciris as sc
 import starsim as ss
-from .core import Source, build, funcs as known_funcs
+from .core import Source, build, factors, product, funcs as known_funcs
 
-__all__ = ['load_emulsion']
+__all__ = ['load_emulsion', 'to_emulsion']
 
 units = dict(days='day', day='day', weeks='week', week='week', months='month', month='month', years='year', year='year')
 solvers = dict(compartment='binomial', IBM='abm', hybrid='abm') # EMULSION's compartments are stochastic and in discrete time
@@ -354,3 +364,110 @@ def load_emulsion(filename, verbose=None):
     if stop is not None:
         cfg['stop'] = getattr(ss, f'{unit}s')(stop) if unit else stop
     return build(sources, verbose=verbose, **cfg)
+
+
+#%% Export
+
+emulsion_funcs = dict(minimum='Min', maximum='Max', absolute='Abs') # As sympy, which EMULSION reads its expressions with, names them
+emulsion_units = dict(day='days', week='weeks') # The units EMULSION has (a Python timedelta); a month or a year is written in days
+
+
+def emulsion_text(node, comps, time):
+    """ An expression (an AST node) in EMULSION's syntax: a compartment's count is total_X, the time is EMULSION's, and the functions are sympy's """
+    class Sub(ast.NodeTransformer):
+        def visit_Call(self, n):
+            self.generic_visit(n)
+            if n.func.id == 'where': # sympy's Piecewise, written whole as a name
+                cond, yes, no = [ast.unparse(a) for a in n.args]
+                return ast.Name(f'Piecewise(({yes}, {cond}), ({no}, True))')
+            n.func.id = emulsion_funcs.get(n.func.id, n.func.id)
+            return n
+        def visit_Name(self, n):
+            return ast.Name(f'total_{n.id}') if n.id in comps else ast.Name(time) if n.id == 't' else n
+    return ast.unparse(Sub().visit(node))
+
+
+def per_person(rate, src):
+    """ A total rate (an AST node) as a rate for each person in the source (a name, or the AST node of a sum): the source taken out if it is a factor, else divided by """
+    num, den = factors(rate)
+    same = lambda f: ast.unparse(f) == (src if isinstance(src, str) else ast.unparse(src))
+    found = next((i for i,f in enumerate(num) if same(f)), None)
+    if found is None:
+        den = den + [ast.Name(src) if isinstance(src, str) else src]
+    else:
+        num = num[:found] + num[found+1:]
+    return product(num, den)
+
+
+def to_emulsion(sim):
+    """
+    The compartmental form of a sim as an EMULSION model (a YAML file): one state machine, run as compartments
+
+    Each compartment is a state, each flow a transition with its rate for each person in
+    it (EMULSION's rates are per individual), a flow out of the model a transition to a
+    state that is removed (`autoremove`), and a flow into it the births (`productions`)
+    of the people in every state. EMULSION's compartments are stochastic, taking whole
+    steps of `delta_t`, as the sim would with `solver='binomial', substeps=1`.
+
+    Args:
+        sim (`ss.Sim`): the sim
+    """
+    sim = ss.converters.export.initialized(sim) # Once, for each of these
+    flat = ss.converters.export.flatten(sim)
+    times = ss.converters.export.timing(sim)
+    lost = list(flat.lost)
+    unit = emulsion_units.get(flat.unit, 'days')
+    scale = float(ss.dur(1, base=flat.unit).to('day').value) if flat.unit not in emulsion_units else 1.0 # Days in the sim's unit, for a unit EMULSION does not have
+    if scale != 1:
+        lost.append(f'changed: the time in {flat.unit}s is written in days, with the rates divided by {scale:n}')
+    if sim.solver != 'binomial':
+        lost.append('changed: EMULSION\'s compartments are stochastic, taking whole steps (as solver="binomial", substeps=1)')
+    comps = list(flat.comps)
+    time = 'time' if scale == 1 else f'(time / {scale!r})'
+    text = lambda node: emulsion_text(node, comps, time)
+    removed = next(name for name in ['removed', 'removed_', 'removed__'] if name not in comps)
+    machine = 'health_state' # EMULSION's usual name (the disease's own may clash with EMULSION's, e.g. model); the import names the disease after the model
+    rate = lambda node: node if scale == 1 else ast.BinOp(node, ast.Div(), ast.Constant(scale))
+
+    # Transitions, with the rate for each person in the source
+    transitions, productions = [], []
+    for flow in flat.flows:
+        node = rate(ast.parse(flow.rate, mode='eval').body)
+        if flow.src is not None:
+            transitions.append({'from': flow.src, 'to': flow.dst or removed, 'rate': text(per_person(node, flow.src)), 'desc': flow.name})
+        else: # Births, made by the people in every state of the disease, which together make the total
+            N = next(k for k in flat.exprs if k.split('_')[-1] == 'N' and flow.dst in ss.converters.export.counted(k, flat.exprs)) # N, or sir_N with several diseases
+            for comp in sorted(ss.converters.export.counted(N, flat.exprs), key=comps.index):
+                productions.append({'from': comp, 'to': flow.dst, 'rate': text(per_person(node, ast.parse(flat.exprs[N], mode='eval').body)), 'desc': flow.name})
+    states = [{c:dict(name=c, desc=f'compartment {c}')} for c in comps]
+    if any(t['to'] == removed for t in transitions):
+        states.append({removed:dict(name=removed, desc='those who left the model', autoremove=True)})
+    sm = dict(desc=f'{flat.name}, exported from Starsim {ss.__version__} (tested with {ss.converters.core.tested_with("emulsion")})', states=states, transitions=transitions)
+    if productions:
+        sm['productions'] = productions
+
+    # Parameters, named expressions, and initial numbers
+    docs = {name:getattr(p, 'doc', None) or name for name,p in ss.converters.export.declared_pars(sim).items()}
+    pars = {name:dict(desc=docs.get(name, name), value=float(value)) for name,value in flat.pars.items() if np.isfinite(value)} # EMULSION needs a desc for each
+    pars.update({name:dict(desc=f'the expression {name}', value=text(ast.parse(expr, mode='eval').body)) for name,expr in flat.exprs.items()})
+    amount = lambda x: int(x) if float(x).is_integer() else float(x)
+    round12 = lambda x: amount(float(f'{x:.12g}')) # Without the error of a time converted between units, so that the steps fit the duration
+    init = [dict(total=amount(sum(flat.comps.values())))] + [dict(vars=[c], amount=amount(n)) for c,n in flat.comps.items() if n]
+
+    model = dict(
+        model_name = flat.name,
+        model_info = dict(abstract=f'{flat.name}, exported from Starsim {ss.__version__} (tested with {ss.converters.core.tested_with("emulsion")}); the compartmental form of the sim'),
+        time_info = dict(time_unit=unit, delta_t=round12(times.dt*scale), total_duration=round12((times.stop - times.start)*scale)),
+        levels = dict(population=dict(desc='the population', aggregation_type='compartment')),
+        processes = dict(population=[machine]),
+        grouping = dict(population={machine:dict(machine_name=machine, key_variables=[machine])}),
+        state_machines = {machine:sm},
+        parameters = pars,
+        initial_conditions = dict(population=[dict(population=init)]),
+        outputs = dict(type='csv', population=dict(period=1)),
+    )
+    if times.date is not None:
+        model['time_info']['origin'] = str(times.date)
+    out = yaml.safe_dump(model, sort_keys=False, default_flow_style=None, width=1000)
+    summary = f'exported to EMULSION: {flat.n_states} states, {flat.n_transitions} transitions, as {len(comps)} states and {len(transitions) + len(productions)} transitions and productions (time in {unit})'
+    return out, summary, lost

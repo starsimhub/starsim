@@ -18,7 +18,7 @@ import tempfile
 import subprocess
 import importlib.util
 import sciris as sc
-from .core import Source, Code, write, build
+from .core import Source, Code, write, build, tested, check_version
 from .camdl import load_camdl
 from .emulsion import load_emulsion
 from .epimodel import load_epimodel
@@ -34,7 +34,7 @@ from .siminf import load_siminf
 from .summer2 import load_summer2
 from .export import exporters, extensions, export_to, to_hub
 
-__all__ = ['Source', 'Code', 'write', 'build', 'importers', 'sniff', 'import_from', 'convert', 'exporters', 'extensions', 'export_to', 'to_hub']
+__all__ = ['Source', 'Code', 'write', 'build', 'importers', 'tested', 'sniff', 'import_from', 'convert', 'exporters', 'extensions', 'export_to', 'to_hub']
 
 importers = dict(
     atomica  = load_atomica,
@@ -132,6 +132,7 @@ def import_from(source, format=None, **kwargs):
     if key not in importers:
         errormsg = f'Cannot import format "{format}"; the formats are {sc.strjoin(importers)}'
         raise ValueError(errormsg)
+    check_version(key)
     if key in scripted and isinstance(source, (str, os.PathLike)) and sc.path(source).suffix == '.py': # The model's own script: read by running it
         with tempfile.TemporaryDirectory() as folder:
             return importers[key](dump(source, key, sc.path(folder)/'model.json'), **kwargs)
