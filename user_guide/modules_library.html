@@ -2,7 +2,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
 
 <meta charset="utf-8">
-<meta name="generator" content="quarto-1.10.20">
+<meta name="generator" content="quarto-1.11.9">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
@@ -76,18 +76,19 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="..//assets/favicon.ico" rel="icon">
 <script src="../site_libs/quarto-html/quarto.js" type="module"></script>
 <script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../site_libs/quarto-html/scrollable-regions/scrollable-regions.js" type="module"></script>
 <script src="../site_libs/quarto-html/popper.min.js"></script>
 <script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
 <script src="../site_libs/quarto-html/anchor.min.js"></script>
 <link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-29e00c98bbba659d91ab3844292f79dc.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-86fc916b84669629367aabb2a24c5117.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-29e00c98bbba659d91ab3844292f79dc.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-5de16f5e46225c21e2daa90d340bf64f.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-dark-3218d7d29a29f08bc4fdf3802c3e3ca5.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-5de16f5e46225c21e2daa90d340bf64f.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-f4ff4a45f4580244642e9ec65f57a742.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
-<link href="../site_libs/bootstrap/bootstrap-dark-9b66b12dae93b55349be7cd4ce3c6b85.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
-<link href="../site_libs/bootstrap/bootstrap-f4ff4a45f4580244642e9ec65f57a742.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-03458e1dc5009a9d9fa84e2edbeff002.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-dark-543e66f010ce6ce4bceb884b9c71bffc.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
+<link href="../site_libs/bootstrap/bootstrap-03458e1dc5009a9d9fa84e2edbeff002.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "navbar",
   "copy-button": false,
@@ -128,7 +129,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <link rel="stylesheet" href="../assets/styles.css">
 </head>
 
-<body class="nav-sidebar floating nav-fixed quarto-light"><script id="quarto-html-before-body" type="application/javascript">
+<body class="nav-sidebar floating nav-fixed quarto-light"><a id="quarto-skip-link" class="visually-hidden-focusable" href="#quarto-document-content">Skip to main content</a><script id="quarto-html-before-body" type="application/javascript">
     const toggleBodyColorMode = (bsSheetEl) => {
       const mode = bsSheetEl.getAttribute("data-mode");
       const bodyEl = window.document.querySelector("body");
@@ -151,6 +152,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
       for (let i=0; i < toggles.length; i++) {
         const toggle = toggles[i];
         if (toggle) {
+          toggle.setAttribute("aria-checked", alternate ? "true" : "false");
           if (alternate) {
             toggle.classList.add("alternate");
           } else {
@@ -180,13 +182,19 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
       manageTransitions('#quarto-margin-sidebar .nav-link', true);
       // Switch the toggles
       setColorSchemeToggle(alternate)
-      // Hack to workaround the fact that safari doesn't
-      // properly recolor the scrollbar when toggling (#1455)
+    }
+    // Hack to workaround the fact that safari doesn't
+    // properly recolor the scrollbar when toggling (#1455).
+    // Not run on load: stylesheets are set before first paint there, and
+    // scrolling would undo the scroll to a URL fragment (#14973).
+    // The one pixel nudge keeps the reader where they were.
+    const refreshSafariScrollbar = () => {
       if (navigator.userAgent.indexOf('Safari') > 0 && navigator.userAgent.indexOf('Chrome') == -1) {
         manageTransitions("body", false);
-        window.scrollTo(0, 1);
+        const scrollY = window.scrollY;
+        window.scrollTo(0, scrollY > 0 ? scrollY - 1 : 1);
         setTimeout(() => {
-          window.scrollTo(0, 0);
+          window.scrollTo(0, scrollY);
           manageTransitions("body", true);
         }, 40);
       }
@@ -280,6 +288,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
       // Read the current dark / light value
       let toAlternate = !hasAlternateSentinel();
       toggleColorMode(toAlternate);
+      refreshSafariScrollbar();
       setStyleSentinel(toAlternate);
       toggleGiscusIfUsed(toAlternate, darkModeDefault);
       window.dispatchEvent(new Event('resize'));
@@ -294,7 +303,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 
 <div id="quarto-search-results"></div>
   <header id="quarto-header" class="headroom fixed-top">
-    <nav class="navbar navbar-expand-lg " data-bs-theme="dark">
+    <nav class="navbar navbar-expand-lg " data-bs-theme="dark" aria-label="Site">
       <div class="navbar-container container-fluid">
       <div class="navbar-brand-container mx-auto">
     <a href="../index.html" class="navbar-brand navbar-brand-logo">
@@ -302,8 +311,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
     <img src="../assets/starsim-logo.png" alt="" class="navbar-logo dark-content">
     </a>
   </div>
-            <div id="quarto-search" class="" title="Search"></div>
-          <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse" aria-controls="navbarCollapse" role="menu" aria-expanded="false" aria-label="Toggle navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+          <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse" aria-controls="navbarCollapse" aria-expanded="false" aria-label="Toggle navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
   <span class="navbar-toggler-icon"></span>
 </button>
           <div class="collapse navbar-collapse" id="navbarCollapse">
@@ -347,17 +355,18 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
     <a href="mailto:info@starsim.org" title="" class="quarto-navigation-tool px-1" aria-label=""><i class="bi bi-envelope-at-fill"></i></a>
     <a href="https://starsim-idm.slack.com" title="" class="quarto-navigation-tool px-1" aria-label=""><i class="bi bi-slack"></i></a>
     <a href="https://starsim.org" title="" class="quarto-navigation-tool px-1" aria-label=""><i class="bi bi-globe"></i></a>
-  <a href="" class="quarto-color-scheme-toggle quarto-navigation-tool  px-1" onclick="window.quartoToggleColorScheme(); return false;" title="Toggle dark mode"><i class="bi"></i></a>
+  <button type="button" role="switch" aria-checked="false" class="quarto-color-scheme-toggle quarto-navigation-tool  px-1" onclick="window.quartoToggleColorScheme(); return false;" title="Toggle dark mode" aria-label="Toggle dark mode"><i class="bi"></i></button>
 </div>
+            <div id="quarto-search" class="" title="Search"></div>
       </div> <!-- /container-fluid -->
     </nav>
-  <nav class="quarto-secondary-nav">
+  <nav class="quarto-secondary-nav" aria-label="Toolbar">
     <div class="container-fluid d-flex">
       <button type="button" class="quarto-btn-toggle btn" data-bs-toggle="collapse" role="button" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
         <i class="bi bi-layout-text-sidebar-reverse"></i>
       </button>
-        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><strong>User guide</strong></li><li class="breadcrumb-item"><a href="../user_guide/modules_diseases.html">Modules</a></li><li class="breadcrumb-item"><a href="../user_guide/modules_library.html">Library modules</a></li></ol></nav>
-        <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">      
+        <nav class="quarto-page-breadcrumbs" aria-label="Breadcrumbs"><ol class="breadcrumb"><li class="breadcrumb-item"><strong>User guide</strong></li><li class="breadcrumb-item"><a href="../user_guide/modules_diseases.html">Modules</a></li><li class="breadcrumb-item"><a href="../user_guide/modules_library.html">Library modules</a></li></ol></nav>
+        <a class="flex-grow-1" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">      
         </a>
     </div>
   </nav>
@@ -365,7 +374,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <!-- content -->
 <div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article page-navbar">
 <!-- sidebar -->
-  <nav id="quarto-sidebar" class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation floating overflow-auto">
+  <nav id="quarto-sidebar" class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation floating overflow-auto" aria-label="Section">
     <div class="sidebar-menu-container"> 
     <ul class="list-unstyled mt-1">
         <li class="sidebar-item">
@@ -382,13 +391,10 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 </li>
         <li class="sidebar-item sidebar-item-section">
       <div class="sidebar-item-container"> 
-            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true">
- <span class="menu-text"><strong>Tutorials</strong></span></a>
-          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true" aria-label="Toggle section">
-            <i class="bi bi-chevron-right ms-2"></i>
-          </a> 
+            <button type="button" class="sidebar-item-text sidebar-item-toggle sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" aria-controls="quarto-sidebar-section-1" aria-expanded="true">
+ <span class="menu-text" id="quarto-sidebar-section-1-label"><strong>Tutorials</strong></span><i class="bi bi-chevron-right" aria-hidden="true"></i></button>
       </div>
-      <ul id="quarto-sidebar-section-1" class="collapse list-unstyled sidebar-section depth1 show">  
+      <ul id="quarto-sidebar-section-1" aria-labelledby="quarto-sidebar-section-1-label" class="collapse list-unstyled sidebar-section depth1 show">  
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../tutorials/t1_intro.html" class="sidebar-item-text sidebar-link">
@@ -435,22 +441,16 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
   </li>
         <li class="sidebar-item sidebar-item-section">
       <div class="sidebar-item-container"> 
-            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true">
- <span class="menu-text"><strong>User guide</strong></span></a>
-          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true" aria-label="Toggle section">
-            <i class="bi bi-chevron-right ms-2"></i>
-          </a> 
+            <button type="button" class="sidebar-item-text sidebar-item-toggle sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" aria-controls="quarto-sidebar-section-2" aria-expanded="true">
+ <span class="menu-text" id="quarto-sidebar-section-2-label"><strong>User guide</strong></span><i class="bi bi-chevron-right" aria-hidden="true"></i></button>
       </div>
-      <ul id="quarto-sidebar-section-2" class="collapse list-unstyled sidebar-section depth1 show">  
+      <ul id="quarto-sidebar-section-2" aria-labelledby="quarto-sidebar-section-2-label" class="collapse list-unstyled sidebar-section depth1 show">  
           <li class="sidebar-item sidebar-item-section">
       <div class="sidebar-item-container"> 
-            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-3" role="navigation" aria-expanded="true">
- <span class="menu-text">Introduction</span></a>
-          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-3" role="navigation" aria-expanded="true" aria-label="Toggle section">
-            <i class="bi bi-chevron-right ms-2"></i>
-          </a> 
+            <button type="button" class="sidebar-item-text sidebar-item-toggle sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-3" aria-controls="quarto-sidebar-section-3" aria-expanded="true">
+ <span class="menu-text" id="quarto-sidebar-section-3-label">Introduction</span><i class="bi bi-chevron-right" aria-hidden="true"></i></button>
       </div>
-      <ul id="quarto-sidebar-section-3" class="collapse list-unstyled sidebar-section depth2 show">  
+      <ul id="quarto-sidebar-section-3" aria-labelledby="quarto-sidebar-section-3-label" class="collapse list-unstyled sidebar-section depth2 show">  
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/intro_starsim.html" class="sidebar-item-text sidebar-link">
@@ -467,13 +467,10 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
   </li>
           <li class="sidebar-item sidebar-item-section">
       <div class="sidebar-item-container"> 
-            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true">
- <span class="menu-text">Basic concepts</span></a>
-          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" role="navigation" aria-expanded="true" aria-label="Toggle section">
-            <i class="bi bi-chevron-right ms-2"></i>
-          </a> 
+            <button type="button" class="sidebar-item-text sidebar-item-toggle sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-4" aria-controls="quarto-sidebar-section-4" aria-expanded="true">
+ <span class="menu-text" id="quarto-sidebar-section-4-label">Basic concepts</span><i class="bi bi-chevron-right" aria-hidden="true"></i></button>
       </div>
-      <ul id="quarto-sidebar-section-4" class="collapse list-unstyled sidebar-section depth2 show">  
+      <ul id="quarto-sidebar-section-4" aria-labelledby="quarto-sidebar-section-4-label" class="collapse list-unstyled sidebar-section depth2 show">  
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/basics_model.html" class="sidebar-item-text sidebar-link">
@@ -508,13 +505,10 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
   </li>
           <li class="sidebar-item sidebar-item-section">
       <div class="sidebar-item-container"> 
-            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-5" role="navigation" aria-expanded="true">
- <span class="menu-text">Modules</span></a>
-          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-5" role="navigation" aria-expanded="true" aria-label="Toggle section">
-            <i class="bi bi-chevron-right ms-2"></i>
-          </a> 
+            <button type="button" class="sidebar-item-text sidebar-item-toggle sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-5" aria-controls="quarto-sidebar-section-5" aria-expanded="true">
+ <span class="menu-text" id="quarto-sidebar-section-5-label">Modules</span><i class="bi bi-chevron-right" aria-hidden="true"></i></button>
       </div>
-      <ul id="quarto-sidebar-section-5" class="collapse list-unstyled sidebar-section depth2 show">  
+      <ul id="quarto-sidebar-section-5" aria-labelledby="quarto-sidebar-section-5-label" class="collapse list-unstyled sidebar-section depth2 show">  
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/modules_diseases.html" class="sidebar-item-text sidebar-link">
@@ -573,13 +567,10 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
   </li>
           <li class="sidebar-item sidebar-item-section">
       <div class="sidebar-item-container"> 
-            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-6" role="navigation" aria-expanded="true">
- <span class="menu-text">Workflows</span></a>
-          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-6" role="navigation" aria-expanded="true" aria-label="Toggle section">
-            <i class="bi bi-chevron-right ms-2"></i>
-          </a> 
+            <button type="button" class="sidebar-item-text sidebar-item-toggle sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-6" aria-controls="quarto-sidebar-section-6" aria-expanded="true">
+ <span class="menu-text" id="quarto-sidebar-section-6-label">Workflows</span><i class="bi bi-chevron-right" aria-hidden="true"></i></button>
       </div>
-      <ul id="quarto-sidebar-section-6" class="collapse list-unstyled sidebar-section depth2 show">  
+      <ul id="quarto-sidebar-section-6" aria-labelledby="quarto-sidebar-section-6-label" class="collapse list-unstyled sidebar-section depth2 show">  
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/workflows_run.html" class="sidebar-item-text sidebar-link">
@@ -614,13 +605,10 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
   </li>
           <li class="sidebar-item sidebar-item-section">
       <div class="sidebar-item-container"> 
-            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-7" role="navigation" aria-expanded="true">
- <span class="menu-text">Advanced topics</span></a>
-          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-7" role="navigation" aria-expanded="true" aria-label="Toggle section">
-            <i class="bi bi-chevron-right ms-2"></i>
-          </a> 
+            <button type="button" class="sidebar-item-text sidebar-item-toggle sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-7" aria-controls="quarto-sidebar-section-7" aria-expanded="true">
+ <span class="menu-text" id="quarto-sidebar-section-7-label">Advanced topics</span><i class="bi bi-chevron-right" aria-hidden="true"></i></button>
       </div>
-      <ul id="quarto-sidebar-section-7" class="collapse list-unstyled sidebar-section depth2 show">  
+      <ul id="quarto-sidebar-section-7" aria-labelledby="quarto-sidebar-section-7-label" class="collapse list-unstyled sidebar-section depth2 show">  
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../user_guide/advanced_time.html" class="sidebar-item-text sidebar-link">
@@ -691,7 +679,7 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <div id="quarto-sidebar-glass" class="quarto-sidebar-collapse-item" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item"></div>
 <!-- margin-sidebar -->
     <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
-        <nav id="TOC" role="doc-toc" class="toc-active" data-toc-expanded="99">
+        <nav id="TOC" role="doc-toc" aria-labelledby="toc-title" class="toc-active" data-toc-expanded="99">
     <h2 id="toc-title">On this page</h2>
    
   <ul>
@@ -716,10 +704,10 @@ gtag('config', 'G-SVDSQH04EM', { 'anonymize_ip': true});
 <div class="toc-actions"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></nav>
     </div>
 <!-- main -->
-<main class="content" id="quarto-document-content">
+<main class="content" id="quarto-document-content" tabindex="-1">
 
 
-<header id="title-block-header" class="quarto-title-block default"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><strong>User guide</strong></li><li class="breadcrumb-item"><a href="../user_guide/modules_diseases.html">Modules</a></li><li class="breadcrumb-item"><a href="../user_guide/modules_library.html">Library modules</a></li></ol></nav>
+<header id="title-block-header" class="quarto-title-block default"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="Breadcrumbs"><ol class="breadcrumb"><li class="breadcrumb-item"><strong>User guide</strong></li><li class="breadcrumb-item"><a href="../user_guide/modules_diseases.html">Modules</a></li><li class="breadcrumb-item"><a href="../user_guide/modules_library.html">Library modules</a></li></ol></nav>
 <div class="quarto-title">
 <h1 class="title">Library modules</h1>
 </div>
@@ -756,7 +744,7 @@ Note
 <section id="importing-and-using-library-modules" class="level2">
 <h2 class="anchored" data-anchor-id="importing-and-using-library-modules">Importing and using library modules</h2>
 <p>Library classes are available both at the top level and via their submodule; the two are identical objects:</p>
-<div id="b6bc26eb" class="cell" data-execution_count="1">
+<div id="db707359" class="cell" data-execution_count="1">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim <span class="im">as</span> ss</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>ss.options(jupyter<span class="op">=</span><span class="va">True</span>)</span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> starsim.library <span class="im">as</span> ssl</span>
@@ -767,7 +755,7 @@ Note
 </div>
 </div>
 <p>Otherwise they behave exactly like core modules, and can be mixed freely with them:</p>
-<div id="807dda83" class="cell" data-execution_count="2">
+<div id="29afbf06" class="cell" data-execution_count="2">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>outbreak <span class="op">=</span> <span class="bu">dict</span>(start<span class="op">=</span><span class="dv">2000</span>, dur<span class="op">=</span>ss.years(<span class="dv">1</span>), dt<span class="op">=</span>ss.days(<span class="dv">1</span>), n_agents<span class="op">=</span><span class="dv">2000</span>)</span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(diseases<span class="op">=</span>ssl.Measles(beta<span class="op">=</span>ss.perday(<span class="fl">0.3</span>)), networks<span class="op">=</span>ss.RandomNet(), <span class="op">**</span>outbreak)</span>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
@@ -776,41 +764,41 @@ Note
 <pre><code>Initializing sim with 2000 agents
   Running 2000 ( 0/366) (0.00 s)  ———————————————————— 0%
   Running 2000.03 (10/366) (0.04 s)  ———————————————————— 3%
-  Running 2000.05 (20/366) (0.07 s)  •——————————————————— 6%
+  Running 2000.05 (20/366) (0.06 s)  •——————————————————— 6%
   Running 2000.08 (30/366) (0.09 s)  •——————————————————— 8%
   Running 2000.11 (40/366) (0.12 s)  ••—————————————————— 11%
-  Running 2000.14 (50/366) (0.14 s)  ••—————————————————— 14%
-  Running 2000.16 (60/366) (0.16 s)  •••————————————————— 17%
-  Running 2000.19 (70/366) (0.18 s)  •••————————————————— 19%
+  Running 2000.14 (50/366) (0.13 s)  ••—————————————————— 14%
+  Running 2000.16 (60/366) (0.15 s)  •••————————————————— 17%
+  Running 2000.19 (70/366) (0.17 s)  •••————————————————— 19%
   Running 2000.22 (80/366) (0.19 s)  ••••———————————————— 22%
   Running 2000.25 (90/366) (0.21 s)  ••••———————————————— 25%
-  Running 2000.27 (100/366) (0.23 s)  •••••——————————————— 28%
-  Running 2000.3 (110/366) (0.25 s)  ••••••—————————————— 30%
+  Running 2000.27 (100/366) (0.22 s)  •••••——————————————— 28%
+  Running 2000.3 (110/366) (0.24 s)  ••••••—————————————— 30%
   Running 2000.33 (120/366) (0.26 s)  ••••••—————————————— 33%
-  Running 2000.36 (130/366) (0.28 s)  •••••••————————————— 36%
-  Running 2000.38 (140/366) (0.30 s)  •••••••————————————— 39%
-  Running 2000.41 (150/366) (0.32 s)  ••••••••———————————— 41%
-  Running 2000.44 (160/366) (0.34 s)  ••••••••———————————— 44%
-  Running 2000.47 (170/366) (0.35 s)  •••••••••——————————— 47%
-  Running 2000.49 (180/366) (0.37 s)  •••••••••——————————— 49%
-  Running 2000.52 (190/366) (0.39 s)  ••••••••••—————————— 52%
-  Running 2000.55 (200/366) (0.41 s)  ••••••••••—————————— 55%
-  Running 2000.58 (210/366) (0.43 s)  •••••••••••————————— 58%
-  Running 2000.6 (220/366) (0.45 s)  ••••••••••••———————— 60%
-  Running 2000.63 (230/366) (0.46 s)  ••••••••••••———————— 63%
-  Running 2000.66 (240/366) (0.48 s)  •••••••••••••——————— 66%
-  Running 2000.68 (250/366) (0.50 s)  •••••••••••••——————— 69%
-  Running 2000.71 (260/366) (0.52 s)  ••••••••••••••—————— 71%
-  Running 2000.74 (270/366) (0.54 s)  ••••••••••••••—————— 74%
-  Running 2000.77 (280/366) (0.55 s)  •••••••••••••••————— 77%
-  Running 2000.79 (290/366) (0.57 s)  •••••••••••••••————— 80%
-  Running 2000.82 (300/366) (0.59 s)  ••••••••••••••••———— 82%
-  Running 2000.85 (310/366) (0.61 s)  ••••••••••••••••———— 85%
-  Running 2000.88 (320/366) (0.63 s)  •••••••••••••••••——— 88%
-  Running 2000.9 (330/366) (0.65 s)  ••••••••••••••••••—— 90%
-  Running 2000.93 (340/366) (0.66 s)  ••••••••••••••••••—— 93%
-  Running 2000.96 (350/366) (0.68 s)  •••••••••••••••••••— 96%
-  Running 2000.99 (360/366) (0.70 s)  •••••••••••••••••••— 99%
+  Running 2000.36 (130/366) (0.27 s)  •••••••————————————— 36%
+  Running 2000.38 (140/366) (0.29 s)  •••••••————————————— 39%
+  Running 2000.41 (150/366) (0.31 s)  ••••••••———————————— 41%
+  Running 2000.44 (160/366) (0.33 s)  ••••••••———————————— 44%
+  Running 2000.47 (170/366) (0.34 s)  •••••••••——————————— 47%
+  Running 2000.49 (180/366) (0.36 s)  •••••••••——————————— 49%
+  Running 2000.52 (190/366) (0.38 s)  ••••••••••—————————— 52%
+  Running 2000.55 (200/366) (0.40 s)  ••••••••••—————————— 55%
+  Running 2000.58 (210/366) (0.41 s)  •••••••••••————————— 58%
+  Running 2000.6 (220/366) (0.43 s)  ••••••••••••———————— 60%
+  Running 2000.63 (230/366) (0.45 s)  ••••••••••••———————— 63%
+  Running 2000.66 (240/366) (0.47 s)  •••••••••••••——————— 66%
+  Running 2000.68 (250/366) (0.48 s)  •••••••••••••——————— 69%
+  Running 2000.71 (260/366) (0.50 s)  ••••••••••••••—————— 71%
+  Running 2000.74 (270/366) (0.52 s)  ••••••••••••••—————— 74%
+  Running 2000.77 (280/366) (0.54 s)  •••••••••••••••————— 77%
+  Running 2000.79 (290/366) (0.55 s)  •••••••••••••••————— 80%
+  Running 2000.82 (300/366) (0.57 s)  ••••••••••••••••———— 82%
+  Running 2000.85 (310/366) (0.59 s)  ••••••••••••••••———— 85%
+  Running 2000.88 (320/366) (0.61 s)  •••••••••••••••••——— 88%
+  Running 2000.9 (330/366) (0.62 s)  ••••••••••••••••••—— 90%
+  Running 2000.93 (340/366) (0.64 s)  ••••••••••••••••••—— 93%
+  Running 2000.96 (350/366) (0.66 s)  •••••••••••••••••••— 96%
+  Running 2000.99 (360/366) (0.68 s)  •••••••••••••••••••— 99%
 Figure(768x576)</code></pre>
 </div>
 <div class="cell-output cell-output-display">
@@ -870,7 +858,7 @@ Figure(768x576)</code></pre>
 </tbody>
 </table>
 <p>All three latent-period models subclass <a href="../api/diseases.html#starsim.diseases.SEIR" title="0"><code>ss.SEIR</code></a>, which owns the S→E→I→R lifecycle. <code>Measles</code> supplies only parameter values. <code>Ebola</code> and <code>Cholera</code> additionally override <code>set_progression()</code> for their richer natural histories (severe disease and burial; symptoms and shedding), while inheriting the compartment transitions and incidence accounting. <code>Cholera</code> also extends <code>infect()</code> to add environmental transmission on top of the usual person-to-person route — the pattern to follow for any waterborne, vector-borne, or otherwise indirectly transmitted disease.</p>
-<div id="df2afc7d" class="cell" data-execution_count="3">
+<div id="74ec3e75" class="cell" data-execution_count="3">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(diseases<span class="op">=</span>ssl.Cholera(beta<span class="op">=</span>ss.perday(<span class="fl">0.5</span>)), networks<span class="op">=</span>ss.RandomNet(), <span class="op">**</span>outbreak)</span>
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
 <span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>sim.plot(<span class="st">'cholera'</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
@@ -881,38 +869,38 @@ Figure(768x576)</code></pre>
   Running 2000.05 (20/366) (0.06 s)  •——————————————————— 6%
   Running 2000.08 (30/366) (0.09 s)  •——————————————————— 8%
   Running 2000.11 (40/366) (0.11 s)  ••—————————————————— 11%
-  Running 2000.14 (50/366) (0.14 s)  ••—————————————————— 14%
-  Running 2000.16 (60/366) (0.16 s)  •••————————————————— 17%
+  Running 2000.14 (50/366) (0.13 s)  ••—————————————————— 14%
+  Running 2000.16 (60/366) (0.15 s)  •••————————————————— 17%
   Running 2000.19 (70/366) (0.18 s)  •••————————————————— 19%
-  Running 2000.22 (80/366) (0.21 s)  ••••———————————————— 22%
-  Running 2000.25 (90/366) (0.23 s)  ••••———————————————— 25%
+  Running 2000.22 (80/366) (0.20 s)  ••••———————————————— 22%
+  Running 2000.25 (90/366) (0.22 s)  ••••———————————————— 25%
   Running 2000.27 (100/366) (0.25 s)  •••••——————————————— 28%
-  Running 2000.3 (110/366) (0.28 s)  ••••••—————————————— 30%
-  Running 2000.33 (120/366) (0.30 s)  ••••••—————————————— 33%
-  Running 2000.36 (130/366) (0.33 s)  •••••••————————————— 36%
-  Running 2000.38 (140/366) (0.35 s)  •••••••————————————— 39%
-  Running 2000.41 (150/366) (0.37 s)  ••••••••———————————— 41%
-  Running 2000.44 (160/366) (0.40 s)  ••••••••———————————— 44%
-  Running 2000.47 (170/366) (0.42 s)  •••••••••——————————— 47%
-  Running 2000.49 (180/366) (0.44 s)  •••••••••——————————— 49%
-  Running 2000.52 (190/366) (0.46 s)  ••••••••••—————————— 52%
-  Running 2000.55 (200/366) (0.49 s)  ••••••••••—————————— 55%
-  Running 2000.58 (210/366) (0.51 s)  •••••••••••————————— 58%
-  Running 2000.6 (220/366) (0.54 s)  ••••••••••••———————— 60%
-  Running 2000.63 (230/366) (0.56 s)  ••••••••••••———————— 63%
-  Running 2000.66 (240/366) (0.58 s)  •••••••••••••——————— 66%
-  Running 2000.68 (250/366) (0.61 s)  •••••••••••••——————— 69%
-  Running 2000.71 (260/366) (0.63 s)  ••••••••••••••—————— 71%
-  Running 2000.74 (270/366) (0.65 s)  ••••••••••••••—————— 74%
-  Running 2000.77 (280/366) (0.68 s)  •••••••••••••••————— 77%
-  Running 2000.79 (290/366) (0.70 s)  •••••••••••••••————— 80%
-  Running 2000.82 (300/366) (0.73 s)  ••••••••••••••••———— 82%
-  Running 2000.85 (310/366) (0.75 s)  ••••••••••••••••———— 85%
-  Running 2000.88 (320/366) (0.77 s)  •••••••••••••••••——— 88%
-  Running 2000.9 (330/366) (0.80 s)  ••••••••••••••••••—— 90%
-  Running 2000.93 (340/366) (0.82 s)  ••••••••••••••••••—— 93%
-  Running 2000.96 (350/366) (0.84 s)  •••••••••••••••••••— 96%
-  Running 2000.99 (360/366) (0.87 s)  •••••••••••••••••••— 99%
+  Running 2000.3 (110/366) (0.27 s)  ••••••—————————————— 30%
+  Running 2000.33 (120/366) (0.29 s)  ••••••—————————————— 33%
+  Running 2000.36 (130/366) (0.31 s)  •••••••————————————— 36%
+  Running 2000.38 (140/366) (0.34 s)  •••••••————————————— 39%
+  Running 2000.41 (150/366) (0.36 s)  ••••••••———————————— 41%
+  Running 2000.44 (160/366) (0.38 s)  ••••••••———————————— 44%
+  Running 2000.47 (170/366) (0.41 s)  •••••••••——————————— 47%
+  Running 2000.49 (180/366) (0.43 s)  •••••••••——————————— 49%
+  Running 2000.52 (190/366) (0.45 s)  ••••••••••—————————— 52%
+  Running 2000.55 (200/366) (0.47 s)  ••••••••••—————————— 55%
+  Running 2000.58 (210/366) (0.50 s)  •••••••••••————————— 58%
+  Running 2000.6 (220/366) (0.52 s)  ••••••••••••———————— 60%
+  Running 2000.63 (230/366) (0.54 s)  ••••••••••••———————— 63%
+  Running 2000.66 (240/366) (0.57 s)  •••••••••••••——————— 66%
+  Running 2000.68 (250/366) (0.59 s)  •••••••••••••——————— 69%
+  Running 2000.71 (260/366) (0.61 s)  ••••••••••••••—————— 71%
+  Running 2000.74 (270/366) (0.64 s)  ••••••••••••••—————— 74%
+  Running 2000.77 (280/366) (0.66 s)  •••••••••••••••————— 77%
+  Running 2000.79 (290/366) (0.68 s)  •••••••••••••••————— 80%
+  Running 2000.82 (300/366) (0.71 s)  ••••••••••••••••———— 82%
+  Running 2000.85 (310/366) (0.73 s)  ••••••••••••••••———— 85%
+  Running 2000.88 (320/366) (0.75 s)  •••••••••••••••••——— 88%
+  Running 2000.9 (330/366) (0.77 s)  ••••••••••••••••••—— 90%
+  Running 2000.93 (340/366) (0.80 s)  ••••••••••••••••••—— 93%
+  Running 2000.96 (350/366) (0.82 s)  •••••••••••••••••••— 96%
+  Running 2000.99 (360/366) (0.84 s)  •••••••••••••••••••— 99%
 Figure(896x672)</code></pre>
 </div>
 <div class="cell-output cell-output-display">
@@ -933,7 +921,7 @@ Figure(896x672)</code></pre>
 </ul>
 <p>Since HIV mortality is CD4-dependent, treatment reduces deaths as well as transmission:</p>
 <p>Unlike the outbreak diseases above, HIV plays out over years, so a yearly timestep and a multi-decade horizon are appropriate:</p>
-<div id="526809c9" class="cell" data-execution_count="4">
+<div id="d872c7f1" class="cell" data-execution_count="4">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>endemic <span class="op">=</span> <span class="bu">dict</span>(start<span class="op">=</span><span class="dv">2000</span>, stop<span class="op">=</span><span class="dv">2030</span>, n_agents<span class="op">=</span><span class="dv">2000</span>)</span>
 <span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>hiv <span class="op">=</span> <span class="kw">lambda</span>: ssl.HIV(beta<span class="op">=</span>ss.peryear(<span class="fl">0.05</span>), init_prev<span class="op">=</span><span class="fl">0.05</span>)</span>
 <span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>net <span class="op">=</span> <span class="kw">lambda</span>: ss.RandomNet(n_contacts<span class="op">=</span>ss.poisson(<span class="dv">2</span>))</span>
@@ -953,13 +941,13 @@ Figure(896x672)</code></pre>
 Initializing sim "With ART" with 2000 agents
   Running "No ART": 2000 ( 0/31) (0.00 s)  ———————————————————— 3%
   Running "With ART": 2000 ( 0/31) (0.00 s)  ———————————————————— 3%
-  Running "No ART": 2010 (10/31) (0.03 s)  •••••••————————————— 35%
-  Running "With ART": 2010 (10/31) (0.03 s)  •••••••————————————— 35%
+  Running "No ART": 2010 (10/31) (0.04 s)  •••••••————————————— 35%
+  Running "With ART": 2010 (10/31) (0.04 s)  •••••••————————————— 35%
   Running "No ART": 2020 (20/31) (0.06 s)  •••••••••••••——————— 68%
-  Running "No ART": 2030 (30/31) (0.08 s)  •••••••••••••••••••• 100%
-
   Running "With ART": 2020 (20/31) (0.07 s)  •••••••••••••——————— 68%
-  Running "With ART": 2030 (30/31) (0.10 s)  •••••••••••••••••••• 100%
+  Running "No ART": 2030 (30/31) (0.09 s)  •••••••••••••••••••• 100%
+
+  Running "With ART": 2030 (30/31) (0.11 s)  •••••••••••••••••••• 100%
 
 Figure(768x576)</code></pre>
 </div>
@@ -1024,49 +1012,49 @@ Note
 </tbody>
 </table>
 <p><code>DiskNet</code> is a spatial network: each agent has an <code>x</code>, <code>y</code> position and a heading, moves at speed <code>v</code> each timestep, bounces off the walls of the unit square, and is connected to every agent within radius <code>r</code>. Because contacts are determined by position, epidemics spread as a wave rather than uniformly:</p>
-<div id="10c86ad3" class="cell" data-execution_count="5">
+<div id="6956c690" class="cell" data-execution_count="5">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(diseases<span class="op">=</span>ss.SIS(beta<span class="op">=</span>ss.perday(<span class="fl">0.2</span>)), networks<span class="op">=</span>ssl.DiskNet(r<span class="op">=</span><span class="fl">0.05</span>), <span class="op">**</span>outbreak)</span>
 <span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>sim.run()</span>
 <span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>sim.plot(<span class="st">'sis'</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 2000 agents
   Running 2000 ( 0/366) (0.00 s)  ———————————————————— 0%
-  Running 2000.03 (10/366) (0.28 s)  ———————————————————— 3%
-  Running 2000.05 (20/366) (0.55 s)  •——————————————————— 6%
-  Running 2000.08 (30/366) (0.82 s)  •——————————————————— 8%
-  Running 2000.11 (40/366) (1.08 s)  ••—————————————————— 11%
-  Running 2000.14 (50/366) (1.35 s)  ••—————————————————— 14%
-  Running 2000.16 (60/366) (1.61 s)  •••————————————————— 17%
-  Running 2000.19 (70/366) (1.88 s)  •••————————————————— 19%
-  Running 2000.22 (80/366) (2.15 s)  ••••———————————————— 22%
-  Running 2000.25 (90/366) (2.42 s)  ••••———————————————— 25%
-  Running 2000.27 (100/366) (2.68 s)  •••••——————————————— 28%
-  Running 2000.3 (110/366) (2.95 s)  ••••••—————————————— 30%
-  Running 2000.33 (120/366) (3.22 s)  ••••••—————————————— 33%
-  Running 2000.36 (130/366) (3.48 s)  •••••••————————————— 36%
-  Running 2000.38 (140/366) (3.75 s)  •••••••————————————— 39%
-  Running 2000.41 (150/366) (4.02 s)  ••••••••———————————— 41%
-  Running 2000.44 (160/366) (4.29 s)  ••••••••———————————— 44%
-  Running 2000.47 (170/366) (4.56 s)  •••••••••——————————— 47%
-  Running 2000.49 (180/366) (4.82 s)  •••••••••——————————— 49%
-  Running 2000.52 (190/366) (5.10 s)  ••••••••••—————————— 52%
-  Running 2000.55 (200/366) (5.37 s)  ••••••••••—————————— 55%
-  Running 2000.58 (210/366) (5.63 s)  •••••••••••————————— 58%
-  Running 2000.6 (220/366) (5.89 s)  ••••••••••••———————— 60%
-  Running 2000.63 (230/366) (6.15 s)  ••••••••••••———————— 63%
-  Running 2000.66 (240/366) (6.41 s)  •••••••••••••——————— 66%
-  Running 2000.68 (250/366) (6.67 s)  •••••••••••••——————— 69%
-  Running 2000.71 (260/366) (6.94 s)  ••••••••••••••—————— 71%
-  Running 2000.74 (270/366) (7.20 s)  ••••••••••••••—————— 74%
-  Running 2000.77 (280/366) (7.47 s)  •••••••••••••••————— 77%
-  Running 2000.79 (290/366) (7.74 s)  •••••••••••••••————— 80%
-  Running 2000.82 (300/366) (8.01 s)  ••••••••••••••••———— 82%
-  Running 2000.85 (310/366) (8.28 s)  ••••••••••••••••———— 85%
-  Running 2000.88 (320/366) (8.55 s)  •••••••••••••••••——— 88%
-  Running 2000.9 (330/366) (8.82 s)  ••••••••••••••••••—— 90%
-  Running 2000.93 (340/366) (9.09 s)  ••••••••••••••••••—— 93%
-  Running 2000.96 (350/366) (9.35 s)  •••••••••••••••••••— 96%
-  Running 2000.99 (360/366) (9.61 s)  •••••••••••••••••••— 99%
+  Running 2000.03 (10/366) (0.26 s)  ———————————————————— 3%
+  Running 2000.05 (20/366) (0.51 s)  •——————————————————— 6%
+  Running 2000.08 (30/366) (0.76 s)  •——————————————————— 8%
+  Running 2000.11 (40/366) (1.01 s)  ••—————————————————— 11%
+  Running 2000.14 (50/366) (1.25 s)  ••—————————————————— 14%
+  Running 2000.16 (60/366) (1.49 s)  •••————————————————— 17%
+  Running 2000.19 (70/366) (1.74 s)  •••————————————————— 19%
+  Running 2000.22 (80/366) (1.99 s)  ••••———————————————— 22%
+  Running 2000.25 (90/366) (2.23 s)  ••••———————————————— 25%
+  Running 2000.27 (100/366) (2.48 s)  •••••——————————————— 28%
+  Running 2000.3 (110/366) (2.72 s)  ••••••—————————————— 30%
+  Running 2000.33 (120/366) (2.98 s)  ••••••—————————————— 33%
+  Running 2000.36 (130/366) (3.22 s)  •••••••————————————— 36%
+  Running 2000.38 (140/366) (3.47 s)  •••••••————————————— 39%
+  Running 2000.41 (150/366) (3.73 s)  ••••••••———————————— 41%
+  Running 2000.44 (160/366) (3.97 s)  ••••••••———————————— 44%
+  Running 2000.47 (170/366) (4.22 s)  •••••••••——————————— 47%
+  Running 2000.49 (180/366) (4.47 s)  •••••••••——————————— 49%
+  Running 2000.52 (190/366) (4.72 s)  ••••••••••—————————— 52%
+  Running 2000.55 (200/366) (4.96 s)  ••••••••••—————————— 55%
+  Running 2000.58 (210/366) (5.21 s)  •••••••••••————————— 58%
+  Running 2000.6 (220/366) (5.46 s)  ••••••••••••———————— 60%
+  Running 2000.63 (230/366) (5.71 s)  ••••••••••••———————— 63%
+  Running 2000.66 (240/366) (5.96 s)  •••••••••••••——————— 66%
+  Running 2000.68 (250/366) (6.20 s)  •••••••••••••——————— 69%
+  Running 2000.71 (260/366) (6.45 s)  ••••••••••••••—————— 71%
+  Running 2000.74 (270/366) (6.70 s)  ••••••••••••••—————— 74%
+  Running 2000.77 (280/366) (6.95 s)  •••••••••••••••————— 77%
+  Running 2000.79 (290/366) (7.20 s)  •••••••••••••••————— 80%
+  Running 2000.82 (300/366) (7.44 s)  ••••••••••••••••———— 82%
+  Running 2000.85 (310/366) (7.69 s)  ••••••••••••••••———— 85%
+  Running 2000.88 (320/366) (7.94 s)  •••••••••••••••••——— 88%
+  Running 2000.9 (330/366) (8.19 s)  ••••••••••••••••••—— 90%
+  Running 2000.93 (340/366) (8.44 s)  ••••••••••••••••••—— 93%
+  Running 2000.96 (350/366) (8.68 s)  •••••••••••••••••••— 96%
+  Running 2000.99 (360/366) (8.93 s)  •••••••••••••••••••— 99%
 Figure(768x576)</code></pre>
 </div>
 <div class="cell-output cell-output-display">
@@ -1082,7 +1070,7 @@ Figure(768x576)</code></pre>
 <h3 class="anchored" data-anchor-id="household-networks">Household networks</h3>
 <p><code>ssl.HouseholdNet</code> is the most substantial library network. It builds households from <a href="https://dhsprogram.com">DHS</a> household survey data, overriding each agent’s age and sex to match a randomly drawn real household. With <code>dynamic=True</code> (the default) households also evolve: one woman is designated head of each household, pregnant non-heads may move out to form new households, and births are added to their mother’s household.</p>
 <p>Real DHS data requires registration, so <code>dhs_data='default'</code> generates synthetic data with the same structure for demos and testing:</p>
-<div id="5ad03a4e" class="cell" data-execution_count="6">
+<div id="78035ad2" class="cell" data-execution_count="6">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
 <span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(diseases<span class="op">=</span><span class="st">'sis'</span>, networks<span class="op">=</span>ssl.HouseholdNet(dhs_data<span class="op">=</span><span class="st">'default'</span>),</span>
@@ -1167,7 +1155,7 @@ Warning
 <section id="congenital-outcomes" class="level3">
 <h3 class="anchored" data-anchor-id="congenital-outcomes">Congenital outcomes</h3>
 <p><code>CongenitalDisease</code> demonstrates the generic congenital framework built into <a href="../api/diseases.html#starsim.diseases.Infection" title="0"><code>ss.Infection</code></a>. When transmission occurs to an unborn agent via <a href="../api/networks.html#starsim.networks.PrenatalNet" title="0"><code>ss.PrenatalNet</code></a>, <code>set_congenital()</code> samples an outcome from the <code>birth_outcomes</code> distribution and schedules it around delivery time; <code>step_congenital()</code> then executes it. Lethal outcomes call <code>request_death()</code>, while non-lethal outcomes set a boolean state. Fetal losses (<code>'stillborn'</code>, <code>'miscarriage'</code>) are scheduled one timestep before delivery so that they happen in utero — otherwise <a href="../api/demographics.html#starsim.demographics.Pregnancy" title="0"><code>ss.Pregnancy</code></a>, which runs earlier in the integration loop, would already have delivered the fetus and the loss would be recorded as a live birth followed by a neonatal death:</p>
-<div id="390e92cb" class="cell" data-execution_count="7">
+<div id="b330b7f1" class="cell" data-execution_count="7">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>mnch_pars <span class="op">=</span> <span class="bu">dict</span>(start<span class="op">=</span><span class="dv">2000</span>, stop<span class="op">=</span><span class="dv">2005</span>, n_agents<span class="op">=</span><span class="dv">2000</span>, dt<span class="op">=</span>ss.weeks(<span class="dv">1</span>))</span>
 <span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(</span>
 <span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>    diseases      <span class="op">=</span> ssl.mnch.CongenitalDisease(beta<span class="op">=</span>ss.peryear(<span class="dv">20</span>), init_prev<span class="op">=</span><span class="fl">0.2</span>),</span>
@@ -1183,32 +1171,32 @@ Warning
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 2000 agents
   Running 2000 ( 0/261) (0.00 s)  ———————————————————— 0%
-  Running 2000.19 (10/261) (0.08 s)  ———————————————————— 4%
-  Running 2000.38 (20/261) (0.15 s)  •——————————————————— 8%
-  Running 2000.58 (30/261) (0.22 s)  ••—————————————————— 12%
-  Running 2000.77 (40/261) (0.29 s)  •••————————————————— 16%
-  Running 2000.96 (50/261) (0.36 s)  •••————————————————— 20%
-  Running 2001.15 (60/261) (0.43 s)  ••••———————————————— 23%
-  Running 2001.34 (70/261) (0.50 s)  •••••——————————————— 27%
-  Running 2001.53 (80/261) (0.58 s)  ••••••—————————————— 31%
-  Running 2001.73 (90/261) (0.65 s)  ••••••—————————————— 35%
-  Running 2001.92 (100/261) (0.72 s)  •••••••————————————— 39%
-  Running 2002.11 (110/261) (0.80 s)  ••••••••———————————— 43%
-  Running 2002.3 (120/261) (0.87 s)  •••••••••——————————— 46%
-  Running 2002.49 (130/261) (0.94 s)  ••••••••••—————————— 50%
-  Running 2002.68 (140/261) (1.02 s)  ••••••••••—————————— 54%
-  Running 2002.88 (150/261) (1.08 s)  •••••••••••————————— 58%
-  Running 2003.07 (160/261) (1.16 s)  ••••••••••••———————— 62%
-  Running 2003.26 (170/261) (1.23 s)  •••••••••••••——————— 66%
-  Running 2003.45 (180/261) (1.31 s)  •••••••••••••——————— 69%
-  Running 2003.64 (190/261) (1.37 s)  ••••••••••••••—————— 73%
-  Running 2003.84 (200/261) (1.45 s)  •••••••••••••••————— 77%
-  Running 2004.03 (210/261) (1.52 s)  ••••••••••••••••———— 81%
-  Running 2004.22 (220/261) (1.60 s)  ••••••••••••••••———— 85%
-  Running 2004.41 (230/261) (1.66 s)  •••••••••••••••••——— 89%
-  Running 2004.6 (240/261) (1.74 s)  ••••••••••••••••••—— 92%
-  Running 2004.79 (250/261) (1.81 s)  •••••••••••••••••••— 96%
-  Running 2004.99 (260/261) (1.88 s)  •••••••••••••••••••• 100%
+  Running 2000.19 (10/261) (0.07 s)  ———————————————————— 4%
+  Running 2000.38 (20/261) (0.14 s)  •——————————————————— 8%
+  Running 2000.58 (30/261) (0.21 s)  ••—————————————————— 12%
+  Running 2000.77 (40/261) (0.27 s)  •••————————————————— 16%
+  Running 2000.96 (50/261) (0.34 s)  •••————————————————— 20%
+  Running 2001.15 (60/261) (0.41 s)  ••••———————————————— 23%
+  Running 2001.34 (70/261) (0.47 s)  •••••——————————————— 27%
+  Running 2001.53 (80/261) (0.54 s)  ••••••—————————————— 31%
+  Running 2001.73 (90/261) (0.61 s)  ••••••—————————————— 35%
+  Running 2001.92 (100/261) (0.68 s)  •••••••————————————— 39%
+  Running 2002.11 (110/261) (0.75 s)  ••••••••———————————— 43%
+  Running 2002.3 (120/261) (0.82 s)  •••••••••——————————— 46%
+  Running 2002.49 (130/261) (0.89 s)  ••••••••••—————————— 50%
+  Running 2002.68 (140/261) (0.95 s)  ••••••••••—————————— 54%
+  Running 2002.88 (150/261) (1.01 s)  •••••••••••————————— 58%
+  Running 2003.07 (160/261) (1.08 s)  ••••••••••••———————— 62%
+  Running 2003.26 (170/261) (1.15 s)  •••••••••••••——————— 66%
+  Running 2003.45 (180/261) (1.22 s)  •••••••••••••——————— 69%
+  Running 2003.64 (190/261) (1.28 s)  ••••••••••••••—————— 73%
+  Running 2003.84 (200/261) (1.35 s)  •••••••••••••••————— 77%
+  Running 2004.03 (210/261) (1.42 s)  ••••••••••••••••———— 81%
+  Running 2004.22 (220/261) (1.49 s)  ••••••••••••••••———— 85%
+  Running 2004.41 (230/261) (1.55 s)  •••••••••••••••••——— 89%
+  Running 2004.6 (240/261) (1.62 s)  ••••••••••••••••••—— 92%
+  Running 2004.79 (250/261) (1.69 s)  •••••••••••••••••••— 96%
+  Running 2004.99 (260/261) (1.75 s)  •••••••••••••••••••• 100%
 
 Births: 188.0
 Stillbirths: 79.0
@@ -1221,7 +1209,7 @@ Congenital infections: 93</code></pre>
 <section id="neonatal-deaths" class="level3">
 <h3 class="anchored" data-anchor-id="neonatal-deaths">Neonatal deaths</h3>
 <p><code>NeonatalSepsis</code> illustrates that neonatal death detection is <em>passive</em>: any mechanism that kills an agent aged 0–28 days is automatically classified as a neonatal death by the <a href="../api/demographics.html#starsim.demographics.Pregnancy" title="0"><code>ss.Pregnancy</code></a> module, with no registration or callback needed. Results therefore appear on the pregnancy module, not the disease:</p>
-<div id="e1f0b5c0" class="cell" data-execution_count="8">
+<div id="bb3b9081" class="cell" data-execution_count="8">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(</span>
 <span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a>    diseases     <span class="op">=</span> ssl.mnch.NeonatalSepsis(),</span>
 <span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a>    demographics <span class="op">=</span> [ss.Pregnancy(fertility_rate<span class="op">=</span>ss.freqperyear(<span class="dv">100</span>), burnin<span class="op">=</span><span class="va">True</span>), ss.Deaths()],</span>
@@ -1239,28 +1227,28 @@ Congenital infections: 93</code></pre>
   Running 2000.38 (20/261) (0.13 s)  •——————————————————— 8%
   Running 2000.58 (30/261) (0.19 s)  ••—————————————————— 12%
   Running 2000.77 (40/261) (0.25 s)  •••————————————————— 16%
-  Running 2000.96 (50/261) (0.32 s)  •••————————————————— 20%
+  Running 2000.96 (50/261) (0.31 s)  •••————————————————— 20%
   Running 2001.15 (60/261) (0.38 s)  ••••———————————————— 23%
-  Running 2001.34 (70/261) (0.45 s)  •••••——————————————— 27%
-  Running 2001.53 (80/261) (0.52 s)  ••••••—————————————— 31%
-  Running 2001.73 (90/261) (0.58 s)  ••••••—————————————— 35%
-  Running 2001.92 (100/261) (0.65 s)  •••••••————————————— 39%
-  Running 2002.11 (110/261) (0.72 s)  ••••••••———————————— 43%
-  Running 2002.3 (120/261) (0.79 s)  •••••••••——————————— 46%
-  Running 2002.49 (130/261) (0.86 s)  ••••••••••—————————— 50%
-  Running 2002.68 (140/261) (0.92 s)  ••••••••••—————————— 54%
-  Running 2002.88 (150/261) (0.98 s)  •••••••••••————————— 58%
-  Running 2003.07 (160/261) (1.05 s)  ••••••••••••———————— 62%
-  Running 2003.26 (170/261) (1.11 s)  •••••••••••••——————— 66%
-  Running 2003.45 (180/261) (1.18 s)  •••••••••••••——————— 69%
-  Running 2003.64 (190/261) (1.25 s)  ••••••••••••••—————— 73%
-  Running 2003.84 (200/261) (1.31 s)  •••••••••••••••————— 77%
-  Running 2004.03 (210/261) (1.38 s)  ••••••••••••••••———— 81%
-  Running 2004.22 (220/261) (1.45 s)  ••••••••••••••••———— 85%
-  Running 2004.41 (230/261) (1.51 s)  •••••••••••••••••——— 89%
-  Running 2004.6 (240/261) (1.58 s)  ••••••••••••••••••—— 92%
-  Running 2004.79 (250/261) (1.65 s)  •••••••••••••••••••— 96%
-  Running 2004.99 (260/261) (1.71 s)  •••••••••••••••••••• 100%
+  Running 2001.34 (70/261) (0.44 s)  •••••——————————————— 27%
+  Running 2001.53 (80/261) (0.51 s)  ••••••—————————————— 31%
+  Running 2001.73 (90/261) (0.57 s)  ••••••—————————————— 35%
+  Running 2001.92 (100/261) (0.64 s)  •••••••————————————— 39%
+  Running 2002.11 (110/261) (0.70 s)  ••••••••———————————— 43%
+  Running 2002.3 (120/261) (0.77 s)  •••••••••——————————— 46%
+  Running 2002.49 (130/261) (0.83 s)  ••••••••••—————————— 50%
+  Running 2002.68 (140/261) (0.89 s)  ••••••••••—————————— 54%
+  Running 2002.88 (150/261) (0.95 s)  •••••••••••————————— 58%
+  Running 2003.07 (160/261) (1.02 s)  ••••••••••••———————— 62%
+  Running 2003.26 (170/261) (1.08 s)  •••••••••••••——————— 66%
+  Running 2003.45 (180/261) (1.15 s)  •••••••••••••——————— 69%
+  Running 2003.64 (190/261) (1.21 s)  ••••••••••••••—————— 73%
+  Running 2003.84 (200/261) (1.28 s)  •••••••••••••••————— 77%
+  Running 2004.03 (210/261) (1.35 s)  ••••••••••••••••———— 81%
+  Running 2004.22 (220/261) (1.41 s)  ••••••••••••••••———— 85%
+  Running 2004.41 (230/261) (1.47 s)  •••••••••••••••••——— 89%
+  Running 2004.6 (240/261) (1.54 s)  ••••••••••••••••••—— 92%
+  Running 2004.79 (250/261) (1.61 s)  •••••••••••••••••••— 96%
+  Running 2004.99 (260/261) (1.67 s)  •••••••••••••••••••• 100%
 
 New infections: 53.0
 Births: 257.0
@@ -1272,7 +1260,7 @@ Neonatal deaths: 26.0</code></pre>
 <h3 class="anchored" data-anchor-id="fetal-health">Fetal health</h3>
 <p><code>FetalHealth</code> is deliberately disease-agnostic: it tracks a baseline fetal weight percentile per pregnancy and exposes two levers that other modules pull — bringing delivery forward (preterm risk) and accumulating growth restriction (low birth weight). At delivery it computes <code>birth_weight</code> and classifies newborns as LBW, VLBW, or SGA.</p>
 <p>The <code>fetal_infection</code> connector pulls those levers when a pregnant woman is infected, and the <code>treat_pregnant</code> intervention partially reverses the damage when she is treated. Note that <code>FetalHealth</code> is passed via <code>custom</code>, since it is not a disease, network, demographic, or intervention:</p>
-<div id="aaa062f7" class="cell" data-execution_count="9">
+<div id="eb615973" class="cell" data-execution_count="9">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb19"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>sim <span class="op">=</span> ss.Sim(</span>
 <span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a>    diseases      <span class="op">=</span> ss.SIR(beta<span class="op">=</span>ss.peryear(<span class="dv">20</span>)),</span>
 <span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a>    demographics  <span class="op">=</span> [ss.Pregnancy(fertility_rate<span class="op">=</span>ss.freqperyear(<span class="dv">100</span>), burnin<span class="op">=</span><span class="va">True</span>), ss.Deaths()],</span>
@@ -1287,32 +1275,32 @@ Neonatal deaths: 26.0</code></pre>
 <div class="cell-output cell-output-stdout">
 <pre><code>Initializing sim with 2000 agents
   Running 2000 ( 0/261) (0.00 s)  ———————————————————— 0%
-  Running 2000.19 (10/261) (0.09 s)  ———————————————————— 4%
-  Running 2000.38 (20/261) (0.16 s)  •——————————————————— 8%
+  Running 2000.19 (10/261) (0.08 s)  ———————————————————— 4%
+  Running 2000.38 (20/261) (0.15 s)  •——————————————————— 8%
   Running 2000.58 (30/261) (0.23 s)  ••—————————————————— 12%
-  Running 2000.77 (40/261) (0.31 s)  •••————————————————— 16%
-  Running 2000.96 (50/261) (0.39 s)  •••————————————————— 20%
-  Running 2001.15 (60/261) (0.46 s)  ••••———————————————— 23%
-  Running 2001.34 (70/261) (0.54 s)  •••••——————————————— 27%
-  Running 2001.53 (80/261) (0.62 s)  ••••••—————————————— 31%
-  Running 2001.73 (90/261) (0.70 s)  ••••••—————————————— 35%
-  Running 2001.92 (100/261) (0.78 s)  •••••••————————————— 39%
-  Running 2002.11 (110/261) (0.86 s)  ••••••••———————————— 43%
-  Running 2002.3 (120/261) (0.93 s)  •••••••••——————————— 46%
-  Running 2002.49 (130/261) (1.01 s)  ••••••••••—————————— 50%
-  Running 2002.68 (140/261) (1.09 s)  ••••••••••—————————— 54%
-  Running 2002.88 (150/261) (1.16 s)  •••••••••••————————— 58%
-  Running 2003.07 (160/261) (1.25 s)  ••••••••••••———————— 62%
-  Running 2003.26 (170/261) (1.32 s)  •••••••••••••——————— 66%
-  Running 2003.45 (180/261) (1.40 s)  •••••••••••••——————— 69%
-  Running 2003.64 (190/261) (1.48 s)  ••••••••••••••—————— 73%
-  Running 2003.84 (200/261) (1.56 s)  •••••••••••••••————— 77%
-  Running 2004.03 (210/261) (1.64 s)  ••••••••••••••••———— 81%
-  Running 2004.22 (220/261) (1.73 s)  ••••••••••••••••———— 85%
-  Running 2004.41 (230/261) (1.80 s)  •••••••••••••••••——— 89%
-  Running 2004.6 (240/261) (1.88 s)  ••••••••••••••••••—— 92%
-  Running 2004.79 (250/261) (1.97 s)  •••••••••••••••••••— 96%
-  Running 2004.99 (260/261) (2.04 s)  •••••••••••••••••••• 100%
+  Running 2000.77 (40/261) (0.30 s)  •••————————————————— 16%
+  Running 2000.96 (50/261) (0.38 s)  •••————————————————— 20%
+  Running 2001.15 (60/261) (0.45 s)  ••••———————————————— 23%
+  Running 2001.34 (70/261) (0.53 s)  •••••——————————————— 27%
+  Running 2001.53 (80/261) (0.60 s)  ••••••—————————————— 31%
+  Running 2001.73 (90/261) (0.68 s)  ••••••—————————————— 35%
+  Running 2001.92 (100/261) (0.76 s)  •••••••————————————— 39%
+  Running 2002.11 (110/261) (0.83 s)  ••••••••———————————— 43%
+  Running 2002.3 (120/261) (0.91 s)  •••••••••——————————— 46%
+  Running 2002.49 (130/261) (0.99 s)  ••••••••••—————————— 50%
+  Running 2002.68 (140/261) (1.06 s)  ••••••••••—————————— 54%
+  Running 2002.88 (150/261) (1.13 s)  •••••••••••————————— 58%
+  Running 2003.07 (160/261) (1.21 s)  ••••••••••••———————— 62%
+  Running 2003.26 (170/261) (1.28 s)  •••••••••••••——————— 66%
+  Running 2003.45 (180/261) (1.36 s)  •••••••••••••——————— 69%
+  Running 2003.64 (190/261) (1.43 s)  ••••••••••••••—————— 73%
+  Running 2003.84 (200/261) (1.51 s)  •••••••••••••••————— 77%
+  Running 2004.03 (210/261) (1.59 s)  ••••••••••••••••———— 81%
+  Running 2004.22 (220/261) (1.67 s)  ••••••••••••••••———— 85%
+  Running 2004.41 (230/261) (1.74 s)  •••••••••••••••••——— 89%
+  Running 2004.6 (240/261) (1.82 s)  ••••••••••••••••••—— 92%
+  Running 2004.79 (250/261) (1.90 s)  •••••••••••••••••••— 96%
+  Running 2004.99 (260/261) (1.97 s)  •••••••••••••••••••• 100%
 
 Figure(896x672)</code></pre>
 </div>
@@ -1330,11 +1318,11 @@ Figure(896x672)</code></pre>
 <section id="adapting-a-library-module" class="level2">
 <h2 class="anchored" data-anchor-id="adapting-a-library-module">Adapting a library module</h2>
 <p>Because library modules are ordinary Starsim modules, the usual customization routes all apply. The lightest touch is to override parameters:</p>
-<div id="94355be9" class="cell" data-execution_count="10">
+<div id="81a44ee2" class="cell" data-execution_count="10">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb21"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a>measles <span class="op">=</span> ssl.Measles(beta<span class="op">=</span>ss.perday(<span class="fl">0.4</span>), dur_exp<span class="op">=</span>ss.normal(loc<span class="op">=</span>ss.days(<span class="dv">10</span>)), p_death<span class="op">=</span><span class="fl">0.01</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
 <p>For structural changes, subclass. Here we give measles waning immunity by making recovered agents susceptible again after a delay:</p>
-<div id="077e25fb" class="cell" data-execution_count="11">
+<div id="acba5502" class="cell" data-execution_count="11">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb22"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> WaningMeasles(ssl.Measles):</span>
 <span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, dur_immune<span class="op">=</span>ss.years(<span class="dv">1</span>), <span class="op">**</span>kwargs):</span>
 <span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a>        <span class="bu">super</span>().<span class="fu">__init__</span>(<span class="op">**</span>kwargs)</span>
@@ -1370,37 +1358,37 @@ Figure(896x672)</code></pre>
   Running 2000.08 (30/366) (0.08 s)  •——————————————————— 8%
   Running 2000.11 (40/366) (0.10 s)  ••—————————————————— 11%
   Running 2000.14 (50/366) (0.12 s)  ••—————————————————— 14%
-  Running 2000.16 (60/366) (0.14 s)  •••————————————————— 17%
-  Running 2000.19 (70/366) (0.16 s)  •••————————————————— 19%
-  Running 2000.22 (80/366) (0.18 s)  ••••———————————————— 22%
+  Running 2000.16 (60/366) (0.13 s)  •••————————————————— 17%
+  Running 2000.19 (70/366) (0.15 s)  •••————————————————— 19%
+  Running 2000.22 (80/366) (0.17 s)  ••••———————————————— 22%
   Running 2000.25 (90/366) (0.19 s)  ••••———————————————— 25%
   Running 2000.27 (100/366) (0.21 s)  •••••——————————————— 28%
-  Running 2000.3 (110/366) (0.23 s)  ••••••—————————————— 30%
-  Running 2000.33 (120/366) (0.25 s)  ••••••—————————————— 33%
-  Running 2000.36 (130/366) (0.27 s)  •••••••————————————— 36%
-  Running 2000.38 (140/366) (0.29 s)  •••••••————————————— 39%
+  Running 2000.3 (110/366) (0.22 s)  ••••••—————————————— 30%
+  Running 2000.33 (120/366) (0.24 s)  ••••••—————————————— 33%
+  Running 2000.36 (130/366) (0.26 s)  •••••••————————————— 36%
+  Running 2000.38 (140/366) (0.28 s)  •••••••————————————— 39%
   Running 2000.41 (150/366) (0.30 s)  ••••••••———————————— 41%
-  Running 2000.44 (160/366) (0.32 s)  ••••••••———————————— 44%
-  Running 2000.47 (170/366) (0.34 s)  •••••••••——————————— 47%
-  Running 2000.49 (180/366) (0.36 s)  •••••••••——————————— 49%
-  Running 2000.52 (190/366) (0.38 s)  ••••••••••—————————— 52%
-  Running 2000.55 (200/366) (0.39 s)  ••••••••••—————————— 55%
-  Running 2000.58 (210/366) (0.41 s)  •••••••••••————————— 58%
-  Running 2000.6 (220/366) (0.43 s)  ••••••••••••———————— 60%
-  Running 2000.63 (230/366) (0.45 s)  ••••••••••••———————— 63%
-  Running 2000.66 (240/366) (0.47 s)  •••••••••••••——————— 66%
-  Running 2000.68 (250/366) (0.49 s)  •••••••••••••——————— 69%
-  Running 2000.71 (260/366) (0.50 s)  ••••••••••••••—————— 71%
-  Running 2000.74 (270/366) (0.52 s)  ••••••••••••••—————— 74%
-  Running 2000.77 (280/366) (0.54 s)  •••••••••••••••————— 77%
-  Running 2000.79 (290/366) (0.56 s)  •••••••••••••••————— 80%
-  Running 2000.82 (300/366) (0.58 s)  ••••••••••••••••———— 82%
-  Running 2000.85 (310/366) (0.59 s)  ••••••••••••••••———— 85%
-  Running 2000.88 (320/366) (0.61 s)  •••••••••••••••••——— 88%
-  Running 2000.9 (330/366) (0.63 s)  ••••••••••••••••••—— 90%
-  Running 2000.93 (340/366) (0.65 s)  ••••••••••••••••••—— 93%
-  Running 2000.96 (350/366) (0.67 s)  •••••••••••••••••••— 96%
-  Running 2000.99 (360/366) (0.69 s)  •••••••••••••••••••— 99%
+  Running 2000.44 (160/366) (0.31 s)  ••••••••———————————— 44%
+  Running 2000.47 (170/366) (0.33 s)  •••••••••——————————— 47%
+  Running 2000.49 (180/366) (0.35 s)  •••••••••——————————— 49%
+  Running 2000.52 (190/366) (0.37 s)  ••••••••••—————————— 52%
+  Running 2000.55 (200/366) (0.38 s)  ••••••••••—————————— 55%
+  Running 2000.58 (210/366) (0.40 s)  •••••••••••————————— 58%
+  Running 2000.6 (220/366) (0.42 s)  ••••••••••••———————— 60%
+  Running 2000.63 (230/366) (0.44 s)  ••••••••••••———————— 63%
+  Running 2000.66 (240/366) (0.46 s)  •••••••••••••——————— 66%
+  Running 2000.68 (250/366) (0.48 s)  •••••••••••••——————— 69%
+  Running 2000.71 (260/366) (0.49 s)  ••••••••••••••—————— 71%
+  Running 2000.74 (270/366) (0.51 s)  ••••••••••••••—————— 74%
+  Running 2000.77 (280/366) (0.53 s)  •••••••••••••••————— 77%
+  Running 2000.79 (290/366) (0.55 s)  •••••••••••••••————— 80%
+  Running 2000.82 (300/366) (0.56 s)  ••••••••••••••••———— 82%
+  Running 2000.85 (310/366) (0.58 s)  ••••••••••••••••———— 85%
+  Running 2000.88 (320/366) (0.60 s)  •••••••••••••••••——— 88%
+  Running 2000.9 (330/366) (0.62 s)  ••••••••••••••••••—— 90%
+  Running 2000.93 (340/366) (0.64 s)  ••••••••••••••••••—— 93%
+  Running 2000.96 (350/366) (0.65 s)  •••••••••••••••••••— 96%
+  Running 2000.99 (360/366) (0.67 s)  •••••••••••••••••••— 99%
 Figure(768x576)</code></pre>
 </div>
 <div class="cell-output cell-output-display">
@@ -1429,15 +1417,50 @@ Figure(768x576)</code></pre>
   window.document.addEventListener("DOMContentLoaded", function (event) {
     // Ensure there is a toggle, if there isn't float one in the top right
     if (window.document.querySelector('.quarto-color-scheme-toggle') === null) {
-      const a = window.document.createElement('a');
-      a.classList.add('top-right');
-      a.classList.add('quarto-color-scheme-toggle');
-      a.href = "";
-      a.onclick = function() { try { window.quartoToggleColorScheme(); } catch {} return false; };
+      const toggle = window.document.createElement('button');
+      toggle.type = "button";
+      toggle.setAttribute("role", "switch");
+      toggle.setAttribute("aria-checked", "false");
+      toggle.classList.add('top-right');
+      toggle.classList.add('quarto-color-scheme-toggle');
+      toggle.setAttribute("aria-label", "Toggle dark mode");
+      toggle.onclick = function() { try { window.quartoToggleColorScheme(); } catch {} return false; };
       const i = window.document.createElement("i");
       i.classList.add('bi');
-      a.appendChild(i);
-      window.document.body.appendChild(a);
+      toggle.appendChild(i);
+      // Put the toggle in a landmark of its own, so that landmark navigation
+      // can reach it.
+      //
+      // The container is always a fresh direct child of body, and the toggle is
+      // never moved into page furniture that the theme or the author controls.
+      // The toggle is positioned against the page, so any ancestor that
+      // establishes a containing block captures it: a positioned element or a
+      // grid for position: absolute, and transform, filter, will-change or
+      // contain for position: fixed. A direct child of body has none of these
+      // to inherit, and the shift when one appears is silent and visual.
+      //
+      // ARIA says a document should have at most one banner, and axe reports a
+      // duplicate whether or not the banners carry distinct labels. So use a
+      // header when the page has no banner yet, and a named region otherwise.
+      //
+      // A header is a banner wherever it sits, unless it is inside sectioning
+      // content, so this cannot just look at the children of body: a custom
+      // page layout wraps the title block header in a plain div. An explicit
+      // role="banner" always counts.
+      const sectioning = 'article, aside, main, nav, section, [role="article"], [role="complementary"], [role="main"], [role="navigation"], [role="region"]';
+      const hasBanner = Array.from(
+        window.document.querySelectorAll('header:not([role]), [role="banner"]')
+      ).some(function(el) {
+        return el.hasAttribute("role") || el.closest(sectioning) === null;
+      });
+      const container = window.document.createElement(hasBanner ? "div" : "header");
+      if (hasBanner) {
+        container.setAttribute("role", "region");
+        container.setAttribute("aria-label", "Toggle dark mode");
+      }
+      container.classList.add('quarto-color-scheme-toggle-container');
+      container.appendChild(toggle);
+      window.document.body.appendChild(container);
     }
     setColorSchemeToggle(hasAlternateSentinel())
     const icon = "";
@@ -1516,7 +1539,8 @@ Figure(768x576)</code></pre>
           return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
       }
       // Inspect non-navigation links and adorn them if external
-     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      window.quartoDecorateExternalLinks = function (root) {
+     var links = (root || window.document).querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
       for (var i=0; i<links.length; i++) {
         const link = links[i];
         if (!isInternal(link.href)) {
@@ -1525,8 +1549,69 @@ Figure(768x576)</code></pre>
           if (link.dataset.originalHref !== undefined) {
             link.href = link.dataset.originalHref;
           }
+          if (!link.classList.contains('no-external-icon')) {
+          }
         }
       }
+      };
+      window.quartoDecorateExternalLinks(window.document);
+    // Esc closes the popup (WCAG 1.4.13) and focus leaving both trigger and
+    // popup closes it (WCAG 2.4.11); tippy handles neither for interactive popups.
+    const hideOnEscAndFocusOut = {
+      name: 'hideOnEscAndFocusOut',
+      defaultValue: true,
+      fn(instance) {
+        const dismiss = () => {
+          // A show scheduled by the trigger delay would otherwise reopen it
+          instance.clearDelayTimeouts();
+          instance.hide();
+        };
+        const onKeyDown = (event) => {
+          if (event.key !== 'Escape') {
+            return;
+          }
+          // Keep Esc from also reaching page handlers (e.g. reveal.js overview),
+          // except an open reveal.js slide menu, which Esc should close too.
+          // The menu handles keys only when its keyboard option is on.
+          const menuHandlesEsc = window.Reveal?.getPlugin?.('menu')?.isOpen() &&
+            window.Reveal.getConfig().menu?.keyboard !== false;
+          if (!menuHandlesEsc) {
+            event.stopPropagation();
+          }
+          if (instance.popper.contains(window.document.activeElement)) {
+            // Disabled while refocusing so the focus trigger does not reopen it
+            instance.disable();
+            instance.reference.focus();
+            instance.enable();
+          }
+          dismiss();
+        };
+        const onFocusOut = (event) => {
+          const target = event.relatedTarget;
+          if (target && !instance.reference.contains(target) &&
+              !instance.popper.contains(target)) {
+            dismiss();
+          }
+        };
+        // On the trigger too: a click trigger (code-annotations: select) has no
+        // blur handling. Attached for the instance's lifetime so leaving the
+        // trigger also cancels a show still pending on the trigger delay.
+        instance.reference.addEventListener('focusout', onFocusOut);
+        return {
+          onShow() {
+            window.document.addEventListener('keydown', onKeyDown, true);
+            instance.popper.addEventListener('focusout', onFocusOut);
+          },
+          onHide() {
+            window.document.removeEventListener('keydown', onKeyDown, true);
+            instance.popper.removeEventListener('focusout', onFocusOut);
+          },
+          onDestroy() {
+            instance.reference.removeEventListener('focusout', onFocusOut);
+          },
+        };
+      },
+    };
     function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
       const config = {
         allowHTML: true,
@@ -1540,6 +1625,7 @@ Figure(768x576)</code></pre>
         interactiveBorder: 10,
         theme: 'quarto',
         placement: 'bottom-start',
+        plugins: [hideOnEscAndFocusOut],
       };
       if (contentFn) {
         config.content = contentFn;
@@ -1702,44 +1788,54 @@ Figure(768x576)</code></pre>
           const lineIds = lines.map((line) => {
             return targetCell + "-" + line;
           })
-          let top = null;
-          let height = null;
-          let parent = null;
+          // Each band is positioned against its own containing block, which is
+          // not the offsetParent of the lines, so place it from client rects.
+          const placeBand = (band, firstEl, lastEl, codeBlock) => {
+            const container = band.offsetParent;
+            if (container === null) {
+              return;
+            }
+            const containerRect = container.getBoundingClientRect();
+            // Reveal.js scales slides with a transform, so convert client
+            // pixels back to the CSS pixels of the container.
+            const scale = containerRect.height / container.offsetHeight || 1;
+            const firstRect = firstEl.getBoundingClientRect();
+            const lastRect = lastEl.getBoundingClientRect();
+            const top = (firstRect.top - containerRect.top) / scale - container.clientTop + container.scrollTop;
+            const height = (lastRect.bottom - firstRect.top) / scale;
+            band.style.top = top - 2 + "px";
+            band.style.height = height + 4 + "px";
+            if (codeBlock) {
+              // Without the copy button wrapper, the containing block is wider
+              // than the code block, so span the code block explicitly.
+              const blockRect = codeBlock.getBoundingClientRect();
+              band.style.left = (blockRect.left - containerRect.left) / scale - container.clientLeft + container.scrollLeft + "px";
+              band.style.width = blockRect.width / scale + "px";
+            }
+          };
           if (lineIds.length > 0) {
-              //compute the position of the single el (top and bottom and make a div)
-              const el = window.document.getElementById(lineIds[0]);
-              top = el.offsetTop;
-              height = el.offsetHeight;
-              parent = el.parentElement.parentElement;
-            if (lineIds.length > 1) {
-              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
-              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
-              height = bottom - top;
+            const el = window.document.getElementById(lineIds[0]);
+            const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+            const parent = el.parentElement.parentElement;
+            // cook up a div (if necessary) and position it
+            let div = window.document.getElementById("code-annotation-line-highlight");
+            if (div === null) {
+              div = window.document.createElement("div");
+              div.setAttribute("id", "code-annotation-line-highlight");
+              div.style.position = 'absolute';
+              parent.appendChild(div);
             }
-            if (top !== null && height !== null && parent !== null) {
-              // cook up a div (if necessary) and position it 
-              let div = window.document.getElementById("code-annotation-line-highlight");
-              if (div === null) {
-                div = window.document.createElement("div");
-                div.setAttribute("id", "code-annotation-line-highlight");
-                div.style.position = 'absolute';
-                parent.appendChild(div);
-              }
-              div.style.top = top - 2 + "px";
-              div.style.height = height + 4 + "px";
-              div.style.left = 0;
-              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
-              if (gutterDiv === null) {
-                gutterDiv = window.document.createElement("div");
-                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
-                gutterDiv.style.position = 'absolute';
-                const codeCell = window.document.getElementById(targetCell);
-                const gutter = codeCell.querySelector('.code-annotation-gutter');
-                gutter.appendChild(gutterDiv);
-              }
-              gutterDiv.style.top = top - 2 + "px";
-              gutterDiv.style.height = height + 4 + "px";
+            placeBand(div, el, lastEl, parent.closest("div.sourceCode") || parent);
+            let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+            if (gutterDiv === null) {
+              gutterDiv = window.document.createElement("div");
+              gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+              gutterDiv.style.position = 'absolute';
+              const codeCell = window.document.getElementById(targetCell);
+              const gutter = codeCell.querySelector('.code-annotation-gutter');
+              gutter.appendChild(gutterDiv);
             }
+            placeBand(gutterDiv, el, lastEl);
             selectedAnnoteEl = annoteEl;
           }
         };
@@ -1838,7 +1934,10 @@ Figure(768x576)</code></pre>
     }
   });
   </script>
-<nav class="page-navigation">
+  <script type="application/javascript">
+  window.quartoScrollableRegionsLabels = {"code":"Scrollable code","output":"Scrollable output"};
+  </script>
+<nav class="page-navigation" aria-label="Page">
   <div class="nav-page nav-page-previous">
       <a href="../user_guide/modules_connectors.html" class="pagination-link" aria-label="Connectors">
         <i class="bi bi-arrow-left-short"></i> <span class="nav-page-text">Connectors</span>
@@ -1857,7 +1956,7 @@ Figure(768x576)</code></pre>
       &nbsp;
     </div>   
     <div class="nav-footer-center">
-<p>Docs built for Starsim v3.7.3 (2026-11-01).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
+<p>Docs built for Starsim v3.7.4 (2026-11-03).<br>© 2023–2026, Gates Foundation. All rights reserved. <a href="https://www.gatesfoundation.org/Privacy-and-Cookies-Notice">Privacy and Cookies Notice</a> | <a href="https://www.gatesfoundation.org/Terms-of-Use">Terms of Use</a></p>
 <div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/starsimhub/starsim/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div>
     <div class="nav-footer-right">
       <ul class="footer-items list-unstyled">
