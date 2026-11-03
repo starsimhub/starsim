@@ -74,6 +74,8 @@ msim.plot('measles.I')
 
 `sim.run(n_runs=50)` runs it 50 times, each with its own random seed (the same as `ss.parallel(sim, n_runs=50)`). The ODE gave one outbreak peaking at about 137 infectious on day 74. The plot of the runs shows their median at each time point, and the range that holds 95% of them. `lines=True` shows each run instead, which shows what the median hides:
 
+For many runs of a small compartmental model, replicates can be far faster as places nobody moves between, in a single run: `sir.stratify(run=list(map(str, range(100))), kind='space')` holds 100 replicates, read with `sim.results.sir.I.by('run')`. A chain binomial SIR of 1,001 people took 1.1 ms this way, against 13 ms for 100 separate runs. `kind='space'` is what keeps them apart: without it, the groups mix as one population.
+
 ```{python}
 msim.plot('measles.I', lines=True)
 ```
@@ -193,7 +195,7 @@ A sweep gives each value equal space, but that does not say they are equally lik
 
 ## Uncertainty in parameter values
 
-Chance is one source of uncertainty; not knowing the parameters is another. A parameter declared with `ss.par()` and bounds (or a prior) can be drawn afresh for each run with `priors=True`: each run takes a value drawn uniformly between the bounds (or from the prior), and a seed of its own, so the spread of the runs includes both. Here β is between 1.5 and 2.3 per day (R0 between 12 and 18), with the five initial cases from before, compared with the same runs with β fixed:
+Chance is one source of uncertainty; not knowing the parameters is another. A parameter declared with `ss.par()` and bounds (or a prior) can be drawn afresh for each run with `priors=True`: each run takes a value drawn uniformly between the bounds (or from the prior), on a Latin hypercube so that few runs cover the range evenly, and a seed of its own, so the spread of the runs includes both. Here β is between 1.5 and 2.3 per day (R0 between 12 and 18), with the five initial cases from before, compared with the same runs with β fixed:
 
 ```{python}
 beta = ss.par(1.9, bounds=[1.5, 2.3]) # β, known to lie between these values

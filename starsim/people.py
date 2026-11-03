@@ -756,7 +756,7 @@ class People:
         uids = np.concatenate([u for u,c,h in claims]).astype(np.int64)
         codes = np.concatenate([np.full(len(u), c) for u,c,h in claims])
         hazards = np.concatenate([h for u,c,h in claims])
-        keep = np.isin(uids, death_uids) # E.g. not someone who left instead
+        keep = np.isin(uids, death_uids, kind='sort') # E.g. not someone who left instead; by default, a table the size of the range of UIDs
         uids, codes, hazards = uids[keep], codes[keep], hazards[keep]
         rank = np.argsort(np.argsort([str(name) for name in self.causes]))[codes] # By the name of the cause, so the order of the modules does not matter
         order = np.lexsort((rank, uids))

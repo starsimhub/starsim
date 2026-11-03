@@ -1604,28 +1604,34 @@ def prior_draws(sim, n, seed=None):
     """
     Values of the model's parameters drawn from their priors (`ss.par(prior=...)`, or uniform over the bounds of one with bounds and no prior), for `ss.parallel(sim, priors=True)`
 
+    The draws are a Latin hypercube, as in `sim.sensitivity()`: each parameter's range is cut into
+    `n` slices of equal probability with one draw in each, which covers it evenly in few runs.
+
     Returns a dict with a list of `n` values for each parameter that has a prior or bounds;
     a parameter with a value for each level (`ss.par(ss.by(age=[...]), prior=...)`) has a draw
     for each level, as "beta[a]", "beta[b]", ..., as `fit()` fits it.
     """
-    rng = np.random.default_rng(seed)
     probe = sim.new(verbose=0).init()
-    out = sc.obj()
+    drawn = sc.objdict() # The parameter behind each draw
     for mod in probe.declared:
         for name,p in mod.graph.pars.items():
-            if name in out or (p.prior is None and p.bounds is None):
+            if name in drawn or (p.prior is None and p.bounds is None):
                 continue
             keys = [f'{name}[{label}]' for label in vector_labels(probe, p.raw, name)] if isinstance(p.raw, ss.by) else [name]
-            for key in keys:
-                if p.prior is None:
-                    vals = rng.uniform(*p.bounds, size=n)
-                else:
-                    prior = sc.dcp(p.prior)
-                    prior.strict = False
-                    vals = prior.init(trace=f'prior_{key}', seed=int(rng.integers(2**31)), force=True).rvs(n)
-                    if p.bounds is not None:
-                        vals = np.clip(vals, *p.bounds)
-                out[key] = [float(v) for v in vals]
+            drawn.update({key:p for key in keys})
+    out = sc.obj()
+    if drawn:
+        unit = sps.qmc.LatinHypercube(d=len(drawn), seed=seed).random(n)
+    for (key,p),quantiles in zip(drawn.items(), unit.T if drawn else []):
+        if p.prior is None:
+            vals = p.bounds[0] + quantiles*(p.bounds[1] - p.bounds[0])
+        else:
+            prior = sc.dcp(p.prior)
+            prior.strict = False
+            vals = prior.init(trace=f'prior_{key}', seed=0, force=True).ppf(quantiles)
+            if p.bounds is not None:
+                vals = np.clip(vals, *p.bounds)
+        out[key] = [float(v) for v in vals]
     if not out:
         errormsg = 'priors=True needs parameters with a prior or bounds, e.g. ss.par(0.3, prior=ss.normal(0.3, 0.05)) or ss.par(0.3, bounds=[0.1, 0.5])'
         raise ValueError(errormsg)

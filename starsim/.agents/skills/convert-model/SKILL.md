@@ -1,6 +1,6 @@
 ---
 name: convert-model
-description: Translate a disease model between Starsim v4 and another framework (EMULSION, odin, SimInf, flepiMoP, summer2, Atomica, SBML, EpiModel, epipack, epydemix, epymorph, LASER, MEmilio, camdl, or Starsim v3), in either direction. Use when someone wants to import, export, port, convert, or reimplement a model, or share a Starsim model with people who use another tool, including the parts that do not map one to one. Pair with the validate-conversion skill to check the result against the original.
+description: Translate a disease model between Starsim v4 and another framework (EMULSION, odin, SimInf, flepiMoP, summer2, Atomica, SBML, EpiModel, epipack, epydemix, epymorph, LASER, MEmilio, camdl, the Pandemic Simulator, or Starsim v3), in either direction. Use when someone wants to import, export, port, convert, or reimplement a model, or share a Starsim model with people who use another tool, including the parts that do not map one to one. Pair with the validate-conversion skill to check the result against the original.
 ---
 
 # Convert a model to or from Starsim
@@ -31,6 +31,7 @@ A model is imported in two passes. The mechanical pass (`ss.import_from(..., for
 6. **Compare the final model with the mechanical import**: a text diff of `model.py` against `sim.imported.code` lists what you changed. Everything it lists should be one of the untranslated pieces or a deliberate fix.
 7. **Validate** with the validate-conversion skill: run both, compare exactly (deterministic) or statistically (stochastic), and explain any difference.
 8. **Report** what was translated mechanically, what by hand, each workaround and why, and anything that does not translate well. A gap is a finding to report, not something to hide or force.
+9. **Say what the model is for.** If others will run it, its docstring says what it answers, its key assumptions, its known biases, and what it should not be used for, taken from the source where the source says so.
 
 ## Finishing an incomplete import
 
@@ -62,6 +63,7 @@ An import that could not translate everything is not refused: `ss.import_from()`
 | LASER, laser-measles | by hand | `references/laser.md` |
 | MEmilio | `format='memilio'` (a JSON dump from `starsim/converters/memilio.py` run as a script; the ODE models `osir`, `oseir`, `oseirdb`, and `osecir`, alone, on a `MobilityGraph` (places with commuting), or in a parameter study (distributions as priors)); the other models (`osecirvvs`, IDE, LCT, SDE, agent-based) by hand | `references/memilio.md` |
 | camdl | `format='camdl'` (a `.camdl` file, or camdlc's JSON) | `references/camdl.md` |
+| Pandemic Simulator | by hand | `references/pandemic_simulator.md` |
 | Starsim v3 | upgrade first with the migrate-starsim3 skill (removed names, changed results); then declared transitions by hand | `references/starsim3.md` |
 
 `ss.converters.importers` lists the importers this version has. For a framework with no importer, it can still help to fill in an `ss.converters.Source` (states, parameters, flows as written in the source) and call `ss.converters.build(source)`, which classifies the rates by the same rules, prints how it read each one, and writes the model as code (`ss.converters.write(source)` gives the code alone).

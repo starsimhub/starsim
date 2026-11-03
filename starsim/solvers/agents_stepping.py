@@ -260,7 +260,7 @@ class Stepping:
                     order = np.argsort(steps, kind='stable')
                     table.uids, table.steps, table.done = uids[order], steps[order], 0
                     table.new_uids, table.new_steps = uids[:0], steps[:0]
-            end = np.searchsorted(table.steps, ti, side='right')
+            end = np.searchsorted(table.steps, np.int32(ti), side='right') # Of its own type: otherwise NumPy copies the whole array to compare them
             now = table.new_steps <= ti
             due = np.sort(np.concatenate([table.carry, table.uids[table.done:end], table.new_uids[now]]))
             table.done = end
@@ -327,11 +327,11 @@ class Stepping:
             places = sim.groups.group_coords[:, d] if d is not None else np.zeros(sim.groups.n_groups, dtype=int)
             expected = np.bincount(places, weights=amount)
             born = self.rng.poisson(expected) # By place; the other levels are drawn as people are born into them
+            shares = [np.bincount(places, weights=amount*p) for p in ps] if len(ps) > 1 else None
             enter = []
             for place,k in enumerate(born):
                 if k:
-                    split = [np.bincount(places, weights=amount*p)[place]/expected[place] for p in ps]
-                    enter += [(place, (dst.name,), n) for dst,n in zip(tr.dst, self.rng.multinomial(k, split) if len(ps) > 1 else [k]) if n]
+                    enter += [(place, (dst.name,), n) for dst,n in zip(tr.dst, self.rng.multinomial(k, [share[place]/expected[place] for share in shares]) if len(ps) > 1 else [k]) if n]
             new = self.add_people(enter, self.ti, f'born_{tr.name}', newborn=not tr.migration)
             self.fire_entered(new, tr)
             self.flowcounts[tr.name] += self.n_of(new)

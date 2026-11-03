@@ -1315,10 +1315,12 @@ class Delivery(ss.products.EventSource, Intervention):
         if len(uids) <= k:
             return cands
         rand = self.tiebreak(uids)
-        keys = [rand] + ([] if wait is None else [-wait[uids]]) + ([] if key is None else [key[uids]])
-        order = np.lexsort(keys)
+        if wait is None and key is None: # The k lowest, which needs no sort
+            first = np.argpartition(rand, k - 1)[:k] if k else []
+        else:
+            first = np.lexsort([rand] + ([] if wait is None else [-wait[uids]]) + ([] if key is None else [key[uids]]))[:k]
         out = selector.nobody()
-        out[uids[order[:k]]] = True
+        out[uids[first]] = True
         return out
 
     def tiebreak(self, uids):

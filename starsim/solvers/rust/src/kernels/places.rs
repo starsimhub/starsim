@@ -14,7 +14,7 @@ fn place_people(ys: A2<f64>, p: &Program, a: usize, b: usize) -> f64 {
     n
 }
 
-/// The rate of every flow for the groups of one place (p.pl_groups[a:b]), when people mix only within their place (`place_rates()`)
+/// The rate of each flow for the groups of one place (p.pl_groups[a:b]), when people mix only within their place: of the flows that are events, or only of the flows of counts (`place_rates()`)
 pub fn place_rates(ys: A2<f64>, p: &Program, a: usize, b: usize, rates: A2<f64>, stack: A2<f64>, expo: A1<f64>, only_det: bool) {
     let nf = p.src.len();
     let top_reg = stack.n0().wrapping_sub(1);
@@ -40,7 +40,7 @@ pub fn place_rates(ys: A2<f64>, p: &Program, a: usize, b: usize, rates: A2<f64>,
         }
     }
     for f in 0..nf {
-        if only_det && !p.det.b(f) {
+        if p.det.b(f) != only_det {
             continue;
         }
         for j in a..b {
