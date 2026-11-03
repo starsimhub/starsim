@@ -510,6 +510,13 @@ class modify(Connector):
         return timed(self.amount)
 
     @property
+    def constant_amount(self):
+        """ Whether the amount and share are the same at every step: numbers, or expressions of parameters with plain values """
+        plain = lambda val: not callable(val) and not isinstance(val, ss.by)
+        values = [leaf.raw if isinstance(leaf, ss.par) else leaf for val in [self.amount, self.share] for leaf in (val.leaves if isinstance(val, ss.expressions.Expr) else [val])]
+        return all(plain(val) for val in values)
+
+    @property
     def active(self):
         """ Whether the modifier applies on the current step """
         sim = self.sim

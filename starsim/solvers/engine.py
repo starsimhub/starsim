@@ -21,7 +21,7 @@ from .backends.kernels import no_tables # For a step whose program holds for the
 
 def convert(val, unit, cache=None):
     """ Convert a typed quantity to a plain number in a unit: a duration to units, a rate to per unit; with a `cache` (a dict), each is converted once, unless its number is changed """
-    if cache is not None and isinstance(val, ss.TimePar):
+    if cache is not None and isinstance(val, ss.TimePar) and not isinstance(val.value, np.ndarray): # An array is as quick to convert as to compare, and a new one each step (a rate of a function) must not be kept
         known = cache.get(id(val))
         if known is None or known[0] is not val or changed(known[1], val.value):
             if len(cache) > 10_000: # Values made as the sim runs (e.g. by a time series) are kept with the others, so are let go of now and then

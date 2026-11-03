@@ -919,6 +919,8 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         if self.live is None:
             return
         if uids is not None:
+            if self.sim.groups.n_groups == 1: # With one group, nobody can change group
+                return
             uids = np.asarray(uids, dtype=np.int64)
             if not any(self.mod[state.name].raw[uids].any() for state in self.graph.people_states):
                 return # New agents, who are not in a state yet

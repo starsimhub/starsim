@@ -351,7 +351,7 @@ class MultiSim:
         else:
             base, n_runs, pars, draws = self.resolve(n_runs, pars, priors)
             plain = not opts and type(self).make_run is MultiSim.make_run # No changes to the sim of each run
-            if n_runs is not None and plain and set(kwargs) <= {'verbose', 'n_cpus', 'parallel'}: # Built once and restarted for each run, where the sims allow, which is many times faster
+            if n_runs is not None and plain and set(kwargs) <= {'verbose', 'n_cpus', 'parallel', 'shrink'}: # Built once and restarted for each run, where the sims allow, which is many times faster
                 restarted = restart_runs(base, n_runs, pars=pars, draws=draws)
                 if restarted is not None:
                     self.sims, self.results, self.runs = restarted
@@ -1223,7 +1223,7 @@ def par_sets(pars):
     return [dict(p) for p in pars]
 
 
-jax_runs = 300 # The number of runs of an ODE with different values from which ss.parallel() takes them in one call to JAX: about 0.5 s to set up, then faster than the kernels (a three-state model crosses over at about 300 runs)
+jax_runs = 30_000 # The number of runs of an ODE with different values from which ss.parallel() takes them in one call to JAX: seconds to import and compile in a first sweep, then faster than the kernels
 
 def by_scenario(sims, key):
     """ For `msim.sims['Vaccine']`: the sim of the scenario, or a list of them if it has several runs """

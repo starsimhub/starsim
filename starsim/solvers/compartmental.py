@@ -1753,7 +1753,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             for m in list(mods):
                 expr = getattr(m, 'where', None)
                 simple = isinstance(m, ss.modify) and isinstance(expr, ss.expressions.Func) and expr.name in ss.expressions.comparisons and m.op == 'multiply'
-                if not simple or m.holding or m.start is not None or m.stop is not None or m.share is not None or m.when is not None or not m.fixed_amount:
+                if not simple or m.holding or m.start is not None or m.stop is not None or m.share is not None or m.when is not None or not m.constant_amount:
                     continue
                 if any(isinstance(leaf, ss.expressions.Count) and any(all(state is not own for own in graph.states.values()) for state in leaf.states) for leaf in expr.leaves):
                     continue
@@ -2399,7 +2399,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         if self.sim.modifiers.get((self.mod.name, 'transition', tf.name)):
             return False
         exprs = [expr for expr in [tf.rate, tf.dur] + sc.tolist(tf.p) if expr is not None]
-        return all(isinstance(leaf, ss.par) and not callable(leaf.raw) and not isinstance(leaf.raw, ss.by) for expr in exprs for leaf in expr.leaves)
+        return all(isinstance(leaf, ss.par) and not callable(leaf.raw) and not (isinstance(leaf.raw, ss.by) and (leaf.raw.varies or isinstance(leaf.raw, ss.parameters.by_func))) for expr in exprs for leaf in expr.leaves)
 
     def par_transfer(self, tf):
         """
@@ -2464,6 +2464,8 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             rows = []
             which = [] # The row of each step
             changing = self.changing_steps(start, stop)
+            if changing is None and sim.pars.nopython:
+                raise ss.CapabilityError(f'nopython=True, but the modifiers of "{mod.name}" are worked out in Python at each step before the run, since they change on steps that cannot be told in advance')
             for ti in range(start, stop):
                 if changing is not None and rows and ti not in changing: # As on the step before
                     which.append(len(rows) - 1)
@@ -2495,20 +2497,33 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
     def changing_steps(self, start, stop):
         """ The steps on which the modifiers of this module change, if all they do is switch on and off at a date, so the tables need working out only on those steps; or None if they could change on any step """
         sim = self.sim
-        mods = [m for key,mods in sim.modifiers.items() if key[0] == self.mod.name for m in mods]
-        if self.time_pars or any(not getattr(m, 'timed', False) or isinstance(m.amount, ss.parameters.TimeValue) for m in mods):
+        mods = [m for key,mods in sim.modifiers.items() if key[0] == self.mod.name for m in mods if not getattr(m, 'constant', False)] # Not those that are the same at every step
+        if self.time_pars or any(not isinstance(m, ss.modify) or not m.tabulated for m in mods):
             return None
-        steps = set()
-        for time in [ss.connectors.to_time(sim, val) for m in mods for val in [m.start, m.stop] if val is not None]: # A time is passed once, so it is found by bisection
-            lo, hi = start, stop # The first step of these whose time has reached it, or `stop`
+
+        def first_step(passed):
+            """ The first step of these at which something that is passed once has been passed, or `stop`, by bisection """
+            lo, hi = start, stop
             while lo < hi:
                 mid = (lo + hi)//2
                 sim.t.ti = min(mid + 1, self.mod.t.npts - 1) # As tables() reads it
-                if ss.connectors.reached(sim.t.now(), time):
+                if passed():
                     hi = mid
                 else:
                     lo = mid + 1
-            steps.add(lo)
+            return lo
+
+        steps = set()
+        for m in mods:
+            if not m.constant_amount: # A step function changes only where its value does; anything else, at any step
+                if m.share is not None or not isinstance(m.amount, ss.timeseries) or not self.held(m.amount) or m.amount.period is not None:
+                    sim.t.ti = 0
+                    return None
+                steps.update(first_step(lambda: sim.t.now('year') + 1e-9 >= year) for year in m.amount.years(sim))
+            for val in [m.start, m.stop]:
+                if val is not None:
+                    time = ss.connectors.to_time(sim, val)
+                    steps.add(first_step(lambda: ss.connectors.reached(sim.t.now(), time)))
         sim.t.ti = 0
         return steps
 
@@ -2689,7 +2704,8 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         pos_s, pos_f = {i:j for j,i in enumerate(kept_s)}, {i:j for j,i in enumerate(kept_f)}
         grouped = self.outcomes and ng > 1 # Outcomes are then worked out by group, from the flows they come from by group at each step
         sources = sorted({key for info in self.outcomes.values() for key,weight in info.sources if key in self.tr_index}) if grouped else []
-        whole = grouped and not any(isinstance(weight, ss.expressions.Expr) for info in self.outcomes.values() for key,weight in info.sources) # For the whole run at once (see derived_outcomes()), unless a weight is an expression, which can change in time: then a step at a time, as a stepped run does
+        steady = lambda weight: all(isinstance(leaf, ss.par) and not callable(leaf.raw) and not isinstance(leaf.raw, ss.by) for leaf in weight.leaves) # A weight of plain parameters is the same at every step
+        whole = grouped and not any(isinstance(weight, ss.expressions.Expr) and not steady(weight) for info in self.outcomes.values() for key,weight in info.sources) # For the whole run at once (see derived_outcomes()), unless a weight is an expression, which can change in time: then a step at a time, as a stepped run does
         src = sc.obj({key:np.zeros((npts, ng)) for key in sources}) if whole else None # The flows the outcomes come from, by step and group
         if grouped:
             for name in self.outcomes:

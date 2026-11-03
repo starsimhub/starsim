@@ -218,7 +218,7 @@ def test_modify_fast_paths():
     def make(**mod):
         beta = ss.par(0.3, name='beta')
         sir = ss.Disease(infection=S >> I @ beta*I, recovery=I >> R @ ss.days(10), init_n=dict(I=100), name='sir')
-        return ss.Sim(sir, interventions=ss.modify(sir.pars.beta, multiply=0.75, **mod) if mod else None, **kw).run()
+        return ss.Sim(sir, interventions=ss.modify(sir.pars.beta, **{'multiply':0.75, **mod}) if mod else None, **kw).run()
 
     # The tables of dated modifiers, worked out where they change, are those of every step
     dates = dict(start='2026-03-01', stop='2026-05-02')
@@ -227,6 +227,35 @@ def test_modify_fast_paths():
         slow = make(**dates)
     assert fast.kernel_only() and np.array_equal(fast.results.sir.I.values, slow.results.sir.I.values)
     assert not np.array_equal(fast.results.sir.I.values, make().results.sir.I.values) # They had an effect
+
+    # A step function is worked out where it changes, as a date is
+    held = lambda: dict(multiply=ss.timeseries({20: 0.7, 40: 0.4, 90: 1.0}), start='2026-01-15')
+    fast = make(**held())
+    with mock.patch.object(ss.solvers.Compartmental, 'changing_steps', lambda *args: None):
+        slow = make(**held())
+    assert np.array_equal(fast.results.sir.I.values, slow.results.sir.I.values)
+
+    # A coverage given as a rate is one share of those eligible at each step, in the kernels
+    beta = ss.par(0.3, name='beta')
+    sir = ss.Disease(infection=S >> I @ beta*I, recovery=I >> R @ ss.days(10), init_n=dict(I=100), name='sir')
+    assert ss.Sim(sir, interventions=ss.vaccinate(efficacy=0.8, coverage=ss.peryear(0.5)), nopython=True, **kw).run().complete
+
+    # An amount or share that varies in time is not taken for a dated one
+    series = ss.timeseries({30: 1.0, 100: 0.2})
+    for kwargs in [dict(multiply=0.5*ss.par(series)), dict(multiply=0.5, share=series)]:
+        beta = ss.par(0.3, name='beta')
+        sir = ss.Disease(infection=S >> I @ beta*I, recovery=I >> R @ ss.days(10), init_n=dict(I=100), name='sir')
+        sim = ss.Sim(sir, interventions=ss.modify(sir.pars.beta, **kwargs), **kw).run()
+        assert sim.diseases.sir.engine.changing_steps(0, 365) is None
+
+    # With nopython=True, what would fall back to Python raises an error instead
+    beta = ss.par(0.3, name='beta')
+    sir = ss.Disease(infection=S >> I @ beta*I, recovery=I >> R @ ss.days(10), init_n=dict(I=100), name='sir')
+    make = lambda **mod: ss.Sim(sir, interventions=ss.modify(sir.pars.beta, multiply=0.75, **mod), nopython=True, **kw)
+    assert make(start='2026-03-01').run().complete and make(where=sir.I.n >= 20_000).run().complete
+    for mod in [dict(where=sir.I.n >= 20_000, until=sir.I.n <= 10_000), dict(multiply=ss.timeseries({30: 1.0, 100: 0.2}, mode='linear'))]:
+        with pytest.raises(ss.CapabilityError, match='nopython'):
+            ss.Sim(sir, interventions=ss.modify(sir.pars.beta, **{'multiply':0.75, **mod}), nopython=True, **kw).run()
 
     # A comparison of counts is part of the rate: the same as writing it there
     beta = ss.par(0.3, name='beta')

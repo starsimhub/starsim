@@ -2156,15 +2156,14 @@ class MixingPools(Route):
         """
         ppl = self.sim.people
         auids = ppl.auids
-        band = np.searchsorted(self.edges, ppl.age.raw[auids], side='right') - 1
-        ok = band >= 0
-        nb = len(self.edges)
-        n = np.bincount(band[ok], minlength=nb)
-        infectious = np.bincount(band[ok], weights=weights[auids][ok], minlength=nb)
-        prev = np.divide(infectious, n, out=np.zeros(nb), where=n > 0)
-        expo = np.zeros(len(auids))
-        expo[ok] = (self.pars.n_contacts.T @ prev)[band[ok]] # n_contacts is indexed [source, destination]
-        return auids, self.pars.beta*expo
+        band = ppl.age_bins(self.edges)[auids] # 0 if younger than the first
+        nb = len(self.edges) + 1
+        n = np.bincount(band, minlength=nb)
+        infectious = np.bincount(band, weights=weights[auids], minlength=nb)
+        n[0] = infectious[0] = 0
+        prev = np.divide(infectious[1:], n[1:], out=np.zeros(nb-1), where=n[1:] > 0)
+        rates = np.append(0.0, self.pars.n_contacts.T @ prev) # n_contacts is indexed [source, destination]
+        return auids, self.pars.beta*rates[band]
 
     def group_exposure(self, weights):
         """

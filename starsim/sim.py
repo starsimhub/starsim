@@ -44,6 +44,7 @@ class SimPars(ss.Pars):
         connectors (str/list/Module): As above
         interventions (str/list/Module): As above
         analyzers (str/list/Module): As above
+        nopython (bool): whether to raise `ss.CapabilityError`, rather than fall back to Python, if a compartmental run cannot be taken whole in the kernels, as with Numba's `nopython=True` (see `sim.kernel_reason()`)
         verbose (int/float): How much to print: 0 nothing, 1 the solver, notes, and progress (default), 2 everything (e.g. each step); a fraction is as 1, with progress every that share of the run (e.g. 0.1 for every 10%)
         create (bool): whether a key that doesn't exist yet can be added
     """
@@ -76,6 +77,7 @@ class SimPars(ss.Pars):
         self.branching  = False  # Whether to run as a branching process: infection takes no one from the uninfected, nor gives anyone back (see ss.Sim)
         self.approx     = None   # None prints a note for each approximation; True keeps the note in sim.notes without printing it; False makes it an error
         self.integrator = None   # The ODE integration scheme: 'rk4' (the default) or 'euler'
+        self.nopython   = False  # Whether to raise an error, rather than fall back to Python, if the run cannot be taken whole in the kernels, as with Numba's nopython=True
         self.substeps   = None   # The number of substeps per timestep: for the 'rk4' and 'euler' integrators (default: enough that no compartment turns over, or grows through its inflows, by more than a quarter in one), and the 'binomial' solver (default: enough that no more than about a tenth of the people in a compartment leave it in one; 1 takes each step whole, as discrete-time chain-binomial models do)
         self.stratify   = None   # People dimensions for every module, e.g. dict(age=[0, 15, 65])
         self.results    = None   # The results to keep by group, by name, e.g. ['I', 'cases'] or ['sir.I']; the others keep only their totals (default: all, every few steps if every step would take more than about 100 MB: see ss.solvers.group_rows())
@@ -1587,7 +1589,7 @@ class Sim(ss.Base):
         elif solver is not None and not self.initialized:
             self.pars.solver = solver
         if self.complete and until is None: # Run again from the start
-            self.new(inplace=True)
+            self.restart() # Which builds it again if it needs to
 
         # Initialization steps
         if verbose is not None and not self.initialized: # So that initializing says as much
@@ -1616,6 +1618,8 @@ class Sim(ss.Base):
             kernels = until is None and not profile and reason is None
             if reason is not None and self.solver != 'abm' and getattr(self, 'declared', None): # Say once why a compartmental run is taken a step at a time (describe() says it too)
                 ss.note(f'run a step at a time, which is much slower than all at once, since {reason}', sim=self, verbose=self.verbose)
+            if self.pars.nopython and not kernels:
+                raise ss.CapabilityError(f'nopython=True, but this sim would be run a step at a time in Python, since {reason or "until= or profile= was given"}')
             if kernels: # JAX or the kernels: see ss.solvers.choose_engine()
                 known = self.__dict__.get('_engine_known')
                 if restarted == 'same' and known is not None and known[0] is self.jax and not self.jax: # A choice from the model and its values, which are as they were

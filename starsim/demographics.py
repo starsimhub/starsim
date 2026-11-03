@@ -514,13 +514,10 @@ class Deaths(Demographics):
 
             death_rate = np.empty(uids.shape, dtype=ss_float)
 
+            binned_ages = ppl.age_bins(ages)[uids]-1 # Negative ages will be in the first bin - do *not* subtract 1 so that this bin is 0
             if (nearest_year, 'f') in rows:
-                binned_ages = np.digitize(ppl.age[ppl.female], ages)-1 # Negative ages will be in the first bin - do *not* subtract 1 so that this bin is 0
-                death_rate[ppl.female] = rows[nearest_year, 'f'][binned_ages]
-                binned_ages = np.digitize(ppl.age[ppl.male], ages)-1 # Negative ages will be in the first bin - do *not* subtract 1 so that this bin is 0
-                death_rate[ppl.male] = rows[nearest_year, 'm'][binned_ages]
+                death_rate[:] = np.where(ppl.female.raw[uids], rows[nearest_year, 'f'][binned_ages], rows[nearest_year, 'm'][binned_ages])
             else:
-                binned_ages = np.digitize(ppl.age, ages)-1 # Negative ages will be in the first bin - do *not* subtract 1 so that this bin is 0
                 death_rate[:] = rows[nearest_year][binned_ages]
             death_rate *= self.pars.rate_units * self.pars.rel_death
 
@@ -943,9 +940,9 @@ class Pregnancy(Demographics, ss.Disease):
     def _unborn(self, moms):
         """ The living fetuses of some mothers (not those already due to die) """
         ppl = self.sim.people
-        auids = ppl.auids
-        keep = self.fetal.raw[auids] & np.isin(ppl.parent.raw[auids], moms) & ~(ppl.ti_dead.raw[auids] <= self.sim.ti)
-        return ss.uids(auids[keep])
+        fetuses = np.flatnonzero(self.fetal.raw) # Few, against the agents
+        keep = np.isin(ppl.parent.raw[fetuses], moms) & ~(ppl.ti_dead.raw[fetuses] <= self.sim.ti) & ~(ppl.ti_removed.raw[fetuses] <= self.sim.ti)
+        return ss.uids(fetuses[keep])
 
     def also_happened(self, name, uids):
         """ A delivery happens to the fetuses as well as the mother, before they are born, so ss.on(preg.delivery) can remove a fetus as a stillbirth
@@ -1169,7 +1166,7 @@ class Pregnancy(Demographics, ss.Disease):
             ages = np.concatenate(self._mothers) if self._mothers else np.zeros(0)
             births = np.histogram(ages, bins=bins)[0]
             auids = ppl.auids
-            women = np.histogram(ppl.age.raw[auids][ppl.female.raw[auids]], bins=bins)[0]
+            women = np.bincount(ppl.age_bins(bins)[auids][ppl.female.raw[auids]], minlength=len(bins) + 1)[1:len(bins)] # As np.histogram(), which sorts them
         elif any(strat.kind == 'age' and strat.edges is not None for strat in sim.groups.strats): # The rate of each age group, for each bin within it
             ng = sim.groups.n_groups
             engine = self.engine
@@ -1293,22 +1290,25 @@ class Pregnancy(Demographics, ss.Disease):
             fertile = fecund*(1 - p_inf) # The mean, since infertility is not a dimension
         frd = self.fertility_rate_data
         scale = pars.rate_units*pars.rel_fertility
+        idx = np.flatnonzero(fecund) if self.abm else None # Those who can conceive: few, against the slots of the arrays
+        a = age if idx is None else age[idx]
         if isinstance(frd, ss.Rate): # One rate, as data with one value: per woman-year (the hazard, for a probability), rescaled as the data are
             vals = np.array([ss.solvers.convert(frd, 'year')], dtype=float)
-            bins = np.zeros(len(age), dtype=int)
+            bins = np.zeros(len(a), dtype=int)
         else:
             year = self.t.now('year') + self.mean_dur_pregnancy
             rows, years, ages = self.fertility_rows
             vals = rows[years[sc.findnearest(years, year)]]
-            bins = np.clip(np.digitize(age, ages) - 1, 0, len(vals) - 1)
+            bins = np.clip(np.digitize(a, ages) - 1, 0, len(vals) - 1) if idx is None else np.clip(ppl.age_bins(ages)[idx] - 1, 0, len(vals) - 1)
         if self.abm: # From all fecund women to those not pregnant, by age group
-            total = np.bincount(bins[fecund], minlength=len(vals))
-            preg = np.bincount(bins[fecund & pregnant], minlength=len(vals))
+            total = np.bincount(bins, minlength=len(vals))
+            preg = np.bincount(bins[pregnant[idx]], minlength=len(vals))
             vals = vals*np.divide(total, total - preg, out=np.zeros(len(vals)), where=total > preg)
-            rate = vals[bins]*scale
-        else:
-            rate = vals[bins]*scale*np.divide(n_np + n_p, n_np, out=np.zeros(len(age)), where=n_np > 0)
-        return ss.peryear(np.where(fertile, rate, 0)*(fertile if not self.abm else 1))
+            out = np.zeros(len(age))
+            out[idx] = vals[bins]*scale*fertile[idx]
+            return ss.peryear(out)
+        rate = vals[bins]*scale*np.divide(n_np + n_p, n_np, out=np.zeros(len(age)), where=n_np > 0)
+        return ss.peryear(np.where(fertile, rate, 0)*fertile)
 
 
 class Population(Demographics, ss.Disease):

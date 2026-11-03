@@ -127,6 +127,7 @@ class People:
         self._states = {}
         self.version = ss.__version__  # Store version info
         self.untraited = [] # Ranges of UIDs made by code that sets their properties afterwards (grow() without age=), whose traits are drawn at the next step: see grow()
+        self._age_bins = {} # The bin of each agent by age, for each set of edges: see age_bins()
         self.has_unborn = False # Whether a module makes agents before they are born, with a negative age (e.g. ss.Pregnancy's fetuses), who are not counted among the people: see unborn_uids()
         self.initialized = False
         self.n_agents_init = round(n_agents) # The nearest whole number, as ss.SimPars takes it (e.g. a number a fit chose)
@@ -855,6 +856,21 @@ class People:
             self.auids = self._auids_view = room[:n_kept].view(ss.uids)
 
         return
+
+    def age_bins(self, edges):
+        """ The bin of each agent's age, as np.digitize(age, edges), by UID: everyone gets older at each step, but few leave their bin, so only those who did are worked out again """
+        age = self.age.raw
+        key = edges.tobytes()
+        bins = self._age_bins.get(key)
+        if bins is None or len(bins) > len(age):
+            bins = np.digitize(age, edges)
+        else:
+            if len(bins) < len(age): # The arrays have grown
+                bins = np.concatenate([bins, np.digitize(age[len(bins):], edges)])
+            moved = ss.solvers.backends.passes.crossed(age, bins, np.append(-np.inf, edges), np.append(edges, np.inf))
+            bins[moved] = np.digitize(age[moved], edges)
+        self._age_bins[key] = bins
+        return bins
 
     def dying(self):
         """ The agents who died or left in this step (see `step_die()`), who are active until the end of it """

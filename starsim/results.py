@@ -1040,10 +1040,19 @@ class Result(ss.arrays.BaseArr):
         if res.runs is not None:
             rows = []
             for col,part in parts.items():
-                for i,(row,vals) in enumerate(zip(part.runs.to_dict('records'), part.values)):
-                    q = row.pop('quantile', None)
-                    head = row if q is not None else dict(run=i, **row)
-                    rows.append(pd.DataFrame(dict(**head, **({} if col is None else dict(column=col)), time=part.timevec, **({} if q is None else dict(quantile=q)), value=vals)))
+                head = part.runs.copy()
+                quantiles = head.pop('quantile') if 'quantile' in head else None
+                if quantiles is None:
+                    head.insert(0, 'run', np.arange(len(head)))
+                n, npts = np.shape(part.values)
+                df = head.iloc[np.repeat(np.arange(n), npts)].reset_index(drop=True)
+                if col is not None:
+                    df['column'] = col
+                df['time'] = np.tile(np.asarray(part.timevec), n)
+                if quantiles is not None:
+                    df['quantile'] = np.repeat(quantiles.values, npts)
+                df['value'] = np.ravel(part.values)
+                rows.append(df)
             return sc.dataframe(pd.concat(rows, ignore_index=True))
 
         if res.timevec is None and set_date_index:

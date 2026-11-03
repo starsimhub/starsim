@@ -617,9 +617,9 @@ class Dist:
     def sync(self, ind):
         """ Move the generator to an index: its initial state, jumped that many times """
         bitgen = self._rng._bit_generator
-        bitgen.state = self.history[0].copy() # First back to the initial state (in case of different numbers of calls)
+        bitgen.state = self.history[0] # First back to the initial state (in case of different numbers of calls)
         if ind: # Seems to randomize state if jumps=0
-            bitgen.state = bitgen.jumped(jumps=ind).state
+            bitgen.advance((ind*210306068529402873165736369884012333109) % 2**128) # As bitgen.jumped(ind), in place (a seventh of the time)
         return
 
     @property

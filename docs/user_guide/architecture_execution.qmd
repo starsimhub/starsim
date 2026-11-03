@@ -77,7 +77,7 @@ New agents exist before diseases see them, networks update before interventions 
 
 **The loop is data.** After `sim.init()`, `sim.loop.to_df()` lists every call at every time, and `sim.loop.insert(fn, label='sir.step')` adds a function at any point, or moves a module there. The order can always be printed, and it is the only thing that decides what runs when. [Modules](architecture_modules.qmd#reading-the-loop) shows how to read it.
 
-In a compartmental run, a disease's own flows have no order: the ODE evaluates them together. If nothing needs a step of its own, the whole run is one call to the *kernels* (small compiled functions that step the compartments; see [Solvers and backends](architecture_solvers.qmd#the-engines)), with no Python loop. `sim.kernel_reason()` says why a run is stepped instead (for example "it runs as agents", or the name of an analyzer with a step of its own), and is `None` for a run taken in one call.
+In a compartmental run, a disease's own flows have no order: the ODE evaluates them together. If nothing needs a step of its own, the whole run is one call to the *kernels* (small compiled functions that step the compartments; see [Solvers and backends](architecture_solvers.qmd#the-engines)), with no Python loop. `sim.kernel_reason()` says why a run is stepped instead (for example "it runs as agents", or the name of an analyzer with a step of its own), and is `None` for a run taken in one call. To be told rather than slowed when a run can't be taken this way, pass `nopython=True` to the sim, which raises an error giving the reason, as Numba's `nopython=True` does.
 
 ## Per-module timesteps
 
