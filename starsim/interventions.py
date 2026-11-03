@@ -918,7 +918,7 @@ class Delivery(ss.products.EventSource, Intervention):
         self.rows = self.group_ti = None # As for a disease: see ss.solvers.group_rows()
         if ng > 1: # By stratum, like the results of a disease: see res.select() and res.by()
             grouped = [res for res in results if ss.solvers.kept_by_group(self.sim, self, res.name)]
-            self.rows, self.group_ti = ss.solvers.group_rows(self.sim, self.sim.t.npts, len(grouped)*ng*8, ss.solvers.Engine.group_bytes, name=self.name)
+            self.rows, self.group_ti = ss.solvers.group_rows(self.sim, self.t.npts, len(grouped)*ng*8, ss.solvers.Engine.group_bytes, name=self.name)
             for res in grouped:
                 res.strats = self.sim.groups.strats
                 res.dims = [strat.name for strat in self.sim.groups.strats]
@@ -937,7 +937,7 @@ class Delivery(ss.products.EventSource, Intervention):
         if self.in_compartments is not None:
             return self.in_compartments.tally(key, sel, weight)
         res = self.results[key]
-        ti = self.sim.ti
+        ti = self.ti
         n = self.n_selected(sel)*weight
         res[ti] += n
         if getattr(res, 'strata', None) is not None and n:
@@ -947,7 +947,7 @@ class Delivery(ss.products.EventSource, Intervention):
 
     def add(self, key, uids=None, groups=None, part=None):
         """ Add people to a result (and to its part for one disease and transition): agents by UID, or people by group """
-        ti = self.sim.ti
+        ti = self.ti
         if uids is not None:
             scale = ss.results.people_scale(self.sim)
             n = float(len(uids))*scale
@@ -1266,7 +1266,7 @@ class Delivery(ss.products.EventSource, Intervention):
         q[np.flatnonzero(left)] = np.nan
         self.add('left', ss.uids(np.flatnonzero(left & alive)))
         if (n_dead := np.count_nonzero(left & ~alive)):
-            self.results.left[ti] += n_dead*ss.results.people_scale(sim)
+            self.results.left[self.ti] += n_dead*ss.results.people_scale(sim)
         waiting &= ~left
         cands = chosen | waiting
         wait = np.where(waiting, ti - q[:len(alive)], 0.0)
@@ -1283,8 +1283,8 @@ class Delivery(ss.products.EventSource, Intervention):
         was = served & waiting
         q[np.flatnonzero(was)] = np.nan
         n = np.count_nonzero(served)
-        self.results.waited[ti] = wait[was].sum()/n*self.dt_sim if n else 0.0
-        self.results.waiting[ti] = np.count_nonzero(~np.isnan(q[sim.people.auids]))*ss.results.people_scale(sim)
+        self.results.waited[self.ti] = wait[was].sum()/n*self.dt_sim if n else 0.0
+        self.results.waiting[self.ti] = np.count_nonzero(~np.isnan(q[sim.people.auids]))*ss.results.people_scale(sim)
         return sel, served
 
     #%% Choosing in an order: priority=
@@ -1578,7 +1578,7 @@ class Delivery(ss.products.EventSource, Intervention):
         """ The coverage of what was delivered in the step """
         super().update_results()
         res = self.results
-        ti = self.sim.ti
+        ti = self.ti
         res.coverage[ti] = res.delivered[ti]/res.eligible[ti] if res.eligible[ti] else 0.0
         if getattr(res.coverage, 'strata', None) is not None:
             row = self.row(ti)

@@ -607,6 +607,19 @@ def test_age_and_birth():
 
 
 
+def test_own_timestep():
+    """ A delivery with a timestep of its own records its results on that timeline, as agents and as compartments """
+    for solver in ['abm', 'binomial']:
+        for dt,index in [(ss.years(2), 2), (ss.months(6), 8)]: # The step that starts at 2003, or the first after it
+            delivery = ss.vaccinate(ss.Vaccine(efficacy=0.5), start=2003, dt=dt)
+            sim = ss.Sim(n_agents=1000, diseases='sir', networks='random' if solver == 'abm' else None, solver=solver, start=2000, stop=2010, dt=ss.years(1), interventions=delivery, verbose=0).run()
+            res = sim.results[delivery.name]
+            assert len(res.delivered) == sim.interventions[0].t.npts != sim.t.npts
+            assert res.delivered[index] > 0 and res.delivered.sum() == res.delivered[index]
+            assert res.coverage[index] == 1
+    return
+
+
 def test_modify_until():
     """ until= keeps a modifier on from where= until a lower level, under each kind of solver """
     def run(solver, pop=1e6, until=True):

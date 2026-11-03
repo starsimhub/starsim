@@ -630,6 +630,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
 
     def init_post(self):
         """ Set the initial conditions """
+        self.inline_modifiers()
         fracs, counts = self.init_fractions()
         self.update_targets()
         amounts = sc.obj({name:frac*self.total_pop*self.state_split[name] for name,frac in fracs.items()})
@@ -1738,6 +1739,47 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         self.kernel_rng = self.make_rng(stream=1) # As a whole run starts with, so stepping gives the same run
         return
 
+    def inline_modifiers(self):
+        """
+        Make each modifier that multiplies a rate while a comparison of this module's counts holds (`where=I.n >= 1000`) part of the rate, as `1 + (multiply - 1)*(I.n >= 1000)`
+
+        The kernels work this out as they do any rate, so the run needs no Python between its steps. The ODE reads the
+        comparison at each stage of a step, not once a step. Anything else about the modifier leaves it to be applied each step.
+        """
+        sim, graph = self.sim, self.graph
+        for key,mods in list(sim.modifiers.items()):
+            if key[0] != self.mod.name or self.cross is not None or any(m.op == 'add' for m in mods):
+                continue
+            for m in list(mods):
+                expr = getattr(m, 'where', None)
+                simple = isinstance(m, ss.modify) and isinstance(expr, ss.expressions.Func) and expr.name in ss.expressions.comparisons and m.op == 'multiply'
+                if not simple or m.holding or m.start is not None or m.stop is not None or m.share is not None or m.when is not None or not m.constant_amount:
+                    continue
+                if any(isinstance(leaf, ss.expressions.Count) and any(all(state is not own for own in graph.states.values()) for state in leaf.states) for leaf in expr.leaves):
+                    continue
+                amount = 1 - m.amount if m.efficacy is not None else m.amount
+                factor = 1 + (amount - 1)*expr
+                named = lambda e: [leaf for leaf in getattr(e, 'leaves', []) if isinstance(leaf, ss.par) and leaf.name == key[2]]
+                if key[1] == 'par':
+                    if any(named(e) for tr in graph.transitions.values() for e in [tr.dur] + sc.tolist(tr.p)):
+                        continue
+                    change = lambda e: ss.expressions.substitute(e, {id(leaf):leaf*factor for leaf in named(e)})
+                    flows = [flow for flow in self.flows if flow.expr is not None and named(flow.expr)]
+                else:
+                    change = lambda e: e*factor
+                    flows = [flow for flow in self.flows if flow.tr is graph.transitions.get(key[2]) and flow.expr is not None]
+                if key[1] not in ['par', 'transition'] or not flows or any(flow.strain or (self.solver == 'binomial' and not flow.dynamic) for flow in flows): # The substeps of the chain binomial are chosen from the rates known at the start
+                    continue
+                for flow in flows:
+                    flow.expr, flow.dynamic = change(flow.expr), True
+                    if flow.tr.rate is not None:
+                        flow.tr.rate = flow.expr
+                        flow.tr.const, flow.tr.terms = ss.expressions.linear(flow.expr)
+                mods.remove(m)
+                m.inlined = True
+                self.whole = None # Worked out again
+        return
+
     def init_func_exprs(self):
         """ Call each value that is a function of the sim, to find those that give an expression of the model's states, which are worked out within the step """
         self.time_pars = [] # The parameters whose value changes over time
@@ -2357,7 +2399,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         if self.sim.modifiers.get((self.mod.name, 'transition', tf.name)):
             return False
         exprs = [expr for expr in [tf.rate, tf.dur] + sc.tolist(tf.p) if expr is not None]
-        return all(isinstance(leaf, ss.par) and not callable(leaf.raw) and not isinstance(leaf.raw, ss.by) for expr in exprs for leaf in expr.leaves)
+        return all(isinstance(leaf, ss.par) and not callable(leaf.raw) and not (isinstance(leaf.raw, ss.by) and (leaf.raw.varies or isinstance(leaf.raw, ss.parameters.by_func))) for expr in exprs for leaf in expr.leaves)
 
     def par_transfer(self, tf):
         """
@@ -2420,7 +2462,15 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         series = {id(par):self.cache[id(par)] for par in self.time_pars}
         if changes: # Modifiers that depend only on time (see kernel_only()): work out every part of the program at each step (and stage), with them applied
             rows = []
+            which = [] # The row of each step
+            changing = self.changing_steps(start, stop)
+            if changing is None and sim.pars.nopython:
+                raise ss.CapabilityError(f'nopython=True, but the modifiers of "{mod.name}" are worked out in Python at each step before the run, since they change on steps that cannot be told in advance')
             for ti in range(start, stop):
+                if changing is not None and rows and ti not in changing: # As on the step before
+                    which.append(len(rows) - 1)
+                    continue
+                which.append(len(rows))
                 sim.t.ti = mod.t.ti = min(ti + 1, npts - 1) # The step from ti, which is step ti+1 (see ss.Loop)
                 self.at_middle()
                 self.cache.clear()
@@ -2432,7 +2482,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             self.year = None
             self.cache.clear()
             shape = (self.n_groups,)
-            fixed, mult, consts, rel_trans = [np.array([[np.broadcast_to(val, shape) for val in row[k]] for row in rows], dtype=float).reshape(len(rows), len(rows[0][k]), self.n_groups) for k in range(4)]
+            fixed, mult, consts, rel_trans = [np.array([[np.broadcast_to(val, shape) for val in row[k]] for row in rows], dtype=float).reshape(len(rows), len(rows[0][k]), self.n_groups)[which] for k in range(4)]
             grouped = [True]*4
         self.tables_by_group = grouped
         for par in self.time_pars: # For the results, a value is a series over the steps (and over the groups, for an ss.by)
@@ -2443,6 +2493,45 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         if values is not None:
             self.kept_tables = (values, tables, dict(self.cache))
         return list(tables)
+
+    def changing_steps(self, start, stop):
+        """ The steps on which the modifiers of this module change, if all they do is switch on and off at a date, so the tables need working out only on those steps; or None if they could change on any step """
+        sim = self.sim
+        mods = [m for key,mods in sim.modifiers.items() if key[0] == self.mod.name for m in mods if not getattr(m, 'constant', False)] # Not those that are the same at every step
+        if self.time_pars or any(not isinstance(m, ss.modify) or not m.tabulated for m in mods):
+            return None
+
+        def first_step(passed):
+            """ The first step of these at which something that is passed once has been passed, or `stop`, by bisection """
+            lo, hi = start, stop
+            while lo < hi:
+                mid = (lo + hi)//2
+                sim.t.ti = min(mid + 1, self.mod.t.npts - 1) # As tables() reads it
+                if passed():
+                    hi = mid
+                else:
+                    lo = mid + 1
+            return lo
+
+        steps = set()
+        for m in mods:
+            if not m.constant_amount: # A step function changes only where its value does; anything else, at any step
+                if m.share is not None or not isinstance(m.amount, ss.timeseries) or not self.held(m.amount) or m.amount.period is not None:
+                    sim.t.ti = 0
+                    return None
+                steps.update(first_step(lambda: sim.t.now('year') + 1e-9 >= year) for year in m.amount.years(sim))
+            if m.when is not None: # A condition on time alone, read once for each step
+                on = []
+                for ti in range(start, stop):
+                    sim.t.ti = min(ti + 1, self.mod.t.npts - 1)
+                    on.append(ss.conditions.holds_now(m.when, sim))
+                steps.update((start + 1 + np.flatnonzero(np.diff(on))).tolist())
+            for val in [m.start, m.stop]:
+                if val is not None:
+                    time = ss.connectors.to_time(sim, val)
+                    steps.add(first_step(lambda: ss.connectors.reached(sim.t.now(), time)))
+        sim.t.ti = 0
+        return steps
 
     def table_years(self, raw):
         """ The year of each row of the tables, one a step, for a value that varies in time: the middle of the step, or its start for a step function, which is held from there, and for Euler's method, which reads everything there """
@@ -2621,7 +2710,8 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         pos_s, pos_f = {i:j for j,i in enumerate(kept_s)}, {i:j for j,i in enumerate(kept_f)}
         grouped = self.outcomes and ng > 1 # Outcomes are then worked out by group, from the flows they come from by group at each step
         sources = sorted({key for info in self.outcomes.values() for key,weight in info.sources if key in self.tr_index}) if grouped else []
-        whole = grouped and not any(isinstance(weight, ss.expressions.Expr) for info in self.outcomes.values() for key,weight in info.sources) # For the whole run at once (see derived_outcomes()), unless a weight is an expression, which can change in time: then a step at a time, as a stepped run does
+        steady = lambda weight: all(isinstance(leaf, ss.par) and not callable(leaf.raw) and not isinstance(leaf.raw, ss.by) for leaf in weight.leaves) # A weight of plain parameters is the same at every step
+        whole = grouped and not any(isinstance(weight, ss.expressions.Expr) and not steady(weight) for info in self.outcomes.values() for key,weight in info.sources) # For the whole run at once (see derived_outcomes()), unless a weight is an expression, which can change in time: then a step at a time, as a stepped run does
         src = sc.obj({key:np.zeros((npts, ng)) for key in sources}) if whole else None # The flows the outcomes come from, by step and group
         if grouped:
             for name in self.outcomes:
@@ -2879,6 +2969,9 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             out[name] = np.zeros((width, n_steps))
             if info.stay is not None or info.p_leave is not None:
                 out[f'n_{name}'] = np.zeros((width, n_steps))
+        vals = self.whole_outcomes(todo, flows, weights, width)
+        if vals is not None:
+            return sc.obj({key:(out[key] + val).reshape(shape) for key,val in vals.items()})
         for ti in range(n_steps):
             for name,info in todo.items():
                 amount = 0.0
@@ -2888,6 +2981,22 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                 if f'n_{name}' in out:
                     out[f'n_{name}'][:, ti] = bufs[name].n
         return sc.obj({key:vals.reshape(shape) for key,vals in out.items()})
+
+    def whole_outcomes(self, todo, flows, weights, width):
+        """ The outcomes drawn all at once, by name: with no delay or stay, an outcome's only draws are binomials of the flows it comes from, one call in the same order as a step at a time; or None if any has more than that """
+        if not all(len(info.kernel) == 1 and info.stay is None and info.p_leave is None and all(key in flows for key,_ in info.sources) for info in todo.values()):
+            return None
+        parts = [(name, flows[key], weight) for name,info in todo.items() for (key,_),weight in zip(info.sources, weights[name])]
+        if not all(np.all((0 <= np.asarray(weight)) & (np.asarray(weight) <= 1)) for _,_,weight in parts):
+            return None
+        flow = np.stack([part[1] for part in parts]) # Parts by width by steps
+        share = np.broadcast_to(np.stack([np.broadcast_to(part[2], (width,)) for part in parts])[:, :, None], flow.shape)
+        whole = np.floor(flow)
+        drawn = self.rng.binomial(whole.astype(int).transpose(2, 0, 1), share.transpose(2, 0, 1)).transpose(1, 2, 0) + (flow - whole)*share
+        out = sc.obj()
+        for i,(name,_,_) in enumerate(parts):
+            out[name] = out.get(name, 0) + drawn[i]*todo[name].kernel[0]
+        return out
 
     #%% Stepping
 

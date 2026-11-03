@@ -177,7 +177,7 @@ class CompartmentalDelivery(sc.prettyobj):
         """ Add the people selected to a result, in total and by group; returns the total """
         d = self.delivery
         res = d.results[key]
-        ti = self.sim.ti
+        ti = d.ti
         n = self.n_selected(sel)*weight
         res[ti] += n
         if getattr(res, 'strata', None) is not None and n:
@@ -488,7 +488,8 @@ class CompartmentalDelivery(sc.prettyobj):
         moves = (product is None and (d.move_states is None or self.plain_move())) or (product is not None and product.holds and getattr(product, 'take', None) is None) # A move between states only within each group, and not an all-or-nothing vaccine, whose doses are not all held
         scheduled = d.routine or (d.in_rounds and d.trigger is None)
         watched = d.name in [ss.conditions.modname(leaf.args[0]) for mod in sim.interventions() if isinstance(mod, ss.Delivery) for leaf in ss.conditions.event_leaves(mod.trigger)] or d._needs # Its events are read, which the kernels do not keep
-        static = ss.conditions.is_static(d.eligible, sim) and (sc.isnumber(d.coverage) or d.coverage is None or isinstance(d.coverage, ss.by))
+        typed = isinstance(d.coverage, ss.TimePar) and not d.in_rounds # A rate among those eligible, the same share at each step
+        static = ss.conditions.is_static(d.eligible, sim) and (sc.isnumber(d.coverage) or d.coverage is None or isinstance(d.coverage, ss.by) or typed)
         past = d.at_age is not None # The people past the age are left out on the first step: see ss.Delivery.skip_past()
         limited = d.capacity is not None or d.queue is not None or bool(getattr(product, 'doses', None)) or getattr(product, 'during', None) is not None # Served in an order, given in doses, or held only in some states, which the kernels do not take
         return moves and scheduled and static and not limited and d.when is None and not watched and not past
@@ -516,7 +517,7 @@ class CompartmentalDelivery(sc.prettyobj):
         for ti in range(npts):
             due[ti] = d.ti_start <= ti + 1 < d.ti_stop and (d.round_tis is None or ti + 1 in d.round_tis)
         sel = d.offer(d.default_eligible() if d.eligible is None else selector.select(d.eligible))
-        cov = np.broadcast_to(np.clip(selector.per_person(1.0 if d.coverage is None else d.coverage), 0, 1), selector.shape)
+        cov = np.broadcast_to(np.clip(selector.per_person(1.0 if d.coverage is None else d.coverage, convert=lambda val: -np.expm1(-d.convert(val)*d.span)), 0, 1), selector.shape)
         changes = dict(d.changes) if d.product is None else {sim.groups.dim_index(d.product.dim):1}
         offered = {sim.groups.dim_index(d.offered):1} if d.remembers else {}
         to = eng.targets(changes | offered)

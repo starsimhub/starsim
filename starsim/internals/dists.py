@@ -36,8 +36,7 @@ _ROUND_IND = 2**62 # Added to the draw index for the stochastic rounding uniform
 _EVEN_IND = 2**61 # Added to the draw index for the offset of evenly spaced uniforms (see even_out())
 _cache.depends(__file__, draws.__file__) # So the cached hash below is compiled again when the draws change
 
-@nb.jit([nb.void(nb.int64, nb.int64, nb.uint64[:], nb.float32[:], nb.uint64, nb.float64),
-          nb.void(nb.int64, nb.int64, nb.uint64[:], nb.float64[:], nb.uint64, nb.float64)], cache=True)
+@nb.jit(cache=True)
 def _hash_uniforms_fill(seed, ind, slots, out, shift, scale):
     """
     Fill `out` with one uniform in (0, 1) per slot via a counter-based (splitmix64) hash keyed
@@ -617,9 +616,9 @@ class Dist:
     def sync(self, ind):
         """ Move the generator to an index: its initial state, jumped that many times """
         bitgen = self._rng._bit_generator
-        bitgen.state = self.history[0].copy() # First back to the initial state (in case of different numbers of calls)
+        bitgen.state = self.history[0] # First back to the initial state (in case of different numbers of calls)
         if ind: # Seems to randomize state if jumps=0
-            bitgen.state = bitgen.jumped(jumps=ind).state
+            bitgen.advance((ind*210306068529402873165736369884012333109) % 2**128) # As bitgen.jumped(ind), in place (a seventh of the time)
         return
 
     @property

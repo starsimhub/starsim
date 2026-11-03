@@ -2,6 +2,7 @@
 Test deliveries: routine and campaign delivery by year, products shared between deliveries, tests with several results, and treatment with a capacity and a queue
 """
 import warnings
+from unittest import mock
 import sciris as sc
 import numpy as np
 import starsim as ss
@@ -170,6 +171,34 @@ def test_campaign_delivery():
 
 
 @sc.timer()
+def test_state_results_at_start():
+    """ An intervention's states are counted at the first time point, and its own results are left for its first step """
+    class Program(ss.Intervention):
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            self.define_states(ss.BoolState('never_reached', default=True))
+            self.define_aliases(reached=lambda mod: ~mod.never_reached)
+
+        def init_results(self):
+            super().init_results()
+            self.define_results(ss.Result('new_reached', dtype=int))
+
+        def step(self):
+            self.new_reached = 1
+
+        def update_results(self):
+            super().update_results()
+            self.results.new_reached[self.ti] = self.new_reached # Would fail at the start, before the first step
+
+    pars = dict(n_agents=100, diseases='sis', networks='random', verbose=0)
+    for kw in [dict(), dict(dt=ss.years(2))]:
+        res = ss.Sim(interventions=Program(**kw), **pars).run().results.program
+        assert np.all(res.never_reached == 100)
+        assert np.all(res.reached == 0)
+        assert res.new_reached[0] == 0 and res.new_reached[1] == 1
+    return
+
+
 def test_disease_resolved_once():
     sc.heading('The disease of a delivery is worked out once, when it is initialized')
     S, I, R = ss.states(3)
@@ -178,6 +207,76 @@ def test_disease_resolved_once():
     sim = ss.Sim(sir, interventions=treatment, unit='day', stop=5, solver='ode', verbose=0).init()
     assert sim.interventions.treatment.__dict__['_disease'] == 'sir'
     return
+
+
+@sc.timer()
+def test_modify_fast_paths():
+    """ Dated modifiers, and modifiers on a comparison of counts, stay in the kernels, with the same results """
+    S, I, R = ss.states('S I R')
+    kw = dict(total_pop=1e6, start='2026-01-01', stop='2026-12-31', dt=ss.days(1), solver='ode', verbose=0)
+
+    def make(**mod):
+        beta = ss.par(0.3, name='beta')
+        sir = ss.Disease(infection=S >> I @ beta*I, recovery=I >> R @ ss.days(10), init_n=dict(I=100), name='sir')
+        return ss.Sim(sir, interventions=ss.modify(sir.pars.beta, **{'multiply':0.75, **mod}) if mod else None, **kw).run()
+
+    # The tables of dated modifiers, worked out where they change, are those of every step
+    dates = dict(start='2026-03-01', stop='2026-05-02')
+    fast = make(**dates)
+    with mock.patch.object(ss.solvers.Compartmental, 'changing_steps', lambda *args: None):
+        slow = make(**dates)
+    assert fast.kernel_only() and np.array_equal(fast.results.sir.I.values, slow.results.sir.I.values)
+    assert not np.array_equal(fast.results.sir.I.values, make().results.sir.I.values) # They had an effect
+
+    # A step function is worked out where it changes, as a date is
+    held = lambda: dict(multiply=ss.timeseries({20: 0.7, 40: 0.4, 90: 1.0}), start='2026-01-15')
+    fast = make(**held())
+    with mock.patch.object(ss.solvers.Compartmental, 'changing_steps', lambda *args: None):
+        slow = make(**held())
+    assert np.array_equal(fast.results.sir.I.values, slow.results.sir.I.values)
+
+    # A condition on time alone is read before the run, for the steps it changes on
+    fast = make(when=lambda t: t.ti % 7 == 0)
+    with mock.patch.object(ss.solvers.Compartmental, 'changing_steps', lambda *args: None):
+        slow = make(when=lambda t: t.ti % 7 == 0)
+    assert fast.kernel_only() and np.array_equal(fast.results.sir.I.values, slow.results.sir.I.values)
+
+    # A coverage given as a rate is one share of those eligible at each step, in the kernels
+    beta = ss.par(0.3, name='beta')
+    sir = ss.Disease(infection=S >> I @ beta*I, recovery=I >> R @ ss.days(10), init_n=dict(I=100), name='sir')
+    assert ss.Sim(sir, interventions=ss.vaccinate(efficacy=0.8, coverage=ss.peryear(0.5)), nopython=True, **kw).run().complete
+
+    # An amount or share that varies in time is not taken for a dated one
+    series = ss.timeseries({30: 1.0, 100: 0.2})
+    for kwargs in [dict(multiply=0.5*ss.par(series)), dict(multiply=0.5, share=series)]:
+        beta = ss.par(0.3, name='beta')
+        sir = ss.Disease(infection=S >> I @ beta*I, recovery=I >> R @ ss.days(10), init_n=dict(I=100), name='sir')
+        sim = ss.Sim(sir, interventions=ss.modify(sir.pars.beta, **kwargs), **kw).run()
+        assert sim.diseases.sir.engine.changing_steps(0, 365) is None
+
+    # With nopython=True, what would fall back to Python raises an error instead
+    beta = ss.par(0.3, name='beta')
+    sir = ss.Disease(infection=S >> I @ beta*I, recovery=I >> R @ ss.days(10), init_n=dict(I=100), name='sir')
+    make = lambda **mod: ss.Sim(sir, interventions=ss.modify(sir.pars.beta, multiply=0.75, **mod), nopython=True, **kw)
+    assert make(start='2026-03-01').run().complete and make(where=sir.I.n >= 20_000).run().complete
+    for mod in [dict(where=sir.I.n >= 20_000, until=sir.I.n <= 10_000), dict(multiply=ss.timeseries({30: 1.0, 100: 0.2}, mode='linear'))]:
+        with pytest.raises(ss.CapabilityError, match='nopython'):
+            ss.Sim(sir, interventions=ss.modify(sir.pars.beta, **{'multiply':0.75, **mod}), nopython=True, **kw).run()
+
+    # A comparison of counts is part of the rate: the same as writing it there
+    beta = ss.par(0.3, name='beta')
+    sir = ss.Disease(infection=S >> I @ beta*I, recovery=I >> R @ ss.days(10), init_n=dict(I=100), name='sir')
+    sim = ss.Sim(sir, interventions=ss.modify(sir.pars.beta, multiply=0.75, where=sir.I.n >= 20_000), **kw).run()
+    beta2 = ss.par(0.3, name='beta')
+    written = ss.Sim(ss.Disease(infection=S >> I @ (beta2*(1 - 0.25*(I.n >= 20_000)))*I, recovery=I >> R @ ss.days(10), init_n=dict(I=100), name='sir'), **kw).run()
+    assert sim.kernel_only() and sim.interventions()[0].inlined
+    assert np.allclose(sim.results.sir.I.values, written.results.sir.I.values, rtol=1e-12)
+
+    # What needs memory is applied each step, and the other sim from the same disease is unchanged
+    held = ss.Sim(sir, interventions=ss.modify(sir.pars.beta, multiply=0.75, where=sir.I.n >= 20_000, until=sir.I.n <= 10_000), **kw).run()
+    assert not held.interventions()[0].inlined and not held.kernel_only()
+    assert ss.Sim(sir, **kw).run().results.sir.I.values.max() > 2.9e5
+    return sim
 
 
 if __name__ == '__main__':

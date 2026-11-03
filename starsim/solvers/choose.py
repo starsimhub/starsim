@@ -1546,6 +1546,7 @@ kernels = [ # What stops the kernels taking a whole run in one call: something i
     Rule('sim', lambda sim: sim.diagnostics, STEPPED, 'it records diagnostics'),
     Rule('sim', lambda sim: sim.verbose >= 2, STEPPED, 'it prints each step (verbose=2)'),
     Rule('sim', own_steps, STEPPED, '{names} {has} a step of {its} own ({kinds})'),
+    Rule('sim', lambda sim: [dict(mod=mod) for mod in sim.interventions() if mod.t.npts != sim.t.npts][:1], STEPPED, '"{mod.name}" has a timestep of its own'), # Whatever the kernels could otherwise take of it
     Rule('declared', flow_births, STEPPED, '"{tr.name}" is a birth driven by a flow (ss.birth(per=)), added at each step'),
     Rule('declared', lambda sim, mod: dict(sync=mod.engine.syncs[0]) if mod.engine.syncs else None, STEPPED, '"{sync.mod.name}.{sync.otr.name}" is a synchronized flow of "{mod.name}.{sync.tr.name}"'), # Recorded in the other module after each step
     Rule('declared', lambda sim, mod: dict(tr=mod.engine.triggers[0]) if mod.engine.triggers else None, STEPPED, '"{tr.name}" is triggered by {tr.trigger}, which is applied at each step'), # In Python, for those who come to meet them other than by a transition

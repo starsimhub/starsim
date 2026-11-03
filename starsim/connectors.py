@@ -287,10 +287,10 @@ class modify(Connector):
             `1 − share·(1 − multiply)`, exactly, since hazards add; a number, an `ss.timeseries`, an `ss.by`, or (with `route=`, as agents) a function of
             the network returning one value per edge (e.g. `lambda net: net.edges.condoms`)
         route (str/list): for a modifier of a transmission, the network or networks (by name) it applies on; by default, every route. A disease written as code has no transmission to name, so on a route the target is its `rel_sus` (of the people who would be infected over it)
-        where (Cond/func): who it applies to: a condition (e.g. `sir.vaccinated`), a condition on a count (e.g. `sir.I.n > 1000`, worked out at each step), or a function of the sim (default: everyone); with `route=`, the people who would be infected
+        where (Cond/func): who it applies to: a condition (e.g. `sir.vaccinated`), a condition on a count (e.g. `sir.I.n > 1000`, worked out at each step; in compartments, as part of the rates where it can be, so the run stays in the kernels), or a function of the sim (default: everyone); with `route=`, the people who would be infected
         start (date/float): when the modifier starts to apply, within the sim (default: the start of the sim); a number is a calendar year from 1900 on, and otherwise a time in the sim's unit
         stop (date/float): when it stops applying (default: never); a stop after the end of the sim never stops it
-        when (func): a condition on time: a function of the timeline returning True on the steps it applies (e.g. `lambda t: t.ti % 7 == 0`); a condition on anything else goes in `where=`
+        when (func): a condition on time alone: a function of the timeline returning True on the steps it applies (e.g. `lambda t: t.ti % 7 == 0`), which can be read before the run; a condition on anything else goes in `where=`
         until (Cond/func): once `where=` selects someone, the modifier stays on for them until this holds, as for a lockdown that starts at one level of cases and ends at a lower one (with `where=`, not with `hold=`); while both hold, `where=` wins
         hold (dur): once `where=` (or `when=`) selects someone, the modifier stays on for them for at least this long, as a rule that is lifted only after a while; a bare number is in the sim's unit
         name (str): the name of the modifier
@@ -369,6 +369,7 @@ class modify(Connector):
         self.held = {} # With hold=: for each engine, the step until which each agent or group is held, and the value it was held at
         self.when_until = -1 # With hold= and when=: the step until which it is held
         self.writer = None # For a parameter of a module written as code that is not a disease: see init_post()
+        self.inlined = False # Whether it became part of the rates: see ss.solvers.Compartmental.inline_modifiers()
         return
 
     @property
@@ -498,7 +499,7 @@ class modify(Connector):
     @property
     def tabulated(self):
         """ Whether the engines can work out the modifier for every step before a run (see `ss.solvers.Compartmental.tables()`): one that depends only on time, and on who it applies to only through states and stratifications """
-        return self.when is None and not self.holding and self.fixed_amount and ss.conditions.is_static(self.where, self.sim)
+        return self.inlined or (not self.holding and self.fixed_amount and ss.conditions.is_static(self.where, self.sim))
 
     @property
     def fixed_amount(self):
@@ -507,6 +508,13 @@ class modify(Connector):
         if isinstance(self.amount, ss.expressions.Expr):
             return all(isinstance(leaf, ss.par) and timed(leaf.raw) for leaf in self.amount.leaves)
         return timed(self.amount)
+
+    @property
+    def constant_amount(self):
+        """ Whether the amount and share are the same at every step: numbers, or expressions of parameters with plain values """
+        plain = lambda val: not callable(val) and not isinstance(val, ss.by)
+        values = [leaf.raw if isinstance(leaf, ss.par) else leaf for val in [self.amount, self.share] for leaf in (val.leaves if isinstance(val, ss.expressions.Expr) else [val])]
+        return all(plain(val) for val in values)
 
     @property
     def active(self):

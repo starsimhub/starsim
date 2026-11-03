@@ -475,7 +475,8 @@ class Stepping:
                     else:
                         hazard = rate()*mult
                         amounts = {src:counts[src]*hazard for src in dsts}
-                        self._fastest = max(self._fastest, float(np.max(hazard)))
+                        if self._fastest is not None: # Only the first derivative's is used
+                            self._fastest = max(self._fastest, float(np.max(hazard)))
                     probs = self.branch_probs(tr) # A split's probabilities can use the counts
                     total = 0.0
                     for src,amount in amounts.items():
@@ -496,6 +497,7 @@ class Stepping:
             self._fastest = 0.0 # The fastest rate out of a count, as the ODE works out its substeps
             k1, f1 = deriv(start)
             n_sub = max(1, int(np.ceil(self._fastest*dt/0.25)))
+            self._fastest = None
             h = dt/n_sub
             total = dict.fromkeys(f1, 0.0)
             for sub in range(n_sub):

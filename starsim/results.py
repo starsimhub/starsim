@@ -1040,10 +1040,19 @@ class Result(ss.arrays.BaseArr):
         if res.runs is not None:
             rows = []
             for col,part in parts.items():
-                for i,(row,vals) in enumerate(zip(part.runs.to_dict('records'), part.values)):
-                    q = row.pop('quantile', None)
-                    head = row if q is not None else dict(run=i, **row)
-                    rows.append(pd.DataFrame(dict(**head, **({} if col is None else dict(column=col)), time=part.timevec, **({} if q is None else dict(quantile=q)), value=vals)))
+                head = part.runs.copy()
+                quantiles = head.pop('quantile') if 'quantile' in head else None
+                if quantiles is None:
+                    head.insert(0, 'run', np.arange(len(head)))
+                n, npts = np.shape(part.values)
+                df = head.iloc[np.repeat(np.arange(n), npts)].reset_index(drop=True)
+                if col is not None:
+                    df['column'] = col
+                df['time'] = np.tile(np.asarray(part.timevec), n)
+                if quantiles is not None:
+                    df['quantile'] = np.repeat(quantiles.values, npts)
+                df['value'] = np.ravel(part.values)
+                rows.append(df)
             return sc.dataframe(pd.concat(rows, ignore_index=True))
 
         if res.timevec is None and set_date_index:
@@ -1892,11 +1901,14 @@ def compare(sim, df=None):
         df (dataframe): the data (default: the sim's)
     """
     df = given_data(sim, df)
-    sim_t, data_t = data_times(sim, df)
-    if data_t.max() < sim_t.min() or data_t.min() > sim_t.max():
-        raise ValueError(f'the data ({df.index[0]} to {df.index[-1]}) lies entirely outside the simulated period ({sim.t.start} to {sim.t.stop}).')
+    kept = sim.__dict__.get('_lined') # The data cannot change between the runs of a sim, so they are lined up with its time points once
+    if kept is None or kept[0] is not df or kept[1] is not sim.t:
+        sim_t, data_t = data_times(sim, df)
+        if data_t.max() < sim_t.min() or data_t.min() > sim_t.max():
+            raise ValueError(f'the data ({df.index[0]} to {df.index[-1]}) lies entirely outside the simulated period ({sim.t.start} to {sim.t.stop}).')
+        kept = sim._lined = (df, sim.t, [(col, W, expected) for col,(W,expected,rows) in lineup(sim, df).items()])
     out = sc.obj()
-    for col,(W,expected,rows) in lineup(sim, df).items():
+    for col,W,expected in kept[2]:
         values = np.asarray(match_column(sim, col).values, dtype=float)
         out[col] = (expected, np.where(W != 0, W*values, 0).sum(axis=1)) # Only the steps used, so a value missing elsewhere (e.g. the prevalence among no one) is not read
     return out
