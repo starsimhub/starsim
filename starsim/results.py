@@ -1901,11 +1901,14 @@ def compare(sim, df=None):
         df (dataframe): the data (default: the sim's)
     """
     df = given_data(sim, df)
-    sim_t, data_t = data_times(sim, df)
-    if data_t.max() < sim_t.min() or data_t.min() > sim_t.max():
-        raise ValueError(f'the data ({df.index[0]} to {df.index[-1]}) lies entirely outside the simulated period ({sim.t.start} to {sim.t.stop}).')
+    kept = sim.__dict__.get('_lined') # The data cannot change between the runs of a sim, so they are lined up with its time points once
+    if kept is None or kept[0] is not df or kept[1] is not sim.t:
+        sim_t, data_t = data_times(sim, df)
+        if data_t.max() < sim_t.min() or data_t.min() > sim_t.max():
+            raise ValueError(f'the data ({df.index[0]} to {df.index[-1]}) lies entirely outside the simulated period ({sim.t.start} to {sim.t.stop}).')
+        kept = sim._lined = (df, sim.t, [(col, W, expected) for col,(W,expected,rows) in lineup(sim, df).items()])
     out = sc.obj()
-    for col,(W,expected,rows) in lineup(sim, df).items():
+    for col,W,expected in kept[2]:
         values = np.asarray(match_column(sim, col).values, dtype=float)
         out[col] = (expected, np.where(W != 0, W*values, 0).sum(axis=1)) # Only the steps used, so a value missing elsewhere (e.g. the prevalence among no one) is not read
     return out

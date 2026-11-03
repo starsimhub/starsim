@@ -319,7 +319,7 @@ sim.run()
 sim.plot('flu')
 ```
 
-Any other rule that remembers what it did is a module written as code: a subclass of `ss.Intervention` whose `step()` decides, and an `ss.modify()` whose `when=` reads its decision, so that the base value is never overwritten. See [below](#writing-an-intervention-as-code).
+Any other rule that remembers what it did is a module written as code: a subclass of `ss.Intervention` whose `step()` decides, and an `ss.modify()` whose `where=` is a function of the sim that reads its decision, so that the base value is never overwritten. See [below](#writing-an-intervention-as-code).
 
 ### How changes combine
 

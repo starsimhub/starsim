@@ -6,6 +6,7 @@ This is what a user runs. It exists to gather the people, modules, and settings 
 Used with: agents and compartments; declared and coded modules
 """
 import os
+import time
 import itertools
 import numpy as np
 import pandas as pd
@@ -1602,6 +1603,7 @@ class Sim(ss.Base):
         if unsaid is not None and self.verbose:
             print('\n'.join(self.start_lines(unsaid)))
         self.timer.start()
+        started = time.perf_counter()
 
         # Check for AlreadyRun errors
         if self.complete:
@@ -1638,7 +1640,7 @@ class Sim(ss.Base):
                 self.complete = self.loop.index == len(self.loop.plan) or self.stopped is not None
 
             # If simulation reached the end, finalize the results
-            self.elapsed = self.timer.toc(output=True)
+            self.elapsed = time.perf_counter() - started # As a number: sc.timer also formats a message
             if self.complete:
                 self.finalize()
                 if getattr(self, 'stopped', None) is not None:
@@ -1893,7 +1895,7 @@ class Sim(ss.Base):
             if isinstance(res, ss.Result):
                 if res.scale: # Scale results; NB: disease-specific results are scaled in module.finalize() below
                     res.apply_scale(stock_scale if res.kind == 'stock' else scale)
-                if np.all(res == res[0]): # Results were not modified during the sim
+                if np.all(res.values == res.values[0]): # Results were not modified during the sim
                     self.results[reskey].auto_plot = False
         self.results_ready = True # Results are ready to use
         return

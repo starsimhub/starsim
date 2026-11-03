@@ -235,6 +235,12 @@ def test_modify_fast_paths():
         slow = make(**held())
     assert np.array_equal(fast.results.sir.I.values, slow.results.sir.I.values)
 
+    # A condition on time alone is read before the run, for the steps it changes on
+    fast = make(when=lambda t: t.ti % 7 == 0)
+    with mock.patch.object(ss.solvers.Compartmental, 'changing_steps', lambda *args: None):
+        slow = make(when=lambda t: t.ti % 7 == 0)
+    assert fast.kernel_only() and np.array_equal(fast.results.sir.I.values, slow.results.sir.I.values)
+
     # A coverage given as a rate is one share of those eligible at each step, in the kernels
     beta = ss.par(0.3, name='beta')
     sir = ss.Disease(infection=S >> I @ beta*I, recovery=I >> R @ ss.days(10), init_n=dict(I=100), name='sir')

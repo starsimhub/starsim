@@ -2520,6 +2520,12 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                     sim.t.ti = 0
                     return None
                 steps.update(first_step(lambda: sim.t.now('year') + 1e-9 >= year) for year in m.amount.years(sim))
+            if m.when is not None: # A condition on time alone, read once for each step
+                on = []
+                for ti in range(start, stop):
+                    sim.t.ti = min(ti + 1, self.mod.t.npts - 1)
+                    on.append(ss.conditions.holds_now(m.when, sim))
+                steps.update((start + 1 + np.flatnonzero(np.diff(on))).tolist())
             for val in [m.start, m.stop]:
                 if val is not None:
                     time = ss.connectors.to_time(sim, val)
@@ -2963,6 +2969,9 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             out[name] = np.zeros((width, n_steps))
             if info.stay is not None or info.p_leave is not None:
                 out[f'n_{name}'] = np.zeros((width, n_steps))
+        vals = self.whole_outcomes(todo, flows, weights, width)
+        if vals is not None:
+            return sc.obj({key:(out[key] + val).reshape(shape) for key,val in vals.items()})
         for ti in range(n_steps):
             for name,info in todo.items():
                 amount = 0.0
@@ -2972,6 +2981,22 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                 if f'n_{name}' in out:
                     out[f'n_{name}'][:, ti] = bufs[name].n
         return sc.obj({key:vals.reshape(shape) for key,vals in out.items()})
+
+    def whole_outcomes(self, todo, flows, weights, width):
+        """ The outcomes drawn all at once, by name: with no delay or stay, an outcome's only draws are binomials of the flows it comes from, one call in the same order as a step at a time; or None if any has more than that """
+        if not all(len(info.kernel) == 1 and info.stay is None and info.p_leave is None and all(key in flows for key,_ in info.sources) for info in todo.values()):
+            return None
+        parts = [(name, flows[key], weight) for name,info in todo.items() for (key,_),weight in zip(info.sources, weights[name])]
+        if not all(np.all((0 <= np.asarray(weight)) & (np.asarray(weight) <= 1)) for _,_,weight in parts):
+            return None
+        flow = np.stack([part[1] for part in parts]) # Parts by width by steps
+        share = np.broadcast_to(np.stack([np.broadcast_to(part[2], (width,)) for part in parts])[:, :, None], flow.shape)
+        whole = np.floor(flow)
+        drawn = self.rng.binomial(whole.astype(int).transpose(2, 0, 1), share.transpose(2, 0, 1)).transpose(1, 2, 0) + (flow - whole)*share
+        out = sc.obj()
+        for i,(name,_,_) in enumerate(parts):
+            out[name] = out.get(name, 0) + drawn[i]*todo[name].kernel[0]
+        return out
 
     #%% Stepping
 

@@ -290,7 +290,7 @@ class modify(Connector):
         where (Cond/func): who it applies to: a condition (e.g. `sir.vaccinated`), a condition on a count (e.g. `sir.I.n > 1000`, worked out at each step; in compartments, as part of the rates where it can be, so the run stays in the kernels), or a function of the sim (default: everyone); with `route=`, the people who would be infected
         start (date/float): when the modifier starts to apply, within the sim (default: the start of the sim); a number is a calendar year from 1900 on, and otherwise a time in the sim's unit
         stop (date/float): when it stops applying (default: never); a stop after the end of the sim never stops it
-        when (func): a condition on time: a function of the timeline returning True on the steps it applies (e.g. `lambda t: t.ti % 7 == 0`); a condition on anything else goes in `where=`
+        when (func): a condition on time alone: a function of the timeline returning True on the steps it applies (e.g. `lambda t: t.ti % 7 == 0`), which can be read before the run; a condition on anything else goes in `where=`
         until (Cond/func): once `where=` selects someone, the modifier stays on for them until this holds, as for a lockdown that starts at one level of cases and ends at a lower one (with `where=`, not with `hold=`); while both hold, `where=` wins
         hold (dur): once `where=` (or `when=`) selects someone, the modifier stays on for them for at least this long, as a rule that is lifted only after a while; a bare number is in the sim's unit
         name (str): the name of the modifier
@@ -499,7 +499,7 @@ class modify(Connector):
     @property
     def tabulated(self):
         """ Whether the engines can work out the modifier for every step before a run (see `ss.solvers.Compartmental.tables()`): one that depends only on time, and on who it applies to only through states and stratifications """
-        return self.inlined or (self.when is None and not self.holding and self.fixed_amount and ss.conditions.is_static(self.where, self.sim))
+        return self.inlined or (not self.holding and self.fixed_amount and ss.conditions.is_static(self.where, self.sim))
 
     @property
     def fixed_amount(self):

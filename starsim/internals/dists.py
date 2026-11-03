@@ -36,8 +36,7 @@ _ROUND_IND = 2**62 # Added to the draw index for the stochastic rounding uniform
 _EVEN_IND = 2**61 # Added to the draw index for the offset of evenly spaced uniforms (see even_out())
 _cache.depends(__file__, draws.__file__) # So the cached hash below is compiled again when the draws change
 
-@nb.jit([nb.void(nb.int64, nb.int64, nb.uint64[:], nb.float32[:], nb.uint64, nb.float64),
-          nb.void(nb.int64, nb.int64, nb.uint64[:], nb.float64[:], nb.uint64, nb.float64)], cache=True)
+@nb.jit(cache=True)
 def _hash_uniforms_fill(seed, ind, slots, out, shift, scale):
     """
     Fill `out` with one uniform in (0, 1) per slot via a counter-based (splitmix64) hash keyed
