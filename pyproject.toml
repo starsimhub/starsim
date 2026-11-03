@@ -141,7 +141,7 @@ lock = [
 optuna = ["scikit-learn"]
 
 [project.scripts]
-starsim = "starsim.internals.cli:main"
+starsim = "starsim_cli:main" # Apart from the package, so that commands that don't need Starsim don't import it
 
 [project.urls]
 "Website" = "https://starsim.org"

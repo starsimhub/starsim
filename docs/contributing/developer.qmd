@@ -37,7 +37,7 @@ The same steps, for when only one of them is wanted:
 pip install -e .[dev]                         # The dependencies
 curl -sSf https://sh.rustup.rs | sh           # Rust
 cd starsim/solvers/rust && ./build && cd -    # The Rust kernels
-STARSIM_KERNELS=numba starsim compile         # The Numba kernels
+STARSIM_KERNELS=numba starsim init compile    # The Numba kernels
 ```
 
 `./build` takes about 90 s the first time and about 15 s after that. Its result, `starsim/solvers/backends/_rs.abi3.so`, is gitignored. `pip install -e .` also compiles the Rust kernels if it finds Rust, but only `./build` needs to be run again when they change. Rust is the one part that is optional for most work: without it, Numba's kernels run, and `tests/test_kernel_sets.py` skips the comparison with Rust's.
@@ -45,7 +45,7 @@ STARSIM_KERNELS=numba starsim compile         # The Numba kernels
 ### Checking the setup
 
 ```bash
-starsim compile --check                       # Which kernels are in use, and whether they are current
+starsim init compile --check                  # Which kernels are in use, and whether they are current
 python -c "import jax; print(jax.devices())"  # Whether JAX works, and which devices it sees
 ```
 

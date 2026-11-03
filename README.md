@@ -65,7 +65,7 @@ starsim init
 
 JAX is recommended, for gradients, fitting with them, and long runs. It is optional since it has no builds for Windows on Arm: there, use `pip install starsim`, and everything else works. Intel Macs are not supported.
 
-`starsim init` compiles Numba's kernels if the Rust ones are not available (which takes a few minutes, once, and makes the first runs faster; the wheels on PyPI include the Rust kernels, so there is usually nothing to compile) and installs its skill for AI coding agents such as Claude Code and Codex (type `/starsim` to use it). To do just one of these, run `starsim compile` or `starsim ai`.
+`starsim init` compiles Numba's kernels if the Rust ones are not available (which takes a few minutes, once, and makes the first runs faster; the wheels on PyPI include the Rust kernels, so there is usually nothing to compile) and, if an AI coding agent such as Claude Code or Codex is installed, links Starsim's skills into your project (type `/starsim` to use them). To do just one of these, run `starsim init compile` or `starsim init ai`.
 
 Or with [uv](https://github.com/astral-sh/uv):
 ```sh
@@ -183,7 +183,7 @@ More usage examples are available in the tutorials and user guide.
 
 ## AI integration
 
-Starsim comes with skills for AI coding agents (Claude Code, Codex, and others), which always match the version installed: how to write, check, and run a model, and how to import a model from another framework or upgrade one from Starsim 3. `starsim ai` (part of `starsim init`) links them into your project, and `starsim ai --global` sets them up for all your projects instead; tools that read skills from installed packages, such as `uvx library-skills`, find them too. For anything else, [llms.txt](https://docs.starsim.org/llms.txt) is a map of the docs and the API for agents.
+Starsim comes with skills for AI coding agents (Claude Code, Codex, and others), which always match the version installed: how to write, check, and run a model, and how to import a model from another framework or upgrade one from Starsim 3. `starsim init ai` (part of `starsim init`) links them into your project, and `starsim ai install --global` sets them up for all your projects instead; tools that read skills from installed packages, such as `uvx library-skills`, find them too. For anything else, [llms.txt](https://docs.starsim.org/llms.txt) is a map of the docs and the API for agents.
 
 
 ## Contributing

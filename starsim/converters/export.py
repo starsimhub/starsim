@@ -31,7 +31,7 @@ import pandas as pd
 import sciris as sc
 import starsim as ss
 
-__all__ = ['exporters', 'export_to', 'flatten', 'to_sbml', 'to_odin', 'to_hub']
+__all__ = ['exporters', 'extensions', 'export_to', 'flatten', 'to_sbml', 'to_odin', 'to_hub']
 
 math_funcs = dict(exp='exp', log='ln', sqrt='root', abs='abs', absolute='abs', sin='sin', cos='cos', floor='floor', ceiling='ceiling')
 odin_funcs = dict(absolute='abs', minimum='min', maximum='max')
@@ -454,6 +454,12 @@ def to_odin(sim):
 exporters = dict(
     sbml    = to_sbml,
     odin    = to_odin,
+)
+
+extensions = dict( # The extension of each format's files, for `starsim convert` (Starsim's own is its code)
+    starsim = '.py',
+    sbml    = '.xml',
+    odin    = '.R',
 )
 
 

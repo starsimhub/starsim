@@ -7,6 +7,6 @@ What Starsim gives AI coding agents (Claude Code, Codex, and others), installed 
   - `convert-model/`: importing a model from another framework or exporting one to it, with notes on each in `references/`
   - `validate-conversion/`: checking a converted model against the original's results
   - `migrate-starsim3/`: rewriting Starsim 3 code for Starsim 4
-- `meta-skill/starsim/`: the short skill that `starsim ai --global` installs for all projects, which loads the skills above from the project's Starsim (`starsim ai show`). It is kept out of `skills/` so that those tools don't list it.
+- `meta-skill/starsim/`: the short skill that `starsim ai install --global` installs for all projects, which loads the skills above from the project's Starsim (`starsim ai show`). It is kept out of `skills/` so that those tools don't list it.
 
-`starsim ai` links the skills into a project, and importing Starsim suggests that where an AI coding agent is installed and has no skills (`starsim ai off` stops this, or `STARSIM_SKILL_NOTE=0`). The commands are in `starsim/internals/cli.py`.
+`starsim init ai` (or `starsim ai install`) links the skills into a project, and importing Starsim suggests that where an AI coding agent is installed and has no skills (`starsim ai off` stops this, or `STARSIM_SKILL_NOTE=0`). The commands are in `starsim/internals/cli.py`.

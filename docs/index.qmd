@@ -44,7 +44,7 @@ Bring in a model from another framework (EpiModel, odin, SBML, and a dozen more)
 ::: {.g-col-4}
 [**AI tools**](https://ai.starsim.org)
 
-Skills for AI coding agents, matched to the installed version: run `starsim ai` in your project.
+Skills for AI coding agents, matched to the installed version: run `starsim init ai` in your project.
 :::
 
 ::: {.g-col-4}
