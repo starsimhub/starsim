@@ -460,12 +460,13 @@ class Run(sc.prettyobj):
                 y_end, flows = carry
             elif clamp and self.fixed: # A loop with a fixed count, which reverse mode needs; the substeps past those the step needs are skipped (except under vmap, where both branches are taken)
                 y_end, flows = lax.fori_loop(0, n_max, sub, (y, flows))
-            else: # As many substeps as the step needs (a loop with a fixed count would take n_max every time)
+            else: # As many substeps as the step needs (a loop with a fixed count would take n_max every time); the first outside the loop, since most steps need only one, and a loop costs more than a substep
                 def body(carry):
                     s, y, flows = carry
                     y, flows = sub(s, (y, flows))
                     return s + 1, y, flows
-                _, y_end, flows = lax.while_loop(lambda carry: carry[0] < n, body, (0, y, flows))
+                y, flows = sub(0, (y, flows))
+                _, y_end, flows = lax.while_loop(lambda carry: carry[0] < n, body, (1, y, flows))
             if len(self.cv_flow): # Everyone in a conveyor moves along one slot
                 y_end = y_end.at[self.cv_next].set(y_end[self.cv_prev]).at[self.cv_first].set(0.0)
             return jnp.maximum(y_end, 0.0), flows, need # The compartments after the step, as the kernels record them, and the substeps it needed (more than it took, if clamped)

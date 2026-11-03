@@ -143,6 +143,11 @@ def test_multisim():
     drawn = ss.Disease(infection=S >> I @ ss.par(0.3, bounds=[0.2, 0.4])*I, recovery=I >> R @ ss.par(0.1, prior=ss.normal(0.1, 0.01)), init_n=dict(I=10), name='sir')
     draws = ss.fit.prior_draws(ss.Sim(drawn, total_pop=1000, stop=5, unit='day', solver='ode', verbose=0), n=8, seed=1)
     assert sorted(np.floor((np.array(list(draws.values())[0]) - 0.2)/0.2*8)) == list(range(8)) # A Latin hypercube: one draw in each slice of the bounds
+    # Runs taken in the kernels have the sim's own results, as runs one at a time do
+    fast = ss.parallel(ss.Sim(sir, solver='binomial', total_pop=10_000, stop=50, verbose=0), n_runs=3, parallel=False)
+    slow = ss.parallel(*[ss.Sim(sir, solver='binomial', total_pop=10_000, stop=50, rand_seed=seed, verbose=0) for seed in [1, 2, 3]], parallel=False)
+    assert list(fast.results.keys()) == list(slow.results.keys())
+    assert all(np.array_equal(fast.results.alive.values[i], slow.sims[i].results.alive.values) for i in range(3))
     sweep = ss.parallel(ss.Sim(sir, solver='binomial', total_pop=10_000, stop=50, verbose=0), pars=dict(beta=[0.3, 0.3, 0.4, 0.4], rand_seed=[1, 2, 1, 2]))
     assert list(sweep.runs.scenario) == ['beta=0.3']*2 + ['beta=0.4']*2 and list(sweep.runs.rand_seed) == [1, 2, 1, 2] # Each seed was a scenario of its own
 

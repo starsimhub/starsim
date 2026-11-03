@@ -13,7 +13,7 @@ import sciris as sc
 import starsim as ss
 from types import SimpleNamespace as Bunch # A plain object with attributes; much faster to read than an objdict, which matters inside the ODE's right-hand side
 
-__all__ = ['Effects', 'Engine', 'CountState', 'StockCtx', 'convert', 'add_rows', 'at_ends', 'by_level', 'no_tables', 'kept_by_group', 'group_rows', 'people_results']
+__all__ = ['Effects', 'Engine', 'CountState', 'StockCtx', 'convert', 'add_rows', 'at_ends', 'by_level', 'no_tables', 'kept_by_group', 'group_rows', 'people_results', 'people_counts']
 
 
 from .backends.kernels import no_tables # For a step whose program holds for the whole step: see ss.kernels.step()
@@ -147,24 +147,33 @@ def group_rows(sim, npts, row_bytes, budget, name=None):
 
 def people_results(sim):
     """ In a compartmental run, the results that agents give the sim (alive, died, emigrated), from the declared states and flows """
-    mods = [mod for mod in sim.declared if mod.graph.people_states]
-    if sim.solver in [None, 'abm'] or 'alive' in sim.results or not mods:
+    if sim.solver in [None, 'abm'] or 'alive' in sim.results:
         return
-    first = mods[0] # Each disease's states hold everyone
+    counts = people_counts(sim, lambda mod, key: np.asarray(mod.results[key].values, dtype=float))
+    if counts is None:
+        return
     kw = dict(module='People', timevec=sim.t.timevec, scale=False)
-    alive = sum(np.asarray(first.results[state.name].values, dtype=float) for state in first.graph.people_states)
-    gone = dict(deaths=0, emigrants=0)
+    sim.results += [
+        ss.Result('alive', label='Number alive', values=counts.alive, kind='stock', **kw),
+        ss.Result('died', label='Deaths', values=counts.died, kind='flow', **kw),
+        ss.Result('emigrated', label='Emigrants', values=counts.emigrated, kind='flow', **kw),
+    ]
+    return
+
+
+def people_counts(sim, get):
+    """ The number alive, the deaths, and the emigrants of a compartmental sim, from the results of its declared modules, as `get(mod, key)` gives them (of one run, or of many with a run axis first); or None if it has no people """
+    mods = [mod for mod in sim.declared if mod.graph.people_states]
+    if not mods:
+        return None
+    first = mods[0] # Each disease's states hold everyone
+    alive = sum(get(first, state.name) for state in first.graph.people_states)
+    gone = dict(died=0, emigrated=0)
     for mod in mods:
         for tr in mod.graph.transitions.values():
             if tr.deaths is not None and tr.deaths in mod.results:
-                gone['emigrants' if getattr(tr, 'migration', False) else 'deaths'] += np.asarray(mod.results[tr.deaths].values, dtype=float)
-    deaths, emigrants = [np.broadcast_to(gone[key], alive.shape).copy() for key in ['deaths', 'emigrants']]
-    sim.results += [
-        ss.Result('alive', label='Number alive', values=alive, kind='stock', **kw),
-        ss.Result('died', label='Deaths', values=deaths, kind='flow', **kw),
-        ss.Result('emigrated', label='Emigrants', values=emigrants, kind='flow', **kw),
-    ]
-    return
+                gone['emigrated' if getattr(tr, 'migration', False) else 'died'] += get(mod, tr.deaths)
+    return sc.obj(alive=alive, **{key:np.broadcast_to(val, alive.shape).copy() for key,val in gone.items()})
 
 
 def by_level(levels, n):
