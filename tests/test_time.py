@@ -119,6 +119,16 @@ def test_syntax():
     monthly = ss.Sim(stop=2, dt=1/12, unit='year', verbose=0).init()
     assert ss.connectors.to_ti(monthly, ss.months(7)) == ss.connectors.to_ti(monthly, 7/12) == 8 # The step that starts at 7 months (was the next, from rounding)
 
+    # Whole days, weeks, months, and years follow the calendar, even around a leap day (these used to be a day out)
+    d = ss.date('2020-03-05')
+    assert d + ss.days(301) == ss.days(301) + d == ss.date('2020-12-31')
+    assert d - ss.days(301) == ss.date('2019-05-09')
+    assert d + ss.weeks(52) == ss.date('2021-03-04')
+    assert d + ss.years(1) == ss.date('2021-03-05')
+    assert d - ss.years(1) == ss.date('2019-03-05')
+    assert ss.date('2020-01-31') + ss.months(1) == ss.date('2020-02-29')
+    assert len(ss.Timeline(start=d, dur=ss.days(301), dt=ss.days(1)).init()) == 302 # Ends on 2020-12-31, not 2021-01-01
+
     # Operations on date vectors
     ss.date.arange(2020,2030)+ss.years(1) # add years to date array
     ss.date.arange(2020,2030)+ss.datedur(years=1) # add datedur to date array
@@ -188,7 +198,7 @@ def test_datearray_operations():
     c = ss.years([1, 2])
 
     d0, m1 = ss.date('2020-01-01'), ss.months(1)
-    plus_month = ss.DateArray([ss.date('2020-01-31'), ss.date('2021-01-31')])
+    plus_month = ss.DateArray([ss.date('2020-02-01'), ss.date('2021-02-01')]) # Whole months follow the calendar
     months_plus = ss.DateArray([ss.months(13), ss.months(25)])
     dates_plus = ss.DateArray([ss.date('2021-01-01'), ss.date('2022-01-01')])
     dates_minus = ss.DateArray([ss.date('2019-01-01'), ss.date('2018-01-01')])
@@ -203,7 +213,7 @@ def test_datearray_operations():
         (lambda: d0 + b, dates_plus),
         (lambda: c + d0, dates_plus),
         (lambda: d0 + c, dates_plus),
-        (lambda: a - m1, ss.DateArray([ss.date('2019-12-02'), ss.date('2020-12-02')])),
+        (lambda: a - m1, ss.DateArray([ss.date('2019-12-01'), ss.date('2020-12-01')])),
         (lambda: m1 - b, ss.DateArray([ss.months(-11), ss.months(-23)])),
         (lambda: b - m1, ss.DateArray([ss.months(11), ss.months(23)])),
         (lambda: m1 - c, ss.months([-11, -23])),

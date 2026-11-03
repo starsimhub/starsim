@@ -113,6 +113,17 @@ Starsim 4 adds a way to write a model as declared states and transitions, which 
 - A modifier whose amount reads a clock (e.g. `multiply=0.5**(El.time/half_life)`) is worked out only for the people in its `where=`, so a declared `ssl.Syphilis` runs within about 6% of the version with `step()`.
 - As agents, a transition with no driver (moved only by an intervention) is no longer drawn each step, a `where=` by sex no longer makes dwell times rescale, and the one-pass exit check applies per state.
 
+
+## Version 3.7.4 (2026-11-03)
+- Arithmetic between dates and days no longer involves a conversion to years; this fixes bugs due to rounding errors (especially in leap years). Adding durations to a date is also faster.
+- *GitHub info*: PR [1532](https://github.com/starsimhub/starsim/pull/1532)
+
+
+## Version 3.7.3 (2026-11-01)
+- `ss.RoutineDelivery` no longer raises an `IndexError` when the start or end year is close to, but not on, the time grid (e.g. `dt=7/365`).
+- *GitHub info*: PR [1515](https://github.com/starsimhub/starsim/pull/1515)
+
+
 ## Version 3.7.2 (2026-10-06)
 - `ss.ClusterNet` (and so `ss.HybridNet`) and `ss.MSMNet` now shuffle agents using `float64` random numbers and a stable sort. Previously, tied `float32` random numbers were ordered differently on different CPUs, so the same seed could give slightly different results on different machines.
 - *GitHub info*: PR [1435](https://github.com/starsimhub/starsim/pull/1435)
