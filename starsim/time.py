@@ -445,7 +445,11 @@ class date(pd.Timestamp):
         elif isinstance(other, ss.dur):
             if other.is_array:
                 return ss.DateArray(np.vectorize(self.__add__)(other))
-            else:
+            elif other.base in ['days', 'weeks'] and float(other.days).is_integer(): # Whole days follow the calendar exactly: as a share of a year, they are a day off around a leap day
+                return self._timestamp_add(pd.Timedelta(days=int(other.days)))
+            elif other.base in ['months', 'years'] and float(other.value).is_integer(): # Likewise whole months and years, e.g. a month after 2020-01-01 is 2020-02-01, as with ss.date.arange()
+                return self._timestamp_add(pd.DateOffset(**{other.base:int(other.value)}))
+            else: # Otherwise (e.g. ss.years(0.5)), as a share of a year
                 return date(self.to_year() + other.years)
         elif isinstance(other, (pd.DateOffset, dt.timedelta)):
             return self._timestamp_add(other)
@@ -470,7 +474,7 @@ class date(pd.Timestamp):
             if other.is_array:
                 return ss.DateArray(np.vectorize(self.__sub__)(other))
             else:
-                return ss.date(self.to_year() - other.years)
+                return self + (-other) # As for addition
         elif isinstance(other, (pd.DateOffset, dt.timedelta)):
             return ss.date(self.to_pandas() - other)
         elif isinstance(other, (ss.date, pd.Timestamp, dt.date, dt.datetime)):
@@ -1120,7 +1124,9 @@ class dur(TimePar):
         if isinstance(other, dur):
             return self._new(self.value + self.to_base(other), other=other)
         elif isinstance(other, date): # If adding to a date, convert to years
-            if self.is_array:
+            if self.base in ['days', 'weeks', 'months', 'years']: # Unless it may be whole calendar units: let date.__add__() handle it
+                return other + self
+            elif self.is_array:
                 return DateArray([ss.date.from_year(x) for x in other.to_year() + self.years]) # Seems to profile slightly faster than np.vectorize
             else:
                 return date.from_year(other.to_year() + self.years)
