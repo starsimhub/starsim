@@ -2,6 +2,14 @@
 # Build & publish the v4 site to GitHub Pages, at starsim.org/v4
 set -euo pipefail # Fail fast if needed
 
+# Usage: ./publishv4 [--fresh]; --fresh reruns every notebook, rather than only the ones that changed (freeze: auto in _quarto.yml)
+if [[ "${1:-}" == "--fresh" ]]; then
+    rm -rf _freeze # Neither --cache-refresh (below) nor --execute reruns a frozen page
+elif [[ -n "${1:-}" ]]; then
+    echo "Unknown option $1; usage: ./publishv4 [--fresh]" >&2
+    exit 1
+fi
+
 QUARTO=${QUARTO:-quarto}
 jobs=$($QUARTO render --help | grep -- '--jobs' > /dev/null && echo "--jobs $(( $(nproc) / 2 ))" || true) # Parallel if this Quarto supports it (custom build), serial otherwise (e.g. CI)
 $QUARTO render --cache-refresh $jobs
