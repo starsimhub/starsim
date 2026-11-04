@@ -266,8 +266,7 @@ def population(place, year=None, revision=None):
         revision (str): the WPP revision (default: the latest bundled); not for a US state
 
     Returns:
-        A dataframe of the number of women and of men (columns `female` and `male`) in each 5-year age group (the index, labeled
-        '0-4', '5-9', ..., '100+', or '80+' for a US state), with where it came from in `.attrs['ref']`
+        A dataframe of the number of women and of men (columns `female` and `male`) in each 5-year age group (the index, labeled '0-4', '5-9', ..., '100+', or '80+' for a US state), with where it came from in `.attrs['ref']`
 
     Examples:
         ```python
@@ -329,8 +328,7 @@ def contacts(place, source=None, layer='all'):
         layer (str): the setting: 'all', 'home', 'school', 'work', or 'community'
 
     Returns:
-        A dataframe of the contacts a day that a person in each age group (a row) has with people in each (a column), with the groups labeled
-        '0-4', '5-9', ..., '75+' (or by single year of age), and where it came from in `.attrs['ref']`; `ss.contacts()` takes it
+        A dataframe of the contacts a day that a person in each age group (a row) has with people in each (a column), with the groups labeled '0-4', '5-9', ..., '75+' (or by single year of age), and where it came from in `.attrs['ref']`; `ss.contacts()` takes it
 
     Examples:
         ```python

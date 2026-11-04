@@ -2218,8 +2218,7 @@ class Sim(ss.Base):
             indent (int): the number of spaces to indent by
 
         Returns:
-            A dictionary representation of the parameters and/or summary results
-            (or write that dictionary to a file)
+            A dictionary representation of the parameters and/or summary results (or write that dictionary to a file)
 
         Examples:
             ```python

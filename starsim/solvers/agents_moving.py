@@ -923,8 +923,7 @@ class Moving:
         For the agents in a state who have just entered it (at `entered`, if the caller knows it; otherwise as dated): choose their branch, sample its dwell time, and schedule the exit
 
         Returns:
-            Which of the members entered the state during the last step's moves (by a progression, dated at its start), after that step's
-            competing rates were drawn, so that they have one draw of them to catch up on (see step_state()); None if there are none
+            Which of the members entered the state during the last step's moves (by a progression, dated at its start), after that step's competing rates were drawn, so that they have one draw of them to catch up on (see step_state()); None if there are none
         """
         mod = self.mod
         name = state.name

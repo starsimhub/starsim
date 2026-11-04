@@ -356,8 +356,7 @@ class HouseholdNet(ss.Network):
             seed (int): random seed for reproducibility
 
         Returns:
-            sc.dataframe: A dataframe with columns `hh_id` and `ages` ready for
-            use with `HouseholdNet(dhs_data=...)`.
+            sc.dataframe: A dataframe with columns `hh_id` and `ages` ready for use with `HouseholdNet(dhs_data=...)`.
         """
         rng = np.random.default_rng(seed)
         age_strings = []
@@ -383,8 +382,7 @@ class HouseholdNet(ss.Network):
                 (e.g. `XXHR7xFL.DTA`).
 
         Returns:
-            sc.dataframe: A dataframe with columns `hh_id`, `ages`, and
-            `sexes` ready for use with `HouseholdNet(dhs_data=...)`.
+            sc.dataframe: A dataframe with columns `hh_id`, `ages`, and `sexes` ready for use with `HouseholdNet(dhs_data=...)`.
 
         Examples:
             ```python

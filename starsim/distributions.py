@@ -108,7 +108,7 @@ class normal(Dist):
 
     Args:
         loc (float): the mean of the distribution (default 0.0)
-        scale (float) the standard deviation of the distribution (default 1.0)
+        scale (float): the standard deviation of the distribution (default 1.0)
 
     """
     scaling = ['predraw', 'postdraw']

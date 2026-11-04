@@ -431,8 +431,7 @@ def compile_status():
     From the shell, `starsim init compile --check` says the same, and exits with 1 if it isn't compiled.
 
     Returns:
-        An `sc.obj` of `engine` ('rust', 'numba', or 'python': what runs the kernels), `compiled` (True only if they run
-        at full speed from the first run, from the current code), `missing` (the parts for which they don't), and `summary` (a line saying so)
+        An `sc.obj` of `engine` ('rust', 'numba', or 'python': what runs the kernels), `compiled` (True only if they run at full speed from the first run, from the current code), `missing` (the parts for which they don't), and `summary` (a line saying so)
 
     Example:
         ```python

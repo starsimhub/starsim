@@ -504,8 +504,7 @@ class MultiSim:
             baseline (str): the label of a scenario to compare with: each other scenario's difference from it, run by run (the runs are paired by position, as in `msim.diff()`), so the interval is of the paired differences
 
         Returns:
-            A dataframe with a row for each result (and scenario, if there are several), and the columns `median`, `low`, `high`, `mean`, and `std`
-            (or `value`, if each scenario was run once); with `key`, the rows of that result
+            A dataframe with a row for each result (and scenario, if there are several), and the columns `median`, `low`, `high`, `mean`, and `std` (or `value`, if each scenario was run once); with `key`, the rows of that result
 
         Example:
             ```python
@@ -1435,8 +1434,7 @@ def parallel(*args, n_runs=None, pars=None, priors=False, **kwargs):
             everything else is passed to `ss.MultiSim()`, e.g. `parallel=False`, `n_cpus`, `shrink`
 
     Returns:
-        A run MultiSim. Each result is available across the runs, with the label of each sim as its scenario,
-        e.g. `msim.results.sir.I.quantiles([0.025, 0.5, 0.975])`.
+        A run MultiSim. Each result is available across the runs, with the label of each sim as its scenario, e.g. `msim.results.sir.I.quantiles([0.025, 0.5, 0.975])`.
 
     Examples:
         ```python
