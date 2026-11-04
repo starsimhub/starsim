@@ -161,6 +161,26 @@ for uid in uids:                            # A draw for each person in turn, ra
     value = self.dist.rvs(uid)
 ```
 
+### A varying number of draws in compiled code
+
+Some decisions need a number of random draws for each person that isn't known in advance: one for each act, or the tries of a matching or queuing algorithm, often written as a loop compiled with `@ss.jit`. `dist.streams(uids)` gives each person a stream of uniforms for this call of the distribution, as a `uint64` state, and `ss.draws.next_u(state)`, inside the compiled loop (or in Python), gives the next uniform in (0, 1) and the new state. A person's stream depends only on the distribution, the step and call, and the person, so the same person in the same step gets the same sequence, however many others draw and however many uniforms they take:
+
+```python
+@ss.jit
+def first_success(states, p, n_max): # For each person, the act (up to n_max) that first succeeds, or -1
+    out = np.full(len(states), -1)
+    for i in range(len(states)):
+        st = states[i]
+        for k in range(n_max):
+            u, st = ss.draws.next_u(st)
+            if u < p:
+                out[i] = k
+                break
+    return out
+
+acts = first_success(self.acts.streams(uids), 0.1, 20) # self.acts is any distribution made in __init__(), e.g. ss.random()
+```
+
 ## Further reading
 
 - [Klein et al.: Noise-free comparison of stochastic agent-based simulations using common random numbers](https://arxiv.org/abs/2409.02086): the method, with examples in Starsim

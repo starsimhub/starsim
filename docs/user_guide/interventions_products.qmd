@@ -116,6 +116,14 @@ print('Treated:', sim.results.treatment.delivered.sum())
 
 A follow-up can have follow-ups of its own, to any depth. By default a test detects infection with the disease it is given for; `detects=` takes a condition for anything else. `delay=` on the test is the time from the test to its result.
 
+A step runs after the steps whose events trigger it, so it acts on the step they happen; steps that trigger each other in a cycle can't, and raise an error, unless one of them has `delay=` (as agents). A delayed step waits at least one step from its trigger (a wait drawn as less, including zero, ends on the next step), so it can be in a cycle, as in a test repeated a year after each negative result:
+
+```python
+first  = ss.screen(sensitivity=0.9, specificity=0.98, at='2010', name='first')
+retest = ss.screen(sensitivity=0.9, specificity=0.98, who=first.negative, delay=ss.years(1), name='retest')
+retest.trigger = first.negative | retest.negative # Each negative result, of either test, starts a year's wait
+```
+
 A test's values can be by the states of several diseases (`{hpv16.I: 0.9, 'hpv18.CIN': 0.95}`), including the boolean states of a disease written as code (`'hpv16.cin'`). With `disease=[...]`, a value for a state without a disease (`'cin'`) is for that state of each, and someone is tested once, in the most severe state they are in.
 
 A test can have more than two results: `results=` gives them, most severe first, each with its chance for people in each state (`None` for people in none of them), and the last result is everyone the others don't take. Each result is a result of the delivery and an event that can trigger what follows:

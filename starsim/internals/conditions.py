@@ -918,7 +918,8 @@ class Selector(sc.prettyobj):
         elif op == 'memory':
             return ss.interventions.remembered(self, cond)
         elif op == 'move':
-            return self.event_of(cond)
+            reading = self.__dict__.get('reading') # A delayed delivery reading the events of the step before, which this reads only in this step (see ss.Delivery.delayed_arrivals())
+            return self.nobody() if reading is not None and reading[0] != sim.ti else self.event_of(cond)
         elif op == 'people':
             name = args[0]
             if name in dims and not self.is_binned(name):

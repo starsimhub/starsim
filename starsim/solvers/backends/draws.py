@@ -1,5 +1,9 @@
 """
-Not for the user: exact random draws in Numba, from one uniform each where possible
+Exact random draws in Numba, from one uniform each where possible; not for the user, except `next_u()`, as `ss.draws.next_u()`
+
+For code compiled with `ss.jit` (or Numba) that needs a varying number of draws for each agent, e.g. one for each act, or in a
+queue: `ss.Dist.streams(uids)` gives the state of a stream for each agent, and `next_u(state)` the next uniform of one and its new
+state. See `ss.Dist.streams()`.
 
 Every draw here is a function of a uniform u in (0, 1): by inversion of the CDF where
 that is cheap (binomial and Poisson up to a mean of 30, negative binomial, exponential,
@@ -158,9 +162,41 @@ def stream(u):
 
 @jit(inline='always')
 def next_u(st):
-    """ The next uniform of a stream, and its new state """
+    """
+    The next uniform in (0, 1) of a stream, and its new state, in code compiled with `ss.jit` (or Numba), or in Python
+
+    Args:
+        st (uint64): the state of the stream, e.g. an agent's from `ss.Dist.streams()`
+
+    Returns:
+        (u, st): the uniform, and the state to pass to the next call
+
+    Examples:
+        ```python
+        @ss.jit
+        def first_success(states, p, n_max): # For each agent, the number of the act (up to n_max) that first succeeds, or -1
+            out = np.full(len(states), -1)
+            for i in range(len(states)):
+                st = states[i]
+                for k in range(n_max):
+                    u, st = ss.draws.next_u(st)
+                    if u < p:
+                        out[i] = k
+                        break
+            return out
+
+        acts = first_success(self.dist.streams(uids), 0.1, 20)
+        ```
+    """
     st += GOLDEN
     return max(mix(st) >> U11, 0.5)*INV53, st
+
+def streams(u):
+    """ The states of streams from uniforms, as `stream()` gives for each, for arrays in NumPy (see `ss.Dist.streams()`) """
+    z = (np.asarray(u, dtype=np.float64)*TWO53).astype(U64) ^ SALT
+    z = (z ^ (z >> U30))*MIX1
+    z = (z ^ (z >> U27))*MIX2
+    return z ^ (z >> U31)
 
 
 #%% float64 exp and log that LLVM can vectorize (to within 1-2 ulp of libm's)
