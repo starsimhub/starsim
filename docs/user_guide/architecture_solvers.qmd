@@ -1,5 +1,5 @@
 ---
-title: Solvers and backends
+title: Engines and kernels
 jupyter: python3
 authorship:
   human: 0

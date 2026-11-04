@@ -459,7 +459,7 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
     # Raise an error if mismatches were found
     mismatchmsg = keymatchmsg + valmatchmsg
     if mismatchmsg:  # pragma: no cover
-        if die and n_mismatch: # To catch full=True case
+        if die and (n_mismatch or keymatchmsg): # Values that differ, or keys that don't match (unless skip_key_diffs=True); with full=True, a message alone is not a mismatch
             raise ValueError(mismatchmsg)
         elif output:
             return df

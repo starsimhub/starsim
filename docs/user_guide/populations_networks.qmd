@@ -246,7 +246,7 @@ A network written as code is a subclass of one of the networks in the [appendix]
 - **A probability per act needs acts.** `ss.peract()` on a route without acts (a random network, a mixing pool, a mother-to-child network) raises an error; give a bare probability per contact instead.
 - **A β by route names every route.** A dict that leaves out a route, or names one that isn't in the sim, raises an error that lists the routes there are.
 - **A static network leaves out newcomers.** With `dynamic=False`, edges are made once, and people born or added later have no contacts on that network.
-- **Mother-to-child networks need `ss.Pregnancy`.** `ss.Births` has no pregnancies to link, so with it, or with no demographics, `ss.MaternalNet`, `ss.PrenatalNet`, and `ss.PostnatalNet` stay empty and no child is infected, with no error.
+- **Mother-to-child networks need `ss.Pregnancy`.** `ss.MaternalNet`, `ss.PrenatalNet`, and `ss.PostnatalNet` link mothers to their children through pregnancies, so a sim with one of them and no `ss.Pregnancy` (with `ss.Births` instead, or no demographics) raises an error saying so.
 
 The API reference for this page: [Networks](../api/networks.qmd).
 

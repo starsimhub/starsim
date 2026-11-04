@@ -182,7 +182,7 @@ The capitalization rule is Starsim's existing one: modules, containers, and base
 
 - **Code is opaque.** A function given as a rate (`rate=my_fn`) isn't analyzed in advance; if it needs something only agents have, a compartmental run stops and says what it asked for.
 - **A disease written as code is not data.** A disease with its own `define_states()` of arrays and its own `step()` runs in the same loop, but `describe()` shows only its class, arrays, and parameters. A class can mix the two: declared transitions, plus code in `step()` after `super().step()`. See [Modules](architecture_modules.qmd).
-- **Some things need agents.** A distribution across people or an individual-level network has no compartmental form, so `solver='auto'` runs the model as agents and says why. See [Solvers and backends](architecture_solvers.qmd).
+- **Some things need agents.** A distribution across people or an individual-level network has no compartmental form, so `solver='auto'` runs the model as agents and says why. See [Engines and kernels](architecture_solvers.qmd).
 - **Exports carry less than the code.** Only the compartmental form of the declared diseases goes into odin or SBML.
 
 ## In the design record
