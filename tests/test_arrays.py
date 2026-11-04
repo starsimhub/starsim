@@ -467,6 +467,29 @@ def test_uids_construction():
     return
 
 
+@sc.timer()
+def test_catarr():
+    sc.heading('Testing categorical states (ss.CatArr)')
+    loc = ss.CatArr('loc', categories=['urban', 'rural'], default='rural', mock=5)
+    loc[ss.uids([0, 1])] = 'urban'
+    loc[ss.uids([2])] = ['urban']
+    assert list((loc == 'urban').uids) == [0, 1, 2]
+    assert (loc != 'urban').count() == 2
+    assert loc.isin(['urban', 'rural']).count() == 5
+    assert list(loc.labels()) == ['urban']*3 + ['rural']*2
+    loc[ss.uids([3])] = loc[ss.uids([0])] # Codes, as read, are kept as they are
+    assert loc.labels(ss.uids([3]))[0] == 'urban'
+    with pytest.raises(ValueError):
+        loc == 'suburban'
+    quint = ss.CatArr('quintile', categories=[1, 2, 3, 4, 5], default=3, mock=4) # Integer categories are stored as they are
+    quint[ss.uids([0])] = 5
+    assert (quint == 5).count() == 1 and (quint == 3).count() == 3
+    assert list(quint.labels()) == [5, 3, 3, 3]
+    with pytest.raises(ValueError):
+        ss.CatArr('mixed', categories=[1, 'two']) # An integer could then be a category or a code
+    return loc
+
+
 # %% Run as a script
 if __name__ == '__main__':
     do_plot = True
@@ -485,6 +508,7 @@ if __name__ == '__main__':
     wrap  = test_uids_array_wrap()
     const = test_uids_construction()
 
+    cat2  = test_catarr()
     sc.toc(T)
     plt.show()
     print('Done.')

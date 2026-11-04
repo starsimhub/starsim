@@ -3,6 +3,7 @@ The starsim command, available after installing Starsim
 
     starsim init                  # "init ai" (if an AI coding agent is installed), then "init compile"
     starsim init compile          # Compile the Numba kernels ahead of time (optional; see below)
+    starsim init compile --rust   # In a clone of Starsim, build the Rust kernels instead (installing Rust if needed)
     starsim init compile --check  # Which kernels are in use, and whether they are compiled
     starsim init ai               # Link Starsim's skills for AI agents into this project
     starsim init dev              # Set up a clone of Starsim for development
@@ -25,7 +26,8 @@ Compiling: Starsim runs its Rust kernels where they are built (as in the wheels 
 otherwise its Numba kernels, which are compiled on first use (a few minutes, once per install).
 Compiling them ahead of time is optional: it saves that wait in the first runs, e.g. in a Docker
 image or in CI. "starsim init" skips it when the Rust kernels are in use, and "starsim init
-compile" compiles Numba's anyway.
+compile" compiles Numba's anyway. In a clone of Starsim whose Rust kernels are not built, both
+offer to build them instead, saying what that takes (--numba skips asking).
 
 `python -m starsim` does the same, e.g. where the command is not on the path.
 """
@@ -90,6 +92,9 @@ def main(argv=None):
 
     def add_compile_args(p):
         p.add_argument('--check', action='store_true', help='Say whether the kernels are compiled, rather than compiling them, and exit with 1 if not')
+        which = p.add_mutually_exclusive_group()
+        which.add_argument('--rust', action='store_true', help='In a clone of Starsim, build the Rust kernels rather than compile the Numba ones, installing Rust if it is missing')
+        which.add_argument('--numba', action='store_true', help='Compile the Numba kernels without offering to build the Rust ones')
         return
 
     # starsim init
@@ -97,7 +102,7 @@ def main(argv=None):
     add_target_args(p)
     p.set_defaults(func=init)
     sub = p.add_subparsers(dest='what', metavar='<what>')
-    a = sub.add_parser('compile', help='Compile the Numba kernels ahead of time (optional: they are otherwise compiled on first use; nothing to do with the Rust kernels)')
+    a = sub.add_parser('compile', help='Compile the Numba kernels ahead of time (optional: they are otherwise compiled on first use), or in a clone without the Rust kernels, offer to build those instead')
     add_compile_args(a)
     a.set_defaults(func=run('build', 'compile'))
     a = sub.add_parser('ai', help='Link the skills for AI coding agents into this project (the same as "starsim ai install")')

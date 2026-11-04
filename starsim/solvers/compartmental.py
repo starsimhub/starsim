@@ -70,7 +70,8 @@ def held(raw):
     elif isinstance(raw, ss.Dist):
         return [held(v) for v in raw.pars.values()]
     elif isinstance(raw, ss.parameters.TimeValue):
-        return [held(getattr(raw, name)) for name in raw.fields] + [held(p.raw) for p in raw.pars]
+        shape = [repr(getattr(raw, name)) for name in ['times', 'mode', 'period'] if hasattr(raw, name)] # How an ss.timeseries goes between its values, which can be changed in place
+        return [held(getattr(raw, name)) for name in raw.fields] + [held(p.raw) for p in raw.pars] + shape
     elif isinstance(raw, dict):
         return [held(v) for v in raw.values()]
     elif isinstance(raw, (list, tuple)):
@@ -1814,6 +1815,10 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
 
         def check(p):
             raw = getattr(p, 'raw', None) # None for a property of people (ss.ppl.age), which does not change
+            if isinstance(raw, ss.expressions.Expr): # A parameter given as an expression (ss.par(0.3*ss.seasonal(...))): what varies in it
+                for leaf in raw.leaves:
+                    check(leaf)
+                return
             varies = isinstance(raw, ss.parameters.TimeValue) or (isinstance(raw, ss.by) and raw.varies)
             if varies and not any(p is par for par in self.time_pars):
                 self.time_pars.append(p)
@@ -2219,6 +2224,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         """ Whether any parameter varies smoothly in time (not as a step function), so is taken at the middle of each step """
         if getattr(self, '_smooth', None) is None:
             raws = [p.raw for p in self.graph.all_pars()]
+            raws += [leaf.raw for raw in raws if isinstance(raw, ss.expressions.Expr) for leaf in raw.leaves if isinstance(leaf, ss.par)] # In a parameter given as an expression
             self._smooth = any(isinstance(raw, (ss.parameters.TimeValue, ss.by)) and not self.held(raw) for raw in raws)
         return self._smooth
 
@@ -2427,9 +2433,11 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         """
         The parts of the program that can change over time, at each step (or as a single entry, if nothing varies)
 
-        A value that varies in time is worked out for every step the first time it is
-        needed, and kept for as long as the parameter holds the same object, so a sim
-        that is run again does not work it out again.
+        A value that varies in time is worked out for every step at once. Modifiers that depend only on time are applied
+        to the steps between the times they change, each span worked out at once in the same way; only a modifier that
+        could change at any step (e.g. one that follows a smooth time series) is worked out step by step. The tables of a
+        whole run are kept for as long as everything they are worked out from is the same, so a sim that is run again,
+        with the same values, does not work them out again.
 
         Args:
             start (int): the first step to give the tables for (for a run taken a part at a time: see `run_parts()`)
@@ -2437,16 +2445,16 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         """
         sim = self.sim
         mod = self.mod
-        p = self.program
         npts = mod.t.npts
         whole = start == 0 and stop is None
         stop = npts if stop is None else stop
         self.cache.clear()
-        changes = any(key[0] == mod.name and not getattr(m, 'constant', False) for key,mods in sim.modifiers.items() for m in mods) # Modifiers that depend on more than the parameters
-        values = self.par_values() if whole and not changes else None
+        mods = [m for key,ms in sim.modifiers.items() if key[0] == mod.name for m in ms if not getattr(m, 'constant', False)] # Modifiers that depend on more than the parameters
+        values = [*self.par_values(), self.mod_values(), npts] if whole and all(getattr(m, 'tabulated', False) for m in mods) else None
         if values is not None and self.kept_tables is not None and self.kept_tables[0] == values: # The same as for the last run
             self.cache.update(self.kept_tables[2])
             return list(self.kept_tables[1])
+        series = dict() # Steps by groups, where a value is otherwise one number or a number for each group
         for par in self.time_pars:
             raw = par.raw
             kept = self.series.get(id(par))
@@ -2454,8 +2462,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             if kept is None or kept[0] is not raw or kept[2] != inner:
                 vals = raw.series(self.table_years(raw), sim, self.convert) # Every year at once (its values converted, then interpolated as numbers, as held_value() takes them; for an ss.by, years by groups)
                 kept = self.series[id(par)] = (raw, np.array(vals, dtype=float).reshape(len(vals), -1), inner)
-            self.cache[id(par)] = kept[1] # Steps by groups, where a value is otherwise one number or a number for each group
-            self.cache['series'] = True # So the tape, which is for one step, is not used (see tape_values())
+            series[id(par)] = kept[1]
         grouped = [] # Whether any value of each table differs by group (otherwise ss.gradients.capture() keeps it once for all of them)
 
         def table(vals):
@@ -2466,22 +2473,36 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             shape = (stop - start if steps else 1, self.n_groups)
             return np.array([np.broadcast_to(val, shape) for val in vals], dtype=float).reshape(len(vals), *shape).swapaxes(0, 1)
 
-        fixed     = table([0.0 if flow.dynamic else self.flow_base(flow)*self.flow_mult(flow) for flow in self.flows])
-        mult      = table([self.flow_mult(flow) if flow.dynamic else 1.0 for flow in self.flows])
-        consts    = table([self.prog_value(par) for par in self.prog_pars])
-        rel_trans = table([state.rel_trans*self.mult_raw('rel_trans', state=state)*mask for state,mask in self.prog_exposures])
-        series = {id(par):self.cache[id(par)] for par in self.time_pars}
-        if changes: # Modifiers that depend only on time (see kernel_only()): work out every part of the program at each step (and stage), with them applied
-            rows = []
-            which = [] # The row of each step
-            changing = self.changing_steps(start, stop)
-            if changing is None and sim.pars.nopython:
+        def all_tables():
+            """ Every table, with the values that vary in time as series over the steps, and the modifiers as they are on the current step """
+            self.cache.clear()
+            if series:
+                self.cache.update(series)
+                self.cache['series'] = True # So the tape, which is for one step, is not used (see tape_values())
+            return [table([0.0 if flow.dynamic else self.flow_base(flow)*self.flow_mult(flow) for flow in self.flows]),
+                    table([self.flow_mult(flow) if flow.dynamic else 1.0 for flow in self.flows]),
+                    table([self.prog_value(par) for par in self.prog_pars]),
+                    table([state.rel_trans*self.mult_raw('rel_trans', state=state)*mask for state,mask in self.prog_exposures])]
+
+        changing = self.changing_steps(start, stop) if mods else None
+        if not mods:
+            tables = all_tables()
+        elif changing is not None: # Modifiers that switch on and off at known steps: the tables of each span between them, with them as they are in it
+            bounds = sorted({start, stop} | {ti for ti in changing if start < ti < stop})
+            tables = None
+            for a,b in zip(bounds[:-1], bounds[1:]):
+                sim.t.ti = mod.t.ti = min(a + 1, npts - 1) # The step from a, which is step a+1 (see ss.Loop)
+                span = all_tables()
+                if tables is None:
+                    tables = [np.empty((stop - start, *t.shape[1:])) for t in span]
+                for out,t in zip(tables, span):
+                    out[a-start:b-start] = t[a-start:b-start] if len(t) > 1 else t[0]
+            grouped = [True]*4
+        else: # Modifiers that could change at any step: work out every part of the program at each step (and stage), with them applied
+            if sim.pars.nopython:
                 raise ss.CapabilityError(f'nopython=True, but the modifiers of "{mod.name}" are worked out in Python at each step before the run, since they change on steps that cannot be told in advance')
+            rows = []
             for ti in range(start, stop):
-                if changing is not None and rows and ti not in changing: # As on the step before
-                    which.append(len(rows) - 1)
-                    continue
-                which.append(len(rows))
                 sim.t.ti = mod.t.ti = min(ti + 1, npts - 1) # The step from ti, which is step ti+1 (see ss.Loop)
                 self.at_middle()
                 self.cache.clear()
@@ -2489,28 +2510,49 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                              [self.flow_mult(flow) if flow.dynamic else 1.0 for flow in self.flows],
                              [self.prog_value(par) for par in self.prog_pars],
                              [state.rel_trans*self.mult_raw('rel_trans', state=state)*mask for state,mask in self.prog_exposures]])
-            sim.t.ti = mod.t.ti = 0
-            self.year = None
-            self.cache.clear()
             shape = (self.n_groups,)
-            fixed, mult, consts, rel_trans = [np.array([[np.broadcast_to(val, shape) for val in row[k]] for row in rows], dtype=float).reshape(len(rows), len(rows[0][k]), self.n_groups)[which] for k in range(4)]
+            tables = [np.array([[np.broadcast_to(val, shape) for val in row[k]] for row in rows], dtype=float).reshape(len(rows), len(rows[0][k]), self.n_groups) for k in range(4)]
             grouped = [True]*4
+        sim.t.ti = mod.t.ti = 0
+        self.year = None
+        self.cache.clear()
         self.tables_by_group = grouped
-        for par in self.time_pars: # For the results, a value is a series over the steps (and over the groups, for an ss.by)
-            vals = series[id(par)]
-            self.cache[id(par)] = vals[:, 0] if vals.shape[1] == 1 else vals
+        for key,vals in series.items(): # For the results, a value is a series over the steps (and over the groups, for an ss.by)
+            self.cache[key] = vals[:, 0] if vals.shape[1] == 1 else vals
             self.cache['series'] = True
-        tables = [np.ascontiguousarray(table) for table in [fixed, mult, consts, rel_trans]]
+        tables = [np.ascontiguousarray(table) for table in tables]
         if values is not None:
             self.kept_tables = (values, tables, dict(self.cache))
         return list(tables)
+
+    def mod_values(self):
+        """ What the modifiers are worked out from, beyond their amounts (see `par_values()`): when they act, on whom, and how; to tell whether the tables of the last run still hold """
+        keys = ['op', 'amount', 'efficacy', 'share', 'start', 'stop', 'when', 'where', 'hold', 'until', 'route']
+        out = []
+        for mods in self.sim.modifiers.values():
+            for m in mods:
+                vals = [getattr(m, key, None) for key in keys]
+                vals = [[held(leaf) for leaf in val.leaves] if isinstance(val, ss.expressions.Expr) else held(val) for val in vals] # An expression's parameters can be given new values
+                out.append([id(m), vals])
+        return out
 
     def changing_steps(self, start, stop):
         """ The steps on which the modifiers of this module change, if all they do is switch on and off at a date, so the tables need working out only on those steps; or None if they could change on any step """
         sim = self.sim
         mods = [m for key,mods in sim.modifiers.items() if key[0] == self.mod.name for m in mods if not getattr(m, 'constant', False)] # Not those that are the same at every step
-        if self.time_pars or any(not isinstance(m, ss.modify) or not m.tabulated for m in mods):
+        if any(not isinstance(m, ss.modify) or not m.tabulated for m in mods):
             return None
+        timed = [p.name for p in self.time_pars]
+        if any(kind == 'par' and name in timed for (modname, kind, name),ms in sim.modifiers.items() if modname == self.mod.name and ms): # A modifier of a value that varies in time is applied to it at each step
+            return None
+        per_step = lambda raw: isinstance(raw, ss.parameters.by_func) or (callable(raw) and not isinstance(raw, (ss.Dist, ss.parameters.TimeValue, ss.by)))
+        if any(per_step(p.raw) for p in self.graph.all_pars()): # A function of the sim, called at each step
+            return None
+
+        def in_time(val):
+            """ Whether an amount or share varies in time (a number for each group does not) """
+            raws = [leaf.raw if isinstance(leaf, ss.par) else leaf for leaf in (val.leaves if isinstance(val, ss.expressions.Expr) else [val])]
+            return any(isinstance(raw, ss.parameters.TimeValue) or (isinstance(raw, ss.by) and raw.varies) or (callable(raw) and not isinstance(raw, ss.by)) for raw in raws)
 
         def first_step(passed):
             """ The first step of these at which something that is passed once has been passed, or `stop`, by bisection """
@@ -2526,7 +2568,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
 
         steps = set()
         for m in mods:
-            if not m.constant_amount: # A step function changes only where its value does; anything else, at any step
+            if in_time(m.amount) or in_time(m.share): # A step function changes only where its value does; anything else, at any step
                 if m.share is not None or not isinstance(m.amount, ss.timeseries) or not self.held(m.amount) or m.amount.period is not None:
                     sim.t.ti = 0
                     return None

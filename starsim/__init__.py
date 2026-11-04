@@ -25,7 +25,7 @@ from .internals.errors import *
 
 #%% Building blocks: arrays, distributions, time, and parameters
 from .internals import arrays
-from .internals.arrays import Arr, FloatArr, TimeArr, IntArr, BoolArr, BoolState, IndexArr, uids
+from .internals.arrays import Arr, FloatArr, TimeArr, IntArr, CatArr, BoolArr, BoolState, IndexArr, uids
 
 from .internals import dists
 from .internals.dists import Dist
@@ -44,7 +44,7 @@ from .internals.time import (
     freqperday, freqperweek, freqpermonth, freqperyear,
 )
 from .internals.dates import DateArray, date, datedur
-from .internals.timeline import Timeline
+from .internals.timeline import Timeline, schedule
 from .internals.parameters import Pars, by, timeseries, seasonal
 
 #%% People and modules

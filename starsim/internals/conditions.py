@@ -227,6 +227,10 @@ class Cond:
         """ For `cond[uids]` and `cond.values`: the value for each agent (by UID), in the sim of a module the condition reads """
         mod = find_module(self)
         sim = getattr(mod, 'sim', None)
+        if sim is None and getattr(mod, '_given', False):
+            errormsg = (f'{self!r} has no values: "{mod.name}" was given to a sim, which runs a copy of each module it is given (so it can be given to other sims). '
+                        f'Read the one that ran from the sim, e.g. sim.{mod.name}, or make the sim with copy_modules=False to run the modules themselves')
+            raise ValueError(errormsg)
         if sim is None or not sim.initialized:
             errormsg = f'{self!r} has no values yet: cond[uids] and cond.values are for a condition on a module in a sim that has been initialized'
             raise ValueError(errormsg)

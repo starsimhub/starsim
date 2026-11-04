@@ -147,7 +147,8 @@ class StaticNet(ss.Network):
     if population size is known. Or the graph can be created by passing a networkx generator function to Starsim.
 
     If "seed=True" is passed as a keyword argument or a parameter in pars, it is replaced with the built-in RNG.
-    The parameter "n" is supplied automatically to be equal to n_agents.
+    The parameter "n" is supplied automatically to be equal to n_agents. With no graph, it is a random (Erdős–Rényi)
+    graph: the one `nx.fast_gnp_random_graph()` would make, edge for edge, made without NetworkX (see `random_graph()`).
 
     Note: CRN safe.
 
@@ -182,9 +183,6 @@ class StaticNet(ss.Network):
         """
         super().init_pre(sim)
         self.n_agents = sim.pars.n_agents
-        if self.nx_graph is None:
-            import networkx as nx # Lazy import since slow
-            self.nx_graph = nx.fast_gnp_random_graph # Fast random (Erdos-Renyi) graph creator
         n_contacts = self.pars.pop('n_contacts') # Remove from pars dict, but use only if p is not supplied
         if self.pars.p is None: # Convert from n_contacts to probability
             self.pars.p = n_contacts/self.n_agents
@@ -208,6 +206,15 @@ class StaticNet(ss.Network):
         super().init_post()
         if 'seed' in self.pars and self.pars.seed is True:
             self.pars.seed = self.dist.rng
+        if self.nx_graph is None: # A random (Erdős–Rényi) graph
+            if isinstance(self.pars.seed, np.random.Generator) and 0 < self.pars.p < 1 and not self.graph_kwargs:
+                p1, p2 = random_graph(self.n_agents, self.pars.p, self.pars.seed)
+                if not len(p1):
+                    raise ValueError(f'The random graph of {self.n_agents} agents with p={self.pars.p} has no edges')
+                self.append(p1=p1, p2=p2, beta=np.ones(len(p1)))
+                return
+            import networkx as nx # Lazy import since slow
+            self.nx_graph = nx.fast_gnp_random_graph
         if callable(self.nx_graph):
             args = inspect.signature(self.nx_graph).parameters
             kw = {k:v for k,v in self.pars.items() if k in args} # Only pass p and seed if the generator accepts them
@@ -249,6 +256,31 @@ class StaticNet(ss.Network):
 
     def step(self):
         pass
+
+
+def random_graph(n, p, rng):
+    """
+    The edges of a random (Erdős–Rényi) graph of n nodes, each pair joined with probability p: the edges, in order, that
+    `networkx.fast_gnp_random_graph(n, p, seed=rng)` makes from the same random numbers, without making the graph (many times faster)
+
+    Like it, it skips from one edge to the next among the pairs (v, w) with w < v, in order, by a geometric number of pairs.
+    """
+    total = n*(n - 1)//2 # The pairs, in order: (1,0), (2,0), (2,1), (3,0), ...
+    lp = np.log(1.0 - p)
+    pos = np.empty(0, dtype=np.int64) # The place of each edge among the pairs
+    last = -1
+    while last < total: # Each draw is the skip to the next edge, until one is past the last pair
+        skips = (np.log(1.0 - rng.random(int(1.02*(total - last)*p) + 100))/lp).astype(np.int64) + 1
+        more = last + np.cumsum(skips)
+        pos = np.concatenate([pos, more])
+        last = more[-1]
+    pos = pos[pos < total]
+    v = ((1 + np.sqrt(1 + 8*pos.astype(np.float64)))//2).astype(np.int64) # The row of each place, corrected for rounding
+    v -= v*(v - 1)//2 > pos
+    v += (v + 1)*v//2 <= pos
+    w = pos - v*(v - 1)//2
+    order = np.argsort(w, kind='stable') # As networkx lists them: by the lower node, then the higher
+    return w[order], v[order]
 
 
 def small_world(n, k, p, seed):

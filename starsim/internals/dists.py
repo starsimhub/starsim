@@ -34,6 +34,21 @@ def str2int(string, modulo=1_000_000_000):
 
 _ROUND_IND = 2**62 # Added to the draw index for the stochastic rounding uniforms, so they're independent of the draw itself
 _EVEN_IND = 2**61 # Added to the draw index for the offset of evenly spaced uniforms (see even_out())
+_REPEAT_IND = 2**60 # Added to the draw index (with 2**40 for each repeat) for an agent's repeats in a call (see Dist.rvs(repeats=True))
+
+
+def occurrences(slots):
+    """ The occurrence of each slot in an array (0 for its first, 1 for its second, ...), or None if no slot is repeated; not for the user """
+    order = np.argsort(slots, kind='stable')
+    s = slots[order]
+    new = np.ones(len(s), dtype=bool)
+    new[1:] = s[1:] != s[:-1]
+    if new.all():
+        return None
+    idx = np.arange(len(s))
+    occ = np.empty(len(s), dtype=np.int64)
+    occ[order] = idx - np.maximum.accumulate(np.where(new, idx, 0))
+    return occ
 _cache.depends(__file__, draws.__file__) # So the cached hash below is compiled again when the draws change
 
 @nb.jit(cache=True)
@@ -1199,17 +1214,23 @@ class Dist:
         rvs = self.dist.ppf(rands)
         return rvs
 
-    def rvs(self, n=1, round=None, reset=False):
+    def rvs(self, n=1, round=None, reset=False, repeats=False):
         """
         Get random variates -- use this!
 
         If the distribution is a duration, the values are in timesteps (e.g. in days
         if `dt=ss.days(1)`), and are only whole numbers if `round` is used.
 
+        With common random numbers (the default), each agent's value comes from their slot and the call, so every call
+        gives new values, but an agent who appears twice in the UIDs of one call gets the same value both times (e.g. two
+        events for one person in a batch); give `repeats=True` for each to be drawn independently. It isn't checked by
+        default, since UIDs from Starsim (e.g. `arr.uids`) never repeat, and checking every call would make draws slower.
+
         Args:
             n (int/tuple/arr): if an int or tuple, return this many random variates; if an array, treat as UIDs
             round (bool/str): if True (or 'stochastic'), randomly round up or down based on how close the value is; if 'nearest', round to the nearest integer; if None, use the value set when the distribution was created
             reset (bool): whether to automatically reset the random number distribution state after being called
+            repeats (bool): whether the UIDs may repeat, so that each repeat gets a value of its own (still common random numbers, except for `ss.choice` and `ss.histogram`, whose repeats are drawn after every slot)
         """
         # Check for readiness
         if not self.initialized:
@@ -1244,11 +1265,16 @@ class Dist:
         self.process_pars()
 
         # Actually get the random numbers
+        occ = occurrences(np.asarray(slots)) if repeats and slots is not None else None # Each slot's occurrence in the call, if any repeats
         if slots is not None and self._use_ppf is not False:
             # Common random numbers via hashing: one uniform per slot, keyed by (seed, ind).
             # Generates exactly len(uids) numbers while preserving CRN.
             # (choice/histogram set _use_ppf=False and keep the native path below.)
             rands = hash_uniforms(self.seed, self.ind, self._slots, dtype=self.hash_dtype, even=self.even)
+            if occ is not None: # Each repeat from a stream of its own, as each call is
+                for k in range(1, occ.max() + 1):
+                    rep = occ == k
+                    rands[rep] = hash_uniforms(self.seed, self.ind + _REPEAT_IND + k*2**40, self._slots[rep], dtype=self.hash_dtype)
             rvs = self.ppf(rands) # Convert to actual values via the PPF
         elif self._use_ppf:
             rands = self.rand(size)
@@ -1256,6 +1282,11 @@ class Dist:
         else:
             if slots is not None: # For every slot up to the largest, so that each agent's draw is their slot's
                 self._size = slots.max() + 1 if len(slots) else 0
+                if occ is not None: # And then one for each repeat
+                    rep = occ > 0
+                    self._slots = np.array(self._slots, dtype=np.int64)
+                    self._slots[rep] = self._size + np.arange(rep.sum())
+                    self._size += int(rep.sum())
             rvs = self.make_rvs() # Or, just get regular values
             if self._slots is not None:
                 rvs = ss.arrays.nb_indexer(rvs, self._slots) if self._slots.size >= ss.arrays.numba_indexing else rvs[self._slots] # Numba indexer is ~1.3x faster for large gathers

@@ -38,8 +38,9 @@ class infection_log(Analyzer):
     over a network, where each infection is drawn along an edge: seeds have a source
     of -1, and infections by a mixing pool (`ss.MixingPool`), a contact matrix, or
     mixing with everyone (no network) have a source and network of NaN, since they
-    come from the share infectious in a group rather than from a particular person.
-    As agents only.
+    come from the share infectious in a group rather than from a particular person
+    (by events, `solver='abm-events'`, each contact is with a particular person, so
+    these have a source and route too). As agents only.
 
     Note: CRN safe.
 

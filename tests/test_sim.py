@@ -637,6 +637,55 @@ def test_engine_rules():
     return
 
 
+@sc.timer()
+def test_given_modules():
+    sc.heading('Testing modules given to a sim: copied, or not (copy_modules=False), and sim.<name> while initializing')
+
+    class Status(ss.Module):
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            self.define_states(ss.IntArr('status', default=0))
+        def step(self):
+            pass
+
+    class Reader(ss.Module):
+        def init_post(self):
+            super().init_post()
+            self.other = self.sim.status # Another module, by name, while the sim is initializing
+        def step(self):
+            pass
+
+    mod = Status(name='status')
+    sim = ss.Sim(modules=[mod, Reader(name='reader')], n_agents=10, start=2000, stop=2002, verbose=0).run()
+    assert sim.reader.other is sim.status
+    with pytest.raises(ValueError, match='copy_modules'): # The one given is not the one that ran
+        (mod.status == 0).uids
+
+    mod = Status(name='status')
+    sim = ss.Sim(modules=mod, n_agents=10, start=2000, stop=2002, verbose=0, copy_modules=False).run()
+    assert sim.status is mod and len((mod.status == 0).uids) == 10
+    with pytest.raises(ValueError, match='copy_modules'):
+        sim.new()
+    with pytest.raises(ValueError, match='copy_modules'):
+        ss.Sim(modules=mod, copy_modules=False)
+
+    # Whole days are ints, as for pandas
+    days = (ss.date('2015-01-01') - ss.date('2010-01-01')).days
+    assert days == 1826 and isinstance(days, int)
+
+    # A death requested after the step's deaths were resolved warns
+    class Late(ss.Module):
+        def finish_step(self):
+            super().finish_step()
+            if self.ti in [1, 2]:
+                self.sim.people.request_death(ss.uids([self.ti]), cause='late')
+        def step(self):
+            pass
+    with pytest.warns(RuntimeWarning, match='next step'):
+        ss.Sim(n_agents=10, modules=Late, dt=ss.day, start='2010-01-01', stop='2010-01-05', verbose=0).run()
+    return sim
+
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)

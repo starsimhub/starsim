@@ -46,7 +46,7 @@ class SimPars(ss.Pars):
         interventions (str/list/Module): As above
         analyzers (str/list/Module): As above
         nopython (bool): whether to raise `ss.CapabilityError`, rather than fall back to Python, if a compartmental run cannot be taken whole in the kernels, as with Numba's `nopython=True` (see `sim.kernel_reason()`)
-        solver (str): how a declared model is run: 'auto' (the default: chosen from the model; see `sim.solver_reason`), 'ode', 'ide' (dwell times as they are, not as stages), 'binomial' (chain binomial), 'gillespie' (exact), 'tau' (tau-leaping), or 'abm' (agents)
+        solver (str): how a declared model is run: 'auto' (the default: chosen from the model; see `sim.solver_reason`), 'ode', 'ide' (dwell times as they are, not as stages), 'binomial' (chain binomial), 'gillespie' (exact), 'tau' (tau-leaping), 'abm' (agents), or 'abm-events' (agents, event by event in continuous time within each step; a declared module can also have its own, ss.Disease(..., solver=))
         branching (bool): whether to run as a branching process, in which infection takes no one from the uninfected, nor gives anyone back (default False)
         approx (bool): what to do about an approximation of the model: None (default) prints a note for each, True keeps the notes in `sim.notes` without printing them, and False makes each an error
         integrator (str): the ODE integration scheme: 'rk4' (the default) or 'euler'
@@ -81,7 +81,7 @@ class SimPars(ss.Pars):
 
         # How the model is run; these only apply to modules with declared states and transitions (see ss.Disease)
         self.unit       = None   # The unit for bare numbers, e.g. 'day'; if nothing in the model has a unit, time is in timesteps
-        self.solver     = 'auto' # 'auto', 'ode', 'ide' (dwell times as they are, not as stages), 'binomial', 'gillespie' (exact), 'tau' (tau-leaping), or 'abm'
+        self.solver     = 'auto' # 'auto', 'ode', 'ide' (dwell times as they are, not as stages), 'binomial', 'gillespie' (exact), 'tau' (tau-leaping), 'abm', or 'abm-events' (agents by events)
         self.branching  = False  # Whether to run as a branching process: infection takes no one from the uninfected, nor gives anyone back (see ss.Sim)
         self.approx     = None   # None prints a note for each approximation; True keeps the note in sim.notes without printing it; False makes it an error
         self.integrator = None   # The ODE integration scheme: 'rk4' (the default) or 'euler'
@@ -485,6 +485,7 @@ class Sim(ss.Base):
         approx (bool): by default, each approximation a solver makes is noted in one line (kept in `sim.notes`, and printed unless `verbose=0`); True does not print them, and False makes them errors
         stratify (dict): stratify every module by a property of people, e.g. `dict(age=[0, 15, 65])`
         data (df): a dataframe (or dict) of data, with a column "time" plus data of the form "module.result", e.g. "hiv.infection": plotted with the results, and what `sim.fit()`, `sim.log_density()`, and `sim.gradient()` compare them to
+        copy_modules (bool): by default, the sim runs a copy of each module it is given, so they can be given to other sims (read the ones that ran from the sim, e.g. `sim.sir`); if False, it runs the modules themselves, so they can be read after the run as they are, but the sim can't be run again or copied with `sim.new()`, and the modules can't be given to another sim
         kwargs (dict): merged with pars; see ss.SimPars for all parameter values
 
     Note:
@@ -511,7 +512,7 @@ class Sim(ss.Base):
 
     def __init__(self, *models, label=None, people=None, demographics=None, connectors=None,
                  networks=None, diseases=None, interventions=None, analyzers=None, custom=None,
-                 modules=None, data=None, pars=None, **kwargs):
+                 modules=None, data=None, pars=None, copy_modules=True, **kwargs):
         self.pars = ss.SimPars() # Make default parameters
         models = [arg for arg in models if arg is not None]
         given = dict(label=label, people=people, demographics=demographics, connectors=connectors, networks=networks, diseases=diseases,
@@ -548,7 +549,9 @@ class Sim(ss.Base):
                     networks=networks, interventions=interventions, diseases=diseases, 
                     analyzers=analyzers, custom=custom, modules=modules)
         args = {key:val for key,val in args.items() if val is not None} # Remove None inputs
-        input_pars = ss.utils.copy_given(pars, args, kwargs)
+        input_pars = ss.utils.copy_given(pars, args, kwargs, copy_modules=copy_modules)
+        if not copy_modules: # Nothing to start again from, since the modules given are the ones that run
+            self._before_init = 'This sim was made with copy_modules=False, so it runs the modules it was given themselves, and can\'t be run again or copied with sim.new(): make it again instead (with new modules)'
         self.pars.update(input_pars)  # Update the parameters
         self.given = [key for key,val in input_pars.items() if val is not None] # Which parameters were supplied, as opposed to defaults
         self.notes = [] # Notes on what was assumed or approximated when the sim was built
@@ -614,8 +617,8 @@ class Sim(ss.Base):
         return ss.interventions.order_steps(sc.tolist(interventions))
 
     def _named_modules(self, attr):
-        """ The modules called `attr`: the sim's own once it is initialized, else those it was given """
-        if self.__dict__.get('initialized'):
+        """ The modules called `attr`: the sim's own once it has them (from early in `init()`, so e.g. one module's `init_post()` can read `sim.<name>` of another), else those it was given """
+        if 'custom' in self.__dict__: # Set by init_module_attrs(), the last of the module types
             mods = self.modules
         else:
             mods = ss.utils.given_modules(self.__dict__.get('pars'))

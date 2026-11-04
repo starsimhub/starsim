@@ -369,6 +369,7 @@ class Births(Demographics):
         people = self.sim.people
         birth_uids = self.get_births()
         new_uids = people.grow(len(birth_uids), parent=birth_uids, age=0)
+        people.born(new_uids)
         return new_uids
 
     def update_results(self):
@@ -1085,6 +1086,7 @@ class Pregnancy(Demographics, ss.Disease):
             if len(still):
                 engine.flowcounts['stillbirth'] += engine.n_of(still)
                 engine.record_event('stillbirth', still)
+            ppl.born(new) # Without fetuses as agents, grow_children() does this
         else:
             new = engine.grow_children(tr, parents, ti)
         moms = ss.uids(np.unique(ppl.parent.raw[new]))
@@ -1203,7 +1205,7 @@ class Pregnancy(Demographics, ss.Disease):
         return
 
 
-    def step_die(self, uids):
+    def on_death(self, uids):
         """
         As agents: take the dead out of the states. The death of the last fetus of a pregnancy is a miscarriage or a
         stillbirth for the mother, by gestational age; a mother who dies while pregnant loses her fetuses, counted the
@@ -1213,7 +1215,7 @@ class Pregnancy(Demographics, ss.Disease):
             uids (array): the agents who died
         """
         if not self.abm or not len(uids):
-            return super().step_die(uids)
+            return super().on_death(uids)
         ppl = self.sim.people
         engine = self.engine
         ti = engine.ti # Dated as the engine dates people's moves (see ss.solvers.Engine.ti)
@@ -1228,7 +1230,7 @@ class Pregnancy(Demographics, ss.Disease):
             moms = ss.uids(np.unique(parent[self.fetal.raw[uids]]))
             moms = moms[self.P.raw[moms] & ppl.alive.raw[moms]]
             moms = moms[~np.isin(moms, ppl.parent.raw[self._unborn(moms)])]
-        super().step_die(uids)
+        super().on_death(uids)
         thr = ss.solvers.convert(self.graph.pars.loss_threshold.raw, self.sim.unit_base)
         def lose(moms, force):
             ga = (ti - np.asarray(self.ti_P.raw[moms], dtype=float))*engine.dt

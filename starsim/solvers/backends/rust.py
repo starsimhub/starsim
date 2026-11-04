@@ -1,7 +1,7 @@
 """
 Not for the user: Starsim's compiled kernels in Rust, as the other kernels to Numba's: with `ss.options.kernels = 'auto'` (the default) when they are there (in
 the wheels, or built), or `'rust'` (or `STARSIM_KERNELS=rust`), the
-serial and threaded passes over the agents and a network's edges (`ss.solvers.backends.passes`), the small kernels of `ss.arrays`, `ss.networks`,
+serial and threaded passes over the agents and a network's edges (`ss.solvers.backends.passes`), the pass of `solver='abm-events'` (`ss.solvers.backends.events`), the small kernels of `ss.arrays`, `ss.networks`,
 `ss.dists`, `ss.distributions` and `ss.People`, the draws of `ss.Dist` (`draws.many`), and the compartmental kernels (`ss.kernels`: see
 `compartmental()`) run in Rust, with the same arguments and results (the same
 numbers, bit for bit, whatever the number of threads). The Rust kernels are compiled ahead of time, so a first run takes no compiling, and
@@ -22,6 +22,7 @@ import collections
 import sciris as sc
 import starsim as ss
 from . import passes
+from . import events
 from . import draws
 
 __all__ = ['use', 'built', 'on', 'fell', 'compartmental']
@@ -49,14 +50,14 @@ def fallback(rs, nb):
 
 def modules():
     """ Where the kernels are: modules, a class (whose kernels are static methods), and `draws.many` (a dict) """
-    return sc.obj(passes=passes, arrays=ss.arrays, networks=ss.networks, dists=ss.dists,
+    return sc.obj(passes=passes, events=events, arrays=ss.arrays, networks=ss.networks, dists=ss.dists,
                       people=sys.modules['starsim.people'], multi_random=ss.distributions.multi_random, many=draws.many)
 
-single = ['levels', 'crossed', 'infection_probs'] # The passes of ss.solvers.backends.passes with no threaded version
+single = ['levels', 'crossed', 'infection_probs', 'edge_index', 'candidates_indexed', 'partners'] # The passes of ss.solvers.backends.passes with no threaded version
 pairs = ['census', 'flatnonzero', 'infect', 'due', 'count_people', 'keep_alive', 'due_alive', 'count_alive', 'keep_raw'] # Those with a serial and a threaded driver by name, both the same Rust kernel (the number of chunks says which)
 tuples = dict(edges='random_edges', candidates='candidates', can='can_transmit', ending='ending', touching='touching', women='women', debut='debuts', compress='compress', exits='competing_exits', agent_exits='competing_agent_exits') # Those whose two drivers are a pair, by the Rust kernel
 names = dict(passes=single + [f'{k}_{kind}' for k in pairs for kind in ['serial', 'threaded']] + [f'{k}_drivers' for k in tuples],
-             arrays=['nb_true_raw', 'nb_indexer', 'nb_true', 'nb_count'], networks=['nb_transmit', 'fisher_yates_shuffle', '_mark_partners'], dists=['_hash_uniforms_fill'],
+             events=['step_events'], arrays=['nb_true_raw', 'nb_indexer', 'nb_true', 'nb_count'], networks=['nb_transmit', 'fisher_yates_shuffle', '_mark_partners'], dists=['_hash_uniforms_fill'],
              people=['count_gone'], multi_random=['combine_rvs', 'combine2_rvs'], many=['expon', 'weibull', 'binomial', 'poisson', 'nbinom'])
 numba = None # The Numba kernels, once replaced
 
@@ -126,6 +127,7 @@ def use(rust=True):
         kernels.update({('passes', f'{k}_{kind}'): fallback(getattr(rs, k), numba['passes', f'{k}_{kind}']) for k in pairs for kind in ['serial', 'threaded']})
         kernels.update({('passes', f'{k}_drivers'): tuple(fallback(getattr(rs, r), nb) for nb in numba['passes', f'{k}_drivers']) for k,r in tuples.items()})
         kernels.update({
+            ('events', 'step_events'):        fallback(rs.step_events, numba['events', 'step_events']),
             ('arrays', 'nb_true_raw'):        fallback(rs.true_raw, numba['arrays', 'nb_true_raw']),
             ('arrays', 'nb_indexer'):         fallback(rs.indexer, numba['arrays', 'nb_indexer']),
             ('networks', 'nb_transmit'):      fallback(rs.transmit, numba['networks', 'nb_transmit']),

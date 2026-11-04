@@ -5,6 +5,7 @@ Test networks
 # %% Imports and settings
 import pytest
 import warnings
+from unittest import mock
 import sciris as sc
 import numpy as np
 import networkx as nx
@@ -812,7 +813,33 @@ def test_transmit_candidates():
         found = ss.solvers.backends.passes.candidates(p1, p2, rel_trans, rel_sus)
         for (src, trg), inds in zip([(p1, p2), (p2, p1)], found):
             assert np.array_equal(inds, np.flatnonzero((rel_trans[src] != 0) & (rel_sus[trg] != 0))), f'Wrong candidates with {n_edges} edges'
+        index = ss.solvers.backends.passes.edge_index(p1, p2, n)
+        for keep in [0.01, 0.2]: # From the infectious, then (with few susceptible) from the susceptible
+            sus = np.where(rng.random(n) < keep, rel_sus, 0)
+            done, *indexed = ss.solvers.backends.passes.candidates_indexed(rel_trans, sus, True, *index, n_edges)
+            assert done and all(np.array_equal(a, b) for a,b in zip(indexed, ss.solvers.backends.passes.candidates(p1, p2, rel_trans, sus))), f'Expected the same candidates by the edges of each agent, with {n_edges} edges'
     return
+
+
+def test_edge_index():
+    sc.heading('Testing that a static network transmits and traces by the edges of each agent, as by a pass over all its edges, and makes a random graph as NetworkX does')
+    p1, p2 = ssl.networks.theoretical.random_graph(500, 0.02, np.random.default_rng(2))
+    edges = np.array(nx.fast_gnp_random_graph(500, 0.02, seed=np.random.default_rng(2)).edges())
+    assert np.array_equal(np.column_stack([p1, p2]), edges), 'Expected the same random graph as NetworkX makes from the same random numbers'
+    S, I, X = ss.states('S I X')
+    sis = ss.Disease(infection=S >> I @ 0.1*I, recovery=I >> S @ 0.2, quarantine=I >> X @ 0.05, init_n=dict(I=20), name='sis')
+    tracing = ss.Delivery(move=I >> X, who=sis.quarantine, trace='net', coverage=0.5)
+    sim = ss.Sim(sis, networks=ssl.StaticNet(n_contacts=8, name='net'), interventions=tracing, n_agents=2000, unit='day', stop=30, verbose=0)
+    runs = []
+    for share in [0, 1]: # By a pass over the edges, then by the edges of each agent wherever it can
+        with mock.patch.object(ss.solvers.backends.passes, 'index_share', share):
+            runs.append(sim.new().run())
+    assert runs[1].networks.net.agent_edges.lists is not None, 'Expected a static network to make the edges of each agent'
+    assert all(np.array_equal(runs[0].results.sis[k], runs[1].results.sis[k]) for k in 'SIX'), 'Expected the same results by the edges of each agent'
+    net = runs[1].networks.net
+    inds = np.arange(0, 2000, 7)
+    assert np.array_equal(net.find_contacts(inds), ss.networks.find_contacts(net.edges.p1, net.edges.p2, inds, as_array=True)), 'Expected the same contacts by the edges of each agent'
+    return runs
 
 
 @sc.timer()
@@ -868,6 +895,7 @@ if __name__ == '__main__':
     person = test_beta_by_person()
     sources = test_infection_sources()
     cand = test_transmit_candidates()
+    index = test_edge_index()
     shared = test_shared_pass()
 
     T.toc()

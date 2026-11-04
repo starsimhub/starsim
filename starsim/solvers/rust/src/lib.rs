@@ -1,12 +1,13 @@
 //! Starsim's compiled kernels, in Rust (see `starsim/solvers/backends/rust.py`), each with the same arguments and results as the Numba function it replaces.
 //! Each file holds its kernels and their bindings, and adds them to the module with its `register()`: `draws.rs` (`starsim/solvers/backends/draws.py`,
-//! which the others use), `passes.rs` (`starsim/solvers/backends/passes.py`), `small.rs` (the small kernels of `internals/arrays.py`, `networks.py`,
+//! which the others use), `passes.rs` (`starsim/solvers/backends/passes.py`), `events.rs` (`starsim/solvers/backends/events.py`), `small.rs` (the small kernels of `internals/arrays.py`, `networks.py`,
 //! `internals/dists.py`, `distributions.py` and `people.py`), and `kernels.rs` and `kernels/` (the compartmental kernels, `starsim/solvers/backends/kernels.py`)
 
 #[macro_use]
 mod py;
 mod draws;
 mod passes;
+mod events;
 mod small;
 mod kernels;
 
@@ -17,6 +18,7 @@ fn _rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("source_hash", env!("SOURCE_HASH").parse::<u32>().unwrap())?; // See build.rs
     draws::bind::register(m)?;
     passes::bind::register(m)?;
+    events::bind::register(m)?;
     small::bind::register(m)?;
     kernels::bind::register(m)?;
     Ok(())

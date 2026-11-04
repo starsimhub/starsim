@@ -225,7 +225,7 @@ class Loop:
         for disease in sim.diseases():
             self += disease.step
 
-        # Update people who died -- calls disease.step_die() internally
+        # Update people who died -- calls each module's on_death() internally
         if self._keep(sim.people.step_die):
             self += sim.people.step_die
 
