@@ -94,8 +94,8 @@ class EventSource:
         else:
             entry = [ti, np.array(sel, dtype=float), eng.state_counts() if before is None else before, eng] # Carried along later moves: see ss.solvers.CompartmentalDelivery.carry_events()
         live = self._live.setdefault(outcome, [])
-        if live and live[0][0] != ti:
-            live.clear()
+        if live and live[-1][0] != ti: # The step before is kept too, for delayed deliveries that ran before it (see current())
+            live[:] = [e for e in live if e[0] == live[-1][0]]
         live.append(entry)
         if outcome in self._needs:
             self._pending.append((outcome, entry))
@@ -103,8 +103,20 @@ class EventSource:
         return
 
     def current(self, outcome, selector):
-        """ The people an event happened to on this step, as a selection for a module's selector """
-        entries = [e for e in self.__dict__.get('_live', {}).get(outcome, []) if e[0] == self.sim.ti]
+        """
+        The people an event happened to on this step, as a selection for a module's selector
+
+        While a delayed delivery reads its trigger (see `ss.Delivery.delayed_arrivals()`), `selector.reading` is (step, marks, new):
+        the people of that step (this one or the one before) that it has not read yet, as `marks` says, with what it has now read put in `new`.
+        """
+        reading = selector.__dict__.get('reading')
+        ti = self.sim.ti if reading is None else reading[0]
+        entries = [e for e in self.__dict__.get('_live', {}).get(outcome, []) if e[0] == ti]
+        if reading is not None:
+            key = (self.name, outcome)
+            t, n = reading[1].get(key, (None, 0))
+            reading[2][key] = (ti, len(entries))
+            entries = entries[n:] if t == ti else entries
         if not selector.abm:
             return ss.solvers.current_groups(self, outcome, entries, selector)
         out = selector.nobody()

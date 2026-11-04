@@ -472,6 +472,33 @@ def test_delay():
     return sim
 
 
+def test_delay_cycle():
+    sc.heading('Testing a cycle of triggers through a delayed step: a test repeated a year after each negative result')
+    def make(loop='confirm', delay=ss.years(1), order=None):
+        S, I = ss.states(2)
+        sis = ss.Disease(infection=S >> I @ ss.peryear(0)*I, recovery=I >> S @ ss.years(1), init_prev=0, name='sis') # Nobody infected: every result negative
+        entry = ss.screen(ss.Diagnostic(specificity=1, name='dx0'), at=[2001], name='entry')
+        retest = ss.screen(ss.Diagnostic(specificity=1, name='dx1'), who=entry.negative, delay=delay, name='retest')
+        confirm = ss.screen(ss.Diagnostic(specificity=1, name='dx2'), who=retest.negative, name='confirm')
+        retest.trigger = entry.negative | (confirm.negative if loop == 'confirm' else retest.negative)
+        mods = order(entry, retest, confirm) if order else [entry, confirm, retest]
+        return ss.Sim(sis, interventions=mods, start=2000, stop=2005, dt=ss.months(1), n_agents=500, solver='abm', verbose=0).run()
+    for loop in ['confirm', 'self']: # Through a step that follows it, and through itself
+        res = make(loop).results
+        assert np.array_equal(np.flatnonzero(res.entry.delivered), [13]) # The results of the step at 2001 (the first time point has no step)
+        assert np.array_equal(np.flatnonzero(res.retest.delivered), [25, 37, 49]) and np.all(res.retest.delivered[[25, 37, 49]] == 500), loop
+    res = make(order=lambda e,r,c: [c, r, e]).results # Run in another order, those triggered after the delayed step has run wait just as long
+    assert np.array_equal(np.flatnonzero(res.retest.delivered), [25, 37, 49])
+    res = make(delay=ss.constant(0)).results # A wait drawn as zero ends on the next step
+    assert np.array_equal(np.flatnonzero(res.retest.delivered)[:3], [14, 15, 16])
+    a = ss.screen(ss.Diagnostic(), interval=7, name='a') # Without a delay, a cycle still raises
+    b = ss.screen(ss.Diagnostic(), who=a.positive, name='b')
+    a.trigger = b.positive
+    with pytest.raises(ValueError, match='cycle'):
+        ss.Sim(make_sir(), interventions=[a, b], **kw)
+    return res
+
+
 def test_coded_disease():
     sc.heading('Testing deliveries for a disease written as code: screen, treat, and vaccinate on ssl.AgentSIR')
     def make(interventions, **kwargs):
@@ -649,6 +676,7 @@ if __name__ == '__main__':
     anytr  = test_treat_any_transition()
     current = test_current_value()
     delay  = test_delay()
+    cycle  = test_delay_cycle()
     coded  = test_coded_disease()
     agents = test_agents_only()
     saved  = test_save_load()

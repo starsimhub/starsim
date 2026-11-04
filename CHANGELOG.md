@@ -73,6 +73,7 @@ Starsim 4 adds a way to write a model as declared states and transitions, which 
 - In `init_post()`, diseases come before networks, so a disease that seeds from a network's states has to call that network's `init_post()` first (or seed later). This silently gave no infections in STIsim and HPVsim until they were changed.
 
 ### Bugfixes and performance
+- Deliveries with `delay=` can be in a cycle of triggers, including with themselves, e.g. a test repeated a year after each negative result (`retest.trigger = first.negative | retest.negative`); cycles without a delay still raise. A delayed delivery reads the events since its last step, so it can run before its trigger. *Regression*: a delay drawn from a distribution as zero (or less) is delivered on the step after the trigger, as a fixed delay always was, rather than on the same step.
 - `ss.nbinom()` can be given by its mean and dispersion, `ss.nbinom(mean=20, n=0.5)`, as well as by `n` and `p`; `n` is the dispersion, so the variance is mean + mean²/n.
 - `sim.run(n_runs=)` restarts one built sim again; a stray argument had turned that off.
 - `sim.fit()` raises an error for a setting the method does not take, instead of ignoring it, as does `Result.resample()`. With a list of methods, a setting goes to the stages that take it.

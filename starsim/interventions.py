@@ -212,7 +212,9 @@ def trigger_moves(owner, outcome, sel, eng=None, before=None):
 def order_steps(mods):
     """
     The interventions in the order they run: each delivery after the deliveries whose events trigger it, so a step acts on
-    the step its trigger happens; otherwise in the order given. A cycle raises.
+    the step its trigger happens; otherwise in the order given. A delivery with `delay=` is at least a step after its trigger,
+    so it need not run after it, and may be in a cycle of triggers (e.g. a test repeated a year after a negative result);
+    any other cycle raises.
     """
     mods = list(mods)
     index = {id(m):i for i,m in enumerate(mods)}
@@ -235,9 +237,10 @@ def order_steps(mods):
                     if not found:
                         errormsg = f'"{m.name}" is triggered by {leaf}, but "{ss.conditions.modname(leaf.args[0])}" is not delivered in the sim: add it to interventions='
                         raise ValueError(errormsg)
-                    deps[i] |= {index[id(d)] for d in found if d is not m}
-            if any(leaf.op == 'event' and (leaf.args[0] is m or (isinstance(leaf.args[0], Delivery) and id(leaf.args[0]) not in index and leaf.args[0].name == m.name)) for leaf in ss.conditions.event_leaves(m.trigger) if isinstance(m.trigger, ss.conditions.Cond)): # By name only for a copy: two steps made in a function share the default name, which the sim then makes unique
-                errormsg = f'"{m.name}" is triggered by its own event ({m.trigger}), so would never happen; a delivery can read its own memory (e.g. who={m.name}.since >= ss.years(5)), but not be triggered by itself'
+                    if m.delay is None: # A delayed delivery reads the events since its last step (see Delivery.delayed_arrivals())
+                        deps[i] |= {index[id(d)] for d in found if d is not m}
+            if m.delay is None and any(leaf.op == 'event' and (leaf.args[0] is m or (isinstance(leaf.args[0], Delivery) and id(leaf.args[0]) not in index and leaf.args[0].name == m.name)) for leaf in ss.conditions.event_leaves(m.trigger) if isinstance(m.trigger, ss.conditions.Cond)): # By name only for a copy: two steps made in a function share the default name, which the sim then makes unique
+                errormsg = f'"{m.name}" is triggered by its own event ({m.trigger}), so would never happen; a delivery can read its own memory (e.g. who={m.name}.since >= ss.years(5)), or be triggered by itself with delay=, but not otherwise'
                 raise ValueError(errormsg)
     out, done = [], set()
     while len(out) < len(mods):
@@ -251,7 +254,7 @@ def order_steps(mods):
                     cycle = cycle[cycle.index(nxt):] + [nxt]
                     break
                 cycle.append(nxt)
-            errormsg = f'The deliveries {names(mods[j] for j in cycle[:-1])} trigger each other in a cycle ({" <- ".join(mods[j].name for j in cycle)}), so none can go first; break the cycle, e.g. with a condition on memory (screening.positive.ever) instead of an event'
+            errormsg = f'The deliveries {names(mods[j] for j in cycle[:-1])} trigger each other in a cycle ({" <- ".join(mods[j].name for j in cycle)}), so none can go first; break the cycle with delay= on one of them (at least a step), or with a condition on memory (screening.positive.ever) instead of an event'
             raise ValueError(errormsg)
         i = ready[0]
         out.append(mods[i])
@@ -352,7 +355,9 @@ class Delivery(ss.products.EventSource, Intervention):
             before anyone newly reached in their class (longest first), and leave the queue if they stop being eligible
         delay (dur/Dist): for a triggered step, the time from the trigger to delivery (agents only): a duration, or a distribution of
             durations, drawn per person (e.g. `ss.uniform(ss.months(1), ss.months(8))`). The people triggered receive it then if they are
-            eligible then (who='s condition, and coverage=, are applied when it is due); someone waiting is not triggered again
+            eligible then (who='s condition, and coverage=, are applied when it is due); someone waiting is not triggered again. The wait
+            is at least a step (one drawn as less, including zero, ends on the step after the trigger), so a delayed step may be in a
+            cycle of triggers, including with itself (e.g. a test repeated a year after each negative result)
         trace (str/Network/list): contact tracing: deliver to the contacts, in this network (or these), of the people that the event in
             who= selects, instead of to them; the condition and `coverage=` then apply to the contacts. Agents only, since only networks
             know who someone's contacts are. A network with `memory=` also gives the partnerships of that long ago that have ended
@@ -611,7 +616,7 @@ class Delivery(ss.products.EventSource, Intervention):
         return isinstance(self.product, ss.Diagnostic) and self.product.delay is not None
 
     def delay_steps(self, sim):
-        """ The number of steps from the trigger to delivery, with a fixed delay= """
+        """ The number of steps from the trigger to delivery, with a fixed delay= (at least one) """
         dt = sim.pars.dt.to(sim.unit_base).value
         return max(1, int(np.ceil(ss.solvers.convert(self.delay, sim.unit_base)/dt - 1e-9)))
 
@@ -1068,21 +1073,38 @@ class Delivery(ss.products.EventSource, Intervention):
         selector = self.selector
         if self.trigger is None:
             return selector.everyone()
-        sel = selector.select(self.trigger)
-        return sel if self.delay is None else self.delayed_arrivals(sel)
+        return selector.select(self.trigger) if self.delay is None else self.delayed_arrivals()
 
-    def delayed_arrivals(self, sel):
-        """ With delay= (agents only): those triggered now start waiting (unless waiting already), and those whose wait is over arrive """
+    def delayed_arrivals(self):
+        """
+        With delay= (agents only): those triggered since its last step start waiting (unless waiting already), and those whose wait is over arrive
+
+        It runs whether or not its trigger has run in the step (see `order_steps()`), so it reads the events of the step before
+        that it has not read yet (those of deliveries that run after it), then those of this step. A wait is at least a step: one
+        drawn as less (including zero) ends on the step after the trigger.
+        """
         selector = self.selector
         ti = self.sim.ti
         due = (self.ti_due <= ti).uids
         self.ti_due[due] = np.nan
-        uids = self.uids(sel)
-        uids = uids[np.isnan(self.ti_due[uids])] # Not triggered again while waiting
+        marks = self.__dict__.setdefault('_read', {}) # The events read so far (see ss.products.EventSource.current())
+        trig = []
+        for t in [ti-1, ti]:
+            new = {}
+            selector.reading = (t, marks, new)
+            try:
+                uids = self.uids(selector.select(self.trigger))
+            finally:
+                selector.reading = None
+            marks.update(new)
+            uids = uids[np.isnan(self.ti_due[uids])] # Not triggered again while waiting
+            self.ti_due[uids] = t # Marked as waiting, until the wait is drawn
+            trig.append(uids)
+        uids = trig[0].concatenate(trig[1])
         if len(uids):
             steps = np.ceil(self.delay.rvs(uids)/self.dt_sim - 1e-9) if isinstance(self.delay, ss.Dist) else self.delay_steps(self.sim)
-            self.ti_due[uids] = ti + np.maximum(steps, 0)
-        now = uids[self.ti_due[uids] <= ti] # A delay drawn as less than a step: now
+            self.ti_due[uids] = self.ti_due[uids] + np.maximum(steps, 1)
+        now = trig[0][self.ti_due[trig[0]] <= ti] # Triggered on the step before, after it ran, and due a step later: now
         self.ti_due[now] = np.nan
         return selector.to_selection(due.concatenate(now) if len(now) else due)
 
