@@ -1207,18 +1207,20 @@ class CatArr(IntArr):
         except (KeyError, TypeError):
             raise ValueError(f'"{value}" is not a category of "{self.name}", which are {self.categories}') from None
 
+    def index(self, uids=None):
+        """ The position of each agent's category in `categories` (by default, for the active agents), or -1 if not set (as pandas' `Categorical.codes`), e.g. to count by category or look up a value for each """
+        codes = np.asarray(self.values if uids is None else self[uids])
+        n = len(self.categories)
+        if not self.integer: # The codes are the positions
+            return np.where((codes >= 0) & (codes < n), codes, -1)
+        vals = np.array(self.categories, dtype=ss_int)
+        order = np.argsort(vals)
+        pos = np.minimum(np.searchsorted(vals[order], codes), n - 1)
+        return np.where(vals[order][pos] == codes, order[pos], -1)
+
     def labels(self, uids=None):
         """ The categories of the agents given (by default, the active agents), with None for those not set """
-        codes = self.values if uids is None else self[uids]
-        if self.integer: # The categories themselves (e.g. the members of an IntEnum), by value
-            vals = np.array([int(c) for c in self.categories])
-            order = np.argsort(vals)
-            pos = np.minimum(np.searchsorted(vals[order], codes), len(vals) - 1)
-            cats = np.array(self.categories + [None], dtype=object)
-            return cats[np.where(vals[order][pos] == codes, order[pos], len(vals))]
-        n = len(self.categories)
-        cats = np.array(self.categories + [None], dtype=object)
-        return cats[np.where((codes >= 0) & (codes < n), codes, n)]
+        return np.array(self.categories + [None], dtype=object)[self.index(uids)]
 
     def __eq__(self, other): return super().__eq__(self.code(other))
     def __ne__(self, other): return super().__ne__(self.code(other))
