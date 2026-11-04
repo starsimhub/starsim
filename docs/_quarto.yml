@@ -130,6 +130,7 @@ website:
             - user_guide/intro_why.qmd
             - user_guide/intro_models.qmd
             - user_guide/intro_concepts.qmd
+            - user_guide/intro_faq.qmd
         - section: "Building models"
           contents:
             - user_guide/building_writing.qmd
@@ -444,7 +445,7 @@ format:
 
 filters:
   - interlinks
-  - assets/authorship.lua
+  - authorship # Each page's authorship front matter as a badge (quartopydoc's extension, in _extensions/sciris)
 
 interlinks:
   sources: {} # Only link to Starsim itself (objects.json); external inventories made every page slower to render

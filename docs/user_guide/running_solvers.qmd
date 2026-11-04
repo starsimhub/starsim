@@ -245,7 +245,7 @@ The properties of each solver, for looking up; the table at the top of the page 
 | `'gillespie'` | No | Continuous, one event at a time (exact) | | No | Yes, as for `'ode'` | No |
 | `'tau'` | No | Continuous, many events at a time (close to exact) | | No | Yes, as for `'ode'` | No |
 | `'abm'` | No | Whole steps | `n_agents=`, `dt=`, `rescale=`, `even_draws=`, `ss.options.crn` | When anything in the model needs agents | No: a step at a time, with compiled passes over the agents | No |
-| `'abm-events'` | No | Continuous within each step; what is stepped (networks, interventions, other modules) is held for the step | `n_agents=`, `dt=` (how often results are recorded, and how late stepped changes are seen) | No | No: one compiled pass of events each step | No. Not yet taken (each a `CapabilityError`): strains, stratifications, triggers (`ss.on`), the infection log, networks with acts, minimum stays, states that are not people |
+| `'abm-events'` | No | Continuous within each step; what is stepped (networks, interventions, other modules) is held for the step | `n_agents=`, `dt=` (how often results are recorded, and how late stepped changes are seen) | No | No: one compiled pass of events each step | No. Not yet taken (each a `CapabilityError`): strains, movement between places, dimensions that only some states or people have, moves between levels, `ss.MixingPools` with pools of their own, minimum stays, states that are not people. Triggers (`ss.on`) are taken at the end of the step of their event |
 
 ## Appendix: every set of kernels
 

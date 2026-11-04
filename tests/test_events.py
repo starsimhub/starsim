@@ -43,10 +43,41 @@ def test_events():
     return
 
 
+def test_events_more():
+    sc.heading('By events: the infection log, a network with acts, triggers at the end of the step, and infections by group')
+    sim = ss.Sim(make_sirs(), networks=[ssl.StaticNet(n_contacts=10), ss.MixingPool(n_contacts=2)], n_agents=1000, solver='abm-events', unit='day', stop=20, analyzers='infection_log', **kw).run()
+    df = sim.analyzers[0].to_df()
+    inf = df[df.source != -1]
+    assert len(inf) == sim.results.sirs.infection.values.sum() and set(inf.network) == {'staticnet', 'mixingpool'} # Each infection, with its source and route (in a pool too)
+
+    S, I = ss.states('S I')
+    sti = ss.Disease(infection=S >> I @ dict(sexualnet=ss.peract(m2f=0.1, f2m=0.0))*I, recovery=I >> S @ ss.peryear(0.2), init_prev=0.1, name='sti')
+    sim = ss.Sim(sti, networks=ss.SexualNet(acts=ss.constant(ss.freq(80, 'year'))), n_agents=1000, solver='abm-events', dt=1/12, start=2000, stop=2004, analyzers='infection_log', **kw).run()
+    df = sim.analyzers[0].to_df()
+    new = ss.uids(df.target[df.source != -1].to_numpy(dtype=int))
+    assert len(new) > 20 and sim.people.female[new].all() # From men to women only
+
+    S, E, I, Q, R = ss.states('S E I Q R')
+    d = ss.Disease(infection=S >> E @ 0.3*I, onset=E >> I @ 0.5, recovery=I >> R @ 0.2, isolate=I >> Q @ ss.on(I.enter), release=Q >> R @ 0.2, init_n=dict(E=20), name='d')
+    res = ss.Sim(d, networks=ssl.StaticNet(n_contacts=8), n_agents=1000, solver='abm-events', unit='day', stop=30, **kw).run().results.d
+    assert res.onset.values.sum() > 100 and np.all(res.I.values == 0) # Isolated at the end of the step of their onset, unless they recovered first
+    assert 0.8*res.onset.values.sum() < res.isolate.values.sum() <= res.onset.values.sum()
+
+    S, I, R = ss.states('S I R')
+    m = ss.Disease(S >> I @ 0.14*I, I >> R @ ss.days(8), init_n=dict(I=10), name='m')
+    m.stratify(age={0: 0.3, 15: 0.6, 65: 0.1})
+    res = ss.Sim(m, networks=ss.contacts(ages=[0, 15, 65], matrix=[[10, 6, 1], [3, 8, 1], [3, 6, 3]]), n_agents=2000, solver='abm-events', unit='day', stop=40, **kw).run().results.m
+    by_age = [res.infection.select(age=a).sum() for a in ['0-14', '15-64', '65+']]
+    assert np.isclose(sum(by_age), res.infection.values.sum()) and by_age[0] > by_age[2] > 0
+    return
+
+
 def test_events_refuse():
     sc.heading('What the events do not take yet is a CapabilityError that says what')
-    with pytest.raises(ss.CapabilityError, match='infection log'):
-        ss.Sim(make_sirs(), networks=ss.RandomNet(), n_agents=500, solver='abm-events', analyzers='infection_log', **kw).init()
+    m = make_sirs()
+    m.stratify(patch=ss.geo.geography(names=['a', 'b'], pop=[600, 400], x=[0, 20], y=[0, 0]), mobility=ss.geo.gravity(away=0.01))
+    with pytest.raises(ss.CapabilityError, match='move between places'):
+        ss.Sim(m, networks=ss.MixingPool(n_contacts=3), n_agents=500, solver='abm-events', **kw).init()
     with pytest.raises(ss.CapabilityError, match='no route'):
         ss.Sim(make_sirs(), n_agents=500, solver='abm-events', **kw).init()
     with pytest.raises(ValueError, match='abm-events'):
@@ -59,5 +90,6 @@ def test_events_refuse():
 if __name__ == '__main__':
     T = sc.timer()
     test_events()
+    test_events_more()
     test_events_refuse()
     T.toc()

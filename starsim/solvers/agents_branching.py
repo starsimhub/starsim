@@ -443,13 +443,13 @@ class Branching:
                 networks[found] = nets[inds[found]]
         return sources, networks
 
-    def log_infections(self, uids, seeds=False):
-        """ Record new infections for an `ss.infection_log` analyzer: with who infected them and the network, where known; seeds have a source of -1 """
+    def log_infections(self, uids, seeds=False, sources=None, networks=None):
+        """ Record new infections for an `ss.infection_log` analyzer: with who infected them and the network (given, or where known from this step's transmission); seeds have a source of -1 """
         if not len(uids):
             return
         if seeds:
             sources, networks = np.full(len(uids), -1.0), np.full(len(uids), np.nan)
-        else:
+        elif sources is None:
             sources, networks = self.sources(uids)
         self.mod.infection_log.add_entries(uids, sources, self.mod.t.tvec[self.mod.ti], network=networks) # At the step's time point, as ti_I is (seeds at the start)
         return
