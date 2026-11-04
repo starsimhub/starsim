@@ -227,14 +227,20 @@ Installing Starsim also installs a `starsim` command, for setting up an environm
 
 | Command | What it does |
 |---|---|
-| `starsim init` | Once, after installing: `starsim init ai` if an AI coding agent is installed, then `starsim init compile` unless the Rust kernels are in use |
+| `starsim init` | Once, after installing: `starsim init ai` if an AI coding agent is installed, then `starsim init compile` unless the Rust kernels are in use (`-y` not to ask anything) |
 | `starsim init compile` | Compiles the Numba kernels ahead of time, as `ss.compile()` does (once per install; a few minutes). Optional: they are otherwise compiled on first use, and with the Rust kernels in use (as from the wheels on PyPI) they are needed only to compare the two |
 | `starsim init compile --rust` | In a clone of Starsim, builds the Rust kernels instead, installing Rust first if it is missing. Without `--rust` (or `--numba`), a clone whose Rust kernels are not built is asked which to do |
 | `starsim init compile --check` | Says which kernels are in use and whether they are compiled, and exits with 1 if not (for a build script) |
-| `starsim init ai` | Links the Starsim skills for AI coding agents into this project, after asking (`-y` not to ask), as `starsim ai install` does (`--global` for all projects) |
+| `starsim init ai` | Links the Starsim skills for AI coding agents into this project, after asking (`-y` not to ask), as `starsim ai install` does. `--global` installs a short skill for all projects instead, `--to=claude,agents` chooses the agents (by default, each one installed), and `--force` replaces a skill of the same name that `starsim` did not install; `starsim init` and `starsim init dev` take these too |
 | `starsim init dev` | For a clone of Starsim: also the development dependencies, Rust if it is missing, and both sets of kernels |
-| `starsim ai` | Where the skills are installed; `starsim ai show`, `install`, `uninstall`, `off`, and `on` manage them |
-| `starsim convert model.R` | Converts a model to Starsim code (`model.py`), telling the format from the file; `--to=` another format, `--out=` the file, `--ai` to have an AI coding agent do it. `starsim convert` lists the formats |
-| `starsim import model.camdl` | The same as `starsim convert model.camdl --to=starsim` |
+| `starsim ai` | Where the skills are installed (as `starsim ai status` says) |
+| `starsim ai list` | Lists the skills, with what each is for |
+| `starsim ai show` | Shows the guide for AI agents, which lists the skills, or one skill (`starsim ai show convert-model`) |
+| `starsim ai install` | Links the skills into this project, as `starsim init ai` does, with the same options; `starsim ai uninstall` removes them (`--global`: the short skill for all projects) |
+| `starsim ai off` | Stops the other `starsim` commands from suggesting the skills; `starsim ai on` lets them again |
+| `starsim convert model.R` | Converts a model to Starsim code (`model.py`), telling the format from the file (or as `--from=` says); `--to=` another format, `--out=` the file, and `--force` to replace it if it exists. `starsim convert` lists the formats |
+| `starsim convert laser_model.py --ai` | Has an AI coding agent do the conversion, with Starsim's skills, in an interactive session (`--headless` to run it on its own). `--ai=claude` names the agent; by default, it is the one in the `STARSIM_AGENT` environment variable, or else the only one installed |
+| `starsim import model.camdl` | The same as `starsim convert model.camdl --to=starsim`; a second argument gives the format, if it can't be told from the file (`starsim import model.json epipack`) |
+| `starsim import sir.xlsx atomica --databook=data.xlsx` | When importing, any other option goes to the importer, as a keyword argument of `ss.import_from()` (here, `databook='data.xlsx'`) |
 | `starsim export model.py sbml` | Writes the sim that `model.py` makes (as `sim`, or `--sim=`) in another format |
 | `starsim --version` | The version of Starsim |
