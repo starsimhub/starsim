@@ -26,6 +26,7 @@ tested = dict(
     epydemix = ('epydemix', '1.4.0',   'epydemix'),
     epymorph = ('epymorph', '1.2.0',   'epymorph'),
     flepimop = ('flepiMoP', '2.1',     'gempyor'),
+    json     = ('Starsim',  ss.__version__, None), # Starsim's own JSON form, which is tested with the Starsim it is part of
     memilio  = ('MEmilio',  '2.4.1',   'memilio-simulation'),
     odin     = ('odin',     '1.2.7',   None),
     sbml     = ('SBML',     'Level 3 Version 1', None),

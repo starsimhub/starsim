@@ -207,7 +207,7 @@ Every importer reads its format into the same intermediate object, `ss.converter
 %%| echo: false
 flowchart LR
   F["odin, SBML, EMULSION, SimInf,<br>flepiMoP, summer2, Atomica, camdl,<br>EpiModel, epipack, epydemix,<br>epymorph, MEmilio"] --> R[reader] --> S["ss.converters.Source"] --> W["ss.converters.write()"] --> C["Starsim code"] --> Sim[sim]
-  Sim --> E["SBML, odin"]
+  Sim --> E["SBML, odin, JSON, ..."]
 ```
 
 A `Source` can also be filled in by hand, to bring in a model from a framework that has no importer (here, an SIR from a spreadsheet or a paper):
@@ -233,6 +233,7 @@ A Starsim model is written as Python, and that code is the model: it is what is 
 | What | How | Holds | Read back? |
 |---|---|---|---|
 | The code | the script itself; for an import, `sim.imported.code` | the model, as Python | yes, by running it |
+| The model as JSON | `ss.export_to(sim, 'json')` | the declared model as plain data, stratifications and all | yes, with `ss.import_from()` |
 | Results as JSON | `sim.to_json()` | parameters, summary, and results, for use elsewhere | no |
 | A saved sim | `ss.save('run.sim', sim)` | the sim itself (a pickle), including partway through a run | yes, with `ss.load()` |
 | Another framework's format | `ss.export_to(sim, 'odin')` | the compartmental form of the declared diseases | yes, with `ss.import_from()` |
@@ -255,6 +256,33 @@ print('Infections, after a round trip through SBML:', round(again.results.measle
 ```
 
 A sim made in Starsim is not written back out as Starsim code: its code is the script that made it. Only an import is written as code.
+
+### Starsim's JSON form
+
+To move a model between programs or people without Python (a file a web app or another tool writes or reads), `ss.export_to(sim, 'json')` writes a declared model as plain data. Unlike the other formats, it is not the compartmental form: it keeps the model as it was declared, with its stratifications, values by group, units, and bounds. It reads like the code, since each value and rate is written as it would be in Python without the `ss.`:
+
+```{python}
+S, I, R = ss.states('S I R')
+gamma = ss.par(0.1, bounds=[0.01, 1.0])
+R0 = ss.par(ss.by(patch=dict(urban=2.5, rural=1.8)), bounds=[0.5, 10])
+infection = S >> I @ R0*gamma*I
+recovery = I >> R @ gamma
+sir = ss.Disease(infection, recovery, init_n=dict(I=ss.by(patch=dict(urban=10, rural=1))), name='sir')
+sir.stratify(patch=['urban', 'rural'])
+two_patch = ss.Sim(sir, total_pop=2000, unit='day', stop=200)
+
+json_file = os.path.join(folder, 'two_patch.json')
+print(ss.export_to(two_patch, 'json', filename=json_file))
+```
+
+A transition is one line, as the operators write it, when it has only its ends and a rate or a dwell time; one with a split or a minimum stay is the arguments of `ss.Transition()` instead (`{"src": "I", "dst": ["P", "R"], "dur": "dur_inf", "p": ["p_paralysis", null]}`). A network, an intervention, or a disease written as code is its type and the parameters that differ from its defaults (`{"type": "RandomNet", "n_contacts": 5}`). Reading the file back writes the model's code and runs it, as for any import, so the code is in `sim.imported.code`:
+
+```{python}
+again = ss.import_from(json_file, verbose=False)
+print(again.imported.code)
+```
+
+Reading a file runs no code from it: each expression is checked, and only the model's own names and Starsim's and NumPy's functions are allowed. What the form does not carry yet, such as outcomes, modifiers (`ss.modify()`), strains, and functions, is listed as `ss.errors.LossyExport`, as for any export.
 
 ## Forecast hubs
 

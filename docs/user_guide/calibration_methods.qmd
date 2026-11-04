@@ -137,7 +137,7 @@ A posterior uses each parameter's `prior=` if it has one, and otherwise a unifor
 
 ### NUTS: `'nuts'`
 
-The No-U-Turn sampler uses gradients to move through the posterior of a deterministic model. It needs JAX and BlackJAX.
+The No-U-Turn sampler uses gradients to move through the posterior of a deterministic model. It needs JAX and BlackJAX. With the same `rand_seed`, it gives the same draws on the CPU, but on a GPU the last digits can differ from one run to the next, since JAX on a GPU does not always add numbers in the same order, and a long chain carries the difference along; the change is far inside the posterior's intervals (a median moved by about 0.5%).
 
 | Setting | Default | Meaning |
 |---|---|---|

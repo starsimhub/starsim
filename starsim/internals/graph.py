@@ -18,9 +18,11 @@ __all__ = ['Graph']
 
 
 def inner_pars(val):
-    """ The parameters inside a value: of a value that varies in time (`ss.seasonal(mean=beta)`), a probability per act (`ss.peract(m2f=b)`), or a value by level (`ss.by(sex=dict(female=p_f, male=p_m))`), also within a beta for each route """
+    """ The parameters inside a value: of a value that varies in time (`ss.seasonal(mean=beta)`), a probability per act (`ss.peract(m2f=b)`), a value by level (`ss.by(sex=dict(female=p_f, male=p_m))`), or a distribution (`ss.constant(dur_inc)`), also within a beta for each route """
     if isinstance(val, (TimeValue, ss.peract)):
         return val.pars
+    elif isinstance(val, ss.Dist):
+        return [q for v in (val.pars or {}).values() for q in ([v] if isinstance(v, par) else inner_pars(v))]
     elif isinstance(val, ss.by):
         return [q for v in val.items for q in ([v] if isinstance(v, par) else inner_pars(v))]
     elif isinstance(val, dict):

@@ -50,6 +50,7 @@ from .emulsion import to_emulsion
 from .flepimop import to_flepimop
 from .memilio import to_memilio
 from .atomica import to_atomica
+from .starsim_json import to_json
 
 __all__ = ['exporters', 'extensions', 'export_to', 'flatten', 'in_unit', 'flow_form', 'timing', 'declared_pars', 'counted', 'to_sbml', 'to_odin', 'to_hub']
 
@@ -613,6 +614,7 @@ exporters = dict(
     camdl    = to_camdl,
     emulsion = to_emulsion,
     flepimop = to_flepimop,
+    json     = to_json,
 )
 
 extensions = dict( # The extension of each format's files, for `starsim convert` (Starsim's own is its code)
@@ -630,6 +632,7 @@ extensions = dict( # The extension of each format's files, for `starsim convert`
     camdl    = '.camdl',
     emulsion = '.yaml',
     flepimop = '.yml',
+    json     = '.json',
 )
 
 

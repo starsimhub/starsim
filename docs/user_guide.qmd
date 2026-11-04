@@ -85,7 +85,7 @@ The user guide is organized by topic: each page covers one in full, to read thro
 - [Overview](user_guide/architecture_index.qmd): how Starsim works inside
 - [Model declaration](user_guide/architecture_declaration.qmd): how a model is held as data
 - [Model execution](user_guide/architecture_execution.qmd): how a model becomes a run
-- [Solvers and backends](user_guide/architecture_solvers.qmd): the engines, and the kernels behind them
+- [Engines and kernels](user_guide/architecture_solvers.qmd): the engines, and the kernels behind them
 - [Transmission](user_guide/architecture_transmission.qmd): routes, effects, and results
 - [Randomness](user_guide/architecture_randomness.qmd): random numbers, and fitting
 - [Modules](user_guide/architecture_modules.qmd): what a module is, and how modules work together

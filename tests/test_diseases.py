@@ -774,6 +774,16 @@ def test_init_in_class():
         assert res.V[0] == 3000, f'The count started at {res.V[0]}, not 3 per person, under {solver}'
     sim = ss.Sim(Vectors(name='vec', init=dict(I=0.1)), n_agents=1000, stop=2, unit='day', dt=1, solver='ode', verbose=0).run()
     assert sim.results.vec.I[0] == 100, 'init= given to the disease should replace that of the class'
+
+    # A parameter of the class inside a distribution in a dwell time is the instance's, so setting it changes the dwell time (it kept the class's)
+    class Incubation(ss.Disease):
+        dur_inc = ss.par(ss.days(15))
+        S, E, I = ss.states(3)
+        infection = S >> E @ ss.perday(0.5)*I
+        onset = E >> I @ ss.constant(dur_inc)
+    dis = Incubation(dur_inc=ss.days(30))
+    assert dis.graph.transitions.onset.dur.raw.pars.v is dis.graph.pars.dur_inc, 'The distribution should hold the parameter of the instance'
+    assert Incubation.onset.dur.raw.pars.v is Incubation.dur_inc and float(Incubation.dur_inc.raw.value) == 15, 'The class should be unchanged'
     return
 
 

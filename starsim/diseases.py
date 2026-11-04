@@ -407,7 +407,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         first = first if isinstance(first, str) else None
         self.set_metadata(**meta)
         self.t.update(**timepars)
-        holds_members = lambda leaf: isinstance(leaf.raw, ss.by) and any(v is m for v in leaf.raw.items for m in members.values()) # A value by level holding the class's parameters (ss.by(sex=dict(female=p_f, male=p_m))), copied with them
+        holds_members = lambda leaf: any(v is m for v in ss.graph.inner_pars(leaf.raw) for m in members.values()) # A value holding the class's parameters, copied with them: by level (ss.by(sex=dict(female=p_f, male=p_m))), a distribution (ss.constant(dur_inc)), or one that varies in time
         def leaves(expr): # Including those inside a parameter that holds an expression, as a dwell time written as an expression is held (e.g. dur=d*ss.days(1), with d = ss.par(ss.lognorm_im(...)))
             for leaf in expr.leaves:
                 yield leaf

@@ -7,7 +7,7 @@ authorship:
   note: Based on the Claude draft on solvers, with a new section on the backends that run them (kernels, Rust, JAX, compiling) and points from the Codex draft
 ---
 
-A model in Starsim says what the compartments are, how people move between them, and at what rates. A *solver* is the method that turns this into numbers over time. The same model can be solved in six ways, and for most models and questions they give the same answer, so Starsim chooses one for you. This page is about the cases where the choice matters: small numbers of people, outbreaks that die out by chance, steps that are too long for the rates, and contacts between particular people. It ends with speed, and the compiled code (the backends) that runs each solver. How the solvers work inside, and how they are tested against each other, is in [Solvers and backends](architecture_solvers.qmd) in the architecture section.
+A model in Starsim says what the compartments are, how people move between them, and at what rates. A *solver* is the method that turns this into numbers over time. The same model can be solved in six ways, and for most models and questions they give the same answer, so Starsim chooses one for you. This page is about the cases where the choice matters: small numbers of people, outbreaks that die out by chance, steps that are too long for the rates, and contacts between particular people. It ends with speed, and the compiled code (the backends) that runs each solver. How the solvers work inside, and how they are tested against each other, is in [Engines and kernels](architecture_solvers.qmd) in the architecture section.
 
 ## The solvers
 
@@ -247,7 +247,7 @@ The properties of each solver, for looking up; the table at the top of the page 
 
 ## Appendix: every set of kernels
 
-The kernels are the compiled code under every solver. All the sets give the same numbers, so the choice is about speed and convenience, not the answer; `ss.options.kernels` sets it (or the environment variable `STARSIM_KERNELS`), and `ss.compile_status().summary` says which is in use and whether it is compiled. Speeds and how each is built are in [Solvers and backends](architecture_solvers.qmd#the-kernels) in the architecture section.
+The kernels are the compiled code under every solver. All the sets give the same numbers, so the choice is about speed and convenience, not the answer; `ss.options.kernels` sets it (or the environment variable `STARSIM_KERNELS`), and `ss.compile_status().summary` says which is in use and whether it is compiled. Speeds and how each is built are in [Engines and kernels](architecture_solvers.qmd#the-kernels) in the architecture section.
 
 | `ss.options.kernels` | What it is | When `'auto'` uses it | Use it for |
 |---|---|---|---|
@@ -260,7 +260,7 @@ JAX is not one of these sets: it is chosen run by run (`sim.jax`, `True` or `Fal
 
 ## Appendix: what needs agents
 
-The rules that decide which engine runs a model are in `ss.solvers.solver_table()` (all of them are in [Solvers and backends](architecture_solvers.qmd#what-decides-which-engine-runs-a-model) in the architecture section). A model with any of these runs as agents, and a compartmental solver asked for by name raises an `ss.CapabilityError` that says what to do:
+The rules that decide which engine runs a model are in `ss.solvers.solver_table()` (all of them are in [Engines and kernels](architecture_solvers.qmd#what-decides-which-engine-runs-a-model) in the architecture section). A model with any of these runs as agents, and a compartmental solver asked for by name raises an `ss.CapabilityError` that says what to do:
 
 ```{python}
 import pandas as pd
