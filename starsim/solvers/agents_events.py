@@ -188,7 +188,7 @@ class Events(Agents):
         mod = self.mod
         tr = self.graph.transmissions[0] if self.graph.transmissions else None
         ns = len(self.graph.people_states)
-        out = sc.objdict(kind=[], x_off=[], r_n=[], two=[], scale=[], bound=[], share=[], lists=[], betas=[], beta_off=[], members=[], mem_eff=[], mem_off=[], mem_n=[], in_src=[])
+        out = sc.objdict(kind=[], x_off=[], r_n=[], deg=[], scale=[], bound=[], share=[], lists=[], betas=[], beta_off=[], members=[], mem_eff=[], mem_off=[], mem_n=[], in_src=[])
         n_x = n_beta = n_mem = 0
         self._route_memo = {}
         try:
@@ -215,7 +215,8 @@ class Events(Agents):
                     bound = sus_max*(float(beta.max()) if len(beta) else 0.0) # A beta raised in place above the largest is caught by the pass (see step())
                     scale = ref
                     out.lists.append(index); out.betas.append(beta)
-                    out.x_off.append(n_x); out.r_n.append(len(index[0]) - 1); out.two.append(not route.one_way)
+                    s1, s2 = index[0], index[3]
+                    out.x_off.append(n_x); out.r_n.append(len(s1) - 1); out.deg.append(np.append(np.diff(s1) + (np.diff(s2) if not route.one_way else 0), 0)) # Each agent's neighbors, once a step, with the same length as s1 so x_off is the place in both
                     out.beta_off.append(n_beta); out.mem_off.append(0); out.mem_n.append(0)
                     n_x += len(index[0]); n_beta += len(beta)
                 else:
@@ -226,7 +227,7 @@ class Events(Agents):
                     bound = sus_max*eff[dst].max()
                     scale = float(route.pars.beta)*ref/len(srcs)
                     src[srcs] = True
-                    out.members.append(dst); out.mem_eff.append(eff[dst]); out.mem_off.append(n_mem); out.mem_n.append(len(dst)); out.x_off.append(0); out.r_n.append(0); out.two.append(False); out.beta_off.append(0)
+                    out.members.append(dst); out.mem_eff.append(eff[dst]); out.mem_off.append(n_mem); out.mem_n.append(len(dst)); out.x_off.append(0); out.r_n.append(0); out.beta_off.append(0)
                     n_mem += len(dst)
                 out.kind.append(0 if is_net else 1)
                 out.scale.append(scale)
@@ -238,8 +239,8 @@ class Events(Agents):
         cat = lambda arrs, dtype: np.concatenate(arrs).astype(dtype, copy=False) if len(arrs) > 1 else np.asarray(arrs[0], dtype=dtype) if arrs else np.zeros(1, dtype=dtype)
         nr = len(out.kind)
         index = [cat([ix[k] for ix in out.lists], np.int64) for k in range(6)] # s1, e1, o1, s2, e2, o2 of every network, end to end
-        return (np.array(out.kind, np.int64), np.array(out.x_off, np.int64), np.array(out.r_n, np.int64), np.array(out.two, dtype=bool), np.array(out.scale, float), np.array(out.bound, float),
-                np.array(out.share, float).reshape(nr, ns), *index, cat(out.betas, float),
+        return (np.array(out.kind, np.int64), np.array(out.x_off, np.int64), np.array(out.r_n, np.int64), np.array(out.scale, float), np.array(out.bound, float),
+                np.array(out.share, float).reshape(nr, ns), *index, cat(out.deg, np.int64), cat(out.betas, float),
                 np.array(out.beta_off, np.int64), cat(out.members, np.int64), cat(out.mem_eff, float), np.array(out.mem_off, np.int64), np.array(out.mem_n, np.int64),
                 np.array(out.in_src, dtype=bool).reshape(nr, n))
 
