@@ -320,6 +320,9 @@ quartodoc:
   style: pkgdown
   dir: api
   parser: google
+  parser_options: # Starsim documents parameters taken by **kwargs, and its Returns are prose with no type
+    warn_unknown_params: false
+    warn_missing_types: false
   render_interlinks: true
   sections:
     - contents: # No title/desc here: the page already shows an "API" heading from the top-level title above (issue #1330)
