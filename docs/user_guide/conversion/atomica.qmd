@@ -99,7 +99,7 @@ Lines are lines of model code (not counting blank lines, comments, imports, or p
 | The HIV demo | 217 (188 spreadsheet rows, 29 lines of Python) | 64 | first 0.14 s, rerun 0.004 s | first 0.036 s, rerun 0.00045 s | Pass |
 | Budget optimization of the HIV demo over its 7 programs | | | 1.3 s | 2.3 s | |
 
-A spreadsheet row that a program officer fills in is not the same as a line of Python, so the line counts compare unlike things. Starsim's Numba kernels are compiled once after installing, which takes a couple of minutes (`starsim compile`); its Rust kernels need no such step.
+A spreadsheet row that a program officer fills in is not the same as a line of Python, so the line counts compare unlike things. Starsim's Numba kernels are compiled once after installing, which takes a couple of minutes (`starsim init compile`); its Rust kernels need no such step.
 
 ## What works and what does not yet
 

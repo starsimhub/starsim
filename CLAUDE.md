@@ -113,7 +113,7 @@ Example and reference modules that build on core Starsim but are not part of it,
 Core disease classes (Disease, Infection, SIR, SIS, SEIR) live in `starsim/diseases.py`.
 
 ### Testing (`tests/`)
-- `test_*.py`: Core test files (about 375 tests, under a minute in parallel); keep new tests here few and quick
+- `test_*.py`: Core test files (about 400 tests, under a minute in parallel); keep new tests here few and quick
 - `devtests/`: Developer tests (contracts, inference, errors, importers and exporters, and slower feature tests), in files named like the core ones
 - `run_tests`: Main test runner script
 - `pytest.ini`: Pytest configuration

@@ -1,6 +1,6 @@
 # Tests
 
-- `test_*.py`: the core tests (about 375, under a minute in parallel), which `./run_tests` runs; keep new tests here few and quick
+- `test_*.py`: the core tests (about 400, under a minute in parallel), which `./run_tests` runs; keep new tests here few and quick
 - `devtests/`: the developer tests, slower and more thorough (`pytest devtests -n auto`); see its README
 - `test_data/`: small data files that the tests read (Nigeria's demography)
 
