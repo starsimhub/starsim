@@ -377,11 +377,12 @@ class Network(Route):
             out.append((src.view(ss.uids), trg.view(ss.uids))) # View (no copy): the kernel's output is its own int64 array
         return out
 
-    def edge_index(self):
+    def edge_index(self, now=False):
         """
         The edges of each agent (see `ss.solvers.backends.passes.edge_index()`), so that transmission from a few people, or contact tracing,
         visits only their edges: None until the edges have stayed the same from one step to the next, so a network whose edges change every
-        step never makes one. The edges change when they are assigned again (e.g. `edges.p1 = ...`), as every method that changes them does.
+        step never makes one, unless `now` (for agents taken by events, which visit only the edges of the people infectious however often
+        the edges change). The edges change when they are assigned again (e.g. `edges.p1 = ...`), as every method that changes them does.
         """
         p1, p2 = self.edges.p1, self.edges.p2
         idx = self.agent_edges
@@ -390,9 +391,10 @@ class Network(Route):
                 return idx.lists
             idx = None
         ids = (id(p1), id(p2)) # Until it is made, not the arrays themselves, which would keep a changing network's old edges in memory; an id used again only makes it sooner
-        if idx is None or idx.ids != ids: # New edges
+        new = idx is None or idx.ids != ids # New edges
+        if new:
             self.agent_edges = sc.obj(ids=ids, ti=self.ti, lists=None)
-        elif len(p1) and self.ti is not None and idx.ti is not None and self.ti > idx.ti: # The same as in an earlier step
+        if len(p1) and (now or (not new and self.ti is not None and idx.ti is not None and self.ti > idx.ti)): # The same as in an earlier step, or wanted now
             n = max(p1.max(), p2.max()) + 1
             self.agent_edges = sc.obj(p1=p1, p2=p2, lists=ss.solvers.backends.passes.edge_index(p1, p2, n))
             return self.agent_edges.lists
