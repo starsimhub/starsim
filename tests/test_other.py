@@ -424,21 +424,22 @@ def test_cli_compile_rust(tmp_path, monkeypatch):
     monkeypatch.setenv('HOME', str(tmp_path))
     monkeypatch.chdir(tmp_path) # So that "starsim init" links any skills here
     done = []
-    monkeypatch.setattr(ss.solvers.backends.rust, 'built', lambda: False)
-    monkeypatch.setattr(ss.solvers.backends.rust, 'on', False)
     monkeypatch.setattr(build, 'rust_crate', lambda: '/fake/crate')
     monkeypatch.setattr(build, 'find_cargo', lambda: None)
     monkeypatch.setattr(build, 'build_rust', lambda again: done.append('rust'))
     monkeypatch.setattr(build.subprocess, 'run', lambda *args, **kwargs: None) # The --check after building
     monkeypatch.setattr(ss, 'compile', lambda: done.append('numba'))
     monkeypatch.setattr(sys.stdin, 'isatty', lambda: True, raising=False)
-    for answer, argv, expected in [('', [], 'rust'), ('n', [], 'numba'), ('y', ['--numba'], 'numba'), ('n', ['--rust'], 'rust')]:
-        monkeypatch.setattr('builtins.input', lambda prompt: answer)
-        cli.main(['init', 'compile', *argv])
-        assert done.pop() == expected, (answer, argv)
-    monkeypatch.setattr('builtins.input', lambda prompt: pytest.fail('asked with -y'))
-    cli.main(['init', '-y']) # No question, and so Numba's
-    assert done.pop() == 'numba'
+    with ss.options.context(kernels='auto'), monkeypatch.context() as m: # 'auto', as in a clone without them, even if the suite runs with kernels='rust'; the kernels are restored after the fakes below are undone
+        m.setattr(ss.solvers.backends.rust, 'built', lambda: False)
+        m.setattr(ss.solvers.backends.rust, 'on', False)
+        for answer, argv, expected in [('', [], 'rust'), ('n', [], 'numba'), ('y', ['--numba'], 'numba'), ('n', ['--rust'], 'rust')]:
+            m.setattr('builtins.input', lambda prompt: answer)
+            cli.main(['init', 'compile', *argv])
+            assert done.pop() == expected, (answer, argv)
+        m.setattr('builtins.input', lambda prompt: pytest.fail('asked with -y'))
+        cli.main(['init', '-y']) # No question, and so Numba's
+        assert done.pop() == 'numba'
     return
 
 
