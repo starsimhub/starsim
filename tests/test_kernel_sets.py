@@ -3,12 +3,14 @@ Test that every set of kernels gives the same numbers: Numba's, Rust's and plain
 
 Numba's kernels are the reference: a change is made there first (plain Python is the same code, run uncompiled), then copied
 to Rust's in starsim/solvers/rust/src/ and, where it applies, to JAX's in ss.gradients (see starsim/solvers/rust/README.md). These are
-quick checks of the main paths, plus one direct call of every kernel that Rust's replace (test_twins()); tests/devtests/rust_twin.py compares every call to the compartmental kernels in any test.
+quick checks of the main paths, plus one direct call of every kernel that Rust's replace (test_twins()), and a check that with Rust's on no kernel of Numba's runs (test_no_numba()), so a kernel written in Numba alone fails; tests/devtests/rust_twin.py compares every call to the compartmental kernels in any test.
 Rust's are skipped if they have not been built (cd starsim/solvers/rust && ./build), unless STARSIM_RUST_REQUIRED=1 (as in CI).
 """
 
 # %% Imports and settings
 import os
+import sys
+import subprocess
 from unittest import mock
 import numba as nb
 import pytest
@@ -62,6 +64,39 @@ def same(make, kernels, seeds=(0, 1)):
     return
 
 
+event_calls = [] # The arguments of the calls of the events' pass in two sims, once taken (see events_inputs())
+
+def events_inputs():
+    """
+    The arguments of every call of the pass of solver='abm-events' in two small sims, kept the first time: one on a network with acts (by
+    direction) and a mixing pool, with an Erlang dwell, a dwell drawn for each agent, a split with deaths, and waning; and one by age, with a contact matrix
+    """
+    if not event_calls:
+        S, E, I, R = ss.states('S E I R')
+        d = ss.Disease(infection=S >> E @ dict(sexualnet=ss.peract(m2f=0.2, f2m=0.1), mixingpool=ss.perday(0.02))*I, latent=ss.Transition(E, I, dur=ss.erlang(k=3, mean=ss.days(5))),
+                       recovery=ss.Transition(I, [R, ss.null], p=[0.9, 0.1], dur=ss.lognorm_ex(mean=ss.days(8), std=ss.days(3))), waning=R >> S @ ss.perday(0.05), init_prev=0.05, name='d')
+        acts = ss.Sim(d, networks=[ss.SexualNet(acts=ss.constant(ss.freq(80, 'year'))), ss.MixingPool(n_contacts=3)], n_agents=1000, solver='abm-events', unit='day', stop=30, **kw)
+        S, I, R = ss.states('S I R')
+        m = ss.Disease(S >> I @ 0.14*I, I >> R @ ss.days(8), init_n=dict(I=10), name='m')
+        m.stratify(age={0: 0.3, 15: 0.6, 65: 0.1})
+        ages = ss.Sim(m, networks=ss.contacts(ages=[0, 15, 65], matrix=[[10, 6, 1], [3, 8, 1], [3, 6, 3]]), n_agents=1000, solver='abm-events', unit='day', stop=30, **kw)
+        E = ss.solvers.backends.events
+        step_events = E.step_events
+        def keep(*args):
+            event_calls.append([np.array(x) if isinstance(x, np.ndarray) else x for x in args]) # Copies, since the pass changes the agents' arrays
+            return step_events(*args)
+        with mock.patch.object(E, 'step_events', keep):
+            acts.run()
+            ages.run()
+    return event_calls
+
+
+def events_call(args):
+    """ A call of the events' pass on copies of its arguments: what it returns, and the agents' arrays it changes (state, ver, t_exit, exit_tr) """
+    args = [np.array(x) if isinstance(x, np.ndarray) else x for x in args]
+    return ss.solvers.backends.events.step_events(*args), args[3:7]
+
+
 def twin_calls():
     """ A call of each kernel in `rust.names`, through the function that calls it where there is one, each giving what it returns and any array it fills """
     P, D, net, rng = ss.solvers.backends.passes, ss.solvers.backends.draws, ss.networks, np.random.default_rng(1)
@@ -75,6 +110,7 @@ def twin_calls():
     rate, adjust, sus = uni(size=3), uni(size=3), uni(np.float32)
     p1, p2, trans, randvals = rng.integers(0, n, 3000), rng.integers(0, n, 3000), uni(np.float32)*a, uni(np.float32, 3000)
     dur = 3*uni(np.float32, 3000)
+    index = lambda: P.edge_index(p1, p2, n) # The edges of each agent: s1, e1, o1, s2, e2, o2
     def filled(f, *args, size=n, dtype=np.int64):
         out = np.empty(size, dtype=dtype)
         return f(*args, out), out
@@ -95,6 +131,7 @@ def twin_calls():
         alive       = lambda: P.count_alive((a, b), alive),
         edges       = lambda: [P.random_edges(auids, 3, 1, True), P.random_edges(auids, rng.integers(0, 4, len(auids)), 1, False)],
         candidates  = lambda: P.candidates(p1, p2, trans, sus),
+        indexed     = lambda: [index(), P.partners(gone, *[index()[i] for i in [0, 2, 3, 5]], n)] + [P.candidates_indexed(trans, sus, two_way, *index(), most) for two_way in [True, False] for most in [0, 3000]],
         can         = lambda: P.can_transmit(p1, p2, trans, sus, np.float32(0.5)),
         ending      = lambda: P.ending(dur, p1, p2, alive),
         touching    = lambda: P.touching(p1, p2, b),
@@ -110,6 +147,7 @@ def twin_calls():
         hashes      = lambda: ss.dists.hash_uniforms(1, 2, auids, np.float32),
         gone        = lambda: ss.solvers.backends.rust.modules().people.count_gone(auids, alive, ti_dead, ti_removed, 5),
         combine     = lambda: [ss.multi_random.combine2_rvs(uni(np.float32), uni(np.float32), np.uint32, 2**32 - 1), ss.multi_random.combine_rvs(nb.typed.List([uni(np.float32) for _ in range(3)]), np.uint32, 2**32 - 1)],
+        events      = lambda: [events_call(args) for args in events_inputs()],
         many        = lambda: [filled(D.many[k], *pars, uni(), dtype=float) for k,pars in [('expon', [uni()]), ('weibull', [uni(), uni()]), ('binomial', [10*uni(), uni()]), ('poisson', [5*uni()]), ('nbinom', [uni() + 1, uni()])]],
     )
 
@@ -169,6 +207,30 @@ def test_stale():
 
 
 @sc.timer()
+@needs_rust
+def test_no_numba():
+    sc.heading('Testing that with the Rust kernels no kernel of Numba\'s runs: every one that runs a sim has a Rust copy')
+    script = """
+import importlib, numba, starsim as ss, starsim.library as ssl
+ss.options(kernels='rust')
+kw = dict(verbose=0)
+S, I, R = ss.states('S I R')
+sir = lambda: ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(10), init_prev=0.01, name='sir')
+sims = [ss.Sim(sir(), networks=net, n_agents=1000, unit='day', stop=30, solver=solver, **kw) for net,solver in [(ss.RandomNet(), 'abm'), (ssl.StaticNet(n_contacts=10), 'abm'), (ssl.StaticNet(n_contacts=10), 'abm-events'), (ss.MixingPool(n_contacts=ss.constant(5)), 'abm-events')]]
+sims += [ss.Sim(ss.SEIR(beta=dict(randomnet=ss.peryear(0.1), sexualnet=ss.peract(0.1))), networks=['random', 'sexual'], demographics=True, n_agents=1000, dur=5, **kw)]
+sims += [ss.Sim(sir(), total_pop=10000, unit='day', stop=30, solver=solver, **kw) for solver in ['ode', 'binomial', 'gillespie', 'tau']]
+for sim in sims:
+    sim.run()
+used = [f'{name}.{k}' for name in ['passes', 'events', 'kernels', 'draws'] for mod in [importlib.import_module(f'starsim.solvers.backends.{name}')] for k,f in vars(mod).items() if isinstance(f, numba.core.registry.CPUDispatcher) and f.__module__ == mod.__name__ and f.signatures]
+print(used)
+"""
+    out = subprocess.run([sys.executable, '-c', script], capture_output=True, text=True, check=True, env=os.environ | dict(MPLBACKEND='agg')) # A fresh process, so no other test's kernels have been compiled
+    used = out.stdout.strip().splitlines()[-1]
+    assert used == '[]', f'These Numba kernels ran with the Rust kernels on, so have no Rust copy (or one that is not used): {used}; copy them to starsim/solvers/rust/src/ and add them to rust.names'
+    return
+
+
+@sc.timer()
 def test_stale_numba(tmp_path):
     sc.heading('Testing that Numba\'s cache is checked against the contents of a file, not its time')
     C = ss.solvers.backends.cache
@@ -189,10 +251,13 @@ def test_stale_numba(tmp_path):
 @sc.timer()
 @needs_rust
 def test_agents():
-    sc.heading('Testing sims with agents: the passes, networks, demographics and draws of ss.Dist')
+    sc.heading('Testing sims with agents: the passes, networks, demographics and draws of ss.Dist, and agents by events')
     same(lambda s: ss.Sim(n_agents=3000, diseases=ss.SIS(beta=0.1, dur_inf=ss.lognorm_ex(ss.years(1), ss.years(0.5))), networks='random', demographics=True, dur=20, rand_seed=s, **kw), compiled)
     same(lambda s: ss.Sim(n_agents=3000, diseases=ss.SEIR(beta=dict(randomnet=ss.peryear(0.1), sexualnet=ss.peract(0.1))), networks=['random', 'sexual'], dur=20, rand_seed=s, **kw), compiled)
     same(lambda s: ss.Sim(n_agents=2000, demographics=[ss.Pregnancy(), ss.Deaths()], networks='maternal', dur=10, rand_seed=s, **kw), compiled)
+    S, I, R = ss.states('S I R') # Agents by events (the pass is also called directly in test_twins())
+    sirs = lambda: ss.Disease(infection=S >> I @ 0.05*I, recovery=I >> R @ 1, waning=R >> S @ (1/14), init_prev=0.01, name='sirs')
+    same(lambda s: ss.Sim(sirs(), networks=[ss.RandomNet(n_contacts=10), ss.MixingPool(n_contacts=2)], n_agents=2000, solver='abm-events', unit='day', stop=30, rand_seed=s, **kw), compiled)
     return
 
 
@@ -314,5 +379,6 @@ if __name__ == '__main__':
     test_jax()
     test_draws()
     test_twins()
+    test_no_numba()
     test_stale()
     T.toc()

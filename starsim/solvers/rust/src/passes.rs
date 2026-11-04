@@ -820,6 +820,102 @@ pub fn candidates<T: Num, S: Num>(p1: &[i64], p2: &[i64], rel_trans: &[T], rel_s
     (close_gaps(out0, &f0, n), if two_way { close_gaps(out1, &f1, n) } else { 0 })
 }
 
+/// The edges of each of n agents, by the end they are at: (s1, e1, o1, s2, e2, o2), with agent u p1 of the edges e1[s1[u]..s1[u+1]], whose p2 are in o1, and p2 of those in e2, whose p1 are in o2 (`passes.edge_index()`)
+pub fn edge_index(p1: &[i64], p2: &[i64], n: usize) -> [Vec<i64>; 6] {
+    let m = p1.len();
+    let (mut s1, mut s2) = (vec![0i64; n + 1], vec![0i64; n + 1]);
+    for (&u, &v) in p1.iter().zip(p2) {
+        s1[u as usize + 1] += 1;
+        s2[v as usize + 1] += 1;
+    }
+    for u in 0..n {
+        s1[u + 1] += s1[u];
+        s2[u + 1] += s2[u];
+    }
+    let (mut e1, mut o1, mut e2, mut o2) = (vec![0i64; m], vec![0i64; m], vec![0i64; m], vec![0i64; m]);
+    let (mut k1, mut k2) = (s1[..n].to_vec(), s2[..n].to_vec()); // The next place of each agent
+    for (i, (&u, &v)) in p1.iter().zip(p2).enumerate() {
+        let (a, b) = (k1[u as usize] as usize, k2[v as usize] as usize);
+        e1[a] = i as i64;
+        o1[a] = v;
+        k1[u as usize] += 1;
+        e2[b] = i as i64;
+        o2[b] = u;
+        k2[v as usize] += 1;
+    }
+    [s1, e1, o1, s2, e2, o2]
+}
+
+/// The distinct numbers in found, each from 0 to n - 1, in order, by a bit for each (`passes.in_order()`)
+pub fn in_order(found: &[i64], n: usize) -> Vec<i64> {
+    let mut bits = vec![0u64; n.div_ceil(64)];
+    for &x in found {
+        bits[(x >> 6) as usize] |= 1u64 << (x & 63);
+    }
+    let mut out = Vec::with_capacity(found.len());
+    for (i, &w) in bits.iter().enumerate() {
+        let mut w = w;
+        while w != 0 {
+            out.push(((i as i64) << 6) + w.trailing_zeros() as i64);
+            w &= w - 1;
+        }
+    }
+    out
+}
+
+/// As candidates(), from the edges of each agent (edge_index()): those of the people infectious or of those susceptible, whichever have fewer, then in order;
+/// None if that would visit more than `most` edges (`passes.candidates_indexed()`)
+#[allow(clippy::too_many_arguments)]
+pub fn candidates_indexed<T: Num, S: Num>(rel_trans: &[T], rel_sus: &[S], two_way: bool, s1: &[i64], e1: &[i64], o1: &[i64], s2: &[i64], e2: &[i64], o2: &[i64], most: i64) -> Option<(Vec<i64>, Vec<i64>)> {
+    let flags: Vec<u8> = rel_trans.iter().zip(rel_sus).map(|(t, s)| (t.f() != 0.0) as u8 + 2*(s.f() != 0.0) as u8).collect();
+    let n = (s1.len() - 1).min(rel_trans.len()); // Agents born since the index have no edges
+    let (mut by_src, mut by_trg) = (0i64, 0i64);
+    for u in 0..n {
+        let (d1, d2) = (s1[u + 1] - s1[u], s2[u + 1] - s2[u]);
+        if flags[u] & 1 != 0 { by_src += d1 + if two_way { d2 } else { 0 }; }
+        if flags[u] & 2 != 0 { by_trg += d2 + if two_way { d1 } else { 0 }; }
+    }
+    let k = by_src.min(by_trg);
+    if k > most {
+        return None;
+    }
+    let from_src = by_src <= by_trg;
+    let (have, want) = if from_src { (1u8, 2u8) } else { (2u8, 1u8) };
+    let ((sa, ea, oa), (sb, eb, ob)) = if from_src { ((s1, e1, o1), (s2, e2, o2)) } else { ((s2, e2, o2), (s1, e1, o1)) };
+    let (mut out0, mut out1) = (vec![0i64; k as usize], vec![0i64; if two_way { k as usize } else { 0 }]);
+    let (mut m0, mut m1) = (0, 0);
+    for u in 0..n {
+        if flags[u] & have != 0 {
+            for j in sa[u] as usize..sa[u + 1] as usize {
+                out0[m0] = ea[j]; // Branchless, as candidates()
+                m0 += (flags[oa[j] as usize] & want != 0) as usize;
+            }
+            if two_way {
+                for j in sb[u] as usize..sb[u + 1] as usize {
+                    out1[m1] = eb[j];
+                    m1 += (flags[ob[j] as usize] & want != 0) as usize;
+                }
+            }
+        }
+    }
+    let n_edges = e1.len();
+    Some((in_order(&out0[..m0], n_edges), in_order(&out1[..m1], n_edges)))
+}
+
+/// The partners of the agents inds (n covers every UID), in order, from the edges of each agent (`passes.partners()`)
+pub fn partners(inds: &[i64], s1: &[i64], o1: &[i64], s2: &[i64], o2: &[i64], n: usize) -> Vec<i64> {
+    let mut is_partner = vec![false; n];
+    let na = s1.len() - 1;
+    for &u in inds {
+        let u = u as usize;
+        if u < na { // Someone born since the index has no edges
+            for &v in &o1[s1[u] as usize..s1[u + 1] as usize] { is_partner[v as usize] = true; }
+            for &v in &o2[s2[u] as usize..s2[u + 1] as usize] { is_partner[v as usize] = true; }
+        }
+    }
+    (0..n).filter(|&i| is_partner[i]).map(|i| i as i64).collect()
+}
+
 /// The edges with a chance of transmission above 0 (`rel_trans[src]·rel_sus[trg]·beta`, in Numba's types), in order: how many, written from the start of out (`passes.can_transmit()`)
 pub fn can_transmit<T: Times<S>, S: Copy + Send + Sync, B: Copy + Send + Sync>(src: &[i64], trg: &[i64], rel_trans: &[T], rel_sus: &[S], beta: &[B], out: &mut [i64], nchunks: usize) -> usize
 where T::Out: Times<B> {
@@ -1188,6 +1284,29 @@ pub mod bind {
     }
 
     #[pyfunction]
+    fn edge_index<'py>(py: Python<'py>, p1: &Arr<'py>, p2: &Arr<'py>, n: usize) -> PyResult<(Arr<'py>, Arr<'py>, Arr<'py>, Arr<'py>, Arr<'py>, Arr<'py>)> {
+        let [s1, e1, o1, s2, e2, o2] = passes::edge_index(sl(p1)?, sl(p2)?, n);
+        Ok((arr(py, s1), arr(py, e1), arr(py, o1), arr(py, s2), arr(py, e2), arr(py, o2)))
+    }
+
+    #[pyfunction]
+    #[allow(clippy::too_many_arguments)]
+    fn candidates_indexed<'py>(py: Python<'py>, rel_trans: &Arr<'py>, rel_sus: &Arr<'py>, two_way: bool, s1: &Arr<'py>, e1: &Arr<'py>, o1: &Arr<'py>, s2: &Arr<'py>, e2: &Arr<'py>, o2: &Arr<'py>, most: i64)
+                               -> PyResult<(bool, Arr<'py>, Arr<'py>)> {
+        typed!(rel_trans, T in [f32, f64] => typed!(rel_sus, S in [f32, f64] => {
+            Ok(match passes::candidates_indexed::<T, S>(sl(rel_trans)?, sl(rel_sus)?, two_way, sl(s1)?, sl(e1)?, sl(o1)?, sl(s2)?, sl(e2)?, sl(o2)?, most) {
+                Some((out0, out1)) => (true, arr(py, out0), arr(py, out1)),
+                None => (false, arr(py, Vec::<i64>::new()), arr(py, Vec::<i64>::new())),
+            })
+        }))
+    }
+
+    #[pyfunction]
+    fn partners<'py>(py: Python<'py>, inds: &Arr<'py>, s1: &Arr<'py>, o1: &Arr<'py>, s2: &Arr<'py>, o2: &Arr<'py>, n: usize) -> PyResult<Arr<'py>> {
+        Ok(arr(py, passes::partners(sl(inds)?, sl(s1)?, sl(o1)?, sl(s2)?, sl(o2)?, n)))
+    }
+
+    #[pyfunction]
     #[allow(clippy::too_many_arguments)]
     fn can_transmit<'py>(py: Python<'py>, src: &Arr<'py>, trg: &Arr<'py>, rel_trans: &Arr<'py>, rel_sus: &Arr<'py>, beta: &Arr<'py>, out: &Arr<'py>, nchunks: i64) -> PyResult<Arr<'py>> {
         let nchunks = chunks(py, nchunks)?;
@@ -1290,6 +1409,9 @@ pub mod bind {
         m.add_function(wrap_pyfunction!(keep_raw, m)?)?;
         m.add_function(wrap_pyfunction!(random_edges, m)?)?;
         m.add_function(wrap_pyfunction!(candidates, m)?)?;
+        m.add_function(wrap_pyfunction!(edge_index, m)?)?;
+        m.add_function(wrap_pyfunction!(candidates_indexed, m)?)?;
+        m.add_function(wrap_pyfunction!(partners, m)?)?;
         m.add_function(wrap_pyfunction!(can_transmit, m)?)?;
         m.add_function(wrap_pyfunction!(ending, m)?)?;
         m.add_function(wrap_pyfunction!(touching, m)?)?;

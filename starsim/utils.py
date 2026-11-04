@@ -539,8 +539,16 @@ def make_disease(arg, names):
     return [obj for obj in flat if not ss.transitions.is_declaration(obj)] + [disease]
 
 
-def copy_given(*inputs):
-    """ The sim's inputs merged and copied together, so the modules given are never run themselves and can be given to other sims, and refer to each other as given """
+def copy_given(*inputs, copy_modules=True):
+    """ The sim's inputs merged and copied together, so the modules given are never run themselves and can be given to other sims, and refer to each other as given; with `copy_modules=False`, the rest is copied, but not the modules """
+    if not copy_modules: # The sim's own, as given
+        given = given_modules(*inputs)
+        for mod in given:
+            if mod.__dict__.get('sim') is not None or getattr(mod, '_given', False):
+                errormsg = f'"{mod.name}" was already given to a sim, so it can\'t be given to another with copy_modules=False, which runs the modules themselves: make it again, or give a copy (e.g. mod.copy())'
+                raise ValueError(errormsg)
+        memo = {id(mod):mod for mod in given} # Shared, so what refers to a module refers to the module itself
+        return sc.mergedicts(*[sc.dcp(inp, memo=memo) for inp in inputs])
     for mod in given_modules(*inputs): # Marked, so that what is added to them later, which this sim would never see, raises (see ss.Module.check_not_given())
         mod.setattribute('_given', True)
     out = sc.mergedicts(*inputs, _copy=True)

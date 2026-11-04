@@ -36,7 +36,7 @@ runs:
     - name: Put Quarto on the path
       shell: bash
       run: echo "$PWD/quarto-cli/package/dist/bin" >> "$GITHUB_PATH"
-    - name: Install the interlinks filter
+    - name: Install quartopydoc's Quarto extensions (interlinks, authorship)
       shell: bash
       working-directory: docs
       run: quarto add sciris/quartopydoc --no-prompt

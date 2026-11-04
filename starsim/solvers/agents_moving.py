@@ -487,6 +487,8 @@ class Moving:
             byplace = np.concatenate([np.flatnonzero(places == place) for place,k in enumerate(npl) if k])
             people.age[new] = np.broadcast_to(age, len(moms))[byplace]
             sim.groups.groups_changed(new)
+        else:
+            people.born(new) # Fetuses are born later, at the delivery: see ss.Pregnancy.make_children()
         return new
 
     def into(self, tr):

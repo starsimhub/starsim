@@ -16,6 +16,7 @@ The user guide is organized by topic: each page covers one in full, to read thro
 - [Why use a framework?](user_guide/intro_why.qmd): when code of your own is enough, and when a framework helps
 - [Starsim models](user_guide/intro_models.qmd): models and frameworks built with Starsim
 - [Conceptual overview](user_guide/intro_concepts.qmd): sims, modules, states, transitions, and solvers in one page
+- [FAQ](user_guide/intro_faq.qmd): common questions, including which pages to read first
 
 ## Building models
 

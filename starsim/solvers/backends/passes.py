@@ -803,16 +803,137 @@ def candidates_driver(threaded):
 
 candidates_drivers = compile_drivers(candidates_driver)
 
-def candidates(p1, p2, rel_trans, rel_sus, two_way=True):
+index_share = 0.25 # The largest share of the edges to visit by the edges of each agent rather than by a pass over all of them
+
+def candidates(p1, p2, rel_trans, rel_sus, two_way=True, index=None):
     """
     The indices of the edges from someone with `rel_trans` not 0 to someone with `rel_sus` not 0 (by UID), p1 to p2 and (if `two_way`) p2 to p1, in order:
-    the edges that might transmit, found for both directions in one pass over the edges (a superset of those that can, which `can_transmit()` then finds among them)
+    the edges that might transmit, found for both directions in one pass over the edges (a superset of those that can, which `can_transmit()` then finds among them),
+    or, with the edges of each agent (`index`, from `edge_index()`), from the edges of the people infectious or of those susceptible, if they have few
     """
+    if index is not None:
+        done, out0, out1 = candidates_indexed(rel_trans, rel_sus, two_way, *index, int(index_share*len(p1)))
+        if done:
+            return (out0, out1) if two_way else (out0,)
     flags = np.empty(len(rel_trans) if 8*len(p1) > len(rel_trans) else 0, dtype=np.uint8) # A byte for each agent, which the edges read 5-10 times more quickly than two numbers each, unless there are few edges
     func, nchunks = threads(candidates_drivers, max(len(p1), len(flags)))
     out1 = np.empty(len(p1) if two_way else 0, dtype=np.int64)
     found = func(p1, p2, rel_trans, rel_sus, two_way, flags, np.empty(len(p1), dtype=np.int64), out1, nchunks)
     return found if two_way else found[:1]
+
+
+#%% The edges of each agent (ss.Network.edge_index()), for passes that visit only some agents' edges
+
+@jit
+def edge_index(p1, p2, n):
+    """
+    The edges of each of `n` agents, by the end they are at: agent u is p1 of the edges `e1[s1[u]:s1[u+1]]`, in order, whose p2 are
+    `o1[s1[u]:s1[u+1]]`, and p2 of the edges `e2[s2[u]:s2[u+1]]`, whose p1 are `o2[...]` (a counting sort of the edges by each end)
+    """
+    m = len(p1)
+    s1 = np.zeros(n + 1, dtype=np.int64)
+    s2 = np.zeros(n + 1, dtype=np.int64)
+    for i in range(m):
+        s1[p1[i] + 1] += 1
+        s2[p2[i] + 1] += 1
+    for u in range(n):
+        s1[u + 1] += s1[u]
+        s2[u + 1] += s2[u]
+    e1 = np.empty(m, dtype=np.int64)
+    o1 = np.empty(m, dtype=np.int64)
+    e2 = np.empty(m, dtype=np.int64)
+    o2 = np.empty(m, dtype=np.int64)
+    k1 = s1[:-1].copy() # The next place of each agent
+    k2 = s2[:-1].copy()
+    for i in range(m):
+        u = p1[i]
+        v = p2[i]
+        e1[k1[u]] = i
+        o1[k1[u]] = v
+        k1[u] += 1
+        e2[k2[v]] = i
+        o2[k2[v]] = u
+        k2[v] += 1
+    return s1, e1, o1, s2, e2, o2
+
+
+debruijn = np.array([0, 1, 48, 2, 57, 49, 28, 3, 61, 58, 50, 42, 38, 29, 17, 4, 62, 55, 59, 36, 53, 51, 43, 22, 45, 39, 33, 30, 24, 18, 12, 5,
+                     63, 47, 56, 27, 60, 41, 37, 16, 54, 35, 52, 21, 44, 32, 23, 11, 46, 26, 40, 15, 34, 20, 31, 10, 25, 14, 19, 9, 13, 8, 7, 6], dtype=np.int64) # The position of the bit in w & -w, by its product with 0x03f79d71b4cb0a89
+
+@jit
+def in_order(found, n):
+    """ The distinct numbers in `found`, each from 0 to n - 1, in order: by a bit for each (so in about n/64 + len(found) steps, rather than a sort's len(found)·log(len(found))) """
+    bits = np.zeros((n + 63)//64, dtype=np.uint64)
+    for x in found:
+        bits[x >> 6] |= np.uint64(1) << np.uint64(x & 63)
+    out = np.empty(len(found), dtype=np.int64)
+    m = 0
+    for i in range(len(bits)):
+        w = bits[i]
+        while w:
+            low = w & (~w + np.uint64(1)) # The lowest bit set
+            out[m] = (i << 6) + debruijn[(low*np.uint64(0x03f79d71b4cb0a89)) >> np.uint64(58)]
+            m += 1
+            w ^= low
+    return out
+
+
+@jit
+def candidates_indexed(rel_trans, rel_sus, two_way, s1, e1, o1, s2, e2, o2, most):
+    """
+    As `candidates()`, from the edges of each agent (`edge_index()`): those of the people infectious, or of those susceptible, whichever have
+    fewer, then put in order. Whether it was done (not if it would visit more than `most` edges, when a pass over all of them is quicker), and the two lists
+    """
+    flags = np.empty(len(rel_trans), dtype=np.uint8)
+    flags_chunk(rel_trans, rel_sus, 0, len(rel_trans), flags)
+    n = min(len(s1) - 1, len(rel_trans)) # Agents born since the index have no edges in it, and none in the network, which has not changed
+    by_src = 0 # The edges visited from the side of the infectious, and of the susceptible
+    by_trg = 0
+    for u in range(n):
+        d1 = s1[u + 1] - s1[u]
+        d2 = s2[u + 1] - s2[u]
+        if flags[u] & 1:
+            by_src += d1 + (d2 if two_way else 0)
+        if flags[u] & 2:
+            by_trg += d2 + (d1 if two_way else 0)
+    none = np.empty(0, dtype=np.int64)
+    k = min(by_src, by_trg)
+    if k > most:
+        return False, none, none
+    from_src = by_src <= by_trg
+    have = 1 if from_src else 2 # The flag of the agents whose edges are visited, and the one wanted at the other end
+    want = 2 if from_src else 1
+    sa, ea, oa = (s1, e1, o1) if from_src else (s2, e2, o2) # p1 to p2: the edges of their p1, or of their p2
+    sb, eb, ob = (s2, e2, o2) if from_src else (s1, e1, o1) # p2 to p1
+    out0 = np.empty(k, dtype=np.int64)
+    out1 = np.empty(k if two_way else 0, dtype=np.int64)
+    m0 = 0
+    m1 = 0
+    for u in range(n):
+        if flags[u] & have:
+            for j in range(sa[u], sa[u + 1]):
+                out0[m0] = ea[j] # Branchless, as candidates_chunk()
+                m0 += (flags[oa[j]] & want) != 0
+            if two_way:
+                for j in range(sb[u], sb[u + 1]):
+                    out1[m1] = eb[j]
+                    m1 += (flags[ob[j]] & want) != 0
+    n_edges = len(e1)
+    return True, in_order(out0[:m0], n_edges), in_order(out1[:m1], n_edges) # In the order of the edges, as a pass over them finds them
+
+
+@jit
+def partners(inds, s1, o1, s2, o2, n):
+    """ The partners of the agents `inds` (by UID; `n` covers every UID), in order, from the edges of each agent (`edge_index()`); as `ss.networks.find_contacts()` """
+    is_partner = np.zeros(n, dtype=np.bool_)
+    na = len(s1) - 1
+    for u in inds:
+        if u < na: # Someone born since the index has no edges
+            for j in range(s1[u], s1[u + 1]):
+                is_partner[o1[j]] = True
+            for j in range(s2[u], s2[u + 1]):
+                is_partner[o2[j]] = True
+    return np.flatnonzero(is_partner)
 
 
 @jit
