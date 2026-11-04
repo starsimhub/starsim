@@ -32,6 +32,7 @@ from .odin import load_odin
 from .sbml import load_sbml
 from .siminf import load_siminf
 from .summer2 import load_summer2
+from .starsim_json import load_json
 from .export import exporters, extensions, export_to, to_hub
 
 __all__ = ['Source', 'Code', 'write', 'build', 'importers', 'tested', 'sniff', 'import_from', 'convert', 'exporters', 'extensions', 'export_to', 'to_hub']
@@ -45,6 +46,7 @@ importers = dict(
     epymorph = load_epymorph,
     epydemix = load_epydemix,
     flepimop = load_flepimop,
+    json     = load_json,
     memilio  = load_memilio,
     odin     = load_odin,
     sbml     = load_sbml,
@@ -102,6 +104,8 @@ def sniff(source):
             return 'siminf'
     elif ext in ['.xml', '.sbml'] and '<sbml' in text:
         return 'sbml'
+    elif ext == '.json' and re.match(r'\s*\{\s*"starsim"\s*:', text): # Starsim's own JSON form, which starts with the version that wrote it
+        return 'json'
     elif ext == '.json': # As written by summer2.py, epydemix.py, epipack.py, epymorph.py, or memilio.py (run as scripts), or dump_epimodel.R; or camdlc's JSON form
         match = re.search(r'"format"\s*:\s*"(summer2|epydemix|epimodel|epipack|epymorph|memilio)"', text)
         if match:
