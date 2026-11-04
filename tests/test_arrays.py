@@ -477,6 +477,7 @@ def test_catarr():
     assert (loc != 'urban').count() == 2
     assert loc.isin(['urban', 'rural']).count() == 5
     assert list(loc.labels()) == ['urban']*3 + ['rural']*2
+    assert list(loc.index()) == [0, 0, 0, 1, 1]
     loc[ss.uids([3])] = loc[ss.uids([0])] # Codes, as read, are kept as they are
     assert loc.labels(ss.uids([3]))[0] == 'urban'
     with pytest.raises(ValueError):
@@ -485,6 +486,7 @@ def test_catarr():
     quint[ss.uids([0])] = 5
     assert (quint == 5).count() == 1 and (quint == 3).count() == 3
     assert list(quint.labels()) == [5, 3, 3, 3]
+    assert list(quint.index()) == [4, 2, 2, 2]
     with pytest.raises(ValueError):
         ss.CatArr('mixed', categories=[1, 'two']) # An integer could then be a category or a code
     return loc
