@@ -74,6 +74,7 @@ Starsim 4 adds a way to write a model as declared states and transitions, which 
 
 ### Bugfixes and performance
 - Deliveries with `delay=` can be in a cycle of triggers, including with themselves, e.g. a test repeated a year after each negative result (`retest.trigger = first.negative | retest.negative`); cycles without a delay still raise. A delayed delivery reads the events since its last step, so it can run before its trigger. *Regression*: a delay drawn from a distribution as zero (or less) is delivered on the step after the trigger, as a fixed delay always was, rather than on the same step.
+- `dist.streams(uids)` gives each agent a stream of uniforms for one call of a distribution, and `ss.draws.next_u(state)` the next uniform in code compiled with `ss.jit`, for a varying number of draws per agent (e.g. one per act) that keeps common random numbers: an agent's sequence depends only on the distribution, step, call and agent.
 - `ss.nbinom()` can be given by its mean and dispersion, `ss.nbinom(mean=20, n=0.5)`, as well as by `n` and `p`; `n` is the dispersion, so the variance is mean + mean²/n.
 - `sim.run(n_runs=)` restarts one built sim again; a stray argument had turned that off.
 - `sim.fit()` raises an error for a setting the method does not take, instead of ignoring it, as does `Result.resample()`. With a list of methods, a setting goes to the stages that take it.

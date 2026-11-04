@@ -377,6 +377,37 @@ def test_choose_n_crn():
     return overlap
 
 
+@sc.timer()
+def test_streams():
+    """ dist.streams(): one stream of uniforms per agent, for compiled code, the same for an agent whoever else draws """
+    sc.heading('Testing per-agent streams for compiled code')
+    @ss.jit
+    def take(states, counts): # A varying number of uniforms for each agent, as compiled code draws them
+        out = np.zeros((len(states), counts.max()))
+        for i in range(len(states)):
+            st = states[i]
+            for k in range(counts[i]):
+                u, st = ss.draws.next_u(st)
+                out[i, k] = u
+        return out
+    every = ss.uids(np.arange(10_000))
+    some = every[np.random.default_rng(1).random(len(every)) < 0.1] # A tenth of them
+    make = lambda: ss.random(seed=3, strict=False).init(slots=every)
+    d1, d2 = make(), make()
+    all_states, some_states = d1.streams(every), d2.streams(some)
+    assert all_states.dtype == np.uint64 and np.array_equal(all_states[some], some_states) # Each agent's stream is its own
+    counts = np.random.default_rng(2).integers(1, 20, len(every))
+    draws_all = take(all_states, counts)
+    assert np.array_equal(draws_all[some], take(some_states, counts[some])) # The same sequences, whoever else draws
+    u, st = ss.draws.next_u(all_states[0]) # The same in Python as compiled
+    assert u == draws_all[0, 0] and 0 < u < 1
+    assert not np.array_equal(d1.streams(every), all_states) # Another call, another stream
+    assert ss.draws.streams([0.25])[0] == ss.draws.stream(0.25) # The same seeds as the rejection samplers' streams
+    vals = draws_all[draws_all > 0]
+    assert abs(vals.mean() - 0.5) < 0.01 and abs(np.corrcoef(draws_all[:, 0], draws_all[:, 1])[0, 1]) < 0.05
+    return draws_all
+
+
 # %% Run as a script
 if __name__ == '__main__':
     T = sc.timer()
@@ -391,6 +422,7 @@ if __name__ == '__main__':
     o8 = test_crn_option()
     o9 = test_multi_random_length()
     o10 = test_choose_n_crn()
+    o11 = test_streams()
 
     T.toc()
 

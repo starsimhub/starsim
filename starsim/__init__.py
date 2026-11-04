@@ -89,7 +89,7 @@ from .internals import loop
 from .internals.loop import Loop
 from . import data # starsim_data is imported only when this is used
 from .internals import gradients # JAX is imported only when this is used
-from .solvers.backends import jit
+from .solvers.backends import jit, draws # Draws, for ss.draws.next_u() in compiled code (see ss.Dist.streams())
 from .sim import SimPars, Sim, demo
 from .run import MultiSim, parallel
 

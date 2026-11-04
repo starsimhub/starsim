@@ -1313,6 +1313,43 @@ class Dist:
         self.jump()
         return key
 
+    def streams(self, uids):
+        """
+        A stream of uniforms for each agent, for compiled code that needs a varying number of draws per agent (e.g. one per act, or in a queue)
+
+        This counts as one call of the distribution (as `rvs(uids)` does), and gives each agent the state of a stream, which
+        `ss.draws.next_u(state)` turns into the next uniform in (0, 1) and the new state, in code compiled with `ss.jit` (or Numba)
+        or in Python. With common random numbers (`ss.options.crn`), an agent's stream depends only on the distribution's seed,
+        the call (the step, and how many times it has been called in the step), and the agent: the same agent in the same step
+        and call gives the same sequence, whoever else is drawn for, and however many uniforms are taken from other streams. The
+        streams of different agents, calls, and distributions are independent. Without common random numbers, the streams
+        are still independent and seeded by the sim, but not paired between scenarios. The distribution's own parameters are not used.
+
+        Args:
+            uids (array): the agents
+
+        Returns:
+            An array of uint64 states, one for each agent
+
+        Examples:
+            ```python
+            states = self.dist.streams(uids)
+            u, state = ss.draws.next_u(states[0]) # The first uniform of the first agent's stream
+            ```
+        """
+        if not self.initialized:
+            raise ss.errors.DistNotInitializedError(self)
+        size, slots = self.process_size(ss.uids(uids))
+        self.make_history()
+        if slots is not None: # One uniform each, by the hash of rvs(), at full width and not evened out, so it depends only on the agent: the seed of its stream
+            u = hash_uniforms(self.seed, self.ind, slots, dtype=np.float64)
+        else:
+            u = self.rng.random(size)
+        self.called += 1
+        self.jump()
+        self._n = self._uids = self._slots = None
+        return draws.streams(u)
+
     @staticmethod
     def validate_round(round):
         """ Check that the rounding option is valid; not for the user """
