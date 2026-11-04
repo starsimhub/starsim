@@ -416,6 +416,32 @@ def test_cli_dev(tmp_path, monkeypatch):
     return
 
 
+def test_cli_compile_rust(tmp_path, monkeypatch):
+    """ In a clone without the Rust kernels, `starsim init compile` offers to build them, and compiles Numba's if declined, if not asked (-y, or no terminal), or with --numba """
+    sc.heading('Testing starsim init compile in a clone without Rust')
+    import starsim_cli as cli
+    from starsim_cli import build
+    monkeypatch.setenv('HOME', str(tmp_path))
+    monkeypatch.chdir(tmp_path) # So that "starsim init" links any skills here
+    done = []
+    monkeypatch.setattr(ss.solvers.backends.rust, 'built', lambda: False)
+    monkeypatch.setattr(ss.solvers.backends.rust, 'on', False)
+    monkeypatch.setattr(build, 'rust_crate', lambda: '/fake/crate')
+    monkeypatch.setattr(build, 'find_cargo', lambda: None)
+    monkeypatch.setattr(build, 'build_rust', lambda again: done.append('rust'))
+    monkeypatch.setattr(build.subprocess, 'run', lambda *args, **kwargs: None) # The --check after building
+    monkeypatch.setattr(ss, 'compile', lambda: done.append('numba'))
+    monkeypatch.setattr(sys.stdin, 'isatty', lambda: True, raising=False)
+    for answer, argv, expected in [('', [], 'rust'), ('n', [], 'numba'), ('y', ['--numba'], 'numba'), ('n', ['--rust'], 'rust')]:
+        monkeypatch.setattr('builtins.input', lambda prompt: answer)
+        cli.main(['init', 'compile', *argv])
+        assert done.pop() == expected, (answer, argv)
+    monkeypatch.setattr('builtins.input', lambda prompt: pytest.fail('asked with -y'))
+    cli.main(['init', '-y']) # No question, and so Numba's
+    assert done.pop() == 'numba'
+    return
+
+
 def test_jax_platform(monkeypatch):
     """ ss.options.jax chooses JAX's platform, and a GPU plugin of another version than jaxlib is warned of before JAX starts (it can crash XLA) """
     sc.heading('Testing the platform of JAX')
