@@ -6,7 +6,7 @@ This crate holds a second copy of Starsim's compiled kernels, in Rust, which giv
 
 The wheels on PyPI include the compiled kernels: one abi3 wheel per platform, for Python 3.12 and later, on Linux and Windows (x86-64 and Arm) and macOS on Arm (settings in `pyproject.toml`, built by `.github/workflows/build_wheels.yml` through setuptools-rust and cibuildwheel), and the sdist includes this crate. Without a wheel for the platform, `pip` builds from the sdist, with the kernels if it finds a Rust toolchain, and otherwise without them, and Numba's kernels run.
 
-From a clone, `starsim init dev` installs Rust if it is missing, and builds the kernels along with the rest of the setup for development (see `docs/contributing/developer.qmd`). To build them by hand, install Rust (https://rustup.rs), then:
+From a clone, `starsim init compile --rust` installs Rust if it is missing and builds the kernels (`starsim init` and `starsim init compile` offer to, when they are not built), and `starsim init dev` does the same along with the rest of the setup for development (see `docs/contributing/developer.qmd`). To build them by hand, install Rust (https://rustup.rs), then:
 
 ```bash
 cd starsim/solvers/rust && ./build
