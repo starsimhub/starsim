@@ -542,7 +542,11 @@ class dur(TimePar):
 
     @property
     def days(self):
-        return self.value*self.factors.days # Needs to return float so matplotlib can plot it correctly
+        """ The duration in days: an int for a whole number of days (as for `pd.Timedelta.days`, e.g. for `pd.date_range(periods=...)`), otherwise a float """
+        days = self.value*self.factors.days # Arrays stay float so matplotlib can plot them correctly
+        if self.is_scalar and days % 1 == 0:
+            return int(days)
+        return days
 
     def __add__(self, other):
         if isinstance(other, dur):

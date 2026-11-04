@@ -1153,6 +1153,88 @@ class IntArr(Arr):
         return
 
 
+class CatArr(IntArr):
+    """
+    A categorical state: one of a list of categories for each agent (e.g. a district, or a wealth quintile), read, compared and set by category
+
+    A category can be used wherever a value can, e.g. `arr == 'urban'`, `arr.isin(['urban', 'periurban'])`, and
+    `arr[uids] = 'urban'`. Each category is stored as its index in `categories` (its code), so it is as fast as an
+    `ss.IntArr`, and an integer given is a code, as `arr[uids]` returns (so `arr[children] = arr[mothers]` works).
+    Integer categories (e.g. wealth quintiles 1 to 5, or the members of an `IntEnum`) are stored as they are, so
+    `arr == 3` is category 3. The categories can be an enum, e.g. `ss.CatArr('state', categories=State)`.
+
+    Args:
+        name (str): the name of the state
+        categories (list/Enum): the categories, e.g. `['urban', 'rural']`, `[1, 2, 3, 4, 5]` (integers, or none of them), or an enum
+        default (any): the value for new agents: a category, or a callable or `ss.Dist` returning categories or codes (e.g. `ss.choice(a=categories, p=[0.3, 0.7])`)
+        kwargs (dict): passed to `ss.Arr`
+
+    Examples:
+        ```python
+        loc = ss.CatArr('loc', categories=['urban', 'rural'], default='rural', mock=4)
+        loc[ss.uids([0, 1])] = 'urban'
+        (loc == 'urban').uids  # ss.uids([0, 1])
+        loc.labels()           # array(['urban', 'urban', 'rural', 'rural'], dtype=object)
+        ```
+    """
+    def __init__(self, name=None, categories=None, default=None, **kwargs):
+        if categories is None or not len(categories):
+            raise ValueError(f'A categorical state needs its categories, e.g. ss.CatArr("{name}", categories=["urban", "rural"])')
+        self.categories = list(categories)
+        ints = [isinstance(c, (int, np.integer)) and not isinstance(c, bool) for c in self.categories]
+        self.integer = all(ints) # Stored as they are, rather than as codes
+        if any(ints) and not self.integer:
+            raise ValueError(f'The categories of "{name}" ({self.categories}) mix integers with others, so an integer could be a category or a code: use one or the other')
+        self.codes = {c:(c if self.integer else i) for i,c in enumerate(self.categories)}
+        if len(self.codes) < len(self.categories):
+            raise ValueError(f'The categories of "{name}" are not unique: {self.categories}')
+        if default is not None and not callable(default):
+            default = self.code(default)
+        super().__init__(name=name, default=default, **kwargs)
+        return
+
+    def code(self, value):
+        """ The code of a category, or the codes of an array of them; integers (codes, or integer categories) are returned unchanged """
+        if isinstance(value, (int, np.integer, Arr)) or value is None:
+            return value
+        if isinstance(value, (list, tuple, np.ndarray)):
+            arr = np.asarray(value)
+            if np.issubdtype(arr.dtype, np.integer):
+                return arr
+            return np.array([self.code(v) for v in arr.tolist()], dtype=ss_int)
+        try:
+            return self.codes[value]
+        except (KeyError, TypeError):
+            raise ValueError(f'"{value}" is not a category of "{self.name}", which are {self.categories}') from None
+
+    def labels(self, uids=None):
+        """ The categories of the agents given (by default, the active agents), with None for those not set """
+        codes = self.values if uids is None else self[uids]
+        if self.integer: # The categories themselves (e.g. the members of an IntEnum), by value
+            vals = np.array([int(c) for c in self.categories])
+            order = np.argsort(vals)
+            pos = np.minimum(np.searchsorted(vals[order], codes), len(vals) - 1)
+            cats = np.array(self.categories + [None], dtype=object)
+            return cats[np.where(vals[order][pos] == codes, order[pos], len(vals))]
+        n = len(self.categories)
+        cats = np.array(self.categories + [None], dtype=object)
+        return cats[np.where((codes >= 0) & (codes < n), codes, n)]
+
+    def __eq__(self, other): return super().__eq__(self.code(other))
+    def __ne__(self, other): return super().__ne__(self.code(other))
+
+    def isin(self, values):
+        return super().isin(self.code(sc.tolist(values)))
+
+    def __setitem__(self, key, value):
+        return super().__setitem__(key, self.code(value))
+
+    def set(self, uids, new_vals=None):
+        if new_vals is None and (callable(self.default) or isinstance(self.default, ss.Dist)): # A default may return categories
+            new_vals = self.code(self.default.rvs(uids) if isinstance(self.default, ss.Dist) else self.default(len(uids)))
+        return super().set(uids, new_vals=self.code(new_vals))
+
+
 class BoolArr(Arr):
     """
     Subclass of `ss.Arr` with defaults for booleans.

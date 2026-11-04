@@ -239,6 +239,7 @@ class Network(Route):
         # Initialize the keys of the network
         self.edges = sc.obj()
         self.participant = ss.BoolArr('participant')
+        self.agent_edges = None # The edges of each agent, once the edges have stayed the same for a step (see edge_index())
 
         # Standard module arguments are parameters; the rest are edges
         if 'sides' in kwargs: # The kinds of people at the two ends of its edges; see directions
@@ -335,7 +336,9 @@ class Network(Route):
         An edge from `src` to `trg` transmits with probability `rel_trans[src]·rel_sus[trg]·beta`, or `prob()` if it is given.
         Random numbers are drawn only for the edges that can transmit: with CRN, each edge's number depends only on its source
         and target, so this gives the same result as drawing one for every edge. The beta is worked out only for the edges from
-        someone infectious to someone susceptible, which are found for both directions in one pass.
+        someone infectious to someone susceptible, which are found for both directions in one pass over the edges, or, once the
+        edges have stayed the same for a step (`edge_index()`), from the edges of the infectious (or the susceptible) alone, if
+        they have few; either way they are in the order of the edges.
 
         Args:
             rel_trans (array): the transmissibility of each agent, by UID (0 if not infectious)
@@ -353,7 +356,7 @@ class Network(Route):
         if not len(self):
             return out
         edges = self.edges
-        found = ss.solvers.backends.passes.candidates(edges.p1, edges.p2, rel_trans, rel_sus, two_way=not self.one_way) # Mother-to-child networks transmit one way
+        found = ss.solvers.backends.passes.candidates(edges.p1, edges.p2, rel_trans, rel_sus, two_way=not self.one_way, index=self.edge_index()) # Mother-to-child networks transmit one way
         for d,inds in enumerate(found):
             src, trg = [ends[inds] for ends in self.ends(d)]
             beta = edge_beta(d, inds, src, trg)
@@ -373,6 +376,27 @@ class Network(Route):
                 src, trg = np.asarray(src)[hit], np.asarray(trg)[hit]
             out.append((src.view(ss.uids), trg.view(ss.uids))) # View (no copy): the kernel's output is its own int64 array
         return out
+
+    def edge_index(self):
+        """
+        The edges of each agent (see `ss.solvers.backends.passes.edge_index()`), so that transmission from a few people, or contact tracing,
+        visits only their edges: None until the edges have stayed the same from one step to the next, so a network whose edges change every
+        step never makes one. The edges change when they are assigned again (e.g. `edges.p1 = ...`), as every method that changes them does.
+        """
+        p1, p2 = self.edges.p1, self.edges.p2
+        idx = self.agent_edges
+        if idx is not None and idx.lists is not None:
+            if idx.p1 is p1 and idx.p2 is p2:
+                return idx.lists
+            idx = None
+        ids = (id(p1), id(p2)) # Until it is made, not the arrays themselves, which would keep a changing network's old edges in memory; an id used again only makes it sooner
+        if idx is None or idx.ids != ids: # New edges
+            self.agent_edges = sc.obj(ids=ids, ti=self.ti, lists=None)
+        elif len(p1) and self.ti is not None and idx.ti is not None and self.ti > idx.ti: # The same as in an earlier step
+            n = max(p1.max(), p2.max()) + 1
+            self.agent_edges = sc.obj(p1=p1, p2=p2, lists=ss.solvers.backends.passes.edge_index(p1, p2, n))
+            return self.agent_edges.lists
+        return None
 
     def init_results(self):
         """ Store network length by default """
@@ -685,6 +709,7 @@ class Network(Route):
         shrunk = ss.utils.shrink()
         self.edges = shrunk
         self.participant = shrunk
+        self.agent_edges = None
         return
 
     def plot(self, max_edges=500, random=False, alpha=0.2, **kwargs):
@@ -737,8 +762,13 @@ class Network(Route):
         - p2 = [2,3,1,4]
         Then find_contacts([1,3]) would return the array [1,2,3] (or the set {1,2,3}, with `as_array=False`)
         """
-        contact_inds = find_contacts(self.edges.p1, self.edges.p2, sc.toarray(inds), as_array=as_array)
-        return contact_inds
+        lists = self.edge_index()
+        if lists is None:
+            return find_contacts(self.edges.p1, self.edges.p2, sc.toarray(inds), as_array=as_array)
+        inds = np.asarray(sc.toarray(inds), dtype=np.int64)
+        s1, e1, o1, s2, e2, o2 = lists
+        partners = ss.solvers.backends.passes.partners(inds, s1, o1, s2, o2, len(s1) - 1)
+        return partners if as_array else set(partners.tolist())
 
     def add_pairs(self):
         """ Define how pairs of people are formed """

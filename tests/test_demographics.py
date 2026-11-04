@@ -610,6 +610,32 @@ def test_declared_newborns():
     return
 
 
+@sc.timer()
+def test_birth_death_hooks():
+    sc.heading('Testing on_birth() and on_death() in coded modules')
+
+    class Watch(ss.Module):
+        def __init__(self):
+            super().__init__(name='watch')
+            self.births = 0
+            self.deaths = 0
+        def on_birth(self, parents, children):
+            assert len(parents) == len(children)
+            self.births += len(children)
+        def on_death(self, uids):
+            self.deaths += len(uids)
+        def step(self):
+            pass
+
+    sim = ss.Sim(modules=[Watch(), ss.Births(birth_rate=30), ss.Deaths(death_rate=20)], n_agents=1000, start=2000, stop=2010, verbose=0).run()
+    assert sim.watch.births == sim.results.births.birth.sum() > 0
+    assert sim.watch.deaths == sim.results.died.sum() > 0
+    for fetus in [False, True]:
+        sim = ss.Sim(modules=[Watch(), ss.Pregnancy(fertility_rate=40, fetus=fetus)], n_agents=1000, start=2000, stop=2005, verbose=0).run()
+        assert sim.watch.births == sim.results.pregnancy.birth.sum() > 0
+    return sim
+
+
 if __name__ == '__main__':
     T = sc.timer()
 

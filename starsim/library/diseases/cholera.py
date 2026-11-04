@@ -191,9 +191,9 @@ class Cholera(AgentSEIR):
 
         return new_cases, sources, networks
 
-    def step_die(self, uids):
+    def on_death(self, uids):
         """ Reset infected/recovered flags for dead agents """
-        super().step_die(uids)
+        super().on_death(uids)
         self.symptomatic[uids] = False
         return
 

@@ -388,7 +388,7 @@ A disease written as code fills in some of these methods:
 | `__init__()` | Gives the parameters (`define_pars()`) and states (`define_states()`) | Always |
 | `set_prognoses(uids, sources)` | Sets what happens to the people just infected: when they recover, whether they die | Always, for an `ss.Infection`; call `super().set_prognoses()` first |
 | `step_state()` | Moves people between states each step, before transmission (e.g. those whose recovery is due) | When the disease has states of its own |
-| `step_die(uids)` | Clears the states of people who died | When the disease has states of its own |
+| `on_death(uids)` | Clears the states of people who died | When the disease has states of its own |
 | `transmit()` | Transmission over the networks | Rarely: the built-in version handles the networks, `beta`, `rel_sus`, and `rel_trans` |
 
 In transmission, the chance that infection passes along a contact from an infectious person to a susceptible one is, in essence, β × `rel_trans` of the source × `rel_sus` of the target, where β is the transmission rate of that network. `rel_sus` and `rel_trans` are 1 by default, and are the levers that the rest of a model pulls: a vaccine lowers `rel_sus`, a treatment lowers `rel_trans`, and a connector between two diseases can raise one disease's `rel_sus` in people infected with the other. Because they are ordinary arrays, they can also be set directly. Here everyone under 20 is fully protected (`rel_sus = 0`), and compared with no protection:

@@ -284,6 +284,39 @@ def test_coded():
     return
 
 
+def test_modifier_tables():
+    sc.heading('Modifiers that depend only on time are worked out before a compartmental run, span by span, and kept for a rerun until something they depend on changes')
+    def make(start=40, cut=0.5, beta=0.3, wrap=False, **kwargs):
+        S, I, R = ss.states(3)
+        season = ss.seasonal(amplitude=0.5, peak=ss.days(50), period=ss.days(180))
+        rate = ss.par(beta*season, name='beta') if wrap else ss.par(beta, name='beta')*season # A parameter given as an expression varies in time as one with the factor outside
+        d = ss.Disease(S, I, R, infection=S >> I @ rate*I, recovery=I >> R @ ss.days(10), init=dict(I=0.001), name='d')
+        d.stratify(age=[0, 20, 60], split=[0.3, 0.5, 0.2])
+        mods = [ss.modify(d.rel_sus, multiply=ss.by(age=[0.5, 1, 0.8]), start=start, stop=150),
+                ss.modify(d.rel_trans, multiply=ss.par(cut, name='cut'), stop=100),
+                ss.modify(d.recovery, multiply=ss.timeseries({0: 1, 60: 2}), start=20)]
+        return ss.Sim(d, interventions=mods, unit='day', stop=200, verbose=0, **kwargs)
+    I = lambda sim: sim.results.d.I.values.copy()
+    sim = make().run()
+    ref = I(sim)
+    assert sim.kernel_reason() is None
+    assert np.array_equal(I(sim.run()), ref), 'A rerun gives the same'
+    assert np.allclose(I(make().run(until=199)), ref, rtol=1e-12), 'A run a step at a time gives the same'
+    assert np.array_equal(I(make(wrap=True).run()), ref), 'The seasonal factor inside a parameter varies in time'
+    assert np.array_equal(I(sim.restart(pars=dict(beta=0.4)).run()), I(make(beta=0.4).run())), 'A new value of a parameter'
+    assert np.array_equal(I(sim.restart(pars=dict(cut=0.2)).run()), I(make(beta=0.4, cut=0.2).run())), 'A new value of a parameter in a modifier'
+    sim = make().run()
+    sim.interventions()[0].start = 60
+    assert np.array_equal(I(sim.run()), I(make(start=60).run())), 'A modifier changed in place'
+    sim = make().run()
+    sim.interventions()[2].amount.mode = 'linear'
+    assert not np.array_equal(I(sim.run()), ref), 'A time series changed in place, in how it goes between its values'
+    sim = make().run()
+    assert np.array_equal(I(sim.new(interventions=make(start=60).pars.interventions).run()), I(make(start=60).run())), 'sim.new() with other modifiers'
+    assert np.array_equal(I(sim.run(solver='binomial')), I(make(solver='binomial').run())), 'sim.run() with another solver'
+    return
+
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -292,5 +325,6 @@ if __name__ == '__main__':
     sims = test_connectors(do_plot=do_plot)
     lazy = test_lazy_arrays()
     test_where_count()
+    test_modifier_tables()
 
     T.toc()

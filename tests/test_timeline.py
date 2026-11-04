@@ -363,6 +363,36 @@ def test_daily_dates():
     return
 
 
+@sc.timer()
+def test_schedule():
+    sc.heading('Testing schedules (ss.schedule)')
+
+    class Clinic(ss.Module):
+        def __init__(self):
+            super().__init__(name='clinic')
+            self.poll = ss.schedule(ss.months(3), start=ss.months(3))
+            self.campaigns = ss.schedule(['2010-01-01', '2011-06-15', '2030-01-01'])
+            self.new_year = ss.schedule(lambda now: now.month == 1 and now.day == 1)
+            self.weekly = ss.schedule(every=ss.weeks(1))
+            self.log = sc.objdict(poll=[], campaigns=[], new_year=[], weekly=0)
+        def step(self):
+            for key in ['poll', 'campaigns', 'new_year']:
+                if getattr(self, key).due():
+                    self.log[key].append(str(self.now))
+            self.log.weekly += self.weekly.due()
+
+    sim = ss.Sim(modules=Clinic(), n_agents=10, dt=ss.days(1), start='2010-01-01', stop='2012-01-01', verbose=0).run()
+    log = sim.clinic.log
+    assert log.poll == ['2010-04-01', '2010-07-01', '2010-10-01', '2011-01-01', '2011-04-01', '2011-07-01', '2011-10-01']
+    assert log.campaigns == ['2010-01-01', '2011-06-15']
+    assert log.new_year == ['2010-01-01', '2011-01-01']
+    assert log.weekly == 105
+
+    sim = ss.Sim(modules=Clinic(), n_agents=10, dt=ss.months(1), start='2010-01-01', stop='2011-01-01', verbose=0).run() # Several due in one step are counted
+    assert sim.clinic.log.weekly == 53
+    return sim
+
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)

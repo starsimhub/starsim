@@ -7,6 +7,7 @@ Used with: agents and compartments; declared and coded modules
 """
 import sciris as sc
 import numpy as np
+import pandas as pd
 import starsim as ss
 
 
@@ -592,3 +593,120 @@ class Timeline:
         self._rel_start = start
         self._rel_dur_class = dur_class
         return
+
+
+class schedule:
+    """
+    When something is due: on a calendar cadence (e.g. every 3 months), on a list of dates, or whenever a function of the date is true
+
+    Make one as an attribute (or parameter) of a module, which links it to the module's timeline when the sim is
+    initialized; then `sched.due()`, in the module's `step()`, is how many of its times fall in this step (from `now`
+    up to the next step's `now`): usually 0 or 1, so `if sched.due():` works. A module can have as many as it needs.
+
+    Args:
+        when (dur/list/callable): how often (as for `every`), the times (as for `dates`), or a function (as for `fn`), by its type
+        start (date/dur): the first time, as a date or a duration after the start of the timeline (default: its start), for `every`
+        stop (date/dur): no times after this, likewise (default: the end of the timeline)
+        every (dur): how often; whole months and years are calendar offsets, so every month is the same day of the month
+        dates (list): the times, e.g. `['2021-06-01', '2023-06-01']` (or years, or durations after the start)
+        fn (callable): a function of the date of the start of each step (its `now`), true when it is due, e.g. `lambda now: now.month == 1`
+
+    Examples:
+        ```python
+        class Clinic(ss.Module):
+            def __init__(self, **kwargs):
+                super().__init__(**kwargs)
+                self.poll = ss.schedule(ss.months(3), start=ss.months(3)) # Every 3 months, the first after 3
+                self.campaigns = ss.schedule(['2021-06-01', '2023-06-01'])
+                self.report = ss.schedule(lambda now: now.month == 1 and now.day == 1) # New Year's Day
+
+            def step(self):
+                if self.poll.due():
+                    ...
+        ```
+    """
+    def __init__(self, when=None, start=None, stop=None, every=None, dates=None, fn=None):
+        if when is not None:
+            if isinstance(when, ss.dur):
+                every = when
+            elif callable(when):
+                fn = when
+            else:
+                dates = when
+        if sum(x is not None for x in [every, dates, fn]) != 1:
+            raise ValueError('A schedule needs one of how often (e.g. ss.schedule(ss.months(3))), a list of dates, or a function of the date')
+        self.every = every
+        self.dates = None if dates is None else sc.tolist(dates)
+        self.fn = fn
+        self.start = start
+        self.stop = stop
+        self.t = None
+        self.counts = None # The number due in each step, by its index (ti)
+        return
+
+    def __repr__(self):
+        what = f'every {self.every}' if self.every is not None else f'{len(self.dates)} dates' if self.dates is not None else 'a function'
+        return f'schedule({what})'
+
+    def init(self, obj):
+        """ Link to a timeline (of a module or sim, or a `ss.Timeline` itself), and work out the number due in each of its steps """
+        t = obj if isinstance(obj, Timeline) else obj.t
+        self.t = t
+        absolute = t.is_absolute
+        tvec = t.tvec
+        if absolute: # Dates, compared as datetime64 (in nanoseconds), so a time on a time point is in the step that starts there
+            points = np.array([d.to_numpy() for d in tvec], dtype='datetime64[ns]')
+            def to_time(x):
+                if isinstance(x, ss.dur):
+                    return (tvec[0] + x).to_numpy()
+                return ss.date(x).to_numpy()
+        else: # Durations, as years
+            points = np.asarray(t.yearvec, dtype=float)
+            def to_time(x):
+                if isinstance(x, ss.dur):
+                    return points[0] + x.years
+                return float(x)
+        counts = np.zeros(len(points), dtype=int)
+        if self.fn is not None:
+            for k in range(1, len(points)): # Step k starts at time point k-1
+                counts[k] = bool(self.fn(tvec[k-1]))
+        else:
+            first = points[0] if self.start is None else to_time(self.start)
+            last = points[-1] if self.stop is None else to_time(self.stop)
+            if self.dates is not None:
+                times = np.array([to_time(x) for x in self.dates], dtype=points.dtype)
+            else:
+                every = self.every
+                calendar = absolute and every.base in ['months', 'years'] and every.value == round(every.value)
+                if calendar: # Each time from the first, so e.g. the 31st of each month is the last day of shorter ones, not drifting
+                    first_ts = pd.Timestamp(first)
+                    times, i = [], 0
+                    while (time := (first_ts + pd.DateOffset(**{every.base:int(i*round(every.value))})).to_datetime64()) <= last:
+                        times.append(time)
+                        i += 1
+                    times = np.array(times, dtype=points.dtype)
+                else:
+                    width = np.timedelta64(int(round(every.days*86400e9)), 'ns') if absolute else every.years
+                    if width <= width*0:
+                        raise ValueError(f'A schedule needs a positive interval, not {every}')
+                    n = int((last - first)//width) + 1 if last >= first else 0
+                    times = first + np.arange(n)*width
+            times = times[(times >= first) & (times <= last)]
+            if not absolute:
+                times = times + 1e-9 # Years to 9 decimals (see Timeline.yearvec), so one on a time point is in the step that starts there
+            k = np.searchsorted(points, times, side='right') # The step whose start is the last time point at or before it
+            k = k[(k >= 1) & (k < len(points))] # Within the timeline
+            counts += np.bincount(k, minlength=len(points))
+        self.counts = counts
+        return self
+
+    def due(self, ti=None):
+        """ The number of times due in this step (or step `ti`), usually 0 or 1 """
+        if self.counts is None:
+            raise RuntimeError(f'{self} has no timeline yet: make it an attribute of a module (linked when the sim is initialized), or call init() with a timeline')
+        return int(self.counts[self.t.ti if ti is None else ti])
+
+    @property
+    def steps(self):
+        """ The steps (their indices, `ti`) in which it is due """
+        return np.flatnonzero(self.counts)

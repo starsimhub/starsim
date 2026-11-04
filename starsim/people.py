@@ -156,6 +156,7 @@ class People:
         self.causes = [] # The causes of death, by name (see request_death()), in the order first seen: people.cause_of_death is the position in this list
         self._claims = [] # The deaths requested in this step, with their causes: see step_die()
         self._died_of = {} # Who died of each cause in this step
+        self._warned_late = set() # The causes of the deaths requested too late in a step, warned about once each: see request_death()
         self._cause_dist = ss.random(name='cause_of_death') # To choose one cause for someone whose death several modules request in a step
 
         if mock:
@@ -741,6 +742,9 @@ class People:
         self.ti_dead[uids] = self.sim.ti
         if len(uids):
             name = cause.name if isinstance(cause, ss.Module) else cause
+            if getattr(self, '_resolved_ti', None) == self.sim.ti and name not in self._warned_late: # E.g. in finish_step()
+                self._warned_late.add(name)
+                ss.warn(f"A death (cause: {name}) was requested after this step's deaths were resolved (by people.step_die(), which comes after every module's step()), so it happens at the next step; request it in step() for it to happen in this one")
             if name not in self.causes:
                 self.causes.append(name)
             hazard = np.full(len(uids), np.nan) if hazard is None else np.broadcast_to(np.asarray(hazard, dtype=float), len(uids))
@@ -819,14 +823,38 @@ class People:
         self.alive[death_uids] = False  # While not dead, removed agents should not be included in alive totals
         self._dying = death_uids # Still active until the end of the step: see update_results() and remove_dead()
 
+        self._resolved_ti = ti # A death requested later in this step happens at the next one: see request_death()
+
         # Execute deaths that took place this timestep (i.e., changing the `alive` state of the agents). This is executed
         # before analyzers have run so that analyzers are able to inspect and record outcomes for agents that died this timestep
-        diseases = [disease for disease in self.sim.diseases() if isinstance(disease, ss.Disease)]
-        diseases += [mod for mod in getattr(self.sim, 'declared', []) if all(mod is not disease for disease in diseases)] # A declared disease given as another kind of module: its agents leave its states as well
-        for disease in diseases:
-            disease.step_die(death_uids)
+        if len(death_uids):
+            for mod in self.death_modules():
+                mod.on_death(death_uids)
 
         return death_uids
+
+    def death_modules(self):
+        """ The modules whose `on_death()` is called at a death (see `ss.Module.on_death()`): the diseases, then any other declared module, then any other module that defines it """
+        mods = getattr(self, '_death_mods', None)
+        if mods is None:
+            sim = self.sim
+            mods = [disease for disease in sim.diseases() if isinstance(disease, ss.Disease)]
+            mods += [mod for mod in getattr(sim, 'declared', []) if all(mod is not m for m in mods)] # A declared disease given as another kind of module: its agents leave its states as well
+            mods += [mod for mod in sim.modules if type(mod).on_death is not ss.Module.on_death and all(mod is not m for m in mods)]
+            if sim.initialized: # Kept once the modules are all there
+                self._death_mods = mods
+        return mods
+
+    def born(self, children):
+        """ Tell each module that defines `on_birth()` about these newborns (see `ss.Module.on_birth()`); called wherever children are born """
+        if len(children):
+            parents = None
+            for mod in self.sim.modules:
+                if type(mod).on_birth is not ss.Module.on_birth:
+                    if parents is None:
+                        parents = ss.uids(self.parent.raw[children])
+                    mod.on_birth(parents, children)
+        return
 
     def remove_dead(self, aging=False):
         """

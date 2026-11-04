@@ -5,6 +5,7 @@ The kernels that the solvers run, and what they share. None of this is needed to
 - `kernels.py`: the compartmental kernels (`ss.kernels`), and `ss.compile()`, which compiles them ahead of time
 - `ode.py`: the ODE's steps in NumPy, vectorized over groups
 - `passes.py`: compiled passes over the agents and a network's edges, for the agent solver
+- `events.py`: the compiled pass of agents taken event by event within a step (`solver='abm-events'`); in Numba only, for now
 - `draws.py`: exact random draws from counter-based uniforms, which the other kernels and `ss.Dist` use
 - `rust.py`: swaps in the Rust kernels, once they have been built
 - `jit.py`: `ss.jit`, to compile users' own code with Numba or JAX

@@ -75,6 +75,7 @@ def twin_calls():
     rate, adjust, sus = uni(size=3), uni(size=3), uni(np.float32)
     p1, p2, trans, randvals = rng.integers(0, n, 3000), rng.integers(0, n, 3000), uni(np.float32)*a, uni(np.float32, 3000)
     dur = 3*uni(np.float32, 3000)
+    index = lambda: P.edge_index(p1, p2, n) # The edges of each agent: s1, e1, o1, s2, e2, o2
     def filled(f, *args, size=n, dtype=np.int64):
         out = np.empty(size, dtype=dtype)
         return f(*args, out), out
@@ -95,6 +96,7 @@ def twin_calls():
         alive       = lambda: P.count_alive((a, b), alive),
         edges       = lambda: [P.random_edges(auids, 3, 1, True), P.random_edges(auids, rng.integers(0, 4, len(auids)), 1, False)],
         candidates  = lambda: P.candidates(p1, p2, trans, sus),
+        indexed     = lambda: [index(), P.partners(gone, *[index()[i] for i in [0, 2, 3, 5]], n)] + [P.candidates_indexed(trans, sus, two_way, *index(), most) for two_way in [True, False] for most in [0, 3000]],
         can         = lambda: P.can_transmit(p1, p2, trans, sus, np.float32(0.5)),
         ending      = lambda: P.ending(dur, p1, p2, alive),
         touching    = lambda: P.touching(p1, p2, b),

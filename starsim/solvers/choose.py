@@ -18,12 +18,13 @@ import sciris as sc
 import starsim as ss
 from .compartmental import Compartmental
 from .agents import Agents, Transmission
+from .agents_events import Events, runs_events
 from .engine import convert
 
 __all__ = ['solver_names', 'integrators', 'Undeclared', 'make_engine', 'choose_solver', 'choose_engine', 'kernel_seconds', 'init_crossings', 'init_capabilities', 'auto_reasons', 'why_not', 'solver_table', 'rules', 'set_par_values', 'flows_of', 'init_group_values', 'settle_start', 'group_people']
 
 
-solver_names = ['auto', 'ode', 'ide', 'binomial', 'gillespie', 'tau', 'abm'] # The solvers that can be asked for ('ide' runs as the ODE, with each dwell time as it is: see Compartmental.slot_rates())
+solver_names = ['auto', 'ode', 'ide', 'binomial', 'gillespie', 'tau', 'abm', 'abm-events'] # The solvers that can be asked for ('ide' runs as the ODE, with each dwell time as it is: see Compartmental.slot_rates(); 'abm-events' as agents, event by event: see Events)
 integrators = ['rk4', 'euler'] # The schemes of the ODE
 
 
@@ -100,7 +101,9 @@ def make_engine(module, sim):
     if module.graph is None:
         return Undeclared(module, sim)
     if sim.solver == 'abm':
-        return Agents(module, sim)
+        return (Events if runs_events(module, sim) else Agents)(module, sim)
+    if getattr(module, 'solver', None) is not None:
+        raise ss.CapabilityError(f'"{module.name}" has solver="{module.solver}", but the sim runs as compartments (solver="{sim.solver}"); a module\'s own solver is for agents only, so give the sim solver="abm", or leave the module\'s out')
     engine = sim.__dict__.get('layouts', {}).pop(module.name, None)
     if engine is None or engine.mod is not module or not engine.current():
         engine = Compartmental(module, sim)
@@ -155,7 +158,7 @@ def choose_solver(sim):
     """
     gather_modules(sim)
     init_model(sim)
-    if sim.pars.solver not in ['auto', 'abm']: # A module's own compartmental form, used only when a compartmental solver is named (e.g. ss.Pregnancy's)
+    if sim.pars.solver not in ['auto', 'abm', 'abm-events']: # A module's own compartmental form, used only when a compartmental solver is named (e.g. ss.Pregnancy's)
         for mod in sim.declared:
             note = mod.compartmental_form(sim)
             if note is not None:
@@ -176,6 +179,8 @@ def choose_solver(sim):
             solver, reason = 'ode', 'every part of the model has a compartmental form' if sim.declared else 'nothing in the model needs agents'
     elif solver == 'ide': # The ODE, with each dwell time as it is rather than as Erlang stages
         solver, reason = 'ode', 'requested (as an integro-differential model)'
+    elif solver == 'abm-events': # Agents, each declared module taken event by event within a step (see Events)
+        solver, reason = 'abm', 'requested (by events, in continuous time)'
     else:
         reason = 'requested'
     sim.solver = solver
@@ -587,7 +592,7 @@ def init_named_people(sim):
     named = getattr(pars.people, 'named', None)
     sim.given_pyramid = None # People given to a compartmental solver: the ages their age groups are split by
     sim.pop_from = None # Where the population size came from, if it was not given: the people given, named people, or the populations of places
-    if isinstance(pars.people, ss.People) and named is None and sim.declared and pars.solver not in ['abm', 'auto']: # Their ages and number, not their agents
+    if isinstance(pars.people, ss.People) and named is None and sim.declared and pars.solver not in ['abm', 'abm-events', 'auto']: # Their ages and number, not their agents
         dist = sc.dcp(pars.people.age.default)
         dist.init(force=True)
         edges = ss.data.world.ages
@@ -1578,7 +1583,7 @@ kernels = [ # What stops the kernels taking a whole run in one call: something i
 
 def own_lifecycle(sim, mod):
     """ A declared module with a step of its own """
-    return next((dict(name=name) for name in ['start_step', 'step_state', 'step', 'step_die', 'update_results', 'finish_step'] if getattr(type(mod), name) is not getattr(ss.Disease, name)), None)
+    return next((dict(name=name) for name in ['start_step', 'step_state', 'step', 'on_death', 'update_results', 'finish_step'] if getattr(type(mod), name) is not getattr(ss.Disease, name)), None)
 
 
 def step_function(sim, mod):

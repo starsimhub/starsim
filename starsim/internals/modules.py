@@ -909,10 +909,13 @@ class Module(Base):
 
     @required()
     def init_post(self):
-        """ Initialize the values of the states; the last step of initialization """
+        """ Initialize the values of the states, and link its schedules (`ss.schedule`) to its timeline; the last step of initialization """
         for state in self.state_list:
             if not state.initialized:
                 state.init_vals()
+        for obj in [*self.__dict__.values(), *self.pars.values()]:
+            if isinstance(obj, ss.schedule):
+                obj.init(self)
         self.initialized = True
         return
 
@@ -1014,6 +1017,32 @@ class Module(Base):
         ss.warn(errormsg)
         return
 
+    def on_birth(self, parents, children):
+        """
+        What to do when people are born (e.g. to give the children traits from their parents); by default, nothing
+
+        Called for every module that defines it, wherever children are born (by `ss.Births`, at a delivery of
+        `ss.Pregnancy`, or by a declared birth transition), once they are people.
+
+        Args:
+            parents (`ss.uids`): the parent of each child (so a parent of several children appears once for each)
+            children (`ss.uids`): the children
+        """
+        return
+
+    def on_death(self, uids):
+        """
+        What to do when agents die or leave; by default, nothing (see `ss.Disease.on_death()` for diseases)
+
+        Called by `people.step_die()` for every module that defines it, once the deaths of the step are resolved, each
+        to one cause (`people.cause_of_death`; `people.died_of(module)` gives those of a module), and before the results
+        are recorded. It isn't called in a step with no deaths.
+
+        Args:
+            uids (`ss.uids`): the agents who died or left in this step
+        """
+        return
+
     @required()
     def finish_step(self):
         """ Define what should happen at the end of the step, after the results are recorded """
@@ -1038,6 +1067,8 @@ class Module(Base):
         weights = ss.results.agent_weights(self.sim) # Agents of different weights (people.scale) are each counted by their weight, as in the result alive
         if names is None:
             names = [state.name for state in self.auto_state_list] + self.derived_state_names
+        if weights is None and len(names) and self._count_states(names): # Counted together, in one pass over the agents
+            return
         for name in names:
             res = self.results[name]
             if weights is None:
@@ -1045,6 +1076,24 @@ class Module(Base):
             else:
                 ss.results.as_float(res)[self.ti] = weights[self[name].uids].sum()
         return
+
+    def _count_states(self, names):
+        """ Record the number of active agents in each of some boolean states, as `update_results()` does one by one, in one pass by UID (as `people.update_results()` does); False if they can't be counted so """
+        ppl = self.sim.people
+        if getattr(self.sim, 'solver', None) != 'abm' or not isinstance(getattr(ppl, 'alive', None), ss.BoolArr): # Not with compartments, or in a mock sim
+            return False
+        states = [self.__dict__.get(name) for name in names]
+        if not all(isinstance(state, ss.BoolArr) and state.raw.ndim == 1 and state.raw.flags.c_contiguous for state in states):
+            return False # E.g. a derived state, or one with no memory of its own yet
+        alive = ppl.alive.raw[:ppl.uid.len_used]
+        dying = ppl.dying()
+        counts = ss.solvers.backends.passes.count_alive(tuple(state.raw for state in states), alive) # Those alive in each, then the number alive...
+        if counts[-1] + len(dying) != len(ppl.auids): # ...which, with those who died in this step, should be the active agents
+            return False
+        ti = self.ti
+        for name,state,count in zip(names, states, counts):
+            self.results[name][ti] = count + (np.count_nonzero(state.raw[dying]) if len(dying) else 0)
+        return True
 
     @required()
     def finalize(self):

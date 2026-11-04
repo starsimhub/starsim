@@ -52,7 +52,7 @@ def modules():
     return sc.obj(passes=passes, arrays=ss.arrays, networks=ss.networks, dists=ss.dists,
                       people=sys.modules['starsim.people'], multi_random=ss.distributions.multi_random, many=draws.many)
 
-single = ['levels', 'crossed', 'infection_probs'] # The passes of ss.solvers.backends.passes with no threaded version
+single = ['levels', 'crossed', 'infection_probs', 'edge_index', 'candidates_indexed', 'partners'] # The passes of ss.solvers.backends.passes with no threaded version
 pairs = ['census', 'flatnonzero', 'infect', 'due', 'count_people', 'keep_alive', 'due_alive', 'count_alive', 'keep_raw'] # Those with a serial and a threaded driver by name, both the same Rust kernel (the number of chunks says which)
 tuples = dict(edges='random_edges', candidates='candidates', can='can_transmit', ending='ending', touching='touching', women='women', debut='debuts', compress='compress', exits='competing_exits', agent_exits='competing_agent_exits') # Those whose two drivers are a pair, by the Rust kernel
 names = dict(passes=single + [f'{k}_{kind}' for k in pairs for kind in ['serial', 'threaded']] + [f'{k}_drivers' for k in tuples],

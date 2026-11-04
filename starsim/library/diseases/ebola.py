@@ -151,8 +151,8 @@ class Ebola(AgentSEIR):
         self.ti_buried[unsafe_buried] = self.ti_dead[unsafe_buried] + p.dur_dead2buried.rvs(unsafe_buried)
         return
 
-    def step_die(self, uids):
+    def on_death(self, uids):
         """ Reset states for dead agents """
-        super().step_die(uids)
+        super().on_death(uids)
         self.severe[uids] = False
         return

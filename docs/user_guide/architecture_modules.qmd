@@ -86,7 +86,7 @@ After that, the loop is built, and the parameters are locked, so setting one tha
 | `step_state()` | diseases | state changes of a disease written as code, before the networks and interventions (a declared disease takes all its transitions in `step()`) |
 | `step()` | connectors, then networks, then interventions | changes to other modules, edges, deliveries |
 | `step()` | diseases | transmission, and every transition of a declared disease |
-| `step_die(uids)` | diseases, through `people.step_die()` | what happens to the agents who die this step (they leave every state) |
+| `on_death(uids)` | every module that defines it, through `people.step_die()` | what happens to the agents who die this step (they leave every state) |
 | `update_results()` | every module, after the people | recording the step's results |
 | `step()` | analyzers | reading the finished step |
 | `finish_step()` | every module, then the people | tidying up; dead agents are removed |

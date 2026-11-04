@@ -377,6 +377,29 @@ def test_choose_n_crn():
     return overlap
 
 
+@sc.timer()
+def test_repeated_uids():
+    sc.heading('Testing draws for UIDs that repeat in a call')
+
+    class M(ss.Module):
+        def __init__(self):
+            super().__init__(name='m')
+            self.r = ss.random(name='r')
+            self.ch = ss.choice(a=1000, name='ch')
+        def step(self):
+            if self.ti == 1:
+                uids = ss.uids(np.array([0, 0, 1, 0]))
+                self.out = [self.r.rvs(uids), self.r.rvs(uids, repeats=True), self.ch.rvs(uids, repeats=True)]
+
+    sims = [ss.Sim(n_agents=10, modules=M(), dt=ss.days(1), start='2010-01-01', stop='2010-01-03', verbose=0).run() for i in range(2)]
+    same, apart, chosen = sims[0].m.out
+    assert same[0] == same[1] == same[3] # By default, as its slot
+    assert len(set(apart[[0, 1, 3]])) == 3 # Each repeat its own
+    assert len(set(chosen[[0, 1, 3]])) == 3
+    assert np.array_equal(apart, sims[1].m.out[1]) # And still reproducible
+    return sims
+
+
 # %% Run as a script
 if __name__ == '__main__':
     T = sc.timer()
