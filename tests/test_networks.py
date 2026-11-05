@@ -312,7 +312,7 @@ def test_disk():
 
     # Simulate SIR on a DiskNet
     nw2 = ssl.networks.DiskNet(r=0.15, v=ss.time.freq(0.05, unit=ss.years(1)))
-    s2 = ss.Sim(n_agents=small, networks=nw2, diseases='sir').init() # This initializes the network
+    s2 = ss.Sim(n_agents=1000, networks=nw2, diseases='sir').init() # This initializes the network; enough agents that the epidemic doesn't die out at the start
     s2.run()
     assert len(s2.networks[0]) > 0 and s2.results.sir.infection.cum[-1] > 0, 'Expected edges, and infections through them'
 
@@ -584,7 +584,7 @@ def test_beta_readings():
     assert ss.SexualNet().directions == ['m2f', 'f2m'] and ss.PrenatalNet().directions == ['mother2child']
     assert ss.RandomNet().directions == []
     assert Couples().directions == ['m2f', 'f2m'] and ss.SexualNet(between='mm').directions == [] # A sexual network of its own is between men and women unless it says otherwise; men only: one beta
-    sim = ss.Sim(sis(ss.peract(m2f=0.2, f2m=0.1)), networks=Couples(name='couples', acts=2), **kw).run()
+    sim = ss.Sim(sis(ss.peract(m2f=0.2, f2m=0.1)), networks=Couples(name='couples', acts=2), **(kw | dict(n_agents=2000))).run() # Enough agents to infect someone in three steps
     assert sim.results.sis.infection.sum() > 0
     with pytest.raises(ValueError, match="between='mf'"):
         ss.Sim(sis(ss.peract(m2f=0.01, f2m=0.01)), networks=ss.SexualNet(between='mm'), **kw).init()

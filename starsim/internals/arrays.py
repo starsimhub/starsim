@@ -1655,6 +1655,18 @@ class UIDArr(IndexArr):
     def raw(self, raw):
         return # Nothing is stored
 
+    def isin(self, values):
+        """ Which agents' UIDs are in `values` (see `ss.Arr.isin()`): as a UID is the agent's index, by setting those places, with no search """
+        if not self.initialized:
+            return super().isin(values)
+        values = np.atleast_1d(sc.toarray(values))
+        if values.dtype == object or values.dtype.kind not in 'iu':
+            return super().isin(values)
+        result = np.zeros(self.len_tot, dtype=np.bool_)
+        values = values[(values >= 0) & (values < self.len_used)] if len(values) and (values.min() < 0 or values.max() >= self.len_used) else values
+        result[values] = True
+        return self.asnew(result, cls=BoolArr, copy=False)
+
     def grow(self, new_uids=None, new_vals=None):
         """ Add new agents, whose UIDs are the next ones """
         if new_uids is None:

@@ -2013,6 +2013,8 @@ class Engine(Telling, Effects):
 
     def outcome_share(self, flow, weight, draw):
         """ The events of an outcome from those of one of its sources, times its weight: a fraction of whole events is a draw if `draw`, and the part of an event left over (from agents who stand for a fraction of a person) is kept as its mean """
+        if np.ndim(weight) == 0 and weight == 1: # Every event counts: nothing to draw
+            return np.asarray(flow, dtype=float)
         if draw and np.all((0 <= weight) & (weight <= 1)):
             whole = np.floor(flow)
             return self.rng.binomial(whole.astype(int), weight) + (flow - whole)*weight
@@ -2032,6 +2034,8 @@ class Engine(Telling, Effects):
         so the two draw the same. Returns the events reported in the step.
         """
         kernel = info.kernel
+        if len(kernel) == 1 and kernel[0] == 1 and info.stay is None and info.p_leave is None and np.ndim(amount) == 1: # Reported in the step, as they happen (most outcomes, as agents): nothing is kept
+            return np.array(amount, dtype=float)
         slots = (ti + np.arange(len(kernel))) % len(buf.pending) # This step and the next ones
         if amount.any():
             if draw and len(kernel) > 1:

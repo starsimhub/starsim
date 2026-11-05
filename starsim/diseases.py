@@ -66,7 +66,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         first (str): the state that everyone not put elsewhere starts in, and is born into; by default, the one named `S` or `susceptible`, else the first state of people made (in the class form, `first = 'N'` in the class body)
         strains (Strains): its strains (`ss.Strains`), which share its states; then `dis.strains`
         stratify (dict/list): as `stratify()`, e.g. `dict(age={0: 0.3, 15: 0.6, 65: 0.1})`; a list of dicts for one call each
-        solver (str): its own solver in a sim of agents, instead of the sim's: `'abm'` (by steps) or `'abm-events'` (event by event, in continuous time)
+        solver (str): its own solver in a sim of agents, instead of the sim's: `'abm'` (by steps), `'abm-bernoulli'` (by steps, each rate one Bernoulli trial a step for those in the state at its start, as code with `ss.bernoulli()` takes it), or `'abm-events'` (event by event, in continuous time)
         kwargs (dict): one keyword per state, transition, parameter, result, function, or modifier (`ss.modify()`, of its own quantities, e.g. `fading=ss.modify('rel_trans', multiply=0.5, where=I)`); also `name`, `label`, and `dt`
 
     The results are the number in each state (`I`), the flow along each transition by its
@@ -134,9 +134,9 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
     def __init__(self, *args, pars=None, strains=None, stratify=None, solver=None, _names=None, **kwargs):
         super().__init__()
         self.strains = None # Its ss.Strains, if it has strains
-        if solver not in [None, 'abm', 'abm-events']:
-            raise ValueError(f'solver must be "abm" or "abm-events" (a module\'s own solver, as agents), or None to follow the sim\'s, not {solver!r}')
-        self.solver = solver # Its own solver, as agents: 'abm' (by steps) or 'abm-events' (by events, in continuous time); None follows the sim's
+        if solver not in [None, 'abm', 'abm-bernoulli', 'abm-events']:
+            raise ValueError(f'solver must be "abm", "abm-bernoulli", or "abm-events" (a module\'s own solver, as agents), or None to follow the sim\'s, not {solver!r}')
+        self.solver = solver # Its own solver, as agents: 'abm' (by steps), 'abm-bernoulli' (by steps, each rate one Bernoulli trial a step), or 'abm-events' (by events, in continuous time); None follows the sim's
         self.callbacks = [] # Functions called with the agents an event happened to: see add_callback()
         if len(args) and (args[0] is None or isinstance(args[0], dict)): # Parameters can also be the first argument
             pars, args = args[0], args[1:]

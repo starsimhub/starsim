@@ -33,7 +33,7 @@ def test_events():
     S, I, R = ss.states('S I R')
     other = ss.Disease(infection=S >> I @ 0.05*I, recovery=I >> R @ 0.2, init_prev=0.01, name='other')
     mixed = ss.Sim([make_sirs(solver='abm-events'), other], networks=ssl.StaticNet(n_contacts=10), n_agents=1000, solver='abm', unit='day', stop=20, **kw).run()
-    assert isinstance(mixed.diseases.sirs.engine, ss.solvers.Events) and type(mixed.diseases.other.engine) is ss.solvers.Agents
+    assert isinstance(mixed.diseases.sirs.engine, ss.solvers.Events) and isinstance(mixed.diseases.other.engine, ss.solvers.Agents) and not isinstance(mixed.diseases.other.engine, ss.solvers.Events)
     assert mixed.results.other.R[-1] > 0 and mixed.results.sirs.R.values.max() > 0
 
     pools = lambda: [ss.MixingPool(n_contacts=ss.constant(10), name='big'), ss.MixingPool(n_contacts=ss.constant(1), name='small')] # A person in both has each pool's own contacts

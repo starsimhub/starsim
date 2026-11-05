@@ -19,12 +19,13 @@ import starsim as ss
 from .compartmental import Compartmental
 from .agents import Agents, Transmission
 from .agents_events import Events, runs_events
+from .agents_compiled import Compiled
 from .engine import convert
 
 __all__ = ['solver_names', 'integrators', 'Undeclared', 'make_engine', 'choose_solver', 'choose_engine', 'kernel_seconds', 'init_crossings', 'init_capabilities', 'auto_reasons', 'why_not', 'solver_table', 'rules', 'set_par_values', 'flows_of', 'init_group_values', 'settle_start', 'group_people']
 
 
-solver_names = ['auto', 'ode', 'ide', 'binomial', 'gillespie', 'tau', 'abm', 'abm-events'] # The solvers that can be asked for ('ide' runs as the ODE, with each dwell time as it is: see Compartmental.slot_rates(); 'abm-events' as agents, event by event: see Events)
+solver_names = ['auto', 'ode', 'ide', 'binomial', 'gillespie', 'tau', 'abm', 'abm-bernoulli', 'abm-events'] # The solvers that can be asked for ('ide' runs as the ODE, with each dwell time as it is: see Compartmental.slot_rates(); 'abm-bernoulli' as agents, each rate one Bernoulli trial a step: see Agents.define(); 'abm-events' as agents, event by event: see Events)
 integrators = ['rk4', 'euler'] # The schemes of the ODE
 
 
@@ -101,7 +102,9 @@ def make_engine(module, sim):
     if module.graph is None:
         return Undeclared(module, sim)
     if sim.solver == 'abm':
-        return (Events if runs_events(module, sim) else Agents)(module, sim)
+        if runs_events(module, sim):
+            return Events(module, sim)
+        return Compiled(module, sim)
     if getattr(module, 'solver', None) is not None:
         raise ss.CapabilityError(f'"{module.name}" has solver="{module.solver}", but the sim runs as compartments (solver="{sim.solver}"); a module\'s own solver is for agents only, so give the sim solver="abm", or leave the module\'s out')
     engine = sim.__dict__.get('layouts', {}).pop(module.name, None)
@@ -158,7 +161,7 @@ def choose_solver(sim):
     """
     gather_modules(sim)
     init_model(sim)
-    if sim.pars.solver not in ['auto', 'abm', 'abm-events']: # A module's own compartmental form, used only when a compartmental solver is named (e.g. ss.Pregnancy's)
+    if sim.pars.solver not in ['auto', 'abm', 'abm-bernoulli', 'abm-events']: # A module's own compartmental form, used only when a compartmental solver is named (e.g. ss.Pregnancy's)
         for mod in sim.declared:
             note = mod.compartmental_form(sim)
             if note is not None:
@@ -181,6 +184,8 @@ def choose_solver(sim):
         solver, reason = 'ode', 'requested (as an integro-differential model)'
     elif solver == 'abm-events': # Agents, each declared module taken event by event within a step (see Events)
         solver, reason = 'abm', 'requested (by events, in continuous time)'
+    elif solver == 'abm-bernoulli': # Agents, each rate one Bernoulli trial a step for those in the state at its start (see Agents.define())
+        solver, reason = 'abm', 'requested (each rate one Bernoulli trial a step)'
     else:
         reason = 'requested'
     sim.solver = solver
@@ -592,7 +597,7 @@ def init_named_people(sim):
     named = getattr(pars.people, 'named', None)
     sim.given_pyramid = None # People given to a compartmental solver: the ages their age groups are split by
     sim.pop_from = None # Where the population size came from, if it was not given: the people given, named people, or the populations of places
-    if isinstance(pars.people, ss.People) and named is None and sim.declared and pars.solver not in ['abm', 'abm-events', 'auto']: # Their ages and number, not their agents
+    if isinstance(pars.people, ss.People) and named is None and sim.declared and pars.solver not in ['abm', 'abm-bernoulli', 'abm-events', 'auto']: # Their ages and number, not their agents
         dist = sc.dcp(pars.people.age.default)
         dist.init(force=True)
         edges = ss.data.world.ages
@@ -802,6 +807,8 @@ def init_where(sim):
                     continue
                 if callable(where) and not isinstance(where, ss.conditions.Cond): # A function of the sim
                     others = (lambda func: lambda sim: ~np.asarray(func(sim), dtype=bool))(where)
+                    if ss.transitions.is_lifelong(where): # So is who it is not for
+                        others = ss.lifelong(others)
                 else: # A condition, a state, or an array
                     others = ~ss.conditions.as_cond(where)
                 sim.pars.connectors[key] = ss.modify(f'{mod.name}.{name}', multiply=0, where=others, name=key)
