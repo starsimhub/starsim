@@ -97,6 +97,54 @@ def events_call(args):
     return ss.solvers.backends.events.step_events(*args), args[3:7]
 
 
+move_calls = [] # The arguments of the calls of the compiled moves in a sim, once taken (see moves_inputs())
+
+def moves_inputs():
+    """
+    The arguments of every call of the compiled moves (`due_agents()` and `step_moves()`) in two small sims, kept the first time: a lognormal
+    dwell into a split, a split with ss.stay a time after an event, a split with deaths, and a competing rate; and dwell times that never end
+    outside a where= on another module, a split whose shares are worked out as they are reached, and a trigger on a condition
+    """
+    if not move_calls:
+        S, E, I, R = ss.states('S E I R')
+        onset = ss.Transition(E, [I, R], p=[0.7, None], dur=ss.lognorm_ex(mean=ss.days(3), std=ss.days(1)))
+        d = ss.Disease(infection=S >> E @ 0.1*I, onset=onset, care=ss.Transition(I, [I, ss.stay], p=[0.5, None], where=onset, dur=ss.days(4)),
+                       recovery=ss.Transition(I, [R, ss.null], p=[0.95, None], dur=ss.weibull(c=2, scale=ss.days(8))), waning=R >> S @ ss.perday(0.05), init_prev=0.05, name='d')
+        sim = ss.Sim(d, networks=ss.RandomNet(n_contacts=4), n_agents=1000, unit='day', stop=30, **kw)
+        M = ss.solvers.backends.moves
+        kernels = {k: getattr(M, k) for k in ['due_agents', 'step_moves']}
+        def keeper(k):
+            def keep(*args):
+                move_calls.append((k, copied(args)))
+                return kernels[k](*args)
+            return keep
+        A, B = ss.states('A B')
+        X, Y, Z = ss.states('X Y Z')
+        clock = ss.Disease(A, B, tick=A >> B @ ss.constant(ss.days(5)), first='A', name='clock')
+        share = lambda sim, uids: np.full(len(uids), 0.3)
+        dec = ss.Disease(X, Y, Z, to_y=ss.Transition(X, Y, p=0.5, rate=ss.perday(2), where=clock.B), to_z=ss.Transition(X, Z, p=0.5, rate=ss.perday(2), where=clock.B),
+                         onward=ss.Transition(Y, [Z, ss.stay], p=[share, None], dur=ss.days(2)), back=ss.Transition(Z, X, dur=0, where=ss.ppl.female), first='X', name='dec')
+        sim2 = ss.Sim([clock, dec], n_agents=1000, unit='day', stop=20, **kw)
+        with mock.patch.object(M, 'due_agents', keeper('due_agents')), mock.patch.object(M, 'step_moves', keeper('step_moves')):
+            sim.run()
+            sim2.run()
+        eng = sim2.diseases.dec.engine
+        assert not eng.uncompiled and eng.kplan.lazy.any() and len(eng.kplan.cond_trigs), eng.uncompiled # Each of them taken by the call
+        assert {k for k,_ in move_calls} == {'due_agents', 'step_moves'}
+    return move_calls
+
+
+def copied(args):
+    """ Copies of the arrays among some arguments (and in their tuples), since the moves change them """
+    return [tuple(np.array(y) for y in x) if isinstance(x, tuple) else np.array(x) if isinstance(x, np.ndarray) else x for x in args]
+
+
+def moves_call(k, args):
+    """ A call of the compiled moves on copies of its arguments: what it returns, and every array it was given, which it changes in place """
+    args = copied(args)
+    return getattr(ss.solvers.backends.moves, k)(*args), [x for x in args if isinstance(x, (np.ndarray, tuple))]
+
+
 def twin_calls():
     """ A call of each kernel in `rust.names`, through the function that calls it where there is one, each giving what it returns and any array it fills """
     P, D, net, rng = ss.solvers.backends.passes, ss.solvers.backends.draws, ss.networks, np.random.default_rng(1)
@@ -148,6 +196,7 @@ def twin_calls():
         gone        = lambda: ss.solvers.backends.rust.modules().people.count_gone(auids, alive, ti_dead, ti_removed, 5),
         combine     = lambda: [ss.multi_random.combine2_rvs(uni(np.float32), uni(np.float32), np.uint32, 2**32 - 1), ss.multi_random.combine_rvs(nb.typed.List([uni(np.float32) for _ in range(3)]), np.uint32, 2**32 - 1)],
         events      = lambda: [events_call(args) for args in events_inputs()],
+        moves       = lambda: [moves_call(k, args) for k,args in moves_inputs()],
         many        = lambda: [filled(D.many[k], *pars, uni(), dtype=float) for k,pars in [('expon', [uni()]), ('weibull', [uni(), uni()]), ('binomial', [10*uni(), uni()]), ('poisson', [5*uni()]), ('nbinom', [uni() + 1, uni()])]],
     )
 

@@ -26,7 +26,7 @@ from .internals.expressions import as_expr, BinOp, dists_in, Count, did_you_mean
 from .internals.parameters import by, TimeValue
 
 __all__ = ['pars', 'State', 'states', 'null',
-           'Transition', 'move', 'birth', 'death', 'lifetable', 'immigration', 'emigration', 'outcome']
+           'Transition', 'move', 'birth', 'death', 'lifetable', 'immigration', 'emigration', 'outcome', 'lifelong']
 
 
 #%% States
@@ -288,6 +288,36 @@ def level_pair(value, what):
         raise ValueError(errormsg)
     src, dst = value
     return sc.tolist(src), (dst[0] if isinstance(dst, list) and len(dst) == 1 else dst)
+
+
+def lifelong(func):
+    """
+    Mark a function of the agents as giving each person a value that stays the same for life, so a run as agents works it out once for each person rather than at each step
+
+    For a `p=`, `where=`, or `rate=` that reads only what never changes for a person once they are in the sim: their sex,
+    or an array whose value is given at birth (e.g. `ss.FloatArr('stable', default=ss.choice([1, 3], p=[0.4, 0.6]))`). The
+    value is worked out as each person is first needed, and kept: one read before its array is set would be kept for life.
+
+    Args:
+        func (callable): a function of the sim (`fn(sim)`, giving a value for everyone), or of the sim and agents (`fn(sim, uids)`)
+
+    Returns:
+        A copy of the function, marked (the function given is not changed)
+
+    Example:
+        ```python
+        recover = ss.Transition(C3, C1, dur=ss.weeks(8), where=ss.lifelong(lambda sim: sim.diseases.bv.stable == 1))
+        ```
+    """
+    import functools
+    out = functools.partial(func)
+    out.lifelong = True
+    return out
+
+
+def is_lifelong(func):
+    """ Whether a function is marked with `ss.lifelong()` """
+    return bool(getattr(func, 'lifelong', False)) and callable(func)
 
 
 class on:

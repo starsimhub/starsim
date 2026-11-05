@@ -43,7 +43,7 @@ class Stepping:
             self.step_held(dt)
         missed = {name:self.schedule(self.graph.states[name], members[name]) if self.unscheduled is None or name in self.unscheduled else None for name in members if name in self.listed} # Who has a draw of the competing rates to catch up on, by state: see schedule()
         self.unscheduled = set() if self.live is not None else None
-        for name in self.listed:
+        for name in self.listed: # In order, since each state's moves are made as it is taken (see Compiled.step_state(), which collects them, so draws the states that share rates together)
             if name in quick:
                 self.leave(self.graph.states[name])
             elif len(members[name]):
@@ -93,7 +93,7 @@ class Stepping:
         self._members = members
         return members
 
-    def leave(self, state, uids=None, missed=None):
+    def leave(self, state, uids=None, missed=None, pending=None):
         """
         At the start of the step: who of the agents in a state leaves it now, by a scheduled exit that is due, or by its competing rates
         (one draw per agent); `missed` are those who have a draw of the competing rates to catch up on (see `schedule()`). With no `uids`,
@@ -156,17 +156,33 @@ class Stepping:
             self.draw_competing(state, uids[early], 0.5*dt, key=f'entry_{name}')
             mod[f'late_{name}'][uids[early]] = 0.0
             uids = uids[~early]
-        if competing and len(uids): # Competing rates: one draw per agent
-            self.draw_competing(state, uids, dt)
+        if competing and len(uids): # Competing rates: one draw per agent (with those of other states with the same rates, if `pending` is given, for an engine that collects the moves: see draw_pending())
+            if pending is not None:
+                pending.append((state, uids))
+            else:
+                self.draw_competing(state, uids, dt)
         return
 
     def draw_competing(self, state, uids, dt, key=None):
         """ The competing rates out of a state, in one draw per agent over a time `dt` (a number, or one for each agent): moves those who leave, and returns which they are """
+        return self.draw_competing_in([(state, uids)], dt, key)[0]
+
+    def draw_competing_in(self, parts, dt, key=None):
+        """
+        As `draw_competing()`, for agents in several states with the same competing rates (`parts`, a list of (state, uids)), e.g. a death rate
+        out of each stage of a disease: the rates are worked out once for all of them, and each state's agents draw from its own stream, so
+        who leaves is as if each state were drawn alone. Returns which leave, for each part
+        """
+        state = parts[0][0]
+        uids = parts[0][1] if len(parts) == 1 else ss.uids.concatenate([u for _,u in parts])
         with self.evaluating(memo={} if len(self.competing[state.name]) > 1 else None): # A part that several rates share (e.g. the EIR, indoors and outdoors) is worked out once
             rates = [(tr, self.eval_for(tr.rate, uids)*self.adjusted(tr.name, uids)) for tr in self.competing[state.name]]
         rates = [(tr, rate) for tr,rate in rates if np.ndim(rate) or rate > 0] # A rate of 0 for everyone (e.g. ss.Pregnancy's infant_rate by default) moves nobody, so it is left out of the draw
         competing = [tr for tr,rate in rates]
-        stays = [self.stayed(tr, state, uids) for tr,rate in rates]
+        stays = []
+        for tr,rate in rates: # Each state's own (see stayed())
+            each = [self.stayed(tr, st, u) for st,u in parts]
+            stays.append(each[0] if all(np.ndim(x) == 0 and x == each[0] for x in each) else np.concatenate([np.broadcast_to(x, len(u)) for x,(st,u) in zip(each, parts)]))
         same = key is None and len(uids) and np.ndim(dt) == 0 and all(np.ndim(rate) == 0 for tr,rate in rates) and all(np.ndim(s) == 0 for s in stays) # The same chances for everyone: worked out once
         if same: # As numbers rather than arrays, since this is most calls, and each is small
             hazards = [(max(float(rate), 0.0)*float(stay) if stay > 0 else 0.0) for (tr,rate),stay in zip(rates, stays)] # (Not a product with stay, which would make an infinite rate NaN for those who can't take it yet)
@@ -179,37 +195,63 @@ class Stepping:
             edges = np.cumsum([0.0] + hazards)*(p_exit/total if total > 0 else 0.0)
         else:
             n = len(uids)
-            hazards = [np.broadcast_to(np.maximum(rate, 0), n)*stay if np.ndim(stay) == 0 else np.where(stay > 0, np.maximum(rate, 0), 0.0) for (tr,rate),stay in zip(rates, stays)] # (Not a product with stay, which would make an infinite rate NaN for those who can't take it yet)
-            total = np.sum(hazards, axis=0) if hazards else np.zeros(n)
+            hazards = np.empty((len(rates), n)) # One row for each exit
+            for i,((tr,rate),stay) in enumerate(zip(rates, stays)):
+                np.maximum(rate, 0, out=hazards[i])
+                if np.ndim(stay):
+                    hazards[i][~(stay > 0)] = 0.0 # (Not a product with stay, which would make an infinite rate NaN for those who can't take it yet)
+                elif stay != 1:
+                    hazards[i] *= stay
+            total = hazards[0] if len(rates) == 1 else hazards.sum(axis=0) if len(rates) else np.zeros(n)
             p_exit = -np.expm1(-total*dt)
             certain = np.isinf(total)
             if certain.any(): # An infinite rate is certain within the step, shared among the infinite rates
-                hazards = [np.where(certain, np.isinf(h), h) for h in hazards]
-                total = np.sum(hazards, axis=0)
+                hazards = np.where(certain, np.isinf(hazards), hazards)
+                total = hazards.sum(axis=0)
                 p_exit = np.where(certain, 1.0, p_exit)
             share = np.divide(p_exit, total, out=np.zeros(n), where=total>0)
             edges = None # Worked out in the compiled pass below, unless it can't be taken
         if np.isnan(total).any():
             bad = [tr.name for tr,h in zip(competing, hazards) if np.isnan(h).any()]
-            raise ValueError(f'the rate of {sc.strjoin(bad)} out of {state.name} is NaN for some people: it reads a clock or an attribute where it has no value.')
-        crn = self.crn_key(f'exit_{state.name}', uids) if key is None and len(uids) else None
-        if crn is not None: # The usual case: each agent's draw is made in one compiled pass, as rvs() would make it, so only those who leave are listed
-            if same:
-                pos, which = ss.solvers.backends.passes.competing_exits(uids, self.sim.people.slot_raw(), *crn, p_exit, edges)
-            else: # With the edges of each agent's exits worked out in it, as np.cumsum() of the hazards times p_exit/total
-                pos, which = ss.solvers.backends.passes.competing_agent_exits(uids, self.sim.people.slot_raw(), *crn, p_exit, share, np.array(hazards, dtype=float).reshape(len(hazards), n))
-            leaving = np.zeros(len(uids), dtype=bool)
-            leaving[pos] = True
+            raise ValueError(f'the rate of {sc.strjoin(bad)} out of {sc.strjoin(st.name for st,u in parts)} is NaN for some people: it reads a clock or an attribute where it has no value.')
+        out = []
+        start = 0
+        for state,u in parts: # Each state from its own stream
+            m = len(u)
+            part = slice(start, start + m)
+            start += m
+            crn = self.crn_key(f'exit_{state.name}', u) if key is None and m else None
+            if crn is not None: # The usual case: each agent's draw is made in one compiled pass, as rvs() would make it, so only those who leave are listed
+                if same:
+                    pos, which = ss.solvers.backends.passes.competing_exits(u, self.sim.people.slot_raw(), *crn, p_exit, edges)
+                else: # With the edges of each agent's exits worked out in it, as np.cumsum() of the hazards times p_exit/total
+                    pos, which = ss.solvers.backends.passes.competing_agent_exits(u, self.sim.people.slot_raw(), *crn, p_exit[part], share[part], hazards[:, part])
+                leaving = np.zeros(m, dtype=bool)
+                leaving[pos] = True
+                for i,tr in enumerate(competing):
+                    self.move(tr, state, u[pos[which == i]])
+                out.append(leaving)
+                continue
+            if edges is None:
+                part_edges = np.cumsum([np.zeros(m)] + list(hazards[:, part]), axis=0)*share[part]
+            else:
+                part_edges = edges
+            pe = p_exit if np.ndim(p_exit) == 0 else p_exit[part]
+            rvs = self.draw(f'exit_{state.name}' if key is None else key, u) # Drawn on entry as well, so perhaps more than once a step
+            leaving = rvs < pe
             for i,tr in enumerate(competing):
-                self.move(tr, state, uids[pos[which == i]])
-            return leaving
-        if edges is None:
-            edges = np.cumsum([np.zeros(n)] + hazards, axis=0)*share
-        rvs = self.draw(f'exit_{state.name}' if key is None else key, uids) # Drawn on entry as well, so perhaps more than once a step
-        leaving = rvs < p_exit
-        for i,tr in enumerate(competing):
-            self.move(tr, state, uids[leaving & (rvs >= edges[i]) & (rvs < edges[i+1])])
-        return leaving
+                self.move(tr, state, u[leaving & (rvs >= part_edges[i]) & (rvs < part_edges[i+1])])
+            out.append(leaving)
+        return out
+
+    def draw_pending(self, pending):
+        """ The competing rates left by `leave()` to draw, as `draw_competing_in()` for each set of states with the same rates: for an engine that collects the moves of the states and takes them together (see Compiled.step_state()), so that the order they are drawn in does not matter """
+        groups = {}
+        for state,uids in pending:
+            groups.setdefault(tuple(tr.name for tr in self.competing[state.name]), []).append((state, uids))
+        for parts in groups.values():
+            self.draw_competing_in(parts, self.dt)
+        return
 
     def after_of(self, tr):
         """ A transition's minimum stay (`after=`), in the sim's unit """

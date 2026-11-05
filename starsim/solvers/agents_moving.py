@@ -261,7 +261,8 @@ class Moving:
         key = ('dest', tr.name)
         fixed = self.__dict__.setdefault('_fixed', {}).get(key)
         if fixed is None:
-            fixed = self._fixed[key] = not tr.dies and all(self.is_fixed(p) for p in tr.p) and all(self.unmodified('branch', f'{tr.name}.{dst.name}') for dst in tr.dst)
+            dies = not tr.dies or (self.is_fixed(getattr(tr, 'p_die', None)) and self.is_fixed(getattr(tr, 'p_stay', None)) and self.unmodified('branch', f'{tr.name}.null')) # The share of ss.null, from those of the others, and of ss.stay (see die_share())
+            fixed = self._fixed[key] = dies and all(self.is_fixed(p) for p in tr.p) and all(self.unmodified('branch', f'{tr.name}.{dst.name}') for dst in tr.dst)
         return self.fixed_edges(key, fixed, lambda u: self.dest_edges_for(tr, u, frm if u is uids else np.full(len(u), -1)), uids)
 
     def dest_edges_for(self, tr, uids, frm):
@@ -285,7 +286,7 @@ class Moving:
             uids = ss.uids.concatenate(uidlist) if len(uidlist) > 1 else uidlist[0]
             uids = uids[mod[name].raw[uids]] # Those still there
             out.append((name, uids))
-            if row is not None and self.competing[name]: # Half a step of the competing rates of the state now, as for people who arrive during a step in a compartmental run (once a step each)
+            if row is not None and self.competing[name] and not self.wholestep: # Half a step of the competing rates of the state now, as for people who arrive during a step in a compartmental run (once a step each)
                 now = self.due(name, uids, ti)
                 stay = uids[~np.isin(uids, now[1])] if now is not None else uids
                 hz = stay[~row[stay]]
@@ -737,7 +738,7 @@ class Moving:
             elif how == 'expon':
                 return ss.solvers.backends.draws.many['expon'](1.0, np.asarray(rvs, dtype=np.float64), np.empty(len(rvs))) # As dist.ppf(), without its checks
             elif how == 'agent':
-                n, pars, kwds = self.agent_pars(key, dist, checked=True)
+                n, pars, kwds = self.agent_pars(key, dist, checked=True, uids=uids)
                 pick = lambda d: {k:(v[uids] if isinstance(v, np.ndarray) and v.shape == (n,) else v) for k,v in d.items()} # These agents' values
                 dist._pars = type(dist.pars)(pick(pars))
                 if kwds is not None:
@@ -750,7 +751,7 @@ class Moving:
         finally:
             dist.jump(to=ind, force=True)
 
-    def agent_pars(self, key, dist, checked=False):
+    def agent_pars(self, key, dist, checked=False, uids=None):
         """
         For one of the engine's distributions whose parameters are values by sex (see agent_values() and is_lifelong()), its parameters for
         everyone (by UID), worked out as rvs() would and kept for the run, so a draw is the uniforms and the inverse; None for any other
@@ -768,10 +769,21 @@ class Moving:
             return dict(dist._pars), None if dist.dist is None else dict(dist.dist.kwds)
         n = len(self.sim.people.uid.raw)
         held = self.lifelong.get(('pars', key))
-        if held is None or held[0] < n: # Or people have been added since: each value for each agent, appended
-            start = 0 if held is None else held[0]
-            new = pars(ss.uids(np.arange(start, n)))
-            join = lambda old, add: {k:(np.concatenate([old[k], v]) if isinstance(v, np.ndarray) and v.shape == (n - start,) else v) for k,v in add.items()}
+        span = self.lifelong_span(('pars', key), None if held is None else range(held[0]), uids) # Worked out for those made since if they are among `uids` (or if None)
+        if span is not None: # Or people have been made since: each value for each agent (see lifelong_table())
+            start, stop = span
+            new = pars(ss.uids(np.arange(start, stop)))
+            def join(old, add):
+                out = {}
+                for k,v in add.items():
+                    if isinstance(v, np.ndarray) and v.shape == (stop - start,):
+                        if stop <= len(old[k]): # Those made since, in the room kept for them (whose rows nothing has read)
+                            v, add_v = (old[k] if old[k].flags.writeable else old[k].copy()), v
+                            v[start:stop] = add_v
+                        else:
+                            v = np.concatenate([old[k][:start], v])
+                    out[k] = v
+                return out
             held = self.lifelong[('pars', key)] = (n, *new) if held is None else (n, join(held[1], new[0]), None if new[1] is None else join(held[2], new[1]))
         return held
 
@@ -941,7 +953,7 @@ class Moving:
         missed = None
         if entered is None:
             entered = mod[f'ti_{name}'].raw[new]
-            if self.competing[name]:
+            if self.competing[name] and not self.wholestep:
                 late = entered < self.ti # NaN (undated) is not
                 if late.any():
                     missed = np.zeros(len(members), dtype=bool)

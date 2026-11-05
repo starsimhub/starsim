@@ -261,8 +261,11 @@ class Branching:
         strains = self.strain_levels()
         if not routes and strains == [None] and self.same_in_group(tr): # The usual case, in one pass over the agents
             return self.transmit_groups(tr, src)
-        if routes and strains == [None] and not any(np.any(np.asarray(self.route_beta(coef, nkey, route), dtype=float) > 0) for nkey,route in routes for coef in tr.terms.values()): # No route carries it (e.g. a mother-to-child transmission with a beta of 0): nobody is infected, and nothing is drawn
-            return ss.uids()
+        on_route = None
+        if routes and strains == [None]: # Only the routes that carry it (e.g. not a mother-to-child transmission on the sexual network); if none do, nobody is infected, and nothing is drawn
+            on_route = [self.carries(tr, nkey, route) for nkey,route in routes]
+            if not any(on_route):
+                return ss.uids()
         sus = self.members(src)
         if not len(sus):
             return ss.uids()
@@ -292,6 +295,8 @@ class Branching:
             if self.strain_adjust[tr.name] is not None:
                 by_strain = self.strain_adjust[tr.name][strain_raw]
         for i,(nkey,route) in enumerate(routes):
+            if on_route is not None and not on_route[i]: # Nothing on it to transmit (see carries())
+                continue
             if isinstance(route, (ss.MixingPool, ss.MixingPools)) and mod not in route.diseases: # Not one of the diseases it is for
                 continue
             if isinstance(route, ss.Network) and route.has_acts: # A probability per act, in each direction
@@ -527,6 +532,17 @@ class Branching:
                 out = out*np.broadcast_to(self.strain_effect(strain), len(self.mod.rel_sus.raw))[uids]
         return out
 
+    def carries(self, tr, nkey, route):
+        """ Whether a route carries a transmission: the coefficient of one of its source states is above 0 on it; kept for the run if they are all fixed (see route_beta()) """
+        kept = self._route_kept
+        key = ('carries', tr.name, nkey)
+        if key in kept:
+            return kept[key]
+        out = any(np.any(np.asarray(self.route_beta(coef, nkey, route), dtype=float) > 0) for coef in tr.terms.values())
+        if all(kept.get(id(coef)) for coef in tr.terms.values()):
+            kept[key] = out
+        return out
+
     def route_beta(self, coef, nkey, route, uids=None):
         """
         The coefficient of a source state in a transmission's rate on one route: a rate per contact, or, on a network with acts, the hazard per act
@@ -538,6 +554,10 @@ class Branching:
         if memo is not None and key in memo:
             val, self._per_act = memo[key]
             return val
+        kept = self._route_kept
+        if key in kept: # Fixed for the run
+            val, self._per_act = kept[key]
+            return val
         self._per_act = False
         with self.evaluating(route=(nkey, route)):
             val = self.eval(coef) if uids is None else self.eval_for(coef, uids)
@@ -546,6 +566,13 @@ class Branching:
             val = self.act_hazards(val, route)
         if memo is not None:
             memo[key] = (val, self._per_act)
+        fixed = kept.get(id(coef))
+        if fixed is None:
+            fixed = kept[id(coef)] = self.strain is None and self.is_route_fixed(coef)
+        if fixed:
+            if isinstance(val, np.ndarray):
+                val.flags.writeable = False # Shared by every step from now on
+            kept[key] = (val, self._per_act)
         return val
 
     def by_target(self, coefs, route):

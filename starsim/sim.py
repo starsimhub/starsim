@@ -46,7 +46,7 @@ class SimPars(ss.Pars):
         interventions (str/list/Module): As above
         analyzers (str/list/Module): As above
         nopython (bool): whether to raise `ss.CapabilityError`, rather than fall back to Python, if a compartmental run cannot be taken whole in the kernels, as with Numba's `nopython=True` (see `sim.kernel_reason()`)
-        solver (str): how a declared model is run: 'auto' (the default: chosen from the model; see `sim.solver_reason`), 'ode', 'ide' (dwell times as they are, not as stages), 'binomial' (chain binomial), 'gillespie' (exact), 'tau' (tau-leaping), 'abm' (agents), or 'abm-events' (agents, event by event in continuous time within each step; a declared module can also have its own, ss.Disease(..., solver=))
+        solver (str): how a declared model is run: 'auto' (the default: chosen from the model; see `sim.solver_reason`), 'ode', 'ide' (dwell times as they are, not as stages), 'binomial' (chain binomial), 'gillespie' (exact), 'tau' (tau-leaping), 'abm' (agents, each declared module as it suggests, by its class's suggested_solver, else 'abm-midstep'), or agents in a particular way, overriding what modules suggest: 'abm-midstep' (by steps, with those who arrive in a state during a step facing its rates for the rest of it), 'abm-wholestep' (by steps, with rates over whole steps only, for those in the state at the start of the step, as code with ss.bernoulli() takes them: faster, and a little less exact at a coarse step), or 'abm-events' (event by event in continuous time within each step); a declared module can also have its own, ss.Disease(..., solver=), which nothing overrides (see ss.solvers.agent_solver())
         branching (bool): whether to run as a branching process, in which infection takes no one from the uninfected, nor gives anyone back (default False)
         approx (bool): what to do about an approximation of the model: None (default) prints a note for each, True keeps the notes in `sim.notes` without printing them, and False makes each an error
         integrator (str): the ODE integration scheme: 'rk4' (the default) or 'euler'
@@ -81,7 +81,7 @@ class SimPars(ss.Pars):
 
         # How the model is run; these only apply to modules with declared states and transitions (see ss.Disease)
         self.unit       = None   # The unit for bare numbers, e.g. 'day'; if nothing in the model has a unit, time is in timesteps
-        self.solver     = 'auto' # 'auto', 'ode', 'ide' (dwell times as they are, not as stages), 'binomial', 'gillespie' (exact), 'tau' (tau-leaping), 'abm', or 'abm-events' (agents by events)
+        self.solver     = 'auto' # 'auto', 'ode', 'ide' (dwell times as they are, not as stages), 'binomial', 'gillespie' (exact), 'tau' (tau-leaping), 'abm' (agents, as each module suggests), 'abm-midstep', 'abm-wholestep' (rates over whole steps only), or 'abm-events' (agents by events)
         self.branching  = False  # Whether to run as a branching process: infection takes no one from the uninfected, nor gives anyone back (see ss.Sim)
         self.approx     = None   # None prints a note for each approximation; True keeps the note in sim.notes without printing it; False makes it an error
         self.integrator = None   # The ODE integration scheme: 'rk4' (the default) or 'euler'
@@ -1117,6 +1117,9 @@ class Sim(ss.Base):
             self.dists.copy_to_module(mod)
             mod.init_post()
             mod.t.ti = np.searchsorted(mod.t.yearvec, self.t.yearvec[self.ti]) # Start the module at the current time point
+        for mod in self.declared: # What the engines keep for the run can depend on the other modules (e.g. a modifier of a beta)
+            if hasattr(mod.engine, 'modules_changed'):
+                mod.engine.modules_changed()
 
         # Add the module to the loop, and resume from the same place
         loop = self.loop

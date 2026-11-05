@@ -15,7 +15,32 @@ from .agents_moving import Moving, ROUNDS, ROUND_MAX
 from .agents_stepping import Stepping
 from .agents_branching import Branching
 
-__all__ = ['Transmission', 'Agents']
+__all__ = ['agent_solvers', 'agent_solver', 'Transmission', 'Agents']
+
+agent_solvers = ['abm-midstep', 'abm-wholestep', 'abm-events'] # The ways a declared module runs as agents, the first by default: those who arrive in a state during a step face its rates for the rest of the step; or from the next step only; or event by event in continuous time
+
+
+def agent_solver(module, sim, why=False):
+    """
+    How a declared module runs as agents, one of `agent_solvers`: its own `solver=`, if it names one; else the sim's, if it names one;
+    else the module's `suggested_solver` (a class attribute, e.g. `suggested_solver = 'abm-wholestep'`); else `'abm-midstep'`.
+    So `solver='abm'` (or `'auto'`, when it chooses agents) takes each module's suggestion, and a sim's `solver='abm-midstep'` overrides it.
+    With `why=True`, also where it came from: `'own'`, `'sim'`, `'suggested'`, or `'default'`.
+    """
+    own = getattr(module, 'solver', None)
+    suggested = getattr(module, 'suggested_solver', None)
+    if suggested is not None and suggested not in agent_solvers:
+        raise ValueError(f'"{module.name}" has suggested_solver={suggested!r}, but it must be one of {sc.strjoin(agent_solvers)}')
+    if own in agent_solvers:
+        solver, source = own, 'own'
+    elif own is None and sim.pars.solver in agent_solvers:
+        solver, source = sim.pars.solver, 'sim'
+    elif suggested is not None:
+        solver, source = suggested, 'suggested'
+    else:
+        solver, source = agent_solvers[0], 'default'
+    return (solver, source) if why else solver
+
 
 class Transmission(Effects):
     """
@@ -144,6 +169,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         mod = self.mod
         graph = self.graph
         self.init_dims()
+        self.wholestep = agent_solver(mod, self.sim) == 'abm-wholestep' # Each rate acts only over whole steps, on those in the state at the start of the step (see draw_competing())
         for obj in list(graph.states.values()) + list(graph.attrs.values()): # Remove the declarations, which are replaced by their run-time form
             if obj.name in mod.__dict__:
                 delattr(mod, obj.name)
@@ -173,6 +199,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         self.trigger_mods = set().union(*[ss.conditions.module_refs(tr.trigger.x) for tr in self.triggers]) # The modules whose changes they react to
         self._seen = dict() # The events each trigger on an event has seen already
         self.lifelong = dict() # Values by sex for everyone, by UID, and the parameters of the distributions that use them, kept for the run: see by_people() and agent_pars()
+        self.lifelong_used = dict() # For each, the number of agents (by UID) made when it was worked out: the arrays have room for agents not yet made, whose values (e.g. their sex) are not known until they are
         self._news = False # Whether anyone has moved since the modules that react to this one last looked: see notify()
         self._subscribers = None
         self._started = False
@@ -180,6 +207,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         self.round = (None, 0) # The step and the round of moves within it that the engine's draws are keyed by: see new_round()
         self._drawn = {} # With STARSIM_CHECK_DRAWS, who has been drawn from each stream in this round: see draw()
         self._route_memo = None # The coefficients worked out on each route in a transmission: see route_beta()
+        self._route_kept = {} # Those that are fixed for the run (see is_route_fixed()), and whether each coefficient is
         self._draw_how = {} # How each of the engine's distributions is drawn from: see draw()
         self._died = [] # Deaths by its transitions in the step: see uncount_deaths()
         self._fired_seen = {} # For each trigger on a delivery's or product's event, who it has seen it for: see unseen_fired()
@@ -216,7 +244,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
                 infected.add(d)
                 todo.append(d)
         hazards = {state.name:[tr for tr in graph.exits[state.name].hazards if not tr.undriven] for state in graph.people_states} # The rates out of each state; a transition with no driver is only by intervention, so nothing to draw
-        self.halved = infected & {s.name for s in graph.infectious if hazards[s.name]}
+        self.halved = set() if self.wholestep else infected & {s.name for s in graph.infectious if hazards[s.name]}
         self.late = set() # The states with a late_ array: see enter()
         unkept = [state.name for state in graph.people_states if read is not None and not state.keep_time and state.name not in read and state.name not in self.scheduled and state.name not in clocked and not any(getattr(tr, 'after', None) is not None for tr in graph.exits[state.name].hazards)]
         exited = {s.name for tr in graph.transitions.values() if any(getattr(d, 'people', False) for d in (tr.dst or [])) for s in (tr.src or []) if getattr(s, 'people', False)}
@@ -234,7 +262,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
                          ss.Arr(f'exit_{name}', dtype=np.int8, nan=-1, label=f'Scheduled exit from {name}')] # Which of the exits, as 8-bit integers
                 if rescalable: # Only needed if a rate can change after dwell times are drawn: see rescale_exits()
                     arrs.append(ss.FloatArr(f'mult_{name}', default=1.0, label=f'Speed of the scheduled exit from {name}, when it was scheduled'))
-            if hazards[name] and (name in self.scheduled or name in self.halved): # See enter()
+            if hazards[name] and (name in self.scheduled or name in self.halved) and not self.wholestep: # See enter()
                 arrs.append(ss.FloatArr(f'late_{name}', default=0.0, label=f'The share of a step of the competing rates out of {name} missed in the step of entering it (less than 0 if too much)'))
                 self.late.add(name)
         self.attrs = graph.attrs # Attributes: an array each (for a derived one, its values when last worked out); see fire() and attr_values()
@@ -1235,7 +1263,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
             return np.ones(np.size(uids))
         uids = self._uids if uids is None else uids
         if self.is_lifelong(by):
-            vals = self.lifelong_table(id(by), lambda new: by.lookup(self.sim, self.convert, year=self.year, cache=self.cache, uids=new))
+            vals = self.lifelong_table(id(by), lambda new: by.lookup(self.sim, self.convert, year=self.year, cache=self.cache, uids=new), uids)
             return vals.copy() if uids is None else vals[uids] # Everyone, or these agents
         return by.lookup(self.sim, self.convert, year=self.year, cache=self.cache, uids=uids)
 
@@ -1249,8 +1277,8 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
     def is_fixed(self, x):
         """
         Whether a value (an expression of parameters, or a condition) is the same for each person for the whole run, so it can be worked out for
-        everyone once (see fixed_edges()): numbers, parameters with no modifiers whose values are numbers or values by sex (see is_lifelong()), and
-        conditions on sex
+        everyone once (see fixed_edges()): numbers, parameters with no modifiers whose values are numbers or values by sex (see is_lifelong()),
+        conditions on sex, and functions marked with `ss.lifelong()`
         """
         E = ss.expressions
         for part in E.nodes(x):
@@ -1263,12 +1291,47 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
                 if isinstance(v, ss.by):
                     if not self.is_lifelong(v):
                         return False
-                elif not isinstance(v, (int, float, np.number, E.Expr, ss.conditions.Cond)):
+                elif not isinstance(v, (int, float, np.number, E.Expr, ss.conditions.Cond)) and not ss.transitions.is_lifelong(v):
                     return False
             elif isinstance(part, ss.conditions.Cond):
                 if part.op in ss.conditions.leaves and not (part.op == 'people' and tuple(part.args) in [('female',), ('male',)]):
                     return False
-            elif not (isinstance(part, ss.by) and self.is_lifelong(part)):
+            elif not (isinstance(part, ss.by) and self.is_lifelong(part)) and not ss.transitions.is_lifelong(part): # A function marked with ss.lifelong()
+                return False
+        return True
+
+    def modules_changed(self):
+        """ A module was added during the run (see `ss.Sim.add_module()`): the coefficients kept for the run are worked out again """
+        self._route_kept = {}
+        return
+
+    def is_route_fixed(self, x):
+        """
+        Whether a coefficient of a transmission has the same value on each route for the whole run, so `route_beta()` keeps it: as `is_fixed()`,
+        with a value by route (a dict by network name) or by direction (`ss.peract`) of such values, and rates and durations of numbers
+        """
+        E = ss.expressions
+        def plain(v):
+            if isinstance(v, (int, float, np.number)) or v is None:
+                return True
+            if isinstance(v, dict):
+                return all(plain(u) for u in v.values())
+            if isinstance(v, ss.peract):
+                return all(plain(u) for u in v.values)
+            if isinstance(v, ss.TimePar):
+                return isinstance(v.value, (int, float, np.number))
+            if isinstance(v, E.Expr):
+                return self.is_route_fixed(v)
+            return False
+        for part in E.nodes(x):
+            if part is None or isinstance(part, (int, float, np.number, E.BinOp, E.Prop)):
+                continue
+            if isinstance(part, E.par):
+                if part.name and not part.literal and self.sim.modifiers.get((self.mod.name, 'par', part.name)):
+                    return False
+                if not plain(part.value):
+                    return False
+            elif not self.is_fixed(part):
                 return False
         return True
 
@@ -1279,21 +1342,41 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         """
         if not fixed:
             return edges(uids)
-        return self.lifelong_table(key, lambda new: edges(new).T)[uids].T
+        return self.lifelong_table(key, lambda new: edges(new).T, uids)[uids].T
 
     def unmodified(self, kind, name):
         """ Whether a branch (or one destination of a transition) has no modifiers and no adjust= of the stratifications """
         return not self.sim.modifiers.get((self.mod.name, kind, name)) and self.branch_adjust.get(name) is None
 
-    def lifelong_table(self, key, values):
-        """ Values for everyone, by UID, kept for the run (see is_lifelong()), from `values(uids)`; those for agents added since are worked out as they are needed """
+    def lifelong_table(self, key, values, uids=None):
+        """
+        Values for everyone, by UID, kept for the run (see is_lifelong()), from `values(uids)`. The arrays have room for agents not yet made, whose
+        values (e.g. their sex) are not known until they are, so those of agents made since are worked out when they are needed: when the table
+        is read for them (`uids`, or everyone if None)
+        """
         vals = self.lifelong.get(key)
-        n = len(self.sim.people.uid.raw)
-        if vals is None or len(vals) < n:
-            start = 0 if vals is None else len(vals)
-            new = values(ss.uids(np.arange(start, n)))
-            vals = self.lifelong[key] = new if vals is None else np.concatenate([vals, new])
+        span = self.lifelong_span(key, vals, uids)
+        if span is not None:
+            start, stop = span
+            new = values(ss.uids(np.arange(start, stop)))
+            if vals is not None and stop <= len(vals): # Only agents made since, in the room kept for them (whose rows nothing has read)
+                if not vals.flags.writeable: # E.g. a broadcast value
+                    vals = self.lifelong[key] = vals.copy()
+                vals[start:stop] = new
+            else:
+                vals = self.lifelong[key] = new if vals is None else np.concatenate([vals[:start], new])
         return vals
+
+    def lifelong_span(self, key, vals, uids=None):
+        """ The agents (by UID, as start and stop) whose values in a table kept for the run (see lifelong_table()) are to be worked out, if it is read for `uids` (everyone if None): those made since, and the room for more if the arrays have grown; None if none are """
+        uid = self.sim.people.uid
+        used = self.lifelong_used.get(key, 0)
+        n = len(uid.raw)
+        if vals is not None and len(vals) >= n and (used >= uid.len_used or (uids is not None and (not len(uids) or np.max(uids) < used))): # Up to date, or not read for those made since
+            return None
+        self.lifelong_used[key] = uid.len_used
+        start = 0 if vals is None else min(used, len(vals))
+        return start, (uid.len_used if vals is not None and len(vals) >= n else n)
 
     def value(self, p):
         if self._drawing and id(p.raw) in self.attr_dists: # A distribution an attribute is drawn from: see draw_attr()

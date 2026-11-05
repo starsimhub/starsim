@@ -54,7 +54,8 @@ The one thing `'auto'` approximates unasked is a dwell time that isn't exponenti
 | `binomial` | discrete | whole people | simple stochastic models on a fixed step | `rate × dt` is large |
 | `gillespie` | continuous | whole people | exact stochastic dynamics | values vary quickly within a step |
 | `tau` | continuous | whole people | large stochastic runs, close to exact | rates change quickly within a leap |
-| `abm` | discrete | individuals | networks, heterogeneity, histories | `rate × dt` is large; cost grows with `n_agents` |
+| `abm`, `abm-midstep` | discrete | individuals | networks, heterogeneity, histories | `rate × dt` is large; cost grows with `n_agents` |
+| `abm-wholestep` | discrete, rates over whole steps | individuals | speed; matching code written with `ss.bernoulli()` | `rate × dt` is large, more so than `abm-midstep` |
 | `abm-events` | continuous | individuals | networks where events are fast against a step | what is stepped changes quickly within a step; cost grows with the number of events |
 
 `'auto'` only ever chooses `ode` or `abm`; a stochastic compartmental solver, or `ide`, is used only when it is asked for by name. `ide` runs as the ODE, with each dwell time that is not exponential as a conveyor of whole steps, leaving each slot at the distribution's own chance rather than through Erlang stages. Any solver can also run the model as a branching process (`branching=True`): infection takes no one from the uninfected and gives no one back, and as agents, agents are made only for the infected (see [Branching and rescaling](running_branching.qmd)). A sim is one run whatever the solver, and many runs are an `ss.MultiSim` (`ss.parallel(sim, n_runs=100)`).

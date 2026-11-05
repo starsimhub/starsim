@@ -10,6 +10,7 @@ mod passes;
 mod events;
 mod small;
 mod kernels;
+mod moves;
 
 use pyo3::prelude::*;
 
@@ -21,5 +22,6 @@ fn _rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     events::bind::register(m)?;
     small::bind::register(m)?;
     kernels::bind::register(m)?;
+    moves::bind::register(m)?;
     Ok(())
 }

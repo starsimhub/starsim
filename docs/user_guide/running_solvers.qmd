@@ -7,7 +7,7 @@ authorship:
   note: Based on the Claude draft on solvers, with a new section on the backends that run them (kernels, Rust, JAX, compiling) and points from the Codex draft
 ---
 
-A model in Starsim says what the compartments are, how people move between them, and at what rates. A *solver* is the method that turns this into numbers over time. The same model can be solved in seven ways, and for most models and questions they give the same answer, so Starsim chooses one for you. This page is about the cases where the choice matters: small numbers of people, outbreaks that die out by chance, steps that are too long for the rates, and contacts between particular people. It ends with speed, and the compiled code (the backends) that runs each solver. How the solvers work inside, and how they are tested against each other, is in [Engines and kernels](architecture_solvers.qmd) in the architecture section.
+A model in Starsim says what the compartments are, how people move between them, and at what rates. A *solver* is the method that turns this into numbers over time. The same model can be solved in eight ways, and for most models and questions they give the same answer, so Starsim chooses one for you. This page is about the cases where the choice matters: small numbers of people, outbreaks that die out by chance, steps that are too long for the rates, and contacts between particular people. It ends with speed, and the compiled code (the backends) that runs each solver. How the solvers work inside, and how they are tested against each other, is in [Engines and kernels](architecture_solvers.qmd) in the architecture section.
 
 ## The solvers
 
@@ -18,8 +18,12 @@ A model in Starsim says what the compartments are, how people move between them,
 | `'binomial'` | Whole people moving between compartments at random, a step at a time (a chain-binomial model) | Simple stochastic runs, and models that are defined in discrete time |
 | `'gillespie'` | Whole people moving one at a time, at random times (Gillespie's exact stochastic simulation algorithm) | Small populations, chance of extinction, exact stochastic dynamics |
 | `'tau'` | As Gillespie, but taking many events at once (tau-leaping), which is close to exact and much faster when there are many events | Large stochastic runs |
-| `'abm'` | Individual agents, each with their own state, age, and contacts | Networks, differences between individuals, histories (who infected whom, time since infection) |
+| `'abm'` | Individual agents, each with their own state, age, and contacts, each declared module run in the way it suggests (below) | Networks, differences between individuals, histories (who infected whom, time since infection) |
+| `'abm-midstep'` | As `'abm'`, by steps: those who arrive in a state during a step face its rates for the rest of the step (the default for agents) | The closest to the compartmental solvers at a given step |
+| `'abm-wholestep'` | As `'abm'`, by steps: rates act over whole steps only, on those in the state at the start of each step, as code with `ss.bernoulli()` takes them | Speed, and matching a model written as code; a little less exact when `rate × dt` is large |
 | `'abm-events'` | As `'abm'`, with each declared module's agents taken event by event in continuous time within each step (a prototype) | Networks where events are fast against a step, which `'abm'` would need small steps for; one module can have its own (`ss.Disease(..., solver='abm-events')`) beside others by steps |
+
+A declared module's class can suggest how it runs as agents (`suggested_solver = 'abm-wholestep'` in the class body), which `'abm'` and `'auto'` follow; naming another agent solver for the sim overrides it, and a module's own `solver=` (`ss.Disease(..., solver='abm-midstep')`) overrides both. `sim.describe()` says which each module runs by, and why.
 
 The first five are *compartmental*: they only know how many people are in each compartment (or group, if the model is [stratified](building_stratification.qmd)). Agents know who each person is. Any of them but `'abm-events'` can also run the model as a branching process, with depletion turned off (`branching=True`; see [Branching and rescaling](running_branching.qmd)).
 
@@ -244,7 +248,7 @@ The properties of each solver, for looking up; the table at the top of the page 
 | `'binomial'` | No | Whole steps, split into substeps | `substeps=` (1 takes each step whole) | No | Yes, as for `'ode'` | No |
 | `'gillespie'` | No | Continuous, one event at a time (exact) | | No | Yes, as for `'ode'` | No |
 | `'tau'` | No | Continuous, many events at a time (close to exact) | | No | Yes, as for `'ode'` | No |
-| `'abm'` | No | Whole steps | `n_agents=`, `dt=`, `rescale=`, `even_draws=`, `ss.options.crn` | When anything in the model needs agents | No: a step at a time, with compiled passes over the agents | No |
+| `'abm'`, `'abm-midstep'`, `'abm-wholestep'` | No | Whole steps; by midsteps, those who arrive during a step face its rates for the rest of it | `n_agents=`, `dt=`, `rescale=`, `even_draws=`, `ss.options.crn` | `'abm'`, when anything in the model needs agents | No: a step at a time, with compiled passes over the agents | No |
 | `'abm-events'` | No | Continuous within each step; what is stepped (networks, interventions, other modules) is held for the step | `n_agents=`, `dt=` (how often results are recorded, and how late stepped changes are seen) | No | No: one compiled pass of events each step | No. Not yet taken (each a `CapabilityError`): strains, movement between places, dimensions that only some states or people have, moves between levels, `ss.MixingPools` with pools of their own, minimum stays, states that are not people. Triggers (`ss.on`) are taken at the end of the step of their event |
 
 ## Appendix: every set of kernels
