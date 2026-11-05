@@ -6,6 +6,7 @@ They exist so that every part of a model has the same parameters, timeline, resu
 Used with: agents and compartments; declared and coded modules
 """
 import inspect
+import itertools
 import functools as ft
 import numpy as np
 import sciris as sc
@@ -293,10 +294,12 @@ class Module(Base):
     """
     _state_aliases = {} # Default state aliases; defined on the class so it always exists, e.g. while unpickling. See define_aliases()
     has_product = False # Whether it delivers a product: see ss.Intervention
+    _serials = itertools.count() # Which module each is, kept by its copies: see __init__()
 
     def __init__(self, name=None, label=None, **kwargs):
         # Housekeeping
         self._locked_attrs = ['pars', 't', 'sim', 'dists', 'results'] # Define key attributes that shouldn't be overwritten
+        self.setattribute('_serial', next(Module._serials)) # Which module this is, kept by its copies (e.g. the sim's), so what was made of the module given is found for the sim's (see ss.expressions.Clock.sets_of())
         self._collect_required() # First, collect methods marked as required on creation
 
         # Handle parameters

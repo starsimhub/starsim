@@ -562,15 +562,26 @@ class Clock(Expr):
         states (list): the states, as `ss.State`s or (module, name) pairs (from a condition, `A | B`)
         kind (str): 'time' or 'progress'
     """
-    sets = [] # The names of the sets of states that clocks have been made for: their engines keep the time each person entered the set (see `ss.solvers.Agents.define()`)
+    made = [] # The clocks of sets of states made so far, as weak references, so that the engine of their module keeps the time each person entered the set, for code that reads one (see sets_of())
 
     def __init__(self, states, kind='time'):
         self.states = list(states)
         self.kind = kind
-        names = tuple(self.names)
-        if len(set(names)) > 1 and names not in Clock.sets:
-            Clock.sets.append(names)
+        if len(set(self.names)) > 1:
+            Clock.made.append(weakref.ref(self))
         return
+
+    @classmethod
+    def sets_of(cls, module):
+        """ The names of the sets of states of the clocks still in use that were made of a module's states, or of those of the module it was copied from (as the sim runs a copy of each module given), e.g. `[('A', 'B')]` """
+        cls.made = [ref for ref in cls.made if ref() is not None]
+        serial = getattr(module, '_serial', None)
+        out = []
+        for ref in cls.made:
+            clock = ref()
+            if clock is not None and serial is not None and getattr(clock.module, '_serial', None) == serial and tuple(clock.names) not in out:
+                out.append(tuple(clock.names))
+        return out
 
     @property
     def names(self):
