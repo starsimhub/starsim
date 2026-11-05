@@ -1017,37 +1017,47 @@ def test_infection_step():
 
 
 @sc.timer()
-def test_bernoulli():
-    """ With solver='abm-bernoulli', each rate is one Bernoulli trial a step for those in the state at its start: those who arrive during a step face it from the next """
-    sc.heading('Testing rates as one Bernoulli trial a step')
-    def make(**kwargs):
+def test_wholestep():
+    """ With solver='abm-wholestep', rates act over whole steps only, on those in the state at the start of the step: those who arrive during a step face them from the next; and solver='abm' follows what a module suggests """
+    sc.heading('Testing rates over whole steps, and suggested solvers')
+    def make(cls=ss.Disease, **kwargs):
         A, B, C = ss.states('A B C')
-        return ss.Disease(A, B, C, tick=A >> B @ ss.constant(ss.days(3)), leave=B >> C @ ss.perday(0.5), first='A', name='d', **kwargs) # Everyone reaches B in step 4
+        return cls(A, B, C, tick=A >> B @ ss.constant(ss.days(3)), leave=B >> C @ ss.perday(0.5), first='A', name='d', **kwargs) # Everyone reaches B in step 4
     res = {}
-    for solver in ['abm', 'abm-bernoulli']:
+    for solver in ['abm-midstep', 'abm-wholestep']:
         sim = ss.Sim(make(), solver=solver, n_agents=10_000, unit='day', stop=10, verbose=0).run()
         eng = sim.diseases.d.engine
         assert isinstance(eng, ss.solvers.Compiled) and not eng.uncompiled
-        assert eng.per_step == (solver == 'abm-bernoulli')
+        assert eng.wholestep == (solver == 'abm-wholestep')
         res[solver] = sim.results.d
-    assert res['abm'].tick[4] == 10_000
-    assert np.isclose(res['abm'].leave[4]/10_000, 1 - np.exp(-0.25), atol=0.02) and res['abm-bernoulli'].leave[4] == 0 # Half a step of the rate in the step they arrive, or none
+    assert res['abm-midstep'].tick[4] == 10_000
+    assert np.isclose(res['abm-midstep'].leave[4]/10_000, 1 - np.exp(-0.25), atol=0.02) and res['abm-wholestep'].leave[4] == 0 # Half a step of the rate in the step they arrive, or none
     p = 1 - np.exp(-0.5)
-    assert np.isclose(res['abm-bernoulli'].leave[5]/10_000, p, atol=0.02) # Then a whole step's chance each step
-    assert np.isclose(res['abm-bernoulli'].B[6]/10_000, (1 - p)**2, atol=0.02)
+    assert np.isclose(res['abm-wholestep'].leave[5]/10_000, p, atol=0.02) # Then a whole step's chance each step
+    assert np.isclose(res['abm-wholestep'].B[6]/10_000, (1 - p)**2, atol=0.02)
 
-    # A module's own solver
-    sim = ss.Sim(make(solver='abm-bernoulli'), n_agents=2000, unit='day', stop=10, verbose=0).run()
-    assert sim.diseases.d.engine.per_step and sim.results.d.leave[4] == 0
+    # A module's own solver, and the one it suggests
+    sim = ss.Sim(make(solver='abm-wholestep'), n_agents=2000, unit='day', stop=10, verbose=0).run()
+    assert sim.diseases.d.engine.wholestep and sim.results.d.leave[4] == 0
     with pytest.raises(ValueError):
         ss.Disease(solver='abm-step')
+    class Suggests(ss.Disease):
+        suggested_solver = 'abm-wholestep'
+    wholestep = lambda sim_solver, **kw: ss.Sim(make(Suggests, **kw), solver=sim_solver, n_agents=500, unit='day', stop=5, verbose=0).init().diseases.d.engine.wholestep
+    assert wholestep('abm') and wholestep('auto') # As it suggests
+    assert not wholestep('abm-midstep') and wholestep('abm-midstep', solver='abm') # The sim's overrides it, and its own 'abm' takes it back
+    assert not wholestep('abm', solver='abm-midstep') # Its own overrides everything
+    assert ss.solvers.agent_solver(ss.Sim(make(Suggests), n_agents=500, verbose=0).init().diseases.d, ss.Sim(n_agents=10), why=True) == ('abm-wholestep', 'suggested')
+    Suggests.suggested_solver = 'abm-step'
+    with pytest.raises(ValueError, match='suggested_solver'):
+        ss.Sim(make(Suggests), n_agents=500, unit='day', stop=5, verbose=0).init()
 
     # The coarse-step SIR of test_infection_step(): the newly infected have a whole step of recovery at their first draw, as written as code with ss.bernoulli()
     S, I, R = ss.states(3)
     sir = ss.Disease(S, I, R, infection=S >> I @ ss.perday(0.25)*I, recovery=I >> R @ ss.perday(1/8), init_prev=0.001, name='sir')
-    r = ss.Sim(sir, solver='abm-bernoulli', n_agents=20_000, unit='day', stop=250, dt=ss.days(4), rand_seed=1, verbose=0).run().results.sir
+    r = ss.Sim(sir, solver='abm-wholestep', n_agents=20_000, unit='day', stop=250, dt=ss.days(4), rand_seed=1, verbose=0).run().results.sir
     attack = 1 - r.S[-1]/20_000
-    assert 0.5 < attack < 0.75, f'The attack rate is {attack:n}, not about 0.6' # 0.797 as abm, with half a step at the first draw
+    assert 0.5 < attack < 0.75, f'The attack rate is {attack:n}, not about 0.6' # 0.797 by midsteps, with half a step at the first draw
     return res
 
 
@@ -1448,7 +1458,7 @@ if __name__ == '__main__':
     sched = test_schedule()
     split = test_split_timing()
     infst = test_infection_step()
-    bern  = test_bernoulli()
+    whole = test_wholestep()
     life2 = test_lifelong()
     stays = test_stays()
     casc  = test_cascade()

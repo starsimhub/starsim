@@ -10,13 +10,7 @@ from .engine import times
 from .agents import Agents
 from .backends import events as kernel
 
-__all__ = ['Events', 'runs_events']
-
-
-def runs_events(module, sim):
-    """ Whether a declared module runs as agents by events: its own `solver=` if it has one, otherwise the sim's """
-    own = getattr(module, 'solver', None)
-    return (own if own is not None else sim.pars.solver) == 'abm-events'
+__all__ = ['Events']
 
 
 class Events(Agents):

@@ -66,7 +66,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         first (str): the state that everyone not put elsewhere starts in, and is born into; by default, the one named `S` or `susceptible`, else the first state of people made (in the class form, `first = 'N'` in the class body)
         strains (Strains): its strains (`ss.Strains`), which share its states; then `dis.strains`
         stratify (dict/list): as `stratify()`, e.g. `dict(age={0: 0.3, 15: 0.6, 65: 0.1})`; a list of dicts for one call each
-        solver (str): its own solver in a sim of agents, instead of the sim's: `'abm'` (by steps), `'abm-bernoulli'` (by steps, each rate one Bernoulli trial a step for those in the state at its start, as code with `ss.bernoulli()` takes it), or `'abm-events'` (event by event, in continuous time)
+        solver (str): its own solver in a sim of agents, instead of the sim's: `'abm-midstep'` (by steps, with those who arrive in a state during a step facing its rates for the rest of it), `'abm-wholestep'` (by steps, with rates over whole steps only, for those in the state at the start of the step, as code with `ss.bernoulli()` takes them: faster, and a little less exact at a coarse step), `'abm-events'` (event by event, in continuous time), or `'abm'` (its `suggested_solver`, whatever the sim's); a class can instead suggest one, `suggested_solver = 'abm-wholestep'` in the class body, which the sim's `solver='abm'` (or `'auto'`) follows and any other agent solver overrides (see `ss.solvers.agent_solver()`)
         kwargs (dict): one keyword per state, transition, parameter, result, function, or modifier (`ss.modify()`, of its own quantities, e.g. `fading=ss.modify('rel_trans', multiply=0.5, where=I)`); also `name`, `label`, and `dt`
 
     The results are the number in each state (`I`), the flow along each transition by its
@@ -103,6 +103,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
     graph = None # Its declared states and transitions (`ss.graph.Graph`); None for a disease written as code
     engine = None # Runs the declared part (see ss.solvers.make_engine()); created when the sim is initialized
     infection_log = None # An InfectionLog, if the sim has an ss.infection_log analyzer
+    suggested_solver = None # For a declared module, how it suggests running as agents, one of ss.solvers.agent_solvers (e.g. 'abm-wholestep'), which the sim's solver='abm' (or 'auto') follows: see ss.solvers.agent_solver()
     code_pars = () # Parameters of a declared module that its own code reads rather than its graph (e.g. ss.Pregnancy's fertility rates)
     allow_modifiers = () # For a disease written as code: which of rel_sus, rel_trans, and its parameters its own code reads, with current_value(), so ss.modify() of them is applied (an ss.Infection with a beta reads both)
 
@@ -134,9 +135,9 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
     def __init__(self, *args, pars=None, strains=None, stratify=None, solver=None, _names=None, **kwargs):
         super().__init__()
         self.strains = None # Its ss.Strains, if it has strains
-        if solver not in [None, 'abm', 'abm-bernoulli', 'abm-events']:
-            raise ValueError(f'solver must be "abm", "abm-bernoulli", or "abm-events" (a module\'s own solver, as agents), or None to follow the sim\'s, not {solver!r}')
-        self.solver = solver # Its own solver, as agents: 'abm' (by steps), 'abm-bernoulli' (by steps, each rate one Bernoulli trial a step), or 'abm-events' (by events, in continuous time); None follows the sim's
+        if solver not in [None, 'abm'] + ss.solvers.agent_solvers:
+            raise ValueError(f'solver must be one of {sc.strjoin(ss.solvers.agent_solvers)} (a module\'s own solver, as agents), "abm" (its suggested one), or None to follow the sim\'s, not {solver!r}')
+        self.solver = solver # Its own solver, as agents (see ss.solvers.agent_solver()); None follows the sim's
         self.callbacks = [] # Functions called with the agents an event happened to: see add_callback()
         if len(args) and (args[0] is None or isinstance(args[0], dict)): # Parameters can also be the first argument
             pars, args = args[0], args[1:]

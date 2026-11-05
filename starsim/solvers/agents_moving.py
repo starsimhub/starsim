@@ -286,7 +286,7 @@ class Moving:
             uids = ss.uids.concatenate(uidlist) if len(uidlist) > 1 else uidlist[0]
             uids = uids[mod[name].raw[uids]] # Those still there
             out.append((name, uids))
-            if row is not None and self.competing[name] and not self.per_step: # Half a step of the competing rates of the state now, as for people who arrive during a step in a compartmental run (once a step each)
+            if row is not None and self.competing[name] and not self.wholestep: # Half a step of the competing rates of the state now, as for people who arrive during a step in a compartmental run (once a step each)
                 now = self.due(name, uids, ti)
                 stay = uids[~np.isin(uids, now[1])] if now is not None else uids
                 hz = stay[~row[stay]]
@@ -953,7 +953,7 @@ class Moving:
         missed = None
         if entered is None:
             entered = mod[f'ti_{name}'].raw[new]
-            if self.competing[name] and not self.per_step:
+            if self.competing[name] and not self.wholestep:
                 late = entered < self.ti # NaN (undated) is not
                 if late.any():
                     missed = np.zeros(len(members), dtype=bool)

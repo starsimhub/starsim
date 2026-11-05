@@ -15,7 +15,32 @@ from .agents_moving import Moving, ROUNDS, ROUND_MAX
 from .agents_stepping import Stepping
 from .agents_branching import Branching
 
-__all__ = ['Transmission', 'Agents']
+__all__ = ['agent_solvers', 'agent_solver', 'Transmission', 'Agents']
+
+agent_solvers = ['abm-midstep', 'abm-wholestep', 'abm-events'] # The ways a declared module runs as agents, the first by default: those who arrive in a state during a step face its rates for the rest of the step; or from the next step only; or event by event in continuous time
+
+
+def agent_solver(module, sim, why=False):
+    """
+    How a declared module runs as agents, one of `agent_solvers`: its own `solver=`, if it names one; else the sim's, if it names one;
+    else the module's `suggested_solver` (a class attribute, e.g. `suggested_solver = 'abm-wholestep'`); else `'abm-midstep'`.
+    So `solver='abm'` (or `'auto'`, when it chooses agents) takes each module's suggestion, and a sim's `solver='abm-midstep'` overrides it.
+    With `why=True`, also where it came from: `'own'`, `'sim'`, `'suggested'`, or `'default'`.
+    """
+    own = getattr(module, 'solver', None)
+    suggested = getattr(module, 'suggested_solver', None)
+    if suggested is not None and suggested not in agent_solvers:
+        raise ValueError(f'"{module.name}" has suggested_solver={suggested!r}, but it must be one of {sc.strjoin(agent_solvers)}')
+    if own in agent_solvers:
+        solver, source = own, 'own'
+    elif own is None and sim.pars.solver in agent_solvers:
+        solver, source = sim.pars.solver, 'sim'
+    elif suggested is not None:
+        solver, source = suggested, 'suggested'
+    else:
+        solver, source = agent_solvers[0], 'default'
+    return (solver, source) if why else solver
+
 
 class Transmission(Effects):
     """
@@ -144,8 +169,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         mod = self.mod
         graph = self.graph
         self.init_dims()
-        own = getattr(mod, 'solver', None)
-        self.per_step = (own if own is not None else self.sim.pars.solver) == 'abm-bernoulli' # Each rate is one Bernoulli trial a step, for those in the state at its start (see draw_competing())
+        self.wholestep = agent_solver(mod, self.sim) == 'abm-wholestep' # Each rate acts only over whole steps, on those in the state at the start of the step (see draw_competing())
         for obj in list(graph.states.values()) + list(graph.attrs.values()): # Remove the declarations, which are replaced by their run-time form
             if obj.name in mod.__dict__:
                 delattr(mod, obj.name)
@@ -220,7 +244,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
                 infected.add(d)
                 todo.append(d)
         hazards = {state.name:[tr for tr in graph.exits[state.name].hazards if not tr.undriven] for state in graph.people_states} # The rates out of each state; a transition with no driver is only by intervention, so nothing to draw
-        self.halved = set() if self.per_step else infected & {s.name for s in graph.infectious if hazards[s.name]}
+        self.halved = set() if self.wholestep else infected & {s.name for s in graph.infectious if hazards[s.name]}
         self.late = set() # The states with a late_ array: see enter()
         unkept = [state.name for state in graph.people_states if read is not None and not state.keep_time and state.name not in read and state.name not in self.scheduled and state.name not in clocked and not any(getattr(tr, 'after', None) is not None for tr in graph.exits[state.name].hazards)]
         exited = {s.name for tr in graph.transitions.values() if any(getattr(d, 'people', False) for d in (tr.dst or [])) for s in (tr.src or []) if getattr(s, 'people', False)}
@@ -238,7 +262,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
                          ss.Arr(f'exit_{name}', dtype=np.int8, nan=-1, label=f'Scheduled exit from {name}')] # Which of the exits, as 8-bit integers
                 if rescalable: # Only needed if a rate can change after dwell times are drawn: see rescale_exits()
                     arrs.append(ss.FloatArr(f'mult_{name}', default=1.0, label=f'Speed of the scheduled exit from {name}, when it was scheduled'))
-            if hazards[name] and (name in self.scheduled or name in self.halved) and not self.per_step: # See enter()
+            if hazards[name] and (name in self.scheduled or name in self.halved) and not self.wholestep: # See enter()
                 arrs.append(ss.FloatArr(f'late_{name}', default=0.0, label=f'The share of a step of the competing rates out of {name} missed in the step of entering it (less than 0 if too much)'))
                 self.late.add(name)
         self.attrs = graph.attrs # Attributes: an array each (for a derived one, its values when last worked out); see fire() and attr_values()

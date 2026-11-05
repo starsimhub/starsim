@@ -732,6 +732,11 @@ def describe_sim(sim, output=False, verbose=False):
         if sim.solver == 'abm':
             scale = f', each standing for {pars.pop_scale:n} people' if pars.pop_scale != 1 else ''
             add('', f'{pars.n_agents:,} agents{scale}', None if 'n_agents' in sim.given else 'guessed')
+            ways = {} # How each declared module runs as agents, and where that came from (see ss.solvers.agent_solver())
+            for mod in sim.declared:
+                ways.setdefault(ss.solvers.agent_solver(mod, sim, why=True), []).append(mod.name)
+            for (solver, source),names in ways.items():
+                add('', f'{solver}: {sc.strjoin(names)}', dict(own='its own solver=', sim=None, suggested='suggested by the module', default='the default for agents')[source])
         if named is not None: # Where a named population came from
             ref = named.ref
             guess = None if named.year is not None else 'guessed: the year the sim starts' if sim.t.is_absolute else 'guessed: the year of the revision'

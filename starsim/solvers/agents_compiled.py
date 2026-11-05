@@ -794,7 +794,7 @@ class Compiled(Agents):
         arrived = self.run_moves(scan=True, mode=0, arrivals=arrivals)
         n = len(self.mod.rel_sus.raw)
         row = None
-        while arrived is not None and len(arrived[0]) and not self.per_step: # Those who arrived in a state with competing rates have half a step of them now, once a step each, as the agent engine's arrive() gives them
+        while arrived is not None and len(arrived[0]) and not self.wholestep: # Those who arrived in a state with competing rates have half a step of them now, once a step each, as the agent engine's arrive() gives them
             if row is None:
                 row = np.zeros(n, dtype=bool)
             self._collect = []
