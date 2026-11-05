@@ -233,8 +233,9 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         adjusted = {self.sim.groups.dim_index(s.name) for s in strats if any(key.rpartition('.')[2] in graph.transitions for key in s.adjust)}
         rescalable = rescalable or bool(adjusted & self.changing_dims) # Or a multiplier by level, for people who can change level
         read = None if ss.options.keep_times else set() # The times of entering a state kept for code to read (None for all); the engine keeps those of the states it schedules exits from, that a clock reads, or whose exits have after=
-        clocked = {name for names in ss.expressions.Clock.sets for name in names} # The states a clock reads (from this module or another), whose times of entering are kept
-        clocked |= {name for m in list(self.sim.declared) + list(self.sim.connectors()) + list(self.sim.interventions()) for clock in ss.solvers.choose.clocks_of(m) for name in clock.names}
+        clocks = [tuple(clock.names) for m in list(self.sim.declared) + list(self.sim.connectors()) + list(self.sim.interventions()) for clock in ss.solvers.choose.clocks_of(m)] # The clocks the sim's modules read (of this module's states or another's)
+        clocks += ss.expressions.Clock.sets_of(mod) # And those made of this module's states for code to read, but no one else's: the names of states alone would match another module's, or one of an earlier sim
+        clocked = {name for names in clocks for name in names} # The states a clock reads, whose times of entering are kept
         infected = {d.name for tr in graph.transmissions for d in tr.dst if getattr(d, 'people', False)} # The states people can enter at a step's end, by an infection or the moves at once after it
         todo = list(infected)
         while todo:
@@ -278,8 +279,8 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
                 arrs.append(ss.BoolArr(f'had_{a.name}', label=f'Whether {a.name} has been set'))
         self.sets = sc.obj() # The sets of states with a clock, and the name of the array of the time each person entered the set: see ss.expressions.Clock
         people = [state.name for state in graph.people_states]
-        for names in ss.expressions.Clock.sets:
-            if all(name in people for name in names):
+        for names in dict.fromkeys(clocks): # Each set of more than one state once, in the order found
+            if len(set(names)) > 1 and all(name in people for name in names):
                 key = tuple(sorted(set(names), key=people.index))
                 if key not in self.sets:
                     self.sets[key] = f'ti_{"_or_".join(key)}'

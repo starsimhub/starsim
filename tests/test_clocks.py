@@ -39,6 +39,10 @@ def test_clocks():
     seen.ab = ab.time
     ss.Sim(d, n_agents=2000, unit='day', stop=40, **kw).run()
     assert seen.n > 100
+    S, A, B, C = ss.states('S A B C')
+    other = ss.Disease(S, A, B, C, start=S >> A @ ss.perday(0.05), ab=A >> B @ ss.days(4), name='d') # The same names, while seen.ab is still in use
+    eng = ss.Sim(other, n_agents=500, unit='day', stop=5, **kw).init().diseases.d.engine
+    assert not eng.sets and not eng.uncompiled, 'a clock made of another module\'s states is kept for this one' # Only the clocks of its own states
 
     # In a rate, a modifier amount, and a condition
     S, A, B, C = ss.states('S A B C')
