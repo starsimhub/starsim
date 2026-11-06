@@ -1,5 +1,5 @@
 """
-Test importing epydemix models, and exporting to epydemix (run in epydemix's own environment, `_envs/epydemix` in the lingua_franca_design repo, if it is there)
+Test importing epydemix models, and exporting to epydemix (run in epydemix's own environment, `_envs/epydemix` in the lingua_franca repo, if it is there)
 """
 import json
 import warnings
@@ -12,7 +12,7 @@ import paths
 from starsim.converters.epydemix import load_epydemix, to_epydemix
 
 kw = dict(verbose=False)
-epydemix_python = paths.lfd/'_envs'/'epydemix'/'bin'/'python'
+epydemix_python = paths.lf/'_envs'/'epydemix'/'bin'/'python'
 
 
 def seird_model():
@@ -111,7 +111,7 @@ def test_epydemix_export():
     return text
 
 
-@pytest.mark.skipif(not epydemix_python.exists(), reason='needs epydemix\'s environment (_envs/epydemix in the lingua_franca_design repo; set STARSIM_LFD)')
+@pytest.mark.skipif(not epydemix_python.exists(), reason='needs epydemix\'s environment (_envs/epydemix in the lingua_franca repo; set STARSIM_LF)')
 def test_epydemix_export_run(tmp_path):
     sc.heading('Testing export to epydemix, run in epydemix and read back')
     dumper = sc.path(ss.__file__).parent/'converters'/'epydemix.py'

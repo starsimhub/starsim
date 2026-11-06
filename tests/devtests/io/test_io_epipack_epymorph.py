@@ -2,7 +2,7 @@
 Test importing epipack and epymorph models, and exporting to epipack and epymorph
 
 The models are as `starsim/converters/epipack.py` and `epymorph.py` write them, run as
-scripts in those frameworks' own environments (`_envs/` in the lingua_franca_design repo);
+scripts in those frameworks' own environments (`_envs/` in the lingua_franca repo);
 the reference numbers are from epipack 0.1.5 and epymorph 1.2.0. The exports are run in
 those environments, if they are there.
 """
@@ -20,8 +20,8 @@ from starsim.converters.epipack import load_epipack, split, to_epipack
 from starsim.converters.epymorph import load_epymorph, to_epymorph
 
 kw = dict(verbose=False)
-epipack_python = paths.lfd/'_envs'/'epipack'/'bin'/'python'
-epymorph_python = paths.lfd/'_envs'/'epymorph'/'bin'/'python'
+epipack_python = paths.lf/'_envs'/'epipack'/'bin'/'python'
+epymorph_python = paths.lf/'_envs'/'epymorph'/'bin'/'python'
 has_epymorph = epymorph_python.exists()
 
 
@@ -110,7 +110,7 @@ def test_epipack_export():
     return text
 
 
-@pytest.mark.skipif(not epipack_python.exists(), reason='needs epipack\'s environment (_envs/epipack in the lingua_franca_design repo; set STARSIM_LFD)')
+@pytest.mark.skipif(not epipack_python.exists(), reason='needs epipack\'s environment (_envs/epipack in the lingua_franca repo; set STARSIM_LF)')
 def test_epipack_export_run(tmp_path):
     sc.heading('Testing export to epipack, run in epipack and read back')
     dumper = sc.path(ss.__file__).parent/'converters'/'epipack.py'
@@ -294,7 +294,7 @@ def test_epymorph_export():
     return text
 
 
-@pytest.mark.skipif(not has_epymorph, reason='needs epymorph\'s environment (STARSIM_LFD)')
+@pytest.mark.skipif(not has_epymorph, reason='needs epymorph\'s environment (STARSIM_LF)')
 def test_epymorph_roundtrip(tmp_path):
     sc.heading('Testing an export to epymorph, run in epymorph and read back')
     sim = sir_births()

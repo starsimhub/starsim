@@ -39,7 +39,7 @@ An odin model is R code in odin's DSL (one `.R` file, or the body of `odin::odin
 
 ## Worked example
 
-[`odin/seir_array/model.py`](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/models/odin/seir_array/model.py) (SEIR in 5 age groups with births, deaths, aging, waning, and a 14-day `delay()`), and [`odin/stochastic_sir_arrays/model.py`](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/models/odin/stochastic_sir_arrays/model.py) (replicates as `n_runs`). `ss.import_from('seir_array_odin.R', stop=...)` gives the aging as a stratification and the delay as a fixed dwell; the one line it lists, the delay's history, is:
+[`odin/seir_array/model.py`](https://github.com/starsimhub/lingua_franca/blob/main/docs/models/odin/seir_array/model.py) (SEIR in 5 age groups with births, deaths, aging, waning, and a 14-day `delay()`), and [`odin/stochastic_sir_arrays/model.py`](https://github.com/starsimhub/lingua_franca/blob/main/docs/models/odin/stochastic_sir_arrays/model.py) (replicates as `n_runs`). `ss.import_from('seir_array_odin.R', stop=...)` gives the aging as a stratification and the delay as a fixed dwell; the one line it lists, the delay's history, is:
 
 ```python
 history = ss.null >> E @ ss.timeseries({0: ss.perday(surv), tau: 0}) # The first tau of the delayed flow, which odin takes as the value at time 0
@@ -49,4 +49,4 @@ With it, the import agrees with odin within 5.6, 8.4, 6.3, and 3.6% in S, E, I, 
 
 ## Running the original
 
-In odin's own R environment, as in the [worked examples](https://github.com/starsimhub/lingua_franca_design/tree/main/docs/models/odin)' `run.py`: write an R driver that does `gen <- odin::odin_(path); x <- gen$new(<user values>); set.seed(seed); out <- x$run(0:<stop>)` and `write.csv(out, ...)`, and run it with `Rscript`. (`odin::odin()` quotes its argument, so a path in a variable, such as `commandArgs()`, needs `odin::odin_()`.) The columns are `t` (or `step`) and one per variable (`S[1]`, ... for arrays). A stock at time `k` is the number at time `k` in both, so no shift is needed. Deterministic models compare exactly; for discrete stochastic ones, many runs, compared statistically (many die out early).
+In odin's own R environment, as in the [worked examples](https://github.com/starsimhub/lingua_franca/tree/main/docs/models/odin)' `run.py`: write an R driver that does `gen <- odin::odin_(path); x <- gen$new(<user values>); set.seed(seed); out <- x$run(0:<stop>)` and `write.csv(out, ...)`, and run it with `Rscript`. (`odin::odin()` quotes its argument, so a path in a variable, such as `commandArgs()`, needs `odin::odin_()`.) The columns are `t` (or `step`) and one per variable (`S[1]`, ... for arrays). A stock at time `k` is the number at time `k` in both, so no shift is needed. Deterministic models compare exactly; for discrete stochastic ones, many runs, compared statistically (many die out early).

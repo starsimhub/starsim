@@ -13,10 +13,10 @@ import starsim as ss
 import paths
 from starsim.converters.epimodel import load_epimodel, to_epimodel, here
 
-lfd = sc.path(os.getenv('STARSIM_LFD', paths.root/'lingua_franca_design')) # The lingua_franca_design repo, for EpiModel's environment
-rscript = lfd/'_envs'/'epimodel'/'bin'/'Rscript'
+lf = sc.path(os.getenv('STARSIM_LF', paths.root/'lingua_franca')) # The lingua_franca repo, for EpiModel's environment
+rscript = lf/'_envs'/'epimodel'/'bin'/'Rscript'
 
-# EpiModel's introduction (docs/models/epimodel/sis-network in the lingua_franca_design repo), as dump_epimodel.R writes it
+# EpiModel's introduction (docs/models/epimodel/sis-network in the lingua_franca repo), as dump_epimodel.R writes it
 sis = dict(format='epimodel', runs=[dict(
     kind = 'netsim',
     type = 'SIS',
@@ -178,7 +178,7 @@ def test_epimodel_export(tmp_path):
     assert '7 exponential stages' in lost[0]
     assert 'infection.flow <- beta * S.num * I / N' in text and 'new.mod = seird' in text and 'outcome_8.flow' in text
     if not rscript.exists():
-        pytest.skip(f'needs EpiModel\'s environment ({rscript}; set STARSIM_LFD)')
+        pytest.skip(f'needs EpiModel\'s environment ({rscript}; set STARSIM_LF)')
     sim.run()
     res = sim.results.seird
     out = subprocess.run([str(rscript), os.path.join(here, 'dump_epimodel.R'), str(tmp_path/'seird.R'), str(tmp_path/'seird.json')], capture_output=True, text=True)

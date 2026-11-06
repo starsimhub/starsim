@@ -915,6 +915,28 @@ def test_shared_pass():
     return together
 
 
+
+@sc.timer()
+def test_network_saturation():
+    sc.heading('Testing that an ODE on a sparse network matches the agents, whose edges each transmit at most once in a step')
+    K, b, dur, dt = 2, 3.0, 0.25, 1/12 # Few contacts, each with a large chance of transmitting in a month
+    def make(solver, net, beta=b, n=5_000):
+        sis = ss.SIS(beta=ss.peryear(beta), dur_inf=ss.years(dur), init_prev=0.1)
+        sim = ss.Sim(diseases=sis, networks=net, n_agents=n, start=2000, stop=2020, dt=ss.month, solver=solver, verbose=0)
+        sim.run()
+        return sim.results.sis.prevalence[-120:].mean() # The last 10 years
+
+    # The ODE's equilibrium is that of mass action with the transmission the agents' edges give: K·(1 − e^(−b·dt))/dt
+    ode = make('ode', ss.RandomNet(n_contacts=K))
+    expected = 1 - 1/(K*(-np.expm1(-b*dt)/dt)*dur)
+    assert np.isclose(ode, expected, rtol=0.01), f'{ode = :.4f}, but the per-step transmission over each edge gives {expected:.4f}'
+
+    # The agents on that sparse network differ from the ODE as they do on a dense one (where mass action holds), apart from saturation
+    sparse = make('abm', ss.RandomNet(n_contacts=K))/ode
+    dense = make('abm', ss.RandomNet(n_contacts=60), beta=b*K/60)/make('ode', ss.RandomNet(n_contacts=60), beta=b*K/60)
+    assert abs(sparse - dense) < 0.08, f'agents ÷ ODE is {sparse:.3f} on the sparse network but {dense:.3f} on the dense one' # About 0.25 apart without the correction
+    return ode, sparse, dense
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -953,5 +975,6 @@ if __name__ == '__main__':
     index = test_edge_index()
     shared = test_shared_pass()
     certain = test_certain_transmission()
+    sat = test_network_saturation()
 
     T.toc()

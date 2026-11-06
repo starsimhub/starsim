@@ -1,7 +1,7 @@
 """
 Test importing MEmilio models, and exporting to MEmilio
 
-The exports are run in MEmilio's environment, if `STARSIM_LFD` gives the lingua_franca_design repo.
+The exports are run in MEmilio's environment, if `STARSIM_LF` gives the lingua_franca repo.
 """
 import os
 import subprocess
@@ -12,8 +12,8 @@ import starsim as ss
 from starsim.converters.memilio import load_memilio, to_memilio
 
 kw = dict(verbose=False)
-lfd = os.environ.get('STARSIM_LFD')
-memilio_python = os.path.join(lfd, '_envs', 'memilio', 'bin', 'python') if lfd else None
+lf = os.environ.get('STARSIM_LF')
+memilio_python = os.path.join(lf, '_envs', 'memilio', 'bin', 'python') if lf else None
 has_memilio = memilio_python is not None and os.path.exists(memilio_python)
 
 def seir_model():
@@ -155,7 +155,7 @@ def test_memilio_export():
     return text
 
 
-@pytest.mark.skipif(not has_memilio, reason='needs MEmilio\'s environment (STARSIM_LFD)')
+@pytest.mark.skipif(not has_memilio, reason='needs MEmilio\'s environment (STARSIM_LF)')
 def test_memilio_roundtrip(tmp_path):
     sc.heading('Testing an export to MEmilio, run in MEmilio and read back')
     sim = seir_sim()

@@ -41,7 +41,7 @@ for label, kw in routes.items():
     print(f'{label}: {sim.solver}, since {sim.solver_reason}')
 ```
 
-With no network, `beta` is a rate per person rather than per contact, so the same R0 of 5 needs 0.5 per day rather than 0.05. Homogeneous mixing, a mixing pool, and a contact matrix have exact compartmental forms, so `solver='auto'` runs them as an ODE; an individual-level network doesn't, so the sim runs as agents. `auto` never approximates the mixing. Ask for `solver='ode'` on a network and Starsim uses the standard approximation (homogeneous mixing with the same mean contacts for a random network; the Anderson–May partner-change model for lasting partnerships) and prints one line saying so, or raises `CapabilityError` with `approximations='error'`. See [Engines and kernels](architecture_solvers.qmd) for how the choice is made.
+With no network, `beta` is a rate per person rather than per contact, so the same R0 of 5 needs 0.5 per day rather than 0.05. Homogeneous mixing, a mixing pool, and a contact matrix have exact compartmental forms, so `solver='auto'` runs them as an ODE; an individual-level network doesn't, so the sim runs as agents. `auto` never approximates the mixing. Ask for `solver='ode'` on a network and Starsim uses the standard approximation (homogeneous mixing with the same mean contacts for a random network, each transmitting at most once in a step, as it does as agents; the Anderson–May partner-change model for lasting partnerships) and prints one line saying so, or raises `CapabilityError` with `approximations='error'`. See [Engines and kernels](architecture_solvers.qmd) for how the choice is made.
 
 A list of routes is a layered population (`ss.contacts('Kenya', layer='school')`, and so on), and the force of infection sums over the layers. Space is a stratification by patch (`ss.geo.geography('Kenya', level=1)`), with an optional mobility model (`ss.geo.gravity()`, `ss.geo.radiation()`, or a matrix) that couples the patches by commuting or migration; these run under every solver. Contact tracing and the transmission log need routes that keep individual contacts, so they need agents.
 
@@ -125,10 +125,10 @@ The code is in `starsim/networks.py` and `solvers/mixing.py` (routes), `connecto
 
 ## In the design record
 
-- [Routes](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/design/06-routes.md): the force of infection, counts used literally, the table of routes, layers, mobility, and geography
-- [Effects](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/design/07-effects.md): `ss.modify`, base and effective values, conditions, and execution order
-- [Interventions](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/design/08-interventions.md): products, delivery keywords, cascades and events, triggers, scenarios, and how each solver realizes them
-- [Results](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/design/09-results.md): automatic and declared results, outcomes, data, and many runs
+- [Routes](https://github.com/starsimhub/lingua_franca/blob/main/docs/design/06-routes.md): the force of infection, counts used literally, the table of routes, layers, mobility, and geography
+- [Effects](https://github.com/starsimhub/lingua_franca/blob/main/docs/design/07-effects.md): `ss.modify`, base and effective values, conditions, and execution order
+- [Interventions](https://github.com/starsimhub/lingua_franca/blob/main/docs/design/08-interventions.md): products, delivery keywords, cascades and events, triggers, scenarios, and how each solver realizes them
+- [Results](https://github.com/starsimhub/lingua_franca/blob/main/docs/design/09-results.md): automatic and declared results, outcomes, data, and many runs
 
 ## Further reading
 

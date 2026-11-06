@@ -1,7 +1,7 @@
 """
-Test importing camdl models from camdl's IR (the tests against camdl itself are downstream, in the lingua_franca_design repo), and exporting sims as camdl models
+Test importing camdl models from camdl's IR (the tests against camdl itself are downstream, in the lingua_franca repo), and exporting sims as camdl models
 
-The exports are compiled and run with camdl from its environment in the lingua_franca_design repo (`_envs/camdl`; set STARSIM_LFD to say where the repo is), and skipped if it is not there.
+The exports are compiled and run with camdl from its environment in the lingua_franca repo (`_envs/camdl`; set STARSIM_LF to say where the repo is), and skipped if it is not there.
 """
 import subprocess
 import numpy as np
@@ -12,7 +12,7 @@ import paths
 from starsim.converters.camdl import load_camdl, to_camdl
 
 kw = dict(verbose=False)
-camdl_bin = paths.lfd/'_envs'/'camdl'/'bin'
+camdl_bin = paths.lf/'_envs'/'camdl'/'bin'
 has_camdl = (camdl_bin/'camdlc').exists() and (camdl_bin/'camdl').exists()
 
 def op(name, left, right):
@@ -20,7 +20,7 @@ def op(name, left, right):
 
 par, pop = lambda name: {'param': name}, lambda name: {'pop': name}
 
-# The IR camdlc writes for docs/models/camdl/sir/original/sir.camdl in the lingua_franca_design repo, trimmed of what the importer does not read
+# The IR camdlc writes for docs/models/camdl/sir/original/sir.camdl in the lingua_franca repo, trimmed of what the importer does not read
 sir_ir = {'ir_version': '0.40', 'model': {
     'name': 'sir',
     'time_unit': 'days',
@@ -57,7 +57,7 @@ def test_camdl_ir():
     assert pars.beta.doc == 'transmission rate'
     assert isinstance(sim.diseases.sir.graph.outcomes.cases.likelihood, ss.nbinom), 'the likelihood should be kept'
 
-    # By hand, as in the camdl SIR translation in the lingua_franca_design repo
+    # By hand, as in the camdl SIR translation in the lingua_franca repo
     beta, gamma, rho, k = ss.par(0.4), ss.par(0.15), ss.par(0.6), ss.par(10)
     S, I, R = ss.states(3)
     infection = S >> I @ beta * I
@@ -135,7 +135,7 @@ def test_camdl_export():
     return text
 
 
-@pytest.mark.skipif(not has_camdl, reason='needs camdl (its environment in the lingua_franca_design repo; set STARSIM_LFD)')
+@pytest.mark.skipif(not has_camdl, reason='needs camdl (its environment in the lingua_franca repo; set STARSIM_LF)')
 def test_camdl_export_run(tmp_path, monkeypatch):
     """ The export read back (compiled with camdlc), and run in camdl, against the sim run as an ODE with one RK4 step a day, as camdl takes """
     sc.heading('Testing export to camdl, read back and run in camdl')

@@ -12,10 +12,10 @@ import sciris as sc
 import starsim as ss
 import starsim.library as ssl
 
-from paths import lfd
+from paths import lf
 
 kw = dict(verbose=0)
-siarx_dir = lfd/'docs'/'models'/'epipack'/'siarx_tracing'
+siarx_dir = lf/'docs'/'models'/'epipack'/'siarx_tracing'
 
 
 def summary(msim, name, state):
@@ -146,7 +146,7 @@ def test_events_groups():
     return
 
 
-@pytest.mark.skipif(not siarx_dir.exists(), reason='the lingua_franca_design repo is not beside this one (or STARSIM_LFD)')
+@pytest.mark.skipif(not siarx_dir.exists(), reason='the lingua_franca repo is not beside this one (or STARSIM_LF)')
 def test_siarx_tracing():
     sc.heading('epipack\'s SIARX with contact tracing on a network, by events, against epipack\'s mean of 100 runs in continuous time')
     sys.path.insert(0, str(siarx_dir.parent.parent))

@@ -128,6 +128,24 @@ class Mixing(Telling):
             return ss.transitions.dwell_stats(val, lambda x: convert(x, unit))[0]
         return float(convert(val, unit))
 
+    @staticmethod
+    def edge_dur(net, sim):
+        """
+        How long each edge of a network transmits over before it is drawn again, in units of the sim's time, for its approximation
+        by homogeneous mixing: the network's own step (a disease that steps less often uses its own: see
+        `ss.solvers.Compartmental.saturation()`); None for a network whose edges never change (`dynamic=False`)
+
+        As agents, an edge transmits at most once to its susceptible end over a step D, with probability 1 − e^(−b·D) for a
+        rate b, so the force of infection over K contacts per unit time is K·(1 − e^(−b·D))/D, not the K·b of mass action. The
+        two agree as K → ∞ with K·b held fixed, but on a sparse network with long steps the difference matters, most of all
+        near the epidemic threshold. Edges that last several steps (`dur=`) are taken a step at a time: within a lasting
+        edge, the partners' states change (recovery, reinfection), which is the partner-change model's concern (`ss.DegreeNet`).
+        """
+        if not net.pars.get('dynamic', True):
+            return None
+        dt = net.dt if net.dt is not None else sim.t.dt
+        return float(convert(dt, sim.unit_base))
+
     def init(self, approximations='note', solver=None):
         """ Turn the sim's networks into contact rates between groups, for the sim's solver (or the one given: the ODE, when the mixing is laid out to choose the solver, see `ss.solvers.choose.lay_out()`) """
         sim = self.sim
@@ -163,12 +181,13 @@ class Mixing(Telling):
                 contacts, source = net.mean_contacts(sim)
                 if contacts is None:
                     raise ss.CapabilityError(f'cannot run with solver="{self.solver}": {kind} has no compartmental approximation yet{source}. Run with solver="abm".')
-                what = f'{kind} approximated by homogeneous mixing with {contacts:n} contacts per {sim._unit_name} ({source})'
+                lasts = net.pars.get('dynamic', True) # Edges that change, each of which transmits at most once in a step (see edge_dur())
+                what = f'{kind} approximated by homogeneous mixing with {contacts:n} contacts per {sim._unit_name} ({source}){", each transmitting at most once in a step" if lasts else ""}'
                 if approximations == 'error':
                     raise ss.CapabilityError(f'cannot run with solver="{self.solver}" and approximations="error": {what}. Run with solver="abm".')
                 else:
                     self.tell(ss.note, what, sim=sim, verbose=0 if approximations == 'allow' else None)
-                self.terms.append(sc.obj(kind='homogeneous', contacts=contacts, name=net.name))
+                self.terms.append(sc.obj(kind='homogeneous', contacts=contacts, name=net.name, edges=net if lasts else None))
         self.note_regrouped()
         if not self.terms: # Every network skipped (each carries no contacts here): none, under a network's name, so a beta by route finds it
             self.terms = [sc.obj(kind='homogeneous', contacts=0.0, name=nets[-1].name)]

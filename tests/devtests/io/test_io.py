@@ -1,7 +1,7 @@
 """
 Test importing models from other frameworks (ss.import_from()), as the Starsim code it writes; and exporting a sim to EMULSION
 
-The EMULSION export is run with EMULSION from its environment in the lingua_franca_design repo (`_envs/emulsion`; set STARSIM_LFD to say where the repo is), and skipped if it is not there.
+The EMULSION export is run with EMULSION from its environment in the lingua_franca repo (`_envs/emulsion`; set STARSIM_LF to say where the repo is), and skipped if it is not there.
 """
 
 # %% Imports and settings
@@ -17,7 +17,7 @@ import corpus
 import paths
 
 kw = dict(verbose=0)
-emulsion_bin = paths.lfd/'_envs'/'emulsion'/'bin'/'emulsion'
+emulsion_bin = paths.lf/'_envs'/'emulsion'/'bin'/'emulsion'
 
 # An EMULSION model with a fixed stay, a per-step probability, deaths, a capacity, and things that are not translated
 emulsion_yaml = """
@@ -187,7 +187,7 @@ def test_emulsion_export(tmp_path):
     return back
 
 
-@pytest.mark.skipif(not emulsion_bin.exists(), reason='needs EMULSION (its environment in the lingua_franca_design repo; set STARSIM_LFD)')
+@pytest.mark.skipif(not emulsion_bin.exists(), reason='needs EMULSION (its environment in the lingua_franca repo; set STARSIM_LF)')
 def test_emulsion_export_run(tmp_path):
     sc.heading('Testing an export to EMULSION, run in EMULSION')
     n_runs = 20

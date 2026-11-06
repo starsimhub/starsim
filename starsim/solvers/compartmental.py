@@ -2134,7 +2134,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         kn = ss.kernels
         ng, nf, nt = self.n_groups, len(self.flows), mix.nt
         exposures = rates.exposures
-        by_group = any(routes is not None for routes in self.prog_routes) or any(getattr(m, 'where', None) is not None for m in self.net_mods) or any(self.prog_rtrs) # Contacts by exposure and group: see set_contacts()
+        by_group = any(routes is not None for routes in self.prog_routes) or any(getattr(m, 'where', None) is not None for m in self.net_mods) or any(self.prog_rtrs) or self.saturates # Contacts by exposure and group: see set_contacts()
         share = mix.share
         share.sort_indices() # A full matrix of entries is read as one, in order (see ss.kernels.share())
         setlist = list(rates.sets)
@@ -2207,7 +2207,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         """ The contacts through each term of the mixing in the program, times the modifiers of the network's contacts and of a transmission on a route; by exposure and group, with the beta of each route, if they differ by any of these """
         p = self.program
         terms = self.sim.mixing.terms
-        by_group = any(routes is not None for routes in self.prog_routes) or any(self.prog_rtrs) # As in init_program(), also with one exposure in one group
+        by_group = any(routes is not None for routes in self.prog_routes) or any(self.prog_rtrs) or self.saturates # As in init_program(), also with one exposure in one group
         if not self.prog_exposures or (p.contacts.shape[0] == p.contacts.shape[2] == 1 and not self.net_mods and not by_group): # Not used, or as built
             return
         mults = [self.contact_mult(term.name) for term in terms] if self.net_mods else [1.0]*len(terms)
@@ -2215,8 +2215,52 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             routes = self.prog_routes[e] if p.contacts.shape[0] > 1 or p.contacts.shape[2] > 1 or by_group else None
             rmults = self.route_mults(*self.prog_rtrs[e]) if self.prog_rtrs[e] is not None else [1.0]*len(terms)
             for t,term in enumerate(terms):
-                p.contacts[e, t] = term.get('contacts', 1.0)*mults[t]*(1.0 if routes is None else routes[t])*rmults[t]
+                beta = (1.0 if routes is None else routes[t])*rmults[t]
+                p.contacts[e, t] = term.get('contacts', 1.0)*mults[t]*beta*self.saturation(e, term, beta)
         return
+
+    @property
+    def saturates(self):
+        """ Whether a term of the mixing is a network whose edges each transmit at most once in a step (see `saturation()`) """
+        return any(term.get('edges') is not None for term in self.sim.mixing.terms)
+
+    def saturation(self, e, term, beta=1.0):
+        """
+        The share of the transmission of mass action that a network's edges give as agents: (1 − e^(−b·D))/(b·D), for edges that
+        transmit at rate b over a step D (the longer of the network's and the disease's), by group (of the people who would be
+        infected); 1 for any other term of the mixing
+
+        As agents, an edge transmits at most once to its susceptible end in a step, so the force of infection through K
+        contacts per unit time is K·(1 − e^(−b·D))/D, not K·b (see `ss.solvers.Mixing.edge_dur()`). Here b is the transmission's
+        beta (with a beta for each route, that route's, given as `beta`) times the susceptibility of each group, its modifiers,
+        and the mean infectiousness of the source state; it is worked out each step, so a beta that varies in time is followed.
+
+        Args:
+            e (int): the exposure in the program
+            term (obj): the term of the mixing
+            beta (float/array): the beta of the term's route, already in the contacts (1 if the beta is in the rate)
+        """
+        if term.get('edges') is None:
+            return 1.0
+        if 'edge_dur' not in term:
+            term.edge_dur = ss.solvers.Mixing.edge_dur(term.edges, self.sim)
+        D = None if term.edge_dur is None else max(term.edge_dur, float(ss.solvers.engine.convert(self.mod.dt, self.sim.unit_base))) # The disease transmits only at its own steps, over the edges there are then
+        flow = self.exposure_flow(e)
+        if D is None or flow is None:
+            return 1.0
+        state, mask = self.prog_exposures[e]
+        trans = np.asarray(self.exposure_trans(state, mask), dtype=float)
+        trans = trans[trans > 0].mean() if np.any(trans > 0) else 0.0
+        rate = np.prod([np.asarray(self.prog_value(leaf), dtype=float) for leaf in flow.expr.leaves if isinstance(leaf, ss.par) and leaf.slot == 'rate'], axis=0) if flow.expr is not None else 1.0
+        bD = np.broadcast_to(np.asarray(beta*rate*self.flow_mult(flow)*trans, dtype=float)*D, self.n_groups)
+        return np.divide(-np.expm1(-bD), bD, out=np.ones(self.n_groups), where=bD > 1e-12)
+
+    def exposure_flow(self, e):
+        """ The first flow by contact whose rate reads an exposure of the program, for its beta (see `saturation()`) """
+        state = self.prog_exposures[e][0]
+        if state is None:
+            return None
+        return next((flow for flow in self.flows if flow.kind == 'contact' and flow.expr is not None and any(leaf is state or getattr(leaf, 'name', None) == state.name and isinstance(leaf, ss.State) for leaf in flow.expr.leaves)), None)
 
     def route_mods(self, tr):
         """ Whether modifiers act on a transmission on some of its routes (`ss.modify(..., network=)`) """
@@ -2298,7 +2342,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             p.consts[i] = self.prog_value(par)
         for i,(state,mask) in enumerate(self.prog_exposures):
             p.rel_trans[i] = self.exposure_trans(state, mask)
-        if self.net_mods or any(self.prog_rtrs):
+        if self.net_mods or any(self.prog_rtrs) or self.saturates:
             self.set_contacts()
         for i,matrix in enumerate(self._mover_rates):
             p.mov_rate[p.mov_starts[1, i]:p.mov_starts[1, i+1]] = matrix.data

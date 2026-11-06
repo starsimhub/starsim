@@ -16,7 +16,7 @@ __all__ = ['Source', 'Code', 'write', 'build', 'tested', 'tested_with', 'check_v
 funcs = dict(exp='exp', log='log', sqrt='sqrt', abs='absolute', fabs='absolute', sin='sin', cos='cos', min='minimum', max='maximum', pmin='minimum', pmax='maximum') # Names in other languages, and the names allowed in a rate
 total = '__total__' # A placeholder for the number of people in the model
 
-# The version of each framework that its converter was written and tested with (the lingua_franca_design repo's docs/models/<framework>/requirements.txt), by format: (the framework, its version, its Python package, if it has one, for checking the one installed)
+# The version of each framework that its converter was written and tested with (the lingua_franca repo's docs/models/<framework>/requirements.txt), by format: (the framework, its version, its Python package, if it has one, for checking the one installed)
 tested = dict(
     atomica  = ('Atomica',  '1.32.4',  'atomica'),
     camdl    = ('camdl',    'commit e8219d1', None),
@@ -224,7 +224,7 @@ def terms(node):
 
 class Rates(sc.prettyobj):
     """
-    Turn the rates of a source into the rates of transitions, by the rules in `docs/design/16-interop.md` in the lingua_franca_design repo
+    Turn the rates of a source into the rates of transitions, by the rules in `docs/design/16-interop.md` in the lingua_franca repo
 
     It exists so that every importer reads a rate the same way.
     """

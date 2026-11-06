@@ -66,7 +66,7 @@ It lists (`ImportIncomplete`): a parameter that differs by age group where it be
 
 ## Worked example
 
-[`memilio/secir/model.py`](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/models/memilio/secir/model.py) (the simple SECIR) and [`memilio/secir_ageres/model.py`](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/models/memilio/secir_ageres/model.py) (by age, with seasonality, a damping, and test-and-trace). The age-resolved version:
+[`memilio/secir/model.py`](https://github.com/starsimhub/lingua_franca/blob/main/docs/models/memilio/secir/model.py) (the simple SECIR) and [`memilio/secir_ageres/model.py`](https://github.com/starsimhub/lingua_franca/blob/main/docs/models/memilio/secir_ageres/model.py) (by age, with seasonality, a damping, and test-and-trace). The age-resolved version:
 
 ```python
 beta     = ss.seasonal(mean=0.05, amplitude=0.2, peak=ss.days(305)) # Highest on 1 Jan, day 305 (day 0 is 2 Mar)

@@ -12,8 +12,8 @@ import starsim as ss
 import paths
 from starsim.converters.siminf import load_siminf, read_script, event_register, as_matrix, predefined, to_siminf
 
-lfd = sc.path(os.getenv('STARSIM_LFD', paths.root/'lingua_franca_design')) # The lingua_franca_design repo, for SimInf's environment
-rscript = lfd/'_envs'/'siminf'/'bin'/'Rscript'
+lf = sc.path(os.getenv('STARSIM_LF', paths.root/'lingua_franca')) # The lingua_franca repo, for SimInf's environment
+rscript = lf/'_envs'/'siminf'/'bin'/'Rscript'
 
 kw = dict(verbose=False)
 
@@ -117,7 +117,7 @@ def test_export(tmp_path):
     I = sum(back.results.seird[f'I_{k}'].values for k in range(1, 8))
     assert np.allclose(I, res.I.values, rtol=1e-9) and np.allclose(back.results.seird.S.values, res.S.values, rtol=1e-9), 'the round trip should give the same ODE'
     if not rscript.exists():
-        pytest.skip(f'needs SimInf\'s environment ({rscript}; set STARSIM_LFD)')
+        pytest.skip(f'needs SimInf\'s environment ({rscript}; set STARSIM_LF)')
     code = f'pdf(NULL); source("{tmp_path/"seird.R"}"); set.seed(1); m <- mparse(transitions = transitions, compartments = compartments, gdata = gdata, u0 = u0[rep(1, 100), ], tspan = tspan); ' \
            f'write.csv(aggregate(. ~ time, trajectory(run(m))[, -1], mean), "{tmp_path/"seird.csv"}", row.names = FALSE)' # The mean of 100 nodes
     out = subprocess.run([str(rscript), '-e', code], capture_output=True, text=True)
