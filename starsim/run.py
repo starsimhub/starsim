@@ -1240,7 +1240,6 @@ def par_sets(pars):
     return [dict(p) for p in pars]
 
 
-jax_runs = 30_000 # The number of runs of an ODE with different values from which ss.parallel() takes them in one call to JAX: seconds to import and compile in a first sweep, then faster than the kernels
 
 def by_scenario(sims, key):
     """ For `msim.sims['Vaccine']`: the sim of the scenario, or a list of them if it has several runs """
@@ -1340,8 +1339,8 @@ def restart_runs(sims, n_runs, pars=None, draws=False):
     asked for), the results of every run (`ss.run.MultiResults`), and a dataframe of the runs.
 
     With `pars=` (see `ss.parallel()`), each set of values is run `n_runs` times (as runs of their sim's scenario if they are `draws`). An ODE
-    with at least `jax_runs` runs (and JAX installed) takes them all in one call to JAX
-    (see `ss.gradients`), which is faster than the kernels for that many.
+    with `sim.jax = True` (and JAX installed) takes them all in one call to JAX (see `ss.gradients`), which is faster than
+    the kernels for tens of thousands of runs, once JAX has started.
     """
     has_graph = lambda sim: any(getattr(mod, 'graph', None) is not None for mod in ss.utils.given_modules(sim.pars)) # Only a sim with a declared module can be run whole
     if not all(has_graph(sim) for sim in sims):
@@ -1372,7 +1371,7 @@ def restart_runs(sims, n_runs, pars=None, draws=False):
     group_ti = dict()
     for r,sim in enumerate(runners):
         first = r*len(sets[r])*n_runs # The position of the sim's first run
-        if pars is not None and None not in sets[r] and len(sets[r])*n_runs >= jax_runs and ss.solvers.why_not(sim, 'jax') is None: # Every run in one call to JAX (an ODE run does not depend on the seed)
+        if pars is not None and None not in sets[r] and sim.jax is True and ss.solvers.why_not(sim, 'jax') is None: # Every run in one call to JAX (an ODE run does not depend on the seed)
             outs = list(ss.gradients.run_sets(sim, [p for p in sets[r] for i in range(n_runs)]).items())
         else:
             outs = []

@@ -146,13 +146,13 @@ def test_simple(do_plot=do_plot):
     # new() copies the sim as it was before init(), so an edit in place is kept too (before, one that repr() did not show was lost); an edit after init() belongs to that run only
     class Values(ss.Module):
         def __init__(self):
-            super().__init__(name='values')
+            super().__init__(name='vals') # Not "values", a method of the results
             self.define_pars(weights=np.ones(2000))
     valsim = ss.Sim(Values(), stop=2, verbose=0)
-    valsim.values.pars.weights[1000] = 7
-    assert valsim.new().values.pars.weights[1000] == 7
-    valsim.init().values.pars.weights[1000] = 9
-    assert valsim.new().values.pars.weights[1000] == 7
+    valsim.vals.pars.weights[1000] = 7
+    assert valsim.new().vals.pars.weights[1000] == 7
+    valsim.init().vals.pars.weights[1000] = 9
+    assert valsim.new().vals.pars.weights[1000] == 7
     return sim
 
 
@@ -710,6 +710,75 @@ def test_given_modules():
     return sim
 
 
+@sc.timer()
+def test_printed_output():
+    sc.heading('Testing what a run prints and describes: in proportions, no notes on correct models, and plain errors')
+    S, I, R = ss.states('S I R')
+    kw = dict(unit='day', stop=ss.days(70), verbose=0)
+
+    # In proportions (total_pop=1), shares and not counts, and no note about chance
+    sim = ss.Sim(ss.Disease(S >> I @ 1.4*I, I >> R @ ss.perday(0.14), init=dict(I=1e-6), name='sir'), total_pop=1, **kw).run()
+    assert 'in proportions' in sim.start_lines()[0] and 'at most 0.66' in sim.end_line()
+    assert not any('chance' in note for note in sim.notes) and 'in proportions' in sim.describe(output=True)
+
+    # No notes on models written as the docs write them: density dependence, a chain binomial in whole steps, and typed rates
+    sims = [ss.Sim(ss.Disease(S >> I @ ss.perday(0.1)*I.n, I >> R @ ss.perday(1), init_n=dict(I=1)), total_pop=20, solver='gillespie', **kw),
+            ss.Sim(ss.Disease(S >> I @ ss.perday(0.2)*I, I >> R @ ss.perday(0.1), init_n=dict(S=1000, I=10)), total_pop=1010, solver='binomial', substeps=1, **kw),
+            ss.Sim(ss.Disease(ss.birth(S, rate=ss.peryear(1.4)), ss.death(rate=ss.peryear(1.05)), init_n=dict(S=100)), total_pop=100, unit='year', stop=1, verbose=0)]
+    for sim in sims:
+        with warnings.catch_warnings():
+            warnings.simplefilter('error')
+            assert not sim.init().notes, sim.notes
+    meant = ss.Sim(ss.Disease(S >> I @ ss.perday(0.3)*I.n, I >> R @ ss.perday(0.1), init_n=dict(I=10)), total_pop=10_000, **kw).init() # But a beta meant for a share, with a count
+    assert any('density-dependent' in note and '.frac' in note for note in meant.notes)
+
+    # Where the rest start is not guessed when the initial values account for everyone; a count is not people; values by group are rounded
+    sim = ss.Sim(ss.Disease(S >> I @ 0.3*I, I >> R @ ss.weeks(10), init_n=dict(S=9999, I=1)), total_pop=10_000, unit='week', stop=10, verbose=0).init()
+    assert 'guessed: R' not in sim.describe(output=True)
+    Sv, Iv = ss.states('Sv Iv', people=False)
+    d = ss.Disease(S >> I @ ss.perday(0.1)*Iv.frac, Sv >> Iv @ ss.perday(0.1)*I.frac, Iv >> Sv @ ss.days(10), ss.null >> S @ ss.by(risk=[2/3, 1/3]), init_n=dict(I=1, Sv=100), name='d')
+    d.stratify(risk=dict(low=0.1, high=0.9))
+    text = ss.Sim(d, total_pop=1000, solver='ode', **kw).init().describe(output=True)
+    assert 'Sv = 100' in text and 'Sv = 100 people' not in text and 'by(risk=[0.666667, 0.333333])' in text
+
+    # After a run, why the kernels did not take it in one call is still the real reason
+    class Counter(ss.Intervention):
+        def step(self):
+            self.n = getattr(self, 'n', 0) + 1
+    sim = ss.Sim(ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(10), init=dict(I=0.01)), interventions=Counter(), total_pop=1000, **kw)
+    assert 'a step of its own' in sim.init().kernel_reason() and 'a step of its own' in sim.run().kernel_reason()
+
+    # Numbers by group that disagree with the split say so
+    d = ss.Disease(S >> I @ ss.perweek(0.1)*I, init_n=dict(S=ss.by(risk=[999, 9000]), I=ss.by(risk=[1, 0])), name='d')
+    d.stratify(risk=dict(low=0.5, high=0.5))
+    with pytest.raises(ValueError, match='puts 9,000 people at risk=high, but the split of the stratification puts 5,000 there'):
+        ss.Sim(d, total_pop=10_000, solver='ode', **kw).init()
+    return sim
+
+
+@sc.timer()
+def test_small_fixes():
+    sc.heading('Testing small fixes: rel_trans adjusted for a count of infectiousness, until=False, a module named after a method of the results, and times from whole steps')
+    S, I = ss.states('S I') # A count of infectiousness (I.n_trans) with rel_trans adjusted by level (a garbled error)
+    SV, IV = ss.State(people=False), ss.State(people=False)
+    d = ss.Disease(infection=S >> I @ 0*I.n, bites=SV >> IV @ ss.perday(0.01)*I.n_trans/(S + I).n, init_n=dict(I=100, SV=1000), name='d')
+    d.stratify(species=dict(a=0.5, b=0.5), adjust={'rel_trans': [2.0, 2.0]})
+    res = ss.Sim(d, total_pop=1000, unit='day', stop=10, verbose=0).run().results.d
+    assert np.isclose(res.IV[-1], 1000*(1 - np.exp(-0.02*0.1*10))) # Twice the infectiousness
+    S, I, R = ss.states('S I R')
+    sim = ss.Sim(ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(10), init=dict(I=0.01)), total_pop=1000, stop=ss.days(20), verbose=0)
+    with pytest.raises(TypeError, match='neither a time nor a condition'): # It ran one step and gave zeros
+        sim.run(until=False)
+    with pytest.raises(ValueError, match='adjust='): # A state's rel_trans by group (it crashed the ODE); stratify(adjust=) gives one
+        ss.State('I', rel_trans=ss.by(risk=[2.0, 0.5]))
+    class Walk(ss.Connector):
+        def step(self): pass
+    with pytest.raises(ValueError, match='method of the results'): # sim.results.walk was the method
+        ss.Sim(n_agents=100, diseases='sis', connectors=Walk(name='walk'), verbose=0).init()
+    timevec = ss.Sim(n_agents=10, start=0, stop=2500, dt=ss.years(0.25), unit='year', verbose=0).init().timevec
+    assert timevec[366] == 91.5 and timevec[906] == 226.5 # They were 91.50000004 and 226.50000009
+    return sim
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -734,6 +803,8 @@ if __name__ == '__main__':
     update = test_update_pars()
     test_copied_modules()
     test_init_order()
+    test_printed_output()
+    test_small_fixes()
 
     T.toc()
 

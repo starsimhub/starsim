@@ -511,8 +511,8 @@ pub fn convey(rng: Rng, y: A2<f64>, p: &Program, w: &Work, flows: A2<f64>, relea
         } else {
             for g in 0..ng {
                 let mut k = b - 1;
-                while k > a + 1 { // The last slot is empty by now (or nearly, by rounding, in the ODE)
-                    y.set(p.args.u(k), g, y.at(p.args.u(k - 1), g));
+                while k > a + 1 { // The last slot is empty by now (or nearly, in the ODE, whose remainder there leaves with the next)
+                    y.set(p.args.u(k), g, y.at(p.args.u(k - 1), g) + if k == b - 1 { y.at(p.args.u(k), g) } else { 0.0 });
                     if y.at(p.args.u(k), g) > 0.0 {
                         idle.set(p.places.u(g), 0.0);
                     }

@@ -506,12 +506,14 @@ class Crossing:
             consts     = np.zeros((n_consts, R)),
             set_starts = ends(setlist),
             set_comps  = flat(setlist),
+            set_w      = np.full(sum(len(item) for item in setlist), -1), # A weighted count is worked out by its disease (see Compartmental.flatten_rates())
             people     = np.arange(self.n_people),
             has_det    = bool(any(p.has_det for p in progs)),
             det        = np.array(det, dtype=bool),
             places     = places,
             n_places   = p0.n_places,
             exp_set    = arr(list(exposures.values())),
+            exp_n      = np.array([progs[key[0]].exp_n[key[1]] for key in exposures], dtype=bool), # A sum takes its parts' (see exposure_sum())
             rel_trans  = np.ones((nx, R)),
             levels     = levels,
             sizes      = p0.sizes,

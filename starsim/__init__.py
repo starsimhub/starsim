@@ -7,9 +7,11 @@ later modules use earlier ones as they are imported.
 
 # Ask for one BLAS thread (see ss.options.num_threads) before Sciris imports NumPy, which starts them; if something else already has, the options limit them
 import os as _os
-_threads = _os.getenv('STARSIM_NUM_THREADS') or _os.getenv('SCIRIS_NUM_THREADS') or '1'
+_limit = [_os.getenv(key, '') for key in ['STARSIM_NUM_THREADS', 'SCIRIS_NUM_THREADS', 'OMP_NUM_THREADS']] # A limit on threads set before Starsim sets its own, which JAX keeps to too (see ss.gradients.jax())
+_threads = _limit[0] or _limit[1] or '1'
 if _threads != '0':
     _os.environ['SCIRIS_NUM_THREADS'] = _threads
+_limit = min([int(n) for n in _limit if n.isdigit() and int(n) > 0], default=None)
 del _os, _threads
 
 # Assign the root folder
@@ -19,6 +21,8 @@ root = sc.thispath(__file__).parent
 #%% Setup: version, settings, utilities, and errors
 from .version import __version__, __versiondate__, __license__
 from .settings import dtypes, options, style
+settings.thread_limit = _limit
+del _limit
 from .utils import ndict, warn, load, save, plot_args, show, return_fig
 from .internals import errors, debugtools
 from .internals.errors import *

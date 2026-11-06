@@ -35,13 +35,13 @@ sim.plot('measles.I')
 
 With no network, mixing is homogeneous: β = 1.9 per day is the rate at which one infectious person infects others in a fully susceptible population, and R0 = 1.9 × 8 ≈ 15.
 
-## Contacts, and the chance of infection per contact
+## Contacts, and the rate of infection per contact
 
-A rate like β can be split into two parts: the number of contacts each person has per day, and the chance that a contact between an infectious and a susceptible person passes the infection on. With 3 contacts a day, a chance of 0.63 per contact per day gives the same β of 3 × 0.63 = 1.9, and the same R0. Once there are contacts, β in the transition is the chance per contact: a β fitted with homogeneous mixing can't be reused with a network without checking what it means.
+A rate like β can be split into two parts: the number of contacts each person has per day, and the rate at which a contact between an infectious and a susceptible person passes the infection on. With 3 contacts a day, a rate of 0.63 per contact per day gives the same β of 3 × 0.63 = 1.9, and the same R0. Once there are contacts, β in the transition is the rate per contact (a contact infects with probability 1 − e^−0.63 ≈ 0.47 in a day; for a chance per contact, give `ss.probperday()`): a β fitted with homogeneous mixing can't be reused with a network without checking what it means.
 
 There are several ways to arrange those 3 contacts a day, and each says something different about how people meet:
 
-- `ss.MixingPool(n_contacts=3)`: everyone mixes at random, with 3 contacts a day. This is the same model as homogeneous mixing, with β split into contacts and a chance per contact.
+- `ss.MixingPool(n_contacts=3)`: everyone mixes at random, with 3 contacts a day. This is the same model as homogeneous mixing, with β split into contacts and a rate per contact.
 - `ss.RandomNet(n_contacts=3)`: each person has 3 contacts, with new people each day.
 - `ss.RandomNet(n_contacts=3, dynamic=False)`: each person has the same 3 contacts every day, for the whole run.
 

@@ -68,12 +68,14 @@ pub struct Program {
     pub consts: A2<f64>,
     pub set_starts: A1<i64>,
     pub set_comps: A1<i64>,
+    pub set_w: A1<i64>,
     pub people: A1<i64>,
     pub has_det: bool,
     pub det: A1<u8>,
     pub places: A1<i64>,
     pub n_places: usize,
     pub exp_set: A1<i64>,
+    pub exp_n: A1<u8>,
     pub rel_trans: A2<f64>,
     pub levels: A2<i64>,
     pub sizes: A1<i64>,
@@ -209,6 +211,13 @@ pub fn unary(op: i64, x: f64) -> f64 {
         COS => x.cos(),
         _ => f64::NAN,
     }
+}
+
+/// Member i of the sets of compartments, counted in group g: the number in its compartment, times its weight if it has one (`member()`)
+#[inline(always)]
+pub fn member(ys: A2<f64>, p: &Program, i: usize, g: usize) -> f64 {
+    let v = ys.at(p.set_comps.u(i), g);
+    if p.set_w.at(i) < 0 { v } else { v*p.consts.at(p.set_w.u(i), g) }
 }
 
 /// A count on the stack of a rate: the number v (COUNT), or its share of the n people there (FRAC), 0 where there is no one (`leaf_share()`)
@@ -490,13 +499,16 @@ fn step_groups<const ONE: bool>(rng: Rng, y: A2<f64>, p: &Program, w: &Work, dt:
                     exposures.row(e).fill(0.0);
                     infectious.fill(0.0);
                     let rel = p.rel_trans.row(e);
-                    for k in p.set_starts.u(s)..p.set_starts.u(s + 1) {
-                        let c = ys.row(p.set_comps.u(k));
+                    for k in p.set_starts.u(s)..p.set_starts.u(s + 1) { // Each member counted by its weight, if it has one (a weighted count that the contact matrices act on)
                         for g in 0..ng {
-                            infectious.add(g, c.at(g)*rel.at(g));
+                            infectious.add(g, member(ys, p, k, g)*rel.at(g));
                         }
                     }
+                    let counted = p.exp_n.b(e);
                     for t in 0..p.sizes.len() {
+                        if counted && !p.use_.b(1, t) { // A count, which only the contact matrices act on
+                            continue;
+                        }
                         let size = p.sizes.u(t);
                         for i in 0..size {
                             num.set(i, 0.0);
@@ -516,7 +528,7 @@ fn step_groups<const ONE: bool>(rng: Rng, y: A2<f64>, p: &Program, w: &Work, dt:
                             }
                         }
                         for i in 0..size {
-                            prev.set(i, if den.at(i) > 0.0 { num.at(i)/den.at(i) } else { 0.0 });
+                            prev.set(i, if counted { num.at(i) } else if den.at(i) > 0.0 { num.at(i)/den.at(i) } else { 0.0 });
                         }
                         if p.use_.b(1, t) { // Mix between the levels in each place
                             if block == size {
@@ -570,7 +582,7 @@ fn step_groups<const ONE: bool>(rng: Rng, y: A2<f64>, p: &Program, w: &Work, dt:
                             let mut v = 0.0;
                             for g in 0..ng {
                                 for i in p.set_starts.u(arg)..p.set_starts.u(arg + 1) {
-                                    v += ys.at(p.set_comps.u(i), g);
+                                    v += member(ys, p, i, g);
                                 }
                             }
                             stack.row(top as usize).fill(v);
@@ -582,7 +594,7 @@ fn step_groups<const ONE: bool>(rng: Rng, y: A2<f64>, p: &Program, w: &Work, dt:
                             for g in 0..ng {
                                 let mut v = 0.0;
                                 for i in p.set_starts.u(arg)..p.set_starts.u(arg + 1) {
-                                    v += ys.at(p.set_comps.u(i), g);
+                                    v += member(ys, p, i, g);
                                 }
                                 vals.set(g, v);
                                 num.add(p.places.u(g), v);
@@ -595,7 +607,7 @@ fn step_groups<const ONE: bool>(rng: Rng, y: A2<f64>, p: &Program, w: &Work, dt:
                             for g in 0..ng {
                                 let mut v = 0.0;
                                 for i in p.set_starts.u(arg)..p.set_starts.u(arg + 1) {
-                                    v += ys.at(p.set_comps.u(i), g);
+                                    v += member(ys, p, i, g);
                                 }
                                 stack.set(top as usize, g, v);
                             }

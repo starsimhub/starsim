@@ -13,7 +13,7 @@ Closing schools is one of the first measures considered against a new respirator
 
 | Parameter | Value | Meaning |
 |---|---|---|
-| β | 0.016 per contact | Chance of infection per contact with an infectious person |
+| β | 0.016 per contact | Rate of infection per contact with an infectious person |
 | Latent period | 3 days | Mean time in E (exponential) |
 | Infectious period | 7 days | Mean time in I (exponential) |
 | Age groups | 0–19, 20–39, 40+ | With the shares of the United Kingdom's population |

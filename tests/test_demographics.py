@@ -611,6 +611,20 @@ def test_declared_newborns():
 
 
 @sc.timer()
+def test_births_by_level():
+    sc.heading('A birth rate per person by level is births from the people at each level, into it, in compartments and as agents')
+    mu = np.array([0.02, 0.1])
+    expected = 500*np.exp(mu*5) # Each group grows at its own rate
+    for solver in ['ode', 'abm']:
+        S, I = ss.states('S I')
+        d = ss.Disease(infection=S >> I @ 0*I, births=ss.birth(S, rate=ss.peryear(ss.by(grp=mu))), init_prev=0, name='d')
+        d.stratify(grp=dict(a=0.5, b=0.5))
+        sim = ss.Sim(d, total_pop=1000, n_agents=10_000, stop=5, dt=0.1, solver=solver, verbose=0).run()
+        assert np.allclose(sim.results.d.S.by('grp').values[-1], expected, rtol=0.02), solver # Before, an error; the inflow ss.null >> S @ ss.by(grp=mu)*N is the total N in each level
+    return sim
+
+
+@sc.timer()
 def test_birth_death_hooks():
     sc.heading('Testing on_birth() and on_death() in coded modules')
 
@@ -657,5 +671,6 @@ if __name__ == '__main__':
     s17 = test_cause_of_death()
     s18 = test_split_by_age()
     s19 = test_declared_newborns()
+    s20 = test_births_by_level()
 
     T.toc()

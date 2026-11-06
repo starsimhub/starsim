@@ -355,7 +355,7 @@ class Stepping:
         return
 
     def step_births(self, dt):
-        """ Inflows of people (`ss.birth`): a number of new agents in each place, drawn from the expected number """
+        """ Inflows of people (`ss.birth`): a number of new agents in each place, and at each level the inflow is given at, drawn from the expected number """
         sim = self.sim
         d = sim.mixing.space
         for tr in self.graph.inflows:
@@ -366,15 +366,19 @@ class Stepping:
                 amount = np.maximum(self.eval(tr.rate)*adjust*dt*self.inflow_split(tr), 0)/self.scale # Agents, by group
                 ps = [np.broadcast_to(p, sim.groups.n_groups) for p in self.branch_probs(tr)] # An inflow split between several states, e.g. ss.null >> (0.9*S + 0.1*X)
             amount = np.broadcast_to(amount, sim.groups.n_groups)
-            places = sim.groups.group_coords[:, d] if d is not None else np.zeros(sim.groups.n_groups, dtype=int)
-            expected = np.bincount(places, weights=amount)
-            born = self.rng.poisson(expected) # By place; the other levels are drawn as people are born into them
-            shares = [np.bincount(places, weights=amount*p) for p in ps] if len(ps) > 1 else None
-            enter = []
-            for place,k in enumerate(born):
-                if k:
-                    enter += [(place, (dst.name,), n) for dst,n in zip(tr.dst, self.rng.multinomial(k, [share[place]/expected[place] for share in shares]) if len(ps) > 1 else [k]) if n]
-            new = self.add_people(enter, self.ti, f'born_{tr.name}', newborn=not tr.migration)
+            dims = ([d] if d is not None else []) + [dim for dim in self.inflow_dims(tr) if dim != d] # The place, and the levels the inflow is given at
+            cells, cell = np.unique(sim.groups.group_coords[:, dims], axis=0, return_inverse=True) if dims else (np.zeros((1, 0), dtype=int), np.zeros(sim.groups.n_groups, dtype=int))
+            expected = np.bincount(cell.ravel(), weights=amount, minlength=len(cells))
+            born = self.rng.poisson(expected) # By place and level; the other levels are drawn as people are born into them
+            shares = [np.bincount(cell.ravel(), weights=amount*p, minlength=len(cells)) for p in ps] if len(ps) > 1 else None
+            enter, of = [], []
+            for c,k in enumerate(born):
+                for dst,n in zip(tr.dst, self.rng.multinomial(k, [share[c]/expected[c] for share in shares]) if len(ps) > 1 else [k]) if k else []:
+                    if n:
+                        enter.append((cells[c, 0] if d is not None else 0, (dst.name,), n))
+                        of.append(np.full(n, c))
+            levels = {dim:cells[np.concatenate(of), j] for j,dim in enumerate(dims) if dim != d} if of else None
+            new = self.add_people(enter, self.ti, f'born_{tr.name}', newborn=not tr.migration, levels=levels)
             self.fire_entered(new, tr)
             self.flowcounts[tr.name] += self.n_of(new)
             if len(new): # An event, e.g. where=measles.births, as for births driven by a flow (see step_per())
@@ -709,7 +713,7 @@ class Stepping:
         self.check_short(short*scale)
         return
 
-    def add_people(self, enter, ti, key, newborn=True):
+    def add_people(self, enter, ti, key, newborn=True, levels=None):
         """
         Add agents to places, in given states
 
@@ -718,6 +722,7 @@ class Stepping:
             ti (int): the time they enter their states
             key (str): what adds them, which names the distributions their levels and states are drawn from
             newborn (bool): whether they are born, so are in the youngest age group; if not, their ages are drawn from the population's age distribution
+            levels (dict): for some dimensions (by index), the level of each agent, in the order of `enter`; the others are drawn from their splits
 
         Returns the UIDs of the new agents.
         """
@@ -732,6 +737,8 @@ class Stepping:
         for i,strat in enumerate(sim.groups.strats): # The place given, and the other levels as people are born into them
             if i == d:
                 people[strat.attr][new] = strat.value(dsts)
+            elif levels is not None and i in levels:
+                people[strat.attr][new] = strat.value(levels[i])
             elif strat.kind == 'age':
                 if strat.edges is None:
                     people[strat.attr][new] = 0

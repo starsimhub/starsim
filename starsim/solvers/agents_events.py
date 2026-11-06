@@ -259,6 +259,8 @@ class Events(Agents):
                 ref = max([float(c) for c in coefs.values()] + [0.0])
                 if ref <= 0:
                     continue
+                elif not np.isfinite(ref):
+                    raise ss.CapabilityError(f'"{mod.name}" cannot run with solver="abm-events": the coefficient of "{tr.name}" on "{nkey}" is a probability of 1, an infinite rate, which has no time to the next event. Run it with solver="abm", where it is a certain transmission.')
                 share = np.zeros(ns)
                 for state,c in coefs.items():
                     share[self.state_index[state.name]] = float(c)/ref*float(state.rel_trans)

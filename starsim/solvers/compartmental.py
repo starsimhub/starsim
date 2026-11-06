@@ -126,6 +126,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
 
     def __init__(self, module, sim, solver=None):
         super().__init__(module, sim, solver)
+        self.held_stages = {} # Dwell times that may run as they are, whose note on stages waits for the layout (see note_stages())
         self.n_groups = sim.groups.n_groups
         self.laid_out = None # The groups it was laid out for, once it is: see build()
         self.last_flows = dict() # The flow along each transition in the last step, by group
@@ -453,24 +454,31 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                     track.first = add_raced(state, j, track, exits, competing, stays)
                     continue
                 dwell = self.dwells.get(tr.name) if tr is not None else None # None for a branch whose rate changes with time: a hazard out of its own compartment
-                slot_rates = self.slot_rates(tr, dwell) if self.sim.pars.solver == 'ide' and dwell is not None and not dwell.fixed and dwell.staged and not stays and not getattr(track, 'apart', False) else None # The dwell time as it is (solver='ide')
+                own = tr is not None and tr.name in stays # A minimum stay of its own, after which its dwell time starts
+                slot_rates = self.slot_rates(tr, dwell) if self.as_is(dwell) and not dwell.fixed and dwell.staged and not own and not getattr(track, 'apart', False) else None # The dwell time as it is (see as_is()), counted from entry, as another exit's minimum stay is
+                if slot_rates is None and tr is not None and tr.name in self.held_stages: # As stages after all, e.g. after a minimum stay of its own
+                    self.note_stages(tr.name, self.held_stages.pop(tr.name), held=True)
                 fixed = dwell is not None and (dwell.fixed or slot_rates is not None) # A fixed delay, or a dwell time as it is: a conveyor, out of which people leave by it
                 n_slots = len(slot_rates) if slot_rates is not None else self.delay_steps(tr) if fixed else max(stays.values(), default=0) # Or a minimum stay: a conveyor, then the rest of the state
-                slots = [add_comp(state, j, None) for i in range(n_slots + 1)] if n_slots else []
                 k = 0 if fixed else dwell.k if dwell is not None else 1
+                running = bool(n_slots) and not fixed and dwell is not None and not own # Another exit's minimum stay, through which this dwell time's stages run: a conveyor for each stage
+                grid = [[add_comp(state, j, s if running else None) for s in range(k if running else 1)] for i in range(n_slots + 1)] if n_slots else [] # By slot, then stage
                 inds = [add_comp(state, j, i) for i in range(k)]
-                track.first = (slots + inds)[0]
+                track.first = (grid[0] if grid else inds)[0]
                 kg = getattr(dwell, 'kg', None)
-                track.starts = None if (kg is None or slots) else (inds, k - kg) # Ragged: a group with fewer stages enters further along, so it passes through its own number
-                acting = slots if fixed else slots[:-1] # The last slot is left by the people due to leave in the next step, with the other exits acting on them until they do (see ss.kernels.convey() and release_rates())
-                for i,ind in enumerate(acting):
-                    add_exits(ind, state, exits, competing, stays, slot=i)
-                    if slot_rates is not None and i < len(slot_rates) and slot_rates[i] > 0: # Leaving after this many steps, at the dwell time's own chance
-                        add_flow(tr, ind, 'slot')
-                        self.flows[-1].slot_rate = slot_rates[i]
-                if slots:
-                    add_flow(tr if fixed else self.graph.transitions[next(iter(stays))], slots[-1], 'conveyor', named=fixed, to=None if fixed else inds[0])
-                    self.conveyors.append(Bunch(slots=slots, flow=self.flows[-1]))
+                track.starts = None if (kg is None or (grid and not running)) else (grid[0] if grid else inds, k - kg) # Ragged: a group with fewer stages enters further along, so it passes through its own number
+                for i,row in enumerate(grid): # The other exits act on every slot, the last until its people leave it (see ss.kernels.convey() and release_rates())
+                    for s,ind in enumerate(row):
+                        add_exits(ind, state, exits, competing, stays, slot=i)
+                        if slot_rates is not None and i < len(slot_rates) and slot_rates[i] > 0: # Leaving after this many steps, at the dwell time's own chance
+                            add_flow(tr, ind, 'slot')
+                            self.flows[-1].slot_rate = slot_rates[i]
+                        if running:
+                            last = s == k-1
+                            add_flow(tr, ind, 'stage', named=last, to=None if last else (row if i < n_slots else inds)[s+1], stages=k) # From the last slot, on out of the conveyor
+                for s in range(len(grid[0]) if grid else 0):
+                    add_flow(tr if fixed else self.graph.transitions[next(iter(stays))], grid[-1][s], 'conveyor', named=fixed, to=None if fixed else inds[s])
+                    self.conveyors.append(Bunch(slots=[row[s] for row in grid], flow=self.flows[-1]))
                 for i,ind in enumerate(inds):
                     if tr is not None and dwell is None:
                         add_flow(tr, ind, 'hazard')
@@ -507,7 +515,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         for flow in self.flows:
             if flow.kind != 'conveyor':
                 self.by_src[None if flow.held else flow.src].append(flow) # A held flow is drawn as an inflow
-        stage_flows = {flow.src:flow for flow in self.flows if flow.kind == 'stage' and flow.strain is None and not getattr(flow, 'raced', False)}
+        stage_flows = {flow.src:flow for flow in self.flows if flow.kind == 'stage' and flow.strain is None and not getattr(flow, 'raced', False) and flow.src not in self.leaving} # Not out of the last slot of a conveyor, whose stages lead on out of it
         self.chains = dict() # For the chain-binomial solver: for each compartment of a dwell time in stages, the number of stages left, its flow to the next, and the flow out of the last (see ss.kernels.draw_chain())
         for c,flow in stage_flows.items():
             d = flow.stages - self.comps[c].stage
@@ -560,8 +568,14 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             dw.kg = None # Not ragged
         return
 
-    def note_stages(self, name, dw):
-        """ In a compartmental run, a dwell time that is not exponential or Erlang is approximated by Erlang stages, which is said in one line """
+    def note_stages(self, name, dw, held=False):
+        """
+        In a compartmental run, a dwell time that is not exponential or Erlang is approximated by Erlang stages, which is said in one line;
+        for one that may run as it is (see as_is()), only once the layout has it as stages after all (`held=True`)
+        """
+        if not held and self.as_is(dw):
+            self.held_stages[name] = dw
+            return
         sim = self.sim
         approx = sim.pars.approx
         unit = f' {sim.unit_name}s'
@@ -577,7 +591,8 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                                      f'     Run with solver="abm", give stages= on the transition, or allow the approximation.')
         else:
             fixed = ' (nearly fixed, not exponential)' if dw.std < dw.mean/2 else '' # e.g. ss.SIR(dur_inf=ss.days(7)), whose std is 1 day
-            self.tell(ss.note, f'{name} has a {dw.family} dwell time{fixed}, approximated by {what}', sim=sim, verbose=0 if approx else None)
+            ide = ', since solver="ide" has no distribution function for it' if sim.pars.solver == 'ide' else ''
+            self.tell(ss.note, f'{name} has a {dw.family} dwell time{fixed}, approximated by {what}{ide}', sim=sim, verbose=0 if approx else None)
             if dw.std > ss.solvers.choose.max_cv*dw.mean: # solver='auto' runs it as agents
                 self.tell(ss.warn, f'{name} has a {dw.family} dwell time whose coefficient of variation is {dw.std/dw.mean:.3g}, so one exponential stage keeps only its mean, and its long tail is lost; run with solver="abm" to keep it')
         return
@@ -586,12 +601,17 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         raise ss.CapabilityError(f'"{tr.name}" cannot run with solver="{self.solver}": {what} has no compartmental form yet.\n'
                                  f'     Run with solver="abm".')
 
+    def step_known(self):
+        """ The step in the sim's unit, or None if it isn't known yet (laid out before the module is in a sim, for its equations: see ss.display.flow_terms()) """
+        step = getattr(getattr(self.mod, 't', None), 'dt', None) or getattr(getattr(self.sim, 'pars', None), 'dt', None) # The sim's, if the module has no timeline yet (see init_crossings())
+        return step.to(self.sim.unit_base).value if isinstance(step, ss.dur) else None
+
     def whole_steps(self, tr, what, dur, lowest, nearest=False):
         """ A time as a number of whole steps (up, or to the nearest with `nearest=True`; at least `lowest`), with a note if it is not one """
-        step = getattr(getattr(self.mod, 't', None), 'dt', None) or getattr(getattr(self.sim, 'pars', None), 'dt', None) # The sim's, if the module has no timeline yet (see init_crossings())
-        if not isinstance(step, ss.dur): # Laid out before the module is in a sim, for its equations (see ss.display.flow_terms()): one slot
+        step = self.step_known()
+        if step is None: # One slot
             return max(lowest, 1)
-        x = float(self.convert(dur))/step.to(self.sim.unit_base).value
+        x = float(self.convert(dur))/step
         n = max(lowest, int(np.ceil(x - (0.5 if nearest else 0) - 1e-9)))
         if abs(x - round(x)) > 1e-6:
             unit = self.sim.unit_name
@@ -609,8 +629,9 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         For each transition out of a state with a minimum stay (`after=`): the first slot of a conveyor it acts on
 
         A person in slot j has been in the state j whole steps, and agents count a stay as whole steps
-        too (see `Agents.stayed()`). A dwell time with a minimum stay starts after it, so its stages come
-        after the conveyor; a fixed delay with one is a longer conveyor (see `delay_steps()`).
+        too (see `Agents.stayed()`). A dwell time with a minimum stay of its own starts after it, so its stages come
+        after the conveyor; a fixed delay with one is a longer conveyor (see `delay_steps()`). Another exit's dwell
+        time runs from entry, as for agents: as it is, along the conveyor (see `as_is()`), or with its stages in each slot.
         """
         stays = sc.obj()
         for tr in competing + staged + exits.contact:
@@ -835,7 +856,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
 
     def eval(self, expr):
         """ An expression's value: from the tape, if it is on it (see `init_tape()`), else worked out here """
-        if self.tape is None:
+        if self.tape is None or self.tape.met is not self.met_counts(): # Made again once the contact matrices are known, which take some counts off it
             self.init_tape()
         if id(expr) in self.tape.roots and self._routes is None and self._route is None and 'series' not in self.cache: # Not for the values of every step at once (see tables())
             return self.tape_values()[id(expr)]
@@ -859,6 +880,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         pars = dict() # The parameters, by their key: (row, the parameter, whether its value is fixed)
         sets = dict() # The sets of states counted
         known = dict() # The key of each part seen, by id (or None if it is not on the tape); the parts are held below, so no id is reused
+        met = self.met_counts()
 
         def key(e):
             """ What a part is made of, as a key, adding it and its parts to the tape; None if it cannot be on it """
@@ -885,7 +907,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                     pk = ('number', repr(float(raw))) if fixed else ('par', id(e)) # The same number, wherever it is written
                     pars.setdefault(pk, (len(pars), e, fixed))
                     k = entry(pk, kn.CONST, pars[pk][0])
-            elif isinstance(e, E.Count) and not e.weighted and not e.trans and not self.split_states(e.states)[1]:
+            elif isinstance(e, E.Count) and not e.weighted and not e.trans and not self.split_states(e.states)[1] and id(e) not in met:
                 names = tuple(state.name for state in e.states)
                 sets.setdefault(names, len(sets))
                 k = entry(('count', e.kind, names), dict(n=kn.COUNT, total=kn.TOTAL, frac=kn.FRAC)[e.kind], sets[names])
@@ -921,6 +943,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         self.tape = sc.obj(
             roots  = roots, # The position of each expression on the tape, by its id
             held   = held,
+            met    = met, # The counts the contact matrices act on, which are not on it
             pars   = [(row, p) for row,p,fixed in pars.values() if not fixed], # Those worked out each step
             consts = consts,
             out    = np.zeros((len(ops), ng)),
@@ -1116,17 +1139,30 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         """ A weighted count (`(ss.by(biting=w)*I).n`, `A.n_trans`): the people in each state and group counted by the group's weight (and infectiousness), in the same place """
         out = 0.0
         for state in states:
-            n = self.count([state], total=False)
-            if expr.weights is not None and state in expr.weights:
-                n = n*np.asarray(self.eval(expr.weights[state]), dtype=float)
-            if expr.trans: # Infectiousness, as in exposure()
-                n = n*state.rel_trans*self.mult_raw('rel_trans', state=state)
-            out = out + n
+            out = out + self.count([state], total=False)*self.weight(expr, state)
         mixing = self.sim.mixing
         out = np.broadcast_to(out, (self.n_groups,))
         if mixing.space is None:
             return float(out.sum())
         return np.bincount(mixing.places, weights=out)[mixing.places]
+
+    def weight(self, expr, state):
+        """ What each group's people in a state count as in a weighted count: their weight, times their infectiousness for `n_trans` (as in `exposure()`) """
+        coef = (expr.weights or {}).get(state)
+        out = 1.0 if coef is None else np.asarray(self.eval(coef), dtype=float)
+        if expr.trans:
+            out = out*state.rel_trans*self.mult_raw('rel_trans', state=state)
+        return out
+
+    def count_matrices(self):
+        return self.sim.mixing.count_terms()
+
+    def met_count(self, states, expr):
+        """ The number of people in some states met through the contact matrices, by group: as `exposure()`, on the number (each counted by its weight in a weighted count) rather than the share """
+        mixing = self.sim.mixing
+        mults = [self.contact_mult(term.name) for term in mixing.terms] if self.net_mods else None
+        num = sum(self.count([state], total=False)*self.weight(expr, state) for state in states) if expr.weighted else self.count(states, total=False)
+        return mixing.exposure(num, self.n_people(total=False), mults, counts=True)
 
     def coverage(self, expr):
         """ A product's coverage (`itn.coverage`): the share of the people in the same place who hold it, by what each level of holding it counts as (see `ss.expressions.Coverage.level_weights()`) """
@@ -1484,22 +1520,32 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                 self.pack_targets()
         return
 
+    def as_is(self, dwell):
+        """
+        Whether a dwell time runs as it is, as a conveyor of whole steps (see slot_rates()), rather than as Erlang stages: under
+        solver='ide', any whose distribution function is known; under every compartmental solver, one that takes only whole
+        numbers of steps (an `ss.choice` of them, e.g. days with daily steps), which is then exact, as it is for agents
+        """
+        if getattr(dwell, 'dist', None) is None or getattr(dwell, 'scale', None) is not None or getattr(dwell, 'varying', False) or self.step_known() is None: # e.g. a transfer's stages (see ss.dimensions.transfer_stages()), which have no distribution here
+            return False
+        elif self.sim.pars.solver == 'ide':
+            return ss.transitions.dwell_cdf(dwell.raw, self.convert) is not None
+        elif not isinstance(dwell.raw, ss.choice):
+            return False
+        a = np.asarray(ss.transitions.numeric_pars(dwell.raw, self.convert)['a'], dtype=float)
+        steps = (np.arange(a) if a.ndim == 0 else a)/self.step_known()
+        return bool(np.all(steps >= 1) and np.allclose(steps, np.round(steps)))
+
     def slot_rates(self, tr, dwell, most=5000):
         """
-        For solver='ide': a dwell time as it is, as a conveyor of whole steps, with the rate of leaving each slot that gives the
+        A dwell time as it is (see as_is()), as a conveyor of whole steps, with the rate of leaving each slot that gives the
         distribution's own chance of leaving after that many steps (rounded to the nearest), out to the step by which all but
         1e-6 have left, whose slot is the last: everyone left there leaves in the next step, as from a fixed delay
 
-        Returns the rates of the slots before the last, or None for a distribution whose CDF is not known (which is left as Erlang stages, with a note)
+        Returns the rates of the slots before the last
         """
-        if dwell.dist is None or getattr(dwell, 'scale', None) is not None or getattr(dwell, 'varying', False):
-            cdf = None
-        else:
-            cdf = ss.transitions.dwell_cdf(dwell.raw, self.convert)
-        if cdf is None:
-            self.tell(ss.note, f'solver="ide" takes the dwell time of "{self.mod.name}.{tr.name}" ({dwell.family}) as {dwell.k} Erlang stages, since it has no distribution function it can use as it is', sim=self.sim)
-            return None
-        dt = self.dt
+        cdf = ss.transitions.dwell_cdf(dwell.raw, self.convert)
+        dt = self.step_known()
         G = cdf((np.arange(most + 1) + 0.5)*dt) # The share who leave within each number of steps, to the nearest step
         rates = []
         before = 0.0
@@ -1588,7 +1634,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             return 0.0
         elif flow.kind == 'conveyor': # The last slot of a conveyor has no rate: its people leave in the step after they reach it, as its inflow in the program (see ss.kernels.convey())
             return 1.0
-        elif flow.kind == 'slot': # A slot of a dwell time as it is (solver='ide'): see slot_rates()
+        elif flow.kind == 'slot': # A slot of a dwell time as it is: see slot_rates()
             return flow.slot_rate
         elif flow.expr is None:
             kg = self.dwells[flow.tr.name].kg if flow.kind == 'stage' else None # Ragged stages: each group's own number
@@ -1823,6 +1869,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             if varies and not any(p is par for par in self.time_pars):
                 self.time_pars.append(p)
 
+        met = self.met_counts()
         interned = dict() # A number for what each part of a rate is made of
         keyed = dict() # Each part's number, by id (the parts are held in held, so no id is reused)
         held = []
@@ -1838,7 +1885,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                 elif isinstance(e, ss.par) and e.literal and sc.isnumber(e.raw):
                     parts = ('number', repr(float(e.raw)))
                 elif isinstance(e, ss.expressions.Count) and not e.weighted:
-                    parts = ('count', e.kind, e.trans, tuple(state.name for state in e.states))
+                    parts = ('count', e.kind, e.trans, tuple(state.name for state in e.states), id(e) in met)
                 else:
                     parts = ('part', id(e))
                 k = keyed[id(e)] = interned.setdefault(parts, len(interned))
@@ -1900,6 +1947,24 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                 args.append(reg)
             return depth
 
+        def count_set(expr):
+            """ The set of a count in the program: its compartments, or for a weighted count, each with the row of consts that weights it (see weight()) """
+            if not expr.weighted:
+                return tuple(c for state in expr.states for c in self.state_comps[state.name])
+            members = []
+            for state in expr.states:
+                row = -1
+                coef = (expr.weights or {}).get(state)
+                if coef is not None or expr.trans:
+                    for leaf in getattr(coef, 'leaves', []): # So a weight that varies in time is in the tables
+                        check(leaf)
+                    key = (id(expr), state.name)
+                    if key not in self.foreign_pars:
+                        self.foreign_pars[key] = ss.par((lambda e, s: lambda sim: self.weight(e, s))(expr, state), name=f'the weight of {state.name} in {ss.expressions.format_expr(expr)}', literal=True)
+                    row = add(pars, id(self.foreign_pars[key]), self.foreign_pars[key])
+                members += [(c, row) for c in self.state_comps[state.name]]
+            return tuple(members)
+
         def flatten_part(expr, strain, routes=None, rtr=None):
             """ The operations for one part of an expression (see flatten()) """
             if isinstance(expr, ss.expressions.BinOp):
@@ -1921,7 +1986,18 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                 check(expr)
                 ops.append(kn.CONST)
                 args.append(add(pars, ('number', repr(float(expr.raw))) if expr.literal and sc.isnumber(expr.raw) else id(expr), expr)) # The same number, wherever it is written, once
-            elif isinstance(expr, ss.expressions.Count) and (self.split_states(expr.states)[1] or expr.weighted): # Another disease's states, or a weighted count, counted once a step, as a function of the sim is
+            elif isinstance(expr, ss.expressions.Count) and id(expr) in met and not (expr.weighted and self.cross is not None): # Met through the contact matrices: the number, as an exposure to the count's set (and a share, over everyone in the same place)
+                ops.append(kn.EXPOSURE)
+                args.append(add(exposures, (count_set(expr), None, None, None), (None, None, None)))
+                if expr.kind == 'frac':
+                    flatten_part(ss.expressions.Count(self.graph.people_states, kind='n'), strain)
+                    ops.append(kn.DIV)
+                    args.append(0)
+                    return 2
+            elif isinstance(expr, ss.expressions.Count) and expr.weighted and self.cross is None and not self.split_states(expr.states)[1]: # A weighted count: each state's compartments counted by its weight, a row of consts (see weight())
+                ops.append(kn.COUNT)
+                args.append(add(sets, count_set(expr)))
+            elif isinstance(expr, ss.expressions.Count) and (self.split_states(expr.states)[1] or expr.weighted): # Another disease's states, or a weighted count of diseases tracked jointly, counted once a step, as a function of the sim is
                 if id(expr) not in self.foreign_pars:
                     self.foreign_pars[id(expr)] = ss.par((lambda e: lambda sim: self.count_expr(e))(expr), name=f'{ss.expressions.format_expr(expr)} (counted by its disease)', literal=True)
                 return flatten(self.foreign_pars[id(expr)], strain, routes, rtr)
@@ -1931,7 +2007,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                 return flatten(self.foreign_pars[id(expr)], strain, routes, rtr)
             elif isinstance(expr, ss.expressions.Count):
                 ops.append(kn.COUNT if expr.kind == 'n' else kn.TOTAL if expr.kind == 'total' else kn.FRAC)
-                args.append(add(sets, tuple(ind for state in expr.states for ind in self.state_comps[state.name])))
+                args.append(add(sets, count_set(expr)))
             elif isinstance(expr, ss.expressions.Prop): # A value for each group, which does not change (a condition on states: for the state the flow leaves)
                 key = (id(expr), getattr(getattr(self, '_src', None), 'name', None))
                 if key not in self.foreign_pars:
@@ -2038,12 +2114,20 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         self.prog_routes = [] # The beta of each term of the mixing, for an exposure through a transmission with a beta for each route (or None)
         self.prog_rtrs = [] # The transmission and its source state, for an exposure through a transmission that modifiers act on, on some routes (or None)
         for (name,strain,key,rkey),(state,routes,rtr) in rates.exposures.items():
-            rates.sets.setdefault(tuple(self.state_comps[name]))
+            rates.sets.setdefault(self.exposure_comps(name))
             masked = strain is not None and self.applies[name][self.strain] # Only the people who carry this strain
             self.prog_exposures.append((state, self.strain_weights[self.sim.groups.group_coords[:, self.strain], strain] if masked else 1.0))
             self.prog_routes.append(routes)
             self.prog_rtrs.append(rtr)
         return
+
+    def exposure_comps(self, name):
+        """ The set of an exposure in the program: of a state, by its name, or of a count that the contact matrices act on, which is its key (see `flatten_rates()`) """
+        return name if isinstance(name, tuple) else tuple(self.state_comps[name])
+
+    def exposure_trans(self, state, mask):
+        """ The infectiousness of an exposure in the program, by group: of a state, with its modifiers and strain (mask); 1 for a count (whose state is None) """
+        return 1.0 if state is None else state.rel_trans*self.mult_raw('rel_trans', state=state)*mask
 
     def make_program(self, rates, mix):
         """ The arrays of the kernels' program (see `ss.kernels.Program`), with what is set later (by `set_contacts()` and `pack_targets()`, and each step) left empty """
@@ -2056,6 +2140,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         share = mix.share
         share.sort_indices() # A full matrix of entries is read as one, in order (see ss.kernels.share())
         setlist = list(rates.sets)
+        members = [[m if isinstance(m, tuple) else (m, -1) for m in item] for item in setlist] # A weighted count's are (compartment, row of its weight)
         order = {id(flow):i for i,flow in enumerate(self.flows)}
         flat = lambda lists: np.array([i for item in lists for i in item], dtype=int)
         ends = lambda lists: np.cumsum([0] + [len(item) for item in lists])
@@ -2075,13 +2160,15 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             args       = np.array(rates.args, dtype=int),
             consts     = np.zeros((len(rates.pars), ng)),
             set_starts = ends(setlist),
-            set_comps  = flat(setlist),
+            set_comps  = flat([[c for c,row in item] for item in members]),
+            set_w      = flat([[row for c,row in item] for item in members]),
             people     = np.array([c for c in self.people_comps if self.uninfected is None or self.comps[c].state.name in self.uninfected], dtype=int), # The population a rate divides by: in a branching process, the uninfected
             has_det    = any(self.det_flow(flow) for flow in self.flows),
             det        = np.array([self.det_flow(flow) for flow in self.flows], dtype=bool),
             places     = np.array(mixing.places) if mixing.space is not None else np.zeros(ng, dtype=int),
             n_places   = sim.groups.strats[mixing.space].n if mixing.space is not None else 1,
-            exp_set    = np.array([setlist.index(tuple(self.state_comps[name])) for name,strain,key,rkey in exposures], dtype=int),
+            exp_set    = np.array([setlist.index(self.exposure_comps(name)) for name,strain,key,rkey in exposures], dtype=int),
+            exp_n      = np.array([isinstance(name, tuple) for name,strain,key,rkey in exposures], dtype=bool),
             rel_trans  = np.ones((len(exposures), ng)),
             levels     = mix.levels,
             sizes      = mix.sizes,
@@ -2212,7 +2299,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         for i,par in enumerate(self.prog_pars):
             p.consts[i] = self.prog_value(par)
         for i,(state,mask) in enumerate(self.prog_exposures):
-            p.rel_trans[i] = state.rel_trans*self.mult_raw('rel_trans', state=state)*mask
+            p.rel_trans[i] = self.exposure_trans(state, mask)
         if self.net_mods or any(self.prog_rtrs):
             self.set_contacts()
         for i,matrix in enumerate(self._mover_rates):
@@ -2267,7 +2354,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         if self.watched is None:
             self.watched = self.graph.all_pars()
         amounts = [held(m.efficacy if isinstance(m, ss.products.Effect) else m.amount) for mods in self.sim.modifiers.values() for m in mods]
-        return [len(amounts), amounts, *[held(p.raw) for p in self.watched], *[held(state.rel_trans) for state,mask in self.prog_exposures]]
+        return [len(amounts), amounts, *[held(p.raw) for p in self.watched], *[held(state.rel_trans) for state,mask in self.prog_exposures if state is not None]]
 
     def step_tables(self):
         """ For a step in the kernels: the tables and row to take its values from, or, with these set in the program already, no tables, and a row of -1 if they are as in the last step """
@@ -2310,6 +2397,23 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                     dy[b] += moved
         return dy
 
+    def chain_start(self, group):
+        """
+        The compartment where the people of a group of linked states (see `ss.graph.Graph.linked()`) are with no immunity, for `next_generation()`:
+        the first state, if it is in the group, else the one state that the group is infected from (e.g. S_H2 of a second host species), or None if it has none
+        """
+        graph = self.graph
+        ids = {id(s) for s in group}
+        if id(graph.first) in ids:
+            first = graph.first
+        else:
+            sources = list({id(s):s for tr in graph.acquisitions for s in tr.src or [] if id(s) in ids}.values())
+            if len(sources) > 1:
+                errormsg = f'"{self.mod.name}" has people in states ({sc.strjoin(s.name for s in group)}) that no transition links to {graph.first.name}, and that are infected from more than one of them ({sc.strjoin(s.name for s in sources)}), so its R0 cannot tell which state they are in with no immunity'
+                raise ValueError(errormsg)
+            first = sources[0] if sources else None
+        return None if first is None else self.state_comps[first.name][0]
+
     def next_generation(self, start=False, y=None):
         """
         The next-generation matrix at the disease-free state, `F V⁻¹`, over the infected compartments of every group
@@ -2318,10 +2422,12 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         infect from, of any count (such as a reservoir, or infectious mosquitoes) that the
         rate of an infection uses, and of the counts that infected people's numbers move
         a count into (mosquitoes biting them). A new infection is a flow from any other
-        compartment into one of these. At the disease-free state, everyone is in the first
-        state (so R0 is in a population with no immunity; with `start=True`, only the infected
-        are moved there, for the reproduction number at the start), each group keeping its size, the infected counts are empty, and the other counts
-        that are filled by an inflow (mosquitoes not infected) are at their equilibrium. Given the compartments `y` (one row per compartment, one
+        compartment into one of these. At the disease-free state, nobody is infected (so the infected at the start are not counted),
+        and everyone else is in the first state, or in the state their own chain of states starts from if no transition links it to
+        the first (e.g. S_H2 of a second host species; see `chain_start()`), so R0 is in a population with no immunity; with `start=True`,
+        the people not infected are as they start, for the reproduction number at the start. Each group keeps its size, except that
+        the people filled by a constant inflow (births of a number a day) and the counts filled by any inflow (mosquitoes not infected)
+        are at their equilibrium, from the rates at the disease-free state. Given the compartments `y` (one row per compartment, one
         column per group), the matrix is instead at that state as it is, for the reproduction number at that time (see `ss.Disease.Rt()`).
         The matrices are worked out by perturbing each infected compartment in turn. Returns None if nothing moves people into an infected state.
         See `ss.Disease.R0()`.
@@ -2349,19 +2455,23 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         if y is not None: # At a given state, as it is, with the size of each group held, so that one more infected person adds to the infected rather than to the people (R0 × S/N in an SIR)
             y0 = np.array(y, dtype=float)
             self.held_n = y0[self.people_comps].sum(axis=0)
-            counts = []
-        else:
-            first = self.state_comps[graph.first.name][0]
-            people = [i for i,comp in enumerate(self.comps) if comp.state.people and i != first and (not start or i in infected)] # At the start, only the infected; otherwise everyone, so immunity at the start is left out
+            settle = []
+        else: # Nobody infected, so the infected at the start are not counted as susceptible
             y0 = self.y.copy()
-            y0[first] += y0[people].sum(axis=0) # Each group keeps its size
-            y0[people] = 0
             y0[infected] = 0
-            counts = [i for i,comp in enumerate(self.comps) if not comp.state.people and i not in infected]
-        if counts: # Their equilibrium, from the rates at the disease-free state
+            if not start: # With no immunity: everyone in the state their chain of states starts from (e.g. S), so immunity at the start is left out
+                for group in graph.linked():
+                    first = self.chain_start(group)
+                    if first is not None:
+                        comps = [i for s in group for i in self.state_comps[s.name] if i != first and i not in infected]
+                        y0[first] += y0[comps].sum(axis=0)
+                        y0[comps] = 0
+            settle = [i for i,comp in enumerate(self.comps) if i not in infected and (not comp.state.people or not start)]
+        if settle: # Their equilibrium, from the rates at the disease-free state: of counts (mosquitoes not infected), and of people filled by a constant inflow (births of a number a day)
             self.y = y0
             self.cache.clear()
             gain, loss = np.zeros_like(y0), np.zeros_like(y0)
+            varies = set() # People filled by an inflow that depends on the people, such as births per person, who keep their number
             for flow,rate in zip(self.flows, self.rates()):
                 if flow.src is not None:
                     loss[flow.src] += rate
@@ -2369,9 +2479,12 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                     for ind,w,dim_map in flow.targets:
                         amount = rate*self.inflow_split(flow.tr)*w
                         gain[ind] += amount if dim_map is None else amount @ dim_map
-            for c in counts:
-                settles = (gain[c] > 0) & (loss[c] > 0)
-                y0[c] = np.where(settles, np.divide(gain[c], loss[c], out=np.zeros_like(gain[c]), where=settles), y0[c])
+                        if flow.dynamic and self.comps[ind].state.people:
+                            varies.add(ind)
+            for c in settle:
+                if c not in varies:
+                    settles = (gain[c] > 0) & (loss[c] > 0)
+                    y0[c] = np.where(settles, np.divide(gain[c], loss[c], out=np.zeros_like(gain[c]), where=settles), y0[c])
         cells = [(i, g) for i in infected for g in range(self.n_groups)]
         eps = 1e-6*max(1.0, y0.sum())
         F = np.zeros((len(cells), len(cells)))
@@ -2482,7 +2595,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             return [table([0.0 if flow.dynamic else self.flow_base(flow)*self.flow_mult(flow) for flow in self.flows]),
                     table([self.flow_mult(flow) if flow.dynamic else 1.0 for flow in self.flows]),
                     table([self.prog_value(par) for par in self.prog_pars]),
-                    table([state.rel_trans*self.mult_raw('rel_trans', state=state)*mask for state,mask in self.prog_exposures])]
+                    table([self.exposure_trans(state, mask) for state,mask in self.prog_exposures])]
 
         changing = self.changing_steps(start, stop) if mods else None
         if not mods:
@@ -2509,7 +2622,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                 rows.append([[0.0 if flow.dynamic else self.flow_base(flow)*self.flow_mult(flow) for flow in self.flows],
                              [self.flow_mult(flow) if flow.dynamic else 1.0 for flow in self.flows],
                              [self.prog_value(par) for par in self.prog_pars],
-                             [state.rel_trans*self.mult_raw('rel_trans', state=state)*mask for state,mask in self.prog_exposures]])
+                             [self.exposure_trans(state, mask) for state,mask in self.prog_exposures]])
             shape = (self.n_groups,)
             tables = [np.array([[np.broadcast_to(val, shape) for val in row[k]] for row in rows], dtype=float).reshape(len(rows), len(rows[0][k]), self.n_groups) for k in range(4)]
             grouped = [True]*4

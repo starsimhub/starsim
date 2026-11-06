@@ -55,6 +55,7 @@ fields = [
     'consts',     # The parameter values, by group
     'set_starts', # Where each set of compartments (the ones counted together) starts and ends
     'set_comps',  # Their compartments
+    'set_w',      # The row of consts that weights each of them, by group, or -1 for a weight of 1 (a weighted count, e.g. (ss.by(biting=w)*I).n: see member())
     'people',     # The compartments that hold people
     'has_det',    # Whether there are any
     'det',        # Whether each flow is of a state that is not people (a reservoir), so is taken as its expected value by the stochastic solvers
@@ -62,6 +63,7 @@ fields = [
     'n_places',
     # Exposure to each infectious state
     'exp_set',    # The set of compartments that are the state; or, if negative, minus the number of exposures before it whose sum it is (diseases tracked jointly, see ss.solvers.Crossing)
+    'exp_n',      # Whether it is to the number in the state, not its share: a count in a rate that the contact matrices act on (`beta*I.n`), through them only (see ss.solvers.Mixing.count_terms())
     'rel_trans',  # Its infectiousness, by group
     'levels',     # For each mixing term, the cell that each group is in
     'sizes',      # The number of cells in each term
@@ -273,7 +275,7 @@ def work(p, y):
     flow, target, operation, compartment, and compartment of an infectious state; for each exposure, through each
     mixing term, each group and cell, each entry of the time share between places that it uses (times the levels in
     each place), and each pair of cells that mix in a place (a quarter as many for a whole matrix of more than 16,
-    which BLAS takes); and each entry of a mover times its compartments. For `plain_seconds()` and `compiled_seconds()`.
+    which BLAS takes); and each entry of a mover times its compartments. For `plain_seconds()`.
     """
     nc, ng = y.shape
     size = ng*(len(p.src) + len(p.tgt_comp) + len(p.ops) + nc + len(p.set_comps))
@@ -316,21 +318,8 @@ def plain_seconds(p, y, npts, solver, n_sub=1):
     return evals(npts, solver, n_sub)*(1e-5 + 6e-7*work(p, y)) + draws
 
 
-def compiled_seconds(p, y, npts, solver, n_sub=1):
-    """
-    About how long a run of the ODE would take in the compiled kernels, in seconds, from the program's size alone (as
-    `plain_seconds()` is, and never timed): 0.5 ms a run, plus 0.1 µs each time the rates are worked out (see
-    `evals()`) and 2 ns for each operation that takes (see `work()`). Measured once (2026-10-25, on a quiet machine)
-    on 24 runs (the models of `plain_seconds()` and MEmilio's 100 to 400 counties, some with Euler steps), it is within
-    0.93 to 1.6 times the time taken for the runs of more than 0.05 s (260 districts over 16 years: 3.7 s
-    against 4.0 s; MEmilio's 400 counties: 0.95 s against 0.62 s), and 0.34 to 1.4 times for the shorter ones (the
-    lowest the SIS with aging, and two SEIRs tracked jointly, 0.41). See `ss.solvers.kernel_seconds()`.
-    """
-    return 5e-4 + evals(npts, solver, n_sub)*(1e-7 + 2e-9*work(p, y))
-
-
 def substeps(rates, dt, n_sub, solver):
-    """ About how many substeps a solver takes in each step, for `plain_seconds()` and `compiled_seconds()`: those given (`n_sub`), or else for the ODE, enough for the fastest of the rates out of a compartment given, as `step()` chooses them """
+    """ About how many substeps a solver takes in each step, for `plain_seconds()`: those given (`n_sub`), or else for the ODE, enough for the fastest of the rates out of a compartment given, as `step()` chooses them """
     if n_sub > 0 or solver >= 2: # The stochastic solvers that take steps of their own length count them in their own way
         return max(n_sub, 1)
     rates = np.ravel(rates)
@@ -903,6 +892,13 @@ def unary(op, x):
 
 
 @kernel(inline='always')
+def member(ys, p, i, g):
+    """ Member i of the sets of compartments, counted in group g: the number in its compartment, times its weight if it has one (see `Program`) """
+    v = ys[p.set_comps[i], g]
+    return v if p.set_w[i] < 0 else v*p.consts[p.set_w[i], g]
+
+
+@kernel(inline='always')
 def leaf_share(op, v, n):
     """ A count on the stack of a rate (see `step()`): the number v in some compartments (COUNT), or its share of the n people there (FRAC), which is 0 where there is no one """
     if op == FRAC:
@@ -1034,14 +1030,14 @@ def place_rates(ys, p, a, b, rates, stack, expo, only_det=False):
                     v = 0.0
                     for gg in range(ys.shape[1]):
                         for i in range(p.set_starts[arg], p.set_starts[arg+1]):
-                            v += ys[p.set_comps[i], gg]
+                            v += member(ys, p, i, gg)
                     stack[top, 0] = v
                 elif op == COUNT or op == FRAC:
                     top += 1
                     v = 0.0
                     for jj in range(a, b):
                         for i in range(p.set_starts[arg], p.set_starts[arg+1]):
-                            v += ys[p.set_comps[i], p.pl_groups[jj]]
+                            v += member(ys, p, i, p.pl_groups[jj])
                     if op == FRAC and n < 0:
                         n = place_people(ys, p, a, b)
                     stack[top, 0] = leaf_share(op, v, n)
@@ -1049,7 +1045,7 @@ def place_rates(ys, p, a, b, rates, stack, expo, only_det=False):
                     top += 1
                     v = 0.0
                     for i in range(p.set_starts[arg], p.set_starts[arg+1]):
-                        v += ys[p.set_comps[i], g]
+                        v += member(ys, p, i, g)
                     stack[top, 0] = v
                 elif op == LOAD:
                     top += 1
@@ -1160,7 +1156,7 @@ def place_events(y, p, w, active, first, last, dt, flows, seed):
 @jit
 def sparse_maps(p, nc):
     """
-    For `sparse_events()`: the sets of compartments that each compartment is in, the exposures to each
+    For `sparse_events()`: the sets of compartments that each compartment is in (and the row of consts that weights it in each), the exposures to each
     set, the flows out of each compartment (in order), the inflows, which compartments hold people, and
     whether any rate is a count in every place
     """
@@ -1170,11 +1166,13 @@ def sparse_maps(p, nc):
         cs_starts[p.set_comps[k] + 1] += 1
     cs_starts = np.cumsum(cs_starts)
     cs_sets = np.empty(len(p.set_comps), dtype=np.int64)
+    cs_w = np.empty(len(p.set_comps), dtype=np.int64)
     fill = cs_starts[:-1].copy()
     for s in range(n_sets): # In order, so each compartment's sets are too
         for k in range(p.set_starts[s], p.set_starts[s+1]):
             c = p.set_comps[k]
             cs_sets[fill[c]] = s
+            cs_w[fill[c]] = p.set_w[k]
             fill[c] += 1
     se_starts = np.zeros(n_sets + 1, dtype=np.int64)
     for e in range(len(p.exp_set)):
@@ -1216,7 +1214,7 @@ def sparse_maps(p, nc):
     has_total = False # A count in every place, which the kept rates cannot follow
     for k in range(len(p.ops)):
         has_total = has_total or p.ops[k] == TOTAL
-    return cs_starts, cs_sets, se_starts, se_exps, cf_starts, cf_flows, inflows, people, has_total
+    return cs_starts, cs_sets, cs_w, se_starts, se_exps, cf_starts, cf_flows, inflows, people, has_total
 
 
 @kernel(error_model='python', inline='always')
@@ -1257,7 +1255,7 @@ def sparse_events(y, p, w, active, first, last, dt, flows, seed, maps):
     nc = y.shape[0]
     nf = len(p.src)
     src, inflow, pl_groups, starts, ops, args = p.src, p.inflow, p.pl_groups, p.starts, p.ops, p.args
-    cs_starts, cs_sets, se_starts, se_exps, cf_starts, cf_flows, inflows, people, has_total = maps
+    cs_starts, cs_sets, cs_w, se_starts, se_exps, cf_starts, cf_flows, inflows, people, has_total = maps
     width = 1
     for m in range(first, last):
         width = max(width, p.pl_starts[active[m]+1] - p.pl_starts[active[m]])
@@ -1318,7 +1316,7 @@ def sparse_events(y, p, w, active, first, last, dt, flows, seed, maps):
                     n += v
                 for k in range(cs_starts[c], cs_starts[c+1]):
                     s = cs_sets[k]
-                    counts[s] += v
+                    counts[s] += v if cs_w[k] < 0 else v*p.consts[cs_w[k], g]
                     for q in range(se_starts[s], se_starts[s+1]):
                         e = se_exps[q]
                         num[e] += v*p.rel_trans[e, g]
@@ -1365,7 +1363,7 @@ def sparse_events(y, p, w, active, first, last, dt, flows, seed, maps):
                             v = 0.0
                             for gg in range(y.shape[1]):
                                 for ii in range(p.set_starts[arg], p.set_starts[arg+1]):
-                                    v += y[p.set_comps[ii], gg]
+                                    v += member(y, p, ii, gg)
                             stack[top, 0] = v
                         elif op == COUNT or op == FRAC:
                             top += 1
@@ -1375,7 +1373,7 @@ def sparse_events(y, p, w, active, first, last, dt, flows, seed, maps):
                             top += 1
                             v = 0.0
                             for ii in range(p.set_starts[arg], p.set_starts[arg+1]):
-                                v += y[p.set_comps[ii], g]
+                                v += member(y, p, ii, g)
                             stack[top, 0] = v
                         elif op == LOAD:
                             top += 1
@@ -1801,8 +1799,8 @@ def convey(rng, y, p, w, flows, release):
             credit(rng, n, p.crd_starts[f], p.crd_starts[f+1], p.crd_parent, p.crd_w, p.crd_index, w[9], flows, w[10])
         else:
             for g in range(ng):
-                for k in range(b-1, a+1, -1): # The last slot is empty by now (or nearly, by rounding, in the ODE)
-                    y[p.args[k], g] = y[p.args[k-1], g]
+                for k in range(b-1, a+1, -1): # The last slot is empty by now (or nearly, in the ODE, whose remainder there leaves with the next)
+                    y[p.args[k], g] = y[p.args[k-1], g] + (y[p.args[k], g] if k == b-1 else 0.0)
                     if y[p.args[k], g] > 0:
                         idle[p.places[g]] = 0
                 y[p.args[a+1], g] = 0
@@ -2038,11 +2036,12 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, varying):
                     for g in range(ng):
                         exposures[e, g] = 0
                         infectious[g] = 0
-                    for k in range(p.set_starts[s], p.set_starts[s+1]):
-                        c = p.set_comps[k]
+                    for k in range(p.set_starts[s], p.set_starts[s+1]): # Each member counted by its weight, if it has one (a weighted count that the contact matrices act on)
                         for g in range(ng):
-                            infectious[g] += ys[c, g]*p.rel_trans[e, g]
+                            infectious[g] += member(ys, p, k, g)*p.rel_trans[e, g]
                     for t in range(len(p.sizes)):
+                        if p.exp_n[e] and not p.use[1, t]: # A count, which only the contact matrices act on
+                            continue
                         size = p.sizes[t]
                         for i in range(size):
                             num[i] = 0
@@ -2058,7 +2057,7 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, varying):
                                 num[i] = num2[i]
                                 den[i] = den2[i]
                         for i in range(size):
-                            prev[i] = num[i]/den[i] if den[i] > 0 else 0.0
+                            prev[i] = num[i] if p.exp_n[e] else num[i]/den[i] if den[i] > 0 else 0.0
                         if p.use[1, t]: # Mix between the levels in each place
                             if block == size:
                                 mix(p.mat[t], prev, size, num)
@@ -2096,7 +2095,7 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, varying):
                             v = 0.0
                             for g in range(ng):
                                 for i in range(p.set_starts[arg], p.set_starts[arg+1]):
-                                    v += ys[p.set_comps[i], g]
+                                    v += member(ys, p, i, g)
                             for g in range(ng):
                                 stack[top, g] = v
                         elif op == COUNT or op == FRAC: # The number in some compartments, in the same place
@@ -2106,7 +2105,7 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, varying):
                             for g in range(ng):
                                 vals[g] = 0
                                 for i in range(p.set_starts[arg], p.set_starts[arg+1]):
-                                    vals[g] += ys[p.set_comps[i], g]
+                                    vals[g] += member(ys, p, i, g)
                                 num[p.places[g]] += vals[g]
                             for g in range(ng):
                                 stack[top, g] = leaf_share(op, num[p.places[g]], local_n[g])
@@ -2115,7 +2114,7 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, varying):
                             for g in range(ng):
                                 stack[top, g] = 0.0
                                 for i in range(p.set_starts[arg], p.set_starts[arg+1]):
-                                    stack[top, g] += ys[p.set_comps[i], g]
+                                    stack[top, g] += member(ys, p, i, g)
                         elif op == LOAD: # A part worked out already
                             top += 1
                             for g in range(ng):

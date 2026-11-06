@@ -53,19 +53,16 @@ def test_jax_engine():
     sc.heading('Testing the choice of JAX or the kernels')
     make, pars = models.towns
     sim = ss.Sim(make(), **sc.mergedicts(pars, kw), solver='ode').run()
-    assert sim.engine_reason.startswith('kernels: a short run') # Shorter than JAX takes to start
-    after = ss.solvers.choose.jax_after
-    try:
-        ss.solvers.choose.jax_after = 0 # As if it were a long run
-        sim = ss.Sim(make(), **sc.mergedicts(pars, kw), solver='binomial').run() # Only the ODE is taken by JAX
-        assert sim.engine_reason.startswith('kernels: JAX does not run')
-        ode = ss.Sim(make(), **sc.mergedicts(pars, kw), solver='ode').run() # The ODE too, which agrees with the kernels
-        assert ode.engine_reason.startswith('JAX: a long run')
-        ref = ss.Sim(make(), **sc.mergedicts(pars, kw), solver='ode')
-        ref.jax = False
-        assert np.allclose(ode.results.sir.I.values, ref.run().results.sir.I.values, rtol=1e-9, atol=0)
-    finally:
-        ss.solvers.choose.jax_after = after
+    assert sim.engine_reason == 'kernels' # A run is never taken by JAX unless asked
+    sim = ss.Sim(make(), **sc.mergedicts(pars, kw), solver='binomial')
+    sim.jax = True
+    assert sim.run().engine_reason.startswith('kernels: JAX does not run') # Only the ODE is taken by JAX
+    ode = ss.Sim(make(), **sc.mergedicts(pars, kw), solver='ode')
+    ode.jax = True
+    assert ode.run().engine_reason == 'JAX, as asked (sim.jax = True)' # The ODE, which agrees with the kernels
+    ref = ss.Sim(make(), **sc.mergedicts(pars, kw), solver='ode')
+    ref.jax = False
+    assert np.allclose(ode.results.sir.I.values, ref.run().results.sir.I.values, rtol=1e-9, atol=0)
     return ode
 
 
@@ -75,6 +72,7 @@ def test_gradient():
     sim = make_sir()
     grad = sim.gradient(results=['I', 'cases'], pars=['beta', 'dur'])
     assert not sim.initialized # The sim itself is not changed
+    assert np.array_equal(sim.gradient('I', pars='sir.beta').beta.sir.I, grad.beta.sir.I) # A parameter named by its module too (it was an IndexError)
     for name,step in [('beta', 1e-6), ('dur', 1e-5)]:
         x0 = 0.4 if name == 'beta' else 8
         runs = [make_sir(**{name:x0 + sign*step}).run().results.sir for sign in [1, -1]]
@@ -259,12 +257,14 @@ def test_parallel_pars():
     sc.heading('Testing many runs with different values, in one call')
     betas = [0.3, 0.4, 0.5]
     singles = [make_sir(beta=beta).run().results.sir.I.values for beta in betas]
-    for n in [1, ss.run.jax_runs//3 + 1]: # Enough runs are taken in one call to JAX
-        msim = ss.parallel(make_sir(), pars=dict(beta=betas*n))
+    for jax in [None, True]: # With sim.jax = True, the runs are taken in one call to JAX
+        sim = make_sir()
+        sim.jax = jax
+        msim = ss.parallel(sim, pars=dict(beta=betas*2))
         n_I = msim.results.sir.I.values[:3]
-        assert (msim.sims[0].diseases.sir.engine.jax_run is not None) == (n > 1)
-        assert msim.run_pars.beta.tolist() == betas*n
-        assert np.allclose(n_I, singles, rtol=1e-9), f'{3*n} runs differ from single runs'
+        assert (msim.sims[0].diseases.sir.engine.jax_run is not None) == bool(jax)
+        assert msim.run_pars.beta.tolist() == betas*2
+        assert np.allclose(n_I, singles, rtol=1e-9), f'runs (jax={jax}) differ from single runs'
     msim = ss.parallel(make_sir(), pars=[dict(beta=0.3), dict(beta=0.5, dur=ss.days(4))], n_runs=2) # A list of sets, each run twice
     assert len(msim.results.sir.I.values) == 4
     return msim

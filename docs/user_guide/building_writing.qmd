@@ -118,7 +118,7 @@ measles.R0()
 `R0()` on a disease on its own assumes homogeneous mixing. For a disease in a sim with contacts or groups, use the sim's copy of it, `sim.diseases.measles.R0()`, which includes them (see below for why the sim has a copy).
 
 ::: {.callout-note}
-The sim prints R0 when it starts. If some people start immune (e.g. `init=dict(I=0.001, R=0.9)`), it also gives the reproduction number in the population as it starts (often called the effective reproduction number, R): "R0 = 15.2 (R = 1.52 at the start, with 10% susceptible)".
+The sim prints R0 when it starts. If some people start immune (e.g. `init=dict(I=0.001, R=0.9)`), it also gives the reproduction number in the population as it starts (often called the effective reproduction number, R): "R0 = 15.2 (R = 1.51 at the start, with 10% susceptible)".
 :::
 
 Over a run, the reproduction number falls as people become immune. After a run, `Rt()` gives it at each time point, as a result to plot: R0 at the state of the run at that time, with the people in each state of each group as they were then, and the rates as they were then (so it drops while an `ss.modify()` lowers β). It works for a run of any solver, including agents, and falls below 1 as the outbreak peaks:

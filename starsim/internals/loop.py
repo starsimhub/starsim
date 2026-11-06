@@ -499,10 +499,10 @@ class Loop:
         if profile is not None:
             self.profile = profile
 
-        # Convert e.g. '2020-01-01' to an actual date
+        # Convert e.g. '2020-01-01' or ss.years(5) to a time on the timeline, as interventions read them (see ss.connectors.to_time())
         cond = None
-        if isinstance(until, str):
-            until = ss.date(until)
+        if isinstance(until, (str, ss.date, ss.dur)):
+            until = ss.connectors.to_time(self.sim, until)
         elif isinstance(until, ss.expressions.Expr) or callable(until): # A condition, e.g. sir.I.n == 0
             cond, until = until, None
         self.stopped = None

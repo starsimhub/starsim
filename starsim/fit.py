@@ -97,9 +97,10 @@ def logpdf(dist, observed, model, xp=np, pars=None):
 
     The distribution's other parameters are taken as given (a parameter that is an
     `ss.par` takes its current value). Supported: `ss.poisson`, `ss.nbinom` (with
-    `n` as the dispersion), `ss.binom` (with `n` the number of trials, and the model's
-    value the probability), `ss.bernoulli` (an observation of 0 or 1, with the model's
-    value its probability), `ss.normal` (with `scale`), and `ss.lognorm_ex` (with `std`).
+    `n` as the dispersion), `ss.binom` (with `n` the number of trials, the data the
+    positives among them, as counts, and the model's value the probability),
+    `ss.bernoulli` (an observation of 0 or 1, with the model's value its probability),
+    `ss.normal` (with `scale`), and `ss.lognorm_ex` (with `std`).
     The counts of a Poisson or negative binomial need not be whole numbers (e.g. weekly
     averages): the factorials are taken as gamma functions, which gives the same values
     for whole numbers.
@@ -141,6 +142,10 @@ def logpdf(dist, observed, model, xp=np, pars=None):
         return xp.where(observed < 0, -np.inf, out)
     elif isinstance(dist, ss.binom): # The positives among n, with the model's value as the probability
         n = pars['n']
+        obs = np.asarray(observed) if isinstance(observed, (np.ndarray, list, tuple, int, float)) else None # Data, not a JAX value
+        if obs is not None and np.any(np.isfinite(obs) & (obs % 1 != 0)):
+            errormsg = f'ss.binom(n=...) as a likelihood takes counts, the positives among n, but the data include {obs[np.isfinite(obs) & (obs % 1 != 0)][0]:n}; for shares, give the share times n'
+            raise ValueError(errormsg)
         p = xp.clip(model, 1e-12, 1 - 1e-12)
         out = gammaln(n + 1) - gammaln(observed + 1) - gammaln(n - observed + 1) + observed*xp.log(p) + (n - observed)*xp.log1p(-p)
         return xp.where((observed < 0) | (observed > n), -np.inf, out)
@@ -157,6 +162,37 @@ def logpdf(dist, observed, model, xp=np, pars=None):
         logobs = np.log(np.where(observed > 0, observed, 1.0))
         return xp.where(observed > 0, norm.logpdf(logobs, xp.log(mean) - sigma2/2, xp.sqrt(sigma2)) - logobs, -np.inf)
     errormsg = f'{type(dist).__name__} cannot be used as a likelihood; use ss.poisson(), ss.nbinom(n=...), ss.binom(n=...), ss.bernoulli(), ss.normal(scale=...), or ss.lognorm_ex(std=...)'
+    raise TypeError(errormsg)
+
+
+def draw(dist, model, rng):
+    """
+    Values drawn from a likelihood, with the model's values as its mean, as `logpdf()` reads them: what `sim.to_data(noise=)` draws
+
+    Args:
+        dist (`ss.Dist`): the likelihood: `ss.poisson()`, `ss.nbinom(n=...)`, `ss.binom(n=...)`, `ss.bernoulli()`, `ss.normal(scale=...)`, or `ss.lognorm_ex(std=...)`
+        model (array): the model's values
+        rng (`np.random.Generator`): the random numbers
+    """
+    pars = {key:(val.raw if isinstance(val, ss.par) else val) for key,val in dist.pars.items()}
+    mean = np.maximum(model, 0)
+    if isinstance(dist, (ss.binom, ss.bernoulli)) and np.any((np.asarray(model) < 0) | (np.asarray(model) > 1)):
+        errormsg = f'ss.{type(dist).__name__}() draws with the model\'s value as a probability, but the values go up to {np.max(model):n}: use it for a share, such as a prevalence, and ss.poisson() or ss.nbinom() for a count'
+        raise ValueError(errormsg)
+    if isinstance(dist, ss.poisson):
+        return rng.poisson(mean)
+    elif isinstance(dist, ss.nbinom): # With n as the dispersion: a variance of mean + mean²/n
+        return rng.negative_binomial(pars['n'], pars['n']/(pars['n'] + mean))
+    elif isinstance(dist, ss.binom):
+        return rng.binomial(pars['n'], model)
+    elif isinstance(dist, ss.bernoulli):
+        return (rng.random(np.shape(model)) < model).astype(float)
+    elif isinstance(dist, ss.normal):
+        return rng.normal(model, pars['scale'])
+    elif isinstance(dist, ss.lognorm_ex):
+        sigma2 = np.log1p(pars['std']**2/np.maximum(mean, 1e-9)**2)
+        return rng.lognormal(np.log(np.maximum(mean, 1e-9)) - sigma2/2, np.sqrt(sigma2))
+    errormsg = f'{type(dist).__name__} is not a likelihood to draw data from; use ss.poisson(), ss.nbinom(n=...), ss.binom(n=...), ss.bernoulli(), ss.normal(scale=...), or ss.lognorm_ex(std=...)'
     raise TypeError(errormsg)
 
 

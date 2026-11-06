@@ -45,7 +45,7 @@ recovery = I >> R @ ss.lognorm_ex(mean=ss.days(8), std=ss.days(2))
 recovery = I >> R @ ss.lognorm_ex(mean=8, std=2, unit='days') # The same: the unit given once
 ```
 
-A distribution's unit is given on its parameters, as typed durations, or once with `unit=`, which applies to every parameter of it that is a time. As agents, each person draws their own duration when they enter the state. As compartments, there are no individuals to draw for, so an Erlang distribution is run exactly as `k` compartments in a row (stages), a fixed duration as one compartment for each step people have been in the state, and any other distribution as Erlang stages with the same mean and standard deviation, with a note that says how many.
+A distribution's unit is given on its parameters, as typed durations, or once with `unit=`, which applies to every parameter of it that is a time. As agents, each person draws their own duration when they enter the state. As compartments, there are no individuals to draw for, so an Erlang distribution is run exactly as `k` compartments in a row (stages), a fixed duration or a choice of whole numbers of steps (`ss.choice` of days, with daily steps) as one compartment for each step people have been in the state, which is exact, and any other distribution as Erlang stages with the same mean and standard deviation, with a note that says how many.
 
 ## Variation between people
 

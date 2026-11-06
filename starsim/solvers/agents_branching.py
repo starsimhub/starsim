@@ -315,7 +315,7 @@ class Branching:
             mult = self.route_mult(tr.name, route) # From the modifiers of its contacts and of the transmission on it
             weights = None
             for state,c in coefs.items():
-                share = (c/ref)*state.rel_trans
+                share = (c/ref if np.isfinite(ref) else -np.expm1(-c*dt))*state.rel_trans # A probability of 1 is an infinite rate (ss.probperweek(1)): a certain transmission, beside which the others have their own chance
                 w = mod[state.name].raw if np.ndim(share) == 0 and share == 1 else mod[state.name].raw*share # The usual case, one source state, needs no product
                 weights = w if weights is None else weights + w
             rel_trans = mod.rel_trans.asnew(times(self.current_value('rel_trans', weights), by_strain), copy=False)
@@ -410,6 +410,8 @@ class Branching:
                     return None
                 coefs.append((c, max(list(c.values()) + [0])))
             first, ref = coefs[0]
+            if not np.isfinite(ref): # A certain transmission (see transmit_from())
+                return None
             for c,r in coefs[1:]: # In proportion to the first, so the infectious weigh the same in each
                 if (r > 0) != (ref > 0) or (ref > 0 and not all(abs(c[k]/r - first[k]/ref) <= 1e-12*abs(first[k]/ref) for k in c)):
                     return None

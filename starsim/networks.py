@@ -198,6 +198,7 @@ class Network(Route):
         p1 (array): an array of length N, the number of connections in the network, with the indices of people on one side of the connection.
         p2 (array): an array of length N, the number of connections in the network, with the indices of people on the other side of the connection.
         beta (array): an array representing relative transmissibility of each connection for this network
+        one_way (bool): whether it transmits only from p1 to p2, as mother-to-child networks do (by default, both ways)
         kwargs (dict): standard module arguments (e.g. `name`, `label`, `dt`) are passed to `update_pars()`; other keys are copied directly into the network as edges
 
     Note that all edge arguments must be arrays of the same length,
@@ -234,7 +235,7 @@ class Network(Route):
             beta = ss_float,
         )
 
-        self.edge_defaults = {} # Values of edge columns that need not be given when edges are added (e.g. condoms=0 on a sexual network)
+        self.edge_defaults = dict(beta=1.0) # Values of edge columns that need not be given when edges are added (e.g. condoms=0 on a sexual network)
 
         # Initialize the keys of the network
         self.edges = sc.obj()
@@ -244,6 +245,8 @@ class Network(Route):
         # Standard module arguments are parameters; the rest are edges
         if 'sides' in kwargs: # The kinds of people at the two ends of its edges; see directions
             self.sides = kwargs.pop('sides')
+        if 'one_way' in kwargs: # Whether it transmits only from p1 to p2
+            self.one_way = kwargs.pop('one_way')
         standard_args = ss.modules.module_args + ss.Timeline.time_args
         edges = dict(edges) if edges is not None else {} # dict() also handles dataframes
         edges.update({k:kwargs.pop(k) for k in list(kwargs) if k not in standard_args})
@@ -608,7 +611,7 @@ class Network(Route):
         Append edges to the current network.
 
         Args:
-            edges (dict): a dictionary of arrays with keys p1,p2,beta, as returned from network.pop_inds()
+            edges (dict): a dictionary of arrays with keys p1, p2, and optionally beta (1 if not given), as returned from network.pop_inds()
             kwargs (dict): the arrays of `edges`, by key
         """
         edges = sc.mergedicts(edges, kwargs)
@@ -696,9 +699,7 @@ class Network(Route):
         if keys is None:
             keys = self.meta_keys()
         for key in keys:
-            if key == 'beta' and key not in df:
-                self.edges[key] = np.ones(len(df['p1']), dtype=ss_float)
-            elif key in self.edge_defaults and key not in df:
+            if key in self.edge_defaults and key not in df:
                 self.edges[key] = np.full(len(df['p1']), self.edge_defaults[key], dtype=self.meta.get(key))
             else:
                 self.edges[key] = np.array(df[key], dtype=self.meta.get(key))
@@ -927,7 +928,9 @@ class RandomNet(DynamicNetwork):
       Poisson-distributed with mean `n_contacts`, so agents have somewhat more variable
       numbers of contacts than with `'exact'`; about 1.8x faster than `'exact'`.
     - `'exact'`: by shuffling the contacts (sampling *without* replacement), so each
-      agent has exactly `n_contacts` contacts.
+      agent has exactly `n_contacts` contacts, if it is even: each agent starts half of
+      its contacts and is the other end of as many, so an odd number is rounded at random
+      to the even numbers either side for each agent (5 gives 4 or 6, 5 on average).
     - `'uniform'`: uniformly from all eligible agents, regardless of their own
       `n_contacts`, as in Covasim v3's random networks. This gives less variable numbers
       of contacts (e.g. with `n_contacts=ss.poisson(20)`, a variance of about 15, rather
@@ -1027,7 +1030,7 @@ class RandomNet(DynamicNetwork):
         return source, target
 
     def shuffle_edges(self, inds, n_contacts):
-        """ Find edges by shuffling the contacts, so each agent has exactly as many as given (`method='exact'`) """
+        """ Find edges by shuffling the contacts, so each agent is at each end of exactly as many as given (`method='exact'`), so has twice that many """
         source = np.repeat(inds, n_contacts)
         target = source.copy()
         randvals = self.dist.rng.random(len(target)) # Precompute the random values for the shuffle
@@ -2500,6 +2503,15 @@ def contacts(matrix=None, ages=None, dims=None, name=None, source=None, layer='a
     Mixing that is a product over stratifications takes a matrix for each, by name (`ss.contacts(dict(age=..., area=...))`): the contacts between
     two groups are the product of the entries for each. The matrix by age can have its own age groups here too (`ss.contacts(dict(age=..., area=...), ages=[0, 15, 65])`).
 
+    What the matrix multiplies is said by the rate of the infection, with I_j and N_j the number infectious and the number of people in group j, and N everyone:
+
+    - `beta*I`: the share of each group who are infectious, β·Σ_j C_ij·I_j/N_j, with C the contacts of a person and β per contact (as for contact surveys);
+    - `beta*I.n`: their number, β·Σ_j C_ij·I_j, density-dependent (as in Lloyd & Jansen's metapopulation);
+    - `beta*I.frac` (or `beta*I.n/N`): their number over everyone, β·Σ_j C_ij·I_j/N (as in Keeling & Rohani's matrices, and WAIFW matrices).
+    - a weighted count, `beta*(ss.by(w)*I).n` or `beta*I.n_trans`: their number, each counted by its weight, β·Σ_j C_ij·w_j·I_j (for `n_trans`, w_j is each group's infectiousness).
+
+    So a textbook's matrix goes in as the textbook gives it, with no rescaling. See the user guide's page on population data for more.
+
     Args:
         matrix (array/str/df/dict): `matrix[i,j]`, the number of contacts per unit time that one person in group `i` has with people in group `j`; or a country, by name or code ('Kenya', 'KE'), or a US state ('United States:Massachusetts'); or a table by age group, as `ss.data.contacts()` gives (with labels such as '0-4' and '75+', or an index named "age"; a table labeled otherwise is a matrix as it is); or a matrix for each of the model's stratifications, by name
         ages (list/array): the lower edge of each age group of the matrix (or of its matrix by age), e.g. `[0, 15, 65]` for 0–14, 15–64, and 65+
@@ -2525,6 +2537,11 @@ def contacts(matrix=None, ages=None, dims=None, name=None, source=None, layer='a
 
         # A product: by age, then 90% of contacts within one's own area
         mixing = ss.contacts(dict(age=[[10, 3], [3, 5]], area=[[0.9, 0.1], [0.1, 0.9]]), ages=[0, 18])
+
+        # Keeling & Rohani's Program 3.1: a matrix of rates per year on shares of everyone, so the rate is I.frac
+        S, I = ss.states('S I')
+        sis = ss.Disease(S >> I @ I.frac, I >> S @ ss.peryear(1), init_prev=0.001).stratify(risk={'high': 0.2, 'low': 0.8})
+        sim = ss.Sim(sis, networks=ss.contacts([[10, 0.1], [0.1, 1]], dims='risk'), unit='year', stop=15).run()
 
         # Men mix with women, and the high-risk with each other more among men than among women: a matrix over sex and risk together
         matrix = np.zeros((2, 2, 2, 2)) # [sex, risk, sex, risk], with sex ['female', 'male'] and risk ['low', 'high']

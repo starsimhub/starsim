@@ -43,8 +43,8 @@ class State(Nameable, Expr):
         init (float): the share of people who start in the state (1.0 is everyone); for a state that is not people, its starting amount
         init_n (int): instead, the number of people who start in the state
         people (bool): whether this state holds people (the default), or is a count of something else (`people=False`: bacteria in the water, mosquitoes); `people=True` says so explicitly, for a group of people that only an inflow fills
-        rel_sus (float): susceptibility multiplier while in this state
-        rel_trans (float): infectiousness multiplier while in this state
+        rel_sus (float): susceptibility multiplier while in this state (one value; for a value by group, see `stratify(adjust=)`)
+        rel_trans (float): infectiousness multiplier while in this state (likewise)
         keep_time (bool): as agents, keep the time each person entered the state (`ti_<name>`) for code to read, e.g. the years since onset; by default it is kept only if the model reads it (a clock, a scheduled exit), to save memory
         label (str): a human-readable name, for plots
 
@@ -69,6 +69,10 @@ class State(Nameable, Expr):
         self.people = people is not False
         self.people_given = people is not None # Said explicitly, so not checked (see ss.graph.Graph.check_counts())
         self.infectious = False # Whether it is a source of infection: in the rate of a transmission (see ss.graph.Graph.resolve_transitions())
+        for key,val in dict(rel_sus=rel_sus, rel_trans=rel_trans).items():
+            if isinstance(val.raw if isinstance(val, par) else val, by): # The engines take one number for everyone in a state
+                errormsg = f'{key}= of a state is one value for everyone in it, not {val}; for a value for each group, give it when stratifying, e.g. disease.stratify(risk=dict(hi=0.5, lo=0.5), adjust={{"{key}": [2.0, 0.5]}})'
+                raise ValueError(errormsg)
         self.rel_sus = rel_sus
         self.rel_trans = rel_trans
         self.keep_time = keep_time
@@ -1020,15 +1024,16 @@ def birth(state=None, rate=None, per=None, n=1, sex=None, name=None, label=None)
 def crude_rate(rate, kind):
     """
     The rate of a birth or death of everyone (`ss.birth()`, `ss.death()`), read as `ss.Births` and `ss.Deaths` read theirs: a bare number is per year,
-    and per 1,000 people if above 1 (see `ss.demographics.bare_rate()`). A typed rate is per person, and warns above 1 per person per year: most likely
-    a rate per 1,000 people, which would grow or empty the population at once. Returns the rate, and the note for a bare number (see `bare_rate()`)
+    and per 1,000 people if above 1 (see `ss.demographics.bare_rate()`). A typed rate is per person, as given, and warns above 5 per person per year
+    (no population is born or dies that fast): most likely a rate per 1,000 people, which would grow or empty the population at once. Returns the
+    rate, and the note for a bare number (see `bare_rate()`)
     """
     if sc.isnumber(rate) or isinstance(rate, ss.timeseries):
         return ss.demographics.bare_rate(rate, 'rate')
     raw = getattr(rate, 'raw', rate)
     if isinstance(raw, ss.Rate) and raw.unit is not None and np.ndim(raw.value) == 0:
         per_year = raw.to('year').value
-        if per_year > 1:
+        if per_year > 5:
             ss.warn(f'the rate of ss.{kind}() is {per_year:n} per person per year; a typed rate is per person, so a crude {kind} rate of {per_year:n} per 1,000 is ss.peryear({per_year/1000:n}), or the bare number {per_year:n}')
     return rate, None
 
@@ -1410,6 +1415,13 @@ def dwell_cdf(dist, convert):
         return lambda x: (np.asarray(x) >= pars['v']).astype(float)
     elif name == 'uniform':
         return sps.uniform(loc=pars['low'], scale=pars['high'] - pars['low']).cdf
+    elif name == 'choice': # A step for each value, e.g. a whole number of days
+        a = np.asarray(pars['a'], dtype=float)
+        a = np.arange(a) if a.ndim == 0 else a
+        p = np.full(len(a), 1/len(a)) if pars.get('p') is None else np.asarray(pars['p'], dtype=float)/np.sum(pars['p'])
+        order = np.argsort(a)
+        a, F = a[order], np.cumsum(p[order])
+        return lambda x: np.concatenate([[0.0], F])[np.searchsorted(a, np.asarray(x), side='right')]
     return None
 
 

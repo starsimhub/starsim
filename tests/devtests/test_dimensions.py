@@ -691,9 +691,13 @@ def test_mixing():
         res = sim.run().results.sir
         return res.infection.cum[-1]/res.S[0]
     assert np.isclose(attack('ode'), attack('abm'), rtol=0.05) # 0.58 and 0.57; 0.50 by band width
-    S, I, R = ss.states('S I R') # A count in a rate is used literally, so the contacts do not apply to it, which is noted
-    literal = ss.Disease(infection=S >> I @ 0.05*I.n/(S + I + R).n, recovery=I >> R @ ss.days(10), init=dict(I=0.01), name='sir').stratify(age=[0, 15])
-    assert any('literally' in note for note in ss.Sim(literal, networks=ss.contacts([[3, 1], [1, 2]], ages=[0, 15]), **kw).init().notes)
+    def counted(rate): # A count of the infectious in a rate is one the contacts act on (see ss.graph.Graph.met_counts): I.n over everyone is I.frac, the sum of C[i, j]*I[j]/N
+        S, I, R = ss.states('S I R')
+        sir = ss.Disease(infection=S >> I @ rate(S, I, R), recovery=I >> R @ ss.days(10), init=dict(I=0.01), name='sir').stratify(age=[0, 15])
+        sim = ss.Sim(sir, networks=ss.contacts([[3, 1], [1, 2]], ages=[0, 15]), **kw).run()
+        assert not any('literally' in note for note in sim.notes)
+        return sim.results.sir.I.values
+    assert np.allclose(counted(lambda S, I, R: 0.05*I.n/(S + I + R).n), counted(lambda S, I, R: 0.05*I.frac))
     for bad in [dict(matrix=[[-5, 0], [0, 1]], ages=[0, 20]), dict(matrix=[[1, 0], [0, 1]], ages=[20, 0]), dict(matrix=[[1, np.nan], [1, 1]])]:
         with pytest.raises(ValueError):
             ss.contacts(**bad)

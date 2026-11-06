@@ -11,6 +11,18 @@ import pandas as pd
 import starsim as ss
 
 
+def stop_is_length(start, stop):
+    """
+    Whether a stop is the length of the run rather than when it ends: any duration (`stop=ss.days(100)`, or `stop=ss.years(2000)`
+    with no start, 2,000 years from 0), except a calendar year after a start that is one too (`start=ss.years(2000), stop=ss.years(2020)`,
+    or a start of 2000 or '2000-01-01'), which is when it ends
+    """
+    if not isinstance(stop, ss.dur):
+        return False
+    cal_start = start is not None and (isinstance(start, str) or ss.time.assume_cal_year(start))
+    return not (cal_start and ss.time.assume_cal_year(stop))
+
+
 class Timeline:
     """
     Handle time vectors and sequencing ("timelines") for both simulations and modules.
@@ -22,7 +34,7 @@ class Timeline:
 
     Args:
         start (str/int/float/`ss.date`/`ss.dur`): when the simulation/module starts, e.g. '2000', '2000-01-01', 2000, ss.date(2000), or ss.years(2000)
-        stop (str/int/float/`ss.date`/`ss.dur`): when the simulation/module ends (with a date as start, a calendar year or a date; a shorter duration is the length of the run)
+        stop (str/int/float/`ss.date`/`ss.dur`): when the simulation/module ends, e.g. '2020-01-01', 2020, or ss.date(2020); a duration is the length of the run, from its start (from 0 if there is no start), so stop=ss.years(2000) alone is 2,000 years, except that with a start in calendar years it can be one too (start=ss.years(2000), stop=ss.years(2020))
         dt (int/float/`ss.dur`): Simulation step size
         dur (int/float/`ss.dur`): If "stop" is not provided, run for this duration
         name (str): if provided, name the `Timeline` object
@@ -284,6 +296,8 @@ class Timeline:
         Args:
             kwargs: the time parameters to change (start, stop, dt, dur); those not given (or None) are kept, except that a new dur replaces the stop (or, if the stop is given too, the start)
         """
+        if stop_is_length(kwargs.get('start', self.start), kwargs.get('stop')): # A duration is the length of the run (see reconcile_args())
+            kwargs['dur'] = kwargs.pop('stop')
         stale = False
         for key in self.time_args:
             current_val = getattr(self, key, None)
@@ -311,11 +325,25 @@ class Timeline:
         """ Reconcile the different options for the input parameters """
 
         if sim is not None:
+            if self is not sim.t and isinstance(self.start, ss.dur) and getattr(sim.t, 'initialized', False) and ss.time.assume_cal_year(sim.t.start) and not ss.time.assume_cal_year(self.start):
+                self.start = sim.t.start + self.start # e.g. ss.Deaths(start=ss.years(10)) in a sim from 2000: 10 years after its start, as an intervention's (see ss.connectors.to_time())
             self.dt    = sc.ifelse(self.dt,    sim.t.dt,    sim.pars.dt)
             self.start = sc.ifelse(self.start, sim.t.start, sim.pars.start)
-            self.stop  = sc.ifelse(self.stop,  sim.t.stop,  sim.pars.stop)
-            if self is sim.t or self.start is None or self.stop is None: # The sim's own dur, even with a start and stop, so three that disagree raise below; a module with a start of its own runs to the sim's stop
-                self.dur   = sc.ifelse(self.dur,   sim.t.dur,   sim.pars.dur)
+            if self is sim.t: # The sim's own stop and dur, even with a start, so three that disagree raise below
+                self.stop = sc.ifelse(self.stop, sim.pars.stop)
+                self.dur  = sc.ifelse(self.dur,  sim.pars.dur)
+
+        # A stop given as a duration is the length of the run, from its start: stop=ss.years(2000) is 2,000 years, not the year 2000 (unless the start is a calendar year too: see stop_is_length())
+        if stop_is_length(self.start, self.stop) and not self.initialized: # Once initialized, the stop is a time (e.g. ss.years(2050) in a model in years)
+            if self.dur is not None and self.dur != self.stop:
+                errormsg = f'stop={self.stop} is the length of the run, so it disagrees with dur={self.dur}; give one of them'
+                raise ValueError(errormsg)
+            self.stop, self.dur = None, self.stop
+            if self.start is None and not isinstance(self.dur, ss.datedur):
+                self.start = type(self.dur)(0) # With no start, from 0, e.g. stop=ss.days(100) is days 0 to 100
+
+        if sim is not None and self is not sim.t and self.dur is None: # A module with no stop or length of its own runs to the sim's stop
+            self.stop = sc.ifelse(self.stop, sim.t.stop)
 
         # Convert strings to other types, starting with dt
         if isinstance(self.dt, str): # e.g. dt='year'
@@ -375,8 +403,6 @@ class Timeline:
         # Convert start and stop from numbers to either durations or dates
         if use_dates:
             if self.start is not None: self.start = ss.date(self.start)  # Convert numbers, durations, etc. to dates
-            if isinstance(self.stop, ss.dur) and not ss.time.assume_cal_year(self.stop) and self.start is not None: # A duration such as ss.days(735) is the length of the run, not a date
-                self.stop = self.start + self.stop
             if self.stop  is not None: self.stop  = ss.date(self.stop)
             self.default_start = ss.date(self.default_start) # e.g. ss.date('2000-01-01')
         elif cal_year_like:
@@ -384,8 +410,9 @@ class Timeline:
             if sc.isnumber(self.stop):  self.stop  = ss.years(self.stop)
             self.default_start = ss.years(self.default_start) # e.g. ss.years(2000)
         else:
-            if sc.isnumber(self.start): self.start = self.default_type(self.start) # Duration-based: wrap in dt's type
-            if sc.isnumber(self.stop):  self.stop  = self.default_type(self.stop)
+            unit = ss.time.get_dur_class(sim.unit_base) if getattr(sim, 'unit_base', None) else self.default_type # In a sim, a bare time is in the model's unit (see ss.solvers.choose.init_unit()); alone, in dt's
+            if sc.isnumber(self.start): self.start = unit(self.start) # Duration-based
+            if sc.isnumber(self.stop):  self.stop  = unit(self.stop)
             self.default_start = self.start or self.default_type(self.default_start) # e.g. ss.years(0)
 
         # Validate durations: dt and dur
@@ -412,10 +439,10 @@ class Timeline:
                 stop = start + dur # e.g. ss.years(2050) or ss.date(2050)
 
             case (None, stop, None): # e.g. ss.Sim(stop=20) or ss.Sim(stop=2020) or ss.Sim(stop=ss.date(2020))
-                if isinstance(stop, ss.dur) and not ss.time.assume_cal_year(stop):  # e.g. stop of ss.years(20), start will be ss.years(0)
+                if isinstance(stop, ss.dur) and not ss.time.assume_cal_year(stop):  # e.g. stop=20, read as ss.years(20): start will be ss.years(0)
                     start = stop.__class__(value=0)
                     dur = stop - start
-                else: # e.g. stop of ss.years(2040), start will be ss.years(1990)
+                else: # e.g. stop=2040, read as ss.years(2040): start will be ss.years(1990)
                     dur = self.default_dur
                     start = stop - dur
 
@@ -501,15 +528,12 @@ class Timeline:
                 dt = self.dt
                 eps = min(1e-6, self.dt/2) # Avoid rounding errors
                 decimals = 9 # Avoid floating-point discrepancies between modules with different dur types (e.g. ss.years vs ss.months)
+                steps = lambda start, stop, dt: start + dt*np.arange(int(np.floor((stop - start + eps)/dt)) + 1) # From whole steps, so the times do not drift (e.g. 91.50000004)
                 if type(start) == type(stop) == type(dt) == self.default_type: # Everything matches: create the tvec, then convert to years
-                    self.tvec = sc.inclusiverange(start.value, stop.value+eps, dt.value)
-                    self.tvec = self.default_type(np.round(self.tvec, decimals=decimals))
+                    self.tvec = self.default_type(np.round(steps(start.value, stop.value, dt.value), decimals=decimals))
                     self.yearvec = np.round(self.tvec.years, decimals=decimals)
                 else: # They don't match: convert to years, then create the tvec
-                    start = self.start.years
-                    stop = self.stop.years
-                    dt = self.dt.years
-                    self.yearvec = np.round(start + sc.inclusiverange(0, stop-start+eps, dt), decimals=decimals)  # Subtracting off self.start.years in np.arange increases floating point precision for that part of the operation, reducing the impact of rounding
+                    self.yearvec = np.round(steps(self.start.years, self.stop.years, self.dt.years), decimals=decimals)
                     self.tvec = self.default_type(ss.years(self.yearvec))
             elif isinstance(self.start, ss.date): # e.g. ss.Sim(ss.date(2000))
                 # Date-based: tvec is the calendar-accurate date sequence (datevec returns this lazily)
@@ -529,6 +553,12 @@ class Timeline:
         if max_steps and n_steps > max_steps:
             warnmsg = f'start={self.start!r}, stop={self.stop!r}, and dt={self.dt!r} give {n_steps:n} timesteps, more than {max_steps:n}, which is valid but can be slow. '
             warnmsg += 'Use a larger dt if a step that small is not needed, or set ss.options.max_steps = 0 to turn off this warning.'
+            ss.warn(warnmsg)
+        max_years = ss.options.max_years
+        years = self.yearvec[-1] - self.yearvec[0] if len(self.yearvec) else 0
+        if max_years and years > max_years and (sim is None or self is getattr(sim, 't', None)): # The sim's own run, not each module's
+            warnmsg = f'start={self.start!r} and stop={self.stop!r} give a run of {years:,.0f} years, which is probably not what was meant (a stop meant as a year, or a time in another unit?). '
+            warnmsg += 'Set ss.options.max_years = 0 to turn off this warning.'
             ss.warn(warnmsg)
 
         # Capture the reference start and duration class so the lazy relvec property can be

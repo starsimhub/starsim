@@ -603,15 +603,9 @@ class Engine(Telling, Effects):
         graph = self.graph
         coords = sim.groups.group_coords
         own = {strat.name:strat for strat in graph.strats}
-        for tr in graph.inflows: # A birth rate for each level of a property of people would be births from the people at each level, which cannot be declared yet
-            if tr.rate is None: # Driven by a flow (ss.birth(per=))
-                continue
-            dims = [dim for leaf in tr.rate.leaves if isinstance(leaf, ss.par) and isinstance(leaf.raw, (ss.by, ss.parameters.by_func)) for dim in leaf.raw.dims]
-            others = [dim for dim in dims if sim.groups.strats[sim.groups.dim_index(dim)].kind != 'space']
-            if tr.per_capita and others:
-                errormsg = (f'The birth rate of "{tr.name}" is given for each level of {sc.strjoin(others)}, which would be births from the people at each level into the first state; that cannot be declared yet. '
-                            f'Give one birth rate, or a total inflow for each level that people arrive at (ss.null >> {tr.dst[0].name} @ ss.by({others[0]}=[...])).')
-                raise ValueError(errormsg)
+        for tr in graph.inflows: # A birth rate per person for each level of a property of people: births from the people at each level
+            if getattr(tr, 'per_capita', False) and self.by_dims(tr.per_person, space=False):
+                tr.rate, tr.by_level = self.per_level(tr.per_person)
         self.applies = sc.obj() # For each state: whether each dimension applies to it
         self.state_split = sc.obj() # The share of a state's initial people (or count) in each group
         self.inflow_splits = sc.obj() # Where an inflow into each state arrives
@@ -668,6 +662,35 @@ class Engine(Telling, Effects):
             people = [state.name for state in graph.people_states]
             self.foreign = {d for d,strat in enumerate(sim.groups.strats) if strat.kind != 'disease' and not any(self.applies[name][d] for name in people)}
         return
+
+    def by_dims(self, expr, space=True):
+        """ The dimensions of the sim that the values by level (`ss.by`) in an expression are given for, as indices; with space=False, not the places """
+        groups = self.sim.groups
+        names = [strat.name for strat in groups.strats]
+        dims = {names.index(dim) for leaf in expr.leaves if isinstance(leaf, ss.par) and isinstance(leaf.raw, (ss.by, ss.parameters.by_func)) for dim in leaf.raw.dims if dim in names}
+        return sorted(d for d in dims if space or groups.strats[d].kind != 'space')
+
+    def per_level(self, rate):
+        """
+        A birth rate per person given for each level of some dimensions (`ss.birth(S, rate=ss.by(species=mu))`), as the inflow it is: the
+        number of people counted by the rate at their level (a weighted count, see `ss.expressions.Count`), born at that level; a newborn is
+        in the youngest age group and of either sex, so those are the sum over their levels (counts are already in the same place).
+        Returns the rate, and the dimensions whose levels the births are at (for `describe()`).
+        """
+        groups = self.sim.groups
+        people = sum(self.graph.people_states[1:], self.graph.people_states[0])
+        kept = [d for d in self.by_dims(rate, space=False) if groups.strats[d].kind != 'age' and groups.strats[d].female is None]
+        dims = [groups.strats[d].name for d in kept]
+        if not kept:
+            return (rate*people).n, dims
+        shape = [groups.strats[d].n for d in kept]
+        terms = []
+        for level in np.ndindex(*shape):
+            onehot = np.zeros(shape)
+            onehot[level] = 1
+            at = ss.par(ss.by(onehot, dims=dims), name=f'level {sc.strjoin(level)} of {sc.strjoin(dims)}', literal=True)
+            terms.append(at*(rate*at*people).n)
+        return sum(terms[1:], terms[0]), dims
 
     def moves(self, tr):
         """ The change of level of a transition with `move=` or `increment=`, as ((dimension, level), ...), where the level of a counter is ('+', amount); or None """
@@ -762,14 +785,19 @@ class Engine(Telling, Effects):
         name = tr.dst[0].name
         if tr.rate is None: # Driven by a flow (ss.birth(per=)), whose children are placed by their parents' groups (see Compartmental.birth_map())
             return self.inflow_splits[name]
-        if self.sim.mixing.space is not None and any(isinstance(leaf, ss.expressions.Count) for leaf in tr.rate.leaves): # A rate that uses the number in a place gives the inflow in that place
-            return self.inflow_local[name]
-        given = [leaf.raw for leaf in tr.rate.leaves if isinstance(leaf, ss.par) and isinstance(leaf.raw, (ss.by, ss.parameters.by_func))]
-        if given: # A rate given for each level of some dimensions is the inflow at that level, so is shared out over the other dimensions only
-            dims = {self.sim.groups.dim_index(dim) for by in given for dim in by.dims}
-            factors = self.inflow_factors[name]
-            return self.sim.groups.fold(np.prod([np.ones(len(factor)) if d in dims and self.applies[name][d] else factor for d,factor in enumerate(factors)], axis=0)) if factors else self.inflow_splits[name]
-        return self.inflow_splits[name]
+        dims = self.inflow_dims(tr)
+        factors = self.inflow_factors[name]
+        if not dims or not factors:
+            return self.inflow_splits[name]
+        return self.sim.groups.fold(np.prod([np.ones(len(factor)) if d in dims else factor for d,factor in enumerate(factors)], axis=0))
+
+    def inflow_dims(self, tr):
+        """ The dimensions an inflow with a rate is given at, so arrives at the same level (see `inflow_split()`): those of its values by level, and the places, if it uses the number in one """
+        name = tr.dst[0].name
+        dims = set(self.by_dims(tr.rate))
+        if any(isinstance(leaf, ss.expressions.Count) for leaf in tr.rate.leaves):
+            dims |= {d for d,strat in enumerate(self.sim.groups.strats) if strat.kind == 'space'}
+        return sorted(d for d in dims if self.applies[name][d])
 
     def init_immunity(self):
         """
@@ -1112,7 +1140,13 @@ class Engine(Telling, Effects):
                 if modname not in ['', self.mod.name]:
                     continue
                 if name in self.rel_adjust:
-                    states = self.graph.infectious if name == 'rel_trans' else [src for tr in self.graph.acquisitions for src in tr.src]
+                    if name == 'rel_trans': # Those who infect others, and those counted by their infectiousness (A.n_trans)
+                        counted = [state for tr in self.graph.transitions.values() if isinstance(tr.rate, ss.expressions.Expr) for leaf in tr.rate.leaves if isinstance(leaf, ss.expressions.Count) and leaf.trans for state in leaf.states]
+                        states = list({id(state):state for state in self.graph.infectious + counted if state.name in self.graph.states}.values())
+                    else:
+                        states = [src for tr in self.graph.acquisitions for src in tr.src]
+                    if not states:
+                        raise ValueError(f'the adjustment of {name} by "{strat.name}" cannot apply, since "{self.mod.name}" has no one it is for: ' + ('no state is a source of a transmission (beta*I) or counted by its infectiousness (I.n_trans)' if name == 'rel_trans' else 'it has no transmission'))
                     if not any(self.applies[state.name][d] for state in states):
                         raise ValueError(f'the adjustment of {name} by "{strat.name}" cannot apply, since the people it is for ({sc.strjoin(s.name for s in states)}) have no level of "{strat.name}".')
                     self.rel_adjust[name].append((d, vals))
@@ -1314,6 +1348,9 @@ class Engine(Telling, Effects):
     def count_expr(self, expr):
         """ The value of a count in a rate (`I.n`, `I.total`, `I.frac`), with another disease's states counted by that disease """
         own, others = self.split_states(expr.states)
+        if id(expr) in self.met_counts(): # Of this disease's states only (see ss.graph.Graph.met_counts)
+            n = self.met_count(own, expr)
+            return n if expr.kind == 'n' else ss.expressions.divide(n, self.local_count(self.graph.people_states))
         if expr.weighted: # Each person counted by a value of theirs
             out = self.count_weighted(own, expr) if own else 0.0
             for name,states in others.items():
@@ -1327,6 +1364,23 @@ class Engine(Telling, Effects):
 
     def count_weighted(self, states, expr):
         """ A weighted count (`(ss.by(biting=w)*I).n`, `A.n_trans`: see `ss.expressions.Count`), in the same place as whoever it is evaluated for; by the engines """
+        raise NotImplementedError
+
+    def met_counts(self):
+        """ The ids of the counts in rates that the sim's contact matrices act on (see `ss.graph.Graph.met_counts`): none if it has none """
+        mixing = self.sim.mixing
+        kept = getattr(self, '_met', None)
+        if kept is None or kept[0] is not mixing.terms or kept[1] is not mixing.pool_terms: # Once for each layout of the mixing (see ss.solvers.Mixing.init())
+            leaves = self.graph.met_counts
+            self._met = (mixing.terms, mixing.pool_terms, {id(leaf) for leaf in leaves} if leaves and self.count_matrices() else set())
+        return self._met[2]
+
+    def count_matrices(self):
+        """ The contact matrices that act on a count in a rate, as this engine has them (see `ss.solvers.Mixing.count_terms()`); by the engines """
+        return []
+
+    def met_count(self, states, expr):
+        """ The number of people in some states met through the sim's contact matrices (`Σ_j C_ij·I_j`, or `Σ_j C_ij·w_j·I_j` for a weighted count: see `ss.solvers.Mixing.count_terms()`), for whoever it is evaluated for; by the engines """
         raise NotImplementedError
 
     def product_of(self, expr):
@@ -1452,9 +1506,9 @@ class Engine(Telling, Effects):
     def note_fast_steps(self):
         """ See `note_steps()` """
         sim = self.sim
-        for tr in self.graph.transitions.values(): # A rate per person that grows with a count of people, which is often a count written for a share
+        for tr in self.graph.acquisitions: # An infection at a rate per person that grows with a count of people, which is often a count written for a share
             if tr.people and not tr.inflow and tr.rate is not None and tr.flow_given is None and ss.expressions.count_power(tr.rate) > 0 and not self.plausible_density(tr): # Not for the whole flow written without a total (beta*S*I), which says so
-                ss.note(f'{tr.name} has a rate per person of {ss.expressions.format_expr(tr.rate)}, which grows with the number of people (density-dependent); for a share of the population, write .frac (e.g. I.frac), or write the transmission with the bare state (e.g. beta * I)', sim=sim)
+                ss.note(f'{tr.name} has a rate per person of {ss.expressions.format_expr(tr.rate)}, which grows with the number of people (density-dependent), and is fast for that: one infectious person would infect {self.density_rate(tr):,.3g} people a day, if everyone were susceptible. For a share of the population, write .frac (e.g. I.frac), or write the transmission with the bare state (e.g. beta * I)', sim=sim)
         if sim.solver in ['gillespie', 'tau'] and self.smooth: # Exact only for rates that are constant within a step
             what = 'solver="gillespie"' if sim.solver == 'gillespie' else 'Tau-leaping'
             msg = f'{what} holds values that vary in time for each step, at its middle'
@@ -1464,16 +1518,16 @@ class Engine(Telling, Effects):
         euler = sim.solver == 'ode' and sim.integrator == 'euler' and sim.pars.substeps is not None # Euler with steps of a given size; otherwise the ODE takes enough substeps
         unit = sim.unit_name
         inflows = [tr.name for tr in self.graph.inflows] # Their rate is a number of people per unit time, so nobody leaves
-        if sim.solver not in ['abm', 'binomial'] and not euler: # The solver is right whatever the step, but a mean dwell shorter than a step is usually a rate meant as a duration (rate=10)
+        if sim.solver not in ['abm', 'binomial'] and not euler: # The solver is right whatever the step, but a bare number for a rate with a mean dwell shorter than a step is usually meant as a duration (rate=10)
             for name,dw in self.dwells.items():
-                if name not in inflows and dw.dist is None and not callable(dw.par.raw) and not isinstance(dw.par.raw, ss.by):
+                if name not in inflows and dw.is_rate and sc.isnumber(dw.par.raw):
                     mean = self.dwell_mean(name)
                     if np.ndim(mean) == 0 and 0 < mean < self.dt:
                         ss.note(f'{name} has a mean dwell of {mean:.2g} {unit}{"s" if mean != 1 else ""}, shorter than the step; a duration is written dur=, or ss.days(10)', sim=sim)
             return
-        if sim.solver == 'binomial' and sim.pars.substeps is None: # It takes enough substeps (see ss.solvers.Compartmental.substeps())
+        if sim.solver == 'binomial': # It takes enough substeps (see ss.solvers.Compartmental.substeps()), or those it was given (substeps=1 for a model written in discrete time)
             return
-        dt = self.dt/(sim.pars.substeps if euler or sim.solver == 'binomial' else 1)
+        dt = self.dt/(sim.pars.substeps if euler else 1)
         step = 'step' if dt == self.dt else 'substep'
         plural = lambda n: f'{n:.2g} {unit}{"s" if n != 1 else ""}'
         fast = [] # What is fast compared with the step, as (rate × step, its name, what it is)
@@ -1511,13 +1565,12 @@ class Engine(Telling, Effects):
         if fast:
             x, _, what = fast[0]
             others = f' (and {sc.strjoin(f[1] for f in fast[1:])} {"is" if len(fast) == 2 else "are"} fast too)' if len(fast) > 1 else ''
-            fixes = 'a shorter step (dt=) or more substeps=' if euler or sim.solver == 'binomial' else f'a shorter step (e.g. dt=ss.{unit}s({dt/4:.2g}))'
+            fixes = 'a shorter step (dt=) or more substeps=' if euler else f'a shorter step (e.g. dt=ss.{unit}s({dt/4:.2g}))'
             msg = f'consider {fixes}: each {step} is {plural(dt)}, and {what}{others}'
             if euler:
                 msg += ' (Euler scales outflows that would take more than everyone down together)' if x > 1 else ''
             else: # Whole steps are off the ODE by an amount of order rate × dt, which can be large: about 15% in the prevalence of a seasonal SIRS at 0.12
-                who = 'agents' if sim.solver == 'abm' else 'the chain binomial'
-                msg += f'. Taking whole steps, {who} may differ from the ODE by an amount of that order'
+                msg += '. Taking whole steps, agents may differ from the ODE by an amount of that order'
             ss.note(f'{msg}; sim.check_dt() shows how much it matters', sim=sim)
         return
 
@@ -1530,19 +1583,26 @@ class Engine(Telling, Effects):
         except Exception: # Not known until the run
             return False
 
-    def plausible_density(self, tr):
+    def density_rate(self, tr):
         """
-        Whether a transition is density-dependent transmission as meant (`S >> I @ beta*I.n`, see `ss.graph.Graph.density_sources`), rather than
-        a count written for a share: whether one infectious person infects each susceptible at a rate under 5% a step. A beta meant for a share
-        (0.3 per day) is far above one for density dependence, R0/(N × the time infectious), unless the population is a handful of people
+        For an acquisition at a rate on counts of people: how many people a day one infectious person would infect if everyone were
+        susceptible (the rate with every count 1, times the population); None if it is not known until the run
         """
-        if not tr.acquisition or not self.graph.density_sources:
-            return False
         one = ss.expressions.substitute(tr.rate, {id(leaf):1.0 for leaf in tr.rate.leaves if isinstance(leaf, ss.expressions.Count)})
         try:
-            return bool(np.all(np.asarray(self.eval(one))*self.dt < 0.05))
+            per_day = float(np.max(np.asarray(self.eval(one))))*float(self.convert(ss.days(1)))
         except Exception: # A value not known until the run (e.g. a function of time)
-            return False
+            return None
+        return per_day*self.sim.pars.total_pop
+
+    def plausible_density(self, tr):
+        """
+        Whether an acquisition at a rate on counts of people is density-dependent transmission as meant (`S >> I @ beta*I.n`), rather than a count
+        written for a share: whether one infectious person would infect fewer than 10 people a day in a population with no immunity (measles
+        infects about 2). A beta meant for a share (0.3 a day) gives 0.3 × N, which is far more in any population but a handful of people
+        """
+        rate = self.density_rate(tr)
+        return rate is None or rate < 10
 
     def varying_dwell(self, name, tr, raw, dw, to_unit):
         """ A dwell time whose distribution has parameters with a value for each group (`ss.by`): see each engine's own """
@@ -1666,11 +1726,18 @@ class Engine(Telling, Effects):
         # Whatever is left over goes to the first state, or, if that is given a value, to the one state that is not (see Graph.resolve_rest())
         total = sum(fracs.values())
         if np.max(total) > 1 + 1e-9:
-            errormsg = f'The initial fractions of "{self.mod.name}" sum to {np.max(total):n}, which is more than 1: {dict(fracs)}. If some of these states are not people (e.g. mosquitoes), declare them with ss.State(people=False), whose init= is a count'
+            if np.ndim(total) and any(isinstance(s.init_n, ss.by) for s in graph.people_states): # Numbers by group, which disagree with the split of the stratification
+                groups, g = self.sim.groups, int(np.argmax(total))
+                where = ', '.join(f'{strat.name}={strat.labels[lev]}' for strat,lev in zip(groups.strats, groups.group_levels[g]) if lev >= 0)
+                room = self.total_pop*groups.group_split[g]
+                errormsg = f'init_n= of "{self.mod.name}" puts {total[g]*room:,.6g} people at {where}, but the split of the stratification puts {room:,.6g} there (of total_pop={self.total_pop:,.6g}); give the stratification a split= that agrees with init_n='
+            else:
+                errormsg = f'The initial fractions of "{self.mod.name}" sum to {np.max(total):n}, which is more than 1: {dict(fracs)}. If some of these states are not people (e.g. mosquitoes), declare them with ss.State(people=False), whose init= is a count'
             raise ValueError(errormsg)
         if graph.people_states:
             rest = 1 - total
             left = np.max(np.abs(rest)) > 1e-9
+            self.rest_empty = not left # Where the rest start does not matter, since there are none (see describe_graph())
             if graph.rest is None and left:
                 first = graph.first.name
                 unset = [s.name for s in graph.people_states if not s.given_init]
@@ -2213,7 +2280,7 @@ class Engine(Telling, Effects):
         """ For a run with real numbers (ode): say where chance would matter, as a stochastic run would show """
         sim = self.sim
         infected = [s for s in self.graph.infected if s.people]
-        if sim.solver != 'ode' or not infected or not self.graph.transmissions:
+        if sim.solver != 'ode' or not infected or not self.graph.transmissions or ss.sim.in_proportions(sim): # In proportions, there is no chance to speak of
             return
         res = self.mod.results
         n = sum(np.asarray(res[s.name].values, dtype=float) for s in infected)

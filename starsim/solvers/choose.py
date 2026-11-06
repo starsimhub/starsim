@@ -9,10 +9,7 @@ import re
 import inspect
 import itertools
 import collections
-import importlib
-import importlib.util
 import math
-import functools
 import numpy as np
 import sciris as sc
 import starsim as ss
@@ -22,7 +19,7 @@ from .agents_events import Events
 from .agents_compiled import Compiled
 from .engine import convert
 
-__all__ = ['solver_names', 'integrators', 'Undeclared', 'make_engine', 'choose_solver', 'choose_engine', 'kernel_seconds', 'init_crossings', 'init_capabilities', 'auto_reasons', 'why_not', 'solver_table', 'rules', 'set_par_values', 'flows_of', 'init_group_values', 'settle_start', 'group_people']
+__all__ = ['solver_names', 'integrators', 'Undeclared', 'make_engine', 'choose_solver', 'choose_engine', 'init_crossings', 'init_capabilities', 'auto_reasons', 'why_not', 'solver_table', 'rules', 'set_par_values', 'flows_of', 'init_group_values', 'settle_start', 'group_people']
 
 
 solver_names = ['auto', 'ode', 'ide', 'binomial', 'gillespie', 'tau', 'abm'] + agent_solvers # The solvers that can be asked for ('ide' runs as the ODE, with each dwell time as it is: see Compartmental.slot_rates(); 'abm' as agents, each declared module as it suggests, and the others as agents in a particular way: see agent_solver())
@@ -150,8 +147,8 @@ def choose_solver(sim):
     written as code: a sim of modules written as code with nothing per person (e.g. an
     ODE of its own in NumPy) has no agents, and one with per-person arrays (e.g. a
     disease written as code) runs as agents. Which engine then takes a whole
-    stochastic compartmental run, JAX or the kernels, is chosen when the sim is run, by
-    `choose_engine()`.
+    compartmental run, the kernels or (with `sim.jax = True`) JAX, is chosen when the sim is
+    run, by `choose_engine()`.
 
     The steps: the modules are gathered and the declared model is built (`init_model()`); what
     matters to the choice is recorded (`init_capabilities()`), with what the layout of the
@@ -359,82 +356,32 @@ def check_model(sim):
     return
 
 
-jax_after = 0.5 # The seconds above which a run taken by the kernels is taken by JAX instead, if sim.jax is None: see choose_engine()
-
-
-def kernel_seconds(sim):
-    """
-    About how long the compiled kernels would take for a whole run of the ODE, from the size of its model alone: its time
-    points, substeps, groups, compartments, flows, movers, the mixing between groups and places, and the stages of the
-    integrator (see `ss.kernels.compiled_seconds()`: 0.93 to 1.6 times the time taken, for runs of more than 0.05 s). It
-    never times anything, so the estimate (and the engine `choose_engine()` picks) is the same for a model whatever has
-    run before, whether the kernels are compiled, and whatever else the machine is doing. It counts the substeps that
-    the rates at the start need, not those an ODE adds as an epidemic grows, and leaves out values that vary in time, so
-    it errs toward the kernels, which start at once.
-    """
-    seconds = 0.0
-    for mod in sim.declared:
-        engine = mod.engine
-        cross = engine.cross
-        if cross is not None and cross.lead != mod.name: # Diseases tracked jointly run as one program, counted once
-            continue
-        engines = cross.engines if cross is not None else [engine]
-        for e in engines:
-            if e.program is None:
-                e.init_program()
-        if cross is not None:
-            cross.build()
-        p = cross.program if cross is not None else engine.program
-        groups = cross.n_cols if cross is not None else engine.n_groups
-        rates = np.concatenate([rate for e in engines for rate in e.start_rates()] + [p.mov_rate])
-        solver = ss.kernels.solvers[sim.integrator]
-        n_sub = ss.kernels.substeps(rates, engine.dt, engine.substeps(), solver)
-        seconds += ss.kernels.compiled_seconds(p, np.empty((cross.n_rows if cross is not None else engine.n_comps, groups)), mod.t.npts, solver, n_sub)
-    return seconds
-
-
-@functools.cache
-def has_jax():
-    """ Whether JAX is installed, which is looked for once a session """
-    return importlib.util.find_spec('jax') is not None
-
-
 def choose_engine(sim):
     """
     Whether JAX takes the sim's whole run of the ODE, as `ss.gradients` runs it, rather than the kernels, and why
 
-    By `sim.jax`: True for JAX, False for the kernels, or None (the default) to choose: JAX if the run would take the
-    kernels more than `jax_after` seconds (see `kernel_seconds()`). Once started, JAX takes 0.1 to 0.3 times as long as the
-    kernels for the ODE over many groups, but starting it takes about half a second in a session (0.3 s to import it, and
-    0.1 to 0.25 s to trace a model; compiled code is kept on disk), which a short run would notice. The choice depends on
-    the model only (`kernel_seconds()` is worked out from its size, never timed), not on what has run before, whether the
-    kernels are compiled, or the load on the machine (and an ODE run in JAX agrees with the kernels to about 1e-14). The
-    other solvers are run by the kernels, as is a model JAX does not cover (see `why_not()`), with a note if JAX was asked for.
+    By `sim.jax`: True for JAX, and otherwise (False, or None, the default) the kernels. JAX is never chosen for a run by
+    itself: it is chosen where it is needed, for gradients and the fits and log-densities that use them (`sim.gradient()`,
+    `sim.log_density()`, `sim.fit()`), and is worth asking for only for a long run over many groups (it takes about half a
+    second to start in a session, and compiles each model; an ODE run in JAX agrees with the kernels to about 1e-14). The
+    other solvers are run by the kernels, as is a model JAX does not cover (see `why_not()`), with a note.
 
     Returns whether to use JAX, and the reason, also kept as `sim.engine_reason`.
     """
     use, why = False, None
-    if sim.jax is False:
-        why = 'kernels, as asked (sim.jax = False)'
+    if not sim.jax:
+        why = 'kernels' + (', as asked (sim.jax = False)' if sim.jax is False else '')
     elif sim.solver != 'ode':
         why = f'kernels: JAX does not run solver="{sim.solver}"'
-        if sim.jax:
-            ss.note(f'JAX does not run solver="{sim.solver}", so it is run by the kernels', sim=sim)
-    elif sim.jax is None and not has_jax():
-        why = 'kernels: JAX is not installed'
+        ss.note(f'JAX does not run solver="{sim.solver}", so it is run by the kernels', sim=sim)
     else:
-        seconds = kernel_seconds(sim) if sim.jax is None else None
-        if seconds is not None and seconds < jax_after:
-            why = f'kernels: a short run (about {seconds:.2g} s), shorter than JAX takes to start (about {jax_after} s a session)'
+        no = why_not(sim, 'jax')
+        if no is not None:
+            why = f'kernels: JAX cannot run this sim, since {no}'
+            ss.note(f'JAX cannot run this sim, since {no}, so it is run by the kernels', sim=sim)
         else:
-            no = why_not(sim, 'jax')
-            if no is not None:
-                why = f'kernels: JAX cannot run this sim, since {no}'
-                if sim.jax:
-                    ss.note(f'JAX cannot run this sim, since {no}, so it is run by the kernels', sim=sim)
-            else:
-                use = True
-                why = 'JAX, as asked (sim.jax = True)' if sim.jax else f'JAX: a long run (about {seconds:.2g} s by the kernels), which it takes in a fraction of the time'
+            use = True
+            why = 'JAX, as asked (sim.jax = True)'
     sim.engine_reason = why
     return use, why
 
@@ -723,10 +670,10 @@ def init_unit(sim):
         pars.dt = dur_class(sc.ifelse(pars.dt, 1.0))
     in_years = unit == 'year' and pars.start is None # A model in years with no start starts in the year 2000 (see ss.Timeline)
     if not dates and not years and not in_years:
-        if sc.isnumber(pars.start) or (pars.start is None and (pars.stop is None or pars.dur is None)): # With a stop and a dur, the start is stop - dur (see ss.Timeline)
-            pars.start = dur_class(sc.ifelse(pars.start, 0))
-        if sc.isnumber(pars.stop):
-            pars.stop = dur_class(pars.stop)
+        if pars.start is None and sc.isnumber(pars.stop) and pars.dur is not None: # With a stop and a dur, the start is stop - dur
+            pars.start = dur_class(pars.stop) - (pars.dur if isinstance(pars.dur, ss.dur) else dur_class(pars.dur))
+        elif sc.isnumber(pars.start) or pars.start is None:
+            pars.start = dur_class(sc.ifelse(pars.start, 0)) # A bare stop is a time in the unit too, as ss.Timeline reads it; a typed one is the length of the run
     return
 
 
@@ -877,14 +824,17 @@ def check_routes(sim):
             if not (sc.isnumber(beta) and beta == 1):
                 raise ValueError(f'the route "{net.name}" has beta={beta}, but in a declared model the beta belongs to the transmission; give it there, e.g. S >> I @ dict({net.name}=...) * I.')
 
-    # A count of people in a rate is literal, so the routes do not apply to it (said of no inflow, such as births, which is in total and never exposure)
+    # A count of people in a rate is literal, so the routes do not apply to it (said of no inflow, such as births, which is in total and never exposure), except the contact matrices to a count in an acquisition (see ss.graph.Graph.met_counts)
+    matrices = [net.name for net in nets if isinstance(net, ss.MixingPools)]
     for mod in sim.declared if routes else []:
+        met = {id(leaf) for leaf in mod.graph.met_counts} if matrices else set()
         for name,tr in mod.graph.transitions.items():
             if tr.inflow:
                 continue
             counts = [leaf for leaf in (tr.rate.leaves if tr.rate is not None else []) if isinstance(leaf, ss.expressions.Count) and any(getattr(s, 'people', True) for s in leaf.states)]
-            if counts:
-                ss.note(f'"{mod.name}.{name}" uses {counts[0]} literally, so {sc.strjoin(routes)} {"does" if len(routes) == 1 else "do"} not apply to it; write the bare state (e.g. {counts[0].states[0].label_name}) for exposure through the routes', sim=sim)
+            others = [r for r in routes if r not in matrices] if counts and id(counts[0]) in met else routes
+            if counts and others:
+                ss.note(f'"{mod.name}.{name}" uses {counts[0]} literally, so {sc.strjoin(others)} {"does" if len(others) == 1 else "do"} not apply to it; write the bare state (e.g. {counts[0].states[0].label_name}) for exposure through the routes', sim=sim)
     return
 
 
@@ -918,7 +868,7 @@ def check_betas(sim, nets):
                         elif acts:
                             hint = f'give ss.peract() with a value for each of its directions ({sc.strjoin(dirs) or "it has none, so one value"})'
                         else:
-                            hint = f'"{net.name}" has no acts, so give one rate or probability per contact' + (', which goes from the mother to the child only' if getattr(net, 'one_way', False) else '')
+                            hint = f'"{net.name}" has no acts, so give one rate or probability per contact' + (', which goes from p1 to p2 only' if getattr(net, 'one_way', False) else '')
                         raise ValueError(f'{where} is a pair, {list(val)}, which has no direction names: {hint}.')
                     if isinstance(val, ss.peract):
                         if not acts:
@@ -1529,15 +1479,19 @@ def stepped_modifier(sim, mod):
 
 
 def weighted_rate(sim, mod):
-    """ A weighted count, a count of another disease, or the coverage of a product in a rate or a dwell time, counted in Python once a step (see `init_program()`) """
+    """
+    A count of another disease, or the coverage of a product, in a rate or a dwell time, counted in Python once a step (see `init_program()`); or a
+    weighted count that the kernels do not take as part of the rate: of diseases tracked jointly, or inside a parameter that holds an expression, as a dwell time can (a rate held in one is that rate: see `ss.expressions.unheld()`)
+    """
     count = lambda leaf: isinstance(leaf, ss.expressions.Count)
     other = lambda leaf: count(leaf) and mod.engine.split_states(leaf.states)[1]
-    def leaves(expr): # Including those inside a parameter that holds an expression, as a dwell time written as one is held
+    def leaves(expr, held=False): # Including those inside a parameter that holds an expression, as a dwell time written as one is held, with whether they are
         for leaf in expr.leaves:
-            yield leaf
+            yield leaf, held
             if isinstance(leaf, ss.par) and isinstance(leaf.raw, ss.expressions.Expr):
-                yield from leaves(leaf.raw)
-    leaf = next((leaf for tr in mod.graph.transitions.values() for expr in [tr.rate, tr.dur] if isinstance(expr, ss.expressions.Expr) for leaf in leaves(expr) if (count(leaf) and leaf.weighted) or other(leaf) or isinstance(leaf, ss.expressions.Coverage)), None)
+                yield from leaves(leaf.raw, True)
+    stepped = lambda leaf, held: other(leaf) or isinstance(leaf, ss.expressions.Coverage) or (count(leaf) and leaf.weighted and (held or mod.engine.cross is not None))
+    leaf = next((leaf for tr in mod.graph.transitions.values() for expr in [tr.rate, tr.dur] if isinstance(expr, ss.expressions.Expr) for leaf,held in leaves(expr) if stepped(leaf, held)), None)
     return None if leaf is None else dict(leaf=leaf, what='a count of another disease' if other(leaf) else 'a weighted count' if count(leaf) else 'the coverage of a product')
 
 
@@ -1568,7 +1522,6 @@ def fixed_reason(sim, mod):
 kernels = [ # What stops the kernels taking a whole run in one call: something in Python needs to see the model between one step and the next (see why_not())
     Rule('sim', lambda sim: sim.solver == 'abm', STEPPED, 'it runs as agents'),
     Rule('sim', lambda sim: not getattr(sim, 'declared', None), STEPPED, 'it has no declared model'),
-    Rule('sim', lambda sim: sim.loop.index or sim.loop.insertions, STEPPED, 'it has been stepped already, or has functions inserted into its loop'),
     Rule('sim', lambda sim: sim.diagnostics, STEPPED, 'it records diagnostics'),
     Rule('sim', lambda sim: sim.verbose >= 2, STEPPED, 'it prints each step (verbose=2)'),
     Rule('sim', own_steps, STEPPED, '{names} {has} a step of {its} own ({kinds})'),
@@ -1579,11 +1532,12 @@ kernels = [ # What stops the kernels taking a whole run in one call: something i
     Rule('declared', lambda sim, mod: dict(tr=mod.engine.event_triggers[0]) if mod.engine.event_triggers else None, STEPPED, '"{tr.name}" is triggered by {tr.trigger}, which is applied at each step'), # Moved in Python at the end of each step
     Rule('declared', stepped_modifier, STEPPED, 'the modifier "{m.name}" is applied each step (it has until= or hold=, a function as its where= or amount, or changes a value that varies by person)'),
     Rule('declared', lambda sim, mod: bool(mod.engine.net_mods), STEPPED, 'a modifier changes the contacts of a network'), # The contacts are set once for a whole run
-    Rule('declared', weighted_rate, STEPPED, '{leaf} is {what}, which is worked out at each step'),
+    Rule('declared', weighted_rate, STEPPED, '{leaf} is {what}, which is worked out in Python once a step and held through it (so an ODE run is only first order in dt)'),
     Rule('declared', lambda sim, mod: modified_key(sim, mod, 'route'), STEPPED, 'a modifier acts on a transmission of "{mod.name}" on one route'),
     Rule('declared', lambda sim, mod: modified_key(sim, mod, 'branch'), STEPPED, 'a modifier changes a branch probability of "{mod.name}"'), # Where arrivals go is set once for a whole run
     Rule('declared', changed_branch, STEPPED, 'a modifier changes "{name}", which a branch probability of "{mod.name}" reads'),
     Rule('declared', fixed_reason, STEPPED, '{reason}'),
+    Rule('sim', lambda sim: sim.loop.index or sim.loop.insertions, STEPPED, 'it has been stepped already, or has functions inserted into its loop'), # Last, since a sim that was stepped for one of the reasons above is still stepped for it
 ]
 
 
@@ -1620,7 +1574,7 @@ def later_trigger(sim, mod):
 fixed = [ # The same, for what cannot change once the sim is initialized
     Rule('declared', own_lifecycle, STEPPED, '"{mod.name}" defines its own {name}()'),
     Rule('declared', lambda sim, mod: dict(name=mod.graph.funcs.keys()[0]) if mod.graph.funcs else None, STEPPED, '"{name}" of "{mod.name}" is called each step'),
-    Rule('declared', step_function, STEPPED, '"{name}" of "{mod.name}" is a function of the sim, so is called each step'),
+    Rule('declared', step_function, STEPPED, '"{name}" of "{mod.name}" is a function of the sim, so is called once a step and held through it (so an ODE run is only first order in dt)'),
     Rule('declared', changing_transfer, STEPPED, 'the rate of the transfer "{tf.name}" of "{mod.name}" {how}'),
     Rule('declared', later_trigger, STEPPED, '"{tr.name}" of "{mod.name}" is triggered by {tr.trigger}, so moves people between steps'),
     Rule('declared', lambda sim, mod: mod.t.npts != sim.t.npts, STEPPED, '"{mod.name}" has a timestep of its own'),

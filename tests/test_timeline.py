@@ -171,7 +171,7 @@ def test_timeline_syntax():
     kw.b1 = [dict(start=None, stop=2010, dur=None, dt=None)           , dict(start=ss.years(1960), stop=ss.years(2010), dur=ss.years(50), dt=ss.years(1))]
     kw.b2 = [dict(start=None, stop=1990, dur=None, dt=None)           , dict(start=ss.years(1940), stop=ss.years(1990), dur=ss.years(50), dt=ss.years(1))]
     kw.b3 = [dict(start=None, stop='1990.1.1', dur=None, dt=None)     , dict(start=ss.date(1940), stop=ss.date(1990), dur=ss.years(50), dt=ss.years(1))]
-    kw.b4 = [dict(start=None, stop=ss.years(2010), dur=None, dt=None) , dict(start=ss.years(1960), stop=ss.years(2010), dur=ss.years(50), dt=ss.years(1))]
+    kw.b4 = [dict(start=None, stop=ss.years(2010), dur=None, dt=None) , dict(start=ss.years(0), stop=ss.years(2010), dur=ss.years(2010), dt=ss.years(1))] # A typed stop is a length, never a year
     kw.b5 = [dict(start=None, stop=ss.date(2050), dur=None, dt=None)  , dict(start=ss.date(2000), stop=ss.date(2050), dur=ss.years(50), dt=ss.years(1))]
     kw.b6 = [dict(start=None, stop=ss.days(100), dur=None, dt=None)   , dict(start=ss.days(0), stop=ss.days(100), dur=ss.days(100), dt=ss.days(1))]
 
@@ -192,7 +192,8 @@ def test_timeline_syntax():
     # Test start and stop
     kw.e1 = [dict(start=1990, stop=2010, dur=None, dt=None)                , dict(start=ss.years(1990), stop=ss.years(2010), dur=ss.years(20), dt=ss.years(1))]
     kw.e2 = [dict(start=ss.years(1990), stop=2010, dur=None, dt=None)      , dict(start=ss.years(1990), stop=ss.years(2010), dur=ss.years(20), dt=ss.years(1))]
-    kw.e3 = [dict(start=1990, stop=ss.years(2010), dur=None, dt=None)      , dict(start=ss.years(1990), stop=ss.years(2010), dur=ss.years(20), dt=ss.years(1))]
+    kw.e3 = [dict(start=1990, stop=ss.years(2010), dur=None, dt=None)      , dict(start=ss.years(1990), stop=ss.years(2010), dur=ss.years(20), dt=ss.years(1))] # A calendar year after a calendar start
+    kw.e3b = [dict(start=1990, stop=ss.years(20), dur=None, dt=None)       , dict(start=ss.years(1990), stop=ss.years(2010), dur=ss.years(20), dt=ss.years(1))] # A length after it
     kw.e4 = [dict(start=ss.date(1990), stop=2010, dur=None, dt=None)       , dict(start=ss.date(1990), stop=ss.date(2010), dur=dd20, dt=ss.years(1))]
     kw.e5 = [dict(start=1990, stop=ss.date(2010), dur=None, dt=None)       , dict(start=ss.date(1990), stop=ss.date(2010), dur=dd20, dt=ss.years(1))]
     kw.e6 = [dict(start=ss.years(0), stop=ss.days(365), dur=None, dt=None) , dict(start=ss.years(0), stop=ss.years(1), dur=ss.years(1), dt=ss.years(1))]
@@ -350,6 +351,17 @@ def test_sim_start_stop_dur():
     t = ss.Timeline(start=2000, stop=2020, dt=1.0)
     t.update(dur=5) # A new dur replaces the stop
     assert t.stop == ss.years(2005) and len(t.tvec) == 6
+    for stop in [1899, 2000]: # A typed stop is the length of the run, however large: never a calendar year
+        sim = ss.Sim(stop=ss.years(stop), **kw).init()
+        assert sim.t.start == ss.years(0) and sim.t.stop == ss.years(stop)
+    sim = ss.Sim(start=1950, stop=ss.years(20), **kw).init()
+    assert sim.t.stop == ss.years(1970)
+    t.update(stop=ss.years(3)) # Also when updated
+    assert t.stop == ss.years(2003)
+    sim = ss.Sim(start=ss.years(2000), stop=ss.years(2020), **kw).init() # A calendar year after a calendar start is when it ends
+    assert sim.t.stop == ss.years(2020)
+    assert ss.connectors.to_time(sim, ss.years(5)) == ss.years(2005) and ss.connectors.to_time(sim, ss.years(2010)) == ss.years(2010) # So are times
+    assert ss.Sim(start=2000, stop=2030, **kw).run(until=ss.years(5)).t.ti == 6 # Stops after the step that starts 5 years in
     return sim
 
 

@@ -68,6 +68,13 @@ def make_delay():
                       recovery=ss.Transition(I, R, dur=ss.days(8)), death=ss.death([E, I], rate=ss.perday(0.02)), init_prev=0.01, name='delay')
 
 
+def make_biting(w=(0.5, 2.0)):
+    """ A weighted count: each infectious person counted by how much they are bitten (or not weighted, w=None) """
+    S, I, R = ss.states('S I R')
+    sir = ss.Disease(infection=S >> I @ ss.perday(0.3)*(I.n if w is None else (ss.by(biting=list(w))*I).n)/(S + I + R).n, recovery=I >> R @ ss.days(8), init=dict(I=0.01), name='sir')
+    return sir.stratify(biting=['lo', 'hi'], split=[0.7, 0.3])
+
+
 models = sc.obj(
     sir     = (make_sir,     dict(total_pop=10_000, unit='day', stop=ss.weeks(12))),
     seir    = (make_seir,    dict(unit='day', stop=200)),
@@ -77,6 +84,7 @@ models = sc.obj(
     malaria = (make_malaria, dict(unit='day', stop=200, total_pop=10_000)),
     tb      = (make_tb,      dict(stop=30, total_pop=100_000)), # Has a transfer, so is stepped
     delay   = (make_delay,   dict(unit='day', stop=150)),
+    biting  = (make_biting,  dict(unit='day', stop=100, total_pop=10_000)),
 )
 
 
@@ -111,6 +119,18 @@ def test_ode():
         print(f'{key:8s} whole run against stepped {diff:0.1e}')
         assert diff < 1e-9, f'{key}: the whole run differs from the stepped one by {diff}' # A value that varies in time is tabulated for a whole run, and worked out at each stage when stepped
     return sims
+
+
+@sc.timer()
+def test_weighted_count():
+    sc.heading('Testing that a weighted count is worked out within each step, as I.n is')
+    make, pars = models.biting
+    sim = lambda w=(0.5, 2.0), dt=1, solver='ode': ss.Sim(make(w), **sc.mergedicts(pars, kw, dict(dt=ss.days(dt), solver=solver))).run().results.sir.I.values
+    I, fine = sim(), sim(dt=0.25)[::4]
+    assert np.abs(I - fine).max()/fine.max() < 1e-5 # Fourth order, not first: it was 14% off when held through each step
+    for solver in ['ode', 'binomial', 'gillespie']: # Weights of 1 are I.n
+        assert np.array_equal(sim((1, 1), solver=solver), sim(None, solver=solver))
+    return I
 
 
 @sc.timer()
@@ -253,15 +273,25 @@ def test_plain_estimate():
 
 @sc.timer()
 def test_engine_choice():
-    sc.heading('Testing that the engine chosen for a run depends on the model only, not on the cache or the load')
+    sc.heading('Testing that a run is taken by the kernels, whatever its size, unless JAX is asked for')
     choices = []
     for compiled in [True, False]:
         clock = itertools.count(0.0, 100.0*(1 - compiled)) # Each call 100 s after the last, as if the machine were busy
         with mock.patch.object(ss.kernels, 'is_compiled', lambda: compiled), mock.patch.object(time, 'perf_counter', lambda: next(clock)): # And a cold cache
-            sim = ss.Sim(make_commute(), total_pop=1e5, unit='day', stop=60, solver='ode', **kw).init()
-            choices.append((ss.solvers.kernel_seconds(sim), ss.solvers.choose_engine(sim)))
-    assert choices[0] == choices[1], f'The estimate and the engine changed with the cache or the clock: {choices}'
+            sim = ss.Sim(make_commute(), total_pop=1e5, unit='day', stop=3650, solver='ode', **kw).init() # A long run, once taken by JAX
+            choices.append(ss.solvers.choose_engine(sim))
+    assert choices[0] == choices[1] == (False, 'kernels'), f'The engine was not the kernels, or changed with the cache or the clock: {choices}'
     return choices
+
+
+@sc.timer()
+def test_jax_thread_limit():
+    sc.heading('Testing that a limit on threads in the environment is kept for JAX, which takes as many CPU devices (see ss.gradients.jax())')
+    code = 'import starsim as ss; print(ss.settings.thread_limit)'
+    env = {k:v for k,v in os.environ.items() if k not in ['OMP_NUM_THREADS', 'SCIRIS_NUM_THREADS', 'STARSIM_NUM_THREADS']}
+    run = lambda **kw: subprocess.run([sys.executable, '-c', code], env=env | kw, capture_output=True, text=True, check=True).stdout.split()[-1]
+    assert run(OMP_NUM_THREADS='2') == '2' and run() == 'None' # Starsim's own default of one BLAS thread is not a limit
+    return
 
 
 @sc.timer()
@@ -322,6 +352,7 @@ if __name__ == '__main__':
     T = sc.timer()
 
     sims = test_ode()
+    weighted = test_weighted_count()
     mix = test_factored_mixing()
     peaks = test_stages()
     seasonal = test_seasonal_steps()

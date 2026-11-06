@@ -331,17 +331,20 @@ def describe_graph(graph, sim=None, out=None):
         guess = state.guessed.get('people')
         add('', f'{state.name} a count, not people', f'guessed: {guess}' if guess else None)
     for state in graph.infectious:
-        add('', f'{state.name} infectious')
+        add('', f'{state.name} infectious' + (f', rel_trans = {value_str(state.rel_trans)}' if rel_str(state.rel_trans) else ''))
+    for state in {id(s):s for tr in graph.acquisitions for s in tr.src or [] if rel_str(s.rel_sus)}.values(): # Where it applies: to an acquisition from the state
+        add('', f'{state.name} susceptible, rel_sus = {value_str(state.rel_sus)}')
     infected = [s.name for s in graph.infected if s.people]
     if infected and not graph.transmissions: # With a transmission, they are its destination and its source, as above
         add('', f'infected: {", ".join(infected)}', 'counted in prevalence, and cured by ss.treat')
     init_str = lambda v: f'{value_str(v)}(sim)' if callable(v) and not isinstance(v, (ss.Dist, Expr, ss.by, ss.parameters.TimeValue)) else v # A function by its name, e.g. Sv = mosquito_start(sim)
-    inits = {s.name:init_str(s.init) for s in graph.states.values() if s.init is not None} | {s.name:f'{s.init_n} {"person" if s.init_n == 1 else "people"}' for s in graph.states.values() if s.init_n is not None}
+    inits = {s.name:init_str(s.init) for s in graph.states.values() if s.init is not None} | {s.name:f'{s.init_n} {"person" if s.init_n == 1 else "people"}' if s.people else s.init_n for s in graph.states.values() if s.init_n is not None} # A state that is not people, as a plain number
     if graph.init_prev is not None and not (sc.isnumber(graph.init_prev) and graph.init_prev == 0):
         inits['init_prev'] = value_str(graph.init_prev.raw) if isinstance(graph.init_prev, par) else graph.init_prev
-    guesses = [graph.guessed[key] for key in ['init', 'init_prev', 'first', 'rest'] if key in graph.guessed]
+    rest_in = graph.rest if not getattr(engine, 'rest_empty', False) else None # Not said when the initial values account for everyone
+    guesses = [graph.guessed[key] for key in ['init', 'init_prev', 'first', 'rest'] if key in graph.guessed and (key != 'rest' or rest_in is not None)]
     if inits:
-        rest = f'; the rest in {graph.rest.name}' if graph.rest is not None else ''
+        rest = f'; the rest in {rest_in.name}' if rest_in is not None else ''
         add('', 'init: ' + ', '.join(f'{k} = {v}' for k,v in inits.items()) + rest, f'guessed: {"; ".join(guesses)}' if guesses else None)
     elif graph.first is not None:
         add('', f'init: {graph.first.name} = 1.0', f'guessed: {"; ".join(["nothing given"] + guesses)}')
@@ -413,6 +416,9 @@ def describe_graph(graph, sim=None, out=None):
                     if tr.stages:
                         text = f'{within} Erlang({tr.stages} stages, mean = {quantity_str(raw, "dur", unit)})'
                 add('', text, 'guessed: scalar duration' if not isinstance(raw, ss.Dist) and tr.dur is not None and not tr.stages else stages)
+            elif getattr(tr, 'by_level', None) is not None: # A birth rate per person by level, which the engine runs as a weighted count at each level (see ss.solvers.Engine.per_level())
+                rate = tr.per_person*ss.expressions.Count(list(graph.people_states), kind='n')
+                add('', f'rate = {format_expr(rate, values="number", unit=unit, mul="×")}', 'each person at the rate of their level' + (f', born at their level of {sc.strjoin(tr.by_level)}' if tr.by_level else ''))
             elif tr.rate is not None:
                 add('', f'rate = {format_expr(tr.rate, values="number", unit=unit, mul="×")}')
             elif tr.p is not None:
@@ -538,6 +544,13 @@ def equation_symbols(graph, engine=None):
                 lines.append(f'In a transmission, I / N in each group is weighted by the contact matrix{net}')
             elif term.kind == 'homogeneous' and term.contacts != 1:
                 lines.append(f'In a transmission, I / N is {term.contacts:n} * I / N: {term.contacts:n} contacts per {unit}{net}')
+    met = engine.met_counts() if mixing is not None and hasattr(engine, 'met_counts') else set()
+    if met: # Counts that the contact matrices act on (see ss.solvers.Mixing.count_terms())
+        nets = sc.strjoin(f'"{term.name}"' for term in mixing.terms if mixing.counts(term))
+        for leaf in dict.fromkeys(str(leaf) for leaf in graph.met_counts if id(leaf) in met):
+            frac = leaf.endswith('.frac')
+            each = leaf.removesuffix('.frac').removesuffix('.n') # What is counted in each group: I for I.n, I.n_trans as itself
+            lines.append(f'In a rate, {leaf} in group i is the sum over groups j of C[i, j] * {each}[j]{" / N" if frac else ""}, with C the contact matrix of {nets}{" and N everyone in the same place" if frac else ""}')
     for name,p in graph.pars.items():
         raw = p.raw
         if isinstance(raw, ss.parameters.seasonal):
@@ -602,16 +615,21 @@ def flow_terms(graph, engine=None, contacts=None):
             term = f'{k}{src} / {name}'
         elif flow.kind == 'contact':
             mix = f'{contacts} * ' if contacts else ''
-            parts = [f'{format_expr(coef)} * {mix}{src} * {state.name} / N' for state,coef in tr.terms.items()]
+            sus = rel_str(flow.state.rel_sus)
+            parts = [f'{sus}{format_expr(coef)} * {mix}{src} * {rel_str(state.rel_trans)}{state.name} / N' for state,coef in tr.terms.items()]
             if tr.const is not None:
-                parts.append(f'{format_expr(tr.const)} * {src}')
+                parts.append(f'{sus}{format_expr(tr.const)} * {src}')
             term = ' + '.join(parts)
             if len(parts) > 1: term = f'({term})'
+        elif flow.kind == 'inflow' and getattr(tr, 'by_level', None) is not None: # A birth rate per person by level, as written rather than as the engine runs it (see ss.solvers.Engine.per_level())
+            term = f'{format_expr(tr.per_person)} * N'
         elif flow.kind == 'inflow':
             term = format_expr(tr.rate)
         else:
             rate = format_expr(tr.rate)
             term = f'({rate}) * {src}' if isinstance(tr.rate, BinOp) and tr.rate.op in '+-' else f'{rate} * {src}'
+            if tr.acquisition and flow.src is not None: # As susceptible as its source, as for a transmission
+                term = rel_str(flow.state.rel_sus) + term
         dsts = []
         if flow.to is not None:
             dsts.append((flow.to, term))
@@ -716,7 +734,8 @@ def describe_sim(sim, output=False, verbose=False):
     stopguess = '' if ('stop' in sim.given or 'dur' in sim.given) else ' [guessed]' # The default length of a run
     t = sim.t
     when = f'{unit}s {t.start} to {t.stop}' if sim.unit is None or not t.is_absolute else f'{t.start} to {t.stop}'
-    desc.section('Sim', f'{len(mods)} module{"s" if len(mods) != 1 else ""}, {pars.total_pop:,.0f} people{popguess}, {when}{stopguess}')
+    pop = f'in proportions (total_pop={pars.total_pop:g})' if ss.sim.in_proportions(sim) else f'{pars.total_pop:,.0f} people'
+    desc.section('Sim', f'{len(mods)} module{"s" if len(mods) != 1 else ""}, {pop}{popguess}, {when}{stopguess}')
     if sim.declared:
         guessed = pars.solver == 'auto'
         add('solver', sim.solver, f'guessed: {sim.solver_reason}' if guessed else 'requested')
@@ -890,6 +909,11 @@ def strat_rows(strat, most=6):
     if strat.adjust and strat.kind != 'strain': # A strain's are shown with its strains
         rows.append('adjust: ' + '; '.join(f'{key} × {short([f"{v:n}" for v in vals])}' for key,vals in strat.adjust.items()))
     return rows
+
+
+def rel_str(value):
+    """ A state's `rel_sus` or `rel_trans` as a factor before what it multiplies (`0.03 * `), or nothing if it is 1 """
+    return '' if sc.isnumber(value) and value == 1 else f'{value_str(value)} * '
 
 
 def factor_str(expr):

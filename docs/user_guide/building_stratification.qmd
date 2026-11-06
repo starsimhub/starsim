@@ -40,7 +40,7 @@ Children are 30% of the town, but about three in five of the infections, and the
 sim.diseases.measles.equations()
 ```
 
-With contacts, β is the rate of infection per contact with an infectious person, and R0 depends on the whole contact matrix: here 0.14 per contact gives an R0 of about 16, close to the 15 before, and with 11% of people susceptible, the sim prints an R of 2.5 at the start. [Population data](populations_data.qmd) covers contact matrices, including those for real countries (`ss.contacts('Kenya')`).
+With contacts, β is the rate of infection per contact with an infectious person, and R0 depends on the whole contact matrix: here 0.14 per contact gives an R0 of about 16, close to the 15 before, and with 11% of people susceptible, the sim prints an R of 2.5 at the start. [Population data](populations_data.qmd) covers contact matrices, including those for real countries (`ss.contacts('Kenya')`), and [what a matrix acts on](populations_data.qmd#what-a-matrix-acts-on): with `beta*I`, as here, the share of each group who are infectious; with `beta*I.n`, their number; and with `beta*I.frac`, their number over everyone, as in Keeling & Rohani's matrices, which go in as the book gives them.
 
 ## Levels and shares
 
@@ -159,6 +159,8 @@ beta = ss.by(age={'0-14': 2.5, '15-64': 1.9, '65+': 1.0})  # By label
 beta = ss.by(age=[2.5, 1.9, 1.0], risk=[1.0, 3.0])         # One value per age group and risk level: the product
 init = ss.by(age=[0.002, 0.001, 0])                         # A share of each age group
 ```
+
+A starting share, like `init` above, is of each group, not of everyone. Textbooks often give starting values as shares of the whole population: 0.0001 of everyone infected, all in a high-risk group that is 20% of people, is `init=dict(I=ss.by(risk=[0.0001/0.2, 0]))`.
 
 A table (a dataframe with a column for each dimension and a column `value`) gives each combination directly, and a table by single year of age works whatever the model's age groups. A value for each group can itself change over time (`ss.by(age=[ss.timeseries(...), 1.9, 1.0])`). See [Parameters](building_parameters.qmd#values-for-each-group).
 

@@ -310,11 +310,16 @@ class SimPars(ss.Pars):
             delivery (`ss.Delivery`): for a product, the delivery it was found in
         """
         name = mod.name
-        if name in names:
-            if delivery is not None and (mod._default_name or names[name] == 'interventions'): # A product named for its delivery
-                mod.name = mod.label = sc.uniquename(f'{delivery.name}_product', list(names), style='_%d')
+        taken = [attr for attr in dir(ss.Results) if not attr.startswith('_')] # The module's results are sim.results.<name>, so a method's name is taken
+        used = list(names) + taken
+        if name in names or name in taken:
+            if delivery is not None and (mod._default_name or names.get(name) == 'interventions'): # A product named for its delivery
+                mod.name = mod.label = sc.uniquename(f'{delivery.name}_product', used, style='_%d')
             elif mod._default_name: # A name the user did not give is simply numbered (e.g. a second clip_edges is clip_edges_1)
-                mod.name = sc.uniquename(name, list(names), style='_%d')
+                mod.name = sc.uniquename(name, used, style='_%d')
+            elif name in taken:
+                errormsg = f'A module cannot be called "{name}", since sim.results.{name} is a method of the results; please give it another name (the names taken are {sc.strjoin(taken)})'
+                raise ValueError(errormsg)
             else:
                 errormsg = f'Cannot add module "{name}" to {modkey}: a module with that name already exists in {names[name]}; please give one of them a different name'
                 raise ValueError(errormsg)
@@ -554,7 +559,7 @@ class Sim(ss.Base):
         self._name_modules(names, demographics, connectors, networks, interventions, diseases, analyzers, custom, modules)
         interventions = self._order_steps(interventions)
         self.par_values = None # Values of model parameters by name, e.g. pars=dict(beta=0.1) or pars=fit.pars
-        self.jax = None # Whether a whole run of the ODE is taken in JAX (as ss.parallel() does for many runs with different values; see ss.gradients); None to choose (see ss.solvers.choose_engine())
+        self.jax = None # Whether a whole run of the ODE is taken in JAX (see ss.gradients): True to ask for it; otherwise the kernels take a run (see ss.solvers.choose_engine()), and JAX is used only where it is needed (gradients, and ss.parallel() for many runs with different values, unless False)
         if isinstance(pars, dict) and len(pars): # Values of the model's parameters by name; a sim setting only by its own name, if no parameter that could be fitted has it (so pars=fit.pars works with a parameter called dur, and pars=dict(dur=10) with a network that has one)
             given = [mod for arg in [modules, demographics, connectors, networks, interventions, diseases, analyzers, custom] for mod in sc.tolist(arg) if isinstance(mod, ss.Module)]
             names = {name for mod in given for name in (mod.pars.keys() if getattr(mod, 'graph', None) is not None else mod.pars.bounded())}
@@ -823,13 +828,14 @@ class Sim(ss.Base):
             short = dict(ode='ODE', ide='integro-differential', binomial='chain binomial', gillespie='Gillespie', tau='tau-leaping')
             solver = 'ide' if self.pars.solver == 'ide' else self.solver # Run as the ODE, with its dwell times as they are
             people = self.declared or 'total_pop' in self.given or self.pop_from # Modules written as code with nothing per person (e.g. an ODE of their own) have no population, unless one was given
-            how = (f'{self.pars.total_pop:,.0f} people, ' if people else '') + 'as ' + (f'a branching process ({short.get(solver, solver)})' if self.pars.branching else kind.get(solver, solver))
+            pop = self.pars.total_pop
+            how = ((f'in proportions (total_pop={pop:g}), ' if in_proportions(self) else f'{pop:,.0f} people, ') if people else '') + 'as ' + (f'a branching process ({short.get(solver, solver)})' if self.pars.branching else kind.get(solver, solver))
         label = f' "{self.label}"' if self.label else ''
         what = f'{sc.strjoin(mods)}, ' if mods else ''
         lines = [ss.display.style(f'Sim{label}: {what}{how}, {when}', 'bold', color=ss.display.in_color())]
         if self.solver != 'abm':
             for dis in self.declared:
-                sources = dis.graph.infectious or dis.graph.density_sources
+                sources = dis.graph.infectious or dis.graph.count_sources
                 if dis.graph.transmissions or sources:
                     try:
                         ngm, ngm_start = dis.engine.next_generation(), dis.engine.next_generation(start=True) # In a population with no immunity, and as it starts
@@ -841,9 +847,15 @@ class Sim(ss.Base):
                         shown = f'{count:,.0f}' if count >= 100 or count == round(count) else f'{count:.3g}' # A share, with total_pop=1, is not 0
                         at_start = ''
                         if abs(R - R0) > 0.01*R0: # Some start immune
-                            share = float(dis.engine.count([dis.graph.first]))/float(dis.engine.count(dis.graph.people_states))
+                            graph = dis.graph
+                            sources = {id(s):s for tr in graph.acquisitions for s in tr.src or [] if s.people}.values() # Every state infected from, as susceptible as its rel_sus, up to fully
+                            susceptible = sum(float(dis.engine.count([s]))*(min(s.rel_sus, 1) if sc.isnumber(s.rel_sus) else 1) for s in sources)
+                            infected = {id(s) for s in graph.infected}
+                            share = susceptible/float(dis.engine.count([s for s in graph.people_states if id(s) not in infected]))
                             at_start = f' (R = {R:.3g} at the start, with {share:.0%} susceptible)'
-                        lines.append(f'  {dis.name}: R0 = {R0:.3g}{at_start}, with {shown} infectious at the start')
+                        timed = [name for name,p in dis.graph.pars.items() if isinstance(p.raw, ss.parameters.TimeValue)] # So R0 is at the start time
+                        when = f' at the start ({sc.strjoin(timed)} {"varies" if len(timed) == 1 else "vary"} in time)' if timed else ''
+                        lines.append(f'  {dis.name}: R0 = {R0:.3g}{when}{at_start}, with {shown} infectious at the start')
         if self.pars.solver == 'auto' and self.solver == 'abm' and self.declared and not any(self.solver_reason in note for note in notes):
             lines.append(f'  Running as agents: {self.solver_reason}')
         lines += [f'  Note: {note}' for note in notes]
@@ -853,15 +865,16 @@ class Sim(ss.Base):
         """ What a run says when it ends: how long it took, and for each disease with a transmission, its infections and their peak """
         parts = []
         for dis in getattr(self, 'declared', []):
-            trs = dis.graph.transmissions or (dis.graph.acquisitions if dis.graph.density_sources else [])
+            trs = dis.graph.transmissions or (dis.graph.acquisitions if dis.graph.count_sources else [])
             if trs and all(tr.name in dis.results for tr in trs):
                 total = sum(dis.results[tr.name].values.sum() for tr in trs)
-                infectious = sum(dis.results[state.name].values for state in dis.graph.infectious or dis.graph.density_sources if state.name in dis.results)
+                infectious = sum(dis.results[state.name].values for state in dis.graph.infectious or dis.graph.count_sources if state.name in dis.results)
                 if np.ndim(infectious):
                     peak = int(np.argmax(infectious))
                     tvec = dis.t.tvec if len(dis.t.tvec) == len(infectious) else self.t.tvec # On the disease's own timeline, if it has one
                     when = ss.utils.time_str(tvec[peak], self) # A date, or e.g. day 27, as in the first line
-                    parts.append(f'{dis.name}: {total:,.0f} infections; at most {infectious[peak]:,.0f} infectious, on {when}')
+                    fmt = '.3g' if in_proportions(self) else ',.0f' # In proportions, shares rather than counts
+                    parts.append(f'{dis.name}: {total:{fmt}} infections; at most {infectious[peak]:{fmt}} infectious, on {when}')
         took = f'{self.elapsed:.2g}' if self.elapsed < 1 else f'{self.elapsed:.1f}'
         return f'  Done in {took} s' + (f'; {"; ".join(parts)}' if parts else '')
 
@@ -1592,7 +1605,7 @@ class Sim(ss.Base):
         self.loop.run(t.tvec[min(t.ti, t.npts - 2)], verbose) # Up to the next step, which starts at time point ti
         return self
 
-    def run(self, until=None, verbose=None, shrink=False, profile=False, solver=None, n_runs=None):
+    def run(self, until=None, verbose=None, shrink=False, profile=False, solver=None, n_runs=None, parallel=True):
         """
         Run the model -- the main method for running a simulation.
 
@@ -1603,6 +1616,7 @@ class Sim(ss.Base):
             profile (bool): if True, record per-entry CPU timing in the loop (see `sim.loop.to_df()`/`plot_cpu()`)
             solver (str): the solver to use, if different from the sim's (a sim already built for another is built again)
             n_runs (int): if provided, run the sim this many times with different seeds, and return an `ss.MultiSim`; a shortcut for `ss.parallel(sim, n_runs=n_runs)`
+            parallel (bool): with `n_runs`, whether to run them in parallel, as `ss.parallel()` takes it (False to run them one after another, e.g. on a shared machine)
 
         A sim that has finished is run again from the start, as it was before it was initialized (see `sim.new()`).
         """
@@ -1612,9 +1626,12 @@ class Sim(ss.Base):
             imp.warned = True
             ss.warn(f'running an import with {len(imp.incomplete)} part(s) of the model not translated (sim.imported.incomplete); '
                     f'its results leave them out. {imp.prompt}', ss.errors.ImportIncomplete)
+        if isinstance(until, (bool, np.bool_)):
+            errormsg = f'until={until} is True or False, neither a time nor a condition. A comparison that already has a value (e.g. A.n <= 1 made after the sim was initialized, when A.n is a number) is not a condition of the model: make it before sim.init(), or give a function of the sim, e.g. until=lambda sim: ...'
+            raise TypeError(errormsg)
         new_solver = solver is not None and solver != (self.solver if self.initialized else self.pars.solver)
         if n_runs is not None:
-            return ss.parallel(self.new(solver=solver) if new_solver else self, n_runs=n_runs, **(dict(run_args=dict(until=until)) if until is not None else {}))
+            return ss.parallel(self.new(solver=solver) if new_solver else self, n_runs=n_runs, parallel=parallel, **(dict(run_args=dict(until=until)) if until is not None else {}))
         if new_solver and self.initialized: # Built for another solver, so built again
             self.new(solver=solver, inplace=True)
         elif solver is not None and not self.initialized:
@@ -2107,7 +2124,7 @@ class Sim(ss.Base):
         Args:
             results (str/list): the results, by name, e.g. 'cases' (or 'sir.cases' if more than one module has one of that name)
             resample (str): the period each value is over, e.g. 'week' for the total of a flow over each week
-            noise (str): 'poisson' (the default), for counts drawn with each value as their mean; or None, for the values themselves
+            noise (str/`ss.Dist`): 'poisson' (the default), for counts drawn with each value as their mean; a likelihood as `sim.fit()` takes it, with each value as its mean, e.g. `ss.nbinom(n=10)` for counts with a variance of mean + mean²/10 (see `ss.fit.logpdf()`); or None, for the values themselves
             seed (int): the random seed for the noise (default: the sim's)
 
         Returns:
@@ -2117,12 +2134,15 @@ class Sim(ss.Base):
             ```python
             truth = ss.Sim(sir, pars=dict(beta=0.025), rand_seed=2, **pars).run()
             data = truth.to_data('cases', resample='week') # Weekly cases, with Poisson noise
+            data = truth.to_data('cases', resample='week', noise=ss.nbinom(n=10)) # Overdispersed, as fitted with likelihood=ss.nbinom(n=10)
             sim = ss.Sim(sir, data=data, **pars)
             ```
         """
         self.check_results_ready('Please run the sim before drawing data from it')
-        if noise not in [None, 'poisson']:
-            errormsg = f'noise="{noise}" is not a kind of noise; the choices are "poisson" and None'
+        if noise == 'poisson':
+            noise = ss.poisson()
+        elif not (noise is None or isinstance(noise, ss.Dist)):
+            errormsg = f'noise={noise!r} is not a kind of noise; the choices are "poisson", a likelihood such as ss.nbinom(n=10), and None'
             raise ValueError(errormsg)
         rng = np.random.default_rng(sc.ifelse(seed, self.pars.rand_seed))
         columns = {}
@@ -2131,12 +2151,12 @@ class Sim(ss.Base):
             if res is None:
                 errormsg = f'The sim has no result "{name}" (or more than one); results are named as in sim.results, e.g. "cases", or "sir.cases"'
                 raise KeyError(errormsg)
-            if noise is not None and res.kind == 'ratio':
-                errormsg = f'"{name}" is a ratio, which has no Poisson noise; give noise=None for its values'
+            if isinstance(noise, (ss.poisson, ss.nbinom)) and res.kind == 'ratio':
+                errormsg = f'"{name}" is a ratio, which has no noise of counts; give noise=None for its values, or a likelihood for a ratio, e.g. ss.normal(scale=0.01)'
                 raise ValueError(errormsg)
             series = res.to_series(resample=resample)
             values = series.to_numpy(dtype=float)
-            columns[name] = rng.poisson(np.maximum(values, 0)) if noise == 'poisson' else values
+            columns[name] = values if noise is None else ss.fit.draw(noise, values, rng)
         timecol = 'date' if isinstance(series.index[0], (ss.date, pd.Timestamp)) else 'time'
         return sc.dataframe({timecol:list(series.index), **columns})
 
@@ -2322,6 +2342,11 @@ class Sim(ss.Base):
         marks = {None:ss.results.intervention_marks(self)} if show_interventions else None
         return self.results.plot(key=key, fig=fig, data=data, label=self.label, show_skipped=show_skipped, annualize=annualize, marks=marks, **kwargs)
 
+
+
+def in_proportions(sim):
+    """ Whether a sim's numbers are shares of a population of 1 (`total_pop=1`): as an ODE, or as agents each a share of it, but not as a stochastic compartmental model, which then has one person """
+    return sim.pars.total_pop <= 1 and (sim.solver or sim.pars.solver) not in ['binomial', 'gillespie', 'tau']
 
 
 def demo(run=True, plot=True, summary=True, show=None, **kwargs):
