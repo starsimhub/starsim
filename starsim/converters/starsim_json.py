@@ -49,7 +49,7 @@ from .core import code_value, time_names, func_names
 __all__ = ['to_json', 'load_json']
 
 # The settings of a sim that the file carries, as they were given
-settings = ['label', 'n_agents', 'total_pop', 'pop_scale', 'start', 'stop', 'dur', 'dt', 'unit', 'solver', 'rand_seed', 'branching', 'approx', 'integrator', 'substeps', 'use_aging']
+settings = ['label', 'n_agents', 'total_pop', 'pop_scale', 'start', 'stop', 'dur', 'dt', 'unit', 'solver', 'rand_seed', 'branching', 'approximations', 'integrator', 'substeps', 'aging']
 module_keys = ['networks', 'demographics', 'interventions', 'analyzers', 'connectors']
 values = ['par', 'seasonal', 'peract', 'timeseries', 'by', 'Rate', 'date', 'datedur', 'dur'] # Starsim's values that can be written as calls, besides typed quantities and distributions
 dist_names = sorted(name for name in dir(ss) if isinstance(getattr(ss, name), type) and issubclass(getattr(ss, name), ss.Dist) and name != 'Dist')
@@ -59,12 +59,14 @@ constants = dict(pi='np.pi', inf='np.inf', nan='np.nan', null='ss.null', stay='s
 #%% Writing
 
 def drop_prefixes(code):
-    """ Python as the file writes it: `ss.days(10)` as `days(10)`, `np.exp(x)` as `exp(x)`, and `ss.ppl.age` as `people.age` """
+    """ Python as the file writes it: `ss.days(10)` as `days(10)`, `np.exp(x)` as `exp(x)`, and `ss.person.age` as `people.age` """
     class Drop(ast.NodeTransformer):
         def visit_Attribute(self, n):
-            if isinstance(n.value, ast.Attribute) and isinstance(n.value.value, ast.Name) and n.value.value.id == 'ss' and n.value.attr == 'ppl':
+            if isinstance(n.value, ast.Attribute) and isinstance(n.value.value, ast.Name) and n.value.value.id == 'ss' and n.value.attr == 'person':
                 return ast.Attribute(ast.Name('people'), n.attr)
             elif isinstance(n.value, ast.Name) and n.value.id in ['ss', 'np']:
+                return ast.Name(n.attr)
+            elif isinstance(n.value, ast.Attribute) and isinstance(n.value.value, ast.Name) and n.value.value.id == 'ss' and n.value.attr == 'time': # ss.time.Rate as Rate
                 return ast.Name(n.attr)
             self.generic_visit(n)
             return n
@@ -122,9 +124,9 @@ class Writer:
         pars = g.pars
         ends = lambda names, empty: empty if not names else names[0] if len(names) == 1 else '[' + ', '.join(names) + ']'
         name = lambda x: 'null' if x is ss.null else 'stay' if x is ss.stay else x.name
-        src = ends([name(x) for x in tr.src], 'null')
-        dst = [name(x) for x in tr.dst or []] + ['stay']*bool(tr.stays) + ['null']*bool(tr.dies) # ss.stay and ss.null are kept out of dst, each with its own p
-        out = sc.objdict(src=src if src != 'null' else None, dst=None if not dst else dst[0] if len(dst) == 1 else dst)
+        src = ends([name(x) for x in tr.source], 'null')
+        dst = [name(x) for x in tr.dest or []] + ['stay']*bool(tr.stays) + ['null']*bool(tr.dies) # ss.stay and ss.null are kept out of dst, each with its own p
+        out = sc.objdict(source=src if src != 'null' else None, dest=None if not dst else dst[0] if len(dst) == 1 else dst)
         dur = tr.dur
         if tr.rate is not None:
             out.rate = self.expr(tr.rate, pars)
@@ -134,17 +136,17 @@ class Writer:
         if p is not None: # A split, or a share of the people leaving by a transition with one destination (e.g. recovery with p=1 - p_death beside death with p=p_death)
             p = sc.tolist(p) + [tr.p_stay]*bool(tr.stays) + [tr.p_die]*bool(tr.dies)
             out.p = [None if x is None else self.expr(x, pars) for x in p]
-        for key in ['after', 'label', 'stages']:
+        for key in ['min_stay', 'label', 'stages']:
             val = getattr(tr, key, None)
             if val is not None:
-                out[key] = self.expr(val, pars) if key == 'after' else val
+                out[key] = self.expr(val, pars) if key == 'min_stay' else val
         for key in ['where', 'move', 'increment']:
             if getattr(tr, key, None) is not None:
                 self.lost.append(f'not exported: the {key}= of transition "{g.module.name}.{tr.name}"')
-        typed = isinstance(getattr(dur, 'raw', dur), (ss.dur, ss.Dist)) # A dwell time written with @ needs a unit, so that it is not read as a rate
-        if set(out.keys()) <= {'src', 'dst', 'rate', 'dur'} and not isinstance(out.dst, list) and ('rate' in out or typed):
+        typed = isinstance(getattr(dur, 'raw', dur), (ss.Duration, ss.Dist)) # A dwell time written with @ needs a unit, so that it is not read as a rate
+        if set(out.keys()) <= {'source', 'dest', 'rate', 'dur'} and not isinstance(out.dest, list) and ('rate' in out or typed):
             rate = out.get('rate', out.get('dur'))
-            return f'{src} >> {out.dst or "null"} @ {rate}'
+            return f'{src} >> {out.dest or "null"} @ {rate}'
         return {k:v for k,v in out.items() if v is not None}
 
     def strat(self, s):
@@ -152,8 +154,8 @@ class Writer:
         if s.geo is not None or s.mobility is not None:
             self.lost.append(f'changed: the places of "{s.name}" are written as names, without their geography or movement')
         out = {s.name: self.value(s.edges if s.edges is not None else s.labels)}
-        if s.split_given:
-            out['split'] = self.value(s.split)
+        if s.fractions_given:
+            out['fractions'] = self.value(s.fractions)
         if s.adjust:
             out['adjust'] = self.value(dict(s.adjust))
         default = 'age' if s.name == 'age' else 'plain'
@@ -194,8 +196,8 @@ class Writer:
                 out[key] = vals
         if g.init_prev is not None and 'init_prev' not in g.guessed: # Not the default, which is worked out again
             out.init_prev = self.value(getattr(g.init_prev, 'raw', g.init_prev))
-        if g.first_given is not None:
-            out.first = g.first_given
+        if g.default_given is not None:
+            out.default_state = g.default_given
         strats = [self.strat(s) for s in g.strats if s.kind != 'strain']
         if strats:
             out.stratify = strats
@@ -277,7 +279,7 @@ def to_json(sim):
     sim = ss.converters.export.initialized(sim)
     w = Writer()
     out = sc.objdict(starsim=ss.__version__)
-    defaults = ss.SimPars()
+    defaults = ss.sim.SimPars()
     for key in settings:
         val = w.value(base.pars.get(key))
         if val is not None and val != w.value(defaults.get(key)):
@@ -342,8 +344,8 @@ class Reader:
                     return ast.parse(constants[n.id], mode='eval').body
                 self.error(where, f'"{n.id}" is not a state, parameter, or transition of the model, in "{text}"')
             elif isinstance(n, ast.Attribute) and isinstance(n.value, ast.Name) and n.value.id == 'people':
-                return ast.Attribute(ast.Attribute(ast.Name('ss'), 'ppl'), n.attr)
-            elif isinstance(n, ast.Attribute) and n.attr in ['n', 'frac', 'total', 'dwell', 'time']:
+                return ast.Attribute(ast.Attribute(ast.Name('ss'), 'person'), n.attr)
+            elif isinstance(n, ast.Attribute) and n.attr in ['n', 'frac', 'total', 'dwell', 'time_in']:
                 return ast.Attribute(visit(n.value), n.attr)
             elif isinstance(n, ast.BinOp) and isinstance(n.op, (ast.Add, ast.Sub, ast.Mult, ast.Div, ast.Pow, ast.BitAnd, ast.BitOr)):
                 return ast.BinOp(visit(n.left), n.op, visit(n.right))
@@ -360,6 +362,10 @@ class Reader:
                 func = ast.Name(name) if name in ['dict', 'expit'] else ast.Attribute(ast.Name('np' if name in func_names else 'ss'), name)
                 if name == 'mean':
                     func = ast.Attribute(ast.Name('ss'), 'mean')
+                elif name == 'Rate': # In its submodule, ss.time.Rate
+                    func = ast.Attribute(ast.Attribute(ast.Name('ss'), 'time'), 'Rate')
+                elif name == 'dur': # The class of a duration, ss.Duration
+                    func = ast.Attribute(ast.Name('ss'), 'Duration')
                 return ast.Call(func, [visit(a) for a in n.args], [ast.keyword(k.arg, visit(k.value)) for k in n.keywords if k.arg is not None])
             self.error(where, f'"{ast.unparse(n)}" is not something a model can say, in "{text}"')
         try:
@@ -416,11 +422,11 @@ class Reader:
             if src.startswith('['): # People leaving any of several states, which the operators write as their sum
                 src = '(' + ' + '.join(ast.unparse(e) for e in ast.parse(src, mode='eval').body.elts) + ')'
             return f'{src} >> {self.ends(dst, names, where)} @ {rate if simple else f"({rate})"}'
-        unknown = set(tr) - {'src', 'dst', 'rate', 'dur', 'p', 'after', 'label', 'stages'}
+        unknown = set(tr) - {'source', 'dest', 'rate', 'dur', 'p', 'min_stay', 'label', 'stages'}
         if unknown:
             self.error(where, f'{sc.strjoin(sorted(unknown))} is not an argument of a transition here')
-        args = [self.ends(tr.get('src') or 'null', names, where), self.ends(tr['dst'] if isinstance(tr.get('dst'), str) else '[' + ', '.join(x or 'null' for x in tr['dst']) + ']' if tr.get('dst') else 'null', names, where)]
-        for key in ['rate', 'dur', 'p', 'after', 'stages', 'label']:
+        args = [self.ends(tr.get('source') or 'null', names, where), self.ends(tr['dest'] if isinstance(tr.get('dest'), str) else '[' + ', '.join(x or 'null' for x in tr['dest']) + ']' if tr.get('dest') else 'null', names, where)]
+        for key in ['rate', 'dur', 'p', 'min_stay', 'stages', 'label']:
             if tr.get(key) is not None:
                 val = repr(tr[key]) if key == 'label' else self.value(tr[key], names, where)
                 args.append(f'{key}={val}')
@@ -430,9 +436,9 @@ class Reader:
         """ The lines of code of a declared disease, as the variable var """
         name = d.get('name', var)
         where = f'disease "{name}"'
-        unknown = set(d) - {'name', 'label', 'pars', 'states', 'transitions', 'results', 'init', 'init_n', 'init_prev', 'first', 'stratify'}
+        unknown = set(d) - {'name', 'label', 'pars', 'states', 'transitions', 'results', 'init', 'init_n', 'init_prev', 'default_state', 'stratify'}
         if unknown:
-            self.error(where, f'{sc.strjoin(sorted(unknown))} is not part of a disease; its parts are name, pars, states, transitions, results, init, init_n, init_prev, first, and stratify')
+            self.error(where, f'{sc.strjoin(sorted(unknown))} is not part of a disease; its parts are name, pars, states, transitions, results, init, init_n, init_prev, default_state, and stratify')
         states = [s if isinstance(s, str) else s['name'] for s in d.get('states', [])]
         pars = list(d.get('pars', {}))
         transitions = list(d.get('transitions', {}))
@@ -493,7 +499,7 @@ class Reader:
         for key in ['init_prev']:
             if d.get(key) is not None:
                 kw[key] = self.value(d[key], names, f'{where}, {key}')
-        for key in ['first', 'label']:
+        for key in ['default_state', 'label']:
             if d.get(key) is not None:
                 kw[key] = repr(d[key])
         kw.name = repr(name)

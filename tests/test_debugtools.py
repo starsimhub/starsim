@@ -67,7 +67,7 @@ def test_mock_objects():
     atol = 0.1
 
     # Initializing Dists
-    o.dist = ss.lognorm_ex(μ, 2, mock=mock)
+    o.dist = ss.lognormal(μ, 2, mock=mock)
     assert np.isclose(o.dist.rvs(1000).mean(), μ, atol=atol), f'Distribution did not have expected mean value of {μ}'
 
     # Initializing Arrs -- can use it, but cannot grow it since mock slots can't grow

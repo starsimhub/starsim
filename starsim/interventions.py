@@ -68,7 +68,7 @@ class Intervention(ss.Module):
 def modules_of(sim, key):
     """ The modules of a kind ('interventions', 'connectors', 'diseases'): the sim's, once it has them, and before then those in its parameters """
     mods = sim.__dict__.get(key)
-    if isinstance(mods, ss.ndict) and len(mods):
+    if isinstance(mods, ss.utils.ndict) and len(mods):
         return list(mods.values())
     return [m for m in sim.pars[key].values() if isinstance(m, ss.Module)]
 
@@ -127,7 +127,7 @@ def fired(selector, cond):
 
 
 def remembered(selector, cond):
-    """ The memory of an event for each agent or group: whether (`ever`), how often (`count`), or how long ago (`since`, in the sim's unit) it happened """
+    """ The memory of an event for each agent or group: whether (`ever`), how often (`n_times`), or how long ago (`since`, in the sim's unit) it happened """
     sim = selector.sim
     event, kind = cond.args
     flush_memory(sim)
@@ -138,11 +138,11 @@ def remembered(selector, cond):
         owner = outcome = None
         if name in mod.graph.transitions:
             last, count = mod[f'last_{name}'].raw, mod[f'count_{name}'].raw
-        elif kind != 'count' and isinstance(getattr(mod, f'ti_{name}', None), ss.Arr): # An event the module records with its time (the index of its step), e.g. preg.live_birth.since
+        elif kind != 'n_times' and isinstance(getattr(mod, f'ti_{name}', None), ss.Arr): # An event the module records with its time (the index of its step), e.g. preg.live_birth.since
             last = mod[f'ti_{name}'].raw
             count = ~np.isnan(last)
         else:
-            raise ss.CapabilityError(f'{cond} cannot be read: "{mod.name}" does not keep the {"number" if kind == "count" else "time"} of {event.args[1]} for each person')
+            raise ss.CapabilityError(f'{cond} cannot be read: "{mod.name}" does not keep the {"number" if kind == "n_times" else "time"} of {event.args[1]} for each person')
     else:
         owner = selector.module(ss.conditions.modname(event.args[0]))
         outcome = event.args[1]
@@ -158,7 +158,7 @@ def remembered(selector, cond):
         return selector.dim(ss.solvers.memory_layout(sim, (owner.name, outcome)).name) > 0
     if kind == 'ever':
         return count > 0
-    elif kind == 'count':
+    elif kind == 'n_times':
         return count
     dt = sim.pars.dt.to(sim.unit_base).value
     return np.where(np.isnan(last), np.inf, (sim.ti - last)*dt)
@@ -172,7 +172,7 @@ def coded_disease(sim, name):
 
 def trigger_moves(owner, outcome, sel, eng=None, before=None):
     """
-    The transitions triggered by an event of a delivery or product (e.g. `ss.Transition(I, R_res, where=drug.failed, p=0.05)`):
+    The transitions triggered by an event of a delivery or product (e.g. `ss.Transition(I, R_res, on=drug.failed, p=0.05)`):
     the people it happened to who are in the transition's source, and meet the rest of its condition, move now, with its
     probability (`p=`), or split between its destinations; under every solver
 
@@ -186,25 +186,27 @@ def trigger_moves(owner, outcome, sel, eng=None, before=None):
     sim = owner.sim
     for mod in sim.declared:
         for tr in [tr for tr in mod.graph.transitions.values() if tr.trigger is not None and tr.trigger.outcome]:
-            event, cond = ss.conditions.split_who(tr.trigger.x)
+            event, cond = ss.conditions.split_where(tr.trigger.x)
+            if getattr(tr, 'where', None) is not None: # The transition's own where= restricts who moves too (on=event, where=cond)
+                cond = ss.conditions.join('&', [c for c in [cond, tr.where] if c is not None])
             if not any(leaf.op == 'event' and ss.conditions.modname(leaf.args[0]) == owner.name and leaf.args[1] == outcome for leaf in ss.conditions.event_leaves(event)):
                 continue
             if sim.solver != 'abm': # As shares of each state and group
                 ss.solvers.trigger_groups(owner, outcome, mod, tr, event, cond, sel, eng, before)
                 continue
             tgt = mod.engine
-            srcs = [s for s in tr.src if s.people]
+            srcs = [s for s in tr.source if s.people]
             uids = sel if isinstance(sel, ss.uids) else ss.uids(np.flatnonzero(sel))
             uids = uids[np.logical_or.reduce([mod[s.name].raw[uids] for s in srcs])] if len(uids) else uids
             if cond is not None and len(uids):
                 uids = uids[np.asarray(tgt.selector.select(cond), dtype=bool)[uids]]
             if not len(uids):
                 continue
-            ps = [np.broadcast_to(p, len(uids)) for p in (tgt.branch_probs_for(tr, uids) if tr.split else [tgt.eval_for(tr.p[0], uids) if tr.p else 1.0])]
+            ps = [np.broadcast_to(p, len(uids)) for p in (tgt.branch_probs_for(tr, uids) if tr._split else [tgt.eval_for(tr.p[0], uids) if tr.p else 1.0])]
             tgt.new_round() # A way in from code: see ss.solvers.Agents.new_round()
             rvs = tgt.draw(f'trig_{tr.name}', uids)
             edges = np.cumsum([np.zeros(len(uids))] + ps, axis=0)
-            for k,dst in enumerate(tr.dst):
+            for k,dst in enumerate(tr.dest):
                 tgt.force(uids[(rvs >= edges[k]) & (rvs < edges[k+1])], tr, dst, srcs=srcs)
     return
 
@@ -264,7 +266,7 @@ def order_steps(mods):
 
 #%% Deliveries for declared models: who gets a product, when, and how many
 
-delivery_keys = ['start', 'stop', 'at', 'interval', 'where', 'coverage', 'capacity', 'delay', 'when', 'deliver', 'trace', 'priority', 'queue', 'skip_reached_within']
+delivery_keys = ['start', 'stop', 'at', 'every', 'on', 'where', 'coverage', 'capacity', 'delay', 'when', 'trace', 'priority', 'queue', 'skip_reached_within']
 
 
 def movers(sim, modname, name):
@@ -296,19 +298,19 @@ class Delivery(ss.products.EventSource, Intervention):
     """
     Deliver a product, or move people along a stratification; see `ss.vaccinate()`, `ss.screen()`, and `ss.treat()`
 
-    Who receives it is `who=`: a condition on people (who is eligible), or an event (the people it happened to); `where=` is
-    anything else it depends on, including an event, and `when=` a condition on time. With an event in `who=` or `where=`,
-    delivery is triggered: it reaches the people the event happened to who meet the conditions. An outcome of another
-    delivery triggers it on the same step; a transition of a disease (`who=tb.care`), on the next step, since deliveries
-    run before the diseases in each step, so by then some of those people may have moved on (a transition triggered by
-    the same one, `T >> D @ ss.on(care)`, moves them in the same step). Otherwise, with `at` or `interval`, delivery
-    happens in rounds, and in each round every eligible person is offered the product once; and with neither, delivery
-    is routine: each person is offered the product once, at the first step on which they are eligible.
+    Who is eligible is `who=`, a condition on people; `where=` is anything else it depends on (e.g. a condition on the
+    population), and `when=` a condition on time. With an event as `on=`, delivery is triggered: it reaches the people
+    the event happened to who are eligible. An outcome of another delivery triggers it on the same step; a transition
+    of a disease (`on=tb.care`), on the next step, since deliveries run before the diseases in each step, so by then
+    some of those people may have moved on (a transition triggered by the same one, `T >> D @ ss.on(care)`, moves them
+    in the same step). Otherwise, with `at` or `every`, delivery happens in rounds, and in each round every eligible
+    person is offered the product once; and with neither, delivery is routine: each person is offered the product
+    once, at the first step on which they are eligible.
 
     A delivery is an event too (the people it reached on the step), and so is each outcome of it (a test's `positive` and
     `negative`, a cure's `cured`, `failed`, and `unneeded`): a follow-up is a step of its own, triggered by one
-    (`ss.treat(drug, who=screening.positive)`), and runs after it in the same step. Each event remembers per person whether
-    (`.ever`), how often (`.count`), and how long ago (`.since`) it happened, including on this step once the delivery has run.
+    (`ss.treat(drug, on=screening.positive)`), and runs after it in the same step. Each event remembers per person whether
+    (`.ever`), how often (`.n_times`), and how long ago (`.since`) it happened, including on this step once the delivery has run.
     With no product and no move, a delivery is a step people attend (e.g. a clinic visit): its event is who attended, which
     several steps can take. `delivery.reached()` is the UIDs of the people it reached on the step (agents only).
 
@@ -319,10 +321,13 @@ class Delivery(ss.products.EventSource, Intervention):
     Note: CRN safe as agents.
 
     Args:
-        what (`ss.Product`): what is delivered: an `ss.Vaccine`, `ss.Diagnostic`, or `ss.Treatment`, or a product written as code (an `ss.Product` with an `administer()`), which any of them can give (also the first argument); `ss.vaccinate()`, `ss.screen()`, and `ss.treat()` instead take the product's own keywords and make it, e.g. `ss.vaccinate(efficacy=0.9, ...)`
-        who (Cond/event): who receives it, which must choose people or compartments: a condition on them (e.g. `ss.ppl.age < 5`), an event
-            (e.g. `sir.infection`, acted on in the next step, `screening.positive`, or a delivery), or a combination with `&` and `|` (an event `|` a condition raises,
-            being neither triggered nor routine); a condition on the population or a function goes in `where=`
+        product (`ss.Product`): what is delivered: an `ss.Vaccine`, `ss.Diagnostic`, or `ss.Treatment`, or a product written as code (an `ss.Product` with an `administer()`), which any of them can give (also the first argument); `ss.vaccinate()`, `ss.screen()`, and `ss.treat()` instead take the product's own keywords and make it, e.g. `ss.vaccinate(efficacy=0.9, ...)`
+        who (Cond/func): who is eligible, which must choose people or compartments: a condition on them (e.g. `ss.person.age < 5`); a condition on the
+            population goes in `where=`. Or a function of the sim returning who receives it this step (UIDs, or a number per group in a compartmental
+            run), which replaces `where`, `coverage`, and the rounds
+        on (event/str): what triggers it: an event (e.g. `sir.infection`, acted on in the next step, `screening.positive`, or a delivery), events joined with `|` (any of them) or `&`
+            (all of them), or a transition by its path (`on='sir.infection'`, found when the sim is initialized); it reaches the people the event happened to
+            on this step who meet `who=` and `where=`
         move (Transition/dict/StrainMove): instead of a product, a move between two states for the people reached, written with the states, e.g. `move=S >> V` (a one-off campaign), or from any of several (`move=U + P + W >> P`: a re-dose, which restarts the time in `P` of those already there); or the level of a stratification they move to, e.g. `move=dict(vaccinated=True)`, or from one level to another, `move=dict(risk=('low', 'high'))`; or a change of strains, e.g. `move=DS >> RIF`
         strain (str/Strain): with `move=` into a state where people carry a strain (e.g. `move=S >> E`), the strain they arrive with: the import of a strain on a date, e.g. `ss.Delivery(move=S >> E, strain='alpha', at=['2021-01-01'], capacity=20)`
         increment (str/dict): instead of a product, a counter that goes up for the people reached: its name, which adds 1 (`increment='doses'`), or a dict of the amount for each (`dict(doses=2)`)
@@ -332,9 +337,8 @@ class Delivery(ss.products.EventSource, Intervention):
         start (date/float): when delivery starts, within the sim (default: the start of the sim); a number is a calendar year from 1900 on (e.g. `2030`), and otherwise a time in the sim's unit (in a sim with dates, that long after the start)
         stop (date/float): when delivery stops (default: never); a stop after the end of the sim never stops it
         at (list): deliver in rounds at these times (a campaign), each within the sim: dates, or numbers, read as `start` is
-        interval (dur): deliver in rounds this far apart, between `start` and `stop`
-        where (Cond/event/str/func): anything else it depends on, joined to who= with `&`: a condition on the population (e.g. `sir.I.n > 1000`), an event, which triggers it
-            (e.g. `where=sir.infection`, or a transition by its path, `where='sir.infection'`, found when the sim is initialized), a condition on people, or a function of the sim
+        every (dur): deliver in rounds this far apart, between `start` and `stop`
+        where (Cond/func): anything else it depends on, joined to `who=` with `&`: a condition on the population (e.g. `sir.I.n > 1000`), a condition on people, or a function of the sim
         coverage (float): the fraction of eligible people reached; also `ss.by(...)`, a typed rate or probability (e.g. `ss.perday(0.1)`,
             `ss.probperyear(0.5)`): the chance over the step or the round (and, for routine delivery, offered at every step to those eligible);
             or a function of the sim, called at each step, returning one of these or, as agents, a probability for each person: an array
@@ -345,25 +349,23 @@ class Delivery(ss.products.EventSource, Intervention):
         priority (Cond/list/Expr/func): who is served first when not everyone can be (under `capacity=`): a condition, or a list of them
             served in order (all of the first, then the second); a score, highest first: an expression (e.g. `-hiv.cd4`, the lowest CD4
             first) or a function of the sim (or of `(sim, uids)`, agents only); or a list of conditions and scores, each breaking the ties
-            of the ones before (e.g. `[due, ss.ppl.age]`, those due first, and among them the oldest); other ties are broken at random
+            of the ones before (e.g. `[due, ss.person.age]`, those due first, and among them the oldest); other ties are broken at random
         queue (bool/dur): what happens to people not served for lack of capacity (agents only): None (the default), they are lost; True, they wait until
             served; a duration, they wait at most that long, and those still waiting then are the outcome `never_ran`. Those waiting are served
             before anyone newly reached in their class (longest first), and leave the queue if they stop being eligible
         skip_reached_within (dur): skip the people this delivery reached less than this long ago (agents only), e.g. `ss.years(1)` for a
             re-screening interval or a rule against re-dosing within a year: someone reached in a round of 2025 can be reached again
             from the round of 2026 on. It is the same as `where=~(delivery.since < ss.years(1))`, which the delivery cannot name before it exists
-        delay (dur/Dist): for a triggered step, the time from the trigger to delivery (agents only): a duration, or a distribution of
+        delay (dur/Dist): for a step triggered by `on=`, the time from the trigger to delivery (agents only): a duration, or a distribution of
             durations, drawn per person (e.g. `ss.uniform(ss.months(1), ss.months(8))`). The people triggered receive it then if they are
             eligible then (who='s condition, and coverage=, are applied when it is due); someone waiting is not triggered again. The wait
             is at least a step (one drawn as less, including zero, ends on the step after the trigger), so a delayed step may be in a
             cycle of triggers, including with itself (e.g. a test repeated a year after each negative result)
         trace (str/Network/list): contact tracing: deliver to the contacts, in this network (or these), of the people that the event in
-            who= selects, instead of to them; the condition and `coverage=` then apply to the contacts. Agents only, since only networks
+            `on=` selects, instead of to them; the condition and `coverage=` then apply to the contacts. Agents only, since only networks
             know who someone's contacts are. A network with `memory=` also gives the partnerships of that long ago that have ended
             (e.g. `ss.DegreeNet(..., memory=ss.months(12))`, to notify the partners of the past year)
         when (func): deliver only on the steps where this function of the timeline returns True (e.g. `lambda t: t.ti % 7 == 0`); a condition on anything but time goes in `where=`
-        deliver (func): a function of the sim returning who receives it this step (UIDs, or a number per group in a compartmental
-            run); replaces `where`, `coverage`, and the rounds
         disease (str): the disease the product acts on (default: the only one)
         name (str): the name; if not given, taken from the variable the delivery is assigned to
         label (str): a human-readable name
@@ -371,7 +373,7 @@ class Delivery(ss.products.EventSource, Intervention):
     Examples:
         ```python
         # Seeding: three people, chosen from everyone susceptible, infected every 30 days for ten years
-        seeds = ss.Delivery(move=S >> I, capacity=3, start=ss.days(30), interval=ss.days(30), stop=ss.years(10))
+        seeds = ss.Delivery(move=S >> I, capacity=3, start=ss.days(30), every=ss.days(30), stop=ss.years(10))
 
         # A move along a stratification for 70% of people in two rounds, e.g. a campaign that leaves a mark
         rollout = ss.Delivery(move=dict(vaccinated=True), coverage=0.7, at=[5, 30], who=~sir.vaccinated)
@@ -380,25 +382,27 @@ class Delivery(ss.products.EventSource, Intervention):
         campaign = ss.Delivery(increment='doses', coverage=0.6, at=[2025, 2026, 2027])
 
         # A test, and a treatment of those who test positive, as two steps
-        screening = ss.screen(sensitivity=0.9, specificity=0.95, who=ss.ppl.age > 30, coverage=0.4, interval=7)
-        treatment = ss.treat(cure=0.95, who=screening.positive, coverage=0.8)
+        screening = ss.screen(sensitivity=0.9, specificity=0.95, who=ss.person.age > 30, coverage=0.4, every=7)
+        treatment = ss.treat(cure=0.95, on=screening.positive, coverage=0.8)
         ```
     """
     compartmental = True
     kind = None # The kind of product this delivers
 
-    def __init__(self, what=None, who=None, move=None, increment=None, start=None, stop=None, at=None, interval=None, where=None, coverage=None,
-                 capacity=None, when=None, deliver=None, trace=None, priority=None, queue=None, skip_reached_within=None,
+    def __init__(self, product=None, who=None, move=None, increment=None, start=None, stop=None, at=None, every=None, where=None, on=None, coverage=None,
+                 capacity=None, when=None, trace=None, priority=None, queue=None, skip_reached_within=None,
                  delay=None, disease=None, at_age=None, strain=None, name=None, label=None, **kwargs):
-        product = what
-        trigger, eligible = ss.conditions.split_who(who, where=where)
+        deliver = None # who= as a function of the sim: who receives it on each step; a function of (sim, uids) is a condition, who is eligible
+        if callable(who) and not isinstance(who, (ss.conditions.Cond, ss.expressions.Expr, ss.State, ss.Arr, ss.Module, ss.Transition)) and ss.utils.n_args(who) < 2:
+            deliver, who = who, None
+        trigger, eligible = ss.conditions.split_delivery(on=on, who=who, where=where)
         own = {key:kwargs.pop(key) for key in product_keys(self.kind) if key in kwargs} # The product's own keywords, e.g. ss.vaccinate(efficacy=0.9, ...)
         if own:
             if product is not None:
                 errormsg = f'{sc.strjoin(f"{key}=" for key in own)} {"is" if len(own) == 1 else "are"} for the product, which is given already; give {"it" if len(own) == 1 else "them"} to the product, or leave the product out and ss.{type(self).__name__}() makes one'
                 raise ValueError(errormsg)
             product = self.kind(**own)
-            product._from_keywords = True # Named for the delivery if its own name is taken: see ss.SimPars.validate_name()
+            product._from_keywords = True # Named for the delivery if its own name is taken: see ss.sim.SimPars.validate_name()
             product._assigned = None
         super().__init__(name=name, label=label, **kwargs)
         self.move_states = None # With move=S >> V: the names of the states people move from (a list), and the one they move to
@@ -409,7 +413,7 @@ class Delivery(ss.products.EventSource, Intervention):
             errormsg = f'move= of "{name or type(self).__name__}" is a move between states written with the states, e.g. move=S >> V (or U + B >> B from either), not a string ({move!r})'
             raise ValueError(errormsg)
         if isinstance(move, ss.Transition):
-            src, dst = move.src or [], move.dst or []
+            src, dst = move.source or [], move.dest or []
             if product is not None or len(dst) != 1 or not src or not all(isinstance(st, ss.State) for st in src + dst) or move.rate is not None or move.dur is not None or move.p is not None:
                 errormsg = f'move= of "{name or type(self).__name__}" is a move from one state (or several) to another for the people reached, e.g. move=S >> V, instead of a product; not {move!r}' + (' with a product' if product is not None else '')
                 raise ValueError(errormsg)
@@ -431,21 +435,21 @@ class Delivery(ss.products.EventSource, Intervention):
             errormsg = f'increment= of "{name or type(self).__name__}" moves people up a counter instead of delivering a product; give one or the other'
             raise ValueError(errormsg)
         rounds = sc.tolist(at)
-        if deliver is not None and (eligible is not None or coverage is not None or rounds or interval is not None):
-            errormsg = 'deliver= says who receives the product on each step, so it replaces where=, coverage=, at=, and interval=; give one or the other'
+        if deliver is not None and (eligible is not None or coverage is not None or rounds or every is not None or trigger is not None):
+            errormsg = 'who= as a function says who receives the product on each step, so it replaces where=, coverage=, at=, every=, and on=; give one or the other'
             raise ValueError(errormsg)
         if at_age is not None: # As people reach the age: routine delivery to those that age or older, leaving out those already past it at the start (see skip_past())
-            if rounds or interval is not None or trigger is not None or deliver is not None:
-                errormsg = 'at_age= is routine delivery, to people as they reach the age, so it cannot have at=, interval=, an event in who= or where=, or deliver='
+            if rounds or every is not None or trigger is not None or deliver is not None:
+                errormsg = 'at_age= is routine delivery, to people as they reach the age, so it cannot have at=, every=, on=, or a function as who='
                 raise ValueError(errormsg)
             self.where_given = None if eligible is None else ss.conditions.as_cond(eligible) # Checked for a compartmental form apart from the age: see age_reason()
-            reached = ss.conditions.Cond('people', 'age') >= (ss.years(at_age).value if isinstance(at_age, ss.TimePar) else at_age)
+            reached = ss.conditions.Cond('people', 'age') >= (ss.years(at_age).value if isinstance(at_age, ss.time.TimePar) else at_age)
             eligible = reached if self.where_given is None else reached & self.where_given
         self.at_age = at_age
         self.start = start
         self.stop = stop
         self.rounds = rounds
-        self.interval = interval
+        self.every = every
         self.eligible = None if eligible is None else ss.conditions.as_cond(eligible)
         if sc.isnumber(coverage) and not 0 <= coverage <= 1:
             errormsg = f'coverage= of "{name or type(self).__name__}" is the share of those reached who receive it, between 0 and 1, not {coverage}'
@@ -455,17 +459,17 @@ class Delivery(ss.products.EventSource, Intervention):
             raise TypeError(errormsg)
         self.coverage = coverage
         self.capacity = capacity
-        self.trigger = trigger # The events in who= and where=
+        self.trigger = trigger # The events of on=
         self.delay = delay # From the trigger to delivery
         if delay is not None and trigger is None:
-            errormsg = f'delay= is the time from a trigger to delivery, so it needs an event in who= (e.g. who=screening.positive); "{name or type(self).__name__}" has none'
+            errormsg = f'delay= is the time from a trigger to delivery, so it needs an event as on= (e.g. on=screening.positive); "{name or type(self).__name__}" has none'
             raise ValueError(errormsg)
         self.when = ss.conditions.check_when(when)
         self.deliver = deliver
         self.trace = trace
         self.priority = priority
         self.queue = None if queue is False else queue
-        if skip_reached_within is not None and not isinstance(skip_reached_within, ss.dur):
+        if skip_reached_within is not None and not isinstance(skip_reached_within, ss.Duration):
             errormsg = f'skip_reached_within= of "{name or type(self).__name__}" is a duration, e.g. ss.years(1): those it reached less than that long ago are skipped; not {skip_reached_within!r}'
             raise TypeError(errormsg)
         self.skip_reached_within = skip_reached_within
@@ -518,7 +522,7 @@ class Delivery(ss.products.EventSource, Intervention):
 
     @property
     def in_rounds(self):
-        return bool(self.rounds) or self.interval is not None
+        return bool(self.rounds) or self.every is not None
 
     @property
     def routine(self):
@@ -558,14 +562,14 @@ class Delivery(ss.products.EventSource, Intervention):
     def typed_function(self):
         """ Whether the coverage is a function of the sim that gives a typed rate (e.g. `lambda sim: ss.peryear(4)`): worked out the first time it can be called """
         cov = self.coverage
-        if not callable(cov) or isinstance(cov, (ss.TimePar, ss.Dist, ss.conditions.Cond, ss.expressions.Expr, ss.by)):
+        if not callable(cov) or isinstance(cov, (ss.time.TimePar, ss.Dist, ss.conditions.Cond, ss.expressions.Expr, ss.by)):
             return False
         if getattr(self, '_typed_coverage', None) is None:
             sim = getattr(self, 'sim', None)
             if sim is None:
                 return False
             try:
-                self._typed_coverage = isinstance(cov(sim), ss.TimePar)
+                self._typed_coverage = isinstance(cov(sim), ss.time.TimePar)
             except Exception: # Not callable yet, e.g. it reads results that do not exist before the run
                 return False
         return self._typed_coverage
@@ -575,13 +579,13 @@ class Delivery(ss.products.EventSource, Intervention):
         """ Whether the model has to record who has been offered the product; not if everyone eligible receives something they then hold for good, nor for a rate among those eligible """
         full = self.coverage is None and self.capacity is None and self.when is None
         lost = self.holds and self.product.waning is not None # Once lost (or for waning by a function, at once), they would be eligible again, and given it again at the next step
-        rate = isinstance(self.coverage, ss.TimePar) or self.typed_function() # Typed coverage (or a function giving it) is a rate among those eligible, offered at every step
+        rate = isinstance(self.coverage, ss.time.TimePar) or self.typed_function() # Typed coverage (or a function giving it) is a rate among those eligible, offered at every step
         return self.routine and not rate and (self.at_age is not None or not ((self.holds or self.move) and full and not lost))
 
     @property
     def age_years(self):
         """ With `at_age=`: the age, in years """
-        return ss.years(self.at_age).value if isinstance(self.at_age, ss.TimePar) else self.at_age
+        return ss.years(self.at_age).value if isinstance(self.at_age, ss.time.TimePar) else self.at_age
 
     def age_reason(self, sim):
         """
@@ -620,7 +624,7 @@ class Delivery(ss.products.EventSource, Intervention):
     @property
     def waits(self):
         """ Whether the results of the test it delivers come after a delay """
-        return isinstance(self.product, ss.Diagnostic) and self.product.delay is not None
+        return isinstance(self.product, ss.Diagnostic) and self.product.result_delay is not None
 
     def delay_steps(self, sim):
         """ The number of steps from the trigger to delivery, with a fixed delay= (at least one) """
@@ -634,25 +638,25 @@ class Delivery(ss.products.EventSource, Intervention):
         if self.holds:
             doses = self.product.doses
             levels = [False] + [f'dose {k+1}' for k in range(len(doses))] if doses else [False, True]
-            if self.boxed(sim): # Waning as a box: its levels
-                levels = [False] + self.product.box_form.levels()
-            out.append(Strat(self.product.dim, levels, split=[1.0] + [0.0]*(len(levels) - 1)))
+            if self.boxed(sim): # Waning as a boxcar: its levels
+                levels = [False] + self.product.boxcar_form.levels()
+            out.append(Strat(self.product.dim, levels, fractions=[1.0] + [0.0]*(len(levels) - 1)))
         for dim,level in (self.move or {}).items():
             if isinstance(level, bool):
-                out.append(Strat(dim, [False, True], split=[1.0, 0.0]))
+                out.append(Strat(dim, [False, True], fractions=[1.0, 0.0]))
         if self.remembers:
-            out.append(Strat(self.offered, [False, True], split=[1.0, 0.0]))
+            out.append(Strat(self.offered, [False, True], fractions=[1.0, 0.0]))
         out += ss.solvers.memory_strats(self, sim)
         return out
 
     def boxed(self, sim):
-        """ Whether holding the product has the levels of a box in this sim: in a compartmental run, for a product that wanes as an `ss.box` (see `ss.products.Held.box_form`) """
-        return self.holds and sim is not None and sim.solver not in [None, 'abm'] and self.product.box_form is not None
+        """ Whether holding the product has the levels of a boxcar in this sim: in a compartmental run, for a product that wanes as an `ss.boxcar` (see `ss.products.Held.boxcar_form`) """
+        return self.holds and sim is not None and sim.solver not in [None, 'abm'] and self.product.boxcar_form is not None
 
     def dim_moves(self, sim=None):
-        """ Movement along those properties that happens by itself: losing the protection of a product (at a rate, or through the levels of a box) """
+        """ Movement along those properties that happens by itself: losing the protection of a product (at a rate, or through the levels of a boxcar) """
         if self.boxed(sim):
-            return self.product.box_form.moves(self.product.dim)
+            return self.product.boxcar_form.moves(self.product.dim)
         if self.holds and self.product.loses:
             return [sc.obj(dim=self.product.dim, src=1, dst=0, dur=self.product.waning)]
         return []
@@ -674,11 +678,11 @@ class Delivery(ss.products.EventSource, Intervention):
             out.append(f'"{self.name}" has queue=, whose people wait to be served, which only agents follow')
         if self.disease_list:
             out.append(f'"{self.name}" is delivered for several diseases (disease=[...]), which only agents follow; a product keyed by the diseases (e.g. efficacy=dict(hpv16=0.9, hpv18=0.9)) has a compartmental form')
-        for key,attr in [('where', 'eligible'), ('deliver', 'deliver'), ('priority', 'priority')]:
+        for key,attr in [('where', 'eligible'), ('who', 'deliver'), ('priority', 'priority')]:
             func = getattr(self, attr)
             if callable(func) and not isinstance(func, (ss.conditions.Cond, ss.Dist, ss.expressions.Expr)) and ss.utils.n_args(func) >= 2:
                 reason = f'{key}= of "{self.name}" takes uids'
-                out.append(ss.modules.Preference(reason) if key == 'priority' and sim.pars.approx is not False else reason)
+                out.append(ss.modules.Preference(reason) if key == 'priority' and sim.pars.approximations != 'error' else reason)
         return out
 
     #%% Initialization
@@ -688,7 +692,7 @@ class Delivery(ss.products.EventSource, Intervention):
         """ The disease the product acts on: declared, or written as code """
         if self.__dict__.get('_coded'): # Written as code: see check_coded()
             return coded_disease(self.sim, self.disease)
-        return self.sim.get_declared(self.disease)
+        return self.sim._declared_module(self.disease)
 
     @property
     def eng(self):
@@ -715,7 +719,7 @@ class Delivery(ss.products.EventSource, Intervention):
             raise sc.KeyNotFoundError(f'disease= of "{self.name}" names {sc.strjoin(missing)}, which {"is not a disease" if len(missing) == 1 else "are not diseases"} in the sim; {known}.')
         self.disease_list = names
         self.disease = names[0]
-        self.product.key_by([sim.diseases[n] if n in coded else sim.get_declared(n) for n in names])
+        self.product.key_by([sim.diseases[n] if n in coded else sim._declared_module(n) for n in names])
         return
 
     def init_pre(self, sim):
@@ -779,24 +783,24 @@ class Delivery(ss.products.EventSource, Intervention):
             raise ValueError(errormsg)
         if self.trace is not None:
             if self.trigger is None:
-                errormsg = f'"{self.name}" traces the contacts of people, so needs to know whose: give an event in who= (e.g. who=tb.diagnosis, or who=screening.positive)'
+                errormsg = f'"{self.name}" traces the contacts of people, so needs to know whose: give an event as on= (e.g. on=tb.diagnosis, or on=screening.positive)'
                 raise ValueError(errormsg)
             self.trace_nets = [sim.networks[net if isinstance(net, str) else net.name] for net in sc.tolist(self.trace)]
         to_ti = ss.connectors.to_ti
         npts = sim.t.npts
-        self.ti_start = 0 if self.start is None else to_ti(sim, self.start, name=f'the start of "{self.name}"') # The first step is 0 (see ss.Loop)
+        self.ti_start = 0 if self.start is None else to_ti(sim, self.start, name=f'the start of "{self.name}"') # The first step is 0 (see ss.loop.Loop)
         self.ti_stop = npts if self.stop is None else to_ti(sim, self.stop, name=f'the stop of "{self.name}"', after=True) # A stop after the end never stops it
         self.round_tis = None
         if self.in_rounds:
             tis = [to_ti(sim, time, name=f'a round of "{self.name}"') for time in self.rounds]
             every = 1
-            if self.interval is not None:
-                steps = self.convert(self.interval)/self.dt_sim
+            if self.every is not None:
+                steps = self.convert(self.every)/self.dt_sim
                 every = max(1, int(round(steps)))
                 last = min(self.ti_stop, npts) # The step after the last that can have a round
                 if steps < 0.5: # E.g. every 30 days with yearly steps: a round once a year
-                    ss.note(f'the interval of "{self.name}" is {steps:.2g} of a step, so it has one round per step; use a smaller dt to deliver it as often as that', sim=sim)
-                interval = self.interval if isinstance(self.interval, ss.dur) else ss.time.get_dur_class(sim.unit_base)(self.convert(self.interval))
+                    ss.note(f'every= of "{self.name}" is {steps:.2g} of a step, so it has one round per step; use a smaller dt to deliver it as often as that', sim=sim)
+                interval = self.every if isinstance(self.every, ss.Duration) else ss.time.get_dur_class(sim.unit_base)(self.convert(self.every))
                 if steps < 0.5 or (abs(steps - every) < 1e-9 and interval.base in ['days', 'weeks']): # A whole number of steps of fixed length (e.g. weekly rounds on daily steps), or less than one step
                     tis += list(range(self.ti_start, last, every))
                 else: # Each round on the first step from its time, the start plus a whole number of intervals, as dates: yearly rounds on weekly steps are a year apart, not 52 weeks (364 days)
@@ -849,8 +853,8 @@ class Delivery(ss.products.EventSource, Intervention):
             raise ValueError(errormsg)
         self.in_compartments = ss.solvers.CompartmentalDelivery(self) if sim.solver != 'abm' else None
         if self.boxed(sim) and next(d for d in sim.interventions() if isinstance(d, Delivery) and d.product is self.product) is self: # Once for the product
-            b = self.product.box_form
-            ss.note(f'the box of "{self.product.name}" ({b.dur!r}) is {b.stages} levels of holding it, each left at a rate, so its end is spread over about {b.dur/np.sqrt(b.stages)!r} either way (as agents, it is exact); give ss.box(..., stages=) more for less', sim=sim)
+            b = self.product.boxcar_form
+            ss.note(f'the plateau of "{self.product.name}" ({b.plateau!r}) is {b.stages} levels of holding it, each left at a rate, so its end is spread over about {b.plateau/np.sqrt(b.stages)!r} either way (as agents, it is exact); give ss.boxcar(..., stages=) more for less', sim=sim)
         return
 
     def check_coded(self, sim):
@@ -1047,7 +1051,7 @@ class Delivery(ss.products.EventSource, Intervention):
         return self.when is None or ss.conditions.holds_now(self.when, sim)
 
     def step(self):
-        """ Deliver the product to whoever it is due to in this step (at its time point, as for all code in a step: see `ss.Loop`), before the disease's transitions in it, under every solver """
+        """ Deliver the product to whoever it is due to in this step (at its time point, as for all code in a step: see `ss.loop.Loop`), before the disease's transitions in it, under every solver """
         flush_memory(self.sim)
         self.step_deliver()
         for owner in [self] + ([self.product] if self.product is not None else []): # The memory of its events, for the steps after it
@@ -1140,11 +1144,11 @@ class Delivery(ss.products.EventSource, Intervention):
         return
 
     def delivered_by_function(self):
-        """ Who the deliver= function says receives the product: UIDs, or a number of people per group """
+        """ Who the function given as who= says receives the product: UIDs, or a number of people per group """
         out = self.deliver(self.sim)
         if self.in_compartments is not None and not isinstance(out, (ss.uids, ss.Arr, ss.conditions.Cond)):
             return self.in_compartments.delivered(out)
-        return self.selector.to_selection(out, 'deliver=')
+        return self.selector.to_selection(out, 'who=')
 
     def default_eligible(self):
         """ Who is eligible if nothing is said: for a treatment that is not triggered, the people it can cure (those in the sources of its moves, or who are infected) """
@@ -1165,12 +1169,12 @@ class Delivery(ss.products.EventSource, Intervention):
         return out
 
     def infected_states(self):
-        """ The infected states of the disease, which a test with no detects= finds and a treatment with no where= is for; raises if there are none """
+        """ The infected states of the disease, which a test with no detects= finds and a treatment with no who= is for; raises if there are none """
         if self.dis.graph is None: # Written as code: see check_coded()
             return ['infected']
         out = [s.name for s in self.dis.graph.infected if s.people]
         if not out:
-            errormsg = f'"{self.name}" is for the infected of "{self.dis.name}", but it has no infected states (no transition is an acquisition); say who it is for with detects= on the test or where= on the delivery, or mark the onset with acquisition=True'
+            errormsg = f'"{self.name}" is for the infected of "{self.dis.name}", but it has no infected states (no transition is an acquisition); say who it is for with detects= on the test or who= on the delivery, or mark the onset with acquisition=True'
             raise ValueError(errormsg)
         return out
 
@@ -1277,8 +1281,8 @@ class Delivery(ss.products.EventSource, Intervention):
     def limit(self):
         """ The most people that can be served now: what is left of the capacity this step """
         ti = self.sim.ti
-        cap = self.capacity(self.sim) if callable(self.capacity) and not isinstance(self.capacity, ss.TimePar) else self.capacity
-        if isinstance(cap, ss.TimePar): # A rate: per unit time, over the step or the round; otherwise a number per round, or per step
+        cap = self.capacity(self.sim) if callable(self.capacity) and not isinstance(self.capacity, ss.time.TimePar) else self.capacity
+        if isinstance(cap, ss.time.TimePar): # A rate: per unit time, over the step or the round; otherwise a number per round, or per step
             cap = self.convert(cap)*self.span
         used = self._used[1] if getattr(self, '_used', (None,))[0] == ti else 0.0
         return max(cap - used, 0.0)
@@ -1390,7 +1394,7 @@ class Delivery(ss.products.EventSource, Intervention):
         if pr is None:
             return None
         selector = self.selector
-        bools = list(ss.conditions.comparisons) + ['&', '|', '~', 'isin', 'state', 'event', 'move', 'incidence'] # A condition, as opposed to a quantity such as ss.ppl.age
+        bools = list(ss.conditions.comparisons) + ['&', '|', '~', 'isin', 'state', 'event', 'move', 'incidence'] # A condition, as opposed to a quantity such as ss.person.age
         is_cond = lambda item: isinstance(item, ss.State) or (isinstance(item, ss.conditions.Cond) and (item.op in bools or (item.op == 'memory' and item.args[1] == 'ever')))
         try:
             items = pr if isinstance(pr, list) else [pr]
@@ -1400,11 +1404,11 @@ class Delivery(ss.products.EventSource, Intervention):
                     key = np.where(selector.select(cond) > 0, i, key)
             elif len(items) == 1:
                 key = -self.score(items[0])
-            else: # Conditions and scores in turn, e.g. [due, ss.ppl.age]: those due first, and among them the oldest first
+            else: # Conditions and scores in turn, e.g. [due, ss.person.age]: those due first, and among them the oldest first
                 keys = [np.broadcast_to(np.where(selector.select(item) > 0, 0.0, 1.0) if is_cond(item) else -np.asarray(self.score(item), dtype=float), selector.shape).ravel() for item in items]
                 key = np.unique(np.column_stack(keys), axis=0, return_inverse=True)[1].reshape(selector.shape) # The rank of each, item by item
         except ss.CapabilityError:
-            if selector.abm or strict or self.sim.pars.approx is False:
+            if selector.abm or strict or self.sim.pars.approximations == 'error':
                 raise
             ss.note(f'priority ignored: the priority of "{self.name}" ({pr}) is per agent, so it chooses pro rata', sim=self.sim)
             return None
@@ -1416,7 +1420,7 @@ class Delivery(ss.products.EventSource, Intervention):
         sim = self.sim
         if isinstance(val, ss.Arr):
             val = ss.conditions.as_cond(val)
-        if isinstance(val, ss.conditions.Cond): # A quantity, e.g. ss.ppl.age
+        if isinstance(val, ss.conditions.Cond): # A quantity, e.g. ss.person.age
             out = val.eval(selector)
         elif isinstance(val, ss.expressions.Expr):
             out = selector.expr(val)
@@ -1541,7 +1545,7 @@ class Delivery(ss.products.EventSource, Intervention):
         several = len(diseases) > 1
         for dis in diseases:
             coded = coded_disease(sim, dis)
-            eng = self.eng if dis == self.disease else (coded or sim.get_declared(dis)).engine
+            eng = self.eng if dis == self.disease else (coded or sim._declared_module(dis)).engine
             mod = eng.mod
             edges = [e for e in self.edges if e.dis == dis]
             insides = [np.logical_or.reduce([mod[s.name].raw[uids] for s in e.srcs]) for e in edges] # Before anyone moves
@@ -1639,13 +1643,13 @@ class Delivery(ss.products.EventSource, Intervention):
         if isinstance(self.eligible, ss.conditions.Cond):
             how += f', to {self.eligible}'
         sim = getattr(self, 'sim', None)
-        unit = sim.unit_name if sim is not None else None
-        if self.interval is not None: # When the rounds are, and how many they reach
-            how += f' every {ss.display.quantity_str(self.interval, "dur", unit)}'
+        unit = sim._unit_name if sim is not None else None
+        if self.every is not None: # When the rounds are, and how many they reach
+            how += f' every {ss.display.quantity_str(self.every, "dur", unit)}'
             if self.start is not None:
                 how += f' from {unit or "step"} {self.start:n}' if sc.isnumber(self.start) else f' from {self.start}'
         if self.delay is not None:
-            how += f', after {ss.display.quantity_str(self.delay, "dur", unit) if isinstance(self.delay, ss.TimePar) else self.delay}'
+            how += f', after {ss.display.quantity_str(self.delay, "dur", unit) if isinstance(self.delay, ss.time.TimePar) else self.delay}'
         if self.coverage is not None and not callable(self.coverage):
             how += f', coverage {ss.expressions.value_str(self.coverage)}'
         if self.priority is not None:
@@ -1687,7 +1691,7 @@ class treat(Delivery):
         ```python
         S, I, R = ss.states(3)
         sir = ss.Disease(infection=S >> I @ 0.3*I, recovery=ss.Transition(I, R, dur=10), init_prev=0.01)
-        treatment = ss.treat(cure=0.95, coverage=0.5, interval=7) # Makes the drug, ss.Treatment(cure=0.95)
+        treatment = ss.treat(cure=0.95, coverage=0.5, every=7) # Makes the drug, ss.Treatment(cure=0.95)
         sim = ss.Sim(sir, interventions=treatment, stop=100).run()
         ```
     """
@@ -1698,10 +1702,10 @@ class screen(Delivery):
     """
     Deliver a diagnostic test; see `ss.Delivery` for the arguments
 
-    `delay=` is the step's, the time from its trigger to the test, as for any step; the time from the test to its result is the test's (`ss.Diagnostic(delay=...)`).
+    `delay=` is the step's, the time from its trigger to the test, as for any step; the time from the test to its result is the test's (`ss.Diagnostic(result_delay=...)`).
 
-    Its outcomes, `positive` and `negative`, are events on the step the result is available (after the test's `delay`), and results:
-    the number with each result on each step. What happens next is a step of its own, triggered by an outcome.
+    Its outcomes, `positive` and `negative`, are events on the step the result is available (after the test's `result_delay`), and results:
+    the number with each result on each step. What happens next is a step of its own, triggered by an outcome (`on=screening.positive`).
 
     Note: CRN safe as agents.
 
@@ -1709,8 +1713,8 @@ class screen(Delivery):
         ```python
         S, I, R = ss.states(3)
         sir = ss.Disease(infection=S >> I @ 0.3*I, recovery=ss.Transition(I, R, dur=10), init_prev=0.01)
-        screening = ss.screen(sensitivity=0.9, specificity=0.98, coverage=0.4, interval=7)
-        treatment = ss.treat(cure=0.95, who=screening.positive, coverage=0.8)
+        screening = ss.screen(sensitivity=0.9, specificity=0.98, coverage=0.4, every=7)
+        treatment = ss.treat(cure=0.95, on=screening.positive, coverage=0.8)
         sim = ss.Sim(sir, interventions=[screening, treatment], stop=100).run()
         ```
     """

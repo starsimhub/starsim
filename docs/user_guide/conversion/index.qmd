@@ -275,7 +275,7 @@ json_file = os.path.join(folder, 'two_patch.json')
 print(ss.export_to(two_patch, 'json', filename=json_file))
 ```
 
-A transition is one line, as the operators write it, when it has only its ends and a rate or a dwell time; one with a split or a minimum stay is the arguments of `ss.Transition()` instead (`{"src": "I", "dst": ["P", "R"], "dur": "dur_inf", "p": ["p_paralysis", null]}`). A network, an intervention, or a disease written as code is its type and the parameters that differ from its defaults (`{"type": "RandomNet", "n_contacts": 5}`). Reading the file back writes the model's code and runs it, as for any import, so the code is in `sim.imported.code`:
+A transition is one line, as the operators write it, when it has only its ends and a rate or a dwell time; one with a split or a minimum stay is the arguments of `ss.Transition()` instead (`{"source": "I", "dest": ["P", "R"], "dur": "dur_inf", "p": ["p_paralysis", null]}`). A network, an intervention, or a disease written as code is its type and the parameters that differ from its defaults (`{"type": "RandomNet", "n_contacts": 5}`). Reading the file back writes the model's code and runs it, as for any import, so the code is in `sim.imported.code`:
 
 ```{python}
 again = ss.import_from(json_file, verbose=False)

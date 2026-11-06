@@ -199,7 +199,7 @@ print(sim.t.relvec[:4]) # Weeks since the start
 
 Contact patterns, reporting, and treatment change over time, and so do the parameters that stand for them. Any value in a model (a rate, a share, a starting value, an intervention's coverage) can change over time, in one of three ways.
 
-**A time series**, `ss.timeseries()`, gives the value at some times, and holds each until the next (`mode='constant'`, the default), interpolates between them (`mode='linear'`), or changes smoothly from each to the next in an S-shaped curve (`mode='cosine'`, as for a gradual change in contacts). With `period=`, it repeats. Measles in children spreads mostly at school, and its epidemics have long followed the school year. Here, in the endemic measles model of [Diseases](building_diseases.qmd#births-and-deaths-in-a-disease), β is higher during school terms than in the summer holiday, with the same mean over the year:
+**A time series**, `ss.timeseries()`, gives the value at some times, and holds each until the next (`interpolation='step'`, the default), interpolates between them (`interpolation='linear'`), or changes smoothly from each to the next in an S-shaped curve (`interpolation='cosine'`, as for a gradual change in contacts). With `period=`, it repeats. Measles in children spreads mostly at school, and its epidemics have long followed the school year. Here, in the endemic measles model of [Diseases](building_diseases.qmd#births-and-deaths-in-a-disease), β is higher during school terms than in the summer holiday, with the same mean over the year:
 
 ```{python}
 def make_measles(beta):
@@ -353,7 +353,7 @@ def show(cls, depth=0):
     for sub in cls.__subclasses__():
         show(sub, depth+1)
 
-show(ss.TimePar)
+show(ss.time.TimePar)
 ```
 
 A unit given as a string, wherever one is (`unit='day'`, `ss.prob(0.1, 'week')`, `.to('years')`, `resample('month')`), is one of these, in the singular or the plural:

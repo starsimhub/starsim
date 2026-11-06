@@ -11,7 +11,7 @@ Core Starsim has the networks most models need: random contacts (`ss.RandomNet`)
 
 | Class | Based on | What it is | Main parameters |
 | --- | --- | --- | --- |
-| `ssl.ClusterNet` | `ss.Network` | Fully connected clusters, such as households | `cluster_size`, `age_range`, `dynamic` |
+| `ssl.ClusterNet` | `ss.Network` | Fully connected clusters, such as households | `cluster_size`, `where`, `dynamic` |
 | `ssl.HybridNet` | `ss.Network` | Covasim's households, schools, workplaces, and community | `household_size`, `contacts`, `beta`, `school_ages`, `work_ages`, `clustered` |
 | `ssl.HouseholdNet` | `ss.Network` | Households built from survey data in the format of the Demographic and Health Surveys (DHS), optionally changing over time | `dhs_data`, `dynamic`, `prob_move_out` |
 | `ssl.DiskNet` | `ss.Network` | People who move in a unit square, in contact with everyone within a radius | `r`, `v` |
@@ -27,7 +27,7 @@ Like every network, these carry agents, so a model with one runs under the agent
 
 ## Households and other clusters
 
-Much transmission happens within households, schools, and workplaces: small groups whose members meet each other again and again. A random network with the same number of contacts spreads infection faster, because each contact is with someone new; in a household, an infectious person soon runs out of susceptible people to infect. `ssl.ClusterNet` divides people (optionally only those in `age_range`) into clusters of sizes drawn from `cluster_size` (by default Poisson with a mean of 4), with everyone in a cluster in contact with everyone else. Its contacts are made once, at the start (or redrawn every step, with `dynamic=True`).
+Much transmission happens within households, schools, and workplaces: small groups whose members meet each other again and again. A random network with the same number of contacts spreads infection faster, because each contact is with someone new; in a household, an infectious person soon runs out of susceptible people to infect. `ssl.ClusterNet` divides people (optionally only those `where=` gives) into clusters of sizes drawn from `cluster_size` (by default Poisson with a mean of 4), with everyone in a cluster in contact with everyone else. Its contacts are made once, at the start (or redrawn every step, with `dynamic=True`).
 
 Here the same SIR disease spreads with about 6 contacts per person: all of them random, or 1 random and the rest in households of about 6. With the same number of contacts, the households slow the epidemic, lower its peak, and leave more people never infected, since many of each person's contacts are already infected or immune. Each scenario is run 3 times, and the plot shows the median and the range:
 
@@ -101,7 +101,7 @@ sim = ss.Sim(networks=ssl.HouseholdNet(dhs_data=dhs_data))
 ```
 
 ::: {.callout-warning}
-`HouseholdNet` sets the age and sex of every agent (other than unborn agents) when it starts. Take care when using it with other modules that set or depend on age and sex, such as `ss.people('Kenya')` (see [People and agents](populations_people.qmd)).
+`HouseholdNet` sets the age and sex of every agent (other than unborn agents) when it starts. Take care when using it with other modules that set or depend on age and sex, such as `ss.population('Kenya')` (see [People and agents](populations_people.qmd)).
 :::
 
 ## Space

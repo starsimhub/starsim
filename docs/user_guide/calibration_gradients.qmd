@@ -37,7 +37,7 @@ pars = dict(total_pop=100_000, start='2025-01-01', stop='2026-01-01')
 
 truth = ss.Sim(measles, pars=dict(beta=1.9, report=0.5), rand_seed=2, **pars)
 truth.run()
-data = truth.to_data('cases', resample='week')
+data = truth.to_synthetic_data('cases', resample='week')
 ```
 
 ## The gradient of a result
@@ -80,7 +80,7 @@ onset = E >> I @ ss.days(10)
 cases = ss.outcome(0.5*onset, likelihood=ss.poisson()) # The share reported, taken as known here
 measles_t = ss.Disease(S >> E @ beta*I, onset, I >> R @ ss.days(8), cases, init=dict(I=0.0001, R=0.9))
 truth_t = ss.Sim(measles_t, pars=dict(beta=true_beta), rand_seed=2, verbose=0, **pars).run()
-data_t = truth_t.to_data('cases', resample='week')
+data_t = truth_t.to_synthetic_data('cases', resample='week')
 
 smooth = lambda pars: 100*np.sum(np.diff(pars['beta'].values)**2) # Large changes from one value to the next are unlikely
 fit_t = ss.Sim(measles_t, data=data_t, **pars).fit(penalty=smooth, verbose=False)

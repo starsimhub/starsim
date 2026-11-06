@@ -643,7 +643,7 @@ def load_siminf(source, u0=None, events=None, verbose=None, **kwargs):
             src.skip(key, why)
     if n_nodes > 1 or register is not None:
         size = u0.sum(axis=1).values if u0 is not None else np.ones(1)
-        strat = dict(node=[str(i + 1) for i in range(n_nodes)], kind='space', split=size/size.sum() if size.sum() else None)
+        strat = dict(node=[str(i + 1) for i in range(n_nodes)], kind='space', fractions=size/size.sum() if size.sum() else None)
         if v0:
             strat['states'] = compartments + list(v0)
         if register is not None:

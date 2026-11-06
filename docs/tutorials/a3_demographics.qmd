@@ -33,7 +33,7 @@ R0 = 1.9 × 8 ≈ 15, so the outbreak infects nearly everyone, and since nobody 
 
 ## Births and deaths
 
-There are a few basic ways to add vital dynamics to your model. The simplest is `ss.birth()` and `ss.death()`, which give births and deaths at a constant rate per person: a crude birth rate of 30 per 1,000 people per year is `ss.birth(rate=ss.peryear(0.03))`. People are born into each disease's first state (`S`) and die from every state at the same rate, so with equal rates the population stays the same size. They are given to the sim in `demographics=`. You can even simply set `demographics=True` to use default rates. By default, agents age if and only if the population has births or deaths; you can override this by setting `use_aging`, e.g. `ss.Sim(use_aging=False)`.
+There are a few basic ways to add vital dynamics to your model. The simplest is `ss.birth()` and `ss.death()`, which give births and deaths at a constant rate per person: a crude birth rate of 30 per 1,000 people per year is `ss.birth(rate=ss.peryear(0.03))`. People are born into each disease's first state (`S`) and die from every state at the same rate, so with equal rates the population stays the same size. They are given to the sim in `demographics=`. You can even simply set `demographics=True` to use default rates. By default, agents age if and only if the population has births or deaths; you can override this by setting `aging`, e.g. `ss.Sim(aging=False)`.
 
 Births and deaths are rates per year, while β and the infectious period are per day. A bare number in a disease, such as the 1.9 in `1.9*I`, is in the model's unit, which Starsim takes from the disease's own typed values (here days, from `ss.days(8)`), not from the births and deaths; but when a model's rates have different units, it is clearer for each rate to say its own, so here β is written `ss.perday(1.9)`. The sim steps by one day (`dt=ss.days(1)`). Here is the measles model with births and deaths, as an ODE, over 20 years:
 
@@ -98,16 +98,16 @@ As agents, measles dies out after the first epidemic, and with no one to bring i
 
 ## A country's population
 
-Constant rates are enough for a town over a few years. For more realistic demographics, birth and death rates change from year to year, and death rates differ by age and sex. Starsim includes the UN World Population Prospects for 187 countries and territories (listed on [Population data](../user_guide/populations_data.qmd#appendix-every-place-and-its-data)): `ss.people('Nigeria')` gives agents with the ages, sex ratio, and size of Nigeria's population in the year the sim starts; `ss.Births(birth_rate='Nigeria')` gives births at Nigeria's crude birth rate in each year; and `ss.Deaths(death_rate='Nigeria')` gives deaths at its death rates by year, age, and sex.
+Constant rates are enough for a town over a few years. For more realistic demographics, birth and death rates change from year to year, and death rates differ by age and sex. Starsim includes the UN World Population Prospects for 187 countries and territories (listed on [Population data](../user_guide/populations_data.qmd#appendix-every-place-and-its-data)): `ss.population('Nigeria')` gives agents with the ages, sex ratio, and size of Nigeria's population in the year the sim starts; `ss.Births(birth_rate='Nigeria')` gives births at Nigeria's crude birth rate in each year; and `ss.Deaths(death_rate='Nigeria')` gives deaths at its death rates by year, age, and sex.
 
 To check the model, compare its population with the UN's, for the same years. A result is compared with data of the same name, so a column called `alive` is plotted with the result `alive`:
 
 ```{python}
 years = [2000, 2010, 2020, 2030]
-population = [ss.people('Nigeria', year=year).named.total for year in years] # The UN's population in each year
+population = [ss.population('Nigeria', year=year).named.total for year in years] # The UN's population in each year
 data = dict(date=years, alive=population)
 
-people = ss.people('Nigeria', n_agents=5000)
+people = ss.population('Nigeria', n_agents=5000)
 demographics = [ss.Births(birth_rate='Nigeria'), ss.Deaths(death_rate='Nigeria')]
 sim = ss.Sim(people=people, demographics=demographics, start=2000, stop=2030, data=data)
 sim.run()
@@ -120,7 +120,7 @@ The population grows from 126 million to about 260 million, as the UN projects. 
 sim.people.plot_ages()
 ```
 
-If you want to use realistic demographics for a setting that isn't in the UN data, or with rates of your own, `ss.Births()` and `ss.Deaths()` also take your own data: one rate, rates by year (a table with a column for the year and one for the rate), or for deaths, rates by year, age, and sex. There are examples of these files in the `test_data` folder (e.g. `nigeria_deaths.csv`), and `ss.People(n_agents, age_data=...)` takes the ages of the population from a file. Crude birth and death rates are usually given per 1,000 people, and these modules read a rate above 1 as per 1,000 and a rate below 1 as per person; give `rate_units=1000` or `rate_units=1` to say which (they warn when a rate could be either). See [Demographics](../user_guide/populations_demographics.qmd) in the user guide.
+If you want to use realistic demographics for a setting that isn't in the UN data, or with rates of your own, `ss.Births()` and `ss.Deaths()` also take your own data: one rate, rates by year (a table with a column for the year and one for the rate), or for deaths, rates by year, age, and sex. There are examples of these files in the `test_data` folder (e.g. `nigeria_deaths.csv`), and `ss.People(n_agents, age_data=...)` takes the ages of the population from a file. Crude birth and death rates are usually given per 1,000 people, and these modules read a rate above 1 as per 1,000 and a rate below 1 as per person; give `rate_per=1000` or `rate_per=1` to say which (they warn when a rate could be either). See [Demographics](../user_guide/populations_demographics.qmd) in the user guide.
 
 ## Pregnancy
 
@@ -132,7 +132,7 @@ As with births and deaths, `ss.Pregnancy(fertility_rate='Nigeria')` reads Nigeri
 pregnancy = ss.Pregnancy(fertility_rate='Nigeria')
 deaths = ss.Deaths(death_rate='Nigeria')
 
-sim = ss.Sim(people=ss.people('Nigeria', n_agents=5000), demographics=[pregnancy, deaths], start=2000, stop=2030, dt=ss.months(1), data=data)
+sim = ss.Sim(people=ss.population('Nigeria', n_agents=5000), demographics=[pregnancy, deaths], start=2000, stop=2030, dt=ss.months(1), data=data)
 sim.run()
 sim.plot('alive')
 ```
@@ -143,15 +143,15 @@ Rates of your own work too: `fertility_rate` takes a table with a column for the
 
 ## Agents standing for many people
 
-Even though we've been simulating populations of a few thousand agents, the results reflect a much larger population. You can think of this as a kind of statistical sampling approximation. Nigeria has well over 100 million people, and it would be much too computationally intensive to simulate one agent for each of them. Instead, each agent stands for many people: the sim takes the size of the population from `ss.people('Nigeria')` (or from `total_pop=`, e.g. `ss.Sim(total_pop=200e6, n_agents=50e3)` for 200 million people as 50,000 agents, each standing for 4,000), and divides it by the number of agents, so above each agent stands for about 25,000 people. Results that count people, such as `alive` and births, are multiplied by this, so they are in people, not agents.
+Even though we've been simulating populations of a few thousand agents, the results reflect a much larger population. You can think of this as a kind of statistical sampling approximation. Nigeria has well over 100 million people, and it would be much too computationally intensive to simulate one agent for each of them. Instead, each agent stands for many people: the sim takes the size of the population from `ss.population('Nigeria')` (or from `total_pop=`, e.g. `ss.Sim(total_pop=200e6, n_agents=50e3)` for 200 million people as 50,000 agents, each standing for 4,000), and divides it by the number of agents, so above each agent stands for about 25,000 people. Results that count people, such as `alive` and births, are multiplied by this, so they are in people, not agents.
 
 Agents are a sample of the population, so results made from few of them are noisy. Here are births each year, with 1,000 agents and with 20,000:
 
 ```{python}
 pars = dict(demographics=[ss.Births(birth_rate='Nigeria'), ss.Deaths(death_rate='Nigeria')], start=2000, stop=2030)
 sims = {
-    '1,000 agents': ss.Sim(people=ss.people('Nigeria', n_agents=1000), **pars),
-    '20,000 agents': ss.Sim(people=ss.people('Nigeria', n_agents=20_000), **pars),
+    '1,000 agents': ss.Sim(people=ss.population('Nigeria', n_agents=1000), **pars),
+    '20,000 agents': ss.Sim(people=ss.population('Nigeria', n_agents=20_000), **pars),
 }
 msim = ss.parallel(sims)
 msim.plot('births.birth')
@@ -161,13 +161,13 @@ With 1,000 agents, about 40 are born each year, and the number varies by chance 
 
 ## Exercises
 
-1. In Niger, the crude birth rate is 45 and the crude death rate is 9. Assuming these rates stay constant, and starting with its population in 2020 (`ss.people('Niger', n_agents=5000)`), how many people will there be in 2040? (You do not need to include any diseases in your model.) Compare this with its UN birth and death rates.
+1. In Niger, the crude birth rate is 45 and the crude death rate is 9. Assuming these rates stay constant, and starting with its population in 2020 (`ss.population('Niger', n_agents=5000)`), how many people will there be in 2040? (You do not need to include any diseases in your model.) Compare this with its UN birth and death rates.
 2. In the measles model with births, how does the time between epidemics in the ODE change if the birth rate (and the death rate) is 20 per 1,000 per year instead of 30? Does it agree with the theory above?
 3. In the town of 20,000 with importations, how often do epidemics come if the town has 50,000 people instead (and so more births each year)? Does measles ever persist between them?
 4. Contraception lowers the rate of conception: `ss.modify(pregnancy.conception, multiply=0.7, start=2010)` cuts it by 30% from 2010. Add it to the Nigeria model with pregnancy as an intervention. How many fewer people are there in 2030?
 
 ## Further reading
 
-- [UN World Population Prospects](https://population.un.org/wpp/): the data behind `ss.people()`, `ss.Births()`, and `ss.Deaths()`
+- [UN World Population Prospects](https://population.un.org/wpp/): the data behind `ss.population()`, `ss.Births()`, and `ss.Deaths()`
 - [EMOD: demographics](https://emod.idmod.org/EMOD-Generic/md_software/software-demographics/): demographics files for an agent-based disease model
 - [Vivarium: documentation](https://vivarium.readthedocs.io/en/latest/): a framework for microsimulation of populations, with births and deaths

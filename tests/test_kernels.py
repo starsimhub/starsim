@@ -47,18 +47,18 @@ def make_plain(beta, **kwargs):
 
 def make_ages():
     """ Three age groups with a contact matrix, and susceptibility that differs by age """
-    return make_plain(0.05, init=dict(I=0.01)).stratify(age=[0, 15, 65], split=[0.3, 0.5, 0.2], adjust=dict(infection=[0.5, 1.0, 1.5]))
+    return make_plain(0.05, init=dict(I=0.01)).stratify(age=[0, 15, 65], fractions=[0.3, 0.5, 0.2], adjust=dict(infection=[0.5, 1.0, 1.5]))
 
 
 def make_towns():
     """ Three towns with commuting between them """
-    towns = ss.geo.geography(names=['north', 'south', 'east'], pop=[50_000, 30_000, 20_000], x=[0, 0, 40], y=[0, 30, 0])
-    return make_plain(0.3, init_n=dict(I=ss.by(patch=[50, 0, 0]))).stratify(patch=towns, mobility=ss.geo.gravity(k=2e-4))
+    towns = ss.geo.geography(names=['north', 'south', 'east'], populations=[50_000, 30_000, 20_000], x=[0, 0, 40], y=[0, 30, 0])
+    return make_plain(0.3, init_n=dict(I=ss.by(patch=[50, 0, 0]))).stratify(patch=towns, mobility=ss.geo.gravity(scale=2e-4))
 
 
 def make_commute():
     """ Three age groups with a contact matrix within each of three towns, with commuting between them, and aging """
-    return make_towns().stratify(age=[0, 15, 65], split=[0.3, 0.5, 0.2])
+    return make_towns().stratify(age=[0, 15, 65], fractions=[0.3, 0.5, 0.2])
 
 
 def make_delay():
@@ -72,7 +72,7 @@ def make_biting(w=(0.5, 2.0)):
     """ A weighted count: each infectious person counted by how much they are bitten (or not weighted, w=None) """
     S, I, R = ss.states('S I R')
     sir = ss.Disease(infection=S >> I @ ss.perday(0.3)*(I.n if w is None else (ss.by(biting=list(w))*I).n)/(S + I + R).n, recovery=I >> R @ ss.days(8), init=dict(I=0.01), name='sir')
-    return sir.stratify(biting=['lo', 'hi'], split=[0.7, 0.3])
+    return sir.stratify(biting=['lo', 'hi'], fractions=[0.7, 0.3])
 
 
 models = sc.obj(
@@ -80,7 +80,7 @@ models = sc.obj(
     seir    = (make_seir,    dict(unit='day', stop=200)),
     ages    = (make_ages,    dict(unit='day', stop=100, networks=ss.contacts(np.array([[8, 3, 1], [3, 6, 2], [1, 2, 3]])))),
     towns   = (make_towns,   dict(unit='day', stop=150, total_pop=100_000)),
-    commute = (make_commute, dict(unit='day', stop=150, total_pop=100_000, use_aging=True, networks=ss.contacts(np.array([[8, 3, 1], [3, 6, 2], [1, 2, 3]])))), # Aging, which a model without births or deaths has only if asked for
+    commute = (make_commute, dict(unit='day', stop=150, total_pop=100_000, aging=True, networks=ss.contacts(np.array([[8, 3, 1], [3, 6, 2], [1, 2, 3]])))), # Aging, which a model without births or deaths has only if asked for
     malaria = (make_malaria, dict(unit='day', stop=200, total_pop=10_000)),
     tb      = (make_tb,      dict(stop=30, total_pop=100_000)), # Has a transfer, so is stepped
     delay   = (make_delay,   dict(unit='day', stop=150)),
@@ -173,7 +173,7 @@ def test_stages():
     # Through the stages in whole steps, with another way out: the same as the ODE
     def cohort(solver):
         E, I, D = ss.states('E I D')
-        sim = ss.Sim(ss.Disease(onset=ss.Transition(E, I, dur=ss.normal(7, 1)), death=ss.Transition(E, D, dur=20), first='E', name='d'), unit='day', stop=10, total_pop=1_000_000, solver=solver, **kw)
+        sim = ss.Sim(ss.Disease(onset=ss.Transition(E, I, dur=ss.normal(7, 1)), death=ss.Transition(E, D, dur=20), default_state='E', name='d'), unit='day', stop=10, total_pop=1_000_000, solver=solver, **kw)
         return sim.run().results.d
     ode, res = cohort('ode'), cohort('binomial')
     assert np.allclose([res.I[6], res.I[8], res.D[10]], [ode.I[6], ode.I[8], ode.D[10]], rtol=0.01)
@@ -199,7 +199,7 @@ def test_seasonal_steps():
     with pytest.raises(ss.CapabilityError): # Exact only for rates that are constant within a step
         S, I = ss.states('S I')
         sis = ss.Disease(infection=ss.Transition(S, I, rate=ss.seasonal(mean=0.15, amplitude=0.5) * I), recovery=ss.Transition(I, S, dur=10), init_prev=0.05, name='sis')
-        ss.Sim(sis, solver='gillespie', approx=False, unit='day', stop=100, **kw).init()
+        ss.Sim(sis, solver='gillespie', approximations='error', unit='day', stop=100, **kw).init()
 
     # A step function next to a value that varies smoothly is held for each step, by the ODE stepped as by a whole run (stepped, it was taken at the middle and end of each step, 1.4% off)
     days = [f'2020-01-{d:02d}' for d in range(1, 32)]
@@ -315,11 +315,11 @@ def test_worker_threads():
 
 def test_compile_status():
     sc.heading('Testing that it is clear whether the kernels are compiled')
-    status = ss.compile_status()
+    status = ss.kernels.compile_status()
     assert status.compiled == (not status.missing)
     assert ('compiled' if status.compiled else 'NOT COMPILED' if status.engine != 'rust' else 'OUT OF DATE') in status.summary
     with ss.options.context(kernels='python'):
-        status = ss.compile_status()
+        status = ss.kernels.compile_status()
     assert status.engine == 'python' and not status.compiled and 'NOT COMPILED' in status.summary
     return status
 

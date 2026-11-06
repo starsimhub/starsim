@@ -76,7 +76,7 @@ def test_timeline():
         """ Generate a fake sim """
         sim = sc.prettyobj()
         sim.t = ss.Timeline(start=start, stop=stop, dt=dt, **kwargs)
-        sim.pars = ss.SimPars()
+        sim.pars = ss.sim.SimPars()
         sim.t.init(None)
         return sim
 
@@ -383,8 +383,8 @@ def test_schedule():
         def __init__(self):
             super().__init__(name='clinic')
             self.poll = ss.schedule(ss.months(3), start=ss.months(3))
-            self.campaigns = ss.schedule(['2010-01-01', '2011-06-15', '2030-01-01'])
-            self.new_year = ss.schedule(lambda now: now.month == 1 and now.day == 1)
+            self.campaigns = ss.schedule(at=['2010-01-01', '2011-06-15', '2030-01-01'])
+            self.new_year = ss.schedule(when=lambda now: now.month == 1 and now.day == 1)
             self.weekly = ss.schedule(every=ss.weeks(1))
             self.log = sc.objdict(poll=[], campaigns=[], new_year=[], weekly=0)
         def step(self):

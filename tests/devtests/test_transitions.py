@@ -85,7 +85,7 @@ def test_counts():
         Sh, Ih = ss.states(2)
         Sv, Ev, Iv = ss.states(3, people=False)
         return ss.Disease(infection=Sh >> Ih @ ss.perday(1e-9)*Iv.n/(Sh + Ih).n, emergence=ss.null >> Sv @ ss.perday(5000), biting=Sv >> Ev @ ss.perday(0.05),
-                          incubation=Ev >> Iv @ ss.constant(ss.days(12)), mortality=Sv + Ev + Iv >> ss.null @ ss.perday(0.1), init=dict(Sh=1.0, Sv=33_333), first='Sh', name='eip')
+                          incubation=Ev >> Iv @ ss.constant(ss.days(12)), mortality=Sv + Ev + Iv >> ss.null @ ss.perday(0.1), init=dict(Sh=1.0, Sv=33_333), default_state='Sh', name='eip')
     for solver in ['ode', 'binomial']:
         Iv = ss.Sim(eip(), solver=solver, total_pop=2000, unit='day', stop=300, **kw).run().results.eip.Iv[-1]
         assert np.isclose(Iv, 5000*0.05/0.15*np.exp(-1.2)/0.1, rtol=0.002), f'{solver}: {Iv:.0f} infectious mosquitoes, not 5,020'
@@ -95,7 +95,7 @@ def test_counts():
         Sh, Ih = ss.states(2)
         Sv, Iv = ss.states(2, people=False)
         return ss.Disease(infection=Sh >> Ih @ ss.perday(0.1)*Iv.n/(Sh + Ih).n, recovery=Ih >> Sh @ ss.days(50), emergence=ss.null >> Sv @ ss.perday(100),
-                          biting=Sv >> Iv @ ss.perday(0.1)*Ih.n/(Sh + Ih).n, mortality=Sv + Iv >> ss.null @ ss.days(10), init_n=dict(Sv=3000), first='Sh', name='vector')
+                          biting=Sv >> Iv @ ss.perday(0.1)*Ih.n/(Sh + Ih).n, mortality=Sv + Iv >> ss.null @ ss.days(10), init_n=dict(Sv=3000), default_state='Sh', name='vector')
     assert [s.name for s in vector().graph.people_states] == ['Sh', 'Ih']
 
     # As agents, counts take substeps (at a monthly step they died out) and the modifiers of their transitions (which were ignored)
@@ -159,13 +159,13 @@ def test_counts():
 
     # where= can be a state of another module, and a death can have several sources
     J, A, X, Y = ss.states('J A X Y')
-    growth = ss.Disease(maturity=J >> A @ ss.perday(0.1), first='J', name='growth')
-    adults = ss.Disease(shift=ss.Transition(X, Y, rate=ss.perday(1.0), where=growth.A), first='X', name='adults')
+    growth = ss.Disease(maturity=J >> A @ ss.perday(0.1), default_state='J', name='growth')
+    adults = ss.Disease(shift=ss.Transition(X, Y, rate=ss.perday(1.0), where=growth.A), default_state='X', name='adults')
     assert ss.Sim([growth, adults], n_agents=100, unit='day', stop=5, **kw).run().results.adults.shift.sum() > 0
-    assert [s.name for s in ss.death([J, A], rate=0.1).src] == ['J', 'A']
+    assert [s.name for s in ss.death([J, A], rate=0.1).source] == ['J', 'A']
     A, B, C = ss.states('A B C')
     d = ss.Disease(A, B, C, tr=ss.Transition(A + B, C, rate=ss.peryear(0.1)), name='d') # A source that is a sum of states is several sources, as in A + B >> C
-    assert [s.name for s in d.graph.transitions.tr.src] == ['A', 'B']
+    assert [s.name for s in d.graph.transitions.tr.source] == ['A', 'B']
 
     # A value set each step that is not a flow, as odin's update() of a variable (the largest prevalence so far, which slows the spread): a module written as code, read by a function in the rate
     class Track(ss.Connector):
@@ -221,8 +221,8 @@ def test_births():
 
     # As agents, people who die in one disease leave the states of another on the same step
     S1, X1, S2, X2 = ss.states(4)
-    one = ss.Disease(S1, X1, nothing=S1 >> X1 @ 0*S1.n, first='S1', name='one')
-    two = ss.Disease(S2, X2, dying=S2 >> ss.null @ ss.perday(0.1), first='S2', name='two')
+    one = ss.Disease(S1, X1, nothing=S1 >> X1 @ 0*S1.n, default_state='S1', name='one')
+    two = ss.Disease(S2, X2, dying=S2 >> ss.null @ ss.perday(0.1), default_state='S2', name='two')
     res = ss.Sim([one, two], n_agents=1000, unit='day', stop=4, **kw).run().results
     assert np.allclose(res.one.S1, res.two.S2) and np.allclose(res.one.S1, res.alive)
 
@@ -247,7 +247,7 @@ def test_births():
     # An inflow given for each level arrives at that level as given, whatever the split
     S, I = ss.states(2)
     arrivals = ss.Disease(arrive=ss.null >> S @ ss.by(sex=[100, 10]), infection=S >> I @ 0*I, name='arrivals')
-    arrivals.stratify(sex=['f', 'm'], split=[1000, 500])
+    arrivals.stratify(sex=['f', 'm'], fractions=[1000, 500])
     res = ss.Sim(arrivals, total_pop=1500, stop=3, **kw).run().results.arrivals
     assert np.allclose(res.arrive.by('sex').values[1:], [100, 10]) # None at the start
     S, I = ss.states('S I') # A birth rate for each level of sex is births from the people of that sex, and the children are of either sex
@@ -366,8 +366,8 @@ def test_stratify():
         make_sir().stratify(age=[0, 15]).stratify(age=[0, 20])
     with pytest.raises(KeyError, match='adjust= names a transition "recovry"'):
         make_sir().stratify(age=[0, 15], adjust={'recovry': [1, 2]})
-    with pytest.raises(ValueError, match='split= has 3 entries'):
-        make_sir().stratify(risk=['low', 'high'], split=[0.5, 0.3, 0.2])
+    with pytest.raises(ValueError, match='fractions= has 3 entries'):
+        make_sir().stratify(risk=['low', 'high'], fractions=[0.5, 0.3, 0.2])
     with pytest.raises(ValueError, match='has 2 values, but "age" has 3 levels'): # Caught when the sim is built, not when it runs
         S, I = ss.states('S I')
         ss.Sim(ss.Disease(infection=ss.Transition(S, I, rate=ss.by(age=[0.3, 0.2]) * I), init_prev=0.01), stratify=dict(age=[0, 15, 65]), **kw).init()
@@ -382,10 +382,10 @@ def test_stratify():
     with pytest.raises(KeyError):
         ss.Sim(make_sir(), stratify=dict(age=[0, 15], adjust={'recovry': [1, 2]}), **kw).init()
     with pytest.raises(ValueError):
-        make_sir().stratify(split=[0.5, 0.5]) # No dimension
+        make_sir().stratify(fractions=[0.5, 0.5]) # No dimension
 
     # A dimension called immunity, with its split used even though the sim has the same groups
-    imm = ss.Sim(make_sir().stratify(immunity=['none', 'high'], split=[0.7, 0.3]), stratify=dict(immunity=['none', 'high']), unit='day', stop=10, **kw).run()
+    imm = ss.Sim(make_sir().stratify(immunity=['none', 'high'], fractions=[0.7, 0.3]), stratify=dict(immunity=['none', 'high']), unit='day', stop=10, **kw).run()
     n = sum(imm.results.sir[k].by('immunity').values[-1] for k in 'SIR')
     assert np.allclose(n/n.sum(), [0.7, 0.3]) # Not no dimension, nor the sim's equal split
     return sims
@@ -400,8 +400,8 @@ def test_outcomes():
         infection = S >> I @ beta * I
         recovery = I >> R @ ss.days(10)
         cases  = ss.outcome(0.5 * infection, delay=ss.days(5))
-        hosp   = ss.outcome(0.05 * infection, delay=ss.days(7), duration=ss.days(10))
-        deaths = ss.outcome(0.2 * hosp, delay=ss.lognorm_ex(mean=14, std=5, unit='days'))
+        hosp   = ss.outcome(0.05 * infection, delay=ss.days(7), stay=ss.days(10))
+        deaths = ss.outcome(0.2 * hosp, delay=ss.lognormal(mean=14, std=5, unit='days'))
         return ss.Disease(infection, recovery, cases, hosp, deaths, prevalence=I/(S + I + R), init_prev=0.01, name='sir')
 
     pars = dict(total_pop=1e6, start='2020-01-01', stop='2020-06-01', **kw)
@@ -442,7 +442,7 @@ def test_outcomes():
     assert any('casess' in note for note in typo.notes) # Data on a sim can be just for plotting, so a column that matches no result is noted, and an error only when fitting
     with pytest.raises(KeyError, match='the data column "casess" matches no result'):
         typo.fit()
-    renamed = ss.simdata(df.rename(columns=dict(cases='Reported')), aliases=dict(cases='Reported'))
+    renamed = ss.SimData(df.rename(columns=dict(cases='Reported')), aliases=dict(cases='Reported'))
     assert 'cases' in ss.Sim(make(0.3), data=renamed, **pars).init().data.columns
     assert 'cases' in ss.Sim(make(0.3), **pars).new(data=renamed).init().data.columns # Or to a new sim
     with pytest.raises(KeyError, match='pars= has a value for "betta", which matches no parameter'):
@@ -455,11 +455,11 @@ def test_outcomes():
         ss.Sim(ss.Disease(infection=ss.Transition(S, I, rate=ss.par() * I), recovery=ss.Transition(I, R, dur=10), init_prev=0.01), **pars).init()
     with pytest.raises(ValueError, match=r'fit\(\) needs data'):
         ss.Sim(make(0.3), **pars).fit()
-    with pytest.raises(ValueError, match='gof'): # Rather than the default in its place
-        sim.fit(gof='nea')
+    with pytest.raises(ValueError, match='loss'): # Rather than the default in its place
+        sim.fit(loss='nea')
     with pytest.raises(KeyError, match='is not a transition or outcome of "ir"'):
         I, R = ss.states('I R')
-        ss.Sim(ss.Disease(recovery=ss.Transition(I, R, dur=3), cases=ss.outcome('infection'), first='I'), **kw).init()
+        ss.Sim(ss.Disease(recovery=ss.Transition(I, R, dur=3), cases=ss.outcome('infection'), default_state='I'), **kw).init()
 
     # The share of a flow that is reported can be a parameter
     rho = ss.par(0.6)
@@ -474,7 +474,7 @@ def test_outcomes():
     def by_patch():
         S, I, R = ss.states(3)
         infection = S >> I @ 0.3 * I
-        sir = ss.Disease(infection, I >> R @ 0.1, ss.outcome(0.5 * infection, name='cases', delay=ss.days(3)), ss.outcome(infection, name='hosp', duration=ss.days(5)), init_n=dict(I=ss.by(patch=[5, 0])), name='sir')
+        sir = ss.Disease(infection, I >> R @ 0.1, ss.outcome(0.5 * infection, name='cases', delay=ss.days(3)), ss.outcome(infection, name='hosp', stay=ss.days(5)), init_n=dict(I=ss.by(patch=[5, 0])), name='sir')
         sir.stratify(patch=['a', 'b'], mobility=ss.geo.Mobility(matrix=[[0, 0.01], [0.01, 0]], kind='migrate'))
         return ss.Sim(sir, total_pop=1000, unit='day', stop=80, **kw)
     kernel, stepped = by_patch().run().results.sir, by_patch().run(profile=True).results.sir # Recording the time of each step needs the loop
@@ -512,7 +512,7 @@ def test_outcomes():
     for solver in ['ode', 'binomial']:
         S, I, R = ss.states(3)
         infection = S >> I @ 0.3 * I
-        fixed = ss.Disease(infection, I >> R @ ss.days(10), ss.outcome(infection, name='hosp', duration=ss.constant(10, unit='days')), init_prev=0.01, name='fixed')
+        fixed = ss.Disease(infection, I >> R @ ss.days(10), ss.outcome(infection, name='hosp', stay=ss.constant(10, unit='days')), init_prev=0.01, name='fixed')
         res = ss.Sim(fixed, unit='day', stop=100, solver=solver, **kw).run().results.fixed
         assert np.allclose(res.n_hosp, np.concatenate([[0], np.convolve(res.hosp, np.ones(10))[:len(res.hosp)-1]])) # A stock at a time point: the admissions of the ten steps before it
 
@@ -630,7 +630,7 @@ def test_modify():
     # So do a modifier on its duration and a duration that changes in time, as agents: a cohort, 498 left in the ODE on day 25 or 15 (not 825 and 4,755)
     def cohort(solver, dur, mods=None):
         I, R = ss.states('I R')
-        dis = ss.Disease(recovery=I >> R @ dur, first='I', name='sir')
+        dis = ss.Disease(recovery=I >> R @ dur, default_state='I', name='sir')
         size = dict(n_agents=10_000) if solver == 'abm' else dict(total_pop=10_000)
         return ss.Sim(dis, interventions=mods(dis) if mods else None, unit='day', dt=0.1, stop=40, solver=solver, rand_seed=1, verbose=0, **size).run().results.sir.I.values
     shorter = lambda dis: ss.modify(dis.pars.dur_I, multiply=0.5, start=20)
@@ -641,8 +641,8 @@ def test_modify():
 
     # A where= on an exit with a dwell time that becomes true while people wait: they leave once it holds, a year later
     A, B = ss.states('A B')
-    aging = ss.Disease(A, B, ab=ss.Transition(A, B, dur=ss.constant(ss.years(1)), where=lambda sim: sim.people.age.raw >= 30), first='A', name='aging')
-    sim = ss.Sim(aging, n_agents=5000, start=2000, stop=2004, use_aging=True, verbose=0).init()
+    aging = ss.Disease(A, B, ab=ss.Transition(A, B, dur=ss.constant(ss.years(1)), where=lambda sim: sim.people.age.raw >= 30), default_state='A', name='aging')
+    sim = ss.Sim(aging, n_agents=5000, start=2000, stop=2004, aging=True, verbose=0).init()
     age = sim.people.age.raw.copy()
     left = ~sim.run().diseases.aging.A.raw
     near = (age >= 29) & (age < 29.9) & sim.people.alive.raw
@@ -701,7 +701,7 @@ def test_modify():
 
     # On one transition with several destinations and a dwell, a modifier changes the dwell, and a note names the destinations that change a branch
     G, A, B = ss.states('G A B')
-    d = ss.Disease(G, A, B, go=ss.Transition(G, [A, B], dur=ss.weeks(4), p=[0.95, 0.05]), first='G', name='d')
+    d = ss.Disease(G, A, B, go=ss.Transition(G, [A, B], dur=ss.weeks(4), p=[0.95, 0.05]), default_state='G', name='d')
     sim = ss.Sim(d, connectors=ss.modify('d.go', multiply=4), total_pop=10_000, solver='ode', start=2000, stop=2001, **kw).run()
     assert any("'d.go.B'" in note for note in sim.notes)
     sim = ss.Sim(d, connectors=ss.modify('d.go.B', multiply=4), total_pop=10_000, solver='ode', start=2000, stop=2001, **kw).run()
@@ -848,7 +848,7 @@ def test_functions():
 
     # A rate given as a function of the sim with one value per person alive, once people have died (it raised IndexError)
     A, B = ss.states('A B')
-    d = ss.Disease(A, B, go=A >> B @ ss.peryear(0.5)*(lambda sim: 1.0*np.asarray(sim.people.female)), first='A', name='d')
+    d = ss.Disease(A, B, go=A >> B @ ss.peryear(0.5)*(lambda sim: 1.0*np.asarray(sim.people.female)), default_state='A', name='d')
     sim6 = ss.Sim(d, demographics=ss.Deaths(death_rate=ss.peryear(200)), n_agents=5000, dt=0.25, start=2000, stop=2001, **kw).run()
     inB = sim6.diseases.d.B.uids
     assert len(inB) > 100 and sim6.people.female[inB].all()
@@ -896,11 +896,11 @@ def test_functions():
     # A branch with p= and where= fires once people are in where= (before, never), and a function p= leaves the rest to the timed exit with none (before, 0.45 instead of 0.9)
     due = lambda sim: sim.people.uid.raw*0 + (sim.ti >= 5) # Everyone, from step 5
     I, R = ss.states('I R')
-    gated = ss.Disease(recovery=ss.Transition(I, R, p=1.0, rate=ss.perday(1e6), where=due), first='I', name='gated')
+    gated = ss.Disease(recovery=ss.Transition(I, R, p=1.0, rate=ss.perday(1e6), where=due), default_state='I', name='gated')
     assert ss.Sim(gated, n_agents=1000, stop=10, unit='day', verbose=0).run().results.gated.R[-1] == 1000
     for solver in ['ode', 'abm']:
         E, A, Y = ss.states(3)
-        d = ss.Disease(E=E, A=A, Y=Y, symp=ss.Transition(E, Y, p=lambda sim: 0.9, dur=ss.weeks(1)), asymp=ss.Transition(E, A, dur=ss.weeks(1)), first='E', name='d')
+        d = ss.Disease(E=E, A=A, Y=Y, symp=ss.Transition(E, Y, p=lambda sim: 0.9, dur=ss.weeks(1)), asymp=ss.Transition(E, A, dur=ss.weeks(1)), default_state='E', name='d')
         res = ss.Sim(d, n_agents=10_000, total_pop=10_000, start=2000, stop=2001, dt=1/52, solver=solver, verbose=0).run().results.d
         assert np.isclose(res.symp.sum()/(res.symp.sum() + res.asymp.sum()), 0.9, atol=0.01)
     return sim
@@ -920,11 +920,11 @@ def test_time_values():
     changed = ss.Sim(sis, interventions=ss.modify(sis.pars.beta, set=ss.timeseries({'2020-02-01': 0.1, '2020-04-01': 0.3}), start='2020-02-01'), **dates).run()
     assert series.solver == 'ode' # A value that varies in time does not make a model agent-based
     assert np.allclose(series.results.sis.I, changed.results.sis.I)
-    assert series.diseases.sis.pars.beta.raw.mode == 'constant'
+    assert series.diseases.sis.pars.beta.raw.interpolation == 'step'
 
     # With no dates, the times are in the sim's unit; and it can be the amount of a modifier
     sis = make(0.3)
-    ramp = ss.modify(sis.pars.beta, multiply=ss.timeseries({0: 1.0, 50: 0.2}, mode='linear'))
+    ramp = ss.modify(sis.pars.beta, multiply=ss.timeseries({0: 1.0, 50: 0.2}, interpolation='linear'))
     res = ss.Sim(sis, interventions=ramp, stop=100, **kw).run().results.sis
     assert res.I[:40].max() > 2*res.I[-1] # Transmission falls below what is needed to sustain it
     with pytest.raises(ValueError):
@@ -959,7 +959,7 @@ def test_time_values():
     for solver in ['ode', 'binomial']:
         I, H, R = ss.states('I H R')
         severe = ss.Transition(I, H, p=0.25, rate=ss.par(0.2778, name='rate_severe')*ss.seasonal(mean=1.0, amplitude=0.3, peak=0.5))
-        sir = ss.Disease(severe=severe, mild=ss.Transition(I, R, p=0.75, rate=0.0909), first='I', name='sir')
+        sir = ss.Disease(severe=severe, mild=ss.Transition(I, R, p=0.75, rate=0.0909), default_state='I', name='sir')
         res = ss.Sim(sir, total_pop=10_000, stop=60, dt=0.1, unit='day', solver=solver, verbose=0).run().results.sir
         assert res.H[0] == 0 and np.isclose(res.severe.cum[-1], res.H[-1], rtol=1e-3) # Was 2,500 at the start, and a flow of 0
 
@@ -979,11 +979,11 @@ def test_time_values():
     yearly = ss.timeseries({'2020-01-01': 1.0, '2020-07-01': 2.0}, period=ss.years(1))
     dated = ss.Sim(stop=ss.days(800), unit='day', start='2020-01-01', **kw).init()
     assert [yearly.at(year, dated) for year in [2020.1, 2020.6, 2021.1, 2021.6]] == [1, 2, 1, 2]
-    curve = ss.timeseries({0: 1.0, 1: 0.0}, mode='cosine')
+    curve = ss.timeseries({0: 1.0, 1: 0.0}, interpolation='cosine')
     assert np.isclose(curve.at(0.5, ss.Sim(stop=2, unit='year').init()), 0.5) and curve.at(0.1, ss.Sim(stop=2, unit='year').init()) > 0.9
     ts = ss.timeseries(['2010-01-01', '2010-07-01'], [0.5, 0.9]) # From its times and values, as np.interp takes them
     assert repr(ts) == repr(ss.timeseries({'2010-01-01': 0.5, '2010-07-01': 0.9}))
-    assert ss.timeseries([0, 10], [1, 2], mode='linear').mode == ss.timeseries({0: 1, 10: 2}, 'linear').mode == 'linear'
+    assert ss.timeseries([0, 10], [1, 2], interpolation='linear').interpolation == ss.timeseries({0: 1, 10: 2}, 'linear').interpolation == 'linear'
 
     # A value that varies in time as a keyword of a module written as code, and a number times a time value
     seasonal = ss.seasonal(mean=ss.peryear(0.4), amplitude=0.6, peak='January')
@@ -1050,9 +1050,9 @@ def test_time_values():
 
 
 def test_stays_and_offspring():
-    sc.heading('Testing a minimum stay (after=) and litters (ss.birth(per=)), as EMULSION has them')
+    sc.heading('Testing a minimum stay (min_stay=) and litters (ss.birth(on=)), as EMULSION has them')
     NB, W = ss.states(2)
-    growth = ss.Disease(weaning=ss.Transition(NB, W, rate=ss.perday(0.5), after=ss.days(21)), first='NB', name='growth')
+    growth = ss.Disease(weaning=ss.Transition(NB, W, rate=ss.perday(0.5), min_stay=ss.days(21)), default_state='NB', name='growth')
     sim = ss.Sim(growth, unit='day', stop=40, n_agents=5000, verbose=0).run()
     n_W = sim.results.growth.W.values
     assert sim.solver == 'abm' and n_W[21] == 0 and n_W[22] > 0.25*5000 # Nobody leaves for 21 days, then at the rate
@@ -1061,13 +1061,13 @@ def test_stays_and_offspring():
     assert ode.solver == 'ode' and ode.results.growth.W[21] == 0 < ode.results.growth.W[22]
     assert np.max(binomial[:, 21]) == 0 < np.min(binomial[:, 22]) and np.isclose(np.mean(binomial[:, 30]), n_W[30], rtol=0.05) # As agents, though released at mid-step (see convey()), so half a step later for people who all arrived at the start
     E, D, I = ss.states(3) # An escape during a minimum stay, as EMULSION's: a rate only while the time in the state is short (agents)
-    x = ss.Disease(onset=ss.Transition(E, I, rate=ss.perday(0.3), after=ss.days(10)), death=ss.Transition(E, D, rate=ss.perday(0.5)*(E.time < ss.days(10))), first='E', name='x')
+    x = ss.Disease(onset=ss.Transition(E, I, rate=ss.perday(0.3), min_stay=ss.days(10)), death=ss.Transition(E, D, rate=ss.perday(0.5)*(E.time_in < ss.days(10))), default_state='E', name='x')
     r = ss.Sim(x, unit='day', stop=30, n_agents=5000, verbose=0).run().results.x
     assert r.I[10] == 0 and r.I[11] > 0 and r.D[11] == r.D[30] > 0, 'nobody should become infectious before day 10, or die after it'
     S, I, R = ss.states('S I R') # A stay on a transmission is not built yet, and no engine ignores it
     for solver in ['abm', 'ode']:
         infection = ss.Transition(S, I, rate=0.3 * I)
-        infection.after = ss.days(5)
+        infection.min_stay = ss.days(5)
         with pytest.raises(ss.CapabilityError):
             ss.Sim(ss.Disease(S, I, R, infection=infection, recovery=I >> R @ ss.days(10), init_n=dict(I=10), name='x'), n_agents=500, unit='day', stop=20, solver=solver, verbose=0).init()
 
@@ -1080,7 +1080,7 @@ def test_stays_and_offspring():
 
     G, L, NB = ss.states(3) # A litter is a birth driven by the transition (EMULSION's offspring)
     farrowing = ss.Transition(G, L, dur=ss.days(10))
-    herd = ss.Disease(G, L, NB, farrowing=farrowing, weaning=ss.Transition(L, G, dur=ss.days(20)), litter=ss.birth(NB, per=farrowing, n=3), first='G', name='herd')
+    herd = ss.Disease(G, L, NB, farrowing=farrowing, weaning=ss.Transition(L, G, dur=ss.days(20)), litter=ss.birth(NB, on=farrowing, n=3), default_state='G', name='herd')
     res = ss.Sim(herd, unit='day', stop=60, n_agents=100, verbose=0).run().results.herd
     assert res.NB[-1] == 3*res.farrowing.values[:-1].sum() > 0 # Three newborns for each farrowing, who are people (NB[-1] is before the last step's)
     res = ss.Sim(herd, unit='day', stop=60, solver='ode', verbose=0).run().results.herd # And as compartments
@@ -1089,9 +1089,9 @@ def test_stays_and_offspring():
     # Offspring by the mother's state: a split on the birth, which fires on= the birth of either module (the one that makes the children, or one that also places them)
     for own in [False, True]:
         S, I = ss.states('S I')
-        newborns = ss.birth(S, per=farrowing, n=3)
+        newborns = ss.birth(S, on=farrowing, n=3)
         trigger = newborns if own else herd.graph.transitions.litter
-        health = ss.Disease(S, I, newborns=newborns, vertical=ss.Transition(S, [I, S], where=trigger & ss.mother(I, born=True), p=[0.5, 0.5]), init_n=dict(I=50), name='health')
+        health = ss.Disease(S, I, newborns=newborns, vertical=ss.Transition(S, [I, S], on=trigger, where=ss.mother(I, include_born=True), p=[0.5, 0.5]), init_n=dict(I=50), name='health')
         res = ss.Sim([herd, health], unit='day', stop=60, n_agents=100, verbose=0).run().results.health
         split = res['vertical.I'].values.sum() + res['vertical.S'].values.sum()
         assert 0 < split < res.newborns.values.sum() and res['vertical.I'].values.sum() > 0, f'on= {"its own" if own else "the herd\'s"} birth: {split} newborns split of {res.newborns.values.sum()}' # Those of infected mothers only
@@ -1104,7 +1104,7 @@ def test_branch_where():
     def make():
         S, A = ss.states('S A')
         return ss.Disease(infection=S >> A @ ss.perday(0)*A,
-            persist = ss.Transition(A, S, p=0.9, dur=ss.constant(ss.years(100)), where=ss.ppl.female), # Women only
+            persist = ss.Transition(A, S, p=0.9, dur=ss.constant(ss.years(100)), where=ss.person.female), # Women only
             clear_a = ss.Transition(A, S, p=None, dur=ss.days(30)), init_prev=0.5, name='d')
     strat = dict(sex=['female', 'male'])
     for solver in ['abm', 'ode']:
@@ -1119,7 +1119,7 @@ def test_branch_where():
     P, C, R = ss.states('P C R')
     female = lambda sim: sim.people.female.raw
     d = ss.Disease(P, C, R, to_cin=ss.Transition(P, C, dur=ss.years(3), p=0.25, where=female), to_clear=ss.Transition(P, R, dur=ss.years(1), where=female),
-                   male=ss.Transition(P, R, dur=ss.years(1), where=lambda sim: ~sim.people.female.raw), first='P', name='d')
+                   male=ss.Transition(P, R, dur=ss.years(1), where=lambda sim: ~sim.people.female.raw), default_state='P', name='d')
     res = ss.Sim(d, n_agents=10_000, start=2000, stop=2010, dt=ss.years(0.25), verbose=0).run().results.d
     assert 1000 < res.C[-1] < 1500 # A quarter of about 5,000 women
     return r
@@ -1155,7 +1155,7 @@ def test_branches():
     with pytest.raises(ValueError, match='give it dur=0'): # An immediate split as one transition says how to write it (it crashed)
         ss.Sim(ss.Disease(go=S >> J @ ss.peryear(1), branch=ss.Transition(J, [A, B], p=[0.5, 0.5]), name='d'), **agents).init()
     A, B, C = ss.states('A B C')
-    d = ss.Disease(A, B, C, tr=ss.Transition(A, [B, C], dur=ss.years(1), p=lambda sim, uids: np.tile([0.3, 0.7], (len(uids), 1))), first='A', name='d')
+    d = ss.Disease(A, B, C, tr=ss.Transition(A, [B, C], dur=ss.years(1), p=lambda sim, uids: np.tile([0.3, 0.7], (len(uids), 1))), default_state='A', name='d')
     with pytest.raises(ss.CapabilityError): # A row of probabilities from a function in p= is refused clearly (it crashed)
         ss.Sim(d, **agents).run()
     for solver in ['abm', 'ode']: # A branch probability over 1 raises, as a sum over 1 does at build (it was used as 1, killing 5,854 of 5,901)
@@ -1170,7 +1170,7 @@ def test_branches():
     d = ss.Disease(S, I, R, infection=S >> I @ ss.peryear(1), death=ss.Transition(I, ss.null, dur=ss.days(20), p=0.1), rec=ss.Transition(I, R, dur=ss.days(20)), name='d')
     d.death.p = ss.by(age=[0.5, 0.0])
     d.stratify(age=[0, 15])
-    res = ss.Sim(d, n_agents=5000, use_aging=False, start=2000, stop=2001, **kw).run().results.d
+    res = ss.Sim(d, n_agents=5000, aging=False, start=2000, stop=2001, **kw).run().results.d
     assert res.death.by('age').values.sum(0)[1] == 0 and res.death.sum() > 0
     d = ss.Disease(S, I, infection=S >> I @ ss.peryear(0.1), death=I >> ss.null @ ss.days(20), name='d')
     with pytest.raises(ValueError):
@@ -1179,7 +1179,7 @@ def test_branches():
     # Branches kept to one level each by move= sum to 1 within that level, not across levels (FPsim: p= per parity)
     A, B, C = ss.states('A B C')
     trs = {f'{dst.name.lower()}{k}': ss.Transition(A, dst, p=p, dur=ss.months(1), move=dict(k=(k, '1'))) for dst,p in [(B, 0.9), (C, 0.1)] for k in '01'}
-    d = ss.Disease(A, B, C, **trs, first='A', name='d').stratify(k=['0', '1']) # Everyone starts in A
+    d = ss.Disease(A, B, C, **trs, default_state='A', name='d').stratify(k=['0', '1']) # Everyone starts in A
     res = ss.Sim(d, n_agents=2000, start=2000, stop=2001, dt=ss.months(1), unit='year', **kw).run().results.d
     assert res.A[-1] == 0 and np.isclose(res.C[-1]/2000, 0.1, atol=0.03)
     A, B, C = ss.states('A B C')
@@ -1207,7 +1207,7 @@ def test_source_weights():
 def test_cond_by_expr():
     sc.heading('Testing arithmetic on a condition and an ss.by: an expression for a rate, in either order')
     age = ss.by(age=[0.1, 0.3])
-    older = ss.ppl.age >= 50
+    older = ss.person.age >= 50
     forms = {
         'by + cond':  lambda: age + 0.2*older,
         'cond + by':  lambda: 0.2*older + age,
@@ -1222,7 +1222,7 @@ def test_cond_by_expr():
              'exp(cond) * by':[0.1, 0.6], 'par(by) + cond':[0.1, 0.5], 'cond + par(by)':[0.1, 0.5]} # Under 50, then 50 and over
     def make(form):
         A, B = ss.states('A B')
-        return ss.Disease(A, B, go=A >> B @ ss.peryear(1.0)*forms[form](), first='A', name='c').stratify(age=[0, 50])
+        return ss.Disease(A, B, go=A >> B @ ss.peryear(1.0)*forms[form](), default_state='A', name='c').stratify(age=[0, 50])
     pars = dict(start=2000, stop=2002, dt=ss.months(1), verbose=0)
     for form in forms:
         expected = 1 - np.exp(-2*np.array(rates[form])) # The share of each age group that moves in two years
@@ -1233,21 +1233,21 @@ def test_cond_by_expr():
 
     # A bare ss.by in a rate with a property of people that is not a dimension, as agents (the reported case)
     by_year = ss.by(dict(age=list(range(100)), value=np.linspace(0, 1, 100)))
-    for rate in [by_year + 0.5*ss.ppl.female, 0.5*ss.ppl.female + by_year, by_year * (1 + ss.ppl.female), (1 + ss.ppl.female) * by_year]:
+    for rate in [by_year + 0.5*ss.person.female, 0.5*ss.person.female + by_year, by_year * (1 + ss.person.female), (1 + ss.person.female) * by_year]:
         assert isinstance(rate, ss.expressions.Expr), f'{rate!r} should be an expression'
         A, B = ss.states('A B')
-        d = ss.Disease(A, B, go=A >> B @ ss.peryear(1.0)*rate, first='A', name='c')
+        d = ss.Disease(A, B, go=A >> B @ ss.peryear(1.0)*rate, default_state='A', name='c')
         assert ss.Sim(d, n_agents=500, **pars).run().results.c.go.sum() > 0
 
     # An unnamed ss.par inside an expression is an error when the model is built, not when it runs
     A, B = ss.states('A B')
     with pytest.raises(ValueError):
-        ss.Disease(A, B, go=A >> B @ ss.peryear(1.0)*(ss.par(age) + 0.2*older), first='A', name='c')
+        ss.Disease(A, B, go=A >> B @ ss.peryear(1.0)*(ss.par(age) + 0.2*older), default_state='A', name='c')
 
     # np.clip of arithmetic on a condition (a state of another module, by name) is an expression, the same as np.maximum and np.minimum
     def clipped(fn):
         A, B, cell, other = ss.states('A B cell other')
-        return [ss.Disease(cell, other, first='cell', name='b'), ss.Disease(A, B, go=A >> B @ ss.peryear(1.0)*fn(3*ss.state('b.cell')), first='A', name='c')]
+        return [ss.Disease(cell, other, default_state='cell', name='b'), ss.Disease(A, B, go=A >> B @ ss.peryear(1.0)*fn(3*ss.ref('b.cell')), default_state='A', name='c')]
     res = [ss.Sim(clipped(fn), n_agents=2000, **pars).run().results.c.go.values for fn in [lambda x: np.clip(x, 0, 1), lambda x: np.minimum(np.maximum(x, 0), 1)]]
     assert np.array_equal(res[0], res[1]) and np.isclose(res[0].sum()/2000, 1 - np.exp(-2), rtol=0.05)
     return
@@ -1258,7 +1258,7 @@ def test_modify_dist_dwell():
     sc.heading('Testing modifiers on a dwell-time parameter that is a distribution')
     def make(raw=ss.constant(ss.years(1)), mod=None, solver='abm'):
         A, B = ss.states('A B')
-        dis = ss.Disease(A, B, go=ss.Transition(A, B, rate=ss.peryear(2)), back=ss.Transition(B, A, dur=ss.par(raw, name='d')), first='A', name='c')
+        dis = ss.Disease(A, B, go=ss.Transition(A, B, rate=ss.peryear(2)), back=ss.Transition(B, A, dur=ss.par(raw, name='d')), default_state='A', name='c')
         size = dict(n_agents=2000) if solver == 'abm' else dict(total_pop=2000)
         return ss.Sim(dis, interventions=mod, start=2000, stop=2006, dt=ss.years(0.25), solver=solver, rand_seed=1, **size, **kw)
 
@@ -1334,7 +1334,7 @@ def test_algebra():
         table    = lambda I: ss.by(dict(age=[0, 15, 50], value=[0.5, 1.0, 0.8])),
         keyed    = lambda I: ss.by(sex=dict(female=1.1, male=0.9)),
         count    = lambda I: 1 + I.frac,
-        person   = lambda I: ss.ppl.age/50,
+        person   = lambda I: ss.person.age/50,
         attr     = lambda I: ss.attr(ss.uniform(0.5, 1.5), name='a'),
         series   = lambda I: ss.timeseries({2000: 1.0, 2001: 0.5}),
         seasonal = lambda I: ss.seasonal(amplitude=0.3),
@@ -1376,18 +1376,18 @@ def test_algebra():
         return sim
     def person_amount(solver): # A modifier's amount over people's properties
         d = sis()
-        return run(solver, d, connectors=ss.modify(d.infection, multiply=ss.ppl.age/50))
+        return run(solver, d, connectors=ss.modify(d.infection, multiply=ss.person.age/50))
     def other_states(solver): # A modifier's amount over another module's states
         A, B = ss.states('A B')
         d = sis()
-        m = ss.Disease(A, B, on=A >> B @ ss.peryear(0.5), first='A', name='m')
+        m = ss.Disease(A, B, on=A >> B @ ss.peryear(0.5), default_state='A', name='m')
         return run(solver, d, m, connectors=ss.modify(d.infection, multiply=1 - 0.9*m.B))
     def attr_on_exit(solver): # An attribute set as people leave a state
         S, I = ss.states('S I')
-        return run(solver, ss.Disease(infection=S >> I @ ss.peryear(2)*I, recovery=I >> S @ ss.years(0.5), t_inf=ss.attr(I.time, on=I.exit), init=dict(I=0.1), name='sis'))
+        return run(solver, ss.Disease(infection=S >> I @ ss.peryear(2)*I, recovery=I >> S @ ss.years(0.5), t_inf=ss.attr(I.time_in, on=I.exit), init=dict(I=0.1), name='sis'))
     def dwell_births(solver): # A dwell time over people's properties and clocks, once people are born
         S, I = ss.states('S I')
-        dur = np.maximum(6 - ss.ppl.age, 0.5)*ss.years(1) + I.time
+        dur = np.maximum(6 - ss.person.age, 0.5)*ss.years(1) + I.time_in
         return run(solver, ss.Disease(infection=S >> I @ ss.peryear(2)*I, recovery=ss.Transition(I, S, dur=dur), init=dict(I=0.1), name='sis'), demographics=[ss.birth(rate=ss.peryear(0.05)), ss.death(rate=ss.peryear(0.02))])
     def peract_dict(solver): # A per-act beta for each direction, in a dict by route
         return run(solver, sis(rate=lambda I: dict(sexualnet=ss.peract(m2f=0.05, f2m=0.03))*I), networks=ss.SexualNet())
@@ -1411,28 +1411,28 @@ def test_init_expression():
     class M(ss.Disease):
         A = ss.par(20.0)
         k = ss.par(1.0)
-        age = ss.ppl.age # A helper, not a result
+        age = ss.person.age # A helper, not a result
         U = ss.State()
         S = ss.State(init=np.minimum(1, 1 - (A - age)/(k*age + A))) # Gauld et al.'s share susceptible by age
-        first = 'U'
+        default_state = 'U'
         become = U >> S @ ss.peryear(0.01)
     share = lambda sim: sim.results.m.S[0]/(sim.results.m.S[0] + sim.results.m.U[0])
     sim = ss.Sim(diseases=M(), n_agents=20_000, dur=ss.days(3), dt=ss.days(1), verbose=0, rand_seed=1).run()
     age = sim.people.age.raw[sim.people.auids]
     expected = np.mean(np.minimum(1, 1 - (20 - age)/(age + 20)))
     assert abs(share(sim) - expected) < 0.01
-    ode = ss.Sim(diseases=M(), n_agents=20_000, dur=ss.days(3), dt=ss.days(1), verbose=0, solver='ode', use_aging=True)
+    ode = ss.Sim(diseases=M(), n_agents=20_000, dur=ss.days(3), dt=ss.days(1), verbose=0, solver='ode', aging=True)
     ode.stratify(age=[0, 5, 10, 15, 20, 100])
     assert abs(share(ode.run()) - expected) < 0.03 # By age group
     fitted = ss.Sim(diseases=M(), n_agents=20_000, dur=ss.days(3), dt=ss.days(1), verbose=0, rand_seed=1, pars={'m.A': 5}).run()
     assert share(fitted) > share(sim) + 0.05
     class Q(ss.Disease): # Given in __init__(), reading the class's parameters
         U, S = ss.states('U S')
-        first = 'U'
+        default_state = 'U'
         A = ss.par(20.0)
         become = U >> S @ ss.peryear(0.01)
         def __init__(self, **kwargs):
-            super().__init__(init=dict(S=np.minimum(1, ss.ppl.age/self.A)), **kwargs)
+            super().__init__(init=dict(S=np.minimum(1, ss.person.age/self.A)), **kwargs)
     q = ss.Sim(diseases=Q(), n_agents=5000, dur=ss.days(3), dt=ss.days(1), verbose=0).run()
     assert list(q.diseases.q.pars.keys()).count('A') == 1 and 0.3 < q.results.q.S[0]/(q.results.q.S[0] + q.results.q.U[0]) < 1
     return sim
@@ -1445,7 +1445,7 @@ def test_class_helpers():
         p_gall = ss.par(ss.by(age={0: 0.1, 30: 0.2}))
         p_cpg = ss.par(0.15)
         A = ss.par(20.0)
-        A2, age = A, ss.ppl.age # Another name, and a property of people
+        A2, age = A, ss.person.age # Another name, and a property of people
         p_carrier = p_cpg*p_gall # A value for each person (by age)
         rel = age/A2
         rec = ss.Transition(I, [S, ss.null], p=[p_carrier, None], dur=ss.days(3))
@@ -1487,7 +1487,7 @@ def test_counter_in_expression():
     for solver in ['abm', 'ode']:
         S, I = ss.states('S I')
         tppi = ss.par(0.5)
-        infection = ss.Transition(S, I, rate=(1 - tppi)**ss.ppl.infections*ss.perday(0.3)*I, increment='infections')
+        infection = ss.Transition(S, I, rate=(1 - tppi)**ss.person.infections*ss.perday(0.3)*I, increment='infections')
         sis = ss.Disease(infection, I >> S @ ss.days(7), init=dict(I=0.01), name='sis')
         sis.stratify(infections=list(range(6)))
         sim = ss.Sim(diseases=sis, n_agents=10_000, dur=ss.days(150), dt=ss.days(1), verbose=0, solver=solver, rand_seed=1).run()
@@ -1525,21 +1525,21 @@ def test_gated_function():
     def make(rate):
         S, I = ss.states('S I')
         return ss.Disease(dying=S >> ss.null @ rate, recovery=I >> S @ ss.years(1), name='d')
-    gated = ss.Sim(diseases=make(ss.par(young_rate, name="young")*(ss.ppl.age < 20)), n_agents=2000, start=2000, stop=2005, rand_seed=3, **kw).run()
+    gated = ss.Sim(diseases=make(ss.par(young_rate, name="young")*(ss.person.age < 20)), n_agents=2000, start=2000, stop=2005, rand_seed=3, **kw).run()
     itself = ss.Sim(diseases=make(young_rate_itself), n_agents=2000, start=2000, stop=2005, rand_seed=3, **kw).run()
     seen = np.concatenate(asked)
     assert len(seen) and np.all(seen < 20), 'The function is called only for those under 20'
     assert np.array_equal(gated.results.d.dying.values, itself.results.d.dying.values), 'The same deaths as a function that gives 0 to the others'
 
-    # ss.Pregnancy's infant_rate, a function of the children it is asked about
+    # ss.Pregnancy's infant_death_rate, a function of the children it is asked about
     ages = []
-    def infant_rate(sim, uids):
+    def infant_death_rate(sim, uids):
         ages.append(np.asarray(sim.people.age[uids]))
         return ss.peryear(np.full(len(uids), 0.05))
-    preg = ss.Pregnancy(fertility_rate=ss.freqperyear(100), infant_rate=infant_rate)
+    preg = ss.Pregnancy(fertility_rate=ss.freqperyear(100), infant_death_rate=infant_death_rate)
     sim = ss.Sim(demographics=preg, n_agents=2000, start=2000, stop=2004, dt=ss.months(1), **kw).run()
     ages = np.concatenate(ages)
-    assert len(ages) and np.all((ages >= 0) & (ages < 1)), 'infant_rate is called only for the children under 1'
+    assert len(ages) and np.all((ages >= 0) & (ages < 1)), 'infant_death_rate is called only for the children under 1'
     assert sim.results.pregnancy.infant_mortality.sum() > 0
     return sim
 
@@ -1552,7 +1552,7 @@ def test_compiled_eval():
     n_inf = ss.attr(1, on=I.enter, combine='sum', name='n_inf')
     d = ss.Disease(infection=S >> I @ ss.peryear(0.4)*k*(0.5**n_inf)*I.n/(S + I).n, recovery=I >> S @ ss.years(0.5), init=dict(I=0.1), name='d')
     sim = ss.Sim(diseases=d, n_agents=3000, start=2000, stop=2003, rand_seed=1, **kw)
-    sim.stratify(patch=ss.geo.geography(names=['A', 'B', 'C'], pop=[1000, 1000, 1000]))
+    sim.stratify(patch=ss.geo.geography(names=['A', 'B', 'C'], populations=[1000, 1000, 1000]))
     sim.run()
     engine = sim.diseases.d.engine
     rate = sim.diseases.d.graph.transitions.infection.rate

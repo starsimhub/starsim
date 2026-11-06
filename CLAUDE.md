@@ -78,14 +78,14 @@ uv add starsim[dev]  # With dev dependencies
 - `results.py`: Results (`ss.Result`, `ss.Results`)
 - `analyzers.py`: Analyzers for custom results (`ss.Analyzer`, the base class, and `ss.infection_log`)
 - `connectors.py`: Connectors between modules (e.g. `ss.modify`)
-- `data.py`: Data by place (`ss.data.population('Kenya')`, `ss.data.contacts(...)`), read by `ss.people('Kenya')`, `ss.contacts('Kenya')`, and `ss.geo.geography('Kenya')`
+- `data.py`: Data by place (`ss.data.population('Kenya')`, `ss.data.contacts(...)`), read by `ss.population('Kenya')`, `ss.contacts('Kenya')`, and `ss.geo.geography('Kenya')`
 - `demographics.py`: Births, deaths, and migration (`ss.Births`, `ss.Deaths`), and pregnancy as declared states and transitions (`ss.Pregnancy`, which provides events such as `conception` and `delivery`, and states such as `P`, for other modules)
 - `diseases.py`: Diseases, declared (states and transitions, in the class form or with `define_states()` and `define_transitions()` in `__init__()`), written as code, or both (`ss.Disease`, `ss.Infection`, `ss.SIR`, ...)
 - `distributions.py`: The statistical distributions to choose from (`ss.uniform`, `ss.poisson`, ...); how they work is in `internals/dists.py`
 - `fit.py`: Fitting to data, as `ss.fit` (imported when first used; `sim.fit()` is the entry point)
 - `geo.py`: Places and the movement between them (`ss.geo.geography`, `ss.geo.Mobility`, `ss.geo.gravity`)
 - `networks.py`: Networks and mixing pools, including partnerships with a target number of partners (`ss.DegreeNet`, and its subclass `ss.SexualNet`, which adds debut and participation)
-- `people.py`: The people (`ss.People`, `ss.people()`, `ss.ppl`)
+- `people.py`: The people (`ss.People`, `ss.population()`, `ss.person`)
 - `products.py`: Vaccine and treatment deployment
 - `run.py`: Running multiple simulations (`ss.MultiSim`, `ss.parallel`)
 - `settings.py`: Global options (`ss.options`) and plotting style
@@ -94,7 +94,7 @@ uv add starsim[dev]  # With dev dependencies
 - `strains.py`: Strains (`ss.Strains`) and immunity between them (`ss.immunity`)
 - `transitions.py`: States and transitions (`ss.State`, `ss.states()`, `ss.Transition` and its `S >> I @ rate` spelling, ...); the names it builds on are spelled by their own modules (`ss.expressions.Expr`, `ss.graph.Graph`, `ss.dimensions.Strat`, ...)
 - `utils.py`: Helper functions
-- `internals/`: How Starsim works under the hood, each also at the top level (`ss.errors`, `ss.graph`, ...): `arrays.py` (state arrays for people and networks), `conditions.py` (conditions on states and people, for `where=`), `dates.py` and `time.py` (dates, durations, and rates), `dimensions.py` (stratifications, `ss.transfer`, and `sim.groups`), `dists.py` (`ss.Dist`, and how distributions are found and seeded), `loop.py` (the integration loop), `modules.py` (base module classes and update logic), `parameters.py` (`ss.Pars`, `ss.by`, `ss.timeseries`, `ss.seasonal`), `timeline.py` (`ss.Timeline`), `graph.py` (the graph of a declared module: its states, transitions, and parameters, completed with defaults and checked; `ss.graph.Graph`), `display.py` (how it is shown: `describe()`, `diagram()`, `equations()`), `expressions.py` (expressions in rates and results, `ss.par`, and how they are evaluated and printed), `gradients.py` (gradients and log-densities in JAX: `sim.gradient()`, `sim.log_density()`), `errors.py` (the few errors and warnings that are classes, e.g. `ss.CapabilityError` and `ss.errors.AtBound`, and `ss.note()`), `debugtools.py` (profiling, debugging, and mock objects for testing)
+- `internals/`: How Starsim works under the hood, each also at the top level (`ss.errors`, `ss.graph`, ...): `arrays.py` (state arrays for people and networks), `conditions.py` (conditions on states and people, for `where=`), `dates.py` and `time.py` (dates, durations, and rates), `dimensions.py` (stratifications, `ss.transfer`, and `sim.groups`), `dists.py` (`ss.Dist`, and how distributions are found and seeded), `loop.py` (the integration loop), `modules.py` (base module classes and update logic), `parameters.py` (`ss.parameters.Pars`, `ss.by`, `ss.timeseries`, `ss.seasonal`), `timeline.py` (`ss.Timeline`), `graph.py` (the graph of a declared module: its states, transitions, and parameters, completed with defaults and checked; `ss.graph.Graph`), `display.py` (how it is shown: `describe()`, `diagram()`, `equations()`), `expressions.py` (expressions in rates and results, `ss.par`, and how they are evaluated and printed), `gradients.py` (gradients and log-densities in JAX: `sim.gradient()`, `sim.log_density()`), `errors.py` (the few errors and warnings that are classes, e.g. `ss.CapabilityError` and `ss.errors.AtBound`, and `ss.note()`), `debugtools.py` (profiling, debugging, and mock objects for testing)
 - `starsim_cli/` (beside `starsim/`): The `starsim` command (`init`, `ai`, `convert`, `import`, `export`), apart from the package so that it starts without importing Starsim: `ai.py` (the skills), `build.py` (compiling, and `init dev`), and `convert.py`
 - `solvers/backends/`: Machinery for speed: `kernels.py` (the Numba kernels that run compartmental models; also `ss.kernels`), `draws.py` (exact draws in Numba), `passes.py` (compiled passes over the agents), `ode.py`, `rust.py` (swaps in the Rust copies of all these, built from `solvers/rust/`: see `ss.options.kernels`), `jit.py` (`ss.jit`; `ss.solvers.backends.jit` is the function), `cache.py`, and `memory.py`
 - `solvers/rust/`: A second copy of every Numba kernel above, in Rust, giving the same numbers bit for bit; `ss.options.kernels='auto'` uses it once built (`cd starsim/solvers/rust && ./build`). The source is not installed; the wheels contain the compiled library. Numba's code is the reference: change it first, then the Rust copy to match, in the same change (never a kernel in Numba alone), and run `tests/test_kernel_sets.py`, whose `test_no_numba()` fails if any Numba kernel runs with Rust's on (see `starsim/solvers/rust/README.md`)
@@ -139,7 +139,7 @@ Core disease classes (Disease, Infection, SIR, SIS, SEIR) live in `starsim/disea
 
 The framework uses a modular architecture where all components inherit from base classes:
 
-- **Base class hierarchy**: All modules inherit from `ss.Base` → `ss.Module` (defined in `internals/modules.py`)
+- **Base class hierarchy**: All modules inherit from `ss.modules.Base` → `ss.Module` (defined in `internals/modules.py`)
 - **Module types**: Networks, Demographics, Diseases, Interventions, Analyzers, Connectors
 - **Module registration**: Modules are automatically discovered and registered via the `find_modules()` function
 - **Integration loop**: The `Loop` class (in `internals/loop.py`) orchestrates module execution during simulation

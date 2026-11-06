@@ -47,6 +47,7 @@ notes = [
     'Example and reference modules (e.g. `ssl.Cholera`) are in the library: `import starsim.library as ssl`. They are illustrative rather than validated.',
     'Signatures are as introspected from the current version; summaries are the first paragraph of each docstring.',
     'Module arguments default to `None` in the signature; the actual defaults are listed as "Default pars", and can be overridden by keyword or via `pars=dict(...)`.',
+    'Entries marked "for extending Starsim" are for writing modules as code or extending Starsim itself (base classes, arrays, and helpers); a model declared from states and transitions does not need them.',
     'Aliases are alternative names for the same object; the canonical name is the one listed, and is the one to prefer when writing new code.',
     'Methods are listed under the class that defines them (e.g. `ss.Result.select()` under `ss.Result`), not under each subclass that inherits them, and only those that the documentation uses; the others are internal.',
     'Any model that is not in the library (an SIRS, an SEIRS, a model with more states) is written as a declared disease: `S, I, R = ss.states(3)`, then `ss.Disease(S >> I @ beta * I, I >> R @ ss.days(7), R >> S @ ss.days(90))`. There a duration alone (`ss.days(7)`) is the mean of an exponential.',
@@ -96,6 +97,31 @@ module_titles = sc.obj(
     other         = 'Other',
 )
 module_order = list(module_titles.keys())
+
+# The supported API under ss: what a modeler writes, and what someone extending Starsim (a module written as code, a
+# distribution, a plotting function) also uses. Anything else that `import starsim as ss` exports is internal, so a callable
+# at the top level that is in neither list is an error here, as is a listed name that no longer exists: add each new export
+# to one list (or move it to its submodule), so that what the index presents as Starsim is chosen, not whatever dir(ss) has
+modeling = '''
+    Sim MultiSim parallel demo
+    People population
+    Disease SIR SIS SEIR State states pars par Transition move birth death lifetable immigration emigration outcome lifelong
+    on attr mother ref transfer by timeseries seasonal Strains immunity
+    RandomNet DegreeNet SexualNet PrenatalNet PostnatalNet BreastfeedingNet MixingPool contacts
+    Births Deaths Pregnancy
+    Delivery vaccinate screen treat Vaccine Diagnostic Treatment boxcar modify infection_log
+    Result Results SimData
+    years months weeks days Duration per prob freq peract perday perweek permonth peryear
+    probperday probperweek probpermonth probperyear freqperday freqperweek freqpermonth freqperyear date datedur schedule
+    uniform normal truncnorm lognormal expon poisson nbinom binom beta_dist weibull gamma erlang constant randint
+    bernoulli choose_n choice histogram random
+    options style show save load import_from export_to
+'''.split()
+extension = '''
+    Module Network DynamicNetwork Infection Demographics Intervention Product Connector Analyzer
+    Arr FloatArr IntArr BoolArr BoolState CatArr TimeArr uids DateArray Timeline Dist multi_random
+    register_modules required compile jit plot_args return_fig warn note CapabilityError AlreadyRunError
+'''.split()
 
 # The library subpackages, each listed after the core modules
 libraries = sc.obj(
@@ -245,7 +271,15 @@ def _modulekey(module, prefix):
 def _getnames(prefix):
     """ Get the public names to index for a namespace """
     if prefix == 'ss':
-        return [name for name in dir(ss) if not name.startswith('_')]
+        exported = {name for name in dir(ss) if not name.startswith('_') and callable(getattr(ss, name)) and not inspect.ismodule(getattr(ss, name))}
+        listed = set(modeling + extension)
+        unlisted, missing = sorted(exported - listed), sorted(listed - exported)
+        if unlisted or missing:
+            errormsg = 'The supported API in make_api.py does not match what starsim exports:'
+            errormsg += f'\n  exported but in neither list (add it to modeling or extension, or move it to its submodule): {unlisted}' if unlisted else ''
+            errormsg += f'\n  listed but not exported (remove it): {missing}' if missing else ''
+            raise ValueError(errormsg)
+        return modeling + extension
     elif prefix == 'ssl':
         return [name for name in ssl.__all__ if name not in libraries]
     return getattr(ss, prefix.removeprefix('ss.')).__all__ # e.g. ss.fit
@@ -258,7 +292,7 @@ def make_index():
     The index has the keys `version`, `description`, `notes`, `links`, `n_entries`,
     `aliases` (a mapping of alias name to canonical name), and `entries` (a list of
     records, each with `name`, `kind`, `module`, `signature`, `summary`, `pars`,
-    `methods`, `example`, `aliases`, and `deprecated`). Names include the namespace, e.g.
+    `methods`, `example`, `aliases`, `deprecated`, and `extension`, whether it is for extending Starsim rather than modeling). Names include the namespace, e.g.
     `ss.SIR` or `ssl.Cholera`.
 
     Examples:
@@ -304,6 +338,7 @@ def make_index():
                 example    = _getexample(doc),
                 aliases    = aliases,
                 deprecated = _isdeprecated(doc),
+                extension  = prefix == 'ss' and canonical.removeprefix('ss.') in extension,
             ))
 
     entries = sorted(entries, key=lambda entry: entry['name'].lower())
@@ -424,6 +459,8 @@ def make_llms_txt(index=None, examples=False):
                 extras.append('aliases: ' + ', '.join(f'{alias}()' for alias in entry['aliases']))
             if entry['deprecated']:
                 extras.append('DEPRECATED')
+            if entry.get('extension'):
+                extras.append('for extending Starsim')
             suffix = f' [{"; ".join(extras)}]' if extras else ''
             summary = entry['summary'] or '(no description available)'
             lines += [f'- `{entry["name"]}{entry["signature"]}`: {summary}{suffix}']

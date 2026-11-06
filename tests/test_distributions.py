@@ -93,7 +93,7 @@ def test_dists(n=n, do_plot=False):
         obj = sc.prettyobj()
         obj.a = sc.obj()
         obj.a.mylist = [ss.random(), ss.Dist(distname='uniform', low=2, high=3)]
-        obj.b = dict(d3=ss.weibull(c=2), d4=ss.constant(v=0.3))
+        obj.b = dict(d3=ss.weibull(c=2), d4=ss.constant(value=0.3))
         dists = ss.dists.Dists(obj).init(sim=make_sim())
 
         # Call each distribution twice
@@ -204,7 +204,7 @@ def test_callable(n=n):
 
     scale = 1
     d1 = ss.normal(name='callable', loc=custom_loc, scale=scale).init(sim=sim)
-    d2 = ss.lognorm_ex(name='callable', mean=custom_loc, std=scale).init(sim=sim)
+    d2 = ss.lognormal(name='callable', mean=custom_loc, std=scale).init(sim=sim)
 
     uids = np.array([1, 3, 7, 9])
     draws1 = d1.rvs(uids)
@@ -383,10 +383,10 @@ def test_timepar_dists():
     # Check distributions that scale linearly with time, with the parameter we'll set
     print('Testing linear distributions ...')
     linear_dists = dict(
-        constant   = 'v',
+        constant   = 'value',
         uniform    = 'high',
         normal     = 'loc',
-        lognorm_ex = 'mean',
+        lognormal  = 'mean',
         expon      = 'scale',
         weibull    = 'scale',
         gamma      = 'scale',
@@ -407,10 +407,10 @@ def test_timepar_dists():
 
     # Check that unitless distributions fail
     print('Testing unitless distributions ...')
-    par = ss.dur(10, 'years')
-    for name in ['lognorm_im', 'randint']:
+    par = ss.years(10)
+    for make in [lambda **kw: ss.lognormal(log_mean=par, **kw), lambda **kw: ss.randint(par, **kw)]:
         with pytest.raises(NotImplementedError):
-            getattr(ss, name)(par, name='notimplemented', module=mock_mods.year, strict=False).init().rvs(n)
+            make(name='notimplemented', module=mock_mods.year, strict=False).init().rvs(n)
 
     # Check special distributions
     print('Testing choice distribution ...')
@@ -539,8 +539,8 @@ def test_dtype_consistency():
     assert native == crn == ss.dtypes.int, f'poisson: by-count={native}, by-UID={crn}, expected {ss.dtypes.int}'
 
     # Other dists aren't independently vulnerable to this issue, but the two paths must still agree
-    for dist in [ss.normal(name='n'), ss.expon(name='e'), ss.lognorm_ex(name='l'),
-                 ss.constant(v=1.5, name='c'), ss.bernoulli(p=0.3, name='b')]:
+    for dist in [ss.normal(name='n'), ss.expon(name='e'), ss.lognormal(name='l'),
+                 ss.constant(value=1.5, name='c'), ss.bernoulli(p=0.3, name='b')]:
         native, crn = path_dtypes(dist)
         assert native == crn, f'{dist.distname}: by-count path {native} != by-UID path {crn}'
     return
@@ -588,7 +588,7 @@ def test_round():
     assert np.isclose(d.rvs(ss.uids(np.arange(10_000))).mean(), 2.3, atol=0.03) # Stochastic rounding is unbiased
 
     # Durations are rounded to whole timesteps
-    steps = ss.lognorm_ex(ss.days(4.5), ss.days(1.5), round='nearest').mock(dt=ss.days(0.5)).rvs(uids)
+    steps = ss.lognormal(ss.days(4.5), ss.days(1.5), round='nearest').mock(dt=ss.days(0.5)).rvs(uids)
     assert steps.dtype == ss.dtypes.int and steps.mean() > 6 # Integer timesteps of half a day
     return steps
 
@@ -639,10 +639,10 @@ def test_engine_copy():
     """ Test that the copy of a distribution a declared model draws from (in the sim's unit) draws what the distribution does """
     sc.heading('Testing that the engine draws what each distribution draws')
     year = ss.debugtools.mock_module(dt=ss.years(1)) # Typed values are drawn in steps of a year, the unit the copy is in
-    dists = [ss.random(), ss.uniform(1, 3), ss.normal(5, 1), ss.truncnorm(5, 2, a=0, b=10), ss.lognorm_im(1, 0.5), ss.lognorm_ex(5, 2),
-             ss.expon(4), ss.poisson(3), ss.beta_dist(2, 3), ss.beta_mean(0.3, 0.01), ss.nbinom(3, 0.5), ss.binom(10, 0.3), ss.randint(0, 10),
+    dists = [ss.random(), ss.uniform(1, 3), ss.normal(5, 1), ss.truncnorm(5, 2, a=0, b=10), ss.lognormal(log_mean=1, log_std=0.5), ss.lognormal(5, 2),
+             ss.expon(4), ss.poisson(3), ss.beta_dist(2, 3), ss.beta_dist(mean=0.3, std=0.1), ss.nbinom(3, 0.5), ss.binom(10, 0.3), ss.randint(0, 10),
              ss.weibull(2, 3), ss.gamma(2, 3), ss.constant(7), ss.bernoulli(0.3), ss.choice([1, 5, 9], p=[0.2, 0.3, 0.5]),
-             ss.histogram(values=[0.6, 0.3, 0.1], bins=[0, 6, 12, 18]), ss.lognorm_ex(ss.days(50), ss.days(20)), ss.normal(5, 1, unit='month'),
+             ss.histogram(values=[0.6, 0.3, 0.1], bins=[0, 6, 12, 18]), ss.lognormal(ss.days(50), ss.days(20)), ss.normal(5, 1, unit='month'),
              ss.choice([30, 40], unit='week'), ss.histogram(values=[0.6, 0.4], bins=[0, 6, 12], unit='month')]
     for dist in dists:
         copy = ss.transitions.numeric_dist(dist, lambda v: ss.solvers.convert(v, 'year'))
@@ -654,7 +654,7 @@ def test_engine_copy():
     # A histogram for each group, as a dwell and as a trait, draws from each person's own (it drew uniform(0, 1))
     h0, h1 = ss.histogram(values=[1], bins=[0, 1], unit='year'), ss.histogram(values=[1], bins=[10, 11], unit='year')
     A, B = ss.states('A B')
-    d = ss.Disease(A, B, go=ss.Transition(A, B, dur=ss.by(urban={False: h0, True: h1})), obj=ss.attr(ss.by(urban={False: h0, True: h1})), name='m', first='A')
+    d = ss.Disease(A, B, go=ss.Transition(A, B, dur=ss.by(urban={False: h0, True: h1})), obj=ss.attr(ss.by(urban={False: h0, True: h1})), name='m', default_state='A')
     ppl = ss.People(1000, extra_states=[ss.BoolState('urban', default=ss.bernoulli(p=0.5))])
     sim = ss.Sim(d, people=ppl, start=2000, stop=2003, verbose=0).run()
     u = sim.people.auids

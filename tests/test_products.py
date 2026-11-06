@@ -131,8 +131,8 @@ def test_own_product():
             self.results.positive[self.ti] = len(screening.reached('positive'))
 
     def make(**kwargs):
-        screening = ss.Delivery(Swab(), coverage=0.2, interval=ss.months(3), name='screening')
-        treatment = ss.treat(ss.Treatment(cure=1.0), who=screening.positive, name='treatment')
+        screening = ss.Delivery(Swab(), coverage=0.2, every=ss.months(3), name='screening')
+        treatment = ss.treat(ss.Treatment(cure=1.0), on=screening.positive, name='treatment')
         return ss.Sim(make_geno('flu'), interventions=[screening, treatment], analyzers=Reached(), **kwargs)
     check_agents(make) # Its own code acts on agents
     sim = run_abm(make)
@@ -152,14 +152,14 @@ def test_hold_ends():
         S, L = ss.states('S L')
         tpt = ss.Vaccine(efficacy=dict(acquisition=0.0), waning=waning, name='tpt')
         tb = ss.Disease(S, L, infection=S >> L @ ss.peryear(0.5), cure=ss.Transition(L, S, rate=ss.peryear(20), where=tpt.held), init=dict(L=0.5), name='tb')
-        give = ss.vaccinate(tpt, interval=ss.months(1), start=2001, stop=2002, coverage=0.2, skip_reached_within=skip, name='give')
+        give = ss.vaccinate(tpt, every=ss.months(1), start=2001, stop=2002, coverage=0.2, skip_reached_within=skip, name='give')
         return ss.Sim(tb, interventions=give, start=2000, stop=2004, dt=ss.months(1), n_agents=500, verbose=0).run()
-    for waning in [ss.box(ss.months(3)), lambda t: np.clip(1 - 4*t.years, 0, 1)]: # Both end after three months
+    for waning in [ss.boxcar(ss.months(3)), lambda t: np.clip(1 - 4*t.years, 0, 1)]: # Both end after three months
         sim = make(waning)
         assert sim.results.tb.cure[36:].sum() == 0 and not sim.people.has_tpt.values.any() # It acted only while held, and nobody holds it after
-    gaps = make(ss.box(ss.months(3)), skip=ss.months(6))
+    gaps = make(ss.boxcar(ss.months(3)), skip=ss.months(6))
     give = gaps.interventions.give
-    assert len((give.count == 2).uids) and not len((give.count > 2).uids) # Monthly rounds for a year reach each person at most twice, 6 months apart
+    assert len((give.n_times == 2).uids) and not len((give.n_times > 2).uids) # Monthly rounds for a year reach each person at most twice, 6 months apart
     return gaps
 
 

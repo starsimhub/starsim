@@ -31,10 +31,10 @@ late = ss.modify(sir.pars.beta, multiply=0.75, where=sir.I.n >= 20_000, until=si
 print(ss.Sim(sir, interventions=late, **pars).init().kernel_reason())
 ```
 
-The first runs in one call: a condition on a count is worked out within the kernels as part of the rate. The second needs to remember whether the measure is on, so it is taken a step at a time. To be told rather than slowed, give the sim `nopython=True`, as with Numba: a run that would fall back to Python then raises `ss.CapabilityError`, with the reason.
+The first runs in one call: a condition on a count is worked out within the kernels as part of the rate. The second needs to remember whether the measure is on, so it is taken a step at a time. To be told rather than slowed, give the sim `require_kernels=True`: a run that would fall back to Python then raises `ss.CapabilityError`, with the reason.
 
 ```{python}
-sim = ss.Sim(sir, interventions=masks, nopython=True, **pars).run() # Fine: the whole run is in the kernels
+sim = ss.Sim(sir, interventions=masks, require_kernels=True, **pars).run() # Fine: the whole run is in the kernels
 ```
 
 What stays in the kernels, and what does not:
@@ -58,7 +58,7 @@ Running the same model many times is fastest with `ss.parallel()` (or `sim.run(n
 msim = ss.parallel(ss.Sim(sir, **pars), pars=dict(beta=[0.2, 0.3, 0.4]), n_runs=10, parallel=False) # 30 runs, taken together
 ```
 
-For the same reason, rerun a sim with `sim.restart()` and `sim.run()` (or just `sim.run()` again on a finished sim) rather than `sim.new()`, unless the model itself has changed. Fitting does this already.
+For the same reason, rerun a sim with `sim.run()` again (or `sim.run(pars=...)` for new values) rather than `sim.new()`, unless the model itself has changed. Fitting does this already.
 
 ## Substeps
 
@@ -120,4 +120,4 @@ pd.DataFrame.from_dict(rows, orient='index')
 
 Those that affect speed or memory are `threads` and `num_threads` (threads for the agents and for linear algebra), `kernels` and `jax` (which code runs the solvers; see [Solvers and backends](running_solvers.qmd#appendix-every-set-of-kernels)), `crn` (faster draws for agents, without common random numbers), `keep_times` and `max_joint` (memory), `precision` (32, the default, keeps agents' values as 32-bit floats, and 64 as 64-bit, which doubles their memory), and `max_steps` (when to warn that a run has many steps); `max_years` (1,000 by default) says when to warn that a run is so long it is probably a mistake. Starsim also reads `SCIRIS_NUM_THREADS`, as it reads `STARSIM_NUM_THREADS`, for the threads of linear algebra (see [Deployment](running_deploy.qmd#threads-for-linear-algebra)), and `STARSIM_CHECK_COUNTS` and `STARSIM_CHECK_DRAWS`, which turn on checks of the agent engine for testing it, at a cost in speed.
 
-The settings of a sim that affect speed or memory are `n_agents` and `pop_scale`, `dt` and `substeps`, `solver`, `nopython`, `results` (which results are kept by group), and `people_results` (whether the people's results are recorded at each step); they are all in [Running sims](running_sim.qmd#appendix-every-sim-setting). The rules that decide whether a compartmental run is taken in one call are in [Solvers and backends](running_solvers.qmd#appendix-what-needs-agents), as `ss.solvers.solver_table()`.
+The settings of a sim that affect speed or memory are `n_agents` and `pop_scale`, `dt` and `substeps`, `solver`, `require_kernels`, `group_results` (which results are kept by group), and `record_people` (whether the people's results are recorded at each step); they are all in [Running sims](running_sim.qmd#appendix-every-sim-setting). The rules that decide whether a compartmental run is taken in one call are in [Solvers and backends](running_solvers.qmd#appendix-what-needs-agents), as `ss.solvers.solver_table()`.

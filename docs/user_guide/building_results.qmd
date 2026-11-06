@@ -30,7 +30,7 @@ print(res)
 
 A disease has a result for each state (`S`, `I`, `R`: the number of people in it at each time point) and each transition (`infection`, `recovery`: the number who made it during each step), named after the variables they were made from. `res.I` and `res['I']` are the same.
 
-The sim's own results are those of the people: `alive`, `died`, and `emigrated` (and, as agents, `female`), each step. `people_results=False` on the sim skips them, which saves a little time in a light model that doesn't need them (demographics read `alive`).
+The sim's own results are those of the people: `alive`, `died`, and `emigrated` (and, as agents, `female`), each step. `record_people=False` on the sim skips them, which saves a little time in a light model that doesn't need them (demographics read `alive`).
 
 ## Reading a result
 
@@ -147,7 +147,7 @@ Nothing in this SIS model depends on sex or age, so the prevalence among women a
 
 ## Comparing with data
 
-Data is matched to results by name: a column called `cases` in a table given as `data=` is compared with the result `cases`, and plotted with it, and weekly data is compared with the total of a flow over each week. [Outcomes](building_outcomes.qmd#data-attached-by-name) covers attaching data, including making data from a run of the model with `sim.to_data()`; it is the data that [calibration](calibration_fitting.qmd) fits to.
+Data is matched to results by name: a column called `cases` in a table given as `data=` is compared with the result `cases`, and plotted with it, and weekly data is compared with the total of a flow over each week. [Outcomes](building_outcomes.qmd#data-attached-by-name) covers attaching data, including making data from a run of the model with `sim.to_synthetic_data()`; it is the data that [calibration](calibration_fitting.qmd) fits to.
 
 ## Plotting
 
@@ -214,10 +214,10 @@ sim = ss.Sim(ss.SIS(), networks='random', analyzers=InfectionsByAge(), n_agents=
 sim.run()
 res = sim.results.infectionsbyage.new_infections
 print('Shape:', res.shape)
-print('Columns:', list(res.by_column().keys()))
+print('Columns:', res.columns)
 ```
 
-Each column is available as a result of its own, as `res.adults` or `res.col('adults')`, or all at once with `res.by_column()`. These share their data with the whole result, so changing one changes the other. Most operations handle each column separately: they are scaled by the number of people each agent stands for, `to_df()` gives one column of the table each, `sim.summarize()` summarizes each, and `resample()` sums each over the period (since this result is a flow):
+Each column is available as a result of its own, as `res.adults`, `res['adults']`, or `res.select(column='adults')`. These share their data with the whole result, so changing one changes the other. Most operations handle each column separately: they are scaled by the number of people each agent stands for, `to_df()` gives one column of the table each, `sim.summarize()` summarizes each, and `resample()` sums each over the period (since this result is a flow):
 
 ```{python}
 yearly = res.resample('year')
@@ -249,7 +249,7 @@ The methods and properties of a result (`ss.Result`), with the first paragraph o
 ```{python}
 import inspect
 
-internal = ['apply_scale', 'convert_timevec', 'disp', 'init_groups', 'init_values', 'parts_after', 'store_group', 'to_str', 'update'] # Used by Starsim itself
+internal = ['disp', 'to_str', 'update'] # Used by Starsim itself
 for name, attr in ss.Result.__dict__.items():
     if name.startswith('_') or name in internal or not isinstance(attr, (property, type(lambda: 0))):
         continue

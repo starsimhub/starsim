@@ -37,10 +37,10 @@ Each row is an idea from epidemiology, how it is declared, and an example of a r
 | **Rates that depend on how many are infected** | Arithmetic and NumPy functions of counts | `S >> I @ beta*I.n/(1 + a*I.n)` (a force of infection that saturates) | |
 | **Rates that vary in time** | `ss.timeseries()`, `ss.seasonal()` | `beta = ss.seasonal(mean=0.3, amplitude=0.2, peak='March')` | |
 | **Rates that differ by group** | `ss.by()`, with a stratification | `ss.by(age=[0.5, 0.2, 0.1])` | |
-| **Rates that depend on each person's traits** | `ss.ppl` | `I >> ss.null @ 0.001*np.exp(0.05*ss.ppl.age)` | |
+| **Rates that depend on each person's traits** | `ss.person` | `I >> ss.null @ 0.001*np.exp(0.05*ss.person.age)` | |
 | **Values that vary between people** (each person's infectiousness) | A distribution, or `ss.attr()` | `ss.attr(ss.normal(500, 50), on=infection)` | |
-| **An event in each person's history** (ever infected, how many times, how long ago) | `.ever`, `.count`, `.since` on a transition | `1 - 0.5**(recovery.since/ss.days(60))`: protection that halves every 60 days since recovery | An antibody level boosted by every infection and decaying in between (as in the [example below](#a-declared-disease-with-immunity-written-as-code)) |
-| **A move as soon as something holds, or happens** | A trigger, `ss.on()` | `U >> A @ ss.on(ss.ppl.age >= 15)` | |
+| **An event in each person's history** (ever infected, how many times, how long ago) | `.ever`, `.n_times`, `.since` on a transition | `1 - 0.5**(recovery.since/ss.days(60))`: protection that halves every 60 days since recovery | An antibody level boosted by every infection and decaying in between (as in the [example below](#a-declared-disease-with-immunity-written-as-code)) |
+| **A move as soon as something holds, or happens** | A trigger, `on=` (or `@ ss.on()`) | `U >> A @ ss.on(ss.person.age >= 15)`, or `ss.Transition(PP, NP, on=preg.delivery, dur=ss.months(6))` | |
 | **Who something applies to** | Conditions (`where=`): see [below](#conditions) | `where=(sir.I.n >= 20_000)` | `where=` the highest weekly incidence so far |
 | **Contacts** | Homogeneous mixing (the default), contact matrices, mixing pools, and networks | `ss.contacts('Kenya')`, `ss.RandomNet(n_contacts=10)`, `ss.SexualNet()` | A network rewired by a rule of your own, e.g. school classes reassigned each term |
 | **Groups and places** | Stratification, and movement between places | `sim.stratify(age=[0, 5, 15, 65])`, `ss.geo.Mobility()` | |
@@ -58,7 +58,7 @@ An empty cell is not a promise that everything nearby can be declared, only that
 
 ## Conditions
 
-A condition says who something applies to, or when: `where=` on `ss.modify()` and the deliveries, and `ss.on()`. Conditions are built from:
+A condition says who something applies to, or when: `where=` on `ss.modify()`, transitions, and the deliveries, and `on=` (or `ss.on()`). Conditions are built from:
 
 | A condition on | Example | Runs as compartments? |
 |---|---|---|
@@ -67,7 +67,7 @@ A condition says who something applies to, or when: `where=` on `ss.modify()` an
 | The incidence over a period | `where=infection.incidence(over=ss.days(7)) > 0.01` | Yes, a step at a time |
 | How incidence is changing | `where=weekly > infection.incidence(over=ss.days(14)) - weekly` (this week more than last) | Yes, a step at a time |
 | Dates | `start=`, `stop=`, `when=` | Yes, in compiled code |
-| A person's traits | `where=ss.ppl.age < 5`, `where=ss.ppl.female` | Only if the model is stratified by them; otherwise as agents |
+| A person's traits | `where=ss.person.age < 5`, `where=ss.person.female` | Only if the model is stratified by them; otherwise as agents |
 | Any of these combined | `&` (and), `\|` (or), `~` (not) | As the least of its parts |
 
 A condition can also be a function of the sim that returns true or false (for a whole compartmental population) or an array (one value for each person or group). That is for what the list above can't say, such as "while weekly incidence is above half its highest so far", which needs a memory of the highest so far.
@@ -104,9 +104,9 @@ All four run as ODEs. With waning immunity, the measures lower the first peak an
 A declared model runs as compartments unless something in it needs individuals. The common reasons are:
 
 - A network of individual contacts (`ss.RandomNet`, `ss.SexualNet`)
-- A condition or rate on a person's traits (`ss.ppl.age`) that the model is not stratified by
+- A condition or rate on a person's traits (`ss.person.age`) that the model is not stratified by
 - A value that varies between people (a distribution, or `ss.attr()`)
-- How long ago, or how often, something happened to each person (`.since`, `.count`)
+- How long ago, or how often, something happened to each person (`.since`, `.n_times`)
 - A module written as code that keeps a value for each person
 - `n_agents=`, or `solver='abm'`
 
@@ -193,7 +193,7 @@ sim = ss.Sim(flu, interventions=measure, **pars).init()
 print(sim.kernel_reason())
 ```
 
-`sim.kernel_reason()` says why a run is taken a step at a time (or gives `None` if it isn't), and `nopython=True` on the sim makes that an error instead.
+`sim.kernel_reason()` says why a run is taken a step at a time (or gives `None` if it isn't), and `require_kernels=True` on the sim makes that an error instead.
 
 ## Performance
 
@@ -205,8 +205,7 @@ A declared compartmental model runs in compiled code, the whole run in one call.
 def seconds(sim):
     """ The time of a second run, after the sim has been built and its code compiled """
     sim.run()
-    sim.restart()
-    sim.run()
+    sim.run() # Again, from the start
     return sim.elapsed
 
 def masks(sim):

@@ -7,7 +7,7 @@ authorship:
   note: Written by AI
 ---
 
-Data on an epidemic is rarely the number infected: it is reported cases, hospital admissions, or deaths, each a share of infections, some time after infection. In Starsim these are outcomes: results computed from the model's flows, with a share, a delay, and (for a stay in hospital) a duration, that don't change the epidemic itself. This page adds three outcomes to an SIR, makes weekly data from the model with a known β, and fits β to it.
+Data on an epidemic is rarely the number infected: it is reported cases, hospital admissions, or deaths, each a share of infections, some time after infection. In Starsim these are outcomes: results computed from the model's flows, with a share, a delay, and (for a stay in hospital) a stay, that don't change the epidemic itself. This page adds three outcomes to an SIR, makes weekly data from the model with a known β, and fits β to it.
 
 ## The model
 
@@ -29,8 +29,8 @@ S, I, R = ss.states('S I R')
 infection = S >> I @ beta*I
 recovery  = I >> R @ ss.days(10)
 cases     = ss.outcome(0.5*infection, delay=ss.days(5))
-hosp      = ss.outcome(0.05*infection, delay=ss.days(7), duration=ss.days(10))
-deaths    = ss.outcome(0.2*hosp, delay=ss.lognorm_ex(mean=14, std=5, unit='days'))
+hosp      = ss.outcome(0.05*infection, delay=ss.days(7), stay=ss.days(10))
+deaths    = ss.outcome(0.2*hosp, delay=ss.lognormal(mean=14, std=5, unit='days'))
 sir = ss.Disease(infection, recovery, cases, hosp, deaths, init=dict(I=0.001), name='sir')
 
 pars = dict(total_pop=1e6, start='2020-01-01', stop='2020-06-01')
@@ -49,7 +49,7 @@ The data is made from the model itself, with β = 0.25, as weekly counts of case
 ```{python}
 truth = ss.Sim(sir, pars=dict(beta=0.25), rand_seed=2, verbose=0, **pars)
 truth.run()
-data = truth.to_data(['cases', 'deaths'], resample='week')
+data = truth.to_synthetic_data(['cases', 'deaths'], resample='week')
 data.head()
 ```
 

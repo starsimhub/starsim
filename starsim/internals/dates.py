@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 import sciris as sc
 import starsim as ss
-from .time import dur, factors, get_dur_class, get_unit_class, normalize_unit, Rate, valid_bases, wrong_dimension
+from .time import Duration, factors, get_dur_class, get_unit_class, normalize_unit, Rate, valid_bases, wrong_dimension
 
 __all__ = ['DateArray', 'date', 'datedur']
 
@@ -32,7 +32,7 @@ class DateArray(np.ndarray):
             if unit is None:
                 if not len(arr): # Nothing to tell the unit from, e.g. a range of dates that ends before it starts
                     unit = ss.date
-                elif isinstance(arr[0], (ss.date, ss.dur)):
+                elif isinstance(arr[0], (ss.date, ss.Duration)):
                     unit = type(arr[0]) # Get the unit from the input
                 elif isinstance(arr[0], (str, np.datetime64, dt.date, dt.datetime, pd.Timestamp)):
                     arr = np.fromiter((ss.date(x) for x in arr), dtype=object)
@@ -46,8 +46,8 @@ class DateArray(np.ndarray):
             else:
                 if not isinstance(unit, type):
                     raise TypeError('unit must be a type (e.g., `ss.months`), not an instance (e.g., `ss.months(1)` or `ss.month`.')
-                if not issubclass(unit, (ss.date, ss.dur)):
-                    raise TypeError(f'unit must be a subclass of ss.date or ss.dur, {unit} is not derived from one of these parent classes.')
+                if not issubclass(unit, (ss.date, ss.Duration)):
+                    raise TypeError(f'unit must be a subclass of ss.date or ss.Duration, {unit} is not derived from one of these parent classes.')
 
             out = arr.view(cls)
             out._unit = unit
@@ -97,7 +97,7 @@ class DateArray(np.ndarray):
 
     @property
     def is_dur(self):
-        return issubclass(self.unit, ss.dur)
+        return issubclass(self.unit, ss.Duration)
 
     @property
     def is_datedur(self):
@@ -250,7 +250,7 @@ class date(pd.Timestamp):
                 return cls._reset_class(sc.dcp(arg))
             elif sc.isnumber(arg): # e.g. 2020
                 single_year_arg = True
-            elif isinstance(arg, ss.dur): # e.g. ss.years(2020)
+            elif isinstance(arg, ss.Duration): # e.g. ss.years(2020)
                 arg = arg.years
                 single_year_arg = True
 
@@ -438,7 +438,7 @@ class date(pd.Timestamp):
             return np.vectorize(self.__add__)(other)
         elif isinstance(other, ss.datedur):
             return self._timestamp_add(other.value)
-        elif isinstance(other, ss.dur):
+        elif isinstance(other, ss.Duration):
             if other.is_array:
                 return ss.DateArray(np.vectorize(self.__add__)(other))
             elif other.base in ['days', 'weeks'] and np.isclose(other.days, round(other.days)): # A whole number of days is added as days, not as a share of a year (which is a day off after a leap day)
@@ -466,7 +466,7 @@ class date(pd.Timestamp):
             return np.vectorize(self.__sub__)(other)
         elif isinstance(other, ss.datedur):
             return ss.date(self.to_pandas() - other.value)
-        elif isinstance(other, ss.dur):
+        elif isinstance(other, ss.Duration):
             if other.is_array:
                 return ss.DateArray(np.vectorize(self.__sub__)(other))
             else:
@@ -482,7 +482,7 @@ class date(pd.Timestamp):
     def __rsub__(self, other):
         if isinstance(other, np.ndarray):
             return other.__class__([o-self for o in other]) # TODO: is this right?
-        elif isinstance(other, ss.dur):
+        elif isinstance(other, ss.Duration):
             # As this is __rsub__, this corresponds to `other - self` hence this operation is not permitted
             raise TypeError("Cannot subtract a date from a duration")
         elif isinstance(other, (ss.date, dt.date, dt.datetime)): # As date - date
@@ -557,9 +557,9 @@ class date(pd.Timestamp):
                    <2024-01-01>, <2025-01-01>], dtype=object)
 
         Args:
-            start (float/ss.date/ss.dur): Lower bound - can be a date or a numerical year
-            stop (float/ss.date/ss.dur): Upper bound - can be a date or a numerical year
-            step (float/ss.dur): Assumes 1 calendar year steps by default
+            start (float/ss.date/ss.Duration): Lower bound - can be a date or a numerical year
+            stop (float/ss.date/ss.Duration): Upper bound - can be a date or a numerical year
+            step (float/ss.Duration): Assumes 1 calendar year steps by default
             inclusive (bool): Whether to include "stop" in the output
             day_round (bool): Whether to round to the nearest day (by default, True if step > 1 day)
             allow_zero (bool): if True, allow a year 0 by creating a duration (ss.years) instead; if False, raise an exception; if None, give a warning
@@ -580,7 +580,7 @@ class date(pd.Timestamp):
             step = get_dur_class(step)(1) # e.g. ss.years(1)
         if isinstance(step, (ss.days, ss.weeks)):
             step = pd.Timedelta(days=step.days)
-        elif isinstance(step, ss.dur) and not isinstance(step, ss.datedur):
+        elif isinstance(step, ss.Duration) and not isinstance(step, ss.datedur):
             step = ss.datedur(step) if float(step.value).is_integer() else step.years # Not e.g. ss.years(0.1) as a calendar duration
 
         # For handling floating point issues
@@ -621,8 +621,8 @@ class date(pd.Timestamp):
         # We're converting them from float years, do it approximately
         elif sc.isnumber(step):
             day_round = sc.ifelse(day_round, not(cls.subdaily(step)))
-            start = start.years if isinstance(start, (date, ss.dur)) else start
-            stop = stop.years if isinstance(stop, (date, ss.dur)) else stop
+            start = start.years if isinstance(start, (date, ss.Duration)) else start
+            stop = stop.years if isinstance(stop, (date, ss.Duration)) else stop
             n_steps = (stop - start) / step
             if not n_steps.is_integer():
                 rounded_steps = round(n_steps)
@@ -632,7 +632,7 @@ class date(pd.Timestamp):
             arr = sc.inclusiverange(start, stop, step) if inclusive else np.arange(start, stop, step)
             return cls.from_array(arr, day_round=day_round, allow_zero=allow_zero, date_type=date_type)
         else:
-            errormsg = f'Cannot construct date range from {start = }, {stop = }, and {step = }. Expecting ss.date(), ss.dur(), or numbers as inputs.'
+            errormsg = f'Cannot construct date range from {start = }, {stop = }, and {step = }. Expecting ss.date(), ss.Duration(), or numbers as inputs.'
             raise TypeError(errormsg)
 
     def to_json(self):
@@ -641,7 +641,7 @@ class date(pd.Timestamp):
         return out
 
 
-class datedur(dur):
+class datedur(Duration):
     """
     A calendar duration, e.g. `ss.datedur(months=1)`: a thin wrapper of `pd.DateOffset`
 
@@ -675,7 +675,7 @@ class datedur(dur):
                 errormsg = f'ss.datedur() takes whole numbers of {sc.strjoin(self.units)}, not {value}; for a duration that is not on the calendar, use e.g. ss.days(1.5)'
                 raise ValueError(errormsg)
             kwargs = dict(years=value.years, months=value.months, days=value.days)
-        elif isinstance(value, dur):
+        elif isinstance(value, Duration):
             kwargs = {value.base: value.value} # e.g. ss.days(7) is 7 calendar days
         elif sc.isnumber(value):
             kwargs = dict(years=value)
@@ -711,10 +711,10 @@ class datedur(dur):
 
     def _compare_args(self, other):
         """ Need to handle numbers differently, since self.value is not a float """
-        if isinstance(other, (ss.dur, ss.date)):
+        if isinstance(other, (ss.Duration, ss.date)):
             return self.years, other.years, True
         elif sc.isnumber(other) or isinstance(other, np.ndarray):
-            return self.years, other, True # self.years instead of self.value is the difference with ss.dur
+            return self.years, other, True # self.years instead of self.value is the difference with ss.Duration
         else:
             return None, None, False
 
@@ -725,7 +725,7 @@ class datedur(dur):
 
     def replace(self, value):
         """
-        Return an `ss.dur` with the supplied value; see `TimePar.replace()`
+        Return an `ss.Duration` with the supplied value; see `TimePar.replace()`
 
         A `datedur` stores a date offset rather than a number, so the finest unit it was given in is
         used, e.g. `ss.datedur(days=10).replace(20)` is `ss.days(20)`.
@@ -779,7 +779,7 @@ class datedur(dur):
     def __mul__(self, other):
         if isinstance(other, Rate):
             return NotImplemented # Delegate to Rate.__rmul__
-        elif isinstance(other, dur):
+        elif isinstance(other, Duration):
             wrong_dimension(self, '*', other)
         kwds = {k:v*other for k,v in self.kwds.items()}
         if all(float(v).is_integer() for v in kwds.values()): # Still whole calendar units, e.g. 52*ss.datedur(weeks=1)
@@ -790,7 +790,7 @@ class datedur(dur):
         if isinstance(other, datedur): # Exactly, in twelfths of a day, e.g. a week by a day is 7
             a, b = [sum(x.kwds.get(k, 0)*v for k,v in self.twelfths.items()) for x in [self, other]]
             return a/b
-        elif isinstance(other, dur):
+        elif isinstance(other, Duration):
             return self.years/other.years
         elif isinstance(other, Rate):
             wrong_dimension(self, '/', other)
@@ -805,7 +805,7 @@ class datedur(dur):
             return self._new(**self._combine(datedur(other).kwds))
         elif isinstance(other, DateArray):
             return DateArray(np.vectorize(self.__add__)(other))
-        elif isinstance(other, dur):
+        elif isinstance(other, Duration):
             if other.is_scalar and other.base in self.units and float(other.value).is_integer(): # Whole calendar units, e.g. ss.years(1)
                 return self._new(**self._combine({other.base:other.value}), other=other)
             return ss.years(self.years) + other # Otherwise, as a plain duration

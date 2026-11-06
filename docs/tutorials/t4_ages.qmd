@@ -151,7 +151,7 @@ Without births, there is one outbreak, and then measles is gone for good: nobody
 
 ## A real population
 
-For a model of a real place, the share of people in each age group, and the contacts between them, can come from data. [`ss.people('Kenya')`](../api/people.qmd) is the population of Kenya, by age and sex (from the UN World Population Prospects), and `ss.contacts('Kenya')` is a contact matrix for Kenya, by 5-year age group (from Prem et al., 2021). Given these, `stratify()` needs only the age groups, and takes the share of people in each from the population; Starsim adds up the contact matrix into the model's age groups. `total_pop` keeps the model to a town of 100,000 people, rather than the whole country:
+For a model of a real place, the share of people in each age group, and the contacts between them, can come from data. [`ss.population('Kenya')`](../api/people.qmd) is the population of Kenya, by age and sex (from the UN World Population Prospects), and `ss.contacts('Kenya')` is a contact matrix for Kenya, by 5-year age group (from Prem et al., 2021). Given these, `stratify()` needs only the age groups, and takes the share of people in each from the population; Starsim adds up the contact matrix into the model's age groups. `total_pop` keeps the model to a town of 100,000 people, rather than the whole country:
 
 ```{python}
 S, E, I, R = ss.states('S E I R')
@@ -164,7 +164,7 @@ measles = ss.Disease(infection, progression, recovery,
 )
 measles.stratify(age=[0, 15, 65]) # The share in each group comes from the population
 
-kenya = ss.Sim(measles, people=ss.people('Kenya'), networks=ss.contacts('Kenya'), **settings)
+kenya = ss.Sim(measles, people=ss.population('Kenya'), networks=ss.contacts('Kenya'), **settings)
 kenya.run()
 kenya.results.measles.infection.by('age').plot()
 ```

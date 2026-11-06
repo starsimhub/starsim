@@ -102,8 +102,8 @@ def _():
 @trigger('adjust= names a transition "recovry"', KeyError)
 def _(): sir().stratify(age=[0, 15], adjust={'recovry': [1, 2]})
 
-@trigger('split= has 3 entries', ValueError)
-def _(): ode(sir().stratify(age=[0, 15], split=[0.2, 0.3, 0.5])).init()
+@trigger('fractions= has 3 entries', ValueError)
+def _(): ode(sir().stratify(age=[0, 15], fractions=[0.2, 0.3, 0.5])).init()
 
 @trigger('is already stratified by "age", in another way', ValueError)
 def _(): sir().stratify(age=[0, 15]).stratify(age=[0, 20])
@@ -127,7 +127,7 @@ def _(): ss.Sim(sir(beta=ss.peract(0.01)), networks='random', n_agents=100, **kw
 def _(): ode(sir(), connectors=ss.modify('sir.nothing', multiply=2)).init()
 
 @trigger('would not be applied by any solver', ValueError)
-def _(): ode(ss.Disease(recovery=ss.Transition(*ss.states('I R'), dur=10), init=dict(I=1.0), first='I', name='d'), connectors=ss.modify('d.rel_trans', multiply=0.5)).init()
+def _(): ode(ss.Disease(recovery=ss.Transition(*ss.states('I R'), dur=10), init=dict(I=1.0), default_state='I', name='d'), connectors=ss.modify('d.rel_trans', multiply=0.5)).init()
 
 @trigger('which is not something it can act on', KeyError)
 def _(): ode(sir(), interventions=ss.vaccinate(ss.Vaccine(efficacy=dict(aquisition=0.5)))).init()
@@ -145,7 +145,7 @@ def _(): ode(sir().stratify(age=[0, 15], adjust={'recovery': [1, 2, 3]})).init()
 def _(): ode(sir(beta=ss.par())).init()
 
 @trigger('the place "Kenyaa" was not found', KeyError)
-def _(): ss.people('Kenyaa')
+def _(): ss.population('Kenyaa')
 
 @trigger('A probability per act must be between 0 and 1', ValueError)
 def _(): ss.peract(1.5)
@@ -180,7 +180,7 @@ def _():
 @trigger('which has a value only for people in B', ValueError)
 def _():
     S, A, B, C = ss.states('S A B C')
-    ss.Disease(S, A, B, C, ab=A >> B @ ss.days(4), sc_=ss.Transition(S, C, rate=ss.perday(1)*(B.time > 1)))
+    ss.Disease(S, A, B, C, ab=A >> B @ ss.days(4), sc_=ss.Transition(S, C, rate=ss.perday(1)*(B.time_in > 1)))
 
 @trigger('so no dwell time is scheduled', ValueError)
 def _():
@@ -196,11 +196,11 @@ def _():
 @trigger('where the split puts nobody', ValueError)
 def _():
     A, B = ss.states('A B')
-    d = ss.Disease(A, B, ab=A >> B @ ss.peryear(0), init=dict(B=ss.by(np.array([[0, 0.5], [0, 0.5]]), dims=['age', 'ever'])), first='A', name='d').stratify(ever=[False, True], split=[1, 0])
+    d = ss.Disease(A, B, ab=A >> B @ ss.peryear(0), init=dict(B=ss.by(np.array([[0, 0.5], [0, 0.5]]), dims=['age', 'ever'])), default_state='A', name='d').stratify(ever=[False, True], fractions=[1, 0])
     ode(d, stratify=dict(age=[0, 30]), stop=1).init()
 
-@trigger('which approx=False does not allow', ss.CapabilityError)
-def _(): ss.Sim(sir(beta=ss.seasonal(mean=0.15, amplitude=0.5)), solver='gillespie', approx=False, unit='day', stop=10, **kw).init()
+@trigger('which approximations="error" does not allow', ss.CapabilityError)
+def _(): ss.Sim(sir(beta=ss.seasonal(mean=0.15, amplitude=0.5)), solver='gillespie', approximations='error', unit='day', stop=10, **kw).init()
 
 @trigger('sir.ti_R is not kept', AttributeError)
 def _(): ss.Sim(sir(), n_agents=100, stop=5, **kw).run().diseases.sir.ti_R.notnan
@@ -296,7 +296,7 @@ def _():
     return ode(ss.Disease(infection=ss.Transition(S, I, rate=0.5 * I), recovery=ss.Transition(I, R, dur=5), waning=ss.Transition(R, S, dur=300), init_prev=0.01, name='sirs'), unit='day', stop=1000, total_pop=10_000).run()
 
 @trigger('approximated by', 'note')
-def _(): return ode(ss.SIR(dur_inf=ss.lognorm_ex(mean=ss.years(6))), stop=2001).init()
+def _(): return ode(ss.SIR(dur_inf=ss.lognormal(mean=ss.years(6))), stop=2001).init()
 
 @trigger('only multiplied together', 'note')
 def _():

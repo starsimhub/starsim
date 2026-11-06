@@ -134,7 +134,7 @@ def test_econ():
     infection = S >> I @ ss.peryear(2)*I
     recovery  = I >> S @ ss.years(1)
     sis = ss.Disease(infection, recovery, init_prev=0.1)
-    vaccine = ss.vaccinate(efficacy=0.5, coverage=0.5, interval=ss.years(1), start=2005, cost=5.0)
+    vaccine = ss.vaccinate(efficacy=0.5, coverage=0.5, every=ss.years(1), start=2005, cost=5.0)
     costs = ssl.Costs(unit_costs={'sis.infection': 0.1}, fixed=1000, start=2005)
     base = ss.Sim(sis, analyzers=costs, total_pop=10_000, start=2000, stop=2020, verbose=0)
     msim = ss.parallel({'None': base, 'Vaccine': base.new(interventions=vaccine)}, parallel=False)

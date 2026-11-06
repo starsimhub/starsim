@@ -64,7 +64,7 @@ def function_rate(src, name, param, values):
     found = param.get('series', {})
     for i,(key,vals) in enumerate(found.items()):
         sname = f'{name}_series' if len(found) == 1 else f'{name}_series_{i+1}'
-        src.add_par(sname, ss.timeseries({float(t):v for t,v in vals.items()}, mode='linear'), doc=f'summer2 function of time in flow "{name}"')
+        src.add_par(sname, ss.timeseries({float(t):v for t,v in vals.items()}, interpolation='linear'), doc=f'summer2 function of time in flow "{name}"')
         text = text.replace(key, sname)
     try:
         used = {n.id for n in ast.walk(ast.parse(text, mode='eval')) if isinstance(n, ast.Name)}
@@ -196,7 +196,7 @@ def load_summer2(source, pars=None, verbose=None):
         if not full:
             kw.states = list(strat['compartments'])
         split = [strat['population_split'][s] for s in strata]
-        kw.split = split
+        kw.fractions = split
         adjust = sc.obj()
 
         # Flow adjustments
@@ -226,7 +226,7 @@ def load_summer2(source, pars=None, verbose=None):
                 continue
             if not dims: # The same shares for everyone
                 mults = np.array([multiplier(items[-1]['adjustments'][s], base[fname]) for s in strata], dtype=float)
-                kw.split = list(mults/mults.sum())
+                kw.fractions = list(mults/mults.sum())
                 if not np.isclose(mults.sum(), 1):
                     nflows[fname].rate = f'({nflows[fname].rate}) * {mults.sum():n}'
             else: # Shares by the level of an earlier stratification
@@ -238,7 +238,7 @@ def load_summer2(source, pars=None, verbose=None):
                         if it['source_strata'].get(dim) == level:
                             table[i] = [multiplier(it['adjustments'][s], base[fname]) for s in strata]
                 totals = np.round(table.sum(axis=1), 12)
-                kw.split = ss.by((table/totals[:, None]).tolist(), dims=[dim, sname])
+                kw.fractions = ss.by((table/totals[:, None]).tolist(), dims=[dim, sname])
                 earlier = next(k for k in src.strats if dim in k)
                 old = earlier.get('adjust') or {}
                 earlier['adjust'] = {**old, fname:list(np.array(old.get(fname, np.ones(len(totals))))*totals)}
@@ -282,7 +282,7 @@ def load_summer2(source, pars=None, verbose=None):
             arr[tuple(s['strata'].index(r['strata'][s['name']]) for s in dims)] = r['value']
         expected = total
         for kw,s in zip([k for k,s in zip(src.strats, strats) if c in s['compartments']], dims):
-            sp = kw['split']
+            sp = kw['fractions']
             expected = np.multiply.outer(expected, np.array(sp)) if not isinstance(sp, ss.by) else None
             if expected is None:
                 break

@@ -19,7 +19,7 @@ A flepiMoP model is a configuration YAML plus CSV files beside it: `compartments
 | `integration.method` | `rk4` and `euler` → `'ode'`, `stochastic` → `'binomial'` | yes |
 | `SinglePeriodModifier`, `StackedModifier` | `ss.modify('<disease>.pars.<par>', multiply=..., start=..., stop=...)`, following `stacked_modifier_method` (`product`, `reduction_product`, `sum`) | yes |
 | `scenarios` | The chosen one as `interventions` (default: the first); each scenario's modifiers in `sim.imported.scenarios` | yes |
-| `outcomes` from incidence or another outcome | `ss.outcome(p * source, delay=ss.days(d), duration=ss.constant(...))`, with the probability as `p_<outcome>` | yes |
+| `outcomes` from incidence or another outcome | `ss.outcome(p * source, delay=ss.days(d), stay=ss.constant(...))`, with the probability as `p_<outcome>` | yes |
 | A modifier for some places only | `where=` on the `ss.modify`, against the place | no |
 | `MultiPeriodModifier`, `subpop_groups`, `outcome_modifiers` | One `ss.modify` per period, by hand | no |
 | A parameter from a `timeseries` file | `ss.timeseries({date: value, ...})`, `ss.by` over places | no |

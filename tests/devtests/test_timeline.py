@@ -58,7 +58,7 @@ def test_units(do_plot=False):
         name = 'sis',
         beta = ss.prob(0.05, 'day'),
         init_prev = ss.bernoulli(p=0.1),
-        dur_inf = ss.lognorm_ex(mean=ss.datedur(days=10)),
+        dur_inf = ss.lognormal(mean=ss.datedur(days=10)),
         waning = ss.perday(0.05),
         imm_boost = 1.0,
     )

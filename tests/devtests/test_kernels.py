@@ -41,18 +41,18 @@ def make_plain(beta, **kwargs):
 
 def make_ages():
     """ Three age groups with a contact matrix, and susceptibility that differs by age """
-    return make_plain(0.05, init=dict(I=0.01)).stratify(age=[0, 15, 65], split=[0.3, 0.5, 0.2], adjust=dict(infection=[0.5, 1.0, 1.5]))
+    return make_plain(0.05, init=dict(I=0.01)).stratify(age=[0, 15, 65], fractions=[0.3, 0.5, 0.2], adjust=dict(infection=[0.5, 1.0, 1.5]))
 
 
 def make_towns():
     """ Three towns with commuting between them """
-    towns = ss.geo.geography(names=['north', 'south', 'east'], pop=[50_000, 30_000, 20_000], x=[0, 0, 40], y=[0, 30, 0])
-    return make_plain(0.3, init_n=dict(I=ss.by(patch=[50, 0, 0]))).stratify(patch=towns, mobility=ss.geo.gravity(k=2e-4))
+    towns = ss.geo.geography(names=['north', 'south', 'east'], populations=[50_000, 30_000, 20_000], x=[0, 0, 40], y=[0, 30, 0])
+    return make_plain(0.3, init_n=dict(I=ss.by(patch=[50, 0, 0]))).stratify(patch=towns, mobility=ss.geo.gravity(scale=2e-4))
 
 
 def make_commute():
     """ Three age groups with a contact matrix within each of three towns, with commuting between them, and aging """
-    return make_towns().stratify(age=[0, 15, 65], split=[0.3, 0.5, 0.2])
+    return make_towns().stratify(age=[0, 15, 65], fractions=[0.3, 0.5, 0.2])
 
 
 def make_delay():
@@ -66,7 +66,7 @@ def make_met():
     """ Counts that a contact matrix acts on: the number in each age group (beta*I.n), weighted (by age, and by infectiousness), and that over everyone (beta*I.frac) """
     S, I, R = ss.states('S I R')
     I.rel_trans = 0.5
-    return ss.Disease(infection=S >> I @ (1e-6*I.n + 1e-6*(ss.by(age=[2, 1, 0.5])*I).n + 2e-6*I.n_trans + 0.1*I.frac), recovery=I >> R @ ss.days(8), init=dict(I=0.001), name='sir').stratify(age=[0, 15, 65], split=[0.3, 0.5, 0.2])
+    return ss.Disease(infection=S >> I @ (1e-6*I.n + 1e-6*(ss.by(age=[2, 1, 0.5])*I).n + 2e-6*I.n_infectious + 0.1*I.frac), recovery=I >> R @ ss.days(8), init=dict(I=0.001), name='sir').stratify(age=[0, 15, 65], fractions=[0.3, 0.5, 0.2])
 
 
 models = sc.obj(
@@ -74,7 +74,7 @@ models = sc.obj(
     seir    = (make_seir,    dict(unit='day', stop=200)),
     ages    = (make_ages,    dict(unit='day', stop=100, networks=ss.contacts(np.array([[8, 3, 1], [3, 6, 2], [1, 2, 3]])))),
     towns   = (make_towns,   dict(unit='day', stop=150, total_pop=100_000)),
-    commute = (make_commute, dict(unit='day', stop=150, total_pop=100_000, use_aging=True, networks=ss.contacts(np.array([[8, 3, 1], [3, 6, 2], [1, 2, 3]])))), # Aging, which a model without births or deaths has only if asked for
+    commute = (make_commute, dict(unit='day', stop=150, total_pop=100_000, aging=True, networks=ss.contacts(np.array([[8, 3, 1], [3, 6, 2], [1, 2, 3]])))), # Aging, which a model without births or deaths has only if asked for
     malaria = (make_malaria, dict(unit='day', stop=200, total_pop=10_000)),
     tb      = (make_tb,      dict(stop=30, total_pop=100_000)), # Has a transfer, so is stepped
     delay   = (make_delay,   dict(unit='day', stop=150)),
@@ -122,7 +122,7 @@ def test_stochastic():
     assert largest_diff(base.new().run(), base.new().run(profile=True)) == 0
 
     # Diseases tracked jointly (74 × 51 compartments, with births) are stepped by the compartments that hold anyone: the same events as stepping every flow, and many times faster
-    lognormal = [ss.SIR(dur_inf=ss.lognorm_ex(mean=ss.years(6)), p_death=0.01), ss.SIS(dur_inf=ss.lognorm_ex(mean=ss.years(10)))] # Starsim 3's durations, as Erlang stages
+    lognormal = [ss.SIR(dur_inf=ss.lognormal(mean=ss.years(6)), p_death=0.01), ss.SIS(dur_inf=ss.lognormal(mean=ss.years(10)))] # Starsim 3's durations, as Erlang stages
     sim = ss.Sim(lognormal, demographics=[ss.birth(rate=ss.peryear(0.05)), ss.death(rate=ss.peryear(0.02))], total_pop=1000, stop=10, solver='gillespie', **kw).init()
     for ti in range(5):
         sim.run_one_step()
@@ -159,12 +159,12 @@ def test_restart():
     # A restarted sim gives what a new one does, for another seed or another value
     sim = ss.Sim(make(), solver='binomial', rand_seed=1, **pars, **kw).init()
     sim.run()
-    sim.restart(rand_seed=5).run()
+    sim.run(rand_seed=5)
     new = ss.Sim(make(), solver='binomial', rand_seed=5, **pars, **kw).run()
     assert largest_diff(sim, new) == 0
 
     sim = ss.Sim(make_plain(0.3, init=dict(I=0.01)), unit='day', stop=100, **kw).init()
-    peaks = [sim.restart(pars=dict(beta=beta)).run().results.sir.I.max() for beta in [0.2, 0.3, 0.4]]
+    peaks = [sim.run(pars=dict(beta=beta)).results.sir.I.max() for beta in [0.2, 0.3, 0.4]]
     new = [sim.new(pars=dict(beta=beta)).run().results.sir.I.max() for beta in [0.2, 0.3, 0.4]]
     assert np.allclose(peaks, new) and peaks[0] < peaks[1] < peaks[2]
 
@@ -180,12 +180,12 @@ def test_restart():
     values = dict()
     for change in [dict(beta=0.4), dict(p_R=0.5), dict(I0=0.05), dict(beta=0.3, p_R=0.9, I0=0.01)]:
         values = values | change # A restart keeps the values of those before it
-        kept.restart(pars=change).run()
+        kept.run(pars=change)
         assert np.array_equal(kept.results.sir.D, splits().new(pars=values).run().results.sir.D), f'A restart with {values} differs from a new sim'
-    kept.restart()
+    kept._restart()
     start = engine.start_y
-    assert kept.restart(pars=dict(beta=0.2)).run() and engine.start_y is start, 'A value the start does not read should keep it'
-    assert kept.restart(pars=dict(p_R=0.7)).run() and engine.start_y is not start, 'A value the branches read should not keep it'
+    assert kept.run(pars=dict(beta=0.2)) and engine.start_y is start, 'A value the start does not read should keep it'
+    assert kept.run(pars=dict(p_R=0.7)) and engine.start_y is not start, 'A value the branches read should not keep it'
 
     # Many runs are restarts of one sim
     base = ss.Sim(make(), solver='binomial', **pars, **kw)
@@ -268,7 +268,7 @@ def test_restart():
 def test_compile():
     sc.heading('Testing that the kernels can be compiled ahead of time')
     ss.compile(verbose=False)
-    assert ss.compile_status().compiled # Not is_compiled(), which is only about Numba's copy, and so is False on a fresh install with Rust
+    assert ss.kernels.compile_status().compiled # Not is_compiled(), which is only about Numba's copy, and so is False on a fresh install with Rust
     return
 
 

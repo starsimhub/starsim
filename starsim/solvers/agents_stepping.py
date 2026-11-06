@@ -177,7 +177,7 @@ class Stepping:
         uids = parts[0][1] if len(parts) == 1 else ss.uids.concatenate([u for _,u in parts])
         with self.evaluating(memo={} if len(self.competing[state.name]) > 1 else None): # A part that several rates share (e.g. the EIR, indoors and outdoors) is worked out once
             rates = [(tr, self.eval_for(tr.rate, uids)*self.adjusted(tr.name, uids)) for tr in self.competing[state.name]]
-        rates = [(tr, rate) for tr,rate in rates if np.ndim(rate) or rate > 0] # A rate of 0 for everyone (e.g. ss.Pregnancy's infant_rate by default) moves nobody, so it is left out of the draw
+        rates = [(tr, rate) for tr,rate in rates if np.ndim(rate) or rate > 0] # A rate of 0 for everyone (e.g. ss.Pregnancy's infant_death_rate by default) moves nobody, so it is left out of the draw
         competing = [tr for tr,rate in rates]
         stays = []
         for tr,rate in rates: # Each state's own (see stayed())
@@ -254,11 +254,11 @@ class Stepping:
         return
 
     def after_of(self, tr):
-        """ A transition's minimum stay (`after=`), in the sim's unit """
-        return 0.0 if getattr(tr, 'after', None) is None else float(self.convert(tr.after))
+        """ A transition's minimum stay (`min_stay=`), in the sim's unit """
+        return 0.0 if getattr(tr, 'min_stay', None) is None else float(self.convert(tr.min_stay))
 
     def stayed(self, tr, state, uids):
-        """ Whether a transition out of a state can happen for each agent, given how long they have been in it: after its minimum stay (`after=`) """
+        """ Whether a transition out of a state can happen for each agent, given how long they have been in it: after its minimum stay (`min_stay=`) """
         after = self.after_of(tr)
         if not after:
             return 1.0
@@ -279,7 +279,7 @@ class Stepping:
         ti = self.ti
         n = people.uid.len_used
         alive = people.alive.raw
-        dt = self.mod.t.dt.to('year').value if isinstance(self.mod.t.dt, ss.TimePar) else self.dt
+        dt = self.mod.t.dt.to('year').value if isinstance(self.mod.t.dt, ss.time.TimePar) else self.dt
         for name,table in self.lifetables.items():
             tr = self.graph.transitions[name]
             if table is None: # The agents drawn so far (by UID); most of those still to die, in order of the step they die in (and how many have been taken); those drawn since, in no order; those due who have not died yet; and those to draw again
@@ -326,7 +326,7 @@ class Stepping:
             for src,uids in zip(srcs, uidlist):
                 other = uids[people.cause_of_death.raw[uids] != mine]
                 if len(other):
-                    for key in dict.fromkeys([tr.name, tr.deaths]): # A split with a state counts its deaths in its flow to ss.null too
+                    for key in dict.fromkeys([tr.name, tr._deaths]): # A split with a state counts its deaths in its flow to ss.null too
                         self.flowcounts[key] -= self.n_of(other)
                         if key in self.flow_groups:
                             self.flow_groups[key] = self.flow_groups[key] - np.bincount(self.groups(other, src), weights=self.weights(other), minlength=self.sim.groups.n_groups)
@@ -359,7 +359,7 @@ class Stepping:
         sim = self.sim
         d = sim.mixing.space
         for tr in self.graph.inflows:
-            if not tr.people or getattr(tr, 'per', None) is not None: # Driven by a flow: see step_per()
+            if not tr.people or getattr(tr, 'birth_on', None) is not None: # Driven by a flow: see step_per()
                 continue
             with self.evaluating(by_group=True):
                 adjust = 1.0 if self.adjust[tr.name] is None else self.adjust[tr.name]
@@ -373,7 +373,7 @@ class Stepping:
             shares = [np.bincount(cell.ravel(), weights=amount*p, minlength=len(cells)) for p in ps] if len(ps) > 1 else None
             enter, of = [], []
             for c,k in enumerate(born):
-                for dst,n in zip(tr.dst, self.rng.multinomial(k, [share[c]/expected[c] for share in shares]) if len(ps) > 1 else [k]) if k else []:
+                for dst,n in zip(tr.dest, self.rng.multinomial(k, [share[c]/expected[c] for share in shares]) if len(ps) > 1 else [k]) if k else []:
                     if n:
                         enter.append((cells[c, 0] if d is not None else 0, (dst.name,), n))
                         of.append(np.full(n, c))
@@ -381,8 +381,8 @@ class Stepping:
             new = self.add_people(enter, self.ti, f'born_{tr.name}', newborn=not tr.migration, levels=levels)
             self.fire_entered(new, tr)
             self.flowcounts[tr.name] += self.n_of(new)
-            if len(new): # An event, e.g. where=measles.births, as for births driven by a flow (see step_per())
-                for dst in tr.dst:
+            if len(new): # An event, e.g. on=measles.births, as for births driven by a flow (see step_per())
+                for dst in tr.dest:
                     inds = new[self.mod[dst.name].raw[new]]
                     if len(inds):
                         self.record(tr, inds, -1, self.state_index[dst.name])
@@ -499,15 +499,15 @@ class Stepping:
                 name = tr.name
                 mult = self.mult_raw('transition', name)*(1.0 if self.adjust[name] is None else self.adjust[name])
                 if np.ndim(mult) and np.shape(mult)[-1] != self.sim.groups.n_groups:
-                    raise ss.CapabilityError(f'a modifier of "{self.mod.name}.{name}" has a condition on people, which a transition of counts ({tr.arrow}) cannot take; give it no where=, or a condition on time')
-                if tr.dur is not None and not tr.inflow:
+                    raise ss.CapabilityError(f'a modifier of "{self.mod.name}.{name}" has a condition on people, which a transition of counts ({tr._arrow}) cannot take; give it no where=, or a condition on time')
+                if tr.dur is not None and not tr._inflow:
                     hazard = 1/self.dwell_mean(name)
                     rate = lambda hazard=hazard: hazard
                 else:
                     rate = self.count_rate(tr.rate)
-                srcs = [None] if tr.inflow else [src.name for src in tr.src]
-                dsts = {src:[(dst.name, self.dim_map(src, dst.name), f'{name}.{dst.name}' if len(tr.dst) > 1 else None) for dst in tr.dst] for src in srcs}
-                plan.append((tr, rate, mult, self.inflow_split(tr) if tr.inflow else None, dsts))
+                srcs = [None] if tr._inflow else [src.name for src in tr.source]
+                dsts = {src:[(dst.name, self.dim_map(src, dst.name), f'{name}.{dst.name}' if len(tr.dest) > 1 else None) for dst in tr.dest] for src in srcs}
+                plan.append((tr, rate, mult, self.inflow_split(tr) if tr._inflow else None, dsts))
             start = {name:np.asarray(val, dtype=float) for name,val in self.counts.items()}
 
             def deriv(counts):
@@ -516,7 +516,7 @@ class Stepping:
                 change = dict.fromkeys(counts, 0.0)
                 flows = {}
                 for tr,rate,mult,split,dsts in plan:
-                    if tr.inflow:
+                    if tr._inflow:
                         amounts = {None: rate()*mult*split}
                     else:
                         hazard = rate()*mult
@@ -607,7 +607,7 @@ class Stepping:
             if forced is not None:
                 self.events[tr.name] = forced
                 self._news = True
-        pairs = [(tr, src) for tr in self.graph.transmissions for src in tr.src + (self.immune_states if not getattr(tr, 'generated', False) else [])] # With protection due to a state or memory: people who have had one strain can be infected by another
+        pairs = [(tr, src) for tr in self.graph.transmissions for src in tr.source + (self.immune_states if not getattr(tr, 'generated', False) else [])] # With protection due to a state or memory: people who have had one strain can be infected by another
         together = self.transmit_together(pairs) if len(pairs) > 1 else None
         self._step_pairs = [] # Who infected whom by each of them, for sources()
         for i,(tr,src) in enumerate(pairs):
@@ -746,7 +746,7 @@ class Stepping:
                     people.age[new] = strat.edges[0]
             elif strat.female is None: # A sex dimension is people.female, as drawn when the agents were made: see ss.People.grow()
                 rvs = self.draw(f'{key}_{strat.name}', new)
-                people[strat.attr][new] = strat.value(np.minimum(np.searchsorted(np.cumsum(strat.split), rvs, side='right'), strat.n - 1))
+                people[strat.attr][new] = strat.value(np.minimum(np.searchsorted(np.cumsum(strat.fractions), rvs, side='right'), strat.n - 1))
         if newborn and not any(strat.kind == 'age' for strat in sim.groups.strats): # Born at 0, before they enter their states (whose dwell times can read their age)
             people.age[new] = 0
         rvs = self.draw(f'{key}_state', new)

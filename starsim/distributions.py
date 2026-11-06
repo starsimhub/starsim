@@ -44,14 +44,17 @@ def combine_rands(a, b):
 
 
 # Common distributions, assigned to a variable since used in help messages
-dist_list = ['random', 'uniform', 'normal', 'truncnorm', 'lognorm_ex', 'lognorm_im', 'expon',
-             'poisson', 'nbinom', 'binom', 'beta_dist', 'beta_mean', 'weibull', 'gamma', 'erlang', 'constant',
+dist_list = ['random', 'uniform', 'normal', 'truncnorm', 'lognormal', 'expon',
+             'poisson', 'nbinom', 'binom', 'beta_dist', 'weibull', 'gamma', 'erlang', 'constant',
              'randint', 'bernoulli', 'choose_n', 'choice', 'histogram']
 
 
 
 class random(Dist):
-    """ Random distribution, with values on the interval (0, 1)
+    """ Random distribution, with values on the interval (0, 1): the raw uniform draws, for code that uses them directly
+
+    Its values are those of `ss.uniform()` with its defaults, but it cannot be scaled or given a unit, and it can be
+    given a dtype (e.g. float32); for a value between bounds, or with a unit, use `ss.uniform()`.
 
     Args:
         dtype (type): the data type of the values (default: `ss.dtypes.float`)
@@ -159,58 +162,97 @@ class truncnorm(Dist):
         return self.ppf(self.rand(self._size))
 
 
-class lognorm_im(Dist):
+class lognormal(Dist):
     """
-    Lognormal distribution, parameterized in terms of the "implicit" (normal)
-    distribution (see lognorm_ex for comparison).
-
-    Note: the `mean` parameter here does *not* correspond to the mean of the resulting
-    random variates!
+    Lognormal distribution, given by its own mean and standard deviation, or by those of its logarithm
 
     Args:
-        mean (float): the mean of the underlying normal distribution (not this distribution) (default 0.0)
-        sigma (float): the standard deviation of the underlying normal distribution (not this distribution) (default 1.0)
+        mean (float): the mean of the values (default 1.0); must be > 0
+        std (float): the standard deviation of the values (default 1.0)
+        log_mean (float): instead of `mean` and `std`, the mean of the logarithm of the values (with `log_std`)
+        log_std (float): the standard deviation of the logarithm of the values
+
+    The mean and standard deviation can have units (e.g. `mean=ss.days(10)`); the log moments
+    cannot, since they are of the logarithm, so give a unit with `unit=`
+    (`ss.lognormal(log_mean=2, log_std=0.5, unit='day')`).
 
     Examples:
         ```python
-        ss.lognorm_im(mean=2, sigma=1, strict=False).rvs(1000).mean() # Should be roughly 12
+        ss.lognormal(mean=2, std=1, strict=False).rvs(1000).mean() # Close to 2
+        ss.lognormal(log_mean=2, log_std=1, strict=False).rvs(1000).mean() # Roughly 12, i.e. exp(2 + 1/2)
+        ss.lognormal(mean=ss.days(10), std=ss.days(3)) # A duration
         ```
     """
-    scaling = 'postdraw'
-    unitless_pars = ('mean', 'sigma')
+    scaling = ['predraw', 'postdraw'] # Given by its log moments, only 'postdraw'
+    unit_pars = ('mean', 'std')
 
-    def __init__(self, mean=0.0, sigma=1.0, **kwargs): # Does not accept dtype
-        super().__init__(distname='lognormal', dist='lognorm', mean=mean, sigma=sigma, **kwargs)
+    def __init__(self, mean=None, std=None, *, log_mean=None, log_std=None, **kwargs): # Does not accept dtype
+        self.log_form = log_mean is not None or log_std is not None
+        if self.log_form:
+            if mean is not None or std is not None:
+                errormsg = f'ss.lognormal() is given by mean and std, or by log_mean and log_std, not by {sc.strjoin([k for k,v in dict(mean=mean, std=std, log_mean=log_mean, log_std=log_std).items() if v is not None])}'
+                raise ValueError(errormsg)
+            self.scaling = 'postdraw'
+            self.unit_pars = None
+            self.unitless_pars = ('log_mean', 'log_std')
+            pars = dict(log_mean=sc.ifelse(log_mean, 0.0), log_std=sc.ifelse(log_std, 1.0))
+        else:
+            pars = dict(mean=sc.ifelse(mean, 1.0), std=sc.ifelse(std, 1.0))
+        super().__init__(distname='lognormal', dist='lognorm', **pars, **kwargs)
         return
 
     @staticmethod
     def scaled_pars(pars, factor):
         """ Parameters (as plain numbers, or functions of the agents) whose draws are those of `pars` times `factor`: the mean of the log moves by log(factor); used for `unit=` in a declared model """
         shift = np.log(factor)
-        mean = pars['mean']
-        if callable(mean):
-            func = mean
-            mean = lambda *args: func(*args) + shift
-            mean.__signature__ = inspect.signature(func) # The distribution passes arguments by their names
+        log_mean = pars['log_mean']
+        if callable(log_mean):
+            func = log_mean
+            log_mean = lambda *args: func(*args) + shift
+            log_mean.__signature__ = inspect.signature(func) # The distribution passes arguments by their names
         else:
-            mean = mean + shift
-        return pars | dict(mean=mean)
+            log_mean = log_mean + shift
+        return pars | dict(log_mean=log_mean)
 
     def convert_timepars(self):
+        if not self.log_form:
+            return super().convert_timepars()
         for key, v in self._pars.items():
-            if isinstance(v, ss.dur) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.dur):
-                raise NotImplementedError('lognorm_im parameters must be nondimensional')
-            if isinstance(v, ss.Rate) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.Rate):
-                raise NotImplementedError('lognorm_im parameters must be nondimensional')
+            if isinstance(v, (ss.Duration, ss.time.Rate)) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], (ss.Duration, ss.time.Rate)):
+                errormsg = f'The log moments of ss.lognormal() ({key}={v}) are of the logarithm, so cannot have units; give mean= and std= with units instead, or a unit with unit='
+                raise NotImplementedError(errormsg)
 
-    def sync_pars(self, call=True):
-        """ Translate between NumPy and SciPy parameters """
-        if call:
-            self.call_pars()
+    @staticmethod
+    def log_moments(mean, std):
+        """ The mean and standard deviation of the logarithm of a lognormal with this mean and standard deviation """
+        if np.isscalar(mean) and mean <= 0:
+            errormsg = f'The mean of ss.lognormal() must be > 0, not {mean}; to give the mean of its logarithm, use log_mean='
+            raise ValueError(errormsg)
+        std2 = std**2
+        mean2 = mean**2
+        log_std = np.sqrt(np.log(std2/mean2 + 1))
+        log_mean = np.log(mean2/np.sqrt(std2 + mean2))
+        return log_mean, log_std
+
+    def sync_pars(self):
+        """ Convert to the moments of the logarithm, then translate to SciPy """
         p = self._pars
-        spars = dict(s=p.sigma, scale=np.exp(p.mean), loc=0)
+        if self.log_form or any(callable(v) and not isinstance(v, type) for v in p.values()): # Since can't work with functions (process_pars() has called them already, when drawing)
+            self.call_pars()
+        log_mean, log_std = self.log_pars()
+        spars = dict(s=log_std, scale=np.exp(log_mean), loc=0)
         self.update_dist_pars(spars)
         return spars
+
+    def log_pars(self):
+        """ The mean and standard deviation of the logarithm, from its current parameters """
+        p = self._pars
+        return (p.log_mean, p.log_std) if self.log_form else self.log_moments(p.mean, p.std)
+
+    def make_rvs(self):
+        """ NumPy's lognormal, which takes the moments of the logarithm """
+        log_mean, log_std = self.log_pars()
+        return self.rng.lognormal(mean=log_mean, sigma=log_std, size=self._size)
 
     def ppf(self, rands):
         kwds = self.dist.kwds
@@ -219,66 +261,9 @@ class lognorm_im(Dist):
             return np.exp(np.asarray(s)*sp_special.ndtri(rands))*np.asarray(scale) + kwds['loc']
         s = np.asarray(s)
         rvs = Dist.ppf(self, rands)
-        if some(s == 0): # SciPy gives NaN for sigma=0, but NumPy (and the limit) gives exp(mean)
+        if some(s == 0): # SciPy gives NaN for a standard deviation of 0, but NumPy (and the limit) gives exp(log_mean)
             rvs = np.where(s == 0, self.dist.kwds['scale'], rvs)
         return rvs
-
-
-class lognorm_ex(Dist):
-    """
-    Lognormal distribution, parameterized in terms of the "explicit" (lognormal)
-    distribution, with mean=mean and std=std for this distribution (see lognorm_im for comparison).
-    Note that a mean ≤ 0.0 is impossible, since this is the parameter of the distribution
-    after the log transform.
-
-    Args:
-        mean (float): the mean of this distribution (not the underlying distribution) (default 1.0)
-        std (float): the standard deviation of this distribution (not the underlying distribution) (default 1.0)
-
-    Examples:
-        ```python
-        ss.lognorm_ex(mean=2, std=1, strict=False).rvs(1000).mean() # Should be close to 2
-        ```
-    """
-    scaling = ['predraw', 'postdraw']
-    unit_pars = ('mean', 'std')
-
-    def __init__(self, mean=1.0, std=1.0, **kwargs): # Does not accept dtype
-        super().__init__(distname='lognormal', dist='lognorm', mean=mean, std=std, **kwargs)
-        return
-
-    def convert_ex_to_im(self):
-        """
-        Lognormal distributions can be specified in terms of the mean and standard
-        deviation of the "explicit" lognormal distribution, or the "implicit" normal distribution.
-        This function converts the parameters from the lognormal distribution to the
-        parameters of the underlying (implicit) distribution, which are the form expected by NumPy's
-        and SciPy's lognorm() distributions.
-        """
-        p = self._pars
-        if any(callable(v) and not isinstance(v, type) for v in p.values()): # Since can't work with functions (process_pars() has called them already, when drawing)
-            self.call_pars()
-        mean = p.pop('mean')
-        std = p.pop('std')
-        if np.isscalar(mean) and mean <= 0:
-            errormsg = f'Cannot create a lognorm_ex distribution with mean≤0 (mean={mean}); did you mean to use lognorm_im instead?'
-            raise ValueError(errormsg)
-        std2 = std**2
-        mean2 = mean**2
-        sigma_im = np.sqrt(np.log(std2/mean2 + 1)) # Computes std for the underlying normal distribution
-        mean_im  = np.log(mean2 / np.sqrt(std2 + mean2)) # Computes the mean of the underlying normal distribution
-        p.mean = mean_im
-        p.sigma = sigma_im
-        return mean_im, sigma_im
-
-    def sync_pars(self):
-        """ Convert from overlying to underlying parameters, then translate to SciPy """
-        self.convert_ex_to_im()
-        spars = lognorm_im.sync_pars(self, call=False) # Borrow sync_pars from lognorm_im
-        return spars
-
-    def ppf(self, rands):
-        return lognorm_im.ppf(self, rands) # Borrow ppf from lognorm_im
 
 
 class expon(Dist):
@@ -354,34 +339,41 @@ class poisson(Dist):
 
 class beta_dist(Dist):
     """
-    Beta distribution
+    Beta distribution, with values between 0 and 1, given by its shape parameters, or by its mean and standard deviation
 
     Args:
         a (float): shape parameter, must be > 0 (default 1.0)
         b (float): shape parameter, must be > 0 (default 1.0)
+        mean (float): instead of `a` and `b`, the mean, which must be 0 < mean < 1 (with `std`)
+        std (float): the standard deviation, which must be 0 < std² < mean×(1 − mean)
+        force (bool): with `mean` and `std`, clip them to the valid range (with a warning) rather than raise an error
+
+    Examples:
+        ```python
+        ss.beta_dist(a=2, b=5)
+        ss.beta_dist(mean=0.3, std=0.1) # E.g. a probability that varies between people
+        ```
     """
     scaling = None
     unitless_pars = ('a', 'b')
-    def __init__(self, a=1.0, b=1.0, **kwargs):
-        super().__init__(distname="beta", dist='beta', a=a, b=b, **kwargs)
+    def __init__(self, a=None, b=None, *, mean=None, std=None, force=False, **kwargs): # Does not accept dtype
+        given = None
+        if mean is not None or std is not None:
+            if mean is None or std is None or a is not None or b is not None:
+                errormsg = f'ss.beta_dist() is given by a and b, or by mean and std, not by {sc.strjoin([k for k,v in dict(a=a, b=b, mean=mean, std=std).items() if v is not None])}'
+                raise ValueError(errormsg)
+            given = dict(mean=mean, std=std)
+            a, b = self.shape_pars(mean, std**2, force=force)
+        a = sc.ifelse(a, 1.0)
+        b = sc.ifelse(b, 1.0)
+        super().__init__(distname='beta', dist='beta', a=a, b=b, **kwargs)
+        if given is not None:
+            self.given = ('beta_dist', given)
         return
 
-
-class beta_mean(Dist):
-    """
-    Beta distribution parameterized by the mean
-
-    Note: the variance of a beta distribution must be 0 < var < mean*(1-mean)
-
-    Args:
-        mean (float): mean of distribution, must be 0 < mean < 1 (default 0.5)
-        var (float): variance of distribution, must be > 0 (default 0.05)
-        force (bool): if True, scale the parameters to the valid range
-    """
-    scaling = None
-    unitless_pars = ('mean', 'var')
-    def __init__(self, mean=0.5, var=0.05, force=False, **kwargs):  # Does not accept dtype
-        # Validation
+    @staticmethod
+    def shape_pars(mean, var, force=False):
+        """ The shape parameters a and b of a beta distribution with this mean and variance """
         eps = 1e-6 # With force=True, clip to strictly inside the valid range, since the bounds themselves are invalid
         if not (0 < mean < 1):
             if force:
@@ -393,17 +385,14 @@ class beta_mean(Dist):
         max_var = mean*(1-mean)
         if not (0 < var < max_var):
             if force:
-                ss.warn(f'Clipping the variance from {var} to 0 < var < {max_var:n}.')
+                ss.warn(f'Clipping the standard deviation from {np.sqrt(var):n} to 0 < std < {np.sqrt(max_var):n}.')
                 var = np.clip(var, eps*max_var, (1-eps)*max_var)
             else:
-                errormsg = f'The variance of a beta distribution must be 0 < var < mean*(1-mean). For your {mean=}, {var=} is invalid; the maximum variance is {max_var:n}.'
+                errormsg = f'The standard deviation of a beta distribution must be 0 < std < sqrt(mean*(1-mean)). For your mean={mean:n}, std={np.sqrt(var):n} is invalid; the maximum is {np.sqrt(max_var):n}.'
                 raise ValueError(errormsg)
-
-        # We're good to go
         a = ((1 - mean)/var - 1/mean) * mean**2
         b = a * (1 / mean - 1)
-        super().__init__(distname="beta", dist='beta', a=a, b=b, **kwargs)
-        return
+        return a, b
 
 
 class nbinom(Dist):
@@ -441,7 +430,7 @@ class nbinom(Dist):
         """ Convert the mean (if given) to p, then translate to SciPy """
         p = self._pars
         if 'mean' in p: # Converted on each draw, since the mean may be a function, an array, or a parameter being fitted
-            if any(callable(v) and not isinstance(v, type) for v in p.values()): # Functions can't be converted, so call them first, as for ss.lognorm_ex()
+            if any(callable(v) and not isinstance(v, type) for v in p.values()): # Functions can't be converted, so call them first, as for ss.lognormal()
                 self.call_pars()
             mean = p.pop('mean')
             p.p = p.n/(p.n + mean)
@@ -515,9 +504,9 @@ class randint(Dist):
 
     def convert_timepars(self):
         for key, v in self._pars.items():
-            if isinstance(v, ss.dur) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.dur):
+            if isinstance(v, ss.Duration) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.Duration):
                 raise NotImplementedError('randint parameters must be nondimensional')
-            if isinstance(v, ss.Rate) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.Rate):
+            if isinstance(v, ss.time.Rate) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.time.Rate):
                 raise NotImplementedError('randint parameters must be nondimensional')
 
     @property
@@ -643,20 +632,20 @@ class constant(Dist):
     Constant (delta) distribution: equivalent to np.full()
 
     Args:
-        v (float): the value to return
+        value (float): the value to return
     """
-    valid_pars = ['v']
+    valid_pars = ['value']
     scaling = ['predraw', 'postdraw']
 
-    def __init__(self, v=0.0, **kwargs):
-        super().__init__(distname='const', v=v, **kwargs)
+    def __init__(self, value=0.0, **kwargs):
+        super().__init__(distname='const', value=value, **kwargs)
         return
 
     def make_rvs(self):
-        return np.full(self._size, self._pars.v)
+        return np.full(self._size, self._pars.value)
 
     def ppf(self, rands): # NB: don't actually need to use random numbers here, but not worth the complexity of avoiding this
-        return np.full(rands.shape, self._pars.v)
+        return np.full(rands.shape, self._pars.value)
 
 
 class bernoulli(Dist):
@@ -699,7 +688,7 @@ class bernoulli(Dist):
         """
         if uids is None:
             uids = self.sim.people.auids # All active UIDs
-        elif isinstance(uids, (ss.BoolArr, ss.IndexArr)):
+        elif isinstance(uids, (ss.BoolArr, ss.arrays.IndexArr)):
             uids = uids.uids
 
         bools = self.rvs(uids)
@@ -768,9 +757,12 @@ class choose_n(Dist):
 
         Args:
             n (int/array): the UIDs, or a size
-            round (bool): not used; as in `ss.Dist.rvs()`
-            reset (bool): not used; as in `ss.Dist.rvs()`
+            round (None): accepted so the call matches `ss.Dist.rvs()`; a choice is not rounded, so only None
+            reset (bool): likewise; a choice is not reset, so only False
         """
+        if round is not None or reset:
+            errormsg = f'ss.choose_n().rvs() chooses agents, so it takes neither round= nor reset= (given round={round!r}, reset={reset!r})'
+            raise ValueError(errormsg)
         chosen = np.zeros(n if np.isscalar(n) else len(n), dtype=bool)
         chosen[self._choose(n)] = True
         return chosen
@@ -784,7 +776,7 @@ class choose_n(Dist):
         """
         if uids is None:
             uids = self.sim.people.auids # All active UIDs
-        elif isinstance(uids, (ss.BoolArr, ss.IndexArr)):
+        elif isinstance(uids, (ss.BoolArr, ss.arrays.IndexArr)):
             uids = uids.uids
         chosen = ss.uids(np.sort(uids[self._choose(uids)]))
         if both:
@@ -865,8 +857,8 @@ class choice(Dist):
     unitless_pars = ('p',)
 
     def __init__(self, a=2, p=None, replace=True, **kwargs):
-        items = [a] if isinstance(a, ss.TimePar) else sc.tolist(a) if not np.isscalar(a) else []
-        if items and all(isinstance(v, ss.TimePar) for v in items): # e.g. a=[ss.months(9), ss.months(10)] or ss.years([1, 2]): the numbers, in the unit of the first
+        items = [a] if isinstance(a, ss.time.TimePar) else sc.tolist(a) if not np.isscalar(a) else []
+        if items and all(isinstance(v, ss.time.TimePar) for v in items): # e.g. a=[ss.months(9), ss.months(10)] or ss.years([1, 2]): the numbers, in the unit of the first
             unit = type(items[0])
             if kwargs.get('unit') is not None:
                 raise ValueError(f'ss.choice() has typed values ({items[0]!r}, ...) and unit={kwargs["unit"]!r}; give one or the other')

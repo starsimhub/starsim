@@ -39,7 +39,7 @@ class Strat:
     Args:
         name (str): the dimension, e.g. 'age'
         levels (list/dict): bin edges (for a continuous property such as age) or labels; or a dict of the share of the population in each, e.g. `{0: 0.3, 15: 0.6, 65: 0.1}`
-        split (list): the share of the population in each level (if not given: from an `ss.geo.geography`'s populations; for age groups, the world's ages; for a boolean dimension, everyone at the first level; otherwise equal)
+        fractions (list): the share of the population in each level (if not given: from an `ss.geo.geography`'s populations; for age groups, the world's ages; for a boolean dimension, everyone at the first level; otherwise equal)
         adjust (dict): multipliers on named transitions, one per level: on its rate (a duration is divided), or on its probability for a branch chosen with p=
         kind (str): 'age', 'space', or 'plain'; if not given, 'space' for an `ss.geo.geography` or with `mobility=`, 'age' for a dimension called age, and otherwise 'plain'
             (a strain dimension, kind 'strain', is made by `ss.Strains`: see `strains`)
@@ -49,7 +49,7 @@ class Strat:
     """
     strains = None # For a strain dimension: the ss.Strains it is made from
 
-    def __init__(self, name, levels, split=None, adjust=None, kind=None, states=None, where=None, mobility=None):
+    def __init__(self, name, levels, fractions=None, adjust=None, kind=None, states=None, where=None, mobility=None):
         self.name = name
         self.geo = levels if isinstance(levels, geography) else None
         self.kind = kind or ('space' if (self.geo is not None or mobility is not None) else 'age' if name == 'age' else 'plain')
@@ -64,13 +64,13 @@ class Strat:
         self.where = dict(where) if where else None
         if self.geo is not None:
             levels = self.geo.names
-            if split is None and self.geo.pop is not None:
-                split = self.geo.pop/self.geo.pop.sum()
+            if fractions is None and self.geo.populations is not None:
+                fractions = self.geo.populations/self.geo.populations.sum()
         if isinstance(levels, dict): # Each level with its share, e.g. age={0: 0.3, 15: 0.6, 65: 0.1}
-            if split is not None:
-                errormsg = f'"{name}" was given the share in each level twice, as a dict and as split=; give one'
+            if fractions is not None:
+                errormsg = f'"{name}" was given the share in each level twice, as a dict and as fractions=; give one'
                 raise ValueError(errormsg)
-            levels, split = list(levels.keys()), list(levels.values())
+            levels, fractions = list(levels.keys()), list(levels.values())
             if all(isinstance(v, str) and is_number(v) for v in levels): # Keys that are numbers as strings, as from R, JSON, or YAML, e.g. {'0': 0.3, '15': 0.6, '65': 0.1}
                 levels = [float(v) for v in levels]
         if isinstance(mobility, (list, tuple)) and any(isinstance(m, (Mobility, gravity, radiation)) for m in mobility):
@@ -85,7 +85,7 @@ class Strat:
             errormsg = f'mobility= is for a spatial stratification, but "{name}" is of kind "{self.kind}"; pass kind="space" if it is a place'
             raise ValueError(errormsg)
         self.mobility = mobility
-        levels = [ss.years(v).value if isinstance(v, ss.TimePar) else v for v in levels] # Ages given as durations (e.g. ss.weeks(6)) are edges in years, as people's ages are
+        levels = [ss.years(v).value if isinstance(v, ss.time.TimePar) else v for v in levels] # Ages given as durations (e.g. ss.weeks(6)) are edges in years, as people's ages are
         numeric = all(sc.isnumber(v) and not isinstance(v, bool) for v in levels)
         self.edges = None
         if numeric: # Bin edges; the last bin is open-ended
@@ -118,30 +118,30 @@ class Strat:
             if np.any(vals < 0):
                 raise ValueError(f'the adjustment of "{key}" by "{name}" has a negative multiplier ({vals}).')
             self.adjust[key] = vals
-        self.joint = None # A split over several dimensions at once, as an ss.by; resolved by the sim
-        self.cond = None # For a dimension of some states only, a split given the levels of other dimensions: their positions, and the share in each level of this one (summing to 1 over it)
-        if isinstance(split, by):
-            self.joint = split
-            split = None
-        self.split_given = split is not None or self.joint is not None
-        if split is not None:
-            split = np.array(split, dtype=float)
-            if len(split) != self.n:
-                raise ValueError(f'split= has {len(split)} entries, but "{name}" has {self.n} levels ({sc.strjoin(self.labels)}).')
-            if not np.isclose(split.sum(), 1):
-                self.guessed['split'] = f'normalized, since it summed to {split.sum():n}'
-                split = split/split.sum()
+        self.joint = None # Fractions over several dimensions at once, as an ss.by; resolved by the sim
+        self.cond = None # For a dimension of some states only, fractions given the levels of other dimensions: their positions, and the share in each level of this one (summing to 1 over it)
+        if isinstance(fractions, by):
+            self.joint = fractions
+            fractions = None
+        self.fractions_given = fractions is not None or self.joint is not None
+        if fractions is not None:
+            fractions = np.array(fractions, dtype=float)
+            if len(fractions) != self.n:
+                raise ValueError(f'fractions= has {len(fractions)} entries, but "{name}" has {self.n} levels ({sc.strjoin(self.labels)}).')
+            if not np.isclose(fractions.sum(), 1):
+                self.guessed['fractions'] = f'normalized, since it summed to {fractions.sum():n}'
+                fractions = fractions/fractions.sum()
         elif self.kind == 'age' and self.edges is not None: # As the people of a declared model, unless the sim has a named population
             world = ss.data.world
-            split = ss.data.age_split(self.edges, world.ages, world.counts)
-            self.guessed['split'] = world.guess
+            fractions = ss.data.age_split(self.edges, world.ages, world.counts)
+            self.guessed['fractions'] = world.guess
         elif all(isinstance(v, (bool, np.bool_)) for v in self.labels): # e.g. vaccinated=[False, True]
-            split = self.first()
-            self.guessed['split'] = f'everyone at {self.labels[0]}, the first level'
+            fractions = self.first()
+            self.guessed['fractions'] = f'everyone at {self.labels[0]}, the first level'
         else:
-            split = np.ones(self.n)/self.n
-            self.guessed['split'] = 'equal across levels'
-        self.split = split
+            fractions = np.ones(self.n)/self.n
+            self.guessed['fractions'] = 'equal across levels'
+        self.fractions = fractions
         return
 
     def worth(self):
@@ -178,7 +178,7 @@ class Strat:
     def draw(self, sim, uids, rvs):
         """ A level for each of some agents, from uniform random numbers: in proportion to the split, or to its row for each agent's levels of the other dimensions """
         if getattr(self, 'cond', None) is None:
-            return np.minimum(np.searchsorted(np.cumsum(self.split), rvs, side='right'), self.n - 1)
+            return np.minimum(np.searchsorted(np.cumsum(self.fractions), rvs, side='right'), self.n - 1)
         coords = sim.groups.group_coords[sim.groups.group_raw()[uids]]
         cdf = np.cumsum(np.stack([self.shares(coords, np.full(len(uids), level)) for level in range(self.n)], axis=1), axis=1)
         return np.minimum((cdf <= rvs[:, None]).sum(axis=1), self.n - 1)
@@ -194,7 +194,7 @@ class Strat:
         d = self.dim
         levels = coords[:, d] if levels is None else levels
         if getattr(self, 'cond', None) is None:
-            return self.split[levels]
+            return self.fractions[levels]
         ds, grid = self.cond
         return grid[tuple(levels if dd == d else coords[:, dd] for dd in ds)]
 
@@ -272,7 +272,7 @@ class Strat:
     def same_as(self, other):
         """ Whether another stratification is this one given again: the same levels, kind, split, adjustments, and states """
         same = self.same_levels(other) and self.kind == other.kind and self.states == other.states and self.where == other.where
-        same = same and np.allclose(self.split, other.split) and list(self.adjust.keys()) == list(other.adjust.keys())
+        same = same and np.allclose(self.fractions, other.fractions) and list(self.adjust.keys()) == list(other.adjust.keys())
         return same and all(np.allclose(self.adjust[key], other.adjust[key]) for key in self.adjust)
 
 
@@ -356,7 +356,7 @@ def transfer(rate=None, dur=None, p=None, states=None, name=None, label=None, in
         ss.transfer(risk=('low', 'high'), rate=ss.peryear(0.1))
         ss.transfer(vaccinated=True, rate=ss.peryear(0.2))
         ss.transfer(increment=dict(immunity=-1), rate=ss.peryear(0.5)) # A counter, down a level at a time
-        ss.transfer(method=('none', ['pill', 'iud']), p=[0.6, 0.4], dur=ss.lognorm_ex(ss.years(2), ss.years(1))) # To one of two levels, after a time drawn for each person
+        ss.transfer(method=('none', ['pill', 'iud']), p=[0.6, 0.4], dur=ss.lognormal(ss.years(2), ss.years(1))) # To one of two levels, after a time drawn for each person
         ```
     """
     opts = [key for key in kwargs if key in ss.interventions.delivery_keys + ['disease']]
@@ -387,14 +387,14 @@ def transfer_stages(sim, mod, tf, strat):
         levels = [i for i,j in enumerate(strat.shifted(tf.increment)) if i != j]
     else:
         levels = [strat.index(tf.src)] if tf.src is not None else [i for i in range(strat.n) if i != strat.index(tf.dst)]
-    out = Strat(f'{tf.name}_stage', [f'stage {i+1}' for i in range(k)], split=[1.0] + [0.0]*(k - 1), states=tf.states, where={tf.dim:levels})
+    out = Strat(f'{tf.name}_stage', [f'stage {i+1}' for i in range(k)], fractions=[1.0] + [0.0]*(k - 1), states=tf.states, where={tf.dim:levels})
     out.owner = mod.name
     out.stages_of = (mod.name, tf.name)
     out.dwell = sc.obj(mean=mean, std=std, k=k, family=type(raw).__name__, exact=trans.exact_stages(raw) is not None) # For the note on how close the stages are: see ss.solvers.Engine.note_stages()
     return out
 
 
-strat_options = ['split', 'adjust', 'kind', 'states', 'where', 'mobility']
+strat_options = ['fractions', 'adjust', 'kind', 'states', 'where', 'mobility']
 place_names = ['patch', 'region', 'district', 'county', 'province', 'place', 'location'] # Names that suggest places, which a list of names alone does not make (see Strat)
 strat_kinds = ['age', 'space', 'plain'] # The kinds stratify() takes (a strain dimension is made by ss.Strains, and a disease one by the solvers)
 
@@ -517,17 +517,17 @@ class Groups(sc.prettyobj):
                     if not strat.same_levels(other):
                         raise ValueError(f'"{mod.name}" is stratified by "{strat.name}" with levels {strat.labels}, but another module or the sim uses {other.labels}.\n'
                                                        f'     A property of people has the same groups for every module; stratify the sim instead: sim.stratify({strat.name}=[...]).')
-                    elif 'split' not in strat.guessed and strat.joint is None and not np.allclose(strat.split, other.split): # An explicit split is used, whichever stratification it is on
-                        if 'split' not in other.guessed:
-                            raise ValueError(f'"{mod.name}" is stratified by "{strat.name}" with split {strat.split.tolist()}, but another module or the sim gives it the split {other.split.tolist()}; give it once.')
-                        other.split = strat.split
-                        other.guessed.pop('split')
+                    elif 'fractions' not in strat.guessed and strat.joint is None and not np.allclose(strat.fractions, other.fractions): # An explicit split is used, whichever stratification it is on
+                        if 'fractions' not in other.guessed:
+                            raise ValueError(f'"{mod.name}" is stratified by "{strat.name}" with split {strat.fractions.tolist()}, but another module or the sim gives it the split {other.fractions.tolist()}; give it once.')
+                        other.fractions = strat.fractions
+                        other.guessed.pop('fractions')
                 else:
                     strats[strat.name] = strat
             for tf in mod.graph.transfers.values(): # A boolean coordinate that does not exist yet is created, with everyone starting False
                 if tf.dim not in strats:
                     if isinstance(tf.dst, bool):
-                        strats[tf.dim] = Strat(tf.dim, [False, True], split=[1.0, 0.0])
+                        strats[tf.dim] = Strat(tf.dim, [False, True], fractions=[1.0, 0.0])
                         mod.graph.strats.append(strats[tf.dim])
                     else:
                         raise sc.KeyNotFoundError(f'the transfer "{tf.name}" moves people along "{tf.dim}", but the model is not stratified by it. Add e.g. {mod.name}.stratify({tf.dim}=[...]).')
@@ -552,9 +552,9 @@ class Groups(sc.prettyobj):
         moved += [dim for mod in sim.pars.interventions.values() for dim in list(getattr(mod, 'move', None) or {}) + list(getattr(mod, 'increment', None) or {})]
         for name in moved:
             strat = strats.get(name)
-            if strat is not None and strat.guessed.get('split') == 'equal across levels':
-                strat.split = strat.first()
-                strat.guessed['split'] = f'everyone at {strat.labels[0]}, the first level, since people are moved between its levels'
+            if strat is not None and strat.guessed.get('fractions') == 'equal across levels':
+                strat.fractions = strat.first()
+                strat.guessed['fractions'] = f'everyone at {strat.labels[0]}, the first level, since people are moved between its levels'
         for strat in self.cross_strats:
             if strat.name in strats:
                 raise ValueError(f'the sim has a dimension called "{strat.name}", which is also the name of a disease whose states are tracked jointly with another\'s; rename one of them.')
@@ -563,18 +563,18 @@ class Groups(sc.prettyobj):
         mixed = {dim for net in sim.pars.networks.values() for dim in (getattr(net, 'dims', None) or (getattr(net, 'full', None) or {}).get('dims') or [])} # Dimensions with contacts of their own (a matrix over several together keeps them in net.full)
         for strat in self.strats: # A name like patch= does not make places: say so, since people at its levels mix as one population (unless contacts say otherwise)
             if getattr(strat, 'like_places', False) and strat.name not in mixed:
-                ss.note(f'"{strat.name}" is given only names, so its levels are groups whose people mix as one population, not places; to make them places, give kind="space" or a geography, e.g. stratify({strat.name}=ss.geo.geography(names=[...], pop=[...]))', sim=sim)
+                ss.note(f'"{strat.name}" is given only names, so its levels are groups whose people mix as one population, not places; to make them places, give kind="space" or a geography, e.g. stratify({strat.name}=ss.geo.geography(names=[...], populations=[...]))', sim=sim)
         named = getattr(sim, 'named_people', None)
         given = getattr(sim, 'given_pyramid', None)
         for strat in self.strats: # Age groups with no split of their own take that of a named population, or of the people given to a compartmental run
-            if (named is not None or given is not None) and strat.kind == 'age' and strat.edges is not None and strat.guessed.get('split') == ss.data.world.guess:
+            if (named is not None or given is not None) and strat.kind == 'age' and strat.edges is not None and strat.guessed.get('fractions') == ss.data.world.guess:
                 ages, counts = (named.ages, named.counts) if named is not None else given
-                strat.split = ss.data.age_split(strat.edges, ages, counts)
-                strat.split_from = 'people'
-                strat.guessed.pop('split')
-        pops = [strat for strat in self.strats if strat.geo is not None and strat.geo.pop is not None]
+                strat.fractions = ss.data.age_split(strat.edges, ages, counts)
+                strat.fractions_from = 'people'
+                strat.guessed.pop('fractions')
+        pops = [strat for strat in self.strats if strat.geo is not None and strat.geo.populations is not None]
         if len(pops) == 1 and 'total_pop' not in sim.given and sim.pop_from is None: # Places with populations, and no other population size: their total
-            sim.pars.total_pop = float(pops[0].geo.pop.sum())
+            sim.pars.total_pop = float(pops[0].geo.populations.sum())
             sim.pars.pop_scale = sim.pars.total_pop/sim.pars.n_agents
             sim.pop_from = f'the places of "{pops[0].name}"'
         self.group_shape = tuple(strat.n for strat in self.strats)
@@ -587,10 +587,10 @@ class Groups(sc.prettyobj):
             strat.dim = d
         joints = [strat for strat in self.strats if strat.joint is not None and strat.states is None] # A split over several dimensions of some states only is the share entering each level: see below
         if len(joints) > 1:
-            errormsg = 'Only one split= can cover several dimensions at once'
+            errormsg = 'Only one fractions= can cover several dimensions at once'
             raise ValueError(errormsg)
         self.joint = None # For a split over several dimensions at once: their positions, and the share of people at each combination of their levels
-        for strat in [strat for strat in self.strats if strat.joint is not None and strat.name not in strat.joint.dims]: # E.g. split=ss.by(sex=dict(female=[...], male=[...]))
+        for strat in [strat for strat in self.strats if strat.joint is not None and strat.name not in strat.joint.dims]: # E.g. fractions=ss.by(sex=dict(female=[...], male=[...]))
             others = sc.strjoin(strat.joint.dims)
             errormsg = (f'The split of "{strat.name}" is given by {others} only; a split over several dimensions is over all of them, including "{strat.name}" itself: '
                         f'ss.by(table, dims=[{", ".join(repr(d) for d in strat.joint.dims)}, {strat.name!r}]), whose table has one row for each level of {others} and one column for each level of "{strat.name}", '
@@ -605,27 +605,27 @@ class Groups(sc.prettyobj):
                 totals = grid.sum(axis=tuple(j for j in range(len(ds)) if j != a), keepdims=True)
                 if np.allclose(totals, 1):
                     within = ages
-                    grid = grid*self.strats[ds[a]].split.reshape([-1 if j == a else 1 for j in range(len(ds))])
+                    grid = grid*self.strats[ds[a]].fractions.reshape([-1 if j == a else 1 for j in range(len(ds))])
             grid = grid/grid.sum()
             for i,d in enumerate(ds): # Each dimension's own split is the total over the others
                 if i not in within:
                     strat, total = self.strats[d], grid.sum(axis=tuple(j for j in range(len(ds)) if j != i))
-                    if strat.joint is None and strat.split_given and 'split' not in strat.guessed and not np.allclose(strat.split, total, atol=1e-6): # The given split would otherwise be replaced
+                    if strat.joint is None and strat.fractions_given and 'fractions' not in strat.guessed and not np.allclose(strat.fractions, total, atol=1e-6): # The given split would otherwise be replaced
                         others = [self.strats[dd].name for dd in ds if dd != d]
-                        raise ValueError(f'"{strat.name}" is given the split {np.round(strat.split, 4).tolist()}, but the split over {sc.strjoin(self.strats[dd].name for dd in ds)} gives it {np.round(total, 4).tolist()}: '
+                        raise ValueError(f'"{strat.name}" is given the split {np.round(strat.fractions, 4).tolist()}, but the split over {sc.strjoin(self.strats[dd].name for dd in ds)} gives it {np.round(total, 4).tolist()}: '
                                                        f'a split over several dimensions is the share at each combination of their levels. For rows that are the shares of {sc.strjoin(others)} given "{strat.name}", '
-                                                       f'multiply them by the share at each level of "{strat.name}" ({np.round(strat.split, 4).tolist()}) first, or leave out one of the two splits.')
-                    strat.split = total
-                    self.strats[d].guessed.pop('split', None)
+                                                       f'multiply them by the share at each level of "{strat.name}" ({np.round(strat.fractions, 4).tolist()}) first, or leave out one of the two splits.')
+                    strat.fractions = total
+                    self.strats[d].guessed.pop('fractions', None)
                     if within:
-                        self.strats[d].guessed['split'] = 'within each age group (the ages are kept), since the split over age has rows that each sum to 1'
+                        self.strats[d].guessed['fractions'] = 'within each age group (the ages are kept), since the split over age has rows that each sum to 1'
             self.joint = (ds, grid)
             split *= grid[tuple(self.group_coords[:, d] for d in ds)]
             born = grid[tuple(0 if i in ages else slice(None) for i in range(len(ds)))] # Newborns are in the youngest age group, so take its share of the others (or everyone's, if it has nobody)
             born = born if born.sum() > 0 else grid.sum(axis=tuple(ages))
             births *= (born/born.sum())[tuple(self.group_coords[:, d] for i,d in enumerate(ds) if i not in ages)]
         for d,strat in enumerate(self.strats):
-            share = strat.split[self.group_coords[:, d]]
+            share = strat.fractions[self.group_coords[:, d]]
             if self.joint is None or d not in self.joint[0]:
                 split *= share
             if strat.kind == 'age':
@@ -642,10 +642,10 @@ class Groups(sc.prettyobj):
                 totals = grid.sum(axis=axis, keepdims=True)
                 grid = np.divide(grid, totals, out=np.full(grid.shape, 1/strat.n), where=totals>0)
                 strat.cond = (ds, grid)
-                weights = np.prod([self.strats[dd].split[self.group_coords[:, dd]] for dd in ds if dd != d], axis=0) # The split overall, for anything that has no group to go by
+                weights = np.prod([self.strats[dd].fractions[self.group_coords[:, dd]] for dd in ds if dd != d], axis=0) # The split overall, for anything that has no group to go by
                 split_all = np.bincount(self.group_coords[:, d], weights=weights*strat.shares(self.group_coords), minlength=strat.n)
-                strat.split = split_all/split_all.sum()
-                strat.guessed.pop('split', None)
+                strat.fractions = split_all/split_all.sum()
+                strat.guessed.pop('fractions', None)
         self.init_ragged()
         self.group_split = self.fold(split)
         self.birth_split = self.fold(births)
@@ -654,8 +654,8 @@ class Groups(sc.prettyobj):
         for strat in self.strats: # Each property that people do not already have gets a distribution to assign it
             if strat.kind != 'age':
                 setattr(sim, f'rng_strat_{strat.name}', ss.random(name=f'rng_strat_{strat.name}'))
-        if 'use_aging' not in sim.given: # People age if and only if they are born or die, unless told otherwise (said in ss.Sim.init(), once the length of the run is known)
-            sim.pars.use_aging = sim.has_demography()
+        if 'aging' not in sim.given: # People age if and only if they are born or die, unless told otherwise (said in ss.Sim.init(), once the length of the run is known)
+            sim.pars.aging = sim._has_demography()
         return
 
     def check_used(self):
@@ -774,7 +774,7 @@ class Groups(sc.prettyobj):
             levels = self.group_coords[:, d]
             if self.group_fold is not None and not self.group_inside[:, d].all():
                 strat = self.strats[d]
-                extra = np.zeros_like(np.take(grid, [0], axis=i)) if count else np.average(grid, axis=i, weights=strat.split, keepdims=True)
+                extra = np.zeros_like(np.take(grid, [0], axis=i)) if count else np.average(grid, axis=i, weights=strat.fractions, keepdims=True)
                 grid = np.concatenate([grid, extra], axis=i)
                 levels = np.where(self.group_inside[:, d], levels, strat.n)
             index.append(levels)
@@ -1025,7 +1025,7 @@ class Groups(sc.prettyobj):
                 self.set_sex(uids)
             elif strat.kind != 'age' and d not in joint and strat.cond is None: # Exactly the split, rounded to whole agents, in a random order
                 order = np.argsort(getattr(sim, f'rng_strat_{strat.name}').rvs(uids), kind='stable')
-                counts = ss.solvers.Compartmental.round_preserving(strat.split*len(uids)).astype(int)
+                counts = ss.solvers.Compartmental.round_preserving(strat.fractions*len(uids)).astype(int)
                 levels = np.repeat(np.arange(strat.n, dtype=level_dtype(strat.n)), counts) # As they are kept, to save memory
                 people[strat.attr][uids[order]] = strat.value(levels)
         if joint:
@@ -1081,7 +1081,7 @@ class Groups(sc.prettyobj):
             if strat.cond is not None:
                 people[strat.attr][uids] = strat.value(strat.draw(sim, uids, rvs))
             else:
-                people[strat.attr][uids] = strat.value(np.minimum(np.searchsorted(np.cumsum(strat.split), rvs, side='right'), strat.n - 1))
+                people[strat.attr][uids] = strat.value(np.minimum(np.searchsorted(np.cumsum(strat.fractions), rvs, side='right'), strat.n - 1))
         self.groups_changed(uids)
         return
 

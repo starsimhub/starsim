@@ -27,7 +27,7 @@ An odin model is R code in odin's DSL (one `.R` file, or the body of `odin::odin
 | Another `if (c) a else b` in a rate | `ss.timeseries` (a condition on the time), `where=`, or a comparison of counts (`(Q.n < K)`) | no |
 | A state at its own level in a stratified model with no matrix (`beta * S[i] * I[i] / N[i]`) | A contact matrix by the dimension, `networks=ss.contacts(np.eye(n))` | no |
 | Arrays over levels with no flows between them (patches) | `stratify(patch=[...], kind='space')`, with `ss.by(patch=[...])` for parameters that differ | no |
-| `interpolate()`, `t`/`time`/`step` | `ss.timeseries({t0: v0, ...}, mode='linear')` as a parameter's value | no |
+| `interpolate()`, `t`/`time`/`step` | `ss.timeseries({t0: v0, ...}, interpolation='linear')` as a parameter's value | no |
 | `output(x)` | A result on the disease, e.g. `prev = I / (S + I + R)` | no |
 
 ## What needs care

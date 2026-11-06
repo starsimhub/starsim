@@ -43,7 +43,7 @@ sirs = ss.Disease(
     init_n    = dict(I=10),
     name      = 'sirs',
 )
-sim = ss.Sim(sirs, total_pop=1000, unit='day', start=0, stop=41, dt=1, solver='ode', use_aging=False, verbose=0).run()
+sim = ss.Sim(sirs, total_pop=1000, unit='day', start=0, stop=41, dt=1, solver='ode', aging=False, verbose=0).run()
 res = sim.results.sirs
 print(f'At t=40: S = {res.S[40]:.2f} (epipack: 411.87), I = {res.I[40]:.2f} (40.71), R = {res.R[40]:.2f} (547.42)')
 sim.plot()

@@ -79,7 +79,7 @@ sir = ss.Disease(
     init_n          = dict(I=10),
 )
 sir.stratify(age=['young', 'old'])
-sir.stratify(location=['urban', 'rural'], split=[0.7, 0.3], adjust={'infection_death': [1, 3]}) # Rural people have worse health care
+sir.stratify(location=['urban', 'rural'], fractions=[0.7, 0.3], adjust={'infection_death': [1, 3]}) # Rural people have worse health care
 
 mixing = ss.contacts(dict(age=[[0.2, 0.3], [0.5, 0.7]], location=[[0.8, 0.2], [0.2, 0.8]]))
 sim = ss.Sim(sir, networks=mixing, total_pop=1000, dt=0.1, stop=20, verbose=0)
@@ -123,8 +123,8 @@ These are from Starsim's switching demo for summer2 users (`tests/switching/test
 | summer2's sigmoidal scale-up | **Not yet**: `ss.timeseries` has constant, linear, and cosine interpolation, so the sigmoid is sampled into a time series |
 | A plain number times a time series (`1.5 * ss.timeseries(...)`) | **Works**. A parameter with no name inline (`ss.par(1.5) * ss.timeseries(...)`) raises a `ValueError` asking for one: give it as `ss.par(1.5, name='k')`, or assign it to a variable first |
 | The same model as a stochastic model or as agents | **Works**: `solver='binomial'`, `'gillespie'`, or `'abm'`; at a yearly step the stochastic solvers can differ a lot from the ODE, and `sim.check_dt()` shows how much a smaller step changes the results |
-| Interventions with costs (active case finding) | **Works**: `ss.treat(cure=0.7, transition='detection', cost=5, where=I, coverage=0.5, at=[2026, 2027])` |
-| Contact matrices and populations by country | **Works**: `ss.contacts('Philippines')` and `ss.people('Philippines', year=2021)` are bundled |
+| Interventions with costs (active case finding) | **Works**: `ss.treat(cure=0.7, moves='detection', cost=5, where=I, coverage=0.5, at=[2026, 2027])` |
+| Contact matrices and populations by country | **Works**: `ss.contacts('Philippines')` and `ss.population('Philippines', year=2021)` are bundled |
 
 ## Bringing your model in
 

@@ -253,7 +253,7 @@ def test_standard_prevalence():
     sc.heading('Testing the standard prevalence by group, as a ratio')
     for solver in ['ode', 'binomial', 'abm']:
         sis = ss.SIS(beta=ss.peryear(0.3), init_prev=0.05)
-        sis.stratify(risk=['low', 'high'], split=[0.8, 0.2], adjust=dict(infection=[0.5, 3]))
+        sis.stratify(risk=['low', 'high'], fractions=[0.8, 0.2], adjust=dict(infection=[0.5, 3]))
         res = ss.Sim(sis, solver=solver, total_pop=10_000, n_agents=10_000, start=2000, stop=2010, verbose=0).run().results.sis
         high, low = res.prevalence.select(risk='high'), res.prevalence.select(risk='low')
         assert high[-1] > 2*low[-1] > 0, f'{solver}: {high[-1]:.3f} against {low[-1]:.3f}'
@@ -327,7 +327,7 @@ def cohort(solver, p=0.3, data=None):
     """ 10,000 people who leave P after 5 days on average: a share p to C, and the rest to R """
     P, C, R = ss.states('P C R')
     course = ss.Transition(P, [C, R], dur=ss.days(5), p=[p, None])
-    dis = ss.Disease(P, C, R, course=course, cases=ss.outcome(0.5*course.C), first='P', name='dis')
+    dis = ss.Disease(P, C, R, course=course, cases=ss.outcome(0.5*course.C), default_state='P', name='dis')
     dis.stratify(age=ss.years([0, 40]))
     return ss.Sim(dis, n_agents=10_000, solver=solver, unit='day', stop=60, data=data, verbose=0)
 
@@ -352,7 +352,7 @@ def test_destinations():
     # A data column named for a destination is matched to it, and fitted
     truth = cohort('ode').run().results.dis.course.C
     data = pd.DataFrame({'course.C': truth.values[1:]}, index=truth.timevec[1:]) # Daily, as the flow is
-    fit = cohort('ode', p=ss.par(0.5, bounds=[0.05, 0.95], name='p'), data=data).fit(gof='rmse')
+    fit = cohort('ode', p=ss.par(0.5, bounds=[0.05, 0.95], name='p'), data=data).fit(loss='rmse')
     assert np.isclose(fit.table.best.iloc[0], 0.3, rtol=1e-2)
     fig = fit.plot(residuals=True) # The residuals below the model and the data, lined up as the fit compares them
     expected, model = ss.results.compare(fit.sim)['course.C']
@@ -412,12 +412,12 @@ def test_plot():
     S, I, R = ss.states('S I R')
     make = lambda data=None: ss.Sim(ss.Disease(infection=S >> I @ 0.3*I, recovery=I >> R @ ss.days(10), init_n=dict(I=5), name='sir'), data=data, total_pop=10_000, start='2025-01-01', stop='2025-04-01', verbose=0)
     truth = make().run()
-    data = truth.to_data('sir.infection', resample='week').iloc[:6] # The first six weeks
-    exact = truth.to_data('sir.infection', resample='week', noise=None)['sir.infection'].to_numpy()
-    over = np.array([truth.to_data('sir.infection', resample='week', noise=ss.nbinom(n=2), seed=s)['sir.infection'].to_numpy() for s in range(200)]) # Negative-binomial noise, as the likelihood of a fit takes it
+    data = truth.to_synthetic_data('sir.infection', resample='week').iloc[:6] # The first six weeks
+    exact = truth.to_synthetic_data('sir.infection', resample='week', noise=None)['sir.infection'].to_numpy()
+    over = np.array([truth.to_synthetic_data('sir.infection', resample='week', noise=ss.nbinom(n=2), seed=s)['sir.infection'].to_numpy() for s in range(200)]) # Negative-binomial noise, as the likelihood of a fit takes it
     assert np.allclose(over.mean(axis=0), exact, rtol=0.25) and np.allclose(over.var(axis=0)[3:9], (exact + exact**2/2)[3:9], rtol=0.4)
     with pytest.raises(ValueError, match='as a probability'): # A count is not a probability (it drew n every time)
-        truth.to_data('sir.infection', noise=ss.binom(n=100))
+        truth.to_synthetic_data('sir.infection', noise=ss.binom(n=100))
     sim = make(data).run()
     ax = sim.plot('sir.infection').axes[0]
     assert len(ax.lines[0].get_xdata()) == 13 # The 13 whole weeks of the run's 91 steps (6 with data)

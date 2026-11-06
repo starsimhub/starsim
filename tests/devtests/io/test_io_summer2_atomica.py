@@ -35,7 +35,7 @@ def seird_sim():
         births    = ss.birth(S, rate=ss.peryear(0.02)),
         infection = ss.Transition(S, E, rate=ss.perday(0.4) * I),
         onset     = ss.Transition(E, I, dur=ss.days(4)),
-        outcome   = ss.Transition(I, [R, D], dur=ss.lognorm_ex(ss.days(8), ss.days(3)), p=[None, 0.1]),
+        outcome   = ss.Transition(I, [R, D], dur=ss.lognormal(ss.days(8), ss.days(3)), p=[None, 0.1]),
         deaths    = ss.death([S, E, I, R], rate=ss.peryear(0.01)),
         init_prev = 0.01, name='seird')
     return ss.Sim(dis, total_pop=1e5, unit='day', stop=120, verbose=0)
@@ -105,7 +105,7 @@ def test_summer2():
     )
     seir.stratify(age=['young', 'old'], adjust={'incidence': [1, 1.1]})
     seir.stratify(clinical=['asymptomatic', 'symptomatic', 'isolated', 'hospital'], states=['I'],
-                  split=ss.by([[0.4, 0.3, 0.2, 0.1], [0.3, 0.3, 0.2, 0.3]], dims=['age', 'clinical']),
+                  fractions=ss.by([[0.4, 0.3, 0.2, 0.1], [0.3, 0.3, 0.2, 0.3]], dims=['age', 'clinical']),
                   adjust={'infection_death': [0, 1, 1, 2], 'rel_trans': [0.5, 1, 0.2, 0.1]})
     hand = ss.Sim(seir, total_pop=1000, dt=0.1, stop=20, verbose=0).run().results.seir
     for state in 'SEIR':

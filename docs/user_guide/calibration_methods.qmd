@@ -47,7 +47,7 @@ sir = ss.Disease(infection, I >> R @ dur_inf, cases, init=dict(I=0.002), name='s
 
 pars = dict(total_pop=10_000, unit='day', stop=120)
 truth = dict(beta=0.3, dur_inf=8)
-data = ss.Sim(sir, pars=dict(beta=0.3, dur_inf=ss.days(8)), solver='binomial', rand_seed=2, verbose=0, **pars).run().to_data('cases', resample='week')
+data = ss.Sim(sir, pars=dict(beta=0.3, dur_inf=ss.days(8)), solver='binomial', rand_seed=2, verbose=0, **pars).run().to_synthetic_data('cases', resample='week')
 
 deterministic = ss.Sim(sir, data=data, verbose=0, **pars)
 stochastic = ss.Sim(sir, data=data, solver='binomial', verbose=0, **pars)
@@ -93,7 +93,7 @@ fit.pars
 | Setting | Default | Meaning |
 |---|---|---|
 | `n_trials` | 100 | The number of sets of values to try |
-| `n_workers` | 1 | The number of processes running trials at once |
+| `workers` | 1 | The number of processes running trials at once |
 | `storage` | None | A file or database URL that keeps the trials, so a fit that stopped can be resumed |
 | Others | Optuna's | The keywords of `study.optimize()`, e.g. `timeout=600` |
 
@@ -239,7 +239,7 @@ Every method that `sim.fit(method=...)` takes, what it gives, which kinds of mod
 | `'slsqp'` | Best fit | Yes | No | No | No | Gradients | As L-BFGS-B | As L-BFGS-B |
 | `'optuna'` | Best fit | Yes | Yes | Yes (default) | Yes (default) | Nothing | 100 trials, of 4 runs each (1 for agents) | A stochastic or agent model, or a first broad search |
 | `'if2'` | Maximum-likelihood best fit | No | No | Yes | No | A likelihood; parameters that are rates | 4 chains × 50 passes × 1,000 particles (each particle a run, run together) | The maximum likelihood of a stochastic model |
-| `'nuts'` | Posterior | Yes | Slowly, with `nopython=False` | No | No | A likelihood; gradients | 4 chains × 1,000 steps, each tens of runs with gradients | A posterior of an ODE, whose data have little chance in them beyond the likelihood's |
+| `'nuts'` | Posterior | Yes | Slowly, with `require_jax=False` | No | No | A likelihood; gradients | 4 chains × 1,000 steps, each tens of runs with gradients | A posterior of an ODE, whose data have little chance in them beyond the likelihood's |
 | `'pmcmc'` | Posterior | No | No | Yes | No | A likelihood | 4 chains × 2,000 draws × tens to hundreds of particles | A posterior of a stochastic compartmental model, with its process noise |
 | `'abc-smc'` | Approximate posterior | Yes | Yes | Yes | Yes | A goodness of fit (no likelihood) | 200 particles × 8 generations, at one to several runs each | A posterior of an agent model, or with no likelihood |
 | A list | What its last stage gives | | | | | What each stage needs | The sum of its stages | A broad search, then a local polish |
@@ -259,4 +259,4 @@ for method, func in ss.fit.methods.items():
 pd.DataFrame(rows).set_index('method')
 ```
 
-A default of `None` is chosen by the fit: for `scan`, 10 points per parameter, up to 100; for `restarts`, 3 searches (1 for one parameter of a deterministic model); for `particles`, 200 for `'abc-smc'` and chosen in each chain's warm-up for `'pmcmc'`; for `n_workers`, 1. What each setting means is in the API docs of `ss.fit.fit_scipy()`, `fit_optuna()`, `fit_if2()`, `fit_nuts()`, `fit_pmcmc()`, and `fit_abc_smc()` (see [ss.fit](../api/fit.qmd)). Their samplers are also callable directly, for a log-density of your own (such as `sim.log_density()`; see [Gradients](calibration_gradients.qmd#the-log-density)): `ss.fit.nuts()`, `ss.fit.pmmh()`, and `ss.fit.abc_smc()`.
+A default of `None` is chosen by the fit: for `scan`, 10 points per parameter, up to 100; for `restarts`, 3 searches (1 for one parameter of a deterministic model); for `particles`, 200 for `'abc-smc'` and chosen in each chain's warm-up for `'pmcmc'`; for `workers`, 1. What each setting means is in the API docs of `ss.fit.fit_scipy()`, `fit_optuna()`, `fit_if2()`, `fit_nuts()`, `fit_pmcmc()`, and `fit_abc_smc()` (see [ss.fit](../api/fit.qmd)). Their samplers are also callable directly, for a log-density of your own (such as `sim.log_density()`; see [Gradients](calibration_gradients.qmd#the-log-density)): `ss.fit.nuts()`, `ss.fit.pmmh()`, and `ss.fit.abc_smc()`.

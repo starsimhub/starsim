@@ -521,7 +521,7 @@ def load_odin(filename, unit='day', stop=None, pars=None, verbose=None, **kwargs
                 src.skip(f'flows between levels ({base})', f'{sc.strjoin(ss_)} move from each level of the index to the next at "{base}", which is not one rate for each level ending in 0, so it was not read as aging')
         if strat is not None:
             if shares.sum() > 0:
-                strat['split'] = list(shares/shares.sum())
+                strat['fractions'] = list(shares/shares.sum())
             src.stratify(**strat)
         if mixing is not None and strat is not None: # Age groups with a contact matrix between them
             src.config.networks = Code(f'ss.contacts({mixing[1].tolist()!r})')
@@ -529,7 +529,7 @@ def load_odin(filename, unit='day', stop=None, pars=None, verbose=None, **kwargs
             src.skip(f'contact matrix {mixing[0]}', 'the levels it is between are not a stratification, so it was not translated')
     elif mixing is not None:
         levels = [str(lev) for lev in range(1, n_levels + 1)]
-        src.stratify(**{dim:levels}, split=list(shares/shares.sum()))
+        src.stratify(**{dim:levels}, fractions=list(shares/shares.sum()))
         src.config.networks = Code(f'ss.contacts({mixing[1].tolist()!r}' + (f', dims={dim!r}' if dim != 'age' else '') + ')')
         notes.append(f'the arrays ({sc.strjoin(arrayed)}) over {n_levels} levels of {dim}, coupled by the contact matrix {mixing[0]}: stratified by {dim} ("1" to "{n_levels}"), with ss.contacts({mixing[0]}, dims={dim!r})')
     elif arrayed and not copies:

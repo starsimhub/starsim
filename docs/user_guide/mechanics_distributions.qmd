@@ -23,7 +23,7 @@ import starsim as ss
 durations = {
     'Exponential':       ss.expon(scale=ss.days(10)),
     'Erlang, 4 stages':  ss.erlang(k=4, mean=ss.days(10)),
-    'Lognormal, std 2':  ss.lognorm_ex(mean=ss.days(10), std=ss.days(2)),
+    'Lognormal, std 2':  ss.lognormal(mean=ss.days(10), std=ss.days(2)),
 }
 plt.figure()
 for label, dist in durations.items():
@@ -41,8 +41,8 @@ In a model, a distribution of durations goes after `@`, or as `dur=`:
 
 ```python
 onset    = E >> I @ ss.erlang(k=4, mean=ss.days(10))
-recovery = I >> R @ ss.lognorm_ex(mean=ss.days(8), std=ss.days(2))
-recovery = I >> R @ ss.lognorm_ex(mean=8, std=2, unit='days') # The same: the unit given once
+recovery = I >> R @ ss.lognormal(mean=ss.days(8), std=ss.days(2))
+recovery = I >> R @ ss.lognormal(mean=8, std=2, unit='days') # The same: the unit given once
 ```
 
 A distribution's unit is given on its parameters, as typed durations, or once with `unit=`, which applies to every parameter of it that is a time. As agents, each person draws their own duration when they enter the state. As compartments, there are no individuals to draw for, so an Erlang distribution is run exactly as `k` compartments in a row (stages), a fixed duration or a choice of whole numbers of steps (`ss.choice` of days, with daily steps) as one compartment for each step people have been in the state, which is exact, and any other distribution as Erlang stages with the same mean and standard deviation, with a note that says how many.
@@ -60,18 +60,16 @@ A value that differs by group, rather than at random between people, is better g
 | Uniform | `ss.uniform` | `low`, `high` | Between a minimum and a maximum |
 | Normal | `ss.normal` | `loc` (mean), `scale` (standard deviation) | |
 | Truncated normal | `ss.truncnorm` | `loc`, `scale`, `low`, `high` | A normal distribution between `low` and `high` |
-| Lognormal | `ss.lognorm_ex` | `mean`, `std` | Given by the mean and standard deviation of the distribution itself |
-| Lognormal (of the underlying normal) | `ss.lognorm_im` | `mean`, `sigma` | Given by the mean and standard deviation of the normal distribution of its logarithm |
+| Lognormal | `ss.lognormal` | `mean`, `std`; or `log_mean`, `log_std` | Given by the mean and standard deviation of the values, or of their logarithm |
 | Exponential | `ss.expon` | `scale` (the mean) | |
 | Gamma | `ss.gamma` | `a` (shape), `scale`; or `mean`, `std` | |
 | Erlang | `ss.erlang` | `k` (stages), `mean` | A gamma distribution with a whole-number shape; exact as compartments |
 | Weibull | `ss.weibull` | `c` (shape), `scale`, `loc` | |
-| Beta | `ss.beta_dist` | `a`, `b` | Between 0 and 1 |
-| Beta, by its mean | `ss.beta_mean` | `mean`, `var` | E.g. a probability that varies |
+| Beta | `ss.beta_dist` | `a`, `b`; or `mean`, `std` | Between 0 and 1, e.g. a probability that varies |
 | Poisson | `ss.poisson` | `lam` (the mean) | A count |
 | Negative binomial | `ss.nbinom` | `n`, `p` | A count with more spread than a Poisson |
 | Binomial | `ss.binom` | `n`, `p` | The number of successes in `n` trials; as a likelihood in [fitting](calibration_fitting.qmd), e.g. the positives among those tested |
-| Constant | `ss.constant` | `v` | The same value for everyone; a fixed duration |
+| Constant | `ss.constant` | `value` | The same value for everyone; a fixed duration |
 | Random integer | `ss.randint` | `low`, `high` | |
 | Bernoulli | `ss.bernoulli` | `p` | True with probability `p`: whether something happens to each person |
 | Choose n | `ss.choose_n` | `n`, `weights` | Exactly `n` people; see [below](#a-fixed-number-of-people) |
@@ -133,7 +131,7 @@ print('Mean age of the rest:', sim.people.age[not_chosen].mean().round(1))
 A distribution can be made, drawn from, and looked at on its own. Outside a sim, one with a unit draws in that unit, here days, and shows what it was made from:
 
 ```{python}
-dist = ss.lognorm_ex(mean=ss.days(5), std=ss.days(2))
+dist = ss.lognormal(mean=ss.days(5), std=ss.days(2))
 print(dist)
 print(dist.rvs(5)) # Five draws, in days
 print('Mean:', dist.dist.mean())
@@ -149,7 +147,7 @@ A distribution can round what it draws, which matters for numbers that must be w
 
 ```{python}
 sim = ss.Sim(n_agents=10, dt=ss.days(1), start='2025-01-01', dur=ss.days(30), verbose=0).init()
-dur = ss.lognorm_ex(ss.days(5), ss.days(2), round='nearest', name='Rounded duration')
+dur = ss.lognormal(ss.days(5), ss.days(2), round='nearest', name='Rounded duration')
 dur.init(sim=sim)
 
 print('Not rounded:', dur.rvs(sim.people.uid, round=False, reset=True).round(2))
@@ -202,7 +200,7 @@ def p_by_age(self, sim, uids):
 def make_sim(campaign=None):
     S, I, R = ss.states('S I R')
     measles = ss.Disease(S >> I @ 0.04*I, I >> R @ ss.days(8), init_prev=0.01, name='measles')
-    school = ss.RandomNet(name='school', n_contacts=10, age_range=[5, 15])
+    school = ss.RandomNet(name='school', n_contacts=10, where=(ss.person.age >= 5) & (ss.person.age < 15))
     community = ss.RandomNet(name='community', n_contacts=2)
     return ss.Sim(measles, networks=[school, community], interventions=campaign, n_agents=5000, stop=ss.days(200))
 

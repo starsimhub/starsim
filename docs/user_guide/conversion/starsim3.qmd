@@ -22,7 +22,7 @@ sim = ss.Sim(diseases=sis, networks=ss.RandomNet(n_contacts=4), n_agents=5000, s
 sim.run()
 ```
 
-In Starsim 4, the same disease is declared as states and transitions. Two things change meaning on the way. A bare number in a Starsim 3 `beta` dict was a probability per step, so here it is written `ss.prob(0.05, 'month')`; copied as a bare number, it would be a rate per year, 12 times too low at monthly steps. And a duration in a declared transition is exponential with that mean, unless a distribution is given, while Starsim 3's `ss.SIS` drew a lognormal `dur_inf`; `dur=ss.lognorm_ex(mean=ss.years(1))` keeps the old shape. Here the textbook exponential is used:
+In Starsim 4, the same disease is declared as states and transitions. Two things change meaning on the way. A bare number in a Starsim 3 `beta` dict was a probability per step, so here it is written `ss.prob(0.05, 'month')`; copied as a bare number, it would be a rate per year, 12 times too low at monthly steps. And a duration in a declared transition is exponential with that mean, unless a distribution is given, while Starsim 3's `ss.SIS` drew a lognormal `dur_inf`; `dur=ss.lognormal(mean=ss.years(1))` keeps the old shape. Here the textbook exponential is used:
 
 ```{python}
 import starsim as ss

@@ -296,7 +296,7 @@ pd.DataFrame.from_dict(docs, orient='index', columns=['What it gives'])
 | `pars` | none | Sets of values of the model's parameters, each a scenario of its own: a dict of lists, taken value by value, or a list of dicts |
 | `priors` | False | Draw `n_runs` sets of values from the parameters' priors (or bounds), on a Latin hypercube; or the draws themselves, e.g. from a posterior |
 | `parallel` | True | Run in separate processes; False runs one after the other |
-| `n_cpus` | all of them | The number of processes |
+| `workers` | one per CPU | The number of processes |
 | `shrink` | True | Remove the people from each sim once it has run, keeping the results |
 | `inplace` | True | Update the sims given (with no `n_runs` or `pars`) with their results; False runs copies |
 | `verbose` | the sims' own | How much each run prints; by default the MultiSim shows the progress of the runs |

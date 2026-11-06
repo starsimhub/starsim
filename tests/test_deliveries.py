@@ -54,10 +54,10 @@ def check_close(sims, func, rtol=0.1):
 def make_cascade(**kwargs):
     """ A rapid test every week for those not tested in four weeks, a PCR to confirm (with a delay), and treatment with limited capacity """
     rapid = ss.Diagnostic(sensitivity=0.8, specificity=0.95)
-    pcr = ss.Diagnostic(sensitivity=0.95, specificity=0.99, delay=ss.days(2))
-    screening = ss.screen(who=rapid.since >= ss.days(28), what=rapid, coverage=0.1, interval=ss.days(7), name='screening') # Named, since a subclass of ss.Sim may make them
-    confirm = ss.screen(who=screening.positive, what=pcr, coverage=0.9, name='confirm')
-    treatment = ss.treat(who=confirm.positive, what=ss.Treatment(cure=0.95), capacity=ss.perday(50), name='treatment')
+    pcr = ss.Diagnostic(sensitivity=0.95, specificity=0.99, result_delay=ss.days(2))
+    screening = ss.screen(who=rapid.since >= ss.days(28), product=rapid, coverage=0.1, every=ss.days(7), name='screening') # Named, since a subclass of ss.Sim may make them
+    confirm = ss.screen(on=screening.positive, product=pcr, coverage=0.9, name='confirm')
+    treatment = ss.treat(on=confirm.positive, product=ss.Treatment(cure=0.95), capacity=ss.perday(50), name='treatment')
     return [screening, confirm, treatment]
 
 
@@ -126,7 +126,7 @@ def test_applied():
     sc.heading('Testing that every modifier and product is applied, or refused when the sim is made')
     # Refused: an efficacy on a transition with several destinations
     P, C, R = ss.states('P C R')
-    hpv = ss.Disease(precin=ss.Transition(P, [C, R], dur=ss.years(2), p=[0.2, 0.8]), init=dict(P=1.0), first='P', name='hpv')
+    hpv = ss.Disease(precin=ss.Transition(P, [C, R], dur=ss.years(2), p=[0.2, 0.8]), init=dict(P=1.0), default_state='P', name='hpv')
     with pytest.raises(ValueError, match="'precin.C'"):
         ss.Sim(hpv, interventions=ss.vaccinate(ss.Vaccine(efficacy=dict(precin=0.5)), at=0), **kw).init()
 
@@ -155,9 +155,9 @@ def test_conditions():
     cond = (ppl.age < 15) & sir.S
     assert isinstance(cond, ss.conditions.Cond)
     assert str(cond) == '((people.age < 15) & sir.S)'
-    assert str((ss.ppl.age < 15) & sir.S) == str(cond) # The same condition with no people made
-    assert str(ppl.age + 1 > 3) == str(ss.ppl.age + 1 > 3) and str(ppl.age.isin([1, 2])) == str(ss.ppl.age.isin([1, 2])) # Arithmetic and isin() are lazy too
-    assert not hasattr(ss.People, 'age') # ss.People is the class only: the lazy references are ss.ppl
+    assert str((ss.person.age < 15) & sir.S) == str(cond) # The same condition with no people made
+    assert str(ppl.age + 1 > 3) == str(ss.person.age + 1 > 3) and str(ppl.age.isin([1, 2])) == str(ss.person.age.isin([1, 2])) # Arithmetic and isin() are lazy too
+    assert not hasattr(ss.People, 'age') # ss.People is the class only: the lazy references are ss.person
     with pytest.raises(TypeError):
         bool(cond)
 
@@ -209,7 +209,7 @@ def test_transfer():
         ss.transfer(vaccinated=True, coverage=0.7, at=[5])
 
     # From one level to another, given as an arrow
-    sir = make_sir().stratify(risk=['low', 'high'], split=[1, 0])
+    sir = make_sir().stratify(risk=['low', 'high'], fractions=[1, 0])
     sim = ss.Sim(sir, interventions=ss.Delivery(move=dict(risk=('low', 'high')), coverage=0.4, at=[5], name='riskier'), solver='ode', stop=10, **kw).run()
     assert np.isclose(sim.results.riskier.delivered[5], 0.4*kw['total_pop'], rtol=0.01)
     return sims
@@ -228,20 +228,20 @@ def test_deliver():
     def by_function(**kwargs):
         sir = make_sir()
         vaccine = ss.Vaccine(efficacy=0.9)
-        chosen = ss.vaccinate(vaccine, deliver=give, capacity=8000)
+        chosen = ss.vaccinate(vaccine, who=give, capacity=8000)
         return ss.Sim(sir, interventions=chosen, **kwargs)
     for solver in ['ode', 'abm']:
         sim = by_function(solver=solver, stop=20, **kw).run()
         assert np.isclose(sim.results.chosen.delivered.sum(), 8000) # Capped by the capacity
     with pytest.raises(ValueError):
-        ss.vaccinate(ss.Vaccine(efficacy=0.9), deliver=give, coverage=0.5)
+        ss.vaccinate(ss.Vaccine(efficacy=0.9), who=give, coverage=0.5)
 
     # A trigger: vaccinate while there are many infections
     def triggered(**kwargs):
         sir = make_sir()
         vaccine = ss.Vaccine(efficacy=0.9)
         many = lambda sim: sim.results.sir.I[sim.ti] > 2000 # At the start of the step
-        response = ss.vaccinate(vaccine, coverage=0.2, interval=1, where=many)
+        response = ss.vaccinate(vaccine, coverage=0.2, every=1, where=many)
         return ss.Sim(sir, interventions=response, **kwargs)
     sims = run_each(triggered)
     for sim in sims.values():
@@ -250,7 +250,7 @@ def test_deliver():
         assert len(given) and np.all(res.sir.I[given] > 2000)
 
     # Rounds a year apart on weekly steps fall a year apart, each on the first step of the year (they were 52 weeks apart, so 2005 had two)
-    yearly = ss.vaccinate(ss.Vaccine(efficacy=0.9), coverage=0.2, interval=ss.years(1), name='yearly')
+    yearly = ss.vaccinate(ss.Vaccine(efficacy=0.9), coverage=0.2, every=ss.years(1), name='yearly')
     sim = ss.Sim(make_sir(), interventions=yearly, start='2000-01-01', stop='2010-01-01', dt=ss.weeks(1), solver='ode', verbose=0).init()
     starts = [sim.t.tvec[ti] for ti in sorted(sim.interventions.yearly.round_tis)]
     assert [d.year for d in starts] == list(range(2000, 2010)) and all(d.month == 1 and d.day <= 7 for d in starts)
@@ -296,8 +296,8 @@ def test_loop_order():
     def make():
         test = ss.Diagnostic(sensitivity=0.9, specificity=0.98)
         drug = ss.Treatment(cure=0.95)
-        screen = ss.screen(test, coverage=0.2, interval=1)
-        treatment = ss.treat(drug, who=screen.positive)
+        screen = ss.screen(test, coverage=0.2, every=1)
+        treatment = ss.treat(drug, on=screen.positive)
         sim = ss.Sim(make_sir(), interventions=[screen, treatment], n_agents=5000, stop=60, verbose=0, unit='day')
         return sim, screen
     sim, screen = make()
@@ -404,7 +404,7 @@ def test_sensitivity_by_state():
         S, E, I, R = ss.states(4)
         seir = ss.Disease(S >> E @ 0.3*I, E >> I @ ss.days(4), I >> R @ ss.days(8), init=dict(I=0.01), name='seir').stratify(age=[0, 15])
         test = ss.Diagnostic(sensitivity=dict(I=ss.by(age=[0.5, 0.9]), E=0.2), specificity=1.0)
-        screening = ss.screen(test, coverage=0.5, interval=10, start=20)
+        screening = ss.screen(test, coverage=0.5, every=10, start=20)
         return ss.Sim(seir, interventions=screening, stop=60, **sc.mergedicts(dict(total_pop=50_000), kwargs))
     for solver,pars in [('ode', {}), ('abm', dict(n_agents=50_000))]:
         res = make(solver=solver, **kw, **pars).run().results
@@ -414,7 +414,7 @@ def test_sensitivity_by_state():
         print(f'{solver}: {res.screening.positive[ti]:.0f} positive, expected {expected:.0f}')
         assert np.isclose(res.screening.positive[ti], expected, rtol=0.05 if solver == 'ode' else 0.15)
     with pytest.raises(KeyError, match='which is not a state of "sis"'):
-        ss.Sim(make_sis(), interventions=ss.screen(ss.Diagnostic(sensitivity=dict(X=0.5)), interval=10), stop=20, **kw).run()
+        ss.Sim(make_sis(), interventions=ss.screen(ss.Diagnostic(sensitivity=dict(X=0.5)), every=10), stop=20, **kw).run()
     return res
 
 
@@ -423,7 +423,7 @@ def test_treat_any_transition():
     for solver,pars in [('ode', {}), ('abm', dict(n_agents=10_000))]:
         S, I, R, P = ss.states(4)
         sir = ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(10), protect=ss.Transition(S, P, rate=ss.perday(0)), init=dict(I=0.01), name='sir')
-        shield = ss.treat(ss.Treatment(transition='protect'), where=sir.S, coverage=0.5, at=[ss.days(0)])
+        shield = ss.treat(ss.Treatment(moves=sir.protect), where=sir.S, coverage=0.5, at=[ss.days(0)])
         res = ss.Sim(sir, interventions=shield, stop=100, solver=solver, **kw, **pars).run().results
         print(f'{solver}: {res.sir.protect.sum():.0f} protected')
         assert np.isclose(res.sir.protect.sum(), 0.5*0.99*kw['total_pop'], rtol=0.05)
@@ -455,8 +455,8 @@ def test_delay():
     def make(delay=ss.months(3), **kwargs):
         S, I = ss.states(2)
         sis = ss.Disease(infection=S >> I @ ss.peryear(2)*I, recovery=I >> S @ ss.years(1), cure=I >> S, init_prev=0.1, name='sis')
-        screening = ss.screen(ss.Diagnostic(sensitivity=0.9, specificity=0.95), coverage=0.3, interval=ss.months(3))
-        treatment = ss.treat(ss.Treatment(cure=0.9, transition='cure'), who=screening.positive, delay=delay)
+        screening = ss.screen(ss.Diagnostic(sensitivity=0.9, specificity=0.95), coverage=0.3, every=ss.months(3))
+        treatment = ss.treat(ss.Treatment(cure=0.9, moves=sis.cure), on=screening.positive, delay=delay)
         return ss.Sim(sis, interventions=[screening, treatment], start=2000, stop=2005, dt=ss.months(1), total_pop=20_000, verbose=0, **kwargs)
     check_agents(make) # Who is waiting is each person's own, so agents only, fixed or drawn
     check_agents(make, delay=ss.uniform(ss.months(1), ss.months(5)))
@@ -479,8 +479,8 @@ def test_delay_cycle():
         S, I = ss.states(2)
         sis = ss.Disease(infection=S >> I @ ss.peryear(0)*I, recovery=I >> S @ ss.years(1), init_prev=0, name='sis') # Nobody infected: every result negative
         entry = ss.screen(ss.Diagnostic(specificity=1, name='dx0'), at=[2001], name='entry')
-        retest = ss.screen(ss.Diagnostic(specificity=1, name='dx1'), who=entry.negative, delay=delay, name='retest')
-        confirm = ss.screen(ss.Diagnostic(specificity=1, name='dx2'), who=retest.negative, name='confirm')
+        retest = ss.screen(ss.Diagnostic(specificity=1, name='dx1'), on=entry.negative, delay=delay, name='retest')
+        confirm = ss.screen(ss.Diagnostic(specificity=1, name='dx2'), on=retest.negative, name='confirm')
         retest.trigger = entry.negative | (confirm.negative if loop == 'confirm' else retest.negative)
         mods = order(entry, retest, confirm) if order else [entry, confirm, retest]
         return ss.Sim(sis, interventions=mods, start=2000, stop=2005, dt=ss.months(1), n_agents=500, solver='abm', verbose=0).run()
@@ -492,8 +492,8 @@ def test_delay_cycle():
     assert np.array_equal(np.flatnonzero(res.retest.delivered), [24, 36, 48, 60])
     res = make(delay=ss.constant(0)).results # A wait drawn as zero ends on the next step
     assert np.array_equal(np.flatnonzero(res.retest.delivered)[:3], [13, 14, 15])
-    a = ss.screen(ss.Diagnostic(), interval=7, name='a') # Without a delay, a cycle still raises
-    b = ss.screen(ss.Diagnostic(), who=a.positive, name='b')
+    a = ss.screen(ss.Diagnostic(), every=7, name='a') # Without a delay, a cycle still raises
+    b = ss.screen(ss.Diagnostic(), on=a.positive, name='b')
     a.trigger = b.positive
     with pytest.raises(ValueError, match='cycle'):
         ss.Sim(make_sir(), interventions=[a, b], **kw)
@@ -506,8 +506,8 @@ def test_coded_disease():
         sir = ssl.AgentSIR(beta=ss.peryear(0.5), init_prev=0.1, dur_inf=ss.years(5), p_death=0.0, **kwargs)
         return ss.Sim(n_agents=5000, diseases=sir, networks='random', interventions=interventions, start=2000, stop=2010, verbose=0).run()
     base = make([]).results.agentsir.infected
-    screening = ss.screen(ss.Diagnostic(sensitivity=0.9, specificity=0.95), coverage=0.2, interval=ss.years(1), name='screening')
-    treatment = ss.treat(ss.Treatment(cure=0.8), who=screening.positive, name='treatment')
+    screening = ss.screen(ss.Diagnostic(sensitivity=0.9, specificity=0.95), coverage=0.2, every=ss.years(1), name='screening')
+    treatment = ss.treat(ss.Treatment(cure=0.8), on=screening.positive, name='treatment')
     res = make([screening, treatment]).results
     t = res.treatment
     assert t.delivered.sum() == res.screening.positive.sum() > 0 and t.unneeded.sum() > 0 # False positives are treated, and need not be
@@ -519,7 +519,7 @@ def test_coded_disease():
     with pytest.raises(KeyError, match='has no "clear_infection"'): # A part the product uses that the disease lacks
         class NoCure(ssl.AgentSIR):
             clear_infection = property(lambda self: (_ for _ in ()).throw(AttributeError('clear_infection')))
-        ss.Sim(n_agents=500, diseases=NoCure(), interventions=ss.treat(ss.Treatment(cure=0.8), coverage=0.1, interval=1), verbose=0).init()
+        ss.Sim(n_agents=500, diseases=NoCure(), interventions=ss.treat(ss.Treatment(cure=0.8), coverage=0.1, every=1), verbose=0).init()
     return res
 
 
@@ -549,9 +549,9 @@ def test_copied_steps():
     def make(sim_class):
         S, I = ss.states('S I')
         d = ss.Disease(infection=S >> I @ ss.permonth(0.3)*I, recovery=I >> S @ ss.months(6), init_prev=0.1, name='d')
-        visit = ss.Delivery(who=ss.state('d.I').enter, name='visit')
-        test = ss.screen(ss.Diagnostic(sensitivity=0.9), who=visit, name='test')
-        tx = ss.treat(ss.Treatment(cure=0.9), who=test.positive, name='tx')
+        visit = ss.Delivery(on=ss.ref('d.I').enter, name='visit')
+        test = ss.screen(ss.Diagnostic(sensitivity=0.9), on=visit, name='test')
+        tx = ss.treat(ss.Treatment(cure=0.9), on=test.positive, name='tx')
         return sim_class(diseases=d, interventions=[visit, test, tx], n_agents=1000, start=2000, stop=2002, dt=ss.months(1), verbose=0).run()
     plain, copied = make(ss.Sim), make(CopySim)
     assert copied.results.tx.delivered.sum() > 0
@@ -564,19 +564,19 @@ def test_agents_only():
     def make(form, **kwargs):
         S, I = ss.states('S I')
         sis, other = make_sis(), ss.Disease(infection=ss.Transition(S, I, rate=0.2 * I), init_prev=0.01, name='other')
-        test = ss.Diagnostic(sensitivity=0.9, delay=ss.days(3) if form == 'result_delay' else None)
-        scr = ss.screen(test, coverage=0.5, interval=7, disease='sis', name='scr')
-        rescr = ss.screen(test, who=scr.negative, disease='sis', name='rescr') # The same test again, for some
+        test = ss.Diagnostic(sensitivity=0.9, result_delay=ss.days(3) if form == 'result_delay' else None)
+        scr = ss.screen(test, coverage=0.5, every=7, disease='sis', name='scr')
+        rescr = ss.screen(test, on=scr.negative, disease='sis', name='rescr') # The same test again, for some
         drug = ss.Treatment(cure=0.9)
         steps = dict(
-            queue        = ss.treat(drug, who=scr.positive, capacity=10, queue=True),
-            delay        = ss.treat(drug, who=scr.positive, delay=ss.days(14)),
-            result_delay = ss.treat(drug, who=scr.positive),
-            since        = ss.treat(drug, who=scr.positive & (scr.since > ss.days(30))),
-            count        = ss.treat(drug, who=scr.positive & (scr.positive.count < 2)),
-            ever         = ss.treat(drug, who=scr.positive & ~scr.negative.ever), # Kept: a level of people
-            union        = ss.treat(drug, who=scr.positive | rescr.positive),
-            product      = ss.treat(drug, who=test.positive), # Delivered by two steps
+            queue        = ss.treat(drug, on=scr.positive, capacity=10, queue=True),
+            delay        = ss.treat(drug, on=scr.positive, delay=ss.days(14)),
+            result_delay = ss.treat(drug, on=scr.positive),
+            since        = ss.treat(drug, on=scr.positive, who=scr.since > ss.days(30)),
+            count        = ss.treat(drug, on=scr.positive, who=scr.positive.n_times < 2),
+            ever         = ss.treat(drug, on=scr.positive, who=~scr.negative.ever), # Kept: a level of people
+            union        = ss.treat(drug, on=scr.positive | rescr.positive),
+            product      = ss.treat(drug, on=test.positive), # Delivered by two steps
             waning       = ss.vaccinate(ss.Vaccine(efficacy=0.9, waning=lambda t: np.exp(-t/50)), at=[10]),
             diseases     = ss.vaccinate(ss.Vaccine(efficacy=0.9), at=[10], disease=['sis', 'other']),
         )
@@ -591,8 +591,8 @@ def test_agents_only():
     def follow(**kwargs):
         sis = make_sis()
         scr = ss.screen(ss.Diagnostic(sensitivity=0.9, specificity=0.5), at=[5], name='scr') # False positives are not infected: unneeded, in S with the cured
-        tx = ss.treat(ss.Treatment(cure=0.5), who=scr.positive, name='tx')
-        after = ss.vaccinate(ss.Vaccine(efficacy=0.5), who=tx, name='after')
+        tx = ss.treat(ss.Treatment(cure=0.5), on=scr.positive, name='tx')
+        after = ss.vaccinate(ss.Vaccine(efficacy=0.5), on=tx, name='after')
         return ss.Sim(sis, interventions=[scr, tx, after], **kwargs)
     for solver,sim in run_each(follow, stop=10).items():
         r = sim.results
@@ -608,7 +608,7 @@ def test_age_and_birth():
         if strata is not None:
             sir.stratify(age=strata)
         mcv1 = ss.vaccinate(efficacy=0.85, coverage=0.8, at_age=ss.months(9), name='mcv1') # On aging into the group that starts at 9 months
-        bcg = ss.vaccinate(efficacy=0.5, coverage=0.6, where='sir.births', name='bcg') # A transition by its path
+        bcg = ss.vaccinate(efficacy=0.5, coverage=0.6, on='sir.births', name='bcg') # A transition by its path
         return ss.Sim(sir, interventions=[mcv1, bcg], start=2000, stop=2004, dt=ss.weeks(1), solver=solver, total_pop=20_000, verbose=0, rand_seed=2, **kwargs)
     sims = {solver:make(solver, **(dict(n_agents=20_000) if solver == 'abm' else {})).run() for solver in ['ode', 'abm']}
     for key in ['mcv1', 'bcg']:

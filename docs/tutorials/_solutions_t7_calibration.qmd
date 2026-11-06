@@ -8,7 +8,7 @@ def make_measles(prior=True):
     """ The model of T7, with or without the prior on the share reported """
     S, E, I, R = ss.states('S E I R')
     beta = ss.par(0.14, bounds=[0.05, 0.5])
-    reported = ss.par(0.5, bounds=[0.05, 1], prior=ss.beta_mean(mean=0.35, var=0.01) if prior else None)
+    reported = ss.par(0.5, bounds=[0.05, 1], prior=ss.beta_dist(mean=0.35, std=0.1) if prior else None)
     infection   = S >> E @ beta*I
     progression = E >> I @ ss.days(10)
     recovery    = I >> R @ ss.days(8)

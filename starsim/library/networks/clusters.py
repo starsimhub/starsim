@@ -31,7 +31,7 @@ class ClusterNet(ss.Network):
 
     Args:
         cluster_size (int/`ss.Dist`): the size of each cluster; a number is the mean of a Poisson distribution
-        age_range (list): if supplied, only agents with `age_range[0] <= age < age_range[1]` are included
+        where (Cond/str/func): if given, who takes part: a condition over people (e.g. `(ss.person.age >= 6) & (ss.person.age < 22)`), as for `ss.RandomNet`
         beta (float): the beta value for each edge
         dynamic (bool): if True, the clusters are recreated on each timestep; if False (default), they are created once and never change
         pars (dict): the same parameters, as a dict
@@ -43,11 +43,11 @@ class ClusterNet(ss.Network):
         sim.run()
         ```
     """
-    def __init__(self, pars=None, cluster_size=_, age_range=_, beta=_, dynamic=_, **kwargs):
+    def __init__(self, pars=None, cluster_size=_, where=_, beta=_, dynamic=_, **kwargs):
         super().__init__()
         self.define_pars(
             cluster_size = ss.poisson(lam=4),
-            age_range = None,
+            where = None,
             beta = 1.0,
             dynamic = False,
         )
@@ -71,7 +71,7 @@ class ClusterNet(ss.Network):
 
     def add_pairs(self):
         """ Assign agents to clusters, and connect every pair of agents within each cluster """
-        uids = self.eligible(self.pars.age_range).uids
+        uids = self.eligible(self.pars.where).uids
         uids = uids[np.argsort(self.rng_order.rvs(uids), kind='stable')] # Shuffle; use a stable sort since the default order of ties depends on the CPU
         n = len(uids)
         if not n:
@@ -172,13 +172,14 @@ class HybridNet(ss.Network):
         rkw = dict(method=p.method, **kw)
 
         def group(name, label, ages):
-            """ Make a school or workplace network """
+            """ Make a school or workplace network, of the people aged from ages[0] to below ages[1] """
+            ages = (ss.person.age >= ages[0]) & (ss.person.age < ages[1])
             if p.clustered:
                 size = n[name]
                 if isinstance(size, ss.constant): # A cluster of N people gives each N-1 contacts (Poisson sizes already give the right mean)
-                    size = ss.constant(size.pars.v + 1)
-                return ClusterNet(name=name, label=label, cluster_size=size, age_range=ages, beta=p.beta[name], **kw)
-            return ss.RandomNet(name=name, label=label, n_contacts=n[name], age_range=ages, beta=p.beta[name], **rkw)
+                    size = ss.constant(size.pars.value + 1)
+                return ClusterNet(name=name, label=label, cluster_size=size, where=ages, beta=p.beta[name], **kw)
+            return ss.RandomNet(name=name, label=label, n_contacts=n[name], where=ages, beta=p.beta[name], **rkw)
 
         networks = [
             ClusterNet(name='h', label='Households', cluster_size=p.household_size, beta=p.beta['h'], **kw),

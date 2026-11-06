@@ -205,7 +205,7 @@ def network(net, src, name, acts=None):
         """ The levels of an attribute, and their counts, stratifying the disease by it (once) as on the network """
         levels, counts = np.unique(mapping(net['attributes'])[attr], return_counts=True)
         if attr not in stratified:
-            src.stratify(**{attr: [str(l) for l in levels]}, split=(counts/counts.sum()).round(10).tolist())
+            src.stratify(**{attr: [str(l) for l in levels]}, fractions=(counts/counts.sum()).round(10).tolist())
             stratified.add(attr)
         return levels, counts
     for i,t in enumerate(terms):

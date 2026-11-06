@@ -29,7 +29,7 @@ sim = ss.Sim(make_sir(), **kw).init()                                       # Ho
 print()
 sim = ss.Sim(make_sir(), networks=ss.RandomNet(n_contacts=10), **kw).init() # A network of individuals
 print()
-sim = ss.Sim(make_sir(ss.lognorm_ex(mean=ss.days(10), std=ss.days(4))), **kw).init() # A lognormal dwell time
+sim = ss.Sim(make_sir(ss.lognormal(mean=ss.days(10), std=ss.days(4))), **kw).init() # A lognormal dwell time
 ```
 
 The rule behind this is that `'auto'` never approximates the mixing and never drops anything individual-level. A model runs as agents if it has any of these:
@@ -75,7 +75,7 @@ Sim: sir, 10,000 people, as an ODE, days 0 to 100
 
 A network model run as an ODE is a coarser model, not an invalid one, and someone who typed `solver='ode'` asked for it. Each ingredient has one standard approximation (lasting partnerships use a partner-change model; a distribution on `beta` uses its mean). Things with no compartmental form, such as contact tracing, stop with an `ss.CapabilityError` before the run, saying what to do instead.
 
-By default each approximation prints a note; `approx=True` keeps the notes without printing them, and `approx=False` makes any approximation an error (under `'auto'`, that sends a lognormal dwell time to agents). Either way the notes are kept in `sim.notes`, so they survive into saved output.
+By default each approximation prints a note; `approximations='allow'` keeps the notes without printing them, and `approximations='error'` makes any approximation an error (under `'auto'`, that sends a lognormal dwell time to agents). Either way the notes are kept in `sim.notes`, so they survive into saved output.
 
 ## The engines
 

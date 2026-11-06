@@ -156,7 +156,7 @@ class Options(sc.obj):
         optdesc.crn = 'If True (default), use common random numbers (CRN) for reproducibility across scenarios. Set False for faster draws (one plain uniform per agent/edge, skipping the slot machinery); statistically valid but not CRN-safe across scenarios.'
         options.crn = sc.parse_env('STARSIM_CRN', True, bool)
 
-        optdesc.keep_times = 'If True, a declared disease run as agents keeps the time each agent entered every state (e.g. ti_S) and the history of every transition (e.g. sir.infection.count, .since, and .ever); by default (False), only those the engine or the model needs (with, for each, the time each agent last left the state, for its stays, e.g. I.stays), to save memory (reading another raises an error); the default for ss.Sim(keep_times=...), which sets it for one sim'
+        optdesc.keep_times = 'If True, a declared disease run as agents keeps the time each agent entered every state (e.g. ti_S) and the history of every transition (e.g. sir.infection.n_times, .since, and .ever); by default (False), only those the engine or the model needs (with, for each, the time each agent last left the state, for its stays, e.g. I.stays), to save memory (reading another raises an error); the default for ss.Sim(keep_times=...), which sets it for one sim'
         options.keep_times = sc.parse_env('STARSIM_KEEP_TIMES', False, bool)
 
         optdesc.max_joint = 'The most compartments that the diseases tracked jointly in a compartmental run may take (their joint states times the groups of the other dimensions; see ss.solvers.Crossing): above it, solver="auto" runs agents, and a compartmental solver that was asked for stops before anything is made. 0 for no limit'
@@ -298,14 +298,13 @@ class Options(sc.obj):
         else:
             return
 
-    def set(self, key=None, value=None, use=False, **kwargs):
+    def set(self, key=None, value=None, **kwargs):
         """
         Set one or more options. See `ss.options.help()` for more information.
 
         Args:
             key    (str):    the parameter to modify, or 'defaults' to reset everything to default
             value  (varies): the value to specify; use None or 'default' to reset to default
-            use (bool): whether to use the chosen style
             kwargs (dict):   if supplied, set multiple key-value pairs
 
         Examples:

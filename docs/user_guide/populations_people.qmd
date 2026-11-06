@@ -43,13 +43,13 @@ The two runs differ a little, since as agents the epidemic is a stochastic proce
 
 As agents, each person has an age and a sex. Unless told otherwise, Starsim gives agents the ages of the world's population in 2024, and an even chance of being female; `ss.People(n_agents, p_female=0.49)` gives another share of women (`p_female=0` makes a population of men only, e.g. for a model of men who have sex with men). A compartmental model split into age groups without a share for each takes the shares from the same ages, and `describe()` marks them as guessed.
 
-The population of a country is `ss.people()`: its size, its ages, and its share of women, from the UN World Population Prospects (or, for a US state, the US Census), which come with Starsim. The sim takes its size from it, so a compartmental model can use a named population as well as agents can:
+The population of a country is `ss.population()`: its size, its ages, and its share of women, from the UN World Population Prospects (or, for a US state, the US Census), which come with Starsim. The sim takes its size from it, so a compartmental model can use a named population as well as agents can:
 
 ```{python}
-kenya = ss.people('Kenya', year=2024)
+kenya = ss.population('Kenya', year=2024)
 print('Population of Kenya in 2024:', round(kenya.named.total))
 
-sim = ss.Sim(measles, people=ss.people('Kenya', year=2024, n_agents=5000), stop=ss.days(50))
+sim = ss.Sim(measles, people=ss.population('Kenya', year=2024, n_agents=5000), stop=ss.days(50))
 sim.init()
 sim.people.plot_ages();
 ```
@@ -69,10 +69,10 @@ A sim copies the people it is given when it is built, so look at `sim.people` af
 
 ## Properties of people
 
-A model refers to a property of people with `ss.ppl`: `ss.ppl.age`, `ss.ppl.female`, or a property of your own. `ss.ppl.age < 5` is a condition, which picks out people, for example to say who an intervention reaches:
+A model refers to a property of people with `ss.person`: `ss.person.age`, `ss.person.female`, or a property of your own. `ss.person.age < 5` is a condition, which picks out people, for example to say who an intervention reaches:
 
 ```python
-ss.vaccinate(efficacy=0.9, coverage=0.8, where=ss.ppl.age < 5, at=ss.days(10)) # Vaccinates children under 5
+ss.vaccinate(efficacy=0.9, coverage=0.8, where=ss.person.age < 5, at=ss.days(10)) # Vaccinates children under 5
 ```
 
 A property of your own is given to `ss.People` as a state, with a value for each agent; it can be drawn from a distribution. A property can be in a rate as well as in a condition. Here 30% of people live in towns, where crowding doubles the rate at which a susceptible person is infected, and 92% of people are immune (as from routine vaccination), so that measles can still spread. Two campaigns give the same number of doses, to 27% of people: one to anyone, and one to 90% of the people in towns:
@@ -81,11 +81,11 @@ A property of your own is given to `ss.People` as a state, with a value for each
 urban = ss.BoolState('urban', default=ss.bernoulli(p=0.3))
 ppl = ss.People(10_000, extra_states=urban)
 
-infection = S >> I @ 1.9*(1 + ss.ppl.urban)*I # Twice the rate in towns
+infection = S >> I @ 1.9*(1 + ss.person.urban)*I # Twice the rate in towns
 measles_towns = ss.Disease(infection, recovery, init=dict(R=0.92), init_prev=0.001, name='measles')
 
 anyone = ss.vaccinate(efficacy=0.9, coverage=0.27, at=ss.days(1), name='campaign')
-towns = ss.vaccinate(efficacy=0.9, coverage=0.9, where=ss.ppl.urban, at=ss.days(1), name='campaign')
+towns = ss.vaccinate(efficacy=0.9, coverage=0.9, where=ss.person.urban, at=ss.days(1), name='campaign')
 base = ss.Sim(measles_towns, people=ppl, stop=ss.days(150), verbose=0)
 msim = ss.parallel({
     'No campaign': base,
@@ -99,7 +99,7 @@ for sim in msim.sims:
 
 With no campaign, measles infects about 470 of the 800 people who are not immune. A campaign for anyone cuts that by more than half, and the same doses given in towns cut it further, since each of them goes to someone at twice the risk, and it is the people at most risk who keep the outbreak going. A property such as `urban` matters in a model as much as it changes who is infected and who is reached.
 
-`ss.ppl` is read when the sim is built, so the property can be given after the model is written.
+`ss.person` is read when the sim is built, so the property can be given after the model is written.
 
 In a compartmental model, people have no properties of their own, only the groups the model is split into. The same property is a stratification, and the same model and conditions then work on groups, with the people in towns as 30% of the population:
 
@@ -167,9 +167,9 @@ As agents, `sim.people` holds every agent: its properties, and the states of eve
 | `cause_of_death` | The cause of each death (its position in `people.causes`, the names of the causes; -1 for none) |
 | `scale` | The number of people the agent stands for, relative to the others (1 unless set) |
 
-Each module adds its own states, under its name. A declared disease adds a state for each of its states (`sim.people.measles.S`, `.I`, `.R`), the time each agent entered a state (`ti_I`) and is due to leave it, and each person's relative susceptibility and transmissibility (`rel_sus` and `rel_trans`). To save memory, the time of entering a state is kept only when something reads it: the disease itself (e.g. for a state with a dwell time), or the code of a module in the sim that names it. Reading one that wasn't kept, e.g. in an analysis after the run, raises an error that says so; `ss.State(keep_time=True)` keeps it for one state (e.g. for code that reads the time since onset), and `ss.Sim(..., keep_times=True)` keeps them all, and the history of every transition (e.g. `sir.infection.count`), for that sim (`ss.options.keep_times = True` does so for every sim).
+Each module adds its own states, under its name. A declared disease adds a state for each of its states (`sim.people.measles.S`, `.I`, `.R`), the time each agent entered a state (`ti_I`) and is due to leave it, and each person's relative susceptibility and transmissibility (`rel_sus` and `rel_trans`). To save memory, the time of entering a state is kept only when something reads it: the disease itself (e.g. for a state with a dwell time), or the code of a module in the sim that names it. Reading one that wasn't kept, e.g. in an analysis after the run, raises an error that says so; `ss.State(keep_time=True)` keeps it for one state (e.g. for code that reads the time since onset), and `ss.Sim(..., keep_times=True)` keeps them all, and the history of every transition (e.g. `sir.infection.n_times`), for that sim (`ss.options.keep_times = True` does so for every sim).
 
-A time of entering reads as the step the move happened in, so `ti_E.isclose(sim.ti)` is "entered this step". The difference of two of them is not always a duration, though: an infection by contact happens at the end of its step, and a scheduled move (such as becoming infectious after a latent period) at the start of its step, so `ti_I - ti_E` reads one step longer than the latent period was. For the time people spent in a state, use the state's `stays`: `np.mean(sim.diseases.measles.E.stays)` is the mean latent period, a duration in the sim's unit, over everyone who has entered E and left it. Those still in the state are left out (`E.time` gives how long they have been there so far). With each state whose time of entering is kept, the time each person last left it is kept too, so `stays` works for any such state, e.g. one with a dwell time (`I.stays` in an SIR); for another, keep its time as above.
+A time of entering reads as the step the move happened in, so `ti_E.isclose(sim.ti)` is "entered this step". The difference of two of them is not always a duration, though: an infection by contact happens at the end of its step, and a scheduled move (such as becoming infectious after a latent period) at the start of its step, so `ti_I - ti_E` reads one step longer than the latent period was. For the time people spent in a state, use the state's `stays`: `np.mean(sim.diseases.measles.E.stays)` is the mean latent period, a duration in the sim's unit, over everyone who has entered E and left it. Those still in the state are left out (`E.time_in` gives how long they have been there so far). With each state whose time of entering is kept, the time each person last left it is kept too, so `stays` works for any such state, e.g. one with a dwell time (`I.stays` in an SIR); for another, keep its time as above.
 
 A module adds its states to the people when the sim is initialized, so they don't need to be given to `ss.People`. A property that belongs to one module (such as a disease's immunity) is best defined in that module, with `define_states()` (see [Custom modules](building_modules.qmd)); a property that several modules use (such as `urban`, or a social determinant of health) is best given to `ss.People` with `extra_states=`, as above.
 
@@ -265,7 +265,7 @@ If two modules would kill the same person in the same step, one of them is chose
 
 ## In a compartmental run
 
-In a compartmental run there are no agents. `sim.people` then has one row for each group the model is split into, and asking for a property of each person, such as `sim.people.age` in a model not split by age, raises an error saying to stratify by it or to run as agents. Results, `describe()`, and conditions such as `where=ss.ppl.age < 5` (for a model stratified by age) work the same either way.
+In a compartmental run there are no agents. `sim.people` then has one row for each group the model is split into, and asking for a property of each person, such as `sim.people.age` in a model not split by age, raises an error saying to stratify by it or to run as agents. Results, `describe()`, and conditions such as `where=ss.person.age < 5` (for a model stratified by age) work the same either way.
 
 The API reference for this page: [People](../api/people.qmd), [Arrays](../api/internals.arrays.qmd).
 
@@ -306,7 +306,7 @@ The kinds of array that hold what agents are and have (see [Arrays](../api/inter
 | `ss.FloatArr` | A number, such as an age or a relative risk | NaN |
 | `ss.IntArr` | A whole number, such as a count | -999999 (for none, since whole numbers have no NaN) |
 | `ss.TimeArr` | The step on which something happened (such as `ti_dead`) | NaN |
-| `ss.IndexArr` | The UID of another agent (such as `parent`), made by Starsim rather than by models | -1 |
+| `ss.arrays.IndexArr` | The UID of another agent (such as `parent`), made by Starsim rather than by models | -1 |
 | `ss.uids` | A set of UIDs, as from `(people.age < 5).uids`, for indexing any array | |
 
 Each takes `default=`, a value or a distribution to draw each agent's value from, and `label=`, the name used in plots.

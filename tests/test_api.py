@@ -40,6 +40,7 @@ def test_make_index():
     assert entrydict['ss.Sim']['example'], 'Expecting ss.Sim to have an example'
     assert entrydict['ssl.Cholera']['module'] == 'library.diseases'
     assert entrydict['ss.fit.compare_models']['module'] == 'fit' and 'ss.geo.gravity' in entrydict and 'ss.data.population' in entrydict
+    assert entrydict['ss.Arr']['extension'] and not entrydict['ss.Sim']['extension'], 'Expecting the index to mark the names for extending Starsim'
     assert 'run()' in entrydict['ss.Sim']['methods'] and 'init_module_attrs()' not in entrydict['ss.Sim']['methods'], 'Expecting public methods only'
     for alias,canonical in index['aliases'].items():
         assert alias not in names, f'Alias {alias} should not have its own entry'

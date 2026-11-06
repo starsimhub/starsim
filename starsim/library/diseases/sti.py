@@ -37,15 +37,15 @@ class Syphilis(ss.Disease):
 
     Args:
         beta (`ss.peract`): the transmission probability per act, from men to women and from women to men
-        dur_exp (`ss.dur`): the mean incubation period
-        dur_primary (`ss.dur`): the mean duration of the primary stage
-        dur_secondary (`ss.dur`): the mean duration of the secondary stage
-        dur_early (`ss.dur`): the mean duration of early latent syphilis
-        dur_late (`ss.dur`): the mean time in late latent syphilis before tertiary syphilis, for those who develop it
+        dur_exp (`ss.Duration`): the mean incubation period
+        dur_primary (`ss.Duration`): the mean duration of the primary stage
+        dur_secondary (`ss.Duration`): the mean duration of the secondary stage
+        dur_early (`ss.Duration`): the mean duration of early latent syphilis
+        dur_late (`ss.Duration`): the mean time in late latent syphilis before tertiary syphilis, for those who develop it
         p_reactivate (float): the share of people with early latent syphilis who relapse to secondary syphilis
         p_tertiary (float): the share who develop tertiary syphilis
         death_rate (`ss.per`): the rate of dying of tertiary syphilis
-        latent_half_life (`ss.dur`): the half-life of infectiousness during latent syphilis
+        latent_half_life (`ss.Duration`): the half-life of infectiousness during latent syphilis
         kwargs (dict): passed to `ss.Disease`, e.g. `init` or `name`
 
     Examples:
@@ -82,8 +82,8 @@ class Syphilis(ss.Disease):
     tertiary  = ss.Transition(Ll, [T, R], dur=dur_late, p=[p_tertiary, None])
     death     = ss.death(T, rate=death_rate)
 
-    fading_early = ss.modify('rel_trans', multiply=0.5**(El.time/latent_half_life), where=El) # Infectiousness falls with time in latency
-    fading_late  = ss.modify('rel_trans', multiply=0.5**(Ll.time/latent_half_life), where=Ll)
+    fading_early = ss.modify('rel_trans', multiply=0.5**(El.time_in/latent_half_life), where=El) # Infectiousness falls with time in latency
+    fading_late  = ss.modify('rel_trans', multiply=0.5**(Ll.time_in/latent_half_life), where=Ll)
 
     prevalence = (E + P + Se + El + Ll + T)/(S + E + P + Se + El + Ll + T + R)
 
@@ -108,7 +108,7 @@ class Gonorrhea(ss.Disease):
 
     Args:
         beta (`ss.peract`): the transmission probability per act, from men to women and from women to men
-        dur_inf (`ss.dur`): the mean time to clearance
+        dur_inf (`ss.Duration`): the mean time to clearance
         kwargs (dict): passed to `ss.Disease`, e.g. `init` or `name`
 
     Examples:

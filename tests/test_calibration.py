@@ -22,7 +22,7 @@ def test_best_trial():
     S, I, R = ss.states(3)
     sir = ss.Disease(S >> I @ beta*I, I >> R @ ss.days(8), init=dict(I=0.01), name='sir')
     pars = dict(total_pop=10_000, unit='day', stop=60, verbose=0)
-    data = ss.Sim(sir, pars=dict(beta=0.5), **pars).run().to_data('I')
+    data = ss.Sim(sir, pars=dict(beta=0.5), **pars).run().to_synthetic_data('I')
     search = spo.minimize
     def stalled(fun, x0, **kwargs): # As SciPy's CG did after a failed line search: back at the start, having tried better
         res = search(fun, x0, **kwargs)
@@ -39,7 +39,7 @@ def test_best_trial():
     k = ss.par(0.5, bounds=[0.1, 1])
     infection = S >> I @ beta*I
     sir = ss.Disease(infection, I >> R @ dur, ss.outcome(k*infection, name='seen'), init=dict(I=0.01), name='sir')
-    data = ss.Sim(sir, pars=dict(beta=0.5), **pars).run().to_data('seen')
+    data = ss.Sim(sir, pars=dict(beta=0.5), **pars).run().to_synthetic_data('seen')
     normal = lambda observed, model: -0.5*((observed - model)/(0.1*model + 1))**2
     fit = ss.Sim(sir, data=data, **pars).fit(likelihood=dict(seen=normal), verbose=0)
     assert fit.method == 'nelder-mead' and np.isclose(fit.pars.beta, 0.5, rtol=0.05)

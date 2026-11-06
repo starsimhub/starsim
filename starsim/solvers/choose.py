@@ -118,7 +118,7 @@ def make_engine(module, sim):
     return engine
 
 
-class MixedNetworks(ss.ndict):
+class MixedNetworks(ss.utils.ndict):
     """
     The networks of a compartmental run, which are none: they became contact rates; asking for one by name says where it is
 
@@ -139,7 +139,7 @@ class MixedNetworks(ss.ndict):
 
 
 def clocks_of(mod):
-    """ The clocks (`X.time`, `(A | B).time`, `X.progress`) that a module's transitions, attributes, amounts, or conditions read """
+    """ The clocks (`X.time_in`, `(A | B).time_in`, `X.progress`) that a module's transitions, attributes, amounts, or conditions read """
     graph = getattr(mod, 'graph', None)
     objs = [[tr.rate, tr.dur, tr.p, getattr(tr, 'where', None), getattr(tr.trigger, 'x', None)] for tr in graph.transitions.values()] if graph is not None else []
     objs += [a if a.kind == 'derived' else a.value for a in getattr(graph, 'attrs', {}).values()] # A derived attribute, through what it is worked out from; one set at an event, through its value
@@ -235,7 +235,7 @@ def init_model(sim):
     sim.crossings = [] # Diseases whose states are tracked jointly in a compartmental run: see init_crossings()
     sim.layouts = {} # The engines of the declared modules, laid out as compartments to choose the solver, by name: see lay_out()
     sim.groups = ss.dimensions.Groups(sim) # The groups of people that the stratifications give: see ss.dimensions.Groups
-    for key in [key for key in pars.keys() if key not in ss.SimPars.names()]: # A model parameter assigned on the sim's parameters, e.g. sim.pars.beta = 0.1, is a value by name
+    for key in [key for key in pars.keys() if key not in ss.sim.SimPars.names()]: # A model parameter assigned on the sim's parameters, e.g. sim.pars.beta = 0.1, is a value by name
         if any(key in mod.pars for mod in sim.declared):
             sim.par_values = sc.mergedicts(sim.par_values, {key:pars.pop(key)})
     set_par_values(sim)
@@ -320,10 +320,10 @@ def init_compartments(sim, joints=None, mixing=None):
         spread = [(p.name, p.raw) for p in mod.graph.spread_pars()] + [(name, a.value) for name,a in mod.graph.attrs.items()] # Parameters, and traits (ss.attr), that are distributions
         for name,raw in spread:
             msg = f'"{name}" of "{mod.name}" is a distribution across people ({type(raw).__name__}), so a compartmental run uses its mean'
-            if pars.approx is False:
-                raise ss.CapabilityError(f'{msg}, which approx=False does not allow.\n     Run as agents, or bin it into a dimension, e.g. {mod.name}.stratify({name}=[...]).')
+            if pars.approximations == 'error':
+                raise ss.CapabilityError(f'{msg}, which approximations="error" does not allow.\n     Run as agents, or bin it into a dimension, e.g. {mod.name}.stratify({name}=[...]).')
             else:
-                ss.note(f'{msg}; to keep the variation, run as agents or bin it into a dimension', sim=sim, verbose=0 if pars.approx else None)
+                ss.note(f'{msg}; to keep the variation, run as agents or bin it into a dimension', sim=sim, verbose=0 if pars.approximations == 'allow' else None)
     if 'n_agents' in sim.given:
         if 'total_pop' in sim.given:
             ss.note(f'n_agents={pars.n_agents:n} is not used, since a compartmental run has one row per group of people rather than agents; the population is total_pop={pars.total_pop:n}', sim=sim)
@@ -331,9 +331,9 @@ def init_compartments(sim, joints=None, mixing=None):
             ss.note(f'n_agents={pars.n_agents:n} is used as the population (total_pop), since a compartmental run has one row per group of people rather than agents; total_pop= is the usual way to give it', sim=sim)
     sim.integrator = sc.ifelse(pars.integrator, 'rk4')
     pars.pop_scale = 1.0
-    pars.people_results = False
+    pars.record_people = False
     staged = any(ss.dimensions.transfer_stages(sim, mod, tf, sim.groups.strats[sim.groups.dim_index(tf.dim)]) is not None for mod in sim.declared for tf in mod.graph.transfers.values()) # Erlang stages of a transfer: see ss.dimensions.transfer_stages()
-    boxed = any(mod.boxed(sim) for mod in pars.interventions.values() if isinstance(mod, ss.Delivery)) # Holding a product that wanes as a box: its levels (see ss.box)
+    boxed = any(mod.boxed(sim) for mod in pars.interventions.values() if isinstance(mod, ss.Delivery)) # Holding a product that wanes as a boxcar: its levels (see ss.boxcar)
     if staged or boxed or any(ss.solvers.memory_strats(mod, sim) for mod in pars.interventions.values() if isinstance(mod, ss.Delivery)): # Levels that the deliveries and transfers need now the solver is known: see ss.Delivery.dims()
         sim.groups.init()
         sim.mixing = ss.solvers.Mixing(sim)
@@ -343,7 +343,7 @@ def init_compartments(sim, joints=None, mixing=None):
         sim.mixing = mixing
         mixing.say()
     else:
-        sim.mixing.init(approx=pars.approx)
+        sim.mixing.init(approximations=pars.approximations)
     sim.mixed = list(pars.networks.values()) # The networks are replaced by contact rates between groups, so are not run themselves
     pars.networks = MixedNetworks(names=[net.name for net in sim.mixed])
     pars.n_agents = sim.groups.n_groups
@@ -398,7 +398,7 @@ def choose_engine(sim):
 
 def resolve_path_triggers(sim):
     """
-    A trigger on a transition of another module by its path (`ss.on(ss.state('pregnancy.delivery'))`, for a module declared
+    A trigger on a transition of another module by its path (`ss.on(ss.ref('pregnancy.delivery'))`, for a module declared
     before that one exists) is that transition's event, as `ss.on(preg.delivery)` is, not the condition of having gone through
     it: so it happens once, in the step, and to whoever the event also happens to (e.g. the fetuses at a delivery)
     """
@@ -425,7 +425,7 @@ def init_flows(sim):
     """
     for flows in [mod for mod in sim.pars.demographics.values() if isinstance(mod, ss.demographics.Flows)]:
         for tr in flows.transitions:
-            named = tr.dst[0] if tr.inflow and tr.state_given else None # A state of one of the diseases
+            named = tr.dest[0] if tr._inflow and tr.state_given else None # A state of one of the diseases
             holder = next((mod for mod in sim.declared if named is None or any(st is named for st in mod.graph.states.values())), sim.declared[0])
             tr = sc.dcp(tr, memo={} if named is None else {id(named):named}) # The sim's own, so the module is unchanged if it is built again
             holder.graph.add_flow(tr)
@@ -438,8 +438,8 @@ def init_flows(sim):
 
 def flows_of(mod):
     """ The transitions of a declared disease that are births, arrivals, or deaths of everyone, so are the population's """
-    placed = lambda tr: getattr(tr, 'per', None) is not None and ss.conditions.modname(tr.per.module) not in [None, mod.name] # Another module's births (ss.birth(per=)), which only say where its children start
-    return [tr for tr in mod.graph.transitions.values() if (tr.inflow and tr.people and not placed(tr)) or getattr(tr, 'every_state', False)]
+    placed = lambda tr: getattr(tr, 'birth_on', None) is not None and ss.conditions.modname(tr.birth_on.module) not in [None, mod.name] # Another module's births (ss.birth(on=)), which only say where its children start
+    return [tr for tr in mod.graph.transitions.values() if (tr._inflow and tr.people and not placed(tr)) or getattr(tr, 'every_state', False)]
 
 
 def set_par_values(sim):
@@ -489,7 +489,7 @@ def set_par_values(sim):
         if len(mods) != 1:
             options = [f'{mod.name}.{k}' for mod in sim.declared for k in mod.graph.pars] + [f'{mod.name}.{k}' for mod in coded for k in mod.pars.bounded()]
             listed = f'Parameters are {sc.strjoin(options)}{ss.expressions.did_you_mean(key, options)}' if options else 'This sim has none that pars= can set (those of a declared model, and those of a module written as code that have bounds).'
-            if key in ss.SimPars.names(): # A sim setting, given by value
+            if key in ss.sim.SimPars.names(): # A sim setting, given by value
                 listed += f' "{key}" is a setting of the sim: give it as sim.new({key}=...), or as ss.par in the sim (e.g. {key}=ss.par(..., bounds=[...])) to fit it.'
             raise sc.KeyNotFoundError(f'pars= has a value for "{key}", which {"matches no parameter" if not mods else "is a parameter of more than one module"}. {listed}')
         attrs = getattr(mods[0], '_par_attrs', {}).get(name) if name not in mods[0].pars else None
@@ -529,10 +529,10 @@ def check_par_values(sim):
                 raise ValueError(f'the parameter "{name}" of "{mod.name}" has no value. Give it one (ss.par(0.1)), or bounds to start from (ss.par(bounds=[0.01, 0.5])), or a value by name (ss.Sim(pars=dict({name}=...))).')
             if p.bounds is None:
                 continue
-            val = raw.value if isinstance(raw, ss.TimePar) else raw.array if isinstance(raw, ss.by) else raw
+            val = raw.value if isinstance(raw, ss.time.TimePar) else raw.array if isinstance(raw, ss.by) else raw
             if not (sc.isnumber(val) or isinstance(val, np.ndarray)): # E.g. a distribution or a function
                 continue
-            low, high = [(type(raw)(b) if isinstance(raw, ss.TimePar) else b).value if isinstance(b, ss.TimePar) else b for b in p.bounds] # A typed bound in the unit of the value
+            low, high = [(type(raw)(b) if isinstance(raw, ss.time.TimePar) else b).value if isinstance(b, ss.time.TimePar) else b for b in p.bounds] # A typed bound in the unit of the value
             tol = 1e-9*abs(high - low) # For rounding, e.g. on a log scale
             val = np.asarray(val, dtype=float)
             if np.any(val < low - tol) or np.any(val > high + tol):
@@ -542,7 +542,7 @@ def check_par_values(sim):
 
 def init_named_people(sim):
     """
-    A named population (`ss.people('Kenya')`): looked up for the year the sim starts, at the sim's number of agents, and the population size taken from it
+    A named population (`ss.population('Kenya')`): looked up for the year the sim starts, at the sim's number of agents, and the population size taken from it
 
     With no people given, a country's contact matrix (`ss.contacts('Kenya')`) brings that country's people, for their ages and sexes
     (but not their number, since the contacts are only how people mix).
@@ -579,7 +579,7 @@ def init_named_people(sim):
         except Exception:
             year = None
     n_agents = sc.ifelse(named.n_agents, int(pars.n_agents))
-    ppl = ss.people(named.place, year=year, n_agents=n_agents, revision=named.revision)
+    ppl = ss.population(named.place, year=year, n_agents=n_agents, revision=named.revision)
     ppl.named.update(year=named.year, n_agents=named.n_agents) # As given, so the sim can be rebuilt
     pars.people = ppl
     sim.named_people = ppl.named
@@ -608,7 +608,7 @@ def init_unit(sim):
     def base(obj):
         return type(obj).base.removesuffix('s')
     def is_dur(obj):
-        return isinstance(obj, ss.dur) and not isinstance(obj, ss.datedur)
+        return isinstance(obj, ss.Duration) and not isinstance(obj, ss.datedur)
     dates = [v for v in [pars.start, pars.stop] if isinstance(v, (str, ss.date))]
     unit_given = pars.unit is not None and pars.unit.removesuffix('s') != 'year' # A bare number is then in that unit, however large (stop=3650 days), not a calendar year
     years = [v for v in [pars.start, pars.stop] if sc.isnumber(v) and time.assume_cal_year(v)] if not unit_given else []
@@ -620,7 +620,7 @@ def init_unit(sim):
     def mod_units(mod):
         if mod in sim.declared: # Births and deaths of the population held by a disease (see init_flows()) are typed, and like demographics say nothing of the unit of its bare numbers
             flows = {id(leaf) for tr in flows_of(mod) for expr in [tr.rate, tr.dur] + sc.tolist(tr.p) if isinstance(expr, ss.expressions.Expr) for leaf in expr.leaves}
-            vals = ss.graph.unit_values([p.raw for p in mod.graph.all_pars() if id(p) not in flows] + [val for oc in mod.graph.outcomes.values() for val in [oc.delay, oc.duration]])
+            vals = ss.graph.unit_values([p.raw for p in mod.graph.all_pars() if id(p) not in flows] + [val for oc in mod.graph.outcomes.values() for val in [oc.delay, oc.stay]])
             vals = vals or mod.graph.unit_values() # ... unless they are its only typed values
         else:
             vals = ss.graph.unit_values(mod.pars.values())
@@ -679,7 +679,7 @@ def init_unit(sim):
     in_years = unit == 'year' and pars.start is None # A model in years with no start starts in the year 2000 (see ss.Timeline)
     if not dates and not years and not in_years:
         if pars.start is None and sc.isnumber(pars.stop) and pars.dur is not None: # With a stop and a dur, the start is stop - dur
-            pars.start = dur_class(pars.stop) - (pars.dur if isinstance(pars.dur, ss.dur) else dur_class(pars.dur))
+            pars.start = dur_class(pars.stop) - (pars.dur if isinstance(pars.dur, ss.Duration) else dur_class(pars.dur))
         elif sc.isnumber(pars.start) or pars.start is None:
             pars.start = dur_class(sc.ifelse(pars.start, 0)) # A bare stop is a time in the unit too, as ss.Timeline reads it; a typed one is the length of the run
     return
@@ -710,7 +710,7 @@ def init_group_values(sim):
         return
     for d,strat in enumerate(sim.groups.strats):
         if strat.kind == 'age':
-            sim.people.age[sim.people.auids] = sim.groups.group_vals(d, strat.mids, outside=strat.mids @ strat.split)
+            sim.people.age[sim.people.auids] = sim.groups.group_vals(d, strat.mids, outside=strat.mids @ strat.fractions)
             sim.people.age.__class__ = ss.arrays.GroupAges # So that a function comparing ages with an age inside a group raises
             sim.people.age.edges = strat.edges
         elif strat.female is not None: # A sex dimension is people.female
@@ -791,7 +791,7 @@ def init_where(sim):
         if isinstance(m, ss.modify) and m.op == 'add' and m.target_kind in ['transition', None]:
             target = next((mod for mod in sim.declared if mod.name == ss.conditions.modname(m.target_module)), None)
             tr = target.graph.transitions.get(m.target_name) if target is not None else None
-            if tr is not None and tr.inflow and tr.rate is not None and getattr(tr, 'per', None) is None:
+            if tr is not None and tr._inflow and tr.rate is not None and getattr(tr, 'birth_on', None) is None:
                 name = f'{tr.name}_added'
                 if name not in target.graph.pars: # Once, if the sim is built again
                     p = ss.par(0.0, doc=f'Added to the inflow {tr.name} from outside the model, by ss.modify(..., add=)')
@@ -821,25 +821,25 @@ def check_routes(sim):
     check_betas(sim, nets)
     for net in nets: # beta times the number of contacts is a hazard, so only one of them may carry a time unit
         n = net.pars.get('n_contacts')
-        rate = n.pars.get('v') if isinstance(n, ss.constant) else n
-        if isinstance(rate, ss.Rate):
+        rate = n.pars.get('value') if isinstance(n, ss.constant) else n
+        if isinstance(rate, ss.time.Rate):
             for mod in sim.declared:
                 for tr in mod.graph.transmissions:
-                    typed = [leaf for leaf in tr.rate.leaves if isinstance(leaf, ss.par) and isinstance(leaf.raw, ss.Rate)]
+                    typed = [leaf for leaf in tr.rate.leaves if isinstance(leaf, ss.par) and isinstance(leaf.raw, ss.time.Rate)]
                     if typed:
                         raise TypeError(f'the beta of "{mod.name}.{tr.name}" ({typed[0].raw!r}) and the n_contacts of "{net.name}" ({rate!r}) both carry a time unit, so their product is not a hazard; give one of them as a bare number, e.g. a probability per contact for beta.')
     if all(getattr(dis, 'graph', None) is not None for dis in sim.pars.diseases.values()):
         for net in nets:
-            beta = net.pars.get('beta', 1.0) if isinstance(net, (ss.MixingPool, ss.MixingPools)) else 1.0
+            beta = net.pars.get('beta', 1.0) if isinstance(net, (ss.MixingPool, ss.networks.MixingPools)) else 1.0
             if not (sc.isnumber(beta) and beta == 1):
                 raise ValueError(f'the route "{net.name}" has beta={beta}, but in a declared model the beta belongs to the transmission; give it there, e.g. S >> I @ dict({net.name}=...) * I.')
 
     # A count of people in a rate is literal, so the routes do not apply to it (said of no inflow, such as births, which is in total and never exposure), except the contact matrices to a count in an acquisition (see ss.graph.Graph.met_counts)
-    matrices = [net.name for net in nets if isinstance(net, ss.MixingPools)]
+    matrices = [net.name for net in nets if isinstance(net, ss.networks.MixingPools)]
     for mod in sim.declared if routes else []:
         met = {id(leaf) for leaf in mod.graph.met_counts} if matrices else set()
         for name,tr in mod.graph.transitions.items():
-            if tr.inflow:
+            if tr._inflow:
                 continue
             counts = [leaf for leaf in (tr.rate.leaves if tr.rate is not None else []) if isinstance(leaf, ss.expressions.Count) and any(getattr(s, 'people', True) for s in leaf.states)]
             others = [r for r in routes if r not in matrices] if counts and id(counts[0]) in met else routes
@@ -891,7 +891,7 @@ def check_betas(sim, nets):
 
 def leaves(mod):
     """ The transitions by which people die of a declared disease (to `ss.null`), who leave the people of every other disease too """
-    return [tr for tr in mod.graph.transitions.values() if tr.people and tr.src and (not tr.dst or tr.dies) and not getattr(tr, 'every_state', False)]
+    return [tr for tr in mod.graph.transitions.values() if tr.people and tr.source and (not tr.dest or tr.dies) and not getattr(tr, 'every_state', False)]
 
 
 def crossing_groups(sim):
@@ -927,7 +927,7 @@ def crossing_groups(sim):
         if home not in links:
             continue
         for other,state in ss.conditions.state_refs(mod):
-            if other in links and other != home and state in sim.get_declared(other).graph.states:
+            if other in links and other != home and state in sim._declared_module(other).graph.states:
                 join(home, other, f'"{mod.name}" acts on {home} by a state of {other}')
     for mod in sim.declared: # A trigger on another disease's state: the compartments where it holds are those of the joint states
         for tr in mod.graph.transitions.values():
@@ -939,7 +939,7 @@ def crossing_groups(sim):
                 continue
             for other,state in ss.conditions.leaf_states(tr.trigger.x):
                 other = ss.conditions.modname(other)
-                if other in links and other != mod.name and state in sim.get_declared(other).graph.states:
+                if other in links and other != mod.name and state in sim._declared_module(other).graph.states:
                     join(mod.name, other, f'{mod.name}.{tr.name} is triggered by a state of {other}')
     groups = []
     for name in names:
@@ -959,28 +959,28 @@ def joint_layout(sim, group, solver):
     members = [mod.name for mod in sim.declared if mod.name in group.names] # In the order of the sim
     strats, people, others = [], [], []
     for name in members:
-        engine = lay_out(sim, sim.get_declared(name), solver)
+        engine = lay_out(sim, sim._declared_module(name), solver)
         labels = []
         for ind in engine.people_comps: # A state with several compartments (branches, or the stages of a dwell time) has a level for each
             state = engine.comps[ind].state.name
             own = engine.state_comps[state]
             labels.append(state if len(own) == 1 else f'{state}.{own.index(ind) + 1}')
-        first = engine.graph.first.name
+        first = engine.graph.default_state.name
         entered = lambda track: not track.immediate and not (getattr(track, 'stay', False) and track.p is not None) # Not those who took ss.stay in a split, which only the split enters
         tracks = [track for track in engine.tracks[first] if entered(track)]
         if len(tracks) != 1:
             raise ss.CapabilityError(f'the states of "{name}" cannot be tracked jointly with those of {sc.strjoin(n for n in members if n != name)} with solver="{solver}" yet, since people entering its first state ("{first}") are split between branches.\n'
                                      f'     Run with solver="abm".')
-        placed = [tr for tr in engine.graph.inflows if getattr(tr, 'per', None) is not None and ss.conditions.modname(tr.per.module) in members and ss.conditions.modname(tr.per.module) != name]
-        if placed: # Its own state for the children of another disease's transition (ss.birth(per=)), which are all the births there are
-            into = placed[0].dst[0].name
+        placed = [tr for tr in engine.graph.inflows if getattr(tr, 'birth_on', None) is not None and ss.conditions.modname(tr.birth_on.module) in members and ss.conditions.modname(tr.birth_on.module) != name]
+        if placed: # Its own state for the children of another disease's transition (ss.birth(on=)), which are all the births there are
+            into = placed[0].dest[0].name
             tracks = [track for track in engine.tracks[into] if entered(track)]
-            if len(tracks) != 1 or len({(ss.conditions.modname(tr.per.module), tr.per.name, tr.dst[0].name) for tr in placed}) > 1:
+            if len(tracks) != 1 or len({(ss.conditions.modname(tr.birth_on.module), tr.birth_on.name, tr.dest[0].name) for tr in placed}) > 1:
                 raise ss.CapabilityError(f'"{name}" places the children of another disease in "{into}", which cannot be done with its states tracked jointly with solver="{solver}" yet (people entering it are split between branches, or it places several transitions\' children).\n'
                                          f'     Run with solver="abm".')
         split = np.zeros(len(labels))
         split[engine.people_comps.index(tracks[0].first)] = 1.0 # Where people born to (or arriving in) the others start: in this disease's first state, as agents do, or where it places them
-        strat = ss.dimensions.Strat(name, labels, split=split, kind='disease')
+        strat = ss.dimensions.Strat(name, labels, fractions=split, kind='disease')
         strat.holders = [n for n in members if n != name] # The diseases whose people have this dimension
         strat.state_levels = {state.name:[engine.people_comps.index(ind) for ind in engine.state_comps[state.name]] for state in engine.graph.people_states}
         strats.append(strat)
@@ -1288,13 +1288,13 @@ def split_bins(sim, mod):
 def beyond_stages(raw, exact, sim):
     """ Why Erlang stages cannot follow a time drawn from a distribution, as the end of a sentence, or None """
     cv = np.nan if exact else dwell_cv(raw, sim)
-    if sim.pars.approx is False and not exact:
-        return ', and approx=False'
+    if sim.pars.approximations == 'error' and not exact:
+        return ', and approximations="error"'
     return f' whose coefficient of variation is {cv:.3g}, which Erlang stages cannot follow' if cv > max_cv else None
 
 
 def far_dwell(sim, mod, tr):
-    """ A dwell time that Erlang stages cannot follow, or with `approx=False`, not exactly """
+    """ A dwell time that Erlang stages cannot follow, or with `approximations="error"`, not exactly """
     raw = None if tr.dur is None else tr.dur.raw
     if not isinstance(raw, ss.Dist) or type(raw).__name__ == 'expon':
         return None
@@ -1360,7 +1360,7 @@ def varying_transfers(sim, mod):
 
 
 def far_transfers(sim, mod):
-    """ A transfer's `dur=` that Erlang stages cannot follow, or with `approx=False`, not exactly """
+    """ A transfer's `dur=` that Erlang stages cannot follow, or with `approximations="error"`, not exactly """
     for name,raw in timed_transfers(mod):
         shape = raw.pars.get('a')
         how = None if ss.transitions.varying_pars(raw) else beyond_stages(raw, type(raw) is ss.gamma and sc.isnumber(shape) and shape == int(shape), sim)
@@ -1423,7 +1423,7 @@ def refused_mixing(sim):
     try:
         mixing = ss.solvers.Mixing(sim)
         mixing.unsaid = [] # Said if it is used (see init_compartments())
-        mixing.init(approx=sim.pars.approx, solver='ode')
+        mixing.init(approximations=sim.pars.approximations, solver='ode')
         sim.laid.mixing = mixing
     except ss.CapabilityError as e:
         return dict(reason=said_of(e))
@@ -1479,8 +1479,8 @@ def own_steps(sim):
 
 
 def flow_births(sim, mod):
-    """ A birth driven by a flow (`ss.birth(per=)`), added in Python after each step """
-    return next((dict(tr=tr) for tr in mod.graph.inflows if getattr(tr, 'per', None) is not None), None)
+    """ A birth driven by a flow (`ss.birth(on=)`), added in Python after each step """
+    return next((dict(tr=tr) for tr in mod.graph.inflows if getattr(tr, 'birth_on', None) is not None), None)
 
 
 def stepped_modifier(sim, mod):
@@ -1536,7 +1536,7 @@ kernels = [ # What stops the kernels taking a whole run in one call: something i
     Rule('sim', lambda sim: sim.verbose >= 2, STEPPED, 'it prints each step (verbose=2)'),
     Rule('sim', own_steps, STEPPED, '{names} {has} a step of {its} own ({kinds})'),
     Rule('sim', lambda sim: [dict(mod=mod) for mod in sim.interventions() if mod.t.npts != sim.t.npts][:1], STEPPED, '"{mod.name}" has a timestep of its own'), # Whatever the kernels could otherwise take of it
-    Rule('declared', flow_births, STEPPED, '"{tr.name}" is a birth driven by a flow (ss.birth(per=)), added at each step'),
+    Rule('declared', flow_births, STEPPED, '"{tr.name}" is a birth driven by a flow (ss.birth(on=)), added at each step'),
     Rule('declared', lambda sim, mod: dict(sync=mod.engine.syncs[0]) if mod.engine.syncs else None, STEPPED, '"{sync.mod.name}.{sync.otr.name}" is a synchronized flow of "{mod.name}.{sync.tr.name}"'), # Recorded in the other module after each step
     Rule('declared', lambda sim, mod: dict(tr=mod.engine.triggers[0]) if mod.engine.triggers else None, STEPPED, '"{tr.name}" is triggered by {tr.trigger}, which is applied at each step'), # In Python, for those who come to meet them other than by a transition
     Rule('declared', lambda sim, mod: dict(tr=mod.engine.event_triggers[0]) if mod.engine.event_triggers else None, STEPPED, '"{tr.name}" is triggered by {tr.trigger}, which is applied at each step'), # Moved in Python at the end of each step

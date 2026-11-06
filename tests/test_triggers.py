@@ -1,5 +1,5 @@
 """
-Test triggered moves (ss.on), the rest staying (ss.stay), lazy handles (ss.ppl, ss.state), and distributions by group
+Test triggered moves (ss.on), the rest staying (ss.stay), lazy handles (ss.person, ss.ref), and distributions by group
 """
 import numpy as np
 import sciris as sc
@@ -11,12 +11,12 @@ kw = dict(verbose=0)
 
 @sc.timer()
 def test_lazy():
-    sc.heading('Testing lazy conditions on people and ss.state')
+    sc.heading('Testing lazy conditions on people and ss.ref')
     def make(cond):
         S, I = ss.states('S I')
         d = ss.Disease(S, I, onset=ss.Transition(S, I, rate=ss.peryear(0.5), where=cond), name='d')
         return ss.Sim(d, n_agents=2000, start=2000, stop=2005, unit='year', **kw).run().diseases.d
-    new = make(ss.ppl.female & (ss.ppl.age >= 15)) # Before there are any people
+    new = make(ss.person.female & (ss.person.age >= 15)) # Before there are any people
     assert new.I.count() > 100
     ppl = new.sim.people
     assert np.all(ppl.female[new.I.uids]) and np.all(ppl.age[new.I.uids] >= 15)
@@ -28,11 +28,11 @@ def test_lazy():
         S, I = ss.states('S I')
         b = ss.Disease(sb=ss.Transition(S, I, rate=ss.peryear(1.0), where=where), name='b')
         return ss.Sim([a, b], n_agents=2000, start=2000, stop=2005, unit='year', **kw).run()
-    sim = pair(ss.state('a.I'))
+    sim = pair(ss.ref('a.I'))
     a, b = sim.diseases.a, sim.diseases.b
     assert np.all(a.I[b.I.uids]) and b.I.count() > 100
     with pytest.raises(ValueError):
-        ss.state('X')
+        ss.ref('X')
     return sim
 
 
@@ -49,7 +49,7 @@ def test_hpv_cancel():
     names = ['hpv16', 'hpv18']
     def make(g):
         S, P, C, X, Z = ss.states('S P C X Z')
-        [other] = [ss.state(f'{o}.X') for o in names if o != g] # The sibling does not exist yet
+        [other] = [ss.ref(f'{o}.X') for o in names if o != g] # The sibling does not exist yet
         return ss.Disease(S, P, C, X, Z,
             infection = S >> P @ ss.peryear(0.3),
             precin    = P >> C @ ss.years(2),
@@ -77,7 +77,7 @@ def test_syphilis_stay():
             tertiary = ss.Transition(LL, T, p=0.35, dur=dur)
         else:
             tertiary = ss.Transition(LL, [T, ss.stay], p=[0.35, None], dur=dur)
-        return ss.Disease(LL, T, Sp, tertiary=tertiary, cure=(LL + T) >> Sp, first='LL', name='syph') # Everyone starts in LL; cure is undriven, so not the remainder
+        return ss.Disease(LL, T, Sp, tertiary=tertiary, cure=(LL + T) >> Sp, default_state='LL', name='syph') # Everyone starts in LL; cure is undriven, so not the remainder
     out = sc.obj()
     with pytest.raises(ValueError, match='ss.stay'): # The rest stay only if asked to, with ss.stay
         make('implicit')
@@ -89,14 +89,14 @@ def test_syphilis_stay():
         assert np.isclose(res.tertiary.sum(), res.T[-1], rtol=1e-6) # Staying is not a flow
         out[f'explicit_{solver}'] = sim
     assert 'states.LL.stay' not in out.explicit_abm.diseases.syph.graph.guessed
-    s = out.explicit_abm.diseases.syph # Those who stayed: no new dwell time, and LL.time keeps running
+    s = out.explicit_abm.diseases.syph # Those who stayed: no new dwell time, and LL.time_in keeps running
     u = s.LL.uids
     assert np.all(s.ti_LL[u] == -1) and np.all(np.isinf(s.ti_exit_LL[u])) # Placed at the start, dated by the step before the first
 
     # The remainder of branches whose p= is not a constant
     def branches(p):
         I, H, R = ss.states('I H R')
-        return ss.Disease(I, H, R, severe=ss.Transition(I, H, p=p, dur=ss.years(1)), mild=ss.Transition(I, R, dur=ss.years(1)), first='I', name='d') # Everyone starts in I
+        return ss.Disease(I, H, R, severe=ss.Transition(I, H, p=p, dur=ss.years(1)), mild=ss.Transition(I, R, dur=ss.years(1)), default_state='I', name='d') # Everyone starts in I
     for solver in ['abm', 'ode']:
         size = dict(n_agents=10_000) if solver == 'abm' else dict(total_pop=10_000)
         ns = [ss.Sim(branches(p), solver=solver, start=2000, stop=2010, unit='year', **size, **kw).run().results.d.H[-1] for p in [0.3, lambda sim: 0.3]]
@@ -114,9 +114,9 @@ def test_ct_by_sex():
     def make(form='pars'):
         E, P, A, Y, S = ss.states('E P A Y S')
         if form == 'pars': # A Dist whose parameters are values by group
-            onset = ss.lognorm_ex(mean=ss.by(sex=dict(female=ss.months(ms[0][0]), male=ss.months(ms[1][0]))), std=ss.by(sex=dict(female=ss.months(ms[0][1]), male=ss.months(ms[1][1]))))
+            onset = ss.lognormal(mean=ss.by(sex=dict(female=ss.months(ms[0][0]), male=ss.months(ms[1][0]))), std=ss.by(sex=dict(female=ss.months(ms[0][1]), male=ss.months(ms[1][1]))))
         else: # A value by group that is a Dist: the same
-            onset = ss.by(sex={sex:ss.lognorm_ex(ss.months(m), ss.months(sd)) for sex,(m,sd) in zip(['female', 'male'], ms)})
+            onset = ss.by(sex={sex:ss.lognormal(ss.months(m), ss.months(sd)) for sex,(m,sd) in zip(['female', 'male'], ms)})
         p_symp = ss.by(sex=dict(female=0.2, male=0.54))
         return ss.Disease(E, P, A, Y, S,
             symp    = ss.Transition(E, P, p=p_symp), # Was one transition per sex, with p=by_sex(...) and sync_sex()
@@ -124,7 +124,7 @@ def test_ct_by_sex():
             onset   = P >> Y @ onset,
             clear_a = A >> S @ ss.months(6),
             clear_y = Y >> S @ ss.months(3),
-            first='E', name='ct') # Everyone starts in E
+            default_state='E', name='ct') # Everyone starts in E
     kw2 = dict(start=2000, stop=2002, dt=ss.months(0.25), unit='year', **kw)
     sims = sc.obj()
     for key,form,strat in [('nostrat', 'pars', None), ('pars', 'pars', dict(sex=['female', 'male'])), ('dists', 'dists', dict(sex=['female', 'male']))]:
@@ -151,7 +151,7 @@ def test_ct_by_sex():
     # A Dist with a function as a parameter (FPsim: duration of use by age), and typed rates inside ss.by
     def callable_dist(solver):
         A, B = ss.states('A B')
-        d = ss.Disease(A, B, ab=ss.Transition(A, B, dur=ss.lognorm_ex(mean=lambda self, sim, uids: np.full(len(uids), 0.5), std=0.1)), first='A', name='d') # Everyone starts in A
+        d = ss.Disease(A, B, ab=ss.Transition(A, B, dur=ss.lognormal(mean=lambda self, sim, uids: np.full(len(uids), 0.5), std=0.1)), default_state='A', name='d') # Everyone starts in A
         size = dict(n_agents=1000) if solver == 'abm' else dict(total_pop=1000)
         return ss.Sim(d, solver=solver, **size, start=2000, stop=2002, dt=ss.months(1), unit='year', verbose=0).run()
     assert callable_dist('abm').results.d.ab.sum() == 1000
@@ -169,7 +169,7 @@ def test_with_conveyor():
     size = lambda solver: dict(n_agents=10_000) if solver == 'abm' else dict(total_pop=10_000)
     for solver in ['abm', 'ode']: # Those who stay at the end of a fixed dwell are not in the flow
         LL, T, Sp = ss.states('LL T Sp')
-        d = ss.Disease(LL, T, Sp, tertiary=ss.Transition(LL, [T, ss.stay], p=[0.35, None], dur=ss.constant(ss.years(2))), cure=(LL + T) >> Sp, first='LL', name='syph') # Everyone (1 or more is people)
+        d = ss.Disease(LL, T, Sp, tertiary=ss.Transition(LL, [T, ss.stay], p=[0.35, None], dur=ss.constant(ss.years(2))), cure=(LL + T) >> Sp, default_state='LL', name='syph') # Everyone (1 or more is people)
         res = ss.Sim(d, solver=solver, start=2000, stop=2004, unit='year', **size(solver), **kw).run().results.syph
         assert res.T[1] == 0 and np.isclose(res.T[-1]/1e4, 0.35, atol=0.02), f'{solver}: {res.T}'
         assert np.isclose(res.tertiary.sum(), res.T[-1], rtol=1e-6), f'{solver}: {res.tertiary.sum()} in the flow, {res.T[-1]} in T'
@@ -178,12 +178,12 @@ def test_with_conveyor():
         S, I = ss.states('S I')
         a = ss.Disease(sa=ss.Transition(S, I, rate=ss.peryear(0.5)), name='a')
         E, I, Z = ss.states('E I Z')
-        latent = E >> I @ (ss.peryear(1)*(E.time > ss.years(1))) if clock else ss.Transition(E, I, dur=ss.constant(ss.years(2)))
-        return [a, ss.Disease(E, I, Z, latent=latent, flag=ss.Transition(E, Z, where=a.I), first='E', name='b')] # The trigger tracks a and b jointly
+        latent = E >> I @ (ss.peryear(1)*(E.time_in > ss.years(1))) if clock else ss.Transition(E, I, dur=ss.constant(ss.years(2)))
+        return [a, ss.Disease(E, I, Z, latent=latent, flag=ss.Transition(E, Z, on=a.I), default_state='E', name='b')] # The trigger tracks a and b jointly
     out = [ss.Sim(make(False), solver=solver, start=2000, stop=2004, dt=ss.months(1), unit='year', **size(solver), **kw).run().results.b for solver in ['abm', 'ode']]
     for key in ['I', 'Z']:
         assert np.allclose(out[0][key], out[1][key], atol=300), f'{key}: {out[0][key][::12]} as agents, {out[1][key][::12]} as compartments'
-    with pytest.raises(ss.CapabilityError, match='E.time is a clock'):
+    with pytest.raises(ss.CapabilityError, match='E.time_in is a clock'):
         ss.Sim(make(True), solver='ode', start=2000, stop=2004, dt=ss.months(1), unit='year', **size('ode'), **kw).init()
     return
 
@@ -193,14 +193,14 @@ def test_after_event():
     sc.heading('Testing an exact dwell until an event of another module, and a time after it')
     A, B = ss.states('A B')
     def make(**kw):
-        a = ss.Disease(A, B, go=ss.Transition(A, B, dur=ss.uniform(ss.days(5), ss.days(15))), first='A', name='a')
+        a = ss.Disease(A, B, go=ss.Transition(A, B, dur=ss.uniform(ss.days(5), ss.days(15))), default_state='A', name='a')
         X, Y = ss.states('X Y')
-        return [a, ss.Disease(X, Y, end=ss.Transition(X, Y, where=a.go, **kw), first='X', name='b')]
+        return [a, ss.Disease(X, Y, end=ss.Transition(X, Y, on=a.go, **kw), default_state='X', name='b')]
     for delay,lag in [(None, 0), (ss.constant(ss.days(5)), 5)]:
         res = ss.Sim(diseases=make(**({} if delay is None else dict(dur=delay))), n_agents=2000, unit='day', stop=30, verbose=0).run().results
         assert np.array_equal(res.b.end.values[lag:], res.a.go.values[:len(res.a.go) - lag]) # Each person leaves X when a.go happens to them, or exactly 5 days after
     with pytest.warns(RuntimeWarning, match='ss.constant'): # A function as dur= is the mean of an exponential
-        ss.Sim(ss.Disease(A, B, go=ss.Transition(A, B, dur=lambda sim: 10.0), first='A', name='a'), n_agents=100, verbose=0).init()
+        ss.Sim(ss.Disease(A, B, go=ss.Transition(A, B, dur=lambda sim: 10.0), default_state='A', name='a'), n_agents=100, verbose=0).init()
     return
 
 
@@ -213,7 +213,7 @@ def test_stay_keeps_course():
     S, A, P = ss.states('S A P')
     infection = S >> A @ ss.peryear(1.0)
     clearance = A >> S @ ss.constant(ss.months(6))
-    progress = ss.Transition(A, [P, ss.stay], p=[0.0, None], where=infection, dur=ss.constant(ss.months(1)))
+    progress = ss.Transition(A, [P, ss.stay], p=[0.0, None], on=infection, dur=ss.constant(ss.months(1)))
     res = ss.Sim(ss.Disease(infection, clearance, progress, name='d'), **common).run().results.d
     assert np.array_equal(res.clearance.values[6:], res.infection.values[:-6]) # Everyone clears exactly 6 months after infection
 
@@ -221,8 +221,8 @@ def test_stay_keeps_course():
     S, P, Y = ss.states('S P Y')
     infection = S >> P @ ss.peryear(1.0)
     symptoms = P >> Y @ ss.constant(ss.months(1))
-    seek = ss.Transition(Y, [Y, ss.stay], p=[0.5, None], where=symptoms, dur=ss.constant(ss.months(3)))
-    clearance = ss.Transition(Y, S, where=symptoms, dur=ss.constant(ss.months(3)))
+    seek = ss.Transition(Y, [Y, ss.stay], p=[0.5, None], on=symptoms, dur=ss.constant(ss.months(3)))
+    clearance = ss.Transition(Y, S, on=symptoms, dur=ss.constant(ss.months(3)))
     sought = []
     count = lambda sim: sought.append(len(sim.diseases.d.seek.uids)) # Its event: those who sought care, not those who stayed
     res = ss.Sim(ss.Disease(infection, symptoms, seek, clearance, name='d'), analyzers=count, **common).run().results.d
@@ -260,7 +260,7 @@ def make_hpv_cancel(order, names=('hpv16', 'hpv18')):
             infection = S >> P @ ss.peryear(0.3),
             precin    = P >> C @ ss.years(2),
             cin       = cin[g],
-            canceled = ss.Transition([S, P, C], Z, where=cin[o].to(states[o][3])), # The other genotype's branch to cancer
+            canceled = ss.Transition([S, P, C], Z, on=cin[o].to(states[o][3])), # The other genotype's branch to cancer
             name = g))
     return mods
 

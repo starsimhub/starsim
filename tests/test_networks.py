@@ -176,7 +176,7 @@ def test_random_stratified():
     contacts = np.array([0.25, 0.93, 8.55]) # Realized degree per risk group
     rng = np.random.default_rng(1)
     group = rng.choice([0, 1, 2], size=n, p=fracs)
-    n_contacts = ss.constant(v=lambda self, sim, uids: contacts[group[np.asarray(uids)]])
+    n_contacts = ss.constant(value=lambda self, sim, uids: contacts[group[np.asarray(uids)]])
 
     def measure(net):
         sim = ss.Sim(n_agents=n, networks=net, rand_seed=1, verbose=0).init()
@@ -509,7 +509,7 @@ def test_dynamic():
 @sc.timer()
 def test_cluster():
     sc.heading('Testing cluster networks')
-    net = ssl.ClusterNet(cluster_size=ss.poisson(5), age_range=[18, 65])
+    net = ssl.ClusterNet(cluster_size=ss.poisson(5), where=(ss.person.age >= 18) & (ss.person.age < 65))
     sim = ss.Sim(n_agents=medium, networks=net).init()
     net = sim.networks[0] # The sim's copy, initialized
     ages = sim.people.age
@@ -534,7 +534,7 @@ def test_hybrid():
     assert nets.c.pars.n_contacts.pars.lam == 10 # Partial update of contacts
     assert isinstance(nets.s, ssl.ClusterNet) and isinstance(nets.w, ssl.ClusterNet) # Clusters by default
     constant = ss.Sim(n_agents=small, networks=ssl.HybridNet(contacts=dict(s=ss.constant(20))), verbose=0).init().networks.s
-    assert constant.pars.cluster_size.pars.v == 21 # A cluster of 21 gives 20 contacts each
+    assert constant.pars.cluster_size.pars.value == 21 # A cluster of 21 gives 20 contacts each
     closed = ss.Sim(n_agents=small, diseases='sis', networks=ssl.HybridNet(contacts=dict(s=0)), verbose=0).run()
     assert len(closed.networks.s) == 0 and len(closed.networks.w) > 0 # No contacts is an empty network
 
@@ -647,8 +647,8 @@ def test_beta_readings():
 
     # Mother-to-child networks transmit one way, so one value is enough (a pair was [b, 0])
     S, I = ss.states('S I')
-    hiv = ss.Disease(infection=ss.Transition(S, I, rate=dict(sexualnet=ss.peract(m2f=0.01, f2m=0.005), maternalnet=ss.peryear(0.5)) * I), init_prev=0.1, name='hiv')
-    sim = ss.Sim(hiv, networks=[ss.SexualNet(), ss.MaternalNet()], demographics=ss.Pregnancy(), **kw).run()
+    hiv = ss.Disease(infection=ss.Transition(S, I, rate=dict(sexualnet=ss.peract(m2f=0.01, f2m=0.005), prenatalnet=ss.peryear(0.5)) * I), init_prev=0.1, name='hiv')
+    sim = ss.Sim(hiv, networks=[ss.SexualNet(), ss.PrenatalNet()], demographics=ss.Pregnancy(), **kw).run()
     assert sim.results.hiv.I[-1] > 0
     return
 
@@ -660,7 +660,7 @@ def test_peract_describe():
         S, P, EL = ss.states('S P EL')
         syph = ss.Disease(S, P, EL, infection=ss.Transition(S, P, rate=beta * (P + 0.55*EL)),
                           latent=ss.Transition(P, EL, dur=ss.years(1)), clear=ss.Transition(EL, S, dur=ss.years(2)), init=dict(P=0.05), name='syph')
-        condoms = ss.modify(syph.infection, efficacy=0.5, share=ss.timeseries({2000: 0.05, 2020: 0.3}), route='sexualnet', name='condoms')
+        condoms = ss.modify(syph.infection, efficacy=0.5, share=ss.timeseries({2000: 0.05, 2020: 0.3}), network='sexualnet', name='condoms')
         return ss.Sim(syph, networks=ss.SexualNet(), interventions=condoms, n_agents=500, start=2000, stop=2002, verbose=0)
     sim = make(ss.peract(m2f=0.3, f2m=0.15)).init()
     text = sim.diseases.syph.describe(output=True)
@@ -679,16 +679,16 @@ def test_beta_default():
         return ss.Disease(infection=ss.Transition(S, I, rate=betas * I), recovery=ss.Transition(I, S, dur=ss.years(1)), init_prev=0.1, name='d')
 
     # A library disease names routes the sim may not have: those are dropped with a note, and the routes it does not name take the default
-    sim = ss.Sim(make(sexualnet=ss.peract(m2f=m2f, f2m=0.5*m2f), msm=ss.peract(0.1), default=0), networks=[ss.SexualNet(), ss.MaternalNet()], demographics='pregnancy', **kw).run()
+    sim = ss.Sim(make(sexualnet=ss.peract(m2f=m2f, f2m=0.5*m2f), msm=ss.peract(0.1), default=0), networks=[ss.SexualNet(), ss.PrenatalNet()], demographics='pregnancy', **kw).run()
     assert sim.results.d.I[-1] > 0
     assert any('msm' in note and 'default' in note for note in sim.notes), sim.notes
-    assert 'beta on maternalnet' in sim.diseases.d.describe(output=True)
+    assert 'beta on prenatalnet' in sim.diseases.d.describe(output=True)
 
     # Without a default, a name that is not a route, or a route with no value, still raises, since it is likely a typo
     with pytest.raises(ValueError):
-        ss.Sim(make(sexualnet=ss.peract(0.01), maternalnet=0, msm=ss.peract(0.1)), networks=[ss.SexualNet(), ss.MaternalNet()], **kw).init()
+        ss.Sim(make(sexualnet=ss.peract(0.01), prenatalnet=0, msm=ss.peract(0.1)), networks=[ss.SexualNet(), ss.PrenatalNet()], **kw).init()
     with pytest.raises(ValueError):
-        ss.Sim(make(sexualnet=ss.peract(0.01)), networks=[ss.SexualNet(), ss.MaternalNet()], **kw).init()
+        ss.Sim(make(sexualnet=ss.peract(0.01)), networks=[ss.SexualNet(), ss.PrenatalNet()], **kw).init()
 
     # The default is the same as giving each route its value, as agents and as an ODE, which agree; it can be a typed rate or a parameter
     def pools(solver, **betas):
@@ -745,7 +745,7 @@ def test_condoms():
         si = ss.Disease(infection=ss.Transition(S, I, rate=0.02 * I), init_prev=0.05, name='si')
         net = CondomNet(name='mf', acts=ss.constant(ss.freqperyear(50)))
         net.define_pars(share=share)
-        condoms = ss.modify(si.infection, efficacy=eff, share=lambda net: net.edges.condoms, route='mf', name='condoms')
+        condoms = ss.modify(si.infection, efficacy=eff, share=lambda net: net.edges.condoms, network='mf', name='condoms')
         return ss.Sim(si, networks=net, interventions=condoms, n_agents=2000, start=2000, stop=2005, verbose=0, rand_seed=seed)
     sim = make(share=0.5).init()
     mf, si = sim.networks.mf, sim.diseases.si
@@ -788,7 +788,7 @@ def test_coded_declared_transmission():
 
     # Over a random network, with and without modifiers of its contacts and of the transmission on it
     random = lambda: ss.RandomNet(n_contacts=4)
-    mods = lambda target: [ss.modify(target, multiply=0.5, route='randomnet'), ss.modify('randomnet.pars.n_contacts', multiply=0.6)]
+    mods = lambda target: [ss.modify(target, multiply=0.5, network='randomnet'), ss.modify('randomnet.pars.n_contacts', multiply=0.6)]
     plain = pairs(True, ss.peryear(0.3), random())
     assert len(plain) > 100 and plain == pairs(False, ss.peryear(0.3), random())
     modified = pairs(True, ss.peryear(0.3), random(), mods('si.rel_sus')) # A disease written as code has no transmission to name, so a modifier on a route is of its rel_sus
@@ -798,9 +798,9 @@ def test_coded_declared_transmission():
     couples = lambda: Couples(name='mf', debut=ss.constant(0), acts=4)
     directed = pairs(True, beta, couples())
     assert len(directed) > 50 and directed == pairs(False, beta, couples())
-    assert pairs(True, beta, couples(), [ss.modify('si.rel_sus', multiply=0, route='mf')]) == [] # No transmission on that route
+    assert pairs(True, beta, couples(), [ss.modify('si.rel_sus', multiply=0, network='mf')]) == [] # No transmission on that route
     with pytest.raises(ValueError, match='rel_sus'):
-        pairs(True, beta, Couples(name='mf', acts=4), [ss.modify('si.rel_trans', multiply=0, route='mf')])
+        pairs(True, beta, Couples(name='mf', acts=4), [ss.modify('si.rel_trans', multiply=0, network='mf')])
     return
 
 
@@ -814,8 +814,8 @@ def test_route_par():
         nets = [ss.RandomNet(name='a', n_contacts=3), ss.RandomNet(name='b', n_contacts=3)]
         sim = ss.Sim(diseases=sir, networks=nets, connectors=mods, n_agents=1000, start=2000, stop=2003, rand_seed=1, verbose=0).run()
         return sim.results.sir.infection.sum(), sim.results.sir.reinfection.sum()
-    by_par = run(ss.modify('sir.pars.beta', multiply=0.2, route='b'))
-    assert by_par == run([ss.modify(f'sir.{tr}', multiply=0.2, route='b') for tr in ['infection', 'reinfection']])
+    by_par = run(ss.modify('sir.pars.beta', multiply=0.2, network='b'))
+    assert by_par == run([ss.modify(f'sir.{tr}', multiply=0.2, network='b') for tr in ['infection', 'reinfection']])
     assert by_par[0] < run(None)[0]
     return by_par
 
@@ -847,8 +847,8 @@ def test_infection_sources():
         sources, nets = d.engine.sources(new)
         found.append((len(new), np.count_nonzero(~np.isnan(sources))))
     S, I = ss.states('S I')
-    d = ss.Disease(infection=S >> I @ dict(sexualnet=ss.peract(0.2), default=0) * I, mtct=S >> I @ dict(maternalnet=ss.peryear(2), default=0) * I, recovery=I >> S @ ss.years(1), init_prev=0.2, name='d')
-    sim = ss.Sim(d, networks=[ss.SexualNet(), ss.MaternalNet()], demographics=ss.Pregnancy(fertility_rate=ss.freqperyear(100)), n_agents=2000, stop=3, analyzers=check, rand_seed=1, verbose=0).run()
+    d = ss.Disease(infection=S >> I @ dict(sexualnet=ss.peract(0.2), default=0) * I, mtct=S >> I @ dict(prenatalnet=ss.peryear(2), default=0) * I, recovery=I >> S @ ss.years(1), init_prev=0.2, name='d')
+    sim = ss.Sim(d, networks=[ss.SexualNet(), ss.PrenatalNet()], demographics=ss.Pregnancy(fertility_rate=ss.freqperyear(100)), n_agents=2000, stop=3, analyzers=check, rand_seed=1, verbose=0).run()
     n_new, n_found = np.sum(found, axis=0)
     assert n_new > 0 and n_found == n_new # Each infection over a network has its source, whichever transmission it was by
     return sim
@@ -881,7 +881,7 @@ def test_edge_index():
     assert np.array_equal(np.column_stack([p1, p2]), edges), 'Expected the same random graph as NetworkX makes from the same random numbers'
     S, I, X = ss.states('S I X')
     sis = ss.Disease(infection=S >> I @ 0.1*I, recovery=I >> S @ 0.2, quarantine=I >> X @ 0.05, init_n=dict(I=20), name='sis')
-    tracing = ss.Delivery(move=I >> X, who=sis.quarantine, trace='net', coverage=0.5)
+    tracing = ss.Delivery(move=I >> X, on=sis.quarantine, trace='net', coverage=0.5)
     sim = ss.Sim(sis, networks=ssl.StaticNet(n_contacts=8, name='net'), interventions=tracing, n_agents=2000, unit='day', stop=30, verbose=0)
     runs = []
     for share in [0, 1]: # By a pass over the edges, then by the edges of each agent wherever it can
@@ -904,7 +904,7 @@ def test_shared_pass():
     sim = ss.Sim(diseases=sir, networks=ss.RandomNet(n_contacts=5), n_agents=medium, start=2000, stop=2002, dt=ss.years(0.1), verbose=0)
     sim.run(until='2001-01-01')
     eng = sim.diseases.sir.engine
-    pairs = [(tr, src) for tr in eng.graph.transmissions for src in tr.src]
+    pairs = [(tr, src) for tr in eng.graph.transmissions for src in tr.source]
     rng = sim.diseases.sir.trans_rng
     ind = rng.dists[0].ind
     together = eng.transmit_together(pairs)

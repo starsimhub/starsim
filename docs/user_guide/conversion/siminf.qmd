@@ -59,7 +59,7 @@ sir = ss.Disease(
     init_n    = dict(I=ss.by(herd=u0.I.values)),
 )
 size = u0[['S', 'I', 'R']].sum(axis=1)
-sir.stratify(herd=list(u0.node.astype(str)), kind='space', split=size/size.sum(), mobility=ss.geo.Mobility(data=register))
+sir.stratify(herd=list(u0.node.astype(str)), kind='space', fractions=size/size.sum(), mobility=ss.geo.Mobility(data=register))
 sim = ss.Sim(sir, solver='gillespie', unit='day', start=0, stop=1460, total_pop=size.sum())
 sim.run()
 sim.plot()

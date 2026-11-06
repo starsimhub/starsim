@@ -134,13 +134,13 @@ def test_syntax():
     ss.date.arange(2020,2030)+ss.datedur(years=1) # add datedur to date array
 
     # Construction of various duration ranges and addition with durations and dates
-    ss.dur.arange(ss.years(0), ss.years(10),ss.years(1)) + ss.years(1)
-    ss.dur.arange(ss.years(0), ss.years(10), ss.datedur(years=1)) + ss.years(1)
-    ss.dur.arange(ss.years(0), ss.datedur(years=10), ss.datedur(years=1)) + ss.years(1)
+    ss.Duration.arange(ss.years(0), ss.years(10),ss.years(1)) + ss.years(1)
+    ss.Duration.arange(ss.years(0), ss.years(10), ss.datedur(years=1)) + ss.years(1)
+    ss.Duration.arange(ss.years(0), ss.datedur(years=10), ss.datedur(years=1)) + ss.years(1)
 
-    ss.dur.arange(ss.years(0), ss.years(10), ss.years(1)) + ss.date(2000)
-    ss.dur.arange(ss.years(0), ss.years(10), ss.datedur(years=1)) + ss.date(2000)
-    ss.dur.arange(ss.years(0), ss.datedur(years=10), ss.datedur(years=1)) + ss.date(2000)
+    ss.Duration.arange(ss.years(0), ss.years(10), ss.years(1)) + ss.date(2000)
+    ss.Duration.arange(ss.years(0), ss.years(10), ss.datedur(years=1)) + ss.date(2000)
+    ss.Duration.arange(ss.years(0), ss.datedur(years=10), ss.datedur(years=1)) + ss.date(2000)
 
     # Rates
     assert (1/ss.years(1)) == ss.peryear(1)
@@ -451,7 +451,7 @@ def test_arithmetic():
                 ops[op](a, b)
         else:
             out = ops[op](a, b)
-            if isinstance(expected, ss.TimePar):
+            if isinstance(expected, ss.time.TimePar):
                 assert type(out) is type(expected) and np.isclose(out.value, expected.value), f'{row} gave {out!r}, not {expected!r}'
             else:
                 assert np.isclose(out, expected), f'{row} gave {out}, not {expected}'
@@ -493,7 +493,7 @@ def test_bare_units():
 
     # The numbers a function gives a distribution are in its unit= (they were read as years, so nobody left)
     fn = lambda self, sim, uids: np.full(len(uids), 6.0)
-    n_I = ss.Sim(sis(ss.lognorm_ex(mean=fn, std=1, unit='month')), start=2000, stop=2003, dt=ss.months(1), n_agents=1000, verbose=0).run().results.d.I
+    n_I = ss.Sim(sis(ss.lognormal(mean=fn, std=1, unit='month')), start=2000, stop=2003, dt=ss.months(1), n_agents=1000, verbose=0).run().results.d.I
     assert n_I[24] == 0
 
     # A bare beta is in the unit of the disease's own durations, beside births and deaths per year (it raised IncompatibleTypes)
@@ -535,21 +535,21 @@ def test_time_text():
 
     # Numbers as numbers in the timeline's own unit, dates as dates without a time of day (they were "days 2000 to 2002" and "on day 2000-01-08 00:27:36")
     sim = ss.Sim(make(), total_pop=1e5, start=2000, stop=2002, verbose=0).run()
-    assert 'years 2000 to 2002' in sim.start_lines()[0] and 'on year 2000.02' in sim.end_line()
+    assert 'years 2000 to 2002' in sim._start_lines()[0] and 'on year 2000.02' in sim._end_line()
     sim = ss.Sim(make(), total_pop=1e5, start='2000', stop='2002', verbose=0).run()
-    assert '2000-01-01 to 2002-01-01' in sim.start_lines()[0] and sim.end_line().endswith('on 2000-01-08')
+    assert '2000-01-01 to 2002-01-01' in sim._start_lines()[0] and sim._end_line().endswith('on 2000-01-08')
     sim = ss.Sim(make(), total_pop=1e5, stop=ss.days(7300), dt=7, verbose=0).init() # A stop that is not a whole number of steps is said (it ended at day 7294 silently)
-    assert 'days 0 to 7294 (the last whole step before 7300)' in sim.start_lines()[0]
+    assert 'days 0 to 7294 (the last whole step before 7300)' in sim._start_lines()[0]
 
     # With no unit, times are steps (they were "days 0 to 50"), and a module of its own with nothing per person has no population (it was "10,000 people, as an ODE")
     S, I, R = ss.states('S I R')
     sim = ss.Sim(ss.Disease(S >> I @ 0.3*I, I >> R @ 0.1, name='sir'), stop=50, verbose=0).run()
-    assert '10,000 people, as an ODE, steps 0 to 50' in sim.start_lines()[0] and 'on step ' in sim.end_line()
+    assert '10,000 people, as an ODE, steps 0 to 50' in sim._start_lines()[0] and 'on step ' in sim._end_line()
     class Own(ss.Module):
         def step(self):
             pass
-    assert 'own, as an ODE, steps 0 to 50' in ss.Sim(Own(), stop=50, verbose=0).init().start_lines()[0]
-    assert '500 people, as an ODE' in ss.Sim(Own(), total_pop=500, stop=50, verbose=0).init().start_lines()[0]
+    assert 'own, as an ODE, steps 0 to 50' in ss.Sim(Own(), stop=50, verbose=0).init()._start_lines()[0]
+    assert '500 people, as an ODE' in ss.Sim(Own(), total_pop=500, stop=50, verbose=0).init()._start_lines()[0]
 
     # A date given to a delivery in a sim in calendar years, without warnings (they were "Dates with years < 1 are not valid")
     with warnings.catch_warnings():

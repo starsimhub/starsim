@@ -780,7 +780,7 @@ def run_sets(sim, par_sets):
     """
     Run a sim with many sets of parameter values, taking the runs in one call to JAX
 
-    Each set is a dict of values by name, as for `sim.restart(pars=...)`. Only for a
+    Each set is a dict of values by name, as for `sim._restart(pars=...)`. Only for a
     sim that `ss.solvers.why_not(sim, 'jax')` allows: an ODE that the kernels run from start to finish.
 
     Args:
@@ -792,7 +792,7 @@ def run_sets(sim, par_sets):
     mods = sim.declared
     captured = [[] for mod in mods]
     for pars in par_sets:
-        sim.restart(pars=pars)
+        sim._restart(pars=pars)
         for j,mod in enumerate(mods):
             captured[j].append(capture(mod.engine))
     outs = outputs(sim, captured, kind='many')
@@ -833,7 +833,7 @@ def gradient(sim, set_pars, x0, read, rel_step=1e-5):
 
     Args:
         sim (`ss.Sim`): an initialized sim that `ss.solvers.why_not(sim, 'jax')` allows, which is left as its run at x0
-        set_pars (func): called with an array of values; restarts the sim with them (e.g. `lambda x: sim.restart(pars=dict(beta=x[0]))`)
+        set_pars (func): called with an array of values; restarts the sim with them (e.g. `lambda x: sim._restart(pars=dict(beta=x[0]))`)
         x0 (array): the values to work out the derivative at
         read (func): called with the sim after its run; returns a number or an array (or an `sc.obj` of arrays)
         rel_step (float): the step for the central differences, relative to each value (or absolute, for a value of 0)
@@ -907,7 +907,7 @@ def find_pars(sim, names=None, several=False):
         errormsg = f'Found {what}; parameters are {sc.strjoin(options)}'
         raise ValueError(errormsg)
     for key,p in out.items():
-        val = p.raw.value if isinstance(p.raw, ss.TimePar) else p.raw
+        val = p.raw.value if isinstance(p.raw, ss.time.TimePar) else p.raw
         if not (sc.isnumber(val) or (several and isinstance(val, (ss.by, np.ndarray, ss.timeseries)))):
             what = 'a number, a value for each level (ss.by), an array, or a time series' if several else 'a single number'
             errormsg = f'Only a parameter that is {what} can be differentiated with respect to, not "{key}" ({p.raw})'
@@ -940,7 +940,7 @@ def entries(sim, names=None):
     pars = sim.par_values
 
     def set_pars(x):
-        sim.restart(pars=sc.mergedicts(pars, ss.fit.to_pars(keys, found, x, types, elements)))
+        sim._restart(pars=sc.mergedicts(pars, ss.fit.to_pars(keys, found, x, types, elements)))
 
     return found, set_pars, x0, bounds
 
@@ -1017,7 +1017,7 @@ def convert_fitted(raw, val, unit_base, xp=np):
     if isinstance(raw, ss.prob):
         period = 1.0 if raw.unit is None else raw.unit.to(unit_base).value
         return -xp.log1p(-val)/period
-    elif isinstance(raw, ss.TimePar):
+    elif isinstance(raw, ss.time.TimePar):
         return val*ss.solvers.convert(type(raw)(1.0), unit_base)
     return val
 
@@ -1199,7 +1199,7 @@ class Density(sc.prettyobj):
     def convert(self, i, val):
         """ A fitted value as the engine uses it: in the sim's unit (see `convert_fitted()`) """
         raw = self.raws[i]
-        if not (isinstance(raw, ss.TimePar) or self.external[i] or sc.isnumber(raw)):
+        if not (isinstance(raw, ss.time.TimePar) or self.external[i] or sc.isnumber(raw)):
             raise Unsupported(f'the fitted parameter "{self.names[i]}" is a {type(raw).__name__}')
         return convert_fitted(raw, val, self.sim.unit_base, jax().numpy)
 

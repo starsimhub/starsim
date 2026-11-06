@@ -20,7 +20,7 @@ def compile(args=None, needed=False):
     """
     import starsim as ss
     if getattr(args, 'check', False):
-        status = ss.compile_status()
+        status = ss.kernels.compile_status()
         print(status.summary)
         sys.exit(0 if status.compiled else 1)
     if choose_rust(args, built=ss.solvers.backends.rust.built()):

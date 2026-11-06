@@ -53,7 +53,7 @@ coverage_by_age = ss.by([[0.15, 0.85],  # 0-14: 15% unvaccinated, 85% vaccinated
                         dims=['age', 'vaccinated'])
 
 measles = make_measles()
-measles.stratify(vaccinated=[False, True], split=coverage_by_age, states=['S'], adjust={'rel_sus': [1, 0.03]})
+measles.stratify(vaccinated=[False, True], fractions=coverage_by_age, states=['S'], adjust={'rel_sus': [1, 0.03]})
 
 sim = ss.Sim(measles, networks=ss.contacts(ages=[0, 15, 65], matrix=age_contacts), **settings)
 sim.run()
@@ -86,7 +86,7 @@ def make_community_measles():
     """ The measles model, by age, community, and vaccination """
     measles = make_measles()
     measles.stratify(community={'general': 0.95, 'close-knit': 0.05})
-    measles.stratify(vaccinated=[False, True], split=coverage_by_community, states=['S'], adjust={'rel_sus': [1, 0.03]})
+    measles.stratify(vaccinated=[False, True], fractions=coverage_by_community, states=['S'], adjust={'rel_sus': [1, 0.03]})
     return measles
 ```
 
@@ -127,7 +127,7 @@ catchup = ss.transfer(vaccinated=True, rate=ss.peryear(ss.by(community=[0, 2])),
 
 measles = make_measles()
 measles.stratify(community={'general': 0.95, 'close-knit': 0.05})
-measles.stratify(vaccinated=[False, True], split=coverage_by_community, states=['S'], adjust={'rel_sus': [1, 0.03]}, catchup=catchup)
+measles.stratify(vaccinated=[False, True], fractions=coverage_by_community, states=['S'], adjust={'rel_sus': [1, 0.03]}, catchup=catchup)
 
 sims = {
     'No catch-up': msim.sims['Close-knit'],
@@ -229,7 +229,7 @@ Its "jointly" line says that measles and pneumococcus are tracked as 5 × 2 = 10
 
 1. In the community model, raise coverage in the community from 60% to 80%. How many fewer infections are there in the rest of the town, where coverage hasn't changed? Why?
 2. Give the same number of catch-up doses (about 600) to unvaccinated people outside the community instead, using a transfer whose rate is 0 in the community. How many infections do they prevent, compared with the doses given in the community?
-3. In the model with two diseases, add a vaccination campaign against measles in children on 1 February (`ss.vaccinate(efficacy=0.93, where=measles.age < 15, coverage=0.8, at='2025-02-01')`); with two diseases in the sim, the vaccine is for the one whose age groups `where=` names (`measles.age`), and `disease=` says which one if it names none (e.g. `where=ss.ppl.age < 15`). How many pneumococcus acquisitions does it prevent over the three years, with and without the interaction? What does this mean for working out the benefit of measles vaccination?
+3. In the model with two diseases, add a vaccination campaign against measles in children on 1 February (`ss.vaccinate(efficacy=0.93, where=measles.age < 15, coverage=0.8, at='2025-02-01')`); with two diseases in the sim, the vaccine is for the one whose age groups `where=` names (`measles.age`), and `disease=` says which one if it names none (e.g. `where=ss.person.age < 15`). How many pneumococcus acquisitions does it prevent over the three years, with and without the interaction? What does this mean for working out the benefit of measles vaccination?
 
 [Solutions](solutions.qmd#t8-stratification-and-co-transmission) · Next: [T9 – Custom modules](t9_modules.qmd)
 

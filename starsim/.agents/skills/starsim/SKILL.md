@@ -62,7 +62,7 @@ Ask the user, rather than choosing, when a value would change the answer and has
 - With a contact matrix or network, β is per contact, so adding one multiplies R0 by the number of contacts: rescale β.
 - `init_prev` seeds the first infected state, so in an SEIR model nobody starts infectious. Use `init=dict(I=...)` to start people in a named state.
 - The population is `total_pop=` under every solver; `n_agents=` is the number of agents, and giving it means a run as agents.
-- Use real data by name where it exists: `ss.people('Kenya')`, `ss.contacts('Kenya')`, `ss.Births(birth_rate='Kenya')`.
+- Use real data by name where it exists: `ss.population('Kenya')`, `ss.contacts('Kenya')`, `ss.Births(birth_rate='Kenya')`.
 - Use `ss.vaccinate()`, `ss.screen()`, and `ss.treat()` for programs, rather than writing an intervention as code.
 - Use `sim.fit()` to fit: it fits each parameter that has bounds (`ss.par(0.5, bounds=[0.1, 1])`) to each result that has data, with no objective function to write.
 - After a run, read `sim.diseases.x`, not the object you made: the sim copies its modules.

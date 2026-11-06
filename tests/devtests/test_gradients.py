@@ -92,7 +92,7 @@ def test_fit():
     sc.heading('Testing that calibration uses the gradients')
     truth = make_sir(beta=0.5, dur=6, init=0.002).run().results.sir
     data = pd.DataFrame(dict(prevalence=truth.prevalence.values[::7]), index=truth.timevec[::7])
-    fit = make_sir(data=data).fit(gof='rmse', verbose=True)
+    fit = make_sir(data=data).fit(loss='rmse', verbose=True)
     print(fit.table)
     assert fit.method == 'l-bfgs-b'
     assert np.allclose(fit.table.best, [0.5, 6, 0.002], rtol=1e-2)
@@ -192,7 +192,7 @@ def test_crossing():
     assert np.allclose(msim.results.hiv.I.values[1], sim.results.hiv.I, rtol=1e-12)
 
     # Restarted with other values, as a fresh sim
-    restarted = make_coinfection().init().restart(pars={'hiv.beta':0.2}).run()
+    restarted = make_coinfection().init().run(pars={'hiv.beta':0.2})
     fresh = make_coinfection(beta=0.2).run().results
     assert np.allclose(restarted.results.hiv.I, fresh.hiv.I, rtol=1e-12)
 
@@ -229,7 +229,7 @@ def test_posterior_data():
         beta = ss.par(beta, bounds=[0.1, 1], name='beta')
         S, I, R = ss.states(3)
         infection = S >> I @ beta * I
-        hosp = ss.outcome(0.05 * infection, delay=ss.days(3), duration=ss.lognorm_ex(mean=ss.days(10), std=ss.days(3)))
+        hosp = ss.outcome(0.05 * infection, delay=ss.days(3), stay=ss.lognormal(mean=ss.days(10), std=ss.days(3)))
         sir = ss.Disease(infection, I >> R @ ss.days(8), hosp, init=dict(I=0.01), name='sir')
         sir.stratify(age=[0, 15, 65])
         return ss.Sim(sir, unit='day', stop=100, total_pop=1e5, data=data, **kw)
@@ -296,7 +296,7 @@ def test_several_values():
     # The log-density and a fit by gradients, whose gradient is the same in either mode, checkpointed or not
     truth = by_place([0.25, 0.4, 0.35]).run().results.sir.infection
     df = pd.DataFrame([dict(time=t, patch=lab, infection=np.asarray(truth.select(patch=lab))[t:t+5].sum()) for lab in ['a', 'b', 'c'] for t in range(0, 56, 5)]).set_index('time') # Each over the five days from its time
-    sim = by_place([0.3]*3, data=ss.simdata(df))
+    sim = by_place([0.3]*3, data=ss.SimData(df))
     ld = sim.log_density(likelihood=dict(infection=ss.poisson()))
     assert ld.names == ['beta[a]', 'beta[b]', 'beta[c]']
     fd = [(ld(ld.x0 + 1e-6*e) - ld(ld.x0 - 1e-6*e))/2e-6 for e in np.eye(3)]
@@ -324,11 +324,11 @@ def test_several_values():
     dur = ss.par(ss.by(patch=[ss.days(8), ss.days(10), ss.days(12)]), bounds=[ss.days(4), ss.days(20)], name='dur')
     sir = ss.Disease(infection=S >> I @ 0.3*I, recovery=I >> R @ dur, init_n=dict(I=ss.by(patch=[10, 10, 10])), name='sir')
     sir.stratify(patch=['a', 'b', 'c'])
-    ld = ss.Sim(sir, unit='day', start=0, stop=60, data=ss.simdata(df), **kw).log_density(likelihood=dict(infection=ss.poisson()))
+    ld = ss.Sim(sir, unit='day', start=0, stop=60, data=ss.SimData(df), **kw).log_density(likelihood=dict(infection=ss.poisson()))
     x = ld.x0*1.3 # Away from where the numbers in the run were worked out
     fd = [(ld(x + 1e-6*e) - ld(x - 1e-6*e))/2e-6 for e in np.eye(3)]
     assert ld.names == ['dur[a]', 'dur[b]', 'dur[c]'] and np.allclose(ld.grad(x), fd, rtol=1e-5)
-    run = ss.Sim(sir, unit='day', start=0, stop=60, data=ss.simdata(df), pars={'dur': ss.by(patch=[ss.days(v) for v in x])}, **kw).run()
+    run = ss.Sim(sir, unit='day', start=0, stop=60, data=ss.SimData(df), pars={'dur': ss.by(patch=[ss.days(v) for v in x])}, **kw).run()
     assert np.isclose(ld(x), ss.fit.loglik(run, likelihood=dict(infection=ss.poisson())) + sum(ss.fit.logprior(dur, v) for v in x), rtol=1e-9) # As a run of the sim gives it
 
     # A time series, fitted value by value
@@ -341,16 +341,16 @@ def test_several_values():
     true = [0.4, 0.2, 0.3, 0.15]
     truth = in_time(true).run().results.sir.infection
     df = pd.DataFrame(dict(infection=[np.asarray(truth)[t:t+5].sum() for t in range(0, 76, 5)]), index=range(0, 76, 5))
-    fit = in_time([0.3]*4, data=ss.simdata(df)).fit(likelihood=dict(infection=ss.poisson()), verbose=0)
+    fit = in_time([0.3]*4, data=ss.SimData(df)).fit(likelihood=dict(infection=ss.poisson()), verbose=0)
     assert fit.method == 'l-bfgs-b' and list(fit.table.par) == ['beta[0]', 'beta[20]', 'beta[40]', 'beta[60]']
     assert isinstance(fit.pars.beta, ss.timeseries) and np.allclose(fit.pars.beta.values, true, rtol=1e-3)
 
     # A likelihood that is a function, which the log-likelihood in JAX does not cover: an error, unless Python in the loop is asked for
     poisson = lambda observed, model: observed*np.log(model) - model
-    sim = in_time([0.3]*4, data=ss.simdata(df))
-    with pytest.raises(ss.CapabilityError, match='nopython=False'):
+    sim = in_time([0.3]*4, data=ss.SimData(df))
+    with pytest.raises(ss.CapabilityError, match='require_jax=False'):
         sim.fit(likelihood=dict(infection=poisson), method='l-bfgs-b', verbose=0)
-    problem = ss.fit.Problem(sim, likelihood=dict(infection=poisson), nopython=False, verbose=0)
+    problem = ss.fit.Problem(sim, likelihood=dict(infection=poisson), require_jax=False, verbose=0)
     value, grad = problem.with_gradient(problem.x0)
     assert np.isfinite(value) and np.all(np.isfinite(grad))
     return fit

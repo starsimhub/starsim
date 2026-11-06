@@ -127,12 +127,12 @@ def load_epymorph(source, solver='tau', verbose=None, **kwargs):
     # Places, and the movement between them
     if n > 1:
         away = np.array(d['movement'], dtype=float) # Without movement this is all zeros, which keeps the places apart, as epymorph's nodes are; with no mobility= they would mix
-        src.stratify(patch=places, split=(totals/totals.sum()).tolist(), mobility=ss.geo.Mobility(matrix=away.tolist(), kind='commute'))
+        src.stratify(patch=places, fractions=(totals/totals.sum()).tolist(), mobility=ss.geo.Mobility(matrix=away.tolist(), kind='commute'))
         moved = away.sum(axis=1)
         src.notes.append(f'places        the {n} nodes as the places "{places[0]}" to "{places[-1]}", ' + (f'with the movement clauses run and averaged into commuting: people spend {moved.min():.3g} to {moved.max():.3g} of their time away' if away.any() else 'with no movement'))
 
     # Run settings
-    src.config.update(unit='day', dt=1, start=d['start'], stop=str(dates[-1] + np.timedelta64(1, 'D')), solver=solver, total_pop=float(totals.sum()), use_aging=False)
+    src.config.update(unit='day', dt=1, start=d['start'], stop=str(dates[-1] + np.timedelta64(1, 'D')), solver=solver, total_pop=float(totals.sum()), aging=False)
     return build(src, verbose=verbose, **kwargs)
 
 

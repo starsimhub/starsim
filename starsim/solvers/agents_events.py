@@ -67,13 +67,13 @@ class Events(Agents):
                 no(f'"{name}" takes people out of the model by migration')
             if tr.stays:
                 no(f'"{name}" has a destination that keeps people where they are (ss.stay)')
-            if getattr(tr, 'after', None) is not None:
-                no(f'"{name}" has a minimum stay (after=)')
-            if any(not getattr(d, 'people', False) or d.name not in self.state_index for d in (tr.dst or [])):
+            if getattr(tr, 'min_stay', None) is not None:
+                no(f'"{name}" has a minimum stay (min_stay=)')
+            if any(not getattr(d, 'people', False) or d.name not in self.state_index for d in (tr.dest or [])):
                 no(f'"{name}" goes to something that is not a state of people of the module')
             if self.moves(tr):
                 no(f'"{name}" changes the level of a dimension (move= or increment=)')
-            if self.rescaled_of(tr.src[0].name if tr.src else '') or getattr(self.dwells.get(name), 'mods', None):
+            if self.rescaled_of(tr.source[0].name if tr.source else '') or getattr(self.dwells.get(name), 'mods', None):
                 no(f'the dwell time of "{name}" has modifiers, which agents rescale when they change')
         for nkey,route in sim.networks.items():
             if isinstance(route, ss.Network):
@@ -81,7 +81,7 @@ class Events(Agents):
                     no(f'"{nkey}" works out its own chance of transmission (net_beta())')
             elif self.is_matrix(route): # A contact matrix, taken as cells (see contact_cells())
                 pass
-            elif isinstance(route, ss.MixingPools) or not isinstance(route, ss.MixingPool):
+            elif isinstance(route, ss.networks.MixingPools) or not isinstance(route, ss.MixingPool):
                 no(f'"{nkey}" is a route ({type(route).__name__}) other than a network, an ss.MixingPool, or a contact matrix (by age bands, over the model\'s groups, or within each place)', 'such as mixing pools of its own, which the events do not take yet')
             for tr in graph.transmissions:
                 if sim.modifiers.get((route.name, 'par', 'n_contacts')) or sim.modifiers.get((mod.name, 'route', f'{tr.name}@{route.name}')):
@@ -129,7 +129,7 @@ class Events(Agents):
         self.drawn = [] # The transitions whose dwell times are drawn for each agent, each step
         for i,tr in enumerate(self.trs):
             dw = self.dwells.get(tr.name)
-            if dw is None or tr.immediate or tr.contact or dw.is_rate:
+            if dw is None or tr._immediate or tr.contact or dw.is_rate:
                 continue
             mean = self.dwell_mean(tr.name) if dw.dist is None and dw.scale is None else None
             adjust = self.adjusted(tr.name, ss.uids([0]))
@@ -142,9 +142,9 @@ class Events(Agents):
         # Each transition's destinations, with their shares; -1 for a death
         dsts, cums = [], []
         for tr in self.trs:
-            dst = [index[d.name] for d in (tr.dst or [])] + [-1]*bool(tr.outflow or tr.dies)
-            if tr.split:
-                frm = np.full(len(auids), index[tr.src[0].name])
+            dst = [index[d.name] for d in (tr.dest or [])] + [-1]*bool(tr._outflow or tr.dies)
+            if tr._split:
+                frm = np.full(len(auids), index[tr.source[0].name])
                 edges = same(self.dest_edges(tr, auids, frm), f'the destinations of "{tr.name}"')
                 cum = list(edges[1:len(dst) + 1])
             else:
@@ -206,13 +206,13 @@ class Events(Agents):
 
     def is_matrix(self, route):
         """ Whether a route mixes by a contact matrix between cells everyone in which has the same contacts: within each place or over the model's dimensions (`sim.mixing.pool_terms`), or by age bands of its own (`ss.contacts(ages=...)`) """
-        return route.name in self.sim.mixing.pool_terms or (isinstance(route, ss.MixingPools) and not route.pools and route.edges is not None)
+        return route.name in self.sim.mixing.pool_terms or (isinstance(route, ss.networks.MixingPools) and not route.pools and route.edges is not None)
 
     def contact_cells(self, route, n):
         """
         A contact matrix as cells (see `is_matrix()`): the cell of each agent (a level of the matrix, in their place if there are places; -1 for
         none), the matrix between the levels (rows: the level reached), and the number of cells, as the agent engine's exposure has them
-        (see `ss.solvers.Mixing.term_exposure()` and `ss.MixingPools.band_exposure()`)
+        (see `ss.solvers.Mixing.term_exposure()` and `ss.networks.MixingPools.band_exposure()`)
         """
         sim = self.sim
         mixing = sim.mixing
@@ -297,7 +297,7 @@ class Events(Agents):
                     scale = ref
                     blks[len(out.kind)] = blk
                 else:
-                    dst, srcs = np.asarray(route.dst_uids, dtype=np.int64), np.asarray(route.src_uids, dtype=np.int64)
+                    dst, srcs = np.asarray(route.target_uids, dtype=np.int64), np.asarray(route.source_uids, dtype=np.int64)
                     if not len(dst) or not len(srcs):
                         continue
                     eff = np.asarray(route.eff_contacts.raw, dtype=float)[:n]
@@ -377,7 +377,7 @@ class Events(Agents):
         sus_state, sus_agent, w_agent, sus_max = np.zeros(len(names)), np.zeros(n), np.zeros(n), 0.0
         if self.graph.transmissions:
             tr = self.graph.transmissions[0]
-            for src in tr.src:
+            for src in tr.source:
                 sus_state[self.state_index[src.name]] = float(src.rel_sus)
             sus_agent = np.broadcast_to(np.asarray(times(self.current_value('rel_sus'), self.mult_raw('transition', tr.name)), dtype=float), n)[:n].copy()
             sus_agent[~alive] = 0.0

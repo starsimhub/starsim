@@ -29,7 +29,7 @@ Rather than subclassing `ss.Module` directly, you almost always want to subclass
 | `ss.Intervention` | Actions that change the simulation | `interventions=` |
 | `ss.Analyzer` | Recording results without changing anything | `analyzers=` |
 | `ss.Connector` | Interactions between modules | `connectors=` |
-| `ss.Module` | Anything that doesn't fit the others | `custom=` (or as a positional argument) |
+| `ss.Module` | Anything that doesn't fit the others | `modules=` (or as a positional argument) |
 
 ## A disease written as code
 

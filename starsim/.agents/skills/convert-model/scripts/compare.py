@@ -65,8 +65,8 @@ def results(sim, series=None, time='auto', runs=None):
     return rows
 
 
-def run(filename, out, n_runs=1, seed=1, series=None, time='auto', n_cpus=None):
-    """ Run a port n_runs times (with seeds seed, seed+1, ...), on at most n_cpus processes, and write its results """
+def run(filename, out, n_runs=1, seed=1, series=None, time='auto', workers=None):
+    """ Run a port n_runs times (with seeds seed, seed+1, ...), on at most `workers` processes, and write its results """
     import starsim as ss
     sim = load_sim(filename)
     sim.pars.verbose = 0
@@ -75,7 +75,7 @@ def run(filename, out, n_runs=1, seed=1, series=None, time='auto', n_cpus=None):
     if n_runs == 1:
         rows = [dict(run=0, **row) for row in results(sim.run(), series, time)]
     else:
-        msim = ss.parallel(sim, n_runs=n_runs, n_cpus=n_cpus, verbose=0)
+        msim = ss.parallel(sim, n_runs=n_runs, workers=workers, verbose=0)
         if len(msim.sims) < n_runs: # Restarted in this process: one sim, with every run in msim.results
             rows = results(msim.sims[0], series, time, runs=msim.results)
         else:
@@ -229,7 +229,7 @@ def main(argv=None):
     p.add_argument('--plot', help='save a plot of each series to this file')
     args = parser.parse_args(argv)
     if args.cmd == 'run':
-        run(args.model, args.out, n_runs=args.runs, seed=args.seed, series=args.series, time=args.time, n_cpus=args.cpus)
+        run(args.model, args.out, n_runs=args.runs, seed=args.seed, series=args.series, time=args.time, workers=args.cpus)
     else:
         df = compare(args.original, args.port, mapping=dict(m.split('=', 1) for m in args.map), rtol=args.rtol, alpha=args.alpha, shift=args.shift, plot=args.plot)
         return 0 if df.ok.all() else 1

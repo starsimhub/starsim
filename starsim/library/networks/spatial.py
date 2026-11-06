@@ -127,20 +127,20 @@ class GeoNet(ss.RandomNet):
     def __init__(self, places='Kenya', level=1, local=0.9, c=2.0, pars=None, **kwargs):
         super().__init__(pars, **kwargs)
         self.geo = places if isinstance(places, ss.geo.geography) else ss.geo.geography(places, level=level)
-        if self.geo.pop is None or self.geo.distances is None:
+        if self.geo.populations is None or self.geo.distances is None:
             errormsg = f'ssl.GeoNet() needs the populations and distances of its places, which {self.geo} does not have'
             raise ValueError(errormsg)
         self.local = local
         self.c = c
         self.share = self.contact_shares()
         self.define_states(
-            ss.IntArr('place', default=ss.choice(a=len(self.geo), p=self.geo.pop/self.geo.pop.sum()), label='Place'),
+            ss.IntArr('place', default=ss.choice(a=len(self.geo), p=self.geo.populations/self.geo.populations.sum()), label='Place'),
         )
         return
 
     def contact_shares(self):
         """ The share of the contacts of the people of each place (rows) that are in each place (columns), as a sparse array """
-        pop, dist = self.geo.pop, self.geo.distances
+        pop, dist = self.geo.populations, self.geo.distances
         with np.errstate(divide='ignore'):
             away = pop[None, :]/dist**self.c
         away[~np.isfinite(away)] = 0 # Including each place itself

@@ -43,7 +43,7 @@ except KeyError as error:
     print(error)
 ```
 
-Most errors are Python's own: a `KeyError` for a name that is not found, as here, a `TypeError` for a value of the wrong kind, and a `ValueError` for the rest. The message is what says what went wrong, so search for it, or catch the error by its type as above. The few that code may want to catch by kind are classes of their own, such as `ss.CapabilityError`, raised when the solver asked for can't run part of the model. Most mistakes are caught when the sim is built (`sim.init()`, which `sim.run()` calls first), before any time step is taken, so an error usually comes at once rather than after a long run. A few are caught at the end: `sim.check_finite()`, called when a run finishes, raises a `ValueError` if the number of people in a declared state stopped being a number (usually a rate too fast for the step), rather than return results that aren't numbers. Every error and warning that is a class of its own is in the [appendix](#appendix-errors-and-warnings).
+Most errors are Python's own: a `KeyError` for a name that is not found, as here, a `TypeError` for a value of the wrong kind, and a `ValueError` for the rest. The message is what says what went wrong, so search for it, or catch the error by its type as above. The few that code may want to catch by kind are classes of their own, such as `ss.CapabilityError`, raised when the solver asked for can't run part of the model. Most mistakes are caught when the sim is built (`sim.init()`, which `sim.run()` calls first), before any time step is taken, so an error usually comes at once rather than after a long run. A few are caught at the end: when a run finishes, it raises a `ValueError` if the number of people in a declared state stopped being a number (usually a rate too fast for the step), rather than return results that aren't numbers. Every error and warning that is a class of its own is in the [appendix](#appendix-errors-and-warnings).
 
 A run prints what it is running and how, the R0 of each disease, any notes, and a closing line with the size and timing of the peak. Read these first: most surprises are explained there. A note is something Starsim assumed or noticed that is worth knowing, and doesn't stop the run. For example, in an SEIR model, `init_prev` puts people in E, where a new infection starts, so nobody is infectious at first:
 
@@ -302,18 +302,18 @@ Measles vaccine protection is close to all or nothing, as are many live vaccines
 
 ```{python}
 truth = ss.Sim(make_measles(), total_pop=100_000, stop=ss.days(50), rand_seed=2, verbose=0).run()
-data = truth.to_data('cases', resample='week')
+data = truth.to_synthetic_data('cases', resample='week')
 data = data.rename(columns={'cases': 'reported'}) # As it might come from elsewhere
 ss.Sim(make_measles(), data=data, total_pop=100_000, stop=ss.days(50)).init()
 ```
 
-Rename the column to match the result (`data.rename(columns={'reported': 'cases'})`), or say which result it is: `data=ss.simdata(data, aliases=dict(cases='reported'))`.
+Rename the column to match the result (`data.rename(columns={'reported': 'cases'})`), or say which result it is: `data=ss.SimData(data, aliases=dict(cases='reported'))`.
 
 **Counts over a period are compared with totals over the same period.** A result that counts events, such as infections or reported cases, is compared with the data as its total from that data point to the next (a data point is the start of its period), so weekly data is compared with weekly totals, whatever the model's time step. A result that counts people at a time, such as the number infectious, is compared at the time of each data point. Data on prevalence (people infectious at a time) given as a count of events, or the other way round, fits the wrong thing; check which kind each column is. [Fitting a model](calibration_fitting.qmd) has more on data.
 
 ### Code of your own
 
-**A method that forgot to call `super()`.** A module written as code that overrides `init_pre()`, `init_results()`, `init_post()`, `start_step()`, `finish_step()`, or `finalize()` without calling the base class's version leaves part of the module unset. At the end of a run, Starsim warns with the methods that were never called (`sim.check_method_calls()`, which can also be called by hand), so read that warning rather than the results.
+**A method that forgot to call `super()`.** A module written as code that overrides `init_pre()`, `init_results()`, `init_post()`, `start_step()`, `finish_step()`, or `finalize()` without calling the base class's version leaves part of the module unset. At the end of a run, Starsim warns with the methods that were never called, so read that warning rather than the results.
 
 **`len(sim.people)` still counts those who died this step.** People who die in a step stay among the active agents until the step ends, so that analyzers can look at them, so a share worked out in an analyzer with `len(sim.people)` as its denominator is off by that step's deaths. Use `sim.people.n_alive`.
 
@@ -399,15 +399,13 @@ The tools on this page and elsewhere, by the question each answers. "Builds" mea
 | `disease.equations()` | The model as the equations of an ODE | No |
 | `disease.diagram()` | The states and transitions, drawn | No |
 | `sim.solver`, `sim.solver_reason` | Which solver was chosen, and why | Builds |
-| `sim.kernel_reason()`, `nopython=True` | Why a compartmental run is taken a step at a time rather than in one call (see [Getting the most speed](running_performance.qmd)) | Builds |
+| `sim.kernel_reason()`, `require_kernels=True` | Why a compartmental run is taken a step at a time rather than in one call (see [Getting the most speed](running_performance.qmd)) | Builds |
 | `ss.solvers.solver_table()` | Every rule that decides which engine runs a model (see [Solvers and backends](running_solvers.qmd#appendix-what-needs-agents)) | No |
 | `sim.check_dt()` | How much each result changes with a step half as long | Runs two copies |
 | `sim.what_modifies()` | Everything that changes a parameter during the run | Builds |
 | `describe(output=True)` with `difflib` | Where two models differ | Builds |
 | `ss.debugtools.diff_sims()`, `check_sims_match()` | Which results of two runs differ, and by how much | No (give it sims that have run) |
 | `sim.set_diagnostics()` | Every random draw and agent state at every step, to find where two runs diverge | Records during the next run |
-| `sim.check_finite()` | Whether a declared state's count stopped being a number | No; called at the end of every run |
-| `sim.check_method_calls()` | Which required methods of a module written as code were never called (a missing `super()`) | No; called at the end of a run taken a step at a time |
 | `ss.options(warnings='error')` | Stops at the first warning | No |
 | `sim.run(until=...)`, `sim.people.to_df()` | The people and their states partway through a run | Runs part of the way |
 | `sim.run_one_step()` | One step at a time, for a debugger | Runs one step |

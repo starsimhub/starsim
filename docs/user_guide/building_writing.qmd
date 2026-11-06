@@ -41,7 +41,7 @@ A sim can hold these kinds of modules, each given to it by keyword (a disease ca
 | Connectors | Links between modules, such as one disease making another more likely | `connectors=` | [Connectors](interventions_connectors.qmd) |
 | Analyzers | Extra results, collected as the sim runs | `analyzers=` | [Analyzers](interventions_analyzers.qmd) |
 
-The sim itself holds what applies to the whole model: the population (`total_pop=`, or `n_agents=` for a model run as agents), the period (`start=`, `stop=`, and the time step `dt=`), and the random seed, as well as how the model is run (`solver=`) and what the sim records of its own (`people_results=False` skips the people's own results, such as the number alive, in a light model that doesn't need them). See [Running sims](running_sim.qmd) for these, and its [appendix of every sim setting](running_sim.qmd#appendix-every-sim-setting); see [Time](building_time.qmd) for the span and the step.
+The sim itself holds what applies to the whole model: the population (`total_pop=`, or `n_agents=` for a model run as agents), the period (`start=`, `stop=`, and the time step `dt=`), and the random seed, as well as how the model is run (`solver=`) and what the sim records of its own (`record_people=False` skips the people's own results, such as the number alive, in a light model that doesn't need them). See [Running sims](running_sim.qmd) for these, and its [appendix of every sim setting](running_sim.qmd#appendix-every-sim-setting); see [Time](building_time.qmd) for the span and the step.
 
 ## Declared modules and modules written as code
 
@@ -187,14 +187,14 @@ Each value that Starsim fills in itself is marked as guessed in `describe()`, wi
 | A duration's distribution | Exponential, with the mean given | A single duration (`ss.days(8)`) | A distribution, e.g. `ss.erlang(k=4, mean=ss.days(8))` |
 | The stages of a duration | As many Erlang stages as match its mean and standard deviation | A non-Erlang distribution run as compartments | `stages=` on the transition |
 | How the epidemic starts | 1% of people infected (`init_prev=0.01`) | A disease with transmission and no `init`, `init_prev`, or `init_n` | `init_prev=`, `init=`, or `init_n=` |
-| Where people start | The state people are infected from, or else the first state made | Nobody placed in a state | `first=` (a state's name) on the disease, or `init=` |
+| Where people start | The state people are infected from, or else the first state made | Nobody placed in a state | `default_state=` (a state's name) on the disease, or `init=` |
 | The state of the rest | The only state with no starting value | One state with none, when the first state has one | `init=` for every state |
 | A transition's name | `infection` for a disease's only transmission, else from its states (`I_to_R`) | No variable or keyword names it | A variable, a keyword, or `name=` |
 | Which transitions are acquisitions | Every transmission, or else the transitions out of the first state | `acquisition=` not given | `acquisition=True` or `False` |
 | The share of the last branch | 1 minus the others | One branch's `p=` is `None` or left out | `p=` on every branch |
 | A parameter given only bounds | The middle of its bounds | `ss.par(bounds=[...])` with no value | A value |
-| The shares of a dimension | From the population, the world's ages, everyone at the first level, or equal shares | No shares given to `stratify()` (see [Stratification](building_stratification.qmd#levels-and-shares)) | `split=`, or a dict of shares |
+| The shares of a dimension | From the population, the world's ages, everyone at the first level, or equal shares | No shares given to `stratify()` (see [Stratification](building_stratification.qmd#levels-and-shares)) | `fractions=`, or a dict of shares |
 | The kind of a dimension | Age for ages, a place for a geography, and otherwise plain groups | `kind=` not given | `kind=` on `stratify()` |
-| Aging | People age only if anyone is born or dies | `use_aging` not given | `use_aging=True` or `False` |
-| A named population's ages | The year the sim starts | No year given for `ss.people('Kenya')` | `ss.people('Kenya', year=...)` |
+| Aging | People age only if anyone is born or dies | `aging` not given | `aging=True` or `False` |
+| A named population's ages | The year the sim starts | No year given for `ss.population('Kenya')` | `ss.population('Kenya', year=...)` |
 | Results by group | Every step, or every few steps if every step would take more than about 100 MB | A stratified model with no `results=` | `results=` on the sim |

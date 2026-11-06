@@ -1,7 +1,7 @@
 """
 Numerical utilities and other helper functions
 
-What is shared by the rest of the code, and doesn't belong to any one part of it: named dictionaries of modules (`ss.ndict`), warnings, cleaning input data, plotting arguments, and returning figures and tables.
+What is shared by the rest of the code, and doesn't belong to any one part of it: named dictionaries of modules (`ss.utils.ndict`), warnings, cleaning input data, plotting arguments, and returning figures and tables.
 
 Used with: agents and compartments; declared and coded modules
 """
@@ -76,9 +76,9 @@ class ndict(sc.obj):
 
     Examples:
         ```python
-        networks = ss.ndict(ss.SexualNet(), ss.PrenatalNet())
-        networks = ss.ndict([ss.SexualNet(), ss.PrenatalNet()])
-        networks = ss.ndict({'sexual':ss.SexualNet(), 'prenatal':ss.PrenatalNet()})
+        networks = ss.utils.ndict(ss.SexualNet(), ss.PrenatalNet())
+        networks = ss.utils.ndict([ss.SexualNet(), ss.PrenatalNet()])
+        networks = ss.utils.ndict({'sexual':ss.SexualNet(), 'prenatal':ss.PrenatalNet()})
         ```
     """
     __slots__ = ('_type',) # Since otherwise treated as keys
@@ -370,7 +370,7 @@ _arities = weakref.WeakKeyDictionary() # The functions of n_args(), kept only wh
 # Alternative column names accepted for standard data columns, used only if the configured
 # column name is absent from the data (e.g. UN World Population Prospects data uses "Time"
 # rather than "Year"). Keep this list short and explicit; anything else can be handled by
-# supplying `metadata=dict(data_cols=...)` explicitly.
+# supplying `columns=dict(...)` (to `ss.Births`, `ss.Deaths`, or `ss.Pregnancy`) explicitly.
 col_synonyms = dict(
     year = ['Year', 'Time', 'year', 'time'],
     age = ['AgeGrpStart', 'AgeGrp'],
@@ -399,7 +399,7 @@ def resolve_data_col(data, key, col):
             return alt
     errormsg = f'''Could not find column "{col}" (used for "{key}") in the data.
 Columns present are: {sc.strjoin(data.keys())}
-Either rename the column, or map it explicitly with e.g. metadata=dict(data_cols=dict({key}='<column name>')).'''
+Either rename the column, or map it explicitly with e.g. columns=dict({key}='<column name>').'''
     raise ValueError(errormsg)
 
 
@@ -445,7 +445,7 @@ def standardize_data(data=None, metadata=None, min_year=1800, out_of_range=0, de
         - An `ss.Dist` instance - if the `data` input is an `ss.Dist`, that same object will be returned by this function
     """
     # It's a format that can be used directly: return immediately
-    if sc.isnumber(data) or isinstance(data, (ss.Dist, ss.Rate)):
+    if sc.isnumber(data) or isinstance(data, (ss.Dist, ss.time.Rate)):
         return data
 
     # Convert series and dataframe inputs into dicts
@@ -483,7 +483,7 @@ def standardize_data(data=None, metadata=None, min_year=1800, out_of_range=0, de
             keys = metadata['sex_keys']
             unknown = set(index['sex']) - set(keys)
             if unknown:
-                errormsg = f'Column "{metadata["data_cols"]["sex"]}" has the values {sc.strjoin(unknown)}, but accepts only {sc.strjoin(keys)}. Change them, or map them with e.g. metadata=dict(sex_keys=dict(F="f", M="m")).'
+                errormsg = f'Column "{metadata["data_cols"]["sex"]}" has the values {sc.strjoin(unknown)}, but accepts only {sc.strjoin(keys)}. Change them, or map them with e.g. columns=dict(sex_keys=dict(F="f", M="m")).'
                 raise ValueError(errormsg)
             index['sex'] = [keys[x] for x in index['sex']]
         assert set(index['sex']) == {'f','m'}, 'If standardized data contains a "sex" column, it should use "m" and "f" to specify the sex.'
@@ -581,7 +581,7 @@ class outermost(method_wrapper):
 
 def num_str(x):
     """ A time as text: a number (or a duration, by its value) without a needless decimal point (100, not 100.0), or a date """
-    x = x.value if isinstance(x, ss.TimePar) else x
+    x = x.value if isinstance(x, ss.time.TimePar) else x
     return f'{x:n}' if sc.isnumber(x) else str(x)
 
 
@@ -590,7 +590,7 @@ def time_str(x, sim=None, plural=False):
     if isinstance(x, (ss.date, pd.Timestamp)):
         return str(ss.date(x)).partition(' ')[0]
     unitless = sim is not None and sim.t.unitless
-    unit_name = type(x).base.removesuffix('s') if isinstance(x, ss.dur) and not unitless else sim.unit_name
+    unit_name = type(x).base.removesuffix('s') if isinstance(x, ss.Duration) and not unitless else sim._unit_name
     return f'{unit_name}{"s"*plural} {num_str(x)}'
 
 

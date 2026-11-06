@@ -17,7 +17,7 @@ def pytest_sessionstart(session):
     global kernels
     if not hasattr(session.config, 'workerinput'):
         import starsim as ss
-        kernels = ss.compile_status()
+        kernels = ss.kernels.compile_status()
     return
 
 

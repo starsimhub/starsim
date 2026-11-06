@@ -64,7 +64,7 @@ def parse_target(target):
         if kind is None and len(parts) == 3: # One destination of a transition with several, e.g. 'hpv.progression.C'
             return parts[0], 'transition', '.'.join(parts[1:])
         return parts[0], kind, None if kind in ['rel_sus', 'rel_trans'] else parts[-1]
-    what = 'a value' if isinstance(target, (ss.TimePar, ss.Dist)) else 'a plain number' if sc.isnumber(target) else 'an object'
+    what = 'a value' if isinstance(target, (ss.time.TimePar, ss.Dist)) else 'a plain number' if sc.isnumber(target) else 'an object'
     raise sc.KeyNotFoundError(f'the target of ss.modify() must be a named quantity, such as sir.pars.beta, sir.rel_sus, sir.recovery, or "sir.pars.beta", not {target} ({type(target).__name__}), which is {what} with no name to refer to.\n'
                                 f'     (A parameter of a network is named by its path, e.g. ss.modify("randomnet.pars.n_contacts", multiply=0.5), or its contacts by the network itself. A parameter of a module written as code is a plain value, so it is named by its path too, e.g. ss.modify("hiv.pars.beta", multiply=0.5); the rel_sus and rel_trans of a disease by themselves, e.g. ss.modify(hiv.rel_trans, multiply=0.5).)')
 
@@ -110,7 +110,7 @@ def to_ti(sim, val, name='time', after=False):
     """
     The first step that starts at or after a time, which must be within the sim
 
-    Step `ti` runs from time point `ti` to the next (see `ss.Loop`), so a time at the start of the sim is step 0.
+    Step `ti` runs from time point `ti` to the next (see `ss.loop.Loop`), so a time at the start of the sim is step 0.
 
     Args:
         sim (Sim): the sim
@@ -132,8 +132,8 @@ def to_ti(sim, val, name='time', after=False):
 
 def to_steps(sim, dur):
     """ The number of steps in a duration (a bare number is in the sim's unit), at least one """
-    val = ss.solvers.convert(dur, sim.unit_base) if isinstance(dur, ss.TimePar) else dur
-    dt = sim.t.dt.to(sim.unit_base).value if isinstance(sim.t.dt, ss.TimePar) else sim.t.dt
+    val = ss.solvers.convert(dur, sim.unit_base) if isinstance(dur, ss.time.TimePar) else dur
+    dt = sim.t.dt.to(sim.unit_base).value if isinstance(sim.t.dt, ss.time.TimePar) else sim.t.dt
     return max(int(round(val/dt)), 1)
 
 
@@ -165,7 +165,7 @@ def contact_mult(engine, name, mods):
 
 def scaled_transmissions(graph, par, what):
     """
-    The transmissions (by name) whose rates a parameter scales, for a modifier of it on a route (`ss.modify(sir.pars.beta, route=...)`): those
+    The transmissions (by name) whose rates a parameter scales, for a modifier of it on a route (`ss.modify(sir.pars.beta, network=...)`): those
     in which it is a factor of the rate from every source of infection (e.g. `beta` in `beta*(k*A + S)`), so that scaling the transmission on
     the route is scaling the parameter
 
@@ -184,7 +184,7 @@ def scaled_transmissions(graph, par, what):
                 raise ValueError(errormsg)
             names.append(trname)
     if not names:
-        errormsg = f'{what} acts on the transmissions that {par.name} scales, but no transmission of "{graph.module.name}" reads it; give a transmission instead, e.g. ss.modify({graph.module.name}.infection, route=...)'
+        errormsg = f'{what} acts on the transmissions that {par.name} scales, but no transmission of "{graph.module.name}" reads it; give a transmission instead, e.g. ss.modify({graph.module.name}.infection, network=...)'
         raise ValueError(errormsg)
     return names
 
@@ -192,7 +192,7 @@ def scaled_transmissions(graph, par, what):
 def route_mult(engine, name, route, inds, trg):
     """
     The multiplier on a transmission over one route to the people who would be infected (`trg`), 1 if there are none: from the modifiers
-    of the route's contacts (`n_contacts`), and from those given the route (`ss.modify(..., route=)`), each `1 − share·(1 − multiply)` for the
+    of the route's contacts (`n_contacts`), and from those given the network (`ss.modify(..., network=)`), each `1 − share·(1 − multiply)` for the
     people it applies to (`where=`, of the people who would be infected)
 
     Args:
@@ -271,18 +271,18 @@ def unapplied(graph, modname, kind, name, mods):
             return (f'"{name}" is a plain parameter of "{modname}", not one of its model\'s parameters (ss.par), so only the module\'s own code reads it, and a modifier cannot change it. '
                     f'Modify a parameter or transition of its model instead (e.g. {modname}.{next(iter(graph.transitions), "transition")}), or give the value when the module is made.')
     elif kind in ['rel_sus', 'rel_trans']:
-        trans_read = kind == 'rel_trans' and any(isinstance(leaf, ss.expressions.Count) and leaf.trans for tr in graph.transitions.values() if tr.rate is not None for leaf in tr.rate.leaves) # Read by a count weighted by infectiousness (A.n_trans)
+        trans_read = kind == 'rel_trans' and any(isinstance(leaf, ss.expressions.Count) and leaf.trans for tr in graph.transitions.values() if tr.rate is not None for leaf in tr.rate.leaves) # Read by a count weighted by infectiousness (A.n_infectious)
         if not (graph.acquisitions if kind == 'rel_sus' else graph.infectious) and not trans_read:
             return f'"{modname}" has no {"acquisition" if kind == "rel_sus" else "transmission"} for it to scale. Modify one of its transitions by name instead: {sc.strjoin(graph.transitions)}.'
     elif kind in ['transition', 'branch']:
         tr = graph.transitions.get(name)
         if tr is None: # A transfer, or one destination of a transition with several
             return None
-        if (not tr.src or not tr.people) and any(not isinstance(m, modify) or m.where is not None for m in mods): # A product's efficacy is for the people who hold it
-            return f'"{name}" ({tr.arrow}) is {"an inflow" if not tr.src else "a transition of counts"}, which has no people for a condition on people (where=, or holding a product) to select. Give the modifier no where=, or a condition on time.'
-        if kind == 'transition' and tr.split and any(isinstance(m, ss.products.Effect) or getattr(m, 'efficacy', None) is not None for m in mods):
-            dsts = sc.strjoin(f"'{name}.{dst.name}'" for dst in tr.dst)
-            return f'"{name}" has several destinations, so an efficacy on it would slow everyone\'s exit from {sc.strjoin(s.name for s in tr.src)}, not lower the chance of one destination. Name the destination it protects against: {dsts}.'
+        if (not tr.source or not tr.people) and any(not isinstance(m, modify) or m.where is not None for m in mods): # A product's efficacy is for the people who hold it
+            return f'"{name}" ({tr._arrow}) is {"an inflow" if not tr.source else "a transition of counts"}, which has no people for a condition on people (where=, or holding a product) to select. Give the modifier no where=, or a condition on time.'
+        if kind == 'transition' and tr._split and any(isinstance(m, ss.products.Effect) or getattr(m, 'efficacy', None) is not None for m in mods):
+            dsts = sc.strjoin(f"'{name}.{dst.name}'" for dst in tr.dest)
+            return f'"{name}" has several destinations, so an efficacy on it would slow everyone\'s exit from {sc.strjoin(s.name for s in tr.source)}, not lower the chance of one destination. Name the destination it protects against: {dsts}.'
     return None
 
 
@@ -304,16 +304,16 @@ class modify(Connector):
             any of these as a string (`'sir.pars.beta'`); or the contacts of a network, as the network (`ss.contacts('Kenya', layer='school')`,
             matched by its name) or as a path (`'school.pars.n_contacts'`). For a transition with several destinations (e.g. `ss.Transition(Tx, [R, I], p=[0.8, None], rate=...)`),
             the transition scales its rate (or its dwell time), and a destination (`'tb.treatment.R'`) scales the probability of that destination; with an outcome for each strain carried
-            (`per='strain'`, `p=`), that is the probability for the whole set of strains a person carries (e.g. that all are cured: Π c_k), not each strain's
+            (`per_strain=True`, `p=`), that is the probability for the whole set of strains a person carries (e.g. that all are cured: Π c_k), not each strain's
         multiply (float): multiply the quantity by this; like `add` and `set`, it can also be `ss.by(...)`, a function of the sim, or an `ss.timeseries`, for changes at given times
         add (float): add this to the quantity: a parameter, or an inflow (a transition from `ss.null`, e.g. CFUs shed into a reservoir), to which it adds an amount per unit time from outside the model
         set (float): replace the quantity with this (a parameter only)
         efficacy (float): for protection such as a condom or a needle program, the share of the risk it removes: the same as `multiply=1 - efficacy` (give one of them)
         share (float): with `multiply=` or `efficacy=`, the share of acts (or, on a route without acts, of contacts) it acts on: the hazard is multiplied by
-            `1 − share·(1 − multiply)`, exactly, since hazards add; a number, an `ss.timeseries`, an `ss.by`, or (with `route=`, as agents) a function of
+            `1 − share·(1 − multiply)`, exactly, since hazards add; a number, an `ss.timeseries`, an `ss.by`, or (with `network=`, as agents) a function of
             the network returning one value per edge (e.g. `lambda net: net.edges.condoms`)
-        route (str/list): for a modifier of a transmission, the network or networks (by name) it applies on; by default, every route. On a parameter (e.g. `tb.pars.beta`), it acts on every transmission the parameter scales (e.g. an infection and its reinfections). A disease written as code has no transmission to name, so on a route the target is its `rel_sus` (of the people who would be infected over it)
-        where (Cond/func): who it applies to: a condition (e.g. `sir.vaccinated`), a condition on a count (e.g. `sir.I.n > 1000`, worked out at each step; in compartments, as part of the rates where it can be, so the run stays in the kernels), or a function of the sim (default: everyone); with `route=`, the people who would be infected
+        network (str/list): for a modifier of a transmission, the network or networks (by name, as in the sim's `networks=`, including mixing pools) it applies on; by default, every one. On a parameter (e.g. `tb.pars.beta`), it acts on every transmission the parameter scales (e.g. an infection and its reinfections). A disease written as code has no transmission to name, so on a network the target is its `rel_sus` (of the people who would be infected over it)
+        where (Cond/func): who it applies to: a condition (e.g. `sir.vaccinated`), a condition on a count (e.g. `sir.I.n > 1000`, worked out at each step; in compartments, as part of the rates where it can be, so the run stays in the kernels), or a function of the sim (default: everyone); with `network=`, the people who would be infected
         start (date/float): when the modifier starts to apply, within the sim (default: the start of the sim); a number is a calendar year from 1900 on, and otherwise a time in the sim's unit
         stop (date/float): when it stops applying (default: never); a stop after the end of the sim never stops it
         when (func): a condition on time alone: a function of the timeline returning True on the steps it applies (e.g. `lambda t: t.ti % 7 == 0`), which can be read before the run; a condition on anything else goes in `where=`
@@ -339,21 +339,21 @@ class modify(Connector):
 
         # Condoms, 90% effective against gonorrhea, used in a share of acts that grows over time, on one network
         use = ss.timeseries({2000: 0.05, 2020: 0.3})
-        condoms = ss.modify(ng.infection, efficacy=0.9, share=use, route='sexualnet')
+        condoms = ss.modify(ng.infection, efficacy=0.9, share=use, network='sexualnet')
 
         # A member of a disease, with the rest of its natural history
         class Measles(ss.Disease):
             S, I, R = ss.states('S I R')
             infection = S >> I @ 0.5*I
             recovery = I >> R @ ss.days(10)
-            fading = ss.modify('rel_trans', multiply=0.5**(I.time/ss.days(3)), where=I)
+            fading = ss.modify('rel_trans', multiply=0.5**(I.time_in/ss.days(3)), where=I)
         ```
     """
     compartmental = True # It works on groups as well as on agents
 
     timepar_skip = ['where', 'until', 'when', 'target_module', 'hold'] # These refer to other modules, which hold their own time parameters (see Module.link_timepars()); hold is converted to steps at init
 
-    def __init__(self, target, multiply=None, add=None, set=None, efficacy=None, share=None, route=None, where=None, start=None, stop=None, when=None, hold=None, until=None, name=None, **kwargs):
+    def __init__(self, target, multiply=None, add=None, set=None, efficacy=None, share=None, network=None, where=None, start=None, stop=None, when=None, hold=None, until=None, name=None, **kwargs):
         super().__init__(name=name, **kwargs)
         given = [key for key,val in dict(multiply=multiply, add=add, set=set, efficacy=efficacy).items() if val is not None]
         if len(given) != 1:
@@ -367,7 +367,7 @@ class modify(Connector):
         if efficacy is not None:
             given, multiply = ['multiply'], efficacy
         self.share = share
-        self.route = None if route is None else sc.tolist(route)
+        self.networks = None if network is None else sc.tolist(network)
         self.op = given[0]
         if name is None: # Until it is named from its variable: what it does, so several unnamed modifiers do not clash
             self.name = self.label = f'{getattr(self.target_name, "name", self.target_name) or self.target_kind}_{self.op}'
@@ -460,28 +460,28 @@ class modify(Connector):
             msg = graph.dwell_not_branch(name, f'the modifier "{self.name}"', modname)
             if msg:
                 ss.note(msg, sim=sim)
-        names = [name] # The transmissions a modifier with route= acts on
-        if self.route is not None:
+        names = [name] # The transmissions a modifier with network= acts on
+        if self.networks is not None:
             if modname in coded: # Written as code, it has no transmission to name: its susceptibility over the route, of the people who would be infected
                 if kind != 'rel_sus':
-                    raise ValueError(f'route= of the modifier "{self.name}" limits it to some routes; "{modname}" is written as code, so its target is {modname}.rel_sus (of the people who would be infected over them), not {self.target}')
+                    raise ValueError(f'network= of the modifier "{self.name}" limits it to some networks; "{modname}" is written as code, so its target is {modname}.rel_sus (of the people who would be infected over them), not {self.target}')
                 name = self.target_name = 'rel_sus'
                 names = [name]
             elif kind == 'par' and modname in mods: # A parameter: every transmission it scales, e.g. beta in each of a model's infection and reinfections
-                names = scaled_transmissions(mods[modname].graph, mods[modname].pars[name], f'route= of the modifier "{self.name}" of {self.target}')
+                names = scaled_transmissions(mods[modname].graph, mods[modname].pars[name], f'network= of the modifier "{self.name}" of {self.target}')
             elif kind != 'transition' or modname not in mods or not mods[modname].graph.transitions[name].contact:
-                raise ValueError(f'route= of the modifier "{self.name}" limits a modifier of a transmission to some routes, so its target is a transmission (e.g. {modname}.infection) or a parameter of transmissions (e.g. {modname}.pars.beta), not {self.target}')
+                raise ValueError(f'network= of the modifier "{self.name}" limits a modifier of a transmission to some networks, so its target is a transmission (e.g. {modname}.infection) or a parameter of transmissions (e.g. {modname}.pars.beta), not {self.target}')
             routes = list(sim.all_networks())
-            for route in self.route:
+            for route in self.networks:
                 if route not in routes:
-                    raise ValueError(f'route= of the modifier "{self.name}" names "{route}", which is not a route of the sim; the routes are {sc.strjoin(routes) or "none"}')
+                    raise ValueError(f'network= of the modifier "{self.name}" names "{route}", which is not a network of the sim; its networks are {sc.strjoin(routes) or "none"}')
             kind = 'route'
         if self.op != 'multiply' and kind != 'par': # A per-person quantity or a rate is a multiplier on each person's own value, which set= or add= would replace
             what = 'each person\'s own value' if kind in ['rel_sus', 'rel_trans'] else 'the rate (or probability) worked out for each person and group'
             errormsg = f'{self.op}= on {self.target} would replace {what}; use multiply= (set= and add= are for parameters, e.g. {modname}.pars.beta; add= is also for an inflow from ss.null)'
             raise ValueError(errormsg)
         self.target_module, self.target_kind = modname, kind
-        for key in [name] if self.route is None else [f'{tr}@{route}' for tr in names for route in self.route]: # On a route, under the transmission's name and the route's (see ss.connectors.route_mult())
+        for key in [name] if self.networks is None else [f'{tr}@{route}' for tr in names for route in self.networks]: # On a route, under the transmission's name and the route's (see ss.connectors.route_mult())
             sim.modifiers[(modname, kind, key)].append(self)
         ss.conditions.check_clocks(self.amount, self.where, f'the modifier "{self.name}"')
         if self.start is not None: # It must be within the sim
@@ -616,7 +616,7 @@ class modify(Connector):
     @property
     def per_edge(self):
         """ Whether its share is a function of the network, one value per edge """
-        return self.route is not None and callable(self.share) and not isinstance(self.share, (ss.parameters.TimeValue, ss.Dist))
+        return self.networks is not None and callable(self.share) and not isinstance(self.share, (ss.parameters.TimeValue, ss.Dist))
 
     def apply(self, value, engine):
         """ Apply the modifier to a value, for the people it applies to """
@@ -660,8 +660,8 @@ class modify(Connector):
         out = f'{self.name:<16s} ' + (f'efficacy={amount}' if self.efficacy is not None else f'{self.op}={amount}')
         if self.share is not None:
             out += f'   share={getattr(self.share, "__name__", self.share)}'
-        if self.route is not None:
-            out += f'   route={sc.strjoin(self.route)}'
+        if self.networks is not None:
+            out += f'   network={sc.strjoin(self.networks)}'
         if self.where is not None:
             out += f'   where={getattr(self.where, "__name__", self.where)}'
         for key in ['start', 'stop']:

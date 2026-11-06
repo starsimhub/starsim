@@ -52,7 +52,7 @@ measles.pars
 - `bounds` is the range of plausible values. A parameter with bounds can be fitted: `sim.fit()` fits every parameter that has bounds to every result that has data ([Fitting a model](calibration_fitting.qmd)). A value outside its bounds is an error.
 - `doc` (what it means) and `source` (where the value came from) are free text. `describe()` shows them under the transition that uses the parameter, and they are kept when the model is saved.
 - `prior=` gives a distribution of belief about the value, used only in calibration ([Gradients](calibration_gradients.qmd)).
-- `label=` is a human-readable name, for plots and tables; `literal=True` marks an anonymous number written inline (such as the 0.5 in `0.5*A`), which is kept as a number rather than made a parameter of the module.
+- `label=` is a human-readable name, for plots and tables.
 
 For a disease that makes its states and transitions in `__init__()` (see [Declaring in `__init__()`](building_diseases.qmd#declaring-in-__init__)), `ss.pars(defaults, **kwargs)` makes several named parameters at once from a dict of defaults and the values given, as a class body's `ss.par()` lines would; see [`ss.pars`](../api/transitions.qmd). [Appendix: how a number is named](#appendix-how-a-number-is-named) lists the names Starsim gives numbers that aren't named.
 
@@ -94,7 +94,7 @@ Where a value is given decides what it means; the form it takes is free. Each of
 | A time series | `ss.timeseries({'2025-01-01': 1.9, '2025-03-01': 1.2})` | Changes over time, from given values |
 | A seasonal cycle | `ss.seasonal(mean=1.9, amplitude=0.2, peak='March')` | A yearly cycle around a mean |
 | A function of the sim | `lambda sim: 1.9 if sim.now < ss.date('2025-03-01') else 1.2` | Worked out at each step |
-| A distribution | `ss.lognorm_ex(mean=ss.days(8), std=ss.days(2))` | Varies between people |
+| A distribution | `ss.lognormal(mean=ss.days(8), std=ss.days(2))` | Varies between people |
 | A function of the sim and the people | `lambda sim, uids: ...` | One value for each person (agents only) |
 
 Any of these can be wrapped in `ss.par()` to give it a name, bounds, or a source. The sections below cover each kind.
@@ -137,7 +137,7 @@ Contact patterns, reporting, and treatment change over time, and so do the param
 
 ## Values that vary between people
 
-A distribution, given as a value, gives each person their own value: `recovery = I >> R @ ss.lognorm_ex(mean=ss.days(8), std=ss.days(2))` gives each person their own infectious period. For durations, a compartmental run represents the distribution with stages; see [Durations](building_diseases.qmd#durations) and [Distributions](mechanics_distributions.qmd).
+A distribution, given as a value, gives each person their own value: `recovery = I >> R @ ss.lognormal(mean=ss.days(8), std=ss.days(2))` gives each person their own infectious period. For durations, a compartmental run represents the distribution with stages; see [Durations](building_diseases.qmd#durations) and [Distributions](mechanics_distributions.qmd).
 
 A function of the sim and the people, `fn(sim, uids)`, returns one value for each person it is given, and can use anything about them. Here the infectious period is longer for children under 5 (a made-up example):
 
@@ -164,7 +164,7 @@ msim.plot('measles.I')
 
 Nearly everyone is infected in the first week or two either way, but with the longer infectious period of young children, the last of them stay infectious for days longer, so the tail of the epidemic is longer. Children under 5 are only a few percent of the population, so the effect is only as large as the group the function applies to.
 
-A rate is worked out for the people who could take it at each step (everyone in its source state), so a function in a rate is called for them, every step. Multiplied by a condition, it is called only for the people the condition holds for, and is 0 for the others: with `rate = ss.par(fn, name='infant')*(ss.ppl.age < 1)`, `fn` is given only the children under 1, and need not check their ages itself.
+A rate is worked out for the people who could take it at each step (everyone in its source state), so a function in a rate is called for them, every step. Multiplied by a condition, it is called only for the people the condition holds for, and is 0 for the others: with `rate = ss.par(fn, name='infant')*(ss.person.age < 1)`, `fn` is given only the children under 1, and need not check their ages itself.
 
 A function that uses `uids`, or anything else about individual people, needs agents, so a model with one runs as agents. Where the same thing can be said by group (`ss.by(age=...)` on a stratified model), it runs under every solver.
 
@@ -206,7 +206,7 @@ print(ssl.AgentSIR(p_death=0.02).pars.p_death)                  # A probability:
 print(ssl.AgentSIR(p_death=ss.bernoulli(p=0.2)).pars.p_death)   # Another Bernoulli distribution
 print(ssl.AgentSIR(dur_inf=ss.gamma(a=4, scale=ss.days(2.5))).pars.dur_inf) # Any distribution of durations: here a mean of 10 days
 try:
-    ssl.AgentSIR(p_death=ss.lognorm_ex(4))
+    ssl.AgentSIR(p_death=ss.lognormal(4))
 except Exception as e:
     print(type(e).__name__, e)
 ```

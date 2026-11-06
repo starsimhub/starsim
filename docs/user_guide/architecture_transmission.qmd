@@ -41,7 +41,7 @@ for label, kw in routes.items():
     print(f'{label}: {sim.solver}, since {sim.solver_reason}')
 ```
 
-With no network, `beta` is a rate per person rather than per contact, so the same R0 of 5 needs 0.5 per day rather than 0.05. Homogeneous mixing, a mixing pool, and a contact matrix have exact compartmental forms, so `solver='auto'` runs them as an ODE; an individual-level network doesn't, so the sim runs as agents. `auto` never approximates the mixing. Ask for `solver='ode'` on a network and Starsim uses the standard approximation (homogeneous mixing with the same mean contacts for a random network; the Anderson–May partner-change model for lasting partnerships) and prints one line saying so, or raises `CapabilityError` with `approx=False`. See [Engines and kernels](architecture_solvers.qmd) for how the choice is made.
+With no network, `beta` is a rate per person rather than per contact, so the same R0 of 5 needs 0.5 per day rather than 0.05. Homogeneous mixing, a mixing pool, and a contact matrix have exact compartmental forms, so `solver='auto'` runs them as an ODE; an individual-level network doesn't, so the sim runs as agents. `auto` never approximates the mixing. Ask for `solver='ode'` on a network and Starsim uses the standard approximation (homogeneous mixing with the same mean contacts for a random network; the Anderson–May partner-change model for lasting partnerships) and prints one line saying so, or raises `CapabilityError` with `approximations='error'`. See [Engines and kernels](architecture_solvers.qmd) for how the choice is made.
 
 A list of routes is a layered population (`ss.contacts('Kenya', layer='school')`, and so on), and the force of infection sums over the layers. Space is a stratification by patch (`ss.geo.geography('Kenya', level=1)`), with an optional mobility model (`ss.geo.gravity()`, `ss.geo.radiation()`, or a matrix) that couples the patches by commuting or migration; these run under every solver. Contact tracing and the transmission log need routes that keep individual contacts, so they need agents.
 
@@ -64,13 +64,13 @@ There are two ways for one module to change another, and both are first-class:
 
 A modifier never overwrites what it changes. Each modifiable quantity has a *base* value (what its module set) and an *effective* value (the base with every active modifier applied). Reading `sir.rel_sus[uids]` gives the base, assigning to it sets the base, and `sir.current_value('rel_sus', uids)` is what transmission will use (whether the disease is declared or written as code, which share the code that applies it: `ss.solvers.Transmission`). When a modifier switches off, the quantity is simply back at its base: there is nothing to save or restore, and two modules can't clobber each other. Several modifiers on one quantity combine by one fixed rule, whatever order they were declared in: **set, then multiply, then add**.
 
-Conditions (`where=`) use the sim's real attributes. Written before the sim exists, `ss.ppl.age > 65` is a lazy expression (an `ss.conditions.Cond`), evaluated each time it's needed. Nothing is analyzed in advance: a condition is tried on whatever the solver provides, agents or groups. `age > 65` works on groups if 65 is an age bin edge; for `age > 70` inside a bin, `auto` runs agents and an explicit `solver='ode'` stops and says why.
+Conditions (`where=`) use the sim's real attributes. Written before the sim exists, `ss.person.age > 65` is a lazy expression (an `ss.conditions.Cond`), evaluated each time it's needed. Nothing is analyzed in advance: a condition is tried on whatever the solver provides, agents or groups. `age > 65` works on groups if 65 is an age bin edge; for `age > 70` inside a bin, `auto` runs agents and an explicit `solver='ode'` stops and says why.
 
 Because modifiers are declared, Starsim can list them all, before anything runs. Products are modifiers too, so a vaccine shows up in the same list:
 
 ```{python}
-masks       = ss.modify(sir.rel_sus, multiply=0.6, where=ss.ppl.age > 65, start=ss.days(20))
-vaccination = ss.vaccinate(efficacy=0.85, who=ss.ppl.age < 15, coverage=0.7, at=[ss.days(30)])
+masks       = ss.modify(sir.rel_sus, multiply=0.6, where=ss.person.age > 65, start=ss.days(20))
+vaccination = ss.vaccinate(efficacy=0.85, who=ss.person.age < 15, coverage=0.7, at=[ss.days(30)])
 sim = ss.Sim(sir, interventions=[masks, vaccination], pars=dict(beta=0.5), stratify=dict(age=[0, 15, 65]), unit='day', stop=ss.days(100), verbose=0)
 sim.what_modifies(sir.rel_sus)
 ```
@@ -79,17 +79,17 @@ Code that writes another module's arrays directly is allowed, but isn't tracked.
 
 ## Interventions: products and delivery
 
-An intervention has two parts. *What* is a product (`ss.Vaccine`, `ss.Diagnostic`, `ss.Treatment`: nouns) or a change to a quantity (`ss.modify`). *Delivery* is who gets it, when, and how many (`ss.vaccinate`, `ss.screen`, `ss.treat`: verbs), given by keywords (`who=`, `coverage=`, `capacity=`, `at=`, `interval=`, `at_age=`), or by one `deliver=` function when those depend on each other. Routine versus campaign delivery is a keyword, not a class. A delivery takes its product's keywords and makes the product itself (`ss.vaccinate(efficacy=0.85, ...)` makes an `ss.Vaccine`); a product is made on its own only when several deliveries give the same one.
+An intervention has two parts. *What* is a product (`ss.Vaccine`, `ss.Diagnostic`, `ss.Treatment`: nouns) or a change to a quantity (`ss.modify`). *Delivery* is who gets it, when, and how many (`ss.vaccinate`, `ss.screen`, `ss.treat`: verbs), given by keywords (`who=`, `on=`, `coverage=`, `capacity=`, `at=`, `every=`, `at_age=`), or by one function as `who=` when those depend on each other. Routine versus campaign delivery is a keyword, not a class. A delivery takes its product's keywords and makes the product itself (`ss.vaccinate(efficacy=0.85, ...)` makes an `ss.Vaccine`); a product is made on its own only when several deliveries give the same one.
 
 A cascade of care is a list of ordinary deliveries, each triggered by the outcome of another:
 
 ```python
-screening = ss.screen(sensitivity=0.8, specificity=0.95, coverage=0.1, interval=ss.days(7))  # a rapid test
-confirm   = ss.screen(sensitivity=0.95, specificity=0.99, who=screening.positive, coverage=0.9) # a follow-up is a step of its own
-treatment = ss.treat(cure=0.95, who=confirm.positive, capacity=ss.perday(50))                # while stocks last
+screening = ss.screen(sensitivity=0.8, specificity=0.95, coverage=0.1, every=ss.days(7))  # a rapid test
+confirm   = ss.screen(sensitivity=0.95, specificity=0.99, on=screening.positive, coverage=0.9) # a follow-up is a step of its own
+treatment = ss.treat(cure=0.95, on=confirm.positive, capacity=ss.perday(50))                # while stocks last
 ```
 
-An outcome such as `screening.positive` is an *event*: the people it happened to this step. Events can be joined (`a | b`), and they remember: `screening.positive.ever`, `.count`, and `.since` work anywhere a condition does. Each step runs after the steps whose events trigger it, whatever order they are listed in, so a follow-up acts on the same step as its trigger. Every delivery has results of its own (`delivered`, `eligible`, `coverage`, ...).
+An outcome such as `screening.positive` is an *event*: the people it happened to this step. Events can be joined (`a | b`), and they remember: `screening.positive.ever`, `.n_times`, and `.since` work anywhere a condition does. Each step runs after the steps whose events trigger it, whatever order they are listed in, so a follow-up acts on the same step as its trigger. Every delivery has results of its own (`delivered`, `eligible`, `coverage`, ...).
 
 The same declarations run under every solver where they can. This cascade runs as an ODE, with the tests as flows thinned by sensitivity and specificity and capacity as a cap on the total flow. Some things need individuals: a test result that comes after a `delay=`, the joint of two events, `.since`, `trace=` (delivery to contacts), or a product whose effect is your own code. Under `auto` any of these makes the sim run as agents, and the reason it prints names the part.
 

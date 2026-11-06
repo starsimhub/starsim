@@ -34,12 +34,12 @@ def test_products(do_plot=False):
 
     # A vaccine for the SIS, offered each year from 2005 to 80% of those not yet vaccinated
     vx_start = 2005
-    vaccination = ss.vaccinate(ss.Vaccine(efficacy=0.9), coverage=0.8, start=vx_start, interval=ss.years(1))
+    vaccination = ss.vaccinate(ss.Vaccine(efficacy=0.9), coverage=0.8, start=vx_start, every=ss.years(1))
 
     # A test with three results, most severe first (Starsim 3's ss.Dx table, with its hierarchy)
     dx_start = 2010
-    cytology = ss.Diagnostic(results=dict(high=dict(I=0.9), low={'I': 0.05, None: 0.02}, normal=None))
-    screening = ss.screen(cytology, coverage=0.9, start=dx_start, interval=ss.years(1))
+    cytology = ss.Diagnostic(outcomes=dict(high=dict(I=0.9), low={'I': 0.05, None: 0.02}, normal=None))
+    screening = ss.screen(cytology, coverage=0.9, start=dx_start, every=ss.years(1))
 
     sim = ss.Sim(make_pars(n_agents=5e3), interventions=[screening, vaccination])
     sim.run()
@@ -60,13 +60,13 @@ def test_products(do_plot=False):
 
     # Treatment of a fixed number each step (Starsim 3's treat_num): those not served wait, and leave the queue if no longer infected
     sis = ss.SIS(beta=ss.peryear(0.5))
-    treatment = ss.treat(ss.Treatment(cure=0.8), where=sis.infection, capacity=50, queue=True)
+    treatment = ss.treat(ss.Treatment(cure=0.8), on=sis.infection, capacity=50, queue=True)
     res = ss.Sim(make_pars() | dict(diseases=sis), interventions=treatment).run().results.treatment
     assert res.delivered.max() == 50 and res.waiting.max() > 0, 'Expected at most 50 treated each step, and a queue'
 
     # The same for a disease written as code, cured by its clear_infection() (as Starsim 3's ss.Tx moved infected to susceptible)
     sis = ssl.AgentSIS(init_prev=0.1)
-    treatment = ss.treat(ss.Treatment(cure=0.8), where=sis.infected, capacity=20, queue=True, interval=1)
+    treatment = ss.treat(ss.Treatment(cure=0.8), where=sis.infected, capacity=20, queue=True, every=1)
     base = ss.Sim(make_pars() | dict(diseases=sis)).run().results.agentsis
     sim = ss.Sim(make_pars() | dict(diseases=sis), interventions=treatment).run()
     assert sim.results.treatment.delivered.max() == 20 and sim.results.treatment.waiting.max() > 0 and sim.results.treatment.cured.sum() > 0
@@ -82,8 +82,8 @@ def test_products(do_plot=False):
 def test_two_products():
     sc.heading('Testing one product delivered by two deliveries')
     vaccine = ss.Vaccine(efficacy=0.9)
-    vx1 = ss.vaccinate(vaccine, who=~vaccine.ever, coverage=0.1, start=2005, interval=ss.years(1))
-    vx2 = ss.vaccinate(vaccine, who=~vaccine.ever, coverage=0.2, start=2005, interval=ss.years(1))
+    vx1 = ss.vaccinate(vaccine, who=~vaccine.ever, coverage=0.1, start=2005, every=ss.years(1))
+    vx2 = ss.vaccinate(vaccine, who=~vaccine.ever, coverage=0.2, start=2005, every=ss.years(1))
     sim = ss.Sim(make_pars(n_agents=5e3), interventions=[vx1, vx2])
     sim.run()
 
@@ -123,7 +123,7 @@ def test_routine_delivery():
 
     # Only between the start and the stop (which is not included, so Starsim 3's end_year=2012 is stop=2013)
     start, stop = 2008, 2013
-    screening = ss.screen(make_dx(), coverage=1.0, start=start, stop=stop, interval=ss.years(1))
+    screening = ss.screen(make_dx(), coverage=1.0, start=start, stop=stop, every=ss.years(1))
     sim = ss.Sim(pars, interventions=screening).run()
     n_screened = sim.results.screening.delivered
     years = sim.t.yearvec # A step's results are in the row of the year it starts
@@ -132,8 +132,8 @@ def test_routine_delivery():
     assert n_screened[(years >= start) & (years < stop)].min() > 0, f'Expected screenings each year from {start} to {stop}'
 
     # A coverage that changes by year (Starsim 3's years= with an array of prob=)
-    coverage = ss.timeseries(np.arange(2005, 2016), np.linspace(0.05, 0.95, 11), mode='linear')
-    sim = ss.Sim(pars, interventions=ss.screen(make_dx(), coverage=coverage, interval=ss.years(1), name='screening')).run()
+    coverage = ss.timeseries(np.arange(2005, 2016), np.linspace(0.05, 0.95, 11), interpolation='linear')
+    sim = ss.Sim(pars, interventions=ss.screen(make_dx(), coverage=coverage, every=ss.years(1), name='screening')).run()
     n_screened = sim.results.screening.delivered
     years = sim.t.yearvec
     early = n_screened[(years >= 2005) & (years <= 2007)].mean()
@@ -147,7 +147,7 @@ def test_routine_delivery():
     assert np.isclose(n_screened[0]/2000, 1 - 0.5**0.5, atol=0.05), 'Expected the probability per year to be per step'
 
     # A window whose years are close to, but not on, the time grid (Starsim 3 raised an IndexError)
-    screening = ss.screen(make_dx(), coverage=1.0, start=2000, stop=2002, interval=ss.years(1), name='screening')
+    screening = ss.screen(make_dx(), coverage=1.0, start=2000, stop=2002, every=ss.years(1), name='screening')
     sim = ss.Sim(make_pars(start=2000, stop=2002), dt=7/365, interventions=screening).run()
     assert sim.results.screening.delivered.sum() > 0, 'Expected screenings with a weekly step'
     return sim
@@ -224,7 +224,7 @@ def test_disease_resolved_once():
     sc.heading('The disease of a delivery is worked out once, when it is initialized')
     S, I, R = ss.states(3)
     sir = ss.Disease(S >> I @ ss.perday(0.3)*I, I >> R @ ss.days(8), init=dict(I=0.01), name='sir')
-    treatment = ss.treat(ss.Treatment(cure=0.8), where=I, capacity=20, interval=1, name='treatment')
+    treatment = ss.treat(ss.Treatment(cure=0.8), where=I, capacity=20, every=1, name='treatment')
     sim = ss.Sim(sir, interventions=treatment, unit='day', stop=5, solver='ode', verbose=0).init()
     assert sim.interventions.treatment.__dict__['_disease'] == 'sir'
     return
@@ -265,7 +265,7 @@ def test_modify_fast_paths():
     # A coverage given as a rate is one share of those eligible at each step, in the kernels
     beta = ss.par(0.3, name='beta')
     sir = ss.Disease(infection=S >> I @ beta*I, recovery=I >> R @ ss.days(10), init_n=dict(I=100), name='sir')
-    assert ss.Sim(sir, interventions=ss.vaccinate(efficacy=0.8, coverage=ss.peryear(0.5)), nopython=True, **kw).run().complete
+    assert ss.Sim(sir, interventions=ss.vaccinate(efficacy=0.8, coverage=ss.peryear(0.5)), require_kernels=True, **kw).run().complete
 
     # An amount or share that varies in time is not taken for a dated one
     series = ss.timeseries({30: 1.0, 100: 0.2})
@@ -275,14 +275,14 @@ def test_modify_fast_paths():
         sim = ss.Sim(sir, interventions=ss.modify(sir.pars.beta, **kwargs), **kw).run()
         assert sim.diseases.sir.engine.changing_steps(0, 365) is None
 
-    # With nopython=True, what would fall back to Python raises an error instead
+    # With require_kernels=True, what would fall back to Python raises an error instead
     beta = ss.par(0.3, name='beta')
     sir = ss.Disease(infection=S >> I @ beta*I, recovery=I >> R @ ss.days(10), init_n=dict(I=100), name='sir')
-    make = lambda **mod: ss.Sim(sir, interventions=ss.modify(sir.pars.beta, multiply=0.75, **mod), nopython=True, **kw)
+    make = lambda **mod: ss.Sim(sir, interventions=ss.modify(sir.pars.beta, multiply=0.75, **mod), require_kernels=True, **kw)
     assert make(start='2026-03-01').run().complete and make(where=sir.I.n >= 20_000).run().complete
-    for mod in [dict(where=sir.I.n >= 20_000, until=sir.I.n <= 10_000), dict(multiply=ss.timeseries({30: 1.0, 100: 0.2}, mode='linear'))]:
-        with pytest.raises(ss.CapabilityError, match='nopython'):
-            ss.Sim(sir, interventions=ss.modify(sir.pars.beta, **{'multiply':0.75, **mod}), nopython=True, **kw).run()
+    for mod in [dict(where=sir.I.n >= 20_000, until=sir.I.n <= 10_000), dict(multiply=ss.timeseries({30: 1.0, 100: 0.2}, interpolation='linear'))]:
+        with pytest.raises(ss.CapabilityError, match='require_kernels'):
+            ss.Sim(sir, interventions=ss.modify(sir.pars.beta, **{'multiply':0.75, **mod}), require_kernels=True, **kw).run()
 
     # A comparison of counts is part of the rate: the same as writing it there
     beta = ss.par(0.3, name='beta')

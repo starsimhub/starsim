@@ -52,7 +52,7 @@ def test_mnch():
 
     # Fetal health: infection during pregnancy should restrict growth
     sim = ss.Sim(diseases=ssl.AgentSIR(name='sir', beta=ss.peryear(20)), demographics=demographics(),
-                 connectors=ssl.mnch.fetal_infection(), custom=ssl.mnch.FetalHealth(),
+                 connectors=ssl.mnch.fetal_infection(), modules=ssl.mnch.FetalHealth(),
                  interventions=ssl.mnch.treat_pregnant(disease='sir', start_year=2001),
                  networks=networks(), **mnch_pars)
     sim.run()

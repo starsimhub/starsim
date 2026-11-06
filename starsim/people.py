@@ -1,5 +1,5 @@
 """
-The people in a sim (`ss.People`), lazy references to their properties (`ss.ppl`), and how they are made
+The people in a sim (`ss.People`), lazy references to their properties (`ss.person`), and how they are made
 
 People hold what every module shares, such as age, sex, and who is alive. In a compartmental run, each row is a group of people rather than an agent.
 
@@ -17,16 +17,16 @@ import numba as nb
 
 class LazyPeople:
     """
-    The people's properties, before there are any people: `ss.ppl.<name>` is a lazy reference to the property `<name>` of each person (e.g. `ss.ppl.age`, `ss.ppl.urban`), checked when the sim is built
+    The people's properties, before there are any people: `ss.person.<name>` is a lazy reference to the property `<name>` of each person (e.g. `ss.person.age`, `ss.person.urban`), checked when the sim is built
 
-    It can be used in a condition (`ss.ppl.age < 15`, for `where=`) and, as the person's value,
-    in a rate, a branch probability, or a result (`expit(b0 + b1*ss.ppl.urban)`); a condition in a
-    rate is 1 for the people it holds for and 0 for the others (`0.3*(ss.ppl.age > 65)`).
+    It can be used in a condition (`ss.person.age < 15`, for `where=`) and, as the person's value,
+    in a rate, a branch probability, or a result (`expit(b0 + b1*ss.person.urban)`); a condition in a
+    rate is 1 for the people it holds for and 0 for the others (`0.3*(ss.person.age > 65)`).
 
     Examples:
         ```python
-        p_use = expit(b0 + b_age*ss.ppl.age + b_urban*ss.ppl.urban)
-        kids = ss.ppl.age < 15
+        p_use = expit(b0 + b_age*ss.person.age + b_urban*ss.person.urban)
+        kids = ss.person.age < 15
         ```
     """
     def __getattr__(self, name):
@@ -36,7 +36,7 @@ class LazyPeople:
 
     def get(self, name, default):
         """
-        `ss.ppl.<name>`, or `default` for everyone if nothing adds the property `<name>` to the people, e.g. one that a
+        `ss.person.<name>`, or `default` for everyone if nothing adds the property `<name>` to the people, e.g. one that a
         module adds (`people.add_state()`), read by a rate whether or not that module is in the sim
 
         Args:
@@ -45,15 +45,15 @@ class LazyPeople:
 
         Example:
             ```python
-            onset = S >> D @ ss.peryear(0.01)*(1 + 0.5*ss.ppl.get('unstable_housing', 0))
+            onset = S >> D @ ss.peryear(0.01)*(1 + 0.5*ss.person.get('unstable_housing', 0))
             ```
         """
         return ss.conditions.Cond('people', name, default)
 
     def __repr__(self):
-        return 'ss.ppl'
+        return 'ss.person'
 
-ppl = LazyPeople()
+person = LazyPeople()
 
 
 class AgentScale(ss.FloatArr):
@@ -100,7 +100,7 @@ class People:
 
     Args:
         n_agents (int): the initial number of agents in the model
-        age_data (dataframe/series/array/str/`ss.Dist`): the age distribution: a dataframe with columns `age` (the lower edge of each age bin) and `value` (the number or share of people in it), a series of values indexed by age, a two-column array, a CSV file with the dataframe's columns, or a distribution of ages. This gives agents ages; for age groups in a compartmental model, use `disease.stratify(age=[0, 15, 65], split=[0.3, 0.6, 0.1])` instead
+        age_data (dataframe/series/array/str/`ss.Dist`): the age distribution: a dataframe with columns `age` (the lower edge of each age bin) and `value` (the number or share of people in it), a series of values indexed by age, a two-column array, a CSV file with the dataframe's columns, or a distribution of ages. This gives agents ages; for age groups in a compartmental model, use `disease.stratify(age=[0, 15, 65], fractions=[0.3, 0.6, 0.1])` instead
         extra_states (list): non-default states to initialize
         p_female (float): the share of agents who are female
         mock (bool): if True, initialize the People object with a mock Sim object (for debugging only)
@@ -108,7 +108,7 @@ class People:
     Examples:
         ```python
         ppl = ss.People(2000)
-        kids = ss.ppl.age < 15 # A lazy condition, for a sim run as agents or as compartments (see ss.ppl)
+        kids = ss.person.age < 15 # A lazy condition, for a sim run as agents or as compartments (see ss.person)
         ```
     """
     _taken = None # See taken_names()
@@ -131,8 +131,8 @@ class People:
         self._age_bins = {} # The bin of each agent by age, for each set of edges: see age_bins()
         self.has_unborn = False # Whether a module makes agents before they are born, with a negative age (e.g. ss.Pregnancy's fetuses), who are not counted among the people: see unborn_uids()
         self.initialized = False
-        self.n_agents_init = round(n_agents) # The nearest whole number, as ss.SimPars takes it (e.g. a number a fit chose)
-        self.named = None # For a named population (ss.people('Kenya')), where it came from: see ss.people()
+        self.n_agents_init = round(n_agents) # The nearest whole number, as ss.sim.SimPars takes it (e.g. a number a fit chose)
+        self.named = None # For a named population (ss.population('Kenya')), where it came from: see ss.population()
 
         # The four fundamental arrays (auids, uid, slot, and parent) are made on first use: see make_uids()
 
@@ -148,7 +148,7 @@ class People:
             ss.Arr('cause_of_death', dtype=np.int16, default=-1, nan=-1, label='Cause of death', shared=True), # Its position in people.causes (-1 for none); no memory until someone dies
         ]
         states.extend(extra_states)
-        self.states = ss.ndict(type=ss.Arr)
+        self.states = ss.utils.ndict(type=ss.Arr)
         for state in states:
             self.states.append(state)
             setattr(self, state.name, state)
@@ -177,8 +177,8 @@ class People:
         uids = ss.uids(np.arange(int(self.n_agents_init)))
         self.auids = uids.astype(ss.dtypes.uid).view(ss.uids) # This tracks all active UIDs (in practice, agents who are alive), as ss.dtypes.uid (64-bit, which index arrays fastest)
         self.uid    = ss.arrays.UIDArr('uid')  # This variable tracks all UIDs; it takes no memory, since a UID is the agent's index
-        self.slot   = ss.IndexArr('slot', shared=self.uid) # A slot is a special state managed internally to generate random numbers
-        self.parent = ss.IndexArr('parent', label='UID of parent', shared=True)  # UID of parent, if any (used with pregnancy)
+        self.slot   = ss.arrays.IndexArr('slot', shared=self.uid) # A slot is a special state managed internally to generate random numbers
+        self.parent = ss.arrays.IndexArr('parent', label='UID of parent', shared=True)  # UID of parent, if any (used with pregnancy)
         for state in [self.uid, self.slot, self.parent]:
             state.people = self # Manually link to people since we need to set these up before using state.link_people()
             state.grow(new_uids=uids, new_vals=uids if state is self.uid else None)
@@ -465,10 +465,10 @@ class People:
         This method also creates the standard people-related results like died and
         emigrated, the flows of people who died or left (`results.died.cum` is the cumulative total).
 
-        If `sim.pars.people_results` is False, People-level result collection is disabled
+        If `sim.pars.record_people` is False, People-level result collection is disabled
         (no results are created here and `People.record_stocks()` and `record_flows()` are skipped in the loop).
         """
-        if not self.sim.pars.get('people_results', True): # Opt-out: skip People-level results entirely
+        if not self.sim.pars.get('record_people', True): # Opt-out: skip People-level results entirely
             return
         kw = dict(module='People', shape=self.sim.t.npts, timevec=self.sim.t.timevec, dtype=int, scale=True)
         results = []
@@ -527,7 +527,7 @@ class People:
 
     def add_state(self, state):
         """
-        Add a property of each person, from a module (e.g. a social determinant of health that several modules read, as `ss.ppl.<name>`)
+        Add a property of each person, from a module (e.g. a social determinant of health that several modules read, as `ss.person.<name>`)
 
         Idempotent: if the people have a property of that name already (added by another module, say), it is
         returned as it is, so each module that reads it can add it. Call it before the people's values are made,
@@ -708,7 +708,7 @@ class People:
     def update_post(self):
         """ Final updates at the very end of the timestep """
         sim = self.sim
-        if sim.pars.use_aging and sim.solver == 'abm': # In a compartmental run, each row is a group, whose age stays the middle of the group (people move between groups as they age)
+        if sim.pars.aging and sim.solver == 'abm': # In a compartmental run, each row is a group, whose age stays the middle of the group (people move between groups as they age)
             self.age[self.alive.uids] += sim.t.dt_year
         return
 
@@ -914,7 +914,7 @@ class People:
         return dying if dying is not None else ss.uids()
 
     def record_stocks(self):
-        """ Record the population counts at the start of the step (each `ss.BoolState`, e.g. alive, female), at its index (see `ss.Loop`) """
+        """ Record the population counts at the start of the step (each `ss.BoolState`, e.g. alive, female), at its index (see `ss.loop.Loop`) """
         ti = self.sim.ti
         res = self.sim.results
         states = [getattr(self, state.name) for state in self.auto_state_list] # Each auto-generated BoolState result, e.g. alive, female
@@ -924,7 +924,7 @@ class People:
             counts = [float(w[state.raw[self.auids]].sum()) for state in states]
             for state in states: # Agents of different weights make fractions of people
                 if res[state.name].values.dtype.kind in 'iu':
-                    res[state.name].init_values(dtype=float, force=True)
+                    res[state.name]._init_values(dtype=float, force=True)
         elif all(state.raw.ndim == 1 for state in states):
             counts = ss.solvers.backends.passes.count_alive(tuple(state.raw for state in states), self.alive.raw[:self.uid.len_used]) # In one pass by UID, if the active agents are those alive (as they are at the start of a step, the dead having been taken out at the end of the last)
             counts = counts[:-1] if counts[-1] == len(self.auids) else [state.count() for state in states]
@@ -947,7 +947,7 @@ class People:
             gone = [float(self.scale.raw[dying[arr.raw[dying] <= ti]].sum()) for arr in [self.ti_dead, self.ti_removed]]
             for key in ['died', 'emigrated']:
                 if res[key].values.dtype.kind in 'iu':
-                    res[key].init_values(dtype=float, force=True)
+                    res[key]._init_values(dtype=float, force=True)
         else:
             gone = [np.count_nonzero(arr.raw[dying] <= ti) for arr in [self.ti_dead, self.ti_removed]]
         unborn = self.unborn_uids()
@@ -969,7 +969,7 @@ class People:
         """ Remove dead agents and run post-step updates (in one pass over the agents, unless update_post() is changed) """
         sim = self.sim
         if type(self).update_post is People.update_post:
-            self.remove_dead(aging=bool(sim.pars.use_aging and sim.solver == 'abm'))
+            self.remove_dead(aging=bool(sim.pars.aging and sim.solver == 'abm'))
         else:
             self.remove_dead()
             self.update_post()
@@ -1139,7 +1139,7 @@ class People:
         return person
 
 
-def people(place, year=None, n_agents=None, revision=None):
+def population(place, year=None, n_agents=None, revision=None):
     """
     A named population: the size, age structure, and sex ratio of a country or a US state
 
@@ -1160,14 +1160,14 @@ def people(place, year=None, n_agents=None, revision=None):
 
     Examples:
         ```python
-        sim = ss.Sim(sir, people=ss.people('Kenya', year=2024), networks=ss.contacts('Kenya'))
-        ss.people('NG').named.total # The population of Nigeria in 2024
+        sim = ss.Sim(sir, people=ss.population('Kenya', year=2024), networks=ss.contacts('Kenya'))
+        ss.population('NG').named.total # The population of Nigeria in 2024
         ```
     """
     pop = ss.data.population(place, year=year, revision=revision)
     ages = np.array(ss.data.age_edges(pop.index))
     total = (pop.female + pop.male).values
-    ppl = People(n_agents=sc.ifelse(n_agents, ss.SimPars().n_agents), age_data=ss.data.to_age_data(ages, total), p_female=pop.female.sum()/total.sum())
+    ppl = People(n_agents=sc.ifelse(n_agents, ss.sim.SimPars().n_agents), age_data=ss.data.to_age_data(ages, total), p_female=pop.female.sum()/total.sum())
     ppl.named = sc.obj(place=place, year=year, n_agents=n_agents, revision=revision, total=float(total.sum()), ages=ages, counts=total, ref=pop.attrs['ref'])
     return ppl
 

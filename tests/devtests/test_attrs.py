@@ -24,11 +24,11 @@ def make_hiv(init_prev=0.05, init=None, art=ss.peryear(0.2)):
         post_art = ss.State()
         infected = acute + latent + falling + on_art + post_art # A sum of states, as a source and for states=
         infection   = S >> acute @ ss.peryear(0.15)*(acute + latent + falling + on_art + post_art)
-        latency     = ss.Transition(acute, latent, dur=ss.lognorm_ex(ss.months(1.7), ss.months(1)), stages=3)
-        progression = ss.Transition(latent, falling, dur=ss.lognorm_ex(ss.years(10), ss.years(3)))
-        aids_death  = ss.Transition(falling, ss.null, dur=ss.lognorm_ex(ss.years(3), ss.years(1)), stages=9)
+        latency     = ss.Transition(acute, latent, dur=ss.lognormal(ss.months(1.7), ss.months(1)), stages=3)
+        progression = ss.Transition(latent, falling, dur=ss.lognormal(ss.years(10), ss.years(3)))
+        aids_death  = ss.Transition(falling, ss.null, dur=ss.lognormal(ss.years(3), ss.years(1)), stages=9)
         start_art   = (acute + latent + falling + post_art) >> on_art @ art
-        dropout     = ss.Transition(on_art, post_art, dur=ss.lognorm_ex(ss.years(3), ss.years(1.5)))
+        dropout     = ss.Transition(on_art, post_art, dur=ss.lognormal(ss.years(3), ss.years(1.5)))
 
         cd4_start     = ss.attr(ss.normal(800, 50), on=infection)
         cd4_latent    = ss.attr(ss.normal(500, 50), on=infection)
@@ -40,7 +40,7 @@ def make_hiv(init_prev=0.05, init=None, art=ss.peryear(0.2)):
             acute:    cd4_start - (cd4_start - cd4_latent)*acute.progress,
             latent:   cd4_latent,
             falling:  np.maximum(1, cd4_latent*(1 - falling.progress)),
-            on_art:   cd4_preart + gain*(2/(1 + np.exp(-art_cd4_growth*on_art.time/ss.months(1))) - 1),
+            on_art:   cd4_preart + gain*(2/(1 + np.exp(-art_cd4_growth*on_art.time_in/ss.months(1))) - 1),
             post_art: np.maximum(1, cd4_stop*(1 - post_art.progress)),
         })
         post_art_death = ss.Transition(post_art, ss.null, dur=np.maximum(np.log(cd4_preart)*cd4_stop/cd4_potential, 0.1)*ss.years(1), stages=10)
@@ -50,7 +50,7 @@ def make_hiv(init_prev=0.05, init=None, art=ss.peryear(0.2)):
     hiv.stratify(cd4=[0, 50, 200, 350, 500], states=hiv.infected) # Derived: no groups
     mods = [
         ss.modify(hiv.cd4_death, multiply=rel_art_mort, where=hiv.on_art, name='art_mort'),
-        ss.modify(hiv.rel_trans, multiply=1 - eff_art*np.minimum(hiv.on_art.time/ss.years(time_to_eff), 1), where=hiv.on_art, name='art_trans'),
+        ss.modify(hiv.rel_trans, multiply=1 - eff_art*np.minimum(hiv.on_art.time_in/ss.years(time_to_eff), 1), where=hiv.on_art, name='art_trans'),
         ss.modify(hiv.rel_trans, multiply=rel_trans_aids, where=(hiv.cd4 < 200) & (hiv.falling | hiv.post_art), name='aids_trans'),
     ]
     return hiv, mods
@@ -107,7 +107,7 @@ def test_attr_rules():
             n_inf   = ss.attr(1, on=infection, combine='sum'),           # A count of events
             first   = ss.attr(ss.normal(5, 1), on=infection, combine='first'),
             low     = ss.attr(ss.normal(5, 1), on=infection, combine='min', init=10),
-            avg     = ss.attr(I.time, on=recovery, combine=lambda old, new: np.where(np.isnan(old), new, (old + new)/2)), # Recorded: the time just completed
+            avg     = ss.attr(I.time_in, on=recovery, combine=lambda old, new: np.where(np.isnan(old), new, (old + new)/2)), # Recorded: the time just completed
             rel     = ss.attr(ss.uniform(0.5, 1.5)),                     # A trait
             dx      = hook,
             init_prev=0.01, name='sis', **extra)
@@ -184,7 +184,7 @@ def test_attr_by_event():
         contact = S >> E @ ss.perday(0.05)*I
         environment = ss.Transition(S, E, rate=ss.perday(0.01), acquisition=True)
         dose = ss.attr({contact: hi, environment: cfu.n/2}) # By contact, a high dose; from the environment, what is there then
-        onset = ss.Transition(E, I, dur=ss.lognorm_im(mean=np.log(dose), sigma=0.01, unit='day')) # The dwell is the dose, in days
+        onset = ss.Transition(E, I, dur=ss.lognormal(log_mean=np.log(dose), log_std=0.01, unit='day')) # The dwell is the dose, in days
         rec = I >> R @ ss.days(5)
     sim = ss.Sim(diseases=M(init_prev=0), n_agents=3000, dur=ss.days(40), dt=ss.days(1), rand_seed=1, **kw).run()
     m = sim.diseases.m
@@ -206,7 +206,7 @@ def test_attr_init():
     class M(ss.Disease):
         S, I = ss.states('S I')
         seroprev = ss.par(0.5)
-        n_inf = ss.attr(1, on=I.enter, combine='sum', init=ss.bernoulli(seroprev)*ss.poisson(lam=ss.ppl.age/20))
+        n_inf = ss.attr(1, on=I.enter, combine='sum', init=ss.bernoulli(seroprev)*ss.poisson(lam=ss.person.age/20))
         inf = S >> I @ 0.5**n_inf*ss.perday(0.01)
         rec = I >> S @ ss.days(5)
     sim = ss.Sim(diseases=M(init_prev=0), n_agents=20_000, dur=ss.days(5), dt=ss.days(1), rand_seed=1, **kw).init()

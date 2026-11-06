@@ -23,25 +23,25 @@ from .version import __version__, __versiondate__, __license__
 from .settings import dtypes, options, style
 settings.thread_limit = _limit
 del _limit
-from .utils import ndict, warn, load, save, plot_args, show, return_fig
+from .utils import warn, load, save, plot_args, show, return_fig
 from .internals import errors, debugtools
 from .internals.errors import *
 
 #%% Building blocks: arrays, distributions, time, and parameters
 from .internals import arrays
-from .internals.arrays import Arr, FloatArr, TimeArr, IntArr, CatArr, BoolArr, BoolState, IndexArr, uids
+from .internals.arrays import Arr, FloatArr, TimeArr, IntArr, CatArr, BoolArr, BoolState, uids
 
 from .internals import dists
 from .internals.dists import Dist
 from .distributions import (
-    random, uniform, normal, truncnorm, lognorm_ex, lognorm_im, expon,
-    poisson, nbinom, binom, beta_dist, beta_mean, weibull, gamma, erlang, constant,
+    random, uniform, normal, truncnorm, lognormal, expon,
+    poisson, nbinom, binom, beta_dist, weibull, gamma, erlang, constant,
     randint, bernoulli, choose_n, choice, histogram, multi_random,
 )
 
 from .internals import time, dates, timeline, parameters
 from .internals.time import (
-    TimePar, dur, Rate, prob, per, freq, peract,
+    Duration, prob, per, freq, peract,
     years, months, weeks, days, year, month, week, day,
     perday, perweek, permonth, peryear,
     probperday, probperweek, probpermonth, probperyear,
@@ -49,30 +49,30 @@ from .internals.time import (
 )
 from .internals.dates import DateArray, date, datedur
 from .internals.timeline import Timeline, schedule
-from .internals.parameters import Pars, by, timeseries, seasonal
+from .internals.parameters import by, timeseries, seasonal
 
 #%% People and modules
-from .people import People, people, ppl
+from .people import People, population, person
 from .internals import modules
-from .internals.modules import register_modules, required, Base, Module
+from .internals.modules import register_modules, required, Module
 from .networks import (
     Network, DynamicNetwork,
     RandomNet, DegreeNet, SexualNet,
-    PrenatalNet, MaternalNet, PostnatalNet, BreastfeedingNet,
-    AgeGroup, MixingPools, MixingPool, contacts,
+    PrenatalNet, PostnatalNet, BreastfeedingNet,
+    MixingPool, contacts,
 )
 from . import geo
-from .results import Result, Results, simdata
-from .products import Product, Vaccine, Treatment, Diagnostic, box
+from .results import Result, Results, SimData
+from .products import Product, Vaccine, Treatment, Diagnostic, boxcar
 from .interventions import Intervention, Delivery, vaccinate, treat, screen
 from .analyzers import Analyzer, infection_log
 from .connectors import Connector, modify
 
 #%% Declared models: conditions, expressions, transitions, and the solvers that run them
 from .internals import conditions
-from .internals.conditions import state
+from .internals.conditions import ref
 from .solvers.backends import kernels
-from .solvers.backends.kernels import compile, compile_status
+from .solvers.backends.kernels import compile
 from .internals import expressions
 from .internals.expressions import par, mother, attr
 from .transitions import (
@@ -90,11 +90,11 @@ from .demographics import Demographics, Births, Deaths, Pregnancy # After the di
 
 #%% Running: the loop, the sim, and many sims
 from .internals import loop
-from .internals.loop import Loop
 from . import data # starsim_data is imported only when this is used
 from .internals import gradients # JAX is imported only when this is used
 from .solvers.backends import jit, draws # Draws, for ss.draws.next_u() in compiled code (see ss.Dist.streams())
-from .sim import SimPars, Sim, demo
+from . import sim
+from .sim import Sim, demo
 from .run import MultiSim, parallel
 
 #%% Importing from and exporting to other frameworks

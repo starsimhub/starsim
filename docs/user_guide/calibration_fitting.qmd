@@ -49,7 +49,7 @@ The data are weekly reported cases. On this page they are illustrative: made onc
 ```{python}
 truth = ss.Sim(measles, pars=dict(beta=1.9, report=0.5, I0=0.0003), n_agents=100_000, rand_seed=3, verbose=0, **pars)
 truth.run()
-data = truth.to_data('cases', resample='week', noise=None).iloc[:-1] # Weekly cases, leaving out the last, partial week
+data = truth.to_synthetic_data('cases', resample='week', noise=None).iloc[:-1] # Weekly cases, leaving out the last, partial week
 rng = np.random.default_rng(3)
 data['cases'] = rng.negative_binomial(10, 10/(10 + data.cases)) # Counts with more variation than Poisson (negative binomial)
 data.head()
@@ -62,7 +62,7 @@ sim = ss.Sim(measles, data=data, **pars)
 fit = sim.fit()
 ```
 
-The fit prints which method it used and why, which parameters it searches on a log scale (those whose bounds span a factor of 10 or more), and whether it converged. `fit.summarize()` shows the values found, with the goodness of fit before and after:
+The fit prints which method it used and why, which parameters it searches on a log scale (those whose bounds span a factor of 10 or more), and whether it converged. `fit.summarize()` shows the values found, with the loss before and after:
 
 ```{python}
 fit.summarize()
@@ -113,7 +113,7 @@ The value is a parameter like any other: `fit.pars.symp_prob`, `ss.Sim(pars=dict
 
 ## The data
 
-The data has a time column (`date`, `year`, `t`, or `time`; an integer `year` is a calendar year), or dates as its index, and one column for each data series, named like the result it is compared with: here `cases`. With several modules, a column that could match more than one result is named with its module, e.g. `measles.cases`. Any result can have data, including an analyzer's (`by_age.cancers_0_15`), a result nested deeper in `sim.results` (`hpv.genotype.cancers`), and a column of a result with columns (`sis.infection.alpha`), so `gof=` is needed only for targets worked out from the results, such as a share.
+The data has a time column (`date`, `year`, `t`, or `time`; an integer `year` is a calendar year), or dates as its index, and one column for each data series, named like the result it is compared with: here `cases`. With several modules, a column that could match more than one result is named with its module, e.g. `measles.cases`. Any result can have data, including an analyzer's (`by_age.cancers_0_15`), a result nested deeper in `sim.results` (`hpv.genotype.cancers`), and a column of a result with columns (`sis.infection.alpha`), so `loss=` is needed only for targets worked out from the results, such as a share.
 
 The data need not be on the model's time step, and nothing needs to say how to line the two up, since each result knows what kind of quantity it is:
 
@@ -121,10 +121,10 @@ The data need not be on the model's time step, and nothing needs to say how to l
 - A **stock** (like the number infectious) or a **ratio** (like prevalence) is compared with the model's value at the data's time.
 - Data by calendar year is compared over the year it names: a flow summed over it, and a stock or ratio averaged over it.
 
-`data=` takes a dataframe or a file name. Real files rarely arrive with matching headers, so `ss.simdata()` renames columns on the way in, and can ignore the columns not needed:
+`data=` takes a dataframe or a file name. Real files rarely arrive with matching headers, so `ss.SimData()` renames columns on the way in, and can ignore the columns not needed:
 
 ```python
-data = ss.simdata('town_cases.csv', aliases=dict(cases='Reported cases (weekly)', date='Week starting'), ignore_extra=True)
+data = ss.SimData('town_cases.csv', aliases=dict(cases='Reported cases (weekly)', date='Week starting'), ignore_extra=True)
 sim = ss.Sim(measles, data=data, **pars)
 ```
 
@@ -132,7 +132,7 @@ A column that matches no result gets a note listing the closest result names whe
 
 ## Measuring the fit
 
-Without a likelihood, the measure of fit is the **normalized absolute error**: for each data series, the mean absolute difference between the model and the data, divided by the mean of the data. It needs no assumptions about the noise in the data, and puts series of different sizes on one scale. `gof='rmse'` uses the root mean squared error instead, and `gof=` can also be a function of the sim that returns the mismatch to minimize (lower is better), e.g. to bring data of its own:
+Without a likelihood, the measure of fit is the **normalized absolute error**: for each data series, the mean absolute difference between the model and the data, divided by the mean of the data. It needs no assumptions about the noise in the data, and puts series of different sizes on one scale. `loss='rmse'` uses the root mean squared error instead, and `loss=` can also be a function of the sim that returns the mismatch to minimize (lower is better), e.g. to bring data of its own:
 
 ```python
 def peak_error(sim):
@@ -140,7 +140,7 @@ def peak_error(sim):
     weekly = sim.results.measles.cases.resample('week')
     return abs(weekly.values.argmax() - data.cases.values.argmax())
 
-fit = sim.fit(gof=peak_error)
+fit = sim.fit(loss=peak_error)
 ```
 
 A **likelihood** says how the data vary around the model's value: the model's value is the mean of the distribution, and the likelihood supplies the rest. It can be declared on the outcome, where it is used by every fit, or given to the fit by the name of the data series:
@@ -150,7 +150,7 @@ cases = ss.outcome(report*onset, likelihood=ss.poisson()) # On the outcome
 fit = sim.fit(likelihood=dict(cases=ss.nbinom(n=10)))     # Or for one fit
 ```
 
-The likelihoods are `ss.poisson()` and `ss.nbinom(n=...)` for counts, `ss.normal(scale=...)` and `ss.lognorm_ex(std=...)` for continuous values, `ss.binom(n=...)` for the number positive in a survey, and `ss.bernoulli()` for yes-or-no outcomes; the [appendix](#appendix-likelihoods-and-priors) says what each is for, and which work in JAX. A likelihood can also be a function of the data and the model's values, `fn(observed, model)`, that returns the log-likelihood of each, for one the list lacks (e.g. a normal whose standard deviation grows with the mean). A function can't be differentiated in JAX, so the default fit then uses Nelder-Mead, which needs no gradients, and says so; a method that needs gradients (`'l-bfgs-b'` or `'nuts'`) is an error that says why.
+The likelihoods are `ss.poisson()` and `ss.nbinom(n=...)` for counts, `ss.normal(scale=...)` and `ss.lognormal(std=...)` for continuous values, `ss.binom(n=...)` for the number positive in a survey, and `ss.bernoulli()` for yes-or-no outcomes; the [appendix](#appendix-likelihoods-and-priors) says what each is for, and which work in JAX. A likelihood can also be a function of the data and the model's values, `fn(observed, model)`, that returns the log-likelihood of each, for one the list lacks (e.g. a normal whose standard deviation grows with the mean). A function can't be differentiated in JAX, so the default fit then uses Nelder-Mead, which needs no gradients, and says so; a method that needs gradients (`'l-bfgs-b'` or `'nuts'`) is an error that says why.
 
 When every data series has a likelihood, the fit maximizes the sum of their logs (the maximum likelihood estimate), and the methods that give a posterior can be used. Reported cases vary more than Poisson counts, so a negative binomial suits them; its dispersion `n` (a smaller `n` is more variable) is rarely known, so it can be fitted too, as a parameter with bounds:
 
@@ -162,7 +162,7 @@ fit_lik.table
 
 The estimates are much like those of the normalized absolute error, as both fit the same curve; the likelihood weighs each week by how much it is expected to vary, and gives the methods that need one (posteriors, profiles) something to work with. The fitted dispersion is lower than the 10 that the counts were drawn with, since it also takes in the chance of the agent-based run, which the ODE doesn't have.
 
-To score a run against its data by hand, e.g. to compare scenarios, or to weigh runs for a posterior of your own, `ss.fit.mismatch(sim)` gives the normalized absolute error (or another `gof=`) and `ss.fit.loglik(sim, likelihood=...)` the log-likelihood (with `by_series=True`, for each data series):
+To score a run against its data by hand, e.g. to compare scenarios, or to weigh runs for a posterior of your own, `ss.fit.mismatch(sim)` gives the normalized absolute error (or another `loss=`) and `ss.fit.loglik(sim, likelihood=...)` the log-likelihood (with `by_series=True`, for each data series):
 
 ```{python}
 print('Normalized absolute error:', ss.fit.mismatch(fit_lik.sim))
@@ -179,7 +179,7 @@ def betabinomial(observed, model, n=5000, rho=0.001):
     p = np.clip(model, 1e-9, 1 - 1e-9)
     return sps.betabinom.logpmf(observed, n, p*(1 - rho)/rho, (1 - p)*(1 - rho)/rho)
 
-survey = truth.to_data('prevalence', noise=None)
+survey = truth.to_synthetic_data('prevalence', noise=None)
 survey = survey[survey.date.isin(ss.date.arange('2025-03-01', '2025-11-01', ss.months(2)))].copy() # The first of every other month
 p = survey.prevalence.values
 survey['prevalence'] = sps.betabinom.rvs(5000, p*999, (1 - p)*999, random_state=rng) # The number positive among 5,000, with rho = 0.001
@@ -220,7 +220,7 @@ The options that matter for a stochastic fit:
 - `n_trials=` is the number of sets of values to try (100 by default). Use more for more parameters.
 - `n_runs=` is the number of runs that each set of values is scored by: 4 by default for a stochastic compartmental model, and 1 for agents. Each trial uses fresh random seeds, so that the search averages over chance rather than fitting one run's luck; the best fit is then the trial among the best tenth whose neighbors score best, rather than the luckiest. `reseed=False` scores every trial with the same seeds instead, e.g. for a rare outcome, where fresh seeds let the search favor values whose runs were lucky.
 - `rand_seed=` makes the fit itself reproducible.
-- `n_workers=4` runs the trials in 4 processes at once, and `storage='fit.log'` keeps the trials in a file, so that calling `fit()` again with the same file carries on where it stopped.
+- `workers=4` runs the trials in 4 processes at once, and `storage='fit.log'` keeps the trials in a file, so that calling `fit()` again with the same file carries on where it stopped.
 - `fit.study` is Optuna's study, for its plots, e.g. `optuna.visualization.plot_param_importances(fit.study)`.
 
 Agents are fitted the same way, e.g. `ss.Sim(measles, data=data, n_agents=20_000, **pars).fit(n_trials=200)`. With agents each run is slower, and with few people in the model the noise is larger, so a fit usually needs more trials.
@@ -244,7 +244,7 @@ print('Onsets each week, counted: ', weekly(res.onset_rate.values)[6:14])
 print('Onsets each week, expected:', weekly(expected)[6:14].round())
 ```
 
-The two agree on average, and the expected number varies less from week to week, since it leaves out the chance of who moves in each step (the chance in who is infected remains). To fit to it, work it out in a `gof=` function of the sim (see [above](#measuring-the-fit)). This holds for a rate, which is drawn at each step; a transition after a duration (`dur=`, or `ss.days(10)` as above) has each person's time drawn when they enter, so its count in a step is already known from who is there, and has no expected value of this kind to compare with.
+The two agree on average, and the expected number varies less from week to week, since it leaves out the chance of who moves in each step (the chance in who is infected remains). To fit to it, work it out in a `loss=` function of the sim (see [above](#measuring-the-fit)). This holds for a rate, which is drawn at each step; a transition after a duration (`dur=`, or `ss.days(10)` as above) has each person's time drawn when they enter, so its count in a step is already known from who is there, and has no expected value of this kind to compare with.
 
 `fit.sim` is one run with the best values. Since the model is stochastic, it is more useful to run it many times, and see whether the data lie within the range of the runs:
 
@@ -338,16 +338,16 @@ The likelihoods that `likelihood=` (or `ss.outcome(..., likelihood=)`) takes. In
 | `ss.poisson()` | Counts, such as reported cases | Yes |
 | `ss.nbinom(n=...)` | Counts that vary more than a Poisson, with `n` the dispersion (a smaller `n` is more variable); `n` can itself be an `ss.par` with bounds, and is then fitted too | Yes |
 | `ss.normal(scale=...)` | Continuous values, with the standard deviation `scale` | Yes |
-| `ss.lognorm_ex(std=...)` | Positive continuous values, with the standard deviation `std` | Yes |
+| `ss.lognormal(std=...)` | Positive continuous values, with the standard deviation `std` | Yes |
 | `ss.binom(n=...)` | The number who test positive out of `n` people surveyed (the data column holds the number positive), with the model's value, a share such as a prevalence, as the probability | Yes |
 | `ss.bernoulli()` | Yes or no outcomes | Yes |
-| A function `fn(observed, model)` | Anything else: it returns the log-likelihood of each value | No: the default fit uses Nelder-Mead; a method with gradients needs `nopython=False` |
+| A function `fn(observed, model)` | Anything else: it returns the log-likelihood of each value | No: the default fit uses Nelder-Mead; a method with gradients needs `require_jax=False` |
 
 The priors that `ss.par(..., prior=)` takes, used by the methods that use likelihoods (a best fit is then the most probable values, and a posterior starts from them). Without one, the prior is uniform over the bounds:
 
 | Prior | In JAX |
 |---|---|
-| `ss.normal()`, `ss.lognorm_ex()`, `ss.lognorm_im()`, `ss.gamma()`, `ss.beta_dist()`, `ss.beta_mean()`, `ss.expon()`, `ss.uniform()` | Yes |
+| `ss.normal()`, `ss.lognormal()`, `ss.gamma()`, `ss.beta_dist()`, `ss.expon()`, `ss.uniform()` | Yes |
 | Any other distribution that has a density (e.g. `ss.weibull()`) | No: it works with the methods that run with Python in the loop |
 
 ## Appendix: what a fit holds
@@ -361,7 +361,7 @@ The attributes of the `ss.fit.Fit` that `sim.fit()` returns (see [ss.fit.Fit](..
 | `fit.before` | The sim with the starting values, already run |
 | `fit.table` | Each parameter's starting value, best value, and bounds; with a posterior, also its median, 95% interval (`lower`, `upper`), `rhat`, and `ess`; with Optuna and IF2, `spread_lower` and `spread_upper` (the range of the best 10% of trials, or of the chains' estimates: an indication of the uncertainty, not an interval) |
 | `fit.method` | The method used |
-| `fit.mismatch`, `fit.mismatch_before` | The goodness of fit (or the negative log-likelihood, or the negative log-posterior) at the best values, and at the starting values; `fit.measure` says which |
+| `fit.mismatch`, `fit.mismatch_before` | The loss (or the negative log-likelihood, or the negative log-posterior) at the best values, and at the starting values; `fit.measure` says which |
 | `fit.scores` | The score of the best values in each run (one for a deterministic model); `mismatch` is their mean, and their spread is the run-to-run noise of a stochastic fit |
 | `fit.converged`, `fit.why` | Whether the method reached its own stopping rule, and how it decided (see [Fit diagnostics](calibration_diagnostics.qmd#appendix-when-each-method-has-converged)) |
 | `fit.trials`, `fit.to_df()` | Every evaluation: the values tried, and the objective at each |

@@ -36,7 +36,7 @@ flowchart LR
 - **Interventions** act on the model: vaccinating, testing, and treating people, or changing a parameter from a date (closing schools, say). See [Interventions](interventions_interventions.qmd) and [Products](interventions_products.qmd).
 - **Connectors** link modules, such as one disease making another more likely. See [Connectors](interventions_connectors.qmd).
 - **Analyzers** record results that the other modules don't keep, without changing anything. See [Analyzers](interventions_analyzers.qmd).
-- **Custom modules** (`custom=`) are anything else a model needs that is none of these, such as a process that is not about health at all (the flocking of birds, say). See [Nonstandard usage](mechanics_nonstandard.qmd).
+- **Custom modules** (given as `modules=`, and kept in `sim.custom`) are anything else a model needs that is none of these, such as a process that is not about health at all (the flocking of birds, say). See [Nonstandard usage](mechanics_nonstandard.qmd).
 
 Most models need only a disease and a sim; the other kinds are added as the question needs them. The sim itself holds what applies to the whole model: the population (`total_pop=`, or `n_agents=` for agents), the time span and step (`start=`, `stop=`, `dt=`), the random seed, and the solver.
 

@@ -46,17 +46,17 @@ def make_malaria():
     Sv, Ev, Iv     = ss.states(3, people=False)
     Nh             = (Sh + Eh + Ih + Rh).n
     malaria = ss.Disease(
-        infection  = Sh >> Eh @ a * b * Iv.n / Nh,
-        latency    = Eh >> Ih @ ss.days(12),
-        recovery   = Ih >> Rh @ ss.days(100),
-        waning     = Rh >> Sh @ ss.days(365),
-        emergence  = ss.null >> Sv @ ss.perday(5_000),
-        biting     = Sv >> Ev @ a * c * Ih.n / Nh,
-        incubation = Ev >> Iv @ ss.days(10),
-        mortality  = Sv + Ev + Iv >> ss.null @ ss.days(10),
-        init       = dict(Ih=0.01, Sv=50_000),
-        first      = 'Sh',
-        name       = 'malaria',
+        infection     = Sh >> Eh @ a * b * Iv.n / Nh,
+        latency       = Eh >> Ih @ ss.days(12),
+        recovery      = Ih >> Rh @ ss.days(100),
+        waning        = Rh >> Sh @ ss.days(365),
+        emergence     = ss.null >> Sv @ ss.perday(5_000),
+        biting        = Sv >> Ev @ a * c * Ih.n / Nh,
+        incubation    = Ev >> Iv @ ss.days(10),
+        mortality     = Sv + Ev + Iv >> ss.null @ ss.days(10),
+        init          = dict(Ih=0.01, Sv=50_000),
+        default_state = 'Sh',
+        name          = 'malaria',
     )
     return malaria
 
@@ -72,7 +72,7 @@ def make_tb():
         failure    = on_treatment >> active @ ss.peryear(0.2),
         init       = dict(active=0.01),
         name       = 'tb',
-        strains    = ss.Strains(['DS', 'MDR'], name='resistance', split=[1.0, 0.0], infection=[1.0, 0.7], cure=[1.0, 0.3]),
+        strains    = ss.Strains(['DS', 'MDR'], name='resistance', fractions=[1.0, 0.0], infection=[1.0, 0.7], cure=[1.0, 0.3]),
     )
     tb.stratify(acquired=ss.transfer(resistance=('DS', 'MDR'), rate=ss.peryear(0.02), states=['on_treatment']))
     return tb
@@ -84,11 +84,11 @@ def make_tb():
 def make_resistance(beta=4, immunity=True, cure=(0.9, 0.3), **kwargs):
     """ Two strains in one TB-like course: superinfection of the latent, cure for each strain, resistance emerging at failure """
     S, L, I, Tx, R = ss.states('S L I Tx R')
-    strains = ss.Strains(['DS', 'RIF'], max_strains=2, split=[0.8, 0.2], rel_trans=[1, 0.6], cure=list(cure),
-                         immunity=ss.immunity(due_to=L, rel_sus=0.7) if immunity else None)
+    strains = ss.Strains(['DS', 'RIF'], max_strains=2, fractions=[0.8, 0.2], rel_trans=[1, 0.6], cure=list(cure),
+                         immunity=ss.immunity(due_to=L, protection=0.7) if immunity else None)
     DS, RIF = strains
     return ss.Disease(infection=S >> L @ ss.peryear(beta)*I, activation=L >> I @ ss.peryear(0.3), diagnosis=I >> Tx @ ss.peryear(2),
-                      treatment=ss.Transition(Tx, [R, I], p='cure', rate=ss.peryear(2), per='strain'),
+                      treatment=ss.Transition(Tx, [R, I], p='cure', rate=ss.peryear(2), per_strain=True),
                       failure=ss.Transition(Tx, I, rate=ss.peryear(0.2), move=DS >> (DS, RIF)), relapse=R >> S @ ss.years(2),
                       name='tb', strains=strains, **kwargs)
 
@@ -114,7 +114,7 @@ def test_strain_levels():
     sc.heading('Testing the strains of a declared subclass in its __init__(), and no strain level for the uninfected')
     class TwoStrains(ss.Disease):
         def __init__(self, **kwargs):
-            super().__init__(strains=ss.Strains(['DS', 'RIF'], name='resistance', split=[0.5, 0.5]), init_prev=0.2, **kwargs)
+            super().__init__(strains=ss.Strains(['DS', 'RIF'], name='resistance', fractions=[0.5, 0.5]), init_prev=0.2, **kwargs)
             assert self.strains.names == ['DS', 'RIF'] # Before the disease is built
             self.define_states(ss.states('S I R'))
             self.define_transitions(infection=self.S >> self.I @ ss.peryear(2)*self.I, recovery=self.I >> self.R @ ss.years(0.5), waning=self.R >> self.S @ ss.years(0.5))
@@ -137,7 +137,7 @@ def test_commuting():
         S, I, R = ss.states('S I R')
         sir = ss.Disease(infection=ss.Transition(S, I, rate=ss.perday(beta) * I), recovery=ss.Transition(I, R, rate=ss.perday(gamma)), init_n=dict(I=ss.by(home=[5, 0])), name='sir')
         sir.stratify(home=['a', 'b']) # Where people live, which does not keep them apart
-        sir.stratify(patch=['a', 'b'], kind='space', split=ss.by(N[:, None]/N.sum()*T, dims=['home', 'patch']), # Where they are now, where they mix
+        sir.stratify(patch=['a', 'b'], kind='space', fractions=ss.by(N[:, None]/N.sum()*T, dims=['home', 'patch']), # Where they are now, where they mix
                      out=ss.transfer(patch=('a', 'b'), rate=ss.by(home=[ss.perday(l), ss.perday(r)])),
                      back=ss.transfer(patch=('b', 'a'), rate=ss.by(home=[ss.perday(r), ss.perday(l)])))
         return ss.Sim(sir, unit='day', stop=100, total_pop=N.sum(), solver=solver, **kwargs, **kw)
@@ -182,7 +182,7 @@ def test_register():
     def make(data=register, init=ss.by(place=[20, 0, 0])):
         S, I, R = ss.states('S I R')
         sir = ss.Disease(infection=ss.Transition(S, I, rate=ss.perday(0.3) * I), recovery=ss.Transition(I, R, dur=ss.days(10)), init_n=dict(I=init), name='sir')
-        return sir.stratify(place=['a', 'b', 'c'], kind='space', split=[0.5, 0.3, 0.2], mobility=ss.geo.Mobility(data=data))
+        return sir.stratify(place=['a', 'b', 'c'], kind='space', fractions=[0.5, 0.3, 0.2], mobility=ss.geo.Mobility(data=data))
 
     sims = sc.obj()
     for solver in ['ode', 'gillespie', 'abm']:
@@ -238,7 +238,7 @@ def test_register():
     def ages(data):
         S1, I1 = ss.states('S1 I1')
         S2, I2 = ss.State('S2', people=True), ss.State('I2', people=True)
-        dis = ss.Disease(S1, I1, S2, I2, inf1=S1 >> I1 @ 0*I1, inf2=S2 >> I2 @ 0*I2, rec1=I1 >> S1 @ 0.0, rec2=I2 >> S2 @ 0.0, init=dict(I1=0.2), first='S1', name='dis')
+        dis = ss.Disease(S1, I1, S2, I2, inf1=S1 >> I1 @ 0*I1, inf2=S2 >> I2 @ 0*I2, rec1=I1 >> S1 @ 0.0, rec2=I2 >> S2 @ 0.0, init=dict(I1=0.2), default_state='S1', name='dis')
         return dis.stratify(herd=['a', 'b'], kind='space', mobility=ss.geo.Mobility(data=data))
     aging = pd.DataFrame({'date':[5, 5], 'from':['a', 'b'], 'to':['a', 'b'], 'n':[100, 50], 'states':['S1, I1']*2, 'to_states':['S2, I2']*2})
     for solver,agents in [('ode', {}), ('gillespie', {}), ('abm', dict(n_agents=1000))]:
@@ -265,7 +265,7 @@ def test_property_values():
     res = sim.results.d
     assert np.allclose(res.S.by('wealthquintile').values[0] + res.I.by('wealthquintile').values[0], 1000)
 
-    # A property people already have is kept and binned (before, urban at 0.9 became 0.000), and split= for it raises
+    # A property people already have is kept and binned (before, urban at 0.9 became 0.000), and fractions= for it raises
     def make(**kw):
         ppl = ss.People(5000, extra_states=[ss.BoolState('urban', default=ss.bernoulli(0.9)), ss.FloatArr('wealth', default=ss.uniform(0, 100))])
         S, I = ss.states('S I')
@@ -275,8 +275,8 @@ def test_property_values():
         return sim
     sim = make().run()
     assert np.isclose(sim.people.urban.mean(), 0.9, atol=0.02) and len(np.unique(sim.people.wealth[sim.people.auids])) > 100
-    with pytest.raises(ValueError, match='split= would overwrite them'):
-        make(split=[0.5, 0.5]).init()
+    with pytest.raises(ValueError, match='fractions= would overwrite them'):
+        make(fractions=[0.5, 0.5]).init()
     with pytest.raises(ValueError, match="'age', 'space', 'plain'"): # An unknown kind
         make(kind='clock')
     return sim
@@ -306,7 +306,7 @@ def test_given_splits():
     tob = np.random.default_rng(1).random(N) < 0.3
     ppl = ss.People(N, extra_states=[ss.BoolState('tob', default=lambda k: tob[:k] if k == N else np.zeros(k, bool))])
     A, B = ss.states('A B')
-    d = ss.Disease(A, B, go=A >> B @ ss.peryear(0.1)*ss.by(tob=[0.0, 1.0]), first='A', name='d') # Only smokers move
+    d = ss.Disease(A, B, go=A >> B @ ss.peryear(0.1)*ss.by(tob=[0.0, 1.0]), default_state='A', name='d') # Only smokers move
     sim = ss.Sim(d, people=ppl, stratify=dict(tob=[False, True]), start=2000, stop=2005, dt=1, verbose=0).run()
     assert sim.people.tob.sum() == tob.sum()
     expected = tob.sum()*(1 - np.exp(-0.6)) # Six steps, from 2000 to 2005
@@ -318,8 +318,8 @@ def test_given_splits():
     def make(table):
         S = ss.State()
         m = ss.Disease(stay=ss.Transition(S, S, rate=ss.peryear(0)), name='life')
-        m.stratify(urban=[False, True], split=[0.83, 0.17])
-        m.stratify(wealth=['w1', 'w2', 'w3', 'w4', 'w5'], split=ss.by(table, dims=['urban', 'wealth']))
+        m.stratify(urban=[False, True], fractions=[0.83, 0.17])
+        m.stratify(wealth=['w1', 'w2', 'w3', 'w4', 'w5'], fractions=ss.by(table, dims=['urban', 'wealth']))
         return ss.Sim(m, n_agents=20_000, start=2010, stop=2011, verbose=0)
     with pytest.raises(ValueError, match='0.83'):
         make(table).init()
@@ -332,11 +332,11 @@ def test_given_splits():
 def test_sex():
     """ As agents, a dimension of sex is people.female, for everyone including newborns """
     sc.heading('Testing sex as a dimension of agents')
-    for kw in [dict(sex=['female', 'male']), dict(sex=['m', 'f']), dict(sex=['female', 'male'], split=[0.7, 0.3])]:
+    for kw in [dict(sex=['female', 'male']), dict(sex=['m', 'f']), dict(sex=['female', 'male'], fractions=[0.7, 0.3])]:
         S, I = ss.states('S I')
         si = ss.Disease(infection=ss.Transition(S, I, rate=0.01 * I), init_prev=0.05, name='si')
         sim = ss.Sim(si, networks=ss.SexualNet(), demographics=ss.Births(birth_rate=30), n_agents=2000, stratify=kw, stop=2010, verbose=0, rand_seed=1).init()
-        if 'split' in kw:
+        if 'fractions' in kw:
             assert np.isclose(sim.people.female.mean(), 0.7, atol=0.03) # people.female follows a split that is given (drawn, for 2000 agents)
         start = (sim.people.female & sim.diseases.si.S).sum()
         sim.run()

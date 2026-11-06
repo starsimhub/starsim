@@ -128,7 +128,7 @@ A model is fitted by finding the values of its parameters that make its results 
 ```{python}
 truth = ss.Sim(sir, pars=dict(beta=0.025, dur_inf=ss.erlang(k=3, mean=ss.days(10))), rand_seed=2, **pars)
 truth.run()
-data = truth.to_data('cases', resample='week')
+data = truth.to_synthetic_data('cases', resample='week')
 data.head()
 ```
 

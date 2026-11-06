@@ -106,7 +106,7 @@ def test_partners():
 
     # A number of partners for each level of a property, as EpiModel's nodefactor
     byrisk = ss.DegreeNet(n_contacts=ss.by(risk=[0.4, 1.6]), dur=50)
-    sim2 = ss.Sim(sis, networks=byrisk, n_agents=medium, stop=200, verbose=0).stratify(risk=['low', 'high'], split=[0.8, 0.2]).run()
+    sim2 = ss.Sim(sis, networks=byrisk, n_agents=medium, stop=200, verbose=0).stratify(risk=['low', 'high'], fractions=[0.8, 0.2]).run()
     level = np.asarray(sim2.networks[0].levels('risk'))[sim2.people.alive.uids]
     degree = sim2.networks[0].degrees(sim2.people.alive.uids)
     assert np.isclose(degree[level == 0].mean(), 0.4, rtol=0.25) and np.isclose(degree[level == 1].mean(), 1.6, rtol=0.25)
@@ -118,7 +118,7 @@ def test_partners():
     with pytest.raises(ValueError):
         ss.DegreeNet.degree_dist(0.7, concurrency=0.9, max_contacts=3)
     with pytest.raises(ss.CapabilityError):
-        ss.Sim(sis, networks=ss.DegreeNet(n_contacts=0.7, dur=50), total_pop=medium, solver='ode', stop=100, approx=False, verbose=0).run()
+        ss.Sim(sis, networks=ss.DegreeNet(n_contacts=0.7, dur=50), total_pop=medium, solver='ode', stop=100, approximations='error', verbose=0).run()
     ring = ss.Sim(sis, networks=ssl.StaticNet(graph=nx.cycle_graph(1000)), total_pop=1000, solver='ode', stop=10, verbose=0).init()
     assert ring.mixing.terms[0].contacts == 2 # Not n_contacts=10, whatever the graph
 
@@ -144,7 +144,7 @@ def test_partner_targets():
     # Most partnerships between people at the same level of risk
     S, I = ss.states('S I')
     sir = ss.Disease(infection=ss.Transition(S, I, rate=0.0 * I), name='sir')
-    sir.stratify(risk=['low', 'high'], split=[0.8, 0.2])
+    sir.stratify(risk=['low', 'high'], fractions=[0.8, 0.2])
     for share in [None, 0.9]:
         net = ss.DegreeNet(n_contacts=0.7, dur=50, match=None if share is None else dict(risk=share), name='net')
         sim = ss.Sim(sir, networks=net, n_agents=5000, stop=300, verbose=0).run()
@@ -156,13 +156,13 @@ def test_partner_targets():
     assert 'match' in net.check(n_runs=2, output=True).index
 
     # Within the levels of several properties at once, each with its own target (EpiModel's nodematch on each)
-    sir.stratify(region=['a', 'b', 'c'], split=[0.5, 0.3, 0.2])
+    sir.stratify(region=['a', 'b', 'c'], fractions=[0.5, 0.3, 0.2])
     net = ss.DegreeNet(n_contacts=0.7, dur=50, match=dict(risk=0.9, region=0.7), name='net')
     res = ss.Sim(sir, networks=net, n_agents=5000, stop=300, verbose=0).run().networks.net.results
     assert np.isclose(res.match_risk[150:].mean(), 0.9, atol=0.02) and np.isclose(res.match_region[150:].mean(), 0.7, atol=0.02) # By chance, 0.68 and 0.38
 
     # A target number of partners at a time between men and women, with concurrency
-    duration = ss.lognorm_ex(mean=ss.years(2), std=ss.years(1))
+    duration = ss.lognormal(mean=ss.years(2), std=ss.years(1))
     mf = ss.SexualNet(n_contacts=ss.poisson(0.7), concurrency=0.1, dur=duration, name='mf')
     sim = ss.Sim(diseases=ss.SIS(beta=ss.peract(0.01)), networks=mf, n_agents=5000, start=2000, stop=2030, dt=ss.months(1), verbose=0).run()
     res = sim.networks.mf.results
@@ -176,7 +176,7 @@ def test_partner_targets():
     assert sim.networks.mf.results.mean_degree[-1] > 0.95
 
     # In an open population with long partnerships, newcomers join and the target holds (before, 0.65 against 0.87, and nobody born in the run took part)
-    mf = ss.SexualNet(n_contacts=0.87, dur=ss.lognorm_ex(mean=ss.years(20), std=ss.years(5)), participation=ss.bernoulli(p=lambda self, sim, uids: np.where(sim.people.age[uids] < 10, 0, 0.9)), name='mf')
+    mf = ss.SexualNet(n_contacts=0.87, dur=ss.lognormal(mean=ss.years(20), std=ss.years(5)), participation=ss.bernoulli(p=lambda self, sim, uids: np.where(sim.people.age[uids] < 10, 0, 0.9)), name='mf')
     sim = ss.Sim(diseases=ss.SIS(beta=ss.peract(0.01)), networks=mf, demographics=[ss.Births(birth_rate=35), ss.Deaths(death_rate=15)], n_agents=5000, start=2000, stop=2040, verbose=0).run()
     ppl, mf = sim.people, sim.networks.mf
     born = (ppl.alive & (ppl.age >= 18) & (ppl.age < 40)).uids # All born during the run, when the probability at birth was 0
@@ -215,7 +215,7 @@ def test_per_act():
     def prev(dt, beta=ss.peract(0.01)):
         S, I = ss.states('S I')
         si = ss.Disease(infection=ss.Transition(S, I, rate=beta * I), init_prev=0.05, name='si')
-        sims = [ss.Sim(si, networks=ss.SexualNet(dur=ss.lognorm_ex(mean=ss.years(2), std=ss.years(1))), n_agents=5000, start=2000, stop=2010, dt=dt, rand_seed=seed, verbose=0) for seed in [1, 2]]
+        sims = [ss.Sim(si, networks=ss.SexualNet(dur=ss.lognormal(mean=ss.years(2), std=ss.years(1))), n_agents=5000, start=2000, stop=2010, dt=dt, rand_seed=seed, verbose=0) for seed in [1, 2]]
         return np.mean([sim.run().results.si.I[-1]/5000 for sim in sims])
     monthly, weekly = prev(ss.years(1/12)), prev(ss.weeks(1))
     assert np.isclose(monthly, weekly, atol=0.03), f'{monthly:.3f} against {weekly:.3f}'
@@ -257,7 +257,7 @@ def test_route_modifiers():
     sc.heading('Testing modifiers of a transmission on one route: condoms, needle programs')
 
     # A condom of efficacy 0.9 in half the acts multiplies the hazard by 1 - 0.5*0.9: p=0.1, 10 acts gives 1 - exp(-10*0.1054*0.55) = 0.440 (STIsim's split of the acts gives 0.438)
-    condoms = lambda **kw: [ss.modify('si.infection', route='sexualnet', **kw)]
+    condoms = lambda **kw: [ss.modify('si.infection', network='sexualnet', **kw)]
     p = chance(ss.peract(m2f=0.1, f2m=0), acts=ss.constant(ss.freqperyear(10)), connectors=condoms(efficacy=0.9, share=0.5), n=100_000)
     assert np.isclose(p, 1 - np.exp(10*np.log(0.9)*0.55), atol=0.01), p
     assert p == chance(ss.peract(m2f=0.1, f2m=0), acts=ss.constant(ss.freqperyear(10)), connectors=condoms(multiply=0.1, share=0.5), n=100_000) # efficacy= is multiply=1 - efficacy
@@ -272,20 +272,20 @@ def test_route_modifiers():
         return ss.Sim(si, networks=[ss.SexualNet(), ss.RandomNet(n_contacts=2)], connectors=mods, n_agents=2000, start=2000, stop=2005, verbose=0).run().results.si.I[-1]
     assert run(condoms(multiply=0, share=1)) > run(condoms(multiply=0, share=1), beta=0) > 0 # Infections only over the random network
     with pytest.raises(ValueError):
-        run(condoms(multiply=0, share=1) + [ss.modify('si.infection', multiply=0.5, route='needles')])
+        run(condoms(multiply=0, share=1) + [ss.modify('si.infection', multiply=0.5, network='needles')])
     with pytest.raises(ValueError, match='transmission'):
-        run([ss.modify('si.rel_sus', multiply=0.5, route='sexualnet')])
+        run([ss.modify('si.rel_sus', multiply=0.5, network='sexualnet')])
 
     # Under an ODE, over a mixing pool, it is a multiplier on that route's hazard, by group with a share by group, as agents
     def pool(solver, mods, seed=1):
         S, I, R = ss.states('S I R')
         sir = ss.Disease(infection=ss.Transition(S, I, rate=dict(pool=ss.perday(0.03), home=ss.perday(0.02)) * I), recovery=ss.Transition(I, R, dur=ss.days(10)), init_prev=0.01, name='sir')
         nets = [ss.MixingPool(n_contacts=4, name='pool'), ss.MixingPool(n_contacts=2, name='home')]
-        sim = ss.Sim(sir, networks=nets, interventions=mods, stratify=dict(risk=['low', 'high'], split=[0.7, 0.3]), total_pop=10_000, n_agents=10_000, solver=solver, unit='day', stop=100, rand_seed=seed, verbose=0)
+        sim = ss.Sim(sir, networks=nets, interventions=mods, stratify=dict(risk=['low', 'high'], fractions=[0.7, 0.3]), total_pop=10_000, n_agents=10_000, solver=solver, unit='day', stop=100, rand_seed=seed, verbose=0)
         return sim.run().results.sir.R.values
-    share = lambda: [ss.modify('sir.infection', multiply=0.2, share=ss.by(risk=[0.3, 0.9]), route='pool')]
+    share = lambda: [ss.modify('sir.infection', multiply=0.2, share=ss.by(risk=[0.3, 0.9]), network='pool')]
     ode = pool('ode', share())
-    assert np.allclose(ode, pool('ode', [ss.modify('sir.infection', multiply=ss.by(risk=[1 - 0.3*0.8, 1 - 0.9*0.8]), route='pool')])) # The same as its multiplier, 1 - share*(1 - multiply)
+    assert np.allclose(ode, pool('ode', [ss.modify('sir.infection', multiply=ss.by(risk=[1 - 0.3*0.8, 1 - 0.9*0.8]), network='pool')])) # The same as its multiplier, 1 - share*(1 - multiply)
     ratio = lambda solver, seeds: np.mean([pool(solver, share(), seed)[-1] for seed in seeds])/np.mean([pool(solver, None, seed)[-1] for seed in seeds])
     ode_ratio, abm_ratio = ratio('ode', [1]), ratio('abm', range(12)) # 12 seeds, since near its threshold one run's epidemic varies a lot (seeds 0-3 alone gave 0.22 here); each solver's own epidemic (agents have about 8% fewer infections here either way), cut by the same share: 0.26
     assert ode_ratio < 0.5 and np.isclose(abm_ratio, ode_ratio, rtol=0.1), (abm_ratio, ode_ratio)
@@ -296,12 +296,12 @@ def test_route_modifiers():
 def test_needles():
     sc.heading('Testing a needle-sharing network beside a sexual one (injecting drug use)')
     def run(mf_beta, needles_beta=ss.peract(0.006), nsp=False):
-        needles = ss.DegreeNet(name='needles', where=ss.ppl.pwid, n_contacts=2, dur=ss.months(6), acts=ss.freqpermonth(20)) # Among people who inject only; no sides, so one value
+        needles = ss.DegreeNet(name='needles', where=ss.person.pwid, n_contacts=2, dur=ss.months(6), acts=ss.freqpermonth(20)) # Among people who inject only; no sides, so one value
         S, I = ss.states('S I')
         hiv = ss.Disease(infection=ss.Transition(S, I, rate=dict(sexualnet=mf_beta, needles=needles_beta) * I), init_prev=0.05, name='hiv')
-        intv = ss.modify(hiv.infection, multiply=0.2, share=0.5, route='needles', start=2005) if nsp else None # Needle and syringe programs: half of injections with a clean needle, 80% less risk
+        intv = ss.modify(hiv.infection, multiply=0.2, share=0.5, network='needles', start=2005) if nsp else None # Needle and syringe programs: half of injections with a clean needle, 80% less risk
         sim = ss.Sim(hiv, networks=[ss.SexualNet(), needles], interventions=intv, n_agents=5000, start=2000, stop=2010, dt=ss.months(1), verbose=0)
-        sim.stratify(pwid=[False, True], split=[0.9, 0.1]).init()
+        sim.stratify(pwid=[False, True], fractions=[0.9, 0.1]).init()
         sim.before = sim.diseases.hiv.I.raw.copy()
         return sim.run()
     sim = run(0)
@@ -335,25 +335,25 @@ def test_partnership_approx():
     # for risk groups with short partnerships, too high for long monogamous partnerships with a long infection, and too low with concurrency
     mf = lambda **kw: ss.SexualNet(participation=ss.bernoulli(p=1.0), debut=ss.constant(0), **kw)
     cases = dict(
-        risk = ([0.9, 1.1], [0.9, 1.1], dict(disease=sis(ss.peract(0.002)), stratify=dict(risk=['low', 'medium', 'high'], split=[0.8, 0.15, 0.05]), # 0.999, 0.995
+        risk = ([0.9, 1.1], [0.9, 1.1], dict(disease=sis(ss.peract(0.002)), stratify=dict(risk=['low', 'medium', 'high'], fractions=[0.8, 0.15, 0.05]), # 0.999, 0.995
                  net=ss.DegreeNet(n_contacts=ss.by(risk=[0.5, 1.5, 4]), match=dict(risk=0.7), dur=ss.months(6), acts=ss.freqperyear(80)))),
         gono = ([0.08, 0.4], [0.06, 0.4], dict(disease=sis(ss.peract(m2f=0.05, f2m=0.03), ss.months(4)), dt=ss.weeks(1), # 0.19, 0.13: concurrency (Poisson partners), which the approximation leaves out
-                 net=ss.SexualNet(participation=ss.bernoulli(p=1.0), debut=ss.constant(0), n_contacts=1, dur=ss.lognorm_ex(mean=ss.weeks(4), std=ss.weeks(2)), acts=ss.freqperweek(2)))),
+                 net=ss.SexualNet(participation=ss.bernoulli(p=1.0), debut=ss.constant(0), n_contacts=1, dur=ss.lognormal(mean=ss.weeks(4), std=ss.weeks(2)), acts=ss.freqperweek(2)))),
         hiv  = ([1.0, 1.25], [1.1, 1.4], dict(disease=sis(ss.peract(m2f=0.004, f2m=0.002)), # 1.105, 1.247: infection kept within pairs, which the approximation spreads
-                 net=mf(dur=ss.lognorm_ex(mean=ss.years(5), std=ss.years(3)), acts=ss.freqperyear(80)))),
+                 net=mf(dur=ss.lognormal(mean=ss.years(5), std=ss.years(3)), acts=ss.freqperyear(80)))),
     )
     for name,(at10,at20,kw) in cases.items():
         prev = lambda solver, seed=1: run(solver, seed=seed, **sc.dcp(kw)).run().results.d.I.values[[120, -1] if name != 'gono' else [522, -1]]/5000
         ratio = prev('ode')/np.mean([prev('abm', seed) for seed in range(1 if name == 'gono' else 4)], axis=0) # One run is enough for the weekly gono, whose ratios are far from its bounds (0.18-0.26 and 0.11-0.13 over 8 seeds)
         assert at10[0] < ratio[0] < at10[1] and at20[0] < ratio[1] < at20[1], f'{name}: {ratio}'
 
-    # The other compartmental solvers use the same force of infection; approx=False raises, sides need a dimension, and 'auto' keeps agents
+    # The other compartmental solvers use the same force of infection; approximations='error' raises, sides need a dimension, and 'auto' keeps agents
     hiv = cases['hiv'][2]
     ode = run('ode', **sc.dcp(hiv)).run().results.d.I[-1]
     for solver in ['binomial', 'gillespie']: # Stochastic, in 5,000 people
         assert np.isclose(run(solver, **sc.dcp(hiv)).run().results.d.I[-1], ode, rtol=0.1), solver
     with pytest.raises(ss.CapabilityError, match='abm'):
-        run('ode', approx=False, **sc.dcp(hiv)).init()
+        run('ode', approximations='error', **sc.dcp(hiv)).init()
     with pytest.raises(ss.CapabilityError, match=r'stratify\(sex='):
         ss.Sim(sis(0.01), networks=ss.SexualNet(), solver='ode', verbose=0).init()
     assert run('auto', **sc.dcp(hiv)).init().solver == 'abm'
@@ -370,7 +370,7 @@ def test_between():
     sw = ss.SexualNet(name='sexwork', between=('fsw', 'client'), n_contacts=dict(fsw=4, client=0.8), dur=ss.months(6), **everyone)
     assert sw.directions == ['fsw2client', 'client2fsw']
     sim = ss.Sim(diseases=ss.SIS(beta=dict(sexwork=ss.peract(fsw2client=0.02, client2fsw=0.01))), networks=sw, **kw)
-    sim.stratify(work=['none', 'fsw', 'client'], split=[0.88, 0.02, 0.1]).run()
+    sim.stratify(work=['none', 'fsw', 'client'], fractions=[0.88, 0.02, 0.1]).run()
     net = sim.networks.sexwork
     level = sim.groups.level_raw([s.name for s in sim.groups.strats].index('work'))
     uids = sim.people.alive.uids
@@ -382,7 +382,7 @@ def test_between():
 
     # Risk matching between men and women
     net = ss.SexualNet(n_contacts=0.8, dur=ss.years(2), match=dict(risk=0.8), **everyone)
-    sim = ss.Sim(diseases=ss.SIS(beta=ss.peract(0.01)), networks=net, **kw).stratify(risk=['low', 'high'], split=[0.7, 0.3]).run()
+    sim = ss.Sim(diseases=ss.SIS(beta=ss.peract(0.01)), networks=net, **kw).stratify(risk=['low', 'high'], fractions=[0.7, 0.3]).run()
     res = sim.networks[0].results
     assert np.isclose(res.match[-24:].mean(), 0.8, atol=0.05) and np.isclose(res.mean_degree[-1], 0.8, rtol=0.1), (res.match[-24:].mean(), res.mean_degree[-1])
 
