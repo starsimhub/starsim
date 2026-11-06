@@ -252,11 +252,6 @@ def _(): fittable().fit(method=[dict(method='nelder-mead', maxiter=2, scan=0), '
 @trigger('the chains disagree about beta', ss.errors.NotConverged)
 def _(): fittable(solver='binomial', total_pop=10_000).fit(method='pmcmc', likelihood=dict(I=ss.poisson()), draws=10, warmup=10, chains=2, particles=10, parallel=False, rand_seed=1).summarize() # Warned when the fit is summarized
 
-@trigger('so only custom code can move people along it', RuntimeWarning)
-def _():
-    S, I = ss.states('S I')
-    ode(ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), cure=ss.Transition(I, S), init_prev=0.01, name='sis')).init()
-
 @trigger('not exported: network', ss.errors.LossyExport)
 def _(): ss.export_to(ss.Sim(sir(), networks='random', n_agents=100, **kw), 'odin')
 

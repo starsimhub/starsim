@@ -979,7 +979,7 @@ class Groups(sc.prettyobj):
 
     def level(self, dim):
         """
-        In an agent-based run: the level of every agent in one dimension, as an array indexed by UID, with -1 for people outside its `where=`
+        In an agent-based run: the level of every agent in one dimension, as an array indexed by UID, with -1 for people outside its `where=`, or outside the states it applies to (e.g. for a strain, people who are not infected)
 
         Args:
             dim (str/int): the dimension, by name or position
@@ -987,14 +987,29 @@ class Groups(sc.prettyobj):
         Example:
             ```python
             sim.groups.level('risk') # 0, 1, 2 for each risk group; -1 for people the risk groups don't apply to
+            sim.groups.level('resistance') # The set of strains each person carries; -1 for people outside the states of the infection
             ```
         """
         d = self.dim_index(dim) if isinstance(dim, str) else dim
         levels = self.level_raw(d)
+        outside = self.outside_states(d)
+        if outside is not None:
+            levels = np.where(outside, -1, levels)
         if self.group_fold is None or self.group_inside[:, d].all():
             return levels
         inside = self.group_inside[self.group_raw(), d]
         return np.where(inside, levels, -1)
+
+    def outside_states(self, d):
+        """ In an agent-based run: whether each agent is outside the states a dimension applies to (`states=`, e.g. the states of an infection, for a strain), by UID, who have no level of it; None if it applies in every state """
+        strat = self.strats[d]
+        mod = next((mod for mod in self.sim.declared if any(s is strat for s in mod.graph.strats)), None) if strat.states is not None else None
+        if mod is None:
+            return None
+        inside = np.zeros(self.sim.people.uid.len_tot, dtype=bool)
+        for name in strat.states:
+            inside |= mod[name].raw
+        return ~inside
 
     def init_vals(self):
         """ In an agent-based run: assign each agent a level of every property they do not already have """

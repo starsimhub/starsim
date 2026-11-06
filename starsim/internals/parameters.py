@@ -1209,7 +1209,12 @@ class timeseries(TimeValue):
 
     It can be used wherever a value or a function of the sim can: as a rate or a
     duration, as the amount of `ss.modify()`, or as the coverage or capacity of a delivery.
-    Before the first time the first value is used, and after the last time the last.
+    Before the first time the first value is used, and after the last time the last, so a
+    value that holds from before the sim needs no time of its own: give it at the first year
+    you have (a number before 1900, e.g. 1800, is not a calendar year but a time after the start).
+    A bare number is read in the module's unit, as any other; to give the values a unit, put
+    the series in a type (`ss.peryear(ss.timeseries(...))`, a series of rates per year), or
+    give each value one.
 
     Args:
         data (dict/str/dataframe/list): the value at each time, as a dict, a dataframe (the first column is
@@ -1224,6 +1229,7 @@ class timeseries(TimeValue):
         ```python
         beta = ss.timeseries({'2020-01-01': 0.3, '2020-03-15': 0.1, '2020-06-01': 0.2})
         decay = ss.timeseries({0: 0.1, 91: 0.2, 183: 0.15, 274: 0.1}, period=ss.days(365)) # The same each year
+        mortality = ss.peryear(ss.timeseries({2000: 0.05, 2020: 0.02})) # Rates per year: 0.05 before 2000, and 0.02 after 2020
         S, I, R = ss.states(3)
         sir = ss.Disease(infection=S >> I @ beta*I, recovery=ss.Transition(I, R, dur=10), init_prev=0.01)
         sim = ss.Sim(sir, start='2020-01-01', stop='2020-09-01').run()
@@ -1257,6 +1263,15 @@ class timeseries(TimeValue):
     @property
     def typed(self):
         return self.values
+
+    def map(self, func):
+        """
+        A new time series with a function applied to each value, e.g. `ss.peryear(ts)`, whose values are rates per year
+
+        Args:
+            func (func): the function, called on each value
+        """
+        return timeseries(dict(zip(self.times, [func(v) for v in self.values])), mode=self.mode, period=self.period)
 
     def years(self, sim):
         """

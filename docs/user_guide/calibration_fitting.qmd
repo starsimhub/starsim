@@ -169,6 +169,26 @@ print('Normalized absolute error:', ss.fit.mismatch(fit_lik.sim))
 print('Log-likelihood:', ss.fit.loglik(fit_lik.sim, likelihood=dict(cases=ss.nbinom(n=fit_lik.pars.dispersion))))
 ```
 
+Any sim that has run can be scored this way, whether or not it came from a fit, and against data it wasn't given, with `df=`. A likelihood that isn't built in is a function, `fn(observed, model)`. Here a survey tested 5,000 people for measles every two months from March, counting the number infectious. People were sampled in clusters (households, schools), so the counts vary more than binomial counts would, which a beta-binomial allows for, with SciPy's `betabinom`: the model's prevalence is the mean share positive, and `rho` sets how much more they vary (the variance is that of a binomial times 1 + (n − 1)·rho, here about 6). Both the calibrated sim and the one with the starting values are scored against it:
+
+```{python}
+import scipy.stats as sps
+
+def betabinomial(observed, model, n=5000, rho=0.001):
+    """ The number positive among n surveyed, with the model's share as the mean, and rho the extra variation (the correlation between those surveyed) """
+    p = np.clip(model, 1e-9, 1 - 1e-9)
+    return sps.betabinom.logpmf(observed, n, p*(1 - rho)/rho, (1 - p)*(1 - rho)/rho)
+
+survey = truth.to_data('prevalence', noise=None)
+survey = survey[survey.date.isin(ss.date.arange('2025-03-01', '2025-11-01', ss.months(2)))].copy() # The first of every other month
+p = survey.prevalence.values
+survey['prevalence'] = sps.betabinom.rvs(5000, p*999, (1 - p)*999, random_state=rng) # The number positive among 5,000, with rho = 0.001
+for label, run in {'Calibrated': fit_lik.sim, 'Starting values': fit_lik.before}.items():
+    print(f'{label}: {ss.fit.loglik(run, df=survey, likelihood=dict(prevalence=betabinomial)):.1f}')
+```
+
+The likelihoods of Starsim 3 are all here: `ss.Normal` is `ss.normal(scale=...)`, `ss.GammaPoisson` is `ss.nbinom(n=...)` (a Poisson count whose rate varies as a gamma distribution is a negative binomial), and `ss.BetaBinomial` is a function as above.
+
 ## How the fit is found
 
 By default a fit is a best fit (a single set of values), by a method that suits the model, which `sim.fit()` prints with its reason. A posterior (the distribution of values consistent with the data) is always asked for by name:
@@ -204,6 +224,27 @@ The options that matter for a stochastic fit:
 - `fit.study` is Optuna's study, for its plots, e.g. `optuna.visualization.plot_param_importances(fit.study)`.
 
 Agents are fitted the same way, e.g. `ss.Sim(measles, data=data, n_agents=20_000, **pars).fit(n_trials=200)`. With agents each run is slower, and with few people in the model the noise is larger, so a fit usually needs more trials.
+
+### Expected flows
+
+With agents, a flow is a count of chance events. For a transition at a rate, the expected number of moves in a step, given the people in the state at its start, is less noisy: the stock times the chance of moving in the step, `1 − exp(−rate·dt)`, or, if the state has other exits, `(rate/total)·(1 − exp(−total·dt))`, with `total` the sum of their rates. It is the number the compartmental solvers work out (as agents, people who arrive in the state during a step other than by infection face half a step of its rates as well, which this leaves out). Starsim doesn't record it for agents, but it can be worked out from the results after the run. Here onset is at a rate of 1/10 a day:
+
+```{python}
+gamma = 0.1 # Onset at a rate of 0.1 a day (after 10 days on average)
+S, E, I, R = ss.states('S E I R')
+onset_rate = E >> I @ ss.perday(gamma)
+measles_rate = ss.Disease(S >> E @ 1.9*I, onset_rate, I >> R @ ss.days(8), init=dict(I=0.0003, R=0.9), name='measles')
+run = ss.Sim(measles_rate, n_agents=20_000, rand_seed=1, verbose=0, **pars).run()
+res = run.results.measles
+
+expected = np.zeros(len(res.E))
+expected[1:] = res.E.values[:-1]*-np.expm1(-gamma*1) # Those in E at the start of each step (of 1 day), times the chance of onset in it
+weekly = lambda x: np.add.reduceat(x, np.arange(0, len(x), 7)) # Totals by week
+print('Onsets each week, counted: ', weekly(res.onset_rate.values)[6:14])
+print('Onsets each week, expected:', weekly(expected)[6:14].round())
+```
+
+The two agree on average, and the expected number varies less from week to week, since it leaves out the chance of who moves in each step (the chance in who is infected remains). To fit to it, work it out in a `gof=` function of the sim (see [above](#measuring-the-fit)). This holds for a rate, which is drawn at each step; a transition after a duration (`dur=`, or `ss.days(10)` as above) has each person's time drawn when they enter, so its count in a step is already known from who is there, and has no expected value of this kind to compare with.
 
 `fit.sim` is one run with the best values. Since the model is stochastic, it is more useful to run it many times, and see whether the data lie within the range of the runs:
 

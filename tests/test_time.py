@@ -458,6 +458,9 @@ def test_arithmetic():
     ts = ss.timeseries({'2020-01-01': 1.0, '2020-03-01': 0.5})
     for out in [r(0.1) * ts, ts * r(0.1)]:
         assert isinstance(out, ss.expressions.Expr) # A rate times a time series is a rate that varies in time, in either order
+    for cls in [ss.peryear, ss.probperday, ss.years]: # A time series in a type is one of values of that type
+        out = cls(ts)
+        assert isinstance(out, ss.timeseries) and out.times == ts.times and [type(v) for v in out.values] == [cls]*2 and out.values[1].value == 0.5
 
     # The slot is checked: a rate times a duration, or a duration, is not a rate, and a rate is not a dwell time
     S, I, R = ss.states('S I R')

@@ -188,8 +188,8 @@ class TimePar:
 
     @classmethod
     def _check_by_arg(cls, *args):
-        """ e.g. ss.permonth(ss.by(age=[1, 2])) is ss.by(age=[ss.permonth(1), ss.permonth(2)]) """
-        if len(args) and type(args[0]).__name__ == 'by' and hasattr(args[0], 'map'): # By name, since ss.by is made after this
+        """ e.g. ss.permonth(ss.by(age=[1, 2])) is ss.by(age=[ss.permonth(1), ss.permonth(2)]), and ss.peryear(ss.timeseries({2000: 0.1, 2020: 0.2})) is a time series of rates per year """
+        if len(args) and type(args[0]).__name__ in ['by', 'timeseries'] and hasattr(args[0], 'map'): # By name, since ss.by and ss.timeseries are made after this
             return args[0].map(cls)
         return None
 

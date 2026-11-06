@@ -105,9 +105,10 @@ class Moving:
         arrived = {} # Who arrived in each state, whose exit may be due already
         for n in range(limit + 1):
             again = False
+            self.new_round() # One for each pass, and within it one for each transition, by its name
             for tr in order:
                 name = tr.name
-                self.new_round()
+                self.new_round(name)
                 if name in triggers:
                     for t,state,uids in self.triggered([tr]):
                         self.move(t, state, uids)
@@ -696,24 +697,41 @@ class Moving:
         """
         return np.floor(np.asarray(dur, dtype=float)/(dt or self.dt) + self.sim.people.phase(uids))
 
-    def new_round(self):
+    def new_round(self, tag=None):
         """
         Start a round of moves: the engine's draws are keyed by the step and the round within it (see `draw()`), so a draw
         does not depend on how the round's moves are batched. Each round of the same-step cascade is one, as is each way in
         from code (e.g. `force()`, `ss.move()`); an agent moves at most once in a round, so each agent's draws stay its own.
+
+        A round for one transition of the cascade is named by it (`tag`, its name) within the round of its pass, and its draws
+        are keyed by the name rather than by how many rounds came before, so adding a transition (e.g. one only a product
+        takes) leaves the draws of the others as they were (see `round_seed()`).
         """
         ti = self.mod.t.ti # The loop's step (before the start, the step being back-dated: see backfill())
-        step, n = self.round
-        self.round = (ti, n + 1 if step == ti else 0)
-        if self.round[1] >= ROUND_MAX:
+        step, n = self.round[:2]
+        if tag is None or step != ti:
+            n = n + 1 if step == ti else 0
+        self.round = (ti, n, tag)
+        if n >= ROUND_MAX:
             raise ValueError(f'"{self.mod.name}" took more than {ROUND_MAX} rounds of moves in step {ti}')
         self._drawn = {}
         return
 
     def draw_ind(self):
         """ The index of the engine's draws in this round (see `new_round()`) """
-        ti, n = self.round
+        ti, n = self.round[:2]
         return ROUNDS + ti*ROUND_MAX + n
+
+    def round_seed(self, seed):
+        """ The seed of a distribution's draws in this round: its own, or, in a round named by a transition (see `new_round()`), one from both """
+        tag = self.round[2]
+        if tag is None:
+            return seed
+        key = (seed, tag)
+        out = self._round_seeds.get(key)
+        if out is None:
+            out = self._round_seeds[key] = ss.dists.str2int(f'{seed}:{tag}')
+        return out
 
     def draw(self, key, uids):
         """
@@ -732,7 +750,7 @@ class Moving:
             if not len(uids):
                 return np.array([], dtype=dist.hash_dtype or ss.dtypes.float) # Uniforms, as below
             slots = self.sim.people.slot_raw()
-            rvs = ss.dists.hash_uniforms(dist.seed, self.draw_ind(), uids if slots is None else slots[uids], dtype=dist.hash_dtype)
+            rvs = ss.dists.hash_uniforms(self.round_seed(dist.seed), self.draw_ind(), uids if slots is None else slots[uids], dtype=dist.hash_dtype)
             if how == 'uniform':
                 return rvs
             elif how == 'expon':
@@ -744,11 +762,13 @@ class Moving:
                 if kwds is not None:
                     dist.dist.kwds = pick(kwds)
             return dist.ppf(rvs)
-        ind = dist.ind
+        ind, seed = dist.ind, dist.seed
         dist.jump(to=self.draw_ind(), force=True)
+        dist.seed = self.round_seed(seed)
         try:
             return dist.rvs(uids)
         finally:
+            dist.seed = seed
             dist.jump(to=ind, force=True)
 
     def agent_pars(self, key, dist, checked=False, uids=None):
@@ -795,7 +815,7 @@ class Moving:
             return None
         if check_draws and uids is not None:
             self.check_drawn(key, uids)
-        return (dist.seed, self.draw_ind(), np.dtype(dist.hash_dtype or ss.dtypes.float))
+        return (self.round_seed(dist.seed), self.draw_ind(), np.dtype(dist.hash_dtype or ss.dtypes.float))
 
     def check_drawn(self, key, uids):
         """ With STARSIM_CHECK_DRAWS=1 (for testing): that none of some agents has been drawn from a stream already in this round """

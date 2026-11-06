@@ -36,6 +36,7 @@ class SimPars(ss.Pars):
         dt (float): The timestep, in units of "unit" (default 1.0)
         rand_seed (int): The overall random seed for the simulation (used to set module-specific random seeds)
         even_draws (bool): Whether to space each call's random numbers evenly for agents, so that about the expected number of them move each time (default False). This reduces the variance between runs (about 3 to 10 times in final size for a simple SIR), but outbreaks die out less often than they should, and the mean of a result can shift (e.g. the peak of an SIR on a network, by about 10%). It has no effect on compartments, and needs `ss.options.crn`
+        keep_times (bool): Whether a declared disease run as agents keeps the time each agent entered every state (e.g. `ti_S`) and the history of every transition (e.g. `sir.infection.count`), for code to read after the run, as for an analyzer; by default, only those the model needs (default: `ss.options.keep_times`, False)
         use_aging (bool): Specify whether agents age (by default, agents age if and only if births and/or deaths are included)
         people_results (bool): Whether to collect the automatic People-level results (alive, female, died, emigrated, etc.) every timestep (default True); set to False to skip this per-timestep cost in lightweight/ODE-style sims that do not need them (note: some modules, e.g. demographics, rely on results.alive)
         people (People): If provided, use a pre-existing People object rather than creating one (in which case n_agents will be ignored)
@@ -78,6 +79,7 @@ class SimPars(ss.Pars):
         self.dt        = None  # Timestep
         self.rand_seed = 1     # Random seed; if None, don't reset
         self.even_draws = False # Whether to space each call's random numbers evenly for agents (see ss.Sim)
+        self.keep_times = None  # Whether a declared disease run as agents keeps the time of entering every state, and the history of every transition (None: ss.options.keep_times)
 
         # How the model is run; these only apply to modules with declared states and transitions (see ss.Disease)
         self.unit       = None   # The unit for bare numbers, e.g. 'day'; if nothing in the model has a unit, time is in timesteps
@@ -178,6 +180,8 @@ class SimPars(ss.Pars):
         self.validate_agents()
         if self.even_draws and not ss.options.crn:
             raise ValueError('even_draws=True needs common random numbers, but ss.options.crn is False')
+        if self.keep_times is None:
+            self.keep_times = ss.options.keep_times
         self.validate_total_pop()
         return
 
@@ -295,9 +299,9 @@ class SimPars(ss.Pars):
         """
         Ensure the module name is unique, renaming it if it is the default name (e.g. "sir" → "sir_1")
 
-        A product that a delivery made from its keywords (`campaign = ss.vaccinate(efficacy=0.9, ...)`) keeps the
-        name of its kind ("vaccine") if it is free, and is otherwise named for its delivery ("campaign_product"),
-        with no warning, since the user did not make it
+        A product keeps its name if it is free; otherwise, if the name is the default (e.g. "vaccine", for a product that a delivery
+        made from its keywords, `campaign = ss.vaccinate(efficacy=0.9, ...)`) or that of a delivery (`ss.screen(tbsim.DST(tb), name='dst')`),
+        it is named for its delivery ("campaign_product", "dst_product"), with no warning
 
         Args:
             mod (`ss.Module`): the module to validate
@@ -307,17 +311,10 @@ class SimPars(ss.Pars):
         """
         name = mod.name
         if name in names:
-            if mod._default_name and getattr(mod, '_from_keywords', False) and delivery is not None:
+            if delivery is not None and (mod._default_name or names[name] == 'interventions'): # A product named for its delivery
                 mod.name = mod.label = sc.uniquename(f'{delivery.name}_product', list(names), style='_%d')
-            elif mod._default_name and isinstance(mod, ss.Product) and names[name] == 'interventions': # e.g. bcg = ss.vaccinate(tbsim.BCG(...)), where the delivery takes the name of its variable: the product is named for its kind, bcg_vaccine
-                kind = next((cls for cls in (ss.Vaccine, ss.Treatment, ss.Diagnostic) if isinstance(mod, cls)), ss.Product)
-                mod.name = mod.label = sc.uniquename(f'{name}_{kind.__name__.lower()}', list(names), style='_%d')
             elif mod._default_name: # A name the user did not give is simply numbered (e.g. a second clip_edges is clip_edges_1)
                 mod.name = sc.uniquename(name, list(names), style='_%d')
-                if isinstance(mod, ss.Product): # Another product of the same default name
-                    cls = type(mod)
-                    cls = f'ss.{cls.__name__}' if cls.__module__.startswith('starsim.') else cls.__name__ # E.g. ss.Treatment, or a package's own hpv.dx
-                    ss.warn(f'The product "{name}" is renamed "{mod.name}", since another module (in {names[name]}) is also called "{name}"; give the product a name to avoid this warning, e.g. {cls}(..., name="{name}_product")')
             else:
                 errormsg = f'Cannot add module "{name}" to {modkey}: a module with that name already exists in {names[name]}; please give one of them a different name'
                 raise ValueError(errormsg)
@@ -448,6 +445,22 @@ class SimPars(ss.Pars):
         return out
 
 
+def own_size(mod):
+    """
+    The bytes needed to pickle a module, not counting its parameters or what it shares with the rest of the sim: the sim, its people, the other modules (e.g.
+    a delivery's transitions, which belong to their disease), and results (its own too, which grow with its stratifications
+    as well as with time); used by `ss.Sim.shrink()` to check that a module has let go of its arrays
+    """
+    import io, dill # dill (as sc.checkmem() uses) for what pickle can't take, e.g. a lambda
+    pars = getattr(mod, 'pars', None) # Its parameters are structure, which doesn't grow with the agents (e.g. a table of fertility rates)
+    class Pickler(dill.Pickler):
+        def persistent_id(self, obj):
+            return id(obj) if obj is not mod and (isinstance(obj, (ss.Module, ss.Sim, ss.People, ss.Results, ss.Result)) or obj is pars) else None
+    out = io.BytesIO()
+    Pickler(out, protocol=-1).dump(mod)
+    return out.tell()
+
+
 class Sim(ss.Base):
     """
     The Sim object
@@ -530,9 +543,14 @@ class Sim(ss.Base):
         names = ss.utils.caller_names(1)
         models = ss.utils.make_disease(models, names)
         diseases = ss.utils.make_disease(diseases, names)
-        positional = [arg for arg in models if not isinstance(arg, dict)]
-        if positional:
-            modules = sc.mergelists(*positional, modules)
+        kinds = dict(demographics=demographics, networks=networks, diseases=diseases, connectors=connectors, interventions=interventions, analyzers=analyzers, custom=custom)
+        for mod in sc.mergelists(*[arg for arg in models if not isinstance(arg, dict)]): # The model's modules, sorted into their kinds now (after those given by keyword, as init() would), so that e.g. sim.pars.diseases has them before init() as after
+            key = next((key for key,cls in ss.modules.module_map().items() if isinstance(mod, cls)), 'custom')
+            if isinstance(kinds[key], (dict, bool)): # Modules by name, e.g. networks=dict(main=...), or demographics=True: sorted at init() (see ss.SimPars.validate_modules())
+                modules = sc.mergelists(mod, modules)
+            else:
+                kinds[key] = sc.mergelists(kinds[key], mod)
+        demographics, networks, diseases, connectors, interventions, analyzers, custom = kinds.values()
         self._name_modules(names, demographics, connectors, networks, interventions, diseases, analyzers, custom, modules)
         interventions = self._order_steps(interventions)
         self.par_values = None # Values of model parameters by name, e.g. pars=dict(beta=0.1) or pars=fit.pars
@@ -755,7 +773,6 @@ class Sim(ss.Base):
         self.init_data(check=False) # Load the data before the modules, which read it (e.g. data by group keeps their results by group at every step)
         self._init_modules_pre()
         self.groups.check_used() # A stratification that nothing uses
-        ss.interventions.check_undriven(self)
         ss.connectors.check_applied(self) # Nothing accepted, then ignored
 
         # Final initializations -- this is "post"
@@ -2031,8 +2048,7 @@ class Sim(ss.Base):
                     npts = len(sim)
                     max_size = size_limit*(base_size + npts) # Maximum size in KB: size_limit scales both the fixed base and the per-timestep allowance
                     for mod in sim.modules:
-                        size = sc.checkmem(mod, descend=0).bytesize[0]/1e3 # Size in KB
-                        size -= sc.checkmem(mod.results, descend=0).bytesize[0]/1e3 # Not counting its results, which grow with its stratifications as well as with time
+                        size = own_size(mod)/1e3 # Size in KB, not counting its results, which grow with its stratifications as well as with time
                         if size > max_size:
                             errormsg = f'Module {mod.name} did not successfully shrink: {size:n} KB, not counting its results, > {max_size:n} KB (= {size_limit:n} KB/timestep × ({base_size:n} base + {npts} timesteps)); use die=False to turn this message into a warning, or increase base_size/size_limit'
                             if die:

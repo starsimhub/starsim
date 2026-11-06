@@ -500,6 +500,25 @@ def test_save():
 
 
 @sc.timer()
+def test_shrink_declared():
+    """ Test that shrinking a sim with a declared disease and a treatment with moves= leaves its modules small, and its results readable and plottable """
+    sc.heading('Testing shrinking a declared disease and a treatment')
+    S, L, I, R, C = ss.states('S L I R C')
+    tb = ss.Disease(S, L, I, R, C, infection=S >> L @ ss.peryear(2)*I, activation=L >> I @ ss.peryear(0.3), recovery=I >> R @ ss.years(1), clear=ss.Transition(L, C), name='tb', init=dict(L=0.2, I=0.02))
+    tx = ss.treat(ss.Treatment(moves={tb.clear: 0.7}), where=tb.L, coverage=ss.peryear(0.5), start=2005, name='tpt')
+    sim = ss.Sim(tb, interventions=tx, n_agents=2000, start=2000, stop=2020, dt=ss.months(1), verbose=0).run()
+    sim.shrink(size_limit=0.3) # Raises if a module is still big; the delivery reaches the disease (through its moves), whose results and arrays are not its own
+    assert sim.results.tb.I.values.sum() > 0 and sim.results.tpt.delivered.values.sum() > 0
+    sim.plot()
+    plt.close('all')
+    with pytest.raises(RuntimeError, match='shrunk'):
+        sim.tb.current_state()
+    with pytest.raises(RuntimeError, match='copy'):
+        tb.current_state() # The module given, not the one that ran
+    return sim
+
+
+@sc.timer()
 def test_save_mixed_dt():
     """ Test that export works when modules span different time axes (issue #1411) """
     sc.heading('Testing export with heterogeneous timelines...')
@@ -550,7 +569,7 @@ def test_rescale():
     res = ss.Sim(diseases=deadly, networks='random', n_agents=2000, total_pop=2e6, rescale=True, stop=40, unit='day', verbose=0).run().results
     assert res.died.cum[-1] > 0 and np.allclose(res.alive, 2e6 - res.died.cum) and np.allclose(res.sir.S + res.sir.I + res.sir.R, res.alive)
     preg = lambda rescale: ss.Sim(demographics=ss.Pregnancy(), n_agents=2000, total_pop=1e6, rescale=rescale, stop=5, unit='day', verbose=0).run().results.pregnancy
-    assert np.allclose(preg(True).P, preg(False).P) # In a module that is not a disease, those no agent stands for are in each state as the agents are (rather than all not pregnant)
+    assert np.allclose(preg(True).P, preg(False).P, rtol=1e-3) # In a module that is not a disease, those no agent stands for are in each state as the agents are (rather than all not pregnant); a birth changes the agents' shares a little
 
     sim = ss.Sim(n_agents=100, diseases=['sis', 'sis'], networks='random').init()
     assert list(sim.diseases.keys()) == ['sis', 'sis_1'] # Default names are made unique, with no warning
@@ -669,6 +688,11 @@ def test_given_modules():
     with pytest.raises(ValueError, match='copy_modules'):
         ss.Sim(modules=mod, copy_modules=False)
 
+    # The model's modules are sorted into their kinds when the sim is made, after those given by keyword, as they are once it is initialized
+    sim = ss.Sim(ss.SIR(), [ss.RandomNet(), Status(name='status')], diseases=ss.SIS(), n_agents=10, verbose=0)
+    assert [d.name for d in sim.pars.diseases] == ['sis', 'sir'] and len(sim.pars.networks) == 1 and len(sim.pars.custom) == 1 and not sim.pars.modules
+    assert list(sim.init().diseases.keys()) == ['sis', 'sir']
+
     # Whole days are ints, as for pandas
     days = (ss.date('2015-01-01') - ss.date('2010-01-01')).days
     assert days == 1826 and isinstance(days, int)
@@ -703,6 +727,7 @@ if __name__ == '__main__':
     sim8 = test_creation_syntax()
     sim9 = test_save()
     sim10 = test_save_mixed_dt()
+    sim10b = test_shrink_declared()
     sim11 = test_rescale()
     sim12 = test_add_module()
     sim13 = test_locked_pars()

@@ -370,7 +370,7 @@ class Events(Agents):
         rate_rows = np.array(rate_rows).reshape(len(rate_rows), n)
         pool = np.zeros((len(self.drawn), n))
         for i,tr in enumerate(self.drawn): # One for each agent, for an entry within the step
-            self.new_round()
+            self.new_round(tr.name)
             pool[i, auids] = self.sample_dwell(tr, auids)
         sus_state, sus_agent, w_agent, sus_max = np.zeros(len(names)), np.zeros(n), np.zeros(n), 0.0
         if self.graph.transmissions:

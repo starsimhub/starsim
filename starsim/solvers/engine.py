@@ -582,7 +582,7 @@ class Engine(Telling, Effects):
     def shrink(self):
         """ Drop the sim and the arrays the run worked in, for saving; the results are kept on the module """
         arrays = [key for key,val in vars(self).items() if isinstance(val, np.ndarray) and val.nbytes > 1000]
-        ss.utils.shrink(self, ['sim', '_selector', 'cache', 'series', 'deliveries', 'program', 'register', 'shifts', 'jax_run'] + arrays) # The selector holds the sim, the cache the values per agent, and the series the tables of a compartmental run
+        ss.utils.shrink(self, ['sim', '_selector', 'cache', 'series', 'deliveries', 'program', 'register', 'shifts', 'jax_run', 'held_series', 'in_people', 'res_values'] + arrays + ['compiled']*isinstance(getattr(self, 'compiled', None), dict)) # The selector holds the sim, the cache the values per agent, compiled (as agents) the functions of its expressions, the series the tables of a compartmental run, held_series the values in time of each step, and in_people and res_values the module's results
         return
 
     def make_rng(self, stream=0, seed=None):

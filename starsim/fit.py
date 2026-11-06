@@ -148,6 +148,9 @@ def logpdf(dist, observed, model, xp=np, pars=None):
         p = xp.clip(model, 1e-12, 1 - 1e-12)
         return observed*xp.log(p) + (1 - observed)*xp.log1p(-p)
     elif isinstance(dist, ss.normal):
+        if sc.isnumber(pars.get('loc', 0)) and pars.get('loc', 0) != 0:
+            errormsg = f'A normal likelihood is centered on the model\'s value, so it takes scale= only, not loc={pars["loc"]}'
+            raise ValueError(errormsg)
         return norm.logpdf(observed, model, pars['scale'])
     elif isinstance(dist, ss.lognorm_ex): # The log of the value is normal
         sigma2 = xp.log1p(pars['std']**2/mean**2)

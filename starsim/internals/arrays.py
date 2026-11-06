@@ -252,6 +252,13 @@ class Arr(BaseArr):
     will only use the ages of active agents. Thus, `sim.people.age.mean()`
     is equal to `sim.people.age.values.mean()`, not `sim.people.age.raw.mean()`.
 
+    `Arr.raw` includes agents who have died, and also has slots that are not
+    people yet: room at the end for agents born later, which hold the array's
+    `nan` (NaN for an `ss.FloatArr`, not its default). So `np.sum(arr.raw)` can be
+    NaN for a float array; to sum, count, or average over the people, use the
+    array itself (`arr.sum()`, `arr.mean()`) or `arr.values`, and to read
+    particular agents, index by UID (`arr[uids]`).
+
     If indexing by an int, integer array, or `ss.uids` object, `Arr.raw` is used
     (i.e. the ints are treated as UIDs). If indexing by a full slice (`[:]`) or a
     boolean array, `Arr.values` is used. `Arr` objects can't be directly indexed
@@ -1084,7 +1091,7 @@ class TimeArr(FloatArr):
 
 class Unkept(BaseArr):
     """
-    A declared disease's time of entering a state (`ti_X`) that is not kept, since the engine does not need it (see `ss.options.keep_times`)
+    A declared disease's time of entering a state (`ti_X`) that is not kept, since the engine does not need it (see `ss.Sim(keep_times=True)`)
 
     Setting it does nothing, and reading it raises an `AttributeError` that says how to keep it.
     It takes no memory, and is not one of the module's states.
@@ -1097,7 +1104,7 @@ class Unkept(BaseArr):
     def unkept(self):
         """ The error for reading it """
         errormsg = (f'{self.mod.name}.{self.name} is not kept, since the engine does not need it (to save memory).\n'
-                    f'     Declare the state with ss.State(keep_time=True) to keep it, or set ss.options.keep_times = True before the sim is initialized to keep the time of entering every state.')
+                    f'     Declare the state with ss.State(keep_time=True) to keep it, or make the sim with ss.Sim(..., keep_times=True) to keep the time of entering every state.')
         return AttributeError(errormsg)
 
     @property

@@ -3,21 +3,12 @@ Test undriven transitions and treatments that move people along them
 """
 
 # %% Imports and settings
-import warnings
 import pytest
 import numpy as np
 import sciris as sc
 import starsim as ss
 
 kw = dict(verbose=0, unit='day')
-
-
-def w209(sim):
-    """ The warnings raised when a sim is initialized that a transition has nothing to drive it """
-    with warnings.catch_warnings(record=True) as w:
-        warnings.simplefilter('always')
-        sim.init()
-    return [str(x.message) for x in w if 'so only custom code can move people along it' in str(x.message)]
 
 
 # %% Define the tests
@@ -249,7 +240,6 @@ def test_bv():
     sims = run_both(make, stop=365)
     for solver,sim in sims.items():
         res = sim.results
-        assert not w209(make(solver=solver, stop=10, **kw))
         assert 'undriven: moved by mtz' in sim.diseases.bv.describe(output=True)
         assert np.isclose(res.treat_bv.delivered.sum(), 0.9*res.bv.symptoms.sum(), rtol=0.05)
         assert np.isclose(res.bv.tx.sum(), res.treat_bv.cured.sum()) and np.isclose(res.treat_bv.cured.sum(), 0.9*res.treat_bv.delivered.sum(), rtol=0.05)

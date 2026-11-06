@@ -40,7 +40,14 @@ class infection_log(Analyzer):
     mixing with everyone (no network) have a source and network of NaN, since they
     come from the share infectious in a group rather than from a particular person
     (by events, `solver='abm-events'`, each contact is with a particular person, so
-    these have a source and route too). As agents only.
+    these have a source and route too). For a disease with strains (`ss.Strains`),
+    each entry also has the strain transmitted (`strain`; for seeds, the strains
+    they start with). As agents only.
+
+    The log stays on the disease (`sim.diseases.sir.infection_log`) as well, so
+    several analyzers can read it, during the run or after. To follow transmission
+    as the sim runs, an analyzer reads the entries of each step with
+    `disease.infection_log.to_df(ti=self.ti)` (see `ss.diseases.InfectionLog.to_df()`).
 
     Note: CRN safe.
 
@@ -62,11 +69,10 @@ class infection_log(Analyzer):
         pass
 
     def finalize_results(self):
-        """ Collect the infection logs from each of the diseases """
+        """ Collect the infection logs from each of the diseases (the same logs, so several analyzers can share them) """
         super().finalize_results()
         for key,disease in self.sim.diseases.items():
             self.logs[key] = disease.infection_log
-            disease.infection_log = None # Reset them to save memory
         return
 
     @property
