@@ -25,7 +25,7 @@ import starsim as ss
 from .internals.expressions import as_expr, BinOp, dists_in, Count, did_you_mean, dimension, Expr, Flow, format_expr, is_one, linear, Nameable, par, value_str
 from .internals.parameters import by, TimeValue
 
-__all__ = ['pars', 'State', 'states', 'null',
+__all__ = ['pars', 'State', 'states', 'unborn', 'dead', 'outside',
            'Transition', 'move', 'birth', 'death', 'lifetable', 'immigration', 'emigration', 'outcome', 'lifelong']
 
 
@@ -227,8 +227,22 @@ def pars(defaults, **kwargs):
     return out
 
 
-class Null:
-    """ Outside the model: the source of an inflow (births, shedding) and the destination of an outflow (deaths, decay) """
+class Outside:
+    """
+    Outside the model, as a source or destination of a transition: where births come from (`ss.unborn >> S`), where deaths go (`I >> ss.dead`),
+    and where people arrive from and leave to without being born or dying (`ss.outside >> S`, `S >> ss.outside`: migration)
+
+    For a state that is not people (e.g. bacteria in the water, or mosquitoes), the same three are where its amount comes from and goes to:
+    mosquitoes emerge from `ss.unborn` and die to `ss.dead`, and bacteria are shed from `ss.outside`.
+
+    It exists so that what a flow into or out of the model means (a birth, a death, or a move) is said where it is written, and counted as such.
+    """
+    sources = ('unborn', 'outside')
+    dests = ('dead', 'outside')
+
+    def __init__(self, kind):
+        self.kind = kind
+
     def __rshift__(self, other):
         if isinstance(other, Transition):
             return other._copy()._set_source(self)
@@ -238,13 +252,31 @@ class Null:
         return Transition(dest=self) @ driver
 
     def __repr__(self):
-        return 'ss.null'
+        return f'ss.{self.kind}'
 
     def __copy__(self): return self
     def __deepcopy__(self, memo): return self
 
 
-null = Null()
+unborn  = Outside('unborn') # Where births come from: ss.unborn >> S
+dead    = Outside('dead') # Where deaths go: I >> ss.dead
+outside = Outside('outside') # Where people arrive from and leave to (migration), or an amount comes from or goes to: ss.outside >> S, S >> ss.outside
+
+
+def split_at(dests, driver):
+    """ A transition with several destinations and no source yet, from a dict of each and its probability and a driver after @ (a duration or a rate), e.g. `I >> {ss.dead: p_death, R: None} @ ss.days(8)`; any other value is not something @ applies to """
+    if isinstance(dests, dict):
+        return Transition(dest=dests) @ driver
+    return NotImplemented
+
+
+def check_outside(end, side):
+    """ Raise an error for ss.dead as a source, or ss.unborn as a destination """
+    if side == 'source' and end.kind not in Outside.sources:
+        raise ValueError(f'{end} is where deaths go, not a source: births come from ss.unborn (ss.unborn >> S), and arrivals from ss.outside (ss.outside >> S)')
+    if side == 'dest' and end.kind not in Outside.dests:
+        raise ValueError(f'{end} is where births come from, not a destination: deaths go to ss.dead (I >> ss.dead), and people leave to ss.outside (S >> ss.outside)')
+    return end
 
 
 class Stay:
@@ -393,8 +425,8 @@ class Transition(Nameable):
     return an `ss.Transition`.
 
     Args:
-        source (State/list): the source state, several states (a list, or a sum `I + R`), or `ss.null` for an inflow
-        dest (State/list): the destination state, a list of states (branching), or `ss.null` for an outflow
+        source (State/list): the source state, several states (a list, or a sum `I + R`), or `ss.unborn` (births) or `ss.outside` (arrivals) for an inflow
+        dest (State/list/dict): the destination state; several (a split), as a dict of each and its probability (`{D: p_death, R: None}`, None for the rest) or a list with `p=`; or `ss.dead` (deaths) or `ss.outside` (leaving) for an outflow
         rate (any): a hazard: a number, `ss.per`, `ss.prob`, an expression of states and parameters, or a function; a transmission is a rate with the source of infection in it (`rate=beta * I`)
         dur (any): a dwell time: a duration or a distribution of durations (instead of `rate`); with an event in `on=`, the time after it that people move
         p (float/list): branch probability
@@ -512,10 +544,14 @@ class Transition(Nameable):
         self.undriven = False # No rate, duration, or p=: only products, deliveries, or code move people along it (see Graph.resolve_exits())
         self.stays = False # Whether ss.stay is one of the destinations, kept out of dest: what the other branches leave over stays (see split)
         self.p_stay = None # Its probability, if given (otherwise the rest)
-        self.dies = False # Whether ss.null is one of several destinations, kept out of dest: those who take it die, as by an outflow
+        self.dies = False # Whether ss.dead is one of several destinations, kept out of dest: those who take it die, as by an outflow
         self.p_die = None # Its probability, if given (otherwise the rest)
-        self._ends_at = {} # Where ss.stay and ss.null were among the destinations given, so their entries of p= can be taken out
+        self._ends_at = {} # Where ss.stay and ss.dead were among the destinations given, so their entries of p= can be taken out
         self.guessed = sc.obj() # Which fields were guessed, and why
+        if isinstance(dest, dict): # A split, each destination with its probability: {D: p_death, R: None}
+            if p is not None:
+                raise ValueError(f'the destinations of a transition were given as a dict, with each one\'s probability ({dest}), so p= is not given too')
+            dest, p = list(dest.keys()), list(dest.values())
         if source is not None:
             self._set_source(source)
         if dest is not None:
@@ -603,21 +639,21 @@ class Transition(Nameable):
 
     @property
     def _split(self):
-        """ Whether it splits between several destinations when it is taken (ss.stay and ss.null count as one each) """
+        """ Whether it splits between several destinations when it is taken (ss.stay and ss.dead count as one each) """
         return self.dest is not None and (len(self.dest) > 1 or self.stays or self.dies)
 
     @property
     def _ends(self):
-        """ The names of the destinations whose flows are recorded apart, as res.<transition>.<name>: its states, and 'null' for ss.null, if there are two or more """
-        names = [d.name for d in self.dest or []] + ['null']*self.dies
+        """ The names of the destinations whose flows are recorded apart, as res.<transition>.<name>: its states, and 'dead' for ss.dead, if there are two or more """
+        names = [d.name for d in self.dest or []] + ['dead']*self.dies
         return names if len(names) > 1 else []
 
     @property
     def _deaths(self):
-        """ The name of the flow that counts the people who die by this transition: the transition's own, or its flow to ss.null in a split with a state; None if nobody dies by it """
-        if self._outflow or (self.dies and not self.dest):
+        """ The name of the flow that counts the people who die by this transition: the transition's own, or its flow to ss.dead in a split with a state; None if nobody dies by it """
+        if (self._outflow and not self.migration) or (self.dies and not self.dest):
             return self.name
-        return f'{self.name}.null' if self.dies else None
+        return f'{self.name}.dead' if self.dies else None
 
     @property
     def _immediate(self):
@@ -629,25 +665,38 @@ class Transition(Nameable):
         return sc.isnumber(raw) and raw == 0
 
     def _set_source(self, src):
-        self.source = [] if src is null else src._sum_states() if isinstance(src, BinOp) else [s for s in sc.tolist(src)] # Several sources as a sum, e.g. ss.Transition(I + R, D)
+        if isinstance(src, Outside):
+            check_outside(src, 'source')
+            self.migration = self.migration or src.kind == 'outside' # Arrivals, at any age (as ss.immigration())
+        self.source = [] if isinstance(src, Outside) else src._sum_states() if isinstance(src, BinOp) else [s for s in sc.tolist(src)] # Several sources as a sum, e.g. ss.Transition(I + R, D)
         return self
 
     def _set_dest(self, dst):
-        if dst is null:
+        if isinstance(dst, Outside):
+            check_outside(dst, 'dest')
+            self.migration = self.migration or dst.kind == 'outside' # Leaving, without dying (as ss.emigration())
             self.dest = []
         elif isinstance(dst, Expr) and not isinstance(dst, State):
             errormsg = f'The destination "{dst}" is not a state; several destinations are a list, with p= for the share of each, e.g. ss.Transition(I, [R, D], dur=10, p=[0.9, 0.1])'
             raise TypeError(errormsg)
         else:
             self.dest = sc.tolist(dst)
-            if len(self.dest) > 1: # ss.stay and ss.null are kept out of the destinations, so they are all states
-                self._ends_at = {key:i for i,d in enumerate(self.dest) for key,end in [('stay', stay), ('die', null)] if d is end}
+            for d in self.dest:
+                if isinstance(d, Outside):
+                    check_outside(d, 'dest')
+                    if d.kind == 'outside' and len(self.dest) > 1:
+                        raise ss.CapabilityError(f'ss.outside as one destination of a split ({self.dest}) is not supported yet; leaving is a transition of its own, e.g. emigration = I >> ss.outside @ rate')
+            if len(self.dest) > 1: # ss.stay and ss.dead are kept out of the destinations, so they are all states
+                self._ends_at = {key:i for i,d in enumerate(self.dest) for key,end in [('stay', stay), ('die', dead)] if d is end}
                 self.stays = 'stay' in self._ends_at
                 self.dies = 'die' in self._ends_at
-                self.dest = [d for d in self.dest if d is not stay and d is not null]
+                self.dest = [d for d in self.dest if d is not stay and not isinstance(d, Outside)]
+                if self.dies and any(getattr(d, 'name', None) == 'dead' for d in self.dest):
+                    raise ValueError('a transition splits between ss.dead and a state called "dead", whose flows would have the same name (res.<transition>.dead); rename the state, e.g. "D"')
             elif self.dest and self.dest[0] is stay: # Alone, an error once the module is built (see Graph.check())
                 self.dest, self.stays = [], True
-            elif self.dest and self.dest[0] is null: # [ss.null] is ss.null
+            elif self.dest and isinstance(self.dest[0], Outside): # [ss.dead] is ss.dead
+                self.migration = self.migration or self.dest[0].kind == 'outside'
                 self.dest = []
         return self
 
@@ -846,7 +895,7 @@ def move(*args, p=None, n=None, uids=None, where=None):
     A one-off move along no transition (as `ss.Delivery(move=I >> R)` is for a declared intervention), so people
     are moved and never made or lost: the number of people stays the same in every disease. A count that is not
     people (`ss.State(people=False)`, e.g. mosquitoes) moves the same way, and also from and to outside the model
-    (`ss.null`), which for people is a birth or a death, and is declared. Also `disease.move(...)`, the same with
+    (`ss.unborn`, `ss.dead`, or `ss.outside`), which for people is a birth, a death, or a move, and is declared. Also `disease.move(...)`, the same with
     the disease given.
 
     Args:
@@ -869,7 +918,7 @@ def move(*args, p=None, n=None, uids=None, where=None):
         ss.move(sir.S, sir.R, p=0.8, where=ss.person.age < 5) # Protect 80% of the susceptible children under 5
         sir.move(uids, sir.R) # These agents, from wherever they are (also ss.move(sir, uids, sir.R), or sir.move(uids, 'R'))
         self.move(self.I, self.R, uids=uids) # In a disease's own code: these agents, if they are infectious
-        ss.move(mosq.Sv, ss.null, p=0.1) # A tenth of the mosquitoes die
+        ss.move(mosq.Sv, ss.dead, p=0.1) # A tenth of the mosquitoes die
         ```
     """
     if p is not None and n is not None:
@@ -901,14 +950,14 @@ def move(*args, p=None, n=None, uids=None, where=None):
                 raise sc.KeyNotFoundError(f'"{x}" is not a state of "{home.name}". Its states are {sc.strjoin(home.graph.states.keys())}')
             x = getattr(home, x)
         return run_state(x)
-    to = None if ends[-1] is null else find(ends[-1])
+    to = None if isinstance(ends[-1], Outside) else find(ends[-1])
     if len(ends) == 2:
         src = ends[0]
-        srcs = [] if src is null else [find(x) for x in sc.tolist(src)]
+        srcs = [] if isinstance(src, Outside) else [find(x) for x in sc.tolist(src)]
     elif home is None:
         raise ValueError('ss.move() was given only the state people move to; give the state they move from too, or the disease, for any of its states (e.g. sir.move(uids, sir.R))')
     elif to is None or not to[1].people:
-        raise ValueError('ss.move() of a count needs the state it comes from (or ss.null)')
+        raise ValueError('ss.move() of a count needs the state it comes from (or ss.outside)')
     else: # Any of the disease's states of people but the destination
         srcs = [(home, state) for state in home.graph.people_states if state is not to[1]]
     pairs = srcs + ([] if to is None else [to])
@@ -1026,7 +1075,7 @@ def birth(state=None, rate=None, on=None, n=1, p_female=None, name=None, label=N
     note = None
     if state is None: # The births of everyone, a crude birth rate (as for ss.death(): births into a disease's state are in the model's unit)
         rate, note = crude_rate(rate, 'birth')
-    out = Transition(null, state, rate=rate, name=name, label=label)
+    out = Transition(unborn, state, rate=rate, name=name, label=label)
     out.rate_note = note
     out.per_capita = on is None
     out.birth_on = None if on is None else BirthOn(on)
@@ -1139,7 +1188,7 @@ def death(state=None, rate=None, dur=None, lifetable=None, name=None, label=None
     """
     if 'p' in kwargs: # A share who die is a branch of the way out of a state, not a death rate
         errormsg = (f'ss.death() takes a rate (rate= or dur=), not p=. For a share of the people leaving a state who die, make it a branch of that exit, e.g. '
-                    f'ss.Transition(I, [R, ss.null], dur=ss.days(10), p=[None, {kwargs["p"]}])')
+                    f'ss.Transition(I, {{R: None, ss.dead: {kwargs["p"]}}}, dur=ss.days(10))')
         raise TypeError(errormsg)
     elif kwargs:
         key = list(kwargs)[0]
@@ -1152,14 +1201,14 @@ def death(state=None, rate=None, dur=None, lifetable=None, name=None, label=None
         if not isinstance(lifetable, globals()['lifetable']):
             errormsg = f'lifetable= of ss.death() is an ss.lifetable(ages, deaths), not {type(lifetable).__name__}'
             raise TypeError(errormsg)
-        out = Transition(None, null, rate=par(ss.peryear(0.0), name=f'mortality_{name}' if name else 'mortality', doc='The death rate from the life table'), name=name, label=label)
+        out = Transition(None, dead, rate=par(ss.peryear(0.0), name=f'mortality_{name}' if name else 'mortality', doc='The death rate from the life table'), name=name, label=label)
         out.every_state = True
         out.lifetable = lifetable
         return out
     note = None
     if state is None: # The deaths of everyone, a crude death rate (a disease's deaths, from one state, can be faster)
         rate, note = crude_rate(rate, 'death')
-    out = Transition(state, null, rate=rate, dur=dur, name=name, label=label)
+    out = Transition(state, dead, rate=rate, dur=dur, name=name, label=label)
     out.rate_note = note
     out.every_state = state is None
     return out
@@ -1178,7 +1227,7 @@ def immigration(state=None, rate=None, name=None, label=None):
         name (str): the name of the transition
         label (str): a human-readable name
     """
-    out = Transition(null, state, rate=rate, name=name, label=label)
+    out = Transition(outside, state, rate=rate, name=name, label=label)
     out.migration = True
     out.state_given = state is not None
     return out
@@ -1199,7 +1248,7 @@ def emigration(state=None, rate=None, dur=None, name=None, label=None):
         label (str): a human-readable name
     """
     out = death(state, rate=rate, dur=dur, name=name, label=label)
-    out.migration = True
+    out.migration = True # Leaving (ss.outside), not dying
     return out
 
 

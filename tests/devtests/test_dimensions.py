@@ -50,10 +50,10 @@ def make_malaria():
         latency       = Eh >> Ih @ ss.days(12),
         recovery      = Ih >> Rh @ ss.days(100),
         waning        = Rh >> Sh @ ss.days(365),
-        emergence     = ss.null >> Sv @ ss.perday(5_000),
+        emergence     = ss.unborn >> Sv @ ss.perday(5_000),
         biting        = Sv >> Ev @ a * c * Ih.n / Nh,
         incubation    = Ev >> Iv @ ss.days(10),
-        mortality     = Sv + Ev + Iv >> ss.null @ ss.days(10),
+        mortality     = Sv + Ev + Iv >> ss.dead @ ss.days(10),
         init          = dict(Ih=0.01, Sv=50_000),
         default_state = 'Sh',
         name          = 'malaria',
@@ -473,8 +473,8 @@ def test_space():
     cholera = ss.Disease(
         infection = S >> I @ 0.5 * W.n / (W.n + 1e5),
         recovery  = I >> R @ ss.days(5),
-        shedding  = ss.null >> W @ 10 * I.n,
-        decay     = W >> ss.null @ ss.days(30),
+        shedding  = ss.outside >> W @ 10 * I.n,
+        decay     = W >> ss.dead @ ss.days(30),
         init      = dict(I=0.001),
         name      = 'cholera',
     )
@@ -1045,7 +1045,7 @@ def test_by_place_times_local_count():
         V = ss.State(people=False)
         f = ss.par(ss.by(patch=[0.2, 0.8]), name='f')
         sis = ss.Disease(infection=ss.Transition(S, I, rate=f*ss.perday(0.1)*V.n/(S + I).n, acquisition=True), recovery=I >> S @ ss.days(20),
-                         hatch=ss.null >> V @ ss.perday(1)*(S + I).n, death=V >> ss.null @ ss.days(1), init=dict(I=0.0, V=ss.by(patch=[500, 500])), name='sis')
+                         hatch=ss.unborn >> V @ ss.perday(1)*(S + I).n, death=V >> ss.dead @ ss.days(1), init=dict(I=0.0, V=ss.by(patch=[500, 500])), name='sis')
         sis.stratify(patch=['a', 'b'], kind='space')
         pop = dict(n_agents=1000) if solver == 'abm' else dict(total_pop=1000)
         sim = ss.Sim(sis, solver=solver, unit='day', stop=60, verbose=0, **pop).run()
@@ -1093,7 +1093,7 @@ def test_by_function():
     m.stratify(patch=ss.geo.geography(names=['a', 'b', 'c']))
     with pytest.raises(ValueError, match='3 levels'):
         ss.Sim(diseases=m, n_agents=300, dur=ss.days(3), dt=ss.days(1), verbose=0).run()
-    inflow = lambda rate, S=ss.State('S'): ss.Sim(diseases=ss.Disease(S, arrive=ss.null >> S @ rate, name='m').stratify(pop={'a': 0.2, 'b': 0.8}), solver='ode', total_pop=100, stop=2002, verbose=0).run().results.m.arrive.by('pop')[1]
+    inflow = lambda rate, S=ss.State('S'): ss.Sim(diseases=ss.Disease(S, arrive=ss.unborn >> S @ rate, name='m').stratify(pop={'a': 0.2, 'b': 0.8}), solver='ode', total_pop=100, stop=2002, verbose=0).run().results.m.arrive.by('pop')[1]
     assert np.allclose(inflow(ss.by(pop=lambda sim: np.array([10., 5.]))), inflow(ss.by(pop=[10., 5.]))) # An inflow by level is the inflow at each level, not shared out again
     return sim
 

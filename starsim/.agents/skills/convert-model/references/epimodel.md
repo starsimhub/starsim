@@ -68,8 +68,8 @@ hiv = ss.Disease(
     infection  = ss.Transition(S, A, rate=({k: week(1 - (1 - 0.0025)**n) for k,n in acts.items()}) * (A + C + D)),
     chronic    = A >> C @ week(1/12),
     aids       = C >> D @ week(1/520),
-    aids_death = D >> ss.null @ week(1/104),
-    departure  = S + A + C >> ss.null @ week(0.0005),
+    aids_death = D >> ss.dead @ week(1/104),
+    departure  = S + A + C >> ss.dead @ week(0.0005),
     arrival    = ss.birth(S, rate=0.00065),
     test       = care(('undx', 'dx'), 0.015, states=['A', 'C']),
     linkage    = care(('dx', 'art'), 0.1), # Not link, which is a method of every module

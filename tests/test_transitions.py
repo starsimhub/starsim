@@ -49,8 +49,8 @@ def make_cholera():
     cholera = ss.Disease(
         infection = S >> I @ beta * W.n / (W.n + K),
         recovery  = I >> R @ ss.days(5),
-        shedding  = ss.null >> W @ xi * I.n,
-        decay     = W >> ss.null @ ss.days(30),
+        shedding  = ss.outside >> W @ xi * I.n,
+        decay     = W >> ss.dead @ ss.days(30),
         init      = dict(I=0.001),
     )
     return cholera
@@ -157,7 +157,7 @@ def test_names():
     listed = ss.Disease(transitions=[ss.Transition(S, I, rate=0.3 * I, name='infection'), ss.Transition(I, R, dur=10, name='recovery')], init=dict(I=0.01))
     assert list(listed.transitions.keys()) == ['infection', 'recovery']
     S, I, R = ss.states(3)
-    recovery, death = I >> R @ ss.days(10), I >> ss.null @ ss.days(100)
+    recovery, death = I >> R @ ss.days(10), I >> ss.dead @ ss.days(100)
     dis = ss.Disease(infection=S >> I @ 0.3 * I, recovery=recovery, death=death, leaving=recovery + death, init=dict(I=0.01), name='dis')
     res = ss.Sim(dis, stop=50, **kw).run().results.dis
     assert np.allclose(res.leaving, res.recovery + res.death)
@@ -205,7 +205,7 @@ def test_names():
         I, R = ss.states('I R')
         ss.Disease(describe=ss.Transition(I, R, dur=3))
     with pytest.raises(ValueError, match='has no rate. Give it one'): # An inflow needs a rate; a transition between states with none is undriven
-        ss.Disease(recovery=ss.Transition(I, R, dur=3), births=ss.Transition(ss.null, S))
+        ss.Disease(recovery=ss.Transition(I, R, dur=3), births=ss.Transition(ss.unborn, S))
     with pytest.raises(ValueError, match='the branch probabilities out of state "I" sum to 0.9, not 1'):
         I, H, R = ss.states('I H R')
         ss.Disease(a=ss.Transition(I, H, p=0.2, dur=3), b=ss.Transition(I, R, p=0.7, dur=3))
@@ -238,7 +238,7 @@ def test_names():
     # Operators that would silently drop something
     W = ss.State('W', people=False) # The water first: the first state of people is still S
     S, I, R = ss.states('S I R')
-    water = ss.Disease(S >> I @ ss.perday(0.5)*W.n/(W.n + 1e5), I >> R @ ss.days(5), ss.null >> W @ 10*I.n, W >> ss.null @ ss.days(30), init=dict(I=0.001), name='water')
+    water = ss.Disease(S >> I @ ss.perday(0.5)*W.n/(W.n + 1e5), I >> R @ ss.days(5), ss.unborn >> W @ 10*I.n, W >> ss.dead @ ss.days(30), init=dict(I=0.001), name='water')
     assert [s.name for s in water.graph.people_states] == ['S', 'I', 'R']
     assert make_sir(beta=0.5).pars.beta.value == 0.5 # A keyword number sets the parameter of that name
     def sir(**kwargs):
@@ -363,7 +363,7 @@ def test_time():
     with pytest.raises(TypeError, match='so the unit of the bare numbers mixed.beta is not known'):
         ss.Sim(ss.Disease(S >> I @ 0.3*I, I >> R @ ss.weeks(1), R >> S @ ss.days(100), name='mixed'), **kw).init()
     with pytest.raises(TypeError, match='mixed.rate'): # As is a bare number in a disease's death
-        ss.Sim(ss.Disease(S >> I @ ss.perday(0.3)*I, I >> R @ ss.weeks(1), I >> ss.null @ 0.01, name='mixed'), **kw).init()
+        ss.Sim(ss.Disease(S >> I @ ss.perday(0.3)*I, I >> R @ ss.weeks(1), I >> ss.dead @ 0.01, name='mixed'), **kw).init()
     deaths = ss.death(rate=10) # But the deaths of everyone, as ss.Deaths reads them: per year, and above 1 per 1,000, with a note (not a warning: it is the usual spelling)
     assert ss.birth(rate=30).rate.raw == ss.peryear(0.03) and ss.birth(rate=0.02).rate.raw == ss.peryear(0.02)
     assert ss.death(rate=ss.peryear(1.05)).rate.raw == ss.peryear(1.05) # A typed rate is per person, as given, with no warning (e.g. a host that lives a year)
@@ -565,10 +565,10 @@ def test_describe():
     print(eqs)
     assert eqs.splitlines() == ['dS/dt = -beta * S * I / N', 'dI/dt =  beta * S * I / N - I / dur_I', 'dR/dt =  I / dur_I']
     S, I, R = ss.states('S I R')
-    fatal = ss.Disease(S >> I @ 0.4*I, ss.Transition(I, [R, ss.null], dur=ss.days(8), p=[None, 0.002]), name='fatal')
-    assert 'dR/dt =  (1 - 0.002) * I / dur' in fatal.equations(output=True) # A branch to ss.null, given in a list, takes its share (it was "I / dur")
+    fatal = ss.Disease(S >> I @ 0.4*I, ss.Transition(I, [R, ss.dead], dur=ss.days(8), p=[None, 0.002]), name='fatal')
+    assert 'dR/dt =  (1 - 0.002) * I / dur' in fatal.equations(output=True) # A branch to ss.dead, given in a list, takes its share (it was "I / dur")
     text = fatal.describe(output=True)
-    assert 'null1' in fatal.diagram() and 'I -> R | (removed)' in text # ss.null shown as leaving the model (it was "I -> ")
+    assert 'null1' in fatal.diagram() and 'I -> R | (removed)' in text # ss.dead shown as leaving the model (it was "I -> ")
     assert 'beta = 0.4 per day' in text # Outside a sim, in the unit of its typed values (it was "per step")
     assert '8 days, p = 0.002"| null1' in fatal.diagram() # Each branch with its share
     S, I, R = ss.states(3)
@@ -607,7 +607,7 @@ def test_describe():
     assert np.isclose(seeded.init().diseases[0].R0(), 0.1*20) # β(N - 1)/γ (it was βN/γ = 2.1)
     S, I, R = ss.states('S I R')
     H = ss.State('H', rel_sus=2) # At high risk
-    inflow = ss.Disease(S + H >> I @ ss.perday(0.2)*I, I >> R @ ss.days(5), ss.null >> S @ ss.perday(8), ss.null >> H @ ss.perday(2), ss.death(rate=ss.perday(0.001)),
+    inflow = ss.Disease(S + H >> I @ ss.perday(0.2)*I, I >> R @ ss.days(5), ss.unborn >> S @ ss.perday(8), ss.unborn >> H @ ss.perday(2), ss.death(rate=ss.perday(0.001)),
                         init_n=dict(S=990, I=10), name='inflow')
     split = ss.Sim(inflow, total_pop=1000, unit='day', **kw).init()
     assert np.isclose(split.diseases.inflow.R0(), 0.2*(0.8 + 0.2*2)/(0.2 + 0.001)) # At the split of the inflows, 80/20 (it was all in S)
@@ -627,8 +627,8 @@ def test_load():
     cholera = ss.Disease(S, I, R, W,
         infection = infection,
         recovery  = ss.Transition(I, [R, S], dur=ss.lognormal(5, 2, unit='days'), p=[0.9, 0.1]),
-        shedding  = ss.null >> W @ ss.par(10, bounds=[5, 20], name='shed') * I.n,
-        decay     = W >> ss.null @ ss.days(30),
+        shedding  = ss.outside >> W @ ss.par(10, bounds=[5, 20], name='shed') * I.n,
+        decay     = W >> ss.dead @ ss.days(30),
         cases     = ss.outcome(0.5*infection, delay=ss.days(3)),
         prev      = I/(S + I + R),
         init_n    = dict(I=5),
@@ -1092,7 +1092,7 @@ def test_compiled_draws():
             flag    = ss.Transition(E, F, on=infection, dur=ss.days(2)), # A time after an event
             unflag  = ss.Transition(F, [I, R], dur=0, p=[0.5, None]), # Taken on in the same step
             release = ss.Transition(H, R, on=H.time_in > ss.days(5)), # A condition
-            die     = H >> ss.null @ ss.perday(0.03), # A competing rate beside a dwell time
+            die     = H >> ss.dead @ ss.perday(0.03), # A competing rate beside a dwell time
             wane    = ss.Transition(R, S, dur=ss.normal(ss.by(sex=dict(female=ss.days(25), male=ss.days(35))), ss.days(5))), # Drawn by the engine after the call
             init_prev=0.02, name='d')
         return ss.Sim(d, networks=ss.RandomNet(n_contacts=4, method='safe'), n_agents=1000, unit='day', stop=60, rand_seed=seed, **kw)
@@ -1339,7 +1339,7 @@ def test_given_dwell():
     n = 20_000
     def make(solver, p=None, rate=None, dur=ss.expon(ss.years(1))):
         P, C, R = ss.states('P C R')
-        exits = dict(course=ss.Transition(P, [C, R], dur=dur, p=[p(P), None])) if p is not None else dict(clear=P >> R @ rate(P), death=P >> ss.null @ ss.peryear(0.1))
+        exits = dict(course=ss.Transition(P, [C, R], dur=dur, p=[p(P), None])) if p is not None else dict(clear=P >> R @ rate(P), death=P >> ss.dead @ ss.peryear(0.1))
         return ss.Sim(ss.Disease(P, C, R, **exits, default_state='P', name='d'), n_agents=n, total_pop=n, stop=ss.years(15), dt=ss.years(0.1), solver=solver, verbose=0)
 
     # A known answer: with an exponential dwell of mean 1, P(C) = 1 - exp(-dwell) sends half to C
@@ -1409,7 +1409,7 @@ def test_init_prev_forms():
 
 @sc.timer()
 def test_split_null():
-    sc.heading('Testing ss.null as one destination of a split: a share die when the transition is taken, as a death would')
+    sc.heading('Testing ss.dead as one destination of a split: a share die when the transition is taken, as a death would')
     def make(dst, p):
         S, I, R = ss.states('S I R')
         dst = [R if d == 'R' else d for d in dst]
@@ -1417,31 +1417,31 @@ def test_split_null():
     out = sc.obj()
     for solver in ['abm', 'ode', 'binomial']:
         size = dict(n_agents=20_000) if solver == 'abm' else dict(total_pop=20_000)
-        sim = ss.Sim(make([ss.null, ss.stay], [0.05, None]), unit='day', stop=200, solver=solver, verbose=0, **size).run()
+        sim = ss.Sim(make([ss.dead, ss.stay], [0.05, None]), unit='day', stop=200, solver=solver, verbose=0, **size).run()
         r = sim.results.d
         n0 = r.I[0]
         died = r.death.values.sum()
         assert np.isclose(died/n0, 0.05, rtol=0.15), f'{solver}: {died/n0:n} of those in I died, not 0.05'
         assert np.isclose(r.I[-1]/n0, 0.95, rtol=0.01), f'{solver}: the rest should stay in I, never taking it again, but {r.I[-1]/n0:n} are left'
         if solver == 'abm':
-            assert sim.results.died.values.sum() == died # Counted as deaths, as a transition to ss.null is
+            assert sim.results.died.values.sum() == died # Counted as deaths, as a transition to ss.dead is
         out[solver] = died/n0
 
-        # With a state: the deaths are res.<transition>.null
-        sim = ss.Sim(make(['R', ss.null], [0.9, 0.1]), unit='day', stop=200, solver=solver, verbose=0, **size).run()
+        # With a state: the deaths are res.<transition>.dead
+        sim = ss.Sim(make(['R', ss.dead], [0.9, 0.1]), unit='day', stop=200, solver=solver, verbose=0, **size).run()
         r = sim.results.d
         n0 = r.I[0]
-        assert np.isclose(r['death.null'].values.sum()/n0, 0.1, rtol=0.1) and np.isclose(r.R[-1]/n0, 0.9, rtol=0.02), solver
-        assert np.isclose(r['death.null'].values.sum() + r['death.R'].values.sum(), r.death.values.sum())
-        assert np.isclose(r.S[-1] + r.I[-1] + r.R[-1] + r['death.null'].values.sum(), r.S[0] + n0), f'{solver}: everyone is in a state or dead'
+        assert np.isclose(r['death.dead'].values.sum()/n0, 0.1, rtol=0.1) and np.isclose(r.R[-1]/n0, 0.9, rtol=0.02), solver
+        assert np.isclose(r['death.dead'].values.sum() + r['death.R'].values.sum(), r.death.values.sum())
+        assert np.isclose(r.S[-1] + r.I[-1] + r.R[-1] + r['death.dead'].values.sum(), r.S[0] + n0), f'{solver}: everyone is in a state or dead'
         if solver == 'abm':
-            assert sim.results.died.values.sum() == r['death.null'].values.sum()
+            assert sim.results.died.values.sum() == r['death.dead'].values.sum()
     assert np.isclose(out.abm, out.ode, rtol=0.15)
 
     # The messages for a source or destination that is not a state or a list of states
     S, I = ss.states('S I')
-    with pytest.raises(TypeError, match=r'ss.null.*alone'):
-        ss.Sim(ss.Disease(S, I, x=ss.Transition([I, ss.null], S, rate=0.1), name='x'), n_agents=100, verbose=0).init()
+    with pytest.raises(TypeError, match=r'ss.dead.*alone'):
+        ss.Sim(ss.Disease(S, I, x=ss.Transition([I, ss.dead], S, rate=0.1), name='x'), n_agents=100, verbose=0).init()
     S, E, P, A = ss.states('S E P A')
     assert 'prevalence' not in ss.Disease(S, E, infection=S >> E @ 0.3*E, recovery=E >> S @ ss.days(5)).graph.exprs # Not guessed: only from states marked infected
     assert 'E + P + A' in repr(ss.Transition(E | P | A, S, rate=0.1)) # Printed before it is built

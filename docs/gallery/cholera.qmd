@@ -32,12 +32,12 @@ K = 1e5                    # Concentration at which infection is half its maximu
 
 infection = S >> I @ ss.perday(0.5) * W.n / (W.n + K)
 recovery  = I >> R @ ss.days(5)
-shedding  = ss.null >> W @ ss.perday(10) * I.n  # Each infectious person sheds 10 a day
-decay     = W >> ss.null @ ss.days(30)          # Bacteria survive 30 days on average
+shedding  = ss.outside >> W @ ss.perday(10) * I.n  # Each infectious person sheds 10 a day
+decay     = W >> ss.dead @ ss.days(30)          # Bacteria survive 30 days on average
 cholera = ss.Disease(infection, recovery, shedding, decay, init=dict(I=0.001), name='cholera')
 ```
 
-`W.n` and `I.n` are counts (the amount of bacteria, and the number of people infectious), where a bare `I` in a rate would be the share of people infectious. `ss.null` is outside the model: shedding adds bacteria from nowhere, and decay removes them. The diagram, from `diagram()`, in which W is slanted since it is not people:
+`W.n` and `I.n` are counts (the amount of bacteria, and the number of people infectious), where a bare `I` in a rate would be the share of people infectious. `ss.dead` is outside the model: shedding adds bacteria from nowhere, and decay removes them. The diagram, from `diagram()`, in which W is slanted since it is not people:
 
 ```{python}
 cholera.diagram()
@@ -59,6 +59,6 @@ Bacteria build up in the water while people are infectious, and outlast them: th
 
 ## Going further
 
-- [Diseases](../user_guide/building_diseases.qmd) covers states that are counts, and flows from and to `ss.null`.
+- [Diseases](../user_guide/building_diseases.qmd) covers states that are counts, and flows from and to `ss.dead`.
 - The library's cholera model, `ssl.diseases.Cholera`, is a fuller version written as code (see the [library's diseases](../user_guide/library_diseases.qmd)).
 - Codeço CT (2001). Endemic and epidemic dynamics of cholera: the role of the aquatic reservoir. *BMC Infectious Diseases* 1:1.

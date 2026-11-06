@@ -678,10 +678,10 @@ class Pregnancy(Demographics, ss.Disease):
     abortion    = ss.Transition(P, NP, p=p_abortion) # At once; the rest face the dwell and the hazards
     miscarriage = ss.Transition(P, NP, rate=loss_rate*(P.time_in < loss_threshold))
     stillbirth  = ss.Transition(P, NP, rate=loss_rate*(P.time_in >= loss_threshold))
-    antepartum  = ss.Transition(P, ss.null, rate=maternal_death_rate)
+    antepartum  = ss.Transition(P, ss.dead, rate=maternal_death_rate)
     delivery    = ss.Transition(P, NP, dur=dur_pregnancy) # P.time_in is gestational age
     birth       = ss.birth(NP, on=delivery) # Children, linked to the mother (agents only, for now): embryos_per_pregnancy of them (see __init__())
-    infant_mortality = ss.Transition(NP, ss.null, rate=infant_death_rate) # The children (not fetuses), until the age of 1: see _gate_infant()
+    infant_mortality = ss.Transition(NP, ss.dead, rate=infant_death_rate) # The children (not fetuses), until the age of 1: see _gate_infant()
 
     sets_unit = False # Its typed defaults (weeks and years) do not set the unit of the model's bare numbers: see ss.solvers.choose.init_unit()
 

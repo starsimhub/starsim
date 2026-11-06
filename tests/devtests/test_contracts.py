@@ -304,7 +304,7 @@ def test_destinations():
 
 # %% Conservation and exact identities
 
-closed = ['sir', 'seir', 'erlang', 'lognormal', 'ages', 'patches', 'vaccination', 'screening', 'flu_rsv', 'age_vaccine', 'patch_matrix'] # No births, deaths, or flows to ss.null
+closed = ['sir', 'seir', 'erlang', 'lognormal', 'ages', 'patches', 'vaccination', 'screening', 'flu_rsv', 'age_vaccine', 'patch_matrix'] # No births, deaths, or flows to ss.dead
 
 
 @pytest.mark.parametrize('name', closed)
@@ -393,7 +393,7 @@ def test_identities():
         assert n_E[10] == 1000 and n_E[11] == 0, f'{solver}: {n_E[10]:n} in E on day 10 and {n_E[11]:n} on day 11, not 1000 and 0'
 
     # With a constant inflow as well, E holds the inflow over the delay: exactly in the ODE at every step, and on average in the stochastic solvers
-    flow = ss.Disease(arrival=ss.null >> E @ ss.perday(100), onset=E >> I @ ss.constant(ss.days(10)), default_state='E', name='flow')
+    flow = ss.Disease(arrival=ss.unborn >> E @ ss.perday(100), onset=E >> I @ ss.constant(ss.days(10)), default_state='E', name='flow')
     exact = np.r_[1000 + 100*np.arange(11), np.full(20, 1000)] # Those who started in E leave on day 10, and the arrivals of each day 10 days later
     n_E = ss.Sim(flow, total_pop=1000, unit='day', stop=30, verbose=0).run().results.flow.E.values
     assert np.allclose(n_E, exact, rtol=1e-9)
@@ -542,7 +542,7 @@ def test_joint_population():
     sc.heading('Testing diseases tracked jointly: the same people in each, as a joint model written by hand, within a budget')
     def pair(solver='auto', **kwargs):
         S, I = ss.states(2)
-        a = ss.Disease(S, I, infection=S >> I @ ss.peryear(0.5)*I, death=ss.Transition(I, ss.null, dur=2), init_prev=0.1, name='a')
+        a = ss.Disease(S, I, infection=S >> I @ ss.peryear(0.5)*I, death=ss.Transition(I, ss.dead, dur=2), init_prev=0.1, name='a')
         S, I = ss.states(2)
         b = ss.Disease(S, I, infection=S >> I @ ss.peryear(0.3)*I, recovery=ss.Transition(I, S, dur=3), init_prev=0.1, name='b')
         return ss.Sim([a, b], total_pop=20_000, stop=2030, solver=solver, verbose=0, **kwargs)
@@ -557,7 +557,7 @@ def test_joint_population():
     SS, SI, IS, II = ss.states('SS SI IS II')
     ba, bb = ss.peryear(0.5), ss.peryear(0.3)
     joint = ss.Disease(SS, SI, IS, II, a1=SS >> IS @ ba*(IS + II), a2=SI >> II @ ba*(IS + II), b1=SS >> SI @ bb*(SI + II), b2=IS >> II @ bb*(SI + II),
-                       r1=SI >> SS @ ss.years(3), r2=II >> IS @ ss.years(3), d1=ss.Transition(IS, ss.null, dur=2), d2=ss.Transition(II, ss.null, dur=2),
+                       r1=SI >> SS @ ss.years(3), r2=II >> IS @ ss.years(3), d1=ss.Transition(IS, ss.dead, dur=2), d2=ss.Transition(II, ss.dead, dur=2),
                        init=dict(SS=0.81, SI=0.09, IS=0.09, II=0.01), default_state='SS', name='ab')
     j = ss.Sim(joint, total_pop=20_000, stop=2030, verbose=0).run().results.ab
     res = pair().run().results

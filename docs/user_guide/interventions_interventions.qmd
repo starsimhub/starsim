@@ -300,7 +300,7 @@ msim.summarize().loc['flu_infection']
 |---|---|
 | `multiply=` | Multiplies the quantity |
 | `efficacy=` | Removes a share of the risk: the same as `multiply=1 - efficacy`, for protection such as condoms |
-| `add=` | Adds to the quantity (parameters only; and an inflow from `ss.null`, to which it adds an amount per unit time from outside the model, e.g. `ss.modify(typhoid.shedding, add=ss.perday(4e6))`) |
+| `add=` | Adds to the quantity (parameters only; and an inflow from `ss.outside` or `ss.unborn`, to which it adds an amount per unit time from outside the model, e.g. `ss.modify(typhoid.shedding, add=ss.perday(4e6))`) |
 | `set=` | Replaces the quantity (parameters only) |
 
 and any of:

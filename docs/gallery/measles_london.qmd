@@ -102,7 +102,7 @@ def make_measles():
         infection = S >> E @ force,
         latency   = E >> I @ ss.perday(pars.sigma),
         recovery  = I >> R @ ss.perday(pars.gamma),
-        births    = ss.null >> S @ births,
+        births    = ss.unborn >> S @ births,
         deaths    = ss.death(rate=ss.perday(pars.mu)),
         init_n    = dict(S=round(pars.s0*N0), E=round(pars.e0*N0), I=round(pars.i0*N0)),
         name      = 'measles',

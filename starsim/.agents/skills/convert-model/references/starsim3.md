@@ -18,7 +18,7 @@ The user-facing version of this mapping, with the traps that change results, is 
 | A categorical `state` array with an `IntEnum` (tbsim's `TBS`) | One `ss.State` per value | Exact |
 | Transmission in `Infection.infect()` with `beta` | `infection = S >> I @ beta * I`, with `beta=dict(net1=..., net2=...)` over named networks | Exact for a typed `beta` (`ss.peryear(0.05)`); **not** for a dict of bare numbers, which changes meaning (below) |
 | `set_prognoses` sampling `dur_inf`, `step_state` moving those with `ti_recovered <= ti` | `recovery = I >> R @ dur_inf` (a duration or distribution after `@` is a dwell time) | Exact in distribution |
-| `p_death` drawn at infection, death at the end of the same duration | A branch: `ss.Transition(I, [R, ss.null], dur=dur, p=[0.99, 0.01])` | Exact in distribution |
+| `p_death` drawn at infection, death at the end of the same duration | A branch: `ss.Transition(I, [R, ss.dead], dur=dur, p=[0.99, 0.01])` | Exact in distribution |
 | `self.transition(uids, to={A: rate_a, B: rate_b})` (competing exits) | One transition per exit: `X >> A @ rate_a`, `X >> B @ rate_b` | Exact (competing hazards) |
 | A rate scaled per agent (`rr_activation[uids]`) | A dimension with `adjust=`, or `ss.modify(tr, multiply=..., where=...)` | Exact |
 | A rate that depends on time since entering a state (`exp(-k * tau)`) | Split the state into recent and remote (tbsim's `infection` and `infection_remote`, at rate `k_latent`), or a rate that reads the time in the state, `ss.peryear(r)*np.exp(-k*L.time_in)` (agents only; `L.time_in` is the clock, which is right where a time worked out by hand from `ti_L` during a step is one step long) | Approximate, or agents only |

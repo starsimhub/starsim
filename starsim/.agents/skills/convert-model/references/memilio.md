@@ -37,7 +37,7 @@ It lists (`ImportIncomplete`): a parameter that differs by age group where it be
 | `TimeExposed` | `onset = E >> INS @ ss.days(3.2)` | Exact |
 | `TimeInfectedNoSymptoms` with `RecoveredPerInfectedNoSymptoms` | `ss.Transition(INS, [ISy, R], dur=ss.days(2), p=[0.91, 0.09])` | Exact |
 | `SeverePerInfectedSymptoms`, `CriticalPerSevere` | The same, one branching transition each | Exact |
-| `DeathsPerCritical` | Two transitions from `ICr` with the same `dur` and `p=0.7`, `p=0.3` (one to `R`, one to `ss.null`) | Exact |
+| `DeathsPerCritical` | Two transitions from `ICr` with the same `dur` and `p=0.7`, `p=0.3` (one to `R`, one to `ss.dead`) | Exact |
 | `Dead` | An outflow: the dead leave the model, and are counted from the flow (`death.cum`) | Exact |
 | `TransmissionProbabilityOnContact` × contacts, with `RelativeTransmissionNoSymptoms` | `infection = S >> E @ beta * contacts * (0.7*INS + risk*ISy)` | Exact |
 | `RiskOfInfectionFromSymptomatic` rising to `Max...` with `TestAndTraceCapacity` | An expression of counts: `excess = np.clip((0.91/2*INS.n - 35)/(5*35 - 35), 0, 1)`, `risk = 0.35 - 0.1*np.cos(np.pi*excess)` | Exact |
@@ -82,7 +82,7 @@ secir = ss.Disease(
     severe    = ss.Transition(ISy, [ISev, R], dur=ss.days(5.8), p=[0.2, 0.8]),
     critical  = ss.Transition(ISev, [ICr, R], dur=ss.days(9.5), p=[0.25, 0.75]),
     recovery  = ss.Transition(ICr, R, dur=ss.days(7.1), p=0.7),
-    death     = ss.Transition(ICr, ss.null, dur=ss.days(7.1), p=0.3),
+    death     = ss.Transition(ICr, ss.dead, dur=ss.days(7.1), p=0.3),
     init_n    = dict(E=100, INS=50, ISy=50, ISev=20, ICr=10, R=10),
 )
 secir.stratify(age=['0', '1', '2'])

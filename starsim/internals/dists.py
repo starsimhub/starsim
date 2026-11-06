@@ -533,6 +533,8 @@ class Dist:
 
         return
 
+    def __rmatmul__(self, other): return ss.transitions.split_at(other, self) # A split with its driver, e.g. {D: p_death, R: None} @ ss.days(8)
+
     def __repr__(self):
         """ Custom display to show state of object: as it was made, e.g. `ss.erlang(k=4, mean=ss.days(10))` """
         j = sc.obj(self.to_json())

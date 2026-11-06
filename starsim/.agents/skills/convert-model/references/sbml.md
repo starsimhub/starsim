@@ -18,7 +18,7 @@ An SBML model is an XML file (from BioModels, COPASI, libRoadRunner, and many ot
 | MathML arithmetic, power, exp, ln, log, root, abs, min, max, comparisons | The same in the rate | yes |
 | An event at a time | `ss.timeseries` as a parameter's value, or `ss.modify(start=...)` | no |
 | An event on a condition | A rate multiplied by a comparison (`beta * (I.n < K)`), or an intervention with `where=` | no |
-| A rate rule for a parameter | A state that is not people, `ss.State(people=False)`, with flows against `ss.null` | no |
+| A rate rule for a parameter | A state that is not people, `ss.State(people=False)`, with flows against `ss.dead` | no |
 | An algebraic rule | By hand, solved for the variable | no |
 | Other stoichiometries (`2 R -> ...`) | Split into flows, or a literal rate with counts | no |
 | `piecewise`, `csymbol time`, `delay` | A product of comparisons, an `ss.timeseries`, or a fixed dwell | no |

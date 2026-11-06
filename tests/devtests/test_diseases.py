@@ -298,7 +298,7 @@ def test_coded_modifiers():
     share = np.mean(codes[codes >= 0] == sim.people.causes.index('a'))
     assert np.isclose(share, 0.9, atol=0.02), share
     S, I = ss.states('S I')
-    dis = ss.Disease(S, I, infection=S >> I @ ss.peryear(1), death=I >> ss.null @ ss.peryear(0.3), name='d')
+    dis = ss.Disease(S, I, infection=S >> I @ ss.peryear(1), death=I >> ss.dead @ ss.peryear(0.3), name='d')
     sim = ss.Sim(diseases=dis, interventions=ss.modify(dis.death, multiply=0.5, where=ss.person.female), n_agents=500, start=2000, stop=2001, verbose=0).run()
     uids = sim.people.auids
     assert np.allclose(sim.diseases.d.death.hazard(uids), np.where(sim.people.female[uids], 0.15, 0.3))

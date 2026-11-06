@@ -423,7 +423,7 @@ class Events(Agents):
                 dst = self.graph.people_states[e_dst[lo]] if e_dst[lo] >= 0 else None
                 uids = ss.uids(e_a[lo:hi])
                 self.flowcounts[tr.name] += self.n_of(uids)
-                key = f'{tr.name}.{"null" if dst is None else dst.name}'
+                key = f'{tr.name}.{"dead" if dst is None else dst.name}'
                 if key in self.flowcounts:
                     self.flowcounts[key] += self.n_of(uids)
                 if ng > 1: # By group, as the agent engine counts them (every state has every dimension: see refuse())

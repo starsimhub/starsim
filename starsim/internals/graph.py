@@ -32,12 +32,13 @@ def inner_pars(val):
 
 def bad_end(end, side):
     """ The message for a source or destination of a transition that is not a state: what to write instead """
-    null, stay = ss.transitions.null, ss.transitions.stay
-    if end is null and side == 'source':
-        return 'ss.null cannot be one of several sources of a transition: for an inflow, give it alone, e.g. ss.Transition(ss.null, S, rate=0.1)'
+    stay = ss.transitions.stay
+    outside = isinstance(end, ss.transitions.Outside)
+    if outside and side == 'source':
+        return f'{end} cannot be one of several sources of a transition: for an inflow, give it alone, e.g. ss.Transition({end}, S, rate=0.1)'
     elif end is stay and side == 'source':
         return 'ss.stay is a destination, not a source: give it as one destination of a split, e.g. ss.Transition(I, [R, ss.stay], p=[0.3, None], dur=10)'
-    elif end is null or end is stay:
+    elif outside or end is stay:
         return f'{end} is one destination of a split, with at least one other, e.g. ss.Transition(I, [R, {end}], p=[0.9, 0.1], dur=10)'
     if isinstance(end, str):
         return f'the {side} of a transition is a state, not its name "{end}": declare the states and give them, e.g. S, I, R = ss.states(3) and ss.Transition(S, I, rate=beta * I)'
@@ -387,7 +388,7 @@ class Graph:
         """ By default, 1% of people start infected, seeded through the transmission (frequency- or density-dependent), unless a state is given a starting value """
         given = any(state.given_init for state in self.states.values())
         counted = lambda tr: {id(st) for leaf in tr.rate.leaves if isinstance(leaf, Count) for st in leaf.states if st.module is self.module} - {id(st) for st in tr.source or []} # The module's states whose numbers the rate reads, other than its source: I in beta*I.n
-        transmitted = any(tr.contact or (not tr._inflow and tr.rate is not None and count_power(tr.rate) > 0 and counted(tr)) for tr in self.transitions.values()) # Births at a rate on counts (ss.null >> N @ b*N.n) are not a transmission
+        transmitted = any(tr.contact or (not tr._inflow and tr.rate is not None and count_power(tr.rate) > 0 and counted(tr)) for tr in self.transitions.values()) # Births at a rate on counts (ss.unborn >> N @ b*N.n) are not a transmission
         if self.init_prev is None and not given and transmitted:
             self.init_prev = par(0.01)
             self._add_par(self.init_prev, name='init_prev')
@@ -640,7 +641,7 @@ class Graph:
                         q.name = f'{p.name}_{field}'
 
         # Register the explicit ss.par objects used in the transitions, and in the weights and likelihoods of the outcomes
-        used = [(tr.name, expr) for tr in self.transitions.values() for expr in [tr.rate, tr.dur] + sc.tolist(tr.p) + [getattr(tr, 'p_die', None), getattr(tr, 'p_stay', None)]] # Including the shares of ss.null and ss.stay among the destinations
+        used = [(tr.name, expr) for tr in self.transitions.values() for expr in [tr.rate, tr.dur] + sc.tolist(tr.p) + [getattr(tr, 'p_die', None), getattr(tr, 'p_stay', None)]] # Including the shares of ss.dead and ss.stay among the destinations
         used += [(oc.name, weight) for oc in self.outcomes.values() for weight in oc.weights]
         used += [(oc.name, val) for oc in self.outcomes.values() for val in oc.likelihood_pars.values() if isinstance(val, par)]
         for oc in self.outcomes.values(): # A parameter written inside a likelihood, e.g. ss.nbinom(n=ss.par(10, bounds=[1, 100])), is named after the outcome and its keyword
@@ -761,7 +762,7 @@ class Graph:
         """ Checks that do not need the sim """
         for name,tr in self.transitions.items():
             tr._check_dimensions()
-            if tr.trigger is not None and (tr.contact or tr._inflow or (tr.p is not None and not tr._split and not tr.trigger.outcome)): # On an outcome, p= is the share of its people who move; a split with ss.stay or ss.null is a split, though neither is a state
+            if tr.trigger is not None and (tr.contact or tr._inflow or (tr.p is not None and not tr._split and not tr.trigger.outcome)): # On an outcome, p= is the share of its people who move; a split with ss.stay or ss.dead is a split, though neither is a state
                 raise ValueError(f'"{name}" is triggered by {tr.trigger}, so it cannot be {"a transmission" if tr.contact else "an inflow" if tr._inflow else "one branch of several with p="}; '
                                         f'give the destinations of a triggered split together, e.g. "{tr._arrow} | B" with p=[...].')
             for inc in [c for c in ss.expressions.nodes([tr.rate, tr.dur] + sc.tolist(tr.p)) if isinstance(c, ss.conditions.Cond) and c.op == 'incidence']: # A flow over a window, in a rate, would be a delay equation
@@ -791,12 +792,12 @@ class Graph:
                 ps = tr.p
                 if len(ps) == 1 and len(tr.dest) == 2 and not tr.stays: # With two destinations, a single value is the first one's probability
                     ps = tr.p = [ps[0], None]
-                ends = ps + [tr.p_stay]*tr.stays + [tr.p_die]*tr.dies # One entry for each destination, with ss.stay and ss.null
+                ends = ps + [tr.p_stay]*tr.stays + [tr.p_die]*tr.dies # One entry for each destination, with ss.stay and ss.dead
                 if len(ps) != len(tr.dest):
                     raise ValueError(f'"{name}" has {len(tr.dest) + tr.stays + tr.dies} destinations but {len(ps) + (tr.p_stay is not None) + (tr.p_die is not None)} branch probabilities; give one for each (or None for the one that takes the rest).')
                 given = [p for p in ends if p is not None]
                 if len(given) < len(ends) - 1:
-                    which = [label for label,p in zip([d.name for d in tr.dest] + ['ss.stay']*tr.stays + ['ss.null']*tr.dies, ends) if p is None]
+                    which = [label for label,p in zip([d.name for d in tr.dest] + ['ss.stay']*tr.stays + ['ss.dead']*tr.dies, ends) if p is None]
                     raise ValueError(f'"{name}" leaves the rest to {sc.strjoin(which)}; only one destination can take the rest, so give the others a p=.')
                 if all(isinstance(p, par) and sc.isnumber(p.raw) for p in given):
                     total = sum(p.raw for p in given)

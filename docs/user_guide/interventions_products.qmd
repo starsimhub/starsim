@@ -97,7 +97,7 @@ msim.plot('sis.I')
 
 `during=` holds a product only while people are in some states: `ss.Treatment(efficacy=dict(transmission=0.5), during=sis.I)` makes people half as infectious while they are infected, and they stop holding it when they recover.
 
-A product's coverage is also a quantity a rate can read: `itn.coverage` is the share of the people in the same place who hold it, each counted by the protection they have left, and `itn.coverage(fn)` counts each by a function of the time since delivery (e.g. the share of mosquitoes a net kills). A disease made with the product can use it in any rate, e.g. `Sv >> ss.null @ 1/life + a*kill*itn.coverage`.
+A product's coverage is also a quantity a rate can read: `itn.coverage` is the share of the people in the same place who hold it, each counted by the protection they have left, and `itn.coverage(fn)` counts each by a function of the time since delivery (e.g. the share of mosquitoes a net kills). A disease made with the product can use it in any rate, e.g. `Sv >> ss.dead @ 1/life + a*kill*itn.coverage`.
 
 ### Tests and what follows them
 

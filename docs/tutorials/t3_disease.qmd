@@ -105,7 +105,7 @@ S, E, I, R = ss.states('S E I R')
 infection   = S >> E @ 1.9*I
 progression = E >> I @ ss.days(10)
 recovery    = ss.Transition(I, R, dur=ss.days(8), p=0.998)        # 99.8% recover...
-death       = ss.Transition(I, ss.null, dur=ss.days(8), p=0.002)  # ...and 0.2% die
+death       = ss.Transition(I, ss.dead, dur=ss.days(8), p=0.002)  # ...and 0.2% die
 measles = ss.Disease(infection, progression, recovery, death, init=dict(I=0.001))
 
 sim = ss.Sim(measles, total_pop=100_000, stop=ss.days(150))
@@ -113,7 +113,7 @@ sim.run()
 print('Deaths:', round(sim.results.measles.death.sum()))
 ```
 
-`ss.null` is outside the model: people who die leave the population. Each branch has its own result, named after it (`recovery` and `death`), and could have its own duration (if, say, people who die did so sooner). Since almost everyone in the town is infected, about 0.2% of 100,000 people die; with so few deaths, the epidemic itself is all but unchanged. The equations show how a branch works: who goes which way is decided when people enter `I`, so `I` is in two parts, `I_1` for those who will recover and `I_2` for those who will die:
+`ss.dead` is outside the model: people who die leave the population. Each branch has its own result, named after it (`recovery` and `death`), and could have its own duration (if, say, people who die did so sooner). Since almost everyone in the town is infected, about 0.2% of 100,000 people die; with so few deaths, the epidemic itself is all but unchanged. The equations show how a branch works: who goes which way is decided when people enter `I`, so `I` is in two parts, `I_1` for those who will recover and `I_2` for those who will die:
 
 ```{python}
 measles.equations()
@@ -136,7 +136,7 @@ dur_infectious = ss.par(ss.days(8), doc='Average infectious period')
 infection   = S >> E @ beta*I
 progression = E >> I @ dur_latent
 recovery    = ss.Transition(I, R, dur=dur_infectious, p=0.998)
-death       = ss.Transition(I, ss.null, dur=dur_infectious, p=0.002)
+death       = ss.Transition(I, ss.dead, dur=dur_infectious, p=0.002)
 measles = ss.Disease(infection, progression, recovery, death, init=dict(I=0.001))
 
 sim = ss.Sim(measles, total_pop=100_000, stop=ss.days(150))
@@ -158,7 +158,7 @@ sim.describe()
 measles.equations()
 ```
 
-`diagram()` draws the states and transitions as a flowchart, with the transmission dashed, the empty circle for `ss.null`, and each arrow labeled with its value and, for a branch, the share that takes it:
+`diagram()` draws the states and transitions as a flowchart, with the transmission dashed, the empty circle for `ss.dead`, and each arrow labeled with its value and, for a branch, the share that takes it:
 
 ```{python}
 measles.diagram()

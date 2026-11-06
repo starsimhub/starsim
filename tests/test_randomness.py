@@ -465,7 +465,7 @@ def test_crn_one_agent():
             severe    = ss.Transition(I, H, p=0.2, dur=ss.weibull(c=2, scale=ss.days(4))), # Branches chosen on entry
             mild      = ss.Transition(I, [R, ss.stay], p=[0.9, None], dur=ss.uniform(ss.days(3), ss.days(9))),
             leave     = ss.Transition(H, R, dur=ss.normal(ss.by(sex=dict(female=ss.days(5), male=ss.days(8))), ss.days(1))),
-            die       = H >> ss.null @ ss.perday(0.03), # A competing rate beside a dwell time
+            die       = H >> ss.dead @ ss.perday(0.03), # A competing rate beside a dwell time
             init_prev=0.02, name='d')
         vx = ss.vaccinate(efficacy=1.0, coverage=1.0, at=[0], where=lambda sim: ss.uids([immune]), name='vx') if immune is not None else None
         with ss.options.context(crn=crn):

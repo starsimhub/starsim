@@ -55,7 +55,7 @@ class Typhoid(ss.Disease):
     R = ss.State()
 
     infection = S >> I @ beta*(I + rel_carrier*C)
-    outcome   = ss.Transition(I, [C, R], dur=dur_inf, p=[p_carrier, None])
+    outcome   = I >> {C: p_carrier, R: None} @ dur_inf
     waning    = R >> S @ dur_imm
     births    = ss.birth(S, rate=birth_rate)
     deaths    = ss.death(rate=birth_rate)
@@ -111,7 +111,7 @@ class Polio(ss.Disease):
 
     infection = S >> E @ beta*I
     onset     = E >> I @ dur_exp
-    outcome   = ss.Transition(I, [P, R], dur=dur_inf, p=[p_paralysis, None])
+    outcome   = I >> {P: p_paralysis, R: None} @ dur_inf
     births    = ss.birth(S, rate=birth_rate)
     deaths    = ss.death(rate=birth_rate)
 

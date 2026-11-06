@@ -26,7 +26,7 @@ def make_hiv(init_prev=0.05, init=None, art=ss.peryear(0.2)):
         infection   = S >> acute @ ss.peryear(0.15)*(acute + latent + falling + on_art + post_art)
         latency     = ss.Transition(acute, latent, dur=ss.lognormal(ss.months(1.7), ss.months(1)), stages=3)
         progression = ss.Transition(latent, falling, dur=ss.lognormal(ss.years(10), ss.years(3)))
-        aids_death  = ss.Transition(falling, ss.null, dur=ss.lognormal(ss.years(3), ss.years(1)), stages=9)
+        aids_death  = ss.Transition(falling, ss.dead, dur=ss.lognormal(ss.years(3), ss.years(1)), stages=9)
         start_art   = (acute + latent + falling + post_art) >> on_art @ art
         dropout     = ss.Transition(on_art, post_art, dur=ss.lognormal(ss.years(3), ss.years(1.5)))
 
@@ -43,8 +43,8 @@ def make_hiv(init_prev=0.05, init=None, art=ss.peryear(0.2)):
             on_art:   cd4_preart + gain*(2/(1 + np.exp(-art_cd4_growth*on_art.time_in/ss.months(1))) - 1),
             post_art: np.maximum(1, cd4_stop*(1 - post_art.progress)),
         })
-        post_art_death = ss.Transition(post_art, ss.null, dur=np.maximum(np.log(cd4_preart)*cd4_stop/cd4_potential, 0.1)*ss.years(1), stages=10)
-        cd4_death      = infected >> ss.null @ ss.by(cd4=ss.peryear([0.30, 0.05, 0.01, 0.005, 0.003]))
+        post_art_death = ss.Transition(post_art, ss.dead, dur=np.maximum(np.log(cd4_preart)*cd4_stop/cd4_potential, 0.1)*ss.years(1), stages=10)
+        cd4_death      = infected >> ss.dead @ ss.by(cd4=ss.peryear([0.30, 0.05, 0.01, 0.005, 0.003]))
 
     hiv = HIV(init_prev=init_prev, init=init, name='hiv')
     hiv.stratify(cd4=[0, 50, 200, 350, 500], states=hiv.infected) # Derived: no groups

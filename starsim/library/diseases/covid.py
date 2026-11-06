@@ -70,8 +70,8 @@ class COVID(ss.Disease):
 
     infection = S >> E @ beta*(rel_ins*INS + rel_sym*ISy)
     onset     = E >> INS @ dur_exp
-    symptoms  = ss.Transition(INS, [ISy, R], dur=dur_ins, p=[p_sym, None])
-    severe    = ss.Transition(ISy, [ISev, R], dur=dur_sym, p=[p_sev, None])
-    critical  = ss.Transition(ISev, [ICr, R], dur=dur_sev, p=[p_crit, None])
-    outcome   = ss.Transition(ICr, [ss.null, R], dur=dur_crit, p=[p_death, None])
+    symptoms  = INS >> {ISy: p_sym, R: None} @ dur_ins
+    severe    = ISy >> {ISev: p_sev, R: None} @ dur_sym
+    critical  = ISev >> {ICr: p_crit, R: None} @ dur_sev
+    outcome   = ICr >> {ss.dead: p_death, R: None} @ dur_crit
 

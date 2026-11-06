@@ -95,7 +95,7 @@ secir = ss.Disease(
     severe    = ss.Transition(ISy, [ISev, R], dur=ss.days(5.8), p=[0.2, 0.8]),
     critical  = ss.Transition(ISev, [ICr, R], dur=ss.days(9.5), p=[0.25, 0.75]),
     recovery  = ss.Transition(ICr, R, dur=ss.days(7.1), p=0.7),
-    death     = ss.Transition(ICr, ss.null, dur=ss.days(7.1), p=0.3),
+    death     = ss.Transition(ICr, ss.dead, dur=ss.days(7.1), p=0.3),
     init_n    = dict(E=100, INS=50, ISy=50, ISev=20, ICr=10, R=10),
 )
 secir.stratify(age=['0', '1', '2']) # Three groups of equal size, each with a third of every state

@@ -232,7 +232,7 @@ def test_hiv_art():
             latency    = acute >> cd4_hi @ ss.months(3),
             decline    = cd4_hi >> cd4_mid @ ss.years(4),
             falling    = cd4_mid >> cd4_lo @ ss.years(3),
-            aids_death = cd4_lo >> ss.null @ ss.years(2),
+            aids_death = cd4_lo >> ss.dead @ ss.years(2),
             start_art  = (acute + cd4_hi + cd4_mid + cd4_lo + post_art) >> on_art, # Undriven: only the delivery moves people along it
             dropout    = on_art >> post_art @ ss.years(5),
             relapse    = post_art >> cd4_lo @ ss.years(1),

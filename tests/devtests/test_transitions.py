@@ -45,8 +45,8 @@ def make_cholera():
     cholera = ss.Disease(
         infection = S >> I @ beta * W.n / (W.n + K),
         recovery  = I >> R @ ss.days(5),
-        shedding  = ss.null >> W @ xi * I.n,
-        decay     = W >> ss.null @ ss.days(30),
+        shedding  = ss.outside >> W @ xi * I.n,
+        decay     = W >> ss.dead @ ss.days(30),
         init      = dict(I=0.001),
     )
     return cholera
@@ -84,8 +84,8 @@ def test_counts():
     def eip():
         Sh, Ih = ss.states(2)
         Sv, Ev, Iv = ss.states(3, people=False)
-        return ss.Disease(infection=Sh >> Ih @ ss.perday(1e-9)*Iv.n/(Sh + Ih).n, emergence=ss.null >> Sv @ ss.perday(5000), biting=Sv >> Ev @ ss.perday(0.05),
-                          incubation=Ev >> Iv @ ss.constant(ss.days(12)), mortality=Sv + Ev + Iv >> ss.null @ ss.perday(0.1), init=dict(Sh=1.0, Sv=33_333), default_state='Sh', name='eip')
+        return ss.Disease(infection=Sh >> Ih @ ss.perday(1e-9)*Iv.n/(Sh + Ih).n, emergence=ss.unborn >> Sv @ ss.perday(5000), biting=Sv >> Ev @ ss.perday(0.05),
+                          incubation=Ev >> Iv @ ss.constant(ss.days(12)), mortality=Sv + Ev + Iv >> ss.dead @ ss.perday(0.1), init=dict(Sh=1.0, Sv=33_333), default_state='Sh', name='eip')
     for solver in ['ode', 'binomial']:
         Iv = ss.Sim(eip(), solver=solver, total_pop=2000, unit='day', stop=300, **kw).run().results.eip.Iv[-1]
         assert np.isclose(Iv, 5000*0.05/0.15*np.exp(-1.2)/0.1, rtol=0.002), f'{solver}: {Iv:.0f} infectious mosquitoes, not 5,020'
@@ -94,8 +94,8 @@ def test_counts():
     def vector():
         Sh, Ih = ss.states(2)
         Sv, Iv = ss.states(2, people=False)
-        return ss.Disease(infection=Sh >> Ih @ ss.perday(0.1)*Iv.n/(Sh + Ih).n, recovery=Ih >> Sh @ ss.days(50), emergence=ss.null >> Sv @ ss.perday(100),
-                          biting=Sv >> Iv @ ss.perday(0.1)*Ih.n/(Sh + Ih).n, mortality=Sv + Iv >> ss.null @ ss.days(10), init_n=dict(Sv=3000), default_state='Sh', name='vector')
+        return ss.Disease(infection=Sh >> Ih @ ss.perday(0.1)*Iv.n/(Sh + Ih).n, recovery=Ih >> Sh @ ss.days(50), emergence=ss.unborn >> Sv @ ss.perday(100),
+                          biting=Sv >> Iv @ ss.perday(0.1)*Ih.n/(Sh + Ih).n, mortality=Sv + Iv >> ss.dead @ ss.days(10), init_n=dict(Sv=3000), default_state='Sh', name='vector')
     assert [s.name for s in vector().graph.people_states] == ['Sh', 'Ih']
 
     # As agents, counts take substeps (at a monthly step they died out) and the modifiers of their transitions (which were ignored)
@@ -107,24 +107,24 @@ def test_counts():
     with pytest.raises(ValueError):
         S, I = ss.states(2)
         W = ss.State(people=False)
-        ss.Disease(infection = S >> I @ 0.5 * W, shedding = ss.null >> W @ 10 * I.n)
+        ss.Disease(infection = S >> I @ 0.5 * W, shedding = ss.outside >> W @ 10 * I.n)
 
     # An inflow split between states of people (FPsim: primary infertility, reached only from births)
     S, X = ss.states('S X')
-    d = ss.Disease(S, X, births=ss.Transition(ss.null, [S, X], rate=ss.peryear(100), p=[0.9, 0.1]), name='d')
+    d = ss.Disease(S, X, births=ss.Transition(ss.unborn, [S, X], rate=ss.peryear(100), p=[0.9, 0.1]), name='d')
     assert X.people
     assert np.isclose(ss.Sim(d, n_agents=1000, stop=5, **kw).run().results.d.X[-1], 50, atol=25)
     with pytest.raises(ValueError, match='people=False'): # Unless one is declared not to be
         S, X = ss.states('S X')
         X.people = False
-        ss.Disease(S, X, births=ss.Transition(ss.null, [S, X], rate=ss.peryear(100), p=[0.9, 0.1]))
+        ss.Disease(S, X, births=ss.Transition(ss.unborn, [S, X], rate=ss.peryear(100), p=[0.9, 0.1]))
 
     # A count that is not people is a real number under every solver: a reservoir shed into by a few infected keeps them infected, as in SimInf's SISe
     def pressure():
         S, I = ss.states(2)
         phi = ss.State(people=False, name='phi')
-        return ss.Disease(S, I, phi, infection=S >> I @ ss.perday(0.1)*phi.n, recovery=I >> S @ ss.perday(0.05), shed=ss.null >> phi @ ss.perday(1)*I.n/(S+I).n,
-                          decay=phi >> ss.null @ ss.perday(0.1), init_n=dict(I=10), name='pressure')
+        return ss.Disease(S, I, phi, infection=S >> I @ ss.perday(0.1)*phi.n, recovery=I >> S @ ss.perday(0.05), shed=ss.outside >> phi @ ss.perday(1)*I.n/(S+I).n,
+                          decay=phi >> ss.dead @ ss.perday(0.1), init_n=dict(I=10), name='pressure')
     ode = ss.Sim(pressure(), total_pop=100, unit='day', stop=200, **kw).run().results.pressure.I[-1]
     for solver,agents in [('binomial', {}), ('gillespie', {}), ('abm', dict(n_agents=100))]:
         final = np.mean([ss.Sim(pressure(), total_pop=100, unit='day', stop=200, solver=solver, rand_seed=seed, **agents, **kw).run().results.pressure.I[-1] for seed in range(5)])
@@ -222,7 +222,7 @@ def test_births():
     # As agents, people who die in one disease leave the states of another on the same step
     S1, X1, S2, X2 = ss.states(4)
     one = ss.Disease(S1, X1, nothing=S1 >> X1 @ 0*S1.n, default_state='S1', name='one')
-    two = ss.Disease(S2, X2, dying=S2 >> ss.null @ ss.perday(0.1), default_state='S2', name='two')
+    two = ss.Disease(S2, X2, dying=S2 >> ss.dead @ ss.perday(0.1), default_state='S2', name='two')
     res = ss.Sim([one, two], n_agents=1000, unit='day', stop=4, **kw).run().results
     assert np.allclose(res.one.S1, res.two.S2) and np.allclose(res.one.S1, res.alive)
 
@@ -246,7 +246,7 @@ def test_births():
 
     # An inflow given for each level arrives at that level as given, whatever the split
     S, I = ss.states(2)
-    arrivals = ss.Disease(arrive=ss.null >> S @ ss.by(sex=[100, 10]), infection=S >> I @ 0*I, name='arrivals')
+    arrivals = ss.Disease(arrive=ss.unborn >> S @ ss.by(sex=[100, 10]), infection=S >> I @ 0*I, name='arrivals')
     arrivals.stratify(sex=['f', 'm'], fractions=[1000, 500])
     res = ss.Sim(arrivals, total_pop=1500, stop=3, **kw).run().results.arrivals
     assert np.allclose(res.arrive.by('sex').values[1:], [100, 10]) # None at the start
@@ -496,7 +496,7 @@ def test_outcomes():
     # And as agents, a weight by age group or by a function of each person (it crashed); the ODE takes the weight by group
     def yll(weight, solver='abm'):
         S, I, R = ss.states('S I R')
-        death = I >> ss.null @ ss.peryear(2)
+        death = I >> ss.dead @ ss.peryear(2)
         d = ss.Disease(S, I, R, infection=S >> I @ ss.perday(0.2)*I, recovery=I >> R @ ss.days(20), death=death, init=dict(I=0.05), yll=ss.outcome(weight*death), name='d')
         d.stratify(age=[0, 15, 50, 70])
         return ss.Sim(d, n_agents=2000, total_pop=2000, solver=solver, dt=ss.days(7), start=2000, stop=2001, **kw).run().results.d
@@ -690,7 +690,7 @@ def test_modify():
     # adjust= on a branch chosen with p= scales its probability, as ss.modify does, under every solver (it divided the dwell; the ODE read a share by a dimension split on entry at its first level)
     def branch_share(solver, adjust=None, modify=False):
         S, D, R = ss.states('S D R')
-        d = ss.Disease(S, D, R, onset=S >> D @ ss.peryear(2), death=ss.Transition(D, ss.null, dur=ss.days(10), p=0.1), recovery=ss.Transition(D, R, dur=ss.days(10)), back=R >> S @ ss.days(5), name='d')
+        d = ss.Disease(S, D, R, onset=S >> D @ ss.peryear(2), death=ss.Transition(D, ss.dead, dur=ss.days(10), p=0.1), recovery=ss.Transition(D, R, dur=ss.days(10)), back=R >> S @ ss.days(5), name='d')
         d.stratify(type=['watery', 'bloody'], states=[D], adjust=adjust)
         con = ss.modify(d.death, multiply=5, where=d.type == 'bloody') if modify else None
         res = ss.Sim(d, connectors=con, n_agents=20_000, total_pop=20_000, solver=solver, dt=ss.days(1), start=2000, stop=2001, **kw).run().results.d
@@ -813,14 +813,14 @@ def test_functions():
         sir = sim.diseases.sir
         if sim.ti == 10:
             assert ss.move(sir.I, sir.R, p=0.5) > 0 and ss.move([sir.S, sir.R], sir.I, n=7) == 7 # Exactly n, as whole people too
-            ss.move(ss.null, sir.W, n=100) # A count can come from outside the model
+            ss.move(ss.dead, sir.W, n=100) # A count can come from outside the model
             with pytest.raises(ss.CapabilityError, match='ss.move'): # Setting the number of people in a state would make or lose people
                 sir.I.n = 0
             with pytest.raises(ValueError):
-                ss.move(sir.I, ss.null)
+                ss.move(sir.I, ss.dead)
     for solver in ['ode', 'binomial', 'abm']:
         S, I, R, W = ss.State(name='S'), ss.State(name='I'), ss.State(name='R'), ss.State(name='W', people=False)
-        dying = ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(7), I >> ss.null @ ss.perday(0.01), W >> ss.null @ ss.perday(0.5), init=dict(I=0.01), name='sir')
+        dying = ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(7), I >> ss.dead @ ss.perday(0.01), W >> ss.dead @ ss.perday(0.5), init=dict(I=0.01), name='sir')
         S, I = ss.State(name='S'), ss.State(name='I')
         sis = ss.Disease(S >> I @ 0.2*I, I >> S @ ss.days(10), init=dict(I=0.01), name='sis')
         sim = ss.Sim(diseases=[dying, sis], interventions=cure, solver=solver, total_pop=2000, n_agents=2000, unit='day', stop=20, **kw).run()
@@ -1163,19 +1163,19 @@ def test_branches():
         ss.Sim(d, **agents).run()
     for solver in ['abm', 'ode']: # A branch probability over 1 raises, as a sum over 1 does at build (it was used as 1, killing 5,854 of 5,901)
         S, D, R = ss.states('S D R')
-        d = ss.Disease(S, D, R, onset=S >> D @ ss.peryear(2), death=ss.Transition(D, ss.null, dur=ss.days(5), p=ss.by(type=[0.1, 1.5])), recovery=ss.Transition(D, R, dur=ss.days(5)), name='d')
+        d = ss.Disease(S, D, R, onset=S >> D @ ss.peryear(2), death=ss.Transition(D, ss.dead, dur=ss.days(5), p=ss.by(type=[0.1, 1.5])), recovery=ss.Transition(D, R, dur=ss.days(5)), name='d')
         d.stratify(type=['watery', 'bloody'], states=[D])
         with pytest.raises(ValueError, match='1.5'):
             ss.Sim(d, n_agents=1000, solver=solver, start=2000, stop=2001, **kw).run()
 
     # A branch probability set after building: a new value for one that was given, and a clear error for one that was not (it raised "'by' object has no attribute 'leaves'")
     S, I, R = ss.states('S I R')
-    d = ss.Disease(S, I, R, infection=S >> I @ ss.peryear(1), death=ss.Transition(I, ss.null, dur=ss.days(20), p=0.1), rec=ss.Transition(I, R, dur=ss.days(20)), name='d')
+    d = ss.Disease(S, I, R, infection=S >> I @ ss.peryear(1), death=ss.Transition(I, ss.dead, dur=ss.days(20), p=0.1), rec=ss.Transition(I, R, dur=ss.days(20)), name='d')
     d.death.p = ss.by(age=[0.5, 0.0])
     d.stratify(age=[0, 15])
     res = ss.Sim(d, n_agents=5000, aging=False, start=2000, stop=2001, **kw).run().results.d
     assert res.death.by('age').values.sum(0)[1] == 0 and res.death.sum() > 0
-    d = ss.Disease(S, I, infection=S >> I @ ss.peryear(0.1), death=I >> ss.null @ ss.days(20), name='d')
+    d = ss.Disease(S, I, infection=S >> I @ ss.peryear(0.1), death=I >> ss.dead @ ss.days(20), name='d')
     with pytest.raises(ValueError):
         d.death.p = ss.by(age=[0.1, 0.01])
 
@@ -1451,7 +1451,7 @@ def test_class_helpers():
         A2, age = A, ss.person.age # Another name, and a property of people
         p_carrier = p_cpg*p_gall # A value for each person (by age)
         rel = age/A2
-        rec = ss.Transition(I, [S, ss.null], p=[p_carrier, None], dur=ss.days(3))
+        rec = ss.Transition(I, [S, ss.dead], p=[p_carrier, None], dur=ss.days(3))
         inf = S >> I @ ss.perday(0.01)*rel*I
         prevalence = I/(S + I)
     sim = ss.Sim(diseases=T(init_prev=0.1), n_agents=500, dur=ss.days(10), dt=ss.days(1), verbose=0).run()
@@ -1500,11 +1500,11 @@ def test_counter_in_expression():
 
 
 def test_inflow_add():
-    """ Ss.modify(inflow, add=) adds an amount from outside the model to an inflow from ss.null, under every solver """
+    """ Ss.modify(inflow, add=) adds an amount from outside the model to an inflow from ss.outside, under every solver """
     for solver in ['abm', 'ode']:
         S, I = ss.states('S I')
         cfu = ss.State(people=False)
-        ty = ss.Disease(S >> I @ ss.perday(1e-9)*cfu.n, I >> S @ ss.days(10), shedding=ss.null >> cfu @ ss.perday(100)*I.n, decay=cfu >> ss.null @ ss.perday(0.5), init=dict(I=0.0), name='ty')
+        ty = ss.Disease(S >> I @ ss.perday(1e-9)*cfu.n, I >> S @ ss.days(10), shedding=ss.outside >> cfu @ ss.perday(100)*I.n, decay=cfu >> ss.dead @ ss.perday(0.5), init=dict(I=0.0), name='ty')
         added = ss.modify('ty.shedding', add=ss.perday(1e6), start=2000.02)
         sim = ss.Sim(diseases=ty, interventions=added, n_agents=1000, start=2000, dur=ss.days(40), dt=ss.days(1), verbose=0, solver=solver).run()
         cfus = sim.results.ty.cfu.values
@@ -1527,7 +1527,7 @@ def test_gated_function():
         return ss.peryear(np.where(sim.people.age[uids] < 20, 0.2, 0.0))
     def make(rate):
         S, I = ss.states('S I')
-        return ss.Disease(dying=S >> ss.null @ rate, recovery=I >> S @ ss.years(1), name='d')
+        return ss.Disease(dying=S >> ss.dead @ rate, recovery=I >> S @ ss.years(1), name='d')
     gated = ss.Sim(diseases=make(ss.par(young_rate, name="young")*(ss.person.age < 20)), n_agents=2000, start=2000, stop=2005, rand_seed=3, **kw).run()
     itself = ss.Sim(diseases=make(young_rate_itself), n_agents=2000, start=2000, stop=2005, rand_seed=3, **kw).run()
     seen = np.concatenate(asked)

@@ -230,8 +230,8 @@ def make_fetal():
     d = ss.Disease(S, I, C, Cs,
         infection = S >> I @ ss.peryear(0.1),
         mtct      = ss.Transition(S, [C, Cs], rate=ss.peryear(3)*ss.mother(I), p=[0.6, None]), # In utero, from the mother's state
-        fetal     = C >> ss.null @ ss.peryear(4), # A fetal death before delivery: a loss for the mother, by gestational age
-        still     = Cs >> ss.null @ ss.on(preg.delivery), # At delivery, before birth: a stillbirth
+        fetal     = C >> ss.dead @ ss.peryear(4), # A fetal death before delivery: a loss for the mother, by gestational age
+        still     = Cs >> ss.dead @ ss.on(preg.delivery), # At delivery, before birth: a stillbirth
         born      = Cs >> S @ ss.on(preg.birth),
         name='d')
     return preg, d
@@ -276,7 +276,7 @@ def test_lactation():
         S, I = ss.states('S I')
         d = ss.Disease(S, I,
             infection = ss.Transition(S, I, rate=dict(prenatalnet=0.3, breastfeedingnet=0.5) * I),
-            death     = ss.Transition(I, ss.null, rate=ss.peryear(2), where=ss.person.age < 1), # Infant deaths end breastfeeding
+            death     = ss.Transition(I, ss.dead, rate=ss.peryear(2), where=ss.person.age < 1), # Infant deaths end breastfeeding
             init=dict(I=0.3), name='d')
         mods = [ss.modify(preg.conception, multiply=0.1, where=preg.lactating & (preg.since_birth < ss.months(6)))] if lam else []
         return dict(demographics=preg, diseases=d, connectors=mods, networks=[ss.PrenatalNet(), ss.BreastfeedingNet()])
@@ -345,7 +345,7 @@ def make_hiv_vertical(bf=True):
     preg = ss.Pregnancy(fertility_rate=ss.freqperyear(120), p_breastfeed=0.8)
     S, I = ss.states('S I')
     beta = dict(prenatalnet=ss.peryear(0.2), breastfeedingnet=ss.peryear(0.3 if bf else 0))
-    hiv = ss.Disease(S, I, infection=ss.Transition(S, I, rate=beta * I), death=ss.Transition(I, ss.null, rate=ss.peryear(0.05)), init=dict(I=0.2), name='hiv')
+    hiv = ss.Disease(S, I, infection=ss.Transition(S, I, rate=beta * I), death=ss.Transition(I, ss.dead, rate=ss.peryear(0.05)), init=dict(I=0.2), name='hiv')
     return dict(demographics=preg, diseases=hiv, networks=[ss.PrenatalNet(), ss.BreastfeedingNet()])
 
 
@@ -406,8 +406,8 @@ def make_syphilis():
         to_late    = EL >> LL @ ss.years(2),
         mtct       = ss.Transition(S, [Cnnd, Cstill, Ccs, Cnorm], rate=ss.peryear(0.9)*ss.mother(S2 | EL | LL),
                                    p=[by_stage(.25, .05, 0), by_stage(.25, .10, .10), by_stage(.45, .40, .10), None]),
-        stillbirth = Cstill >> ss.null @ ss.on(preg.delivery), # Fetal removal at delivery: a stillbirth for the mother
-        nnd        = Cnnd >> ss.null @ ss.on(preg.birth), # Born, then dies: a neonatal death
+        stillbirth = Cstill >> ss.dead @ ss.on(preg.delivery), # Fetal removal at delivery: a stillbirth for the mother
+        nnd        = Cnnd >> ss.dead @ ss.on(preg.birth), # Born, then dies: a neonatal death
         born_cs    = Ccs >> CS @ ss.on(preg.birth),
         born_ok    = Cnorm >> S @ ss.on(preg.birth),
         init=dict(S2=0.03, EL=0.05, LL=0.1), name='syph')

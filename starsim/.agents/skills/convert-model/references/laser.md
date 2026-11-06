@@ -35,7 +35,7 @@ LASER (`laser-core`, `laser-generic`, and the measles-specific `laser-measles`) 
 - **Bare stops are in the sim's unit.** Write `unit='day', stop=years*365`.
 - **Speed.** Starsim is much slower per agent than LASER (about 20 to 110 ns per agent-step against 1 ns, on one core against all of them). Run a scaled-down version (fewer places, fewer years, or `n_agents` below the population) for the comparison, and run the original at the same scale.
 - **Deaths outside a declared transition** (the life-table function) appear in `sim.results.died`, not in the disease's results.
-- **Importation into `E` from outside** cannot be `ss.null >> E`, which adds people; write it as a rate per susceptible.
+- **Importation into `E` from outside** cannot be `ss.unborn >> E`, which adds people; write it as a rate per susceptible.
 
 ## Worked example
 

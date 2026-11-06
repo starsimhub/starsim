@@ -84,7 +84,7 @@ class TB(ss.Disease):
     remission    = Y >> A @ sym_asy
     tb_death     = ss.death(Y, rate=sym_dead)
     births       = ss.birth(S, rate=mu)
-    replacement  = ss.null >> S @ sym_dead*Y.n # Births that replace the TB deaths, so the population is constant
+    replacement  = ss.unborn >> S @ sym_dead*Y.n # Births that replace the TB deaths, so the population is constant
     deaths       = ss.death(rate=mu)
 
     prevalence = (A + Y)/(S + L + C + R + N + A + Y) # Explicit form: the prevalence of TB disease, not of infection (which includes latent L), so not from states marked infected (ss.State(infected=True))

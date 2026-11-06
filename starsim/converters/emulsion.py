@@ -308,7 +308,7 @@ def load_emulsion(filename, verbose=None):
             if 'prototype' in t:
                 src.skip(what, f'newborns of the prototype {t["prototype"]} are not translated: an inflow into each machine\'s state of the prototype')
             else:
-                src.skip(what, f'births into {t.get("to")} from those in {t.get("from")} ({t.get("rate", t.get("proba"))} each) are not translated: an inflow, ss.null >> {t.get("to")} @ <rate>*{t.get("from")}.n, entering every machine together')
+                src.skip(what, f'births into {t.get("to")} from those in {t.get("from")} ({t.get("rate", t.get("proba"))} each) are not translated: an inflow, ss.unborn >> {t.get("to")} @ <rate>*{t.get("from")}.n, entering every machine together')
         for key in machine:
             if key not in machine_keys:
                 src.skip(f'{mname}: {key}', f'"{key}" in the state machine is not read by the importer')

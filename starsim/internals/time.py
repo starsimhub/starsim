@@ -567,6 +567,8 @@ class Duration(TimePar):
         else:
             return self._new(self.value + other)
 
+    def __rmatmul__(self, other): return ss.transitions.split_at(other, self) # A split with its driver, e.g. {D: p_death, R: None} @ ss.days(8)
+
     def __radd__(self, other):
         return self if sc.isnumber(other) and other == 0 else self.__add__(other) # For sum(), which starts from 0
 

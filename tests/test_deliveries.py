@@ -140,7 +140,7 @@ def test_applied():
     assert sim.results.sis.infection.sum() == 0
     for solver in ['ode', 'abm']:
         Sv = ss.State('Sv', people=False)
-        mosq = ss.Disease(ss.State('S'), Sv, emergence=ss.null >> Sv @ ss.perday(100), mortality=Sv >> ss.null @ ss.days(10), init=dict(Sv=1000), name='mosq')
+        mosq = ss.Disease(ss.State('S'), Sv, emergence=ss.unborn >> Sv @ ss.perday(100), mortality=Sv >> ss.dead @ ss.days(10), init=dict(Sv=1000), name='mosq')
         sim = ss.Sim(mosq, interventions=ss.modify(mosq.emergence, multiply=0.5, start=10), solver=solver, n_agents=1000, unit='day', stop=100, verbose=0).run()
         assert np.isclose(sim.results.mosq.Sv[-1], 500, rtol=0.05), solver
     return sim

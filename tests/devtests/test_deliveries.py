@@ -1069,8 +1069,8 @@ def test_weighted_counts():
         N = (S + I).n
         itn = ss.Vaccine(efficacy=dict(bite=0.5), waning=ss.boxcar(plateau=ss.days(200)), name='itn')
         c = 0 if cov is None else itn.coverage if kill is None else itn.coverage(kill)
-        d = ss.Disease(bite=S >> I @ ss.perday(0.3)*Iv.n/N, recovery=I >> S @ ss.days(30), emerge=ss.null >> Sv @ ss.perday(0.1)*N,
-                       feeding=Sv >> Iv @ ss.perday(0.3)*((ss.by(biting=w)*I).n if weighted else I.n)/N, death=Sv + Iv >> ss.null @ ss.perday(0.1) + ss.perday(0.2)*c,
+        d = ss.Disease(bite=S >> I @ ss.perday(0.3)*Iv.n/N, recovery=I >> S @ ss.days(30), emerge=ss.unborn >> Sv @ ss.perday(0.1)*N,
+                       feeding=Sv >> Iv @ ss.perday(0.3)*((ss.by(biting=w)*I).n if weighted else I.n)/N, death=Sv + Iv >> ss.dead @ ss.perday(0.1) + ss.perday(0.2)*c,
                        init=dict(I=0.05, Sv=1.0), name='mal')
         d.stratify(biting=['lo', 'mid', 'hi'], fractions=[1/3]*3, adjust=dict(bite=w))
         size = dict(n_agents=10_000) if solver == 'abm' else dict(total_pop=10_000)
@@ -1088,7 +1088,7 @@ def test_weighted_counts():
     def shed(solver, eff):
         S, A = ss.states('S A')
         E = ss.State('E', people=False)
-        d = ss.Disease(infection=S >> A @ ss.perday(0.001)*E.n/(S + A).n, recovery=A >> S @ ss.days(20), shed=ss.null >> E @ ss.perday(1.0)*A.n_infectious, decay=E >> ss.null @ ss.days(1), init_prev=0.1, name='ty')
+        d = ss.Disease(infection=S >> A @ ss.perday(0.001)*E.n/(S + A).n, recovery=A >> S @ ss.days(20), shed=ss.outside >> E @ ss.perday(1.0)*A.n_infectious, decay=E >> ss.dead @ ss.days(1), init_prev=0.1, name='ty')
         drug = ss.Treatment(efficacy=dict(transmission=eff), during=d.A, name='drug')
         size = dict(n_agents=10_000) if solver == 'abm' else dict(total_pop=10_000)
         return ss.Sim(d, interventions=ss.treat(drug, where=d.A, coverage=0.5, at=[ss.days(1)], name='tx'), unit='day', stop=5, solver=solver, verbose=0, **size).run().results.ty.E[3]

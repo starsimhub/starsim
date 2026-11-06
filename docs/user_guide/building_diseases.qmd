@@ -86,7 +86,7 @@ res = ss.Sim(seir, stop=ss.days(120), verbose=0).run().results.seir
 print('Peak prevalence:', round(res.prevalence.max(), 3))
 ```
 
-A set of states is written with `+` or `|`, which mean the same for states: `E | I` and `E + I` are the number in either, `(E | I).frac` their share, and `(E | I) >> R` a transition from either. Without brackets, Python reads `E | I >> R` as `E | (I >> R)`, which raises an error saying so. Someone who dies of the disease leaves the population, `I >> ss.null` (or a branch to it), and the deaths so far are `res.death.cum`; a state `D` for them would keep them among the people, and in the denominator of `prevalence`.
+A set of states is written with `+` or `|`, which mean the same for states: `E | I` and `E + I` are the number in either, `(E | I).frac` their share, and `(E | I) >> R` a transition from either. Without brackets, Python reads `E | I >> R` as `E | (I >> R)`, which raises an error saying so. Someone who dies of the disease leaves the population, `I >> ss.dead` (or a branch to it), and the deaths so far are `res.death.cum`; a state `D` for them would keep them among the people, and in the denominator of `prevalence`.
 
 **Several sources of infection** are a sum: `S >> E @ beta*(I + 0.5*A)` says that people in `A` (say, without symptoms) are half as infectious as those in `I`. A rate must be linear in its bare states, since exposure on a network is a sum over contacts; anything nonlinear is written with counts (`I.n`).
 
@@ -177,13 +177,13 @@ Any other distribution of durations works too; see [Distributions](mechanics_dis
 
 Some people go one way and some another: most people with measles recover, but a small share die. There are two ways to say this, and they differ in when the branch is decided.
 
-**Separate transitions with `p=`** are decided when people enter the state, and each branch can have its own duration. Here 0.2% of people with measles die, and `ss.null` is outside the model:
+**Separate transitions with `p=`** are decided when people enter the state, and each branch can have its own duration. Here 0.2% of people with measles die, and `ss.dead` is outside the model:
 
 ```{python}
 S, I, R = ss.states('S I R')
 infection = S >> I @ 1.9*I
 recovery  = ss.Transition(I, R, dur=ss.days(8), p=0.998)
-death     = ss.Transition(I, ss.null, dur=ss.days(8), p=0.002)
+death     = ss.Transition(I, ss.dead, dur=ss.days(8), p=0.002)
 measles = ss.Disease(infection, recovery, death, init_prev=0.001)
 
 sim = ss.Sim(measles, total_pop=100_000, stop=ss.days(50), verbose=0)
@@ -191,20 +191,23 @@ sim.run()
 print('Deaths:', round(sim.results.measles.death.sum()))
 ```
 
-**One transition with several destinations**, given as a list with `p=` for the share going to each, is decided when people leave. Its result is the total, and each destination has a result of its own, `<transition>.<state>`. Here the dead are kept as a state, `D`, so that they can be counted:
+**One transition with several destinations** is decided when people leave. Give each destination with its share, as a dict: `I >> {ss.dead: 0.002, R: None} @ ss.days(8)` says that after the infectious period, 0.2% die and the rest (`None`) recover. Its result is the total, and each destination has a result of its own, `<transition>.<state>` (or `<transition>.dead` for those who die):
 
 ```{python}
-S, I, R, D = ss.states('S I R D')
+S, I, R = ss.states('S I R')
 infection = S >> I @ 1.9*I
-outcome   = ss.Transition(I, [R, D], p=[0.998, 0.002], dur=ss.days(8))
+outcome   = I >> {ss.dead: 0.002, R: None} @ ss.days(8)
 measles = ss.Disease(infection, outcome, init_prev=0.001)
 
 sim = ss.Sim(measles, total_pop=100_000, stop=ss.days(50), verbose=0)
 sim.run()
 res = sim.results.measles
-print('Deaths:', round(res['outcome.D'].sum()))
-print('Dead at the end:', round(res.D[-1]))
+print('Deaths:', round(res['outcome.dead'].sum()))
 ```
+
+The long form is `ss.Transition(I, {ss.dead: 0.002, R: None}, dur=ss.days(8))`. The destinations and their shares can also be two lists, `ss.Transition(I, [ss.dead, R], p=[0.002, None], dur=ss.days(8))`, which is the same and suits destinations built by code. After `@`, the duration (or rate) must be a Starsim value (`ss.days(8)`, `ss.par(...)`), not a bare number, for Python to apply it to the dict.
+
+**Outside the model** are where people come from and go to: `ss.unborn` for births (`ss.unborn >> S`), `ss.dead` for deaths (`I >> ss.dead`), and `ss.outside` for people who arrive or leave alive (`ss.outside >> S`, `S >> ss.outside`), who are counted as arrivals and emigrants rather than births and deaths. Someone who dies leaves the people, so is not kept in a state; the deaths so far are the cumulative flow, `res.death.cum`.
 
 The shares out of one state must add up to 1; one of them can be left as `None`, for the rest. A share can vary by age group or in time, like any other value ([Parameters](building_parameters.qmd)).
 
@@ -254,8 +257,8 @@ W = ss.State(people=False) # Bacteria in the water: a count, not people
 cholera = ss.Disease(
     infection = S >> I @ beta * W.n/(W.n + K),
     recovery  = I >> R @ ss.days(5),
-    shedding  = ss.null >> W @ xi*I.n,    # An inflow: the total per day
-    decay     = W >> ss.null @ ss.days(30), # The mean lifetime in the water
+    shedding  = ss.outside >> W @ xi*I.n,    # An inflow: the total per day
+    decay     = W >> ss.dead @ ss.days(30), # The mean lifetime in the water
     init      = dict(I=0.001),
 )
 sim = ss.Sim(cholera, total_pop=100_000, unit='day', stop=365, verbose=0)
@@ -265,7 +268,7 @@ sim.diseases.cholera.plot('I', 'W') # The infectious, and the bacteria in the wa
 
 Since nobody catches cholera from a person here, the infection is **spontaneous** (its rate has no bare state), but it is still the acquisition of the disease: it is what a vaccine or a lower susceptibility acts on.
 
-A count can weight each person: `(ss.by(biting=[0.5, 1, 2])*I).n` counts each infectious person by how much they are bitten (in a model stratified by `biting`), and `I.n_infectious` by how infectious they are (their `rel_trans`, with any product or modifier on it), so a treatment that halves infectiousness also halves what the treated shed: `shedding = ss.null >> W @ xi*I.n_infectious`. A weighted count works under every solver; in a compartmental run the kernels work it out within each step, as they do `I.n`, except in diseases tracked jointly (two diseases whose states depend on each other), where it is worked out once a step and held through it, as `sim.kernel_reason()` says. A contact matrix acts on a weighted count in a rate as it does on `I.n` (see [Population data](populations_data.qmd)).
+A count can weight each person: `(ss.by(biting=[0.5, 1, 2])*I).n` counts each infectious person by how much they are bitten (in a model stratified by `biting`), and `I.n_infectious` by how infectious they are (their `rel_trans`, with any product or modifier on it), so a treatment that halves infectiousness also halves what the treated shed: `shedding = ss.outside >> W @ xi*I.n_infectious`. A weighted count works under every solver; in a compartmental run the kernels work it out within each step, as they do `I.n`, except in diseases tracked jointly (two diseases whose states depend on each other), where it is worked out once a step and held through it, as `sim.kernel_reason()` says. A contact matrix acts on a weighted count in a rate as it does on `I.n` (see [Population data](populations_data.qmd)).
 
 ## Susceptibility and infectiousness
 
@@ -474,8 +477,8 @@ The parts of a module written as code (its parameters, states, results, and the 
 
 | Argument | What it gives | See |
 |---|---|---|
-| `source` | The source state; several states, as a list or a sum (`S + V`); or `ss.null`, for an inflow from outside the model | [Ways to write a transition](#ways-to-write-a-transition) |
-| `dest` | The destination state; a list of states, for a branch decided on leaving; or `ss.null`, for an outflow | [Branching](#branching) |
+| `source` | The source state; several states, as a list or a sum (`S + V`); or `ss.unborn` (births) or `ss.outside` (arrivals), for an inflow from outside the model | [Ways to write a transition](#ways-to-write-a-transition) |
+| `dest` | The destination state; several, for a branch decided on leaving, as a dict of each and its probability (`{D: p_death, R: None}`) or a list with `p=`; or `ss.dead` (deaths) or `ss.outside` (leaving), for an outflow | [Branching](#branching) |
 | `rate` | A hazard: a number, a typed rate, a probability per period, an expression of states and parameters, or a function of the sim; with a bare state in it, a transmission | [Transmission](#transmission), [Other rates](#other-rates) |
 | `dur` | A dwell time instead of a rate: a duration, or a distribution of durations | [Durations](#durations) |
 | `p` | The share of people who take this transition (separate transitions out of one state), or a list of shares, one for each destination | [Branching](#branching) |

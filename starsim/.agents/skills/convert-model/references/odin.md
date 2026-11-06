@@ -33,7 +33,7 @@ An odin model is R code in odin's DSL (one `.R` file, or the body of `odin::odin
 ## What needs care
 
 - Give `unit=` (default `'day'`) and `stop=`: odin knows neither.
-- A `delay()` returns the delayed expression's value at time 0 for the first `tau`, as if the flow had run before the start. Without that history the epidemic in `seir_array` peaks 14 days late. Add it as an inflow: `history = ss.null >> I @ ss.timeseries({0: ss.perday(surv * new_inf_0), tau: 0})`.
+- A `delay()` returns the delayed expression's value at time 0 for the first `tau`, as if the flow had run before the start. Without that history the epidemic in `seir_array` peaks 14 days late. Add it as an inflow: `history = ss.unborn >> I @ ss.timeseries({0: ss.perday(surv * new_inf_0), tau: 0})`.
 - A parameter equal to the population (`N <- 1e7` used as a divisor) is kept as a number (`beta * I.n / N`), which is exact while the population is constant; with births and deaths, the frequency-dependent form is `beta * I`.
 - odin's latent people do not age in `seir_array`, so the youngest group differs from Starsim's (a finding of the worked example).
 
@@ -42,7 +42,7 @@ An odin model is R code in odin's DSL (one `.R` file, or the body of `odin::odin
 [`odin/seir_array/model.py`](https://github.com/starsimhub/lingua_franca/blob/main/docs/models/odin/seir_array/model.py) (SEIR in 5 age groups with births, deaths, aging, waning, and a 14-day `delay()`), and [`odin/stochastic_sir_arrays/model.py`](https://github.com/starsimhub/lingua_franca/blob/main/docs/models/odin/stochastic_sir_arrays/model.py) (replicates as `n_runs`). `ss.import_from('seir_array_odin.R', stop=...)` gives the aging as a stratification and the delay as a fixed dwell; the one line it lists, the delay's history, is:
 
 ```python
-history = ss.null >> E @ ss.timeseries({0: ss.perday(surv), tau: 0}) # The first tau of the delayed flow, which odin takes as the value at time 0
+history = ss.unborn >> E @ ss.timeseries({0: ss.perday(surv), tau: 0}) # The first tau of the delayed flow, which odin takes as the value at time 0
 ```
 
 With it, the import agrees with odin within 5.6, 8.4, 6.3, and 3.6% in S, E, I, and R (as the worked example's 50-stage version does). The stochastic SIR arrays agree within 4.7 of 1,001 people in the mean over 2,000 runs.

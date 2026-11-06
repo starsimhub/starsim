@@ -425,7 +425,7 @@ def describe_graph(graph, sim=None, out=None):
                 add('', 'happens immediately on entry')
         if tr.p is not None:
             at_exit = f'decided as people leave, from their time in {tr.source[0].name}' if name in graph.dwell_trs else None
-            stays = [f'{label}: ' + ('the rest' if p is None else format_expr(p, values=True)) for label,p,given in [('null', tr.p_die, tr.dies), ('stay', tr.p_stay, tr.stays)] if given]
+            stays = [f'{label}: ' + ('the rest' if p is None else format_expr(p, values=True)) for label,p,given in [('dead', tr.p_die, tr.dies), ('stay', tr.p_stay, tr.stays)] if given]
             add('', f'p = {", ".join(["the rest" if p is None else format_expr(p, values=True) for p in tr.p] + stays)}', at_exit)
         elif 'p' in tr.guessed:
             add('', f'p = {tr.guessed["p"]}', 'guessed: what the other branches leave')
@@ -460,14 +460,14 @@ def describe_graph(graph, sim=None, out=None):
 
 def graph_edges(graph):
     """
-    Each transition as (source, destination, name, kind, p), with None for `ss.null`; a transition to every state (`ss.death()`) is one edge from each
+    Each transition as (source, destination, name, kind, p), with None for `ss.dead`; a transition to every state (`ss.death()`) is one edge from each
 
     `p` is the share that takes this destination, for a transition with `p=` (None for the one that takes the rest), and False for one without.
     """
     out = []
     for name,tr in graph.transitions.items():
         kind = 'contact' if tr.contact else 'spontaneous'
-        dsts = (tr.dest or [None]) + [None]*bool(tr.dest and tr.dies) # ss.null as one of several destinations is an edge of its own
+        dsts = (tr.dest or [None]) + [None]*bool(tr.dest and tr.dies) # ss.dead as one of several destinations is an edge of its own
         ps = (list(tr.p) if tr.p is not None else [None]*len(tr.dest or [None])) + [getattr(tr, 'p_die', None)]*bool(tr.dest and tr.dies)
         if tr.p is None and not tr.dies:
             ps = [False]*len(dsts)
@@ -923,11 +923,11 @@ def factor_str(expr):
 
 
 def branch_shares(tr):
-    """ The share of a transition's flow that goes to each of its destination states, as a factor to put before it (e.g. "0.3 * ", or "" for all of it), and the share that leaves its source ("" unless ss.stay is one of its destinations); what ss.null takes goes nowhere """
+    """ The share of a transition's flow that goes to each of its destination states, as a factor to put before it (e.g. "0.3 * ", or "" for all of it), and the share that leaves its source ("" unless ss.stay is one of its destinations); what ss.dead takes goes nowhere """
     if not tr._split:
         return ['']*len(tr.dest), ''
     ps = list(tr.p or [None]*len(tr.dest))
-    ends = ps + [tr.p_stay]*tr.stays + [tr.p_die]*tr.dies # One entry for each destination, with ss.stay and ss.null
+    ends = ps + [tr.p_stay]*tr.stays + [tr.p_die]*tr.dies # One entry for each destination, with ss.stay and ss.dead
     given = [factor_str(p) for p in ends if p is not None]
     shares = [f'{factor_str(p)} * ' if p is not None else f'(1 - {" - ".join(given)}) * ' for p in ends] # The destination with p=None takes the rest
     leaving = ''
