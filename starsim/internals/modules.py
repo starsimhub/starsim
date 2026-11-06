@@ -312,7 +312,7 @@ class Module(Base):
         self._collect_required() # First, collect methods marked as required on creation
 
         # Handle parameters
-        self.pars = ss.parameters.Pars() # Usually populated via self.define_pars()
+        self.pars = ss.Pars() # Usually populated via self.define_pars()
         self._default_name = True # Whether the name is the class default, in which case the sim can rename it to make it unique
         self._implicit = False # Whether it was made or named by the sim (from the transitions it was given, or its states), so its results are at the top of the sim's (e.g. sim.results.I) even beside other diseases
         named = type(self) is ss.Disease or isinstance(self, (ss.modify, ss.Delivery, ss.Product)) # The modules that take the name of their variable (see ss.Sim._name_modules())
@@ -587,7 +587,7 @@ class Module(Base):
                 self.pars.update(**given)
             self.pars.forget_bare(kwargs) # A module's own defaults are in the unit it means
         else: # Or overwrite
-            self.pars = ss.parameters.Pars(**kwargs)
+            self.pars = ss.Pars(**kwargs)
         return self.pars
 
     def _value(self, p):
@@ -621,7 +621,7 @@ class Module(Base):
             **kwargs (dict): more parameters, merged into `pars`
         """
         # Merge pars and kwargs
-        if isinstance(pars, ss.parameters.Pars): # E.g. a package's full set of defaults for the module: those given as ss.par keep their bounds
+        if isinstance(pars, ss.Pars): # E.g. a package's full set of defaults for the module: those given as ss.par keep their bounds
             pars = pars.with_bounded()
         pars = sc.mergedicts(pars, kwargs)
 
@@ -851,13 +851,13 @@ class Module(Base):
             self.t.init(sim=self.sim) # Initialize time vector
             self.link_timepars() # Add module dt to the timepars
             self.check_bare_units(sim)
-            if isinstance(self.pars, ss.parameters.Pars) and getattr(self, 'graph', None) is None: # A declared module checks its own, against its graph (see ss.Disease.init_pre())
+            if isinstance(self.pars, ss.Pars) and getattr(self, 'graph', None) is None: # A declared module checks its own, against its graph (see ss.Disease.init_pre())
                 self.pars.check_added(self.name) # A parameter set but never defined, e.g. renamed
-            if isinstance(self.pars, ss.parameters.Pars):
+            if isinstance(self.pars, ss.Pars):
                 self.pars.bind(self) # Arithmetic on a value that varies is on its value now, once the sim is initialized
             if self.name not in sim.pars: # Add a new key, which is allowed even if the sim's parameters are locked
                 sim.pars.update({self.name: self.pars}, create=True)
-            elif isinstance(sim.pars[self.name], ss.parameters.Pars): # Not a setting of the sim with the same name, e.g. a module called "branching", which is left as it is
+            elif isinstance(sim.pars[self.name], ss.Pars): # Not a setting of the sim with the same name, e.g. a module called "branching", which is left as it is
                 sim.pars[self.name] = self.pars
             sim.results[self.name] = self.results
             sim.people.add_module(self) # Connect the states to the people
@@ -867,14 +867,14 @@ class Module(Base):
         return
 
     def check_bare_units(self, sim):
-        """ Warn about parameters given as bare numbers in a unit other than the sim's (see `ss.parameters.Pars.bare_units()`) """
+        """ Warn about parameters given as bare numbers in a unit other than the sim's (see `ss.Pars.bare_units()`) """
         if getattr(sim, 'declared', None): # In a declared model, bare numbers are in the sim's unit (None for timesteps)
             unit = sim.unit and ss.time.normalize_unit(sim.unit)
         else: # Otherwise in its timestep's, if it has one (not in a mock sim)
             unit = getattr(sim.t.dt, 'base', None)
             if unit is None:
                 return
-        if isinstance(self.pars, ss.parameters.Pars):
+        if isinstance(self.pars, ss.Pars):
             self.pars.bare_units(unit, label=self.name)
         return
 

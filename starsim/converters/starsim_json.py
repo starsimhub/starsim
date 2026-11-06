@@ -277,7 +277,7 @@ def to_json(sim):
     sim = ss.converters.export.initialized(sim)
     w = Writer()
     out = sc.objdict(starsim=ss.__version__)
-    defaults = ss.sim.SimPars()
+    defaults = ss.SimPars()
     for key in settings:
         val = w.value(base.pars.get(key))
         if val is not None and val != w.value(defaults.get(key)):

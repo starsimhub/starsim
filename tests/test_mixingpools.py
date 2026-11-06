@@ -176,6 +176,18 @@ def test_counts():
         return ss.Sim(d, networks=networks, total_pop=3, stop=20, solver='ode', verbose=0).run().results.d.I.by('patch').values[-1]
     assert np.allclose(spread(ss.contacts(np.ones((3, 3)), dims='patch')), 8/9)
     assert np.allclose(spread(ss.contacts(np.eye(3), dims='patch')), spread(None))
+
+    # A count inside a function of the rate modifies it by the total, and is not met: three groups mixing evenly are one group
+    def capped(groups):
+        S, I, R = ss.states('S I R')
+        slowdown = 1 - 0.5*np.clip(I.n/2000, 0, 1) # As MEmilio's capacity to test and trace
+        d = ss.Disease(infection=S >> I @ ss.perday(0.3)*slowdown*I, recovery=I >> R @ ss.perday(0.1), init_n=dict(I=30), name='d')
+        nets = None
+        if groups:
+            d.stratify(age=['0', '1', '2'])
+            nets = ss.contacts(np.full((3, 3), 1/3))
+        return ss.Sim(d, networks=nets, total_pop=10_000, unit='day', stop=100, verbose=0).run().results.d.R[-1]
+    assert np.isclose(capped(True), capped(False)) # Before, the count in the function was met, as I/3
     return
 
 

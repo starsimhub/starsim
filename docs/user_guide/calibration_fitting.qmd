@@ -49,7 +49,7 @@ The data are weekly reported cases. On this page they are illustrative: made onc
 ```{python}
 truth = ss.Sim(measles, pars=dict(beta=1.9, report=0.5, I0=0.0003), n_agents=100_000, rand_seed=3, verbose=0, **pars)
 truth.run()
-data = truth.to_synthetic_data('cases', resample='week', noise=None).iloc[:-1] # Weekly cases, leaving out the last, partial week
+data = truth.to_synthetic_data('cases', resample='week', noise=None) # Weekly cases (whole weeks only, so not the last, partial one)
 rng = np.random.default_rng(3)
 data['cases'] = rng.negative_binomial(10, 10/(10 + data.cases)) # Counts with more variation than Poisson (negative binomial)
 data.head()

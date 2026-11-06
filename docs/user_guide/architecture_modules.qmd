@@ -14,7 +14,7 @@ Everything a sim runs, apart from the people themselves, is a *module*: each dis
 A module is an instance of `ss.Module` (`starsim/internals/modules.py`), or of a subclass. Every module has the same parts:
 
 - a **name** (`sir`, `randomnet`), unique in the sim, and a **label** for plots;
-- its **parameters**, `mod.pars` (an `ss.parameters.Pars`), given with `define_pars()` and set from the user's arguments with `update_pars()`, which raises an error for one that wasn't defined;
+- its **parameters**, `mod.pars` (an `ss.Pars`), given with `define_pars()` and set from the user's arguments with `update_pars()`, which raises an error for one that wasn't defined;
 - its **timeline**, `mod.t` (an `ss.Timeline`), which is the sim's unless the module is given a `dt`, `start` or `stop` of its own;
 - its **distributions**, each with a random number stream of its own, found by searching the module when the sim is initialized ([Randomness](architecture_randomness.qmd));
 - its **states**, arrays with one value per agent (`define_states()`), which the people grow and shrink with the population;

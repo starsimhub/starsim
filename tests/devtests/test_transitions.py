@@ -761,8 +761,11 @@ def test_functions():
     # Code is not run to choose the solver: with no age groups the function cannot run as compartments, which it says, so the model is run as agents by asking
     with pytest.raises(ss.CapabilityError, match='people.age'):
         ss.Sim(make(), stop=100, unit='day', **kw).run()
-    sim = ss.Sim(make(seeding=seed_cluster), stop=100, unit='day', solver='abm', **kw).run()
-    assert sim.results.d.I[-1] == sim.diseases.d.I.count() # The counts kept through the run, which the function's changes to the states are counted in, are those of the agents
+    sim = ss.Sim(make(seeding=seed_cluster), stop=100, unit='day', solver='abm', **kw).init()
+    sim.run(until=sim.t.tvec[-2]) # Up to the start of the last step, where its count is recorded
+    count = sim.diseases.d.I.count()
+    sim.run()
+    assert sim.results.d.I[-1] == count # The counts kept through the run, which the function's changes to the states are counted in, are those of the agents
     by_age = ss.Sim(make(), stop=100, unit='day', stratify=dict(age=[0, 50]), **kw).run()
     assert by_age.solver == 'ode'
     res = by_age.results.d

@@ -218,7 +218,7 @@ def test_complex_api():
     )
 
     # Test with explicit initialization
-    pars2 = ss.sim.SimPars(n_agents=1000, label='v1', verbose=0, stop=2020)
+    pars2 = ss.SimPars(n_agents=1000, label='v1', verbose=0, stop=2020)
 
     net1 = ss.RandomNet(name='random1', n_contacts=6)
     net2 = ss.RandomNet(name='random2', n_contacts=4)

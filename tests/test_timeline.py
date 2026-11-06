@@ -76,7 +76,7 @@ def test_timeline():
         """ Generate a fake sim """
         sim = sc.prettyobj()
         sim.t = ss.Timeline(start=start, stop=stop, dt=dt, **kwargs)
-        sim.pars = ss.sim.SimPars()
+        sim.pars = ss.SimPars()
         sim.t.init(None)
         return sim
 

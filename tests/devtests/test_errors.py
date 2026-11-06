@@ -87,6 +87,12 @@ def _():
     states = ss.states(2)
     ss.Disease(states[0] >> states[1] @ 0.1)
 
+@trigger('is an event (or has one), which triggers it, so give the event as on=', TypeError)
+def _():
+    G, NG, M, I = ss.states('G NG M I')
+    newborns = ss.birth(M, on=ss.Transition(G, NG, dur=ss.days(240)))
+    ss.Transition(M, I, p=0.3, where=newborns & ss.mother(I, include_born=True)) # An event of a transition not yet in a module (before, its name crashed the message)
+
 @trigger('a count carries no strain', ValueError)
 def _():
     S, I, R = ss.states('S I R')

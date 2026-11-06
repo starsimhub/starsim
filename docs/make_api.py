@@ -120,7 +120,7 @@ modeling = '''
 extension = '''
     Module Network DynamicNetwork Infection Demographics Intervention Product Connector Analyzer
     Arr FloatArr IntArr BoolArr BoolState CatArr TimeArr uids DateArray Timeline Dist multi_random
-    register_modules required compile jit plot_args return_fig ndict TimePar Rate warn note CapabilityError AlreadyRunError
+    register_modules required compile jit plot_args return_fig ndict Pars SimPars TimePar Rate warn note CapabilityError AlreadyRunError
 '''.split()
 
 # The library subpackages, each listed after the core modules

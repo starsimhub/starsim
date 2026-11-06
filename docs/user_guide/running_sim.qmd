@@ -270,7 +270,7 @@ Keep anything that differs between scenarios as an argument rather than editing 
 
 ## Appendix: every sim setting
 
-Every keyword of `ss.Sim()`, by what it is for; `sim.pars` (an `ss.sim.SimPars`) holds them all once the sim is made, and the API pages for [ss.Sim and ss.sim.SimPars](../api/sim.qmd) give the details.
+Every keyword of `ss.Sim()`, by what it is for; `sim.pars` (an `ss.SimPars`) holds them all once the sim is made, and the API pages for [ss.Sim and ss.SimPars](../api/sim.qmd) give the details.
 
 | Setting | Default | What it is |
 |---|---|---|

@@ -887,8 +887,9 @@ class Result(ss.arrays.BaseArr):
         """
         Which period of a longer time unit each time point is in; see `resample()`
 
-        Returns the period of each time point (a non-decreasing array of integers from 0), and for calendar
-        months and years, the date each period starts (the first day of its month or year; else None).
+        Returns the period of each time point (a non-decreasing array of integers from 0); for calendar
+        months and years, the date each period starts (the first day of its month or year; else None);
+        and whether each period is whole, i.e. its steps cover it (to within half a step).
 
         Args:
             new_unit (str/dur): the new unit; see `resample()`
@@ -901,8 +902,11 @@ class Result(ss.arrays.BaseArr):
             idx = pd.DatetimeIndex(tv) # A time point is in the period that its step starts in, so 1 January is in its own year, as for data
             key = np.asarray(idx.year*12 + idx.month - 1 if new_unit == 'month' else idx.year)
             keys, bins = np.unique(key, return_inverse=True)
-            starts = pd.to_datetime(dict(year=keys//12, month=keys%12 + 1, day=1) if new_unit == 'month' else dict(year=keys, month=1, day=1))
-            return bins, starts
+            calendar = lambda k: pd.to_datetime(dict(year=k//12, month=k%12 + 1, day=1) if new_unit == 'month' else dict(year=k, month=1, day=1))
+            starts = calendar(keys)
+            widths = np.asarray((calendar(keys + 1) - starts)/pd.Timedelta(days=1), dtype=float) # The days in each month or year
+            step = np.median(np.diff(idx)/pd.Timedelta(days=1)) if len(idx) > 1 else widths[0]
+            return bins, starts, np.bincount(bins)*step > widths - 0.5*step
         if isinstance(new_unit, str):
             if new_unit not in ['day', 'week', 'month', 'year']:
                 errormsg = f'Cannot resample to "{new_unit}"; use "day", "week", "month", "year", or a duration, e.g. ss.weeks(2)'
@@ -922,7 +926,7 @@ class Result(ss.arrays.BaseArr):
         step = np.median(np.diff(t)) if len(t) > 1 else width
         eps = 0.5*min(step, width)/width # Times that are the same up to rounding (e.g. 83.9999999 days from 12 weeks) are the same time point
         bins = np.floor(t/width + eps).astype(int) # A period includes its start and not its end, as for data: a flow at a time point is over the step that starts there
-        return bins, None
+        return bins, None, np.bincount(bins)*step > width - 0.5*step
 
     def resample(self, new_unit=None, summarize_by=None, use_years=False):
         """
@@ -936,6 +940,8 @@ class Result(ss.arrays.BaseArr):
         are used instead for a sim with dates. Each period is labeled by its start: for calendar months and years,
         the first day of the month or year (so a year of weekly steps is labeled 1 January, not the first week
         of the year), or the start of the run if later; otherwise its first time point.
+        Only whole periods are kept: a monthly run from 2000 to 2020 has 20 years, as its last step (from 2020)
+        is one month of 2020, while a yearly one has 21 (unless no period is whole, when all are kept).
         The values by group (`select()` and `by()`) are resampled too.
 
         Args:
@@ -963,13 +969,20 @@ class Result(ss.arrays.BaseArr):
         if how == 'last' and self.kind == 'stock' and not cumulative(self.name): # The state at the start of each period, as at each time point
             how = 'first'
         t = self.t_axis
-        bins, period_starts = self.periods(new_unit)
+        bins, period_starts, whole = self.periods(new_unit)
         starts = np.flatnonzero(np.diff(bins, prepend=-1)) # The first time point of each period
         ends = np.append(starts[1:], len(bins)) - 1 # And the last
+        keep = slice(None)
+        if whole.any(): # Only whole periods, leaving out a part at either end, e.g. 20 years for a monthly run from 2000 to 2020, whose last step (from 2020) is one month of 2020
+            whole_inds = np.flatnonzero(whole)
+            keep = slice(whole_inds[0], whole_inds[-1] + 1)
+            starts, ends = starts[keep], ends[keep]
+            if period_starts is not None:
+                period_starts = period_starts[keep]
 
         def agg(arr, how, starts=starts, ends=ends):
             """ An array with time on axis t, over each period; a run axis or columns come along """
-            return None if arr is None else np.moveaxis(self.summarizers[how](np.moveaxis(np.asarray(arr), t, 0), starts, ends), 0, t)
+            return None if arr is None else np.moveaxis(self.summarizers[how](np.moveaxis(np.asarray(arr), t, 0)[:ends[-1]+1], starts, ends), 0, t)
 
         strata, denom, group_ti = self.strata, self.denom, self.group_ti
         agg_g = agg # For the values by group
@@ -978,6 +991,8 @@ class Result(ss.arrays.BaseArr):
             g_bins = bins[group_ti]
             g_starts = np.flatnonzero(np.diff(g_bins, prepend=-1))
             g_ends = np.append(g_starts[1:], len(g_bins)) - 1
+            g_keep = np.isin(g_bins[g_starts], np.arange(len(whole))[keep])
+            g_starts, g_ends = g_starts[g_keep], g_ends[g_keep]
             agg_g = lambda arr, how: agg(arr, how, g_starts, g_ends)
             if len(g_starts) < len(starts):
                 _no_groups = f'it is kept by group every {group_ti[1]} steps, so its groups cannot be resampled to a shorter period'
@@ -1487,7 +1502,8 @@ class Results(ss.ndict):
         All the results, as one dataframe with a column for each: e.g. `alive` for the sim's own, `sir_prevalence` for a module's,
         and `bysex_n_infected_male` for each column of a 2D result
 
-        If the modules have different time points (e.g. different time steps), a dict of dataframes instead, one for the sim's own results and one for each module.
+        If the modules have different time points (e.g. different time steps), a dict of dataframes instead, one for the sim's own results and one for each module;
+        resampled, one dataframe of the periods they all have (e.g. 50 whole years for a monthly module in a yearly sim from 2000 to 2050, as its year from 2050 is one month).
 
         Args:
             sep (str): separator for the column names
@@ -1497,6 +1513,13 @@ class Results(ss.ndict):
         flat = self.flatten(sep=sep, columns=True, **kwargs)
         if not flat:
             return None
+        if len({len(res) for res in flat.values()}) > 1 and kwargs.get('resample') is not None: # Resampled to the same periods, apart from a whole period at the end that some have (see resample()): those they all have
+            times = {key:np.asarray(res._convert_timevec()) for key,res in flat.items()}
+            common = functools.reduce(np.intersect1d, times.values())
+            if len(common):
+                data = {key:res.values[np.isin(times[key], common)] for key,res in flat.items()}
+                timevec = flat[0]._convert_timevec()[np.isin(times[flat.keys()[0]], common)]
+                return sc.dataframe(data, index=timevec) if set_date_index else sc.dataframe(dict(time=timevec) | data)
         if len({len(res) for res in flat.values()}) > 1: # Different time points: one dataframe for the sim's own results and one for each module
             own = Results(self._module)
             for key,val in self.items():

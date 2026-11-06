@@ -270,7 +270,7 @@ def test_fit_sim_setting():
     data = make(2000).run().to_synthetic_data('sis.I') # With no total_pop, the counts are of agents, so they tell the number apart
     fit = make(ss.par(1000, bounds=[500, 4000]), data=data).fit(verbose=0)
     assert np.isclose(fit.pars.n_agents, 2000, rtol=0.1), fit.pars
-    assert len(fit.sim.new(pars=fit.pars).init().people) == int(fit.pars.n_agents) # pars= takes the setting by name
+    assert len(fit.sim.new(pars=fit.pars).init().people) == round(fit.pars.n_agents) # pars= takes the setting by name (rounded, as the sim takes it)
     with pytest.raises(sc.KeyNotFoundError):
         make(2000).new(pars=dict(n_agents=3000)).init() # Not given as ss.par, so not a value by name
     return fit

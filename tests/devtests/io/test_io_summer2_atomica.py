@@ -113,7 +113,7 @@ def test_summer2():
 
     # Derived outputs, in summer2's conventions (a flow is a rate)
     out = outputs(sim)
-    assert np.allclose(out.incidence_old, res.incidence.select(age='old').values/0.1)
+    assert np.allclose(out.incidence_old, np.concatenate([[0], res.incidence.select(age='old').values[:-1]])/0.1) # At the end of each step, as summer2 reports it
     assert np.allclose(out.accum_old, np.cumsum(out.incidence_old))
     hosp = res.I.select(clinical='hospital').values
     assert np.allclose(out.prop_infected_hosp, hosp/res.I.values)

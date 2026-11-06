@@ -1,5 +1,5 @@
 """
-The sim (`ss.Sim`) and its parameters (`ss.sim.SimPars`)
+The sim (`ss.Sim`) and its parameters (`ss.SimPars`)
 
 This is what a user runs. It exists to gather the people, modules, and settings of a model in one object; to choose how to run it (the solver); and to hold the results. It works the same way for every kind of model.
 
@@ -17,7 +17,7 @@ import starsim as ss
 approximations = ['note', 'allow', 'error'] # What a sim does with each approximation a solver makes: see ss.Sim(approximations=)
 
 
-class SimPars(ss.parameters.Pars):
+class SimPars(ss.Pars):
     """
     The settings of a sim, as `sim.pars`; each is described in `ss.Sim`
 
@@ -106,7 +106,7 @@ class SimPars(ss.parameters.Pars):
         for key in pars:
             if key in self.removed:
                 raise ValueError(self.removed[key])
-        if 'custom' in pars and not isinstance(pars['custom'], ss.ndict): # Only as part of a whole SimPars, e.g. ss.Sim(pars=ss.sim.SimPars(...))
+        if 'custom' in pars and not isinstance(pars['custom'], ss.ndict): # Only as part of a whole SimPars, e.g. ss.Sim(pars=ss.SimPars(...))
             available = [key for key in self.keys() if key != 'custom']
             raise sc.KeyNotFoundError(f"Key(s) ['custom'] not found; available keys are {available}")
         return super().check_key_mismatch(pars)
@@ -457,7 +457,7 @@ class Sim(ss.modules.Base):
 
     Args:
         model (Module/list/dict): the model: a module or a list of modules, which are sorted by type as for `modules`; transitions, alone or in a list (or in `diseases=`), are one disease, named from its states (e.g. `sim.sir`).
-            Alternatively, the sim parameters as an `ss.sim.SimPars` object or a nested dictionary, which can include all other arguments
+            Alternatively, the sim parameters as an `ss.SimPars` object or a nested dictionary, which can include all other arguments
         pars (dict): the values of model parameters by name, e.g. `pars=dict(beta=0.1)` or `pars=fit.pars` (see `ss.par`), and of sim
             settings by their own names (e.g. `stop`) where no parameter of the model has the name; a name that is neither raises a `KeyError`
         label (str): the human-readable name of the simulation
@@ -499,7 +499,7 @@ class Sim(ss.modules.Base):
         substeps (int): the number of substeps per timestep, for the 'rk4' and 'euler' integrators and the 'binomial' solver (default: enough that no compartment changes by more than about a quarter, or a tenth for the binomial solver, in one)
         group_results (list): the results to keep by group, by name, e.g. `['I', 'cases']` or `['sir.I']`; the others keep only their totals (default: all, every few steps if every step would take more than about 100 MB)
         verbose (int/float): How much to print: 0 nothing, 1 the solver, notes, and progress (default), 2 everything (e.g. each step); a fraction is as 1, with progress every that share of the run (e.g. 0.1 for every 10%)
-        kwargs (dict): the settings above, by name (they are kept in `sim.pars`, an `ss.sim.SimPars`)
+        kwargs (dict): the settings above, by name (they are kept in `sim.pars`, an `ss.SimPars`)
 
     Note:
         Modules can be supplied either via individual keyword arguments (`diseases`, `networks`, etc.)
@@ -546,7 +546,7 @@ class Sim(ss.modules.Base):
         kinds = dict(demographics=demographics, networks=networks, diseases=diseases, connectors=connectors, interventions=interventions, analyzers=analyzers)
         for mod in sc.mergelists(*[arg for arg in models if not isinstance(arg, dict)]): # The model's modules, sorted into their kinds now (after those given by keyword, as init() would), so that e.g. sim.pars.diseases has them before init() as after
             key = next((key for key,cls in ss.modules.module_map().items() if isinstance(mod, cls)), 'custom')
-            if key not in kinds or isinstance(kinds[key], (dict, bool)): # Modules of no standard kind (sim.custom), or by name, e.g. networks=dict(main=...), or demographics=True: sorted at init() (see ss.sim.SimPars.validate_modules())
+            if key not in kinds or isinstance(kinds[key], (dict, bool)): # Modules of no standard kind (sim.custom), or by name, e.g. networks=dict(main=...), or demographics=True: sorted at init() (see ss.SimPars.validate_modules())
                 modules = sc.mergelists(mod, modules)
             else:
                 kinds[key] = sc.mergelists(kinds[key], mod)
@@ -609,7 +609,7 @@ class Sim(ss.modules.Base):
                 named = [mod] if type(mod) is ss.Disease or isinstance(mod, (ss.modify, ss.Delivery)) else []
                 named += [getattr(mod, 'product', None)]*isinstance(mod, ss.Delivery)
                 for obj in named:
-                    if obj is not None and obj._default_name and not getattr(obj, '_from_keywords', False): # A product its delivery made is named for the delivery: see ss.sim.SimPars.validate_name()
+                    if obj is not None and obj._default_name and not getattr(obj, '_from_keywords', False): # A product its delivery made is named for the delivery: see ss.SimPars.validate_name()
                         name = getattr(obj, '_assigned', None) or names.get(id(obj)) # The variable it was first assigned to, else the one that holds it here
                         if name in taken:
                             name = None
@@ -1333,7 +1333,7 @@ class Sim(ss.modules.Base):
                 for key,module in modules.items():
                     self.pars[attr][key] = module.pars
 
-        for mod in self.modules: # Each module is also sim.<name> (see __getattr__()), unless the sim has an attribute of that name (module names are unique: see ss.sim.SimPars.validate_name())
+        for mod in self.modules: # Each module is also sim.<name> (see __getattr__()), unless the sim has an attribute of that name (module names are unique: see ss.SimPars.validate_name())
             if mod.name in dir(self):
                 ss.warn(f'The sim has an attribute "{mod.name}", so sim.{mod.name} is not the module of that name; use e.g. sim.diseases.{mod.name}')
         return
@@ -1868,7 +1868,7 @@ class Sim(ss.modules.Base):
             return rebuild()
         base = self.__dict__.get('_before_init') # The copy that sim.new() and a rerun start from, which takes the same values
         if rand_seed is not None:
-            dict.__setitem__(self.pars, 'rand_seed', rand_seed) # The seed of this run, which is set while the sim is initialized (see ss.sim.SimPars.freeze())
+            dict.__setitem__(self.pars, 'rand_seed', rand_seed) # The seed of this run, which is set while the sim is initialized (see ss.SimPars.freeze())
             if isinstance(base, Sim):
                 base.pars.rand_seed = rand_seed
         if pars:

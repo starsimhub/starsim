@@ -374,7 +374,7 @@ class Event(Cond):
     def module(self):
         kind, obj, dst = self.args
         if kind in ['tr', 'to']:
-            return obj.module
+            return getattr(obj, 'module', None) # None for a transition not yet part of a module (e.g. in an error message as it is declared)
         mods = [s.module if isinstance(s, ss.State) else s[0] for s in obj]
         return next((m for m in mods if m is not None), None)
 
@@ -384,7 +384,7 @@ class Event(Cond):
         mod = modname(self.module)
         prefix = f'{mod}.' if mod else ''
         if kind in ['tr', 'to']:
-            out = f'{prefix}{obj.name}'
+            out = f'{prefix}{obj.name or f"({obj._arrow})"}' # By its source and destinations before it has a name
             return out if kind == 'tr' else f'{out}.to({getattr(dst, "name", dst)})'
         names = self.names
         return f'{prefix}{names[0] if len(names) == 1 else "(" + " | ".join(names) + ")"}.{kind}'
