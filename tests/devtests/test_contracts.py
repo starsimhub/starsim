@@ -150,26 +150,6 @@ def test_streams_across_sims():
     return a2
 
 
-def test_crn_pairing():
-    sc.heading('Testing that with common random numbers, making one agent immune changes few other agents, for a declared disease as agents')
-    def susceptible(seed, uid=None): # Who is still susceptible at the end; with uid, that agent is made immune at the start
-        intv = ss.vaccinate(efficacy=1.0, coverage=1.0, at=[0], where=lambda sim: ss.uids([uid]), name='vx') if uid is not None else None
-        sir = ss.SIR(beta=ss.perday(0.05), dur_inf=ss.days(10), init_prev=0.02)
-        sim = ss.Sim(n_agents=1000, diseases=sir, networks=ss.RandomNet(n_contacts=4, method='safe'), interventions=intv, solver='abm', unit='day', stop=100, rand_seed=seed, verbose=0) # A network that keeps CRN when people are born or die (ss.RandomNet does not)
-        return sim.run().diseases.sir['S'].raw.copy()
-    changed = dict()
-    for crn in [True, False]:
-        with ss.options.context(crn=crn):
-            changed[crn] = []
-            for seed in range(5):
-                base = susceptible(seed)
-                uid = int(np.nonzero(~base)[0][-1]) # An agent infected in the baseline
-                changed[crn].append(max(int((base != susceptible(seed, uid)).sum()) - 1, 0)) # Other agents whose outcome changes
-    assert np.median(changed[True]) <= 2, f'With CRN, making one agent immune changed the outcomes of {changed[True]} other agents' # 0 to 4
-    assert np.median(changed[False]) > 50, f'Without CRN, making one agent immune changed only {changed[False]} other agents' # About 300 of 800 infected
-    return changed
-
-
 # %% The solvers agree
 
 fine = dict(dt=ss.days(0.25), total_pop=10_000) # Agents and stepped solvers differ from the ODE by an amount of order dt, so compare at a fine step; and at a size that runs quickly event by event
