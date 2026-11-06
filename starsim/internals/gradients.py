@@ -513,7 +513,7 @@ class Run(sc.prettyobj):
 
     def function(self, clamp=False):
         """
-        The run, as a function of a dict of its numbers (see `capture()`): returns the compartments at the end, at the end of each step, the flows over each step, and the most substeps a step needed
+        The run, as a function of a dict of its numbers (see `capture()`): returns the compartments after the last step, at the start of each step, the flows over each step, and the most substeps a step needed
 
         Args:
             clamp (bool): see `stepper()`
@@ -524,23 +524,22 @@ class Run(sc.prettyobj):
         def run(X):
             X = self.prepare(X)
             step = self.stepper(X, clamp)
-            steps = self.npts - 1
+            steps = self.npts # One from each time point
             rows = {name:X[name][:steps] for name in table_fields if X[name].shape[0] > 1} # Each step's row of the tables that vary in time, given to it by the scan, rather than read from the whole table at each step (which reverse mode turns into adding into a table as large at every step)
             def body(y, xs):
                 ti, step_rows = xs
+                y_start = y
                 y = self.deliver(y, X, ti)
                 y_end, flows, n = step(y, ti, step_rows)
-                return y_end, (y_end, flows, n)
-            y_end, (stocks, flows, n) = checkpointed(body, X['y'], (jnp.arange(steps), rows), steps, self.fixed and self.checkpoint(X)) # Step ti+1 goes from time point ti to ti+1, with the values at the start of it
-            stocks = jnp.concatenate([X['y'][None], stocks]) # The start, then the end of each step, as the kernels record them
-            flows = jnp.concatenate([jnp.zeros((1,) + flows.shape[1:]), flows])
+                return y_end, (y_start, flows, n)
+            y_end, (stocks, flows, n) = checkpointed(body, X['y'], (jnp.arange(steps), rows), steps, self.fixed and self.checkpoint(X)) # Step ti goes from time point ti to ti+1, with the values at the start of it; the compartments at each time point are those at the start of its step, as the kernels record them
             return y_end, stocks, flows, jnp.max(n)
 
         return run
 
     def checkpoint(self, X):
         """ Whether a run differentiated in reverse mode keeps the state at only about √T of its T steps (see `checkpointed()`): if what reverse mode would otherwise keep (the compartments at each substep and stage) is large """
-        kept = (self.npts - 1)*self.n_max*4*np.size(X['y'])*8
+        kept = self.npts*self.n_max*4*np.size(X['y'])*8
         return kept > checkpoint_bytes
 
     def get(self, kind='run'):
@@ -1387,12 +1386,13 @@ class Density(sc.prettyobj):
                 amount = amount + flow*weight
             kernel = info.kernel
             now = amount*kernel[0] if len(kernel) == 1 else jnp.convolve(amount, jnp.asarray(kernel))[:npts]
+            before = lambda x: jnp.concatenate([jnp.zeros(1), x[:-1]]) # The number in it at the start of each step, from the steps before (see Compartmental.derived_outcomes())
             if info.stay is not None: # Each arrival leaves after a stay drawn for it
                 leaving = jnp.convolve(now, jnp.asarray(info.stay))[:npts]
-                out[f'n_{name}'] = jnp.cumsum(now - leaving)
+                out[f'n_{name}'] = before(jnp.cumsum(now - leaving))
             elif info.p_leave is not None: # A share leaves at each step: the arrivals of each step, decaying since
                 decay = (1 - np.asarray(info.p_leave, dtype=float))**np.arange(npts)
-                out[f'n_{name}'] = jnp.convolve(now, jnp.asarray(decay))[:npts]
+                out[f'n_{name}'] = before(jnp.convolve(now, jnp.asarray(decay))[:npts])
             out[name] = now
         return out
 

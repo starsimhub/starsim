@@ -15,6 +15,12 @@ ROUNDS = 2**52 # The index of the engine's draws is ROUNDS + ti*ROUND_MAX + roun
 ROUND_MAX = 2**20
 
 
+def step_key(mod):
+    """ The step that a module's draws by agent are keyed by: the loop's step plus 1, the initialization being 0 (as for each distribution's own: see `ss.Dist.jump_dt()`); during the initialization, 0, or before the start, the step being back-dated (see `Agents.backfill()`) """
+    ti = mod.t.ti
+    return ti + 1 if mod.sim.initialized else ti
+
+
 def member(a, b):
     """ Which of the UIDs `a` are in `b`, as np.isin(), for the few agents of a round of moves (whose fixed cost np.isin() is several times) """
     if not len(b):
@@ -89,8 +95,8 @@ class Moving:
         steps) is taken by another sweep, as are the triggers on an event that happened after them, until nobody moves.
 
         Args:
-            ti (int): the time of entry: the start of the step (`self.ti`) for the transitions that are not contact-mediated, and its end (the
-                loop's `ti`) for infections, which have happened by then (so an infected person transmits over their whole dwell time, as in the ODE)
+            ti (int): the time of entry: the start of the step (`self.ti`, the loop's) for the transitions that are not contact-mediated, and its end
+                (`self.ti + 1`) for infections, which have happened by then (so an infected person transmits over their whole dwell time, as in the ODE)
         """
         mod = self.mod
         order, position, back = self.sweep()
@@ -562,7 +568,7 @@ class Moving:
         burnin = self.mod.burnin_plan(self) # People who start part way through, from a module's own rule (ss.Pregnancy's burnin=)
         if burnin is not None:
             self.backfill_burnin(burnin)
-            self.record_stocks() # The start, again
+            self.count_stocks() # The start, again
         for key,arr in self.sets.items(): # Those placed in a set entered it when they were placed
             for name in key:
                 uids = self.members(self.graph.states[name])
@@ -595,7 +601,7 @@ class Moving:
             self.events = dict()
             self.live = None # Counted again
             self.unscheduled = None # Writes are not watched while nothing is counted
-            self.record_stocks()
+            self.count_stocks()
         return
 
     @property
@@ -697,6 +703,9 @@ class Moving:
         """
         return np.floor(np.asarray(dur, dtype=float)/(dt or self.dt) + self.sim.people.phase(uids))
 
+    def step_key(self):
+        return step_key(self.mod)
+
     def new_round(self, tag=None):
         """
         Start a round of moves: the engine's draws are keyed by the step and the round within it (see `draw()`), so a draw
@@ -707,7 +716,7 @@ class Moving:
         are keyed by the name rather than by how many rounds came before, so adding a transition (e.g. one only a product
         takes) leaves the draws of the others as they were (see `round_seed()`).
         """
-        ti = self.mod.t.ti # The loop's step (before the start, the step being back-dated: see backfill())
+        ti = self.step_key()
         step, n = self.round[:2]
         if tag is None or step != ti:
             n = n + 1 if step == ti else 0
@@ -828,8 +837,8 @@ class Moving:
 
     def stamp(self, name, uids, ti):
         """
-        Date some agents' entering a state, at the engine's time `ti` (the start of the step for a move made then, `ti`
-        of the loop less 1; its end for an infection by contact), and record the steps from it to the loop's index, so
+        Date some agents' entering a state, at the engine's time `ti` (the start of the step for a move made then, the
+        loop's `ti`; its end, `ti + 1`, for an infection by contact), and record the steps from it to the loop's index, so
         that `ti_X` reads as the step the move happened in (see `ss.TimeArr`), while `.raw` has the engine's time
         """
         arr = self.mod[f'ti_{name}']
@@ -842,16 +851,16 @@ class Moving:
     def index_of(self, ti):
         """
         The index of the step a move that the engine dates `ti` happens in, which is what `ti_X` reads: during a step,
-        the loop's `ti`, both for a move at its start (dated `ti - 1`) and for an infection by contact at its end (dated
-        `ti`); 0 for anyone placed at the start, however the engine dates them (see `seed_ti()`); and before the start
-        (see `backfill()`), the step after `ti`, since every move there is taken at the start of its step
+        the loop's `ti`, both for a move at its start (dated `ti`) and for an infection by contact at its end (dated
+        `ti + 1`); -1, the step before the first, for anyone placed at the start, however the engine dates them (see
+        `seed_ti()`); and before the start (see `backfill()`), `ti` itself, since every move there is taken at the start of its step
         """
         if self._backfill is not None:
-            return ti + 1
+            return ti
+        if not self.sim.initialized: # Placed at the start
+            return -1
         ti_loop = self.mod.t.ti
-        if ti_loop == 0: # Placed at the start
-            return 0
-        return ti if ti == ti_loop else ti + 1
+        return ti if ti <= ti_loop else ti - 1
 
     def enter(self, state, uids, ti, tr=None, srcs=-1):
         """

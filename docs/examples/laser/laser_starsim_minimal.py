@@ -33,7 +33,7 @@ class SIRModel(ss.Module):
     def step(self):
         pass # Nothing to do in the step itself
 
-    def update_results(self): # Called after each step, and at the start
+    def record_stocks(self): # Called at the start of each step, so each result is the state at its time point
         tick = self.ti
         susceptible = (self.population.disease_state == 0).sum()
         infected = (self.population.disease_state == 1).sum()

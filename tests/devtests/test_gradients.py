@@ -124,8 +124,8 @@ def test_identifiability():
 def test_posterior():
     sc.heading('Testing a posterior from NUTS')
     truth = make_sir(beta=0.5, dur=6).run().results.sir
-    weekly = np.add.reduceat(truth.cases.values[1:], np.arange(0, len(truth.cases) - 1, 7))[:-1] # A flow is compared with its total since the last data point
-    data = pd.DataFrame(dict(cases=np.random.default_rng(1).poisson(weekly)), index=truth.timevec[7::7][:len(weekly)])
+    weekly = np.add.reduceat(truth.cases.values, np.arange(0, len(truth.cases), 7))[:-1] # A flow is compared with its total over the steps from its data point to the next (the last, partial week left out)
+    data = pd.DataFrame(dict(cases=np.random.default_rng(1).poisson(weekly)), index=truth.timevec[::7][:len(weekly)])
     fit = make_sir(dur=6, data=data).fit(pars=['beta'], likelihood=dict(cases=ss.poisson()), method='nuts', draws=100, warmup=100, chains=2, rand_seed=1, verbose=True)
     fit.summarize()
     table = fit.table.set_index('par')
@@ -295,7 +295,7 @@ def test_several_values():
 
     # The log-density and a fit by gradients, whose gradient is the same in either mode, checkpointed or not
     truth = by_place([0.25, 0.4, 0.35]).run().results.sir.infection
-    df = pd.DataFrame([dict(time=t, patch=lab, infection=np.asarray(truth.select(patch=lab))[t-4:t+1].sum()) for lab in ['a', 'b', 'c'] for t in range(5, 61, 5)]).set_index('time')
+    df = pd.DataFrame([dict(time=t, patch=lab, infection=np.asarray(truth.select(patch=lab))[t:t+5].sum()) for lab in ['a', 'b', 'c'] for t in range(0, 56, 5)]).set_index('time') # Each over the five days from its time
     sim = by_place([0.3]*3, data=ss.simdata(df))
     ld = sim.log_density(likelihood=dict(infection=ss.poisson()))
     assert ld.names == ['beta[a]', 'beta[b]', 'beta[c]']
@@ -340,7 +340,7 @@ def test_several_values():
         return ss.Sim(sir, unit='day', start=0, stop=80, data=data, **kw)
     true = [0.4, 0.2, 0.3, 0.15]
     truth = in_time(true).run().results.sir.infection
-    df = pd.DataFrame(dict(infection=[np.asarray(truth)[t-4:t+1].sum() for t in range(5, 81, 5)]), index=range(5, 81, 5))
+    df = pd.DataFrame(dict(infection=[np.asarray(truth)[t:t+5].sum() for t in range(0, 76, 5)]), index=range(0, 76, 5))
     fit = in_time([0.3]*4, data=ss.simdata(df)).fit(likelihood=dict(infection=ss.poisson()), verbose=0)
     assert fit.method == 'l-bfgs-b' and list(fit.table.par) == ['beta[0]', 'beta[20]', 'beta[40]', 'beta[60]']
     assert isinstance(fit.pars.beta, ss.timeseries) and np.allclose(fit.pars.beta.values, true, rtol=1e-3)

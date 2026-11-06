@@ -462,7 +462,7 @@ def test_update_pars():
     sim.init()
     age0 = sim.people.age.raw[:100].copy()
     sim.run()
-    assert sim.pars.use_aging and np.allclose(sim.people.age.raw[:100] - age0, 2)
+    assert sim.pars.use_aging and np.allclose(sim.people.age.raw[:100] - age0, 3) # A step from each of 2000, 2001, and 2002
     return
 
 
@@ -567,7 +567,7 @@ def test_rescale():
     assert res.flu.I[0] == 10 and np.isclose(res.flu.prevalence[0], 1e-5)
     deadly = ss.SIR(beta=ss.perday(0.3), dur_inf=ss.days(10), p_death=0.5, init_prev=0.002) # An agent's death is scale people, not those no agent stands for yet
     res = ss.Sim(diseases=deadly, networks='random', n_agents=2000, total_pop=2e6, rescale=True, stop=40, unit='day', verbose=0).run().results
-    assert res.died.cum[-1] > 0 and np.allclose(res.alive, 2e6 - res.died.cum) and np.allclose(res.sir.S + res.sir.I + res.sir.R, res.alive)
+    assert res.died.cum[-1] > 0 and np.allclose(res.alive, 2e6 - (res.died.cum - res.died)) and np.allclose(res.sir.S + res.sir.I + res.sir.R, res.alive) # Those alive at each time point: less the deaths of the steps before it
     preg = lambda rescale: ss.Sim(demographics=ss.Pregnancy(), n_agents=2000, total_pop=1e6, rescale=rescale, stop=5, unit='day', verbose=0).run().results.pregnancy
     assert np.allclose(preg(True).P, preg(False).P, rtol=1e-3) # In a module that is not a disease, those no agent stands for are in each state as the agents are (rather than all not pregnant); a birth changes the agents' shares a little
 

@@ -388,7 +388,7 @@ class Events(Agents):
         # The pass
         dt = self.dt
         t0 = self.ti*dt
-        seed = np.random.SeedSequence([int(self.dists.init.seed), int(mod.ti)]).generate_state(1, np.uint64)[0] # The step's key: by the module's seed and the step, so each agent's draws in it are its own (see backends.events.rand())
+        seed = np.random.SeedSequence([int(self.dists.init.seed), int(self.step_key())]).generate_state(1, np.uint64)[0] # The step's key: by the module's seed and the step, so each agent's draws in it are its own (see backends.events.rand())
         e_a, e_tr, e_src, e_dst, e_t, e_by, e_rt, over = kernel.step_events(t0, t0 + dt, seed, state, self.ver, self.t_exit, self.exit_tr, fresh,
             self.haz_ptr, self.haz_tr, haz_rate, haz_row, rate_rows, self.br_ptr, self.br_tr, self.br_cum, self.tm_ptr, self.tm_tr,
             self.dw_kind, self.dw_k, self.dw_mean, self.dw_row, pool, self.dst_ptr, self.dst_state, self.dst_cum, self.inf_tr,
@@ -434,7 +434,7 @@ class Events(Agents):
                 self.events[tr.name] = uids if tr.name not in self.events else ss.uids.concatenate([self.events[tr.name], uids])
                 self.record(tr, uids, e_src[lo:hi], e_dst[lo])
                 if dst is not None:
-                    self.stamp(dst.name, uids, mod.ti) # Dated at the step it happened in
+                    self.stamp(dst.name, uids, mod.ti + 1) # Dated at the end of the step it happened in, as an infection is
                 else: # Died: at the end of the step, as by the agent engine's own outflows (see send())
                     people.request_death(uids, cause=mod)
                     srcs = sorted(set(e_src[lo:hi]))
@@ -442,10 +442,10 @@ class Events(Agents):
         if self.triggers: # Who ss.on() moves, by the events of the step: at its end, as the agent engine's sweep takes them (see finish_moves())
             self._moved = []
             self.cache.clear()
-            self.finish_moves(mod.ti)
+            self.finish_moves(mod.ti + 1)
         if self._news:
             self._news = False
-            self.notify(mod.ti)
+            self.notify(mod.ti + 1)
         self.cache.clear()
-        self.record_stocks()
+        self.count_stocks()
         return

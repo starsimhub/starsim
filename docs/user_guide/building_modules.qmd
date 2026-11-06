@@ -80,9 +80,9 @@ class Antibodies(ss.Module):
         self.level[recovered] = 1.0
         return
 
-    def update_results(self):
-        super().update_results()
-        self.results.mean_level[self.ti] = self.level.mean()
+    def record_stocks(self):
+        super().record_stocks()
+        self.results.mean_level[self.ti] = self.level.mean() # The level at the start of the step
         return
 ```
 
@@ -199,7 +199,7 @@ def init_results(self):
     )
 ```
 
-`kind=` says how the result is summed over time and compared with data: `'flow'` for a number of events in each step (e.g. new infections), `'stock'` for a quantity at each time point (e.g. the number infected), and `'ratio'` for a share or a mean. If it isn't given, it is guessed from the name (`new_...` is a flow, `n_...` a stock) or else the type (an integer is a count, guessed to be a flow; anything else is a ratio). A flow or stock is a count, which is multiplied by the number of people each agent stands for when the population is [rescaled](running_branching.qmd); a ratio (a share, a mean, or a level) isn't. `scale=` overrides this. Fill results in `update_results()`, at `self.ti`.
+`kind=` says how the result is summed over time and compared with data: `'flow'` for a number of events in each step (e.g. new infections), `'stock'` for a quantity at each time point (e.g. the number infected), and `'ratio'` for a share or a mean. If it isn't given, it is guessed from the name (`new_...` is a flow, `n_...` a stock) or else the type (an integer is a count, guessed to be a flow; anything else is a ratio). A flow or stock is a count, which is multiplied by the number of people each agent stands for when the population is [rescaled](running_branching.qmd); a ratio (a share, a mean, or a level) isn't. `scale=` overrides this. Fill results at `self.ti`: a stock in `record_stocks()`, called at the start of each step before any module steps, so that it is the state at the time point; a flow in `record_flows()`, called at the end of the step after every module has stepped and the deaths have happened (or in `step()`, as the events happen, e.g. `self.results.doses[self.ti] += len(uids)`). A result that needs both, such as a rate of births over the people alive, goes in `record_flows()`, reading the stock from its result (`self.sim.results.alive[self.ti]`), or in `finalize_results()`, over the whole run at once. A class that defines `update_results()`, as Starsim 3 and early versions of Starsim 4 did, raises a `TypeError` saying to split it.
 
 ## The work: `step()`
 
@@ -207,7 +207,7 @@ def init_results(self):
 
 - `self.sim` is the whole sim: its people (`self.sim.people`), diseases (`self.sim.diseases.cold`), and so on. A plain `ss.Module` given as `modules=` is in `self.sim.custom` (`sim.modules` is every module of the sim, of every kind).
 - `self.pars` are the module's parameters. A time parameter stays one (`self.pars.half_life`), as above. A value that varies, in time (`ss.timeseries`, `ss.seasonal`) or by level (`ss.by(node=[...])`), is its value now in arithmetic and NumPy (`self.pars.emergence*n`, `np.exp(-self.pars.k)`, `float(self.pars.k)`): a number in the sim's unit, or one for each level. If its values are typed, its value now is typed too, so `self.pars.rate.to_prob()` works whether `rate` is `ss.peryear(0.1)` or `ss.timeseries({2000: ss.peryear(0.1), 2010: ss.peryear(0.2)})`. So is a parameter of a declared disease, with what modifies it applied (`acts*(1 - hiv.pars.eff_condom)`).
-- `self.t.dt` is the length of a step, `self.now` is the date or time the step starts from, and `self.ti` is the index of the time point at the step's end, where what happens during the step is recorded.
+- `self.t.dt` is the length of a step, `self.now` is the date or time of the step (the time point it starts from), and `self.ti` is the index of that time point, where the step's results are recorded. The first step is `self.ti == 0`. A stock recorded at `self.ti` is already there (e.g. `self.sim.results.cold.I[self.ti]`, the number infectious now), but this step's flows are not, so `[self.ti - 1]` of a flow is the last step's.
 - A transition of a declared disease says who went through it: `disease.recovery.uids` is the agents who recovered in the last step. `disease.recovery.ever`, `.count`, and `.since` say whether, how often, and how long ago each person did; to save memory, a disease keeps this history only for the transitions something in the model reads, so to read one after the run (e.g. `sir.infection.count.values`), make the sim with `ss.Sim(..., keep_times=True)` (or set `ss.options.keep_times = True` for every sim).
 - To move people between the states of a declared disease, use `ss.move()`: `ss.move(sir.I, sir.R, p=0.5)` cures half of those infectious, `ss.move(sir.S, sir.I, n=5)` makes five susceptible people infectious, `ss.move(sir.S, sir.R, p=0.8, where=ss.ppl.age < 5)` protects 80% of the susceptible children under 5 (a condition on a group, as in `where=` elsewhere), and `sir.move(uids, sir.R)` moves particular agents from wherever they are (as agents only; the arguments can come in any order, with the source before the destination, so `ss.move(sir, uids, 'R')` is the same). It runs the same under every solver, and since people are moved rather than made or lost, every disease keeps the same people; the number in a state of people (`sir.I.n`) is read, not set. A count that is not people (mosquitoes, `ss.State(people=False)`) can also be set (`W.n = 0`) or moved from and to outside the model (`ss.move(ss.null, mosq.Sv, n=1000)`).
 
@@ -226,11 +226,12 @@ When a sim is built and run, each module goes through these stages:
 1. **`__init__()`**: the module is made; its parameters and states are given.
 2. **`init_pre(sim)`**: called once when the sim is built. It links the module to the sim and the people, sets up its time steps, and calls `init_results()`. Override it rarely, and call `super().init_pre(sim)` if you do.
 3. **`init_post()`**: called once the people exist and their states have their initial values; for setup that needs them.
-4. **`step()`**: called once each step.
-5. **`update_results()`**: called each step after every module has stepped, to record the step's results.
-6. **`finalize()`** and **`finalize_results()`**: called once at the end of the run, e.g. to work out a result from others.
+4. **`record_stocks()`**: called at the start of each step, before any module has stepped, to record the state then.
+5. **`step()`**: called once each step.
+6. **`record_flows()`**: called at the end of each step, after every module has stepped, to record what happened in it.
+7. **`finalize()`** and **`finalize_results()`**: called once at the end of the run, e.g. to work out a result from others.
 
-Always call the base class's method (`super().init_results()`, `super().update_results()`, and so on) when you override one that the base class has.
+Always call the base class's method (`super().init_results()`, `super().record_stocks()`, and so on) when you override one that the base class has.
 
 ## Modules from functions
 
@@ -259,7 +260,7 @@ A function module is called at every step, so it has to check the time itself if
 ## Pitfalls
 
 - **Writing code for something that is declared.** Check the table at the top of this page first: a declared part runs under every solver and shows in `describe()`.
-- **Forgetting `super()`.** Call `super().__init__()` with no arguments as the first line of `__init__()`, and the base class's method whenever you override `init_results()`, `update_results()`, `init_post()`, and the like. Leaving one out gives a warning that a required method was not called, not an error; `sim.check_method_calls()`, which `sim.run()` calls, lists any that weren't.
+- **Forgetting `super()`.** Call `super().__init__()` with no arguments as the first line of `__init__()`, and the base class's method whenever you override `init_results()`, `record_stocks()`, `record_flows()`, `init_post()`, and the like. Leaving one out gives a warning that a required method was not called, not an error; `sim.check_method_calls()`, which `sim.run()` calls, lists any that weren't.
 - **Keeping per-person values outside a state.** A plain array doesn't grow when agents are born; a state does, and appears in `sim.people.to_df()`.
 - **Keeping a reference to another module.** A sim copies the modules it is given when it is built, so reach the rest of the sim through `self.sim` in `step()` (e.g. `self.sim.diseases.cold`), not through an object kept from before.
 - **Comparing `self.ti` across modules with their own timelines.** A module given `start=`, `stop=`, or a `dt=` of its own runs only on its own steps, and its `self.ti` counts those steps, not the sim's. To compare times between modules, use dates or durations (`self.now`), not step indices.

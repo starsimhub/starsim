@@ -60,7 +60,7 @@ def test_on_event():
         assert np.isclose(res.b.flag[1:].sum(), res.a.sa[1:].sum(), rtol=0.25)
         r = make_on_event(order, solver='ode').results
         assert np.isclose(r.b.flag.sum(), res.b.flag.sum(), rtol=0.05), f'{r.b.flag.sum():.0f} as an ODE, {res.b.flag.sum():.0f} as agents'
-        assert np.isclose(r.b.flag.sum(), r.b.unflag.sum() + r.b.F[-1], rtol=1e-6) # The flow is the move
+        assert np.isclose(r.b.flag[:-1].sum(), r.b.unflag[:-1].sum() + r.b.F[-1], rtol=1e-6) # The flow is the move (F[-1] is before the last step's flows)
 
     # The events of a state by path, for modules made from strings: the same as the state's own
     def by_path(path):

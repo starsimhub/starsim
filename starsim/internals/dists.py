@@ -731,7 +731,7 @@ class Dist:
         """
         if ti is None:
             ti = self.module.t.ti
-        to = self.dt_jump_size*ti
+        to = self.dt_jump_size*(ti + 1) # State 0 is the initialization's, so the step from time point ti (which is step ti) draws from state ti + 1
         return self.jump(to=to, force=force)
 
     def init(self, trace=None, seed=None, module=None, sim=None, slots=None, force=False):

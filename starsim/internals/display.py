@@ -62,8 +62,8 @@ class Progress:
 
     def line(self):
         t = self.sim.t
-        share = t.ti/max(1, t.npts - 1)
-        now = ss.utils.time_str(t.tvec[t.ti], self.sim) # The end of the step being run, so that the last says the end of the run: a date, or e.g. day 27
+        share = (t.ti + 1)/max(1, t.npts) # Of the run, once the step being run is done
+        now = ss.utils.time_str(t.tvec[t.ti], self.sim) # The time point the step being run starts at: a date, or e.g. day 27
         return f'  {self.bar(share)} {share:4.0%}  {now}  {self.sim.elapsed:.1f} s'
 
     def update(self):
@@ -71,8 +71,8 @@ class Progress:
         t = self.sim.t
         if self.mode == 'lines':
             verbose = self.sim.verbose
-            every = max(1, round(t.npts*verbose) if verbose < 1 else t.npts//10)
-            if not t.ti % every:
+            mark = verbose if verbose < 1 else 0.1 # A line each time the share done passes another of these
+            if int((t.ti + 1)/t.npts/mark + 1e-9) > int(t.ti/t.npts/mark + 1e-9):
                 print(self.line())
             return
         now = time.time()
@@ -658,13 +658,13 @@ def check_dt(sim, factor=2, output=False):
     fine.run()
     rows = []
     for mod in coarse.declared:
-        n = mod.t.npts - 1 # The module's own timeline, which may differ from the sim's
+        n = mod.t.npts - 1 # The module's own timeline, which may differ from the sim's: the larger steps whose smaller ones are all in the finer run (it has no step past the last time point)
         for key,res in mod.results.items():
             if not isinstance(res, ss.Result) or np.ndim(res.values) != 1:
                 continue
             other = fine.results[mod.name][key].values
-            if res.kind == 'flow': # A flow: total it over each of the larger steps (a flow at a time point is over the step that ends there)
-                a, b = res.values[1:n+1], other[1:n*factor+1].reshape(n, factor).sum(axis=1)
+            if res.kind == 'flow': # A flow: total it over each of the larger steps (a flow at a time point is over the step that starts there)
+                a, b = res.values[:n], other[:n*factor].reshape(n, factor).sum(axis=1)
             else: # A stock: at each of the larger steps' time points
                 b = other[::factor]
                 a, b = res.values[:len(b)], b[:len(res.values)]

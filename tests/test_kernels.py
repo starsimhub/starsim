@@ -187,7 +187,8 @@ def test_seasonal_steps():
         S, I = ss.states('S I')
         sis = ss.Disease(infection=ss.Transition(S, I, rate=ss.seasonal(mean=ss.perday(0.15), amplitude=0.5, peak=0.25) * I), recovery=ss.Transition(I, S, dur=ss.days(10)), init_prev=0.05, name='sis')
         sim = ss.Sim(sis, solver=solver, dt=dt, stop=ss.years(2), total_pop=pop, rand_seed=seed, **kw).run()
-        return sim.results.sis.infection.sum()/pop, sim.solver
+        steps = int(round(728/dt.days)) # The first 728 days, eight whole quarters, as the steps from the last time point go past two years
+        return sim.results.sis.infection[:steps].sum()/pop, sim.solver
     ode = make('ode', ss.days(1))[0]
     out = sc.obj()
     for solver,pop in dict(gillespie=5000, tau=500_000).items(): # Steps of a quarter of a year, held at their middle: about 3% too many infections, against 5-6% held at the start

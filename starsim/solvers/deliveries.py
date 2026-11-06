@@ -513,9 +513,9 @@ class CompartmentalDelivery(sc.prettyobj):
         eng = self.eng
         selector = self.selector
         npts = sim.t.npts
-        due = np.zeros(npts, dtype=np.bool_) # By the time point each step starts from, the step being the next time point's (see ss.Loop)
+        due = np.zeros(npts, dtype=np.bool_) # By the step, which is the time point it starts from (see ss.Loop)
         for ti in range(npts):
-            due[ti] = d.ti_start <= ti + 1 < d.ti_stop and (d.round_tis is None or ti + 1 in d.round_tis)
+            due[ti] = d.ti_start <= ti < d.ti_stop and (d.round_tis is None or ti in d.round_tis)
         sel = d.offer(d.default_eligible() if d.eligible is None else selector.select(d.eligible))
         cov = np.broadcast_to(np.clip(selector.per_person(1.0 if d.coverage is None else d.coverage, convert=lambda val: -np.expm1(-d.convert(val)*d.span)), 0, 1), selector.shape)
         changes = dict(d.changes) if d.product is None else {sim.groups.dim_index(d.product.dim):1}

@@ -30,8 +30,8 @@ def test_particle_mcmc():
         return ss.Sim(sir, unit='day', start='2020-01-01', stop='2020-04-01', solver='binomial', total_pop=10_000, data=data, verbose=0, rand_seed=3)
 
     truth = make().run().results.sir
-    weekly = np.add.reduceat(truth.cases.values[1:], np.arange(0, len(truth.cases) - 1, 7))[:-1] # A flow is compared with its total since the last data point
-    data = pd.DataFrame(dict(cases=np.random.default_rng(1).poisson(weekly)), index=truth.timevec[7::7][:len(weekly)])
+    weekly = np.add.reduceat(truth.cases.values, np.arange(0, len(truth.cases), 7))[:-1] # A flow is compared with its total over the steps from its data point to the next (the last, partial week left out)
+    data = pd.DataFrame(dict(cases=np.random.default_rng(1).poisson(weekly)), index=truth.timevec[::7][:len(weekly)])
 
     # The particle filter's estimate of the likelihood is highest at the value that made the data
     sim = make(data=data).init()
@@ -100,8 +100,8 @@ def test_fitted_mobility():
 
     # IF2 gives each particle its own movement, and finds the value that made the data
     truth = make(away=0.01, solver='ode').run().results.sir
-    weekly = np.add.reduceat(truth.cases.values[1:], np.arange(0, len(truth.cases) - 1, 7))[:-1]
-    data = pd.DataFrame(dict(cases=np.random.default_rng(1).poisson(weekly)), index=truth.timevec[7::7][:len(weekly)])
+    weekly = np.add.reduceat(truth.cases.values, np.arange(0, len(truth.cases), 7))[:-1]
+    data = pd.DataFrame(dict(cases=np.random.default_rng(1).poisson(weekly)), index=truth.timevec[::7][:len(weekly)])
     fit = make(data=data).fit(method='if2', particles=100, iterations=10, chains=2, rand_seed=1, verbose=False)
     assert 0.005 < fit.table.set_index('par').best.away < 0.02, fit.table
     return fit

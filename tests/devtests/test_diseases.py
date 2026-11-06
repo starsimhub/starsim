@@ -182,9 +182,9 @@ def test_coded_seeds():
     sim = ss.Sim(diseases=ssl.AgentSIR(dur_inf=ss.constant(ss.years(2)), p_death=0), networks='random', n_agents=1000, start=2000, stop=2005, verbose=0).init()
     sir = sim.diseases.agentsir
     seeds = sir.infected.uids
-    assert len(seeds) and np.all(sir.ti_infected[seeds] == 0) and np.all(sir.ti_recovered[seeds] == 3) # Infectious in steps 1 and 2, as a case infected in step 1 is in steps 2 and 3
+    assert len(seeds) and np.all(sir.ti_infected[seeds] == -1) and np.all(sir.ti_recovered[seeds] == 2) # Dated by the step before the first, so infectious in steps 0 and 1, as a case infected in step 0 is in steps 1 and 2
     sim.run()
-    assert np.all(sir.recovered[seeds]) and np.all(sim.results.agentsir.infected[1:3] >= len(seeds))
+    assert np.all(sir.recovered[seeds]) and np.all(sim.results.agentsir.infected[0:2] >= len(seeds))
     return sim
 
 
@@ -216,7 +216,7 @@ def test_coded_par_modifiers():
     mods = [make(target='coded.pars.level', multiply=0.5, start=2002), make(multiply=2), make(target='coded.pars.risk', set=ss.probperyear(0.6))]
     dis = ss.Sim(diseases=Coded(), connectors=mods, **pars).run().diseases.coded
     level, rate, risk = np.array(dis.seen).T
-    assert np.allclose(level, [0.4, 0.4, 0.2, 0.2])
+    assert np.allclose(level, [0.4, 0.4, 0.2, 0.2, 0.2]) # A step from each year, 2000 to 2004; the modifier applies from the one at 2002
     assert np.allclose(rate, 0.4)
     assert np.allclose(risk, 0.6)
     assert dis.pars.level == 0.4 and dis.pars.rate == ss.peryear(0.2) and dis.pars.risk == ss.probperyear(0.3)

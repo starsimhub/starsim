@@ -11,7 +11,7 @@ import starsim as ss
 from .engine import CountState, Effects, Engine, times
 from .compartmental import Compartmental
 from .agents_expressions import Expressions
-from .agents_moving import Moving, ROUNDS, ROUND_MAX
+from .agents_moving import Moving, ROUNDS, ROUND_MAX, step_key
 from .agents_stepping import Stepping
 from .agents_branching import Branching
 
@@ -129,7 +129,7 @@ class Transmission(Effects):
         elif not ss.options.crn:
             return dist.rvs(uids)
         slots = self.sim.people.slot_raw()
-        return ss.dists.hash_uniforms(dist.seed, ROUNDS + self.mod.t.ti*ROUND_MAX, uids if slots is None else slots[uids], dtype=dist.hash_dtype, even=dist.even)
+        return ss.dists.hash_uniforms(dist.seed, ROUNDS + step_key(self.mod)*ROUND_MAX, uids if slots is None else slots[uids], dtype=dist.hash_dtype, even=dist.even)
 
     def pick_sources(self, pairs, name):
         """
@@ -302,8 +302,6 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         for state in graph.people_states:
             if state.name not in unkept:
                 mod[f'ti_{state.name}'].shift = mod[f'shift_{state.name}']
-            if state.name in self.scheduled:
-                mod[f'ti_exit_{state.name}'].shift = 1 # Read as the step the exit is taken in (exits are taken at a step's start)
         for name in unkept: # Setting it does nothing, and reading it says how to keep it
             mod.setattribute(f'ti_{name}', ss.arrays.Unkept(f'ti_{name}', mod))
         for state in graph.people_states: # Each change to who is in a state is counted: see wrote()
@@ -551,7 +549,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         if not self._started:
             self.moved_early = moved if self.moved_early is None else ss.uids.concatenate([self.moved_early, moved])
         if tr is None and self.stocks and self.sim.loop.index == 0: # A one-off move before the first step (e.g. ss.move() in init_post(), or after sim.init()): the start, recorded already (see init_post()), is recorded again with them
-            self.record_stocks()
+            self.count_stocks()
         return moved
 
     def move_some(self, srcs, dst, p=None, n=None, uids=None, where=None):
@@ -686,7 +684,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
             if name in self.tf_dists:
                 self.schedule_transfer(name, self.transfer_uids(name, tf)[1], self.dt, -1)
         self.n_seen = self.sim.people.uid.len_used # Agents made after this (e.g. born of ss.Births) are put in the first state: see place_newcomers()
-        self.record_stocks() # The results at the first time point are the start
+        self.count_stocks() # The results at the first time point are the start
         return
 
     def seed_dist(self):
@@ -767,7 +765,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         return
 
     def infect_now(self, uids, strain=None):
-        """ Infect some agents now, from code (`ss.Disease.infect()`): those in the first state, along its first transmission (with the strain given), counted in its flow, dated as infections are (at the step's index, its end), and logged as seeds """
+        """ Infect some agents now, from code (`ss.Disease.infect()`): those in the first state, along its first transmission (with the strain given), counted in its flow, dated as infections are (at the step's end, the next time point), and logged as seeds """
         mod = self.mod
         self.new_round()
         uids = uids[mod[self.graph.first.name][uids]]
@@ -784,13 +782,8 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
             self._uids = uids
             ps = [np.broadcast_to(p, len(uids)) for p in self.branch_probs_for(tr, uids)]
             which = np.minimum((np.cumsum(ps, axis=0) <= self.draw('seed_where', uids)[None, :]).sum(axis=0), len(tr.dst) - 1)
-        before = dict(self.flowcounts)
         for i,dst in enumerate(tr.dst):
-            self.force(uids[which == i], tr, dst, ti=mod.ti)
-        if getattr(self, 'written_ti', None) == mod.ti: # Between steps (e.g. after sim.run(until=...)), once this step's results are written: the flow is added to them, as it would be lost when the next step starts counting
-            for key,val in self.flowcounts.items():
-                if val != before[key]:
-                    mod.results[key][mod.ti] += val - before[key]
+            self.force(uids[which == i], tr, dst, ti=mod.ti + 1) # Between steps (e.g. after sim.run(until=...)), counted in the next step, as the engine clears its flows at the end of each
         if mod.infection_log is not None:
             self.log_infections(uids, seeds=True)
         return uids
@@ -1027,8 +1020,8 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
             return None
         return np.bincount(sim.groups.group_coords[:, sim.mixing.space], weights=vals, minlength=sim.groups.strats[sim.mixing.space].n)
 
-    def record_stocks(self):
-        """ As for the other engines (see `Engine.record_stocks()`), with the number in each state of people as it has been kept since the last census (see `census()`) """
+    def count_stocks(self):
+        """ As for the other engines (see `Engine.count_stocks()`), with the number in each state of people as it has been kept since the last census (see `census()`) """
         people = self.graph.people_states
         counts = {state.name:(self.counted(state) if not self.sim.people.scale.weighted else self.weighted_count(state)) for state in people}
         if self.held is not None: # The uninfected of a branching process, as counts

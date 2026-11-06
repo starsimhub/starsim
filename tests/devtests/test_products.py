@@ -79,7 +79,7 @@ def test_test_diseases():
             return seen.pos
         r = sim.results
         k = int(np.flatnonzero(r.prog.delivered)[0])
-        n = {g:np.array([r[g][x][k-1] for x in ['S', 'I', 'CIN', 'CA']]) for g in ['hpv16', 'hpv18']} # At the start of the step it was delivered in
+        n = {g:np.array([r[g][x][k] for x in ['S', 'I', 'CIN', 'CA']]) for g in ['hpv16', 'hpv18']} # At the start of the step it was delivered in
         N = n['hpv16'].sum()
         p = 0.0
         for x in range(4):
@@ -134,7 +134,7 @@ def test_outcomes():
         p = np.array([[sum(table[res].get(x, 0) for res in list(table)[j:]) for j in range(3)] for x in ['S', 'I', 'CIN', 'CA']])
         miss = 1.0
         for g in ['hpv16', 'hpv18']:
-            n = np.array([r[g][x][k-1] for x in ['S', 'I', 'CIN', 'CA']]) # At the start of the step it was delivered in
+            n = np.array([r[g][x][k] for x in ['S', 'I', 'CIN', 'CA']]) # At the start of the step it was delivered in
             N = n.sum()
             miss = miss*(1 - n/N @ p)
         tails = np.concatenate([[1], 1 - miss, [0]])

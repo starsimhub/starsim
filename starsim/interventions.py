@@ -784,7 +784,7 @@ class Delivery(ss.products.EventSource, Intervention):
             self.trace_nets = [sim.networks[net if isinstance(net, str) else net.name] for net in sc.tolist(self.trace)]
         to_ti = ss.connectors.to_ti
         npts = sim.t.npts
-        self.ti_start = 1 if self.start is None else to_ti(sim, self.start, name=f'the start of "{self.name}"') # The first step is 1 (see ss.Loop)
+        self.ti_start = 0 if self.start is None else to_ti(sim, self.start, name=f'the start of "{self.name}"') # The first step is 0 (see ss.Loop)
         self.ti_stop = npts if self.stop is None else to_ti(sim, self.stop, name=f'the stop of "{self.name}"', after=True) # A stop after the end never stops it
         self.round_tis = None
         if self.in_rounds:
@@ -801,10 +801,10 @@ class Delivery(ss.products.EventSource, Intervention):
                     tis += list(range(self.ti_start, last, every))
                 else: # Each round on the first step from its time, the start plus a whole number of intervals, as dates: yearly rounds on weekly steps are a year apart, not 52 weeks (364 days)
                     yearvec = np.asarray(sim.t.yearvec, dtype=float)
-                    n = int((yearvec[last - 1] - yearvec[self.ti_start - 1])/interval.years) + 1
-                    times = [sim.t.tvec[self.ti_start - 1] + interval*k for k in range(n)] # One by one, since a calendar interval (ss.datedur) doesn't take an array
+                    n = int((yearvec[last - 1] - yearvec[self.ti_start])/interval.years) + 1
+                    times = [sim.t.tvec[self.ti_start] + interval*k for k in range(n)] # One by one, since a calendar interval (ss.datedur) doesn't take an array
                     years = np.array([time.years if isinstance(time, ss.date) else time.to('year').value for time in times])
-                    found = np.searchsorted(yearvec, years - 1e-6) + 1 # As to_ti() finds them, allowing for rounding
+                    found = np.searchsorted(yearvec, years - 1e-6) # As to_ti() finds them, allowing for rounding
                     tis += [int(ti) for ti in found if ti < last]
             self.round_tis = set(tis)
             tis = sorted(self.round_tis)
@@ -1032,8 +1032,8 @@ class Delivery(ss.products.EventSource, Intervention):
         timevec = self.results.timevec # Its own, the sim's time axis, which it keeps when the sim is shrunk
         tis = sorted(ti for ti in self.round_tis or [] if ti < len(timevec))
         if self.round_tis is not None and len(tis) <= 10:
-            return [timevec[ti - 1] for ti in tis] # Step ti starts at time point ti-1
-        return [(timevec[self.ti_start - 1], timevec[min(self.ti_stop, len(timevec)) - 1])]
+            return [timevec[ti] for ti in tis] # Step ti starts at time point ti
+        return [(timevec[min(self.ti_start, len(timevec) - 1)], timevec[min(self.ti_stop, len(timevec) - 1)])]
 
     #%% Stepping
 
@@ -1619,9 +1619,9 @@ class Delivery(ss.products.EventSource, Intervention):
                     owner.flush(np.inf)
         return
 
-    def update_results(self):
+    def record_flows(self):
         """ The coverage of what was delivered in the step """
-        super().update_results()
+        super().record_flows()
         res = self.results
         ti = self.ti
         res.coverage[ti] = res.delivered[ti]/res.eligible[ti] if res.eligible[ti] else 0.0

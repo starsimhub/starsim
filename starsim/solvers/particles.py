@@ -20,7 +20,7 @@ class Particles(sc.prettyobj):
     Many runs of an engine's program, from its start, each with its own compartments and random numbers, stepped forward together; for `ss.fit.ParticleFilter`
 
     The runs start from the engine as it is (restarted), and the engine is not changed until `restore()`.
-    `advance()` takes every run to a later time point, and `select()` keeps some of the runs (each as
+    `advance()` takes every run through more steps, and `select()` keeps some of the runs (each as
     often as it is picked), as a filter does when it draws them again.
 
     Args:
@@ -30,9 +30,9 @@ class Particles(sc.prettyobj):
         by_group (bool): whether to keep the stocks and flows by group (else their total, as one group)
 
     Attributes:
-        stocks (array): the number in each state at each time point of each run (runs × time points × states × groups)
-        flows (array): the flow along each transition and mover over the step to each time point, likewise
-        done (int): the time point the runs have reached
+        stocks (array): the number in each state at each time point of each run, at the start of its step (runs × time points × states × groups)
+        flows (array): the flow along each transition and mover over the step from each time point, likewise
+        done (int): the steps the runs have taken, which is the time point they have reached (the results are filled in before it)
         npts (int): the time points of a whole run
     """
     def __init__(self, engine, n, rng, by_group=False):
@@ -66,10 +66,10 @@ class Particles(sc.prettyobj):
 
     def advance(self, end, tables=None, shares=None, row0=0):
         """
-        Take every run to time point `end`, if it is not there already
+        Take every run to time point `end` (through the steps before it), if it is not there already
 
         Args:
-            end (int): the time point
+            end (int): the time point, after the last step to take
             tables (list): the parts of the program that vary in time, as `ss.kernels.advance()` takes them, if not the engine's own: one entry for every run, or one for each (as each particle of IF2 has its own values)
             shares (array): the time share between places of every run (runs by entries), if not the engine's own
             row0 (int): the row of a whole run's tables that the first row of `tables` is
@@ -80,7 +80,7 @@ class Particles(sc.prettyobj):
         shares = self.shares if shares is None else shares
         rest = (self.solver, self.n_sub, *tables, shares, self.register, self.shifts, self.state_of, self.stocks, self.flows, row0)
         n_sub = ss.kernels.substeps(np.append(self.program.fixed[self.program.src >= 0], self.program.mov_rate), self.dt, self.n_sub, self.solver) # The rates of the step last refreshed
-        kn = ss.kernels.choose(len(self.ys)*ss.kernels.plain_seconds(self.program, self.ys[0], end - self.done + 1, self.solver, n_sub))
+        kn = ss.kernels.choose(len(self.ys)*ss.kernels.plain_seconds(self.program, self.ys[0], end - self.done, self.solver, n_sub))
         if not ss.solvers.backends.rust.on and isinstance(self.rngs, list): # Made for the Rust kernels, now run by Numba's
             self.rngs = nb.typed.List(self.rngs)
             if self.n_threads > 1:
@@ -95,9 +95,9 @@ class Particles(sc.prettyobj):
     def select(self, picks, keep=0):
         """ Keep the runs picked, each as often as it is picked, with their stocks and flows from time point `keep` on (those before it are left as they were) """
         self.ys = self.ys[picks]
-        if keep <= self.done:
-            self.stocks[:, keep:self.done+1] = self.stocks[picks, keep:self.done+1]
-            self.flows[:, keep:self.done+1] = self.flows[picks, keep:self.done+1]
+        if keep < self.done:
+            self.stocks[:, keep:self.done] = self.stocks[picks, keep:self.done]
+            self.flows[:, keep:self.done] = self.flows[picks, keep:self.done]
         return
 
     def restore(self):

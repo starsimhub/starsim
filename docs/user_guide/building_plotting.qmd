@@ -54,7 +54,7 @@ A module plots its own results with `plot()`, which by default puts its states t
 sim.diseases.measles.plot('I', 'prevalence') # Two axes: the number and the share infectious
 ```
 
-A model run over years can be plotted as yearly values with `annualize=True`, which adds up each result by its kind: the total of a flow over each year, the value of a stock at its end, and a ratio worked out again from its parts. If the sim has data (see [Outcomes](building_outcomes.qmd#data-attached-by-name)), `sim.plot()` shows it as points with the result of the same name, with a flow summed over each period of the data, as a fit compares them, and the title says so (e.g. "weekly totals, as in the data"); `show_data=False` leaves it out.
+A model run over years can be plotted as yearly values with `annualize=True`, which adds up each result by its kind: the total of a flow over each year, the value of a stock at its start (of a running total, `.cum`, at its end), and a ratio worked out again from its parts. If the sim has data (see [Outcomes](building_outcomes.qmd#data-attached-by-name)), `sim.plot()` shows it as points with the result of the same name, with a flow summed over each period of the data, as a fit compares them, and the title says so (e.g. "weekly totals, as in the data"); `show_data=False` leaves it out.
 
 ## Plotting results
 

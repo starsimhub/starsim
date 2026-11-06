@@ -51,7 +51,7 @@ Second, neither β nor the share reported is known, so each is a parameter with 
 
 ## The data
 
-The file `data/measles_cases.csv` has the number of measles cases reported each week, from the week ending 8 January to the week ending 19 March:
+The file `data/measles_cases.csv` has the number of measles cases reported each week, from the week starting 1 January to the week starting 12 March:
 
 ```{python}
 data = pd.read_csv('data/measles_cases.csv')
@@ -67,15 +67,15 @@ This data is illustrative, not real. It was made once, from an agent-based run o
 ```python
 import numpy as np
 truth = ss.Sim(measles, pars=dict(beta=0.16, reported=0.4), n_agents=100_000, rand_seed=3, **settings).run()
-weekly = truth.to_data('cases', resample='week', noise=None) # Weekly reported cases
+weekly = truth.to_data('cases', resample='week', noise=None) # Weekly reported cases, each dated by the first day of its week
 rng = np.random.default_rng(3)
 weekly['cases'] = rng.negative_binomial(30, 30/(30 + weekly.cases)) # With extra variation (negative binomial counts)
-weekly[weekly.date <= ss.date('2025-03-19')].to_csv('data/measles_cases.csv', index=False)
-weekly[weekly.date > ss.date('2025-03-19')].to_csv('data/measles_cases_after.csv', index=False) # What happens next
+weekly[weekly.date <= ss.date('2025-03-12')].to_csv('data/measles_cases.csv', index=False)
+weekly[weekly.date > ss.date('2025-03-12')].to_csv('data/measles_cases_after.csv', index=False) # What happens next
 ```
 :::
 
-The data is matched to the model's results by name: the column `cases` is compared with the outcome `cases`, and the column `date` gives the time of each row (the end of the week). Since each row is a week's total, it is compared with the total of the model's daily cases over that week. To attach the data, give it to the sim. Plotting the cases then shows the data with the model's results, here with the starting guesses:
+The data is matched to the model's results by name: the column `cases` is compared with the outcome `cases`, and the column `date` gives the time of each row (the first day of the week). Since each row is a week's total, it is compared with the total of the model's daily cases over that week, the seven days from its date. To attach the data, give it to the sim. Plotting the cases then shows the data with the model's results, here with the starting guesses:
 
 ```{python}
 sim = ss.Sim(measles, data=data, **settings)
@@ -156,7 +156,7 @@ proj = post.project({'No campaign': None}, n=100, data=everything)
 proj.plot('measles.cases')
 ```
 
-The outbreak peaked in the week ending 9 April, at 465 reported cases, well above the projection's median of about 350, and 3,470 cases were reported in all, against a median of about 2,800. Both are within the projection's range, near its top: about 40% of infections were in fact reported, which the data up to March couldn't tell from a smaller share. A decision based on the median alone would have underestimated the outbreak, and what the campaign would prevent; one based on the range would not.
+The outbreak peaked in the week starting 2 April, at 465 reported cases, well above the projection's median of about 350, and 3,470 cases were reported in all, against a median of about 2,800. Both are within the projection's range, near its top: about 40% of infections were in fact reported, which the data up to March couldn't tell from a smaller share. A decision based on the median alone would have underestimated the outbreak, and what the campaign would prevent; one based on the range would not.
 
 This is the usual situation: data from early in an outbreak say how fast it is growing, but not how big it will get, and a projection from them is only as good as its range. [Fitting a model](../user_guide/calibration_fitting.qmd) in the user guide covers fitting stochastic and agent-based models, other ways to measure the mismatch, and the choice of method; [Fit diagnostics](../user_guide/calibration_diagnostics.qmd) covers what else to check.
 

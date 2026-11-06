@@ -100,7 +100,7 @@ def test_any():
         k = int(np.flatnonzero(r.prog.delivered)[0])
         exp = seen
         if solver == 'ode': # Independent genotypes: from the marginals
-            f = {x:[r[g][x][k-1]/10_000 for g in ['hpv16', 'hpv18']] for x in ['CIN', 'CA']} # At the start of the step it was delivered in
+            f = {x:[r[g][x][k]/10_000 for g in ['hpv16', 'hpv18']] for x in ['CIN', 'CA']} # At the start of the step it was delivered in
             no_ca = np.prod([1 - p for p in f['CA']])
             exp = sc.obj(eligible=10_000*no_ca, found=0.9*10_000*(no_ca - np.prod([1 - a - b for a,b in zip(f['CA'], f['CIN'])])))
         assert np.isclose(r.prog.eligible[k], exp.eligible) and np.isclose(r.prog.positive[k], exp.found, rtol=1e-6 if solver == 'ode' else 0.05), solver

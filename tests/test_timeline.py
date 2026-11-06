@@ -395,9 +395,9 @@ def test_schedule():
 
     sim = ss.Sim(modules=Clinic(), n_agents=10, dt=ss.days(1), start='2010-01-01', stop='2012-01-01', verbose=0).run()
     log = sim.clinic.log
-    assert log.poll == ['2010-04-01', '2010-07-01', '2010-10-01', '2011-01-01', '2011-04-01', '2011-07-01', '2011-10-01']
+    assert log.poll == ['2010-04-01', '2010-07-01', '2010-10-01', '2011-01-01', '2011-04-01', '2011-07-01', '2011-10-01', '2012-01-01'] # A step from each day, the last included
     assert log.campaigns == ['2010-01-01', '2011-06-15']
-    assert log.new_year == ['2010-01-01', '2011-01-01']
+    assert log.new_year == ['2010-01-01', '2011-01-01', '2012-01-01']
     assert log.weekly == 105
 
     sim = ss.Sim(modules=Clinic(), n_agents=10, dt=ss.months(1), start='2010-01-01', stop='2011-01-01', verbose=0).run() # Several due in one step are counted

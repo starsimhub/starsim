@@ -391,8 +391,9 @@ def test_time():
     assert isinstance(sir.ti_I, ss.TimeArr) and sir.ti_I.raw.dtype == np.float32 and sir.exit_I.raw.dtype == np.int8 # 4 bytes and 1
     infected = sir.ti_I.notnan.uids
     assert np.isnan(sir.ti_I[sir.S.uids]).all() and (sir.ti_I[infected] <= sir.ti).all() # Never infected is NaN, not a large negative number
-    assert np.allclose(sir.ti_I.years[infected], sir.t.yearvec[sir.ti_I[infected].astype(int)]) # The year at the end of the step of infection
-    assert (sir.ti_I[infected] >= 0).all() and (sir.ti_I[infected] == 0).sum() == sir.results.I[0] # Those infectious at the start (by contact) are dated as if infected at the end of the step before the first, index 0, as infections by contact are dated at the end of their step
+    later = infected[sir.ti_I[infected] >= 0]
+    assert np.allclose(sir.ti_I.years[later], sir.t.yearvec[sir.ti_I[later].astype(int)]) # The year at the start of the step of infection
+    assert (sir.ti_I[infected] >= -1).all() and (sir.ti_I[infected] == -1).sum() == sir.results.I[0] # Those infectious at the start are dated as if infected in the step before the first, index -1
     with pytest.raises(AttributeError, match='sir.ti_R is not kept'): # The engine does not need ti_R, so it was not kept
         sir.ti_R.notnan
     class Recovered(ss.Analyzer): # A Starsim 3-style module that reads it, which needs it kept
@@ -749,7 +750,7 @@ def test_lifetable_and_seeding():
     age = np.asarray(sim.people.age.raw[sim.people.auids])
     expected = np.sum(1 - table.survive(age + 1)/table.survive(age))
     res = sim.run().results.sir
-    assert np.isclose(res.death[1], expected, rtol=0.1) and np.isclose(res.S[0] - res.S[1], res.death[1]) # Deaths in the first year, as the table gives them
+    assert np.isclose(res.death[0], expected, rtol=0.1) and np.isclose(res.S[0] - res.S[1], res.death[0]) # Deaths in the first year, as the table gives them
     with pytest.raises(ss.CapabilityError):
         ss.Sim(make(), unit='year', stop=3, solver='ode', verbose=0).init()
     ode = ss.Sim(make(strat=True), unit='year', stop=3, solver='ode', verbose=0).run() # Stratified by age, it is a death rate for each age group
@@ -761,7 +762,7 @@ def test_lifetable_and_seeding():
         sir = ss.Disease(S >> I @ ss.perday(0.05)*I.frac, I >> R @ ss.days(8), init=dict(I=0), name='sir')
         seeds = ss.Delivery(move=S >> I, capacity=3, start=ss.days(30), interval=ss.days(30), stop=ss.days(365), name='importation')
         delivered = ss.Sim(sir, interventions=seeds, unit='day', stop=400, solver=solver, n_agents=10_000, verbose=0).run().results.importation.delivered.values
-        assert list(np.flatnonzero(delivered)[:3]) == [31, 61, 91] and np.allclose(delivered[delivered > 0], 3) # The steps that start at 30, 60, 90
+        assert list(np.flatnonzero(delivered)[:3]) == [30, 60, 90] and np.allclose(delivered[delivered > 0], 3) # The steps that start at 30, 60, 90
     return sim
 
 
@@ -834,14 +835,14 @@ def test_seeded_stay():
         S, I, R = ss.states(3)
         rf = ss.Disease(infection=S >> I @ ss.perday(0.001)*I.n, recovery=I >> R @ ss.constant(ss.days(1)), init_n=dict(I=100), name='rf')
         res = ss.Sim(rf, unit='day', stop=2, total_pop=10_000, n_agents=10_000, solver=solver, verbose=0).run().results.rf
-        assert res.I[1] == res.infection[1] # Only the new cases are left after the first step
+        assert res.I[1] == res.infection[0] # Only the new cases of the first step are left after it
     # On a network too, a seed with a one-step stay infects in the first step only, as the people it infects do in theirs (before, never; by a rate, see the loop above)
     S, I, R = ss.states('S I R')
     sir = ss.Disease(S, I, R, infection=S >> I @ ss.perday(0.1)*I, recovery=I >> R @ ss.constant(ss.days(1)), init_n=dict(I=100), name='sir')
     sim = ss.Sim(sir, networks=ss.RandomNet(), unit='day', stop=4, n_agents=10_000, analyzers=ss.infection_log(), verbose=0).run()
     log = sim.analyzers[0].to_df()
     by_seeds = log[log.source.isin(log.target[log.source == -1])]
-    assert len(by_seeds) and (by_seeds.t == 1).all(), f'seeds infected on days {sorted(set(by_seeds.t))}'
+    assert len(by_seeds) and (by_seeds.t == 0).all(), f'seeds infected on days {sorted(set(by_seeds.t))}'
     return
 
 
@@ -961,7 +962,7 @@ def test_schedule():
     sc.heading('Testing exits scheduled at entry')
 
     # A split read at entry: everyone infected in the first five steps is severe, including those infected in the fifth
-    early = lambda sim: 1.0*(sim.ti <= 5) # The first five steps are 1 to 5
+    early = lambda sim: 1.0*(sim.ti < 5) # The first five steps are 0 to 4
     def check(sim): # An HIV-like hook after the step: the share of the acute dwell elapsed needs the scheduled exit, for those who entered this step too
         d = sim.diseases.d
         for name in ['A', 'R']: # The states with a scheduled exit
@@ -978,7 +979,7 @@ def test_schedule():
     )
     sim = ss.Sim(d, n_agents=5000, unit='day', stop=40, **kw).run()
     res = sim.results.d
-    assert res.severe.sum() == res.severe[0] + res.A[0] + res.infection[1:6].sum() + res.relapse[1:6].sum() # Seeds whose dwell rounds to no steps leave at the start, counted at 0
+    assert res.severe.sum() == res.A[0] + res.infection[:5].sum() + res.relapse[:5].sum() # Seeds whose dwell rounds to no steps leave at the start, before the first time point's count, so are not a flow
 
     # Where= on a branch that is closed to everyone at entry: they wait until it opens (FPsim)
     A, B = ss.states('A B')
@@ -1002,7 +1003,7 @@ def test_schedule():
 def test_split_timing():
     """ Separate p= transitions out of a state split on entry; one transition with several destinations splits when it is taken """
     sc.heading('Testing when a split is decided')
-    late = lambda sim: 1.0*(sim.ti > 10) # Severe only from the step that starts at 10
+    late = lambda sim: 1.0*(sim.ti >= 10) # Severe only from the step that starts at 10
     def make(shape):
         I, H, R = ss.states('I H R')
         if shape == 'entry': # Branch, then wait
@@ -1037,7 +1038,7 @@ def test_wholestep():
     sc.heading('Testing rates over whole steps, and suggested solvers')
     def make(cls=ss.Disease, **kwargs):
         A, B, C = ss.states('A B C')
-        return cls(A, B, C, tick=A >> B @ ss.constant(ss.days(3)), leave=B >> C @ ss.perday(0.5), first='A', name='d', **kwargs) # Everyone reaches B in step 4
+        return cls(A, B, C, tick=A >> B @ ss.constant(ss.days(3)), leave=B >> C @ ss.perday(0.5), first='A', name='d', **kwargs) # Everyone reaches B in step 3
     res = {}
     for solver in ['abm-midstep', 'abm-wholestep']:
         sim = ss.Sim(make(), solver=solver, n_agents=10_000, unit='day', stop=10, verbose=0).run()
@@ -1045,15 +1046,15 @@ def test_wholestep():
         assert isinstance(eng, ss.solvers.Compiled) and not eng.uncompiled
         assert eng.wholestep == (solver == 'abm-wholestep')
         res[solver] = sim.results.d
-    assert res['abm-midstep'].tick[4] == 10_000
-    assert np.isclose(res['abm-midstep'].leave[4]/10_000, 1 - np.exp(-0.25), atol=0.02) and res['abm-wholestep'].leave[4] == 0 # Half a step of the rate in the step they arrive, or none
+    assert res['abm-midstep'].tick[3] == 10_000
+    assert np.isclose(res['abm-midstep'].leave[3]/10_000, 1 - np.exp(-0.25), atol=0.02) and res['abm-wholestep'].leave[3] == 0 # Half a step of the rate in the step they arrive, or none
     p = 1 - np.exp(-0.5)
-    assert np.isclose(res['abm-wholestep'].leave[5]/10_000, p, atol=0.02) # Then a whole step's chance each step
+    assert np.isclose(res['abm-wholestep'].leave[4]/10_000, p, atol=0.02) # Then a whole step's chance each step
     assert np.isclose(res['abm-wholestep'].B[6]/10_000, (1 - p)**2, atol=0.02)
 
     # A module's own solver, and the one it suggests
     sim = ss.Sim(make(solver='abm-wholestep'), n_agents=2000, unit='day', stop=10, verbose=0).run()
-    assert sim.diseases.d.engine.wholestep and sim.results.d.leave[4] == 0
+    assert sim.diseases.d.engine.wholestep and sim.results.d.leave[3] == 0
     with pytest.raises(ValueError):
         ss.Disease(solver='abm-step')
     class Suggests(ss.Disease):
@@ -1283,7 +1284,7 @@ def test_value():
     bites, f, em, em_float, positive, death2, beta, raw = mosq.read
     assert isinstance(bites, ss.perday) and np.allclose(f, [0.6, 0.8]) and np.isclose(em, np.expm1(2/365)) and np.isclose(em_float, 2/365) and positive
     probs = np.array(mosq.probs)
-    assert np.allclose(probs[:,0], -np.expm1(-2)) and np.allclose(probs[:,1], -np.expm1(-np.array([1, 1, 2]))) and np.isclose(*probs[-1]), 'A typed rate and a time series of them convert alike'
+    assert np.allclose(probs[:,0], -np.expm1(-2)) and np.allclose(probs[:,1], -np.expm1(-np.array([1, 1, 2, 2]))) and np.isclose(*probs[-1]), 'A typed rate and a time series of them convert alike' # A step from each year, 2003 included
     assert isinstance(death2, ss.peryear) and death2.value == 4, 'Arithmetic on a time series of typed values is typed arithmetic'
     assert np.isclose(beta, 0.1) and raw == 0.3, 'Arithmetic applies the change (to 0.1 per day); float() is the value the parameter holds'
     assert isinstance(ss.timeseries({2000:1, 2001:2})*2, ss.expressions.Expr), 'Outside a sim, it is an expression'
@@ -1427,7 +1428,7 @@ def test_read_each_step():
     sc.heading('Testing what a run taken whole, and one stepped, read at each step: other diseases, modifiers, and values in time')
     class Step(ss.Intervention):
         def step(self):
-            if self.sim.t.ti == 15 and 'm' in self.sim.connectors:
+            if self.sim.t.ti == 14 and 'm' in self.sim.connectors: # From the step from day 14
                 self.sim.connectors.m.amount = 0.1
 
     def sir(name='sir', rate=lambda I: 0.3*I, results=lambda I: {}):

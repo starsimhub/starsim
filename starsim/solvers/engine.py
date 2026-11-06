@@ -13,7 +13,7 @@ import sciris as sc
 import starsim as ss
 from types import SimpleNamespace as Bunch # A plain object with attributes; much faster to read than an objdict, which matters inside the ODE's right-hand side
 
-__all__ = ['Effects', 'Engine', 'CountState', 'StockCtx', 'convert', 'add_rows', 'at_ends', 'by_level', 'no_tables', 'kept_by_group', 'group_rows', 'people_results', 'people_counts']
+__all__ = ['Effects', 'Engine', 'CountState', 'StockCtx', 'convert', 'add_rows', 'at_starts', 'by_level', 'no_tables', 'kept_by_group', 'group_rows', 'people_results', 'people_counts']
 
 
 from .backends.kernels import no_tables # For a step whose program holds for the whole step: see ss.kernels.step()
@@ -90,13 +90,13 @@ def add_rows(out, rows, tis, vals):
     return
 
 
-def at_ends(out, rows, ends, tis, vals):
-    """ Put the values at the time points among `tis` that end a row into that row of `out` """
-    if len(ends) == len(rows): # Each ends a row of its own
+def at_starts(out, rows, starts, tis, vals):
+    """ Put the values at the time points among `tis` that start a row into that row of `out` """
+    if len(starts) == len(rows): # Each starts a row of its own
         out[rows[tis[0]]:rows[tis[-1]]+1] = vals
         return
-    last = np.isin(tis, ends)
-    out[rows[tis[last]]] = vals[last]
+    first = np.isin(tis, starts)
+    out[rows[tis[first]]] = vals[first]
     return
 
 
@@ -108,12 +108,12 @@ def kept_by_group(sim, mod, key):
 
 def group_rows(sim, npts, row_bytes, budget, name=None):
     """
-    The time points at which results are kept by group: each one, or the end of every few steps if each one would take more than `budget` bytes
+    The time points at which results are kept by group: each one, or the start of every few steps if each one would take more than `budget` bytes
 
     The number of steps between them is the shortest of a week, two weeks, four weeks, a quarter, half a year, or
     a year (or of 2, 5, 10, 20, ... steps for a sim with no unit, or one longer than a day) that keeps them within
     the budget. A row of values by group then holds a flow added up over its steps, and anything else as it is
-    at the end of them (so a ratio of states is the ratio then). See `ss.Result.select()`.
+    at the start of them (so a ratio of states is the ratio then). See `ss.Result.select()`.
 
     Args:
         npts (int): the number of time points
@@ -121,7 +121,7 @@ def group_rows(sim, npts, row_bytes, budget, name=None):
         budget (float): the most memory they may take
         name (str): the module whose results they are, to say so in a note
 
-    Returns the row of each time point and the time point each row ends at, or (None, None) for every time point.
+    Returns the row of each time point and the time point each row starts at, or (None, None) for every time point.
     """
     columns = [] if sim.data is None else sim.data.columns
     if npts*row_bytes <= budget or npts <= 2 or sim.pars.rescale: # With rescaling, the scale differs at each step, and is applied to each one
@@ -136,13 +136,13 @@ def group_rows(sim, npts, row_bytes, budget, name=None):
     else:
         ladder = [m*10**e for e in range(8) for m in [1, 2, 5]]
     every = next((k for k in ladder if k >= need), need)
-    rows = (np.arange(npts) + every - 1)//every # The start is a row of its own, then each `every` steps
-    ends = np.minimum(np.arange(rows[-1] + 1)*every, npts - 1)
+    rows = np.arange(npts)//every # Each `every` steps, from the start
+    starts = np.arange(rows[-1] + 1)*every
     unit = sim.unit or 'step'
     span = f'{every} {unit}s' if days is None else f'{every*days:g} days'
     ss.note(f'the results of "{name}" are kept by group every {span} (a flow added up over them), since every {unit} would take {npts*row_bytes/1e6:,.0f} MB; '
             f'name the results to keep by group with results=[...] to keep them more often', sim=sim)
-    return rows, ends
+    return rows, starts
 
 
 def people_results(sim):
@@ -894,13 +894,12 @@ class Engine(Telling, Effects):
     @property
     def ti(self):
         """
-        The time point the engine takes people's state at: the start of the step being taken (`self.mod.ti - 1`,
-        since the step's own time point, the loop's `ti`, is its end), and the start of the run before the first step.
-        So people who move at the start of a step (as all but infections do) are timed from then, and infections from its end;
-        either way their time of entering (`ti_X`) reads as the step's index (see `ss.solvers.Agents.index_of()`).
+        The time point the engine takes people's state at: the start of the step being taken, the loop's `ti`.
+        People who move at the start of a step (as all but infections do) are timed from then, and infections from its end
+        (`ti + 1`); either way their time of entering (`ti_X`) reads as the step's index (see `ss.solvers.Agents.index_of()`).
         """
         ti = self.__dict__.get('_ti') # Set while people are back-dated: see Agents.backfill()
-        return max(self.mod.t.ti - 1, 0) if ti is None else ti
+        return self.mod.t.ti if ti is None else ti
 
     @property
     def total_pop(self):
@@ -1292,7 +1291,7 @@ class Engine(Telling, Effects):
         t = self.sim.t
         years = t.yearvec if year is None else np.union1d(t.yearvec, (t.yearvec[:-1] + t.yearvec[1:])/2) # The steps' starts, or also their middles
         kept = self.series_over(func, years, year is None)
-        ti = max(t.ti - 1, 0) if year is None else int(np.searchsorted(years, year)) # The step's start: the loop's ti is its end (the start of the run before the first step)
+        ti = t.ti if year is None else int(np.searchsorted(years, year)) # The step's start
         if year is not None and (ti >= len(years) or years[ti] != year):
             out = func.series([year], self.sim, self.convert)[0]
         elif ti < len(kept[2]):
@@ -1882,7 +1881,7 @@ class Engine(Telling, Effects):
             if stages is not None and not stages.dwell.exact: # Erlang stages: see ss.dimensions.transfer_stages()
                 self.note_stages(name, stages.dwell)
         mod.define_results(*results)
-        written = {r.name for r in results if isinstance(r, ss.Result)} | set(graph.states) | set(graph.transitions) # Those the engine writes, which are scaled when written (see update_results()); not those of the disease's own code, which are counted in agents and scaled at the end
+        written = {r.name for r in results if isinstance(r, ss.Result)} | set(graph.states) | set(graph.transitions) # Those the engine writes, which are scaled when written (see record_stocks() and record_flows()); not those of the disease's own code, which are counted in agents and scaled at the end
         ss.results.in_people(*[r for key,r in mod.results.items() if isinstance(r, ss.Result) and (key in written or key.partition('.')[0] in graph.transitions)])
 
         # Stratified results are one result with a dimension for each stratification: see res.select() and res.by()
@@ -2056,6 +2055,7 @@ class Engine(Telling, Effects):
             return np.asarray(self.flow_groups.get(key, np.zeros(ng)), dtype=float) # A transition with no events this step has no entry
 
         def store(key, vals, flow):
+            vals = np.broadcast_to(np.asarray(vals, dtype=float), (ng,)) # The number in an outcome is 0 until its first arrivals
             res[key][ti] = vals.sum()
             res[key].store_group(ti, vals, self.rows, flow=flow)
             return
@@ -2072,9 +2072,9 @@ class Engine(Telling, Effects):
                     with self.evaluating(by_group=True): # One weight for each group, as the flows are
                         weight = self.eval(weight)
                 amount += self.outcome_share(flow, weight, integer)
-            info.now = self.report_outcome(info, info, amount, ti, integer)
-            if info.stay is not None or info.p_leave is not None:
+            if info.stay is not None or info.p_leave is not None: # The number in it at the start of the step
                 store(f'n_{name}', info.n, False)
+            info.now = self.report_outcome(info, info, amount, ti, integer)
             store(name, info.now, True)
         return
 
@@ -2126,8 +2126,12 @@ class Engine(Telling, Effects):
         return now
 
     def start_step(self):
-        """ Start counting the flows of the step """
+        """ Start the step: values held for the last step are worked out again """
         self.cache.clear()
+        return
+
+    def clear_flows(self):
+        """ Start counting flows afresh: at the end of each step, once its flows are recorded, and after the initialization (whose moves are part of the state at the start, not a flow); so anything moved between steps (e.g. by `disease.infect()` after `sim.run(until=...)`) is counted in the next step """
         for name in self.flowcounts:
             self.flowcounts[name] = 0.0
         if hasattr(self, 'flow_groups'):
@@ -2136,8 +2140,8 @@ class Engine(Telling, Effects):
             self.flow_derived.clear()
         return
 
-    def record_stocks(self):
-        """ Record the number in each state at the end of the step (so `R[ti]` has the people who recovered in the step that ends at time point `ti`, as `recovery[ti]` does) """
+    def count_stocks(self):
+        """ Count the number in each state now: after the initialization, and at the end of each step, which the next step's `record_stocks()` records as the state at its start """
         for state in self.graph.states.values():
             self.stocks[state.name] = self.stock(state)
         return
@@ -2174,45 +2178,86 @@ class Engine(Telling, Effects):
                         counts[name] = counts[name]*(1 + extra)
         return stocks, stock_groups
 
-    def update_results(self):
-        mod = self.mod
-        graph = self.graph
-        res = mod.results
-        ti = mod.ti
-        scale = ss.results.people_scale(self.sim) # As agents, counts of people are written in people
-        if getattr(self, 'res_found', None) != len(res): # What it writes to, found once (results are not added during the run)
-            self.res_found = len(res)
-            self.in_people = [r for r in res.values() if getattr(r, 'in_people', False)]
-            self.coded = [state.name for state in mod.auto_state_list if state.name not in graph.states] + mod.derived_state_names
-            if getattr(getattr(self.sim.people, 'scale', None), 'weighted', False): # Agents of different weights (people.scale) make fractions of people
-                for key in list(self.stocks) + list(self.flowcounts):
-                    if res[key].values.dtype.kind in 'iu':
-                        res[key].init_values(dtype=float, force=True)
-            self.res_values = {key:res[key].values for key in list(graph.states) + list(self.flowcounts) + list(graph.exprs)}
-            self.exprs_by_group = {name for name in graph.exprs if getattr(res[name], 'strata', None) is not None}
-        people = self.in_people
+    def find_results(self):
+        """ What the results are written to, found once (results are not added during the run) """
+        mod, graph, res = self.mod, self.graph, self.mod.results
+        if getattr(self, 'res_found', None) == len(res):
+            return
+        self.res_found = len(res)
+        self.in_people = [r for r in res.values() if getattr(r, 'in_people', False)]
+        self.coded = [state.name for state in mod.auto_state_list if state.name not in graph.states] + mod.derived_state_names
+        if getattr(getattr(self.sim.people, 'scale', None), 'weighted', False): # Agents of different weights (people.scale) make fractions of people
+            for key in list(self.stocks) + list(self.flowcounts):
+                if res[key].values.dtype.kind in 'iu':
+                    res[key].init_values(dtype=float, force=True)
+        self.res_values = {key:res[key].values for key in list(graph.states) + list(self.flowcounts) + list(graph.exprs)}
+        self.exprs_by_group = {name for name in graph.exprs if getattr(res[name], 'strata', None) is not None}
+        stock_names = set(graph.states) | set(self.coded)
+        self.stock_people = [r for r in self.in_people if r.name in stock_names]
+        self.flow_people = [r for r in self.in_people if r.name not in stock_names]
+        return
+
+    def write_scale(self):
+        """ The scale counts of people are written in, as agents (see `ss.results.people_scale()`), set on the results that keep values by group """
+        scale = ss.results.people_scale(self.sim)
         if scale != getattr(self, 'res_scale', None): # The values by group, as they are kept
             self.res_scale = scale
-            for r in people:
+            for r in self.in_people:
                 r.write_scale = scale
+        return scale
+
+    def record_stocks(self):
+        """
+        Record the number in each state at the start of the step, at its index (so `R[ti]` has the people recovered by time
+        point `ti`, before the step from it, whose recoveries are `recovery[ti]`); they are kept for the results worked out
+        with the flows of the step (see `record_flows()`)
+        """
+        mod = self.mod
+        res = mod.results
+        ti = mod.ti
+        self.find_results()
+        scale = self.write_scale()
+        self.count_stocks() # Now, with the people in the groups they are in now (e.g. by age, once they have aged at the end of the last step)
         stocks, stock_groups = self.with_unrepresented()
+        self.stocks_start = (sc.obj(stocks), sc.obj(stock_groups)) # As they are now (shallow copies: the engine replaces its counts in the step, rather than changing them in place)
         values = self.res_values
         for name,val in stocks.items():
             values[name][ti] = val
-        for name,val in self.flowcounts.items():
-            values[name][ti] = val
-        self.written_ti = ti # See Agents.infect_now()
-        if self.outcomes:
-            self.step_outcomes()
         derived = getattr(self, 'derived_res', {})
         for name,val in stock_groups.items():
             if name not in derived:
                 res[name].store_group(ti, val, self.rows)
+        for key,strat in derived.items(): # By a derived stratification instead (whose results keep every time point)
+            if key in self.graph.states:
+                res[key].store_group(ti, self.stock_derived.get(key, 0.0))
+        if scale != 1:
+            for r in self.stock_people:
+                r[ti] = r[ti]*scale
+        if self.coded: # The module's own `ss.BoolState`s (and derived states), counted as for a module written as code
+            ss.Module.record_stocks(mod, names=self.coded)
+        return
+
+    def record_flows(self):
+        """ Record the flows of the step, at its index, and the results worked out from them and the states at its start """
+        mod = self.mod
+        graph = self.graph
+        res = mod.results
+        ti = mod.ti
+        self.find_results()
+        scale = self.write_scale()
+        stocks, stock_groups = getattr(self, 'stocks_start', None) or self.with_unrepresented()
+        values = self.res_values
+        for name,val in self.flowcounts.items():
+            values[name][ti] = val
+        if self.outcomes:
+            self.step_outcomes()
+        derived = getattr(self, 'derived_res', {})
         for name,val in self.flow_groups.items():
             if name not in derived:
                 res[name].store_group(ti, val, self.rows, flow=True)
         for key,strat in derived.items(): # By a derived stratification instead (whose results keep every time point)
-            res[key].store_group(ti, self.stock_derived.get(key, 0.0) if key in self.graph.states else self.flow_derived.get(key, 0.0))
+            if key not in self.graph.states:
+                res[key].store_group(ti, self.flow_derived.get(key, 0.0))
         if self.rows is not None: # The flows by group so far in this row, for the results worked out from them
             if ti == 0 or self.rows[ti] != self.rows[ti-1]:
                 self.row_flows = sc.obj()
@@ -2222,8 +2267,8 @@ class Engine(Telling, Effects):
             ctx = StockCtx(self, stocks, ti=ti) # Before the results are scaled
             for name,expr in graph.exprs.items():
                 values[name][ti] = ss.expressions.evaluate(expr, ctx)
-                if name in self.exprs_by_group: # By group: in a row of several steps, from the states at its end and the flows over it
-                    ctx_g = StockCtx(self, stock_groups, self.flow_groups if self.rows is None else self.row_flows, ti=ti)
+                if name in self.exprs_by_group: # By group: in a row of several steps, from the states at its start and the flows over it
+                    ctx_g = StockCtx(self, stock_groups if self.rows is None else self.row_stocks(stock_groups, ti), self.flow_groups if self.rows is None else self.row_flows, ti=ti)
                     if name in self.ratios:
                         num, den = [ss.expressions.evaluate(part, ctx_g) for part in self.ratios[name]]
                         row = ti if self.rows is None else self.rows[ti]
@@ -2231,11 +2276,15 @@ class Engine(Telling, Effects):
                     else:
                         res[name].store_group(ti, ss.expressions.evaluate(expr, ctx_g), self.rows)
         if scale != 1:
-            for r in people: # The values written this step
+            for r in self.flow_people: # The values written this step
                 r[ti] = r[ti]*scale
-        if self.coded: # The module's own `ss.BoolState`s (and derived states), counted as for a module written as code
-            ss.Module.update_results(mod, names=self.coded)
         return
+
+    def row_stocks(self, stock_groups, ti):
+        """ The states by group at the start of the row of several steps that time point `ti` is in (see `ss.solvers.group_rows()`), for the results worked out over the row """
+        if ti == 0 or self.rows[ti] != self.rows[ti-1]:
+            self.row_start = stock_groups
+        return self.row_start
 
     def register_sets(self):
         """

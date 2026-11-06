@@ -53,14 +53,15 @@ class Timeline:
 
     The `Timeline` object also has the following attributes/methods:
 
-    - `ti` (int): the current step, which is also the time point where its results go: step `ti` runs from time point `ti-1` to `ti` (0 before the first step)
-    - `npts` (int): the total number of time *points* in the timeline (one more than the number of steps; see note below)
-    - `now()` (`ss.date`/float/str): the current time, the start of the step (time point `ti-1`; the start of the run before the first step), based on tvec by default or a different vector if specified
+    - `ti` (int): the current time point, which is also the current step: step `ti` runs from time point `ti` to the next, and its results go at `ti`
+    - `npts` (int): the total number of time *points* in the timeline, which is also the number of steps (see note below)
+    - `now()` (`ss.date`/float/str): the current time, time point `ti`, the start of the current step, based on tvec by default or a different vector if specified
 
-    Note: the time vectors include *both* the start and stop endpoints, so `npts`
-    (the number of time points) is one more than the number of steps taken. For
-    example, `start=0, stop=1, dt=1` runs a single step but produces two time points
-    (`[0, 1]`), since the state is recorded at both the start and the end. Specifying
+    Note: the time vectors include *both* the start and stop endpoints, and a step
+    is taken from each of them, so each time point is a period: a stock at it is the
+    state at its start, and a flow at it is the total over the step that starts there.
+    For example, `start=0, stop=1, dt=1` produces two time points (`[0, 1]`) and takes
+    two steps; the state after the last one is not recorded. Specifying
     the length via `dur` is exactly equivalent to specifying `stop` (internally,
     `stop = start + dur`), so e.g. `start=2000, dur=1` and `start=2000, stop=2001`
     produce identical timelines. See the time user guide for the rationale behind
@@ -123,7 +124,7 @@ class Timeline:
             else: return str(v)
 
         if self.initialized:
-            return f'Timeline({fmt(self.start)}-{fmt(self.stop)}; dt={self.dt!r}; now={fmt(self.tvec[self.ti])}; ti={self.ti}/{len(self)-1})'
+            return f'Timeline({fmt(self.start)}-{fmt(self.stop)}; dt={self.dt!r}; now={fmt(self.now())}; ti={self.ti}/{len(self)-1})'
         else:
             return 'Timeline(uninitialized)'
 
@@ -241,9 +242,8 @@ class Timeline:
 
     def now(self, key=None):
         """
-        Get the current simulation time: the start of the current step, which runs from time point `ti-1` to `ti`
-        (the start of the run before the first step), since that is when the step happens and what it reads its
-        inputs at; its results go at `ti`, its end (see `ss.Loop`)
+        Get the current simulation time: time point `ti`, the start of the current step, which is when the step
+        happens, what it reads its inputs at, and where its results go (see `ss.Loop`)
 
         Args:
             key (str): which type of time to get: "tvec" (default), "time", "year", "date", or "str"
@@ -251,7 +251,7 @@ class Timeline:
         Examples:
             ```python
             t = ss.Timeline(start='2021-01-01', stop='2022-02-02', dt='week')
-            t.ti = 26 # The step from time point 25 to 26
+            t.ti = 25 # The step from time point 25 to 26
             t.now() # Returns <2021-06-25>
             t.now('date') # Returns <2021-06-25>
             t.now('year') # Returns 2021.479
@@ -276,7 +276,7 @@ class Timeline:
             errormsg = f'Invalid key "{key}": must be one of {sc.strjoin(self._time_vecs)}'
             raise ValueError(errormsg)
 
-        ti = self.ti - 1 if self.ti > 0 else self.ti # The start of the step (a negative ti is a step before the start: see ss.solvers.Agents.backfill())
+        ti = self.ti # A negative ti is a step before the start: see ss.solvers.Agents.backfill()
         if 0 <= ti < len(vec): # Normal use case, we're in the middle of a sim
             now = vec[ti]
         else: # Special case, we are before or after the sim period
@@ -698,8 +698,8 @@ class schedule:
                 return float(x)
         counts = np.zeros(len(points), dtype=int)
         if self.fn is not None:
-            for k in range(1, len(points)): # Step k starts at time point k-1
-                counts[k] = bool(self.fn(tvec[k-1]))
+            for k in range(len(points)): # Step k starts at time point k
+                counts[k] = bool(self.fn(tvec[k]))
         else:
             first = points[0] if self.start is None else to_time(self.start)
             last = points[-1] if self.stop is None else to_time(self.stop)
@@ -724,8 +724,9 @@ class schedule:
             times = times[(times >= first) & (times <= last)]
             if not absolute:
                 times = times + 1e-9 # Years to 9 decimals (see Timeline.yearvec), so one on a time point is in the step that starts there
-            k = np.searchsorted(points, times, side='right') # The step whose start is the last time point at or before it
-            k = k[(k >= 1) & (k < len(points))] # Within the timeline
+            end = points[-1] + (points[-1] - points[-2] if len(points) > 1 else 0*(points[-1] - points[0])) # The end of the last step, which starts at the last time point
+            k = np.searchsorted(points, times[times < end] if len(points) > 1 else times, side='right') - 1 # The step whose start is the last time point at or before it
+            k = k[k >= 0] # Within the timeline
             counts += np.bincount(k, minlength=len(points))
         self.counts = counts
         return self

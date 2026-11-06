@@ -77,7 +77,7 @@ class Branching:
             self.generation = np.append(self.generation, np.zeros(grow, dtype=ss.dtypes.int))
             self.infected_ti = np.append(self.infected_ti, np.zeros(grow, dtype=ss.dtypes.int))
         srcs = np.asarray(srcs, dtype=ss.dtypes.int)
-        self.infected_ti[uids] = self.mod.ti if self._started else 0
+        self.infected_ti[uids] = self.mod.ti + 1 if self._started else 0 # At the end of the step, the next time point
         self.infector[uids] = srcs
         self.generation[uids] = np.where(srcs >= 0, self.generation[np.maximum(srcs, 0)] + 1, 0)
         return

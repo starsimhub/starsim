@@ -126,10 +126,10 @@ def test_routine_delivery():
     screening = ss.screen(make_dx(), coverage=1.0, start=start, stop=stop, interval=ss.years(1))
     sim = ss.Sim(pars, interventions=screening).run()
     n_screened = sim.results.screening.delivered
-    years = sim.t.yearvec # A step's results are at its end, so those of the step that starts in a year are at the next
-    assert n_screened[years <= start].sum() == 0, f'Expected zero screenings before {start}'
-    assert n_screened[years > stop].sum() == 0, f'Expected zero screenings from {stop}'
-    assert n_screened[(years > start) & (years <= stop)].min() > 0, f'Expected screenings each year from {start} to {stop}'
+    years = sim.t.yearvec # A step's results are in the row of the year it starts
+    assert n_screened[years < start].sum() == 0, f'Expected zero screenings before {start}'
+    assert n_screened[years >= stop].sum() == 0, f'Expected zero screenings from {stop}'
+    assert n_screened[(years >= start) & (years < stop)].min() > 0, f'Expected screenings each year from {start} to {stop}'
 
     # A coverage that changes by year (Starsim 3's years= with an array of prob=)
     coverage = ss.timeseries(np.arange(2005, 2016), np.linspace(0.05, 0.95, 11), mode='linear')
@@ -143,8 +143,8 @@ def test_routine_delivery():
     # No window: the whole sim, offered at every step with a probability per year (Starsim 3's annual_prob=True)
     sim = ss.Sim(make_pars(start=2010, stop=2014), dt=0.5, interventions=ss.screen(make_dx(), coverage=ss.probperyear(0.5), name='screening')).run()
     n_screened = sim.results.screening.delivered
-    assert n_screened[1:].min() > 0, 'Expected screening on every step when no window is given'
-    assert np.isclose(n_screened[1]/2000, 1 - 0.5**0.5, atol=0.05), 'Expected the probability per year to be per step'
+    assert n_screened.min() > 0, 'Expected screening on every step when no window is given'
+    assert np.isclose(n_screened[0]/2000, 1 - 0.5**0.5, atol=0.05), 'Expected the probability per year to be per step'
 
     # A window whose years are close to, but not on, the time grid (Starsim 3 raised an IndexError)
     screening = ss.screen(make_dx(), coverage=1.0, start=2000, stop=2002, interval=ss.years(1), name='screening')
@@ -161,7 +161,7 @@ def test_campaign_delivery():
     # One year only
     sim = ss.Sim(pars, interventions=ss.screen(make_dx(), coverage=0.5, at=[2010], name='screening')).run()
     n_screened = sim.results.screening.delivered
-    on_year = np.isclose(sim.t.yearvec, 2011) # The results of the step that starts in 2010
+    on_year = np.isclose(sim.t.yearvec, 2010) # The results of the step that starts in 2010
     assert n_screened[on_year].sum() > 0 and n_screened[~on_year].sum() == 0, 'Expected screenings in 2010 only'
 
     # Several years, each with its own coverage
@@ -169,7 +169,7 @@ def test_campaign_delivery():
     coverage = ss.timeseries(years, [0.3, 0.5, 0.7])
     sim = ss.Sim(pars, interventions=ss.screen(make_dx(), coverage=coverage, at=years, name='screening')).run()
     n_screened = sim.results.screening.delivered
-    on = np.isin(sim.t.yearvec, np.array(years) + 1) # The results of the steps that start in those years
+    on = np.isin(sim.t.yearvec, years) # The results of the steps that start in those years
     assert n_screened[~on].sum() == 0, 'Expected no screenings outside campaign years'
     assert np.all(np.diff(n_screened[on]) > 0), 'Expected each round to reach its own coverage'
 
@@ -193,7 +193,7 @@ def test_campaign_delivery():
 
 @sc.timer()
 def test_state_results_at_start():
-    """ An intervention's states are counted at the first time point, and its own results are left for its first step """
+    """ An intervention's states are counted at the start of each step, and its own flows at the end, so the first row has the first step's """
     class Program(ss.Intervention):
         def __init__(self, **kwargs):
             super().__init__(**kwargs)
@@ -207,16 +207,16 @@ def test_state_results_at_start():
         def step(self):
             self.new_reached = 1
 
-        def update_results(self):
-            super().update_results()
-            self.results.new_reached[self.ti] = self.new_reached # Would fail at the start, before the first step
+        def record_flows(self):
+            super().record_flows()
+            self.results.new_reached[self.ti] = self.new_reached
 
     pars = dict(n_agents=100, diseases='sis', networks='random', verbose=0)
     for kw in [dict(), dict(dt=ss.years(2))]:
         res = ss.Sim(interventions=Program(**kw), **pars).run().results.program
         assert np.all(res.never_reached == 100)
         assert np.all(res.reached == 0)
-        assert res.new_reached[0] == 0 and res.new_reached[1] == 1
+        assert np.all(res.new_reached == 1) # The first step's at the first time point
     return
 
 

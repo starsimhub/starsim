@@ -372,16 +372,19 @@ class Births(Demographics):
         people.born(new_uids)
         return new_uids
 
-    def update_results(self):
-        """ Calculate new births and crude birth rate """
-        # New births -- already calculated
+    def record_flows(self):
+        """ The births of the step (already counted) """
         self.results.birth[self.ti] = self.n_births_this_step
+        return
 
-        # Calculate crude birth rate (CBR)
-        inv_rate_units = 1.0/self.pars.rate_units
-        births_per_year = self.n_births_this_step/self.t.dt_year
-        denom = self.sim.people.alive.sum()
-        self.results.cbr[self.ti] = inv_rate_units*births_per_year/denom
+    def finalize(self):
+        """ The crude birth rate: the births of each step, over the people alive at its start """
+        super().finalize()
+        if 'alive' not in self.sim.results: # Not recorded with ss.Sim(people_results=False)
+            return
+        units = self.pars.rate_units*self.t.dt_year
+        n_alive = self.sim.results.alive[self.match_time_inds()]
+        self.results.cbr[:] = sc.safedivide(self.results.birth[:], n_alive, default=0)/units
         return
 
 
@@ -560,7 +563,7 @@ class Deaths(Demographics):
         ppl.request_death(death_uids, cause=self)
         return death_uids
 
-    def update_results(self):
+    def record_flows(self):
         self.n_deaths = len(self.sim.people.died_of(self)) # Once each death has one cause: someone another module killed in the same step may have died of that instead
         self.results.death[self.ti] = self.n_deaths
         return
@@ -866,7 +869,7 @@ class Pregnancy(Demographics, ss.Disease):
                 for mod in self.sim.declared: # The start is counted again, with them in each module's first state
                     if mod is not self and mod.abm:
                         mod.engine.live = None
-                        mod.engine.record_stocks()
+                        mod.engine.count_stocks()
         note = f'{self.name}: women pregnant at the start, conceived over the {"step" if steps == 1 else f"{steps} steps"} before it (burnin=True)'
         return sc.obj(share=share, steps=steps, tr=self.graph.transitions.conception, target=['P'], note=note, after=after)
 
@@ -895,7 +898,7 @@ class Pregnancy(Demographics, ss.Disease):
 
     def step(self):
         """ The pregnancy's transitions, at the start of the step, before the diseases' """
-        if self.ti == 1 and self.abm and self.fetus: # On the first step: women pregnant at the start (burnin=) carry fetuses too
+        if self.ti == 0 and self.abm and self.fetus: # On the first step: women pregnant at the start (burnin=) carry fetuses too
             moms = self.P.uids
             self._conceive(moms[~np.isin(moms, self.sim.people.parent.raw[self._unborn(moms)])], 0)
         if self.abm: # Weaning
@@ -1031,7 +1034,7 @@ class Pregnancy(Demographics, ss.Disease):
         w = np.where(pre, np.divide(u, q, out=np.zeros(len(u)), where=q>0)*p_pre, p_pre + np.divide(u - q, 1 - q, out=np.zeros(len(u)), where=q<1)*(1 - p_pre)) # Where in the given distribution
         inds = np.minimum(np.searchsorted(np.cumsum(p), w, side='right'), len(a) - 1)
         steps = np.asarray(ss.weeks(weeks[inds])/self.t.dt, dtype=float)
-        self.set_delivery(uids, self.ti_P.raw[uids] + 1 + self.engine.whole_steps(uids, steps, dt=1.0), weeks=weeks[inds]) # Rounded up or down at random, as the engine rounds a dwell time (see ss.solvers.Agents.whole_steps())
+        self.set_delivery(uids, self.ti_P.raw[uids] + self.engine.whole_steps(uids, steps, dt=1.0), weeks=weeks[inds]) # Rounded up or down at random, as the engine rounds a dwell time (see ss.solvers.Agents.whole_steps())
         return
 
     def lactate(self, moms, ti):
@@ -1123,7 +1126,7 @@ class Pregnancy(Demographics, ss.Disease):
         uids, ti = uids[keep], ti[keep]
         past = ti < self.ti + 1 # A step already past (e.g. a duration drawn again during the pregnancy, shorter than she has been pregnant): the next step, the first it can be taken in
         ti = np.where(past, self.ti + 1, ti)
-        steps = (ti - 1 - self.ti_P.raw[uids])*self.t.dt.weeks # From the engine's times: the exit is taken at the start of step ti
+        steps = (ti - self.ti_P.raw[uids])*self.t.dt.weeks # From the engine's times: the exit is taken at the start of step ti, time point ti
         self.ti_exit_P[uids] = ti
         self.dur_gestation[uids] = steps if weeks is None else np.where(past, steps, np.broadcast_to(np.asarray(weeks, dtype=float), keep.shape)[keep])
         return
@@ -1145,12 +1148,16 @@ class Pregnancy(Demographics, ss.Disease):
         self.asfr = np.zeros((len(self.asfr_bins) - 1, self.t.npts))
         return
 
-    def update_results(self):
-        super().update_results()
-        self.results.neonatal_death[self.ti] = self._nnd*self.sim.current_scale
-        self._nnd = 0
+    def record_stocks(self):
+        super().record_stocks()
         if self.abm and self.fetus:
             self.results.unborn[self.ti] = np.count_nonzero(self.fetal.raw & self.sim.people.alive.raw)*self.sim.current_scale
+        return
+
+    def record_flows(self):
+        super().record_flows()
+        self.results.neonatal_death[self.ti] = self._nnd*self.sim.current_scale
+        self._nnd = 0
         self.compute_asfr()
         return
 

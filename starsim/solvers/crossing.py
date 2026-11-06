@@ -184,7 +184,7 @@ class Crossing:
             self.register = self.join_register(lead.init_register())
             self.check_short(self.kernels().apply_events(lead.make_rng(stream=2), self.y, self.register, 0, lead.integer))
         for engine in self.engines:
-            engine.record_stocks()
+            engine.count_stocks()
         self.kernel_rng = self.engines[0].make_rng(stream=1) # As a whole run starts with, so stepping gives the same run
         self.reset()
         return

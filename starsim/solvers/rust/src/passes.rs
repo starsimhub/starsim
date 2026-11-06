@@ -609,28 +609,6 @@ pub fn due<T: Num>(auids: &[i64], ti_dead: &[T], ti_removed: &[T], ti: i64, nchu
     })
 }
 
-/// The number of active agents in each state, then the number who died and who left by step ti (`passes.count_people()`)
-pub fn count_people<T: Num>(auids: &[i64], states: &[&[bool]], alive: &[bool], ti_dead: &[T], ti_removed: &[T], ti: i64, nchunks: usize) -> Vec<i64> {
-    let st = T::step(ti);
-    let (n, ns) = (auids.len(), states.len());
-    let per = par(nchunks, move |c| {
-        let (a, b) = bounds(c, n, nchunks);
-        let us = &auids[a..b];
-        let mut out: Vec<i64> = states.iter().map(|x| us.iter().map(|&u| x[u as usize] as i64).sum()).collect(); // A pass for each state, which is quicker than a loop over them for each agent
-        let (mut dead, mut removed) = (0, 0);
-        for &uid in us {
-            let u = uid as usize;
-            if !alive[u] {
-                dead += ti_dead[u].le(st) as i64;
-                removed += ti_removed[u].le(st) as i64;
-            }
-        }
-        out.extend([dead, removed]);
-        out
-    });
-    sum(per, ns + 2)
-}
-
 /// Take the agents no longer alive out of the active agents (those alive go to kept, in order), and age those who are: the number alive, and the others (`passes.keep_alive()`)
 pub fn keep_alive<A: Copy + AddAssign + Send + Sync>(auids: &[i64], alive: &[bool], age: &mut [A], dt: A, aging: bool, kept: &mut [i64], nchunks: usize) -> (i64, Vec<i64>) {
     let n = auids.len();
@@ -1224,15 +1202,6 @@ pub mod bind {
 
     #[pyfunction]
     #[allow(clippy::too_many_arguments)]
-    fn count_people<'py>(py: Python<'py>, auids: &Arr<'py>, states: &Bound<'py, PyTuple>, alive: &Arr<'py>, ti_dead: &Arr<'py>, ti_removed: &Arr<'py>, ti: i64, nchunks: i64) -> PyResult<Arr<'py>> {
-        let nchunks = chunks(py, nchunks)?;
-        let items: Vec<Arr> = states.iter().collect();
-        let st = bools(&items)?;
-        typed!(ti_dead, T in [f32, f64, i16, i32, i64] => Ok(arr(py, passes::count_people::<T>(sl(auids)?, &st, sl(alive)?, sl(ti_dead)?, sl(ti_removed)?, ti, nchunks))))
-    }
-
-    #[pyfunction]
-    #[allow(clippy::too_many_arguments)]
     fn keep_alive<'py>(py: Python<'py>, auids: &Arr<'py>, alive: &Arr<'py>, age: &Arr<'py>, dt: f64, aging: bool, kept: &Arr<'py>, nchunks: i64) -> PyResult<(i64, Arr<'py>)> {
         let nchunks = chunks(py, nchunks)?;
         typed!(age, A in [f32, f64] => {
@@ -1402,7 +1371,6 @@ pub mod bind {
         m.add_function(wrap_pyfunction!(flatnonzero, m)?)?;
         m.add_function(wrap_pyfunction!(infect, m)?)?;
         m.add_function(wrap_pyfunction!(due, m)?)?;
-        m.add_function(wrap_pyfunction!(count_people, m)?)?;
         m.add_function(wrap_pyfunction!(keep_alive, m)?)?;
         m.add_function(wrap_pyfunction!(due_alive, m)?)?;
         m.add_function(wrap_pyfunction!(count_alive, m)?)?;

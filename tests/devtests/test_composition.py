@@ -38,8 +38,8 @@ class NumpySIR(ss.Module):
         self.y = np.array([S - b*S*I*dt, I + (b*S*I - g*I)*dt, R + g*I*dt])
         return
 
-    def update_results(self):
-        super().update_results()
+    def record_stocks(self):
+        super().record_stocks()
         self.results.I[self.ti] = self.y[1]
         return
 

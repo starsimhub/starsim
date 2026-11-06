@@ -466,7 +466,7 @@ class People:
         emigrated, the flows of people who died or left (`results.died.cum` is the cumulative total).
 
         If `sim.pars.people_results` is False, People-level result collection is disabled
-        (no results are created here and `People.update_results` is skipped in the loop).
+        (no results are created here and `People.record_stocks()` and `record_flows()` are skipped in the loop).
         """
         if not self.sim.pars.get('people_results', True): # Opt-out: skip People-level results entirely
             return
@@ -821,9 +821,9 @@ class People:
         death_uids = ss.uids(deaths)
         self.resolve_causes(death_uids[self.ti_dead.raw[death_uids] <= ti])
         self.alive[death_uids] = False  # While not dead, removed agents should not be included in alive totals
-        self._dying = death_uids # Still active until the end of the step: see update_results() and remove_dead()
+        self._dying = death_uids # Still active until the end of the step: see record_flows() and remove_dead()
 
-        self._resolved_ti = ti # A death requested later in this step happens at the next one: see request_death()
+        self._resolved_ti = ti if self.sim.initialized else None # A death requested later in this step happens at the next one: see request_death() (not during the initialization, whose step 0 is the first step's too)
 
         # Execute deaths that took place this timestep (i.e., changing the `alive` state of the agents). This is executed
         # before analyzers have run so that analyzers are able to inspect and record outcomes for agents that died this timestep
@@ -913,44 +913,49 @@ class People:
         dying = getattr(self, '_dying', None)
         return dying if dying is not None else ss.uids()
 
-    def update_results(self):
-        """ Record per-timestep population counts into the simulation results """
+    def record_stocks(self):
+        """ Record the population counts at the start of the step (each `ss.BoolState`, e.g. alive, female), at its index (see `ss.Loop`) """
         ti = self.sim.ti
         res = self.sim.results
         states = [getattr(self, state.name) for state in self.auto_state_list] # Each auto-generated BoolState result, e.g. alive, female
-        dying = self.dying()
         counts = None
         if self.scale.weighted: # Each agent counted by its weight (see AgentScale)
-            auids = self.auids
-            w = self.scale.raw[auids]
-            gone = dying[self.ti_dead.raw[dying] <= ti], dying[self.ti_removed.raw[dying] <= ti]
-            counts = [float(w[state.raw[auids]].sum()) for state in states] + [float(self.scale.raw[uids].sum()) for uids in gone]
+            w = self.scale.raw[self.auids]
+            counts = [float(w[state.raw[self.auids]].sum()) for state in states]
+            for state in states: # Agents of different weights make fractions of people
+                if res[state.name].values.dtype.kind in 'iu':
+                    res[state.name].init_values(dtype=float, force=True)
         elif all(state.raw.ndim == 1 for state in states):
-            counts = ss.solvers.backends.passes.count_alive(tuple(state.raw for state in states), self.alive.raw[:self.uid.len_used]) # In one pass by UID, if the active agents are those alive and those who died in this step
-            if counts[-1] + len(dying) == len(self.auids):
-                counts = [count + np.count_nonzero(state.raw[dying]) for state,count in zip(states, counts)] + [np.count_nonzero(self.ti_dead.raw[dying] <= ti), np.count_nonzero(self.ti_removed.raw[dying] <= ti)]
-            else: # From the active agents themselves
-                counts = ss.solvers.backends.passes.count_people(self.auids.view(np.ndarray), tuple(state.raw for state in states), self.alive.raw, self.ti_dead.raw, self.ti_removed.raw, ti)
-        if self.scale.weighted: # Agents of different weights make fractions of people
-            for key in [state.name for state in states] + ['died', 'emigrated']:
-                if res[key].values.dtype.kind in 'iu':
-                    res[key].init_values(dtype=float, force=True)
+            counts = ss.solvers.backends.passes.count_alive(tuple(state.raw for state in states), self.alive.raw[:self.uid.len_used]) # In one pass by UID, if the active agents are those alive (as they are at the start of a step, the dead having been taken out at the end of the last)
+            counts = counts[:-1] if counts[-1] == len(self.auids) else [state.count() for state in states]
         unborn = self.unborn_uids()
         if len(unborn): # Agents made at conception (by ss.Pregnancy) are not yet people, so are not counted (ss.Pregnancy counts them: pregnancy.unborn)
             if counts is None:
-                counts = [state.count() for state in states] + list(count_gone(self.auids.view(np.ndarray), self.alive.raw, self.ti_dead.raw, self.ti_removed.raw, ti))
+                counts = [state.count() for state in states]
             w = self.scale.raw[unborn] if self.scale.weighted else np.ones(len(unborn))
-            gone = ~self.alive.raw[unborn]
-            counts = [count - w[state.raw[unborn] != 0].sum() for state,count in zip(states, counts)] + [counts[-2] - w[gone & (self.ti_dead.raw[unborn] <= ti)].sum(), counts[-1] - w[gone & (self.ti_removed.raw[unborn] <= ti)].sum()]
-        if counts is not None:
-            for state,count in zip(states, counts):
-                res[state.name][ti] = count
-            # Those who died or left in this step are no longer alive, and are taken out at the end of it (see finish_step()); whenever in the step it was requested
-            res.died[ti], res.emigrated[ti] = counts[-2:]
+            counts = [count - w[state.raw[unborn] != 0].sum() for state,count in zip(states, counts)]
+        for i,state in enumerate(states):
+            res[state.name][ti] = counts[i] if counts is not None else state.count()
+        return
+
+    def record_flows(self):
+        """ Record the people who died or left in the step, at its index; they are taken out at the end of it (see `finish_step()`), whenever in the step it was requested """
+        ti = self.sim.ti
+        res = self.sim.results
+        dying = self.dying() # Those who died or left in the step, who are all the active agents not alive
+        if self.scale.weighted:
+            gone = [float(self.scale.raw[dying[arr.raw[dying] <= ti]].sum()) for arr in [self.ti_dead, self.ti_removed]]
+            for key in ['died', 'emigrated']:
+                if res[key].values.dtype.kind in 'iu':
+                    res[key].init_values(dtype=float, force=True)
         else:
-            for state in states:
-                res[state.name][ti] = state.count()
-            res.died[ti], res.emigrated[ti] = count_gone(self.auids.view(np.ndarray), self.alive.raw, self.ti_dead.raw, self.ti_removed.raw, ti)
+            gone = [np.count_nonzero(arr.raw[dying] <= ti) for arr in [self.ti_dead, self.ti_removed]]
+        unborn = self.unborn_uids()
+        if len(unborn):
+            w = self.scale.raw[unborn] if self.scale.weighted else np.ones(len(unborn))
+            out = ~self.alive.raw[unborn]
+            gone = [gone[0] - w[out & (self.ti_dead.raw[unborn] <= ti)].sum(), gone[1] - w[out & (self.ti_removed.raw[unborn] <= ti)].sum()]
+        res.died[ti], res.emigrated[ti] = gone
         return
 
     def unborn_uids(self):
@@ -1182,16 +1187,3 @@ class Person(sc.obj):
         df = sc.dataframe.from_dict(self, orient='index', columns=['value'])
         df.index.name = 'key'
         return df
-
-
-@nb.jit(cache=True)
-def count_gone(auids, alive, ti_dead, ti_removed, ti):
-    """ The number of active agents who are no longer alive, because they died or left by step ti, in one pass """
-    deaths = 0
-    removed = 0
-    for k in range(auids.shape[0]):
-        uid = auids[k]
-        if not alive[uid]:
-            deaths += ti_dead[uid] <= ti
-            removed += ti_removed[uid] <= ti
-    return deaths, removed

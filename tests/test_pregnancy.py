@@ -26,25 +26,27 @@ def test_burnin_ode():
 def test_burnin_pregnancies():
     sc.heading('Testing burnin=: women pregnant at the start count their pregnancies, so deliveries plus losses are pregnancies')
     seen = sc.obj(start=None, lost=None)
+    def snapshot(sim): # The women pregnant at the start, once the sim is initialized
+        p = sim.demographics.pregnancy
+        preg = p.P.uids
+        seen.start = (len(preg), p.n_pregnancies[preg], p.parity[preg])
+        seen.lost = np.zeros(len(sim.people.uid.raw) + 100_000)
+        return sim
     def check(sim):
         p = sim.demographics.pregnancy
-        if sim.ti == 0:
-            preg = p.P.uids
-            seen.start = (len(preg), p.n_pregnancies[preg], p.parity[preg])
-            seen.lost = np.zeros(len(sim.people.uid.raw) + 100_000)
         for tr in ['abortion', 'miscarriage', 'stillbirth']: # Each woman's losses in the run
             uids = p.engine.fresh(f'test_{tr}', tr, unique=False)
             np.add.at(seen.lost, uids, 1)
 
     # Women pregnant at the start count that pregnancy
-    ss.Sim(demographics=ss.Pregnancy(fertility_rate=ss.freqperyear(100)), analyzers=check, n_agents=2000, verbose=0).init().run(until=0)
+    snapshot(ss.Sim(demographics=ss.Pregnancy(fertility_rate=ss.freqperyear(100)), analyzers=check, n_agents=2000, verbose=0).init())
     n, npreg, parity = seen.start
     assert n > 10 and np.all(npreg == 1 + parity), f'Women pregnant at the start have {np.unique(npreg)} pregnancies'
 
     # With deliveries before the start (short pregnancies), counted in parity, and losses in the run
     preg = ss.Pregnancy(fertility_rate=ss.freqperyear(600), dur_pregnancy=ss.uniform(ss.weeks(10), ss.weeks(70)), p_abortion=0.1, loss_rate=ss.probperweek(0.01))
     preg.stratify(parity=['0', '1', '2', '3+'], split=[1, 0, 0, 0])
-    sim = ss.Sim(demographics=preg, analyzers=check, n_agents=10_000, start=2000, stop=2004, dt=ss.months(1), verbose=0).run()
+    sim = snapshot(ss.Sim(demographics=preg, analyzers=check, n_agents=10_000, start=2000, stop=2004, dt=ss.months(1), verbose=0).init()).run()
     n, npreg, parity = seen.start
     assert np.all(npreg == 1 + parity) and np.sum(parity > 0) > 10, 'A delivery before the start counts as a pregnancy too'
     p, ppl = sim.demographics.pregnancy, sim.people
@@ -124,15 +126,16 @@ def test_delivery_shift():
     sc.heading('Testing rescheduled deliveries')
     sim = ss.Sim(demographics=ss.Pregnancy(fertility_rate=ss.freqperyear(100), burnin=False), n_agents=3000, **kw)
     sim.init()
-    sim.run(until=24)
+    sim.run(until=sim.t.tvec[24]) # Through the step from time point 24 (a date: a bare number here is a year)
     p = sim.demographics.pregnancy
     uids = p.P.uids
     due = np.ceil(p.ti_exit_P[uids])
     later = uids[due > p.ti + 3]
     p.set_delivery(later, p.ti + 1) # Due at the next step
     assert np.all(np.ceil(p.ti_exit_P[later]) == p.ti + 1)
-    sim.run(until=sim.ti + 2)
-    assert not np.any(p.P[later]) and np.all(p.ti_delivered[later] >= p.ti - 2), 'Every rescheduled delivery happened'
+    step = p.ti + 1
+    sim.run(until=sim.t.tvec[sim.ti + 2])
+    assert len(later) and np.all(p.ti_delivered[later] == step), 'Every rescheduled delivery happened, at the step it was rescheduled to' # (Some conceive again in it)
     return sim
 
 

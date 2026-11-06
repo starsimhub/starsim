@@ -354,11 +354,11 @@ Closing schools is a modifier on the school layer of a contact matrix: see [Popu
 
 ### Changes triggered by the epidemic
 
-A rule such as "close schools when cases pass a threshold" is a function of the sim, given as `where=`, which returns `True` on the steps it applies. It can read any result up to the start of the step (`sim.ti - 1`, since this step's results aren't written yet). It has no memory: the modifier is on exactly when the function says so, so a bare threshold switches on and off as the epidemic crosses it. `hold=` adds the simplest memory: once on, it stays on for at least that long. Here transmission is halved for at least 30 days whenever more than 5,000 people are infectious:
+A rule such as "close schools when cases pass a threshold" is a function of the sim, given as `where=`, which returns `True` on the steps it applies. It can read the stocks at the start of the step (`sim.results.flu.I[sim.ti]`, recorded before any module steps), and the flows of the steps before (`[sim.ti - 1]`, since this step's aren't known yet). It has no memory: the modifier is on exactly when the function says so, so a bare threshold switches on and off as the epidemic crosses it. `hold=` adds the simplest memory: once on, it stays on for at least that long. Here transmission is halved for at least 30 days whenever more than 5,000 people are infectious:
 
 ```{python}
 def many_infectious(sim):
-    return sim.results.flu.I[sim.ti - 1] > 5000
+    return sim.results.flu.I[sim.ti] > 5000 # The number infectious at the start of this step
 
 reactive = ss.modify(flu.pars.beta, multiply=0.5, where=many_infectious, hold=ss.days(30))
 sim = ss.Sim(flu, interventions=reactive, **kw)
@@ -439,7 +439,7 @@ class Lockdown(ss.Intervention):
         return
 
     def step(self):
-        infectious = self.sim.results.flu.I[self.sim.ti - 1] if self.sim.ti > 0 else 0 # As of the last step
+        infectious = self.sim.results.flu.I[self.sim.ti] # At the start of this step
         if not self.active and infectious > self.pars.on:
             self.active = True
         elif self.active and infectious < self.pars.off:
@@ -477,7 +477,7 @@ An intervention's effect is the difference between a run with it and a run witho
 - **A multiplier is relative to the base.** `ss.modify(beta, multiply=ss.timeseries({20: 0.5, 60: 0.8}), start=20)` sets transmission to 80% of its base from day 60, not to 80% of the 50% before.
 - **Susceptibility and infectiousness only multiply.** `add=` and `set=` are for parameters; on `rel_sus` and `rel_trans`, use `multiply=`.
 - **A trigger with no memory flickers.** `where=` on a threshold switches the modifier on and off as the quantity crosses it; give `hold=` for a measure that stays in place once begun.
-- **Read results from before this step.** A function given as `where=` runs before the step's results are written; read `[sim.ti - 1]`, not `[sim.ti]`.
+- **Read stocks now, and flows from before this step.** A function given as `where=` runs after the step's stocks are recorded and before its flows are known: read a stock at `[sim.ti]` (e.g. `I[sim.ti]`), and a flow at `[sim.ti - 1]` (the last step's infections), since a flow at `[sim.ti]` isn't complete until the step ends.
 - **A function made in a loop sees the loop's last value.** Python reads a variable when a function runs, not when it is made, so every `where=lambda sim: sim.people.age >= lower` made in `for lower in [0, 15]:` uses 15. Use a condition (`where=ss.ppl.age >= lower`), which keeps the value it was written with, or pass the value in (`lambda sim, lower=lower: ...`).
 
 The API reference for this page: [Interventions](../api/interventions.qmd), [Connectors](../api/connectors.qmd) (for `ss.modify()`).
@@ -552,7 +552,7 @@ The events a delivery can be triggered by (in `who=` or `where=`), and the condi
 | Someone's mother | `ss.mother(anc.positive.ever, born=True)` | The people whose mother meets the condition (agents only) |
 | A count, or a share | `sis.I.n > 1000`, `sis.I.frac > 0.02` | Everyone, on the steps when it holds |
 | Recent incidence | `flu.infection.incidence(over=ss.days(7), by='patch') > 200e-5` | Everyone in the groups where it holds, on the steps when it does |
-| A function of the sim | `lambda sim: sim.people.age >= 15`, `lambda sim: sim.results.flu.I[sim.ti - 1] > 5000` | Whatever it returns: a boolean array, UIDs, or one value for everyone |
+| A function of the sim | `lambda sim: sim.people.age >= 15`, `lambda sim: sim.results.flu.I[sim.ti] > 5000` | Whatever it returns: a boolean array, UIDs, or one value for everyone |
 | A function of the timeline (`when=`) | `lambda t: t.ti % 7 == 0` | Everyone, on the steps when it returns `True` |
 
 And the ways to time a delivery: `start=` and `stop=` (an interval of time), `at=` (rounds at given times), `interval=` (rounds this far apart), `at_age=` (as people reach an age), `when=` (on the steps a function of time selects), `delay=` (after its trigger), and none of these (routine, as people become eligible).

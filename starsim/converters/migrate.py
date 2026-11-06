@@ -276,14 +276,6 @@ targeted = ['ss.Delivery', 'ss.vaccinate', 'ss.screen', 'ss.treat', 'ss.modify',
 agent_bases = {'SIR': 'ssl.AgentSIR', 'SIS': 'ssl.AgentSIS', 'SEIR': 'ssl.AgentSEIR'} # Starsim 3's diseases written as code, which are declared in Starsim 4
 mf_keys = {'mf', 'mfnet'} # ss.MFNet (now ss.SexualNet), which puts men in p1, so a pair [p1 to p2, p2 to p1] is [m2f, f2m]
 one_way_keys = {'prenatal', 'prenatalnet', 'maternal', 'maternalnet', 'postnatal', 'postnatalnet', 'breastfeeding', 'breastfeedingnet'} # Mother to child only
-ti_names = {'ti'} # A bare name, or an attribute ending in .ti (self.ti, sim.ti, self.sim.ti, self.t.ti)
-
-
-def is_ti(node):
-    """ Whether an expression is the time index: `ti`, `self.ti`, `sim.ti`, `self.t.ti`, ... """
-    if isinstance(node, ast.Name):
-        return node.id in ti_names
-    return isinstance(node, ast.Attribute) and node.attr == 'ti'
 
 
 def is_declared(cls):
@@ -360,27 +352,23 @@ def find_analyzers(texts):
 
 
 def migrate_ast(text, analyzers=None):
-    """ The changes that need the structure of the code: the bases of diseases written as code; and what to check about the time index, which is Starsim 3's in every phase of a step, except that the first step is `ti == 1` """
+    """ The changes that need the structure of the code: the bases of diseases written as code; and what to check about the results, which are recorded at the start of a step (stocks, `record_stocks()`) and at its end (flows, `record_flows()`), where Starsim 3 recorded both at its end in `update_results()` """
     tree = ast.parse(text)
     edits = Edits(text)
     found = [] # (line, message) for a person
     uses_ssl = False
-    analyzer_steps = [] # The lines of analyzers' step(), which also run at the first time point
+    analyzer_steps = [] # The lines of analyzers' step(), which see the state at the end of the step
 
     def visit_func(func, analyzer):
-        """ An analyzer's step(), which also runs at the start; the first step, which is ti == 1; and results written in finish_step() """
+        """ An analyzer's step(), which sees the state at the end of the step; update_results(), which is split in two; and results written in finish_step() """
         if analyzer and func.name == 'step':
             analyzer_steps.append(func.lineno)
-        elif func.name in ['step', 'step_state']:
-            for node in [n for n in ast.walk(func) if isinstance(n, ast.Compare)]:
-                operands = [node.left] + node.comparators
-                zero = any(isinstance(op, ast.Constant) and op.value == 0 for op in operands)
-                if zero and any(map(is_ti, operands)):
-                    found.append((node.lineno, f'in {func.name}(), the first step is ti == 1 (ti == 0 is the start of the run, before any step); for something to do once at the start, use init_post()'))
+        elif func.name == 'update_results':
+            found.append((func.lineno, 'update_results() is split in two: record_stocks(), at the start of the step, for the results that are the state then (e.g. self.results.n_x[self.ti] = self.x.sum()), and record_flows(), at its end, for those about what happened in it (e.g. new infections); a result that needs both goes in record_flows(), reading the stock from its result, or in finalize_results() for the whole run'))
         elif func.name == 'finish_step':
             for node in ast.walk(func):
                 if isinstance(node, (ast.Assign, ast.AugAssign)) and 'results' in ast.unparse(node):
-                    found.append((node.lineno, 'a result written in finish_step() comes after update_results() has run for the step: count it in step() instead, at self.ti'))
+                    found.append((node.lineno, 'a result written in finish_step() comes after record_flows() has run for the step: count it in step() instead, at self.ti'))
                     break
 
     for cls in [n for n in ast.walk(tree) if isinstance(n, ast.ClassDef)]:
@@ -396,7 +384,7 @@ def migrate_ast(text, analyzers=None):
                 visit_func(stmt, analyzer)
 
     if analyzer_steps:
-        found.append((analyzer_steps[0], f'an analyzer\'s step() (line{"s" if len(analyzer_steps) > 1 else ""} {sc.strjoin(analyzer_steps)}) also runs at the first time point (self.ti == 0), before any step, to record the start: if it reads something that the first step creates, return early there'))
+        found.append((analyzer_steps[0], f'an analyzer\'s step() (line{"s" if len(analyzer_steps) > 1 else ""} {sc.strjoin(analyzer_steps)}) runs at the end of each step, so the people it sees are as they are at the next time point: a result about the state at the step\'s start (as Starsim 3 recorded at the step\'s index) goes in record_stocks() instead'))
 
     # A beta pair for each network, e.g. beta={'mf': [0.08, 0.04]}: Starsim 3's [p1 to p2, p2 to p1] has direction names in Starsim 4
     def is_beta(node):

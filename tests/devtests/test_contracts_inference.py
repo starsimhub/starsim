@@ -237,7 +237,7 @@ rtols = {'nelder-mead':0.02, 'l-bfgs-b':0.02, 'optuna':0.05, 'if2':0.05} # Optun
 def test_sbc(method):
     sc.heading(f'Testing that {method} recovers a known value from simulated data')
     truth = 0.35
-    fit = sbc_fit(method, truth=truth, seed=3 if method in ['pmcmc', 'if2'] else 1) # Two short chains of particle MCMC, or of IF2, pass both checks at some seeds only (IF2's chains end within 2 log-likelihood units of each other at about 3 seeds in 4, at seed 3 with the draws of ss.solvers.backends.draws)
+    fit = sbc_fit(method, truth=truth, seed=3 if method == 'if2' else 1) # Two short chains of particle MCMC, or of IF2, pass both checks at some seeds only (particle MCMC at 4 of seeds 1 to 8; IF2's chains end within 2 log-likelihood units of each other at about 3 seeds in 4, at seed 3 with the draws of ss.solvers.backends.draws)
     assert fit.method == method
     check_fit(fit, truth, rtols.get(method), rhat_max=1.3 if method == 'pmcmc' else 1.1) # Two chains of 100 draws of particle MCMC are short and sticky, so their R-hat is noisy; 1.3 still catches chains stuck apart
     if fit.samples is None:
@@ -268,7 +268,7 @@ def test_two_optima():
         infection = S >> I @ b * I
         cases = ss.outcome(0.5 * infection, delay=ss.days(3), likelihood=ss.nbinom(n=10))
         sir = ss.Disease(infection, I >> R @ dur, cases, init=dict(I=1e-3), name='sir')
-        data = pd.DataFrame(dict(cases=counts), index=pd.date_range('2020-01-08', periods=17, freq='7D'))
+        data = pd.DataFrame(dict(cases=counts), index=pd.date_range('2020-01-01', periods=17, freq='7D')) # Each the total over the week from its date
         return ss.Sim(sir, unit='day', start='2020-01-01', stop='2020-05-01', total_pop=1e5, data=data, verbose=0)
 
     # From simulation-based calibration: an optimizer started from the best point of a scan stopped at 58.86, and SciPy said it had converged
@@ -342,8 +342,8 @@ def test_value_per_level():
         sir.stratify(patch=['a', 'b'])
         return ss.Sim(sir, stop=60, data=data, verbose=0)
     truth = make([0.25, 0.4]).run().results.sir.infection
-    total = lambda lab, t: np.asarray(truth.select(patch=lab))[t-4:t+1].sum() # Data on a flow are its totals over each period
-    df = pd.DataFrame([dict(time=t, patch=lab, infection=total(lab, t)) for lab in ['a', 'b'] for t in range(5, 61, 5)]).set_index('time')
+    total = lambda lab, t: np.asarray(truth.select(patch=lab))[t:t+5].sum() # Data on a flow are its totals over each period, from its time
+    df = pd.DataFrame([dict(time=t, patch=lab, infection=total(lab, t)) for lab in ['a', 'b'] for t in range(0, 56, 5)]).set_index('time')
     fit = make([0.3, 0.3], data=ss.simdata(df)).fit(verbose=0)
     assert list(fit.table.par) == ['beta[a]', 'beta[b]'] and np.allclose(fit.pars.beta.values, [0.25, 0.4], rtol=1e-4) # Each level is fitted
     assert np.allclose(fit.sim.diseases.sir.pars.beta.raw.values, [0.25, 0.4], rtol=1e-4) # And the fitted sim has them
@@ -373,7 +373,7 @@ def test_fitted_where_used():
         masks = ss.modify(sir.pars.beta, multiply=effect, start=30) # A parameter used only by an intervention
         return ss.Sim(sir, interventions=masks, unit='day', stop=60, verbose=0)
     truth = make(0.4, ss.days(12)).run().results.sir.infection
-    df = pd.DataFrame(dict(time=np.arange(5, 61, 5), infection=[np.asarray(truth)[t-4:t+1].sum() for t in range(5, 61, 5)])).set_index('time')
+    df = pd.DataFrame(dict(time=np.arange(0, 56, 5), infection=[np.asarray(truth)[t:t+5].sum() for t in range(0, 56, 5)])).set_index('time') # Each over the five days from its time
     sim = make(ss.par(0.6, bounds=[0.1, 1], name='effect'), ss.par(ss.days(8), bounds=[ss.days(3), ss.weeks(4)], name='dur'))
     sim.data = ss.simdata(df)
     assert np.isclose(sim.new(pars=dict(effect=0.4, dur=ss.days(12))).run().results.sir.infection[-1], truth[-1]) # Each can be set by name
@@ -433,9 +433,9 @@ def test_profile():
         return ss.Sim(ss.Disease(infection, I >> R @ gamma, cases, init_n=dict(I=10), name='sir'), total_pop=10_000, unit='day', stop=84, solver=solver, verbose=0)
     truth = make().new(pars=dict(beta=ss.perday(0.4))).run().results.sir.cases.values
     rng = np.random.default_rng(1)
-    days = np.arange(7, len(truth), 7)
+    days = np.arange(0, len(truth) - 6, 7) # Whole weeks, each from its day
     sim = make()
-    sim.data = ss.simdata(pd.DataFrame(dict(time=days, cases=[rng.poisson(truth[t-6:t+1].sum()) for t in days])))
+    sim.data = ss.simdata(pd.DataFrame(dict(time=days, cases=[rng.poisson(truth[t:t+7].sum()) for t in days])))
     prof = ss.fit.profile(sim, 'beta', values=np.linspace(0.37, 0.43, 7))
     low, high = prof.interval
     assert low < 0.4 < high and 0.37 < low and high < 0.43, f'Expected a 95% interval around 0.4 within the values, not {prof.interval}'

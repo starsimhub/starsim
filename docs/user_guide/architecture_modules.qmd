@@ -82,16 +82,17 @@ After that, the loop is built, and the parameters are locked, so setting one tha
 | Method | Called for | What it is for |
 |---|---|---|
 | `start_step()` | every module | moving the random number streams on to this step; a declared disease's engine prepares the step |
+| `record_stocks()` | every module, after the people | recording the state at the start of the step (the stocks) |
 | `step()` | custom modules, then demographics | what the module does; births add agents, and deaths are requested |
 | `step_state()` | diseases | state changes of a disease written as code, before the networks and interventions (a declared disease takes all its transitions in `step()`) |
 | `step()` | connectors, then networks, then interventions | changes to other modules, edges, deliveries |
 | `step()` | diseases | transmission, and every transition of a declared disease |
 | `on_death(uids)` | every module that defines it, through `people.step_die()` | what happens to the agents who die this step (they leave every state) |
-| `update_results()` | every module, after the people | recording the step's results |
+| `record_flows()` | every module, after the people | recording what happened in the step (the flows) |
 | `step()` | analyzers | reading the finished step |
 | `finish_step()` | every module, then the people | tidying up; dead agents are removed |
 
-A method that is sure to do nothing in this sim (the base class's own `update_results()` for a module with nothing to count, say) is left out of the plan, so it costs nothing. At the first time point there is no step: the loop records the starting values, and the analyzers run once to see them.
+A method that is sure to do nothing in this sim (the base class's own `record_flows()` for a module with nothing to count, say) is left out of the plan, so it costs nothing. A step is taken from every time point, the first and the last included, and every step runs the same methods, except that the sim's `advance()` is not called before the first. A class that defines `update_results()`, which Starsim no longer calls, raises a `TypeError` when it is made, saying to split it into `record_stocks()` and `record_flows()`.
 
 **Finalized.** After the last step, `finalize()` calls `finalize_results()` on each module, which scales the results that count people by the number of people each agent stands for. A module can override `finalize_results()` to work out results from others; it calls `super().finalize_results()` first. A module that has been finalized can't be stepped again: running it again raises `ss.AlreadyRunError`, which says to copy it first.
 
@@ -198,10 +199,10 @@ sim = ss.Sim(
 )
 sim.init()
 df = sim.loop.to_df()
-df[df.ti == 1][['label', 'module', 'func_name']]
+df[df.ti == 1][['label', 'module', 'func_name']] # The second step
 ```
 
-Each row is one call. The rows that are missing are the ones left out because they would do nothing: the analyzer's `start_step()`, and every module's `finish_step()`, which none of these overrides. The first time point (`ti == 0`) has only the rows that record the start: the people's and modules' results (except the intervention's, which has done nothing yet) and the analyzer.
+Each row is one call. The rows that are missing are the ones left out because they would do nothing: the analyzer's (`ss.infection_log` records infections as they happen), and the `finish_step()` of the modules that don't override it. The first step (`ti == 0`) has the same rows but `sim.advance()`, since the time is already at the first time point.
 
 Three more tools work on the same plan:
 

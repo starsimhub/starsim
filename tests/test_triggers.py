@@ -91,7 +91,7 @@ def test_syphilis_stay():
     assert 'states.LL.stay' not in out.explicit_abm.diseases.syph.graph.guessed
     s = out.explicit_abm.diseases.syph # Those who stayed: no new dwell time, and LL.time keeps running
     u = s.LL.uids
-    assert np.all(s.ti_LL[u] == 0) and np.all(np.isinf(s.ti_exit_LL[u]))
+    assert np.all(s.ti_LL[u] == -1) and np.all(np.isinf(s.ti_exit_LL[u])) # Placed at the start, dated by the step before the first
 
     # The remainder of branches whose p= is not a constant
     def branches(p):

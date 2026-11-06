@@ -426,7 +426,7 @@ def test_period_rates():
     assert ss.demographics.period_year([2010, 2010, 2015, 2015], 2014.9) == 2010 and ss.demographics.period_year([2010, 2015], 2015) == 2015
     data = pd.DataFrame(dict(Time=[2010, 2010, 2015, 2015], Sex=['Female', 'Male']*2, AgeGrpStart=0, mx=[0.04, 0.04, 0.0, 0.0]))
     sim = ss.Sim(n_agents=10_000, demographics=ss.Deaths(death_rate=data, rate_units=1), start=2010, stop=2015, dt=ss.months(1), verbose=0).run()
-    deaths = sim.results.died.values[1:]
+    deaths = sim.results.died.values[:-1] # The step from 2015 has the 2015 rate, 0
     assert deaths.min() > 0, 'Every step before 2015 has the 2010 rate'
     expected = 10_000*(1 - np.exp(-0.04*5))
     assert abs(deaths.sum() - expected) < 4*np.sqrt(expected), f'Expected about {expected:.0f} deaths, not {deaths.sum()}'
@@ -458,7 +458,7 @@ def test_lifetable_deaths():
     sim = ss.Sim(n_agents=20_000, demographics=ss.Deaths(lifetable=tables), start=2000, stop=2010, verbose=0).run()
     female, dead = sim.people.female.raw, ~sim.people.alive.raw
     for sel,rates in [(female, [0.01, 0.02]), (~female, [0.03, 0.06])]:
-        expected = 1 - np.exp(-5*rates[0] - 5*rates[1]) # The 2000 table to 2005, then the 2005 one
+        expected = 1 - np.exp(-5*rates[0] - 6*rates[1]) # The 2000 table for the steps from 2000 to 2004, then the 2005 one for those from 2005 to 2010
         assert abs(dead[sel].mean() - expected) < 4*np.sqrt(expected/sel.sum()), f'{dead[sel].mean():.3f} died, not {expected:.3f}'
     with pytest.raises(ValueError):
         ss.Deaths(lifetable=dict(women=table(0.01), men=table(0.03)))
@@ -481,7 +481,7 @@ def test_lifetable_deaths():
     for rate,fine,stratify in [(coarse, mx, True), (ss.peryear(flat), ss.peryear(flat), False)]:
         n = [make(r, solver, stratify, **pop).run().results.d.death.sum() for r,solver,pop in [(fine, 'abm', dict(n_agents=50_000)), (rate, 'ode', dict(total_pop=50_000))]]
         assert np.isclose(n[0], n[1], rtol=0.06), f'{n[0]:n} deaths as agents, {n[1]:n} as compartments'
-    assert np.isclose(n[1], 50_000*(1 - np.exp(-0.02*5)), rtol=1e-3)
+    assert np.isclose(n[1], 50_000*(1 - np.exp(-0.02*6)), rtol=1e-3) # Six steps, from 2000 to 2005
     return sim
 
 
@@ -574,7 +574,7 @@ def test_split_by_age():
     dis = ss.Disease(onset=S >> I @ ss.peryear(0.01), name='dis')
     dis.stratify(age=[0, 1, 5])
     dis.stratify(wealth=['poor', 'rich'], split=ss.by([[0, 1], [1, 0], [1, 0]], dims=['age', 'wealth']))
-    sim = ss.Sim(diseases=dis, n_agents=5000, start=2000, stop=2002, rand_seed=1, verbose=0, demographics=[ss.Births(birth_rate=ss.peryear(0.04)), ss.Deaths(death_rate=ss.peryear(0.01))]).run()
+    sim = ss.Sim(diseases=dis, n_agents=5000, start=2000, stop=2002, dt=ss.months(3), rand_seed=1, verbose=0, demographics=[ss.Births(birth_rate=ss.peryear(0.04)), ss.Deaths(death_rate=ss.peryear(0.01))]).run() # Quarterly, so the newborns of a step are still under 1 at the next time point
     n = lambda t, age: (sim.results.dis.S.select(age=age).by('wealth').values[t] + sim.results.dis.I.select(age=age).by('wealth').values[t])
     assert n(0, 0).sum() < 0.05*5000 # Before, each age group was a third of the people
     assert n(0, 1)[1] == 0 and n(0, 2)[1] == 0 # Only those under 1 are rich...

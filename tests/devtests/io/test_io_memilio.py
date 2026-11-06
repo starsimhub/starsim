@@ -89,7 +89,7 @@ def test_secir():
     res = sim.results.osecir
     assert 'InfectedNoSymptomsConfirmed' not in res and 'Dead' not in res, 'Empty confirmed states are left out, and the dead leave'
     alive = sum(res[s].values for s in ['Susceptible', 'Exposed', 'InfectedNoSymptoms', 'InfectedSymptoms', 'InfectedSevere', 'InfectedCritical', 'Recovered'])
-    dead = res.death.cum.values + res.severe_death.cum.values
+    dead = sum(res[f].cum.values - res[f].values for f in ['death', 'severe_death']) # Deaths before each time point (the cumulative total includes the step from it)
     assert np.allclose(alive + dead, 10_000), 'Everyone is alive or has died'
     assert res.InfectedCritical.values.max() < 15, 'The ICU should not be overfilled'
     ns = {}

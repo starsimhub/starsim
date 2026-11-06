@@ -23,12 +23,11 @@ solvers = ['ode', 'binomial', 'abm']
 
 
 def at_start(sim):
-    """ The results with the number in each state before the first step at index 0, for a compartmental sim (results count the number after each step) """
+    """ The results with the number in each state at the start, at index 0, before the first step """
     sim.init()
     for mod in sim.declared:
         mod.engine.start_step()
         mod.engine.record_stocks()
-        mod.engine.update_results()
     return sim.results
 
 
@@ -94,7 +93,7 @@ def make_towns(**kwargs):
 
 def seed_north(sim):
     """ Infect 50 people in the first town, on the first step """
-    if sim.ti == 1:
+    if sim.ti == 0:
         sir = sim.diseases.sir
         if sim.solver == 'abm':
             uids = (sim.people.patch == 0).uids[:5] # Each agent stands for 10 people
@@ -373,10 +372,10 @@ def test_strain_carriers():
         S, L, I = ss.states('S L I')
         return ss.Disease(S, L, I, infection=S >> I @ ss.peryear(1)*I, activation=ss.Transition(L, I, rate=ss.peryear(1), per='strain', alone=True), init=init,
                           name='d', strains=ss.Strains(['A', 'B'], max_strains=2, split={'A+B': 1}, transmit=transmit, **values))
-    first = lambda transmit: run(together(dict(I=0.001), transmit), 'ode', stop=2001, dt=0.01, total_pop=1e6).results.d.infection[1]
+    first = lambda transmit: run(together(dict(I=0.001), transmit), 'ode', stop=2001, dt=0.01, total_pop=1e6).results.d.infection[0]
     assert np.isclose(first('each'), 2*first('one'), rtol=0.02)
     res = run(together(dict(L=0.5), activation=[1, 3]), 'ode', stop=2001, dt=0.01, total_pop=1e6).results.d
-    assert np.isclose(res.activation[1], 0.5e6*4*0.01, rtol=0.05) # The rate of a set is the sum of its strains'
+    assert np.isclose(res.activation[0], 0.5e6*4*0.01, rtol=0.05) # The rate of a set is the sum of its strains'
     assert np.isclose(res.I.select(strain='B')[1] - res.I.select(strain='B')[0], 3*res.I.select(strain='A')[1] - 3*res.I.select(strain='A')[0], rtol=0.05) # ... and the strain moving on is chosen in proportion
 
     return res
@@ -835,7 +834,7 @@ def test_by_properties():
     assert sim.solver == 'abm'
     female, dead = sim.people.female.raw[sim.people.auids], sim.diseases.d.D.raw[sim.people.auids]
     for sel,rate in [(female, 0.02), (~female, 0.05)]:
-        p = 1 - np.exp(-10*rate)
+        p = 1 - np.exp(-11*rate) # The people after the run: 11 steps of a year, one from each time point
         assert abs(dead[sel].mean() - p) < 3*np.sqrt(p*(1 - p)/sel.sum())
     with pytest.raises(ss.CapabilityError, match='stratify'):
         make(mu, solver='ode', total_pop=20_000).init()

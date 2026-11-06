@@ -44,7 +44,7 @@ def test_events():
         event = on(d)
         vx = ss.vaccinate(ss.Vaccine(efficacy=0), where=event, name='vx')
         res = ss.Sim(d, interventions=vx, n_agents=5000, unit='day', stop=60, **kw).run().results
-        target = res.d[flow][:-1].sum() if flow else res.d.D[-2] # Events in a step are acted on by the next, so not those of the last
+        target = res.d[flow][:-1].sum() if flow else res.d.D[-1] # Events in a step are acted on by the next, so not those of the last (D[-1] is the state at the last step's start)
         assert np.isclose(res.vx.delivered.sum(), target, rtol=0.02), f'{event}: {res.vx.delivered.sum()} delivered, {target} expected'
 
     # A branch is an event under a compartmental solver too; entering a state is not, yet

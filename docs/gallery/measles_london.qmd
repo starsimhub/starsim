@@ -47,8 +47,8 @@ stop = start + ss.days(7*1096) # 1,096 weeks of data
 terms = [(7, 100), (115, 199), (252, 300), (308, 356)] # School terms, in days of the year
 
 census = pd.read_csv('../tutorials/data/he2010_london_covariates.tsv', sep='\t') # Days from 1944-01-07; the birth rate is per person per year, lagged four years
-cases = pd.read_csv('../tutorials/data/he2010_london_cases.tsv', sep='\t')        # Days from the start
-data = pd.DataFrame(dict(recovery=cases.weekly_cases.values), index=[start + ss.days(int(t)) for t in cases.time])
+cases = pd.read_csv('../tutorials/data/he2010_london_cases.tsv', sep='\t')        # Days from the start to the end of each week
+data = pd.DataFrame(dict(recovery=cases.weekly_cases.values), index=[start + ss.days(int(t) - 7) for t in cases.time]) # Each week dated by its first day, as Starsim dates a flow
 
 def year(date):
     """ The time as He et al. count it: the year, plus the day of the year over 365.25 """
@@ -116,7 +116,7 @@ sim.run()
 The model runs as a chain binomial, a stochastic compartmental model, since nothing in it is about individual people. To compare it with the data, the weekly recoveries are scaled by the reporting rate ρ:
 
 ```{python}
-weekly = sim.results.measles.recovery.values[1:].reshape(-1, 7).sum(axis=1) # Days 1-7, 8-14, ..., as the data are
+weekly = sim.results.measles.recovery.values[:-1].reshape(-1, 7).sum(axis=1) # The steps from days 0-6, 7-13, ..., as the data are (the last step, from the stop, is past the data)
 plt.figure(figsize=(10, 4))
 plt.plot(data.index, data.recovery, label='Reported', alpha=0.6)
 plt.plot(data.index, pars.rho*weekly, label='Model × ρ', alpha=0.8)
@@ -257,12 +257,10 @@ class Filter(ss.Analyzer):
         self.rng = np.random.default_rng(self.sim.pars.rand_seed + 1)
 
     def step(self):
-        if self.ti == 0: # Analyzers also run at the start, before the first step
+        self.week += self.model.C # The recoveries of this step
+        if (self.ti + 1) % 7: # Steps 0-6 are the first week, 7-13 the second, ...
             return
-        self.week += self.model.C
-        if self.ti % 7:
-            return
-        weights = np.exp(reported(self.observed[self.ti//7 - 1], self.week))
+        weights = np.exp(reported(self.observed[(self.ti + 1)//7 - 1], self.week))
         self.loglik += np.log(weights.mean())
         n = len(weights)
         chosen = np.searchsorted(np.cumsum(weights/weights.sum()), (self.rng.random() + np.arange(n))/n).clip(max=n - 1)

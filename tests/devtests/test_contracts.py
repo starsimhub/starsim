@@ -531,7 +531,8 @@ def test_coded_beside():
     watched = corpus.sir(unit='day', analyzers=Watch()).run()
     assert watched.solver == 'ode', f'An analyzer changed the solver to {watched.solver}'
     assert np.array_equal(watched.results.sir.I.values, alone.results.sir.I.values)
-    assert np.allclose(watched.analyzers.watch.seen, alone.results.sir.I.values[:len(watched.analyzers.watch.seen)])
+    seen = watched.analyzers.watch.seen # An analyzer runs at the end of a step, so it sees the next time point's count
+    assert len(seen) == len(alone.results.sir.I) and np.allclose(seen[:-1], alone.results.sir.I.values[1:])
     numpy = corpus.sir(unit='day', connectors=NumpySIS()).run()
     assert numpy.solver == 'ode' and np.array_equal(numpy.results.sir.I.values, alone.results.sir.I.values)
     assert numpy.connectors.numpysis.y[1] > 0.5 # Its own model ran (to near 1 - 0.1/0.3)

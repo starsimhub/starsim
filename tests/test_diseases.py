@@ -106,7 +106,7 @@ def test_seir():
     res = sim.results.seir
     assert not (seir.E & seir.I).any(), 'Agents should not be in both E and I'
     assert np.allclose(res.prevalence, (res.E + res.I)/sim.results.alive), 'prevalence should be computed from E plus I'
-    assert res.infection.min() >= 0 and res.infection[0] == 0, 'Seed infections should be excluded from incidence exactly once'
+    assert res.infection.min() >= 0 and res.infection[0] == res.S[0] - res.S[1], 'Seed infections should be excluded from incidence exactly once' # The first step's infections, not the seeds
     assert np.array_equal(res.infection.cum, np.cumsum(res.infection)), 'Cumulative infections should be the running sum of new infections'
 
     # Latent agents should not transmit: with no infectious period, there should be no epidemic
@@ -149,10 +149,10 @@ def test_aliases():
     assert 'infectious' in res, 'A derived alias should generate an automatic result'
     assert res.infectious.max() == 0, 'Nobody is infectious, since everyone is isolated'
 
-    # Its new infections are recorded at the end of the step they happen in, as the counts of its states are (during a step, self.ti is its start)
+    # Its new infections are recorded at the step they happen in, which takes them out of S by the next time point
     sim = ss.Sim(n_agents=1000, diseases=ssl.AgentSIR(beta=ss.perday(0.1), dur_inf=ss.days(10), p_death=0), networks='random', dur=ss.days(30), dt=ss.days(1), verbose=0).run()
     res = sim.results.agentsir
-    assert np.array_equal(res.infection[1:], -np.diff(res.susceptible)) # The infections of each step leave S in it
+    assert np.array_equal(res.infection[:-1], -np.diff(res.susceptible)) # The infections of each step leave S by the next time point
     assert np.count_nonzero(sim.diseases.agentsir.ti_infected == 10) == res.infection[10] # And are dated there too, as a declared disease dates ti_I
 
     # Aliases can also be defined alongside the states they refer to
@@ -526,7 +526,7 @@ def test_same_strains():
     transmit_from = ss.solvers.Agents.transmit_from
     def from_first(self, tr, src):
         rng = self.mod.trans_rng
-        rng.jump(to=rng.dists[0].dt_jump_size*self.mod.t.ti, force=True)
+        rng.jump(to=rng.dists[0].dt_jump_size*(self.mod.t.ti + 1), force=True) # The step's own state (see ss.Dist.jump_dt())
         return transmit_from(self, tr, src)
     with pytest.MonkeyPatch.context() as mp:
         mp.setattr(ss.solvers.Agents, 'transmit_from', from_first)
@@ -605,7 +605,7 @@ def test_mixed_disease():
     mixed = sim.diseases.mixed
     assert sim.solver == 'abm' # The coded array needs agents
     assert mixed.results.infection.sum() > 0 and mixed.years_infected.sum() > 0 # Both parts ran
-    assert np.isclose(mixed.years_infected.sum(), mixed.results.I[1:].sum()*sim.t.dt_year) # One step for each step spent infected
+    assert np.isclose(mixed.years_infected.sum(), (mixed.results.I[1:].sum() + mixed.count(mixed.I))*sim.t.dt_year) # One step for each step spent infected, the last step's included
     fitted, _ = ss.fit.bounded_pars(ss.Sim(diseases=Mixed(rate=ss.par(1.0, bounds=[0.5, 2])), n_agents=100, verbose=0).init())
     assert list(fitted.keys()) == ['rate'] # Its code's parameter can be fitted too
     with pytest.raises(ss.CapabilityError): # A declared transition never calls set_prognoses()
@@ -658,12 +658,12 @@ def test_code_seams():
     assert list(tb.strats.age.edges) == [0, 15]
     assert sum(len(uids) for uids in seen) == tb.results.diagnosis.sum() == tb.count_diagnosis.raw.sum()
     assert tb.results.fast.sum() > 0 and sim.results.give.delivered.sum() > 0 # Those diagnosed in the last year, then cured by holding a product of the kind
-    assert np.isclose(tb.count(tb.I), tb.results.I[-1]) and np.isclose(tb.count(), sim.results.alive[-1])
+    assert np.isclose(tb.count(tb.I), np.count_nonzero(tb.I.raw & sim.people.alive.raw)*ss.results.people_scale(sim)) and np.isclose(tb.count(), sim.people.alive.raw.sum()*ss.results.people_scale(sim)) # The people in each state now, after the last step
     assert np.allclose(np.ones(2)*(1 - tb.pars.eff), 0.1) # A declared parameter read by code during a run is its number
     S, I = ss.states('S I')
     sis = ss.Disease(S >> I @ ss.peryear(2)*I, I >> S @ ss.years(1), ss.death(rate=ss.peryear(0.02)), init=dict(I=0.05), name='sis')
     ode = ss.Sim(sis, total_pop=1000, start=2000, stop=2004, verbose=0).run() # The people results agents give the sim
-    assert np.isclose(ode.results.alive[-1], ode.diseases.sis.count()) and np.isclose(ode.results.died.cum[-1], 1000 - ode.results.alive[-1])
+    assert ode.results.alive[0] == 1000 and np.isclose(ode.diseases.sis.count(), 1000 - ode.results.died.cum[-1]) # The people after the run are the start less every step's deaths
     return sim
 
 

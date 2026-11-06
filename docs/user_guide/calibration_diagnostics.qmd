@@ -69,7 +69,7 @@ A pattern in the residuals points to the structure of the model, or to how the d
 | Different starts giving different answers | Several optima, too short a search, a noisy objective |
 | A good fit but an unstable projection | Parameters the data can't tell apart; a change in the epidemic the model doesn't have |
 
-Before blaming the model, check that like is compared with like: incidence with case counts over the same interval, prevalence with a survey at a time, hospital admissions with admissions rather than beds occupied, and dates aligned (a week ending on a Sunday, not starting on one). The fit's measure (`fit.mismatch`) helps compare fits to the same data, here 0.38 for the SIR model against 0.10 for the SEIR model, but the plot shows *where* a model fails.
+Before blaming the model, check that like is compared with like: incidence with case counts over the same interval, prevalence with a survey at a time, hospital admissions with admissions rather than beds occupied, and dates aligned (Starsim dates a count by the start of its period, so a week starting on a Monday is dated by that Monday, and data dated by the end of each week needs moving back a week). The fit's measure (`fit.mismatch`) helps compare fits to the same data, here 0.38 for the SIR model against 0.10 for the SEIR model, but the plot shows *where* a model fails.
 
 ## Did the search converge?
 

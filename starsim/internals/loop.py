@@ -54,35 +54,36 @@ class Loop:
     Each type of module is called at a different time. Within each module type,
     they are called in the order listed. The default loop order is:
 
-        1. sim:               advance()        # Move the time to this step's time point
+        1. sim:               advance()        # Move the time to this step's time point (from the second step on)
         2. sim:               start_step()     # Initialize the sim, including plotting progress
         3. all modules:       start_step()     # Initialize the modules, including the random number distribution
-        4. sim.custom:        step()           # Run any custom modules
-        5. sim.demographics:  step()           # Update the demographics, including adding new agents
-        6. sim.diseases:      step_state()     # Update the disease states, e.g. exposed -> infected
-        7. sim.connectors:    step()           # Run the connectors
-        8. sim.networks:      step()           # Run the networks, including adding/removing edges
-        9. sim.interventions: step()           # Run the interventions
-        10. sim.diseases:     step()           # Run the diseases, including transmission
-        11. people:           step_die()       # Figure out who died on this timestep
-        12. people:           update_results() # Update basic state results
-        13. all modules:      update_results() # Update any results
-        14. sim.analyzers:    step()           # Run the analyzers
-        15. all modules:      finish_step()    # Do any final tidying
-        16. people:           finish_step()    # Clean up dead agents
-        17. sim:              finish_step()    # Finish the step
+        4. people:            record_stocks()  # Record the basic states at the start of the step
+        5. all modules:       record_stocks()  # Record each module's states at the start of the step
+        6. sim.custom:        step()           # Run any custom modules
+        7. sim.demographics:  step()           # Update the demographics, including adding new agents
+        8. sim.diseases:      step_state()     # Update the disease states, e.g. exposed -> infected
+        9. sim.connectors:    step()           # Run the connectors
+        10. sim.networks:     step()           # Run the networks, including adding/removing edges
+        11. sim.interventions: step()          # Run the interventions
+        12. sim.diseases:     step()           # Run the diseases, including transmission
+        13. people:           step_die()       # Figure out who died on this timestep
+        14. people:           record_flows()   # Record who died or left in the step
+        15. all modules:      record_flows()   # Record what happened in the step
+        16. sim.analyzers:    step()           # Run the analyzers
+        17. all modules:      finish_step()    # Do any final tidying
+        18. people:           finish_step()    # Clean up dead agents
+        19. sim:              finish_step()    # Finish the step
 
     A sim that is nothing but compartments the kernels can run from start to finish goes
     through them in one call instead, not this order step by step (see `sim.kernel_reason()`).
 
     One time index holds for every function of a step, in every module: the step from time
-    point k-1 to k is step k, and throughout it `sim.ti == k`, where its results go (so the
-    first step has `ti == 1`): `self.results.x[self.ti]` is this step's value, in `step()` as
-    in `update_results()`, and a time recorded as `self.ti` in one is `self.ti` in the other.
-    `sim.now` is when the step starts, time point k-1, which it reads time-varying inputs and
-    dates at. At the first time point (`ti == 0`, `now` the start) there is no step: only the
-    results of the start are recorded (people's and every module's, though an intervention, which
-    has done nothing yet, only counts its states), and the analyzers run (`at_start`).
+    point k to k+1 is step k, and throughout it `sim.ti == k` and `sim.now` is time point k,
+    which is when the step happens, what it reads time-varying inputs and dates at, and where
+    its results go. A step is taken from every time point, the last included, so each time
+    point is a period: its stocks are the state at its start (recorded by `record_stocks()`,
+    before any module's step), and its flows the totals over the step (recorded by
+    `record_flows()`, after them). The state after the last step is not recorded.
 
     Args:
         sim (Sim): the sim to run (usually made by the sim itself)
@@ -90,7 +91,6 @@ class Loop:
     def __init__(self, sim):
         self.sim = sim
         self.funcs = None
-        self.at_start = None # The functions that run at the first time point, to record the start, by the function order of the one each stands for
         self.shared_timelines = [] # The timelines of the modules on the sim's timeline, which the sim's advance() moves
         self.abs_tvecs = None
         self.abs_numvecs = None # Canonical numeric (float-year) time arrays, parallel to abs_tvecs, used for sorting/uniformity
@@ -174,7 +174,8 @@ class Loop:
         sim = self.sim
 
         # Move the time to the step about to be taken, so that it is the same in every function of the step: the sim's time,
-        # with that of the modules on its timeline; a module with a timeline of its own moves its own
+        # with that of the modules on its timeline; a module with a timeline of its own moves its own. The first step is at the
+        # time the sim starts at, so these are not called then (see make_plan())
         self.shared_timelines = [mod.t for mod in sim.modules if self._on_sim_time(mod)] # Their timelines, not the modules, so a search of the sim does not find the modules again here
         self += sim.advance # Note special __iadd__() method above, which appends these to the funcs list
         for mod in sim.modules:
@@ -186,6 +187,14 @@ class Loop:
         for mod in sim.modules:
             if self._keep(mod.start_step):
                 self += mod.start_step
+
+        # Record the state at the start of the step. A module's record_stocks() is skipped only when it is the inherited
+        # base method and the module has no auto-generated boolean-state results to count (see _null_record())
+        if sim.pars.get('people_results', True): # People results can be opted out for lightweight sims
+            self += sim.people.record_stocks
+        for mod in sim.modules:
+            if self._keep(mod.record_stocks):
+                self += mod.record_stocks
 
         # Rescale the population if needed
         if sim.pars.rescale:
@@ -229,31 +238,17 @@ class Loop:
         if self._keep(sim.people.step_die):
             self += sim.people.step_die
 
-        first = len(self.funcs) # From here to the analyzers, the functions also run at the first time point, to record the start (see below for the interventions)
-
-        # Update results. A module's update_results is skipped only when it is the inherited
-        # base method (not overridden anywhere in the MRO) and the module has no auto-generated
-        # boolean-state results to count -- i.e. the base loop is provably a no-op. Overrides
-        # (including those that call super() or gain behavior via a mixin) are always kept.
-        if sim.pars.get('people_results', True): # People results can be opted out for lightweight sims
-            self += sim.people.update_results
+        # Record what happened in the step
+        if sim.pars.get('people_results', True):
+            self += sim.people.record_flows
         for mod in sim.modules:
-            if self._keep(mod.update_results):
-                self += mod.update_results
+            if self._keep(mod.record_flows):
+                self += mod.record_flows
 
         # Apply analyzers
         for ana in sim.analyzers():
             if self._keep(ana.step):
                 self += ana.step
-        self.at_start = {}
-        intvs = {intv.name: intv for intv in sim.interventions()}
-        for i in range(first, len(self.funcs)):
-            func = self.funcs[i]
-            intv = intvs.get(func['module'])
-            if intv is None:
-                self.at_start[i] = func['func']
-            elif len(intv.auto_state_list) or len(intv.derived_state_names): # Its states have values at the start, but its own update_results() may read what its first step sets
-                self.at_start[i] = ft.partial(ss.Module.update_results, intv)
 
         # Clean up dead agents, and perform other housekeeping tasks
         for func in [mod.finish_step for mod in sim.modules] + [sim.people.finish_step]:
@@ -284,7 +279,7 @@ class Loop:
 
         This is so only for Starsim's own methods, when nothing has been changed that they
         would act on, and for a `step()` with nothing in it: a module's `start_step()` with no random numbers to move on, its
-        `finish_step()` and `update_results()` (see `_null_update_results()`) when inherited
+        `finish_step()`, `record_stocks()` and `record_flows()` (see `_null_record()`) when inherited
         unchanged, and the people's deaths and removals in a run without agents (in which nobody
         dies as an agent). The sim's own calls are always kept, as places to insert others. A method that a
         module overrides is always kept, so a module written as code costs the loop only the
@@ -295,15 +290,17 @@ class Loop:
         if isinstance(obj, ss.Module):
             if name == 'step':
                 return empty_function(func) # E.g. an analyzer that only has finalize(), which needs one
-            elif name not in ['start_step', 'finish_step', 'update_results']: # An intervention given as a function
+            elif name not in ['start_step', 'finish_step', 'record_stocks', 'record_flows']: # An intervention given as a function
                 return False
             inherited = getattr(type(obj), name) is getattr(ss.Module, name)
             if name == 'start_step':
                 return inherited and (obj.dists is None or not ss.options.crn) # Moving the streams on is all it does
             elif name == 'finish_step':
                 return inherited
-            elif name == 'update_results':
-                return self._null_update_results(obj)
+            elif name == 'record_stocks':
+                return self._null_record(obj)
+            elif name == 'record_flows':
+                return inherited
         elif obj is sim.people and name in ['step_die', 'finish_step']:
             people = type(obj)
             same = people.step_die is ss.People.step_die and people.finish_step is ss.People.finish_step and people.update_post is ss.People.update_post and people.remove_dead is ss.People.remove_dead
@@ -311,17 +308,17 @@ class Loop:
         return False
 
     @staticmethod
-    def _null_update_results(mod):
+    def _null_record(mod):
         """
-        Return True if a module's `update_results` is a guaranteed no-op and can be skipped
+        Return True if a module's `record_stocks()` is a guaranteed no-op and can be skipped
 
-        This holds only when the module uses the inherited base `Module.update_results`
+        This holds only when the module uses the inherited base `Module.record_stocks`
         (not overridden anywhere below `ss.Module` in the class hierarchy, so no `super()`
         call or mixin behavior is missed) and has no auto-generated boolean-state or
         derived-state results for the base method to count. Such a call would iterate an empty list and change
         nothing, so omitting it from the plan is result-identical.
         """
-        not_overridden = type(mod).update_results is ss.Module.update_results
+        not_overridden = type(mod).record_stocks is ss.Module.record_stocks
         return not_overridden and not len(mod.auto_state_list) and not len(mod.derived_state_names)
 
     def collect_abs_tvecs(self):
@@ -390,8 +387,8 @@ class Loop:
 
         Because all entries at a given tick share one time and the times are strictly
         increasing, this is identical to sorting by (time, func_order); and the tick
-        index equals the sim time index, so no separate ti pass is needed. At the first
-        tick there is no step, so only the functions that record the start are emitted.
+        index equals the sim time index, so no separate ti pass is needed. The first
+        step is at the first tick, which the timelines are already at, so it has no advance().
         """
         tvec = self.abs_tvecs['sim']
         # Precompute the per-function fields once, rather than rebuilding them per entry
@@ -401,8 +398,8 @@ class Loop:
         for ti in range(len(tvec)):
             t = tvec[ti]
             for func_order, func, label, module, func_name in specs:
-                if ti or func_order in self.at_start:
-                    append(LoopEntry(t, ti, func_order, func if ti else self.at_start[func_order], label, module, func_name)) # By position, which is quicker for the many entries
+                if ti or func_name != 'advance':
+                    append(LoopEntry(t, ti, func_order, func, label, module, func_name)) # By position, which is quicker for the many entries
         return plan
 
     def _make_plan_sorted(self):
@@ -425,8 +422,8 @@ class Loop:
             label = f'{module}.{func_name}'
             tvec = self.abs_tvecs[module]
             numvec = self.abs_numvecs[module]
-            for j in range(0 if func_order in self.at_start else 1, len(tvec)): # At its first time point, a module has no step, and only records the start
-                r_append(LoopEntry(time=tvec[j], ti=0, func_order=func_order, func=func if j else self.at_start[func_order], label=label, module=module, func_name=func_name))
+            for j in range(1 if func_name == 'advance' else 0, len(tvec)): # A timeline starts at its first time point, so is not moved there
+                r_append(LoopEntry(time=tvec[j], ti=0, func_order=func_order, func=func, label=label, module=module, func_name=func_name))
                 t_append(numvec[j])
                 f_append(func_order)
 
@@ -511,7 +508,7 @@ class Loop:
         plan = self.plan
         while self.index < len(plan):
             entry = plan[self.index]
-            if until is not None and entry.label == 'sim.advance' and self.sim.t.tvec[entry.ti - 1] > until: # Stop before a step that starts after the time asked for
+            if until is not None and entry.label == 'sim.advance' and self.sim.t.tvec[entry.ti] > until: # Stop before a step that starts after the time asked for
                 break
             if cond is not None and entry.label == 'sim.advance' and self.sim.holds(cond): # It holds at the end of the step just taken
                 self.stopped = self.sim.t.ti
@@ -698,7 +695,7 @@ class Loop:
         Plot a diagram of all the events
 
         Args:
-            simplify (bool): if True, skip advance, update_results, and finish_step events, which are automatically applied
+            simplify (bool): if True, skip advance, record_stocks, record_flows, and finish_step events, which are automatically applied
             max_len (int): maximum number of entries to plot
             fig_kw (dict): passed to `plt.figure()`
             plot_kw (dict): passed to `plt.plot()`
@@ -710,7 +707,7 @@ class Loop:
         if df is None:
             df = self.to_df()
         if simplify:
-            filter_out = ['advance', 'update_results', 'finish_step']
+            filter_out = ['advance', 'record_stocks', 'record_flows', 'finish_step']
             df = df[~df.func_name.isin(filter_out)]
         if max_len:
             df = df[:max_len]

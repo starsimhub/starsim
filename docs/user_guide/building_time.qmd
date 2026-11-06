@@ -36,7 +36,7 @@ sim.run()
 sim.plot('measles')
 ```
 
-The step, `dt`, is one unit of the model by default (here a day). Results are recorded at every time point, from the start to the stop inclusive, so a run of 59 daily steps has 60 time points: the state at the start, then after each step. A flow, such as infections, at a time point is the number during the step that ends there.
+The step, `dt`, is one unit of the model by default (here a day). Results are recorded at every time point, from the start to the stop inclusive, and a step is taken from each, the last included, so this run has 60 time points and 60 daily steps, the last of them 1 March. Each time point is a period: a stock, such as the number infectious, at a time point is the state at its start, and a flow, such as infections, the number during the step that starts there. The state after the last step is not recorded, so after a run `sim.people` is one step past the last time point.
 
 Specifying the length with `dur` is exactly the same as specifying `stop`: internally, `stop = start + dur`, so `start=2000, dur=20` is the same as `start=2000, stop=2020`. Why are the endpoints inclusive? For a range like `start=2000, stop=2020`, there are three equally valid interpretations:
 
@@ -44,7 +44,7 @@ Specifying the length with `dur` is exactly the same as specifying `stop`: inter
 2. **Inclusive start, minimally inclusive end** (2000-01-01 to 2020-01-01), by analogy to `np.linspace(0, 20)` giving `0`–`20`, or `plt.xlim(left=2000, right=2020)`.
 3. **Inclusive start, maximally inclusive end** (2000-01-01 to 2020-12-31).
 
-Starsim uses the second (middle) interpretation. This is mostly for plotting (a sim run from 2000 to 2020 looks odd if the plot ends in 2019) and so that `stop` and `dur` are interchangeable: `start=2000, dur=20` intuitively runs *to* 2020, not 2019. Just as with `np.arange`, the step determines which points fall within the range, and the final point is the last one *at or before* `stop`: `start='2017-01-01', stop='2024-12-31', dt=ss.datedur(months=1)` ends at 2024-12-01, because the next monthly point is past `stop`.
+Starsim uses the second (middle) interpretation. This is mostly for plotting (a sim run from 2000 to 2020 looks odd if the plot ends in 2019) and so that `stop` and `dur` are interchangeable: `start=2000, dur=20` intuitively runs *to* 2020, not 2019. The time points follow this interpretation, but since a step is taken from each, the last included, the flows of yearly steps cover every year in full, as in the third: the row for 2020 is the state at the start of 2020 and the infections during 2020. Just as with `np.arange`, the step determines which points fall within the range, and the final point is the last one *at or before* `stop`: `start='2017-01-01', stop='2024-12-31', dt=ss.datedur(months=1)` ends at 2024-12-01, because the next monthly point is past `stop`.
 
 ### Choosing the step
 

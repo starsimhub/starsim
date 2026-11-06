@@ -44,7 +44,7 @@ class Ebola(AgentSEIR):
     Attributes:
         exposed (BoolState):    infected but not yet infectious
         severe (BoolState):     currently severely ill
-        buried (BoolState):     dead and buried (no longer infectious)
+        buried (BoolArr):       dead and buried (no longer infectious): each is taken out of the population at the end of the step of their burial, so the result `burial` counts them, a flow
         ti_exposed (FloatArr):  timestep of exposure
         ti_severe (TimeArr):    timestep severe symptoms began
         ti_buried (TimeArr):    timestep of burial
@@ -87,7 +87,7 @@ class Ebola(AgentSEIR):
         self.define_states(
             # SEIR states are added automatically, here we add severe and buried
             ss.BoolState('severe', label='Severe'),
-            ss.BoolState('buried', label='Buried'),
+            ss.BoolArr('buried', label='Buried'), # Not counted as a state: see burial
 
             # Timepoint states
             ss.TimeArr('ti_severe', label='Time of severe symptoms'),
@@ -119,6 +119,7 @@ class Ebola(AgentSEIR):
         self.severe[dead] = False
         buried = self.ti_buried.due().uids
         self.buried[buried] = True
+        self.results.burial[self.ti] = len(buried)
         self.sim.people.request_death(buried, cause=self)
 
         # Update transmissibility: severe agents and unburied bodies are more infectious
@@ -126,6 +127,11 @@ class Ebola(AgentSEIR):
         self.rel_trans[self.severe] = p.sev_factor
         unburied = (dead & ~self.ti_buried.due()).uids
         self.rel_trans[unburied] = p.unburied_factor
+        return
+
+    def init_results(self):
+        super().init_results()
+        self.define_results(ss.Result('burial', dtype=int, kind='flow', label='Burials'))
         return
 
     def set_progression(self, uids):

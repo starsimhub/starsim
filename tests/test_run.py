@@ -100,7 +100,7 @@ def test_multisim():
 
     # Export results
     two = msim.results.sis.S.resample(ss.years(2))
-    assert np.array_equal(two.values[:, 1], msim.results.sis.S.values[:, 4]) # A stock at the end of each two years from the start
+    assert np.array_equal(two.values[:, 1], msim.results.sis.S.values[:, 2]) # A stock at the start of each two years from the start
     df = msim.to_df(quantiles=None)
     assert len(df[(df.module == 'sis') & (df.result == 'I')]) == 4*npts # One row per run and time
 
@@ -178,7 +178,7 @@ def test_other():
     S, I, R = ss.states('S I R')
     sir = ss.Disease(infection=S >> I @ 0.3*I, recovery=I >> R @ ss.days(10), init_n=dict(I=5), name='sir').stratify(age={0: 0.3, 15: 0.7})
     kw = dict(total_pop=10_000, stop=ss.days(100), solver='binomial', verbose=0)
-    weekly = ss.Sim(sir, **kw).run().to_data('sir.infection', resample='week')
+    weekly = ss.Sim(sir, **kw).run().to_data('sir.infection', resample='week').iloc[:-1] # Whole weeks: the last of the 101 steps' is three days
     msim = ss.parallel({'Base': ss.Sim(sir, data=weekly, **kw), 'Vaccine': ss.Sim(sir, interventions=ss.vaccinate(efficacy=0.9, coverage=0.5, at=20), **kw)}, n_runs=3)
     averted = msim.summarize(baseline='Base').loc[('sir_infection', 'Vaccine')]
     paired = msim.results.sir.infection.diff('Base').Vaccine.summarize()

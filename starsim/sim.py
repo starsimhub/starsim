@@ -1575,7 +1575,7 @@ class Sim(ss.Base):
         return
 
     def advance(self):
-        """ Move the time to the step about to be taken, its time point being the end of it, where whatever it does is dated and recorded: for the sim, and the modules on its timeline (see `ss.Loop`) """
+        """ Move the time to the step about to be taken, from the time point it starts at, where whatever it does is dated and recorded: for the sim, and the modules on its timeline (see `ss.Loop`) """
         self.t.ti += 1
         for t in self.loop.shared_timelines:
             t.ti += 1
@@ -1602,7 +1602,8 @@ class Sim(ss.Base):
         """
         if not self.initialized: self.init() # Automatically initialize if not initialized
         t = self.t
-        self.loop.run(t.tvec[min(t.ti, t.npts - 2)], verbose) # Up to the next step, which starts at time point ti
+        nxt = t.ti + 1 if self.loop.index else 0 # The next step, which starts at its time point
+        self.loop.run(t.tvec[min(nxt, t.npts - 1)], verbose)
         return self
 
     def run(self, until=None, verbose=None, shrink=False, profile=False, solver=None, n_runs=None, parallel=True):
@@ -1610,7 +1611,7 @@ class Sim(ss.Base):
         Run the model -- the main method for running a simulation.
 
         Args:
-            until (date/str/float/Expr/func): run the steps up to and including the one that starts at this time; or a condition, checked at the end of each step, that stops and finalizes the run once it holds: an expression of the model (`sir.I.n + sir.R.n >= 1000`) or a function of the sim; the results after the stop are NaN, and `sim.stopped` is the time point it stopped at
+            until (date/str/float/Expr/func): run the steps up to and including the one that starts at this time; or a condition, checked at the end of each step, that stops and finalizes the run once it holds: an expression of the model (`sir.I.n + sir.R.n >= 1000`) or a function of the sim; the results after the stop are NaN, and `sim.stopped` is the last time point with results (the condition held at the end of its step)
             verbose (int): how much to print: 0 nothing, 1 the solver, notes, and progress (default), 2 everything (e.g. each step)
             shrink (bool): whether to explicitly shrink the sim after running
             profile (bool): if True, record per-entry CPU timing in the loop (see `sim.loop.to_df()`/`plot_cpu()`)
@@ -1657,7 +1658,7 @@ class Sim(ss.Base):
             errormsg = 'Simulation is already complete'
             raise ss.AlreadyRunError(errormsg)
 
-        self.stopped = None # The time point a condition given as until= stopped the run at
+        self.stopped = None # The last time point with results, if a condition given as until= stopped the run
         if self.verbose: # Otherwise none, or how far it has got for a MultiSim's progress (see ss.run.single_run())
             self.progress = ss.display.Progress(self)
         try:

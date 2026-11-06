@@ -49,15 +49,15 @@ def test_people():
         sir = make_sir()
         def look(sim): # Results read during the run are people, with 5 people to an agent
             if sim.ti == 30:
-                seen[sim.solver] = sc.obj(I=sim.results.sir.I[sim.ti - 1], delivered=sim.results.stock.delivered[sim.ti - 1])
+                seen[sim.solver] = sc.obj(I=sim.results.sir.I[sim.ti], delivered=sim.results.stock.delivered[sim.ti - 1]) # The state at the start of the step, and the deliveries of the last
             return True
         stock = ss.vaccinate(ss.Vaccine(efficacy=0.9), capacity=ss.perday(500), start=10, where=look)
         return ss.Sim(sir, interventions=stock, **kwargs)
     sims = run_both(make, stop=60)
     for solver,sim in sims.items():
         res = sim.results
-        assert np.allclose(res.stock.delivered[11:60], 500, rtol=0.02), f'{solver}: {res.stock.delivered[11:21]}' # From the step that starts at 10
-        assert seen[solver].I == res.sir.I[29] and seen[solver].delivered == res.stock.delivered[29] # Not scaled again at the end
+        assert np.allclose(res.stock.delivered[10:59], 500, rtol=0.02), f'{solver}: {res.stock.delivered[10:20]}' # From the step that starts at 10
+        assert seen[solver].I == res.sir.I[30] and seen[solver].delivered == res.stock.delivered[29] # Not scaled again at the end
     assert sims.abm.pars.pop_scale == 5
     check_close(sims, lambda sim: seen[sim.solver].I, rtol=0.15)
     check_close(sims, lambda sim: sim.results.sir.infection.cum[-1], rtol=0.1)
@@ -73,14 +73,14 @@ def test_priority():
     sims = run_both(make, stop=40, priority=lambda sir: [sir.risk == 'high']) # All of the high-risk first (10,000 people, 20 days)
     for solver,sim in sims.items():
         by = sim.results.stock.delivered.by('risk').values
-        assert np.allclose(by[1:20, 1], 500) and np.allclose(by[1:20, 0], 0), f'{solver}: {by[:22]}'
-        assert by[22:40, 0].sum() > 0.95*500*18
+        assert np.allclose(by[0:20, 1], 500) and np.allclose(by[0:20, 0], 0), f'{solver}: {by[:22]}'
+        assert by[21:39, 0].sum() > 0.95*500*18
     sims = run_both(make, stop=40, priority=lambda sir: ss.ppl.age) # Oldest first
     for solver,sim in sims.items():
         by = sim.results.stock.delivered.by('age').values
         n_old = sim.results.sir.S.by('age').values[0, 2] + sim.results.sir.I.by('age').values[0, 2]
         first = int(n_old//500) - 1
-        assert np.allclose(by[1:first+1, 2], 500) and by[1:first+1, :2].sum() == 0, f'{solver}: {by[:first+3]}'
+        assert np.allclose(by[0:first, 2], 500) and by[0:first, :2].sum() == 0, f'{solver}: {by[:first+3]}'
     check_close(sims, lambda sim: sim.results.stock.delivered.sum(), rtol=0.01)
 
     # A score per agent: under an explicit compartmental solver it is ignored with a note; with approx=False it is an error; left to choose, the model runs as agents
@@ -92,7 +92,7 @@ def test_priority():
     assert make(priority=uids, total_pop=50_000, stop=10, **kw).init().solver == 'abm'
     lowest = make(priority=uids, solver='abm', total_pop=50_000, n_agents=10_000, stop=3, **kw).run()
     got = lowest.people.has_vaccine.raw[:10_000].astype(bool)
-    assert got[:300].all() and not got[300:].any() # 100 agents a day, lowest UID first
+    assert got[:400].all() and not got[400:].any() # 100 agents a day for the 4 steps (days 0 to 3), lowest UID first
     return sims
 
 
@@ -162,9 +162,9 @@ def test_memory():
     sim = run_abm(rescreen, stop=120).abm
     r = sim.results.screening
     p = 1 - np.exp(-4/365) # Each day, of those not screened in the last 30 days
-    assert np.isclose(r.coverage[1:31].mean(), p, rtol=0.07) and np.isclose(r.eligible[2], 50_000*(1 - p), rtol=0.01) # Over 30 steps, since as agents one step varies by about 10%; as agents it is also about 4% low (as on v4-rs: a known issue)
-    assert np.isclose(r.eligible[61], 50_000 - r.delivered[32:61].sum(), rtol=0.01) # Those screened in the 30 days before are not eligible
-    assert sim.results.recent.delivered[1] > 0 and sim.results.recent.eligible[51] < 6*r.delivered[46:51].sum()
+    assert np.isclose(r.coverage[0:30].mean(), p, rtol=0.07) and np.isclose(r.eligible[1], 50_000*(1 - p), rtol=0.01) # Over 30 steps, since as agents one step varies by about 10%; as agents it is also about 4% low (as on v4-rs: a known issue)
+    assert np.isclose(r.eligible[60], 50_000 - r.delivered[31:60].sum(), rtol=0.01) # Those screened in the 30 days before are not eligible
+    assert sim.results.recent.delivered[0] > 0 and sim.results.recent.eligible[50] < 6*r.delivered[45:50].sum()
     screened = sim.interventions.screening.last_event.raw
     assert np.nanmin(sim.ti - screened) >= 0
 
@@ -191,11 +191,11 @@ def test_memory():
     for since,sims in [(True, run_abm(doses, stop=80)), (False, run_both(doses, stop=80, since=False))]:
         for solver,sim in sims.items():
             res = sim.results
-            assert np.isclose(res.first.delivered[6], 30_000, rtol=0.02)
+            assert np.isclose(res.first.delivered[5], 30_000, rtol=0.02)
             d2 = res.second.delivered
-            assert d2[:36].sum() == 0 and np.isclose(d2[36], 15_000, rtol=0.03) # Half of those who had the first
+            assert d2[:35].sum() == 0 and np.isclose(d2[35], 15_000, rtol=0.03) # Half of those who had the first
             assert not since or np.isclose(d2.sum(), res.first.delivered.sum(), rtol=0.01) # Everyone who had the first, in the end
-            assert np.isclose(res.held.delivered[61], 30_000, rtol=0.02) # Everyone who had a dose
+            assert np.isclose(res.held.delivered[60], 30_000, rtol=0.02) # Everyone who had a dose
     check_close(sims, lambda sim: sim.results.sir.infection.cum[-1], rtol=0.2) # Agents are about 10% below the ODE at a step of a day (as in test_transfer), and one run varies too
     assert [s.labels for s in sims.ode.groups.strats if s.name == 'has_vx'][0] == [False, 'dose 1', 'dose 2']
     return sims

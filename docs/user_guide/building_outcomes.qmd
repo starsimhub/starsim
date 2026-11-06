@@ -34,7 +34,7 @@ print(res.keys())
 print('Infections:', round(res.infection.sum()))
 ```
 
-A result has one value for each time point of the sim. A stock at time point *t* is the number at *t*; a flow at *t* is the number during the step that ends at *t*, so a flow's first value is 0. See [Results](building_results.qmd) for working with results: selecting, resampling, plotting, and exporting them.
+A result has one value for each time point of the sim. Each time point is the start of a step: a stock at time point *t* is the number at *t*, and a flow at *t* is the number during the step that starts at *t*, so a flow's first value is the first step's. See [Results](building_results.qmd) for working with results: selecting, resampling, plotting, and exporting them.
 
 ## Declaring more results
 
@@ -136,7 +136,7 @@ sim.plot('cases')
 
 The plot shows the model's cases summed over each week of the data, as they are compared in a fit, and its title says so ("weekly totals, as in the data"). Since the data was made by the same model, the two match but for the noise; real data won't, since no model is the process that made it, which is what fitting is for.
 
-- **Data need not be on the model's time step.** A flow, such as weekly reported cases, is compared with the model's total over each week of the data; a stock or a ratio, such as the share immune in a serosurvey, with the model's value on the date of the data. The result already knows which it is.
+- **Data need not be on the model's time step.** A flow, such as weekly reported cases, is compared with the model's total over each week of the data, from the data's date to the next (so a week is dated by its first day); a stock or a ratio, such as the share immune in a serosurvey, with the model's value on the date of the data. The result already knows which it is.
 - **With several diseases**, a column is matched to the one that has a result of that name, or is named with its disease, `measles.cases`.
 - **Data by group** is given in long form: extra columns named after dimensions (`age`) say which group each row is for, and each row is compared with `cases.select(age=...)`.
 - **A missing value is not a zero.** Leave weeks with no report empty (`NaN`) rather than 0, so that they are left out of the comparison rather than compared with a count of none.
@@ -145,7 +145,7 @@ The plot shows the model's cases summed over each week of the data, as they are 
 Data is usually read from a file: `data='measles_cases.csv'` reads it. A file whose headers are not the names of results is read with `ss.simdata()`, which renames the columns and can drop those that match nothing:
 
 ```python
-data = ss.simdata('measles_cases.csv', aliases=dict(date='Week ending', cases='Reported measles cases'), ignore_extra=True)
+data = ss.simdata('measles_cases.csv', aliases=dict(date='Week starting', cases='Reported measles cases'), ignore_extra=True)
 sim = ss.Sim(measles, data=data, total_pop=100_000, start='2025-01-01', stop='2025-05-01')
 ```
 

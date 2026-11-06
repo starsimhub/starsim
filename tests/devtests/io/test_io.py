@@ -136,8 +136,8 @@ def test_emulsion(tmp_path):
     assert dis.graph.transitions.force_of_infection.contact
     sim.run()
     res = sim.results.seirq
-    full = res.Q.values[:-1] >= 20 # The capacity is a condition on the count at the start of a step
-    assert full.any() and (res.detection.values[1:][full] == 0).all()
+    full = res.Q.values >= 20 # The capacity is a condition on the count at the start of a step
+    assert full.any() and (res.detection.values[full] == 0).all()
     assert np.isclose(res.prevalence_pct[10], 100*(res.E[10] + res.I[10])/(res.S[10] + res.E[10] + res.I[10] + res.Q[10] + res.R[10]))
 
     # The same model as an ODE agrees with the stochastic one on average

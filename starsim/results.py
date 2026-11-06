@@ -267,7 +267,7 @@ class Result(ss.arrays.BaseArr):
         once; `by()` has a column for each strain instead, counting a person who carries several in each.
 
         The values by group are kept at every time point, or, if that would take too much memory, every few steps
-        (see `ss.solvers.group_rows()` and the sim parameter `results`); then the result has a value at the end of each
+        (see `ss.solvers.group_rows()` and the sim parameter `results`); then the result has a value at the start of each
         of these periods, which for a flow is its total over the period.
 
         For a result across the runs of a MultiSim, also select runs: by position (`run=3`, a result of one
@@ -608,7 +608,7 @@ class Result(ss.arrays.BaseArr):
         return
 
     def store_group(self, ti, vals, rows=None, flow=False):
-        """ Keep the values by group at time point ti, if this result keeps them: in its row, where a flow is added up over the steps of the row (`rows` gives the row of each time point; see `ss.solvers.group_rows()`) """
+        """ Keep the values by group at time point ti, if this result keeps them: in its row, where a flow is added up over the steps of the row, and anything else is as it is at its first time point (`rows` gives the row of each time point; see `ss.solvers.group_rows()`) """
         strata = self.strata
         if strata is None:
             return
@@ -617,7 +617,7 @@ class Result(ss.arrays.BaseArr):
             strata[ti] = vals
         elif flow:
             strata[rows[ti]] += vals
-        else:
+        elif ti == 0 or rows[ti] != rows[ti-1]:
             strata[rows[ti]] = vals
         return
 
@@ -640,8 +640,8 @@ class Result(ss.arrays.BaseArr):
                 super().init_results()
                 self.define_results(ss.Result('n_infected', groups=True), ss.Result('prevalence', scale=False, groups=True))
 
-            def update_results(self):
-                super().update_results()
+            def record_stocks(self):
+                super().record_stocks()
                 alive, infected = self.sim.groups.count(), self.sim.groups.count(self.infected)
                 self.results.n_infected.set_groups(self.ti, infected)
                 self.results.prevalence.set_groups(self.ti, infected, alive)
@@ -765,6 +765,11 @@ class Result(ss.arrays.BaseArr):
         return arr[ends]
 
     @staticmethod
+    def periods_first(arr, starts, ends):
+        """ The first value of each period: for a stock, the state at its start (see `resample()`) """
+        return arr[starts]
+
+    @staticmethod
     def periods_mean(arr, starts, ends):
         """ The mean of each period, of the time points that have a value (a NaN is a time point with none, e.g. a mean birth weight on a step with no births); NaN if none do """
         arr = np.asarray(arr, dtype=float)
@@ -776,7 +781,7 @@ class Result(ss.arrays.BaseArr):
     # the values (time first), and the first and last time point of each period, giving one row per period. A ratio
     # with a numerator and denominator (e.g. prevalence by group) is summarized by 'mean' as each part summed over the
     # period, then divided, rather than with this function. Others can be added, e.g. `ss.Result.summarizers['max'] = fn`.
-    summarizers = dict(sum=periods_sum, last=periods_last, mean=periods_mean)
+    summarizers = dict(sum=periods_sum, last=periods_last, mean=periods_mean, first=periods_first)
     kinds = dict(flow='sum', stock='last', ratio='mean') # Each kind of result, and how it is summarized over time unless told otherwise
 
     @classmethod
@@ -867,7 +872,7 @@ class Result(ss.arrays.BaseArr):
         Which period of a longer time unit each time point is in; see `resample()`
 
         Returns the period of each time point (a non-decreasing array of integers from 0), and for calendar
-        months and years, the date each period ends (the first day of the next month or year; else None).
+        months and years, the date each period starts (the first day of its month or year; else None).
 
         Args:
             new_unit (str/dur): the new unit; see `resample()`
@@ -877,15 +882,11 @@ class Result(ss.arrays.BaseArr):
             raise ValueError(f'Cannot resample "{self.name}": it has no time vector')
         dated = self.has_dates
         if isinstance(new_unit, str) and new_unit in ['month', 'year'] and dated: # Calendar months and years
-            idx = pd.DatetimeIndex(tv)
-            if len(idx) > 1: # A time point is in the period of the step that ends there, so 1 January is in the year before, as for data; the start is in the first period
-                idx = idx - (idx[1:] - idx[:-1]).min()/2
+            idx = pd.DatetimeIndex(tv) # A time point is in the period that its step starts in, so 1 January is in its own year, as for data
             key = np.asarray(idx.year*12 + idx.month - 1 if new_unit == 'month' else idx.year)
-            key[0] = key[1:2].max(initial=key[0])
             keys, bins = np.unique(key, return_inverse=True)
-            nxt = keys + 1 # The period after each
-            ends = pd.to_datetime(dict(year=nxt//12, month=nxt%12 + 1, day=1) if new_unit == 'month' else dict(year=nxt, month=1, day=1))
-            return bins, ends
+            starts = pd.to_datetime(dict(year=keys//12, month=keys%12 + 1, day=1) if new_unit == 'month' else dict(year=keys, month=1, day=1))
+            return bins, starts
         if isinstance(new_unit, str):
             if new_unit not in ['day', 'week', 'month', 'year']:
                 errormsg = f'Cannot resample to "{new_unit}"; use "day", "week", "month", "year", or a duration, e.g. ss.weeks(2)'
@@ -904,20 +905,21 @@ class Result(ss.arrays.BaseArr):
             width = new_unit.years if hasattr(tv, 'years') else float(new_unit)
         step = np.median(np.diff(t)) if len(t) > 1 else width
         eps = 0.5*min(step, width)/width # Times that are the same up to rounding (e.g. 83.9999999 days from 12 weeks) are the same time point
-        bins = np.ceil(t/width - eps).astype(int) - 1 # A period includes its end and not its start, as for data: a flow at a time point is over the step that ends there
-        return np.maximum(bins, 0), None # The start is in the first period
+        bins = np.floor(t/width + eps).astype(int) # A period includes its start and not its end, as for data: a flow at a time point is over the step that starts there
+        return bins, None
 
     def resample(self, new_unit=None, summarize_by=None, use_years=False):
         """
         Resample the result to a longer time unit, by its `summarize_by` (which by default follows its kind)
 
-        A flow is summed over each period, a stock takes its value at the end of each
-        period, and a ratio sums its numerator and denominator over each period (by group, if
-        it has them) and divides them (one with no parts is averaged over the period). Periods
-        start at the sim's start and include their end, as for data; calendar months and years
-        are used instead for a sim with dates. Each period is labeled by its end: for calendar months and years,
-        the first day of the next (so a year of weekly steps is labeled 1 January of the next year, not the week
-        ending after it), or the end of the run if sooner; otherwise its last time point.
+        A flow is summed over each period, a stock takes its value at the start of each
+        period (a cumulative total, e.g. `res.infection.cum`, its value at the end), and a ratio sums
+        its numerator and denominator over each period (by group, if it has them) and divides them (one
+        with no parts is averaged over the period). Periods start at the sim's start and include their
+        start, as for data, as each time point holds the step that starts there; calendar months and years
+        are used instead for a sim with dates. Each period is labeled by its start: for calendar months and years,
+        the first day of the month or year (so a year of weekly steps is labeled 1 January, not the first week
+        of the year), or the start of the run if later; otherwise its first time point.
         The values by group (`select()` and `by()`) are resampled too.
 
         Args:
@@ -932,7 +934,7 @@ class Result(ss.arrays.BaseArr):
             ```python
             res = sim.results.sir
             res.infection.resample('week') # Weekly totals
-            res.I.resample('week') # The number infected at the end of each week
+            res.I.resample('week') # The number infected at the start of each week
             ```
         """
         if new_unit is None:
@@ -942,8 +944,10 @@ class Result(ss.arrays.BaseArr):
         if how is None:
             errormsg = f'Cannot resample "{self.name}": it is not summarized over time (summarize_by=None); give summarize_by=, e.g. "mean"'
             raise ValueError(errormsg)
+        if how == 'last' and self.kind == 'stock' and not cumulative(self.name): # The state at the start of each period, as at each time point
+            how = 'first'
         t = self.t_axis
-        bins, period_ends = self.periods(new_unit)
+        bins, period_starts = self.periods(new_unit)
         starts = np.flatnonzero(np.diff(bins, prepend=-1)) # The first time point of each period
         ends = np.append(starts[1:], len(bins)) - 1 # And the last
 
@@ -954,7 +958,7 @@ class Result(ss.arrays.BaseArr):
         strata, denom, group_ti = self.strata, self.denom, self.group_ti
         agg_g = agg # For the values by group
         no_groups = None
-        if strata is not None and group_ti is not None: # The values by group are kept every few steps: each row goes into the period its last time point is in
+        if strata is not None and group_ti is not None: # The values by group are kept every few steps: each row goes into the period its first time point is in
             g_bins = bins[group_ti]
             g_starts = np.flatnonzero(np.diff(g_bins, prepend=-1))
             g_ends = np.append(g_starts[1:], len(g_bins)) - 1
@@ -971,14 +975,12 @@ class Result(ss.arrays.BaseArr):
             values, low, high = agg(self.values, how), agg(self.low, how), agg(self.high, how)
             new_strata = agg_g(strata, how)
             new_denom = None
-        timevec = self.timevec[ends]
-        if period_ends is not None: # The calendar end of each period, or the end of the run
-            stop = pd.Timestamp(self.timevec[-1])
-            timevec = ss.DateArray([ss.date(min(end, stop)) for end in period_ends])
-        if use_years:
+        timevec = self.timevec[starts]
+        if period_starts is not None: # The calendar start of each period, or the start of the run
+            first = pd.Timestamp(self.timevec[0])
+            timevec = ss.DateArray([ss.date(max(start, first)) for start in period_starts])
+        if use_years: # Labeled by the calendar year each period covers
             years = np.asarray(timevec.years if hasattr(timevec, 'years') else timevec, dtype=float)
-            if self.has_dates and len(self.timevec) > 1: # Labeled by the calendar year each period covers, so the one ending on 1 January 2001 is 2000
-                years = years - 0.5*np.min(np.diff(np.asarray(self.timevec.years, dtype=float)))
             timevec = np.floor(years + 1e-9).astype(int)
         out = self.asnew(values=values, low=low, high=high, timevec=timevec, summarize_by=self.summarize_by, _shape=values.shape, **self.parts_after(lambda res: res.resample(new_unit, summarize_by, use_years)))
         out.group_ti = None # Its values by group, if any, are at its own time points
@@ -1205,6 +1207,12 @@ class Result(ss.arrays.BaseArr):
         if (self.values.min() >= 0) and (ax.get_ylim()[0] < 0):
             ax.set_ylim(bottom=0)
         return
+
+
+def cumulative(name):
+    """ Whether a stock is a cumulative total (`res.infection.cum`, or named `cum_...` or `cumulative`), which counts the steps up to and including its own, so is resampled by its value at the end of each period """
+    name = str(name)
+    return name.endswith('.cum') or 'cum_' in name or 'cumulative' in name
 
 
 def period_totals(times):
@@ -1925,20 +1933,23 @@ def time_weights(sim_t, data_t, flow, annual=False):
     """
     The weights of the steps for each data time (see `lineup()`), and which data times are inside the simulated period
 
-    A value of a flow at a step is what happened over the step that ends there. Data at a time is compared with: for a flow, the sum
-    over the interval since the data time before; for a stock or ratio, the value interpolated at that time. Data by calendar
+    A value of a flow at a time point is what happened over the step that starts there, as data at a time is
+    the count over the period it starts (e.g. the cases of a week, dated by its first day). Data at a time is compared with: for a flow, the sum
+    over the interval up to the next data time; for a stock or ratio, the value interpolated at that time. Data by calendar
     year (`annual`; see `by_year()`) is compared with the year it names: a flow summed over it, and a stock or ratio averaged over it.
     """
-    eps = np.median(np.diff(sim_t))/2 if len(sim_t) > 1 else 1e-9 # Times that are the same up to rounding (e.g. 84.00000015 days from 12 weeks) are the same time point
+    step = np.median(np.diff(sim_t)) if len(sim_t) > 1 else 0.0
+    eps = step/2 if len(sim_t) > 1 else 1e-9 # Times that are the same up to rounding (e.g. 84.00000015 days from 12 weeks) are the same time point
+    end = sim_t.max() + step # The end of the last step, which starts at the last time point
     if annual:
         lo, hi = data_t, data_t + 1
-        inside = (lo >= sim_t.min() - eps) & (hi <= sim_t.max() + eps) # Only whole years
+        inside = (lo >= sim_t.min() - eps) & (hi <= end + eps) # Only whole years, the last step included
     else:
-        spacing = np.median(np.diff(data_t)) if len(data_t) > 1 else np.inf
-        lo, hi = np.append(data_t[0] - spacing, data_t[:-1]) if len(data_t) else data_t, data_t
-        inside = (data_t >= sim_t.min() - eps) & (data_t <= sim_t.max() + eps)
-    if flow: # The steps that end in (lo, hi]
-        W = ((sim_t[None,:] > lo[:,None] + eps) & (sim_t[None,:] <= hi[:,None] + eps)).astype(float)
+        spacing = np.median(np.diff(data_t)) if len(data_t) > 1 else step
+        lo, hi = data_t, np.append(data_t[1:], data_t[-1] + spacing) if len(data_t) else data_t
+        inside = (data_t >= sim_t.min() - eps) & ((hi <= end + eps) if flow else (data_t <= sim_t.max() + eps))
+    if flow: # The steps that start in [lo, hi)
+        W = ((sim_t[None,:] >= lo[:,None] - eps) & (sim_t[None,:] < hi[:,None] - eps)).astype(float)
     elif annual: # The mean of the time points in [lo, hi)
         W = ((sim_t[None,:] >= lo[:,None] - eps) & (sim_t[None,:] < hi[:,None] - eps)).astype(float)
         W /= np.maximum(W.sum(axis=1, keepdims=True), 1)
@@ -2032,10 +2043,11 @@ def flow_periods(sim, col, res, x):
     if len(data_t) < 2: # No period to repeat
         return x[summed[0]], summed[1]
     step = 1.0 if annual else np.median(np.diff(data_t))
-    eps = np.median(np.diff(sim_t))/2 if len(sim_t) > 1 else 1e-9
-    first, last = (data_t[0], data_t[-1] + 1) if annual else (data_t[0] - step, data_t[-1]) # Where the data's periods start and end
+    sim_step = np.median(np.diff(sim_t)) if len(sim_t) > 1 else 0.0
+    eps = sim_step/2 if len(sim_t) > 1 else 1e-9
+    first, last = (data_t[0], data_t[-1] + 1) if annual else (data_t[0], data_t[-1] + step) # Where the data's periods start and end
     n_before = max(0, int(np.floor((first - sim_t.min() + eps)/step)))
-    n_after = max(0, int(np.floor((sim_t.max() + eps - last)/step)))
+    n_after = max(0, int(np.floor((sim_t.max() + sim_step + eps - last)/step))) # To the end of the last step
     before = data_t[0] - step*np.arange(n_before, 0, -1)
     after = data_t[-1] + step*np.arange(1, n_after + 1)
     times = np.concatenate([before, data_t, after])
@@ -2069,7 +2081,7 @@ def lineup(sim, df=None):
     """
     The matrix that lines up each result that has data with its data, which `compare()` uses
 
-    For a flow, it sums the steps of the interval that ends at each data time; for a stock or ratio,
+    For a flow, it sums the steps of the interval that starts at each data time (up to the next); for a stock or ratio,
     it interpolates linearly between the steps either side of each data time (see `time_weights()`).
     A result of a module with a timestep of its own is lined up on that module's timeline.
 
