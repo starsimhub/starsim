@@ -64,7 +64,7 @@ def parse_target(target):
         if kind is None and len(parts) == 3: # One destination of a transition with several, e.g. 'hpv.progression.C'
             return parts[0], 'transition', '.'.join(parts[1:])
         return parts[0], kind, None if kind in ['rel_sus', 'rel_trans'] else parts[-1]
-    what = 'a value' if isinstance(target, (ss.time.TimePar, ss.Dist)) else 'a plain number' if sc.isnumber(target) else 'an object'
+    what = 'a value' if isinstance(target, (ss.TimePar, ss.Dist)) else 'a plain number' if sc.isnumber(target) else 'an object'
     raise sc.KeyNotFoundError(f'the target of ss.modify() must be a named quantity, such as sir.pars.beta, sir.rel_sus, sir.recovery, or "sir.pars.beta", not {target} ({type(target).__name__}), which is {what} with no name to refer to.\n'
                                 f'     (A parameter of a network is named by its path, e.g. ss.modify("randomnet.pars.n_contacts", multiply=0.5), or its contacts by the network itself. A parameter of a module written as code is a plain value, so it is named by its path too, e.g. ss.modify("hiv.pars.beta", multiply=0.5); the rel_sus and rel_trans of a disease by themselves, e.g. ss.modify(hiv.rel_trans, multiply=0.5).)')
 
@@ -132,8 +132,8 @@ def to_ti(sim, val, name='time', after=False):
 
 def to_steps(sim, dur):
     """ The number of steps in a duration (a bare number is in the sim's unit), at least one """
-    val = ss.solvers.convert(dur, sim.unit_base) if isinstance(dur, ss.time.TimePar) else dur
-    dt = sim.t.dt.to(sim.unit_base).value if isinstance(sim.t.dt, ss.time.TimePar) else sim.t.dt
+    val = ss.solvers.convert(dur, sim.unit_base) if isinstance(dur, ss.TimePar) else dur
+    dt = sim.t.dt.to(sim.unit_base).value if isinstance(sim.t.dt, ss.TimePar) else sim.t.dt
     return max(int(round(val/dt)), 1)
 
 

@@ -99,7 +99,7 @@ def rename(text, names, unit):
             if func == 'mean' and len(n.args) == 1:
                 return self.visit(n.args[0])
             cls = getattr(ss, func, None) if func else None
-            if isinstance(cls, type) and issubclass(cls, ss.time.TimePar) and all(isinstance(a, ast.Constant) for a in n.args):
+            if isinstance(cls, type) and issubclass(cls, ss.TimePar) and all(isinstance(a, ast.Constant) for a in n.args):
                 return ast.Constant(float(ss.solvers.convert(cls(*[a.value for a in n.args]), unit)))
             self.generic_visit(n)
             return n

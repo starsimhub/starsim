@@ -68,7 +68,7 @@ class Intervention(ss.Module):
 def modules_of(sim, key):
     """ The modules of a kind ('interventions', 'connectors', 'diseases'): the sim's, once it has them, and before then those in its parameters """
     mods = sim.__dict__.get(key)
-    if isinstance(mods, ss.utils.ndict) and len(mods):
+    if isinstance(mods, ss.ndict) and len(mods):
         return list(mods.values())
     return [m for m in sim.pars[key].values() if isinstance(m, ss.Module)]
 
@@ -443,7 +443,7 @@ class Delivery(ss.products.EventSource, Intervention):
                 errormsg = 'at_age= is routine delivery, to people as they reach the age, so it cannot have at=, every=, on=, or a function as who='
                 raise ValueError(errormsg)
             self.where_given = None if eligible is None else ss.conditions.as_cond(eligible) # Checked for a compartmental form apart from the age: see age_reason()
-            reached = ss.conditions.Cond('people', 'age') >= (ss.years(at_age).value if isinstance(at_age, ss.time.TimePar) else at_age)
+            reached = ss.conditions.Cond('people', 'age') >= (ss.years(at_age).value if isinstance(at_age, ss.TimePar) else at_age)
             eligible = reached if self.where_given is None else reached & self.where_given
         self.at_age = at_age
         self.start = start
@@ -562,14 +562,14 @@ class Delivery(ss.products.EventSource, Intervention):
     def typed_function(self):
         """ Whether the coverage is a function of the sim that gives a typed rate (e.g. `lambda sim: ss.peryear(4)`): worked out the first time it can be called """
         cov = self.coverage
-        if not callable(cov) or isinstance(cov, (ss.time.TimePar, ss.Dist, ss.conditions.Cond, ss.expressions.Expr, ss.by)):
+        if not callable(cov) or isinstance(cov, (ss.TimePar, ss.Dist, ss.conditions.Cond, ss.expressions.Expr, ss.by)):
             return False
         if getattr(self, '_typed_coverage', None) is None:
             sim = getattr(self, 'sim', None)
             if sim is None:
                 return False
             try:
-                self._typed_coverage = isinstance(cov(sim), ss.time.TimePar)
+                self._typed_coverage = isinstance(cov(sim), ss.TimePar)
             except Exception: # Not callable yet, e.g. it reads results that do not exist before the run
                 return False
         return self._typed_coverage
@@ -579,13 +579,13 @@ class Delivery(ss.products.EventSource, Intervention):
         """ Whether the model has to record who has been offered the product; not if everyone eligible receives something they then hold for good, nor for a rate among those eligible """
         full = self.coverage is None and self.capacity is None and self.when is None
         lost = self.holds and self.product.waning is not None # Once lost (or for waning by a function, at once), they would be eligible again, and given it again at the next step
-        rate = isinstance(self.coverage, ss.time.TimePar) or self.typed_function() # Typed coverage (or a function giving it) is a rate among those eligible, offered at every step
+        rate = isinstance(self.coverage, ss.TimePar) or self.typed_function() # Typed coverage (or a function giving it) is a rate among those eligible, offered at every step
         return self.routine and not rate and (self.at_age is not None or not ((self.holds or self.move) and full and not lost))
 
     @property
     def age_years(self):
         """ With `at_age=`: the age, in years """
-        return ss.years(self.at_age).value if isinstance(self.at_age, ss.time.TimePar) else self.at_age
+        return ss.years(self.at_age).value if isinstance(self.at_age, ss.TimePar) else self.at_age
 
     def age_reason(self, sim):
         """
@@ -1281,8 +1281,8 @@ class Delivery(ss.products.EventSource, Intervention):
     def limit(self):
         """ The most people that can be served now: what is left of the capacity this step """
         ti = self.sim.ti
-        cap = self.capacity(self.sim) if callable(self.capacity) and not isinstance(self.capacity, ss.time.TimePar) else self.capacity
-        if isinstance(cap, ss.time.TimePar): # A rate: per unit time, over the step or the round; otherwise a number per round, or per step
+        cap = self.capacity(self.sim) if callable(self.capacity) and not isinstance(self.capacity, ss.TimePar) else self.capacity
+        if isinstance(cap, ss.TimePar): # A rate: per unit time, over the step or the round; otherwise a number per round, or per step
             cap = self.convert(cap)*self.span
         used = self._used[1] if getattr(self, '_used', (None,))[0] == ti else 0.0
         return max(cap - used, 0.0)
@@ -1649,7 +1649,7 @@ class Delivery(ss.products.EventSource, Intervention):
             if self.start is not None:
                 how += f' from {unit or "step"} {self.start:n}' if sc.isnumber(self.start) else f' from {self.start}'
         if self.delay is not None:
-            how += f', after {ss.display.quantity_str(self.delay, "dur", unit) if isinstance(self.delay, ss.time.TimePar) else self.delay}'
+            how += f', after {ss.display.quantity_str(self.delay, "dur", unit) if isinstance(self.delay, ss.TimePar) else self.delay}'
         if self.coverage is not None and not callable(self.coverage):
             how += f', coverage {ss.expressions.value_str(self.coverage)}'
         if self.priority is not None:

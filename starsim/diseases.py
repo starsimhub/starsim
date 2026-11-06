@@ -1171,7 +1171,7 @@ class Infection(Disease):
             return
         β = self.pars.beta
         values = β.values() if isinstance(β, dict) else [β]
-        value = lambda v: v.values if isinstance(v, ss.peract) else v.value if isinstance(v, ss.time.Rate) else v
+        value = lambda v: v.values if isinstance(v, ss.peract) else v.value if isinstance(v, ss.Rate) else v
         if not any(np.any(value(v)) for v in values): # Not transmitted by design (beta=0)
             return
         errormsg = (f'"{self.name}" is transmitted over networks and mixing pools, but the sim has none, so it would infect no one: '
@@ -1234,7 +1234,7 @@ class Infection(Disease):
         unit = getattr(sim, 'unit', None) # None if time is counted in steps, when a bare number is a probability per step
 
         def scalar_beta(β):
-            return isinstance(β, ss.time.Rate) or sc.isnumber(β)
+            return isinstance(β, ss.Rate) or sc.isnumber(β)
 
         nets = {ss.networks.standardize_netkey(k):net for k,net in sim.networks.items()}
         def in_unit(k, β): # A bare number is a rate in the sim's unit, as in a declared disease (on a network with acts, a probability per act)
@@ -1463,7 +1463,7 @@ class Infection(Disease):
 
         # Handle everything else: mixing pools, environmental transmission, etc.
         elif isinstance(route, ss.networks.Route):
-            beta = betas[0].to_prob(self.t.dt) if isinstance(betas[0], ss.time.Rate) else betas[0] # Mixing pools are unidirectional, so only the first beta is used
+            beta = betas[0].to_prob(self.t.dt) if isinstance(betas[0], ss.Rate) else betas[0] # Mixing pools are unidirectional, so only the first beta is used
             rel_sus = times(rel_sus, eng.route_mult('rel_sus', route)(None, slice(None)))
             target_uids = route.compute_transmission(self.rel_sus.asnew(rel_sus, copy=False), self.rel_trans.asnew(rel_trans, copy=False), beta, disease=self)
             pairs = [(np.full(len(target_uids), dtype=ss_int, fill_value=ss.dtypes.int_nan), target_uids, i)]

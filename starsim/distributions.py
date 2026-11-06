@@ -218,7 +218,7 @@ class lognormal(Dist):
         if not self.log_form:
             return super().convert_timepars()
         for key, v in self._pars.items():
-            if isinstance(v, (ss.Duration, ss.time.Rate)) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], (ss.Duration, ss.time.Rate)):
+            if isinstance(v, (ss.Duration, ss.Rate)) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], (ss.Duration, ss.Rate)):
                 errormsg = f'The log moments of ss.lognormal() ({key}={v}) are of the logarithm, so cannot have units; give mean= and std= with units instead, or a unit with unit='
                 raise NotImplementedError(errormsg)
 
@@ -506,7 +506,7 @@ class randint(Dist):
         for key, v in self._pars.items():
             if isinstance(v, ss.Duration) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.Duration):
                 raise NotImplementedError('randint parameters must be nondimensional')
-            if isinstance(v, ss.time.Rate) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.time.Rate):
+            if isinstance(v, ss.Rate) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.Rate):
                 raise NotImplementedError('randint parameters must be nondimensional')
 
     @property
@@ -857,8 +857,8 @@ class choice(Dist):
     unitless_pars = ('p',)
 
     def __init__(self, a=2, p=None, replace=True, **kwargs):
-        items = [a] if isinstance(a, ss.time.TimePar) else sc.tolist(a) if not np.isscalar(a) else []
-        if items and all(isinstance(v, ss.time.TimePar) for v in items): # e.g. a=[ss.months(9), ss.months(10)] or ss.years([1, 2]): the numbers, in the unit of the first
+        items = [a] if isinstance(a, ss.TimePar) else sc.tolist(a) if not np.isscalar(a) else []
+        if items and all(isinstance(v, ss.TimePar) for v in items): # e.g. a=[ss.months(9), ss.months(10)] or ss.years([1, 2]): the numbers, in the unit of the first
             unit = type(items[0])
             if kwargs.get('unit') is not None:
                 raise ValueError(f'ss.choice() has typed values ({items[0]!r}, ...) and unit={kwargs["unit"]!r}; give one or the other')

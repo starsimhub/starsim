@@ -148,7 +148,7 @@ class People:
             ss.Arr('cause_of_death', dtype=np.int16, default=-1, nan=-1, label='Cause of death', shared=True), # Its position in people.causes (-1 for none); no memory until someone dies
         ]
         states.extend(extra_states)
-        self.states = ss.utils.ndict(type=ss.Arr)
+        self.states = ss.ndict(type=ss.Arr)
         for state in states:
             self.states.append(state)
             setattr(self, state.name, state)

@@ -258,7 +258,7 @@ def test_code(tmp_path):
     code_value = ss.converters.core.code_value
     for val in [pd.DataFrame(dict(I=[5.0, 20, 40]), index=[10, 20, 30]), pd.DataFrame(dict(I=[1.0, 2]), index=pd.to_datetime(['2020-01-01', '2020-02-01']))]:
         assert eval(code_value(val), dict(pd=pd)).equals(val)
-    rate = eval(code_value(ss.time.Rate(0.3, ss.weeks(2))), dict(ss=ss))
+    rate = eval(code_value(ss.Rate(0.3, ss.weeks(2))), dict(ss=ss))
     assert rate.value == 0.3 and rate.unit == ss.weeks(2)
 
     # Several sources: a disease's variable is not a name another source defines (here a state)

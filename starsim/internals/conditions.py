@@ -205,7 +205,7 @@ class Cond:
     @staticmethod
     def arith(op, a, b):
         """ Arithmetic on a condition: with an expression (a parameter, a state's count), a typed value (ss.peryear(0.02)), or a value by level or in time (ss.by, ss.timeseries), it is an expression for a rate, e.g. b*ss.person.age; otherwise a condition """
-        if any(isinstance(x, (ss.expressions.Expr, ss.time.TimePar, ss.by, ss.parameters.TimeValue)) for x in (a, b)):
+        if any(isinstance(x, (ss.expressions.Expr, ss.TimePar, ss.by, ss.parameters.TimeValue)) for x in (a, b)):
             return ss.expressions.BinOp(op, a, b) # A value by level or in time is a parameter in it, as when it is the whole rate
         elif op == '**':
             return ss.expressions.BinOp(op, a, b) # A power has no condition of its own
@@ -1125,7 +1125,7 @@ class Selector(sc.prettyobj):
 
     def level(self, cond, value):
         """ A label of a stratification (e.g. 'high', or True) becomes its position; a duration compared with the time since an event, a number in the sim's unit """
-        if isinstance(cond, Cond) and cond.op == 'memory' and isinstance(value, ss.time.TimePar):
+        if isinstance(cond, Cond) and cond.op == 'memory' and isinstance(value, ss.TimePar):
             return ss.solvers.convert(value, self.sim.unit_base)
         if isinstance(cond, Cond) and cond.op in leaves and isinstance(value, (str, bool, np.bool_)):
             name = cond.args[-1]
@@ -1272,7 +1272,7 @@ class Selector(sc.prettyobj):
             return grid[tuple(self.dim(sim.groups.strats[d].name) for d in ds)]
         if callable(val) and not isinstance(val, ss.Dist):
             val = val(sim)
-        if isinstance(val, ss.time.TimePar) and convert is not None:
+        if isinstance(val, ss.TimePar) and convert is not None:
             val = convert(val)
         if isinstance(val, ss.Arr):
             val = val.raw if self.abm else val.raw[:sim.groups.n_groups]

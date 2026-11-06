@@ -165,9 +165,9 @@ def hash_uniforms(seed, ind, slots, dtype=None, even=False):
 
 def timepar_of(val):
     """ The time parameter that a distribution's parameter is, or holds in an array of them (which is slow, but allowed); else None """
-    if isinstance(val, ss.time.TimePar):
+    if isinstance(val, ss.TimePar):
         return val
-    elif isinstance(val, np.ndarray) and val.size and isinstance(val.flat[0], ss.time.TimePar):
+    elif isinstance(val, np.ndarray) and val.size and isinstance(val.flat[0], ss.TimePar):
         return val.flat[0]
     return None
 
@@ -414,7 +414,7 @@ class Dist:
         dist (rv_generic): optional; a `scipy.stats` distribution (frozen or not) to get the ppf from
         distname (str): the name for this class of distribution (e.g. "uniform")
         name (str): the name for this particular distribution (e.g. "age_at_death")
-        unit (str/`ss.time.TimePar`): if provided, convert the output of the distribution to a timepar (e.g. rate or duration); can also be inferred from distribution parameters (see examples below)
+        unit (str/`ss.TimePar`): if provided, convert the output of the distribution to a timepar (e.g. rate or duration); can also be inferred from distribution parameters (see examples below)
         round (bool/str): if True (or 'stochastic'), randomly round each value up or down to an integer; if 'nearest', round to the nearest integer (see `dist.rvs()`)
         seed (int): the user-chosen random seed (e.g. 3)
         offset (int): the seed offset; will be automatically assigned (based on hashing the name) if None
@@ -537,7 +537,7 @@ class Dist:
         """ Custom display to show state of object: as it was made, e.g. `ss.erlang(k=4, mean=ss.days(10))` """
         j = sc.obj(self.to_json())
         classname, pars = self.given if self.given is not None else (j.classname, j.pars)
-        parstr = [f'{k}=ss.{v!r}' if isinstance(v, ss.time.TimePar) else f'{k}={v}' for k,v in pars.items()]
+        parstr = [f'{k}=ss.{v!r}' if isinstance(v, ss.TimePar) else f'{k}={v}' for k,v in pars.items()]
         string = f'ss.{classname}({j.diststr}{sc.strjoin(parstr)})'
         return string
 
@@ -599,7 +599,7 @@ class Dist:
         """
         for key,new in kwargs.items():
             old = self.pars.get(key)
-            if isinstance(old, ss.time.TimePar) and not isinstance(new, ss.time.TimePar):
+            if isinstance(old, ss.TimePar) and not isinstance(new, ss.TimePar):
                 if sc.isnumber(new) or sc.checktype(new, 'arraylike'):
                     kwargs[key] = old.replace(new)
                 # Otherwise (e.g. a function or None), use the new value directly
@@ -948,7 +948,7 @@ class Dist:
         """ Each parameter and what it is scaled by, if the parameters are all plain values (otherwise None); not for the user """
         out = [self.module, self.unit]
         for val in self.pars.values():
-            inner = val.value if isinstance(val, ss.time.TimePar) else val
+            inner = val.value if isinstance(val, ss.TimePar) else val
             if not isinstance(inner, static_types):
                 return None
             out += [val, inner]
@@ -1025,7 +1025,7 @@ class Dist:
                 dt = self.step_dt() # Outside a sim, in the distribution's own unit
                 if issubclass(timepar_type, ss.Duration):
                     self._pars[key] = v/dt
-                elif issubclass(timepar_type, ss.time.Rate):
+                elif issubclass(timepar_type, ss.Rate):
                     self._pars[key] = v*dt # Usually to_prob, but may be n_events
                 else:
                     errormsg = f'Unknown timepar type {v}'
@@ -1297,10 +1297,10 @@ class Dist:
                 rvs = self.unit(rvs)
                 if isinstance(rvs, ss.Duration):
                     rvs = rvs/self.step_dt()
-                elif isinstance(rvs, ss.time.Rate):
+                elif isinstance(rvs, ss.Rate):
                     rvs = rvs*self.step_dt()
                 else:
-                    errormsg = f'Unexpected timepar type {type(rvs)}: expecting subclass of ss.Duration or ss.time.Rate'
+                    errormsg = f'Unexpected timepar type {type(rvs)}: expecting subclass of ss.Duration or ss.Rate'
                     raise NotImplementedError(errormsg)
             else:  # It can't, raise an error
                 errormsg = f'You have provided a timepar {self.unit} to scale {self} by, but this distribution cannot be scaled postdraw. '
@@ -1477,6 +1477,6 @@ class Dist:
         if unit is None:
             plt.xlabel('Value')
         else:
-            plt.xlabel(f'Per {unit.base.removesuffix("s")}' if issubclass(unit, ss.time.Rate) else unit.base.capitalize()) # e.g. "Days", or "Per year"
+            plt.xlabel(f'Per {unit.base.removesuffix("s")}' if issubclass(unit, ss.Rate) else unit.base.capitalize()) # e.g. "Days", or "Per year"
         plt.ylabel(f'Count ({n} total)')
         return rvs

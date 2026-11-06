@@ -60,7 +60,7 @@ def normalize_unit(base):
     elif isinstance(base, TimePar):
         base = base.base
     else:
-        errormsg = f'Base must be str or ss.time.TimePar, not {base}'
+        errormsg = f'Base must be str or TimePar, not {base}'
         raise TypeError(errormsg)
     return base
 
@@ -110,7 +110,7 @@ def type_str(obj):
     elif isinstance(obj, freq):
         return 'a frequency (ss.freq)'
     elif isinstance(obj, Rate):
-        return f'a rate (ss.{name})' if name != 'Rate' else 'a rate (ss.time.Rate)'
+        return f'a rate (ss.{name})'
     elif isinstance(obj, (ss.date, ss.DateArray)):
         return 'a date'
     elif sc.isnumber(obj) or isinstance(obj, np.ndarray):
@@ -248,7 +248,7 @@ class TimePar:
             return hash(tuple(years))
 
     def __float__(self):
-        """ Disallowed: converting a timepar to a float would silently discard its unit; see `ss.time.Rate.__float__()` for the rate version """
+        """ Disallowed: converting a timepar to a float would silently discard its unit; see `Rate.__float__()` for the rate version """
         errormsg = f'Converting a TimePar to a float is ambiguous ({self!r}). Use tp.value for the raw value, tp.years for the value in years, and tp.to_dt() to convert to timesteps.'
         raise TypeError(errormsg)
 
@@ -266,7 +266,7 @@ class TimePar:
     def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
         """ Disallow array operations by default, as they create arrays of objects (basically lists) """
         if len(inputs) == 1 and inputs[0] is self: # With a single input, operate on the value
-            if isinstance(self, ss.time.Rate) and ufunc not in unit_safe_ufuncs: # Would silently discard the denominator, e.g. np.exp(ss.peryear(1)) == np.exp(ss.perday(1))
+            if isinstance(self, Rate) and ufunc not in unit_safe_ufuncs: # Would silently discard the denominator, e.g. np.exp(ss.peryear(1)) == np.exp(ss.perday(1))
                 raise self._no_float_error(f'np.{ufunc.__name__}()')
             value = inputs[0].value
             return getattr(ufunc, method)(value, **kwargs)
@@ -275,8 +275,8 @@ class TimePar:
             return NotImplemented
 
         arg1,arg2 = inputs # Expect self,other as order of inputs, but can change
-        is_tp1 = isinstance(arg1, ss.time.TimePar)
-        is_tp2 = isinstance(arg2, ss.time.TimePar)
+        is_tp1 = isinstance(arg1, TimePar)
+        is_tp2 = isinstance(arg2, TimePar)
         use_left = is_tp1 or not is_tp2 # Use left unless arg1 isn't a timepar and arg2 is
         if use_left: # For operations where order doesn't matter
             tp_arg,o_arg = arg1,arg2 # Timepar argument and other argument (which may or may not be a timepar)
@@ -416,7 +416,7 @@ Examples:
         Class method to convert another TimePar object to this TimePar's base units
 
         Args:
-            other (`ss.time.TimePar`): the value to convert
+            other (`TimePar`): the value to convert
         """
         if isinstance(other, TimePar):
             return getattr(other, cls.base) # e.g. other.years
@@ -715,7 +715,7 @@ class Rate(TimePar):
 
     def __init__(self, value, unit=None):
         if unit is not None and self.base is not None:
-            unitstr = unit.base if isinstance(unit, ss.time.TimePar) else unit
+            unitstr = unit.base if isinstance(unit, TimePar) else unit
             if isinstance(unitstr, str) and normalize_unit(unitstr) != self.base:
                 errormsg = f'Cannot specify incompatible unit "{unit}" for a rate when base "{self.base}" is already specified'
                 raise ValueError(errormsg)
@@ -728,7 +728,7 @@ class Rate(TimePar):
                 if isinstance(self, ss.prob): # ss.prob is the only one for which not having a unit is fine
                     self.unit = None
                 else:
-                    errormsg = f'{type(self).__name__}({value}) needs a unit, e.g. ss.perday({value})'
+                    errormsg = f'ss.{type(self).__name__}({value}) needs a unit, e.g. ss.{type(self).__name__}({value}, "day") or ss.perday({value})'
                     raise ValueError(errormsg)
         elif isinstance(unit, ss.Duration):
             self.unit = unit
@@ -739,7 +739,7 @@ class Rate(TimePar):
             self.unit = ss.years(unit) # Default of years
 
         # Convert from one rate to another
-        if isinstance(value, ss.time.Rate):
+        if isinstance(value, Rate):
             value = self._convert_rate(value)
 
         if isinstance(value, list):
@@ -779,7 +779,7 @@ class Rate(TimePar):
 
     def _set_base(self):
         """ Rates can have either unit or base set; handle either """
-        if self.base is None and isinstance(self.unit, ss.time.TimePar):
+        if self.base is None and isinstance(self.unit, TimePar):
             self.base = self.unit.base
         elif self.unit is not None and self.base != self.unit.base: # Should not be possible, but check just in case
             errormsg = f'Inconsistent definition: base = {self.base} but unit = {self.unit.base}'
@@ -833,7 +833,7 @@ class Rate(TimePar):
                 raise TypeError(errormsg)
             base = dur_cls.base.removesuffix('s') # e.g. 'months' -> 'month'
             prefix = dict(per='per', prob='probper', freq='freqper').get(self.timepar_subtype)
-            if prefix is None: # e.g. a bare ss.time.Rate, which has no per-unit subclasses
+            if prefix is None: # e.g. a bare Rate, which has no per-unit subclasses
                 return self.__class__(self, unit=dur_cls(1))
             unit_cls = get_rate_class(prefix+base) # e.g. 'per'+'month' -> ss.permonth
         return unit_cls(self) # The conversion itself is done by the constructor, via Rate._convert_rate()
@@ -857,7 +857,7 @@ class Rate(TimePar):
         raise self._no_float_error('float()')
 
     def __mul__(self, other):
-        errormsg = 'ss.time.Rate() does not implement multiplication; this is implemented differently by its subclasses: '
+        errormsg = 'Rate() does not implement multiplication; this is implemented differently by its subclasses: '
         errormsg += 'ss.per() (the rate at which an event happens, e.g. a mortality rate), ss.prob() (a probability, e.g. of symptomatic infection), '
         errormsg += 'and ss.time.freq() (a number of events per time, e.g. acts per year).'
         raise NotImplementedError(errormsg)
@@ -1305,7 +1305,7 @@ class peract:
     @staticmethod
     def check(val, where=''):
         """ A probability per act must be in [0, 1] """
-        if isinstance(val, ss.time.TimePar):
+        if isinstance(val, TimePar):
             errormsg = f'ss.peract() takes a probability per act, which has no time unit, not {val}{where}'
             raise TypeError(errormsg)
         raw = val.raw if isinstance(val, ss.par) else val
@@ -1391,7 +1391,7 @@ class years(Duration):
 
     def __str__(self):
         """ As this is the "default" Starsim unit, show its value simply for calendar years, e.g. 2020.5 """
-        if ss.time.assume_cal_year(self.value):
+        if assume_cal_year(self.value):
             return f'{self.value:g}'
         else:
             return super().__str__()
@@ -1465,16 +1465,16 @@ def get_unit_class(which, unit):
 
     Args:
         which (str): 'dur', 'rate', or 'full' (either)
-        unit (str/type/`ss.time.TimePar`): the unit, e.g. 'year' or `ss.years`
+        unit (str/type/`TimePar`): the unit, e.g. 'year' or `ss.years`
     """
-    if isinstance(unit, type) and issubclass(unit, ss.time.TimePar):
+    if isinstance(unit, type) and issubclass(unit, TimePar):
         return unit
-    elif isinstance(unit, ss.time.TimePar):
+    elif isinstance(unit, TimePar):
         if sc.isnumber(unit.value) and unit.value == 1:
             return unit.__class__
         else:
             errormsg = f'TimePar instances can only be used as base classes when the value is one, e.g. ss.years(1), but you supplied {unit}. '
-            errormsg += 'Please convert to the equivalent base unit, e.g. instead of ss.time.Rate(value=4, unit=ss.weeks(2)), do ss.time.Rate(value=2, unit=ss.weeks).'
+            errormsg += 'Please convert to the equivalent base unit, e.g. instead of Rate(value=4, unit=ss.weeks(2)), do Rate(value=2, unit=ss.weeks).'
             raise ValueError(errormsg)
     elif isinstance(unit, str):
         if which == 'rate' or (which == 'full' and unit in rate_classes):
@@ -1681,7 +1681,7 @@ class DateConverter(matplotlib.units.ConversionInterface):
     def default_units(x, axis):
         if isinstance(x, ss.DateArray):
             return ss.Duration if (len(x) and x.is_dur) else ss.date
-        elif sc.isiterable(x) and not isinstance(x, ss.time.TimePar): # e.g. a list or pandas Series of durations, so check the first entry
+        elif sc.isiterable(x) and not isinstance(x, TimePar): # e.g. a list or pandas Series of durations, so check the first entry
             x = next(iter(x), None)
         if isinstance(x, ss.Duration):
             return ss.Duration

@@ -279,7 +279,7 @@ class Stepping:
         ti = self.ti
         n = people.uid.len_used
         alive = people.alive.raw
-        dt = self.mod.t.dt.to('year').value if isinstance(self.mod.t.dt, ss.time.TimePar) else self.dt
+        dt = self.mod.t.dt.to('year').value if isinstance(self.mod.t.dt, ss.TimePar) else self.dt
         for name,table in self.lifetables.items():
             tr = self.graph.transitions[name]
             if table is None: # The agents drawn so far (by UID); most of those still to die, in order of the step they die in (and how many have been taken); those drawn since, in no order; those due who have not died yet; and those to draw again

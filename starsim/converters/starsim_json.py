@@ -66,8 +66,6 @@ def drop_prefixes(code):
                 return ast.Attribute(ast.Name('people'), n.attr)
             elif isinstance(n.value, ast.Name) and n.value.id in ['ss', 'np']:
                 return ast.Name(n.attr)
-            elif isinstance(n.value, ast.Attribute) and isinstance(n.value.value, ast.Name) and n.value.value.id == 'ss' and n.value.attr == 'time': # ss.time.Rate as Rate
-                return ast.Name(n.attr)
             self.generic_visit(n)
             return n
     return ast.unparse(Drop().visit(ast.parse(code, mode='eval')))
@@ -362,8 +360,6 @@ class Reader:
                 func = ast.Name(name) if name in ['dict', 'expit'] else ast.Attribute(ast.Name('np' if name in func_names else 'ss'), name)
                 if name == 'mean':
                     func = ast.Attribute(ast.Name('ss'), 'mean')
-                elif name == 'Rate': # In its submodule, ss.time.Rate
-                    func = ast.Attribute(ast.Attribute(ast.Name('ss'), 'time'), 'Rate')
                 elif name == 'dur': # The class of a duration, ss.Duration
                     func = ast.Attribute(ast.Name('ss'), 'Duration')
                 return ast.Call(func, [visit(a) for a in n.args], [ast.keyword(k.arg, visit(k.value)) for k in n.keywords if k.arg is not None])

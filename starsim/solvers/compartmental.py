@@ -63,7 +63,7 @@ def held(raw):
     """ What a parameter holds, to compare at each step: its numbers, or else the object itself, which an id stands for in the comparison (see `Compartmental.settled()`) """
     if isinstance(raw, (float, int)):
         return raw
-    elif isinstance(raw, ss.time.TimePar):
+    elif isinstance(raw, ss.TimePar):
         return held(raw.value)
     elif isinstance(raw, ss.par):
         return held(raw.raw)

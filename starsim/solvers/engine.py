@@ -21,7 +21,7 @@ from .backends.kernels import no_tables # For a step whose program holds for the
 
 def convert(val, unit, cache=None):
     """ Convert a typed quantity to a plain number in a unit: a duration to units, a rate to per unit; with a `cache` (a dict), each is converted once, unless its number is changed """
-    if cache is not None and isinstance(val, ss.time.TimePar) and not isinstance(val.value, np.ndarray): # An array is as quick to convert as to compare, and a new one each step (a rate of a function) must not be kept
+    if cache is not None and isinstance(val, ss.TimePar) and not isinstance(val.value, np.ndarray): # An array is as quick to convert as to compare, and a new one each step (a rate of a function) must not be kept
         known = cache.get(id(val))
         if known is None or known[0] is not val or changed(known[1], val.value):
             if len(cache) > 10_000: # Values made as the sim runs (e.g. by a time series) are kept with the others, so are let go of now and then
@@ -29,7 +29,7 @@ def convert(val, unit, cache=None):
             number = np.copy(val.value) if isinstance(val.value, np.ndarray) else val.value
             known = cache[id(val)] = (val, number, convert(val, unit))
         return known[2]
-    if isinstance(val, ss.time.TimePar):
+    if isinstance(val, ss.TimePar):
         if isinstance(val, ss.prob): # A probability per period becomes the hazard that gives it
             period = 1.0 if val.unit is None else val.unit.to(unit).value # With no unit, the probability is per unit of the sim's time
             with np.errstate(divide='ignore'): # A probability of 1 is an infinite hazard: certain within the step
@@ -40,7 +40,7 @@ def convert(val, unit, cache=None):
 
 def unconvert(val, number, unit):
     """ The reverse of `convert()`: a number, or an array, in a unit as a typed quantity like `val` """
-    if not isinstance(val, ss.time.TimePar):
+    if not isinstance(val, ss.TimePar):
         return number
     if isinstance(val, ss.prob):
         period = 1.0 if val.unit is None else val.unit.to(unit).value
@@ -409,7 +409,7 @@ class Effects(sc.prettyobj):
                 raise ss.CapabilityError(f'the modifiers of {self.mod.name}.pars.{name} give it a value for each person, but "{self.mod.name}" is written as code and reads one value, self.pars.{name}. '
                                          f'Read self.current_value(\'{name}\', uids) in its code, and say so in its class: allow_modifiers = (\'{name}\',).')
             if np.ndim(getattr(value, 'value', value)): # The same for everyone, e.g. by a condition on the population
-                value = type(value)(vals[0]) if isinstance(value, ss.time.TimePar) else vals[0]
+                value = type(value)(vals[0]) if isinstance(value, ss.TimePar) else vals[0]
             self.mod.pars[name] = value
         return
 
@@ -423,7 +423,7 @@ class Effects(sc.prettyobj):
         mod = self.mod
         value = mod.pars[name]
         value = value.raw if isinstance(value, ss.par) else value
-        if not (sc.isnumber(value) or isinstance(value, ss.time.TimePar)):
+        if not (sc.isnumber(value) or isinstance(value, ss.TimePar)):
             return f'"{name}" of "{mod.name}" is a {type(value).__name__}, and a module written as code reads a number, a rate, a probability, or a duration from a parameter a modifier changes. Modify its rel_sus or rel_trans, or declare the disease (see ss.Disease).'
         if name not in getattr(mod, 'allow_modifiers', ()) and any(ss.conditions.on_people(getattr(m, 'where', None)) for m in mods):
             return (f'"{mod.name}" is written as code, so it reads one value of "{name}", self.pars.{name}, which cannot differ between people. '
@@ -936,7 +936,7 @@ class Engine(Telling, Effects):
             if isinstance(out, ss.expressions.Expr): # A function that uses the model's own states (I.n) gives an expression, which is worked out here
                 self.cache.setdefault('held', []).append(out) # Values are cached by id, so the expression's parts are kept until the cache is cleared, so that no new object can take their id
                 out = self.eval(out)
-            elif p.slot in ['rate', 'dur'] and not isinstance(out, ss.time.TimePar) and not isinstance(raw, ss.parameters.TimeValue) and self.inferred_unit: # An expression has the units of its own values
+            elif p.slot in ['rate', 'dur'] and not isinstance(out, ss.TimePar) and not isinstance(raw, ss.parameters.TimeValue) and self.inferred_unit: # An expression has the units of its own values
                 self.bare_return(p, raw, out)
             return self.modified(p, self.convert(out)) # Not cached, since it can depend on the current state
         elif isinstance(raw, dict) and self._routes is None and not len(self.sim.networks): # A beta for each route, under homogeneous mixing: the value of the routes it does not name
@@ -951,7 +951,7 @@ class Engine(Telling, Effects):
             out = self.by_group(raw)
         else:
             fixed = self.fixed.get(key) # A plain value is converted once, and reused for as long as the parameter holds the same object with the same number in it
-            number = raw.value if isinstance(raw, ss.time.TimePar) else None # A typed quantity's number can be changed in place
+            number = raw.value if isinstance(raw, ss.TimePar) else None # A typed quantity's number can be changed in place
             if fixed is None or fixed[0] is not raw or changed(fixed[1], number):
                 fixed = self.fixed[key] = (raw, np.copy(number) if isinstance(number, np.ndarray) else number, self.convert(raw))
             out = fixed[2]
@@ -1411,7 +1411,7 @@ class Engine(Telling, Effects):
             scaled = trans.scaled_dist(raw) if tr.dur is not None and isinstance(raw, trans.Expr) else None # A distribution times a factor: each draw is scaled, so it keeps its shape
             if scaled is not None:
                 raw = trans.by_dist(scaled[0].raw)
-            if tr.dur is not None and callable(raw) and not isinstance(raw, (ss.Dist, ss.time.TimePar, ss.by, trans.TimeValue)): # A function's value is the mean of an exponential, not each person's own time
+            if tr.dur is not None and callable(raw) and not isinstance(raw, (ss.Dist, ss.TimePar, ss.by, trans.TimeValue)): # A function's value is the mean of an exponential, not each person's own time
                 fname = getattr(raw, '__name__', 'the function')
                 self.tell(ss.warn, f'"{self.mod.name}.{name}" has dur={fname}, whose value is the mean of an exponential dwell time, so people leave at a constant rate; for each person to leave at the time it gives, write dur=ss.constant({fname})')
             dw = Bunch(par=p, raw=raw, dist=None, k=tr.stages or 1, exact=True, is_rate=tr.dur is None, family='exponential', std=None, fixed=False, kg=None, scale=None if scaled is None else scaled[1])
@@ -1425,8 +1425,8 @@ class Engine(Telling, Effects):
                 if np.isnan(mean): # A parameter is a function of the agents
                     if self.solver != 'abm':
                         raise ss.CapabilityError(f'"{name}" cannot run with solver="{self.solver}": its dwell time {raw} has a parameter that is a function of the agents. Run with solver="abm".')
-                    typed_factor = scaled is not None and any(isinstance(getattr(leaf, 'raw', None), ss.time.TimePar) for leaf in trans.as_expr(scaled[1]).leaves) # e.g. dur=d*ss.days(1), whose numbers are days
-                    if getattr(raw, 'unit', None) is None and not typed_factor and not any(isinstance(v, ss.time.TimePar) for v in raw.pars.values()): # What the function returns has no unit to say otherwise
+                    typed_factor = scaled is not None and any(isinstance(getattr(leaf, 'raw', None), ss.TimePar) for leaf in trans.as_expr(scaled[1]).leaves) # e.g. dur=d*ss.days(1), whose numbers are days
+                    if getattr(raw, 'unit', None) is None and not typed_factor and not any(isinstance(v, ss.TimePar) for v in raw.pars.values()): # What the function returns has no unit to say otherwise
                         funcs = sc.strjoin(getattr(v, '__name__', 'a function') if callable(v) else str(v) for v in raw.pars.values() if callable(v) or isinstance(v, (ss.conditions.Cond, ss.expressions.Expr)))
                         self.tell(ss.note, f'the dwell time of "{name}" comes from {funcs}, whose numbers are read in {self.sim.unit_base}s, the sim\'s unit; if they are in another unit, give it on the distribution, e.g. unit="month"', sim=self.sim)
                 elif dw.family == 'expon':
@@ -1486,7 +1486,7 @@ class Engine(Telling, Effects):
                 continue
             if m.where is not None or m.holding:
                 raise ss.CapabilityError(f'the modifier "{m.name}" sets {path}, the dwell time of "{name}", with where= or hold=, which is not supported yet for a dwell time that is a distribution; set it for everyone, or use multiply= with where=.')
-            new = m.amount if isinstance(m.amount, ss.Dist) else ss.expon(scale=m.amount) if isinstance(m.amount, ss.time.TimePar) or sc.isnumber(m.amount) else None
+            new = m.amount if isinstance(m.amount, ss.Dist) else ss.expon(scale=m.amount) if isinstance(m.amount, ss.TimePar) or sc.isnumber(m.amount) else None
             if new is None or ss.transitions.varying_pars(new):
                 raise ss.CapabilityError(f'the modifier "{m.name}" sets {path}, the dwell time of "{name}", to {m.amount}; a dwell time that is a distribution can be set to another distribution with fixed parameters, or to a duration (the mean of an exponential).')
             mean, std = ss.transitions.dwell_stats(new, to_unit)

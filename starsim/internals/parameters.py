@@ -87,7 +87,7 @@ class Pars(sc.obj):
 
     def note_bare(self, key, old, new):
         """ Note that a parameter with a unit (or a distribution of values with one) was set to a bare number, which keeps that unit """
-        typed = [old] if isinstance(old, ss.time.TimePar) else [v for v in old.pars.values() if isinstance(v, ss.time.TimePar)]
+        typed = [old] if isinstance(old, ss.TimePar) else [v for v in old.pars.values() if isinstance(v, ss.TimePar)]
         if typed and typed[0].base is not None and np.any(np.asarray(sc.tolist(new), dtype=float) != 0): # Zero is the same in any unit
             self.setattribute('_bare', (self._bare or {}) | {key:(typed[0].base, type(typed[0]).__name__)}) # The unit, and the kind of value (e.g. "years" or "peryear"), to say how to give it
         return
@@ -221,11 +221,11 @@ class Pars(sc.obj):
 
                 elif isinstance(old, Pars): # It's a Pars object: update recursively
                     old.update(new, create=create)
-                elif isinstance(old, ss.utils.ndict): # Update module containers -- main use case
+                elif isinstance(old, ss.ndict): # Update module containers -- main use case
                     self._update_ndict(key, old, new)
                 elif isinstance(old, ss.Module): # Update modules -- rare
                     self._update_module(old, new)
-                elif isinstance(old, ss.time.TimePar):
+                elif isinstance(old, ss.TimePar):
                     self._update_timepar(key, old, new)
                 elif isinstance(old, ss.Dist): # Update a distribution
                     self._update_dist(key, old, new)
@@ -269,7 +269,7 @@ class Pars(sc.obj):
         """ Update a time parameter """
 
         # It's a TimePar, e.g. dur_inf = ss.years(6); use directly
-        if isinstance(new, ss.time.TimePar):
+        if isinstance(new, ss.TimePar):
             self[key] = new
 
         # It's a dataframe, allow the update -- used for demographics
@@ -331,15 +331,15 @@ class Pars(sc.obj):
             self[key] = ss.constant(new, unit=old.unit if isinstance(new, Number) else None)
 
         # It's a single value, e.g. dur_inf = 6: its main parameter
-        elif isinstance(new, (Number, ss.Duration, ss.time.Rate)) or sc.isfunc(new):
+        elif isinstance(new, (Number, ss.Duration, ss.Rate)) or sc.isfunc(new):
             old.set(new)
             if isinstance(new, Number):
                 self.note_bare(key, old, new)
             first = next(iter(old.pars), None)
-            num = lambda v: v.value if isinstance(v, ss.time.TimePar) else v
+            num = lambda v: v.value if isinstance(v, ss.TimePar) else v
             kept = [k for k,v in old.pars.items() if k != first and (sc.isfunc(v) or sc.isnumber(num(v)) and np.isfinite(num(v)) and not (k == 'loc' and num(v) == 0))] # The parameters that still shape it, e.g. the std of a lognormal; not a dtype, an infinite bound, or a zero shift
             if kept: # Only some of the distribution was set, which may not be what was meant (in a declared model, a duration alone is an exponential instead), so say so
-                val = f'ss.{new!r}' if isinstance(new, (ss.Duration, ss.time.Rate)) else new.__name__ if sc.isfunc(new) else new
+                val = f'ss.{new!r}' if isinstance(new, (ss.Duration, ss.Rate)) else new.__name__ if sc.isfunc(new) else new
                 bare = [k for k in kept if k in (old.unit_pars or []) and sc.isnumber(old.pars[k])] if isinstance(new, ss.Duration) else [] # E.g. the std of ss.lognormal(mean=ss.years(6)): a number, in the unit of the mean, which is now that of the value given
                 units = f' in {new.base}' if bare else ''
                 ss.warn(f'{key}={val} set only the {first} of its default distribution, keeping the rest: it is now {old}{units}. '
@@ -347,7 +347,7 @@ class Pars(sc.obj):
 
         # Give up
         else:
-            typed = [v for v in old.pars.values() if isinstance(v, ss.time.TimePar) and v.base is not None] if isinstance(old, ss.Dist) else []
+            typed = [v for v in old.pars.values() if isinstance(v, ss.TimePar) and v.base is not None] if isinstance(old, ss.Dist) else []
             base = typed[0].base if typed else None # A bare number is read in the default's unit, so the suggestion says it (20.27 months written as 20.27 would be years)
             vals = ', '.join(f'ss.{base}({v})' if base and sc.isnumber(v) else str(v) for v in new) if isinstance(new, (list, tuple)) else None
             what = f'use pars.{key}.set({vals}), in the unit meant' if vals is not None else f'use pars.{key}.set(**{new})' if isinstance(new, dict) else 'give a distribution'
@@ -386,7 +386,7 @@ def _restore_pars(cls, items, state):
 
 def replaced_dist(key, old, new):
     """ Warn that a single value given for a declared parameter whose default is a distribution (not an exponential) replaces it, e.g. dur=ss.days(10) for a lognormal is an exponential """
-    if isinstance(old, ss.Dist) and not isinstance(old, (ss.expon, ss.constant)) and (isinstance(new, (ss.Duration, ss.time.Rate)) or sc.isnumber(new)):
+    if isinstance(old, ss.Dist) and not isinstance(old, (ss.expon, ss.constant)) and (isinstance(new, (ss.Duration, ss.Rate)) or sc.isnumber(new)):
         first = next(iter(old.pars), 'mean')
         val = new if sc.isnumber(new) else f'ss.{new!r}'
         ss.warn(f'{key}={val} replaced its default distribution, {old}, by a single value (as a dwell time, an exponential with that mean). '
@@ -499,7 +499,7 @@ class by:
     def __new__(cls, table=None, dims=None, **kwargs):
         if table is None and dims is None and len(kwargs) == 1: # A function of the sim giving one value per level, e.g. ss.by(patch=fn)
             (dim, val), = kwargs.items()
-            if callable(val) and not isinstance(val, (TimeValue, ss.Dist, ss.time.TimePar, by, Expr, type)):
+            if callable(val) and not isinstance(val, (TimeValue, ss.Dist, ss.TimePar, by, Expr, type)):
                 return by_func(dim, val)
         return super().__new__(cls)
 
@@ -520,7 +520,7 @@ class by:
             (dim, vals), = kwargs.items()
             table, kwargs = {dim:list(vals.keys()), 'value':list(vals.values())}, {}
         if dims is not None: # An array with one axis for each dimension
-            if isinstance(table, ss.time.TimePar):
+            if isinstance(table, ss.TimePar):
                 self.wrap = type(table)
                 table = table.value
             self.array = np.array(table, dtype=float)
@@ -622,7 +622,7 @@ class by:
                 errormsg = f'Cannot combine an ss.by() of {len(a)} levels of "{self.dim}" with one of {len(b)}'
                 raise ValueError(errormsg)
             return by(**{self.dim:[func(x, y) for x,y in zip(a, b)]})
-        elif not isinstance(other, (by, Expr, ss.time.TimePar, TimeValue)) and not sc.isnumber(other): # E.g. a flow, whose share it is (an outcome), or a condition
+        elif not isinstance(other, (by, Expr, ss.TimePar, TimeValue)) and not sc.isnumber(other): # E.g. a flow, whose share it is (an outcome), or a condition
             return NotImplemented
         return ss.expressions.BinOp(op, other, self) if reflected else ss.expressions.BinOp(op, self, other)
 
@@ -1099,10 +1099,10 @@ def typed_now(val, sim):
     """ The value now of a value that varies whose values are typed, as a typed value (for an `ss.by` of one dimension, one per level, if all of one kind); else None """
     year = sim.t.now('year')
     if isinstance(val, TimeValue):
-        return val.at(year, sim) if any(isinstance(const_value(v), ss.time.TimePar) for v in val.typed) else None
+        return val.at(year, sim) if any(isinstance(const_value(v), ss.TimePar) for v in val.typed) else None
     if isinstance(val, by) and val.dim is not None and val.values is not None:
         items = [val.converter(sim, year=year)(v) for v in val.items]
-        if items and all(type(v) is type(items[0]) and isinstance(v, ss.time.TimePar) for v in items):
+        if items and all(type(v) is type(items[0]) and isinstance(v, ss.TimePar) for v in items):
             return items[0]._new(np.array([v.value for v in items], dtype=float))
     return None
 
@@ -1114,7 +1114,7 @@ def typed_attr(val, attr):
     """ A typed value's own attribute (e.g. `.to_prob()`) of a value that varies, on its value now (see `now()`); for `__getattr__()` """
     if attr in typed_attrs:
         out = now(val)
-        if isinstance(out, ss.time.TimePar):
+        if isinstance(out, ss.TimePar):
             return getattr(out, attr)
     raise AttributeError(f"'{type(val).__name__}' object has no attribute '{attr}'")
 

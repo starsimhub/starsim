@@ -115,9 +115,9 @@ def run_values(inputs):
     vals = [run_value(x) for x in inputs]
     if any(v is None for v in vals):
         return None
-    if any(isinstance(x, ss.time.TimePar) for x in inputs): # With a typed value, a parameter that holds one is typed too (its current value is a number in the sim's unit), so e.g. ss.weeks(40) - preg.pars.loss_threshold is a duration in weeks
+    if any(isinstance(x, ss.TimePar) for x in inputs): # With a typed value, a parameter that holds one is typed too (its current value is a number in the sim's unit), so e.g. ss.weeks(40) - preg.pars.loss_threshold is a duration in weeks
         for i,(x,v) in enumerate(zip(inputs, vals)):
-            if isinstance(x, par) and isinstance(x.raw, ss.time.TimePar) and sc.isnumber(v):
+            if isinstance(x, par) and isinstance(x.raw, ss.TimePar) and sc.isnumber(v):
                 unit = x.module.sim.unit_base # E.g. 'year'
                 vals[i] = (ss.time.get_dur_class(unit) if x.raw.timepar_type == 'dur' else ss.time.get_rate_class(f'per{unit}'))(v) # A rate's current value is per unit (see ss.Module._value())
     return vals
@@ -140,7 +140,7 @@ class Expr:
     Base class for anything that can appear in a rate or a result: states,
     counts, parameters, and arithmetic on them.
     """
-    _is_expr = True # Checked by ss.time.TimePar so e.g. ss.peryear(0.02) * N.n defers to the expression
+    _is_expr = True # Checked by ss.TimePar so e.g. ss.peryear(0.02) * N.n defers to the expression
 
     def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
         """ NumPy functions of an expression (np.minimum(I.n, K), np.exp(-k * I.n)) are expressions too, as is arithmetic with NumPy numbers """
@@ -305,7 +305,7 @@ class par(Nameable, Expr):
     def __getattr__(self, attr):
         """ The methods of a distribution or time value are its parameter's, as in a module written as code, e.g. `sir.pars.dur_inf.set(mean=8)` """
         value = self.__dict__.get('value') # Not self.value, which would recurse while unpickling
-        if not attr.startswith('_') and isinstance(value, (ss.Dist, ss.time.TimePar)):
+        if not attr.startswith('_') and isinstance(value, (ss.Dist, ss.TimePar)):
             return getattr(value, attr)
         raise AttributeError(f"'par' object has no attribute '{attr}'")
 
@@ -347,7 +347,7 @@ def value_str(val):
     if isinstance(val, float): return f'{val:n}'
     elif isinstance(val, ss.parameters.TimeValue): return repr(val)
     elif callable(val) and not isinstance(val, ss.Dist): return getattr(val, '__name__', 'function').replace('<lambda>', 'a lambda function')
-    elif isinstance(val, ss.time.TimePar): return repr(val)
+    elif isinstance(val, ss.TimePar): return repr(val)
     elif isinstance(val, ss.by) and val.given: return f'by({", ".join(f"{k}={rounded(v)}" for k,v in val.given.items())})' # A value for each level, each to six figures as a number is
     return str(val)
 
@@ -1074,7 +1074,7 @@ def value_dimension(val):
         return 0
     elif isinstance(val, ss.Duration):
         return 1
-    elif isinstance(val, ss.time.Rate):
+    elif isinstance(val, ss.Rate):
         return -1 if val.unit is not None else None # A probability with no unit is a plain number
     elif isinstance(val, ss.Dist):
         if val.unit is not None:
@@ -1143,9 +1143,9 @@ def format_expr(expr, values=False, bare=None, mul='*', exact=False, unit=None):
                 return ss.display.seasonal_str(raw, value_str(float(getattr(raw.mean, 'value', raw.mean))))
             if values == 'number' and isinstance(raw, ss.timeseries):
                 return ss.display.timeseries_str(raw)
-            if values == 'number' and unit is not None and isinstance(raw, ss.time.Rate) and raw.unit is not None and type(raw.unit).base.removesuffix('s') != unit:
+            if values == 'number' and unit is not None and isinstance(raw, ss.Rate) and raw.unit is not None and type(raw.unit).base.removesuffix('s') != unit:
                 return ss.display.quantity_str(raw, 'rate', unit)
-            text = value_str(raw.value if isinstance(raw, ss.time.TimePar) and values == 'number' else raw)
+            text = value_str(raw.value if isinstance(raw, ss.TimePar) and values == 'number' else raw)
             if exact and isinstance(raw, float) and float(text) != raw: # E.g. 1 + 1e-9, which is "1" to six figures
                 text = repr(float(raw))
             elif exact and isinstance(raw, ss.by):

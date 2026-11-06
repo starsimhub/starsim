@@ -451,7 +451,7 @@ def test_arithmetic():
                 ops[op](a, b)
         else:
             out = ops[op](a, b)
-            if isinstance(expected, ss.time.TimePar):
+            if isinstance(expected, ss.TimePar):
                 assert type(out) is type(expected) and np.isclose(out.value, expected.value), f'{row} gave {out!r}, not {expected!r}'
             else:
                 assert np.isclose(out, expected), f'{row} gave {out}, not {expected}'

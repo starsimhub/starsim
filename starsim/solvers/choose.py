@@ -118,7 +118,7 @@ def make_engine(module, sim):
     return engine
 
 
-class MixedNetworks(ss.utils.ndict):
+class MixedNetworks(ss.ndict):
     """
     The networks of a compartmental run, which are none: they became contact rates; asking for one by name says where it is
 
@@ -529,10 +529,10 @@ def check_par_values(sim):
                 raise ValueError(f'the parameter "{name}" of "{mod.name}" has no value. Give it one (ss.par(0.1)), or bounds to start from (ss.par(bounds=[0.01, 0.5])), or a value by name (ss.Sim(pars=dict({name}=...))).')
             if p.bounds is None:
                 continue
-            val = raw.value if isinstance(raw, ss.time.TimePar) else raw.array if isinstance(raw, ss.by) else raw
+            val = raw.value if isinstance(raw, ss.TimePar) else raw.array if isinstance(raw, ss.by) else raw
             if not (sc.isnumber(val) or isinstance(val, np.ndarray)): # E.g. a distribution or a function
                 continue
-            low, high = [(type(raw)(b) if isinstance(raw, ss.time.TimePar) else b).value if isinstance(b, ss.time.TimePar) else b for b in p.bounds] # A typed bound in the unit of the value
+            low, high = [(type(raw)(b) if isinstance(raw, ss.TimePar) else b).value if isinstance(b, ss.TimePar) else b for b in p.bounds] # A typed bound in the unit of the value
             tol = 1e-9*abs(high - low) # For rounding, e.g. on a log scale
             val = np.asarray(val, dtype=float)
             if np.any(val < low - tol) or np.any(val > high + tol):
@@ -822,10 +822,10 @@ def check_routes(sim):
     for net in nets: # beta times the number of contacts is a hazard, so only one of them may carry a time unit
         n = net.pars.get('n_contacts')
         rate = n.pars.get('value') if isinstance(n, ss.constant) else n
-        if isinstance(rate, ss.time.Rate):
+        if isinstance(rate, ss.Rate):
             for mod in sim.declared:
                 for tr in mod.graph.transmissions:
-                    typed = [leaf for leaf in tr.rate.leaves if isinstance(leaf, ss.par) and isinstance(leaf.raw, ss.time.Rate)]
+                    typed = [leaf for leaf in tr.rate.leaves if isinstance(leaf, ss.par) and isinstance(leaf.raw, ss.Rate)]
                     if typed:
                         raise TypeError(f'the beta of "{mod.name}.{tr.name}" ({typed[0].raw!r}) and the n_contacts of "{net.name}" ({rate!r}) both carry a time unit, so their product is not a hazard; give one of them as a bare number, e.g. a probability per contact for beta.')
     if all(getattr(dis, 'graph', None) is not None for dis in sim.pars.diseases.values()):

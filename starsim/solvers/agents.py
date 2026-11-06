@@ -52,7 +52,7 @@ class Transmission(Effects):
 
     - **Hazard or probability.** `over_network()` takes the chance of an edge in the step. A declared disease gives 1 − exp(−β·dt) from its rate,
       or, on a network with acts, works out a hazard per act (`Agents.transmit_acts()`); one written as code gives its beta as the probability in
-      the step, converting a rate the same way (`ss.time.Rate.to_prob()`).
+      the step, converting a rate the same way (`ss.Rate.to_prob()`).
     - **Order and attribution.** The routes are taken in the order of `sim.networks`, and on each, p1 to p2 and then p2 to p1; someone reached by
       several is infected by the first (`first_infections()`), which is the source in the infection log. With strains, every strain is passed on
       in one pass, and someone reached by several is infected by one of them drawn at random, whose strain they take (`pick_sources()`), and
@@ -84,7 +84,7 @@ class Transmission(Effects):
             rel_trans (array): the effective transmissibility of each agent, by UID (0 if not infectious)
             rel_sus (array): the effective susceptibility of each agent, by UID (0 if not susceptible)
             betas (list): the probability of transmission over an edge in the step, p1 to p2 and p2 to p1: each a number (0 for none, so no random
-                numbers are drawn), a rate (`ss.time.Rate.to_prob()`), or an array of one for each of the network's directions by sides (see `ss.peract`)
+                numbers are drawn), a rate (`ss.Rate.to_prob()`), or an array of one for each of the network's directions by sides (see `ss.peract`)
             name (str): what the modifiers on the route are under (see `route_mult()`)
 
         Returns:
@@ -98,7 +98,7 @@ class Transmission(Effects):
                 beta = beta[route.edge_directions(src, trg)]
             elif not beta: # No random numbers are drawn
                 return None
-            if isinstance(beta, ss.time.Rate): # A disease written as code can give its beta as a rate
+            if isinstance(beta, ss.Rate): # A disease written as code can give its beta as a rate
                 beta = beta.to_prob(self.mod.t.dt)
             if acts:
                 with np.errstate(divide='ignore'): # A chance of 1 per act is an infinite hazard, and stays 1
@@ -1257,7 +1257,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         strat = self.derived_strat(by)
         if strat is not None: # By the level of an attribute
             raw = by.values
-            vals = self.convert(raw) if isinstance(raw, ss.time.TimePar) else [self.convert(v(sim) if isinstance(v, ss.parameters.TimeValue) else v) for v in sc.tolist(raw)]
+            vals = self.convert(raw) if isinstance(raw, ss.TimePar) else [self.convert(v(sim) if isinstance(v, ss.parameters.TimeValue) else v) for v in sc.tolist(raw)]
             vals = np.asarray(vals, dtype=float).ravel()
             if len(vals) != strat.n:
                 raise ValueError(f'ss.by({strat.name}=...) has {len(vals)} values, but "{strat.name}" has {strat.n} levels ({sc.strjoin(strat.labels)}).')
@@ -1296,7 +1296,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         if by.table is not None or not all(dim in ['sex', 'female'] for dim in by.dims):
             return False
         vals = [v for given in by.given.values() for v in (given.values() if isinstance(given, dict) else sc.tolist(given))]
-        return not any(isinstance(v, ss.parameters.TimeValue) or (callable(v) and not isinstance(v, ss.time.TimePar)) for v in vals)
+        return not any(isinstance(v, ss.parameters.TimeValue) or (callable(v) and not isinstance(v, ss.TimePar)) for v in vals)
 
     def never(self, tr):
         """
@@ -1358,7 +1358,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
                 return all(plain(u) for u in v.values())
             if isinstance(v, ss.peract):
                 return all(plain(u) for u in v.values)
-            if isinstance(v, ss.time.TimePar):
+            if isinstance(v, ss.TimePar):
                 return isinstance(v.value, (int, float, np.number))
             if isinstance(v, E.Expr):
                 return self.is_route_fixed(v)
