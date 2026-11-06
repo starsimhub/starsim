@@ -20,3 +20,18 @@ Run a single file with `pytest test_sim.py`, and the tests with coverage with `.
 - `baseline.yaml`, `benchmark*.yaml`, `perf_guard.yaml`: the recorded results and timings that `test_baselines.py` checks against
 - `update_all`: update the baseline and every benchmark (e.g. before a release), by `update_benchmarks.py` and then the baseline; `update_baseline.py` updates the baseline and the quick benchmarks only; `quick_baseline` and `quick_benchmark` check them
 - `benchmark_*.py`, `profile_*.py`, `simple.py`: scripts for timing and profiling by hand
+
+## Downstream repositories
+
+The tests also run the tests of the following downstream repositories to prevent accidental regressions:
+
+- [covasim](https:github.com/starsimhub/covasim)
+- [fpsim](https:github.com/starsimhub/fpsim)
+- [hpvsim](https:github.com/starsimhub/hpvsim)
+- [lingua_franca_design](https:github.com/starsimhub/lingua_franca_design)
+- [starsim-malaria](https:github.com/starsimhub/starsim-malaria)
+- [mighti](https:github.com/starsimhub/mighti)
+- [rotasim](https:github.com/starsimhub/rotasim)
+- [rstarsim](https:github.com/starsimhub/rstarsim)
+- [tbsim](https:github.com/starsimhub/tbsim)
+- [typhoidsim](https:github.com/starsimhub/typhoidsim)
