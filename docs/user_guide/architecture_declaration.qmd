@@ -170,11 +170,11 @@ print(ss.export_to(sim, 'odin'))
 
 An importer keeps the source's names, marks what it guessed (as `[guessed]` in `describe()`, like a hand-written model), keeps going when something doesn't map onto a built-in piece, and lists what it couldn't translate by name (`ss.errors.ImportIncomplete`, also in `sim.imported.incomplete`). An incomplete import still runs, without the listed parts, and the warning says how to finish it with the `convert-model` skill for AI assistants (in `starsim/.agents/skills/`). Exporters work the other way: SBML and odin are written from the built model (each disease's graph and engine, in its compartmental form), and each export lists what it left out or changed (`ss.errors.LossyExport`), one line per declaration. A network, a module written as code, and a function are always listed as left out. `ss.converters.to_hub()` writes the runs of a MultiSim as a forecast-hub submission.
 
-The code is in `starsim/converters/`: `core.py` holds `Source`, `write()`, and `build()`, there is one file per framework, and `export.py` has the exporters. The files for epipack, epydemix, epymorph, MEmilio, and summer2 also run as scripts in those frameworks' own environments (needing neither Starsim nor Sciris), where they write the model as JSON for the importer to read; EpiModel's equivalent is an R script (`dump_epimodel.R`). Each importer is tested against its framework's own examples (`tests/devtests/io/`) and in a scaled-down demo per framework (`tests/switching/` in the lingua_franca_design repo). For the modeler's view, see [Import and export](conversion/index.qmd) and the conversion pages for each framework.
+The code is in `starsim/converters/`: `core.py` holds `Source`, `write()`, and `build()`, there is one file per framework, and `export.py` has the exporters. The files for epipack, epydemix, epymorph, MEmilio, and summer2 also run as scripts in those frameworks' own environments (needing neither Starsim nor Sciris), where they write the model as JSON for the importer to read; EpiModel's equivalent is an R script (`dump_epimodel.R`). Each importer is tested against its framework's own examples (`tests/devtests/io/`) and in a scaled-down demo per framework (`tests/switching/` in the lingua_franca repo). For the modeler's view, see [Import and export](conversion/index.qmd) and the conversion pages for each framework.
 
 ## The vocabulary
 
-A language nobody can hold in their head is one nobody uses correctly, so the design record lists every public name in one place ([17-vocabulary.md](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/design/17-vocabulary.md)), and a name is added only after asking: does Starsim already have one; can it be written with what exists (a bednet is an `ss.modify`, a metapopulation a stratification by patch); would more than one kind of model use it; is a keyword enough?
+A language nobody can hold in their head is one nobody uses correctly, so the design record lists every public name in one place ([17-vocabulary.md](https://github.com/starsimhub/lingua_franca/blob/main/docs/design/17-vocabulary.md)), and a name is added only after asking: does Starsim already have one; can it be written with what exists (a bednet is an `ss.modify`, a metapopulation a stratification by patch); would more than one kind of model use it; is a keyword enough?
 
 The capitalization rule is Starsim's existing one: modules, containers, and base classes are CamelCase (`ss.Sim`, `ss.Disease`, `ss.Vaccine`); the pieces you put inside them are lowercase (`ss.days`, `ss.normal`, `ss.modify`, `ss.vaccinate`). The importers are held to the same vocabulary: they write only names that a person would write by hand, which is why every import is ordinary Starsim code.
 
@@ -187,14 +187,14 @@ The capitalization rule is Starsim's existing one: modules, containers, and base
 
 ## In the design record
 
-- [Overview](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/design/00-overview.md)
-- [Objects and construction](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/design/01-objects.md): names, the equivalence rule, `describe()`
-- [Types](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/design/02-types.md): durations, rates, and bare numbers
-- [States and transitions](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/design/03-states-and-transitions.md): the operators, rates, dwell times, and what is guessed
-- [Parameters and data](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/design/04-parameters.md)
-- [Dimensions and stratification](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/design/05-dimensions.md)
-- [Working with other frameworks](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/design/16-interop.md): importers, classifying rates, exports, and the vignette test
-- [The complete vocabulary](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/design/17-vocabulary.md): every public name, with keywords and slot types
+- [Overview](https://github.com/starsimhub/lingua_franca/blob/main/docs/design/00-overview.md)
+- [Objects and construction](https://github.com/starsimhub/lingua_franca/blob/main/docs/design/01-objects.md): names, the equivalence rule, `describe()`
+- [Types](https://github.com/starsimhub/lingua_franca/blob/main/docs/design/02-types.md): durations, rates, and bare numbers
+- [States and transitions](https://github.com/starsimhub/lingua_franca/blob/main/docs/design/03-states-and-transitions.md): the operators, rates, dwell times, and what is guessed
+- [Parameters and data](https://github.com/starsimhub/lingua_franca/blob/main/docs/design/04-parameters.md)
+- [Dimensions and stratification](https://github.com/starsimhub/lingua_franca/blob/main/docs/design/05-dimensions.md)
+- [Working with other frameworks](https://github.com/starsimhub/lingua_franca/blob/main/docs/design/16-interop.md): importers, classifying rates, exports, and the vignette test
+- [The complete vocabulary](https://github.com/starsimhub/lingua_franca/blob/main/docs/design/17-vocabulary.md): every public name, with keywords and slot types
 
 ## Further reading
 

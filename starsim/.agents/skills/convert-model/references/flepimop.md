@@ -36,7 +36,7 @@ A flepiMoP model is a configuration YAML plus CSV files beside it: `compartments
 
 ## Worked example
 
-[`flepimop/vaccine_scenarios/model.py`](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/models/flepimop/vaccine_scenarios/model.py): two provinces with vaccination and waning, three scenarios of stacked modifiers, and chained outcomes. The import of the two-province SEIR matches flepiMoP's reference to 1e-12 in every compartment of both provinces; the vaccine scenarios, run with the original's draws, match its means to 4e-12 in every stock, flow, and outcome. The draws, by hand:
+[`flepimop/vaccine_scenarios/model.py`](https://github.com/starsimhub/lingua_franca/blob/main/docs/models/flepimop/vaccine_scenarios/model.py): two provinces with vaccination and waning, three scenarios of stacked modifiers, and chained outcomes. The import of the two-province SEIR matches flepiMoP's reference to 1e-12 in every compartment of both provinces; the vaccine scenarios, run with the original's draws, match its means to 4e-12 in every stock, flow, and outcome. The draws, by hand:
 
 ```python
 Ro = ss.par(2.5, prior=sps.truncnorm((1.1 - 2.5)/0.1, (3 - 2.5)/0.1, loc=2.5, scale=0.1))

@@ -70,7 +70,7 @@ Yes: see [R-Starsim](https://r.starsim.org).
 
 ## Why is Starsim built this way?
 
-The answer is "it's complicated" (because disease modeling is complicated!). In brief, we were fed up with the limitations of existing disease models (especially our own!), and so we asked the question "Can we build a disease modeling framework that functions as a 'lingua franca', that pays homage to the best aspects of all the other disease models that have come before?". The answer is of course "lol no", but we did our best! For an (extremely) detailed explanation of the Starsim design process, see the [Lingua Franca Design](https://starsim.org/lingua_franca_design/) docs.
+The answer is "it's complicated" (because disease modeling is complicated!). In brief, we were fed up with the limitations of existing disease models (especially our own!), and so we asked the question "Can we build a disease modeling framework that functions as a 'lingua franca', that pays homage to the best aspects of all the other disease models that have come before?". The answer is of course "lol no", but we did our best! For an (extremely) detailed explanation of the Starsim design process, see the [Lingua Franca](https://starsim.org/lingua_franca/) docs.
 
 ## Where can I get help?
 

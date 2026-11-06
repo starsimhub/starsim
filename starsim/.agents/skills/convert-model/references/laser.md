@@ -39,7 +39,7 @@ LASER (`laser-core`, `laser-generic`, and the measles-specific `laser-measles`) 
 
 ## Worked example
 
-[`laser/hub_spoke_seir/model.py`](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/models/laser/hub_spoke_seir/model.py) (an SEIR on a hub and spokes), [`laser/england_wales/model.py`](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/models/laser/england_wales/model.py) (measles in England and Wales, with the life-table and importation workarounds), and [`measles_metapop/seir_districts/model.py`](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/models/measles_metapop/seir_districts/model.py) (260 districts). The hub and spoke:
+[`laser/hub_spoke_seir/model.py`](https://github.com/starsimhub/lingua_franca/blob/main/docs/models/laser/hub_spoke_seir/model.py) (an SEIR on a hub and spokes), [`laser/england_wales/model.py`](https://github.com/starsimhub/lingua_franca/blob/main/docs/models/laser/england_wales/model.py) (measles in England and Wales, with the life-table and importation workarounds), and [`measles_metapop/seir_districts/model.py`](https://github.com/starsimhub/lingua_franca/blob/main/docs/models/measles_metapop/seir_districts/model.py) (260 districts). The hub and spoke:
 
 ```python
 angles = 2*np.pi*np.arange(5)/5

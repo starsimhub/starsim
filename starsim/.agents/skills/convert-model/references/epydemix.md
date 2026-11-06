@@ -54,7 +54,7 @@ Then, in Starsim, `sim = ss.import_from('model.json')`. The dump records the las
 
 ## Worked example
 
-[`epydemix/sir_kenya`](https://github.com/starsimhub/lingua_franca_design/tree/main/docs/models/epydemix/sir_kenya) (the SIR in Kenya, dumped from the original script as it is) and [`epydemix/covid19`](https://github.com/starsimhub/lingua_franca_design/tree/main/docs/models/epydemix/covid19) (COVID-19 in Massachusetts, dumped from a short script that builds the model at the posterior medians, in the persistence scenario). Against 200 runs of each original (the same initial numbers, `compare.py`): every series agrees, 30 for Kenya (each compartment and transition in each of the 5 age groups; `frac_z3` 0, every KS p ≥ 0.039, means within 1.1% of the peak) and 40 for COVID-19 (all 9 compartments, 4 transitions, and infections, deaths, and new deaths in each of the 9 age groups; `frac_z3` ≤ 0.025, every KS p ≥ 0.02, means within 5% of the peak, 1.7% for the totals). Final deaths: 10,480 (10,279 to 10,705) against the stored reference's 10,525 (10,324 to 10,737), which draws new initial numbers in each run. The import of the COVID model:
+[`epydemix/sir_kenya`](https://github.com/starsimhub/lingua_franca/tree/main/docs/models/epydemix/sir_kenya) (the SIR in Kenya, dumped from the original script as it is) and [`epydemix/covid19`](https://github.com/starsimhub/lingua_franca/tree/main/docs/models/epydemix/covid19) (COVID-19 in Massachusetts, dumped from a short script that builds the model at the posterior medians, in the persistence scenario). Against 200 runs of each original (the same initial numbers, `compare.py`): every series agrees, 30 for Kenya (each compartment and transition in each of the 5 age groups; `frac_z3` 0, every KS p ≥ 0.039, means within 1.1% of the peak) and 40 for COVID-19 (all 9 compartments, 4 transitions, and infections, deaths, and new deaths in each of the 9 age groups; `frac_z3` ≤ 0.025, every KS p ≥ 0.02, means within 5% of the peak, 1.7% for the totals). Final deaths: 10,480 (10,279 to 10,705) against the stored reference's 10,525 (10,324 to 10,737), which draws new initial numbers in each run. The import of the COVID model:
 
 ```python
 beta = ss.par(ss.timeseries({'2020-02-23': 0.0626, '2020-02-24': 0.0626, ...}))  # The array the run was given
@@ -67,7 +67,7 @@ I_to_D0_or_R = ss.Transition(I, [D0, R], rate=mu, p=[IFR, None])
 D0_to_D1     = D0 >> D1 @ 4.0 / Delta  # ... to D3_to_D4
 ```
 
-The hand-written worked example ([`epydemix/covid19/model.py`](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/models/epydemix/covid19/model.py)) instead writes `beta` from `R0` and `ss.seasonal`, and the death chain with `stages=4`, so that `R0`, `Delta`, and the seasonality can be fitted.
+The hand-written worked example ([`epydemix/covid19/model.py`](https://github.com/starsimhub/lingua_franca/blob/main/docs/models/epydemix/covid19/model.py)) instead writes `beta` from `R0` and `ss.seasonal`, and the death chain with `stages=4`, so that `R0`, `Delta`, and the seasonality can be fitted.
 
 ## Running the original
 

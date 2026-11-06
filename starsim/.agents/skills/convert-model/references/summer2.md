@@ -47,7 +47,7 @@ Then, in Starsim, `sim = ss.import_from('model.json')`. If the source builds sev
 
 ## Worked example
 
-[`summer2/seir-age-clinical/model.py`](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/models/summer2/seir-age-clinical/model.py) (SEIR by age with a clinical stratification of `I` entered by age, infectiousness by level, and derived outputs) and [`summer2/sir-age-location/model.py`](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/models/summer2/sir-age-location/model.py) (mixing matrices for age and location). The imports agree with summer2 within 0.0005 people of 1,000 (every compartment and derived output) and 0.08 people of 1,000. The derived outputs, in hand-written code:
+[`summer2/seir-age-clinical/model.py`](https://github.com/starsimhub/lingua_franca/blob/main/docs/models/summer2/seir-age-clinical/model.py) (SEIR by age with a clinical stratification of `I` entered by age, infectiousness by level, and derived outputs) and [`summer2/sir-age-location/model.py`](https://github.com/starsimhub/lingua_franca/blob/main/docs/models/summer2/sir-age-location/model.py) (mixing matrices for age and location). The imports agree with summer2 within 0.0005 people of 1,000 (every compartment and derived output) and 0.08 people of 1,000. The derived outputs, in hand-written code:
 
 ```python
 res = sim.results.sir
@@ -56,4 +56,4 @@ incidence_old = res.incidence.select(age='old').values / dt   # summer2's flow o
 
 ## Running the original
 
-In summer2's own environment: build the model, `model.run()`, then `model.get_outputs_df()` (one column per stratified compartment, e.g. `SXage_youngXlocation_urban`) and `model.get_derived_outputs_df()`; the [worked examples](https://github.com/starsimhub/lingua_franca_design/tree/main/docs/models/summer2)' `export.py` write these in the long format. In Starsim, `res[f'{state}'].select(age=..., location=...)`. A stock at index `k` is the number at summer2's time `k`, with no shift.
+In summer2's own environment: build the model, `model.run()`, then `model.get_outputs_df()` (one column per stratified compartment, e.g. `SXage_youngXlocation_urban`) and `model.get_derived_outputs_df()`; the [worked examples](https://github.com/starsimhub/lingua_franca/tree/main/docs/models/summer2)' `export.py` write these in the long format. In Starsim, `res[f'{state}'].select(age=..., location=...)`. A stock at index `k` is the number at summer2's time `k`, with no shift.

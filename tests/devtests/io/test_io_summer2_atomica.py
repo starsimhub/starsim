@@ -1,5 +1,5 @@
 """
-Test importing summer2 and Atomica models, and exporting to them (run in their own environments, `_envs/` in the lingua_franca_design repo, if they are there)
+Test importing summer2 and Atomica models, and exporting to them (run in their own environments, `_envs/` in the lingua_franca repo, if they are there)
 """
 import os
 import json
@@ -16,8 +16,8 @@ from starsim.converters.summer2 import load_summer2, outputs, to_summer2
 from starsim.converters.atomica import load_atomica, to_atomica
 
 kw = dict(verbose=False)
-summer2_python = paths.lfd/'_envs'/'summer2'/'bin'/'python'
-atomica_python = paths.lfd/'_envs'/'atomica'/'bin'/'python'
+summer2_python = paths.lf/'_envs'/'summer2'/'bin'/'python'
+atomica_python = paths.lf/'_envs'/'atomica'/'bin'/'python'
 has_atomica = atomica_python.exists()
 
 
@@ -150,7 +150,7 @@ def test_summer2_export():
     return text
 
 
-@pytest.mark.skipif(not summer2_python.exists(), reason='needs summer2\'s environment (_envs/summer2 in the lingua_franca_design repo; set STARSIM_LFD)')
+@pytest.mark.skipif(not summer2_python.exists(), reason='needs summer2\'s environment (_envs/summer2 in the lingua_franca repo; set STARSIM_LF)')
 def test_summer2_export_run(tmp_path):
     sc.heading('Testing export to summer2, run in summer2 and read back')
     dumper = sc.path(ss.__file__).parent/'converters'/'summer2.py'
@@ -290,7 +290,7 @@ def test_atomica_export(tmp_path):
     return back
 
 
-@pytest.mark.skipif(not has_atomica, reason='needs Atomica\'s environment (STARSIM_LFD)')
+@pytest.mark.skipif(not has_atomica, reason='needs Atomica\'s environment (STARSIM_LF)')
 def test_atomica_framework(tmp_path):
     sc.heading('Testing an export to Atomica, run in Atomica')
     sim = sir_births()

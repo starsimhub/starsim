@@ -4,7 +4,7 @@
 - `devtests/`: the developer tests, slower and more thorough (`pytest devtests -n auto`); see its README
 - `test_data/`: small data files that the tests read (Nigeria's demography)
 
-The tests that need other frameworks' examples or the frameworks themselves, and the switching demos for each framework's users, are in the lingua_franca_design repo's `tests/`, and run downstream (see `.github/workflows/test_downstream.yml`).
+The tests that need other frameworks' examples or the frameworks themselves, and the switching demos for each framework's users, are in the lingua_franca repo's `tests/`, and run downstream (see `.github/workflows/test_downstream.yml`).
 
 Run a single file with `pytest test_sim.py`, and the tests with coverage with `./check_coverage`.
 
@@ -25,14 +25,14 @@ Run a single file with `pytest test_sim.py`, and the tests with coverage with `.
 
 The tests also run the tests of the following downstream repositories to prevent accidental regressions:
 
-- [covasim](https:github.com/starsimhub/covasim)
-- [fpsim](https:github.com/starsimhub/fpsim)
-- [hpvsim](https:github.com/starsimhub/hpvsim)
-- [lingua_franca_design](https:github.com/starsimhub/lingua_franca_design)
-- [mighti](https:github.com/starsimhub/mighti)
-- [rotasim](https:github.com/starsimhub/rotasim)
-- [rstarsim](https:github.com/starsimhub/rstarsim)
-- [starsim-malaria](https:github.com/starsimhub/starsim-malaria)
-- [stisim](https:github.com/starsimhub/stisim)
-- [tbsim](https:github.com/starsimhub/tbsim)
-- [typhoidsim](https:github.com/starsimhub/typhoidsim)
+- [covasim](https://github.com/starsimhub/covasim)
+- [fpsim](https://github.com/starsimhub/fpsim)
+- [hpvsim](https://github.com/starsimhub/hpvsim)
+- [lingua_franca](https://github.com/starsimhub/lingua_franca)
+- [mighti](https://github.com/starsimhub/mighti)
+- [rotasim](https://github.com/starsimhub/rotasim)
+- [rstarsim](https://github.com/starsimhub/rstarsim)
+- [starsim-malaria](https://github.com/starsimhub/starsim-malaria)
+- [stisim](https://github.com/starsimhub/stisim)
+- [tbsim](https://github.com/starsimhub/tbsim)
+- [typhoidsim](https://github.com/starsimhub/typhoidsim)

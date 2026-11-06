@@ -38,7 +38,7 @@ An EMULSION model is one YAML file: `time_info` (unit, `delta_t`, `total_duratio
 
 ## Worked example
 
-[`emulsion/quickstart/model.py`](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/models/emulsion/quickstart/model.py): three state machines (age group, gestation, health), with the minimum stays, conditions on another machine, the quarantine calendar and capacity, and births on farrowing. The import (`ss.import_from('quickstart.yaml')`) gives the health machine's 13 transitions directly, and lists the 16 pieces that the worked example writes by hand:
+[`emulsion/quickstart/model.py`](https://github.com/starsimhub/lingua_franca/blob/main/docs/models/emulsion/quickstart/model.py): three state machines (age group, gestation, health), with the minimum stays, conditions on another machine, the quarantine calendar and capacity, and births on farrowing. The import (`ss.import_from('quickstart.yaml')`) gives the health machine's 13 transitions directly, and lists the 16 pieces that the worked example writes by hand:
 
 ```python
 dates = {'2021-01-01': 0, '2021-04-01': 1, '2021-09-02': 0, '2022-04-01': 1, '2022-09-02': 0}
@@ -59,4 +59,4 @@ life = Life(
 
 ## Running the original
 
-`emulsion run model.yaml --runs 200 --seed 1 --quiet --output-dir out` writes `out/counts.csv`, one row per run (`simu_id`) and step (`step`), with a column for each state and each extra output. For the SIR, the worked example's `compare.py` found that a stock at index `k` is the number on day `k` in both, so the rows line up as they are; check this for each model, since it depends on how the steps are labelled. EMULSION's compartments and individuals are stochastic: compare the means and spreads over many runs. See [`emulsion/sir/run.py`](https://github.com/starsimhub/lingua_franca_design/blob/main/docs/models/emulsion/sir/run.py), which runs it in its own environment and writes the long CSV that `validate.md` compares.
+`emulsion run model.yaml --runs 200 --seed 1 --quiet --output-dir out` writes `out/counts.csv`, one row per run (`simu_id`) and step (`step`), with a column for each state and each extra output. For the SIR, the worked example's `compare.py` found that a stock at index `k` is the number on day `k` in both, so the rows line up as they are; check this for each model, since it depends on how the steps are labelled. EMULSION's compartments and individuals are stochastic: compare the means and spreads over many runs. See [`emulsion/sir/run.py`](https://github.com/starsimhub/lingua_franca/blob/main/docs/models/emulsion/sir/run.py), which runs it in its own environment and writes the long CSV that `validate.md` compares.

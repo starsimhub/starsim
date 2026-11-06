@@ -1,7 +1,7 @@
 """
 Test importing flepiMoP configurations, and exporting sims as them
 
-The exports are run with flepiMoP from its environment in the lingua_franca_design repo (`_envs/flepimop`; set STARSIM_LFD to say where the repo is), and skipped if it is not there.
+The exports are run with flepiMoP from its environment in the lingua_franca repo (`_envs/flepimop`; set STARSIM_LF to say where the repo is), and skipped if it is not there.
 """
 
 # %% Imports and settings
@@ -19,7 +19,7 @@ import paths
 from starsim.converters.flepimop import load_flepimop, to_flepimop
 
 kw = dict(verbose=0)
-flepimop_bin = paths.lfd/'_envs'/'flepimop'/'bin'
+flepimop_bin = paths.lf/'_envs'/'flepimop'/'bin'
 
 
 def test_dimensions(tmp_path):
@@ -95,7 +95,7 @@ def test_flepimop_export(tmp_path):
     return back
 
 
-@pytest.mark.skipif(not (flepimop_bin/'flepimop').exists(), reason='needs flepiMoP (its environment in the lingua_franca_design repo; set STARSIM_LFD)')
+@pytest.mark.skipif(not (flepimop_bin/'flepimop').exists(), reason='needs flepiMoP (its environment in the lingua_franca repo; set STARSIM_LF)')
 def test_flepimop_export_run(tmp_path):
     sc.heading('Testing an export to flepiMoP, run in flepiMoP')
     files, summary, lost = to_flepimop(export_sim())
