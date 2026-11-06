@@ -192,7 +192,7 @@ def test_coded_seeds():
 def test_coded_par_modifiers():
     sc.heading('Testing modifiers of the parameters of a disease written as code')
 
-    class Coded(ss.Infection):
+    class Coded(ss.AgentDisease):
         def __init__(self, **kwargs):
             super().__init__()
             self.define_pars(beta=0.1, init_prev=0.1, level=0.4, rate=ss.peryear(0.2), risk=ss.probperyear(0.3), spread=ss.normal(1, 1))

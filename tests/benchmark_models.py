@@ -5,7 +5,7 @@ Each covers a kind of model the other benchmarks miss:
 
 - fseis10: malariasim's "fseis10" scenario, ported to Starsim alone (see make_fseis())
 - counts:  a declared model with counts (Ross-Macdonald malaria, mosquitoes as counts), as agents
-- coded:   a disease written as code (an ss.Infection subclass), over a network, with demographics
+- coded:   a disease written as code (an ss.AgentDisease subclass), over a network, with demographics
 - by_age:  a declared model with ss.by age tables (Covasim's prognoses, FPsim's deaths by age and sex)
 - tb:      a declared disease as agents with four transmissions over one network, at 1,000 and 10,000 agents (tbsim)
 - contra:  a declared choice among many states, by regression and tables by age and destination (FPsim's contraception)
@@ -50,7 +50,7 @@ class MosquitoODE(ss.Module):
         return
 
 
-class HumanSEIS(ss.Infection):
+class HumanSEIS(ss.AgentDisease):
     """ malariasim's MalariaHumanSEIS: bitten from the mosquitoes' EIR, with biting heterogeneity by person and age, written as code """
     def __init__(self, **kwargs):
         super().__init__()

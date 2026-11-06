@@ -169,8 +169,8 @@ class Counter(ss.Module):
     assert sim.results.counter.seen.sum() == 55 and sim.results.counter.new_events[0] == 5 # Every step's events seen, the first step's at the first time point
 
     # Renames, verbose, and Starsim 3's diseases written as code
-    text, changes, todo = migrate_text("p = ss.time_prob(0.1); pars = dict(verbose=-1)\nclass MySIS(ss.SIS): pass\nclass MyNCD(ss.Disease): pass")
-    assert text == "p = ss.probperyear(0.1); pars = dict(verbose=0)\nclass MySIS(ssl.AgentSIS): pass\nclass MyNCD(ss.Disease): pass" # ss.Disease and ss.Infection keep their meaning
+    text, changes, todo = migrate_text("p = ss.time_prob(0.1); pars = dict(verbose=-1)\nclass MySIS(ss.SIS): pass\nclass MyNCD(ss.Disease): pass\nclass MyHIV(ss.Infection): pass")
+    assert text == "p = ss.probperyear(0.1); pars = dict(verbose=0)\nclass MySIS(ssl.AgentSIS): pass\nclass MyNCD(ss.Disease): pass\nclass MyHIV(ss.AgentDisease): pass" # ss.Disease keeps its meaning, and ss.Infection is ss.AgentDisease
     assert migrate_text('pars = dict(verbose=0.1)')[0] == 'pars = dict(verbose=0.1)' # A fraction is progress every that share of the run
     assert migrate_text('ss.link_dists(obj, sim)')[0] == 'ss.dists.link_dists(obj, sim)' # Internal helpers are in their submodules
     assert 'ssl.AgentSIR' in migrate_text('sir = ss.SIR(beta=0.1)')[2][0][1] # A use of ss.SIR is flagged, not rewritten
@@ -197,7 +197,7 @@ class Counter(ss.Module):
     assert text == "a = sim.results.alive; b = res['sir.infected']; c = df['n_alive']" and len(todo) == 1 # A column of a dataframe could be anything's: listed
     own = "class Mosquito(ss.Module):\n    def init_results(self):\n        self.define_results(ss.Result('n_infected'))\n    def step(self):\n        self.results.n_infected[self.ti] = 5\nx = res['n_infected']"
     assert migrate_text(own)[1:] == ([], []) # A result the package makes keeps its name
-    text = migrate_text("a = sim.results.sis.new_infections; b = res.cum_infections[-1]; c = res['new_infections']; d = res['cum_infections']; e = sim.summary.value.sis_cum_infections; data = {'hiv.new_infections': x}")[0] # The results of ss.Infection
+    text = migrate_text("a = sim.results.sis.new_infections; b = res.cum_infections[-1]; c = res['new_infections']; d = res['cum_infections']; e = sim.summary.value.sis_cum_infections; data = {'hiv.new_infections': x}")[0] # The results of ss.AgentDisease
     assert text == "a = sim.results.sis.infection; b = res.infection.cum[-1]; c = res['infection']; d = res['infection'].cum; e = sim.summary.value.sis_infection; data = {'hiv.infection': x}"
     text, changes, todo = migrate_text("df['obs_new_infections']; total_cum_infections = 3")
     assert 'obs_new_infections' in text and 'total_cum_infections' in text and len(todo) == 1 # Not the name of a disease of the file: listed
@@ -329,7 +329,7 @@ def test_cli_convert(tmp_path, monkeypatch, capsys):
     cli.main(['convert', 'sir.xml', '--out=back.py']) # The format told from the file, and back to Starsim
     back = runpy.run_path('back.py')['sim'].run()
     orig = runpy.run_path('sir.py')['sim'].run()
-    assert np.allclose(back.results.sir.prevalence, orig.results.sir.prevalence, rtol=1e-3) # The same model
+    assert np.allclose(back.results.sir.R, orig.results.sir.R, rtol=1e-3) # The same model
     with pytest.raises(SystemExit, match='exists already'):
         cli.main(['import', 'sir.xml', '--out=back.py'])
     with pytest.raises(SystemExit, match='no sim called "other"'):

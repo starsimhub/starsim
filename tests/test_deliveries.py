@@ -133,9 +133,7 @@ def test_applied():
     # Applied: modifiers of a disease written as code that overrides transmit(), and a change to an inflow under the ODE
     class OwnTransmit(ssl.AgentSIS):
         def transmit(self): # Its own loop over the routes, as Covasim's is
-            betamap = self.validate_beta()
-            rel_trans = self.rel_trans.asnew(self.infectious.raw*self.rel_trans.raw, copy=False)
-            rel_sus = self.rel_sus.asnew(self.susceptible.raw*self.rel_sus.raw, copy=False)
+            betamap, rel_trans, rel_sus = self.route_betas(), self.transmissibility(), self.susceptibility()
             out = [self.transmit_route(i, route, betamap[ss.networks.standardize_netkey(key)], rel_trans, rel_sus) for i,(key,route) in enumerate(self.sim.networks.items())]
             return self.finalize_infections(*zip(*out))
     sim = ss.Sim(diseases=OwnTransmit(name='sis'), networks='random', connectors=ss.modify('sis.rel_sus', multiply=0), n_agents=1000, verbose=0).run()

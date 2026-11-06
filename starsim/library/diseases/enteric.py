@@ -50,8 +50,8 @@ class Typhoid(ss.Disease):
     birth_rate  = ss.par(ss.peryear(1/60), doc='Birth and death rate', source='Illustrative')
 
     S = ss.State()
-    I = ss.State(init=0.001, label='Acute infection')
-    C = ss.State(label='Chronic carrier')
+    I = ss.State(init=0.001, label='Acute infection', infected=True) # Counted in the results infected and prevalence
+    C = ss.State(label='Chronic carrier', infected=True)
     R = ss.State()
 
     infection = S >> I @ beta*(I + rel_carrier*C)
@@ -60,7 +60,6 @@ class Typhoid(ss.Disease):
     births    = ss.birth(S, rate=birth_rate)
     deaths    = ss.death(rate=birth_rate)
 
-    prevalence = (I + C)/(S + I + C + R)
 
 
 class Polio(ss.Disease):
@@ -104,8 +103,9 @@ class Polio(ss.Disease):
     p_paralysis = ss.par(1/200, doc='Share of infections that cause paralysis',   source='US CDC Pink Book: about 1 in 200 for wild type 1')
     birth_rate  = ss.par(ss.peryear(0.03), doc='Birth and death rate',            source='Illustrative')
 
-    S, E = ss.states('S E')
-    I = ss.State(init=0.001, label='Shedding')
+    S = ss.State('S')
+    E = ss.State('E', infected=True) # Counted in the results infected and prevalence
+    I = ss.State(init=0.001, label='Shedding', infected=True)
     R = ss.State()
     P = ss.State(label='Paralysed')
 
@@ -115,4 +115,3 @@ class Polio(ss.Disease):
     births    = ss.birth(S, rate=birth_rate)
     deaths    = ss.death(rate=birth_rate)
 
-    prevalence = (E + I)/(S + E + I + R + P)

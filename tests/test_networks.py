@@ -713,7 +713,7 @@ def test_beta_default():
     # A disease written as code reads the default too
     sim = ss.Sim(diseases=ssl.AgentSIS(beta=dict(random=0.05, msm=0.1, default=0)), networks=['random', ss.SexualNet()], **kw).run()
     assert sim.results.agentsis.prevalence[-1] > 0 and any('msm' in note for note in sim.notes)
-    assert sim.diseases.agentsis.validate_beta()['sexual'] == [0, 0]
+    assert sim.diseases.agentsis.route_betas()['sexual'] == [0, 0]
     return
 
 
@@ -762,7 +762,7 @@ def test_condoms():
 def test_coded_declared_transmission():
     """ A disease written as code and a declared one, run as agents, infect the same people over the same contacts with the same seed """
     sc.heading('Testing that coded and declared diseases transmit the same way')
-    class SI(ss.Infection):
+    class SI(ss.AgentDisease):
         def __init__(self, beta, **kwargs):
             super().__init__(**kwargs)
             self.define_pars(beta=beta)

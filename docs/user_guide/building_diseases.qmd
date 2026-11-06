@@ -76,7 +76,40 @@ measles_density.equations()
 
 A rate can also be written as the whole flow, as in the equations of other frameworks: `S >> I @ beta*S*I/N` (with `N = S + I + R`) is the same frequency-dependent model as `beta*I`, and `beta*S*I` the same density-dependent model as `beta*I.n`.
 
+**Infected states and prevalence.** Mark the states whose people are infected, and the disease has two more results, `infected` (the number in them) and `prevalence` (their share of everyone in its states). Nothing is guessed: a disease with no state marked has neither, and one that defines its own `infected` or `prevalence` keeps it. `ss.SIR`, `ss.SEIR`, and `ss.SIS` mark theirs.
+
+```{python}
+S, R = ss.states('S R')
+E, I = ss.states('E I', infected=True) # Or E = ss.State(label='Exposed', infected=True)
+seir = ss.Disease(S >> E @ ss.perday(0.3)*I, E >> I @ ss.days(5), I >> R @ ss.days(8), init_prev=0.01, name='seir')
+res = ss.Sim(seir, stop=ss.days(120), verbose=0).run().results.seir
+print('Peak prevalence:', round(res.prevalence.max(), 3))
+```
+
+A set of states is written with `+` or `|`, which mean the same for states: `E | I` and `E + I` are the number in either, `(E | I).frac` their share, and `(E | I) >> R` a transition from either. Without brackets, Python reads `E | I >> R` as `E | (I >> R)`, which raises an error saying so. Someone who dies of the disease leaves the population, `I >> ss.null` (or a branch to it), and the deaths so far are `res.death.cum`; a state `D` for them would keep them among the people, and in the denominator of `prevalence`.
+
 **Several sources of infection** are a sum: `S >> E @ beta*(I + 0.5*A)` says that people in `A` (say, without symptoms) are half as infectious as those in `I`. A rate must be linear in its bare states, since exposure on a network is a sum over contacts; anything nonlinear is written with counts (`I.n`).
+
+**Transmission as code.** What an expression can't say can be written in Python, in two ways, without leaving the declared disease:
+
+- **A rate that is a function**, `S >> I @ fn`, gives the rate for each person leaving `S`. It takes any of `self` (the disease), `sim`, and `uids` (the people it is for), by those names: `lambda self, sim: self.pars.beta*self.I.n/sim.people.n_alive` means the same as agents and as compartments, while one that takes `uids` gives each person their own rate and runs as agents only. This keeps every solver exact. In a class, the function can be a method: `infection = S >> I @ custom_infection` in the class body, after `def custom_infection(self, sim): ...`, or `rate=self.custom_infection` in `define_transitions()`.
+- **The disease's own `transmit()`** gives who is infected in each step by a transmission: as agents, their UIDs; as compartments, the number in each group. `super().transmit(transition)` is what the solver would do, so an override can add to it or take from it. A disease with several transmissions is told which one, `def transmit(self, transition)`; with one, the argument can be left out. Under the ODE, it is taken once a step, at its start, so that transmission is first order in the step (a note says so).
+
+```{python}
+class WithImports(ss.SIR):
+    """ An SIR with 5 imported cases each step, as agents or as compartments """
+    def transmit(self):
+        new = super().transmit()
+        if self.sim.solver == 'abm':
+            people = self.sim.people.auids
+            return new | people[self.S.raw[people]][:5] # Five susceptible people (the first five, for simplicity)
+        return new + 5
+
+for solver in ['abm', 'ode']:
+    sim = ss.Sim(WithImports(beta=ss.peryear(0.5), init_prev=0), solver=solver, n_agents=2000, dt=ss.days(7), start=2000, stop=2002, verbose=0)
+    sim.run()
+    print(solver, "- infections:", round(sim.results.withimports.infection.sum()))
+```
 
 ## Other rates
 
@@ -381,14 +414,14 @@ Each strain then has its own results (`sim.results.den1`), and a delivery can ac
 A disease that needs something states and transitions can't say, such as a quantity that each person carries and that changes continuously (a CD4 count, a viral load, or an immunity level that wanes), is written as a Python class, with arrays for each person and methods that update them. It runs as agents, and can sit in the same sim as declared diseases. There are two base classes:
 
 - **`ss.Disease`**, for a disease with no transmission between people, such as a non-communicable disease.
-- **`ss.Infection`**, for a transmitted disease. It adds the states `susceptible` and `infected`, each agent's relative susceptibility and infectiousness (`rel_sus` and `rel_trans`), and transmission over the sim's networks with a `beta` for each, which is rarely worth writing again. `ssl.AgentSIR` and `ssl.AgentSEIR` (`import starsim.library as ssl`) are complete examples, and good bases for a disease of your own.
+- **`ss.AgentDisease`**, for a transmitted disease. It adds the states `susceptible` and `infected`, each agent's relative susceptibility and infectiousness (`rel_sus` and `rel_trans`), and transmission over the sim's networks with a `beta` for each, which is rarely worth writing again. The transmission is done by the solver, by the same code as for a declared disease run as agents, and each piece of it can be overridden on its own: who can transmit and be infected (`transmissibility()`, `susceptibility()`), the betas (`route_betas()`), one route (`transmit_route()`), how the routes' infections are combined (`finalize_infections()`), or the whole step (`transmit()`, e.g. calling `super().transmit()` and adding a route of its own, as `ssl.Cholera` adds the environment). `ssl.AgentSIR` and `ssl.AgentSEIR` (`import starsim.library as ssl`) are complete examples, and good bases for a disease of your own.
 
 A disease written as code fills in some of these methods:
 
 | Method | What it does | When to override it |
 |--------|---------|------------------|
 | `__init__()` | Gives the parameters (`define_pars()`) and states (`define_states()`) | Always |
-| `set_prognoses(uids, sources)` | Sets what happens to the people just infected: when they recover, whether they die | Always, for an `ss.Infection`; call `super().set_prognoses()` first |
+| `set_prognoses(uids, sources)` | Sets what happens to the people just infected: when they recover, whether they die | Always, for an `ss.AgentDisease`; call `super().set_prognoses()` first |
 | `step_state()` | Moves people between states each step, before transmission (e.g. those whose recovery is due) | When the disease has states of its own |
 | `on_death(uids)` | Clears the states of people who died | When the disease has states of its own |
 | `transmit()` | Transmission over the networks | Rarely: the built-in version handles the networks, `beta`, `rel_sus`, and `rel_trans` |

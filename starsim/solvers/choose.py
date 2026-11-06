@@ -30,7 +30,7 @@ class Undeclared(Transmission):
     """
     The engine of a disease that declares no states or transitions (see `ss.Disease`): there is nothing for it to run, so the disease's own
     code is all of it. It gives that code what a declared disease's engine gives its own, as agents: the modifiers and products on its
-    `rel_sus`, `rel_trans`, and parameters (`dis.current_value()`, and `self.pars` while it runs), transmission over the networks (`ss.Infection.transmit_route()`; see `Transmission`),
+    `rel_sus`, `rel_trans`, and parameters (`dis.current_value()`, and `self.pars` while it runs), transmission over the networks (`ss.AgentDisease.transmit_route()`; see `Transmission`),
     and, for a delivery, the people its conditions select and a cure (`force()`)
 
     It exists so that code written for a disease can act on any disease in the same way.
@@ -91,13 +91,13 @@ class Undeclared(Transmission):
         return len(uids)
 
     def unapplied(self, kind, name=None, mods=()):
-        """ Why the disease would not apply the modifiers (`mods`) on a parameter (`name`) or on its `rel_sus` or `rel_trans` (`kind`), or None if it would: a transmitted `ss.Infection` reads those in `transmit_route()` (see `ss.connectors.check_applied()`) """
+        """ Why the disease would not apply the modifiers (`mods`) on a parameter (`name`) or on its `rel_sus` or `rel_trans` (`kind`), or None if it would: a transmitted `ss.AgentDisease` reads those in `transmit_route()` (see `ss.connectors.check_applied()`) """
         mod = self.mod
         if kind == 'par':
             return self.unapplied_par(name, mods)
-        if (isinstance(mod, ss.Infection) and 'beta' in mod.pars) or kind in getattr(mod, 'allow_modifiers', ()): # Or its own code reads them, with mod.current_value()
+        if (isinstance(mod, ss.AgentDisease) and 'beta' in mod.pars) or kind in getattr(mod, 'allow_modifiers', ()): # Or its own code reads them, with mod.current_value()
             return None
-        why = 'it is not an ss.Infection' if not isinstance(mod, ss.Infection) else 'it has no beta'
+        why = 'it is not an ss.AgentDisease' if not isinstance(mod, ss.AgentDisease) else 'it has no beta'
         return (f'"{mod.name}" is written as code and is not transmitted ({why}), so nothing reads its rel_sus or rel_trans; a product or modifier acts on it only through its transmission. '
                 f'If its own code reads {kind} with {mod.name}.current_value(\'{kind}\', uids), say so in its class: allow_modifiers = (\'{kind}\',).')
 
@@ -762,7 +762,7 @@ def init_where(sim):
                     sim.pars.connectors[key].on_rate = True
                     continue
                 if callable(where) and not isinstance(where, ss.conditions.Cond): # A function of the sim
-                    others = (lambda func: lambda sim: ~np.asarray(func(sim), dtype=bool))(where)
+                    others = (lambda func: lambda self, sim: ~np.asarray(ss.utils.call_fn(func, self=self, sim=sim), dtype=bool))(where)
                     if ss.transitions.is_lifelong(where): # So is who it is not for
                         others = ss.lifelong(others)
                 else: # A condition, a state, or an array
@@ -1228,7 +1228,7 @@ def reads_mother(sim, mod):
 def uid_functions(sim, mod):
     """ A parameter that is a function of uids """
     raws = [p.raw for p in mod.graph.all_pars() if callable(p.raw) and not isinstance(p.raw, ss.Dist)]
-    return [dict(name=getattr(raw, '__name__', 'function')) for raw in raws if ss.utils.n_args(raw) >= 2]
+    return [dict(name=getattr(raw, '__name__', 'function')) for raw in raws if ss.utils.takes_uids(raw)]
 
 
 def plain_init_prev(mod):
@@ -1541,6 +1541,7 @@ kernels = [ # What stops the kernels taking a whole run in one call: something i
     Rule('declared', lambda sim, mod: dict(tr=mod.engine.triggers[0]) if mod.engine.triggers else None, STEPPED, '"{tr.name}" is triggered by {tr.trigger}, which is applied at each step'), # In Python, for those who come to meet them other than by a transition
     Rule('declared', lambda sim, mod: dict(tr=mod.engine.event_triggers[0]) if mod.engine.event_triggers else None, STEPPED, '"{tr.name}" is triggered by {tr.trigger}, which is applied at each step'), # Moved in Python at the end of each step
     Rule('declared', stepped_modifier, STEPPED, 'the modifier "{m.name}" is applied each step (it has until= or hold=, a function as its where= or amount, or changes a value that varies by person)'),
+    Rule('declared', lambda sim, mod: mod.custom_transmit, STEPPED, '"{mod.name}" has a transmit() of its own, which is called at each step'),
     Rule('declared', lambda sim, mod: bool(mod.engine.net_mods), STEPPED, 'a modifier changes the contacts of a network'), # The contacts are set once for a whole run
     Rule('declared', weighted_rate, STEPPED, '{leaf} is {what}, which is worked out in Python once a step and held through it (so an ODE run is only first order in dt)'),
     Rule('declared', lambda sim, mod: modified_key(sim, mod, 'route'), STEPPED, 'a modifier acts on a transmission of "{mod.name}" on one route'),

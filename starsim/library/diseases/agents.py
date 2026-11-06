@@ -1,13 +1,16 @@
 """
 Diseases written as code: Starsim 3's SIR, SEIR, and SIS
 
-These are the Starsim 3 library models, written as `ss.Infection` subclasses with
-per-agent states and methods. They are examples of writing a disease as code, and
-base classes for the library diseases that add per-agent behavior. The core `ss.SIR`,
-`ss.SIS`, and `ss.SEIR` are declared from states and transitions instead. Written as
-code, these run only as agents, hence their names (`ssl.AgentSIR` and the others).
+These are the Starsim 3 library models, written as `ss.AgentDisease` subclasses with
+per-agent states and methods. They are teaching examples: they spell out, step by step
+in plain Python, what the declared `ss.SIR`, `ss.SIS`, and `ss.SEIR` do under the hood
+when run as agents, and they are starting points for a disease of your own written as
+code. Their length is the point; they have no advantage over the declared models, which
+are shorter, run with every solver, and can be described, diagrammed, and fitted. To
+model an SIR, use `ss.SIR`. Written as code, these run only as agents, hence their names
+(`ssl.AgentSIR` and the others).
 
-They schedule each move in whole steps as the agent engine does a declared disease's (see `ss.Infection`): an
+They schedule each move in whole steps as the agent engine does a declared disease's (see `ss.AgentDisease`): an
 infection in a step happens at its end, so a course of `dur` steps after it is due at `self.ti + 1 + dur`, and is
 taken when `ss.TimeArr.due()`, at the start of a step, before transmission, rounding a time between steps up or
 down at random in proportion. So each case, seeds included, is infectious for `dur` steps on average, and with the
@@ -23,16 +26,16 @@ __all__ = ['AgentSIR', 'AgentSEIR', 'AgentSIS']
 _ = None # For function signatures
 
 
-class AgentSIR(ss.Infection):
+class AgentSIR(ss.AgentDisease):
     """
     An SIR model written as code: Starsim 3's `ss.SIR`
 
     This class implements a basic SIR model with states for susceptible,
     infected/infectious, and recovered, as per-agent arrays updated in code (see
-    `ss.Infection`). It also includes deaths, and basic results. It is an example of
-    writing a disease as code, and a base class for diseases with per-agent behavior
-    (e.g. `ssl.Ebola`); for an SIR model, use the declared `ss.SIR`, which runs with
-    every solver. A Starsim 3 subclass of `ss.SIR` that overrides its methods can
+    `ss.AgentDisease`). It also includes deaths, and basic results. It is a teaching
+    example, showing in code what the declared `ss.SIR` does as agents, and a starting
+    point for a disease written as code (e.g. `ssl.Ebola`); it has no advantage over
+    `ss.SIR`, which is shorter and runs with every solver, so for an SIR model, use that. A Starsim 3 subclass of `ss.SIR` that overrides its methods can
     subclass this class instead, unchanged.
 
     Its defaults are Starsim 3's: a lognormal `dur_inf` (a mean of 6 years, std 1 year)
@@ -61,7 +64,7 @@ class AgentSIR(ss.Infection):
         )
         self.update_pars(pars, **kwargs)
 
-        # Example of defining all states, redefining those from ss.Infection, using reset=True
+        # Example of defining all states, redefining those from ss.AgentDisease, using reset=True
         self.define_states(
             ss.BoolState('susceptible', default=True, label='Susceptible'),
             ss.BoolState('infected', label='Infected'),
@@ -230,7 +233,7 @@ class AgentSEIR(AgentSIR):
         return
 
 
-class AgentSIS(ss.Infection):
+class AgentSIS(ss.AgentDisease):
     """
     An SIS model with waning immunity, written as code: Starsim 3's `ss.SIS` (see `ssl.AgentSIR`), with its lognormal `dur_inf`
 

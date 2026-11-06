@@ -1443,7 +1443,7 @@ def test_split_null():
     with pytest.raises(TypeError, match=r'ss.null.*alone'):
         ss.Sim(ss.Disease(S, I, x=ss.Transition([I, ss.null], S, rate=0.1), name='x'), n_agents=100, verbose=0).init()
     S, E, P, A = ss.states('S E P A')
-    assert 'prevalence' in ss.Disease(S, E, infection=S >> E @ 0.3*E, recovery=E >> S @ ss.days(5)).graph.exprs # Any disease with transmission has one
+    assert 'prevalence' not in ss.Disease(S, E, infection=S >> E @ 0.3*E, recovery=E >> S @ ss.days(5)).graph.exprs # Not guessed: only from states marked infected
     assert 'E + P + A' in repr(ss.Transition(E | P | A, S, rate=0.1)) # Printed before it is built
     with pytest.raises(TypeError, match=r'\[E, P, A\].*E \+ P \+ A'):
         ss.Sim(ss.Disease(S, E, P, A, x=ss.Transition(E | P | A, S, rate=0.1), name='x'), n_agents=100, verbose=0).init()

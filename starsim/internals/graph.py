@@ -123,7 +123,7 @@ class Graph:
         self.guessed = sc.obj()
         self.strats = [] # Stratifications, filled by stratify()
         self.transfers = sc.obj() # Movement between the levels of a stratification
-        self.auto_prevalence = False # Whether exprs has the automatic prevalence: see resolve_prevalence()
+        self.marked_results = set() # The results in exprs worked out from the states marked infected (infected, prevalence): see resolve_derived()
 
         self.collect(list(args or []), dict(members or {}))
         if isinstance(init_prev, par):
@@ -137,7 +137,7 @@ class Graph:
         self.resolve_pars()
         self.set_keywords()
         self.resolve_exits()
-        self.resolve_prevalence()
+        self.resolve_derived()
         self.check()
         return
 
@@ -145,12 +145,26 @@ class Graph:
         """ Whether a member of the module has this name """
         return any(name in other for other in [self.states, self.transitions, self.pars, self.outcomes, self.exprs, self.funcs, self.transfers, self.attrs, self.modifiers])
 
-    def resolve_prevalence(self):
-        """ A disease with transmission has the result `prevalence`, the share of people in the states counted in it, unless the name is taken """
-        infected = [state for state in self.infected if state.people]
-        if infected and (self.transmissions or self.count_sources) and not self.taken('prevalence') and not hasattr(type(self.module), 'prevalence'):
-            self.add(self.exprs, 'prevalence', ss.expressions.as_stocks(sum(infected[1:], infected[0])/sum(self.people_states[1:], self.people_states[0])))
-            self.auto_prevalence = True
+    def resolve_derived(self):
+        """
+        The results of the states marked infected (`ss.State(infected=True)`): `infected`, the number in them, and `prevalence`, their share
+        of the people in every state, unless the module defines its own of that name. Nothing is guessed: with no state marked, there are none
+        """
+        marked = [state for state in self.people_states if state.infected]
+        if not marked:
+            return
+        own = self.states.get('infected')
+        if own is not None and (len(marked) > 1 or own is not marked[0]):
+            errormsg = (f'"{self.module.name if self.module is not None else "The disease"}" marks {"more than one state" if len(marked) > 1 else "a state"} as infected ({sc.strjoin(s.name for s in marked)}), but also has a state called "infected", '
+                        f'which is the name of the result counting them. Either rename the state (e.g. "infectious"), or do not set infected=True and define the infected states and prevalence yourself (e.g. prevalence=(E + I)/(S + E + I + R))')
+            raise ValueError(errormsg)
+        cls = type(self.module)
+        if own is None and not self.taken('infected') and not hasattr(cls, 'infected'):
+            self.add(self.exprs, 'infected', ss.expressions.as_stocks(sum(marked[1:], marked[0])))
+            self.marked_results.add('infected')
+        if not self.taken('prevalence') and not hasattr(cls, 'prevalence'):
+            self.add(self.exprs, 'prevalence', ss.expressions.as_stocks(sum(marked[1:], marked[0])/sum(self.people_states[1:], self.people_states[0])))
+            self.marked_results.add('prevalence')
         return
 
     def __repr__(self):
@@ -185,6 +199,10 @@ class Graph:
                     errormsg = f'Could not find a name for {obj}; pass it as a keyword, e.g. ss.Disease(..., cd4=ss.attr(...))'
                     raise ValueError(errormsg)
                 self.add(self.attrs, obj.name, obj)
+                continue
+            if isinstance(obj, ss.conditions.Cond) and name is not None and obj.op == '|' and ss.conditions.state_objects(obj) is not None: # A named set of states, e.g. infected = E | I, is a result: the number in them, as for E + I
+                states = ss.conditions.state_objects(obj)
+                self.add(self.exprs, name, ss.expressions.as_stocks(sum(states[1:], states[0])))
                 continue
             if isinstance(obj, State) and None not in (name, obj.name) and name != obj.name: # A named state under another name, e.g. n_infected = I, is a result: the number in the state
                 self.add(self.exprs, name, ss.expressions.as_stocks(obj))
@@ -997,11 +1015,17 @@ class Graph:
     @property
     def infected(self):
         """
-        The states counted in prevalence: the states people are infected into, and the sources of infection (of people by contact, as `I` in `beta*I`, or density-dependent, in `beta*I.n`; or of a count, as `Ih` in a bite rate `Ih.n / N` of mosquitoes)
+        The infected states: those marked `infected=True`, if any are. Otherwise, as worked out from the transitions (for what needs
+        them, e.g. the states strains are carried in, or the number infected at the start; never for a result, see `resolve_derived()`):
+        the states people are infected into, and the sources of infection (of people by contact, as `I` in `beta*I`, or density-dependent,
+        in `beta*I.n`; or of a count, as `Ih` in a bite rate `Ih.n / N` of mosquitoes)
 
         In a model where nobody is a source of infection (a staged condition such as a cancer), also every state that
         people reach from those without passing through a state they can be in without having been infected
         """
+        marked = [s for s in self.states.values() if getattr(s, 'infected', False)]
+        if marked:
+            return sorted(marked, key=lambda s: s.order)
         sources = {id(s):s for s in self.infectious + self.count_sources}
         for tr in self.transitions.values():
             if not tr.people and tr.rate is not None:

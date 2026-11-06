@@ -203,10 +203,10 @@ print('Infectious at the start:', res.sir.I[0])
 
 #### Diseases written as code
 
-Dynamic rescaling needs to know which agents are naive, and to make agents naive again. A declared disease does both by itself. A disease written as code that transmits (a subclass of `ss.Infection`) counts the agents who have ever been infected (`ti_infected`) as not naive, and its `make_naive()` puts each of its states back to its default value, except `rel_sus` and `rel_trans`, which other modules (such as vaccines) often change. A disease that keeps something else, or that sets `rel_sus` itself, overrides it:
+Dynamic rescaling needs to know which agents are naive, and to make agents naive again. A declared disease does both by itself. A disease written as code that transmits (a subclass of `ss.AgentDisease`) counts the agents who have ever been infected (`ti_infected`) as not naive, and its `make_naive()` puts each of its states back to its default value, except `rel_sus` and `rel_trans`, which other modules (such as vaccines) often change. A disease that keeps something else, or that sets `rel_sus` itself, overrides it:
 
 ```python
-class MyDisease(ss.Infection):
+class MyDisease(ss.AgentDisease):
     def make_naive(self, uids, skip_states=None):
         super().make_naive(uids, skip_states=['rel_trans']) # Reset rel_sus too
         self.my_custom_value[uids] = 0 # And anything not kept as a state

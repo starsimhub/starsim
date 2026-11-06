@@ -51,7 +51,7 @@ class Intervention(ss.Module):
         Return the UIDs of the agents eligible now: those `eligibility` gives, or everyone
         """
         if self.eligibility is not None:
-            is_eligible = self.eligibility(self.sim)
+            is_eligible = ss.utils.call_fn(self.eligibility, self=self, sim=self.sim)
             if is_eligible is not None and len(is_eligible): # Only worry if non-None/nonzero length
                 if isinstance(is_eligible, ss.BoolArr):
                     is_eligible = is_eligible.uids
@@ -393,7 +393,7 @@ class Delivery(ss.products.EventSource, Intervention):
                  capacity=None, when=None, trace=None, priority=None, queue=None, skip_reached_within=None,
                  delay=None, disease=None, at_age=None, strain=None, name=None, label=None, **kwargs):
         deliver = None # who= as a function of the sim: who receives it on each step; a function of (sim, uids) is a condition, who is eligible
-        if callable(who) and not isinstance(who, (ss.conditions.Cond, ss.expressions.Expr, ss.State, ss.Arr, ss.Module, ss.Transition)) and ss.utils.n_args(who) < 2:
+        if callable(who) and not isinstance(who, (ss.conditions.Cond, ss.expressions.Expr, ss.State, ss.Arr, ss.Module, ss.Transition)) and not ss.utils.takes_uids(who):
             deliver, who = who, None
         trigger, eligible = ss.conditions.split_delivery(on=on, who=who, where=where)
         own = {key:kwargs.pop(key) for key in product_keys(self.kind) if key in kwargs} # The product's own keywords, e.g. ss.vaccinate(efficacy=0.9, ...)
@@ -454,8 +454,8 @@ class Delivery(ss.products.EventSource, Intervention):
         if sc.isnumber(coverage) and not 0 <= coverage <= 1:
             errormsg = f'coverage= of "{name or type(self).__name__}" is the share of those reached who receive it, between 0 and 1, not {coverage}'
             raise ValueError(errormsg)
-        if callable(coverage) and not isinstance(coverage, (ss.conditions.Cond, ss.Dist, ss.expressions.Expr)) and ss.utils.n_args(coverage) >= 2:
-            errormsg = f'coverage= of "{name or type(self).__name__}" is a function of the sim alone, fn(sim), returning a probability (or one for each person); it is not given uids'
+        if callable(coverage) and not isinstance(coverage, (ss.conditions.Cond, ss.Dist, ss.expressions.Expr)) and ss.utils.takes_uids(coverage):
+            errormsg = f'coverage= of "{name or type(self).__name__}" is a function of the sim (and of the intervention, as self), fn(sim), returning a probability (or one for each person); it is not given uids'
             raise TypeError(errormsg)
         self.coverage = coverage
         self.capacity = capacity
@@ -680,7 +680,7 @@ class Delivery(ss.products.EventSource, Intervention):
             out.append(f'"{self.name}" is delivered for several diseases (disease=[...]), which only agents follow; a product keyed by the diseases (e.g. efficacy=dict(hpv16=0.9, hpv18=0.9)) has a compartmental form')
         for key,attr in [('where', 'eligible'), ('who', 'deliver'), ('priority', 'priority')]:
             func = getattr(self, attr)
-            if callable(func) and not isinstance(func, (ss.conditions.Cond, ss.Dist, ss.expressions.Expr)) and ss.utils.n_args(func) >= 2:
+            if callable(func) and not isinstance(func, (ss.conditions.Cond, ss.Dist, ss.expressions.Expr)) and ss.utils.takes_uids(func):
                 reason = f'{key}= of "{self.name}" takes uids'
                 out.append(ss.modules.Preference(reason) if key == 'priority' and sim.pars.approximations != 'error' else reason)
         return out
@@ -1145,7 +1145,7 @@ class Delivery(ss.products.EventSource, Intervention):
 
     def delivered_by_function(self):
         """ Who the function given as who= says receives the product: UIDs, or a number of people per group """
-        out = self.deliver(self.sim)
+        out = ss.utils.call_fn(self.deliver, self=self, sim=self.sim)
         if self.in_compartments is not None and not isinstance(out, (ss.uids, ss.Arr, ss.conditions.Cond)):
             return self.in_compartments.delivered(out)
         return self.selector.to_selection(out, 'who=')
@@ -1183,7 +1183,7 @@ class Delivery(ss.products.EventSource, Intervention):
         selector = self.selector
         sel = self.offer(sel)
         self.tally('eligible', sel)
-        cov = selector.per_person(1.0 if self.coverage is None else self.coverage, convert=lambda val: -np.expm1(-self.convert(val)*self.span)) # A typed probability or rate is over the step or the round
+        cov = selector.per_person(1.0 if self.coverage is None else self.coverage, convert=lambda val: -np.expm1(-self.convert(val)*self.span), owner=self) # A typed probability or rate is over the step or the round
         if self.in_compartments is not None: # That share of each state and group
             chosen = sel*np.clip(cov, 0, 1)
         else:
@@ -1424,12 +1424,12 @@ class Delivery(ss.products.EventSource, Intervention):
             out = val.eval(selector)
         elif isinstance(val, ss.expressions.Expr):
             out = selector.expr(val)
-        elif callable(val) and ss.utils.n_args(val) >= 2:
+        elif callable(val) and ss.utils.takes_uids(val):
             if not selector.abm:
-                raise ss.CapabilityError(f'the priority of "{self.name}" is a function of (sim, uids), which exist only per agent.')
+                raise ss.CapabilityError(f'the priority of "{self.name}" is a function of uids, which exist only per agent.')
             auids = sim.people.auids
             out = np.zeros(selector.shape)
-            out[auids] = val(sim, auids)
+            out[auids] = ss.utils.call_fn(val, self=self, sim=sim, uids=auids)
         else:
             out = selector.per_person(val)
         out = np.asarray(out, dtype=float)

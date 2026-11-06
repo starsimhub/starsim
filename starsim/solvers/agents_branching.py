@@ -481,7 +481,7 @@ class Branching:
             mods = [m for leaf in tr.rate.leaves if isinstance(leaf, ss.par) and leaf.name and not leaf.literal for m in self.sim.modifiers.get((self.mod.name, 'par', leaf.name), [])]
             per_agent = any(m.where is not None or isinstance(m.amount, ss.by) or (callable(m.amount) and not isinstance(m.amount, ss.parameters.TimeValue)) for m in mods) # As does a modifier of a parameter for some people
             props = any(isinstance(leaf, (ss.expressions.Prop, ss.expressions.attr)) or (isinstance(leaf, ss.par) and isinstance(leaf.raw, ss.by) and leaf.raw.on_people(self.sim)) for leaf in tr.rate.leaves) # As does a property or attribute of people
-            self.by_groups[tr.name] = not spread and not per_agent and not props and not any(ss.utils.n_args(func) >= 2 for func in funcs) and not ss.expressions.clocks_in(tr.rate) # A function of the agents, or a clock, can give each a rate of their own
+            self.by_groups[tr.name] = not spread and not per_agent and not props and not any(ss.utils.takes_uids(func) for func in funcs) and not ss.expressions.clocks_in(tr.rate) # A function of the agents, or a clock, can give each a rate of their own
         return self.by_groups[tr.name] and np.ndim(self.mult_raw('transition', tr.name)) == 0 and np.ndim(self.mult_raw('rel_sus')) == 0
 
     def transmit_groups(self, tr, src):

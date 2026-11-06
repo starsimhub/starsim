@@ -1440,8 +1440,8 @@ class Sim(ss.modules.Base):
     def _init_rescale(self):
         """ Check that the diseases support dynamic rescaling, and create the distribution for it """
         for disease in self.diseases():
-            if disease.graph is None and (type(disease).not_naive is ss.Disease.not_naive or (isinstance(disease, ss.Infection) and not hasattr(disease, 'ti_infected'))):
-                errormsg = f'Dynamic rescaling (rescale=True) requires each disease written as code to define not_naive() and make_naive(), or to be an ss.Infection with a ti_infected state, but "{disease.name}" does not'
+            if disease.graph is None and (type(disease).not_naive is ss.Disease.not_naive or (isinstance(disease, ss.AgentDisease) and not hasattr(disease, 'ti_infected'))):
+                errormsg = f'Dynamic rescaling (rescale=True) requires each disease written as code to define not_naive() and make_naive(), or to be an ss.AgentDisease with a ti_infected state, but "{disease.name}" does not'
                 raise ValueError(errormsg)
         self.rng_rescale = ss.choose_n(name='rng_rescale') # Choose who to make naive when rescaling
         return

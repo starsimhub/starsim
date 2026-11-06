@@ -266,14 +266,14 @@ def test_ncd():
         def step_state(self):
             self.anemic[self.pars.p_onset.filter()] = True
 
-    class Background(ss.Infection): # No beta, so not transmitted
+    class Background(ss.AgentDisease): # No beta, so not transmitted
         pass
 
     sim2 = ss.Sim(diseases=[Anemia(), Background(init_prev=0.1)], networks='random', n_agents=500, verbose=0).run()
     anemia = sim2.diseases.anemia
     assert sim2.results.anemia.anemic[-1] > 400 # Anemia(p_onset=0.1) for 50 years
     assert sim2.results.background.infection.sum() == 0 # Not transmitted
-    assert isinstance(anemia, ss.Disease) and not isinstance(anemia, ss.Infection) and isinstance(sim2.diseases.background, ss.Disease)
+    assert isinstance(anemia, ss.Disease) and not isinstance(anemia, ss.AgentDisease) and isinstance(sim2.diseases.background, ss.Disease)
     assert not hasattr(anemia, 'susceptible') and 'infect' not in anemia.describe(output=True) # No states of an infection forced on it
 
     # An infection written as code with a beta but nothing to transmit it over is an error, not a run with no infections; with beta=0 it is not transmitted by design
@@ -332,7 +332,7 @@ def test_mtct():
 @sc.timer()
 def test_congenital():
     """
-    Test the generic congenital outcome framework in the base Infection class.
+    Test the generic congenital outcome framework in ss.AgentDisease.
     Uses CongenitalDisease example and verifies outcomes are sampled and fired.
     """
     sc.heading('Testing congenital framework...')
@@ -451,7 +451,7 @@ def test_same_transmission():
     sc.heading('Testing that an SIR declared and one written as code transmit the same, by the same code: the same infections, sources, and networks, CRN included')
     seeds = lambda self, sim, uids: (uids % 50 == 0).astype(float) # Every 50th agent, so seeding takes no random numbers
 
-    class CodedSIR(ss.Infection):
+    class CodedSIR(ss.AgentDisease):
         def __init__(self, **kwargs):
             super().__init__()
             self.define_pars(beta=ss.perday(0.1), dur_inf=10, init_prev=ss.bernoulli(seeds))
@@ -465,7 +465,7 @@ def test_same_transmission():
             super().set_prognoses(uids, sources)
             self.infected[uids] = True
             self.ti_infected[uids] = self.ti
-            self.ti_recovered[uids] = self.ti + 1 + self.pars.dur_inf # Infected at the end of the step (the seeds at the start, step 0), as ss.Infection teaches
+            self.ti_recovered[uids] = self.ti + 1 + self.pars.dur_inf # Infected at the end of the step (the seeds at the start, step 0), as ss.AgentDisease teaches
 
     kw = dict(n_agents=n_agents, stop=50, unit='day', verbose=0, analyzers=ss.infection_log(), networks=[ss.RandomNet(n_contacts=4), ss.RandomNet(n_contacts=2, name='other')],
               connectors=[ss.modify('sir.rel_sus', multiply=0.5, where=lambda sim: sim.people.age > 40), ss.modify('other.pars.n_contacts', multiply=0.5)],
@@ -485,7 +485,7 @@ def test_same_strains():
     seeds = lambda self, sim, uids: (uids % 50 == 0).astype(float) # Every 50th agent, so seeding takes no random numbers
     strains = lambda imm: ss.Strains(['a', 'b'], rel_trans=[1, 2], immunity=ss.immunity(due_to=imm, protection=[[1, 0.5], [0.5, 1]]) if imm else None)
 
-    class CodedSIR(ss.Infection):
+    class CodedSIR(ss.AgentDisease):
         def __init__(self, seed_strain, imm=None, **kwargs):
             super().__init__(strains=strains(imm and 'recovered'))
             self.define_pars(beta=ss.perday(0.1), dur_inf=10, init_prev=ss.bernoulli(seeds))
@@ -537,7 +537,7 @@ def test_same_strains():
 @sc.timer()
 def test_coded_strains():
     sc.heading('Testing strains of a disease written as code: passed on by the shared transmission, with protection between them')
-    class SIRS(ss.Infection):
+    class SIRS(ss.AgentDisease):
         def __init__(self, strains=None, **kwargs):
             super().__init__(strains=strains)
             self.define_pars(beta=ss.perday(0.08), dur_inf=8, dur_imm=30, init_prev=ss.bernoulli(0.02))
@@ -574,8 +574,8 @@ def test_coded_strains():
     with pytest.raises(ss.CapabilityError, match='max_strains'):
         SIRS(strains=ss.Strains(['a', 'b'], max_strains=2))
 
-    # The example in ss.Infection's docstring runs, and a library disease written as code takes strains= as well
-    example = ss.Infection.__doc__.split('```python')[1].split('```')[0]
+    # The example in ss.AgentDisease's docstring runs, and a library disease written as code takes strains= as well
+    example = ss.AgentDisease.__doc__.split('```python')[1].split('```')[0]
     ns = dict(ss=ss)
     exec(textwrap.dedent(example), ns)
     assert (np.bincount(ns['sim'].diseases.flu.strain[ns['sim'].diseases.flu.strain >= 0], minlength=2) > 0).all()
@@ -669,7 +669,7 @@ def test_code_seams():
 
 def test_coded_defaults():
     sc.heading('Testing a bare beta, typed parameters, and results in __init__() of a disease written as code')
-    class SI(ss.Infection):
+    class SI(ss.AgentDisease):
         def __init__(self):
             super().__init__()
             self.define_pars(beta=0.02, init_prev=ss.bernoulli(0.05))
@@ -812,6 +812,74 @@ def test_rel_sus_per_act():
     return
 
 
+def test_derived_results():
+    sc.heading('Testing the results of states marked infected, a list of transitions, and | for sources')
+
+    # A list of transitions and outcomes, and | for several sources; infected and prevalence count the states marked infected, beside the user's own
+    S, R = ss.states(2)
+    Ia, Iw = ss.states(2, infected=True)
+    inf_a = S >> Ia @ 0.1*Ia
+    inf_w = S >> Iw @ 0.01*(Ia + Iw)
+    rec = (Ia | Iw) >> R @ 0.05
+    prev_a = Ia/(S + Ia + Iw + R)
+    res = ss.Sim(ss.Disease([inf_a, inf_w, rec, prev_a], init=dict(Ia=0.01), name='d'), n_agents=500, verbose=0).run().results.d
+    assert np.array_equal(res.infected, res.Ia + res.Iw) and np.allclose(res.prevalence, res.infected/(res.S + res.Ia + res.Iw + res.R))
+    rec = Ia + Iw >> R @ 0.05 # The same as (Ia | Iw) >> R
+    same = ss.Sim(ss.Disease(inf_a, inf_w, rec, prev_a, init=dict(Ia=0.01), name='d'), n_agents=500, verbose=0).run().results.d
+    assert np.array_equal(res.R, same.R)
+    with pytest.raises(TypeError, match='brackets'):
+        Ia | Iw >> R @ 0.05 # Read by Python as Ia | (Iw >> R)
+
+    # Nothing marked, nothing guessed; | on states is + in a result too; a state called infected among several marked ones is an error
+    S, I, R = ss.states(3)
+    res = ss.Sim(ss.Disease(S >> I @ 0.1*I, I >> R @ 0.05, init=dict(I=0.01), ever=I | R, share=(I | R).frac, name='d'), n_agents=200, verbose=0).run().results.d
+    assert 'prevalence' not in res and 'infected' not in res
+    assert np.array_equal(res.ever, res.I + res.R) and np.allclose(res.share, res.ever/(res.S + res.ever))
+    with pytest.raises(ValueError, match='value for each person'): # Not silently dropped
+        ss.Disease(S >> I @ 0.1*I, I >> R @ 0.05, p=I/ss.person.n, name='d')
+    susceptible, recovered = ss.states(2)
+    exposed, infected = ss.states(2, infected=True)
+    with pytest.raises(ValueError, match='rename the state'):
+        ss.Disease(susceptible >> exposed @ 0.1*infected, exposed >> infected @ 0.1, infected >> recovered @ 0.05, name='d')
+    return res
+
+
+def test_declared_transmit():
+    sc.heading('Testing a declared disease with its own transmit(), and functions of self, sim, and uids')
+    kw = dict(n_agents=1000, start=2000, stop=2003, unit='year', verbose=0)
+
+    class Same(ss.SIR):
+        def transmit(self, transition):
+            return super().transmit(transition) # What the solver would do
+
+    class Half(ss.SIR):
+        def transmit(self): # One transmission: the argument can be left out
+            new = super().transmit()
+            return new[::2] if self.sim.solver == 'abm' else new/2
+
+    # As agents, the solver's own transmission is the same run; as an ODE, it is taken once a step, so is first order in dt
+    res = {cls.__name__: ss.Sim(cls(beta=ss.peryear(2), name='sir'), networks='random', solver='abm', **kw).run().results.sir.infection.sum() for cls in [ss.SIR, Same, Half]}
+    assert res['SIR'] == res['Same'] > res['Half']
+    ode = [ss.Sim(cls(beta=ss.peryear(2), name='sir'), solver='ode', dt=ss.days(7), **kw).run().results.sir.infection.sum() for cls in [ss.SIR, Same, Half]]
+    assert np.isclose(ode[0], ode[1], rtol=0.05) and ode[2] < ode[1]
+
+    # Several transmissions: transmit() is told which
+    class NoArg(ssl.TB):
+        def transmit(self):
+            return super().transmit()
+    with pytest.raises(TypeError, match='transmissions'):
+        ss.Sim(NoArg(), solver='abm', **kw).run()
+
+    # A rate as a function of any of self, sim, and uids, by name: the same expression as agents and as an ODE; uids only as agents
+    S, I, R = ss.states(3)
+    rate = lambda self, sim: self.pars.beta*self.I.n/sim.people.n_alive
+    n = [ss.Sim(ss.Disease(infection=S >> I @ rate, recovery=I >> R @ ss.years(1), beta=ss.par(ss.peryear(3)), init_prev=0.05, name='d'), solver=solver, **kw).run().results.d.infection.sum() for solver in ['abm', 'ode']]
+    assert np.isclose(n[0], n[1], rtol=0.15)
+    with pytest.raises(ss.CapabilityError, match='uids'):
+        ss.Sim(ss.Disease(infection=S >> I @ (lambda uids, sim: ss.peryear(0.5)*np.ones(len(uids))), recovery=I >> R @ ss.years(1), name='d'), solver='ode', **kw).run()
+    return res
+
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -833,3 +901,5 @@ if __name__ == '__main__':
     seams = test_code_seams()
     cong  = test_congenital()
     define = test_define_transitions()
+    derived = test_derived_results()
+    own = test_declared_transmit()

@@ -729,7 +729,7 @@ class Module(Base):
 
         An alias is only used if the attribute isn't otherwise defined, so it acts as a
         default that a subclass overrides simply by defining a state of the same name.
-        This is how `ss.Infection` treats everyone infected as infectious, while letting
+        This is how `ss.AgentDisease` treats everyone infected as infectious, while letting
         a subclass define `infectious` as a state (or another alias) in its own right.
 
         Each alias is either the name of another state, or a callable taking the module as

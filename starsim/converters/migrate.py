@@ -11,8 +11,8 @@ It reads `.py` files, and the Python code cells of notebooks (`.ipynb`), Quarto 
 
 The changes made are the renames (e.g. `ss.time_prob()` to `ss.probperyear()`, `ss.MFNet` and `ss.SexualNetwork` to `ss.SexualNet`,
 and `ss.library.X` to `ssl.X`), `verbose=-1` (now `verbose=0`), `res.annualize()` (now `res.resample('year')`), subclasses of
-Starsim 3's SIR, SIS, and SEIR written as code (e.g. `ss.SIS` to `ssl.AgentSIS`; Starsim 3's `ss.Disease` and `ss.Infection` keep
-their meaning), a `beta` pair on `ss.MFNet` (`beta={'mf': [0.08, 0.04]}`, which was [men to women, women to men]: now
+Starsim 3's SIR, SIS, and SEIR written as code (e.g. `ss.SIS` to `ssl.AgentSIS`; Starsim 3's `ss.Disease` keeps
+its meaning, and `ss.Infection` is now `ss.AgentDisease`), a `beta` pair on `ss.MFNet` (`beta={'mf': [0.08, 0.04]}`, which was [men to women, women to men]: now
 `ss.peract(m2f=0.08, f2m=0.04)`) or on a mother-to-child network (`[b, 0]`, which is now `b`, since those networks transmit one
 way), `copy_inputs=` (removed: a sim always copies its inputs), `ss.uids.cat()` (now `ss.uids.concatenate()`), an override of `ss.Infection`'s `infect()` (now `transmit()`), of `step_die(uids)` (now `on_death(uids)`), `preg.breastfeeding`
 (now `preg.lactating`), `ss.RandomNet(uniform_targets=True)` (now `method='uniform'`), the keywords of `ss.SIR`, `ss.SIS`, and `ss.SEIR` that Starsim 3 read itself
@@ -52,6 +52,8 @@ renames = [
     (r'\bss\.InfectionLog\b',      'ss.diseases.InfectionLog',       'ss.InfectionLog is ss.diseases.InfectionLog'),
     (r'\.annualize\(\)',           ".resample('year')",              "res.annualize() is res.resample('year') (a flow is summed, a stock taken at the year's end, a ratio averaged)"),
     (r'''(\bverbose['"]?\s*[=:]\s*)(-1|['"]brief['"])(?![\w.])''', r'\g<1>0', 'verbose=-1 ("brief") is verbose=0'),
+    (r'\bss\.Infection\b', 'ss.AgentDisease',                      "Starsim 3's ss.Infection, a disease written as code with transmission over the networks, is ss.AgentDisease (it runs only as agents; a declared disease is an ss.Disease)"),
+    (r'\b(super\(\)|self)\.validate_beta\(\s*\)', r'\1.route_betas()', "ss.Infection's validate_beta() is ss.AgentDisease's route_betas(): the pair of betas for each of the sim's networks"),
     (r'\bss\.demographics\.Pregnancy\b', 'ss.Pregnancy', "Starsim 3's pregnancy written as code is now ss.Pregnancy, the declared pregnancy (with Starsim 3's arguments; its states and results have v4's names)"),
     (r'\b(\w*preg\w*)\.pregnant\b',  r'\1.P',                        "ss.Pregnancy's pregnant is its state P"),
     (r'\b(\w*preg\w*)\.ti_pregnant\b', r'\1.ti_P',                   "ss.Pregnancy's ti_pregnant is ti_P, the step P was entered"),

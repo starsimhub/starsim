@@ -524,11 +524,10 @@ class Held(Product):
         elapsed = (self.sim.ti - self.ti_delivered.raw[uids])*engine.dt
         unit = self.sim.unit_base
         t = elapsed if unit is None else ss.time.get_dur_class(unit)(elapsed) # Time in steps, if the sim has no unit
-        nargs = 1 if isinstance(fn, boxcar) else ss.utils.n_args(fn)
-        if nargs == 2:
-            errormsg = f'the waning of "{self.name}" is a function of two arguments; it is a function of the time since delivery, fn(t), or of (t, sim, uids), with the sim and the agents who hold it'
-            raise TypeError(errormsg)
-        vals = fn(t, self.sim, uids) if nargs >= 3 else fn(t)
+        if isinstance(fn, boxcar):
+            vals = fn(t)
+        else: # A function of the time since delivery, fn(t), and of any of self, sim, and uids, the agents who hold it (by name; by position, fn(t, sim, uids))
+            vals = ss.utils.call_fn(fn, names=('t', 'self', 'sim', 'uids'), positions={1:('t',), 3:('t', 'sim', 'uids')}, t=t, self=self, sim=self.sim, uids=uids)
         out[uids] = np.broadcast_to(np.asarray(vals, dtype=float), len(uids))
         return out
 
@@ -1095,7 +1094,7 @@ class Diagnostic(Product):
     def agent_reasons(self, sim):
         out = super().agent_reasons(sim)
         detects = self.detects
-        if callable(detects) and not isinstance(detects, ss.conditions.Cond) and ss.utils.n_args(detects) >= 2:
+        if callable(detects) and not isinstance(detects, ss.conditions.Cond) and ss.utils.takes_uids(detects):
             out.append(f'what the test "{self.name}" detects is a function of uids')
         if self.result_delay is not None:
             out.append(f'the results of the test "{self.name}" come after a delay, which only agents wait for')

@@ -64,7 +64,9 @@ class COVID(ss.Disease):
     p_crit   = ss.par(0.25, doc='Share of severe cases that become critical',                  source='MEmilio ode_secir_simple')
     p_death  = ss.par(0.30, doc='Share of critical cases who die',                             source='MEmilio ode_secir_simple')
 
-    S, E, INS, ISy, ISev, ICr, R = ss.states('S E INS ISy ISev ICr R')
+    S = ss.State('S')
+    E, INS, ISy, ISev, ICr = ss.states('E INS ISy ISev ICr', infected=True) # Counted in the results infected and prevalence: the explicit form is prevalence = (E + INS + ISy + ISev + ICr)/(S + E + INS + ISy + ISev + ICr + R)
+    R = ss.State('R')
 
     infection = S >> E @ beta*(rel_ins*INS + rel_sym*ISy)
     onset     = E >> INS @ dur_exp
@@ -73,4 +75,3 @@ class COVID(ss.Disease):
     critical  = ss.Transition(ISev, [ICr, R], dur=dur_sev, p=[p_crit, None])
     outcome   = ss.Transition(ICr, [ss.null, R], dur=dur_crit, p=[p_death, None])
 
-    prevalence = (E + INS + ISy + ISev + ICr)/(S + E + INS + ISy + ISev + ICr + R)

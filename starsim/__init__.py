@@ -84,7 +84,7 @@ from .internals.dimensions import transfer
 from . import solvers
 
 #%% Diseases and demographics
-from .diseases import Disease, Infection, SIR, SEIR, SIS
+from .diseases import Disease, AgentDisease, SIR, SEIR, SIS
 from .strains import immunity, Strains
 from .demographics import Demographics, Births, Deaths, Pregnancy # After the diseases, since a pregnancy is one
 

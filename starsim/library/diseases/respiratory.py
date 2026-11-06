@@ -54,8 +54,9 @@ class Influenza(ss.Disease):
     dur_imm    = ss.par(ss.years(1), doc='Mean time immune after recovering',            source='Illustrative (antigenic drift)')
     birth_rate = ss.par(ss.peryear(0.02), doc='Birth and death rate',                    source='Illustrative')
 
-    S, E = ss.states('S E')
-    I = ss.State(init=0.0001, label='Infectious')
+    S = ss.State('S')
+    E = ss.State('E', infected=True) # Counted in the results infected and prevalence
+    I = ss.State(init=0.0001, label='Infectious', infected=True)
     R = ss.State()
 
     infection = S >> E @ beta*I
@@ -65,7 +66,6 @@ class Influenza(ss.Disease):
     births    = ss.birth(S, rate=birth_rate)
     deaths    = ss.death(rate=birth_rate)
 
-    prevalence = (E + I)/(S + E + I + R)
 
 
 class RSV(ss.Disease):
@@ -112,8 +112,9 @@ class RSV(ss.Disease):
     dur_imm    = ss.par(ss.years(1),  doc='Mean time immune after recovering',            source='Illustrative')
     birth_rate = ss.par(ss.peryear(0.02), doc='Birth and death rate', source='Illustrative')
 
-    M, S, E = ss.states('M S E')
-    I = ss.State(init=0.001, label='Infectious')
+    M, S = ss.states('M S')
+    E = ss.State('E', infected=True) # Counted in the results infected and prevalence
+    I = ss.State(init=0.001, label='Infectious', infected=True)
     R = ss.State()
 
     maternal  = M >> S @ dur_mat
@@ -124,7 +125,6 @@ class RSV(ss.Disease):
     births    = ss.birth(M, rate=birth_rate) # Babies are born protected
     deaths    = ss.death(rate=birth_rate)
 
-    prevalence = (E + I)/(M + S + E + I + R)
 
 
 class Pertussis(ss.Disease):
@@ -168,8 +168,9 @@ class Pertussis(ss.Disease):
     dur_imm    = ss.par(ss.years(30), doc='Mean time immune after recovering',    source='Wearing and Rohani (2009)')
     birth_rate = ss.par(ss.peryear(0.02), doc='Birth and death rate',             source='Wearing and Rohani (2009): 0.012 to 0.028 per year')
 
-    S, E = ss.states('S E')
-    I = ss.State(init=0.0001, label='Infectious')
+    S = ss.State('S')
+    E = ss.State('E', infected=True) # Counted in the results infected and prevalence
+    I = ss.State(init=0.0001, label='Infectious', infected=True)
     R = ss.State()
 
     infection = S >> E @ beta*I
@@ -179,4 +180,3 @@ class Pertussis(ss.Disease):
     births    = ss.birth(S, rate=birth_rate)
     deaths    = ss.death(rate=birth_rate)
 
-    prevalence = (E + I)/(S + E + I + R)

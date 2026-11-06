@@ -570,12 +570,12 @@ class Coverage(Expr):
             raise ss.CapabilityError(f'{self.name}({getattr(self.weight, "__name__", "weight")}) counts each holder by a function of the time since delivery, which in a compartmental run needs the product to wane as an ss.boxcar() (whose levels give the time)')
         k = b.stages
         times = [(i + 0.5)*b.plateau/k for i in range(k)] + ([b.plateau + b.decay] if b.decay is not None else [])
-        if ss.utils.n_args(self.weight) >= 2:
-            raise ss.CapabilityError(f'{self.name} counts each holder by a function of (t, sim, uids), whose uids exist only per agent; with solver="{sim.solver}", give a function of t alone')
+        if ss.utils.takes_uids(self.weight, names=('t', 'self', 'sim', 'uids'), positions={1:('t',), 3:('t', 'sim', 'uids')}):
+            raise ss.CapabilityError(f'{self.name} counts each holder by a function of uids, which exist only per agent; with solver="{sim.solver}", give a function of t (and sim) alone')
         unit = ss.time.get_dur_class(sim.unit_base)
         vals = []
         for t in times: # Each level's time, relative to the boxcar's own waning
-            w = np.ravel(np.asarray(self.weight(unit(np.array([t.to(sim.unit_base).value]))), dtype=float))[0]
+            w = np.ravel(np.asarray(ss.utils.call_fn(self.weight, names=('t', 'self', 'sim', 'uids'), positions={1:('t',), 3:('t', 'sim', 'uids')}, t=unit(np.array([t.to(sim.unit_base).value])), sim=sim), dtype=float))[0]
             vals.append(w/max(float(b(t)), 1e-12))
         return np.array([0.0] + vals)
 

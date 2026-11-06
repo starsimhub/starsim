@@ -347,22 +347,74 @@ def caller_names(depth=1, skip=None):
     return out
 
 
-def n_args(func):
-    """ The number of positional arguments a function needs: `fn(sim)` is 1 and `fn(sim, uids)` is 2, and arguments with defaults (`fn(sim, years=5)`) do not count """
+fn_names = ('self', 'sim', 'uids') # The arguments a user function can take by name: its module, the sim, and the agents
+fn_positions = {0:(), 1:('sim',), 2:('sim', 'uids'), 3:('self', 'sim', 'uids')} # By position, for a function whose arguments have other names
+
+
+def fn_args(func, names=fn_names, positions=None):
+    """
+    The arguments a user function takes, in its order: those it names among `names` (by default `self`, the module whose
+    function it is; `sim`; and `uids`, the agents it is for), so any of `fn(sim)`, `fn(self, sim)`, `fn(sim, uids)`,
+    `fn(self, sim, uids)` (or none) can be written; a function whose arguments have other names takes them by position
+    (`fn(s)` is the sim, `fn(s, u)` the sim and the agents, `fn(m, s, u)` all three). Arguments with defaults (`fn(sim,
+    years=5)`) are not counted. Worked out once for each function.
+
+    Args:
+        func (callable): the function
+        names (tuple): the arguments it can take by name
+        positions (dict): for each number of arguments, which they are by position (by default, see `fn_positions`)
+    """
+    key = (names, None if positions is None else tuple(positions.items()))
     try:
-        return _arities[func] # Worked out once for each function, since it can be asked at every step
+        known = _fn_args[func]
+        if key in known:
+            return known[key]
     except (KeyError, TypeError):
-        pass
+        known = None
     import inspect
     kinds = [inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD]
-    out = sum(1 for p in inspect.signature(func).parameters.values() if p.kind in kinds and p.default is inspect.Parameter.empty)
+    given = [name for name,p in inspect.signature(func).parameters.items() if p.kind in kinds and p.default is inspect.Parameter.empty]
+    if all(name in names for name in given):
+        out = tuple(given)
+    else:
+        positions = fn_positions if positions is None else positions
+        if len(given) not in positions:
+            errormsg = f'the function "{getattr(func, "__name__", "function")}" takes {len(given)} arguments ({sc.strjoin(given)}); it takes any of {sc.strjoin(names)}, by those names'
+            raise TypeError(errormsg)
+        out = positions[len(given)]
     try:
-        _arities[func] = out
+        if known is None:
+            known = _fn_args[func] = {}
+        known[key] = out
     except TypeError: # A callable that can't be weakly referenced, or hashed
         pass
     return out
 
-_arities = weakref.WeakKeyDictionary() # The functions of n_args(), kept only while the function is, so that a sim in a closure can be freed
+_fn_args = weakref.WeakKeyDictionary() # The arguments of each function of fn_args(), kept only while the function is, so that a sim in a closure can be freed
+
+
+def takes_uids(func, **kwargs):
+    """ Whether a user function takes the agents (`uids`), so is a function of each agent, which exists only when run as agents (see `fn_args()`) """
+    return 'uids' in fn_args(func, **kwargs)
+
+
+def call_fn(func, names=fn_names, positions=None, **values):
+    """
+    Call a user function with the arguments it takes (see `fn_args()`), from those given by name
+
+    Args:
+        func (callable): the function
+        names (tuple): the arguments it can take by name
+        positions (dict): for each number of arguments, which they are by position
+        values (dict): the value of each argument, e.g. `self=mod, sim=sim, uids=uids`
+
+    Example:
+        ```python
+        ss.utils.call_fn(lambda self, sim: self.pars.beta*sim.people.n_alive, self=sir, sim=sim) # Each argument is passed if it is named
+        ```
+    """
+    return func(*[values.get(name) for name in fn_args(func, names=names, positions=positions)])
+
 
 
 # %% Data cleaning and processing
