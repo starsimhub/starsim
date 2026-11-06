@@ -1772,7 +1772,7 @@ class SIR(Disease):
     Note: CRN safe as agents.
 
     Args:
-        beta (float/`ss.per`/dict): the transmission rate (per contact, if there are networks; a dict gives one per network, and `default=` for the networks it does not name)
+        beta (float/`ss.per`/dict): the transmission rate (per contact, if there are networks, over each step of the contact, so `ss.probperday(p)` gives each contact a chance p in a day; a dict gives one per network, and `default=` for the networks it does not name)
         init_prev (float): the fraction of people who start infected (or, above 1, a number of people)
         dur_inf (float/`ss.Duration`/`ss.Dist`): the mean time that people are infected for (by default 6 years), as an exponential; give a distribution (e.g. `ss.lognormal(mean=ss.years(6))`) for another shape
         p_death (float): the probability of death from infection, at the end of the infection (by default 0)
@@ -1805,7 +1805,7 @@ class SEIR(Disease):
     Note: CRN safe as agents.
 
     Args:
-        beta (float/`ss.per`/dict): the transmission rate (per contact, if there are networks; a dict gives one per network, and `default=` for the networks it does not name)
+        beta (float/`ss.per`/dict): the transmission rate (per contact, if there are networks, over each step of the contact, so `ss.probperday(p)` gives each contact a chance p in a day; a dict gives one per network, and `default=` for the networks it does not name)
         init_prev (float): the fraction of people who start infected, who start exposed, in `E` (or, above 1, a number of people); to start people infectious, give `init=dict(I=0.01)` or `init_n=dict(I=10)` instead
         dur_exp (float/`ss.Duration`/`ss.Dist`): the mean time that people are exposed (latent) for (by default 0.5 years; a number is in the model's unit), as an exponential
         dur_inf (float/`ss.Duration`/`ss.Dist`): the mean time that people are infectious for (by default 6 years), as an exponential
@@ -1841,7 +1841,7 @@ class SIS(Disease):
     Note: CRN safe as agents.
 
     Args:
-        beta (float/`ss.per`/dict): the transmission rate (per contact, if there are networks; a dict gives one per network, and `default=` for the networks it does not name)
+        beta (float/`ss.per`/dict): the transmission rate (per contact, if there are networks, over each step of the contact, so `ss.probperday(p)` gives each contact a chance p in a day; a dict gives one per network, and `default=` for the networks it does not name)
         init_prev (float): the fraction of people who start infected (or, above 1, a number of people)
         dur_inf (float/`ss.Duration`/`ss.Dist`): the mean time that people are infected for (by default 10 years), as an exponential unless a distribution is given
         kwargs (dict): passed to `ss.Disease`, e.g. `name`
