@@ -301,7 +301,7 @@ class Module(Base):
         super().__init_subclass__(**kwargs)
         if 'update_results' in cls.__dict__:
             errormsg = (f'{cls.__name__} defines update_results(), which Starsim no longer calls: split it into record_stocks(), for the results that are the state at '
-                        f'the start of the step (e.g. a count of a state), and record_flows(), for those about what happened in the step (e.g. new infections); see ss.loop.Loop')
+                        f'the start of the step (e.g. a count of a state), and record_flows(), for those about what happened in the step (e.g. new infections); see ss.loop.Loop, and https://docs.starsim.org/v3v4 for help migrating from Starsim 3')
             raise TypeError(errormsg)
         return
 
@@ -651,7 +651,7 @@ class Module(Base):
         # Should be no remaining pars
         remaining = set(pars.keys()) - set(module_args) - set(ss.Timeline.time_args)
         if len(remaining):
-            errormsg = f'{len(remaining)} unrecognized argument{"s" if len(remaining) > 1 else ""} for {self.name}: {sc.strjoin(sorted(remaining))}'
+            errormsg = f'{len(remaining)} unrecognized argument{"s" if len(remaining) > 1 else ""} for {self.name}: {sc.strjoin(sorted(remaining))}{ss.errors.starsim3(keys=sorted(remaining), call=f"ss.{type(self).__name__}")}'
             raise ValueError(errormsg)
         return
 

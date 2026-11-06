@@ -156,7 +156,7 @@ flags = [
     (r'\bss\.(calibration\.)?(Calibration|CalibComponent|BetaBinomial|Binomial|DirichletMultinomial|GammaPoisson|Normal)\b|\bss\.calibration\b|\b(linear_interp|linear_accum|step_containing)\b', "Starsim 3's calibration was removed: bounds on the parameters (ss.par(v, bounds=[lo, hi])), the data on the sim (ss.Sim(..., data=df)), and sim.fit(); a likelihood by series (likelihood=dict(prevalence=ss.normal(scale=s)), or ss.binom, ss.nbinom, ss.poisson), or loss=fn(sim) for a measure of your own"),
     (r'\.plot_compare\(', 'msim.compare(do_plot=True) (with t= and sim_inds= as before)'),
     (r'\bss\.dynamics_by_age\b', "ss.dynamics_by_age was removed: stratify the sim by age (sim.stratify(age=[0, 20, 40])) and read a result by age group (res.I.by('age')), or write an analyzer of your own (see the user guide on analyzers)"),
-    (r'\b(ppl|people)\.filter\(', "People.filter() and its Filter were removed: use the states as arrays and conditions, e.g. ppl.female.uids, (ppl.female & (ppl.age > 5)).uids, or where=ss.person.age < 15"),
+    (r'\b(ppl|people)\.filter\(|\bss\.Filter\b', "People.filter() and its Filter were removed: use the states as arrays and conditions, e.g. ppl.female.uids, (ppl.female & (ppl.age > 5)).uids, or where=ss.person.age < 15"),
     (r'\.to_df\(.*\bdescend\s*=', 'results.to_df() always includes the results of the modules too (as sim.to_df() did), with the times as the column time, or as the index with set_date_index=True'),
     (r'''\[\s*['"]timevec['"]\s*\]|columns=dict\(timevec=''', "if this is a column of to_df(), the times are the column time (sim.results.timevec is unchanged)"),
     (r'\bss\.(Samples|Dataset|samples)\b', 'ss.Samples and ss.Dataset were removed: ss.parallel(sim, n_runs=n) gives the runs (msim.results, msim.to_df()); save their dataframes to keep them'),
@@ -303,6 +303,13 @@ def removed(name):
             if re.search(pattern, text):
                 return message
     return None
+
+
+def removed_keyword(key, call='ss.Sim'):
+    """ What replaces `key=` of `call` (e.g. 'ss.Sim', 'ss.Pregnancy'), a keyword of Starsim 3's that Starsim 4 does not take, from the migration of `call(key=True)`; or None """
+    notes = lambda text: [note for line, note in sum(migrate_text(text)[1:], []) if line] # Line 0 is about the imports
+    new = [note for note in notes(f'{call}({key}=True)\n') if note not in notes(f'{call}()\n')] # Only what the keyword brings, not what the call itself does (e.g. ss.SIR's flag)
+    return new[0] if new else None
 
 
 targeted = ['ss.Delivery', 'ss.vaccinate', 'ss.screen', 'ss.treat', 'ss.modify', 'ss.Transition'] # What takes who=, where=, when=, or on=

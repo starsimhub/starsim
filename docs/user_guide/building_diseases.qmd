@@ -86,7 +86,7 @@ res = ss.Sim(seir, stop=ss.days(120), verbose=0).run().results.seir
 print('Peak prevalence:', round(res.prevalence.max(), 3))
 ```
 
-A set of states is written with `+` or `|`, which mean the same for states: `E | I` and `E + I` are the number in either, `(E | I).frac` their share, and `(E | I) >> R` a transition from either. Without brackets, Python reads `E | I >> R` as `E | (I >> R)`, which raises an error saying so. Someone who dies of the disease leaves the population, `I >> ss.dead` (or a branch to it), and the deaths so far are `res.death.cum`; a state `D` for them would keep them among the people, and in the denominator of `prevalence`.
+A set of states is written with `+` or `|`, which mean the same for states: `E | I` and `E + I` are the number in either, `(E | I).frac` their share, `0.3*(E | I)` exposure to either in a rate, and `(E | I) >> R` a transition from either. Without brackets, Python reads `E | I >> R` as `E | (I >> R)`, which raises an error saying so. Someone who dies of the disease leaves the population, `I >> ss.dead` (or a branch to it), and the deaths so far are `res.death.cum`; a state `D` for them would keep them among the people, and in the denominator of `prevalence`.
 
 **Several sources of infection** are a sum: `S >> E @ beta*(I + 0.5*A)` says that people in `A` (say, without symptoms) are half as infectious as those in `I`. A rate must be linear in its bare states, since exposure on a network is a sum over contacts; anything nonlinear is written with counts (`I.n`).
 

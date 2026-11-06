@@ -361,7 +361,7 @@ class Pars(sc.obj):
         new_keys = pars.keys()
         mismatches = [key for key in new_keys if key not in available_keys]
         if len(mismatches):
-            errormsg = f'Key(s) {mismatches} not found; available keys are {available_keys}'
+            errormsg = f'Key(s) {mismatches} not found; available keys are {available_keys}{ss.errors.starsim3(keys=mismatches, call="ss.Sim" if isinstance(self, ss.SimPars) else "ss.Module")}'
             raise sc.KeyNotFoundError(errormsg)
         return
 

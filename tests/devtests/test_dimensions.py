@@ -804,8 +804,7 @@ def test_properties_in_rates():
     ode.stratify(age=[0, 50])
     ode.run()
     assert np.isclose(sim.results.sir.R[-1], ode.results.sir.R[-1], rtol=0.15)
-    with pytest.raises(TypeError, match=r'0.3\*\(Ia \+ Is\)'):
-        ss.Disease(S, I, R, infection=S >> I @ 0.3*(S | I))
+    assert repr(0.3*(S | I)) == repr(0.3*(S + I)) # A set of states in a rate is their sum
 
     # Shown as people.urban and expit()
     sim = make('abm')

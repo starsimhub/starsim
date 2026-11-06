@@ -49,9 +49,9 @@ def as_expr(obj):
     if isinstance(obj, Expr):
         return obj
     elif isinstance(obj, ss.conditions.Cond): # A property of people (ss.person.age), or a condition, which is 1 or 0 for each person
-        if states_or(obj): # e.g. 0.3*(Ia | Is), which almost always meant exposure to people in either
-            errormsg = 'A condition on states alone cannot be used in a rate: | on states is a condition, for where=; the people in several states are their sum, e.g. 0.3*(Ia + Is)'
-            raise TypeError(errormsg)
+        states = states_of(obj)
+        if states is not None: # A set of states, Ia | Is, in a rate is the same as Ia + Is: exposure to the people in either
+            return sum(states[1:], states[0])
         return Prop(obj)
     elif isinstance(obj, ss.transitions.Transition) and obj.source is None: # e.g. S >> I + R @ 0.1, where @ binds before +
         errormsg = f'"@" binds before "+", so the destination of a transition is not a sum: several destinations are a list, with p= for the share of each, e.g. ss.Transition(I, [R, D], dur=10, p=[0.9, 0.1])'
@@ -69,13 +69,11 @@ def as_expr(obj):
 _wrapped = weakref.WeakValueDictionary() # The parameter each object has been wrapped in, by id; the parameter holds the object, so the id is not reused while it lives
 
 
-def states_or(cond):
-    """ Whether a condition is, or does arithmetic on, states alone joined by |, e.g. Ia | Is, or 0.3*(Ia | Is) """
-    def only_states(c):
-        return isinstance(c, ss.conditions.Cond) and (c.op == 'state' or (c.op == '|' and all(only_states(arg) for arg in c.args)))
-    if cond.op == '|':
-        return only_states(cond)
-    return cond.op in '+-*/' and any(isinstance(arg, ss.conditions.Cond) and states_or(arg) for arg in cond.args)
+def states_of(cond):
+    """ The states a condition joins with |, e.g. [Ia, Is] for Ia | Is, which means the same as Ia + Is in a rate or a count; None if it is anything else """
+    if isinstance(cond, ss.conditions.Cond) and cond.op == '|':
+        return ss.conditions.state_objects(cond)
+    return None
 
 
 arith = {'+':operator.add, '-':operator.sub, '*':operator.mul, '/':operator.truediv, '**':operator.pow} # For the values of expressions of parameters (see run_value())

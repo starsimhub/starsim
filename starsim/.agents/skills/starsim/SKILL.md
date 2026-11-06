@@ -71,7 +71,7 @@ Ask the user, rather than choosing, when a value would change the answer and has
 
 ## Where to read
 
-https://starsim.org/v4/llms.txt is the map: every tutorial and user guide page, with a summary and a link to its text, then every public name with its signature, summary, and defaults. It is for the latest release, which can differ from the version installed (`ss.__version__`); for that version's own docs of a name, use `help(ss.Sim)`. Read the page before writing that part of a model.
+https://starsim.org/v4/llms.txt is the map: every tutorial and user guide page, with a summary and a link to its text, then every public name with its signature, summary, and defaults. It is for the latest release, which can differ from the version installed (`ss.__version__`); for that version's own docs of a name, run `starsim help Sim` (or `help(ss.Sim)`), which for any other term lists the names and pages that mention it. Read the page before writing that part of a model.
 
 | Task | Pages |
 | --- | --- |
