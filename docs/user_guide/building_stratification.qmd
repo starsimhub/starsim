@@ -181,8 +181,11 @@ res = sim.results.measles
 res.I                                  # Everyone in I
 res.I.select(age='0-14')               # Children in I (or age=0, by position)
 res.I.select(age=0, vaccinated=True)   # Vaccinated children in I
+res.I.select(age=[1, 2])               # Everyone 15 and over in I: the levels listed are added up, as one series
 res.infection.by('age')                # New infections, one series per age group
 ```
+
+A list of levels gives their total, so coarser groups don't need a model stratified more coarsely: with `age=[0, 10, 15]` (groups `0-9`, `10-14`, and `15+`), the under-15s are `select(age=[0, 1])` (or `age=['0-9', '10-14']`), and the rest `select(age='15+')`.
 
 A ratio, such as prevalence (`I/N`), is never averaged over groups: its numerator and denominator are each summed over the groups selected, and then divided. See [Results](building_results.qmd).
 

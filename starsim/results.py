@@ -261,6 +261,11 @@ class Result(ss.arrays.BaseArr):
         """
         Select groups of a stratified result by name: keeps the given levels of each dimension, and sums over the rest
 
+        A list of levels gives one result, their total (e.g. coarser age groups). For strains carried together
+        (`ss.Strains(max_strains=2)`), the levels are the sets of strains carried (`'A'`, `'B'`, `'A+B'`; ordered by when each
+        was acquired, e.g. `'B+A'` as well, if there are more strains than can be carried at once), so each person is counted
+        once; `by()` has a column for each strain instead, counting a person who carries several in each.
+
         The values by group are kept at every time point, or, if that would take too much memory, every few steps
         (see `ss.solvers.group_rows()` and the sim parameter `results`); then the result has a value at the end of each
         of these periods, which for a flow is its total over the period.
@@ -276,6 +281,8 @@ class Result(ss.arrays.BaseArr):
             ```python
             res = sim.results.sir
             res.I.select(age=0) # The youngest age group
+            res.I.select(age=[0, 1]) # The first two age groups, added up (e.g. under 15, with stratify(age=[0, 10, 15]))
+            res.I.select(strain=['A', 'A+B']) # Those who carry strain A, with ss.Strains(['A', 'B'], max_strains=2), each counted once
             res.I.select(sex='female', risk='high')
             msim.results.sir.I.select(beta=0.3).quantiles() # The runs with beta = 0.3
             res.cin.select(to='X') # The flow to one destination of a transition with several, as res.cin.X is
@@ -556,7 +563,8 @@ class Result(ss.arrays.BaseArr):
             dim (str): the dimension, e.g. 'age'; or, for the results of a treatment of several diseases or transitions, 'disease' or 'edge'
 
         For a result across runs, the columns come after the runs and time points, so `res.by('age').young` is a result across runs.
-        For strains carried together (`ss.Strains(max_strains=2)`), the columns are the strains, and a person who carries several is in each.
+        For strains carried together (`ss.Strains(max_strains=2)`), the columns are the strains, and a person who carries several is in each,
+        so the columns add up to more than the total; `select()` takes the sets of strains carried (e.g. `select(strain='A+B')`), each person once.
         """
         levels, pick = self._axis(dim)
         if dim in self._run_cols().values():

@@ -204,7 +204,8 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         self._subscribers = None
         self._started = False
         self._backfill = None # While people are back-dated: see backfill()
-        self.round = (None, 0) # The step and the round of moves within it that the engine's draws are keyed by: see new_round()
+        self.round = (None, 0, None) # The step and the round of moves within it that the engine's draws are keyed by, and the transition it is for: see new_round()
+        self._round_seeds = {} # The seeds of the rounds named by a transition: see round_seed()
         self._drawn = {} # With STARSIM_CHECK_DRAWS, who has been drawn from each stream in this round: see draw()
         self._route_memo = None # The coefficients worked out on each route in a transmission: see route_beta()
         self._route_kept = {} # Those that are fixed for the run (see is_route_fixed()), and whether each coefficient is
@@ -232,7 +233,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         strats = list(graph.strats) + [s for s in self.sim.groups.sim_strats if s not in graph.strats]
         adjusted = {self.sim.groups.dim_index(s.name) for s in strats if any(key.rpartition('.')[2] in graph.transitions for key in s.adjust)}
         rescalable = rescalable or bool(adjusted & self.changing_dims) # Or a multiplier by level, for people who can change level
-        read = None if ss.options.keep_times else set() # The times of entering a state kept for code to read (None for all); the engine keeps those of the states it schedules exits from, that a clock reads, or whose exits have after=
+        read = None if self.sim.pars.keep_times else set() # The times of entering a state kept for code to read (None for all); the engine keeps those of the states it schedules exits from, that a clock reads, or whose exits have after=
         clocks = [tuple(clock.names) for m in list(self.sim.declared) + list(self.sim.connectors()) + list(self.sim.interventions()) for clock in ss.solvers.choose.clocks_of(m)] # The clocks the sim's modules read (of this module's states or another's)
         clocks += ss.expressions.Clock.sets_of(mod) # And those made of this module's states for code to read, but no one else's: the names of states alone would match another module's, or one of an earlier sim
         clocked = {name for names in clocks for name in names} # The states a clock reads, whose times of entering are kept
@@ -244,7 +245,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
             for d in {d.name for tr in onward for d in (tr.dst or []) if getattr(d, 'people', False)} - infected:
                 infected.add(d)
                 todo.append(d)
-        hazards = {state.name:[tr for tr in graph.exits[state.name].hazards if not tr.undriven] for state in graph.people_states} # The rates out of each state; a transition with no driver is only by intervention, so nothing to draw
+        hazards = {state.name:[tr for tr in graph.exits[state.name].hazards if not tr.undriven and not self.never(tr)] for state in graph.people_states} # The rates out of each state; a transition with no driver (or a rate of 0 for the run) is only by intervention, so nothing to draw
         self.halved = set() if self.wholestep else infected & {s.name for s in graph.infectious if hazards[s.name]}
         self.late = set() # The states with a late_ array: see enter()
         unkept = [state.name for state in graph.people_states if read is not None and not state.keep_time and state.name not in read and state.name not in self.scheduled and state.name not in clocked and not any(getattr(tr, 'after', None) is not None for tr in graph.exits[state.name].hazards)]
@@ -1274,6 +1275,22 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
             return False
         vals = [v for given in by.given.values() for v in (given.values() if isinstance(given, dict) else sc.tolist(given))]
         return not any(isinstance(v, ss.parameters.TimeValue) or (callable(v) and not isinstance(v, ss.TimePar)) for v in vals)
+
+    def never(self, tr):
+        """
+        Whether a rate out of a state is 0 for everyone for the whole run (a factor that is a number or a parameter of 0, with no modifiers),
+        so it moves nobody: it is not drawn, as for a transition with no driver, and declaring it leaves the draws of the others as they were
+        """
+        if tr.contact or tr.rate is None or self.sim.modifiers.get((self.mod.name, 'transition', tr.name)):
+            return False
+        E = ss.expressions
+        for f in E.factors(tr.rate)[0]:
+            if isinstance(f, E.par) and not (f.name and not f.literal and self.sim.modifiers.get((self.mod.name, 'par', f.name))):
+                v = f.value
+                v = getattr(v, 'value', v) # A rate of 0 (e.g. ss.peryear(0))
+                if sc.isnumber(v) and v == 0:
+                    return True
+        return False
 
     def is_fixed(self, x):
         """

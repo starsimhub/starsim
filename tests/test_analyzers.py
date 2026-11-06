@@ -2,6 +2,7 @@
 Test analyzers
 """
 
+import numpy as np
 import sciris as sc
 import starsim as ss
 sc.options(interactive=False) # Assume not running interactively
@@ -27,11 +28,35 @@ def test_infection_log(do_plot=False):
     return log
 
 
+@sc.timer()
+def test_shared_log():
+    """ Several infection logs share the disease's, each step's entries can be read as the sim runs, and the strain transmitted is logged """
+    sc.heading('Testing a shared infection log')
+    class steps(ss.Analyzer):
+        def init_pre(self, sim):
+            super().init_pre(sim)
+            self.n = []
+        def step(self):
+            self.n.append(len(self.sim.diseases.d.infection_log.to_df(ti=self.ti)))
+
+    S, I, R = ss.states('S I R')
+    dis = ss.Disease(infection=S >> I @ ss.peryear(1)*I, recovery=I >> R @ ss.years(2), init=dict(I=0.05), strains=ss.Strains(['A', 'B']), name='d')
+    sim = ss.Sim(dis, n_agents=500, dur=5, networks='random', analyzers=[ss.infection_log(name='a'), ss.infection_log(name='b'), steps()], verbose=0).run()
+    a, b = sim.analyzers.a, sim.analyzers.b
+    assert a.log is b.log is sim.diseases.d.infection_log # Shared, not taken by the first
+    df = a.to_df()
+    assert sim.analyzers.steps.n == np.bincount(np.searchsorted(sim.t.yearvec, df.t), minlength=sim.t.npts).tolist() # Each step's entries, as they were logged
+    assert sim.analyzers.steps.n[1:] == sim.results.d.infection.values[1:].tolist() # After the seeds, the step's infections
+    assert set(df.strain) == {'A', 'B'}
+    return sim
+
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
     T = sc.timer()
 
     log    = test_infection_log(do_plot=do_plot)
+    shared = test_shared_log()
 
     T.toc()

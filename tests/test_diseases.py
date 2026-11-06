@@ -742,6 +742,8 @@ def test_define_transitions():
     assert 'extra' in extra.transitions and 'code_par' in extra.code_pars
     with pytest.raises(ss.CapabilityError): # Declared after the disease was made
         extra.define_results(share_I=extra.I.frac)
+    with pytest.raises(ss.CapabilityError, match='subclass'): # Likewise a transition assigned to it, which would not be part of it
+        extra.waning = extra.R >> extra.S @ ss.days(10)
 
     class Fitted(ss.Disease): # A parameter given with bounds is a value, not a declaration, so the states and transitions can follow
         def __init__(self, **kwargs):

@@ -111,6 +111,23 @@ def test_strain_cure():
 
 
 @sc.timer()
+def test_strain_levels():
+    sc.heading('Testing the strains of a declared subclass in its __init__(), and no strain level for the uninfected')
+    class TwoStrains(ss.Disease):
+        def __init__(self, **kwargs):
+            super().__init__(strains=ss.Strains(['DS', 'RIF'], name='resistance', split=[0.5, 0.5]), init_prev=0.2, **kwargs)
+            assert self.strains.names == ['DS', 'RIF'] # Before the disease is built
+            self.define_states(ss.states('S I R'))
+            self.define_transitions(infection=self.S >> self.I @ ss.peryear(2)*self.I, recovery=self.I >> self.R @ ss.years(0.5), waning=self.R >> self.S @ ss.years(0.5))
+    sim = ss.Sim(TwoStrains(name='tb'), networks='random', n_agents=1000, start=2000, stop=2002, rand_seed=1, **kw).run()
+    tb = sim.diseases.tb
+    level = sim.groups.level('resistance')
+    assert len(tb.I.uids) and (level[tb.I.uids] >= 0).all()
+    assert len(tb.S.uids) and (level[tb.S.uids] == -1).all() and (level[tb.R.uids] == -1).all() # Not DS, the first strain
+    return sim
+
+
+@sc.timer()
 def test_commuting():
     sc.heading('Testing commuters who leave home and come back at finite rates, as a dimension of where people are now')
     beta, gamma, away, N = 1.0, 0.1, 0.1, np.array([8000, 2000.])
@@ -400,6 +417,7 @@ def test_places_by_name():
 
 if __name__ == '__main__':
     cure    = test_strain_cure()
+    slev = test_strain_levels()
     commuting = test_commuting()
     register = test_register()
     values  = test_property_values()

@@ -297,7 +297,7 @@ class Expressions:
                 raise ValueError(errormsg)
             arr = mod[self.sets[key]]
         if isinstance(arr, ss.arrays.Unkept):
-            errormsg = f'{clock} reads the time of entering {names[0]}, which was not kept since no clock of it was known when the sim was built; make the clock before the sim, or set ss.options.keep_times = True'
+            errormsg = f'{clock} reads the time of entering {names[0]}, which was not kept since no clock of it was known when the sim was built; make the clock before the sim, or make the sim with ss.Sim(..., keep_times=True)'
             raise ValueError(errormsg)
         start = np.asarray(arr.raw[uids], dtype=float)
         ti = self.ti
@@ -509,7 +509,7 @@ class Expressions:
             if not paths.get(state.name): # The first state, or one no transition leads to: placement is entering it
                 self.fire(None, uids, -1, self.state_index[state.name])
             for tr,src,dst in paths.get(state.name, []):
-                self.new_round() # One for each transition, as each can set an attribute again
+                self.new_round(tr.name) # One for each transition, as each can set an attribute again
                 arr = mod[f'ti_{src}']
                 kept = not isinstance(arr, ss.arrays.Unkept) # Not kept if nothing reads the time of entering it, which then this cannot either
                 if kept:

@@ -106,10 +106,13 @@ def test_two_products():
         assert 'campaign' in ss.Sim(make_pars(), interventions=intervention).init().interventions
         assert 'campaign' in ss.Sim(make_pars()).new(interventions=intervention).init().interventions
 
-    # Two products of the same default name: the warning names the product's own class
+    # Two products of the same default name, and a product named as its delivery is: each is named for its delivery, without a warning
     t1, t2 = [ss.treat(ss.Treatment(cure=c), coverage=0.5, at=2005) for c in [0.5, 0.9]]
-    with pytest.warns(Warning, match=r"ss\.Treatment\(\.\.\., name="):
-        ss.Sim(make_pars(), interventions=[t1, t2]).init()
+    dst = ss.screen(ss.Diagnostic(sensitivity=0.9, name='dst'), at=2005, name='dst')
+    with warnings.catch_warnings():
+        warnings.simplefilter('error')
+        three = ss.Sim(make_pars(), interventions=[t1, t2, dst]).init()
+    assert [p.name for p in three.products()] == ['treatment', 't2_product', 'dst_product']
     return sim
 
 

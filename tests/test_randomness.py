@@ -431,6 +431,27 @@ def test_repeated_uids():
     return sims
 
 
+@sc.timer()
+def test_crn_undriven():
+    """ Test that declaring a transition nobody takes, or one with a rate of 0, leaves every draw of the run as it was, with and without strains """
+    sc.heading('Testing that an undriven transition leaves the draws as they were')
+    def make(extra=None, strains=False):
+        S, L, I, R, C = ss.states('S L I R C')
+        kw = dict(strains=ss.Strains(['DS', 'RIF'], split=[0.8, 0.2], rel_trans=[1, 0.6])) if strains else {}
+        trs = dict(infection=S >> L @ ss.peryear(4)*I, activation=L >> I @ ss.peryear(0.5), recovery=I >> R @ ss.years(1), waning=R >> S @ ss.years(2))
+        if extra == 'undriven':
+            trs['clear'] = ss.Transition(L, C) # Taken only by a product's moves=
+        elif extra == 'zero':
+            trs['death'] = I >> C @ ss.peryear(0) # A rate of 0, alongside a duration
+        d = ss.Disease(S, L, I, R, C, **trs, name='d', init=dict(L=0.2, I=0.02), **kw)
+        return ss.Sim(d, n_agents=1000, start=2000, stop=2003, dt=ss.months(1), verbose=0).run().results.d.infection.values
+    for strains in [False, True]:
+        base = make(strains=strains)
+        for extra in ['undriven', 'zero']:
+            assert np.array_equal(base, make(extra, strains)), f'Declaring {extra} changed the draws (strains={strains})'
+    return base
+
+
 # %% Run as a script
 if __name__ == '__main__':
     T = sc.timer()
@@ -447,6 +468,7 @@ if __name__ == '__main__':
     o10 = test_choose_n_crn()
     o11 = test_streams()
     o12 = test_repeated_uids()
+    o13 = test_crn_undriven()
 
     T.toc()
 

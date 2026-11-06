@@ -435,7 +435,7 @@ class Held(Product):
         """ The name of the property of people that says whether they hold the product """
         return f'has_{self.name}'
 
-    held = held_cond() # Whether each person holds it now, as a condition: `ss.modify(..., where=vx.held)`; or any product of a kind: `where=ss.Vaccine.held`
+    held = held_cond() # Whether each person holds it now (until it is lost, or none of its protection is left), as a condition: `ss.modify(..., where=vx.held)`; or any product of a kind: `where=ss.Vaccine.held`
 
     @property
     def coverage(self):
@@ -636,6 +636,21 @@ class Held(Product):
             if len(lost):
                 arr[lost] = 0
                 sim.groups.groups_changed(lost)
+        if self.fades: # Protection that fades by a shape or function of time: held until none is left (e.g. the end of a box), unless an effect does not wane
+            keys = {key for effects in self.disease_effects(sim).values() for key in effects}
+            fns = [self.waning.get(key) for key in keys] if isinstance(self.waning, dict) else [self.waning]
+            arr = sim.people[self.dim]
+            uids = (arr > 0).uids
+            if len(uids) and all(callable(fn) for fn in fns):
+                holds = np.zeros(len(arr.raw), dtype=bool)
+                holds[uids] = True
+                eng = (ss.interventions.coded_disease(sim, self.disease) or sim.get_declared(self.disease)).engine
+                left = np.max([self.remaining(fn, holds, eng)[uids] for fn in fns], axis=0)
+                lost = uids[left <= 0]
+                if len(lost):
+                    arr[lost] = 0
+                    sim.groups.groups_changed(lost)
+            return
         if not self.loses:
             return
         arr = sim.people[self.dim]
@@ -668,8 +683,9 @@ class Vaccine(Held):
         waning (dur/box/func/dict): a duration, for protection that is lost after an exponentially distributed time with that mean;
             `ss.box(dur=..., decay=...)`, full protection for a time and then (optionally) an exponential decline, under every solver;
             or a function of the time since delivery returning the share of protection that remains, `fn(t)` or `fn(t, sim, uids)`, with `t` a
-            duration (e.g. `t < ss.days(180)`, `t.years`) and `uids` the agents who hold it (e.g. `sim.people.age[uids] - t.years`, their age when it was given; agents only). A delivery gives a product that
-            fades by a shape or function again to those who hold it, restarting it. A dict gives each effect its own (e.g.
+            duration (e.g. `t < ss.days(180)`, `t.years`) and `uids` the agents who hold it (e.g. `sim.people.age[uids] - t.years`, their age when it was given; agents only). It is held (`vx.held`) until no
+            protection is left (as agents, e.g. at the end of a box), and a delivery gives a product that fades by a shape or function
+            again to those who hold it, restarting it. A dict gives each effect its own (e.g.
             `dict(acquisition=ss.box(dur=ss.years(1)), transmission=None)`). For other shapes under every solver (two rates in turn),
             write the protection as states and move people into them: see `ss.Delivery`'s `move=`
         doses (list): for a vaccine given in doses, the relative efficacy after each (e.g. `[0.85, 1.0]`); holding it then has a
@@ -730,8 +746,8 @@ class Treatment(Held):
 
     A treatment can cure (`cure=`, once, when it is given), change rates for as long as it is held
     (`efficacy=`), or both. By default it is given to the people who are infected. A treatment that cures
-    has the outcomes `cured`, `failed` (infected, and not cured), and `unneeded` (not infected), which are
-    results and events of its deliveries.
+    has the outcomes `cured`, `failed` (infected, and not cured), and `unneeded` (not in a state it cures: not
+    infected, or with `moves=`, in no source of its transitions), which are results and events of its deliveries.
 
     A treatment can instead name the transitions it moves people along (`moves=`), usually undriven ones
     (`cure = A + C >> S`, with no `@`). Each person treated who is in a source of one of them moves along it

@@ -768,6 +768,22 @@ def test_coded_declared_transmission():
 
 
 @sc.timer()
+def test_route_par():
+    sc.heading('Testing a modifier of a parameter on one route, which acts on every transmission that the parameter scales')
+    def run(mods):
+        S, I, R = ss.states('S I R')
+        beta = ss.par(ss.peryear(3.0))
+        sir = ss.Disease(infection=S >> I @ beta*I, reinfection=R >> I @ 0.5*beta*I, recovery=I >> R @ ss.years(0.5), init_prev=0.05, name='sir')
+        nets = [ss.RandomNet(name='a', n_contacts=3), ss.RandomNet(name='b', n_contacts=3)]
+        sim = ss.Sim(diseases=sir, networks=nets, connectors=mods, n_agents=1000, start=2000, stop=2003, rand_seed=1, verbose=0).run()
+        return sim.results.sir.infection.sum(), sim.results.sir.reinfection.sum()
+    by_par = run(ss.modify('sir.pars.beta', multiply=0.2, route='b'))
+    assert by_par == run([ss.modify(f'sir.{tr}', multiply=0.2, route='b') for tr in ['infection', 'reinfection']])
+    assert by_par[0] < run(None)[0]
+    return by_par
+
+
+@sc.timer()
 def test_beta_by_person():
     sc.heading('Testing a beta per act that differs between the people who would be infected')
     def make(beta):
@@ -889,6 +905,7 @@ if __name__ == '__main__':
     acts = test_per_act_beta()
     cond = test_condoms()
     same = test_coded_declared_transmission()
+    rpar = test_route_par()
     read = test_beta_readings()
     peract = test_peract_describe()
     default = test_beta_default()

@@ -152,7 +152,7 @@ sim.run()
 sim.plot()
 ```
 
-**Steps, people, and agents.** A run moves forward in steps of time, `dt`, which is one of the unit by default: here one day. For the ODE, the step is only how often results are recorded, since the equations are solved more finely in between. For agents, the step matters more, since each agent moves at most once per step. [Tutorial 1](t1_intro.qmd) showed that this outbreak is too fast for a step of a day as agents. Here are agents with a step of a day and of a quarter of a day, with the ODE:
+**Steps, people, and agents.** A run moves forward in steps of time, `dt`, which is one of the unit by default: here one day. For the ODE, the step is only how often results are recorded, since the equations are solved more finely in between. For agents, the step matters more, since each agent's moves are drawn once per step, so those infected in a step wait until the next to move on. [Tutorial 1](t1_intro.qmd) showed that this outbreak is too fast for a step of a day as agents. Here are agents with a step of a day and of a quarter of a day, with the ODE:
 
 ```{python}
 ode = ss.Sim(measles, total_pop=100_000, stop=ss.days(50), verbose=0)

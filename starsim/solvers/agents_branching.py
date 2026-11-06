@@ -244,6 +244,7 @@ class Branching:
     def transmit(self, tr, src):
         """ Work out who in a state is infected this step """
         self._route_memo = {} # See route_beta()
+        self._new_strains = [] # The strain each new case was infected with, for the infection log (see set_strain())
         try:
             return self.transmit_from(tr, src)
         finally:
@@ -456,7 +457,17 @@ class Branching:
             sources, networks = np.full(len(uids), -1.0), np.full(len(uids), np.nan)
         elif sources is None:
             sources, networks = self.sources(uids)
-        self.mod.infection_log.add_entries(uids, sources, self.mod.t.tvec[self.mod.ti], network=networks) # At the step's time point, as ti_I is (seeds at the start)
+        extra = {}
+        if self.strain is not None: # The strain transmitted (for seeds, and any infection whose strain was not chosen in transmission, the strains they carry)
+            labels = np.array(self.sim.groups.strats[self.strain].labels, dtype=object)
+            strain = labels[self.strain_raw()[uids]]
+            for new, given in ([] if seeds else getattr(self, '_new_strains', None) or []): # In order, so a later one (as set_strain() did) wins
+                order = np.argsort(new)
+                inds = np.minimum(np.searchsorted(new[order], uids), len(new) - 1)
+                found = new[order][inds] == uids
+                strain[found] = labels[given[order][inds[found]]]
+            extra['strain'] = strain
+        self.mod.infection_log.add_entries(uids, sources, self.mod.t.tvec[self.mod.ti], network=networks, **extra) # At the step's time point, as ti_I is (seeds at the start)
         return
 
     def same_in_group(self, tr):
@@ -515,6 +526,8 @@ class Branching:
         """ Give new cases their strain; if they carry strains already (`carried`), they carry this one as well """
         sim = self.sim
         uids = ss.uids(uids)
+        if getattr(self, '_new_strains', None) is not None and self.mod.infection_log is not None:
+            self._new_strains.append((uids, np.broadcast_to(strain, len(uids))))
         if carried:
             strain = self.carriage.adds[self.strain_raw()[uids], strain]
         sim.people[sim.groups.strats[self.strain].attr][uids] = sim.groups.strats[self.strain].value(strain)

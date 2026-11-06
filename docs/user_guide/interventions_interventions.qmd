@@ -54,6 +54,7 @@ A delivery says who can receive the product, when, and how many. There is one de
 | `capacity=` | The number that can be delivered (per round, per step, or as a rate) |
 | `priority=` | Who is served first when capacity runs short |
 | `queue=` | Whether those not served wait their turn (agents only) |
+| `skip_reached_within=` | Skip those this delivery reached less than this long ago, e.g. `ss.years(1)` (agents only) |
 | `delay=` | The time from a trigger to delivery (agents only) |
 | `trace=` | Deliver to the contacts of those selected, on a network (agents only) |
 | `when=` | Deliver only on steps where a function of the timeline returns `True`, e.g. `lambda t: t.ti % 7 == 0` |
@@ -157,6 +158,19 @@ print('Adults vaccinated:', sim.results.adults.delivered.sum())
 
 Each of these deliveries makes its own vaccine. The first is named `vaccine`; since that name is taken, the second is named after its delivery, `adults_product`.
 
+`skip_reached_within=` leaves out the people the delivery itself reached less than that long ago: a re-screening interval, one test per person per campaign, or a rule against giving a drug again within a year. Someone reached in a round of 2005 is skipped by the rounds within the year, and can be reached again from the round of 2006 on. Here a test is offered every month, to a tenth of people each time, but to nobody tested in the past year:
+
+```{python}
+monthly = ss.screen(sensitivity=0.9, specificity=0.98, coverage=0.1, interval=ss.months(1), name='monthly')
+yearly = ss.screen(sensitivity=0.9, specificity=0.98, coverage=0.1, interval=ss.months(1), skip_reached_within=ss.years(1), name='yearly')
+for screening in [monthly, yearly]:
+    sim = ss.Sim(sis, interventions=screening, **kw)
+    sim.run()
+    print(f'{screening.name}: {sim.results[screening.name].delivered.sum():n} tests, {sim.interventions[screening.name].ever.uids.size:n} people tested')
+```
+
+It is the same as `where=~(yearly.since < ss.years(1))`, which a delivery cannot be given before it exists.
+
 ### Delivery when something happens
 
 An event in `where=` delivers to the people something has just happened to, instead of on a schedule: a transition (the people who went through it on this step), or the outcome of another delivery. A transition can also be given by its path, `where='sis.infection'`. Here half of people are treated when they are infected, with no limit, or with up to 30 treatments a month:
@@ -173,6 +187,8 @@ msim.plot('sis.I')
 ```
 
 With no limit, treating half of the people soon after they are infected keeps prevalence at under a fifth of its level without treatment. With at most 30 treatments a month, a little fewer than are needed even at the start, infections outgrow what the program can treat, and prevalence rises, more slowly than without treatment, to nearly its level without it: a capacity a little short of the need early on lets an epidemic grow far beyond it.
+
+A delivery triggered by a transition of a disease acts on the step after it: the people who went through it are reached at the start of the next step, by when some may have moved on (e.g. a test at the start of treatment that finds people already out of it). An outcome of another delivery triggers its follow-up in the same step. For a step that must happen at once, declare it as a transition of the disease triggered by the same transition, e.g. `T >> D @ ss.on(care)`, which moves people in the same step (see [Diseases](building_diseases.qmd)).
 
 A condition can also be read on someone's mother: `ss.mother(cond, born=True)` holds for a person whose mother meets `cond`. Each event remembers, per person, whether it ever happened (`.ever`), how often (`.count`), and how long ago (`.since`). Here newborns are tested if their mother tested positive at antenatal care within the past year (this SIS model has no transmission from mother to child, so the newborns tested are infected only by chance; a model of mother-to-child transmission, such as the congenital infections on [Maternal, newborn, and child health](library_mnch.qmd), is where this matters):
 

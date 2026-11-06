@@ -242,7 +242,7 @@ class Cond:
         try:
             out = self.eval(selector)
         except (KeyError, AttributeError) as e: # E.g. the memory of a declared transition that nothing in the model reads (tb.diagnosis.since), which is not kept
-            raise ss.CapabilityError(f'{self!r} cannot be read: "{mod.name}" keeps it only when something in the model reads it (a condition, rate, or result), and nothing does ({e}); set ss.options.keep_times = True before the sim is initialized to keep it') from e
+            raise ss.CapabilityError(f'{self!r} cannot be read: "{mod.name}" keeps it only when something in the model reads it (a condition, rate, or result), and nothing does ({e}); make the sim with ss.Sim(..., keep_times=True) to keep it') from e
         out = np.asarray(out)
         if out.ndim == 0:
             out = np.full(sim.people.uid.len_tot, out[()])
@@ -896,6 +896,9 @@ class Selector(sc.prettyobj):
                 out = np.nan_to_num(raw).astype(int)
             if sim.groups.group_fold is not None and not sim.groups.group_inside[:, d].all(): # People outside the dimension's where= have no level of it
                 out = np.where(sim.groups.group_inside[sim.groups.group_raw(), d], out, -1)
+            outside = sim.groups.outside_states(d) # Nor do people outside the states it applies to, e.g. the uninfected for a strain
+            if outside is not None:
+                out = np.where(outside, -1, out)
             return out
         return sim.groups.group_levels[:, d][None, :]
 

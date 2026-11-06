@@ -820,9 +820,9 @@ class Compiled(Agents):
         return
 
     def shrink(self):
-        """ Forget the tables and buffers of the call, which hold a value for each agent (they are made again if the sim runs on) """
+        """ Forget the tables and buffers of the call, which hold a value for each agent (they are made again if the sim runs on), and the functions that make them """
         super().shrink()
-        for key in ['_kctr', '_kmark', '_kidx', '_kev', '_karrays', '_kz']:
+        for key in ['_kctr', '_kmark', '_kidx', '_kev', '_karrays', '_kz', 'kedges', 'kedge_src', 'kpar_src', 'lifelong']:
             self.__dict__.pop(key, None)
         if self.__dict__.get('kplan') is not None:
             self.kplan.LATE = None

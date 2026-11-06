@@ -399,8 +399,7 @@ def test_time():
     class Recovered(ss.Analyzer): # A Starsim 3-style module that reads it, which needs it kept
         def step(self):
             self.n = self.sim.diseases.sir.ti_R.isclose(self.ti).sum() # A move reads as the step it happened in (see ss.TimeArr)
-    with ss.options.context(keep_times=True):
-        sim = ss.Sim(make_sir(), stop=100, unit='day', n_agents=1000, analyzers=Recovered(), **kw).run()
+    sim = ss.Sim(make_sir(), stop=100, unit='day', n_agents=1000, analyzers=Recovered(), keep_times=True, **kw).run() # For this sim (ss.options.keep_times for every sim)
     assert np.array_equal(sim.diseases.sir.results.I, sir.results.I) and sim.analyzers[0].n == sim.results.sir.recovery[-1] # The same run, and the recoveries of the last step
     assert sim.diseases.sir.recovery.count.values.sum() == sim.results.sir.recovery.sum() # And the history of every transition, to read after the run
     S, I, R = ss.states('S I R')

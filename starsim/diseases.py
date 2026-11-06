@@ -134,7 +134,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
 
     def __init__(self, *args, pars=None, strains=None, stratify=None, solver=None, _names=None, **kwargs):
         super().__init__()
-        self.strains = None # Its ss.Strains, if it has strains
+        self.strains = strains # Its ss.Strains, if it has strains: set now, so a subclass's __init__() can read it before the disease is built (see ss.strains.attach())
         if solver not in [None, 'abm'] + ss.solvers.agent_solvers:
             raise ValueError(f'solver must be one of {sc.strjoin(ss.solvers.agent_solvers)} (a module\'s own solver, as agents), "abm" (its suggested one), or None to follow the sim\'s, not {solver!r}')
         self.solver = solver # Its own solver, as agents (see ss.solvers.agent_solver()); None follows the sim's
@@ -159,6 +159,14 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         else: # Written as code: its own define_pars() and define_states() follow; or declared by define_states() and define_transitions()
             self.update_pars(pars, **kwargs)
         return
+
+    def __setattr__(self, attr, value):
+        """ A state or transition assigned once the disease is built would never be part of it, so it raises (see `declare()`) """
+        if isinstance(value, (ss.State, ss.Transition)) and self.__dict__.get('graph') is not None and value is not getattr(self, attr, None):
+            errormsg = (f'"{self.name}" was built when it was made, so the {type(value).__name__.lower()} "{attr}" would not be part of it. Declare its states and transitions '
+                        f'in its __init__() or class body: for a variant of a disease, subclass it and call self.define_transitions() in __init__() after super().__init__()')
+            raise ss.CapabilityError(errormsg)
+        return super().__setattr__(attr, value)
 
     @staticmethod
     def has_structure(kwargs):
@@ -697,13 +705,13 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         self.engine.define()
         needs = ss.interventions.memory_needs(sim) if isinstance(sim, ss.Sim) and self.graph is not None and self.graph.transitions else {} # Not a mock sim
         self.remembered = [name for mod,name in needs if mod == self.name and name in self.graph.transitions] # Transitions whose memory something reads, e.g. tb.diagnosis.since
-        if ss.options.keep_times and self.abm: # Or every transition's, to read after the run
+        if self.abm and (sim.pars.keep_times if isinstance(sim, ss.Sim) else ss.options.keep_times): # Or every transition's, to read after the run
             self.remembered += [name for name in self.graph.transitions if name not in self.remembered]
         for name in self.remembered:
             self.define_states(ss.FloatArr(f'last_{name}', label=f'Time index of the last {name}'), ss.FloatArr(f'count_{name}', default=0, label=f'Number of times: {name}'))
         super().init_pre(sim)
         if any(isinstance(a, ss.infection_log) for a in sim.analyzers.values()):
-            self.infection_log = InfectionLog(disease=self.name, networks=sim.networks.keys())
+            self.infection_log = InfectionLog(disease=self.name, networks=sim.networks.keys(), timeline=self.t)
         self.engine.init_pre()
         return
 
@@ -933,8 +941,12 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
             ```
         """
         graph = self.graph
+        if self.engine is None and getattr(self, '_given', False):
+            raise RuntimeError(f'"{self.name}" was given to a sim, which runs a copy of each module it is given (so it can be given to other sims); read the one that ran from the sim, e.g. sim.{self.name}.current_state()')
         if self.engine is None:
             raise RuntimeError(f'"{self.name}" has the state of each agent once the sim is initialized (sim.init())')
+        if isinstance(self.sim, ss.utils.Shrunk):
+            raise RuntimeError(f'the state of each agent of "{self.name}" was dropped when the sim was shrunk; run it with shrink=False to keep it')
         if self.sim.solver != 'abm':
             raise ss.CapabilityError(f'disease.current_state() is the state of each of the agents, but "{self.name}" is run with solver="{self.sim.solver}"; use the counts of its states (e.g. sim.results.{self.name}.S) instead')
         names = [s if isinstance(s, str) else s.name for s in sc.tolist(states)] if states is not None else [s.name for s in graph.people_states]
@@ -1558,16 +1570,22 @@ class InfectionLog:
     diagnosis, treatment, notification etc.)
 
     A table of outcomes can be returned using `InfectionLog.to_df()`, and a NetworkX
-    graph with `InfectionLog.to_graph()`.
+    graph with `InfectionLog.to_graph()`. An analyzer that follows transmission as the
+    sim runs reads each step's entries with `to_df(ti=self.ti)`:
+
+    >>> new = sim.diseases.sir.infection_log.to_df(ti=self.ti) # In an analyzer's step()
 
     Args:
         disease (str): the name of the disease being logged
         networks (list): the names of the networks, used to convert the network IDs recorded by `ss.Infection` to names in `to_df()`
+        timeline (`ss.Timeline`): the disease's timeline, so that each entry has the time index it was logged at, for `to_df(ti=...)`
     """
-    def __init__(self, disease=None, networks=None):
+    def __init__(self, disease=None, networks=None, timeline=None):
         self.disease = disease
         self.networks = sc.tolist(networks)
+        self.timeline = timeline
         self.chunks = [] # One dict of arrays (t, source, target, and any extra data) per call to add_entries()
+        self.chunk_ti = [] # The time index each chunk was logged at (None without a timeline), for to_df(ti=...)
         self.updates = [] # Data added with add_data(), applied when the log is read
         self.n = 0 # Number of entries
         return
@@ -1610,6 +1628,7 @@ class InfectionLog:
             sources = np.nan if sources is None else sources
             chunk = dict(t=np.full(n, time, dtype=object), source=sources, target=uids, **kwargs)
             self.chunks.append({k:np.broadcast_to(v, n) if np.ndim(v) == 0 else np.array(v) for k,v in chunk.items()}) # Copy arrays, so later changes to them don't change the log
+            self.chunk_ti.append(None if self.timeline is None else self.timeline.ti)
             self.n += n
         return
 
@@ -1642,7 +1661,7 @@ class InfectionLog:
             self.updates.append((self.n, uids, kwargs)) # Store the number of entries so far, so only earlier entries are updated
         return
 
-    def to_df(self):
+    def to_df(self, ti=None):
         """
         Return a tabular representation of the log as a line list dataframe
 
@@ -1650,23 +1669,64 @@ class InfectionLog:
         recorded in the log. Note that the log will contain `NaN` for quantities
         that are defined for some edges and not others (and which are missing for
         a particular entry)
-        """
-        if self.n == 0:
-            return sc.dataframe(columns=['t', 'source', 'target'])
 
-        df = pd.concat([pd.DataFrame(chunk) for chunk in self.chunks], ignore_index=True)
+        Args:
+            ti (int): if given, only the entries logged at this time index of the disease (e.g. `ti=self.ti` in an analyzer's `step()`, for the infections of the step just taken; at `ti=0`, the seeds); it reads only those entries, so is quick to call every step
+
+        Example:
+            ```python
+            class new_infections(ss.Analyzer):
+                def init_results(self):
+                    super().init_results()
+                    self.define_results(ss.Result('known', label='Infections from a known source'))
+
+                def step(self):
+                    df = self.sim.diseases.sir.infection_log.to_df(ti=self.ti)
+                    self.results.known[self.ti] = (df.source >= 0).sum() # Not seeds (-1), nor those with no source (NA)
+
+            sim = ss.Sim(diseases='sir', networks='random', analyzers=[ss.infection_log(), new_infections()]).run()
+            ```
+        """
+        columns = ['t', 'source', 'target']
+        if ti is None:
+            keep = list(range(len(self.chunks)))
+        else:
+            if self.timeline is None:
+                raise ValueError(f'The infection log of "{self.disease}" has no timeline, so it cannot find the entries of a time index; give InfectionLog(timeline=...) (a disease gives its own)')
+            ti = int(ti) if ti >= 0 else self.timeline.npts + int(ti)
+            keep = [i for i,cti in enumerate(self.chunk_ti) if cti == ti]
+        if not keep:
+            return sc.dataframe(columns=columns)
+
+        # Only the entries from the first chunk kept on are needed: data added later can only change those, or later ones
+        sizes = np.array([len(chunk['target']) for chunk in self.chunks])
+        starts = np.concatenate([[0], np.cumsum(sizes)])
+        offset = starts[keep[0]]
+        df = pd.concat([pd.DataFrame(self.chunks[i]) for i in keep], ignore_index=True)
 
         # Apply data added later: for each UID, update its most recent entry at the time of the call
-        for n, uids, kwargs in self.updates:
-            targets = df.target.values[:n]
-            inds = np.flatnonzero(np.isin(targets, uids))
-            last = pd.Series(inds, index=targets[inds]).groupby(level=0).last() # Most recent entry for each UID
-            for k,v in kwargs.items():
-                if k not in df.columns:
-                    df[k] = None # Object dtype, so any value can be stored
-                if np.ndim(v):
-                    v = pd.Series(v, index=uids)[last.index].values # Match per-UID values to the entries
-                df.loc[last.values, k] = v
+        if self.updates:
+            targets_all = np.concatenate([chunk['target'] for chunk in self.chunks[keep[0]:]]) # From the first kept entry on
+            row = np.full(len(targets_all), -1) # The row of the dataframe of each of those entries, if kept
+            r = 0
+            for i in keep:
+                row[starts[i] - offset:starts[i+1] - offset] = np.arange(r, r + sizes[i])
+                r += sizes[i]
+            for n, uids, kwargs in self.updates:
+                if n <= offset:
+                    continue
+                targets = targets_all[:n - offset]
+                inds = np.flatnonzero(np.isin(targets, uids))
+                last = pd.Series(inds, index=targets[inds]).groupby(level=0).last() # Most recent entry for each UID
+                last = last[row[last.values] >= 0] # Of those kept
+                if not len(last):
+                    continue
+                for k,v in kwargs.items():
+                    if k not in df.columns:
+                        df[k] = None # Object dtype, so any value can be stored
+                    if np.ndim(v):
+                        v = pd.Series(v, index=uids)[last.index].values # Match per-UID values to the entries
+                    df.loc[row[last.values], k] = v
 
         # Convert network IDs to names, leaving any other values (e.g. names) as-is
         if self.networks and 'network' in df.columns:
