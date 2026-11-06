@@ -250,9 +250,9 @@ def test_births():
     arrivals.stratify(sex=['f', 'm'], split=[1000, 500])
     res = ss.Sim(arrivals, total_pop=1500, stop=3, **kw).run().results.arrivals
     assert np.allclose(res.arrive.by('sex').values[1:], [100, 10]) # None at the start
-    with pytest.raises(ValueError): # A birth rate for each level would be births from each level, which cannot be declared yet
-        S, I = ss.states('S I')
-        ss.Sim(ss.Disease(births=ss.birth(S, rate=ss.by(sex=[0.02, 0])), infection=ss.Transition(S, I, rate=0 * I), name='births').stratify(sex=['f', 'm']), **kw).init()
+    S, I = ss.states('S I') # A birth rate for each level of sex is births from the people of that sex, and the children are of either sex
+    res = ss.Sim(ss.Disease(births=ss.birth(S, rate=ss.by(sex=[0.02, 0])), infection=ss.Transition(S, I, rate=0 * I), name='births').stratify(sex=['f', 'm']), total_pop=1000, stop=1, **kw).run().results.births
+    assert np.allclose(res.births.by('sex').values[1:].sum(axis=0), 0.5*0.02*500, rtol=0.02)
 
     # Migration: immigrants arrive at any age (and age group), and emigrants leave without dying
     for age in [False, True]:
@@ -1003,12 +1003,14 @@ def test_time_values():
     dip = ss.Disease(infection=ss.Transition(S, I, rate=ss.timeseries({0: 0.05, 60: 0.4}) * I), recovery=ss.Transition(I, S, dur=10), init_n=dict(I=20), name='dip')
     assert any('would usually die out' in note for note in ss.Sim(dip, unit='day', stop=200, **kw).run().notes)
 
-    # A fast transition is noted when the solver takes whole steps, and check_dt() says how much the step matters
+    # A fast transition is noted when Euler takes whole steps, but not for the chain binomial asked for them (substeps=1, a model written in discrete time); check_dt() says how much the step matters
     S, I, R = ss.states('S I R')
     fast = ss.Disease(infection=ss.Transition(S, I, rate=0.6 * I), recovery=ss.Transition(I, R, dur=4), init_prev=0.01, name='fast')
     stepped = ss.Sim(fast, solver='binomial', substeps=1, unit='day', stop=60, total_pop=1e6, **kw) # Whole steps (by default, the chain binomial takes enough substeps)
     df = stepped.check_dt(output=True)
-    assert any('consider a shorter step' in note and 'infection transmits at up to 0.6' in note and 'I is fast too' in note for note in stepped.new().init().notes) # The transmission is the fastest (0.6 a day), then leaving I (1/4)
+    assert not any('consider a shorter step' in note for note in stepped.new().init().notes)
+    euler = stepped.new(solver='ode', integrator='euler', substeps=1).init()
+    assert any('consider a shorter step' in note and 'infection transmits at up to 0.6' in note and 'I is fast too' in note for note in euler.notes) # The transmission is the fastest (0.6 a day), then leaving I (1/4)
     assert 0.05 < df.change[df.result == 'I'].iloc[0] < 0.2
     with sc.capture() as txt: # With its default substeps, the chain binomial takes substeps of the same size whatever the step, so says so (it printed a table of zeros)
         S, E, I, R = ss.states('S E I R')

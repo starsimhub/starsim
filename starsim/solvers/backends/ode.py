@@ -74,6 +74,7 @@ class Layout:
         self.tape(p)
         sets = len(p.set_starts) - 1
         self.sets = matrix(np.repeat(np.arange(sets), np.diff(p.set_starts)), p.set_comps, (sets, nc)) # Sets by compartments
+        self.weighted = [s for s,(a,b) in enumerate(zip(p.set_starts[:-1], p.set_starts[1:])) if (p.set_w[a:b] >= 0).any()] # The sets of weighted counts
         self.place = matrix(np.arange(ng), p.places, (ng, max(p.n_places, 1))) # Groups by places
         # Movers: each compartment of each mover, by each of its entries
         cc, ee, mm = [], [], []
@@ -178,6 +179,14 @@ def binary(op, a, b):
     raise ValueError(op)
 
 
+def members(ys, p, s):
+    """ The compartments of set s, by group, each times its weight if it has one (as `ss.kernels.member()`) """
+    a, b = p.set_starts[s], p.set_starts[s+1]
+    rows = p.set_w[a:b]
+    out = ys[p.set_comps[a:b]]
+    return out if (rows < 0).all() else out*np.where(rows[:, None] >= 0, p.consts[rows], 1.0)
+
+
 def rates_of(ys, p, L):
     """ The rate of every flow, by group, as `ss.kernels.step()` works them out (not by place: that is only for the exact solver) """
     rates = p.fixed.copy()
@@ -191,15 +200,17 @@ def rates_of(ys, p, L):
         if s < 0:
             expo[e] = expo[e+s:e].sum(axis=0)
             continue
-        infectious = (ys[p.set_comps[p.set_starts[s]:p.set_starts[s+1]]]*p.rel_trans[e]).sum(axis=0)
+        infectious = (members(ys, p, s)*p.rel_trans[e]).sum(axis=0)
         for t in range(len(p.sizes)):
+            if p.exp_n[e] and not p.use[1, t]: # A count, which only the contact matrices act on
+                continue
             size, block, lev = p.sizes[t], p.block[t], p.levels[t]
             num = np.bincount(lev, infectious, minlength=size)[:size]
             den = np.bincount(lev, n, minlength=size)[:size]
             if p.use[0, t]: # Move people to where they spend their time
                 num = (L.share.T @ num.reshape(-1, block)).ravel()
                 den = (L.share.T @ den.reshape(-1, block)).ravel()
-            prev = np.divide(num, den, out=np.zeros(size), where=den > 0)
+            prev = num if p.exp_n[e] else np.divide(num, den, out=np.zeros(size), where=den > 0)
             if p.use[1, t]: # Mix between the levels in each place
                 prev = p.mat[t][:size, :size] @ prev if block == size else (prev.reshape(-1, block) @ p.mat[t][:block, :block].T).ravel()
             if p.use[2, t]: # Mix between places
@@ -208,6 +219,8 @@ def rates_of(ys, p, L):
             expo[e] += c*prev[lev]
     if L.counts:
         setsum = L.sets @ ys # Sets by groups
+        for s in L.weighted:
+            setsum[s] = members(ys, p, s).sum(axis=0)
         local = (setsum @ L.place)[:, p.places]
         total = setsum.sum(axis=1, keepdims=True)
     V = np.empty((L.n_nodes, ng))
@@ -338,8 +351,10 @@ def _step(rng, y, p, dt, n_sub, solver, flows):
         sub += 1
         if sub >= n_sub:
             break
-    for f_out,slots in L.conveyors: # step_end(): everyone in a conveyor moves along one slot
+    for f_out,slots in L.conveyors: # step_end(): everyone in a conveyor moves along one slot (what is left in the last stays, to leave with the next)
+        left = y[slots[-1]].copy()
         y[slots[1:]] = y[slots[:-1]]
+        y[slots[-1]] += left
         y[slots[0]] = 0
     np.maximum(y, 0, out=y)
     return

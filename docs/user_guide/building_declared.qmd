@@ -32,7 +32,7 @@ Each row is an idea from epidemiology, how it is declared, and an example of a r
 | **Flows at a rate** | `>>` and `@`, and `ss.null` for flows into or out of the model | `R >> S @ ss.peryear(0.1)`, `I >> ss.null @ 0.01` | A rate worked out each step by another program |
 | **Time in a state** | A duration, or a distribution of durations | `I >> R @ ss.days(8)`, `E >> I @ ss.erlang(k=4, mean=ss.days(10))` | A recovery time from a model of each person's viral load within the host |
 | **Branching** (a share go one way, the rest another) | `p=` | `ss.Transition(I, [R, D], p=[0.98, None], dur=ss.days(8))` | |
-| **Transmission**, frequency- or density-dependent | A bare state (a share), or a count, `.n` | `S >> I @ 1.9*I`, `S >> I @ 1.9e-5*I.n` | |
+| **Transmission**, frequency- or density-dependent | A bare state (a share), or a count, `.n`; with a contact matrix, each says what the matrix acts on (see [What a matrix acts on](populations_data.qmd#what-a-matrix-acts-on)) | `S >> I @ 1.9*I`, `S >> I @ 1.9e-5*I.n` | |
 | **Several sources of infection** | A sum | `S >> E @ beta*(I + 0.5*A)` | |
 | **Rates that depend on how many are infected** | Arithmetic and NumPy functions of counts | `S >> I @ beta*I.n/(1 + a*I.n)` (a force of infection that saturates) | |
 | **Rates that vary in time** | `ss.timeseries()`, `ss.seasonal()` | `beta = ss.seasonal(mean=0.3, amplitude=0.2, peak='March')` | |

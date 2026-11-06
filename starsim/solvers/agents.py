@@ -1130,11 +1130,35 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
                 out += np.bincount(mixing.places, weights=self.counts[state.name], minlength=n_places)
         return out[mixing.places] if self._by_group else self.for_uids(out[places]) # For each group, or for the agents the rate is being worked out for, so it combines with a value by person (e.g. ss.by(patch=...))
 
+    def count_matrices(self):
+        """ The contact matrices that act on a count, as agents use them: over the model's own groups (see `ss.solvers.Mixing.init_pools()`) """
+        mixing = self.sim.mixing
+        nets = [net for net in self.sim.networks.values() if isinstance(net, ss.MixingPools)]
+        other = next((net for net in nets if net.name not in mixing.pool_terms), None)
+        if other is not None:
+            errormsg = f'"{self.mod.name}" has a count in a rate ({self.graph.met_counts[0]}) that the contact matrix "{other.name}" acts on, which as agents it does only over the model\'s own groups, not age groups of its own; stratify by them, e.g. ss.contacts(matrix) with sim.stratify(age=[...]), or run as compartments'
+            raise ss.CapabilityError(errormsg)
+        return mixing.count_terms([mixing.pool_terms[net.name] for net in nets])
+
+    def met_count(self, states, expr):
+        """ The number of people in some states met through the contact matrices: from the agents in each group (counted by their weight, and in a weighted count by theirs in it), as for a compartmental run (see `ss.solvers.Mixing.exposure()`) """
+        sim = self.sim
+        people = sim.people
+        ng = sim.groups.n_groups
+        groups = sim.groups.group_raw()
+        members = self._members
+        num = 0.0
+        for state in states:
+            uids = members[state.name] if members is not None and state.name in members else self.members(state) # At the start of the step, while its rates are worked out, or now
+            num = num + np.bincount(groups[uids], weights=self.count_weights(expr, state, uids), minlength=ng)*self.scale
+        n = np.bincount(groups[people.auids], weights=people.scale.raw[people.auids] if people.scale.weighted else None, minlength=ng)*self.scale
+        out = sum(sim.mixing.term_exposure(term, num, n, counts=True) for term in self.count_matrices())
+        return out if self._by_group else self.for_uids(out[groups]) # For each group, or for the agents the rate is being worked out for
+
     def count_weighted(self, states, expr):
         """ A weighted count (`(ss.by(biting=w)*I).n`, `A.n_trans`): each agent in the states counted by its weight (and infectiousness), in the same place, as `local_count()` gives it """
         sim = self.sim
         mixing = sim.mixing
-        people = sim.people
         places = self.place_raw() if mixing.space is not None else None
         n_places = sim.groups.strats[mixing.space].n if places is not None else 1
         members = self._members
@@ -1143,20 +1167,25 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
             uids = members[state.name] if members is not None and state.name in members else self.members(state)
             if not len(uids):
                 continue
-            w = np.ones(len(uids))
-            if expr.weights is not None and state in expr.weights: # Per agent, even while the counts are advanced by group
-                with self.evaluating(uids=uids, for_uids=True, by_group=False):
-                    vals = np.asarray(self.eval(expr.weights[state]), dtype=float)
-                w = w*(vals[uids] if vals.ndim and len(vals) != len(uids) else np.broadcast_to(vals, len(uids)))
-            if expr.trans: # Infectiousness, as in exposure()
-                w = w*self.mod.rel_trans[uids]*self.mult('rel_trans', None, uids)*state.rel_trans
-            if people.scale.weighted:
-                w = w*people.scale.raw[uids]
+            w = self.count_weights(expr, state, uids)
             out += np.bincount(places[uids], weights=w, minlength=n_places) if places is not None else w.sum()
         out = out*self.scale
         if places is None:
             return float(out[0])
         return out[mixing.places] if self._by_group else self.for_uids(out[places])
+
+    def count_weights(self, expr, state, uids):
+        """ What each agent in a state counts as in a count: its own weight, if agents differ, times its weight (and infectiousness) in a weighted count """
+        w = np.ones(len(uids))
+        if expr.weights is not None and state in expr.weights and len(uids): # Per agent, even while the counts are advanced by group
+            with self.evaluating(uids=uids, for_uids=True, by_group=False):
+                vals = np.asarray(self.eval(expr.weights[state]), dtype=float)
+            w = w*(vals[uids] if vals.ndim and len(vals) != len(uids) else np.broadcast_to(vals, len(uids)))
+        if expr.trans: # Infectiousness, as in exposure()
+            w = w*self.mod.rel_trans[uids]*self.mult('rel_trans', None, uids)*state.rel_trans
+        if self.sim.people.scale.weighted:
+            w = w*self.sim.people.scale.raw[uids]
+        return w
 
     def coverage(self, expr):
         """ A product's coverage (`itn.coverage`): the share of the agents in the same place who hold it, each by the protection they have left (or a function of the time since delivery) """

@@ -1073,7 +1073,7 @@ def test_weighted_counts():
     prev = {(s,wt):mosquitoes(s, wt).results.mal.I[[50, 150]]/10_000 for s in ['abm', 'ode'] for wt in [True, False]}
     assert np.allclose(prev['abm', True], prev['ode', True], atol=0.02) and np.all(prev['ode', True] > prev['ode', False] + 0.01), prev
     sim = mosquitoes('ode')
-    assert 'weighted count' in sim.diseases.mal.engine.kernel_reason()
+    assert sim.diseases.mal.engine.kernel_reason() is None # Worked out in the kernels, as I.n is
     with pytest.raises(TypeError):
         S, I = ss.states('S I')
         (I.n*I).n # Not a weight per person

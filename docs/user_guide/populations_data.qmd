@@ -149,6 +149,39 @@ mixing = ss.contacts(matrix, dims=['sex', 'risk'])
 
 The entries of a matrix are contacts per unit time, in the sim's unit unless `unit=` says otherwise (e.g. `ss.contacts(matrix, ages=[0, 15], unit='day')`). A country's matrix is always contacts a day, as the studies give them, whatever the sim's unit.
 
+## What a matrix acts on
+
+The rate of the infection says what the matrix multiplies: the share of each group who are infectious, their number, or their number as a share of everyone. With *C* the matrix, *I*~j~ and *N*~j~ the number infectious and the number of people in group *j*, and *N* everyone:
+
+| The rate | The force of infection on group *i* | The matrix is | As in |
+|---|---|---|---|
+| `beta*I` | β Σ~j~ *C*~ij~ *I*~j~ / *N*~j~ | Contacts per person with each group, and β is per contact | Contact surveys and the matrices of countries; frequency-dependent models |
+| `beta*I.n` | β Σ~j~ *C*~ij~ *I*~j~ | A rate for each pair of people (density-dependent) | Lloyd & Jansen (2004), and metapopulation models in densities |
+| `beta*I.frac`, or `beta*I.n/N` | β Σ~j~ *C*~ij~ *I*~j~ / *N* | A rate on the share of everyone who are infectious in each group | Keeling & Rohani (2008), chapter 3; the WAIFW (who acquires infection from whom) matrices of Bjørnstad (2018) |
+
+So a matrix from a textbook goes in as the textbook gives it, with the rate written as the textbook writes it, and no rescaling (rescaling a matrix by *N*~j~ / *N* is exact only while the groups keep their sizes, which they don't with aging, births, or migration). Keeling & Rohani's Program 3.1, an SIS in a high- and a low-risk group whose β acts on shares of the whole population, is:
+
+```{python}
+import numpy as np
+beta = np.array([[10, 0.1], [0.1, 1]]) # Per year: row i is the group infected, column j the group infecting
+S, I = ss.states('S I')
+sis = ss.Disease(S >> I @ I.frac, I >> S @ ss.peryear(1), init=dict(I=ss.by(risk=[1e-5/0.2, 1e-3/0.8])), name='sis')
+sis.stratify(risk={'high': 0.2, 'low': 0.8})
+sim = ss.Sim(sis, networks=ss.contacts(beta, dims='risk'), total_pop=1, stop=15, unit='year')
+sim.run()
+print('Infectious at year 15, as shares of everyone:', sim.results.sis.I.by('risk').values[-1].round(6)) # The book's 0.100132 and 0.026810
+```
+
+The β is in the matrix, so the rate is just `I.frac`; the same model as counts is `S >> I @ I.n/N` with `N` the size of the population. For a matrix on counts, as in Lloyd & Jansen's metapopulation, where patch *i* is infected at Σ~j~ β~ij~ *I*~j~ from the number infectious in every patch:
+
+```python
+seir = ss.Disease(S >> E @ I.n, E >> I @ ss.perday(1/3), I >> R @ ss.perday(1/3), name='seir') # With beta a 20 × 20 matrix of rates per day
+seir.stratify(patch=[f'patch{i}' for i in range(20)], kind='space')
+sim = ss.Sim(seir, networks=ss.contacts(beta, dims='patch'), total_pop=20, unit='day')
+```
+
+`equations()` says what a matrix acts on in each rate. Only contact matrices act on a count: other networks (a mixing pool of everyone, or a network of individual contacts) don't, and `I.total` is always the whole population. A matrix acts on a count of the disease's own states in the rate of an infection (`I.n` in `S >> I @ beta*I.n`); in a model with places, *N* is everyone in the same place. It acts on a weighted count in the same way: `beta*(ss.by(risk=w)*I).n` is β Σ~j~ *C*~ij~ *w*~j~ *I*~j~, and `beta*I.n_trans` weights each group by its infectiousness (its `rel_trans`, with any product or modifier on it). As agents, a matrix acts on a count in the same way, if it is over the model's own groups (e.g. `ss.contacts(matrix, dims='risk')`, or `ss.contacts(matrix)` over the model's age groups).
+
 ## Contact matrices by setting
 
 A country's contact matrix can be split by setting: `ss.contacts('Kenya', layer=['home', 'school', 'work', 'community'])` gives a matrix for each, named after it, which together make up the whole (`layer='all'`, the default, is the whole). Every source has these four settings. By default, a country's matrix is from Prem et al. (2021), which is bundled; for the 10 places it lacks, including Japan and Australia, it is from their earlier matrices (2017), downloaded on first use, so every one of the 187 places has a matrix. `source=` picks one study (`'prem2021'`, `'prem2017'`, or `'mistry2021'`), and the reference of a matrix (`.attrs['ref']`) says which it came from. Each can then be changed on its own with `ss.modify()`; here schools close from day 10:

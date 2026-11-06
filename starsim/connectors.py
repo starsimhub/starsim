@@ -87,15 +87,15 @@ def to_time(sim, val):
         if not t.is_absolute and isinstance(t.tvec[0], ss.years) and ss.time.assume_cal_year(t.tvec[0]): # A timeline in calendar years (start=2000): the date's year, as the timeline holds it
             return ss.years(date.to_year())
         return date
-    elif t.is_absolute:
-        if sc.isnumber(val):
-            if ss.time.assume_cal_year(val): # A calendar year
-                return ss.date(val)
-            return t.tvec[0] + ss.time.get_dur_class(sim.unit_base)(val)
-        return t.tvec[0] + val
+    elif t.is_absolute and sc.isnumber(val):
+        if ss.time.assume_cal_year(val): # A calendar year
+            return ss.date(val)
+        return t.tvec[0] + ss.time.get_dur_class(sim.unit_base)(val)
     elif sc.isnumber(val):
         return type(t.tvec[0])(val)
-    return val
+    elif not t.is_absolute and ss.time.assume_cal_year(t.tvec[0]) and ss.time.assume_cal_year(val): # A calendar year in a timeline of them, as the sim's own start=ss.years(2000) is (see ss.timeline.stop_is_length())
+        return val
+    return t.tvec[0] + val # Any other duration is a time since the start: ss.years(5) is 5 years after it
 
 
 def reached(now, time):

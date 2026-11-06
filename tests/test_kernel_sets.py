@@ -10,6 +10,7 @@ Rust's are skipped if they have not been built (cd starsim/solvers/rust && ./bui
 # %% Imports and settings
 import os
 import sys
+import importlib
 import subprocess
 from unittest import mock
 import numba as nb
@@ -318,7 +319,7 @@ def test_compartmental():
         same(lambda s: ss.Sim(make_seir(), total_pop=2000, unit='day', stop=60, rand_seed=s, **how(solver), **kw), compiled + ['python'], seeds=[2])
         same(lambda s: ss.Sim(make_seir(), total_pop=2000, unit='day', stop=40, rand_seed=s, branching=True, **how(solver), **kw), compiled + ['python'], seeds=[2]) # A branching process: the count in a flow's own group (ss.kernels.GROUP)
     if rust:
-        for key in ['sir', 'commute', 'delay']:
+        for key in ['sir', 'commute', 'delay', 'biting']:
             make, pars = models[key]
             for solver in solvers:
                 if solver == 'gillespie' and key == 'commute':
@@ -355,6 +356,27 @@ def test_full_share():
         ss.kernels.share(pairs, vals, v, n*levels, levels, out, by_columns)
         ref = (v.reshape(n, levels).T @ matrix).T if by_columns else matrix @ v.reshape(n, levels)
         assert np.allclose(out, ref.ravel(), rtol=1e-12)
+    return
+
+
+@sc.timer()
+def test_met_counts():
+    sc.heading('Testing counts that a contact matrix acts on (beta*I.n, beta*I.frac, and weighted), by age within towns with commuting: each set of kernels, and JAX')
+    def make(seed=0, weighted=False, **kwargs):
+        towns = ss.geo.geography(names=['north', 'south', 'east'], pop=[50_000, 30_000, 20_000], x=[0, 0, 40], y=[0, 30, 0])
+        S, I, R = ss.states('S I R')
+        I.rel_trans = 0.5
+        rate = 1e-6*(ss.by(age=[2, 1, 0.5])*I).n + 0.2*I.n_trans/(S + I + R).n if weighted else 2e-6*I.n + 0.1*I.frac
+        sir = ss.Disease(infection=S >> I @ rate, recovery=I >> R @ ss.days(8), init_n=dict(I=ss.by(patch=[50, 0, 0])), name='sir')
+        sir.stratify(patch=towns, mobility=ss.geo.gravity(k=2e-4)).stratify(age=[0, 15, 65], split=[0.3, 0.5, 0.2])
+        return ss.Sim(sir, networks=ss.contacts(np.array([[8, 3, 1], [3, 6, 2], [1, 2, 3]])), unit='day', stop=100, total_pop=100_000, rand_seed=seed, **kw, **kwargs)
+    for weighted in [False, True]:
+        for solver in ['rk4', 'binomial']:
+            same(lambda s: make(s, weighted, **how(solver)), compiled + ['python'], seeds=[0])
+        if importlib.util.find_spec('jax'):
+            ode, ref = make(weighted=weighted, solver='ode'), make(weighted=weighted, solver='ode')
+            ode.jax, ref.jax = True, False
+            assert np.allclose(ode.run().results.sir.I.values, ref.run().results.sir.I.values, rtol=1e-9, atol=0)
     return
 
 

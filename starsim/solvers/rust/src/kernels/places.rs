@@ -64,7 +64,7 @@ pub fn place_rates(ys: A2<f64>, p: &Program, a: usize, b: usize, rates: A2<f64>,
                     let mut v = 0.0;
                     for gg in 0..ys.n1() {
                         for i in p.set_starts.u(arg)..p.set_starts.u(arg + 1) {
-                            v += ys.at(p.set_comps.u(i), gg);
+                            v += member(ys, p, i, gg);
                         }
                     }
                     stack.set(top as usize, 0, v);
@@ -73,7 +73,7 @@ pub fn place_rates(ys: A2<f64>, p: &Program, a: usize, b: usize, rates: A2<f64>,
                     let mut v = 0.0;
                     for jj in a..b {
                         for i in p.set_starts.u(arg)..p.set_starts.u(arg + 1) {
-                            v += ys.at(p.set_comps.u(i), p.pl_groups.u(jj));
+                            v += member(ys, p, i, p.pl_groups.u(jj));
                         }
                     }
                     if op == FRAC && n < 0.0 {
@@ -84,7 +84,7 @@ pub fn place_rates(ys: A2<f64>, p: &Program, a: usize, b: usize, rates: A2<f64>,
                     top += 1;
                     let mut v = 0.0;
                     for i in p.set_starts.u(arg)..p.set_starts.u(arg + 1) {
-                        v += ys.at(p.set_comps.u(i), g);
+                        v += member(ys, p, i, g);
                     }
                     stack.set(top as usize, 0, v);
                 } else {
@@ -252,6 +252,7 @@ pub fn place_events(y: A2<f64>, p: &Program, w: &Work, active: &[usize], dt: f64
 pub struct SparseMaps {
     cs_starts: Vec<usize>,
     cs_sets: Vec<usize>,
+    cs_w: Vec<i64>,
     se_starts: Vec<usize>,
     se_exps: Vec<usize>,
     cf_starts: Vec<usize>,
@@ -275,11 +276,13 @@ pub fn sparse_maps(p: &Program, nc: usize) -> SparseMaps {
     }
     cumsum(&mut cs_starts);
     let mut cs_sets = vec![0; p.set_comps.len()];
+    let mut cs_w = vec![0; p.set_comps.len()];
     let mut fill = cs_starts[..nc].to_vec();
     for s in 0..n_sets { // In order, so each compartment's sets are too
         for k in p.set_starts.u(s)..p.set_starts.u(s + 1) {
             let c = p.set_comps.u(k);
             cs_sets[fill[c]] = s;
+            cs_w[fill[c]] = p.set_w.at(k);
             fill[c] += 1;
         }
     }
@@ -326,7 +329,7 @@ pub fn sparse_maps(p: &Program, nc: usize) -> SparseMaps {
         people[p.people.u(i)] = true;
     }
     let has_total = (0..p.ops.len()).any(|k| p.ops.at(k) == TOTAL);
-    SparseMaps { cs_starts, cs_sets, se_starts, se_exps, cf_starts, cf_flows, inflows, people, has_total }
+    SparseMaps { cs_starts, cs_sets, cs_w, se_starts, se_exps, cf_starts, cf_flows, inflows, people, has_total }
 }
 
 /// Put a key into the first n of a sorted array, in order; returns the new number of keys (`add_key()`)
@@ -358,7 +361,7 @@ pub fn sparse_events(y: A2<f64>, p: &Program, w: &Work, active: &[usize], dt: f6
     let nc = y.n0();
     let nf = p.src.len();
     let top_reg = p.depth.wrapping_sub(1);
-    let SparseMaps { cs_starts, cs_sets, se_starts, se_exps, cf_starts, cf_flows, inflows, people, has_total } = maps;
+    let SparseMaps { cs_starts, cs_sets, cs_w, se_starts, se_exps, cf_starts, cf_flows, inflows, people, has_total } = maps;
     let mut width = 1;
     for &i in active {
         width = width.max(p.pl_starts.u(i + 1) - p.pl_starts.u(i));
@@ -430,7 +433,7 @@ pub fn sparse_events(y: A2<f64>, p: &Program, w: &Work, active: &[usize], dt: f6
                 }
                 for k in cs_starts[c]..cs_starts[c + 1] {
                     let s = cs_sets[k];
-                    counts[s] += v;
+                    counts[s] += if cs_w[k] < 0 { v } else { v*p.consts.at(cs_w[k] as usize, g) };
                     for q in se_starts[s]..se_starts[s + 1] {
                         let e = se_exps[q];
                         num[e] += v*p.rel_trans.at(e, g);
@@ -488,7 +491,7 @@ pub fn sparse_events(y: A2<f64>, p: &Program, w: &Work, active: &[usize], dt: f6
                             let mut v = 0.0;
                             for gg in 0..y.n1() {
                                 for ii in p.set_starts.u(arg)..p.set_starts.u(arg + 1) {
-                                    v += y.at(p.set_comps.u(ii), gg);
+                                    v += member(y, p, ii, gg);
                                 }
                             }
                             stack.set(top as usize, 0, v);
@@ -499,7 +502,7 @@ pub fn sparse_events(y: A2<f64>, p: &Program, w: &Work, active: &[usize], dt: f6
                             top += 1;
                             let mut v = 0.0;
                             for ii in p.set_starts.u(arg)..p.set_starts.u(arg + 1) {
-                                v += y.at(p.set_comps.u(ii), g);
+                                v += member(y, p, ii, g);
                             }
                             stack.set(top as usize, 0, v);
                         } else {

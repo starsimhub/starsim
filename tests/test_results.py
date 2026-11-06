@@ -414,7 +414,13 @@ def test_plot():
     # A flow with weekly data over part of a daily run: its weekly totals over the whole run, not only the weeks with data
     S, I, R = ss.states('S I R')
     make = lambda data=None: ss.Sim(ss.Disease(infection=S >> I @ 0.3*I, recovery=I >> R @ ss.days(10), init_n=dict(I=5), name='sir'), data=data, total_pop=10_000, start='2025-01-01', stop='2025-04-01', verbose=0)
-    data = make().run().to_data('sir.infection', resample='week').iloc[:6] # The first six weeks
+    truth = make().run()
+    data = truth.to_data('sir.infection', resample='week').iloc[:6] # The first six weeks
+    exact = truth.to_data('sir.infection', resample='week', noise=None)['sir.infection'].to_numpy()
+    over = np.array([truth.to_data('sir.infection', resample='week', noise=ss.nbinom(n=2), seed=s)['sir.infection'].to_numpy() for s in range(200)]) # Negative-binomial noise, as the likelihood of a fit takes it
+    assert np.allclose(over.mean(axis=0), exact, rtol=0.25) and np.allclose(over.var(axis=0)[3:9], (exact + exact**2/2)[3:9], rtol=0.4)
+    with pytest.raises(ValueError, match='as a probability'): # A count is not a probability (it drew n every time)
+        truth.to_data('sir.infection', noise=ss.binom(n=100))
     sim = make(data).run()
     ax = sim.plot('sir.infection').axes[0]
     assert len(ax.lines[0].get_xdata()) == 12 # The 12 whole weeks of the run (6 with data)
@@ -449,6 +455,8 @@ def test_axes():
     sis.stratify(sex=['female', 'male'])
     msim = ss.Sim(sis, unit='day', stop=40, total_pop=1000, solver='binomial', verbose=0).run(n_runs=3)
     res = msim.results.sis.I
+    serial = ss.Sim(sis, unit='day', stop=40, total_pop=1000, solver='binomial', verbose=0).run(n_runs=3, parallel=False) # It was a TypeError
+    assert np.array_equal(serial.results.sis.I.values, res.values)
     by = res.by('sex')
     assert by.shape == (3, 41, 2) and np.array_equal(by.values.sum(axis=-1), res.values) and np.array_equal(by.male.values, res.select(sex='male').values) # Across runs, a column for each level
     assert by.resample('week').shape[0] == 3 and np.array_equal(by.resample('week').values[..., 0], res.select(sex='female').resample('week').values)

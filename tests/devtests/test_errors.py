@@ -272,7 +272,7 @@ def _(): return ode(sir(), start='2020-01-01', stop='2020-03-01').init()
 @trigger('shorter than the step', 'note')
 def _():
     S, I, R = ss.states('S I R')
-    return ode(ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=0.5), init_prev=0.01, name='sir')).init()
+    return ode(ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, rate=2), init_prev=0.01, name='sir')).init() # A bare number for a rate, likely meant as a duration
 
 @trigger('aggregated from 3 age groups', 'note')
 def _(): return ode(sir(), stratify=dict(age=[0, 15]), networks=ss.contacts(np.ones((3, 3)), ages=[0, 15, 50])).init()

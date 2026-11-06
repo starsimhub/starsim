@@ -17,6 +17,8 @@ import sciris as sc
 import matplotlib.font_manager as fm
 import starsim as ss # Only used to set references
 
+thread_limit = None # The fewest threads asked for in the environment when Starsim was imported (STARSIM_NUM_THREADS, SCIRIS_NUM_THREADS, or OMP_NUM_THREADS), before it set its own (see ss.gradients.jax()); None if none was
+
 
 def cache_numba():
     """ Keep Numba's cache in a temporary folder if it has nowhere else to go (a read-only package and home folder, as in some containers), since `cache=True` would otherwise fail on import; Numba finds it by `NUMBA_CACHE_DIR`, as do the workers of `ss.parallel()` """
@@ -118,6 +120,8 @@ class Options(sc.obj):
 
         optdesc.max_steps = 'The number of timesteps above which a sim warns that it may be slow (0 to never warn)'
         options.max_steps = sc.parse_env('STARSIM_MAX_STEPS', 50_000, int) # More than a century at a daily step, which the textbooks' models run
+        optdesc.max_years = 'The length of a run in years above which a sim warns that it is probably a mistake (0 to never warn)'
+        options.max_years = sc.parse_env('STARSIM_MAX_YEARS', 1000, int) # Longer is almost always a stop meant as a year, or a time in the wrong unit
 
         optdesc.jupyter = 'Set whether to use Jupyter settings (retina figures): -1=auto, 0=False, 1=True'
         options.jupyter = sc.parse_env('STARSIM_JUPYTER', -1, int)
@@ -143,7 +147,7 @@ class Options(sc.obj):
         optdesc.kernels = 'Which kernels run the solvers (all give the same results): "auto" (default) for Rust if it is there (in the wheels, or built: see starsim/solvers/rust/README.md), and otherwise Numba, with compartmental runs taken as plain Python until Numba has compiled (if a run, or the runs of a session, would take longer as plain Python than compiling takes, about two minutes once per install, Numba compiles first; a note says which); "rust" for Rust, compiled ahead of time, so a first run takes no compiling; "numba" to always compile with Numba first (see ss.compile()); "python" for the compartmental kernels as plain Python (the passes over agents are Numba). JAX is chosen by the run (see sim.jax), and ss.jit is always Numba'
         options.kernels = sc.parse_env('STARSIM_KERNELS', 'auto', str)
 
-        optdesc.jax = 'The platform that JAX runs on where Starsim uses it (sim.gradient(), posteriors, and long ODE runs; see sim.jax): "auto" (default) for JAX\'s own choice (a GPU if it finds one), or a platform, e.g. "cpu" (for a GPU that JAX cannot use) or "cuda". It sets JAX_PLATFORMS, so it applies to everything in the session that uses JAX, and must be set before JAX is first used'
+        optdesc.jax = 'The platform that JAX runs on where Starsim uses it (sim.gradient(), fits, and ODE runs with sim.jax = True): "auto" (default) for JAX\'s own choice (a GPU if it finds one), or a platform, e.g. "cpu" (for a GPU that JAX cannot use) or "cuda". It sets JAX_PLATFORMS, so it applies to everything in the session that uses JAX, and must be set before JAX is first used'
         options.jax = sc.parse_env('STARSIM_JAX', 'auto', str)
 
         optdesc.uncompiled_warning = 'If True (default), say on import when Starsim has not been compiled yet (see ss.compile()) -- NOTE, only has effect via the environment variable since executed on load'

@@ -232,7 +232,7 @@ def test_agents_match_ode():
     analytic = dict( # From the corpus's parameters
         sir     = 0.3*10, # β·D
         seir    = 0.3*10, # β·D, since everyone exposed becomes infectious
-        malaria = np.sqrt(0.3*0.5*50_000/10_000*100 * 0.3*0.5*0.1/(0.1 + 0.1)*10), # √(abM/(Nr) · acσ/((σ + μ)μ)) = 7.5, with M = 50,000 mosquitoes at equilibrium and N = 10,000 people (was 0)
+        malaria = np.sqrt(0.3*0.5*50_000/9_900*100 * 0.3*0.5*0.1/(0.1 + 0.1)*10), # √(abM/(Nr) · acσ/((σ + μ)μ)) = 7.54, with M = 50,000 mosquitoes at equilibrium and N = 9,900 people, the 1% infected at the start left out (was 0, then 7.5 with them counted as susceptible)
     )
     for name,R0 in analytic.items():
         sim = corpus.models[name](solver='ode', **fine)

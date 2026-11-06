@@ -110,6 +110,9 @@ def test_ide():
     assert np.allclose(ode.I.values, ide.I.values, rtol=2e-3, atol=1)
     delay = ss.constant(ss.days(6)) # Exact as a conveyor, as it already is
     assert np.array_equal(make(delay, 'ode').I.values, make(delay, 'ide').I.values)
+    days = ss.choice(a=ss.days([3, 4, 5, 8]), p=[0.1, 0.4, 0.3, 0.2]) # Whole steps: a conveyor under every compartmental solver, not stages
+    assert np.array_equal(make(days, 'ode').I.values, make(days, 'ide').I.values)
+    assert np.array_equal(make(ss.choice(a=ss.days([6]), p=[1]), 'ode').I.values, make(delay, 'ode').I.values)
     res = make(gamma, 'ide', branching=True, stop=100) # Grows at the rate the generation interval gives (Euler-Lotka)
     y = res.E.values + res.I.values
     t = np.arange(len(y))

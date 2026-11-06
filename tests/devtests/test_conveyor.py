@@ -45,7 +45,7 @@ def test_fixed_delay():
     n0 = 1000
     ode = ss.Sim(cohort(), solver='ode', total_pop=10_000, unit='day', stop=20, **kw).run()
     r = ode.results.d
-    assert np.allclose(r.E[:14], n0*np.exp(-mu*k), rtol=1e-6) and r.E[14:].max() < 1e-9
+    assert np.allclose(r.E[:14], n0*np.exp(-mu*k), rtol=1e-6) and r.E[14:].max() < 1e-6 # What the integrator leaves in the last slot (7e-8 of a person here) leaves with the next step, rather than being dropped
     assert np.isclose(r.latent[14], n0*np.exp(-mu*13.5), rtol=1e-5) and np.isclose(r.latent.sum(), r.latent[14]) # Half of the last step's deaths come first
     abm = ss.Sim(cohort(), n_agents=10_000, unit='day', stop=20, **kw).run().results.d
     assert abm.latent[:14].sum() == 0 and abm.E[14] == 0 and np.isclose(abm.latent[14], n0*np.exp(-mu*14), rtol=0.05)

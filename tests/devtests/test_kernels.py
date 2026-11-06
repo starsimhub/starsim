@@ -62,6 +62,13 @@ def make_delay():
                       recovery=ss.Transition(I, R, dur=ss.days(8)), death=ss.death([E, I], rate=ss.perday(0.02)), init_prev=0.01, name='delay')
 
 
+def make_met():
+    """ Counts that a contact matrix acts on: the number in each age group (beta*I.n), weighted (by age, and by infectiousness), and that over everyone (beta*I.frac) """
+    S, I, R = ss.states('S I R')
+    I.rel_trans = 0.5
+    return ss.Disease(infection=S >> I @ (1e-6*I.n + 1e-6*(ss.by(age=[2, 1, 0.5])*I).n + 2e-6*I.n_trans + 0.1*I.frac), recovery=I >> R @ ss.days(8), init=dict(I=0.001), name='sir').stratify(age=[0, 15, 65], split=[0.3, 0.5, 0.2])
+
+
 models = sc.obj(
     sir     = (make_sir,     dict(total_pop=10_000, unit='day', stop=ss.weeks(12))),
     seir    = (make_seir,    dict(unit='day', stop=200)),
@@ -71,6 +78,7 @@ models = sc.obj(
     malaria = (make_malaria, dict(unit='day', stop=200, total_pop=10_000)),
     tb      = (make_tb,      dict(stop=30, total_pop=100_000)), # Has a transfer, so is stepped
     delay   = (make_delay,   dict(unit='day', stop=150)),
+    met     = (make_met,     dict(unit='day', stop=150, total_pop=100_000, networks=ss.contacts(np.array([[8, 3, 1], [3, 6, 2], [1, 2, 3]])))),
 )
 
 

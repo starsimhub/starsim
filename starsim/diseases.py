@@ -590,14 +590,19 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         """
         The basic reproduction number, from the next-generation matrix at the disease-free state
 
-        By definition it is in a population with no immunity: everyone is taken to be in the first
-        state (e.g. S), each group keeping its size, whoever starts immune (`init=dict(R=0.9)`).
-        The reproduction number at the start, with that immunity, is in the line a run prints
-        as it starts, when it differs (`R0 = 15.2 (R = 1.52 at the start, with 10% susceptible)`).
+        By definition it is in a population with no infection and no immunity: the people infected at the start are left
+        out, and everyone else is taken to be in the first state (e.g. S), each group keeping its size, whoever starts
+        immune (`init=dict(R=0.9)`). So where transmission is density-dependent (`beta*I.n`), R0 is for the population less
+        the people seeded, which matters only when many are (half the people seeded halves it). If no transition links some states to the first (a chain of states for each host
+        species), their people are in the state their own chain starts from. People filled by a constant inflow (births of a
+        number a day) and counts that are not people (mosquitoes) are at their equilibrium, which the inflow and the rates out
+        of them set (Λ/μ). The reproduction number at the start, with any immunity, is in the line a run prints as it starts,
+        when it differs (`R0 = 15.2 (R = 1.52 at the start, with 10% susceptible)`).
 
         The model is laid out as an ODE: if the disease is in a sim, a copy of that sim
         is made with `solver='ode'`, with its mixing and stratification; otherwise a sim with
-        the disease alone, under homogeneous mixing, with the default number of people. Values that vary in time are taken at the start.
+        the disease alone, under homogeneous mixing, with the default number of people. Values that vary in time
+        (a seasonal β) are taken at the start, so this is R0 at the start time.
         A sim runs a copy of the disease it is given, so the R0 of a sim's model is `sim.diseases.<name>.R0()`;
         this matters where a count is a number rather than a share of the people (mosquitoes per person).
 

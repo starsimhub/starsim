@@ -342,7 +342,17 @@ def value_str(val):
     elif isinstance(val, ss.parameters.TimeValue): return repr(val)
     elif callable(val) and not isinstance(val, ss.Dist): return getattr(val, '__name__', 'function').replace('<lambda>', 'a lambda function')
     elif isinstance(val, ss.TimePar): return repr(val)
+    elif isinstance(val, ss.by) and val.given: return f'by({", ".join(f"{k}={rounded(v)}" for k,v in val.given.items())})' # A value for each level, each to six figures as a number is
     return str(val)
+
+
+def rounded(v):
+    """ Numbers to six significant figures, in a list or a dict as given """
+    if isinstance(v, dict):
+        return {k:rounded(x) for k,x in v.items()}
+    elif isinstance(v, (list, tuple, np.ndarray)):
+        return [rounded(x) for x in v]
+    return float(f'{v:.6g}') if isinstance(v, (float, np.floating)) else v
 
 
 def is_one(expr):
@@ -461,6 +471,20 @@ def substitute(expr, subs):
     elif isinstance(expr, Func):
         return Func(expr.name, *[substitute(arg, subs) for arg in expr.args])
     return subs.get(id(expr), expr)
+
+
+def unheld(expr):
+    """ A rate with each parameter that holds an expression of states or counts (`ss.par(beta*I)`) replaced by that expression, since that is what it is: worked out as the rate is, under every solver, rather than as a value """
+    if isinstance(expr, par) and isinstance(expr.value, Expr) and any(isinstance(part, (ss.transitions.State, Count, Coverage)) for part in nodes(expr.value)):
+        if expr.bounds is not None or expr.prior is not None:
+            errormsg = f'The parameter {expr.name or ""} holds the rate {expr.value}, which reads the model\'s states, so it cannot be fitted as a value; give the bounds or prior to the parameters inside it instead, e.g. beta = ss.par(0.3, bounds=[0.1, 1]) in ss.par(beta*I)'
+            raise ValueError(errormsg)
+        return unheld(expr.value)
+    parts = [expr.a, expr.b] if isinstance(expr, BinOp) else expr.args if isinstance(expr, Func) else []
+    new = [unheld(part) for part in parts]
+    if all(a is b for a,b in zip(new, parts)):
+        return expr
+    return BinOp(expr.op, *new) if isinstance(expr, BinOp) else Func(expr.name, *new)
 
 
 binops = dict(add='+', subtract='-', multiply='*', divide='/', true_divide='/', power='**')
@@ -1118,6 +1142,8 @@ def format_expr(expr, values=False, bare=None, mul='*', exact=False, unit=None):
             text = value_str(raw.value if isinstance(raw, ss.TimePar) and values == 'number' else raw)
             if exact and isinstance(raw, float) and float(text) != raw: # E.g. 1 + 1e-9, which is "1" to six figures
                 text = repr(float(raw))
+            elif exact and isinstance(raw, ss.by):
+                text = repr(raw)
             return text
         elif isinstance(e, ss.transitions.State):
             return e.label_name if bare is None else bare(e)

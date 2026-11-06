@@ -66,7 +66,7 @@ msim = ss.parallel({'Nobody immune': nobody, '90% immune': immune})
 msim.plot('measles.I')
 ```
 
-With only 10% of people susceptible, each infectious person infects 15 × 0.1 ≈ 1.5 others on average. This is the reproduction number at the start, which the run prints after R0 (`R = 1.52 at the start, with 10% susceptible`): R0 itself is for a population in which everyone is susceptible, and is still 15.2. So the outbreak still grows, but slowly: it peaks at about 700 people infectious at once rather than 74,000, and infects about 6,000 people over the year instead of almost everyone. An outbreak can only grow when the reproduction number is above 1, so to stop measles spreading, more than 1 − 1/R0 = 1 − 1/15 ≈ 93% of people must be immune: the herd immunity threshold. Try `R=0.95` to see an outbreak that dies out.
+With only 10% of people susceptible, each infectious person infects 15 × 0.1 ≈ 1.5 others on average. This is the reproduction number at the start, which the run prints after R0 (`R = 1.51 at the start, with 10% susceptible`): R0 itself is for a population in which everyone is susceptible, and is still 15.2. So the outbreak still grows, but slowly: it peaks at about 700 people infectious at once rather than 74,000, and infects about 6,000 people over the year instead of almost everyone. An outbreak can only grow when the reproduction number is above 1, so to stop measles spreading, more than 1 − 1/R0 = 1 − 1/15 ≈ 93% of people must be immune: the herd immunity threshold. Try `R=0.95` to see an outbreak that dies out.
 
 ## Changing parameters
 

@@ -93,19 +93,19 @@ fn items<'py>(o: &Bound<'py, PyAny>, n: usize, what: &str) -> PyResult<Vec<Bound
 
 /// A program (`kernels.Program`)
 fn program<'py>(o: &Bound<'py, PyAny>, k: &mut Keep<'py>) -> PyResult<Program> {
-    let f = items(o, 55, "Program")?;
+    let f = items(o, 57, "Program")?;
     Ok(Program {
         n_trans: uint(&f[0])?, src: a1(&f[1], k, false)?, named: b1(&f[2], k, false)?, index: a1(&f[3], k, false)?, record: a1(&f[4], k, false)?,
         inflow: a2(&f[5], k, true)?, fixed: a2(&f[6], k, true)?, mult: a2(&f[7], k, true)?, depth: uint(&f[8])?, starts: a1(&f[9], k, false)?,
-        ops: a1(&f[10], k, false)?, args: a1(&f[11], k, false)?, consts: a2(&f[12], k, true)?, set_starts: a1(&f[13], k, false)?, set_comps: a1(&f[14], k, false)?,
-        people: a1(&f[15], k, false)?, has_det: f[16].is_truthy()?, det: b1(&f[17], k, false)?, places: a1(&f[18], k, false)?, n_places: uint(&f[19])?,
-        exp_set: a1(&f[20], k, false)?, rel_trans: a2(&f[21], k, true)?, levels: a2(&f[22], k, false)?, sizes: a1(&f[23], k, false)?, block: a1(&f[24], k, false)?,
-        contacts: a3(&f[25], k, false)?, use_: b2(&f[26], k, false)?, mat: a3(&f[27], k, false)?, sh_pair: a2(&f[28], k, false)?, sh_val: a1(&f[29], k, true)?,
-        tgt_starts: a1(&f[30], k, false)?, tgt_comp: a1(&f[31], k, false)?, tgt_w: a2(&f[32], k, false)?, tgt_map: a1(&f[33], k, false)?, tgt_rec: a1(&f[34], k, false)?,
-        crd_starts: a1(&f[35], k, false)?, crd_index: a1(&f[36], k, false)?, crd_w: a2(&f[37], k, false)?, crd_parent: a1(&f[38], k, false)?, maps: a3(&f[39], k, false)?,
-        n_movers: uint(&f[40])?, mov_starts: a2(&f[41], k, false)?, mov_comps: a1(&f[42], k, false)?, mov_pair: a2(&f[43], k, false)?, mov_rate: a1(&f[44], k, true)?,
-        mov_base: a1(&f[45], k, false)?, mov_par: a1(&f[46], k, false)?, src_starts: a1(&f[47], k, false)?, src_flows: a1(&f[48], k, false)?, src_chain: a1(&f[49], k, false)?,
-        src_stage: a1(&f[50], k, false)?, src_last: a1(&f[51], k, false)?, local: f[52].is_truthy()?, pl_starts: a1(&f[53], k, false)?, pl_groups: a1(&f[54], k, false)?,
+        ops: a1(&f[10], k, false)?, args: a1(&f[11], k, false)?, consts: a2(&f[12], k, true)?, set_starts: a1(&f[13], k, false)?, set_comps: a1(&f[14], k, false)?, set_w: a1(&f[15], k, false)?,
+        people: a1(&f[16], k, false)?, has_det: f[17].is_truthy()?, det: b1(&f[18], k, false)?, places: a1(&f[19], k, false)?, n_places: uint(&f[20])?,
+        exp_set: a1(&f[21], k, false)?, exp_n: b1(&f[22], k, false)?, rel_trans: a2(&f[23], k, true)?, levels: a2(&f[24], k, false)?, sizes: a1(&f[25], k, false)?, block: a1(&f[26], k, false)?,
+        contacts: a3(&f[27], k, false)?, use_: b2(&f[28], k, false)?, mat: a3(&f[29], k, false)?, sh_pair: a2(&f[30], k, false)?, sh_val: a1(&f[31], k, true)?,
+        tgt_starts: a1(&f[32], k, false)?, tgt_comp: a1(&f[33], k, false)?, tgt_w: a2(&f[34], k, false)?, tgt_map: a1(&f[35], k, false)?, tgt_rec: a1(&f[36], k, false)?,
+        crd_starts: a1(&f[37], k, false)?, crd_index: a1(&f[38], k, false)?, crd_w: a2(&f[39], k, false)?, crd_parent: a1(&f[40], k, false)?, maps: a3(&f[41], k, false)?,
+        n_movers: uint(&f[42])?, mov_starts: a2(&f[43], k, false)?, mov_comps: a1(&f[44], k, false)?, mov_pair: a2(&f[45], k, false)?, mov_rate: a1(&f[46], k, true)?,
+        mov_base: a1(&f[47], k, false)?, mov_par: a1(&f[48], k, false)?, src_starts: a1(&f[49], k, false)?, src_flows: a1(&f[50], k, false)?, src_chain: a1(&f[51], k, false)?,
+        src_stage: a1(&f[52], k, false)?, src_last: a1(&f[53], k, false)?, local: f[54].is_truthy()?, pl_starts: a1(&f[55], k, false)?, pl_groups: a1(&f[56], k, false)?,
     })
 }
 

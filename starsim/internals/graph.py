@@ -10,7 +10,7 @@ import itertools
 import numpy as np
 import sciris as sc
 import starsim as ss
-from .expressions import as_expr, BinOp, Count, count_power, did_you_mean, Expr, is_one, linear, par, per_person
+from .expressions import as_expr, BinOp, Count, count_power, did_you_mean, Expr, is_one, linear, par, per_person, unheld
 from .parameters import by, TimeValue
 from ..transitions import FlowSum, outcome, State, Transition
 
@@ -148,7 +148,7 @@ class Graph:
     def resolve_prevalence(self):
         """ A disease with transmission has the result `prevalence`, the share of people in the states counted in it, unless the name is taken """
         infected = [state for state in self.infected if state.people]
-        if infected and (self.transmissions or self.density_sources) and not self.taken('prevalence') and not hasattr(type(self.module), 'prevalence'):
+        if infected and (self.transmissions or self.count_sources) and not self.taken('prevalence') and not hasattr(type(self.module), 'prevalence'):
             self.add(self.exprs, 'prevalence', ss.expressions.as_stocks(sum(infected[1:], infected[0])/sum(self.people_states[1:], self.people_states[0])))
             self.auto_prevalence = True
         return
@@ -272,6 +272,8 @@ class Graph:
         found = {id(s):s for s in self._declared}
         self._refs = [] # States used only inside a rate
         for tr in trs:
+            if tr.rate is not None:
+                tr.rate = unheld(tr.rate) # A rate held in a parameter, e.g. ss.par(beta*I), is that rate
             for side,ends in [('source', tr.src or []), ('destination', tr.dst or [])]:
                 for end in ends:
                     if not isinstance(end, State):
@@ -451,19 +453,9 @@ class Graph:
         Refuse a forgotten `people=False`: a group of states of people that no transition links to the first state
         and that only an inflow (not a birth) fills, as mosquitoes are, would otherwise silently become agents
         """
-        links = {id(s):set() for s in self.people_states}
-        if id(self.first) not in links: # No first state given (sim.init() raises), or not one of people
+        if not any(s is self.first for s in self.people_states): # No first state given (sim.init() raises), or not one of people
             return
-        for tr in self.transitions.values():
-            ends = [s for s in (tr.src or []) + (tr.dst or []) if s.people]
-            for s in ends:
-                links[id(s)].update(id(e) for e in ends)
-        group, todo = set(), [id(self.first)]
-        while todo: # The states linked to the first, in either direction
-            i = todo.pop()
-            if i not in group:
-                group.add(i)
-                todo += links[i]
+        group = {id(s) for s in next(g for g in self.linked() if any(s is self.first for s in g))} # The states linked to the first
         for tr in self.transitions.values():
             dst = [s for s in tr.dst or [] if id(s) not in group]
             if tr.inflow and tr.people and dst and not getattr(tr, 'per_capita', False) and tr.per is None and not any(s.people_given for s in dst):
@@ -471,6 +463,26 @@ class Graph:
                 raise ValueError(f'"{tr.name}" ({tr.arrow}) fills {sc.strjoin(others)}, which no transition links to {self.first.name}, where people start, so {"it looks like" if len(others) == 1 else "they look like"} a count of something else (e.g. mosquitoes). '
                                                 f'Every state is people unless declared a count: if {"it is" if len(others) == 1 else "they are"} not people, declare {sc.strjoin(others)} with ss.State(people=False) (or ss.states(n, people=False)); if {"it is" if len(others) == 1 else "they are"} people, say so with people=True.')
         return
+
+    def linked(self):
+        """ The groups of states of people that transitions link, in either direction: one, unless the people are in separate chains of states (e.g. a chain for each host species) """
+        links = {id(s):{id(s)} for s in self.people_states}
+        for tr in self.transitions.values():
+            ends = [s for s in (tr.src or []) + (tr.dst or []) if s.people]
+            for s in ends:
+                links[id(s)].update(id(e) for e in ends)
+        groups, seen = [], set()
+        for state in self.people_states:
+            group, todo = set(), [id(state)]
+            while todo:
+                i = todo.pop()
+                if i not in group and i not in seen:
+                    group.add(i)
+                    todo += links[i]
+            if group:
+                seen |= group
+                groups.append([s for s in self.people_states if id(s) in group])
+        return groups
 
     def resolve_rest(self):
         """
@@ -524,6 +536,7 @@ class Graph:
         if tr.every_state:
             tr.src = list(self.people_states)
         if tr.per_capita:
+            tr.per_person = tr.rate # Kept for a rate by level, whose births are from the people at each level (see ss.solvers.Engine.per_level())
             tr.rate = tr.rate * Count(list(self.people_states), kind='n')
             tr.const, tr.terms = linear(tr.rate)
         return
@@ -624,6 +637,7 @@ class Graph:
         used += [(name, a.init_value) for name,a in self.attrs.items() if isinstance(a.init_value, Expr)] # And in its value before any event
         used += [(name, val) for name,a in self.attrs.items() if a.init_value is not None for p in ss.expressions.dists_in(a.init_value) for val in p.value.pars.values() if isinstance(val, par)]
         used += [(name, leaf.value) for name,expr in list(used) if expr is not None for leaf in expr.leaves if isinstance(leaf, par) and isinstance(leaf.value, Expr)] # And inside a dwell time given as an expression (of attributes)
+        used += [(name, w) for name,expr in list(used) if expr is not None for w in count_weights(expr)] # And in the weights of a weighted count, e.g. (ss.by(biting=w)*I).n
         used += [(name, inner) for name,expr in list(used) if expr is not None for leaf in expr.leaves if isinstance(leaf, par) for inner in inner_pars(leaf.value)] # And a parameter inside a value that varies in time, a probability per act, or a beta for each route
         for name,expr in used:
             if expr is not None:
@@ -929,13 +943,27 @@ class Graph:
         return [s for s in self.states.values() if s.infectious]
 
     @property
-    def density_sources(self):
-        """ The states whose numbers drive an acquisition at a rate on counts of people, which is density-dependent transmission: `I` in `S >> I @ beta*I.n` """
+    def count_sources(self):
+        """ The states whose numbers or shares drive an acquisition at a rate on counts of them, which are the sources of infection without a transmission: `I` in `S >> I @ beta*I.n` (density-dependent), or `beta*I.frac` """
         out = {}
         for tr in self.acquisitions:
-            if tr.rate is not None and not tr.contact and count_power(tr.rate) > 0:
+            if tr.rate is not None and not tr.contact:
                 out.update({id(leaf.states[0]):leaf.states[0] for leaf in tr.rate.leaves if isinstance(leaf, Count) and len(leaf.states) == 1
                             and leaf.states[0].people and leaf.states[0].module is self.module and not any(leaf.states[0] is src for src in tr.src or [])})
+        return list(out.values())
+
+    @property
+    def met_counts(self):
+        """
+        The counts in a rate that a contact matrix acts on (see `ss.solvers.Mixing.count_terms()`): in the rate of an acquisition, the number
+        (`I.n`, or weighted: `(ss.by(w)*I).n`, `I.n_trans`) or share (`I.frac`) of the people in states of this disease that it does not take
+        people from, as `I` in `S >> I @ beta*I.n`
+        """
+        out = {}
+        for tr in self.acquisitions:
+            for leaf in (tr.rate.leaves if tr.rate is not None else []):
+                if isinstance(leaf, Count) and leaf.kind in ['n', 'frac'] and all(s.people and s.module is self.module and not any(s is src for src in tr.src or []) for s in leaf.states):
+                    out[id(leaf)] = leaf
         return list(out.values())
 
     @property
@@ -967,7 +995,7 @@ class Graph:
         In a model where nobody is a source of infection (a staged condition such as a cancer), also every state that
         people reach from those without passing through a state they can be in without having been infected
         """
-        sources = {id(s):s for s in self.infectious + self.density_sources}
+        sources = {id(s):s for s in self.infectious + self.count_sources}
         for tr in self.transitions.values():
             if not tr.people and tr.rate is not None:
                 sources.update({id(leaf.states[0]):leaf.states[0] for leaf in tr.rate.leaves if isinstance(leaf, Count) and len(leaf.states) == 1 and leaf.states[0].people})
@@ -1029,6 +1057,7 @@ class Graph:
         """ Every parameter in the graph, named or inline """
         out = {id(p):p for p in self.pars.values()}
         exprs = [expr for tr in self.transitions.values() for expr in [tr.rate, tr.dur] + sc.tolist(tr.p)]
+        exprs += [w for expr in exprs if expr is not None for w in count_weights(expr)]
         for expr in exprs:
             if expr is not None:
                 out.update({id(leaf):leaf for leaf in expr.leaves if isinstance(leaf, par)})
@@ -1039,6 +1068,11 @@ class Graph:
         dwells = [tr.dur for tr in self.transitions.values()]
         dwells += [scaled[0] for tr in self.transitions.values() if tr.dur is not None and isinstance(tr.dur.raw, Expr) and (scaled := ss.transitions.scaled_dist(tr.dur.raw)) is not None] # A distribution times a factor, e.g. dur=d*ss.weeks(1), is drawn on entry too
         return [p for p in self.all_pars() if isinstance(p.raw, ss.Dist) and not any(p is dur for dur in dwells)]
+
+
+def count_weights(expr):
+    """ The weights of the weighted counts in an expression (`w` in `(w*I).n`), whose parameters are the module's too """
+    return [w for leaf in expr.leaves if isinstance(leaf, ss.expressions.Count) and leaf.weights for w in leaf.weights.values()]
 
 
 def unit_values(vals):

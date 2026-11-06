@@ -115,12 +115,10 @@ def test_versions(monkeypatch, capsys):
     sc.heading('Testing the versions the converters were tested with')
     assert set(ss.converters.tested) == set(ss.converters.importers) | set(ss.converters.exporters), 'Every format should say which version it was tested with'
     sim = make_sir()
-    with pytest.warns(ss.errors.LossyExport):
-        text = ss.export_to(sim, 'odin', verbose=False)
+    text = ss.export_to(sim, 'odin', verbose=False) # An SIR loses nothing (it lost the automatic prevalence, which it did not declare)
     assert f'(tested with odin {ss.converters.tested['odin'][1]})' in text
     monkeypatch.setitem(ss.converters.tested, 'odin', ('odin', '0.0', 'numpy')) # As if numpy were the framework, at another version than the one installed
-    with pytest.warns(ss.errors.LossyExport):
-        ss.export_to(sim, 'odin', verbose=False)
+    ss.export_to(sim, 'odin', verbose=False)
     assert 'was tested with 0.0' in capsys.readouterr().out
     return
 

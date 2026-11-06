@@ -70,7 +70,7 @@ sim.describe()
 
 ## Age groups and contacts
 
-Most respiratory infections spread differently between age groups. `stratify()` splits each state by age: here into three groups, with the share of the population in each. `ss.contacts()` says how much each group mixes with each other one: a contact matrix, in which row *i*, column *j* is the number of contacts a day that a person in group *i* has with people in group *j*. With contacts, β is the chance of infection per contact. The infectious period is a parameter too, `dur_inf`, so that it can be changed later. This model also has an outcome, `cases`: the infections that are reported, here one in five.
+Most respiratory infections spread differently between age groups. `stratify()` splits each state by age: here into three groups, with the share of the population in each. `ss.contacts()` says how much each group mixes with each other one: a contact matrix, in which row *i*, column *j* is the number of contacts a day that a person in group *i* has with people in group *j*. With contacts, β is the rate of infection per contact. The infectious period is a parameter too, `dur_inf`, so that it can be changed later. This model also has an outcome, `cases`: the infections that are reported, here one in five.
 
 ```{python}
 S, I, R = ss.states('S I R')

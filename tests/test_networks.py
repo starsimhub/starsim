@@ -477,6 +477,22 @@ def test_edge_ops():
 
 
 @sc.timer()
+def test_one_way():
+    sc.heading('Testing a network that transmits one way (one_way=True)')
+    reached = {}
+    for one_way in [False, True]:
+        net = ss.Network(p1=np.arange(99), p2=np.arange(1, 100), beta=np.ones(99), one_way=one_way, name='chain') # A chain, each person linked to the next
+        sim = ss.Sim(n_agents=100, diseases=ss.SIR(beta=ss.perday(5), init_prev=0, dur_inf=ss.days(1000)), networks=net, dt=ss.days(1), stop=ss.days(20), verbose=0)
+        sim.init()
+        sim.diseases.sir.infect(ss.uids([50]))
+        sim.run()
+        reached[one_way] = np.flatnonzero(~sim.diseases.sir.S.values)
+    assert reached[False].min() < 50 < reached[False].max() # Both ways from person 50
+    assert reached[True].min() == 50 < reached[True].max() # Only from p1 to p2
+    return reached
+
+
+@sc.timer()
 def test_dynamic():
     sc.heading('Testing static (dynamic=False) networks')
     kw = dict(n_agents=small, diseases='sis', verbose=0)
@@ -540,6 +556,27 @@ def test_bare_units():
     with pytest.warns(RuntimeWarning, match='set only the mean') as record: # The same unit as the sim: only that the std of the default was kept (see Pars._update_dist())
         ss.Sim(n_agents=200, diseases=ss.SIS(beta=ss.peract(0.01)), networks=ss.SexualNet(dur=5), verbose=0).init()
     assert not any('read in' in str(w.message) for w in record)
+    return
+
+
+@sc.timer()
+def test_certain_transmission():
+    sc.heading('A probability of 1 per contact (an infinite rate) transmits to every contact, and a bare beta on a network is a rate')
+    def infected(beta):
+        S, I = ss.states('S I')
+        si = ss.Disease(infection=S >> I @ beta*I, init_prev=0.3, name='si')
+        sim = ss.Sim(si, networks=ss.RandomNet(n_contacts=2, dynamic=False), n_agents=5000, unit='week', dt=ss.weeks(1), stop=1, rand_seed=1, verbose=0).init()
+        before = sim.diseases.si.I.raw.copy()
+        e = sim.networks[0].edges
+        k = np.bincount(e.p2[before[e.p1]], minlength=len(before)) + np.bincount(e.p1[before[e.p2]], minlength=len(before)) # Infectious contacts of each person
+        at_risk = (k > 0) & ~before
+        with warnings.catch_warnings():
+            warnings.simplefilter('error') # It was a RuntimeWarning and no infections
+            sim.run()
+        return sim.diseases.si.I.raw[at_risk].mean(), k[at_risk]
+    assert infected(ss.probperweek(1))[0] == 1
+    share, k = infected(0.3)
+    assert np.isclose(share, np.mean(1 - np.exp(-0.3*k)), atol=0.03) # A rate per contact, not a probability of 0.3
     return
 
 
@@ -898,6 +935,7 @@ if __name__ == '__main__':
     ehh  = test_dynamic_household()
     oth  = test_other()
     ops  = test_edge_ops()
+    oneway = test_one_way()
     dyn  = test_dynamic()
     clus = test_cluster()
     hyb  = test_hybrid()
@@ -914,5 +952,6 @@ if __name__ == '__main__':
     cand = test_transmit_candidates()
     index = test_edge_index()
     shared = test_shared_pass()
+    certain = test_certain_transmission()
 
     T.toc()

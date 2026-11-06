@@ -38,15 +38,18 @@ def jax():
     Import JAX (imported only when first used, since it takes a few tenths of a second)
 
     If JAX has not been imported yet, it is given a device for each core of the CPU (as
-    `numpyro.set_host_device_count()` does), so that the chains of a posterior run on
-    cores of their own; everything else runs on the first. The platform it runs
+    `numpyro.set_host_device_count()` does), or as many as the threads asked for in the
+    environment (e.g. `OMP_NUM_THREADS=1`: see `ss.settings.thread_limit`), so that the chains
+    of a posterior run on cores of their own; everything else runs on the first. XLA's own
+    threads (most of them compiling) are not limited by it: no flag of XLA's limits them. The platform it runs
     on is `ss.options.jax` (e.g. "cpu"), if not "auto". The first time, its devices are
     started here, so that a GPU that fails to start (e.g. with a CUDA plugin of another
     version than jaxlib) says what to do.
     """
     if 'jax' not in sys.modules:
-        if 'xla_force_host_platform_device_count' not in os.environ.get('XLA_FLAGS', ''):
-            os.environ['XLA_FLAGS'] = f'{os.environ.get("XLA_FLAGS", "")} --xla_force_host_platform_device_count={os.cpu_count() or 1}'.strip()
+        if 'xla_force_host_platform_device_count' not in os.environ.get('XLA_FLAGS', ''): # As many as the threads asked for in the environment, if any (e.g. OMP_NUM_THREADS=1: see ss.settings.thread_limit)
+            devices = min(os.cpu_count() or 1, ss.settings.thread_limit or os.cpu_count() or 1)
+            os.environ['XLA_FLAGS'] = f'{os.environ.get("XLA_FLAGS", "")} --xla_force_host_platform_device_count={devices}'.strip()
         if ss.options.jax != 'auto':
             os.environ['JAX_PLATFORMS'] = ss.options.jax
     try:
@@ -186,6 +189,7 @@ class Run(sc.prettyobj):
         self.place = OneHot(p.places, p.n_places) # Which place each group is in
         self.cells = [OneHot(p.levels[t], int(p.sizes[t])) for t in range(len(p.sizes))] # ... and which level of each stratification
         self.sets = [p.set_comps[p.set_starts[s]:p.set_starts[s+1]] for s in range(len(p.set_starts) - 1)]
+        self.set_w = [p.set_w[p.set_starts[s]:p.set_starts[s+1]] for s in range(len(p.set_starts) - 1)] # The row of consts that weights each, or -1
         self.tgt_flow = np.repeat(np.arange(nf), np.diff(p.tgt_starts)) # The flow each target belongs to
         self.crd_flow = np.repeat(np.arange(nf), np.diff(p.crd_starts)) # ... and each transition a flow is also counted as
 
@@ -251,21 +255,23 @@ class Run(sc.prettyobj):
                     expo = expo + exposures[x]
                 exposures.append(expo)
                 continue
-            infectious = (ys[self.sets[p.exp_set[e]]]*rel_trans[e]).sum(axis=0)
+            infectious = (self.members(ys, s, consts)*rel_trans[e]).sum(axis=0) # Each member counted by its weight, if it has one
             expo = 0.0
-            if self.simple and not p.use[0].any() and not p.use[2].any(): # One group, mixing with itself
+            if self.simple and not p.use[0].any() and not p.use[2].any() and not p.exp_n[e]: # One group, mixing with itself
                 for t in range(len(p.sizes)):
                     expo = expo + X['contacts'][min(e, len(p.contacts) - 1), t]*jnp.where(n > 0, infectious/jnp.where(n > 0, n, 1.0), 0.0)
                 exposures.append(expo)
                 continue
             for t in range(len(p.sizes)):
+                if p.exp_n[e] and not p.use[1, t]: # A count, which only the contact matrices act on
+                    continue
                 num = self.cells[t].sum(infectious)
                 den = self.cells[t].sum(n)
                 block = int(p.block[t])
                 if p.use[0, t]: # Move people to where they spend their time
                     num = self.share(num, block, X, True)
                     den = self.share(den, block, X, True)
-                prev = jnp.where(den > 0, num/jnp.where(den > 0, den, 1.0), 0.0)
+                prev = num if p.exp_n[e] else jnp.where(den > 0, num/jnp.where(den > 0, den, 1.0), 0.0)
                 if p.use[1, t]: # Mix between the levels in each place
                     prev = (prev.reshape(-1, block) @ X['mat'][t, :block, :block].T).ravel()
                 if p.use[2, t]: # Mix between places
@@ -279,6 +285,15 @@ class Run(sc.prettyobj):
         for f in self.dynamic: # The operations on a stack, as in the kernels
             rows[f] = jnp.broadcast_to(self.evaluate(ys, p.starts[f], p.starts[f+1], consts, exposures, local_n, regs), (self.ng,))*mult[f]
         return jnp.stack(rows)
+
+    def members(self, ys, s, consts):
+        """ The compartments of set s, by group, each times its weight if it has one (as `ss.kernels.member()`) """
+        jnp = jax().numpy
+        rows = self.set_w[s]
+        out = ys[self.sets[s]]
+        if (rows >= 0).any():
+            out = out*jnp.stack([jnp.broadcast_to(consts[r], (self.ng,)) if r >= 0 else jnp.ones(self.ng) for r in rows])
+        return out
 
     def evaluate(self, ys, a, b, consts, exposures, local_n, regs):
         """ The value of the operations a to b-1 of the program, by group, with the compartments at ys (as `ss.kernels.step()` works out a rate) """
@@ -297,11 +312,11 @@ class Run(sc.prettyobj):
             elif op == kn.EXPOSURE:
                 stack.append(exposures[arg])
             elif op == kn.TOTAL: # In the whole population, every place
-                stack.append(jnp.broadcast_to(ys[self.sets[arg]].sum(), (self.ng,)))
+                stack.append(jnp.broadcast_to(self.members(ys, arg, consts).sum(), (self.ng,)))
             elif op == kn.GROUP: # In the same group
-                stack.append(ys[self.sets[arg]].sum(axis=0))
+                stack.append(self.members(ys, arg, consts).sum(axis=0))
             elif op in [kn.COUNT, kn.FRAC]:
-                local = ys[self.sets[arg]].sum(axis=0)
+                local = self.members(ys, arg, consts).sum(axis=0)
                 if not self.simple:
                     local = self.place.local(local)
                 stack.append(jnp.where(local_n > 0, local/jnp.where(local_n > 0, local_n, 1.0), 0.0) if op == kn.FRAC else local) # As ss.kernels.leaf_share(): the share of an empty place is 0
@@ -468,7 +483,7 @@ class Run(sc.prettyobj):
                 y, flows = sub(0, (y, flows))
                 _, y_end, flows = lax.while_loop(lambda carry: carry[0] < n, body, (1, y, flows))
             if len(self.cv_flow): # Everyone in a conveyor moves along one slot
-                y_end = y_end.at[self.cv_next].set(y_end[self.cv_prev]).at[self.cv_first].set(0.0)
+                y_end = y_end.at[self.cv_next].set(y_end[self.cv_prev]).at[self.cv_last].add(y_end[self.cv_last]).at[self.cv_first].set(0.0) # What is left in the last slot stays, to leave with the next (see ss.kernels.convey())
             return jnp.maximum(y_end, 0.0), flows, need # The compartments after the step, as the kernels record them, and the substeps it needed (more than it took, if clamped)
 
         return step
@@ -917,7 +932,7 @@ def entries(sim, names=None):
     import starsim.fit # For the entries of a parameter with several values
     found, levels, elements = ss.fit.expand(sim, find_pars(sim, names, several=True))
     if names is not None: # Only the values named, of a parameter with several ("beta[a]")
-        named = lambda key: any(n in [key, base_name(key)] or key.endswith(f'.{n}') or base_name(key).endswith(f'.{n}') for n in names)
+        named = lambda key: any(m in [key, base_name(key)] or key.endswith(f'.{m}') or base_name(key).endswith(f'.{m}') for n in names for m in [n, n.split('.', 1)[-1]]) # 'sir.beta' is 'beta' when one module has it (find_pars() has chosen the module)
         found = sc.obj({key:p for key,p in found.items() if named(key)})
     raws = [ss.fit.entry(name, p, levels, elements) for name,p in found.items()]
     x0, types = ss.fit.start_values(raws)

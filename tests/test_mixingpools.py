@@ -145,6 +145,40 @@ def test_matrix():
     return
 
 
+@sc.timer()
+def test_counts():
+    """ A contact matrix acts on what the rate says: the share of each group (beta*I), the number in each (beta*I.n), or that over everyone (beta*I.frac), as compartments and as agents """
+    sc.heading('Testing what a contact matrix acts on...')
+    from scipy.integrate import solve_ivp
+    beta, split, pop = np.array([[10, 0.1], [0.1, 1]]), np.array([0.2, 0.8]), 10_000 # Keeling & Rohani's Program 3.1, on shares of everyone
+    def make(rate, solver='ode', **kwargs):
+        S, I = ss.states('S I')
+        sis = ss.Disease(infection=S >> I @ rate(S, I), recovery=I >> S @ ss.peryear(1), init=dict(I=0.01), name='sis').stratify(risk={'high':split[0], 'low':split[1]})
+        sim = ss.Sim(sis, networks=ss.contacts(beta, dims='risk'), total_pop=pop, stop=15, unit='year', dt=0.05, solver=solver, verbose=0, **kwargs).run()
+        return np.array([sim.results.sis.I.select(risk=risk).values for risk in ['high', 'low']])/pop
+    t = np.arange(0, 15.01, 0.05)
+    solve = lambda w: solve_ivp(lambda t, I: (beta @ (w*I))*(split - I) - I, [0, 15], 0.01*split, t_eval=t, rtol=1e-10, atol=1e-12).y
+    ref = solve(1)
+    frac = make(lambda S, I: I.frac)
+    assert np.abs(frac - ref).max() < 1e-4
+    assert np.abs(make(lambda S, I: (ss.by(risk=[2, 1])*I).n/pop) - solve(np.array([2, 1]))).max() < 1e-4 # A weighted count, also acted on by the matrix (it was an error)
+    for rate in [lambda S, I: I.n/pop, lambda S, I: I.n/(S + I).total]: # The same, as counts over the population
+        assert np.allclose(make(rate), frac, rtol=1e-9)
+    shares = make(lambda S, I: I) # On the share of each group, which is more
+    assert shares[:, -1].sum() > 2*frac[:, -1].sum()
+    agents = make(lambda S, I: I.n/pop, solver='abm', n_agents=pop)
+    assert np.allclose(agents[:, -1], frac[:, -1], rtol=0.1)
+
+    # A matrix with no terms between places still acts on a count (it was ignored)
+    def spread(networks):
+        S, I = ss.states('S I')
+        d = ss.Disease(S >> I @ (3*I.n), I >> S @ ss.perday(1), init=dict(I=ss.by(patch=[0.01, 0, 0])), name='d').stratify(patch=['a', 'b', 'c'], kind='space')
+        return ss.Sim(d, networks=networks, total_pop=3, stop=20, solver='ode', verbose=0).run().results.d.I.by('patch').values[-1]
+    assert np.allclose(spread(ss.contacts(np.ones((3, 3)), dims='patch')), 8/9)
+    assert np.allclose(spread(ss.contacts(np.eye(3), dims='patch')), spread(None))
+    return
+
+
 def test_keep_memory(monkeypatch):
     """ Older glibc refuses a threshold above 32 MB, which should not stop the rest of the setting """
     memory = ss.solvers.backends.memory

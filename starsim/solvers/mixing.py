@@ -427,17 +427,27 @@ class Mixing(Telling):
         return
 
     def check_reciprocal(self, net, strat, mat):
-        """ Say if a contact matrix is not reciprocal for the dimension's split: the contacts of the people in level i with level j should equal those of j with i, N_i·C_ij = N_j·C_ji """
+        """
+        Say if a contact matrix is not reciprocal for the dimension's split: the contacts of the people in level i with level j should equal those of j with i, N_i·C_ij = N_j·C_ji;
+        or, for a matrix that acts only on counts (`beta*I.n`, `beta*I.frac`: see `count_terms()`), whose entries are for pairs of people, C_ij = C_ji
+        """
         split = getattr(strat, 'split', None)
         if split is None or np.ndim(split) != 1 or len(split) != len(mat):
             return
-        flows = np.asarray(split, dtype=float)[:, None]*mat # Contacts from level i to level j, per person in the population
+        sim = self.sim
+        coded = any(isinstance(mod, ss.Disease) and getattr(mod, 'graph', None) is None for mod in sim.pars.diseases.values()) # Which transmit by exposure
+        counts = any(mod.graph.met_counts for mod in sim.declared) and not coded and not any(mod.graph.transmissions for mod in sim.declared)
+        flows = mat if counts else np.asarray(split, dtype=float)[:, None]*mat # Contacts from level i to level j, per person in the population (or per pair, on counts)
         scale = np.maximum(np.maximum(flows, flows.T), 1e-300)
         gap = np.abs(flows - flows.T)/scale
         if np.max(gap[scale > 1e-12*flows.max()], initial=0) > 0.05:
             i, j = np.unravel_index(np.argmax(np.where(scale > 1e-12*flows.max(), gap, 0)), gap.shape)
-            self.tell(ss.note, f'the contact matrix of "{net.name}" for "{strat.name}" is not reciprocal for its split: {strat.labels[i]} have {mat[i, j]:.3g} contacts each with {strat.labels[j]} ({flows[i, j]:.3g} per person of the population), '
-                    f'but {strat.labels[j]} have {mat[j, i]:.3g} each with {strat.labels[i]} ({flows[j, i]:.3g}); it is used as given, with rows as the contacts of a person in each level', sim=self.sim)
+            if counts:
+                self.tell(ss.note, f'the contact matrix of "{net.name}" for "{strat.name}" acts on counts (e.g. beta*I.n), so is for pairs of people, but is not symmetric: {mat[i, j]:.3g} for {strat.labels[i]} with {strat.labels[j]}, '
+                        f'and {mat[j, i]:.3g} for {strat.labels[j]} with {strat.labels[i]}; it is used as given, with rows as the people infected', sim=self.sim)
+            else:
+                self.tell(ss.note, f'the contact matrix of "{net.name}" for "{strat.name}" is not reciprocal for its split: {strat.labels[i]} have {mat[i, j]:.3g} contacts each with {strat.labels[j]} ({flows[i, j]:.3g} per person of the population), '
+                        f'but {strat.labels[j]} have {mat[j, i]:.3g} each with {strat.labels[i]} ({flows[j, i]:.3g}); it is used as given, with rows as the contacts of a person in each level', sim=self.sim)
         return
 
     def dim_matrices(self, net, beta):
@@ -475,23 +485,48 @@ class Mixing(Telling):
             matrix = np.kron(matrix, mat)
         return sc.obj(kind='matrix', cells=cells, matrix=matrix*beta, name=net.name, dim=names.index(list(net.dims)[0]), dims=[names.index(dim) for dim in net.dims])
 
-    def exposure(self, infectious, n, mults=None):
+    @staticmethod
+    def counts(term):
+        """ Whether a term of the mixing acts on counts as well as shares: a contact matrix, not homogeneous mixing or partnerships (see `count_terms()`) """
+        return term.kind == 'matrix' and 'partnership' not in term
+
+    def count_terms(self, terms=None):
         """
-        Exposure of each group to an infectious state: contacts per unit time, times the chance that a contact is infectious
+        The contact matrices that act on a count in a rate (`I.n`, `I.frac`: see `ss.graph.Graph.met_counts`), of the terms given or the
+        sim's; with none, a count is the number in the same place
+
+        A matrix acts on what the rate says: `beta*I` is exposure to the share of each group (`beta·Σ_j C_ij·I_j/N_j`), `beta*I.n` to the
+        number in each (`beta·Σ_j C_ij·I_j`), and `beta*I.frac` to that number over everyone in the same place (`beta·Σ_j C_ij·I_j/N`).
+        Other networks do not act on a count, as without a matrix.
+        """
+        terms = list(self.terms if terms is None else terms)
+        out = [term for term in terms if self.counts(term)]
+        if out and any(term.get('partnership') for term in terms):
+            errormsg = f'a count in a rate (e.g. beta*I.n) is mixed by the contact matrix "{out[0].name}", but the sim also has partnerships ("{next(t.name for t in terms if t.get("partnership"))}"), which do not act on a count; write the transmission as exposure (beta*I), or leave out one of them'
+            raise ss.CapabilityError(errormsg)
+        return out
+
+    def exposure(self, infectious, n, mults=None, counts=False):
+        """
+        Exposure of each group to an infectious state: contacts per unit time, times the chance that a contact is infectious; or, with
+        `counts`, a count met through the contact matrices: contacts per unit time, times the number of people in the state (see `count_terms()`)
 
         Args:
             infectious (array): the (infectiousness-weighted) number in the state, in each group
             n (array): the number of people in each group
             mults (list): a multiplier on the contacts of each term (a number, or one for each group), from the modifiers of its network
+            counts (bool): whether the matrices act on the number in the state rather than its share
         """
         out = 0.0
         for t,term in enumerate(self.terms):
+            if counts and not self.counts(term):
+                continue
             mult = 1.0 if mults is None else mults[t]
-            out = out + mult*self.term_exposure(term, infectious, n)
+            out = out + mult*self.term_exposure(term, infectious, n, counts)
         return out
 
-    def term_exposure(self, term, infectious, n):
-        """ Exposure of each group through one term of the mixing: see `exposure()` """
+    def term_exposure(self, term, infectious, n, counts=False):
+        """ Exposure of each group through one term of the mixing (with `counts`, to the number in the state): see `exposure()` """
         if term.kind == 'homogeneous' and self.space is not None: # People mix within their own place
             n_places = self.sim.groups.strats[self.space].n
             return term.contacts*self.by_place(self.places, infectious, n, n_places)[self.places]
@@ -505,7 +540,7 @@ class Mixing(Telling):
         den = np.bincount(levels, weights=n, minlength=size)
         if term.get('pre'): # Who is present in each place
             num, den = self.spread(num, block, by_columns=True), self.spread(den, block, by_columns=True)
-        prev = np.divide(num, den, out=np.zeros(size), where=den>0)
+        prev = num if counts else np.divide(num, den, out=np.zeros(size), where=den>0)
         prev = term.matrix @ prev if size == block else (prev.reshape(-1, block) @ term.matrix.T).ravel() # Mixing between the levels (in each place)
         if term.get('post'): # ... and between places
             prev = self.spread(prev, block)

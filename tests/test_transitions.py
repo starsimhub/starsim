@@ -365,8 +365,7 @@ def test_time():
         ss.Sim(ss.Disease(S >> I @ ss.perday(0.3)*I, I >> R @ ss.weeks(1), I >> ss.null @ 0.01, name='mixed'), **kw).init()
     deaths = ss.death(rate=10) # But the deaths of everyone, as ss.Deaths reads them: per year, and above 1 per 1,000, with a note (not a warning: it is the usual spelling)
     assert ss.birth(rate=30).rate.raw == ss.peryear(0.03) and ss.birth(rate=0.02).rate.raw == ss.peryear(0.02)
-    with pytest.warns(RuntimeWarning, match='per person per year'):
-        assert ss.birth(rate=ss.perday(0.02)).rate.raw == ss.perday(0.02) # A typed rate is per person, as given, with a warning above 1 per person per year
+    assert ss.death(rate=ss.peryear(1.05)).rate.raw == ss.peryear(1.05) # A typed rate is per person, as given, with no warning (e.g. a host that lives a year)
     mixed = ss.Sim(ss.Disease(S >> I @ ss.perday(0.3)*I, I >> R @ ss.weeks(1), name='mixed'), demographics=deaths, **kw).init()
     assert mixed.diseases.mixed.pars.rate_deaths.raw == ss.peryear(0.01) and 'rate=10 is a bare number, so it is taken as 10 per 1,000 people per year' in mixed.notes
     zero = ss.par(0.0, name='zero') # But 0 is 0 in any unit
@@ -535,7 +534,9 @@ def test_describe():
     density = ss.Sim(ss.Disease(S >> I @ ss.perday(3e-5)*I.n, I >> R @ ss.days(10), init_n=dict(I=10)), **kw).init()
     assert 'mixing' not in density.describe(output=True) # Nothing is contact-mediated, so there is no mixing to describe (it said "frequency-dependent")
     assert 'infected: I ' in density.describe(output=True) # Density-dependent transmission is a transmission: I is its source, and R is not infected (it counted R)
-    assert np.isclose(density.diseases[0].R0(), 3e-5*10_000*10) # beta × N × the time infectious (it failed, "Singular matrix")
+    assert np.isclose(density.diseases[0].R0(), 3e-5*(10_000 - 10)*10) # beta × the susceptible × the time infectious (it failed, "Singular matrix"; then counted the 10 infected as susceptible)
+    share = ss.Sim(ss.Disease(S >> I @ ss.perday(0.3)*I.frac, I >> R @ ss.days(10), init_n=dict(I=10)), **kw).init() # A share of everyone (as with a contact matrix): I is the source here too
+    assert 'infected: I ' in share.describe(output=True) and np.isclose(share.diseases[0].R0(), 3, rtol=1e-6) # It counted R, and R0 failed ("Singular matrix")
     S, I, R = ss.states('S I R')
     aged = ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=10), init_prev=0.01, name='sir').stratify(age=[0, 15])
     births = ss.Sim(aged, demographics=[ss.birth(rate=ss.peryear(0.02)), ss.death(rate=ss.peryear(0.02))], networks=ss.contacts([[3, 1], [1, 2]]), unit='day', total_pop=10_000, **kw).init().describe(output=True)
@@ -585,7 +586,7 @@ def test_describe():
     S, I, R = ss.states('S I R')
     immune = ss.Sim(ss.Disease(S >> I @ 1.9*I, I >> R @ ss.days(8), init=dict(R=0.9, I=1e-3), name='measles'), unit='day', solver='ode', verbose=0).init()
     assert np.isclose(immune.diseases.measles.R0(), 15.2) # With no immunity, whoever starts immune (it was 1.52, R at the start)
-    assert 'R = 1.52 at the start, with 10% susceptible' in '\n'.join(immune.start_lines())
+    assert 'R = 1.51 at the start, with 10% susceptible' in '\n'.join(immune.start_lines())
     S, E, I, R = ss.states('S E I R')
     seir = ss.Disease(infection=ss.Transition(S, E, rate=0.3 * I), onset=ss.Transition(E, I, dur=5),
                       recovery=ss.Transition(I, R, dur=10), death=ss.death(I, rate=0.05))
@@ -596,7 +597,22 @@ def test_describe():
     assert np.isclose(aged.init().diseases[0].R0(), 0.3*np.linalg.eigvals(C).max()) # With the mixing of its sim
     assert 'C[i, j] * I[j] / N[j]' in aged.diseases[0].equations(output=True) # And its equations say so, with the matrix
     cholera = ss.Sim(make_cholera(), total_pop=10_000, unit='day', **kw)
-    assert np.isclose(cholera.init().diseases[0].R0(), 0.5/1e5*10_000*10*5*30) # Infection × shedding × time infectious × time in the water
+    assert np.isclose(cholera.init().diseases[0].R0(), 0.5/1e5*9_990*10*5*30) # Infection × shedding × time infectious × time in the water, with the 0.1% infected at the start left out
+
+    # At the disease-free state: the seeded infected are not susceptible; a constant inflow sets the people; and a chain of states of its own keeps its people
+    S, I, R = ss.states('S I R')
+    seeded = ss.Sim(ss.Disease(S >> I @ ss.perday(0.1)*I.n, I >> R @ ss.days(1), init_n=dict(I=1)), total_pop=21, **kw)
+    assert np.isclose(seeded.init().diseases[0].R0(), 0.1*20) # β(N - 1)/γ (it was βN/γ = 2.1)
+    S, I, R = ss.states('S I R')
+    H = ss.State('H', rel_sus=2) # At high risk
+    inflow = ss.Disease(S + H >> I @ ss.perday(0.2)*I, I >> R @ ss.days(5), ss.null >> S @ ss.perday(8), ss.null >> H @ ss.perday(2), ss.death(rate=ss.perday(0.001)),
+                        init_n=dict(S=990, I=10), name='inflow')
+    split = ss.Sim(inflow, total_pop=1000, unit='day', **kw).init()
+    assert np.isclose(split.diseases.inflow.R0(), 0.2*(0.8 + 0.2*2)/(0.2 + 0.001)) # At the split of the inflows, 80/20 (it was all in S)
+    assert '2 * beta * H * I / N' in inflow.equations(output=True) and 'H susceptible, rel_sus = 2' in inflow.describe(output=True) # And rel_sus is shown (it was left out)
+    (S1, I1, R1), (S2, I2, R2) = [ss.states(f'S{h} I{h} R{h}', people=True) for h in [1, 2]] # Two host species, each infected by the other; nothing links them
+    hosts = ss.Disease(S1 >> I1 @ 0.1*I2.n/1000, I1 >> R1 @ 0.1, S2 >> I2 @ 0.4*I1.n/1000, I2 >> R2 @ 0.1, init_n=dict(S1=500, S2=500, I1=1))
+    assert np.isclose(ss.Sim(hosts, total_pop=1001, **kw).init().diseases[0].R0(), np.sqrt(0.1*0.4*500*500/1000**2*100)) # Each host's people where they are (it was all of them in S1)
     return sim
 
 
@@ -1109,6 +1125,42 @@ def test_stays():
     m = ss.Sim(tb, n_agents=1000, stop=ss.days(60), verbose=0).run().diseases.tb
     assert len(m.E.stays) == 1000 and np.isclose(np.mean(m.E.stays).value, 5, atol=0.5), np.mean(m.E.stays) # Not from the last time they entered I
     return stays
+
+
+@sc.timer()
+def test_stay_beside_dwell():
+    sc.heading('Testing a minimum stay (after=) on one exit beside the dwell time of another, as compartments: the dwell runs from entry, as for agents')
+    def make(dur, after=True, rate=0.0, solver='ode'):
+        A, E, I, D = ss.states('A E I D')
+        die = dict(die=ss.Transition(E, D, rate=ss.perday(rate), after=ss.days(2) if after else None))
+        d = ss.Disease(A, E, I, D, enter=A >> E @ ss.perday(0.3), onset=ss.Transition(E, I, dur=dur), **die, init=dict(A=1.0), first='A', name='d')
+        return ss.Sim(d, unit='day', stop=20, total_pop=1e5, solver=solver, verbose=0).run()
+    I = lambda sim: sim.results.d.I.values
+    for dur in [ss.normal(ss.days(5), ss.days(1)), ss.choice(a=ss.days([3, 4, 5]), p=[0.2, 0.5, 0.3])]: # As stages in each slot of the stay, and as a conveyor of whole days
+        assert np.allclose(I(make(dur)), I(make(dur, after=False)), rtol=1e-6, atol=0.01), 'A stay on an exit nobody takes does not delay the onset' # To the accuracy of the ODE: the stages are shifted along the conveyor at the end of each step
+    E, X, D = ss.states('E X D') # A hazard acts on the people in every slot of another exit's stay, the last too
+    d = ss.Disease(E, X, D, die=ss.Transition(E, D, rate=ss.perday(0.2)), other=ss.Transition(E, X, rate=ss.perday(0.0), after=ss.days(2)), init=dict(E=1.0), first='E', name='d')
+    sim = ss.Sim(d, unit='day', stop=6, total_pop=1e5, solver='ode', verbose=0).run()
+    assert np.allclose(sim.results.d.E.values/1e5, np.exp(-0.2*np.arange(7)), rtol=1e-4), sim.results.d.E.values # It was 0.61 at day 3, not 0.55, when the hazard left out the last slot
+    return
+
+
+@sc.timer()
+def test_held_rate():
+    sc.heading('Testing a rate held in a parameter (ss.par(beta*I)): it is that rate, under every solver')
+    def make(held, solver='ode', **kwargs):
+        S, I, R = ss.states('S I R')
+        rate = ss.perday(0.3)*I
+        sir = ss.Disease(infection=S >> I @ (ss.par(rate, name='force') if held else rate), recovery=I >> R @ ss.days(8), init=dict(I=0.01), name='sir')
+        return ss.Sim(sir, unit='day', stop=60, total_pop=10_000, solver=solver, verbose=0, **kwargs)
+    for solver,kwargs in [('ode', {}), ('abm', dict(n_agents=2000, networks=ss.RandomNet(n_contacts=4)))]: # Worked out within the step, and as a transmission over a network
+        held, plain = make(True, solver, **kwargs).run(), make(False, solver, **kwargs).run()
+        assert np.array_equal(held.results.sir.I.values, plain.results.sir.I.values), solver
+    assert held.diseases.sir.graph.transitions.infection.contact and np.isclose(make(True).init().diseases.sir.R0(), 2.4)
+    with pytest.raises(ValueError, match='cannot be fitted'):
+        S, I, R = ss.states('S I R')
+        ss.Sim(ss.Disease(infection=S >> I @ ss.par(ss.perday(0.3)*I, bounds=[0.1, 1]), recovery=I >> R @ ss.days(8)), verbose=0).init()
+    return
 
 
 @sc.timer()

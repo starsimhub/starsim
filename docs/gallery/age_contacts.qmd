@@ -7,13 +7,13 @@ authorship:
   note: Written by AI
 ---
 
-People of different ages mix differently: children have the most contacts, and most of them with other children. An age-structured model splits each state by age group, and a contact matrix says how many contacts a day a person in each group has with people in each other group. With contacts, β is the chance of infection per contact, and the force of infection on group *i* is β times the sum over groups *j* of the contacts of *i* with *j* times the share of *j* who are infectious. This page builds an age-structured SIR, as in the age-structured models of Keeling and Rohani (2008, chapter 3).
+People of different ages mix differently: children have the most contacts, and most of them with other children. An age-structured model splits each state by age group, and a contact matrix says how many contacts a day a person in each group has with people in each other group. With contacts, β is the rate of infection per contact, and the force of infection on group *i* is β times the sum over groups *j* of the contacts of *i* with *j* times the share of *j* who are infectious. This page builds an age-structured SIR, as in the age-structured models of Keeling and Rohani (2008, chapter 3).
 
 ## The model
 
 | Parameter | Value | Meaning |
 |---|---|---|
-| β | 0.05 per contact | Chance of infection per contact with an infectious person, per day |
+| β | 0.05 per contact | Rate of infection per contact with an infectious person, per day |
 | Infectious period | 10 days | Mean time in I (exponential) |
 | Age groups | 0–14, 15–64, 65+ | With 30%, 50%, and 20% of people |
 | Contacts | see the matrix | Contacts a day of a person in each group (rows) with each group (columns) |
