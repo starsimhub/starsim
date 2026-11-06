@@ -15,7 +15,7 @@ camdl is a compartmental modeling language (a compiler, `camdlc`, in OCaml; a ru
 | `compartments` | States (all declared as people) | yes |
 | `S --> I @ beta * S * I / N` | `S >> I @ beta * I` (the source taken out; a state over the total is exposure) | yes |
 | `I --> R @ gamma * I`, `E --> I @ E / 5 'days` | `I >> R @ gamma`, `E >> I @ 0.2` (time literals in the model's unit) | yes |
-| A birth or death (`--> S`, `S -->`) | An inflow or an outflow against `ss.null` | yes |
+| A birth or death (`--> S`, `S -->`) | An inflow or an outflow against `ss.dead` | yes |
 | `let N = S + I + R` | A named expression, written out where it is used | yes |
 | Parameters with bounds, priors (`log_normal`, `normal`, `beta`, `gamma`, `exponential`, `uniform`, `truncated_normal`, `half_normal`; a flat prior is the bounds), and docs | `ss.par(value, bounds=[...], prior=ss.lognormal(log_mean=mu, log_std=sigma), doc=...)` | yes |
 | Observations of a flow (`incidence(...)`) with a share (`rho * projected`), weekly (`closing_at(time, 7 'days)`), and a likelihood (`neg_binomial`, `poisson`, `normal` with a fixed sd) | `ss.outcome(rho * infection, likelihood=ss.nbinom(n=k))` (weekly data is compared with the total over each week) | yes |

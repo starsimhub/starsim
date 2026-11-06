@@ -188,6 +188,7 @@ class Expr:
     def __or__(self, other):       return ss.conditions.Cond('|', self, other)
     def __ror__(self, other):      return ss.conditions.Cond('|', other, self)
     def __invert__(self):          return ss.conditions.Cond('~', self)
+    def __rmatmul__(self, other):    return ss.transitions.split_at(other, self) # A split with its driver, e.g. {D: p_death, R: None} @ ss.days(8)
     def __lt__(self, other):       return compare('less', self, other) # Comparisons are 1 or 0, e.g. a capacity: rate * (Q.n < 20)
     def __le__(self, other):       return compare('less_equal', self, other)
     def __gt__(self, other):       return compare('greater', self, other)
@@ -535,7 +536,7 @@ class Coverage(Expr):
     Examples:
         ```python
         itn = ss.Vaccine(efficacy=dict(bite_indoor=0.6), waning=ss.boxcar(plateau=ss.years(3)), name='itn')
-        mortality = Sv >> ss.null @ 1/life + a*f_in*itn.coverage(lambda t: kill(t)) # Mosquitoes killed by nets, in proportion to the nets in use
+        mortality = Sv >> ss.dead @ 1/life + a*f_in*itn.coverage(lambda t: kill(t)) # Mosquitoes killed by nets, in proportion to the nets in use
         ```
     """
     def __init__(self, product, weight=None):

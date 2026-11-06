@@ -306,7 +306,7 @@ class modify(Connector):
             the transition scales its rate (or its dwell time), and a destination (`'tb.treatment.R'`) scales the probability of that destination; with an outcome for each strain carried
             (`per_strain=True`, `p=`), that is the probability for the whole set of strains a person carries (e.g. that all are cured: Π c_k), not each strain's
         multiply (float): multiply the quantity by this; like `add` and `set`, it can also be `ss.by(...)`, a function of the sim, or an `ss.timeseries`, for changes at given times
-        add (float): add this to the quantity: a parameter, or an inflow (a transition from `ss.null`, e.g. CFUs shed into a reservoir), to which it adds an amount per unit time from outside the model
+        add (float): add this to the quantity: a parameter, or an inflow (a transition from `ss.outside`, e.g. CFUs shed into a reservoir), to which it adds an amount per unit time from outside the model
         set (float): replace the quantity with this (a parameter only)
         efficacy (float): for protection such as a condom or a needle program, the share of the risk it removes: the same as `multiply=1 - efficacy` (give one of them)
         share (float): with `multiply=` or `efficacy=`, the share of acts (or, on a route without acts, of contacts) it acts on: the hazard is multiplied by
@@ -478,7 +478,7 @@ class modify(Connector):
             kind = 'route'
         if self.op != 'multiply' and kind != 'par': # A per-person quantity or a rate is a multiplier on each person's own value, which set= or add= would replace
             what = 'each person\'s own value' if kind in ['rel_sus', 'rel_trans'] else 'the rate (or probability) worked out for each person and group'
-            errormsg = f'{self.op}= on {self.target} would replace {what}; use multiply= (set= and add= are for parameters, e.g. {modname}.pars.beta; add= is also for an inflow from ss.null)'
+            errormsg = f'{self.op}= on {self.target} would replace {what}; use multiply= (set= and add= are for parameters, e.g. {modname}.pars.beta; add= is also for an inflow from ss.outside or ss.unborn)'
             raise ValueError(errormsg)
         self.target_module, self.target_kind = modname, kind
         for key in [name] if self.networks is None else [f'{tr}@{route}' for tr in names for route in self.networks]: # On a route, under the transmission's name and the route's (see ss.connectors.route_mult())

@@ -69,8 +69,8 @@ class Malaria(ss.Disease):
     infection  = Sh >> Ih @ a*b*Iv.n/Nh
     recovery   = Ih >> Rh @ gamma
     biting     = Sv >> Iv @ a*c*Ih.n/Nh
-    emergence  = ss.null >> Sv @ m*mu_v*Nh
-    mortality  = Sv + Iv >> ss.null @ mu_v
+    emergence  = ss.unborn >> Sv @ m*mu_v*Nh
+    mortality  = Sv + Iv >> ss.dead @ mu_v
     births     = ss.birth(Sh, rate=mu_h)
     deaths     = ss.death(rate=mu_h)
 

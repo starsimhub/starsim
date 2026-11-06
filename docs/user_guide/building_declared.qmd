@@ -28,8 +28,8 @@ Each row is an idea from epidemiology, how it is declared, and an example of a r
 | Idea | Declared with | Example | Needs code |
 |---|---|---|---|
 | **Compartments** (susceptible, infectious, ...) | `ss.states()`, `ss.State()` | `S, E, I, R = ss.states('S E I R')` | A quantity each person carries that changes continuously, such as a CD4 count that falls faster at a higher viral load |
-| **Counts that are not people** (mosquitoes, bacteria in water) | `ss.State(people=False)` | `W = ss.State(people=False)`, with `ss.null >> W @ xi*I.n` for shedding into it | A hydrological model of the river the bacteria are carried in |
-| **Flows at a rate** | `>>` and `@`, and `ss.null` for flows into or out of the model | `R >> S @ ss.peryear(0.1)`, `I >> ss.null @ 0.01` | A rate worked out each step by another program |
+| **Counts that are not people** (mosquitoes, bacteria in water) | `ss.State(people=False)` | `W = ss.State(people=False)`, with `ss.outside >> W @ xi*I.n` for shedding into it | A hydrological model of the river the bacteria are carried in |
+| **Flows at a rate** | `>>` and `@`, and `ss.dead` for flows into or out of the model | `R >> S @ ss.peryear(0.1)`, `I >> ss.dead @ 0.01` | A rate worked out each step by another program |
 | **Time in a state** | A duration, or a distribution of durations | `I >> R @ ss.days(8)`, `E >> I @ ss.erlang(k=4, mean=ss.days(10))` | A recovery time from a model of each person's viral load within the host |
 | **Branching** (a share go one way, the rest another) | `p=` | `ss.Transition(I, [R, D], p=[0.98, None], dur=ss.days(8))` | |
 | **Transmission**, frequency- or density-dependent | A bare state (a share), or a count, `.n`; with a contact matrix, each says what the matrix acts on (see [What a matrix acts on](populations_data.qmd#what-a-matrix-acts-on)) | `S >> I @ 1.9*I`, `S >> I @ 1.9e-5*I.n` | |
@@ -37,7 +37,7 @@ Each row is an idea from epidemiology, how it is declared, and an example of a r
 | **Rates that depend on how many are infected** | Arithmetic and NumPy functions of counts | `S >> I @ beta*I.n/(1 + a*I.n)` (a force of infection that saturates) | |
 | **Rates that vary in time** | `ss.timeseries()`, `ss.seasonal()` | `beta = ss.seasonal(mean=0.3, amplitude=0.2, peak='March')` | |
 | **Rates that differ by group** | `ss.by()`, with a stratification | `ss.by(age=[0.5, 0.2, 0.1])` | |
-| **Rates that depend on each person's traits** | `ss.person` | `I >> ss.null @ 0.001*np.exp(0.05*ss.person.age)` | |
+| **Rates that depend on each person's traits** | `ss.person` | `I >> ss.dead @ 0.001*np.exp(0.05*ss.person.age)` | |
 | **Values that vary between people** (each person's infectiousness) | A distribution, or `ss.attr()` | `ss.attr(ss.normal(500, 50), on=infection)` | |
 | **An event in each person's history** (ever infected, how many times, how long ago) | `.ever`, `.n_times`, `.since` on a transition | `1 - 0.5**(recovery.since/ss.days(60))`: protection that halves every 60 days since recovery | An antibody level boosted by every infection and decaying in between (as in the [example below](#a-declared-disease-with-immunity-written-as-code)) |
 | **A move as soon as something holds, or happens** | A trigger, `on=` (or `@ ss.on()`) | `U >> A @ ss.on(ss.person.age >= 15)`, or `ss.Transition(PP, NP, on=preg.delivery, dur=ss.months(6))` | |

@@ -787,7 +787,7 @@ def init_where(sim):
             if target is not None and p.name not in target.graph.pars:
                 target.graph.pars[p.name] = p
                 target.define_pars(**{p.name:p})
-    for m in list(sim.pars.interventions.values()) + list(sim.pars.connectors.values()): # An amount added to an inflow from outside the model (from ss.null), e.g. CFUs added to a reservoir: a parameter of 0 added to its rate, which the modifier adds to
+    for m in list(sim.pars.interventions.values()) + list(sim.pars.connectors.values()): # An amount added to an inflow from outside the model (from ss.outside or ss.unborn), e.g. CFUs added to a reservoir: a parameter of 0 added to its rate, which the modifier adds to
         if isinstance(m, ss.modify) and m.op == 'add' and m.target_kind in ['transition', None]:
             target = next((mod for mod in sim.declared if mod.name == ss.conditions.modname(m.target_module)), None)
             tr = target.graph.transitions.get(m.target_name) if target is not None else None
@@ -890,7 +890,7 @@ def check_betas(sim, nets):
 
 
 def leaves(mod):
-    """ The transitions by which people die of a declared disease (to `ss.null`), who leave the people of every other disease too """
+    """ The transitions by which people die of a declared disease (to `ss.dead`), who leave the people of every other disease too """
     return [tr for tr in mod.graph.transitions.values() if tr.people and tr.source and (not tr.dest or tr.dies) and not getattr(tr, 'every_state', False)]
 
 

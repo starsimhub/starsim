@@ -3,6 +3,7 @@ Test the Dists object in internals/dists.py
 """
 
 # %% Imports and settings
+from unittest import mock
 import pytest
 import numpy as np
 import sciris as sc
@@ -452,6 +453,42 @@ def test_crn_undriven():
     return base
 
 
+@sc.timer()
+def test_crn_one_agent():
+    """ With common random numbers, making immune one agent who would have been infected too late to infect anyone leaves every other agent exactly as they were, whichever moves the agent engine takes """
+    sc.heading('Testing that making one agent immune leaves everyone else as they were')
+    def make(seed, immune=None, crn=True):
+        S, E, I, H, R = ss.states('S E I H R')
+        d = ss.Disease(S, E, I, H, R,
+            infection = S >> E @ ss.perday(0.1)*(I + H),
+            onset     = ss.Transition(E, [I, R], p=[0.8, None], dur=ss.lognormal(ss.days(3), ss.days(1))), # A split after a dwell time
+            severe    = ss.Transition(I, H, p=0.2, dur=ss.weibull(c=2, scale=ss.days(4))), # Branches chosen on entry
+            mild      = ss.Transition(I, [R, ss.stay], p=[0.9, None], dur=ss.uniform(ss.days(3), ss.days(9))),
+            leave     = ss.Transition(H, R, dur=ss.normal(ss.by(sex=dict(female=ss.days(5), male=ss.days(8))), ss.days(1))),
+            die       = H >> ss.dead @ ss.perday(0.03), # A competing rate beside a dwell time
+            init_prev=0.02, name='d')
+        vx = ss.vaccinate(efficacy=1.0, coverage=1.0, at=[0], where=lambda sim: ss.uids([immune]), name='vx') if immune is not None else None
+        with ss.options.context(crn=crn):
+            sim = ss.Sim(d, networks=ss.RandomNet(n_contacts=4, method='safe'), interventions=vx, n_agents=1000, unit='day', stop=40, rand_seed=seed, verbose=0).run()
+        return {k: v.raw.copy() for k, v in sim.diseases.d.__dict__.items() if isinstance(v, ss.Arr)}
+
+    def changed(seed, crn=True):
+        """ The arrays in which anyone but the immune agent differs """
+        base = make(seed)
+        uid = np.nonzero(base['E'])[0][0] # Exposed at the end, and so never infectious (nothing wanes): they infected no one
+        other = make(seed, immune=uid, crn=crn)
+        assert base['E'][uid] and not other['E'][uid], 'The immune agent should not have been infected'
+        rest = np.arange(len(base['E'])) != uid
+        return [k for k, v in base.items() if not np.array_equal(v[rest], other[k][rest], equal_nan=True)]
+
+    for seed in [0, 1]:
+        assert not (diff := changed(seed)), f'Making one agent immune changed other agents\' {diff} (seed {seed})'
+        with mock.patch.object(ss.solvers.agents_compiled, 'compiled_reasons', lambda engine: ['off']): # The agent engine's own moves, not the compiled ones
+            assert not (diff := changed(seed)), f'Making one agent immune changed other agents\' {diff} with the agent engine\'s own moves (seed {seed})'
+    assert changed(0, crn=False), 'Without CRN, making one agent immune should change other agents' # So the test can see CRN being lost
+    return
+
+
 # %% Run as a script
 if __name__ == '__main__':
     T = sc.timer()
@@ -469,6 +506,7 @@ if __name__ == '__main__':
     o11 = test_streams()
     o12 = test_repeated_uids()
     o13 = test_crn_undriven()
+    o14 = test_crn_one_agent()
 
     T.toc()
 

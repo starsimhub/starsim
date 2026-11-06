@@ -1824,15 +1824,15 @@ class Engine(Telling, Effects):
         if not tr._split:
             return [1.0]*len(tr.dest)
         ps = [None if p is None else self.eval(p) for p in (tr.p if ps is None else ps)]
-        return self.dest_shares(tr, ps, stay=self.ends_given(tr, self.eval)) # With ss.stay or ss.null, what the states leave over stays or dies
+        return self.dest_shares(tr, ps, stay=self.ends_given(tr, self.eval)) # With ss.stay or ss.dead, what the states leave over stays or dies
 
     @staticmethod
     def ends_given(tr, ev):
-        """ The probabilities given to ss.stay and ss.null in a split, together: the destination that takes the rest does not get them """
+        """ The probabilities given to ss.stay and ss.dead in a split, together: the destination that takes the rest does not get them """
         return sum((ev(p) for p in [tr.p_stay, tr.p_die] if p is not None), 0.0)
 
     def die_share(self, tr, shares, ev=None):
-        """ The probability of ss.null in a split (0 if it is not one of the destinations): what the shares of the states leave over, less what ss.stay takes """
+        """ The probability of ss.dead in a split (0 if it is not one of the destinations): what the shares of the states leave over, less what ss.stay takes """
         if not tr.dies:
             return 0.0
         ev = ev or self.eval

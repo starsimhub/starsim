@@ -636,7 +636,7 @@ def test_births_by_level():
         d = ss.Disease(infection=S >> I @ 0*I, births=ss.birth(S, rate=ss.peryear(ss.by(grp=mu))), init_prev=0, name='d')
         d.stratify(grp=dict(a=0.5, b=0.5))
         sim = ss.Sim(d, total_pop=1000, n_agents=10_000, stop=5, dt=0.1, solver=solver, verbose=0).run()
-        assert np.allclose(sim.results.d.S.by('grp').values[-1], expected, rtol=0.02), solver # Before, an error; the inflow ss.null >> S @ ss.by(grp=mu)*N is the total N in each level
+        assert np.allclose(sim.results.d.S.by('grp').values[-1], expected, rtol=0.02), solver # Before, an error; the inflow ss.unborn >> S @ ss.by(grp=mu)*N is the total N in each level
     return sim
 
 

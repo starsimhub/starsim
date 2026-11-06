@@ -1755,7 +1755,7 @@ class SIR(Disease):
     R         = ss.State('R')
     infection = ss.Transition(S, I, rate=beta * I)
     recovery  = ss.Transition(I, R, dur=dur_inf, p=1 - p_death)
-    death     = ss.Transition(I, ss.null, dur=dur_inf, p=p_death)
+    death     = ss.Transition(I, ss.dead, dur=dur_inf, p=p_death)
 
 
 class SEIR(Disease):
@@ -1789,7 +1789,7 @@ class SEIR(Disease):
     infection = ss.Transition(S, E, rate=beta * I)
     latency   = ss.Transition(E, I, dur=dur_exp)
     recovery  = ss.Transition(I, R, dur=dur_inf, p=1 - p_death)
-    death     = ss.Transition(I, ss.null, dur=dur_inf, p=p_death)
+    death     = ss.Transition(I, ss.dead, dur=dur_inf, p=p_death)
 
 
 class SIS(Disease):

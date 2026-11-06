@@ -25,8 +25,8 @@ def serotype(name, pars, others=(), **kwargs):
         recovery   = I >> R @ p['dur_inf'],
         biting     = Sv >> Ev @ p['a']*p['c']*I.n/N,
         incubation = Ev >> Iv @ p['eip'],
-        emergence  = ss.null >> Sv @ p['m']*p['mu_v']*N,
-        mortality  = Sv + Ev + Iv >> ss.null @ p['mu_v'],
+        emergence  = ss.unborn >> Sv @ p['m']*p['mu_v']*N,
+        mortality  = Sv + Ev + Iv >> ss.dead @ p['mu_v'],
         name = name,
         **kwargs,
     )

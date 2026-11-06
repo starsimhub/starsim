@@ -13,7 +13,7 @@ An EMULSION model is one YAML file: `time_info` (unit, `delta_t`, `total_duratio
 | `proba: p` | `-log(1 - p)`, the rate that gives it: `p` is per time unit, not per step (EMULSION makes it `1 - (1 - p)**delta_t` for a step) | yes |
 | `duration:` on a state whose only way out is `proba: 1` or `amount-all-but: 0` | A fixed dwell, `ss.constant(ss.days(d))` | yes |
 | `duration:` on a state with other ways out | A minimum stay: `min_stay=` on the ways out (and nothing on an escape), as agents or compartments | yes |
-| `autoremove: yes` (a dead state) | An outflow to `ss.null` | yes |
+| `autoremove: yes` (a dead state) | An outflow to `ss.dead` | yes |
 | `escape: yes` | Nothing: a way out with no `min_stay=` applies throughout | yes |
 | `escape: cond`, `cond: is_X` | `where=` on the transition, against the other machine's state | no |
 | `when: calendar_period` | A parameter that is an `ss.timeseries` of 0 and 1, multiplying the rate | no |
@@ -23,7 +23,7 @@ An EMULSION model is one YAML file: `time_info` (unit, `delta_t`, `total_duratio
 | `prototypes`, `initial_conditions` | `init_n=dict(...)` counts on each disease | yes |
 | `outputs.extra_vars` | Results on the disease, where they are expressions of counts | yes |
 | `aggregation_type` | `solver='binomial'` for `compartment`, `'abm'` for `IBM` and `hybrid` | yes |
-| `productions: {from: A, to: J, rate: b}` (births) | An inflow, `ss.null >> J @ b*A.n`; with several machines, cross them into one disease first, so the newborns enter each machine's state together | no |
+| `productions: {from: A, to: J, rate: b}` (births) | An inflow, `ss.unborn >> J @ b*A.n`; with several machines, cross them into one disease first, so the newborns enter each machine's state together | no |
 | A level with `aggregation_type: metapopulation` (herds) | A place dimension, `dis.stratify(pop=[...], kind='space')`, with the initial numbers by place (`ss.by(pop=...)`) and movement between places as a route | no |
 | A level or process in a Python add-on (`file:`, `class_name:`) | Custom code, or a declared form if one fits (e.g. a trade register as a route) | no |
 | `total_<level>` (e.g. `total_herd`) | The number of people (in each place, once stratified) | yes |

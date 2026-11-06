@@ -669,7 +669,7 @@ def flow(src, frm, to, term, discrete, env, assign, dt, unit, notes):
             src.add_flow(frm, to, dur=ss.constant(getattr(ss, f'{unit}s')(tau)), label=f'delay({ast.unparse(inner)}, {tau:n})')
             notes.append(f'{name} = delay({ast.unparse(inner)}, {tau:n}) read as a fixed dwell time of {tau:n} in {frm}, whose outflows give the share who survive it ({factor:.6g})')
             src.delays.append((name, frm, tau, factor))
-            src.skip(f'{name} (history)', f'for the first {tau:n}, odin\'s delay() gives the value at time 0 (as if the flow had been going on before the start), while the import starts with no one partway through {frm}; a workaround is an inflow to {to} for the first {tau:n} (ss.null >> {to} @ ss.timeseries(...))')
+            src.skip(f'{name} (history)', f'for the first {tau:n}, odin\'s delay() gives the value at time 0 (as if the flow had been going on before the start), while the import starts with no one partway through {frm}; a workaround is an inflow to {to} for the first {tau:n} (ss.unborn >> {to} @ ss.timeseries(...))')
             return
         src.skip(name, f'a delay that is not a delay of one flow ({src.exprs[name]})')
         return

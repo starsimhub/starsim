@@ -261,7 +261,7 @@ def load_camdl(filename, pars=None, scenario=None, solver='ode', camdlc=None, ve
             src.add_par(item[1], 1.0, doc='a function of time in camdl, set to 1')
             src.skip(item[1], f'a function of time ({fn.get("kind")}), set to 1; write it as an ss.seasonal() or ss.timeseries() value of the parameter')
     for eq in m.get('ode_equations', []):
-        src.skip(eq['compartment'], 'a compartment given by an ODE; write it as a state that is not people (ss.State(people=False)) with flows against ss.null')
+        src.skip(eq['compartment'], 'a compartment given by an ODE; write it as a state that is not people (ss.State(people=False)) with flows against ss.dead')
 
     # Initial numbers, which may refer to the parameters, to each other, and to named expressions
     values = {k:(p.value if p.value is not None else sum(p.bounds)/2) for k,p in src.pars.items()}

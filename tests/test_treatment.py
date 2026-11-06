@@ -54,7 +54,7 @@ def test_undriven():
 
     with pytest.raises(ValueError, match='has no rate. Give it one'): # An inflow still needs a rate
         S, I = ss.states('S I')
-        ss.Disease(births=ss.Transition(ss.null, S), infection=ss.Transition(S, I, rate=0.3 * I))
+        ss.Disease(births=ss.Transition(ss.unborn, S), infection=ss.Transition(S, I, rate=0.3 * I))
     return sim
 
 

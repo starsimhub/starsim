@@ -35,7 +35,7 @@ Then, in Starsim, `sim = ss.import_from('model.json')`. If the source builds sev
 | Another parameter that is a function of time | `ss.timeseries(..., interpolation='linear')` or `ss.seasonal(...)` | no |
 | An adjustment on several earlier dimensions | Rates by hand: `rate=base * ss.by([[...], [...]], dims=['age', 'clinical'])` | no |
 | Infectiousness that differs between compartments | `rel_trans=` on each `ss.State` | no |
-| `ReplacementBirthFlow` | Births at the death rate: `ss.null >> S @ mu * (S + I + R).n` | no |
+| `ReplacementBirthFlow` | Births at the death rate: `ss.unborn >> S @ mu * (S + I + R).n` | no |
 | Computed values, tracked values | An `ss.par(lambda sim: ...)`, or a result | no |
 
 ## What needs care

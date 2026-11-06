@@ -118,10 +118,10 @@ def test_epimodel_dcm():
     dis = ss.Disease(
         infection = S >> I @ inf_prob*act_rate*I,
         recovery  = I >> R @ rec_rate,
-        arrival   = ss.null >> S @ a_rate*(S + I + R).n,
-        departure_S = S >> ss.null @ ds_rate,
-        departure_I = I >> ss.null @ di_rate,
-        departure_R = R >> ss.null @ dr_rate,
+        arrival   = ss.unborn >> S @ a_rate*(S + I + R).n,
+        departure_S = S >> ss.dead @ ds_rate,
+        departure_I = I >> ss.dead @ di_rate,
+        departure_R = R >> ss.dead @ dr_rate,
         init_n = dict(S=1000, I=1), name='sir',
     )
     ref = ss.Sim(dis, solver='ode', total_pop=1001, unit='day', dt=ss.days(0.5), start=0, stop=499, verbose=0).run()

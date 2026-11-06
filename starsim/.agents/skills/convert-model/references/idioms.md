@@ -35,9 +35,9 @@ What to write for the pieces that `ss.import_from()` lists as not translated (`I
 
 | In the source | In Starsim |
 |---|---|
-| Births into a state | `ss.birth(S, rate=mu)` (per person, by the population), or `ss.null >> S @ mu * (S + I + R).n` |
-| Deaths from some states, or from all | `S + R >> ss.null @ mu`, `ss.death(rate=mu)` (from every state) |
-| An absorbing dead state that is removed (`autoremove`) | An outflow to `ss.null` |
+| Births into a state | `ss.birth(S, rate=mu)` (per person, by the population), or `ss.unborn >> S @ mu * (S + I + R).n` |
+| Deaths from some states, or from all | `S + R >> ss.dead @ mu`, `ss.death(rate=mu)` (from every state) |
+| An absorbing dead state that is removed (`autoremove`) | An outflow to `ss.dead` |
 | Immigration and emigration | `ss.immigration(S, rate=)`, `ss.emigration(rate=)` |
 | Aging between age groups | `aging=True` on the sim with an age stratification; or `ss.transfer` between levels |
 | Offspring produced on a transition (EMULSION's `produce_offspring`) | Into one state: a birth driven by the transition, `ss.birth(NB, on=farrowing, n=10)` (under every solver); by prototype across several machines: custom code on the transition's events, see below |

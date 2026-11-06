@@ -241,7 +241,7 @@ class Compiled(Agents):
         k.nt, k.ns, k.ntrig = nt, ns, len(trigs)
         k.one = np.ones(1)
         k.dt = float(self.dt)
-        k.dst_keys = [[f'{tr.name}.{d.name}' for d in (tr.dest or [])] + [f'{tr.name}.null']*bool(tr.dies) for tr in trs]
+        k.dst_keys = [[f'{tr.name}.{d.name}' for d in (tr.dest or [])] + [f'{tr.name}.dead']*bool(tr.dies) for tr in trs]
         k.scan_sched = k.sched_k & ~k.comp_state # Exits of a state with competing rates too are taken by leave()
         k.stat1 = (k.sched_k, k.ex_ptr, k.ex_tr, k.nbr, k.br_col, k.loops, k.pos, k.kind, k.split, k.dst_ptr, k.dst_state, k.dst_col, k.dw, k.adj, k.aft, k.has_dw, k.src_mask, k.ae_ptr, k.ae_trig, k.tr_trig)
         k.stat2 = (k.trig_dist, k.trig_fixed, np.zeros(1), k.fam) # (trig_mean is not used: a delay given as a number is an exponential distribution, see kadd_mean())

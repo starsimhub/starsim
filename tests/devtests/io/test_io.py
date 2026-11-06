@@ -301,7 +301,7 @@ def test_hand(tmp_path):
             recovery   = I >> R @ ss.perday(0.1),
             detection  = I >> Q @ (0.05 * (Q.n < 20)),
             release    = Q >> R @ ss.constant(ss.days(10)),
-            death      = I >> ss.null @ ss.perday(0.001),
+            death      = I >> ss.dead @ ss.perday(0.001),
             init_n     = dict(I=10),
             name       = 'seirq',
         )

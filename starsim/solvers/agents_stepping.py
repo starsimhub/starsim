@@ -326,7 +326,7 @@ class Stepping:
             for src,uids in zip(srcs, uidlist):
                 other = uids[people.cause_of_death.raw[uids] != mine]
                 if len(other):
-                    for key in dict.fromkeys([tr.name, tr._deaths]): # A split with a state counts its deaths in its flow to ss.null too
+                    for key in dict.fromkeys([tr.name, tr._deaths]): # A split with a state counts its deaths in its flow to ss.dead too
                         self.flowcounts[key] -= self.n_of(other)
                         if key in self.flow_groups:
                             self.flow_groups[key] = self.flow_groups[key] - np.bincount(self.groups(other, src), weights=self.weights(other), minlength=self.sim.groups.n_groups)
@@ -364,7 +364,7 @@ class Stepping:
             with self.evaluating(by_group=True):
                 adjust = 1.0 if self.adjust[tr.name] is None else self.adjust[tr.name]
                 amount = np.maximum(self.eval(tr.rate)*adjust*dt*self.inflow_split(tr), 0)/self.scale # Agents, by group
-                ps = [np.broadcast_to(p, sim.groups.n_groups) for p in self.branch_probs(tr)] # An inflow split between several states, e.g. ss.null >> (0.9*S + 0.1*X)
+                ps = [np.broadcast_to(p, sim.groups.n_groups) for p in self.branch_probs(tr)] # An inflow split between several states, e.g. ss.unborn >> (0.9*S + 0.1*X)
             amount = np.broadcast_to(amount, sim.groups.n_groups)
             dims = ([d] if d is not None else []) + [dim for dim in self.inflow_dims(tr) if dim != d] # The place, and the levels the inflow is given at
             cells, cell = np.unique(sim.groups.group_coords[:, dims], axis=0, return_inverse=True) if dims else (np.zeros((1, 0), dtype=int), np.zeros(sim.groups.n_groups, dtype=int))

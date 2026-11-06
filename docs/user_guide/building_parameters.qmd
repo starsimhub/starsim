@@ -250,7 +250,7 @@ example = ss.Disease(
     infection = S >> E @ 0.5*(I + 0.5*A),                    # beta (the 0.5 on A is not a parameter)
     onset     = ss.Transition(E, [I, A], p=[0.6, 0.4], dur=ss.days(5)), # dur_E (the shares are not parameters)
     recovery  = ss.Transition(I, R, dur=ss.days(7), p=0.99), # dur_recovery and p_recovery, since I has two ways out
-    death     = ss.Transition(I, ss.null, dur=ss.days(9), p=0.01),
+    death     = ss.Transition(I, ss.dead, dur=ss.days(9), p=0.01),
     clear     = A >> R @ ss.days(5),                         # dur_A
     waning    = R >> S @ ss.prob(0.01, 'week'),              # rate_waning
     init_prev = 0.001,

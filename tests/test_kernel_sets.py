@@ -75,7 +75,7 @@ def events_inputs():
     if not event_calls:
         S, E, I, R = ss.states('S E I R')
         d = ss.Disease(infection=S >> E @ dict(sexualnet=ss.peract(m2f=0.2, f2m=0.1), mixingpool=ss.perday(0.02))*I, latent=ss.Transition(E, I, dur=ss.erlang(k=3, mean=ss.days(5))),
-                       recovery=ss.Transition(I, [R, ss.null], p=[0.9, 0.1], dur=ss.lognormal(mean=ss.days(8), std=ss.days(3))), waning=R >> S @ ss.perday(0.05), init_prev=0.05, name='d')
+                       recovery=ss.Transition(I, [R, ss.dead], p=[0.9, 0.1], dur=ss.lognormal(mean=ss.days(8), std=ss.days(3))), waning=R >> S @ ss.perday(0.05), init_prev=0.05, name='d')
         acts = ss.Sim(d, networks=[ss.SexualNet(acts=ss.constant(ss.freq(80, 'year'))), ss.MixingPool(n_contacts=3)], n_agents=1000, solver='abm-events', unit='day', stop=30, **kw)
         S, I, R = ss.states('S I R')
         m = ss.Disease(S >> I @ 0.14*I, I >> R @ ss.days(8), init_n=dict(I=10), name='m')
@@ -110,7 +110,7 @@ def moves_inputs():
         S, E, I, R = ss.states('S E I R')
         onset = ss.Transition(E, [I, R], p=[0.7, None], dur=ss.lognormal(mean=ss.days(3), std=ss.days(1)))
         d = ss.Disease(infection=S >> E @ 0.1*I, onset=onset, care=ss.Transition(I, [I, ss.stay], p=[0.5, None], on=onset, dur=ss.days(4)),
-                       recovery=ss.Transition(I, [R, ss.null], p=[0.95, None], dur=ss.weibull(c=2, scale=ss.days(8))), waning=R >> S @ ss.perday(0.05), init_prev=0.05, name='d')
+                       recovery=ss.Transition(I, [R, ss.dead], p=[0.95, None], dur=ss.weibull(c=2, scale=ss.days(8))), waning=R >> S @ ss.perday(0.05), init_prev=0.05, name='d')
         sim = ss.Sim(d, networks=ss.RandomNet(n_contacts=4), n_agents=1000, unit='day', stop=30, **kw)
         M = ss.solvers.backends.moves
         kernels = {k: getattr(M, k) for k in ['due_agents', 'step_moves']}

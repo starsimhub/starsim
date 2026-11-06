@@ -619,7 +619,7 @@ def split(rng, n, a, b, weights, credit, out, comps, which, maps, scratch, rec, 
             for k in range(a, b):
                 total[g] += weights[k, g]
             whole = whole and abs(total[g] - 1) < 1e-9
-            if 0 < total[g] < 1 - 1e-9: # Shares that sum below 1 leave the rest nowhere, as in the ODE: the share of a split that takes ss.null, or the part of a flow a credit is not
+            if 0 < total[g] < 1 - 1e-9: # Shares that sum below 1 leave the rest nowhere, as in the ODE: the share of a split that takes ss.dead, or the part of a flow a credit is not
                 total[g] = 1.0
         for k in range(a, b): # One multinomial draw, as a chain of conditional binomials
             for g in range(ng):
@@ -1141,7 +1141,7 @@ def place_events(y, p, w, active, first, last, dt, flows, seed):
             tot = 0.0
             for k in range(ka, kb):
                 tot += p.tgt_w[k, where]
-            whole = not (0 < tot < 1 - 1e-9) # Shares that sum below 1 leave the rest nowhere, as in the ODE: the share of a split that takes ss.null
+            whole = not (0 < tot < 1 - 1e-9) # Shares that sum below 1 leave the rest nowhere, as in the ODE: the share of a split that takes ss.dead
             tot = tot if whole else 1.0
             cum = 0.0
             for k in range(ka, kb):
@@ -1441,7 +1441,7 @@ def sparse_events(y, p, w, active, first, last, dt, flows, seed, maps):
             tot = 0.0
             for k in range(ka, kb):
                 tot += p.tgt_w[k, where]
-            whole = not (0 < tot < 1 - 1e-9) # Shares that sum below 1 leave the rest nowhere, as in the ODE: the share of a split that takes ss.null
+            whole = not (0 < tot < 1 - 1e-9) # Shares that sum below 1 leave the rest nowhere, as in the ODE: the share of a split that takes ss.dead
             tot = tot if whole else 1.0
             cum = 0.0
             for k in range(ka, kb):

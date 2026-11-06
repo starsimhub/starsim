@@ -53,7 +53,7 @@ settings = ['label', 'n_agents', 'total_pop', 'pop_scale', 'start', 'stop', 'dur
 module_keys = ['networks', 'demographics', 'interventions', 'analyzers', 'connectors']
 values = ['par', 'seasonal', 'peract', 'timeseries', 'by', 'Rate', 'date', 'datedur', 'dur'] # Starsim's values that can be written as calls, besides typed quantities and distributions
 dist_names = sorted(name for name in dir(ss) if isinstance(getattr(ss, name), type) and issubclass(getattr(ss, name), ss.Dist) and name != 'Dist')
-constants = dict(pi='np.pi', inf='np.inf', nan='np.nan', null='ss.null', stay='ss.stay')
+constants = dict(pi='np.pi', inf='np.inf', nan='np.nan', unborn='ss.unborn', dead='ss.dead', outside='ss.outside', stay='ss.stay')
 
 
 #%% Writing
@@ -121,10 +121,10 @@ class Writer:
         """ A transition: as one line in the words of its code (`"I >> R @ dur_inf"`) if it has only its ends and a rate or a dwell time, else as the arguments of `ss.Transition()` """
         pars = g.pars
         ends = lambda names, empty: empty if not names else names[0] if len(names) == 1 else '[' + ', '.join(names) + ']'
-        name = lambda x: 'null' if x is ss.null else 'stay' if x is ss.stay else x.name
-        src = ends([name(x) for x in tr.source], 'null')
-        dst = [name(x) for x in tr.dest or []] + ['stay']*bool(tr.stays) + ['null']*bool(tr.dies) # ss.stay and ss.null are kept out of dst, each with its own p
-        out = sc.objdict(source=src if src != 'null' else None, dest=None if not dst else dst[0] if len(dst) == 1 else dst)
+        name = lambda x: 'stay' if x is ss.stay else x.name
+        src = ends([name(x) for x in tr.source], 'outside' if tr.migration else 'unborn') # An inflow: births, or arrivals
+        dst = [name(x) for x in tr.dest or []] + ['stay']*bool(tr.stays) + ['dead']*bool(tr.dies) # ss.stay and ss.dead are kept out of dst, each with its own p
+        out = sc.objdict(source=src, dest=('outside' if tr.migration else 'dead') if not dst else dst[0] if len(dst) == 1 else dst)
         dur = tr.dur
         if tr.rate is not None:
             out.rate = self.expr(tr.rate, pars)
@@ -144,7 +144,7 @@ class Writer:
         typed = isinstance(getattr(dur, 'raw', dur), (ss.Duration, ss.Dist)) # A dwell time written with @ needs a unit, so that it is not read as a rate
         if set(out.keys()) <= {'source', 'dest', 'rate', 'dur'} and not isinstance(out.dest, list) and ('rate' in out or typed):
             rate = out.get('rate', out.get('dur'))
-            return f'{src} >> {out.dest or "null"} @ {rate}'
+            return f'{src} >> {out.dest} @ {rate}'
         return {k:v for k,v in out.items() if v is not None}
 
     def strat(self, s):
@@ -396,12 +396,12 @@ class Reader:
         return repr(val)
 
     def ends(self, text, names, where):
-        """ The source or destination of a transition: a state, `null`, or a list of states """
+        """ The source or destination of a transition: a state, `unborn`, `dead`, `outside`, or a list of states """
         code = self.expr(text, names, where)
         node = ast.parse(code, mode='eval').body
-        ok = lambda n: isinstance(n, ast.Name) or ast.unparse(n) in ['ss.null', 'ss.stay']
+        ok = lambda n: isinstance(n, ast.Name) or ast.unparse(n) in ['ss.unborn', 'ss.dead', 'ss.outside', 'ss.stay']
         if not (ok(node) or isinstance(node, ast.List) and all(ok(e) for e in node.elts)):
-            self.error(where, f'"{text}" is not a state, null, or a list of states')
+            self.error(where, f'"{text}" is not a state, unborn, dead, outside, or a list of states')
         return code
 
     def transition(self, name, tr, names, where):
@@ -421,7 +421,7 @@ class Reader:
         unknown = set(tr) - {'source', 'dest', 'rate', 'dur', 'p', 'min_stay', 'label', 'stages'}
         if unknown:
             self.error(where, f'{sc.strjoin(sorted(unknown))} is not an argument of a transition here')
-        args = [self.ends(tr.get('source') or 'null', names, where), self.ends(tr['dest'] if isinstance(tr.get('dest'), str) else '[' + ', '.join(x or 'null' for x in tr['dest']) + ']' if tr.get('dest') else 'null', names, where)]
+        args = [self.ends(tr.get('source') or 'unborn', names, where), self.ends(tr['dest'] if isinstance(tr.get('dest'), str) else '[' + ', '.join(x or 'dead' for x in tr['dest']) + ']' if tr.get('dest') else 'dead', names, where)]
         for key in ['rate', 'dur', 'p', 'min_stay', 'stages', 'label']:
             if tr.get(key) is not None:
                 val = repr(tr[key]) if key == 'label' else self.value(tr[key], names, where)
@@ -524,7 +524,7 @@ class Reader:
 
 def check_name(name, where, reader):
     """ A name in the model must be a Python name, so that the code can use it """
-    if not (isinstance(name, str) and name.isidentifier() and not keyword.iskeyword(name)) or name in ['ss', 'ssl', 'np', 'sim', 'people', 'null', 'stay']:
+    if not (isinstance(name, str) and name.isidentifier() and not keyword.iskeyword(name)) or name in ['ss', 'ssl', 'np', 'sim', 'people', 'unborn', 'dead', 'outside', 'stay']:
         reader.error(where, f'"{name}" cannot be a name in a model: use letters, numbers, and underscores, not starting with a number, and not a word Python or Starsim uses')
 
 

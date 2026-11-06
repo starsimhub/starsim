@@ -80,8 +80,8 @@ class Syphilis(ss.Disease):
     onset     = E >> P @ dur_exp
     secondary = P >> Se @ dur_primary
     latency   = Se >> El @ dur_secondary
-    relapse   = ss.Transition(El, [Se, Ll], dur=dur_early, p=[p_reactivate, None])
-    tertiary  = ss.Transition(Ll, [T, R], dur=dur_late, p=[p_tertiary, None])
+    relapse   = El >> {Se: p_reactivate, Ll: None} @ dur_early
+    tertiary  = Ll >> {T: p_tertiary, R: None} @ dur_late
     death     = ss.death(T, rate=death_rate)
 
     fading_early = ss.modify('rel_trans', multiply=0.5**(El.time_in/latent_half_life), where=El) # Infectiousness falls with time in latency

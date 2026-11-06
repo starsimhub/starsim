@@ -80,7 +80,7 @@ def _():
 @trigger('has no rate. Give it one', ValueError)
 def _():
     S, I = ss.states('S I')
-    ss.Disease(births=ss.Transition(ss.null, S), infection=S >> I @ 0.1*I)
+    ss.Disease(births=ss.Transition(ss.unborn, S), infection=S >> I @ 0.1*I)
 
 @trigger('of the module has no name', ValueError)
 def _():
@@ -103,7 +103,7 @@ def _():
 def _():
     S, I = ss.states('S I')
     W = ss.State('W', people=False)
-    ss.Disease(infection=S >> I @ 0.5*W, shedding=ss.null >> W @ 10*I.n)
+    ss.Disease(infection=S >> I @ 0.5*W, shedding=ss.outside >> W @ 10*I.n)
 
 @trigger('adjust= names a transition "recovry"', KeyError)
 def _(): sir().stratify(age=[0, 15], adjust={'recovry': [1, 2]})
@@ -197,7 +197,7 @@ def _():
 def _():
     S, X = ss.states('S X')
     X.people = False
-    ss.Disease(S, X, births=ss.Transition(ss.null, [S, X], rate=ss.peryear(100), p=[0.9, 0.1]))
+    ss.Disease(S, X, births=ss.Transition(ss.unborn, [S, X], rate=ss.peryear(100), p=[0.9, 0.1]))
 
 @trigger('where the split puts nobody', ValueError)
 def _():

@@ -40,7 +40,7 @@ def test_fixed_delay():
     mu = 0.01
     def cohort():
         S, E, I = ss.states('S E I')
-        return ss.Disease(S, E, I, infection=S >> E @ 0*I, latent=E >> I @ ss.constant(ss.days(14)), die=E >> ss.null @ ss.perday(mu), init=dict(E=0.1), name='d')
+        return ss.Disease(S, E, I, infection=S >> E @ 0*I, latent=E >> I @ ss.constant(ss.days(14)), die=E >> ss.dead @ ss.perday(mu), init=dict(E=0.1), name='d')
     k = np.arange(14) # The seeds are dated a step before the start, as if infected then, so they leave in the step from day 13 to 14
     n0 = 1000
     ode = ss.Sim(cohort(), solver='ode', total_pop=10_000, unit='day', stop=20, **kw).run()

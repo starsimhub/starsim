@@ -655,8 +655,8 @@ def disease_code(source, var, total=None):
     for flow in source.flows:
         branch = isinstance(flow.dst, list)
         arrow = f'{flow.src or ""} -> {"/".join(flow.dst) if branch else flow.dst or ""}'.strip()
-        src = 'ss.null' if flow.src is None else flow.src
-        dst = '[' + ', '.join(flow.dst) + ']' if branch else 'ss.null' if flow.dst is None else flow.dst
+        src = 'ss.unborn' if flow.src is None else flow.src # An inflow from another framework: births (ss.outside for arrivals)
+        dst = '[' + ', '.join(flow.dst) + ']' if branch else 'ss.dead' if flow.dst is None else flow.dst
         name = flow.name
         if name is None and flow.rate in source.exprs and flow.rate not in taken: # A rate given by a named expression names its transition
             name = flow.rate

@@ -11,7 +11,7 @@ The import reads the R script without running R: literal numbers, strings, `c()`
 | SimInf | Starsim | Mechanical |
 |---|---|---|
 | A transition `"S -> rate -> I"` | A transition, the rate a total flow, classified (`beta*S*I/N` is exposure) | yes |
-| `@` | `ss.null` (births and deaths) | yes |
+| `@` | `ss.dead` (births and deaths) | yes |
 | `N <- S + I + R` | A named expression | yes |
 | `pow()`, `fmin()`, `fmax()`, `(int)` | The same in the rate | yes |
 | Stoichiometry with net change one person moving (`S + I -> ... -> 2*I`) | `S -> I` | yes |
@@ -19,7 +19,7 @@ The import reads the R script without running R: literal numbers, strings, `c()`
 | Rows of `u0` | A stratification `node` (`kind='space'`), split by node size; initial numbers by node as `ss.by(node=...)` | yes |
 | `gdata`; `ldata` that differs by node | Parameters; `ss.par(ss.by(node=...))` | yes |
 | `enter`, `exit`, `intTrans`, `extTrans` events, with `E` and `N` | `ss.geo.Mobility(data=register)` (`to_states` for `intTrans`; entering animals go to the first compartment selected) | yes |
-| `SISe`, `SISe3` (`phi` in the environment, by quarter) | `phi` as `ss.State(people=False)`, with a seasonal decay `phi >> ss.null` and shedding `ss.null >> phi` from `I` | yes |
+| `SISe`, `SISe3` (`phi` in the environment, by quarter) | `phi` as `ss.State(people=False)`, with a seasonal decay `phi >> ss.dead` and shedding `ss.outside >> phi` from `I` | yes |
 | `tspan` | `solver='gillespie'`, in days, from `tspan[0] - 1` to `tspan[-1]` | yes |
 | `u0`, `events` computed in R (`u0_SIR()`, `events_SIR()`, `read.csv()`, loops) | Listed as "computed in R"; pass them in: `ss.import_from('model.R', u0='u0.csv', events='events.csv.gz')` | no |
 | `pts_fun` (C code updating `v`) | Transitions of a state that is not people (below) | no |
@@ -32,8 +32,8 @@ The import reads the R script without running R: literal numbers, strings, `c()`
 
 ```python
 phi = ss.State(people=False)
-decay = phi >> ss.null @ ss.perday(-np.log(1 - b))
-shed  = ss.null >> phi @ ss.perday(alpha*(-np.log(1 - b))/b) * I.n/(S + I).n
+decay = phi >> ss.dead @ ss.perday(-np.log(1 - b))
+shed  = ss.outside >> phi @ ss.perday(alpha*(-np.log(1 - b))/b) * I.n/(S + I).n
 infection = S >> I @ upsilon * phi.n # phi.n, not phi: phi is a count, not people
 ```
 

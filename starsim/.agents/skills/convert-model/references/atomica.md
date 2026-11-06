@@ -8,7 +8,7 @@ An Atomica model is a framework workbook (compartments, characteristics, paramet
 
 | Atomica | Starsim | Mechanical |
 |---|---|---|
-| A compartment | A state (a source is `ss.null`; a sink such as the dead stays a state, as in Atomica's results) | yes |
+| A compartment | A state (a source is `ss.dead`; a sink such as the dead stays a state, as in Atomica's results) | yes |
 | A characteristic | A named expression and a result (a sum of compartments, maybe over a denominator) | yes |
 | A link in the transition matrix | A transition `<from>_to_<to>` (with `_<parameter>` if a link has several) | yes |
 | Format `rate`, `probability` | A rate per year | yes |

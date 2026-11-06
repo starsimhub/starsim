@@ -761,7 +761,7 @@ def test_printed_output():
     sim = ss.Sim(ss.Disease(S >> I @ 0.3*I, I >> R @ ss.weeks(10), init_n=dict(S=9999, I=1)), total_pop=10_000, unit='week', stop=10, verbose=0).init()
     assert 'guessed: R' not in sim.describe(output=True)
     Sv, Iv = ss.states('Sv Iv', people=False)
-    d = ss.Disease(S >> I @ ss.perday(0.1)*Iv.frac, Sv >> Iv @ ss.perday(0.1)*I.frac, Iv >> Sv @ ss.days(10), ss.null >> S @ ss.by(risk=[2/3, 1/3]), init_n=dict(I=1, Sv=100), name='d')
+    d = ss.Disease(S >> I @ ss.perday(0.1)*Iv.frac, Sv >> Iv @ ss.perday(0.1)*I.frac, Iv >> Sv @ ss.days(10), ss.unborn >> S @ ss.by(risk=[2/3, 1/3]), init_n=dict(I=1, Sv=100), name='d')
     d.stratify(risk=dict(low=0.1, high=0.9))
     text = ss.Sim(d, total_pop=1000, solver='ode', **kw).init().describe(output=True)
     assert 'Sv = 100' in text and 'Sv = 100 people' not in text and 'by(risk=[0.666667, 0.333333])' in text
