@@ -118,7 +118,7 @@ class MultiSim:
 
         unknown = set(kwargs) - set(self.run_options)
         if unknown:
-            errormsg = f'Unknown argument{"s" if len(unknown) > 1 else ""} {sc.strjoin(sorted(unknown))} for running many sims; the options are n_runs, pars, priors, inplace, and {sc.strjoin(self.run_options)}'
+            errormsg = f'Unknown argument{"s" if len(unknown) > 1 else ""} {sc.strjoin(sorted(unknown))} for running many sims; the options are n_runs, pars, priors, inplace, and {sc.strjoin(self.run_options)}{ss.errors.starsim3(keys=sorted(unknown), call="ss.MultiSim")}'
             raise TypeError(errormsg)
 
         # Set properties

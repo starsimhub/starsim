@@ -119,7 +119,8 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         if overridden and not infection and ss.transitions.class_members(cls):
             base = next((f'ssl.Agent{b.__name__}' for b in cls.__mro__ if b.__module__ == __name__ and b.__name__ in ['SIR', 'SIS', 'SEIR']), 'ss.AgentDisease')
             errormsg = (f'{cls.__name__} declares states or transitions and defines {sc.strjoin(overridden)}, which a declared transition never calls, so it would be silently ignored.\n'
-                        f'     To write a declared transmission as code, override transmit(self, transition), which gives who is infected (see ss.Disease.transmit()); a disease written as code from the start subclasses {base} (import starsim.library as ssl).')
+                        f'     To write a declared transmission as code, override transmit(self, transition), which gives who is infected (see ss.Disease.transmit()); a disease written as code from the start subclasses {base} (import starsim.library as ssl).\n'
+                        f'     If this was written for Starsim 3, see https://docs.starsim.org/v3v4 for help migrating.')
             raise ss.CapabilityError(errormsg)
         rebound = [name for name in dict.fromkeys(k for base in cls.__mro__[1:] for k,v in vars(base).items() if isinstance(v, ss.par)) if name in vars(cls) and not isinstance(vars(cls)[name], (ss.par, ss.expressions.Expr))]
         if rebound: # A declared parameter rebound to something else (a method, a number) is dropped from the model, and its transitions keep the base class's parameter, so it would be silently ignored
@@ -466,7 +467,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
             modifier.own(self, name)
         for key in sc.mergedicts(pars):
             if key not in self.pars:
-                raise sc.KeyNotFoundError(f'"{self.name}" has no parameter named "{key}". Its parameters are {sc.strjoin(self.pars.keys())}{ss.expressions.did_you_mean(key, self.pars.keys())}')
+                raise sc.KeyNotFoundError(f'"{self.name}" has no parameter named "{key}". Its parameters are {sc.strjoin(self.pars.keys())}{ss.expressions.did_you_mean(key, self.pars.keys())}{ss.errors.starsim3(keys=key, call=f"ss.{type(self).__name__}")}')
         self.pars.update(pars) # A declared parameter keeps its bounds and name: see ss.Pars
         return
 
@@ -696,7 +697,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         unknown = [key for key in self.pars if key not in self.graph.pars and key not in self.code_pars] if self.graph is not None else [] # Added after the disease was made, so nothing reads it
         if unknown:
             hint = ' The starting values are given when the disease is made, e.g. ss.Disease(..., init=dict(I=0.01)) or init_n=dict(I=100), and cannot be set through pars.' if 'init' in unknown or 'init_n' in unknown else ''
-            raise sc.KeyNotFoundError(f'"{self.name}" has no parameter named {sc.strjoin(unknown)}, so nothing would read it. Its parameters are {sc.strjoin(self.graph.pars.keys())}{ss.expressions.did_you_mean(unknown[0], self.graph.pars.keys())}{hint}')
+            raise sc.KeyNotFoundError(f'"{self.name}" has no parameter named {sc.strjoin(unknown)}, so nothing would read it. Its parameters are {sc.strjoin(self.graph.pars.keys())}{ss.expressions.did_you_mean(unknown[0], self.graph.pars.keys())}{hint}{ss.errors.starsim3(keys=unknown, call=f"ss.{type(self).__name__}")}')
         self.engine = ss.solvers.make_engine(self, sim)
         self.engine.define()
         needs = ss.interventions.memory_needs(sim) if isinstance(sim, ss.Sim) and self.graph is not None and self.graph.transitions else {} # Not a mock sim

@@ -108,7 +108,7 @@ class SimPars(ss.Pars):
                 raise ValueError(self.removed[key])
         if 'custom' in pars and not isinstance(pars['custom'], ss.ndict): # Only as part of a whole SimPars, e.g. ss.Sim(pars=ss.SimPars(...))
             available = [key for key in self.keys() if key != 'custom']
-            raise sc.KeyNotFoundError(f"Key(s) ['custom'] not found; available keys are {available}")
+            raise sc.KeyNotFoundError(f"Key(s) ['custom'] not found; available keys are {available}{ss.errors.starsim3(keys='custom')}")
         return super().check_key_mismatch(pars)
 
     @classmethod

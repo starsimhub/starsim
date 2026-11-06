@@ -709,7 +709,7 @@ class Pregnancy(Demographics, ss.Disease):
         )
         unknown = [k for k in given if k not in self.pars]
         if unknown:
-            raise sc.KeyNotFoundError(f'"{self.name}" has no parameter named {sc.strjoin(unknown)}. Its parameters are {sc.strjoin(self.pars.keys())}{ss.expressions.did_you_mean(unknown[0], self.pars.keys())}')
+            raise sc.KeyNotFoundError(f'"{self.name}" has no parameter named {sc.strjoin(unknown)}. Its parameters are {sc.strjoin(self.pars.keys())}{ss.expressions.did_you_mean(unknown[0], self.pars.keys())}{ss.errors.starsim3(keys=unknown, call=f"ss.{type(self).__name__}")}')
         fertility = given.pop('fertility_rate', ss.peryear(100)) # Rates (a number, a table, or a place) for conception_rate(), or the hazard of conception as a function
         defaults = dict(year='Time', age='AgeGrp', value='ASFR')
         if isinstance(fertility, str): # A named place: its UN age-specific fertility rates, per 1,000 women, by year and 5-year age group

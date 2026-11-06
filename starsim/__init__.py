@@ -106,7 +106,10 @@ def __getattr__(name):
     if name == 'fit':
         import importlib
         return importlib.import_module(f'.{name}', __name__)
-    hint = '; import it first: import starsim.library as ssl' if name == 'library' else ''
+    if name == 'library':
+        hint = '; import it first: import starsim.library as ssl'
+    else:
+        hint = '' if name.startswith('__') else errors.starsim3(names=name) # A name of Starsim 3's says what replaces it
     raise AttributeError(f'module "starsim" has no attribute "{name}"{hint}')
 
 # The kernels: Rust if it has been built (or asked for by STARSIM_KERNELS), else Numba (see ss.options.kernels)
