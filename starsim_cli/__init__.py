@@ -14,6 +14,10 @@ The starsim command, available after installing Starsim
     starsim ai show [skill]  # Show the guide for AI agents, or one of its skills
     starsim ai uninstall     # Remove them
     starsim ai off           # Stop the other commands from suggesting them ("on" undoes it)
+    starsim ai "how would I model a leaky vaccine?" # Ask an AI coding agent (-i: in an interactive session)
+
+    starsim help             # This list of commands
+    starsim help RandomNet   # The docstring of a name (any case), with a link; or else where a term appears
 
     starsim convert model.R       # Convert to Starsim code (model.py); the format is told from the file
     starsim convert model.camdl --to=epimodel # Or to another framework
@@ -31,7 +35,7 @@ offer to build them instead, saying what that takes (--numba skips asking).
 
 `python -m starsim` does the same, e.g. where the command is not on the path.
 """
-# Only the commands that need Starsim import it (compiling, converting), so that the rest start at once
+# Only the commands that need Starsim import it (compiling, converting, help), so that the rest start at once
 import sys
 import argparse
 
@@ -126,13 +130,25 @@ def main(argv=None):
     a = sub.add_parser('show', help='Show the guide for AI agents (which lists the skills), or one of its skills')
     a.add_argument('skill', nargs='?', help='The skill to show (default: the guide)')
     a.set_defaults(func=run('ai', 'show'))
+    a = sub.add_parser('ask', help='Ask an AI coding agent a question about Starsim (the same as "starsim ai <question>")')
+    a.add_argument('question', nargs='*', help='The question (quoted, or as several words)')
+    a.add_argument('-i', '--interactive', action='store_true', help='Ask it in an interactive session, rather than printing the answer')
+    a.add_argument('--agent', help='The agent to ask, e.g. --agent=claude (default: STARSIM_AGENT, or else the first installed of: claude, codex)')
+    a.set_defaults(func=run('ai', 'ask'))
+    ai_actions = list(sub.choices) + ['-h', '--help']
+
+    # starsim help
+    p = commands.add_parser('help', help='With no term, this list of commands; with one, look it up in the docs: a name\'s docstring, with a link, or else the names and pages where the term appears')
+    p.add_argument('term', nargs='*', help='The name (e.g. RandomNet, ss.Sim.run) or term to look up, in any case')
+    p.add_argument('--offline', action='store_true', help='Search only the docstrings of the Starsim installed, not the pages of the docs online')
+    p.set_defaults(func=run('help', 'help'))
 
     # starsim convert, import, export
     def add_convert_args(p, source=True, to=True):
         p.add_argument('--out', help='The file to write (default: the input\'s name, with the extension of the format)')
         p.add_argument('--sim', default='sim', help='For a Starsim file, the variable that holds the sim (default: sim)')
         p.add_argument('--force', action='store_true', help='Replace the output file if it exists')
-        p.add_argument('--ai', nargs='?', const=True, default=False, metavar='AGENT', help='Have an AI coding agent do the conversion, with Starsim\'s skills (optionally naming the agent, e.g. --ai=claude; default: STARSIM_AGENT, or the only one installed)')
+        p.add_argument('--ai', nargs='?', const=True, default=False, metavar='AGENT', help='Have an AI coding agent do the conversion, with Starsim\'s skills (optionally naming the agent, e.g. --ai=claude; default: STARSIM_AGENT, or else the first installed of: claude, codex)')
         p.add_argument('--headless', action='store_true', help='With --ai, run the agent on its own, rather than in an interactive session')
         p.set_defaults(func=run('convert', 'convert'), parser=p)
         return
@@ -156,9 +172,18 @@ def main(argv=None):
     p.set_defaults(source='starsim')
     add_convert_args(p)
 
+    argv = sys.argv[1:] if argv is None else list(argv)
+    if argv[:1] == ['ai'] and argv[1:] and argv[1] not in ai_actions: # A question, e.g. starsim ai "how ...?" or starsim ai -i "how ...?"
+        argv.insert(1, 'ask')
     args, extra = parser.parse_known_args(argv)
-    if args.command is None: # Bare "starsim": show the help rather than an error
+    if args.command is None or (args.command == 'help' and not args.term): # Bare "starsim" or "starsim help": show the help rather than an error
         parser.print_help()
+        if args.command == 'help':
+            import shutil, textwrap
+            note = ('With a name or term, "starsim help" looks it up in the docs: "starsim help RandomNet" prints the docstring of ss.RandomNet '
+                    '(any case, e.g. "sim.run"), with a link to its page online; any other term, e.g. "starsim help leaky vaccine", lists the '
+                    'names and pages of the docs that mention it.')
+            print('\n' + textwrap.fill(note, width=min(shutil.get_terminal_size().columns, 100)))
         out = None
     elif args.command in ['convert', 'import', 'export']:
         args.input = getattr(args, 'input_opt', None) or args.input

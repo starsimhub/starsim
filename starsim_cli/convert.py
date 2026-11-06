@@ -6,21 +6,15 @@ the file), then written out as Starsim code (`sim.imported.code`) or in another 
 an AI coding agent does it instead, with Starsim's convert-model skill, for what has no
 mechanical conversion (e.g. LASER) or needs judgment.
 """
-import os
 import sys
 import ast
-import shutil
 import warnings
 import subprocess
 from pathlib import Path
 
-__all__ = ['convert', 'formats', 'agents', 'choose_agent']
+from .ai import agents, choose_agent # The agents that --ai can run, and which one
 
-# The coding agents that --ai can run: the command for an interactive session, and for one that runs on its own (--headless), with the prompt where "{}" is
-agents = dict(
-    claude = dict(interactive=['claude', '{}'], headless=['claude', '-p', '{}', '--permission-mode', 'acceptEdits', '--allowedTools', 'Bash(python:*)', 'Bash(starsim:*)']), # Edits files, and runs Python to check the result
-    codex  = dict(interactive=['codex', '{}'], headless=['codex', 'exec', '--sandbox', 'workspace-write', '{}']),
-)
+__all__ = ['convert', 'formats']
 
 
 def formats():
@@ -126,23 +120,6 @@ def convert(args, extra=()):
 
 #%% With an AI coding agent
 
-def choose_agent(name=None):
-    """ The agent to run: the one named (by --ai=<name>, or else `STARSIM_AGENT`), or else the only one installed """
-    name = name or os.environ.get('STARSIM_AGENT')
-    if name:
-        if name not in agents:
-            sys.exit(f'Unknown agent "{name}"; the agents are: {", ".join(agents)}')
-        if not shutil.which(agents[name]['interactive'][0]):
-            sys.exit(f'"{agents[name]["interactive"][0]}" is not on the path')
-        return name
-    found = [key for key,agent in agents.items() if shutil.which(agent['interactive'][0])]
-    if not found:
-        sys.exit(f'No AI coding agent found on the path: install one of {", ".join(agents)}')
-    elif len(found) > 1:
-        sys.exit(f'Several AI coding agents are installed ({", ".join(found)}): choose one with --ai=<name>, or set STARSIM_AGENT')
-    return found[0]
-
-
 def prompt(args):
     """ What to ask the agent """
     source = Path(args.input)
@@ -161,7 +138,7 @@ def prompt(args):
 
 def run_agent(args):
     """ Run an AI coding agent on the conversion, interactively or (with --headless) on its own """
-    name = choose_agent(None if args.ai is True else args.ai)
+    name = choose_agent(None if args.ai is True else args.ai, option='--ai')
     text = prompt(args)
     command = [text if word == '{}' else word for word in agents[name]['headless' if args.headless else 'interactive']]
     print(f'Starting {name}{" (headless)" if args.headless else ""} to convert {args.input} ...')

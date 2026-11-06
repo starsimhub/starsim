@@ -1,9 +1,10 @@
 """
-The skills for AI coding agents: `starsim ai` (and `starsim init ai`)
+The skills for AI coding agents, and asking an agent about Starsim: `starsim ai` (and `starsim init ai`)
 
 Starsim's skills are in its package, in `.agents/skills/` (one folder per skill). In a project, they are linked into
 the folders where coding agents look for skills, so that they always match the Starsim installed; for all projects,
 a short skill is installed instead, which loads them from the Starsim in use (with `starsim ai show`).
+`starsim ai "<question>"` asks an agent a question about Starsim (with `-i`, in an interactive session).
 
 This module doesn't import Starsim (or Sciris), so that the command starts at once. The starsim command calls
 `note_skills()` from here after its other commands, to suggest the skills where an agent has none.
@@ -15,7 +16,7 @@ import subprocess
 import importlib.util
 from pathlib import Path
 
-__all__ = ['skills', 'list_skills', 'show', 'install', 'uninstall', 'status', 'off', 'on', 'note_skills']
+__all__ = ['skills', 'list_skills', 'show', 'install', 'uninstall', 'status', 'off', 'on', 'note_skills', 'agents', 'choose_agent', 'ask']
 
 package_folder = Path(importlib.util.find_spec('starsim').submodule_search_locations[0]) # Found without importing it
 agents_folder = package_folder / '.agents' # Where tools that read installed packages look for skills (e.g. library-skills)
@@ -24,6 +25,22 @@ meta_folder = agents_folder / 'meta-skill' # The short skill for all projects, w
 skill_name = 'starsim' # The name of both the short skill and the main skill (the guide)
 marker = 'installed by `starsim ai`' # In the installed SKILL.md, so that a skill of the same name from elsewhere is not overwritten
 off_file = '.starsim/skill_note_off' # In the home folder: if there, the starsim command doesn't suggest the skills (see note_skills())
+
+
+# The coding agents that the starsim command can run, each as a command with the prompt where "{}" is: for an interactive
+# session; for one that runs on its own and may edit files (starsim convert --headless); and for one that only answers a question (starsim ai "...")
+agents = dict(
+    claude = dict(
+        interactive = ['claude', '{}'],
+        headless = ['claude', '-p', '{}', '--permission-mode', 'acceptEdits', '--allowedTools', 'Bash(python:*)', 'Bash(starsim:*)'], # Edits files, and runs Python to check the result
+        ask = ['claude', '-p', '{}', '--allowedTools', 'Bash(starsim:*)', 'WebFetch(domain:starsim.org)'], # Reads, and looks things up in the docs
+    ),
+    codex = dict(
+        interactive = ['codex', '{}'],
+        headless = ['codex', 'exec', '--sandbox', 'workspace-write', '{}'],
+        ask = ['codex', 'exec', '--sandbox', 'read-only', '--skip-git-repo-check', '{}'], # Read-only, so safe outside a repo
+    ),
+)
 
 
 class Target:
@@ -325,3 +342,37 @@ def note_skills():
     if not note_off() and targets['claude'].present and not skills_found():
         print('\nUsing an AI coding agent? Run "starsim init ai" to give it Starsim\'s skills ("starsim ai off" to stop this note)')
     return
+
+
+#%% Asking an agent
+
+def choose_agent(name=None, option='--agent'):
+    """ The agent to run: the one named (by `option`, or else `STARSIM_AGENT`), or else the first installed, in the order of `agents` """
+    name = name or os.environ.get('STARSIM_AGENT')
+    if name:
+        if name not in agents:
+            sys.exit(f'Unknown agent "{name}"; the agents are: {", ".join(agents)}')
+        if not shutil.which(agents[name]['interactive'][0]):
+            sys.exit(f'"{agents[name]["interactive"][0]}" is not on the path')
+        return name
+    found = [key for key,agent in agents.items() if shutil.which(agent['interactive'][0])]
+    if not found:
+        sys.exit(f'No AI coding agent found on the path: install one of {", ".join(agents)} (or look it up with "starsim help <term>")')
+    elif len(found) > 1:
+        print(f'Using {found[0]} (also installed: {", ".join(found[1:])}; choose with {option}=<name>, or set STARSIM_AGENT)', file=sys.stderr)
+    return found[0]
+
+
+def ask(args):
+    """ Ask an AI coding agent a question about Starsim: answered on its own, or with -i, in an interactive session """
+    question = ' '.join(args.question).strip()
+    if not question:
+        sys.exit('Ask a question, e.g. starsim ai "how would I model a leaky vaccine?"')
+    name = choose_agent(args.agent)
+    text = (f'{question}\n\n(This is a question about Starsim {version()}, the disease modeling framework installed here. '
+            f'Use Starsim\'s skills (if they aren\'t loaded, run "starsim ai show"), and look up names and topics with '
+            f'"starsim help <term>". Answer with working code where it helps; don\'t change any files unless asked to.)')
+    command = [text if word == '{}' else word for word in agents[name]['interactive' if args.interactive else 'ask']]
+    if args.interactive:
+        print(f'Starting {name} ...')
+    sys.exit(subprocess.run(command, stdin=None if args.interactive else subprocess.DEVNULL).returncode) # Nothing more to read, so an agent waits for no input

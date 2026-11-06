@@ -337,6 +337,62 @@ def test_cli_convert(tmp_path, monkeypatch, capsys):
     return
 
 
+def test_cli_ask(ai_home, monkeypatch, capsys):
+    """ `starsim ai "<question>"` asks the agent installed, on its own or (with -i) interactively; the actions stay actions """
+    sc.heading('Testing starsim ai "<question>"')
+    import starsim_cli as cli
+    from starsim_cli import ai
+    with pytest.raises(SystemExit, match='No AI coding agent found'):
+        cli.main(['ai', 'how would I model a leaky vaccine?'])
+    commands = []
+    monkeypatch.setattr(ai.shutil, 'which', lambda command: f'/bin/{command}' if command in ['claude', 'codex'] else None)
+    monkeypatch.setattr(ai.subprocess, 'run', lambda command, **kwargs: commands.append(command) or sc.objdict(returncode=0))
+    for argv in [['ai', 'how would I model', 'a leaky vaccine?'], ['ai', '-i', 'how would I model a leaky vaccine?'], ['ai', 'ask', 'list'], ['ai', '--agent=codex', 'why?']]:
+        with pytest.raises(SystemExit):
+            cli.main(argv)
+    headless, interactive, listed, codex = commands
+    assert headless[:2] == ['claude', '-p'] and 'how would I model a leaky vaccine?' in headless[2] # The words, as one question
+    assert interactive[0] == 'claude' and interactive[1].startswith('how would I') # The first message of a session
+    assert listed[2].startswith('list') and codex[:2] == ['codex', 'exec'] # A question that is an action's name, and the agent chosen
+    assert 'Using claude (also installed: codex' in capsys.readouterr().err
+    cli.main(['ai', 'list']) # Still the action
+    assert 'convert-model' in capsys.readouterr().out
+    return
+
+
+def test_cli_help(monkeypatch, capsys):
+    """ `starsim help <term>`: a name's docstring with a link, or else the names and pages that mention the term """
+    sc.heading('Testing starsim help')
+    import io
+    import json
+    import starsim_cli as cli
+    from starsim_cli import help as cli_help
+    capsys.readouterr()
+    cli.main(['help']) # With no term, the commands, and what a term does
+    out = capsys.readouterr().out
+    assert 'starsim convert' in out and 'prints the docstring' in out
+    cli.main(['help', 'randomnet']) # In any case
+    out = capsys.readouterr().out
+    assert out.startswith('ss.RandomNet(') and 'Random connectivity between agents' in out
+    assert 'Docs: https://starsim.org/v4/api/networks.html#starsim.networks.RandomNet' in out
+    cli.main(['help', 'starsim.Sim.run()']) # A method, with or without its prefix and parentheses
+    out = capsys.readouterr().out
+    assert out.startswith('ss.Sim.run(until=') and 'api/sim.html#starsim.sim.Sim\n' in out # Linked to its class
+    assert cli_help.url(ssl.Cholera).endswith('api/library.diseases.html#starsim.library.diseases.Cholera') # Documented by package
+    assert cli_help.url(ss.converters.Source).endswith('api/converters.html#starsim.converters.Source')
+
+    index = [dict(href='user_guide/interventions_products.html#leaky', title='Products', section='Leaky', text='Under a Leaky Vaccine, everyone is still infectable'),
+             dict(href='api/products.html', title='products', section='', text='leaky vaccine')] # The API's pages are the docstrings, so not listed
+    monkeypatch.setattr(cli_help.urllib.request, 'urlopen', lambda *args, **kwargs: io.BytesIO(json.dumps(index).encode()))
+    cli.main(['help', 'leaky', 'vaccine'])
+    out = capsys.readouterr().out
+    assert 'Pages that mention "leaky vaccine"' in out and 'https://starsim.org/v4/user_guide/interventions_products.html#leaky' in out
+    assert 'api/products.html' not in out
+    with pytest.raises(SystemExit, match='Nothing in the docs mentions'):
+        cli.main(['help', 'xyzzy', '--offline'])
+    return
+
+
 def test_skill_note(ai_home, monkeypatch, capsys):
     """ The starsim command suggests the skills only if an agent is installed and has none, and until switched off """
     sc.heading('Testing the note about skills')

@@ -183,7 +183,7 @@ More usage examples are available in the tutorials and user guide.
 
 ## AI integration
 
-Starsim comes with skills for AI coding agents (Claude Code, Codex, and others), which always match the version installed: how to write, check, and run a model, and how to import a model from another framework or upgrade one from Starsim 3. `starsim init ai` (part of `starsim init`) links them into your project, and `starsim ai install --global` sets them up for all your projects instead; tools that read skills from installed packages, such as `uvx library-skills`, find them too. For anything else, [llms.txt](https://docs.starsim.org/llms.txt) is a map of the docs and the API for agents.
+Starsim comes with skills for AI coding agents (Claude Code, Codex, and others), which always match the version installed: how to write, check, and run a model, and how to import a model from another framework or upgrade one from Starsim 3. `starsim init ai` (part of `starsim init`) links them into your project, and `starsim ai install --global` sets them up for all your projects instead; tools that read skills from installed packages, such as `uvx library-skills`, find them too. `starsim ai "how would I model a leaky vaccine?"` asks your agent a question about Starsim (`-i` for an interactive session), and `starsim help RandomNet` looks a name or term up in the docs, without an agent. For anything else, [llms.txt](https://docs.starsim.org/llms.txt) is a map of the docs and the API for agents.
 
 
 ## Contributing
