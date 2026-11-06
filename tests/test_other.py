@@ -162,12 +162,11 @@ class Counter(ss.Module):
         self.results.seen[self.ti] = self.results.new_events[self.ti]
 '''
     new, changes, todo = migrate_text(old)
-    assert new == old # The time index is Starsim 3's in every phase of a step: nothing to rewrite
+    assert new == old and any('record_stocks()' in msg and 'record_flows()' in msg for line,msg in todo) # update_results() is split in two, which needs a person
     scope = {}
-    exec(new, scope)
+    exec(new.replace('update_results', 'record_flows'), scope) # A flow seen at the end of the step, as a person would split it
     sim = ss.Sim(n_agents=100, modules=scope['Counter'](), start=0, stop=10, verbose=0).run()
-    assert sim.results.counter.seen.sum() == 50 and sim.results.counter.new_events[0] == 0 # Every step's events seen, and none at the start
-    assert 'ti == 1' in migrate_text('class X(ss.Module):\n    def step(self):\n        if self.ti == 0:\n            pass')[2][0][1]
+    assert sim.results.counter.seen.sum() == 55 and sim.results.counter.new_events[0] == 5 # Every step's events seen, the first step's at the first time point
 
     # Renames, verbose, and Starsim 3's diseases written as code
     text, changes, todo = migrate_text("p = ss.time_prob(0.1); pars = dict(verbose=-1)\nclass MySIS(ss.SIS): pass\nclass MyNCD(ss.Disease): pass")

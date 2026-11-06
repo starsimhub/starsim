@@ -675,9 +675,11 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
             raise ValueError(errormsg)
         tis = np.arange(copy.t.npts) if group_ti is None else np.asarray(group_ti)
         values = np.full(len(tis), np.nan)
+        taken = 0 # The steps the copy has taken
         for row,ti in enumerate(tis):
-            while copy.t.ti <= ti and copy.t.ti < copy.t.npts - 1: # The step that starts at this time point, so its rates are those of the run's
+            while taken <= ti: # Through the step that starts at this time point, so its rates are those of the run's
                 copy.run_one_step()
+                taken += 1
             y = engine.y.copy()
             for name,vals in stored.items():
                 comps = engine.state_comps[name]
@@ -806,6 +808,12 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         self.engine.start_step()
         return
 
+    def finish_step(self):
+        """ Once the step's flows are recorded (and the analyzers have run), its engine starts counting them afresh """
+        super().finish_step()
+        self.engine.clear_flows()
+        return
+
     def step_state(self):
         """
         State changes at the start of the step, before the networks and interventions, by a disease written as code (e.g. recovery)
@@ -849,7 +857,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
             sources (array): Optionally specify the infecting agent
         """
         if self.infection_log:
-            self.infection_log.add_entries(uids, sources, self.t.tvec[self.ti]) # At the step's time point, as ti_infected is
+            self.infection_log.add_entries(uids, sources, self.t.tvec[max(self.ti, 0)]) # At the step's time point, as ti_infected is (the seeds at the start)
         return
 
     def current_value(self, key, uids=None):
@@ -993,9 +1001,14 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
             self.run_callbacks()
         return
 
-    def update_results(self):
-        """ The counts of the states and the flows; for a disease written as code, the count of each `ss.BoolState` (see `ss.Module.update_results()`) """
-        self.engine.update_results()
+    def record_stocks(self):
+        """ The counts of the states at the start of the step; for a disease written as code, the count of each `ss.BoolState` (see `ss.Module.record_stocks()`) """
+        self.engine.record_stocks()
+        return
+
+    def record_flows(self):
+        """ The flows of the step, and the results worked out from them """
+        self.engine.record_flows()
         return
 
     def finalize_results(self):
@@ -1026,7 +1039,7 @@ class Infection(Disease):
     An infection in a step happens at its end, so a course scheduled from it starts at the next step: schedule a move
     `dur` steps after an infection at `self.ti + 1 + dur`, in an `ss.TimeArr`, and take it when `due()` (as in the
     example below). Each case is then infectious for `dur` steps on average, as a declared disease's is; the seeds are
-    dated at the start (`self.ti` is 0), the end of the step before the first, so they are too.
+    dated by the step before the first (`self.ti` is -1 while they are set), so they are too.
 
     A disease that can be written as states and transitions is declared instead, with
     `ss.Disease` (see `ss.SIR`), which gives it every solver and `describe()`, `equations()`,
@@ -1200,10 +1213,10 @@ class Infection(Disease):
         """
         Set initial values for states: by default, infect `init_prev` of the people (`set_prognoses()`)
 
-        The initial infections are dated at the start of the run (`self.ti` is 0), the end of the step before
-        the first, as a declared disease dates its seeds and an infection in a step is dated at its end: so a
-        disease that schedules a move from `self.ti + 1` (e.g. `self.ti_recovered[uids] = self.ti + 1 + dur`,
-        read with `ss.TimeArr.due()`) gives the seeds the same course as later cases.
+        The initial infections are dated by the step before the first (`self.ti` is -1 while they are set), as if
+        infected at its end, which is the start of the run, as a declared disease dates its seeds and an infection in a
+        step is dated by that step: so a disease that schedules a move from `self.ti + 1` (e.g. `self.ti_recovered[uids] =
+        self.ti + 1 + dur`, read with `ss.TimeArr.due()`) gives the seeds the same course as later cases.
         """
         super().init_post()
         if self.pars.init_prev is None:
@@ -1215,7 +1228,11 @@ class Infection(Disease):
         if len(initial_cases):
             if self.strains is not None:
                 self.strain[initial_cases] = self.strain_dist.rvs(initial_cases)
-            self.set_prognoses(initial_cases, sources=-1)  # -1 = externally seeded infection with no source agent
+            saved, self.t.ti = self.t.ti, -1 # Dated by the step before the first (see above)
+            try:
+                self.set_prognoses(initial_cases, sources=-1)  # -1 = externally seeded infection with no source agent
+            finally:
+                self.t.ti = saved
         return initial_cases
 
     def init_results(self):
@@ -1523,9 +1540,9 @@ class Infection(Disease):
         """
         return
 
-    def update_results(self):
-        """ Update prevalence; the result infection is recorded by set_prognoses() as infections happen """
-        super().update_results()
+    def record_stocks(self):
+        """ Update prevalence, at the start of the step; the result infection is recorded by set_prognoses() as infections happen """
+        super().record_stocks()
         res = self.results
         ti = self.ti
         alive = self.sim.people.n_alive if ss.results.agent_weights(self.sim) is None else self.sim.results.alive[self.sim.ti] # With agents of different weights, people alive as results count them (recorded just before)
@@ -1537,7 +1554,7 @@ class Infection(Disease):
         super().finalize_results()
         res = self.results
         ti_infected = getattr(self, 'ti_infected', None) # A subclass can remove it (define_states(reset=...))
-        if ti_infected is not None and not res.infection.values.any() and np.any(ti_infected.raw > 1): # People were infected during the run, but none were counted (not those seeded, which are dated by the first step: see init_post())
+        if ti_infected is not None and not res.infection.values.any() and np.any(ti_infected.raw > 0): # People were infected during the run, but none were counted (not those seeded, which are dated by the step before the first: see init_post())
             ss.warn(f'"{self.name}": people were infected during the run, but the result infection is 0 at every time point. Infection.set_prognoses() counts them, '
                     f'so an override of it ({type(self).__name__}.set_prognoses()) should call super().set_prognoses(uids, sources)')
         return

@@ -18,12 +18,27 @@ class Analyzer(ss.Module):
     about a simulation than is available by default -- for example, pulling states
     out of sim.people on a particular timestep before they get updated on the next step.
 
-    The key method of the analyzer is `step()`, which is called at each time point:
-    at the end of each step, once its results are recorded (with `self.ti` the step's,
-    as in every module), and at the first time point (`self.ti == 0`), before any step,
-    to record the start.
+    An analyzer records results as any module does: those about the state at the start
+    of each step (stocks) in `record_stocks()`, and those about what happened in it
+    (flows) in `record_flows()` (both with `self.ti` the step's, as in every module).
+    Its `step()`, if it has one, is called at the end of each step, after the flows are
+    recorded, when the people are as they are at the next time point.
+
+    Examples:
+        ```python
+        class BySex(ss.Analyzer):
+            def init_results(self):
+                super().init_results()
+                self.define_results(ss.Result('infected', columns=['female', 'male'], kind='stock'))
+
+            def record_stocks(self):
+                infected, female = self.sim.diseases.sis.I, self.sim.people.female
+                self.results.infected[self.ti] = [np.count_nonzero(infected & female), np.count_nonzero(infected & ~female)]
+        ```
     """
-    pass
+    def step(self):
+        """ Nothing by default: an analyzer usually only records results (see `record_stocks()` and `record_flows()`) """
+        pass
 
 
 class infection_log(Analyzer):

@@ -56,7 +56,7 @@ Each result says what kind of quantity it is, as its `kind`, which decides how i
 
 | `kind` | `summarize_by` | What it is | Examples | Over a period |
 |---|---|---|---|---|
-| `'stock'` | `'last'` | A number at each time point | `S`, `I`, `R` | The value at the end |
+| `'stock'` | `'last'` | A number at each time point | `S`, `I`, `R` | Resampled, the value at the start (a running total, `.cum`, at the end); over the whole run, the last value |
 | `'flow'` | `'sum'` | A number of events during each step | `infection`, `recovery`, `cases` | The total |
 | `'ratio'` | `'mean'` | One number divided by another | `prevalence` | Worked out again from the totals of its parts (the mean, for one with no parts) |
 
@@ -66,12 +66,12 @@ A flow's running total is `.cum`, so `res.infection.cum[-1]` is the number of in
 
 ### Time points
 
-A result has one value for each time point of the sim, from `start` to `stop`. `I[0]` is the number infectious at the start, before any step; `infection[0]` is 0, since no step has ended yet; and `infection[1]` is the number of infections during the first step. A flow is dated at the end of its step: with daily steps, the infections dated 2 January are those during 1 January.
+A result has one value for each time point of the sim, from `start` to `stop`, and a step is taken from each, the last included, so each time point is a period: the step that starts there. `I[0]` is the number infectious at the start, and `infection[0]` is the number of infections during the first step. A flow is dated by the start of its step: with daily steps, the infections dated 1 January are those during 1 January. The state after the last step is not recorded, so after a run, `sim.people` is one step past the last time point of the results.
 
 ```{python}
 print('Infectious at the start:', res.I[0])
-print('Infections at the start:', res.infection[0])
-print('Infections in the first step:', round(res.infection[1], 2))
+print('Infections in the first step:', round(res.infection[0], 2))
+print('Infectious after the first step:', round(res.I[1], 2))
 ```
 
 ## More results: ratios and outcomes
@@ -97,7 +97,7 @@ Each result is named after its variable (`prevalence`, `cases`). See [Outcomes](
 
 ## Changing the time step of a result
 
-`resample()` gives a result over longer periods (`'day'`, `'week'`, `'month'`, `'year'`, or a duration such as `ss.weeks(2)`), adding it up by its `summarize_by` without being told: weekly cases are the total over each week, monthly numbers infectious are the value at the end of each month. `to_series()` gives a pandas series with the dates as its index:
+`resample()` gives a result over longer periods (`'day'`, `'week'`, `'month'`, `'year'`, or a duration such as `ss.weeks(2)`), adding it up by its `summarize_by` without being told: weekly cases are the total over each week, monthly numbers infectious are the value at the start of each month, and a running total (`.cum`) is the value at the end of each period. Each period is labeled by its start (1 January for a year, the 1st for a month, otherwise its first time point). `to_series()` gives a pandas series with the dates as its index:
 
 ```{python}
 res.cases.resample('week').to_series().head()
@@ -133,7 +133,8 @@ class ByGroup(ss.Analyzer):
         super().init_results()
         self.define_results(ss.Result('prevalence', groups=True))
 
-    def step(self):
+    def record_stocks(self): # At the start of each step, as the other stocks are
+        super().record_stocks()
         groups = self.sim.groups
         self.results.prevalence.set_groups(self.ti, groups.count(self.sim.diseases.sis.I), groups.count()) # The infected over everyone, in each group
 
@@ -231,7 +232,7 @@ res.plot()
 
 ## Pitfalls
 
-- **The flow at a time point is the step that ends there.** The peak in infections dated 10 March is the infections during 9 March, with daily steps.
+- **The flow at a time point is the step that starts there.** The peak in infections dated 10 March is the infections during 10 March, with daily steps, and the weekly total dated 3 March is the week from 3 March. Data dated by the end of each period ("week ending") needs its dates moved back by one period to be compared.
 - **A ratio is not a mean over groups.** Use `res.prevalence.select(age='65+')`, not the mean of the prevalence in each group.
 - **Agents' results are scaled.** With each agent standing for several people, counts are multiplied by that number when the run ends; a count read in the middle of a run is in agents (see [Branching and rescaling](running_branching.qmd)).
 

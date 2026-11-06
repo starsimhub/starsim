@@ -200,7 +200,7 @@ def threshold(**kwargs):
     """ 16. Distancing while more than 1,000 are infected, as a function of the sim """
     S, I, R = ss.states('S I R')
     sir = ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=10), init_prev=0.001, name='sir')
-    distancing = ss.modify(sir.pars.beta, multiply=0.3, where=lambda sim: sim.results.sir.I[sim.ti - 1] > 1000, name='distancing')
+    distancing = ss.modify(sir.pars.beta, multiply=0.3, where=lambda sim: sim.results.sir.I[sim.ti] > 1000, name='distancing')
     return make_sim(sir, kwargs, unit='day', stop=200, total_pop=50_000, interventions=distancing)
 
 
@@ -267,7 +267,7 @@ def poisson_weekly(**kwargs):
     """ The flepiMoP pattern: a Poisson likelihood on weekly counts that are not whole numbers (here, the expected counts of an ODE run) """
     truth = outcomes().run()
     daily = truth.results.sir.cases.values
-    weekly = sc.dataframe(date=truth.t.timevec[7::7], cases=[daily[i-6:i+1].sum() for i in range(7, len(daily), 7)]) # The total since the last data point, as a flow is compared
+    weekly = sc.dataframe(date=truth.t.timevec[0:-6:7], cases=[daily[i:i+7].sum() for i in range(0, len(daily) - 6, 7)]) # The total over the week each data point starts, as a flow is compared
     return outcomes(beta=0.25, likelihood=ss.poisson(), data=weekly, **kwargs)
 
 

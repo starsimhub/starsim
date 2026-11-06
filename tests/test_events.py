@@ -25,7 +25,7 @@ def test_events():
     assert sim.solver == 'abm' and 'events' in sim.solver_reason
     assert isinstance(sim.diseases.sirs.engine, ss.solvers.Events)
     assert np.all(res.S.values + res.I.values + res.R.values == 2000)
-    assert np.array_equal(np.diff(res.I.values), (res.infection.values - res.recovery.values)[1:]) # Each step's flows are its events
+    assert np.array_equal(np.diff(res.I.values), (res.infection.values - res.recovery.values)[:-1]) # Each step's flows are its events
     assert res.I.values.max() > 300 # Infection at 2.5 a day spreads well within a step of a day
     assert np.array_equal(res.I.values, make(1).results.sirs.I.values)
     assert not np.array_equal(res.I.values, make(2).results.sirs.I.values)

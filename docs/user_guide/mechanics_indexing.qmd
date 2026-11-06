@@ -120,7 +120,8 @@ class AgeOfInfectious(ss.Analyzer):
         self.define_results(ss.Result('mean_age', label='Mean age of the infectious'))
         return
 
-    def step(self):
+    def record_stocks(self): # At the start of each step, as the other stocks are
+        super().record_stocks()
         infectious = self.sim.diseases.measles.I.uids
         if len(infectious):
             self.results.mean_age[self.ti] = self.sim.people.age[infectious].mean()

@@ -384,18 +384,16 @@ def run(rng, y, p, dt, npts, solver, n_sub, fixed, mult, consts, rel_trans, reg,
     tables = (fixed, mult, consts, rel_trans)
     parts = (p.fixed, p.mult, p.consts, p.rel_trans)
     short = 0.0
-    stocks[0] = y
-    for ti in range(start + 1, npts):
+    for ti in range(start, npts): # Step ti goes from time point ti to ti+1
         k = ti - start
-        r = k - 1
+        stocks[k] = y
         if len(sh.to):
-            plain.apply_shifts(rng, y, sh, ti-1, False, tally[k])
+            plain.apply_shifts(rng, y, sh, ti, False, tally[k])
         for j in range(4):
-            if r < len(tables[j]):
-                parts[j][:] = tables[j][r]
+            if k < len(tables[j]):
+                parts[j][:] = tables[j][k]
         set_movers(p)
         step(rng, y, p, dt, n_sub, solver, flows[k])
         if len(reg.src):
-            short += plain.apply_events(rng, y, reg, ti, False)
-        stocks[k] = y
+            short += plain.apply_events(rng, y, reg, ti+1, False)
     return y, stocks, flows, short

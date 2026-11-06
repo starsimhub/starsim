@@ -519,7 +519,7 @@ class Compiled(Agents):
         people = self.sim.people
         n = len(self.mod.rel_sus.raw)
         self.new_round()
-        key = call_key(self.kseed, ROUNDS + self.mod.t.ti*ROUND_MAX + self.round[1])
+        key = call_key(self.kseed, ROUNDS + self.step_key()*ROUND_MAX + self.round[1])
         ctr = self.__dict__.get('_kctr')
         if ctr is None or len(ctr) != n: # Made as needed (and again after shrink())
             ctr = self._kctr = np.zeros(n, np.int64)
@@ -903,15 +903,15 @@ class Compiled(Agents):
             if agents:
                 agents = np.concatenate(agents).astype(np.int64)
                 self.run_moves(scan=False, agents=agents, arr_tr=np.concatenate(trs).astype(np.int64), arr_src=np.concatenate(srcs).astype(np.int64),
-                               arr_kind=np.zeros(len(agents), np.int64), ti_due=mod.ti, ti_enter=mod.ti, mode=1) # Infections are dated at the step's end
+                               arr_kind=np.zeros(len(agents), np.int64), ti_due=mod.ti + 1, ti_enter=mod.ti + 1, mode=1) # Infections are dated at the step's end, the next time point
             if self._news:
                 self._news = False
-                self.notify(mod.ti)
+                self.notify(mod.ti + 1)
         finally:
             self._infecting = False
         self.write_derived(self.sim.people.auids)
         self.cache.clear()
         if self.sim.mixing.register is not None and mod is self.sim.declared[-1]:
-            self.step_register(mod.ti)
-        self.record_stocks()
+            self.step_register(mod.ti + 1)
+        self.count_stocks()
         return

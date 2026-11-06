@@ -26,7 +26,7 @@ def test_states():
             key = (b.tr, b.key, tuple(b.uids))
             if b.tr in ['miscarriage', 'stillbirth'] and key not in ga.seen:
                 ga.seen.add(key)
-                step = b.key[0] + 1 # The index of the step it happened in (the batch is dated at the step's start)
+                step = b.key[0] # The index of the step it happened in (the batch is dated at the step's start, which is its index)
                 uids = b.uids[preg.ti_P[b.uids] < step] # Not those who conceived again in the same step, whose time of entering P is now that of the new pregnancy
                 ga[b.tr] += list((step - preg.ti_P[uids])*preg.t.dt.weeks) # At the step it happened
         assert not np.any(preg.P & ~sim.people.female), 'only women are pregnant'
@@ -110,7 +110,7 @@ def test_compartmental():
                  solver='binomial', total_pop=20_000, stratify=strat, **kw).run()
     r = sim.results.pregnancy
     assert r.antepartum.sum() > 0 and r.birth.sum() > 1.1*r.delivery.sum() # Twins
-    assert np.isclose(r.NP[-1] + r.P[-1], r.NP[0] + r.P[0] + r.birth.sum() - r.antepartum.sum())
+    assert np.isclose(r.NP[-1] + r.P[-1], r.NP[0] + r.P[0] + r.birth[:-1].sum() - r.antepartum[:-1].sum()) # The last row is the start of the last step, before its flows
     return sim
 
 
@@ -121,20 +121,20 @@ def test_burnin():
     make = lambda burnin=True: ss.Pregnancy(fertility_rate=ss.freqperyear(100), p_abortion=0.1, burnin=burnin)
     abm = ss.Sim(demographics=make(), n_agents=20_000, **pars).run()
     none = ss.Sim(demographics=make(False), n_agents=20_000, **pars).run()
-    assert none.results.pregnancy.delivery[:8].sum() == 0, 'Without burn-in, nobody delivers before the first pregnancies come to term'
+    assert none.results.pregnancy.delivery[:7].sum() == 0, 'Without burn-in, nobody delivers before the first pregnancies come to term'
     r = abm.results.pregnancy
-    early, later = r.delivery[1:9].sum(), r.delivery[13:21].sum()
+    early, later = r.delivery[0:8].sum(), r.delivery[12:20].sum()
     assert np.isclose(early, later, rtol=0.2), f'{early} deliveries in the first 8 months, against {later} a year later'
     assert np.isclose(r.P[0], r.P[18], rtol=0.15), f'{r.P[0]} pregnant at the start, {r.P[18]} later'
-    assert np.isclose(r.birth[1], r.delivery[1] - r.stillbirth[1], rtol=0.1), 'The first deliveries have their births'
-    assert r.conception[0] == 0 and r.abortion[0] == 0, 'Burn-in events are not counted in the results'
+    assert np.isclose(r.birth[0], r.delivery[0] - r.stillbirth[0], rtol=0.1), 'The first deliveries have their births'
+    assert r.conception[0] < 0.5*r.P[0] and r.abortion[0] < 0.1*r.P[0], 'Burn-in events are not counted in the results (row 0 has only the first step\'s)'
 
     # The TFR and ASFR, as in Starsim 3: about the fertility rate over the ages women can conceive at
-    tfr = abm.results.pregnancy.tfr[13:25].mean() # Per year at each step, whatever the step (with monthly steps, it was the TFR of the month)
+    tfr = abm.results.pregnancy.tfr[12:24].mean() # Per year at each step, whatever the step (with monthly steps, it was the TFR of the month)
     assert 2.5 < tfr < 3.5, f'TFR {tfr}'
     assert abm.results.pregnancy.tfr.kind == 'ratio' # So it is averaged over time, not summed
     asfr = abm.demographics.pregnancy.asfr
-    assert asfr.shape == (11, len(abm.timevec)) and asfr[:3, 24].sum() == 0 and asfr[4, 24] > 50 # None under 15; per 1000 women, over a year
+    assert asfr.shape == (11, len(abm.timevec)) and asfr[:3, 23].sum() == 0 and asfr[4, 23] > 50 # None under 15; per 1000 women, over a year
 
     # sim.new() keeps burnin= (it replays the sim's inputs)
     again = abm.new().run().results.pregnancy
@@ -249,8 +249,9 @@ def test_fetus():
     assert r.pregnancy.stillbirth.sum() >= r.d.still.sum() and r.pregnancy.miscarriage.sum() > 50
     assert r.pregnancy.birth.sum() == r.pregnancy.delivery.sum() - r.d.still.sum() # A stillborn fetus is not born
     fetal = (p.fetal & ppl.alive).uids
-    assert np.all(p.P[ppl.parent[fetal]]) and np.all(ppl.age[fetal] < 0) # Every fetus has a pregnant mother, and is lost with her
-    assert len(sim.networks.maternalnet) == len(fetal)
+    orphan = ~ppl.alive[ppl.parent[fetal]] # Her mother died in the last step: lost at the next, which the run does not take
+    assert np.all(ppl.ti_dead[fetal[orphan]] == sim.ti) and np.all(p.P[ppl.parent[fetal[~orphan]]]) and np.all(ppl.age[fetal] < 0) # Every fetus has a pregnant mother, and is lost with her
+    assert len(sim.networks.maternalnet) == (~orphan).sum() # An orphan's edge went with her mother
     born, unborn = (ppl.alive & (ppl.age >= 0)).sum(), (ppl.alive & (ppl.age < 0)).sum()
     assert np.isclose(r.d.S[-1] + r.d.I[-1] + r.d.C[-1] + r.d.Cs[-1], born + unborn, rtol=0.01) and np.isclose(r.alive[-1], born, rtol=0.01) # The unborn are in the disease's states (so they can be infected before birth), though not among the people (as in test_mtct)
 

@@ -219,7 +219,7 @@ class LaserSEIR(ss.Module):
         ... # Seed some infections, and set up the counts by place (self.counts)
 
     def step(self):
-        tick = self.ti - 1 # Starsim's first step is ti=1; LASER's first tick is 0
+        tick = self.ti # Starsim's first step is ti=0, as LASER's first tick is
         moved = lambda: np.zeros((nb.get_num_threads(), len(self.pop)), dtype=np.int32) # The moves by thread and place, which update the counts
         lc.nb_timer_update(self.state, I, self.itimer, R, moved(), self.nodeid) # Recoveries
         lc.nb_timer_update_timer_set(self.state, E, self.etimer, I, self.itimer, moved(), self.nodeid, self.infdur, 1, tick) # Onsets
@@ -234,7 +234,7 @@ What to know:
 - LASER's arrays are its own (an `int8` state and `uint16` timers, one value a person), so the kernels act on arrays the module keeps, not on a declared disease's states. Kept as Starsim states of `sim.people` instead (`ss.Arr`, passing `.raw`), the run was 24 to 37% slower, from the people's own work each step.
 - LASER draws from Numba's own generator, one stream a thread, so a run is reproducible only at the same number of threads, and its draws don't share Starsim's common random numbers.
 - Importing `laser.generic` also imports its geography packages (geopandas, pyproj, shapely), even when only the kernels are used.
-- Starsim's first step is `ti = 1` (from time point 0 to 1), while LASER's first tick is 0: getting this wrong gives no epidemic, silently.
+- Starsim's first step is `ti = 0` (from time point 0 to 1), as LASER's first tick is, so the tick is `self.ti`.
 
 ## Further reading
 

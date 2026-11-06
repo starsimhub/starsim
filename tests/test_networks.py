@@ -572,7 +572,7 @@ def test_certain_transmission():
         at_risk = (k > 0) & ~before
         with warnings.catch_warnings():
             warnings.simplefilter('error') # It was a RuntimeWarning and no infections
-            sim.run()
+            sim.run(until=sim.t.tvec[0]) # The first step only
         return sim.diseases.si.I.raw[at_risk].mean(), k[at_risk]
     assert infected(ss.probperweek(1))[0] == 1
     share, k = infected(0.3)
@@ -740,20 +740,20 @@ def test_condoms():
             super().add_pairs()
             self.edges.condoms[:] = self.pars.share
             return
-    def make(share=0.0, eff=0.8):
+    def make(share=0.0, eff=0.8, seed=1):
         S, I = ss.states('S I')
         si = ss.Disease(infection=ss.Transition(S, I, rate=0.02 * I), init_prev=0.05, name='si')
         net = CondomNet(name='mf', acts=ss.constant(ss.freqperyear(50)))
         net.define_pars(share=share)
         condoms = ss.modify(si.infection, efficacy=eff, share=lambda net: net.edges.condoms, route='mf', name='condoms')
-        return ss.Sim(si, networks=net, interventions=condoms, n_agents=2000, start=2000, stop=2005, verbose=0, rand_seed=1)
+        return ss.Sim(si, networks=net, interventions=condoms, n_agents=2000, start=2000, stop=2005, verbose=0, rand_seed=seed)
     sim = make(share=0.5).init()
     mf, si = sim.networks.mf, sim.diseases.si
     assert np.all(mf.edges.condoms == 0.5)
     assert 1*si.pars.beta == si.engine.value(si.pars.beta), 'The current value of a declared parameter is a number'
-    none, half, full = [make(share=s).run().results.si.infection.sum() for s in [0.0, 0.5, 1.0]]
+    none, half, full = [sum(make(share=s, seed=seed).run().results.si.infection.sum() for seed in [1, 2, 3]) for s in [0.0, 0.5, 1.0]] # Over a few seeds, since the numbers are small
     assert none > half > full, f'Condoms should reduce infections: {none}, {half}, {full}'
-    assert make(share=1.0, eff=0.0).run().results.si.infection.sum() == none, 'With no efficacy, condoms do nothing'
+    assert sum(make(share=1.0, eff=0.0, seed=seed).run().results.si.infection.sum() for seed in [1, 2, 3]) == none, 'With no efficacy, condoms do nothing'
     plain = ss.Sim(diseases=ss.SIS(beta=dict(mf=0.05)), networks=ss.SexualNet(name='mf'), n_agents=500, verbose=0).run() # append() without condoms
     assert len(plain.networks.mf.edges.condoms) == len(plain.networks.mf)
     return

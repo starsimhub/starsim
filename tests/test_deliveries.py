@@ -95,8 +95,9 @@ def test_change():
     assert np.allclose(bare.results.sir.S, res.S) # In a sim with dates, a number is days since the start (not the year 20, which was taken as the first day)
     with pytest.raises(ValueError): # A time outside the sim, such as the year 2030 written as a number of days
         ss.Sim(sir, interventions=ss.modify(sir.pars.beta, set=0.09, start=2030), start='2020-01-01', stop='2020-04-30', verbose=0).init()
-    with pytest.raises(ValueError): # At the stop, where no step starts, so it would never apply
-        ss.Sim(sir, interventions=ss.modify(sir.pars.beta, set=0.09, start='2020-04-30'), start='2020-01-01', stop='2020-04-30', verbose=0).init()
+    ss.Sim(sir, interventions=ss.modify(sir.pars.beta, set=0.09, start='2020-04-30'), start='2020-01-01', stop='2020-04-30', verbose=0).init() # At the stop is fine, since the last step starts there
+    with pytest.raises(ValueError): # After the stop, where no step starts, so it would never apply
+        ss.Sim(sir, interventions=ss.modify(sir.pars.beta, set=0.09, start='2020-05-01'), start='2020-01-01', stop='2020-04-30', verbose=0).init()
 
     # It is a modifier, so stop= and when= work
     for extra in [dict(stop=0), dict(when=lambda t: False)]:
@@ -168,15 +169,15 @@ def test_conditions():
     sims = run_each(make, stop=20)
     for sim in sims.values():
         n_S = sim.results.sir.S.by('age').values[5, 0]
-        assert np.isclose(sim.results.kids.delivered[6], n_S, rtol=0.02) # Every susceptible child at time 5, and nobody else, in the step from it
-        assert np.allclose(sim.results.kids.delivered.by('age').values[6], [sim.results.kids.delivered[6], 0, 0]) # By stratum: all in the youngest group
+        assert np.isclose(sim.results.kids.delivered[5], n_S, rtol=0.02) # Every susceptible child at time 5, and nobody else, in the step from it
+        assert np.allclose(sim.results.kids.delivered.by('age').values[5], [sim.results.kids.delivered[5], 0, 0]) # By stratum: all in the youngest group
         total = sim.results.kids.delivered.by('age').summarize() # Labeled by group
         assert isinstance(total, pd.Series) and len(total) == 3 and np.isclose(total.iloc[0], sim.results.kids.delivered.summarize())
     check_close(sims, lambda sim: sim.results.kids.delivered.sum(), rtol=0.05)
 
     # A function of the sim does the same
     func = make(eligible=lambda sim: sim.people.age < 15, solver='ode', stop=20, **kw).run()
-    assert func.results.kids.delivered[6] > sims.ode.results.kids.delivered[6] # Including the children who are not susceptible
+    assert func.results.kids.delivered[5] > sims.ode.results.kids.delivered[5] # Including the children who are not susceptible
 
     # An age that is not the edge of a group cannot be used on groups, so the model runs as agents unless told otherwise
     auto = make(eligible=ppl.age < 10, stop=20, **kw).init()
@@ -202,7 +203,7 @@ def test_transfer():
     sims = run_each(make)
     for sim in sims.values():
         delivered = sim.results.rollout.delivered
-        assert np.allclose(delivered[[6, 31]], [35_000, 10_500], rtol=0.05) # 70% of everyone, then 70% of those left (not of the half that started unvaccinated)
+        assert np.allclose(delivered[[5, 30]], [35_000, 10_500], rtol=0.05) # 70% of everyone, then 70% of those left (not of the half that started unvaccinated)
     check_close(sims, lambda sim: sim.results.sir.infection.cum[-1], rtol=0.35) # What is left after the campaign depends on how far the epidemic had got, which varies by about 10% between agent-based runs, and agents are about 10% below the ODE at a step of a day
     with pytest.raises(TypeError): # ss.transfer() is movement at a rate, never a delivery
         ss.transfer(vaccinated=True, coverage=0.7, at=[5])
@@ -210,7 +211,7 @@ def test_transfer():
     # From one level to another, given as an arrow
     sir = make_sir().stratify(risk=['low', 'high'], split=[1, 0])
     sim = ss.Sim(sir, interventions=ss.Delivery(move=dict(risk=('low', 'high')), coverage=0.4, at=[5], name='riskier'), solver='ode', stop=10, **kw).run()
-    assert np.isclose(sim.results.riskier.delivered[6], 0.4*kw['total_pop'], rtol=0.01)
+    assert np.isclose(sim.results.riskier.delivered[5], 0.4*kw['total_pop'], rtol=0.01)
     return sims
 
 
@@ -239,19 +240,19 @@ def test_deliver():
     def triggered(**kwargs):
         sir = make_sir()
         vaccine = ss.Vaccine(efficacy=0.9)
-        many = lambda sim: sim.results.sir.I[sim.ti - 1] > 2000
+        many = lambda sim: sim.results.sir.I[sim.ti] > 2000 # At the start of the step
         response = ss.vaccinate(vaccine, coverage=0.2, interval=1, where=many)
         return ss.Sim(sir, interventions=response, **kwargs)
     sims = run_each(triggered)
     for sim in sims.values():
         res = sim.results
         given = np.flatnonzero(res.response.delivered)
-        assert len(given) and np.all(res.sir.I[given - 1] > 2000)
+        assert len(given) and np.all(res.sir.I[given] > 2000)
 
     # Rounds a year apart on weekly steps fall a year apart, each on the first step of the year (they were 52 weeks apart, so 2005 had two)
     yearly = ss.vaccinate(ss.Vaccine(efficacy=0.9), coverage=0.2, interval=ss.years(1), name='yearly')
     sim = ss.Sim(make_sir(), interventions=yearly, start='2000-01-01', stop='2010-01-01', dt=ss.weeks(1), solver='ode', verbose=0).init()
-    starts = [sim.t.tvec[ti - 1] for ti in sorted(sim.interventions.yearly.round_tis)]
+    starts = [sim.t.tvec[ti] for ti in sorted(sim.interventions.yearly.round_tis)]
     assert [d.year for d in starts] == list(range(2000, 2010)) and all(d.month == 1 and d.day <= 7 for d in starts)
 
     # Scenarios are sims, and can be compared run by run
@@ -326,7 +327,7 @@ def test_triggers():
 
     # A function of the sim has no memory, so it switches on and off as the number infected crosses the threshold
     sir = make()
-    distancing = ss.modify(sir.pars.beta, multiply=0.3, where=lambda sim: sim.results.sir.I[sim.ti - 1] > 1000)
+    distancing = ss.modify(sir.pars.beta, multiply=0.3, where=lambda sim: sim.results.sir.I[sim.ti] > 1000)
     bare = ss.Sim(sir, interventions=distancing, **pars).run()
     base = ss.Sim(make(), **pars).run()
     assert bare.solver == 'ode'
@@ -350,7 +351,7 @@ def test_triggers():
             sim = self.sim
             if self.closed and sim.ti >= self.reopen:
                 self.closed = False
-            if not self.closed and sim.results.sir.I[sim.ti - 1] > self.threshold: # During a step, sim.ti is its own index, so the last results are those of the step before
+            if not self.closed and sim.results.sir.I[sim.ti] > self.threshold: # During a step, sim.ti is its own index, and its stocks (the state at its start) are recorded already
                 self.closed = True
                 self.reopen = sim.ti + 7*self.weeks
             self.days_closed += self.closed
@@ -366,7 +367,7 @@ def test_triggers():
 
     # Or hold=: a condition that holds on one step keeps the modifier on for ten, as start= and stop= would
     sir = make()
-    once = ss.Sim(sir, interventions=ss.modify(sir.pars.beta, multiply=0.3, when=lambda t: t.ti == 51, hold=10), **pars).run() # The step that starts at 50
+    once = ss.Sim(sir, interventions=ss.modify(sir.pars.beta, multiply=0.3, when=lambda t: t.ti == 50, hold=10), **pars).run() # The step that starts at 50
     sir = make()
     timed = ss.Sim(sir, interventions=ss.modify(sir.pars.beta, multiply=0.3, start=50, stop=60), **pars).run()
     assert np.allclose(once.results.sir.I, timed.results.sir.I)
@@ -391,8 +392,8 @@ def test_coverage_by_group():
     vx = ss.vaccinate(ss.Vaccine(efficacy=0.9), at=[5], coverage=ss.by(age=[0.8, 0.2, 0.5]), name='vx')
     res = ss.Sim(sir, interventions=vx, unit='day', stop=20, solver='ode', verbose=0).run().results.vx
     young = ['0-4', '5-14']
-    assert np.allclose(res.coverage.by('age').values[6], [0.8, 0.2, 0.5])
-    assert np.isclose(res.coverage.select(age=young)[6], res.delivered.select(age=young)[6]/res.eligible.select(age=young)[6]) # Not 0.8 + 0.2
+    assert np.allclose(res.coverage.by('age').values[5], [0.8, 0.2, 0.5])
+    assert np.isclose(res.coverage.select(age=young)[5], res.delivered.select(age=young)[5]/res.eligible.select(age=young)[5]) # Not 0.8 + 0.2
     assert np.isclose(res.eligible.summarize(), res.eligible.values.sum()) # The offers made over the run (it was their mean over every step, e.g. 19.6 of 1,000 eligible)
     return res
 
@@ -407,8 +408,8 @@ def test_sensitivity_by_state():
         return ss.Sim(seir, interventions=screening, stop=60, **sc.mergedicts(dict(total_pop=50_000), kwargs))
     for solver,pars in [('ode', {}), ('abm', dict(n_agents=50_000))]:
         res = make(solver=solver, **kw, **pars).run().results
-        ti = 31 # The step from time 30
-        before = lambda name, **sel: res.seir[name].select(**sel)[ti-1] if sel else res.seir[name][ti-1]
+        ti = 30 # The step from time 30
+        before = lambda name, **sel: res.seir[name].select(**sel)[ti] if sel else res.seir[name][ti] # At the start of the step
         expected = 0.5*(0.5*before('I', age=0) + 0.9*before('I', age=1) + 0.2*before('E')) # Nobody else tests positive
         print(f'{solver}: {res.screening.positive[ti]:.0f} positive, expected {expected:.0f}')
         assert np.isclose(res.screening.positive[ti], expected, rtol=0.05 if solver == 'ode' else 0.15)
@@ -460,12 +461,12 @@ def test_delay():
     check_agents(make) # Who is waiting is each person's own, so agents only, fixed or drawn
     check_agents(make, delay=ss.uniform(ss.months(1), ss.months(5)))
     res = make(solver='abm', n_agents=20_000).run().results
-    pos, tx = res.screening.positive[1:-3], res.treatment.delivered[4:] # Nothing is delivered at the first time point, which has no step
+    pos, tx = res.screening.positive[:-3], res.treatment.delivered[3:] # Treated three steps after the test, from the first step
     assert tx[0] > 0 and tx[1:3].sum() == 0
     assert np.allclose(tx, pos, rtol=1e-6), f'{tx[::3]} treated against {pos[::3]} positive'
     sim = make(delay=ss.uniform(ss.months(1), ss.months(5)), solver='abm', n_agents=20_000).run() # Drawn per person: 2 to 5 steps after the test
     tx = sim.results.treatment.delivered
-    assert tx[:3].sum() == 0 and np.isclose(tx[3:6].sum(), 0.75*sim.results.screening.positive[1], rtol=0.1) # Those due after 2, 3, or 4 steps
+    assert tx[:2].sum() == 0 and np.isclose(tx[2:5].sum(), 0.75*sim.results.screening.positive[0], rtol=0.1) # Those due after 2, 3, or 4 steps
     assert 'after 3 months' in make(solver='abm', n_agents=1000).init().interventions.treatment.describe()
     with pytest.raises(ValueError):
         ss.treat(ss.Treatment(cure=0.9), delay=ss.months(3))
@@ -485,12 +486,12 @@ def test_delay_cycle():
         return ss.Sim(sis, interventions=mods, start=2000, stop=2005, dt=ss.months(1), n_agents=500, solver='abm', verbose=0).run()
     for loop in ['confirm', 'self']: # Through a step that follows it, and through itself
         res = make(loop).results
-        assert np.array_equal(np.flatnonzero(res.entry.delivered), [13]) # The results of the step at 2001 (the first time point has no step)
-        assert np.array_equal(np.flatnonzero(res.retest.delivered), [25, 37, 49]) and np.all(res.retest.delivered[[25, 37, 49]] == 500), loop
+        assert np.array_equal(np.flatnonzero(res.entry.delivered), [12]) # The results of the step that starts at 2001
+        assert np.array_equal(np.flatnonzero(res.retest.delivered), [24, 36, 48, 60]) and np.all(res.retest.delivered[[24, 36, 48, 60]] == 500), loop # The last at the stop, where the last step starts
     res = make(order=lambda e,r,c: [c, r, e]).results # Run in another order, those triggered after the delayed step has run wait just as long
-    assert np.array_equal(np.flatnonzero(res.retest.delivered), [25, 37, 49])
+    assert np.array_equal(np.flatnonzero(res.retest.delivered), [24, 36, 48, 60])
     res = make(delay=ss.constant(0)).results # A wait drawn as zero ends on the next step
-    assert np.array_equal(np.flatnonzero(res.retest.delivered)[:3], [14, 15, 16])
+    assert np.array_equal(np.flatnonzero(res.retest.delivered)[:3], [13, 14, 15])
     a = ss.screen(ss.Diagnostic(), interval=7, name='a') # Without a delay, a cycle still raises
     b = ss.screen(ss.Diagnostic(), who=a.positive, name='b')
     a.trigger = b.positive
@@ -595,7 +596,7 @@ def test_agents_only():
         return ss.Sim(sis, interventions=[scr, tx, after], **kwargs)
     for solver,sim in run_each(follow, stop=10).items():
         r = sim.results
-        assert r.tx.unneeded[6] > 0 and np.isclose(r.after.delivered[6], r.tx.delivered[6], rtol=0.01 if solver == 'binomial' else 1e-6), solver # Was 11% short as an ODE, the parts taken as independent; the binomial solver draws
+        assert r.tx.unneeded[5] > 0 and np.isclose(r.after.delivered[5], r.tx.delivered[5], rtol=0.01 if solver == 'binomial' else 1e-6), solver # Was 11% short as an ODE, the parts taken as independent; the binomial solver draws
     return sim
 
 
@@ -637,7 +638,7 @@ def test_age_and_birth():
 def test_own_timestep():
     """ A delivery with a timestep of its own records its results on that timeline, as agents and as compartments """
     for solver in ['abm', 'binomial']:
-        for dt,index in [(ss.years(2), 2), (ss.months(6), 8)]: # The step that starts at 2003, or the first after it
+        for dt,index in [(ss.years(2), 2), (ss.months(6), 6)]: # The step that starts at 2003 or, on a two-year timeline, the first after it (2004)
             delivery = ss.vaccinate(ss.Vaccine(efficacy=0.5), start=2003, dt=dt)
             sim = ss.Sim(n_agents=1000, diseases='sir', networks='random' if solver == 'abm' else None, solver=solver, start=2000, stop=2010, dt=ss.years(1), interventions=delivery, verbose=0).run()
             res = sim.results[delivery.name]

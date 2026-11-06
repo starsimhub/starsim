@@ -25,7 +25,7 @@ def test_clocks():
         st = d.states # The declarations, in the sim; a clock of a set is made before the sim, so it is kept
         ti, dt = d.ti, d.t.dt.to('day').value
         u = d.B.uids
-        placed = d.ti_B[u] == 0 # At the start, which is a step before the first step's index
+        placed = d.ti_B[u] == -1 # At the start, dated by the step before the first
         assert np.allclose(d.engine.eval_for(st.B.time, u), (ti - d.ti_B[u] - placed)*dt) # The steps since the step they entered in, by a move at its start
         both = d.engine.eval_for(seen.ab, u)
         came = u[~np.isnan(d.ti_A[u])] # From A; the others were placed in B, so entered the set then

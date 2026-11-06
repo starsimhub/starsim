@@ -15,7 +15,6 @@ The wheels include them (see `pyproject.toml`); from a clone, build them from th
 
 Used with: agents and compartments; declared and coded modules
 """
-import sys
 import zlib
 import importlib.util
 import collections
@@ -52,14 +51,14 @@ def fallback(rs, nb):
 def modules():
     """ Where the kernels are: modules, a class (whose kernels are static methods), and `draws.many` (a dict) """
     return sc.obj(passes=passes, events=events, moves=moves, arrays=ss.arrays, networks=ss.networks, dists=ss.dists,
-                      people=sys.modules['starsim.people'], multi_random=ss.distributions.multi_random, many=draws.many)
+                      multi_random=ss.distributions.multi_random, many=draws.many)
 
 single = ['levels', 'crossed', 'infection_probs', 'edge_index', 'candidates_indexed', 'partners'] # The passes of ss.solvers.backends.passes with no threaded version
-pairs = ['census', 'flatnonzero', 'infect', 'due', 'count_people', 'keep_alive', 'due_alive', 'count_alive', 'keep_raw'] # Those with a serial and a threaded driver by name, both the same Rust kernel (the number of chunks says which)
+pairs = ['census', 'flatnonzero', 'infect', 'due', 'keep_alive', 'due_alive', 'count_alive', 'keep_raw'] # Those with a serial and a threaded driver by name, both the same Rust kernel (the number of chunks says which)
 tuples = dict(edges='random_edges', candidates='candidates', can='can_transmit', ending='ending', touching='touching', women='women', debut='debuts', compress='compress', exits='competing_exits', agent_exits='competing_agent_exits') # Those whose two drivers are a pair, by the Rust kernel
 names = dict(passes=single + [f'{k}_{kind}' for k in pairs for kind in ['serial', 'threaded']] + [f'{k}_drivers' for k in tuples],
              events=['step_events'], moves=['due_agents', 'step_moves'], arrays=['nb_true_raw', 'nb_indexer', 'nb_true', 'nb_count'], networks=['nb_transmit', 'fisher_yates_shuffle', '_mark_partners'], dists=['_hash_uniforms_fill'],
-             people=['count_gone'], multi_random=['combine_rvs', 'combine2_rvs'], many=['expon', 'weibull', 'binomial', 'poisson', 'nbinom'])
+             multi_random=['combine_rvs', 'combine2_rvs'], many=['expon', 'weibull', 'binomial', 'poisson', 'nbinom'])
 numba = None # The Numba kernels, once replaced
 
 def get(where, k):
@@ -138,7 +137,6 @@ def use(rust=True):
             ('arrays', 'nb_true'):            fallback(rs.true_vals, numba['arrays', 'nb_true']),
             ('arrays', 'nb_count'):           fallback(rs.count, numba['arrays', 'nb_count']),
             ('networks', 'fisher_yates_shuffle'): fallback(rs.shuffle, numba['networks', 'fisher_yates_shuffle']),
-            ('people', 'count_gone'):         fallback(rs.count_gone, numba['people', 'count_gone']),
             ('networks', '_mark_partners'):   fallback(rs.mark_partners, numba['networks', '_mark_partners']),
             ('multi_random', 'combine_rvs'):  fallback(rs.combine_rvs, numba['multi_random', 'combine_rvs'].__func__),
             ('multi_random', 'combine2_rvs'): fallback(rs.combine2_rvs, numba['multi_random', 'combine2_rvs'].__func__),

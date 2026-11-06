@@ -51,7 +51,7 @@ Starsim has four time types: durations (`ss.days(10)`), hazard rates (`ss.perday
 | `ss.Sim(sir, start=2020, stop=2030)` | year | `unit='year' (from start and stop years)` |
 | `ss.Sim(sir, stop=100, dt=ss.weeks(1))` | week | `unit='week' (from dt)` |
 
-**One time index per step.** Step `k` goes from time point `k − 1` to `k`. Throughout it, in every module, `sim.ti` is `k`, where its results go, and `sim.now` is its start, when values that vary in time are read. At `ti == 0` there is no step: the loop records the starting values (for an intervention, only the counts of its states, not its own `update_results()`), and the analyzers run once to see them. See [Time](building_time.qmd).
+**One time index per step.** Step `k` goes from time point `k` to `k + 1`. Throughout it, in every module, `sim.ti` is `k`, where its results go, and `sim.now` is time point `k`, when the step happens and when values that vary in time are read. A step is taken from every time point, the last included, so each time point is a period: its stocks are the state at its start, and its flows the totals over its step. The first step is `ti == 0`. See [Time](building_time.qmd).
 
 ## The loop
 
@@ -59,15 +59,16 @@ Each step, the loop calls the modules in Starsim's long-standing order (`starsim
 
 | Order | Who | What happens |
 |---|---|---|
-| 1 | sim, then every module | `advance()` and `start_step()`: move time and the random number streams on |
-| 2 | custom modules, then demographics | `step()`: custom modules; births add agents, and deaths are requested |
-| 3 | diseases | `step_state()`: state updates of a disease written as code |
-| 4 | connectors, networks, interventions | `step()`: cross-module code, then edges, then deliveries |
-| 5 | diseases | `step()`: transmission, and every transition of a declared disease |
-| 6 | people | `step_die()`: requested deaths take effect |
-| 7 | people, then every module | `update_results()` |
-| 8 | analyzers | `step()`, reading the finished step |
-| 9 | every module, people, sim | `finish_step()`: dead agents are removed |
+| 1 | sim, then every module | `advance()` (from the second step on) and `start_step()`: move time and the random number streams on |
+| 2 | people, then every module | `record_stocks()`: the state at the start of the step |
+| 3 | custom modules, then demographics | `step()`: custom modules; births add agents, and deaths are requested |
+| 4 | diseases | `step_state()`: state updates of a disease written as code |
+| 5 | connectors, networks, interventions | `step()`: cross-module code, then edges, then deliveries |
+| 6 | diseases | `step()`: transmission, and every transition of a declared disease |
+| 7 | people | `step_die()`: requested deaths take effect |
+| 8 | people, then every module | `record_flows()`: what happened in the step |
+| 9 | analyzers | `step()`, reading the finished step |
+| 10 | every module, people, sim | `finish_step()`: dead agents are removed |
 
 New agents exist before diseases see them, networks update before interventions so an intervention sees the final network, and interventions run before transmission so someone vaccinated today is protected today. Within a type, modules run in the order given; there are no priorities, phases, or dependency graph. Three rules make this easy to reason about:
 

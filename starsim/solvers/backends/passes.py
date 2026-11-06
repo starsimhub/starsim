@@ -424,40 +424,6 @@ def due(auids, ti_dead, ti_removed, ti):
 
 
 @jit
-def count_chunk(auids, states, alive, ti_dead, ti_removed, ti, a, b, out):
-    """ For the active agents a to b: the number in each state, then the number who died and who left (who are no longer alive) """
-    ns = len(states)
-    for i in range(a, b):
-        uid = auids[i]
-        for s in range(ns):
-            out[s] += states[s][uid] != 0
-        if not alive[uid]:
-            out[ns] += ti_dead[uid] <= ti
-            out[ns+1] += ti_removed[uid] <= ti
-    return
-
-
-def count_driver(threaded):
-    loop = nb.prange if threaded else range
-    def count_people(auids, states, alive, ti_dead, ti_removed, ti, nchunks):
-        n = len(auids)
-        out = np.zeros((nchunks, len(states) + 2), dtype=np.int64)
-        for c in loop(nchunks):
-            a, b = bounds(c, n, nchunks)
-            count_chunk(auids, states, alive, ti_dead, ti_removed, ti, a, b, out[c])
-        return out.sum(axis=0)
-    return count_people
-
-count_people_serial, count_people_threaded = compile_drivers(count_driver)
-
-def count_people(auids, states, alive, ti_dead, ti_removed, ti):
-    """ The number of active agents in each of some states (as `state.count()`), then the number who died and who left by step ti (as `count_gone()`), in one pass """
-    nchunks = n_chunks(len(auids))
-    func = count_people_threaded if nchunks > 1 else count_people_serial
-    return func(auids, states, alive, ti_dead, ti_removed, ti, nchunks)
-
-
-@jit
 def keep_chunk(auids, alive, a, b):
     """ The number of the active agents a to b who are still alive """
     m = 0

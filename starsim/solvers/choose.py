@@ -63,9 +63,17 @@ class Undeclared(Transmission):
         ss.utils.shrink(self, ['sim', '_selector', 'cache']) # Each holds the sim (as the declared engine's shrink() drops it)
         return
 
-    def update_results(self):
+    def record_stocks(self):
         """ The count of each `ss.BoolState`, as for any module """
-        ss.Module.update_results(self.mod)
+        ss.Module.record_stocks(self.mod)
+        return
+
+    def record_flows(self):
+        """ Nothing: a disease written as code records its own flows """
+        return
+
+    def clear_flows(self):
+        """ Nothing: a disease written as code counts its own flows """
         return
 
     def value(self, p):
@@ -717,6 +725,8 @@ def settle_start(sim):
             mod.engine.settle_start()
     for crossing in sim.crossings: # Once every disease in it has its initial conditions
         crossing.init()
+    for mod in sim.declared: # Moves at the start are part of the state there, not a flow of the first step
+        mod.engine.clear_flows()
     return
 
 
@@ -1543,7 +1553,7 @@ kernels = [ # What stops the kernels taking a whole run in one call: something i
 
 def own_lifecycle(sim, mod):
     """ A declared module with a step of its own """
-    return next((dict(name=name) for name in ['start_step', 'step_state', 'step', 'on_death', 'update_results', 'finish_step'] if getattr(type(mod), name) is not getattr(ss.Disease, name)), None)
+    return next((dict(name=name) for name in ['start_step', 'step_state', 'step', 'on_death', 'record_stocks', 'record_flows', 'finish_step'] if getattr(type(mod), name) is not getattr(ss.Disease, name)), None)
 
 
 def step_function(sim, mod):

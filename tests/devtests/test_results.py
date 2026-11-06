@@ -36,9 +36,9 @@ def test_groups_kept(monkeypatch, tmp_path):
         k = res.I.group_ti[1] # The steps in each row
         assert k > 1 and any('kept by group every' in note for note in sim.notes)
         assert np.allclose(res.I, full.I) # The totals at every step (as agents, with the same seed)
-        assert np.isclose(res.infection.select(age='0-49')[2], full.infection.select(age='0-49')[k+1:2*k+1].sum()) # A flow by group: its total over the steps of a row
-        assert np.isclose(res.I.select(age='50+')[2], full.I.select(age='50+')[2*k]) # A state by group: at the end of a row
-        assert np.isclose(res.share.select(age='0-49')[-1], full.share.select(age='0-49')[-1]) # A ratio by group: of its parts at the end
+        assert np.isclose(res.infection.select(age='0-49')[2], full.infection.select(age='0-49')[2*k:3*k].sum()) # A flow by group: its total over the steps of a row
+        assert np.isclose(res.I.select(age='50+')[2], full.I.select(age='50+')[2*k]) # A state by group: at the start of a row
+        assert np.isclose(res.share.select(age='0-49')[-1], full.share.select(age='0-49')[res.I.group_ti[-1]]) # A ratio by group: of its parts at the start of the last row
         assert np.allclose(res.infection.resample(ss.days(2*k)).select(age='0-49'), full.infection.resample(ss.days(2*k)).select(age='0-49'))
 
     # Data by group, even from a file, keeps them by group at every step, since it is compared with each one

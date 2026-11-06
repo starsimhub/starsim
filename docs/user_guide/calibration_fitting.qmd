@@ -117,14 +117,14 @@ The data has a time column (`date`, `year`, `t`, or `time`; an integer `year` is
 
 The data need not be on the model's time step, and nothing needs to say how to line the two up, since each result knows what kind of quantity it is:
 
-- A **flow**, like reported cases, is summed over each interval of the data: weekly data is compared with each week's total.
+- A **flow**, like reported cases, is summed over each interval of the data, which starts at the data's time and runs to the next: weekly data is compared with each week's total, so each week is dated by its first day. Data dated by the end of each period ("week ending") needs its dates moved back by one period first.
 - A **stock** (like the number infectious) or a **ratio** (like prevalence) is compared with the model's value at the data's time.
 - Data by calendar year is compared over the year it names: a flow summed over it, and a stock or ratio averaged over it.
 
 `data=` takes a dataframe or a file name. Real files rarely arrive with matching headers, so `ss.simdata()` renames columns on the way in, and can ignore the columns not needed:
 
 ```python
-data = ss.simdata('town_cases.csv', aliases=dict(cases='Reported cases (weekly)', date='Week ending'), ignore_extra=True)
+data = ss.simdata('town_cases.csv', aliases=dict(cases='Reported cases (weekly)', date='Week starting'), ignore_extra=True)
 sim = ss.Sim(measles, data=data, **pars)
 ```
 

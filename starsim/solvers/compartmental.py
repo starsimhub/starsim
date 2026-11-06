@@ -10,7 +10,7 @@ import numba as nb
 import scipy.sparse as sps
 import sciris as sc
 import starsim as ss
-from .engine import Bunch, CountState, Engine, StockCtx, add_rows, at_ends, by_level, no_tables
+from .engine import Bunch, CountState, Engine, StockCtx, add_rows, at_starts, by_level, no_tables
 from .backends import ode
 
 __all__ = ['Compartmental', 'synced_event']
@@ -97,12 +97,10 @@ def run_many_parts(owner, rngs, ys, args, n_cols, outputs, state_of, rows, grp_s
     length = max(int(50e6//(sum(len(table) for table in [program.fixed, program.mult, program.consts, program.rel_trans])*n_cols*8)), 1) # Steps per part
     start = 0
     kn = owner.kernels(runs=len(rngs))
-    while True:
-        end = min(start + length, npts - 1)
-        kn.run_many(rngs, ys, program, dt, start, end + 1, solver, n_sub, *owner.tables(start, end), owner.register, owner.shifts, stocks, flows, stocks_g, flows_g,
+    while start < npts:
+        end = min(start + length, npts) # The steps from start to end-1
+        kn.run_many(rngs, ys, program, dt, start, end, solver, n_sub, *owner.tables(start, end), owner.register, owner.shifts, stocks, flows, stocks_g, flows_g,
                     tally, tally_g, state_of, np.zeros(0, dtype=int) if rows is None else rows, grp_state, grp_flow)
-        if end >= npts - 1:
-            break
         start = end
     return
 
@@ -131,7 +129,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         self.laid_out = None # The groups it was laid out for, once it is: see build()
         self.last_flows = dict() # The flow along each transition in the last step, by group
         self.steady = self.last_values = self.step_rows = self.watched = self.splits = self.state_matrix = None
-        self.start_deps = self.start_held = self.start_y = self.kept_tables = None # See start_key() and tables() # See settled(), count_deaths(), and record_stocks()
+        self.start_deps = self.start_held = self.start_y = self.kept_tables = None # See start_key() and tables() # See settled(), count_deaths(), and count_stocks()
         self.fresh = False
         self.forced = dict() # People moved along a transition by an intervention (see force()) this step, by group, until the step is recorded
         self.program = None # The flows as arrays, for the kernels: see init_program()
@@ -677,7 +675,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             self.forced = dict()
         if self.sim.mixing.register is not None and self.cross is None: # The events dated at the start (in a crossing, they happen to everyone once the diseases have their people: see ss.solvers.Crossing.init())
             self.check_short(self.kernels().apply_events(self.make_rng(stream=2), self.y, self.init_register(), 0, self.integer))
-        self.record_stocks() # The results at the first time point are the start
+        self.count_stocks() # The results at the first time point are the start
         self.n_start = sum(self.y[self.state_comps[s.name]].sum() for s in self.graph.infected if s.people) # The number infected at the start: see note_chance()
         self.mod.setattribute('dists', None) # Compartments draw from the engine's own generator, so the module's distributions are never sampled and need not be advanced each step
         return
@@ -706,7 +704,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         key = self.start_key()
         if key is not None and key == self.start_held: # As the last start: see start_key()
             self.y = self.start_y.copy()
-            self.record_stocks()
+            self.count_stocks()
         else:
             self.y = np.zeros((self.n_comps, self.n_groups))
             self.init_post()
@@ -2320,10 +2318,11 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         return self.sim.solver == 'ode' and self.sim.integrator == 'euler'
 
     def at_middle(self):
-        """ Take values that vary smoothly in time at the middle of the step, which runs from time point `ti-1` to `ti`, as `tables()` does, so that a stepped run takes the same values as a whole one """
+        """ Take values that vary smoothly in time at the middle of the step, which runs from time point `ti` to the next, as `tables()` does, so that a stepped run takes the same values as a whole one """
         if self.smooth and not self.euler:
             years, ti = self.mod.t.yearvec, self.mod.t.ti
-            self.year = (years[ti-1] + years[ti])/2 if ti else None
+            end = years[ti+1] if ti + 1 < len(years) else years[-1] + (years[-1] - years[-2] if len(years) > 1 else 0) # As table_years() has it, to the last bit
+            self.year = (years[ti] + end)/2
             self.cache.clear()
         return
 
@@ -2365,7 +2364,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                 self.sim.t.ti = self.mod.t.ti = ti
                 self.cache.clear()
                 self.step_rows = tuple(tables) if any(len(table) > 1 for table in tables) else no_tables
-            return (no_tables, -1) if self.step_rows is no_tables else (self.step_rows, self.mod.t.ti - 1)
+            return (no_tables, -1) if self.step_rows is no_tables else (self.step_rows, self.mod.t.ti)
         self.at_middle()
         self.refresh_program()
         self.year = None
@@ -2604,7 +2603,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             bounds = sorted({start, stop} | {ti for ti in changing if start < ti < stop})
             tables = None
             for a,b in zip(bounds[:-1], bounds[1:]):
-                sim.t.ti = mod.t.ti = min(a + 1, npts - 1) # The step from a, which is step a+1 (see ss.Loop)
+                sim.t.ti = mod.t.ti = min(a, npts - 1) # The step from a, which is step a (see ss.Loop)
                 span = all_tables()
                 if tables is None:
                     tables = [np.empty((stop - start, *t.shape[1:])) for t in span]
@@ -2616,7 +2615,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                 raise ss.CapabilityError(f'nopython=True, but the modifiers of "{mod.name}" are worked out in Python at each step before the run, since they change on steps that cannot be told in advance')
             rows = []
             for ti in range(start, stop):
-                sim.t.ti = mod.t.ti = min(ti + 1, npts - 1) # The step from ti, which is step ti+1 (see ss.Loop)
+                sim.t.ti = mod.t.ti = min(ti, npts - 1) # The step from ti, which is step ti (see ss.Loop)
                 self.at_middle()
                 self.cache.clear()
                 rows.append([[0.0 if flow.dynamic else self.flow_base(flow)*self.flow_mult(flow) for flow in self.flows],
@@ -2672,7 +2671,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             lo, hi = start, stop
             while lo < hi:
                 mid = (lo + hi)//2
-                sim.t.ti = min(mid + 1, self.mod.t.npts - 1) # As tables() reads it
+                sim.t.ti = min(mid, self.mod.t.npts - 1) # As tables() reads it
                 if passed():
                     hi = mid
                 else:
@@ -2689,7 +2688,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             if m.when is not None: # A condition on time alone, read once for each step
                 on = []
                 for ti in range(start, stop):
-                    sim.t.ti = min(ti + 1, self.mod.t.npts - 1)
+                    sim.t.ti = min(ti, self.mod.t.npts - 1)
                     on.append(ss.conditions.holds_now(m.when, sim))
                 steps.update((start + 1 + np.flatnonzero(np.diff(on))).tolist())
             for val in [m.start, m.stop]:
@@ -2721,7 +2720,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         self._mover_rates = self.mover_rates()
         for i,matrix in enumerate(self._mover_rates):
             self.program.mov_rate[self.program.mov_starts[1, i]:self.program.mov_starts[1, i+1]] = matrix.data
-        solver = ss.kernels.solvers[sim.integrator if sim.solver == 'ode' else sim.solver]
+        solver = ss.kernels.solver_code(sim)
         if self.register is None:
             self.init_register()
         self.init_shifts()
@@ -2734,7 +2733,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
     def plain_seconds(self):
         """ About how long the run would take as plain Python, from the size of its program and its rates at the start (see `ss.kernels.plain_seconds()`) """
         p = self.program
-        solver = ss.kernels.solvers[self.sim.integrator if self.solver == 'ode' else self.solver]
+        solver = ss.kernels.solver_code(self.sim)
         n_sub = ss.kernels.substeps(np.concatenate(self.start_rates() + [p.mov_rate]), self.dt, self.substeps(), solver)
         return ss.kernels.plain_seconds(p, self.y, self.mod.t.npts, solver, n_sub)
 
@@ -2827,9 +2826,8 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         """
         Take a whole run a part at a time, in calls to the kernels that each take as many steps as fit in `part_bytes`
 
-        Yields the time point each part starts at, and its compartments and flows at each time point (as `ss.kernels.run()`
-        returns them, without the first, which the part before has, after the first part). The deliveries' results are
-        stored as it goes.
+        Yields the time point each part starts at, and its compartments and flows at each of its time points (as `ss.kernels.run()`
+        returns them). The deliveries' results are stored as it goes.
         """
         args, _ = self.run_args(tables=False)
         y, program, dt, npts, solver, n_sub = args
@@ -2840,16 +2838,15 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         short = 0.0
         start = 0
         kn = self.kernels()
-        while start < npts - 1:
-            end = min(start + length, npts - 1)
-            tally = np.zeros((end + 1 - start, len(self.shifts.to), 2, self.n_groups))
+        while start < npts:
+            end = min(start + length, npts) # The steps from start to end-1
+            tally = np.zeros((end - start, len(self.shifts.to), 2, self.n_groups))
             tables = self.tables(start, end) # Only for these steps, since by group at every step they can be large
-            y, stocks, flows, more = kn.run(rng, y, program, dt, end + 1, solver, n_sub, *tables, self.register, self.shifts, tally, start)
+            y, stocks, flows, more = kn.run(rng, y, program, dt, end, solver, n_sub, *tables, self.register, self.shifts, tally, start)
             short += more
-            last = end == npts - 1
             for k,mod in enumerate(self.deliveries):
-                mod.in_compartments.store_shifts(tally[:, self.shift_of[k]] if start == 0 else tally[1:, self.shift_of[k]], start=0 if start == 0 else start + 1, done=last) # The first row is the end of the part before
-            yield (start, stocks, flows) if start == 0 else (start + 1, stocks[1:], flows[1:])
+                mod.in_compartments.store_shifts(tally[:, self.shift_of[k]], start=start, done=end == npts)
+            yield (start, stocks, flows)
             start = end
         self.y = y
         self.check_short(short)
@@ -2867,12 +2864,12 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         graph = self.graph
         res = mod.results
         npts, ng = mod.t.npts, self.n_groups
-        rows, ends = (self.rows, self.group_ti) if self.rows is not None else (np.arange(npts), np.arange(npts)) # A row for each time point, unless kept every few steps
+        rows, starts = (self.rows, self.group_ti) if self.rows is not None else (np.arange(npts), np.arange(npts)) # A row for each time point, unless kept every few steps
         states = list(graph.states)
         n_flows = self.n_trans + len(self.movers)
         kept_s, kept_f = self.group_needs()
         totals = sc.obj(stocks=np.zeros((len(states), npts)), flows=np.zeros((n_flows, npts)))
-        groups = sc.obj(stocks=np.zeros((len(ends), len(kept_s), ng)), flows=np.zeros((len(ends), len(kept_f), ng))) # Only those needed
+        groups = sc.obj(stocks=np.zeros((len(starts), len(kept_s), ng)), flows=np.zeros((len(starts), len(kept_f), ng))) # Only those needed
         pos_s, pos_f = {i:j for j,i in enumerate(kept_s)}, {i:j for j,i in enumerate(kept_f)}
         grouped = self.outcomes and ng > 1 # Outcomes are then worked out by group, from the flows they come from by group at each step
         sources = sorted({key for info in self.outcomes.values() for key,weight in info.sources if key in self.tr_index}) if grouped else []
@@ -2890,7 +2887,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             by_state = np.stack([stocks[:, comps[0]] if len(comps) == 1 else stocks[:, comps].sum(axis=1) for comps in (self.state_comps[name] for name in states)], axis=1) # Time points by states by groups
             totals.stocks[:, tis] = by_state.sum(axis=-1).T
             totals.flows[:, tis] = flows.sum(axis=-1).T
-            at_ends(groups.stocks, rows, ends, tis, by_state if len(kept_s) == len(states) else by_state[:, kept_s])
+            at_starts(groups.stocks, rows, starts, tis, by_state if len(kept_s) == len(states) else by_state[:, kept_s])
             add_rows(groups.flows, rows, tis, flows if kept_f == list(range(n_flows)) else flows[:, kept_f])
             if whole:
                 for key in sources:
@@ -2909,8 +2906,8 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                 if getattr(res[key], 'strata', None) is not None:
                     if key in self.outcomes: # A flow, added up over the steps of each row
                         add_rows(res[key].strata, rows, tis, vals)
-                    else: # The number at the end of each row
-                        at_ends(res[key].strata, rows, ends, tis, vals)
+                    else: # The number at the start of each row
+                        at_starts(res[key].strata, rows, starts, tis, vals)
         self.flow_groups = sc.obj()
         self.sim.t.ti = mod.t.ti = npts - 1
         store = self.store_run
@@ -2922,7 +2919,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             store(name, totals.flows[ind], flow_g(ind))
         derived = self.derived(n, new, outcomes=not grouped)
         stratified = [name for name in self.ratio_names() if getattr(res[name], 'strata', None) is not None]
-        if stratified: # Sums and ratios of states by group: from the states at the end of each row, and the flows over it
+        if stratified: # Sums and ratios of states by group: from the states at the start of each row, and the flows over it
             ctx = StockCtx(self, sc.obj({name:stock_g(i) for i,name in enumerate(states)}), sc.obj({name:flow_g(ind) for name,ind in self.tr_index.items()}), ti=np.arange(npts) if self.rows is None else self.group_ti)
             for name in stratified:
                 if name in self.ratios:
@@ -2939,8 +2936,8 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         sh = self.shifts
         tally = np.zeros((self.mod.t.npts, len(sh.to), 2, self.n_groups))
         for ti in np.flatnonzero(sh.due.any(axis=0)):
-            if ti < len(stocks) - 1: # No step follows the last time point
-                self.kernels().apply_shifts(self.rng, np.array(stocks[ti]), sh, ti, False, tally[ti+1]) # Expected numbers, so nothing is drawn; at the time point of the step from ti, its end
+            if ti < len(stocks):
+                self.kernels().apply_shifts(self.rng, np.array(stocks[ti]), sh, ti, False, tally[ti]) # Expected numbers, so nothing is drawn; at the step from ti
         for k,mod in enumerate(self.deliveries):
             mod.in_compartments.store_shifts(tally[:, self.shift_of[k]])
         return
@@ -3066,7 +3063,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             seeds (list): see `derived_outcomes()`
 
         Returns a dict of the outcomes and the results given as expressions.
-        This is what `update_results()` does on each step, for every step at once.
+        This is what `record_flows()` does on each step, for every step at once.
         """
         graph = self.graph
         out = self.derived_outcomes(new, expected=expected, seeds=seeds) if outcomes else sc.obj()
@@ -3102,15 +3099,16 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                 amount = amount + flow*weight
             kernel = info.kernel
             now = amount*kernel[0] if len(kernel) == 1 else np.apply_along_axis(np.convolve, -1, amount, kernel)[..., :npts]
-            if info.stay is not None: # Each arrival leaves after its stay
+            if info.stay is not None: # Each arrival leaves after its stay; the number in it at each time point is that at the start of its step, from the steps before
                 leaving = np.apply_along_axis(np.convolve, -1, now, info.stay)[..., :npts]
-                out[f'n_{name}'] = np.cumsum(now - leaving, axis=-1)
+                inside = np.cumsum(now - leaving, axis=-1)
+                out[f'n_{name}'] = np.concatenate([np.zeros(inside.shape[:-1] + (1,)), inside[..., :-1]], axis=-1)
             elif info.p_leave is not None:
                 current = np.zeros(now.shape[:-1])
                 out[f'n_{name}'] = np.zeros(now.shape)
                 for ti in range(now.shape[-1]): # Every step, or every one of the steps given (a particle filter gives those a data point depends on)
+                    out[f'n_{name}'][..., ti] = current # At the start of the step
                     current = current + now[..., ti] - current*info.p_leave
-                    out[f'n_{name}'][..., ti] = current
             out[name] = now
         return out
 
@@ -3143,9 +3141,9 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                 amount = 0.0
                 for (key,_),weight in zip(info.sources, weights[name]):
                     amount = amount + self.outcome_share(flows[key][:, ti] if key in flows else out[key][:, ti], weight, True)
-                out[name][:, ti] = self.report_outcome(info, bufs[name], np.asarray(amount, dtype=float), ti, True)
-                if f'n_{name}' in out:
+                if f'n_{name}' in out: # At the start of the step
                     out[f'n_{name}'][:, ti] = bufs[name].n
+                out[name][:, ti] = self.report_outcome(info, bufs[name], np.asarray(amount, dtype=float), ti, True)
         return sc.obj({key:vals.reshape(shape) for key,vals in out.items()})
 
     def whole_outcomes(self, todo, flows, weights, width):
@@ -3247,15 +3245,15 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         sim, dt, kn, rng = self.sim, first.dt, owner.kernels(), owner.kernel_rng
         solver = sim.integrator if sim.solver == 'ode' else sim.solver
         tables, row = owner.step_tables()
-        y, flows = kn.one_step(rng, owner.y, owner.program, dt, ss.kernels.solvers[solver], first.substeps(), tables, row)
-        if sim.mixing.register is not None: # The events dated at the end of the step
-            owner.check_short(kn.apply_events(rng, y, owner.register, first.mod.ti, first.integer))
+        y, flows = kn.one_step(rng, owner.y, owner.program, dt, ss.kernels.solver_code(sim), first.substeps(), tables, row)
+        if sim.mixing.register is not None: # The events dated at the end of the step, the next time point
+            owner.check_short(kn.apply_events(rng, y, owner.register, first.mod.ti + 1, first.integer))
         if solver == 'gillespie' and owner.program.local and owner.program.has_det: # By place, the counts are settled after the events, as in SimInf
             kn.settle_places(y, owner.program, dt, flows)
         owner.y = y
         parts = owner.flows_of(flows)
         for engine,part in zip(owner.engines, parts):
-            engine.record_flows(part)
+            engine.take_flows(part)
         for engine,part in zip(owner.engines, parts): # Synchronized flows, once every engine has recorded its own
             if engine.syncs:
                 engine.pass_syncs(part)
@@ -3284,8 +3282,8 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                 flows[..., self.tr_index[f'{tr.name}.null'], :] = flows[..., self.tr_index[tr.name], :] - sum(flows[..., self.tr_index[f'{tr.name}.{dst.name}'], :] for dst in tr.dst)
         return flows
 
-    def record_stocks(self):
-        """ As `ss.solvers.Engine.record_stocks()`, for every state at once """
+    def count_stocks(self):
+        """ As `ss.solvers.Engine.count_stocks()`, for every state at once """
         if self.state_matrix is None:
             self.state_matrix = np.zeros((len(self.graph.states), self.n_comps))
             for i,name in enumerate(self.graph.states):
@@ -3296,7 +3294,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             self.stock_groups.update(zip(self.graph.states, counts))
         return
 
-    def record_flows(self, flows):
+    def take_flows(self, flows):
         """ After a step: the flow along each transition and mover over it, by group, and the people at its end """
         flows = self.count_deaths(flows)
         totals = flows.sum(axis=1).tolist()
@@ -3323,6 +3321,6 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             if mover.name is not None:
                 self.flowcounts[mover.name] += totals[self.n_trans + i]
                 self.flow_groups[mover.name] = flows[self.n_trans + i]
-        self.record_stocks()
+        self.count_stocks()
         self.stepped = self.mod.ti
         return

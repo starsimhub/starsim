@@ -131,7 +131,7 @@ Three other ways of running again:
 
 ## Running part of the way
 
-`sim.run(until=...)` runs up to a given time and stops; a later `sim.run()` carries on from there. This is useful for looking at the state of a sim in the middle of a run, for changing it before going on, and for running a shared start once and then branching into scenarios. In a stochastic run, the scenarios then share not only their start but the chance events up to the branch point: they begin from the same epidemic, as a response would in reality, rather than from different epidemics that happen to have the same parameters. Here, measles reaches a town of 100,000 people in which 90% are immune, run as 10,000 agents (with quarter-day steps, which measles's fast rates need as agents). A month in, the scenarios differ by how much contacts are reduced from then on (by closing schools, say), each a copy of the sim at that point with an `ss.modify()` added:
+`sim.run(until=...)` runs up to a given time and stops, after the step that starts at that time (so the people are then as they are at the end of that step); a later `sim.run()` carries on from there, with the next step. This is useful for looking at the state of a sim in the middle of a run, for changing it before going on, and for running a shared start once and then branching into scenarios. In a stochastic run, the scenarios then share not only their start but the chance events up to the branch point: they begin from the same epidemic, as a response would in reality, rather than from different epidemics that happen to have the same parameters. Here, measles reaches a town of 100,000 people in which 90% are immune, run as 10,000 agents (with quarter-day steps, which measles's fast rates need as agents). A month in, the scenarios differ by how much contacts are reduced from then on (by closing schools, say), each a copy of the sim at that point with an `ss.modify()` added:
 
 ```{python}
 S, I, R = ss.states('S I R')
@@ -170,16 +170,17 @@ A shared start also saves time when it is long compared with the rest of the run
 For a declared model, Starsim works out the order of everything in a step from the model itself. For modules written as code it matters, because each module's code runs at a fixed point in the step:
 
 1. Each module's `start_step()`, which mostly moves the random number generators on.
-2. Modules of your own (`custom=`), then births, deaths, and other demographics.
-3. Progression of each disease (`step_state()`: recoveries, deaths, and other moves that don't depend on contact).
-4. Connectors (which change one module according to another).
-5. Networks (contacts form and end).
-6. Interventions.
-7. Transmission (each disease's `step()`).
-8. Deaths are carried out (`people.step_die()`), with each death assigned to one cause, so that every death is counted once.
-9. Results are recorded.
-10. Analyzers (which see the step's results).
-11. Each module's, the people's, and the sim's `finish_step()`.
+2. The stocks are recorded (`record_stocks()`): the state at the start of the step.
+3. Modules of your own (`custom=`), then births, deaths, and other demographics.
+4. Progression of each disease (`step_state()`: recoveries, deaths, and other moves that don't depend on contact).
+5. Connectors (which change one module according to another).
+6. Networks (contacts form and end).
+7. Interventions.
+8. Transmission (each disease's `step()`).
+9. Deaths are carried out (`people.step_die()`), with each death assigned to one cause, so that every death is counted once.
+10. The flows are recorded (`record_flows()`): what happened in the step.
+11. Analyzers (which see the step's results).
+12. Each module's, the people's, and the sim's `finish_step()`.
 
 So on a single day, a woman who becomes pregnant, develops symptoms, moves house, takes a test, and transmits an infection does them in that order, and transmits to her new household rather than her old one. Putting demographics first means that a child born during a step can be infected during that step (for example, by her mother), and that the effect of an infection during pregnancy is captured. Putting networks before transmission means that a new partnership can transmit in the step it forms, which matters for sexually transmitted infections with short partnerships.
 

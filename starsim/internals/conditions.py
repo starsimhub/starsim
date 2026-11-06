@@ -969,9 +969,9 @@ class Selector(sc.prettyobj):
         def strata(key): # By group; a result of a model without groups has no strata, so it is one group
             vals = getattr(res[key], 'strata', None)
             return np.asarray(vals if vals is not None else np.asarray(res[key].values)[:, None])
-        ti = min(max(sim.ti - 1, 0), len(res[name]) - 1) # The last time point with results: that of the step before this one
+        ti = min(sim.ti, len(res[name]) - 1) # This step, whose stocks (the people at its start) are recorded already, and whose flows are not yet
         steps = 1 if over is None else ss.connectors.to_steps(sim, over)
-        flows = strata(name)[max(ti - steps + 1, 0):ti + 1].sum(axis=0)
+        flows = strata(name)[max(ti - steps, 0):ti].sum(axis=0) # Over the steps before it
         people = sum(strata(key)[ti] for key,state in mod.graph.states.items() if state.people)
         level = np.zeros(len(flows), dtype=int) if by is None else np.maximum(sim.groups.group_levels[:, sim.groups.dim_index(by)], 0)
         num = np.bincount(level, weights=flows)

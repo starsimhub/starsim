@@ -332,9 +332,9 @@ class Stepping:
                             self.flow_groups[key] = self.flow_groups[key] - np.bincount(self.groups(other, src), weights=self.weights(other), minlength=self.sim.groups.n_groups)
         return
 
-    def update_results(self):
+    def record_flows(self):
         self.uncount_deaths()
-        return super().update_results()
+        return super().record_flows()
 
     def die(self, uids):
         """ People who died this step (of anything, in any module) leave every state, and are taken out of the counts recorded for it """
@@ -347,7 +347,7 @@ class Stepping:
             self.live_total = self.live_total - (np.bincount(self.sim.groups.group_raw()[counted], minlength=self.sim.groups.n_groups) if self.sim.groups.n_groups > 1 else len(counted))
         for state in self.graph.people_states:
             inds = uids[self.mod[state.name][uids]]
-            if len(inds): # Each by their weight, as record_stocks() counted them
+            if len(inds): # Each by their weight, as count_stocks() counted them
                 self.stocks[state.name] = self.stocks.get(state.name, 0) - self.n_of(inds)
                 if state.name in self.stock_groups:
                     self.stock_groups[state.name] = self.stock_groups[state.name] - np.bincount(self.groups(inds, state), weights=self.weights(inds), minlength=self.sim.groups.n_groups)
@@ -618,15 +618,15 @@ class Stepping:
             self.move(tr, src, uids)
         self._infecting = True # See enter()
         try:
-            self.finish_moves(mod.ti) # Infections are dated at the step's index, its end
+            self.finish_moves(mod.ti + 1) # Infections are dated at the step's end, the next time point
         finally:
             self._infecting = False
-        self.step_per(mod.ti)
+        self.step_per(mod.ti + 1)
         self.write_derived(self.sim.people.auids)
         self.cache.clear() # Who is in each state has changed (including by the same-step cascade), so values read after the step (e.g. dis.current_value('rel_sus')) are worked out again
         if self.sim.mixing.register is not None and mod is self.sim.declared[-1]: # The events dated at the end of the step, after every module's transmissions; the people are the same for every module, so it is done once
-            self.step_register(mod.ti)
-        self.record_stocks() # Deaths later in the step are taken out of them: see die()
+            self.step_register(mod.ti + 1)
+        self.count_stocks() # Deaths later in the step are taken out of them: see die()
         return
 
     def shift_states(self, uids, states, to_states, ti):

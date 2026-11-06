@@ -314,7 +314,7 @@ def plain_seconds(p, y, npts, solver, n_sub=1):
     """
     if solver == solvers['gillespie']:
         return y.sum()*len(p.src)*(1e-5 + 3e-7*work(p, y))
-    draws = npts*max(n_sub, 1)*len(p.src)*y.shape[1]*7e-5 if solver in [solvers['binomial'], solvers['tau']] else 0.0
+    draws = npts*max(n_sub, 1)*len(p.src)*y.shape[1]*7e-5 if solver in [solvers['binomial'], solvers['whole'], solvers['tau']] else 0.0
     return evals(npts, solver, n_sub)*(1e-5 + 6e-7*work(p, y)) + draws
 
 
@@ -791,13 +791,14 @@ def draw_chain(rng, y, p, w, s, dt, new, flows):
 
 
 @kernel(inline='always') # Compiled into step(), since a call that is passed the program costs about as much as a small step (see into_many())
-def draw(rng, y, p, w, dt, flows, tau):
+def draw(rng, y, p, w, dt, flows, tau, whole):
     """
     Draw whole numbers of events over a time dt, and add them to the flows
 
     For each compartment, the number who leave it (binomial for the chain-binomial solver;
     for tau-leaping, Poisson, and no more than are there), then one multinomial draw of
-    which flow each leaves by. Called by `step()`, which has worked out the rates.
+    which flow each leaves by. Called by `step()`, which has worked out the rates. The chance of leaving a source of
+    infection is the rate times dt, unless `whole` (the chain binomial in whole steps, as discrete-time models are written).
     """
     ng = y.shape[1]
     rates, groups, new, rows = w[0], w[3], w[7], w[10]
@@ -815,11 +816,21 @@ def draw(rng, y, p, w, dt, flows, tau):
             draw_chain(rng, y, p, w, s, dt, new, flows)
             continue
         if src >= 0:
+            transmits = False # Whether people here are a source of infection (a member of an exposure set)
+            for k in range(len(p.set_comps)):
+                if p.set_comps[k] == src:
+                    transmits = True
+                    break
             for g in range(ng):
                 total[g] = 0
                 for k in range(a, b):
                     total[g] += max(rates[p.src_flows[k], g], 0.0)
-                prob[g] = total[g]*y[src, g]*dt if tau else -np.expm1(-total[g]*dt)
+                if tau:
+                    prob[g] = total[g]*y[src, g]*dt
+                elif transmits and not whole: # The rate times the substep's length, so each stay counts in transmission (from the substep after it starts) for 1/rate in time on average, as in the ODE; 1 - exp(-rate*dt) would keep people half a substep longer, as if R0 were R0*(1 + rate*dt/2)
+                    prob[g] = min(total[g]*dt, 1.0)
+                else: # Exact for a rate held over the substep (e.g. the force of infection)
+                    prob[g] = -np.expm1(-total[g]*dt)
             if tau:
                 poissons(rng, prob, left, rows)
             else:
@@ -2177,7 +2188,7 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, varying):
                 else:
                     if solver == 3: # Tau-leaping: a leap short enough that the rates change little over it
                         h = min(end - elapsed, 0.03/max(fastest, 1e-12))
-                    draw(rng, y, p, w, h, flows, solver == 3)
+                    draw(rng, y, p, w, h, flows, solver == 3, solver == 5)
                 if p.has_det and not by_place: # By place, the counts are settled after the step's events: see settle_places()
                     settle(y, p, w, h, flows)
                 elapsed += h
@@ -2396,7 +2407,15 @@ def apply_events(rng, y, r, ti, whole):
 
 #%% A whole run
 
-solvers = dict(rk4=0, euler=1, binomial=2, tau=3, gillespie=4)
+solvers = dict(rk4=0, euler=1, binomial=2, tau=3, gillespie=4, whole=5) # whole: the chain binomial in whole steps (substeps=1), with 1 - exp(-r*dt) for every exit, as discrete-time chain-binomial models are written (see draw())
+
+def solver_code(sim):
+    """ The kernels' number for the sim's solver (see `solvers`): for the ODE, its integrator; the chain binomial in whole steps (`substeps=1`) is the discrete-time model as written, for which `draw()` keeps the exponential for every exit """
+    if sim.solver == 'ode':
+        return solvers[sim.integrator]
+    if sim.solver == 'binomial' and sim.pars.substeps == 1:
+        return solvers['whole']
+    return solvers[sim.solver]
 
 @jit
 def apply_shifts(rng, y, sh, ti, whole, tally):
@@ -2508,25 +2527,25 @@ def varies(tables):
 @kernel(inline='always')
 def time_point(rng, y, p, w, ti, row, dt, n_sub, solver, flows, tables, reg, sh, tally):
     """
-    Step ti of a run, from time point ti-1 to ti, as `run()`, `run_many()` and `advance()` take it, in this order: the
+    Step ti of a run, from time point ti to ti+1, as `run()`, `run_many()` and `advance()` take it, in this order: the
     deliveries at its start (added to `tally`), the values of the step (row `row` of the tables), the step, the events
-    of the register dated at its end, and (for the exact solver by place) the places' fixed delays. Returns the number
+    of the register dated at its end (time point ti+1), and (for the exact solver by place) the places' fixed delays. Returns the number
     of people that events of the register could not find. `advance()` takes the same steps in a loop of its own, since
     going through this costs a small particle filter about 15% (with step() compiled into it either way).
     """
     whole = solver >= 2
     if len(sh.to):
-        apply_shifts(rng, y, sh, ti-1, whole, tally)
-        if sh.due[:, ti-1].any():
+        apply_shifts(rng, y, sh, ti, whole, tally)
+        if sh.due[:, ti].any():
             wake(w)
     set_step((p.fixed, p.mult, p.consts, p.rel_trans), row, tables)
     set_movers(p)
     step(rng, y, p, w, dt, n_sub, solver, flows, varies(tables))
     short = 0.0
     if len(reg.src): # The events dated at its end (not called if there are none, since passing the register costs as much as a small step)
-        short = apply_events(rng, y, reg, ti, whole)
+        short = apply_events(rng, y, reg, ti+1, whole)
         if solver == 4 and p.local:
-            touch(reg, ti, p.places, w)
+            touch(reg, ti+1, p.places, w)
     if solver == 4 and p.local and p.has_det:
         settle_places(y, p, w, dt, flows)
     return short
@@ -2535,28 +2554,27 @@ def time_point(rng, y, p, w, ti, row, dt, n_sub, solver, flows, tables, reg, sh,
 @jit
 def run(rng, y, p, dt, npts, solver, n_sub, fixed, mult, consts, rel_trans, reg, sh, tally, start):
     """
-    Take every step of a run, or the steps from time point `start` on
+    Take every step of a run, or the steps from time point `start` to `npts-1`, one from each time point
 
     Args:
-        y (array): the compartments at the start, by group
+        y (array): the compartments at time point `start`, by group
         p (Program): the flows
         dt (float): the timestep
-        npts (int): the number of time points: the start, and the end of each of the npts-1 steps
+        npts (int): the time point after the last step's start: the number of time points of the run, each the start of a step, or the end of a part of it
         solver (int): which of `solvers` to use
         n_sub (int): for the ODE, the number of substeps (see `step()`)
         rng (Generator): the random numbers to draw from
         fixed, mult, consts, rel_trans (arrays): the values of these parts of the program at each step, or a single
             entry if they are the same throughout
-        reg (Register): the events of a movement register, applied at the end of the step they are dated in (those of the start are already in y)
-        sh (Shifts): the deliveries, applied at the start of each step they happen in; `due` is by the time point the step starts from
-        tally (array): filled in with the number each delivery reached and found eligible, by group, at the time point of the step it happened in, its end (time points by deliveries by 2 by groups)
-        start (int): the time point that y is at; the run is taken from there to time point npts-1, so it can be taken a part at a time
+        reg (Register): the events of a movement register, applied at the end of the step before the time point they are dated at (those of the start are already in y)
+        sh (Shifts): the deliveries, applied at the start of each step they happen in; `due` is by the step, the time point it starts from
+        tally (array): filled in with the number each delivery reached and found eligible, by group, at the step it happened in (time points by deliveries by 2 by groups)
+        start (int): the time point that y is at; the steps are taken from there, so the run can be taken a part at a time
             (the tables then start at the step from `start`, unless they have a single entry)
 
-    Returns the compartments at the end, the compartments at each time point (the start, then the end of each
-    step), the total of each transition and mover over the step that ends at each time point (0 at the start),
-    and the number of people that events of the register could not find. The time points are those from
-    `start` on, as is `tally`.
+    Returns the compartments after the last step, the compartments at each time point (at the start of its step),
+    the total of each transition and mover over the step from each time point, and the number of people that
+    events of the register could not find. The time points are those from `start` to `npts-1`, as are those of `tally`.
     """
     y = y.copy()
     ws = workspace(y, p)
@@ -2565,11 +2583,10 @@ def run(rng, y, p, dt, npts, solver, n_sub, fixed, mult, consts, rel_trans, reg,
     flows = np.zeros((npts - start, p.n_trans + p.n_movers, y.shape[1]))
     short = 0.0
     tables = (fixed, mult, consts, rel_trans)
-    stocks[0] = y
-    for ti in range(start + 1, npts): # Step ti goes from time point ti-1 to ti, with the values at the start of it
+    for ti in range(start, npts): # Step ti goes from time point ti to ti+1, with the values at the start of it
         k = ti - start
-        short += time_point(rng, y, p, w, ti, k-1, dt, n_sub, solver, flows[k], tables, reg, sh, tally[k])
         stocks[k] = y
+        short += time_point(rng, y, p, w, ti, k, dt, n_sub, solver, flows[k], tables, reg, sh, tally[k])
     hold(ws)
     return y, stocks, flows, short
 
@@ -2577,14 +2594,15 @@ def run(rng, y, p, dt, npts, solver, n_sub, fixed, mult, consts, rel_trans, reg,
 @jit
 def run_many(rngs, ys, p, dt, start, npts, solver, n_sub, fixed, mult, consts, rel_trans, reg, sh, stocks, flows, stocks_g, flows_g, tally, tally_g, state_of, rows, grp_state, grp_flow):
     """
-    Take the steps from time point `start` to npts-1 of many runs that differ only in their random numbers, filling in their results
+    Take the steps from time points `start` to npts-1 of many runs that differ only in their random numbers, filling in their results
 
     Args:
         rngs (list): the random numbers of each run, as a typed list of generators
         ys (array): the compartments of each run at time point `start`, by group; changed in place
         start (int): the time point to start from, so the runs can be taken a part at a time (the tables then start at the step from it, unless they have a single entry)
-        stocks, flows (arrays): filled in with the number in each state at each time point, and the total of each transition and mover over the step that ends at it, as runs by time points by states (or transitions) by 1 (the total)
-        stocks_g, flows_g (arrays): those kept by group, as runs by rows by states (or transitions) by groups: a state as it is at the last time point of its row, and a flow added up over them (see `ss.solvers.group_rows()`)
+        npts (int): the time point after the last step's start (see `run()`)
+        stocks, flows (arrays): filled in with the number in each state at each time point, and the total of each transition and mover over the step from it, as runs by time points by states (or transitions) by 1 (the total)
+        stocks_g, flows_g (arrays): those kept by group, as runs by rows by states (or transitions) by groups: a state as it is at the first time point of its row, and a flow added up over them (see `ss.solvers.group_rows()`)
         tally (array): filled in with the total number each delivery reached and found eligible, as runs by time points by deliveries by 2 by 1
         tally_g (array): the same by group, in the rows of `rows` (runs by rows by deliveries by 2 by groups)
         state_of (array): the state that each compartment is part of
@@ -2606,32 +2624,29 @@ def run_many(rngs, ys, p, dt, start, npts, solver, n_sub, fixed, mult, consts, r
         y = ys[r]
         wake(w) # Each run steps every place first
         for ti in range(start, npts):
-            if ti > start:
-                k = ti - start
-                now_sh[:] = 0
-                time_point(rng, y, p, w, ti, k-1, dt, n_sub, solver, now, tables, reg, sh, now_sh)
-                if len(sh.to):
-                    for d in range(len(sh.to)):
-                        for g in range(ng):
-                            tally[r, ti, d, 0, 0] += now_sh[d, 0, g]
-                            tally[r, ti, d, 1, 0] += now_sh[d, 1, g]
-                            if n_rows:
-                                tally_g[r, rows[ti], d, 0, g] += now_sh[d, 0, g]
-                                tally_g[r, rows[ti], d, 1, g] += now_sh[d, 1, g]
-                for f in range(nflows):
-                    for g in range(ng):
-                        flows[r, ti, f, 0] += now[f, g]
-                        if n_rows and grp_flow[f] >= 0:
-                            flows_g[r, rows[ti], grp_flow[f], g] += now[f, g]
-            elif ti > 0: # The start of a later part, which the part before has recorded
-                continue
-            end = n_rows > 0 and (ti == len(rows) - 1 or rows[ti+1] != rows[ti]) # The last time point of its row
-            for c in range(nc):
+            first = n_rows > 0 and (ti == 0 or rows[ti-1] != rows[ti]) # The first time point of its row
+            for c in range(nc): # The state at the start of the step
                 s = state_of[c]
                 for g in range(ng):
                     stocks[r, ti, s, 0] += y[c, g]
-                    if end and grp_state[s] >= 0:
+                    if first and grp_state[s] >= 0:
                         stocks_g[r, rows[ti], grp_state[s], g] += y[c, g]
+            k = ti - start
+            now_sh[:] = 0
+            time_point(rng, y, p, w, ti, k, dt, n_sub, solver, now, tables, reg, sh, now_sh)
+            if len(sh.to):
+                for d in range(len(sh.to)):
+                    for g in range(ng):
+                        tally[r, ti, d, 0, 0] += now_sh[d, 0, g]
+                        tally[r, ti, d, 1, 0] += now_sh[d, 1, g]
+                        if n_rows:
+                            tally_g[r, rows[ti], d, 0, g] += now_sh[d, 0, g]
+                            tally_g[r, rows[ti], d, 1, g] += now_sh[d, 1, g]
+            for f in range(nflows):
+                for g in range(ng):
+                    flows[r, ti, f, 0] += now[f, g]
+                    if n_rows and grp_flow[f] >= 0:
+                        flows_g[r, rows[ti], grp_flow[f], g] += now[f, g]
     hold(ws)
     return
 
@@ -2639,19 +2654,19 @@ def run_many(rngs, ys, p, dt, start, npts, solver, n_sub, fixed, mult, consts, r
 @jit
 def advance(rngs, p, ys, first, last, dt, start, end, solver, n_sub, fixed, mult, consts, rel_trans, sh_vals, reg, sh, state_of, stocks, flows, row0=0):
     """
-    Take steps start+1 to end of runs first to last-1 (particles of a particle filter), each from its own compartments, with its own random numbers
+    Take steps start to end-1 of runs first to last-1 (particles of a particle filter), each from its own compartments, with its own random numbers
 
     Args:
         rngs (list): the random numbers of each run, as a typed list of generators
         p (Program): the flows; the parts of it that vary in time are changed as it runs, so each thread needs its own (see `advance_threads()`)
         ys (array): the compartments of each run, by group; changed in place
         first, last (int): the runs to take
-        start, end (int): the time points to step from and to
+        start, end (int): the time points to step from and to (the steps from start to end-1)
         fixed, mult, consts, rel_trans (arrays): as for `run()`, with a first axis for the runs: one entry if every run has the same values, or one for each run (as each particle of IF2 has its own parameter values)
         sh_vals (array): the time share between places (`sh_val` of the program) of each run, as runs by entries: one entry if every run has the program's own
         row0 (int): the row of the tables that their first row is (those with more than one), if they do not start at the start of the run
         state_of (array): the state that each compartment is part of
-        stocks, flows (arrays): filled in at time points start+1 to end, as `run_many()` returns them (by group, or the
+        stocks, flows (arrays): filled in at time points start to end-1, as `run_many()` returns them (by group, or the
             total in one group if they have only one)
         (the others are as for `run()`)
     """
@@ -2673,29 +2688,29 @@ def advance(rngs, p, ys, first, last, dt, start, end, solver, n_sub, fixed, mult
         if len(sh_vals) > 1:
             p.sh_val[:] = sh_vals[r]
         wake(w) # Each run steps every place first
-        for ti in range(start + 1, end + 1):
-            if len(sh.to): # As time_point() does, written out here: see its docstring
-                apply_shifts(rng, y, sh, ti-1, solver >= 2, tally)
-                if sh.due[:, ti-1].any():
-                    wake(w)
-            set_step(parts, ti - 1 - row0, tables)
-            set_movers(p)
-            step(rng, y, p, w, dt, n_sub, solver, now, varies(tables)) # Compiled into advance(): see into_many()
-            if len(reg.src):
-                apply_events(rng, y, reg, ti, solver >= 2)
-                if solver == 4 and p.local:
-                    touch(reg, ti, p.places, w)
-            if solver == 4 and p.local and p.has_det:
-                settle_places(y, p, w, dt, now)
+        for ti in range(start, end):
             for s in range(stocks.shape[2]):
                 for g in range(stocks.shape[3]):
                     stocks[r, ti, s, g] = 0
+            for c in range(nc): # The state at the start of the step
+                for g in range(ng):
+                    stocks[r, ti, state_of[c], g if by_group else 0] += y[c, g]
+            if len(sh.to): # As time_point() does, written out here: see its docstring
+                apply_shifts(rng, y, sh, ti, solver >= 2, tally)
+                if sh.due[:, ti].any():
+                    wake(w)
+            set_step(parts, ti - row0, tables)
+            set_movers(p)
+            step(rng, y, p, w, dt, n_sub, solver, now, varies(tables)) # Compiled into advance(): see into_many()
+            if len(reg.src):
+                apply_events(rng, y, reg, ti+1, solver >= 2)
+                if solver == 4 and p.local:
+                    touch(reg, ti+1, p.places, w)
+            if solver == 4 and p.local and p.has_det:
+                settle_places(y, p, w, dt, now)
             for f in range(nflows):
                 for g in range(flows.shape[3]):
                     flows[r, ti, f, g] = 0
-            for c in range(nc):
-                for g in range(ng):
-                    stocks[r, ti, state_of[c], g if by_group else 0] += y[c, g]
             for f in range(nflows):
                 for g in range(ng):
                     flows[r, ti, f, g if by_group else 0] += now[f, g]

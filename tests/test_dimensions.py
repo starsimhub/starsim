@@ -23,12 +23,11 @@ solvers = ['ode', 'binomial', 'abm']
 
 
 def at_start(sim):
-    """ The results with the number in each state before the first step at index 0, for a compartmental sim (results count the number after each step) """
+    """ The results with the number in each state at the start, at index 0, before the first step """
     sim.init()
     for mod in sim.declared:
         mod.engine.start_step()
         mod.engine.record_stocks()
-        mod.engine.update_results()
     return sim.results
 
 
@@ -295,7 +294,7 @@ def test_many_groups():
     assert groups.n_groups == 49_152
     assert np.array_equal(groups.group_raw(), groups.level_raw(0).astype(np.int64)*384 + groups.level_raw(1)) # Kept up to date as people move in and out of D
     res = sim.results.dis
-    assert res.D.by('b').values[-1].sum() == res.D[-1] == sim.diseases.dis.D.sum()
+    assert res.D.by('b').values[-1].sum() == res.D[-1] and res.D[-1] - res.back[-1] + res.onset[-1] == sim.diseases.dis.D.sum() # The last time point, then its step
     return sim
 
 
@@ -310,7 +309,7 @@ def test_given_splits():
     d = ss.Disease(A, B, go=A >> B @ ss.peryear(0.1)*ss.by(tob=[0.0, 1.0]), first='A', name='d') # Only smokers move
     sim = ss.Sim(d, people=ppl, stratify=dict(tob=[False, True]), start=2000, stop=2005, dt=1, verbose=0).run()
     assert sim.people.tob.sum() == tob.sum()
-    expected = tob.sum()*(1 - np.exp(-0.5))
+    expected = tob.sum()*(1 - np.exp(-0.6)) # Six steps, from 2000 to 2005
     assert abs(sim.results.d.go.sum() - expected) < 4*np.sqrt(expected)
     assert 'guessed' not in [line for line in sim.describe(output=True).splitlines() if 'tob' in line and 'dimension' in line][0]
 
@@ -339,12 +338,13 @@ def test_sex():
         sim = ss.Sim(si, networks=ss.SexualNet(), demographics=ss.Births(birth_rate=30), n_agents=2000, stratify=kw, stop=2010, verbose=0, rand_seed=1).init()
         if 'split' in kw:
             assert np.isclose(sim.people.female.mean(), 0.7, atol=0.03) # people.female follows a split that is given (drawn, for 2000 agents)
+        start = (sim.people.female & sim.diseases.si.S).sum()
         sim.run()
         ppl = sim.people
         strat = sim.groups.strats[0]
         women = ppl[strat.attr].raw[ppl.auids] == strat.female
         assert np.array_equal(women, ppl.female.raw[ppl.auids]), f'{kw}: the levels of sex disagree with people.female'
-        assert sim.results.si.S.select(**{strat.name: strat.labels[strat.female]})[-1] == (ppl.female & sim.diseases.si.S).sum()
+        assert sim.results.si.S.select(**{strat.name: strat.labels[strat.female]})[0] == start # The women in S at the start
     with pytest.raises(ValueError, match='people.female'):
         S, I = ss.states('S I')
         ss.Sim(ss.Disease(infection=ss.Transition(S, I, rate=0.01 * I), name='si'), n_agents=100, stratify=dict(sex=['a', 'b']), verbose=0).init()

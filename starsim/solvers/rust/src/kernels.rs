@@ -704,7 +704,7 @@ fn step_groups<const ONE: bool>(rng: Rng, y: A2<f64>, p: &Program, w: &Work, dt:
                     if solver == 3 {
                         h = mn(end - elapsed, 0.03/mx(fastest, 1e-12));
                     }
-                    draw(rng, y, p, w, h, flows, solver == 3);
+                    draw(rng, y, p, w, h, flows, solver == 3, solver == 5);
                 }
                 if p.has_det && !by_place {
                     settle(y, p, w, h, flows);
@@ -920,14 +920,14 @@ pub fn varies(tables: &Tables) -> bool {
     (0..4).any(|k| tables[k].n0() > 1)
 }
 
-/// Step ti of a run, from time point ti-1 to ti (`time_point()`): the deliveries at its start, the values of the step, the step, the events of the register at its end, and the places' fixed delays; returns the people the register could not find
+/// Step ti of a run, from time point ti to ti+1 (`time_point()`): the deliveries at its start, the values of the step, the step, the events of the register at its end (time point ti+1), and the places' fixed delays; returns the people the register could not find
 #[allow(clippy::too_many_arguments)]
 pub fn time_point(rng: Rng, y: A2<f64>, p: &Program, w: &Work, ti: usize, row: i64, dt: f64, n_sub: i64, solver: i64, flows: A2<f64>, tables: &Tables,
                   reg: &Register, sh: &Shifts, tally: A3<f64>) -> f64 {
     let whole = solver >= 2;
     if sh.to.n0() > 0 {
-        apply_shifts(rng, y, sh, ti - 1, whole, tally);
-        if (0..sh.due.n0()).any(|k| sh.due.b(k, ti - 1)) {
+        apply_shifts(rng, y, sh, ti, whole, tally);
+        if (0..sh.due.n0()).any(|k| sh.due.b(k, ti)) {
             wake(w);
         }
     }
@@ -936,9 +936,9 @@ pub fn time_point(rng: Rng, y: A2<f64>, p: &Program, w: &Work, ti: usize, row: i
     step(rng, y, p, w, dt, n_sub, solver, flows, varies(tables));
     let mut short = 0.0;
     if reg.src.len() > 0 {
-        short = apply_events(rng, y, reg, ti, whole);
+        short = apply_events(rng, y, reg, ti + 1, whole);
         if solver == 4 && p.local {
-            touch(reg, ti, p.places, w);
+            touch(reg, ti + 1, p.places, w);
         }
     }
     if solver == 4 && p.local && p.has_det {
@@ -947,17 +947,16 @@ pub fn time_point(rng: Rng, y: A2<f64>, p: &Program, w: &Work, ti: usize, row: i
     short
 }
 
-/// Every step of a run from time point `start` (`run()`), into stocks and flows (time points from `start` on); returns the people the register could not find
+/// Every step of a run from time point `start` to npts-1 (`run()`), one from each time point, into stocks (at the start of each step) and flows (over it); returns the people the register could not find
 #[allow(clippy::too_many_arguments)]
 pub fn run(rng: Rng, y: A2<f64>, p: &Program, dt: f64, npts: usize, solver: i64, n_sub: i64, tables: &Tables, reg: &Register, sh: &Shifts, tally: Nd<f64, 4>,
            start: usize, stocks: A3<f64>, flows: A3<f64>) -> f64 {
     let w = workspace(y.n0(), y.n1(), p);
     let mut short = 0.0;
-    stocks.plane(0).copy_from(y);
-    for ti in start + 1..npts {
+    for ti in start..npts {
         let k = ti - start;
-        short += time_point(rng, y, p, &w, ti, k as i64 - 1, dt, n_sub, solver, flows.plane(k), tables, reg, sh, tally.sub(k));
         stocks.plane(k).copy_from(y);
+        short += time_point(rng, y, p, &w, ti, k as i64, dt, n_sub, solver, flows.plane(k), tables, reg, sh, tally.sub(k));
     }
     short
 }
@@ -987,38 +986,34 @@ pub fn run_many(rngs: &[Rng], ys: A3<f64>, p: &Program, dt: f64, start: usize, n
         let y = ys.plane(r);
         wake(&w);
         for ti in start..npts {
-            if ti > start {
-                let k = ti - start;
-                for d in 0..n_sh { now_sh.plane(d).fill(0.0); }
-                time_point(rng, y, p, &w, ti, k as i64 - 1, dt, n_sub, solver, now, tables, reg, sh, now_sh);
-                for d in 0..n_sh {
-                    for g in 0..ng {
-                        o.tally.add([r, ti, d, 0, 0], now_sh.at(d, 0, g));
-                        o.tally.add([r, ti, d, 1, 0], now_sh.at(d, 1, g));
-                        if n_rows > 0 {
-                            o.tally_g.add([r, rows.u(ti), d, 0, g], now_sh.at(d, 0, g));
-                            o.tally_g.add([r, rows.u(ti), d, 1, g], now_sh.at(d, 1, g));
-                        }
-                    }
-                }
-                for f in 0..nflows {
-                    for g in 0..ng {
-                        o.flows.add([r, ti, f, 0], now.at(f, g));
-                        if n_rows > 0 && grp_flow.at(f) >= 0 {
-                            o.flows_g.add([r, rows.u(ti), grp_flow.u(f), g], now.at(f, g));
-                        }
-                    }
-                }
-            } else if ti > 0 { // The start of a later part, which the part before has recorded
-                continue;
-            }
-            let end = n_rows > 0 && (ti == rows.len() - 1 || rows.at(ti + 1) != rows.at(ti));
-            for c in 0..nc {
+            let first = n_rows > 0 && (ti == 0 || rows.at(ti - 1) != rows.at(ti)); // The first time point of its row
+            for c in 0..nc { // The state at the start of the step
                 let s = state_of.u(c);
                 for g in 0..ng {
                     o.stocks.add([r, ti, s, 0], y.at(c, g));
-                    if end && grp_state.at(s) >= 0 {
+                    if first && grp_state.at(s) >= 0 {
                         o.stocks_g.add([r, rows.u(ti), grp_state.u(s), g], y.at(c, g));
+                    }
+                }
+            }
+            let k = ti - start;
+            for d in 0..n_sh { now_sh.plane(d).fill(0.0); }
+            time_point(rng, y, p, &w, ti, k as i64, dt, n_sub, solver, now, tables, reg, sh, now_sh);
+            for d in 0..n_sh {
+                for g in 0..ng {
+                    o.tally.add([r, ti, d, 0, 0], now_sh.at(d, 0, g));
+                    o.tally.add([r, ti, d, 1, 0], now_sh.at(d, 1, g));
+                    if n_rows > 0 {
+                        o.tally_g.add([r, rows.u(ti), d, 0, g], now_sh.at(d, 0, g));
+                        o.tally_g.add([r, rows.u(ti), d, 1, g], now_sh.at(d, 1, g));
+                    }
+                }
+            }
+            for f in 0..nflows {
+                for g in 0..ng {
+                    o.flows.add([r, ti, f, 0], now.at(f, g));
+                    if n_rows > 0 && grp_flow.at(f) >= 0 {
+                        o.flows_g.add([r, rows.u(ti), grp_flow.u(f), g], now.at(f, g));
                     }
                 }
             }
@@ -1043,7 +1038,7 @@ pub struct Advance<'a> {
     pub row0: i64,
 }
 
-/// Steps start+1 to end of runs first to last-1 (particles of a particle filter), each from its own compartments, with its own random numbers (`advance()`)
+/// Steps start to end-1 of runs first to last-1 (particles of a particle filter), each from its own compartments, with its own random numbers (`advance()`)
 pub fn advance(rngs: &[Rng], p: &Program, ys: A3<f64>, first: usize, last: usize, a: &Advance) {
     let (nc, ng) = (ys.n1(), ys.n2());
     let nflows = p.n_trans + p.n_movers;
@@ -1066,39 +1061,39 @@ pub fn advance(rngs: &[Rng], p: &Program, ys: A3<f64>, first: usize, last: usize
             p.sh_val.copy_from(a.sh_vals.row(r));
         }
         wake(&w);
-        for ti in a.start + 1..a.end + 1 {
-            if n_sh > 0 {
-                apply_shifts(rng, y, a.sh, ti - 1, a.solver >= 2, tally);
-                if (0..a.sh.due.n0()).any(|k| a.sh.due.b(k, ti - 1)) {
-                    wake(&w);
-                }
-            }
-            let row = ti as i64 - 1 - a.row0;
-            set_step(pt, row, &tables);
-            set_movers(p);
-            step(rng, y, p, &w, a.dt, a.n_sub, a.solver, now, varies(&tables));
-            if a.reg.src.len() > 0 {
-                apply_events(rng, y, a.reg, ti, a.solver >= 2);
-                if a.solver == 4 && p.local {
-                    touch(a.reg, ti, p.places, &w);
-                }
-            }
-            if a.solver == 4 && p.local && p.has_det {
-                settle_places(y, p, &w, a.dt, now);
-            }
+        for ti in a.start..a.end {
             for s in 0..a.stocks.shape(2) {
                 for g in 0..a.stocks.shape(3) {
                     a.stocks.set([r, ti, s, g], 0.0);
                 }
             }
+            for c in 0..nc { // The state at the start of the step
+                for g in 0..ng {
+                    a.stocks.add([r, ti, a.state_of.u(c), if by_group { g } else { 0 }], y.at(c, g));
+                }
+            }
+            if n_sh > 0 {
+                apply_shifts(rng, y, a.sh, ti, a.solver >= 2, tally);
+                if (0..a.sh.due.n0()).any(|k| a.sh.due.b(k, ti)) {
+                    wake(&w);
+                }
+            }
+            let row = ti as i64 - a.row0;
+            set_step(pt, row, &tables);
+            set_movers(p);
+            step(rng, y, p, &w, a.dt, a.n_sub, a.solver, now, varies(&tables));
+            if a.reg.src.len() > 0 {
+                apply_events(rng, y, a.reg, ti + 1, a.solver >= 2);
+                if a.solver == 4 && p.local {
+                    touch(a.reg, ti + 1, p.places, &w);
+                }
+            }
+            if a.solver == 4 && p.local && p.has_det {
+                settle_places(y, p, &w, a.dt, now);
+            }
             for f in 0..nflows {
                 for g in 0..a.flows.shape(3) {
                     a.flows.set([r, ti, f, g], 0.0);
-                }
-            }
-            for c in 0..nc {
-                for g in 0..ng {
-                    a.stocks.add([r, ti, a.state_of.u(c), if by_group { g } else { 0 }], y.at(c, g));
                 }
             }
             for f in 0..nflows {

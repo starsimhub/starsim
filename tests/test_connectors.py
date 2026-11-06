@@ -277,7 +277,7 @@ def test_coded():
         mods = [ss.modify('wealth.pars.rate', multiply=2, start=2), ss.modify('wealth.pars.rate', add=1, where=lambda sim: sim.ti >= 4), ss.modify('link.pars.rate', set=ss.timeseries({1: 3, 3: 4}), start=1)]
         sim = ss.Sim(diseases=ss.SIR(beta=ss.perday(0.1)), modules=Wealth(name='wealth'), connectors=[Link(name='link'), *mods], n_agents=100, unit='year', stop=5, solver=solver, verbose=0).run()
         wealth, link = sim.get_module('wealth'), sim.get_module('link')
-        assert wealth.seen == [1, 1, 2, 3, 3] and link.seen == [1, 3, 3, 4, 4], f'{solver}: {wealth.seen} and {link.seen}'
+        assert wealth.seen == [1, 1, 2, 2, 3, 3] and link.seen == [1, 3, 3, 4, 4, 4], f'{solver}: {wealth.seen} and {link.seen}' # A step from each year 0 to 5
         assert wealth.pars.rate == 1
     with pytest.raises(ValueError, match='cannot differ between people'):
         ss.Sim(diseases=ss.SIR(beta=ss.perday(0.1)), modules=Wealth(name='wealth'), connectors=ss.modify('wealth.pars.rate', multiply=2, where=ss.ppl.age > 5), n_agents=100, verbose=0).init()
@@ -301,7 +301,7 @@ def test_modifier_tables():
     ref = I(sim)
     assert sim.kernel_reason() is None
     assert np.array_equal(I(sim.run()), ref), 'A rerun gives the same'
-    assert np.allclose(I(make().run(until=199)), ref, rtol=1e-12), 'A run a step at a time gives the same'
+    assert np.allclose(I(make().run(until=200)), ref, rtol=1e-12), 'A run a step at a time gives the same'
     assert np.array_equal(I(make(wrap=True).run()), ref), 'The seasonal factor inside a parameter varies in time'
     assert np.array_equal(I(sim.restart(pars=dict(beta=0.4)).run()), I(make(beta=0.4).run())), 'A new value of a parameter'
     assert np.array_equal(I(sim.restart(pars=dict(cut=0.2)).run()), I(make(beta=0.4, cut=0.2).run())), 'A new value of a parameter in a modifier'

@@ -41,14 +41,14 @@ def test_fixed_delay():
     def cohort():
         S, E, I = ss.states('S E I')
         return ss.Disease(S, E, I, infection=S >> E @ 0*I, latent=E >> I @ ss.constant(ss.days(14)), die=E >> ss.null @ ss.perday(mu), init=dict(E=0.1), name='d')
-    k = np.arange(14) # The seeds are dated a step before the start, as if infected then, so they leave at day 14
+    k = np.arange(14) # The seeds are dated a step before the start, as if infected then, so they leave in the step from day 13 to 14
     n0 = 1000
     ode = ss.Sim(cohort(), solver='ode', total_pop=10_000, unit='day', stop=20, **kw).run()
     r = ode.results.d
     assert np.allclose(r.E[:14], n0*np.exp(-mu*k), rtol=1e-6) and r.E[14:].max() < 1e-6 # What the integrator leaves in the last slot (7e-8 of a person here) leaves with the next step, rather than being dropped
-    assert np.isclose(r.latent[14], n0*np.exp(-mu*13.5), rtol=1e-5) and np.isclose(r.latent.sum(), r.latent[14]) # Half of the last step's deaths come first
+    assert np.isclose(r.latent[13], n0*np.exp(-mu*13.5), rtol=1e-5) and np.isclose(r.latent.sum(), r.latent[13]) # Half of the last step's deaths come first
     abm = ss.Sim(cohort(), n_agents=10_000, unit='day', stop=20, **kw).run().results.d
-    assert abm.latent[:14].sum() == 0 and abm.E[14] == 0 and np.isclose(abm.latent[14], n0*np.exp(-mu*14), rtol=0.05)
+    assert abm.latent[:13].sum() == 0 and abm.E[14] == 0 and np.isclose(abm.latent[13], n0*np.exp(-mu*14), rtol=0.05)
 
     # An epidemic: as agents, and converging to the exact delay as the step shrinks
     kw2 = dict(unit='day', stop=200, **kw)

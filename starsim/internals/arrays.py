@@ -1005,7 +1005,7 @@ class TimeArr(FloatArr):
     def __init__(self, name=None, **kwargs):
         super().__init__(name=name, **kwargs)
         self.t = None # The timeline the steps are of (the module's), for due() and .years; set when its states are linked to the people
-        self.shift = None # Steps added when read, from the engine's time of a move to the index of the step it happened in: by agent (an Arr) for a declared state's time of entering, 1 for a scheduled exit
+        self.shift = None # Steps added when read, from the engine's time of a move to the index of the step it happened in: by agent (an Arr) for a declared state's time of entering (a scheduled exit is taken at the start of a step, whose index is its engine time)
         return
 
     def shifted(self, vals, key=None):

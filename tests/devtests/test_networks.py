@@ -191,7 +191,7 @@ def chance(beta, acts=ss.constant(ss.freqperyear(1)), dt=ss.years(1), steps=1, c
     si = ss.Disease(infection=ss.Transition(S, I, rate=beta * I), init_prev=0.5, name='si')
     net = net or ss.SexualNet
     net = net(dur=ss.constant(ss.years(100)), participation=ss.bernoulli(p=1.0), debut=ss.constant(0), acts=acts)
-    sim = ss.Sim(si, networks=net, connectors=connectors, n_agents=n, start=2000, stop=2000 + steps*dt.years, dt=dt, rand_seed=seed, verbose=0).init()
+    sim = ss.Sim(si, networks=net, connectors=connectors, n_agents=n, start=2000, stop=2000 + (steps - 1)*dt.years, dt=dt, rand_seed=seed, verbose=0).init() # A step from each time point, the last included
     e = sim.networks[0].edges
     female = sim.people.female.raw
     men, women = np.where(female[e.p1], e.p2, e.p1), np.where(female[e.p1], e.p1, e.p2)

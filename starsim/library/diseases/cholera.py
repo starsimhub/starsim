@@ -197,8 +197,8 @@ class Cholera(AgentSEIR):
         self.symptomatic[uids] = False
         return
 
-    def update_results(self):
-        super().update_results()
+    def record_flows(self):
+        super().record_flows()
         res = self.results
         ti = self.ti
         res.death[ti] = np.count_nonzero(self.ti_dead.isclose(ti)) # Deaths requested in this step, as due() rounds ti_dead

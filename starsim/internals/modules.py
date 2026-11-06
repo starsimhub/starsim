@@ -296,6 +296,15 @@ class Module(Base):
     has_product = False # Whether it delivers a product: see ss.Intervention
     _serials = itertools.count() # Which module each is, kept by its copies: see __init__()
 
+    def __init_subclass__(cls, **kwargs):
+        """ A module that defines `update_results()` is one written for Starsim 3 or an early v4: say how to split it, rather than never call it """
+        super().__init_subclass__(**kwargs)
+        if 'update_results' in cls.__dict__:
+            errormsg = (f'{cls.__name__} defines update_results(), which Starsim no longer calls: split it into record_stocks(), for the results that are the state at '
+                        f'the start of the step (e.g. a count of a state), and record_flows(), for those about what happened in the step (e.g. new infections); see ss.Loop')
+            raise TypeError(errormsg)
+        return
+
     def __init__(self, name=None, label=None, **kwargs):
         # Housekeeping
         self._locked_attrs = ['pars', 't', 'sim', 'dists', 'results'] # Define key attributes that shouldn't be overwritten
@@ -1056,13 +1065,13 @@ class Module(Base):
         self.t.ti += 1
         return
 
-    def update_results(self, names=None):
+    def record_stocks(self, names=None):
         """
-        Update results; by default, compute counts of each state at each point in time
+        Record the results that are the state at the start of the step (stocks), at its index; by default, the count of each state
 
-        This function is executed after transmission in all modules has been resolved.
-        This allows result updates at this point to capture outcomes dependent on multiple
-        modules, where relevant.
+        Called at the start of every step, before any module's step (see `ss.Loop`), so the results at a time point
+        are the state there: e.g. `self.results.n_on_art[self.ti] = self.on_art.sum()`. A result about what happens
+        in the step (a flow, or one that needs a flow) goes in `record_flows()` instead.
 
         Args:
             names (list): the states to count (default: every `ss.BoolState` and derived state)
@@ -1080,8 +1089,19 @@ class Module(Base):
                 ss.results.as_float(res)[self.ti] = weights[self[name].uids].sum()
         return
 
+    def record_flows(self):
+        """
+        Record the results about what happened in the step (flows), at its index: e.g. `self.results.doses[self.ti] = self.n_doses`
+
+        Called at the end of every step, after every module's step and the deaths (see `ss.Loop`). The state then is
+        that of the next time point, so a result that also needs a stock reads it from its result, recorded at the
+        start of the step (e.g. `self.sim.results.alive[self.ti]`), or is worked out over the whole run in
+        `finalize_results()`.
+        """
+        return
+
     def _count_states(self, names):
-        """ Record the number of active agents in each of some boolean states, as `update_results()` does one by one, in one pass by UID (as `people.update_results()` does); False if they can't be counted so """
+        """ Record the number of active agents in each of some boolean states, as `record_stocks()` does one by one, in one pass by UID (as `people.record_stocks()` does); False if they can't be counted so """
         ppl = self.sim.people
         if getattr(self.sim, 'solver', None) != 'abm' or not isinstance(getattr(ppl, 'alive', None), ss.BoolArr): # Not with compartments, or in a mock sim
             return False
@@ -1089,13 +1109,12 @@ class Module(Base):
         if not all(isinstance(state, ss.BoolArr) and state.raw.ndim == 1 and state.raw.flags.c_contiguous for state in states):
             return False # E.g. a derived state, or one with no memory of its own yet
         alive = ppl.alive.raw[:ppl.uid.len_used]
-        dying = ppl.dying()
         counts = ss.solvers.backends.passes.count_alive(tuple(state.raw for state in states), alive) # Those alive in each, then the number alive...
-        if counts[-1] + len(dying) != len(ppl.auids): # ...which, with those who died in this step, should be the active agents
+        if counts[-1] != len(ppl.auids): # ...which should be the active agents, as at the start of a step
             return False
         ti = self.ti
-        for name,state,count in zip(names, states, counts):
-            self.results[name][ti] = count + (np.count_nonzero(state.raw[dying]) if len(dying) else 0)
+        for name,count in zip(names, counts):
+            self.results[name][ti] = count
         return True
 
     @required()

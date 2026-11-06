@@ -101,37 +101,6 @@ pub fn shuffle<T: Copy, R: Copy + Into<f64>>(arr: &mut [T], randvals: &[R]) {
     }
 }
 
-/// A step of a time (an int, or a float, as ti_dead may be)
-pub trait Step: Copy {
-    const IS_INT: bool;
-    fn to_i64(self) -> i64;
-    fn to_f64(self) -> f64;
-}
-macro_rules! step {
-    ($is_int:expr, $($t:ty),+) => {
-        $(impl Step for $t {
-            const IS_INT: bool = $is_int;
-            #[inline(always)] fn to_i64(self) -> i64 { self as i64 }
-            #[inline(always)] fn to_f64(self) -> f64 { self as f64 }
-        })+
-    };
-}
-step!(true, i16, i32, i64);
-step!(false, f32, f64);
-
-/// The number of active agents who are no longer alive because they died, and because they left, by step ti (`people.count_gone()`)
-pub fn count_gone<T: Copy>(auids: &[i64], alive: &[bool], ti_dead: &[T], ti_removed: &[T], by: impl Fn(T) -> bool) -> (i64, i64) {
-    let (mut deaths, mut removed) = (0, 0);
-    for &u in auids {
-        let u = u as usize;
-        if !alive[u] {
-            deaths += by(ti_dead[u]) as i64;
-            removed += by(ti_removed[u]) as i64;
-        }
-    }
-    (deaths, removed)
-}
-
 /// Mark the partners of the agents flagged in is_ind, in both directions of each edge (`networks._mark_partners()`)
 pub fn mark_partners<I: Ix>(p1: &[I], p2: &[I], is_ind: &[bool], is_partner: &mut [bool]) {
     for (&a, &b) in p1.iter().zip(p2) {
@@ -176,7 +145,6 @@ pub mod bind {
     use numpy::{PyArrayDyn, PyUntypedArray, PyUntypedArrayMethods};
     use pyo3::exceptions::PyTypeError;
     use pyo3::prelude::*;
-    use crate::small::Step;
     use crate::small;
     use crate::py::{arr, sl, sl_mut, strided};
 
@@ -236,21 +204,6 @@ pub mod bind {
         }))
     }
 
-    /// Int steps and an int ti are compared as int64s, and otherwise as float64s (as Numba compares them)
-    #[pyfunction]
-    fn count_gone(auids: &Bound<PyAny>, alive: &Bound<PyAny>, ti_dead: &Bound<PyAny>, ti_removed: &Bound<PyAny>, ti: &Bound<PyAny>) -> PyResult<(i64, i64)> {
-        let (auids, alive) = (sl::<i64>(auids)?, sl::<bool>(alive)?);
-        let int_ti = ti.extract::<i64>().ok(); // An int or NumPy int (a float doesn't convert)
-        let float_ti = ti.extract::<f64>()?;
-        typed!(ti_dead, T in [i16, i32, i64, f32, f64] => {
-            let (d, r) = (sl::<T>(ti_dead)?, sl::<T>(ti_removed)?);
-            match int_ti {
-                Some(t) if T::IS_INT => Ok(small::count_gone::<T>(auids, alive, d, r, |x| x.to_i64() <= t)),
-                _ => Ok(small::count_gone::<T>(auids, alive, d, r, |x| x.to_f64() <= float_ti)),
-            }
-        })
-    }
-
     #[pyfunction]
     fn mark_partners(p1: &Bound<PyAny>, p2: &Bound<PyAny>, is_ind: &Bound<PyAny>, is_partner: &Bound<PyAny>) -> PyResult<()> {
         typed!(p1, I in [i64, i32, i16, u64, u32] => Ok(small::mark_partners::<I>(sl(p1)?, sl(p2)?, sl(is_ind)?, sl_mut(is_partner)?)))
@@ -303,7 +256,6 @@ pub mod bind {
         m.add_function(wrap_pyfunction!(true_vals, m)?)?;
         m.add_function(wrap_pyfunction!(count, m)?)?;
         m.add_function(wrap_pyfunction!(shuffle, m)?)?;
-        m.add_function(wrap_pyfunction!(count_gone, m)?)?;
         m.add_function(wrap_pyfunction!(mark_partners, m)?)?;
         m.add_function(wrap_pyfunction!(combine_rvs, m)?)?;
         m.add_function(wrap_pyfunction!(combine2_rvs, m)?)?;

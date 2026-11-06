@@ -51,7 +51,7 @@ def test_run_options():
     assert 'cpu_time' in df.columns and df['cpu_time'].isna().all(), 'cpu_time should be NaN without profiling'
     assert df.time.dtype == float # Plain numbers, not durations (it showed days(0), day, days(2))
 
-    # One time index during a step: every module sees the same one, the step's, where its results go (the first step is ti == 1)
+    # One time index during a step: every module sees the same one, the step's, where its results go (the first step is ti == 0)
     seen = sc.obj(rate=[], intv=[])
     def rate(sim):
         seen.rate.append(sim.ti)
@@ -61,7 +61,7 @@ def test_run_options():
     S, I, R = ss.states('S I R')
     sir = ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, rate=rate), init_prev=0.1, name='sir')
     sim = ss.Sim(sir, interventions=intv, solver='abm', n_agents=100, unit='day', stop=4, verbose=0).run()
-    assert seen.intv == [1, 2, 3, 4] and set(seen.rate) == {1, 2, 3, 4}
+    assert seen.intv == [0, 1, 2, 3, 4] and set(seen.rate) == {0, 1, 2, 3, 4}
     assert sim.ti == 4 # At the last time point, after the run
 
     return s2.loop
@@ -174,7 +174,7 @@ def test_loop_plan_views_and_insert():
     calls = []
     sim.loop.insert(lambda sim: calls.append(sim.ti), label='sim.finish_step', before=True)
     sim.run()
-    assert len(calls) == sim.t.npts - 1, 'Label-based insertion did not run once per step' # Once, not twice
+    assert len(calls) == sim.t.npts, 'Label-based insertion did not run once per step' # Once, not twice
 
     calls = []
     sim = ss.Sim(small_pars).init()
@@ -197,7 +197,7 @@ def test_coded_alone():
     sim = ss.Sim(modules=Decay(), stop=10, verbose=0).run()
     assert sim.solver != 'abm' and len(sim.people.uid) == 1, 'Code with nothing per person should not make agents'
     assert sim.people.n_alive == sim.pars.total_pop == 10_000 # What describe() says it runs with
-    assert np.isclose(sim.custom.decay.y, np.exp(-1))
+    assert np.isclose(sim.custom.decay.y, np.exp(-1.1)) # A step from each of the 11 time points, so the state after the run is that of the step from 10
     assert set(sim.loop.to_df().label) == {'sim.advance', 'sim.start_step', 'decay.step', 'sim.finish_step'} # Nothing else does anything here
     assert not sim.check_method_calls() # What was left out counts as called
     return sim

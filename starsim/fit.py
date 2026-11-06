@@ -421,9 +421,9 @@ class ParticleFilter(sc.prettyobj):
             if swarm is not None: # The rows of the tables (of those that vary in time) for the steps to this data point
                 swarm.perturb(rng)
                 row0 = runs.done
-                tables = swarm.tables(rows=slice(row0, max(last[k], runs.done)))
+                tables = swarm.tables(rows=slice(row0, max(last[k] + 1, runs.done)))
                 shares = swarm.shares() if swarm.moving else None
-            runs.advance(last[k], tables, shares, row0)
+            runs.advance(last[k] + 1, tables, shares, row0) # Through the step from the last time point the point reads, whose stock is at its start and flow over it
             stocks, flows = runs.stocks, runs.flows
             obs = np.zeros(n)
             for s,i in points[row]:

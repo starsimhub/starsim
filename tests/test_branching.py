@@ -58,7 +58,8 @@ def test_until():
     sim.run(until=sir.I.n + sir.R.n >= 500)
     I, R = sim.results.sir.I, sim.results.sir.R
     assert sim.complete and sim.stopped is not None and sim.branching.outcome == 'stopped'
-    assert I[sim.stopped] + R[sim.stopped] >= 500 and I[sim.stopped - 1] + R[sim.stopped - 1] < 500
+    n = I[sim.stopped] + R[sim.stopped]
+    assert n < 500 <= n + sim.results.sir.infection[sim.stopped] # The last time point with results: the condition held at the end of its step
     assert np.isnan(I[sim.stopped + 1:]).all()
     sim = ss.Sim(make_sir(n=10), n_agents=2000, unit='day', stop=200, **kw) # Not only for branching: an ordinary run, by a function of the sim
     sim.run(until=lambda sim: sim.t.ti >= 20)

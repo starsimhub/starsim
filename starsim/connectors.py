@@ -108,9 +108,9 @@ def reached(now, time):
 
 def to_ti(sim, val, name='time', after=False):
     """
-    The first step that starts at or after a time, which must be within the sim and before its last time point (where no step starts)
+    The first step that starts at or after a time, which must be within the sim
 
-    Step `ti` runs from time point `ti-1` to `ti` (see `ss.Loop`), so a time at the start of the sim is step 1.
+    Step `ti` runs from time point `ti` to the next (see `ss.Loop`), so a time at the start of the sim is step 0.
 
     Args:
         sim (Sim): the sim
@@ -127,9 +127,7 @@ def to_ti(sim, val, name='time', after=False):
         when = f'{val}, which is {time}' if sc.isnumber(val) and not (sim.t.is_absolute and ss.time.assume_cal_year(val)) else f'{val}'
         raise ValueError(f'{name} ({when}) is outside the sim ({tvec[0]} to {tvec[-1]}){hint}.')
     ti = next((ti for ti,now in enumerate(tvec) if reached(now, time)), len(tvec)) # len(tvec) if after the end
-    if ti >= len(tvec) - 1 and not after: # The last time point records the end of the run: no step starts there, so nothing timed then would happen
-        raise ValueError(f'{name} ({val}) is after the start of the last step ({tvec[-2]}), so it would never happen: the last time point ({tvec[-1]}) is the end of the run, where no step starts. Give an earlier time, or a later stop.')
-    return ti + 1 # The step from that time point
+    return ti # The step from that time point
 
 
 def to_steps(sim, dur):
@@ -554,9 +552,9 @@ class modify(Connector):
             return []
         sim = self.sim
         timevec = sim.results.timevec
-        start = 1 if self.start is None else to_ti(sim, self.start)
-        stop = len(timevec) if self.stop is None else min(to_ti(sim, self.stop, after=True), len(timevec))
-        return [(timevec[start - 1], timevec[stop - 1])]
+        start = 0 if self.start is None else to_ti(sim, self.start)
+        stop = len(timevec) - 1 if self.stop is None else min(to_ti(sim, self.stop, after=True), len(timevec) - 1)
+        return [(timevec[start], timevec[stop])]
 
     @property
     def active(self):

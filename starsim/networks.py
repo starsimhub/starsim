@@ -628,9 +628,9 @@ class Network(Route):
         self.validate_uids()
         return
 
-    def update_results(self):
-        """ Store the number of edges in the network """
-        super().update_results()
+    def record_flows(self):
+        """ Store the number of edges in the network of the step (made in its step, so recorded after it) """
+        super().record_flows()
         self.results['n_edges'][self.ti] = len(self)
         return
 
@@ -1652,8 +1652,9 @@ class DegreeNet(DynamicNetwork):
         self.add_pairs()
         return
 
-    def update_results(self):
-        super().update_results()
+    def record_flows(self):
+        """ The partnerships formed in the step, and the network of the step (made in its step, so recorded after it) """
+        super().record_flows()
         if self.targeted:
             self.results.formed[self.ti] = getattr(self, 'formed', 0)
             degree = self.degrees(self.active(self.sim.people).uids)

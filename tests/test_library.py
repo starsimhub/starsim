@@ -53,7 +53,7 @@ def test_diseases():
         total = n_exp + n_infectious + np.array(res.susceptible) + np.array(res.recovered)
         assert res.infection.cum[-1] > 0, f'Expected {name} infections'
         assert new.min() >= 0, f'{name} has negative infection: seeds are being double-counted'
-        assert new[0] == 0, f'{name} counted its seed infections as new infections'
+        assert new[0] == res.susceptible[0] - res.susceptible[1], f'{name} counted its seed infections as new infections' # Only the first step's infections
         assert new.sum() == res.infection.cum[-1], f'{name} cumulative infections do not match the sum'
         assert not (dis.exposed & dis.infectious).any(), f'{name} has agents in both E and I'
         assert np.array_equal(total, np.array(sim.results.alive)), f'{name} compartments do not sum to the population'
@@ -68,7 +68,7 @@ def test_diseases():
     # Ebola should progress agents to severe disease and bury the dead
     ebola = sims.ebola.results.ebola
     assert ebola.severe.max() > 0, 'Expected some severe Ebola cases'
-    assert ebola.buried.max() > 0, 'Expected some Ebola burials'
+    assert ebola.burial.sum() > 0, 'Expected some Ebola burials'
 
     # Cholera dies out completely with a yearly timestep, since its natural history is in days
     yearly = ss.Sim(diseases=ssl.Cholera(beta=ss.perday(0.5)), networks=ss.RandomNet(),

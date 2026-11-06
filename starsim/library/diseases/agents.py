@@ -317,9 +317,9 @@ class AgentSIS(ss.Infection):
         return
 
     @ss.required()
-    def update_results(self):
+    def record_stocks(self):
         """ Store the population immunity (susceptibility) """
-        super().update_results()
+        super().record_stocks()
         self.results['rel_sus'][self.ti] = self.rel_sus.mean()
         return
 

@@ -62,7 +62,7 @@ class NCD(ss.Disease):
     def step_state(self):
         ti = self.ti
         deaths = (self.ti_dead <= ti).uids # <= since a prognosis that rounds to 0 is only caught on the next step
-        self.sim.people.request_death(deaths, cause=self) # Counted once resolved: see update_results()
+        self.sim.people.request_death(deaths, cause=self) # Counted once resolved: see record_flows()
         if self.infection_log:
             self.infection_log.add_data(deaths, died=True)
         return
@@ -89,10 +89,14 @@ class NCD(ss.Disease):
         )
         return
 
-    def update_results(self):
-        super().update_results()
+    def record_stocks(self):
+        super().record_stocks()
         ti = self.ti
-        self.results.death[ti] = len(self.sim.people.died_of(self)) # Deaths attributable to this module in this step, once each has one cause
         self.results.not_at_risk[ti]   = np.count_nonzero(self.not_at_risk)
         self.results.prevalence[ti]    = np.count_nonzero(self.affected)/self.sim.people.n_alive
+        return
+
+    def record_flows(self):
+        super().record_flows()
+        self.results.death[self.ti] = len(self.sim.people.died_of(self)) # Deaths attributable to this module in this step, once each has one cause
         return

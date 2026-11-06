@@ -182,7 +182,7 @@ def test_counts():
     behavior = ss.Disease(infection=S >> I @ ss.perday(0.3)*I*slowing, recovery=I >> R @ ss.days(10), init_n=dict(I=10), name='behavior')
     sim = ss.Sim(behavior, connectors=Track(name='track'), unit='day', stop=200, n_agents=10_000, **kw).run()
     frac = sim.results.behavior.I.values/10_000
-    assert np.allclose(sim.connectors.track.peaks, np.maximum.accumulate(frac)[:-1]) # Set from the start of each step
+    assert np.allclose(sim.connectors.track.peaks, np.maximum.accumulate(frac)) # Set from the start of each step, one from each time point
     assert frac.max() < 0.15 # Without the slowing, 30% are infectious at the peak
     ode = ss.Sim(behavior, connectors=Track(name='track'), unit='day', stop=200, total_pop=10_000, solver='ode', **kw).run() # The same code, as compartments: the number alive is the number of people, not of groups
     assert ode.people.alive.sum() == 10_000 and np.isclose(ode.connectors.track.peak, frac.max(), rtol=0.2)
@@ -514,7 +514,7 @@ def test_outcomes():
         infection = S >> I @ 0.3 * I
         fixed = ss.Disease(infection, I >> R @ ss.days(10), ss.outcome(infection, name='hosp', duration=ss.constant(10, unit='days')), init_prev=0.01, name='fixed')
         res = ss.Sim(fixed, unit='day', stop=100, solver=solver, **kw).run().results.fixed
-        assert np.allclose(res.n_hosp, np.convolve(res.hosp, np.ones(10))[:len(res.hosp)])
+        assert np.allclose(res.n_hosp, np.concatenate([[0], np.convolve(res.hosp, np.ones(10))[:len(res.hosp)-1]])) # A stock at a time point: the admissions of the ten steps before it
 
     # A share of a finished transition is a share of its flow, an outcome, never a second transition at a share of the rate
     S, I, R = ss.states(3)
@@ -1082,9 +1082,9 @@ def test_stays_and_offspring():
     farrowing = ss.Transition(G, L, dur=ss.days(10))
     herd = ss.Disease(G, L, NB, farrowing=farrowing, weaning=ss.Transition(L, G, dur=ss.days(20)), litter=ss.birth(NB, per=farrowing, n=3), first='G', name='herd')
     res = ss.Sim(herd, unit='day', stop=60, n_agents=100, verbose=0).run().results.herd
-    assert res.NB[-1] == 3*res.farrowing.values.sum() > 0 # Three newborns for each farrowing, who are people
+    assert res.NB[-1] == 3*res.farrowing.values[:-1].sum() > 0 # Three newborns for each farrowing, who are people (NB[-1] is before the last step's)
     res = ss.Sim(herd, unit='day', stop=60, solver='ode', verbose=0).run().results.herd # And as compartments
-    assert np.isclose(res.NB[-1], 3*res.farrowing.values.sum())
+    assert np.isclose(res.NB[-1], 3*res.farrowing.values[:-1].sum())
 
     # Offspring by the mother's state: a split on the birth, which fires on= the birth of either module (the one that makes the children, or one that also places them)
     for own in [False, True]:
@@ -1228,7 +1228,7 @@ def test_cond_by_expr():
         expected = 1 - np.exp(-2*np.array(rates[form])) # The share of each age group that moves in two years
         for solver,size in [('ode', dict(total_pop=10_000)), ('abm', dict(n_agents=10_000))]:
             res = ss.Sim(make(form), solver=solver, **size, **pars).run().results.c
-            moved = res.go.by('age').values.sum(axis=0)/res.A.by('age').values[0]
+            moved = res.go.by('age').values[:-1].sum(axis=0)/res.A.by('age').values[0] # The steps from the first 24 time points: two years
             assert np.allclose(moved, expected, rtol=0.02 if solver == 'ode' else 0.1), f'{form} ({solver}): {moved} moved, not {expected}'
 
     # A bare ss.by in a rate with a property of people that is not a dimension, as agents (the reported case)
