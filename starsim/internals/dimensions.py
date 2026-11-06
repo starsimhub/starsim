@@ -85,7 +85,7 @@ class Strat:
             errormsg = f'mobility= is for a spatial stratification, but "{name}" is of kind "{self.kind}"; pass kind="space" if it is a place'
             raise ValueError(errormsg)
         self.mobility = mobility
-        levels = [ss.years(v).value if isinstance(v, ss.time.TimePar) else v for v in levels] # Ages given as durations (e.g. ss.weeks(6)) are edges in years, as people's ages are
+        levels = [ss.years(v).value if isinstance(v, ss.TimePar) else v for v in levels] # Ages given as durations (e.g. ss.weeks(6)) are edges in years, as people's ages are
         numeric = all(sc.isnumber(v) and not isinstance(v, bool) for v in levels)
         self.edges = None
         if numeric: # Bin edges; the last bin is open-ended

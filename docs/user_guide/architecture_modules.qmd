@@ -169,7 +169,7 @@ Modules don't hold references to each other: a module reaches the rest of the si
 
 | To reach | Write | Notes |
 |---|---|---|
-| A module, by kind and name | `self.sim.diseases.sir`, `self.sim.networks.randomnet` | the usual way; each kind is an `ss.utils.ndict`, so `sim.diseases[0]` works too |
+| A module, by kind and name | `self.sim.diseases.sir`, `self.sim.networks.randomnet` | the usual way; each kind is an `ss.ndict`, so `sim.diseases[0]` works too |
 | A module, by name alone | `self.sim.sir` | if the name is unique and isn't an attribute of the sim |
 | A module through the people | `self.sim.people.sir` | the people hold every module with states |
 | A state by its full name | `self.sim.people.states['sir.I']` | every module's states, flat, as `<module>.<state>` |

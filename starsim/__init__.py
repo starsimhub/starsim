@@ -23,7 +23,7 @@ from .version import __version__, __versiondate__, __license__
 from .settings import dtypes, options, style
 settings.thread_limit = _limit
 del _limit
-from .utils import warn, load, save, plot_args, show, return_fig
+from .utils import ndict, warn, load, save, plot_args, show, return_fig
 from .internals import errors, debugtools
 from .internals.errors import *
 
@@ -41,7 +41,7 @@ from .distributions import (
 
 from .internals import time, dates, timeline, parameters
 from .internals.time import (
-    Duration, prob, per, freq, peract,
+    TimePar, Duration, Rate, prob, per, freq, peract,
     years, months, weeks, days, year, month, week, day,
     perday, perweek, permonth, peryear,
     probperday, probperweek, probpermonth, probperyear,

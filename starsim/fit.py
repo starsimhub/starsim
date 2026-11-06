@@ -224,7 +224,7 @@ def logprior(par, x, xp=np):
     With `xp` as `jax.numpy`, in JAX (for the log-density in JAX), which covers normal, lognormal, gamma, beta, exponential, and uniform priors.
     """
     prior = par.prior
-    low, high = [b.value if isinstance(b, ss.time.TimePar) else b for b in par.bounds] # Uniform over the bounds is a constant, so the unit of typed bounds does not matter
+    low, high = [b.value if isinstance(b, ss.TimePar) else b for b in par.bounds] # Uniform over the bounds is a constant, so the unit of typed bounds does not matter
     if prior is None:
         return -np.log(high - low)
     stats = sps if xp is np else ss.gradients.jax().scipy.stats
@@ -1244,7 +1244,7 @@ def optimize(sim, total=None, maximize=None, minimize=None, at=None, start=None,
         """ A spending parameter's value at the start of the new allocation """
         if isinstance(raw, ss.timeseries):
             return float(raw.at(as_year(sc.ifelse(begin, t0)), probe))
-        return float(raw.value if isinstance(raw, ss.time.TimePar) else raw)
+        return float(raw.value if isinstance(raw, ss.TimePar) else raw)
     before = np.array([level(current[name]) for name in names])
     total = float(sc.ifelse(total, before.sum()))
     by_program = bounds if isinstance(bounds, dict) else {}
@@ -1355,7 +1355,7 @@ def optimize(sim, total=None, maximize=None, minimize=None, at=None, start=None,
 
 def bound_value(b, raw):
     """ A bound of a parameter in the unit of its value: a typed bound (e.g. `ss.days(3)`) is converted to the type of the parameter """
-    return (type(raw)(b) if isinstance(raw, ss.time.TimePar) else b).value if isinstance(b, ss.time.TimePar) else b
+    return (type(raw)(b) if isinstance(raw, ss.TimePar) else b).value if isinstance(b, ss.TimePar) else b
 
 
 def bounded_pars(probe, pars=None, unused=()):
@@ -1473,8 +1473,8 @@ def entry(name, p, levels=None, elements=None):
 
 def start_values(raws):
     """ The values of entries of `expand()` as numbers, and the type of each typed one (to keep its unit), or None """
-    x0 = np.array([raw.value if isinstance(raw, ss.time.TimePar) else raw for raw in raws], dtype=float)
-    return x0, [type(raw) if isinstance(raw, ss.time.TimePar) else None for raw in raws]
+    x0 = np.array([raw.value if isinstance(raw, ss.TimePar) else raw for raw in raws], dtype=float)
+    return x0, [type(raw) if isinstance(raw, ss.TimePar) else None for raw in raws]
 
 
 def sensitivity(sim, pars=None, results=None, n=100, rand_seed=None, verbose=None):

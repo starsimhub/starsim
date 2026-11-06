@@ -39,7 +39,7 @@ def infer_rate_per(per, rates, name, hint=None):
         return per
     if isinstance(rates, (pd.Series, pd.DataFrame)):
         values = rates.values
-    elif isinstance(rates, ss.time.TimePar):
+    elif isinstance(rates, ss.TimePar):
         values = rates.value
     else:
         values = rates
@@ -335,7 +335,7 @@ class Births(Demographics):
             this_birth_rate = rows[period_year(years, sim.t.now('year'))] / p.rate_per * p.rel_birth
         else:
             this_birth_rate = p.birth_rate
-            if isinstance(this_birth_rate, ss.time.Rate):
+            if isinstance(this_birth_rate, ss.Rate):
                 this_birth_rate = ss.prob(this_birth_rate.value / self.pars.rate_per * self.pars.rel_birth, this_birth_rate.unit).to_prob(ss.years(1))
             else: # number
                 this_birth_rate = this_birth_rate / self.pars.rate_per * self.pars.rel_birth
@@ -513,7 +513,7 @@ class Deaths(Demographics):
         # We are going to set up death_rate as a prob with unit=ss.years(1). That is the probability of death in 1 year
         if sc.isnumber(drd):
             death_rate = np.array([drd / self.pars.rate_per * self.pars.rel_death])  # A rate per year, converted to a probability per timestep below
-        elif isinstance(drd, ss.time.Rate):
+        elif isinstance(drd, ss.Rate):
             if drd.unit == ss.years(1): # drd is already in years so don't need to translate
                 death_rate = np.array([drd.value / self.pars.rate_per * self.pars.rel_death])
             else:
@@ -541,7 +541,7 @@ class Deaths(Demographics):
         death_rate = ss.peryear(death_rate)
         p_death = death_rate.to_prob(self.t.dt)  # Convert to probability per timestep
 
-        if sc.isnumber(drd) or isinstance(drd, ss.time.Rate):
+        if sc.isnumber(drd) or isinstance(drd, ss.Rate):
             p_death = p_death[0] # to_prob() returns an array; extract the scalar when the input was scalar/Rate
         return p_death
 
@@ -716,7 +716,7 @@ class Pregnancy(Demographics, ss.Disease):
             fertility = ss.data.rates(fertility, 'fertility')
             given.setdefault('rate_per', 1000)
             defaults = dict(year='Time', age='AgeGrpStart', value='ASFR')
-        is_function = callable(fertility) and not isinstance(fertility, (ss.time.TimePar, ss.Dist, ss.timeseries, pd.Series, pd.DataFrame))
+        is_function = callable(fertility) and not isinstance(fertility, (ss.TimePar, ss.Dist, ss.timeseries, pd.Series, pd.DataFrame))
         self.fertility_data = None if is_function else fertility # The fertility rates as given; see standardize_fertility_data()
         own = self.code_pars
         self.update_pars({k:v for k,v in given.items() if k in own})
@@ -821,8 +821,8 @@ class Pregnancy(Demographics, ss.Disease):
         pars = self.pars
         if self.fertility_data is not None:
             self.fertility_rate_data = standardize_fertility_data(self)
-            self.fertility_rows = ss.demographics.rate_rows(self.fertility_rate_data)
-            self.pars.rate_per = ss.demographics.infer_rate_per(pars.rate_per, self.fertility_rate_data, 'fertility_rate')
+            self.fertility_rows = rate_rows(self.fertility_rate_data)
+            self.pars.rate_per = infer_rate_per(pars.rate_per, self.fertility_rate_data, 'fertility_rate')
         elif pars.rate_per is None: # The hazard of conception as a function: the crude birth rate is per 1,000
             pars.rate_per = 1000
         self._gate_infant()
@@ -840,7 +840,7 @@ class Pregnancy(Demographics, ss.Disease):
         unborn = [node for node in ss.expressions.nodes(rate.raw) if isinstance(node, ss.expressions.mother) and not node.include_born]
         if unborn: # Read on the mothers of the children, who are born, so it needs no fetuses as agents
             rate.value = ss.expressions.substitute(rate.raw, {id(node):ss.expressions.mother(node.x, include_born=True) for node in unborn})
-        zero = isinstance(rate.raw, ss.time.TimePar) and not np.any(np.asarray(rate.raw.value) > 0)
+        zero = isinstance(rate.raw, ss.TimePar) and not np.any(np.asarray(rate.raw.value) > 0)
         self.graph.transitions.infant_mortality.rate = rate if zero else rate*((ss.person.age >= 0) & (ss.person.age < 1))
         return
 
@@ -1318,7 +1318,7 @@ class Pregnancy(Demographics, ss.Disease):
         scale = pars.rel_fertility/pars.rate_per
         idx = np.flatnonzero(fecund) if self.abm else None # Those who can conceive: few, against the slots of the arrays
         a = age if idx is None else age[idx]
-        if isinstance(frd, ss.time.Rate): # One rate, as data with one value: per woman-year (the hazard, for a probability), rescaled as the data are
+        if isinstance(frd, ss.Rate): # One rate, as data with one value: per woman-year (the hazard, for a probability), rescaled as the data are
             vals = np.array([ss.solvers.convert(frd, 'year')], dtype=float)
             bins = np.zeros(len(a), dtype=int)
         else:

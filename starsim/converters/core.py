@@ -475,9 +475,9 @@ def code_value(val, pars=None):
         return '{' + ', '.join(f'{cv(k)}: {cv(v)}' for k,v in val.items()) + '}'
     elif isinstance(val, ss.datedur):
         return f'ss.datedur({kwargs(val.kwds)})'
-    elif type(val) is ss.time.Rate: # A rate with no class of its own keeps its unit, e.g. ss.time.Rate(0.3, ss.weeks(2))
-        return f'ss.time.Rate({cv(val.value)}, {cv(val.unit)})'
-    elif isinstance(val, (ss.Duration, ss.time.Rate)):
+    elif type(val) is ss.Rate: # A rate with no class of its own keeps its unit, e.g. ss.Rate(0.3, ss.weeks(2))
+        return f'ss.Rate({cv(val.value)}, {cv(val.unit)})'
+    elif isinstance(val, (ss.Duration, ss.Rate)):
         return f'ss.{type(val).__name__}({cv(val.value)})'
     elif isinstance(val, ss.peract):
         return f'ss.peract({cv(val.value) if val.value is not None else kwargs(val.directions)})'

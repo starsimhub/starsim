@@ -570,7 +570,7 @@ class Graph:
         if tr.rate is not None:
             for leaf in tr.rate.leaves:
                 if isinstance(leaf, par):
-                    leaf.slot = 'rate' if isinstance(leaf.raw, (ss.time.TimePar, ss.Dist)) else None
+                    leaf.slot = 'rate' if isinstance(leaf.raw, (ss.TimePar, ss.Dist)) else None
             if isinstance(tr.rate, par):
                 tr.rate.slot = 'rate'
                 slots.append(('rate', tr.rate))
@@ -1081,7 +1081,7 @@ def unit_values(vals):
     def check(val):
         if isinstance(val, ss.Duration) and not isinstance(val, ss.datedur):
             out.append(type(val).base)
-        elif isinstance(val, ss.time.Rate) and val.unit is not None:
+        elif isinstance(val, ss.Rate) and val.unit is not None:
             out.append(type(val.unit).base)
         elif isinstance(val, ss.Dist):
             if val.unit is not None:

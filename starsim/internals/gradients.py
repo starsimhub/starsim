@@ -907,7 +907,7 @@ def find_pars(sim, names=None, several=False):
         errormsg = f'Found {what}; parameters are {sc.strjoin(options)}'
         raise ValueError(errormsg)
     for key,p in out.items():
-        val = p.raw.value if isinstance(p.raw, ss.time.TimePar) else p.raw
+        val = p.raw.value if isinstance(p.raw, ss.TimePar) else p.raw
         if not (sc.isnumber(val) or (several and isinstance(val, (ss.by, np.ndarray, ss.timeseries)))):
             what = 'a number, a value for each level (ss.by), an array, or a time series' if several else 'a single number'
             errormsg = f'Only a parameter that is {what} can be differentiated with respect to, not "{key}" ({p.raw})'
@@ -1017,7 +1017,7 @@ def convert_fitted(raw, val, unit_base, xp=np):
     if isinstance(raw, ss.prob):
         period = 1.0 if raw.unit is None else raw.unit.to(unit_base).value
         return -xp.log1p(-val)/period
-    elif isinstance(raw, ss.time.TimePar):
+    elif isinstance(raw, ss.TimePar):
         return val*ss.solvers.convert(type(raw)(1.0), unit_base)
     return val
 
@@ -1199,7 +1199,7 @@ class Density(sc.prettyobj):
     def convert(self, i, val):
         """ A fitted value as the engine uses it: in the sim's unit (see `convert_fitted()`) """
         raw = self.raws[i]
-        if not (isinstance(raw, ss.time.TimePar) or self.external[i] or sc.isnumber(raw)):
+        if not (isinstance(raw, ss.TimePar) or self.external[i] or sc.isnumber(raw)):
             raise Unsupported(f'the fitted parameter "{self.names[i]}" is a {type(raw).__name__}')
         return convert_fitted(raw, val, self.sim.unit_base, jax().numpy)
 

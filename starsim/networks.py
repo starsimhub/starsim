@@ -859,7 +859,7 @@ class DynamicNetwork(Network):
     def remember(self, p1, p2):
         """ With memory=: keep the partnerships that end now, and forget those that ended longer ago than it """
         m, sim, ti = self.pars.memory, self.sim, self.t.ti
-        steps = (ss.solvers.convert(m, sim.unit_base) if isinstance(m, ss.time.TimePar) else m)/self.t.dt.to(sim.unit_base).value
+        steps = (ss.solvers.convert(m, sim.unit_base) if isinstance(m, ss.TimePar) else m)/self.t.dt.to(sim.unit_base).value
         h = self.history if self.history is not None else sc.obj(p1=p1[:0], p2=p2[:0], ti=np.zeros(0, dtype=np.int32))
         keep = h.ti > ti - steps
         self.history = sc.obj(p1=np.concatenate([h.p1[keep], p1]), p2=np.concatenate([h.p2[keep], p2]), ti=np.concatenate([h.ti[keep], np.full(len(p1), ti, dtype=np.int32)]))
@@ -887,15 +887,15 @@ def check_acts(net, acts):
     example = 'e.g. ss.freqperweek(2), or ss.lognormal(ss.freqperyear(80), ss.freqperyear(30)) for a rate that varies between partnerships'
     if acts is None or isinstance(acts, ss.freq):
         return
-    rates = [acts] if isinstance(acts, ss.time.Rate) else []
+    rates = [acts] if isinstance(acts, ss.Rate) else []
     if isinstance(acts, ss.Dist):
-        rates = [v for v in acts.pars.values() if isinstance(v, ss.time.Rate) and not isinstance(v, ss.freq)]
+        rates = [v for v in acts.pars.values() if isinstance(v, ss.Rate) and not isinstance(v, ss.freq)]
     if rates: # E.g. ss.peryear(80), which as agents would be the chance of an act in a step, not a number of them
         raise ValueError(f'acts= of "{name}" is a number of acts per unit time, not a hazard or probability per unit time (ss.{rates[0]!r}): give a frequency, {example}')
     elif sc.isnumber(acts):
         raise ValueError(f'acts= of "{name}" is a number of acts per unit time in each partnership; a bare number ({acts}) would be acts in a step, which depends on the step. Give a rate, {example}')
     elif isinstance(acts, ss.Dist):
-        timed = acts.unit is not None or any(isinstance(v, ss.time.TimePar) for v in acts.pars.values())
+        timed = acts.unit is not None or any(isinstance(v, ss.TimePar) for v in acts.pars.values())
         if not timed:
             raise ValueError(f'acts= of "{name}" is a number of acts per unit time in each partnership, so a distribution of them needs its parameters as rates ({acts} has none), {example}')
         if isinstance(acts, (ss.poisson, ss.nbinom, ss.binom, ss.randint, ss.bernoulli)):
@@ -1340,14 +1340,14 @@ class DegreeNet(DynamicNetwork):
             return
         p = self.pars
         check_acts(self, p.acts)
-        if isinstance(p.acts, ss.time.TimePar):
+        if isinstance(p.acts, ss.TimePar):
             self.acts_per_step = ss.solvers.convert(p.acts, sim.unit_base)*self.t.dt.to(sim.unit_base).value
         if isinstance(p.dur, ss.Dist):
             self.mean_dur = None # Only for partnerships that end at a constant rate
             mean = ss.transitions.dwell_stats(p.dur, lambda v: ss.solvers.convert(v, sim.unit_base))[0]
             self.mean_steps = mean/self.t.dt.to(sim.unit_base).value
         else:
-            dur = ss.solvers.convert(p.dur, sim.unit_base) if isinstance(p.dur, ss.time.TimePar) else p.dur
+            dur = ss.solvers.convert(p.dur, sim.unit_base) if isinstance(p.dur, ss.TimePar) else p.dur
             self.mean_dur = self.mean_steps = dur/self.t.dt.to(sim.unit_base).value # In steps
             if self.mean_dur < 1:
                 errormsg = f'Partnerships of "{self.name}" last {self.mean_dur:n} steps on average; they need to last at least one'
@@ -2393,7 +2393,7 @@ class MixingPool(Route):
         """
         n = self.pars.n_contacts
         rate = n.pars.value if isinstance(n, ss.constant) else n
-        if isinstance(rate, ss.time.Rate):
+        if isinstance(rate, ss.Rate):
             self.pars.n_contacts = ss.constant(ss.solvers.convert(rate, sim.unit_base))
             self.eff_contacts.default = self.pars.n_contacts
         super().init_pre(sim)
@@ -2435,7 +2435,7 @@ class MixingPool(Route):
 
         # Determine the mixing pool beta value
         beta = self.pars.beta
-        if isinstance(beta, ss.time.Rate):
+        if isinstance(beta, ss.Rate):
             ss.warn('In mixing pools, beta should typically be a float')
             beta = beta.to_prob(self.t.dt)
         if sc.isnumber(beta) and beta == 0:

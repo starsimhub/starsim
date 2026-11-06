@@ -158,7 +158,7 @@ class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
         inputs = [self._arr(x) for x in inputs]
         kwargs = {k:self._arr(v) for k,v in kwargs.items()}
         for x in itertools.chain(inputs, kwargs.values()):
-            if isinstance(x, ss.time.TimePar):
+            if isinstance(x, ss.TimePar):
                 return NotImplemented # Operations involving a TimePar and a BaseArr won't return a BaseArr, and will be handled by a TimePar operator
         result = getattr(ufunc, method)(*inputs, **kwargs)
 
@@ -586,7 +586,7 @@ class Arr(BaseArr):
         if not self.initialized and not inplace and op in ss.conditions.ops: # Before the sim exists, this builds a lazy condition instead, as a comparison does (or, with a typed value, an expression for a rate): see ss.conditions.Cond
             arr = ss.conditions.from_arr(self)
             return ss.conditions.Cond.arith(op, other, arr) if reverse else ss.conditions.Cond.arith(op, arr, other)
-        if isinstance(other, (ss.time.TimePar, ss.date)):
+        if isinstance(other, (ss.TimePar, ss.date)):
             return NotImplemented # Not implemented here, at least for now. But allow falling back to the other classes if they have an implementation
 
         if inplace and self.shared is not None:

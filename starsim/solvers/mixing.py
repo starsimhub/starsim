@@ -123,7 +123,7 @@ class Mixing(Telling):
         if isinstance(val, ss.Dist):
             pars = val.pars
             for key in ['value', 'lam', 'mean', 'loc']:
-                if key in pars and (sc.isnumber(pars[key]) or isinstance(pars[key], ss.time.Rate)):
+                if key in pars and (sc.isnumber(pars[key]) or isinstance(pars[key], ss.Rate)):
                     return float(convert(pars[key], unit))
             return ss.transitions.dwell_stats(val, lambda x: convert(x, unit))[0]
         return float(convert(val, unit))
@@ -276,7 +276,7 @@ class Mixing(Telling):
             mix = within*local + (1 - within)*mix
 
         # How long partnerships last: their mean, and for any distribution but a constant rate, 32 points of it, scaled to the mean
-        dur = self.mean(p.dur, unit) if isinstance(p.dur, (ss.Dist, ss.time.TimePar)) else float(p.dur)
+        dur = self.mean(p.dur, unit) if isinstance(p.dur, (ss.Dist, ss.TimePar)) else float(p.dur)
         durs = None
         if isinstance(p.dur, ss.Dist) and not isinstance(p.dur, ss.expon):
             dist = ss.transitions.numeric_dist(p.dur, lambda v: convert(v, unit))

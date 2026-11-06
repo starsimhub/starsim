@@ -1,7 +1,7 @@
 """
 Numerical utilities and other helper functions
 
-What is shared by the rest of the code, and doesn't belong to any one part of it: named dictionaries of modules (`ss.utils.ndict`), warnings, cleaning input data, plotting arguments, and returning figures and tables.
+What is shared by the rest of the code, and doesn't belong to any one part of it: named dictionaries of modules (`ndict`), warnings, cleaning input data, plotting arguments, and returning figures and tables.
 
 Used with: agents and compartments; declared and coded modules
 """
@@ -76,9 +76,9 @@ class ndict(sc.obj):
 
     Examples:
         ```python
-        networks = ss.utils.ndict(ss.SexualNet(), ss.PrenatalNet())
-        networks = ss.utils.ndict([ss.SexualNet(), ss.PrenatalNet()])
-        networks = ss.utils.ndict({'sexual':ss.SexualNet(), 'prenatal':ss.PrenatalNet()})
+        networks = ndict(ss.SexualNet(), ss.PrenatalNet())
+        networks = ndict([ss.SexualNet(), ss.PrenatalNet()])
+        networks = ndict({'sexual':ss.SexualNet(), 'prenatal':ss.PrenatalNet()})
         ```
     """
     __slots__ = ('_type',) # Since otherwise treated as keys
@@ -445,7 +445,7 @@ def standardize_data(data=None, metadata=None, min_year=1800, out_of_range=0, de
         - An `ss.Dist` instance - if the `data` input is an `ss.Dist`, that same object will be returned by this function
     """
     # It's a format that can be used directly: return immediately
-    if sc.isnumber(data) or isinstance(data, (ss.Dist, ss.time.Rate)):
+    if sc.isnumber(data) or isinstance(data, (ss.Dist, ss.Rate)):
         return data
 
     # Convert series and dataframe inputs into dicts
@@ -581,7 +581,7 @@ class outermost(method_wrapper):
 
 def num_str(x):
     """ A time as text: a number (or a duration, by its value) without a needless decimal point (100, not 100.0), or a date """
-    x = x.value if isinstance(x, ss.time.TimePar) else x
+    x = x.value if isinstance(x, ss.TimePar) else x
     return f'{x:n}' if sc.isnumber(x) else str(x)
 
 

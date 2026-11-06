@@ -496,7 +496,7 @@ class Module(Base):
         Args:
             name (str): A string with the name of the module class in lower case, e.g. 'sir'
         """
-        subcls = ss.modules.find_modules(flat=True).get(name)
+        subcls = find_modules(flat=True).get(name)
         if subcls is not None and issubclass(subcls, cls):
             return subcls(*args, **kwargs)
         else:
@@ -889,7 +889,7 @@ class Module(Base):
         Args:
             force (bool): whether to relink parameters that are already linked
         """
-        timepars = sc.search(self, type=ss.time.TimePar, skip=dict(keys=ss.utils.skipkeys(['sim', 'module', 't'] + list(getattr(self, 'timepar_skip', []))), subclasses=ss.dists.no_dists())) # Skip the timeline, else the module's own dt would be linked to itself
+        timepars = sc.search(self, type=ss.TimePar, skip=dict(keys=ss.utils.skipkeys(['sim', 'module', 't'] + list(getattr(self, 'timepar_skip', []))), subclasses=ss.dists.no_dists())) # Skip the timeline, else the module's own dt would be linked to itself
 
         # Initialize them with the parent module
         dt = self.t.dt
@@ -910,7 +910,7 @@ class Module(Base):
         Result for 'susceptible' (the number susceptible). For identical behavior that does not automatically
         generate results, use `ss.BoolArr` instead of `ss.BoolState`.
         """
-        self.results.timevec = self.t.timevec # Store the timevec in the results for plotting; not a Result so don't use ss.utils.ndict.append()
+        self.results.timevec = self.t.timevec # Store the timevec in the results for plotting; not a Result so don't use ss.ndict.append()
         results = sc.autolist()
         for state in self.auto_state_list:
             results += ss.Result(state.name, dtype=int, scale=True, label=state.label, kind='stock')

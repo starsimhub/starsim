@@ -1244,13 +1244,13 @@ def resamplable(res, kwargs=None):
     return not (isinstance(res, Result) and res.summarize_by is None and (kwargs or {}).get('summarize_by') is None)
 
 
-class Results(ss.utils.ndict):
+class Results(ss.ndict):
     """ Container for storing results
 
     Args:
         module (Module/str): the module the results belong to, or its name
-        args (list): passed to `ss.utils.ndict`
-        kwargs (dict): passed to `ss.utils.ndict`
+        args (list): passed to `ss.ndict`
+        kwargs (dict): passed to `ss.ndict`
     """
     __slots__ = ('_module', '_implicit', '_given_to')
 
@@ -1313,8 +1313,8 @@ class Results(ss.utils.ndict):
         """ Print the results in full
 
         Args:
-            args (list): passed to `str()` of the `ss.utils.ndict`
-            kwargs (dict): passed to `str()` of the `ss.utils.ndict`
+            args (list): passed to `str()` of the `ss.ndict`
+            kwargs (dict): passed to `str()` of the `ss.ndict`
         """
         print(super().__str__(*args, **kwargs))
         return

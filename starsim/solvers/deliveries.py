@@ -488,7 +488,7 @@ class CompartmentalDelivery(sc.prettyobj):
         moves = (product is None and (d.move_states is None or self.plain_move())) or (product is not None and product.holds and getattr(product, 'take', None) is None) # A move between states only within each group, and not an all-or-nothing vaccine, whose doses are not all held
         scheduled = d.routine or (d.in_rounds and d.trigger is None)
         watched = d.name in [ss.conditions.modname(leaf.args[0]) for mod in sim.interventions() if isinstance(mod, ss.Delivery) for leaf in ss.conditions.event_leaves(mod.trigger)] or d._needs # Its events are read, which the kernels do not keep
-        typed = isinstance(d.coverage, ss.time.TimePar) and not d.in_rounds # A rate among those eligible, the same share at each step
+        typed = isinstance(d.coverage, ss.TimePar) and not d.in_rounds # A rate among those eligible, the same share at each step
         static = ss.conditions.is_static(d.eligible, sim) and (sc.isnumber(d.coverage) or d.coverage is None or isinstance(d.coverage, ss.by) or typed)
         past = d.at_age is not None # The people past the age are left out on the first step: see ss.Delivery.skip_past()
         limited = d.capacity is not None or d.queue is not None or bool(getattr(product, 'doses', None)) or getattr(product, 'during', None) is not None # Served in an order, given in doses, or held only in some states, which the kernels do not take

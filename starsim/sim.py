@@ -106,7 +106,7 @@ class SimPars(ss.parameters.Pars):
         for key in pars:
             if key in self.removed:
                 raise ValueError(self.removed[key])
-        if 'custom' in pars and not isinstance(pars['custom'], ss.utils.ndict): # Only as part of a whole SimPars, e.g. ss.Sim(pars=ss.sim.SimPars(...))
+        if 'custom' in pars and not isinstance(pars['custom'], ss.ndict): # Only as part of a whole SimPars, e.g. ss.Sim(pars=ss.sim.SimPars(...))
             available = [key for key in self.keys() if key != 'custom']
             raise sc.KeyNotFoundError(f"Key(s) ['custom'] not found; available keys are {available}")
         return super().check_key_mismatch(pars)
@@ -120,14 +120,14 @@ class SimPars(ss.parameters.Pars):
 
     def _reset_modules(self):
         """ Initialize ndicts for module storage """
-        self.custom        = ss.utils.ndict()
-        self.demographics  = ss.utils.ndict()
-        self.connectors    = ss.utils.ndict()
-        self.networks      = ss.utils.ndict()
-        self.interventions = ss.utils.ndict()
-        self.diseases      = ss.utils.ndict()
-        self.analyzers     = ss.utils.ndict()
-        self.modules       = ss.utils.ndict()
+        self.custom        = ss.ndict()
+        self.demographics  = ss.ndict()
+        self.connectors    = ss.ndict()
+        self.networks      = ss.ndict()
+        self.interventions = ss.ndict()
+        self.diseases      = ss.ndict()
+        self.analyzers     = ss.ndict()
+        self.modules       = ss.ndict()
         return
 
     def is_default(self, key):
@@ -223,7 +223,7 @@ class SimPars(ss.parameters.Pars):
         # Get all modules into a consistent list format
         modmap = ss.modules.module_map()
         for modkey in modmap.keys():
-            if not isinstance(self[modkey], ss.utils.ndict):
+            if not isinstance(self[modkey], ss.ndict):
                 self[modkey] = [m for entry in sc.tolist(self[modkey]) for m in (entry if isinstance(entry, list) else [entry])] # One level of nested lists, e.g. a helper that returns several interventions
 
         # Convert any modules that are not already Module objects
@@ -314,10 +314,10 @@ class SimPars(ss.parameters.Pars):
         if demog in [True, 1]:
             demog = [ss.birth(rate=ss.peryear(0.02)), ss.death(rate=ss.peryear(0.01))]
         elif demog in [False, 0]:
-            demog = ss.utils.ndict()
+            demog = ss.ndict()
 
         # Births, deaths, and migration declared for the population are held together, until the sim adds them to a disease: see ss.demographics.Flows
-        if not isinstance(demog, ss.utils.ndict):
+        if not isinstance(demog, ss.ndict):
             demog = sc.tolist(demog)
             flows = [mod for mod in demog if isinstance(mod, ss.Transition)]
             if flows:
@@ -357,7 +357,7 @@ class SimPars(ss.parameters.Pars):
             given = self[modkey]
             if isinstance(given, list) and len(given) == 1 and isinstance(given[0], dict): # A dict, wrapped in a list on the way in
                 given = given[0]
-            if isinstance(given, dict) and not isinstance(given, ss.utils.ndict) and len(given) and all(isinstance(v, ss.Module) for v in given.values()): # Modules by name, e.g. networks=dict(main=..., casual=...)
+            if isinstance(given, dict) and not isinstance(given, ss.ndict) and len(given) and all(isinstance(v, ss.Module) for v in given.values()): # Modules by name, e.g. networks=dict(main=..., casual=...)
                 modlist = []
                 for name,mod in given.items():
                     if mod._default_name:
@@ -366,7 +366,7 @@ class SimPars(ss.parameters.Pars):
                     modlist.append(mod)
             elif isinstance(self[modkey], list):
                 modlist = self[modkey]
-            elif isinstance(self[modkey], ss.utils.ndict):
+            elif isinstance(self[modkey], ss.ndict):
                 # If it is an ndict, then assume the keys specify names the values represent modules
                 # They may already be module instances, in which case we will simply verify that the type
                 # matches the expected type
@@ -526,7 +526,7 @@ class Sim(ss.modules.Base):
     def __init__(self, *models, label=None, people=None, demographics=None, connectors=None,
                  networks=None, diseases=None, interventions=None, analyzers=None,
                  modules=None, data=None, pars=None, copy_modules=True, **kwargs):
-        self.pars = ss.sim.SimPars() # Make default parameters
+        self.pars = SimPars() # Make default parameters
         models = [arg for arg in models if arg is not None]
         given = dict(label=label, people=people, demographics=demographics, connectors=connectors, networks=networks, diseases=diseases,
                      interventions=interventions, analyzers=analyzers, modules=modules, data=data)
@@ -602,7 +602,7 @@ class Sim(ss.modules.Base):
     @staticmethod
     def _name_modules(names, *args):
         """ A module built with the plain ss.Disease() constructor takes its name from the variable it is assigned to """
-        taken = set(ss.sim.SimPars()) | set(dir(ss.Sim)) | ss.People.taken_names() # Names the sim or the people already use, e.g. interventions in def run(interventions): ss.Sim(interventions=interventions), or version
+        taken = set(SimPars()) | set(dir(ss.Sim)) | ss.People.taken_names() # Names the sim or the people already use, e.g. interventions in def run(interventions): ss.Sim(interventions=interventions), or version
         for arg in args:
             mods = list(sc.tolist(arg))
             for mod in mods:
@@ -754,7 +754,7 @@ class Sim(ss.modules.Base):
         self._held = [] if self.pars.verbose else None # Notes are said after the line that starts the run
 
         # Validation and initialization -- this is "pre"
-        defaults = ss.sim.SimPars()
+        defaults = SimPars()
         for key,val in self._settings().items():
             if val is not None and key not in self.given and not ss.utils.same_value(val, defaults.get(key)): # A setting set before init() was given too, e.g. sim.pars.aging = True (but not one made a float, e.g. n_agents)
                 self.given.append(key)
@@ -911,7 +911,7 @@ class Sim(ss.modules.Base):
         vars(sim).clear()
         vars(sim).update(state)
         sim.pars.check_key_mismatch(kwargs)
-        defaults = ss.sim.SimPars()
+        defaults = SimPars()
         for key,val in kwargs.items():
             sim.pars[key] = sc.dcp(defaults.get(key)) if val is None else val
             if val is None and key in sim.given:
@@ -1121,7 +1121,7 @@ class Sim(ss.modules.Base):
                     key = modkey
                     break
         names = {mod.name:None for mod in self.modules}
-        ss.sim.SimPars.validate_name(module, key, names)
+        SimPars.validate_name(module, key, names)
         modules = [module]
         if module.has_product:
             same = [p for p in self.products() if p is module.product or p.name == module.product.name]

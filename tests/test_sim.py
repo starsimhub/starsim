@@ -222,18 +222,18 @@ def test_complex_api():
 
     net1 = ss.RandomNet(name='random1', n_contacts=6)
     net2 = ss.RandomNet(name='random2', n_contacts=4)
-    networks = ss.utils.ndict(net1, net2)
+    networks = ss.ndict(net1, net2)
 
     dis1 = ss.SIR(dur_inf=ss.expon(scale=ss.years(6.0)))
     dis2 = ss.SIS(beta=ss.prob(0.07, 'year'), init_prev=0.1)
-    diseases = ss.utils.ndict(dis1, dis2)
+    diseases = ss.ndict(dis1, dis2)
 
     dem1 = ss.Births(birth_rate=ss.time.freq(20, 'year'))
     dem2 = ss.Deaths(death_rate=ss.time.freq(20, 'year'))
-    demographics = ss.utils.ndict(dem1, dem2)
+    demographics = ss.ndict(dem1, dem2)
 
     int1 = ss.Intervention.from_func(jump_age)
-    interventions = ss.utils.ndict(int1)
+    interventions = ss.ndict(int1)
 
     # Assemble and run
     s1 = ss.Sim(pars1).run()

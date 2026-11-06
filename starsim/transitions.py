@@ -1043,7 +1043,7 @@ def crude_rate(rate, kind):
     if sc.isnumber(rate) or isinstance(rate, ss.timeseries):
         return ss.demographics.bare_rate(rate, 'rate')
     raw = getattr(rate, 'raw', rate)
-    if isinstance(raw, ss.time.Rate) and raw.unit is not None and np.ndim(raw.value) == 0:
+    if isinstance(raw, ss.Rate) and raw.unit is not None and np.ndim(raw.value) == 0:
         per_year = raw.to('year').value
         if per_year > 5:
             ss.warn(f'the rate of ss.{kind}() is {per_year:n} per person per year; a typed rate is per person, so a crude {kind} rate of {per_year:n} per 1,000 is ss.peryear({per_year/1000:n}), or the bare number {per_year:n}')
@@ -1502,11 +1502,11 @@ def numeric_pars(dist, convert, per_agent=None):
                 raise ValueError(errormsg)
             unit = dist.unit if key not in shape_pars else None
             pars[key] = per_agent(val if unit is None else val.map(lambda v: unit(v) if sc.isnumber(v) else v))
-        elif key == 'a' and isinstance(dist, ss.choice) and dist.unit is not None and not isinstance(val, ss.time.TimePar) and np.issubdtype(np.asarray(val).dtype, np.number): # The values a choice is drawn from, e.g. durations in weeks
+        elif key == 'a' and isinstance(dist, ss.choice) and dist.unit is not None and not isinstance(val, ss.TimePar) and np.issubdtype(np.asarray(val).dtype, np.number): # The values a choice is drawn from, e.g. durations in weeks
             pars[key] = np.asarray(convert(dist.unit(np.asarray(val, dtype=float))), dtype=float)
-        elif key in shape_pars and not isinstance(val, ss.time.TimePar):
+        elif key in shape_pars and not isinstance(val, ss.TimePar):
             pars[key] = val
-        elif callable(val) and not isinstance(val, (ss.time.TimePar, ss.Dist)): # A function of the agents (as agents only), e.g. lambda self, sim, uids: sim.people.age[uids]/10, whose values are converted as they are drawn
+        elif callable(val) and not isinstance(val, (ss.TimePar, ss.Dist)): # A function of the agents (as agents only), e.g. lambda self, sim, uids: sim.people.age[uids]/10, whose values are converted as they are drawn
             pars[key] = converted_func(val, dist.unit, convert)
         elif isinstance(val, ss.conditions.Cond) or (isinstance(val, Expr) and not isinstance(val, par)): # A property of people, or an expression of them, e.g. mean=2*ss.person.age: read for each agent as it is drawn (as agents only)
             pars[key] = converted_func(person_func(as_expr(val)), dist.unit, convert)
@@ -1560,7 +1560,7 @@ def numeric_dist(dist, convert, per_agent=None):
 def varying_pars(dist):
     """ The parameters of a distribution that differ between people: values by group (`ss.by`, also as a named parameter, `ss.par(ss.by(...))`), and functions """
     raw = {key:val.raw if isinstance(val, par) else val for key,val in dist.pars.items()}
-    return {key:val for key,val in raw.items() if isinstance(val, by) or (callable(val) and not isinstance(val, (type, ss.Dist, ss.time.TimePar)))}
+    return {key:val for key,val in raw.items() if isinstance(val, by) or (callable(val) and not isinstance(val, (type, ss.Dist, ss.TimePar)))}
 
 
 def by_dist(raw):

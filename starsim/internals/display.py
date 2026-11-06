@@ -863,7 +863,7 @@ def describe_steps(sim, desc):
     """ The sections of `describe(verbose=True)`, added to `desc` (a `Description`): each rate and dwell time per step of its module """
     unit = sim._unit_name
     def plain(raw): # A single value in the sim's unit, or None if it varies (by group, by person, or in time)
-        if sc.isnumber(raw) or (isinstance(raw, ss.time.TimePar) and np.ndim(raw.value) == 0):
+        if sc.isnumber(raw) or (isinstance(raw, ss.TimePar) and np.ndim(raw.value) == 0):
             return ss.solvers.engine.convert(raw, sim.unit_base)
         return None
     for mod in sim.declared:
@@ -1004,7 +1004,7 @@ def quantity_str(raw, kind, unit):
     if isinstance(raw, ss.Duration):
         base = type(raw).base
         return f'{raw.value:n} {base if raw.value != 1 else base.removesuffix("s")}'
-    elif isinstance(raw, ss.time.Rate) and raw.unit is not None:
+    elif isinstance(raw, ss.Rate) and raw.unit is not None:
         word = 'per' if isinstance(raw, ss.per) else 'probability per' if isinstance(raw, ss.prob) else 'events per'
         return f'{raw.value:n} {word} {type(raw.unit).base.removesuffix("s")}'
     elif sc.isnumber(raw) and kind == 'rate':
@@ -1052,7 +1052,7 @@ def route_lines(mod, tr, sim):
             sides = f" ({net.name}'s {net.sides_str()})" if dirs else ''
             lines.append(f'beta on {name}: per act, {values}{sides}')
             acts = net.pars.get('acts')
-            if isinstance(acts, ss.time.Rate):
+            if isinstance(acts, ss.Rate):
                 lines.append(f'    acts {quantity_str(acts, None, unit)} in each partnership')
             elif acts is not None:
                 lines.append(f'    acts per unit time in each partnership ~ {acts}, drawn once for each')
@@ -1109,7 +1109,7 @@ def quantity_json(raw, kind, unit):
     """ A value as plain data, for `sim.to_json()`: a typed quantity, a distribution, or a plain number """
     if isinstance(raw, ss.Duration):
         return dict(type='dur', value=float(raw.value), unit=type(raw).base.removesuffix('s'))
-    elif isinstance(raw, ss.time.Rate):
+    elif isinstance(raw, ss.Rate):
         types = {ss.per:'per', ss.prob:'prob', ss.time.freq:'freq'}
         key = [v for k,v in types.items() if isinstance(raw, k)][0]
         return dict(type=key, value=float(raw.value), unit=None if raw.unit is None else type(raw.unit).base.removesuffix('s'))

@@ -353,7 +353,7 @@ def show(cls, depth=0):
     for sub in cls.__subclasses__():
         show(sub, depth+1)
 
-show(ss.time.TimePar)
+show(ss.TimePar)
 ```
 
 A unit given as a string, wherever one is (`unit='day'`, `ss.prob(0.1, 'week')`, `.to('years')`, `resample('month')`), is one of these, in the singular or the plural:
