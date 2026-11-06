@@ -248,7 +248,7 @@ def test_treat():
     for solver,sim in sims.items():
         res = sim.results
         assert res.sis.I[-1] < 0.9*base.results.sis.I[-1]
-        assert np.isclose(res.rounds.delivered[31], 0.3*res.sis.I[30], rtol=0.15 if solver == 'abm' else 0.07) # By default, the people who are infected at the time (as agents, those infected after the step's exits, and one run)
+        assert np.isclose(res.rounds.delivered[30], 0.3*res.sis.I[30], rtol=0.15 if solver == 'abm' else 0.07) # By default, the people who are infected at the time (as agents, those infected after the step's exits, and one run)
     check_close(sims, lambda sim: sim.results.rounds.delivered.sum(), rtol=0.12) # As agents, about 9% fewer are infected (a difference of order dt)
 
     # A treatment that changes rates, with protection that fades by a function of time (agents only)
@@ -296,7 +296,7 @@ def test_treat():
         both = ss.treat(ss.Treatment(cure=0.5, efficacy=dict(mortality=0.9)), coverage=0.5, every=5, name='both')
         sim = ss.Sim(sird, interventions=both, solver=solver, stop=150, **kw).run()
         res = sim.results
-        assert np.isclose(res.both.delivered[1], 0.5*res.sird.I[0], rtol=0.1 if solver == 'ode' else 0.3) # Not to everyone (it was 10,000 of 10,000); as agents, half of about 100, after the step's exits
+        assert np.isclose(res.both.delivered[0], 0.5*res.sird.I[0], rtol=0.1 if solver == 'ode' else 0.3) # Not to everyone (it was 10,000 of 10,000); as agents, half of about 100, after the step's exits
         assert res.sird.death.sum() < 0.6*untreated.results.sird.death.sum()
     for bad in [lambda: ss.Treatment(efficacy=0.9), lambda: ss.Vaccine()]:
         with pytest.raises(ValueError):

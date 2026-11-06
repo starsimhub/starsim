@@ -131,7 +131,7 @@ class People:
         self._age_bins = {} # The bin of each agent by age, for each set of edges: see age_bins()
         self.has_unborn = False # Whether a module makes agents before they are born, with a negative age (e.g. ss.Pregnancy's fetuses), who are not counted among the people: see unborn_uids()
         self.initialized = False
-        self.n_agents_init = round(n_agents) # The nearest whole number, as ss.sim.SimPars takes it (e.g. a number a fit chose)
+        self.n_agents_init = round(n_agents) # The nearest whole number, as ss.SimPars takes it (e.g. a number a fit chose)
         self.named = None # For a named population (ss.population('Kenya')), where it came from: see ss.population()
 
         # The four fundamental arrays (auids, uid, slot, and parent) are made on first use: see make_uids()
@@ -156,6 +156,7 @@ class People:
         self.causes = [] # The causes of death, by name (see request_death()), in the order first seen: people.cause_of_death is the position in this list
         self._claims = [] # The deaths requested in this step, with their causes: see step_die()
         self._died_of = {} # Who died of each cause in this step
+        self._knock_on = None # The deaths requested by modules' on_death(), while step_die() calls it, so they happen in the same step
         self._warned_late = set() # The causes of the deaths requested too late in a step, warned about once each: see request_death()
         self._cause_dist = ss.random(name='cause_of_death') # To choose one cause for someone whose death several modules request in a step
 
@@ -742,7 +743,9 @@ class People:
         self.ti_dead[uids] = self.sim.ti
         if len(uids):
             name = cause.name if isinstance(cause, ss.Module) else cause
-            if getattr(self, '_resolved_ti', None) == self.sim.ti and name not in self._warned_late: # E.g. in finish_step()
+            if getattr(self, '_knock_on', None) is not None: # During step_die(), from a module's on_death(), so it happens in this step
+                self._knock_on.append(ss.uids(uids))
+            elif getattr(self, '_resolved_ti', None) == self.sim.ti and name not in self._warned_late: # E.g. in finish_step()
                 self._warned_late.add(name)
                 ss.warn(f"A death (cause: {name}) was requested after this step's deaths were resolved (by people.step_die(), which comes after every module's step()), so it happens at the next step; request it in step() for it to happen in this one")
             if name not in self.causes:
@@ -763,7 +766,6 @@ class People:
     def resolve_causes(self, death_uids):
         """ Give each agent who dies in this step one cause, from the deaths requested (see `request_death()`); called by `step_die()` """
         claims, self._claims = self._claims, []
-        self._died_of = {}
         if not claims:
             return
         uids = np.concatenate([u for u,c,h in claims]).astype(np.int64)
@@ -798,7 +800,9 @@ class People:
         people, codes = ss.uids(people), codes[pick]
         self.cause_of_death[people] = codes
         for code in np.unique(codes):
-            self._died_of[self.causes[code]] = people[codes == code]
+            name = self.causes[code]
+            these = people[codes == code]
+            self._died_of[name] = self._died_of[name].concatenate(these) if name in self._died_of else these # Added to, for the deaths that on_death() requests (see step_die())
         return
 
     def request_removal(self, uids):
@@ -819,18 +823,29 @@ class People:
         if n_alive != len(self.auids): # ...unless something else has changed who is alive: then from the active agents themselves
             deaths = ss.solvers.backends.passes.due(self.auids.view(np.ndarray), self.ti_dead.raw, self.ti_removed.raw, ti)
         death_uids = ss.uids(deaths)
-        self.resolve_causes(death_uids[self.ti_dead.raw[death_uids] <= ti])
-        self.alive[death_uids] = False  # While not dead, removed agents should not be included in alive totals
-        self._dying = death_uids # Still active until the end of the step: see record_flows() and remove_dead()
-
-        self._resolved_ti = ti if self.sim.initialized else None # A death requested later in this step happens at the next one: see request_death() (not during the initialization, whose step 0 is the first step's too)
+        dying = death_uids
+        self._died_of = {}
 
         # Execute deaths that took place this timestep (i.e., changing the `alive` state of the agents). This is executed
-        # before analyzers have run so that analyzers are able to inspect and record outcomes for agents that died this timestep
-        if len(death_uids):
-            for mod in self.death_modules():
-                mod.on_death(death_uids)
+        # before analyzers have run so that analyzers are able to inspect and record outcomes for agents that died this timestep.
+        # A death that a module's on_death() requests (e.g. of the fetuses of a mother who dies) happens in this step too
+        while len(dying):
+            self.resolve_causes(dying[self.ti_dead.raw[dying] <= ti])
+            self.alive[dying] = False  # While not dead, removed agents should not be included in alive totals
+            self._dying = death_uids # Still active until the end of the step: see record_flows() and remove_dead()
+            self._knock_on = [] # Filled by request_death() during on_death()
+            try:
+                for mod in self.death_modules():
+                    mod.on_death(dying)
+                knock_on = self._knock_on
+            finally:
+                self._knock_on = None
+            dying = ss.uids.concatenate(knock_on) if knock_on else ss.uids()
+            dying = ss.uids(np.unique(dying[self.alive.raw[dying]]))
+            if len(dying):
+                death_uids = death_uids.concatenate(dying)
 
+        self._resolved_ti = ti if self.sim.initialized else None # A death requested later in this step happens at the next one: see request_death() (not during the initialization, whose step 0 is the first step's too)
         return death_uids
 
     def death_modules(self):
@@ -1167,7 +1182,7 @@ def population(place, year=None, n_agents=None, revision=None):
     pop = ss.data.population(place, year=year, revision=revision)
     ages = np.array(ss.data.age_edges(pop.index))
     total = (pop.female + pop.male).values
-    ppl = People(n_agents=sc.ifelse(n_agents, ss.sim.SimPars().n_agents), age_data=ss.data.to_age_data(ages, total), p_female=pop.female.sum()/total.sum())
+    ppl = People(n_agents=sc.ifelse(n_agents, ss.SimPars().n_agents), age_data=ss.data.to_age_data(ages, total), p_female=pop.female.sum()/total.sum())
     ppl.named = sc.obj(place=place, year=year, n_agents=n_agents, revision=revision, total=float(total.sum()), ages=ages, counts=total, ref=pop.attrs['ref'])
     return ppl
 

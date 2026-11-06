@@ -49,7 +49,7 @@ from .internals.time import (
 )
 from .internals.dates import DateArray, date, datedur
 from .internals.timeline import Timeline, schedule
-from .internals.parameters import by, timeseries, seasonal
+from .internals.parameters import Pars, by, timeseries, seasonal
 
 #%% People and modules
 from .people import People, population, person
@@ -94,7 +94,7 @@ from . import data # starsim_data is imported only when this is used
 from .internals import gradients # JAX is imported only when this is used
 from .solvers.backends import jit, draws # Draws, for ss.draws.next_u() in compiled code (see ss.Dist.streams())
 from . import sim
-from .sim import Sim, demo
+from .sim import Sim, SimPars, demo
 from .run import MultiSim, parallel
 
 #%% Importing from and exporting to other frameworks

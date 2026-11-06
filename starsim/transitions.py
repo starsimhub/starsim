@@ -213,7 +213,7 @@ def pars(defaults, **kwargs):
         elif isinstance(given, par):
             out[key] = default.merge(given)
         elif given is not None: # As a declared parameter takes a value (a bare number keeps the default's unit)
-            values = ss.parameters.Pars({key:default.raw})
+            values = ss.Pars({key:default.raw})
             values.update({key:given})
             default.value = values[key]
             out[key] = default

@@ -402,7 +402,7 @@ class Delivery(ss.products.EventSource, Intervention):
                 errormsg = f'{sc.strjoin(f"{key}=" for key in own)} {"is" if len(own) == 1 else "are"} for the product, which is given already; give {"it" if len(own) == 1 else "them"} to the product, or leave the product out and ss.{type(self).__name__}() makes one'
                 raise ValueError(errormsg)
             product = self.kind(**own)
-            product._from_keywords = True # Named for the delivery if its own name is taken: see ss.sim.SimPars.validate_name()
+            product._from_keywords = True # Named for the delivery if its own name is taken: see ss.SimPars.validate_name()
             product._assigned = None
         super().__init__(name=name, label=label, **kwargs)
         self.move_states = None # With move=S >> V: the names of the states people move from (a list), and the one they move to

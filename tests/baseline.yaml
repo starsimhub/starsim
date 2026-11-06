@@ -13,8 +13,8 @@ sir_deaths: 2225.0
 sir_infection: 12665.0
 sir_prevalence: 0.30020611776071127
 sir_recovery: 10553.0
-sis_I: 10389.0
-sis_S: 1797.0
-sis_infection: 23079.0
-sis_prevalence: 0.5101220392765733
-sis_recovery: 11559.0
+sis_I: 10372.0
+sis_S: 1814.0
+sis_infection: 22795.0
+sis_prevalence: 0.49882141407857405
+sis_recovery: 11359.0

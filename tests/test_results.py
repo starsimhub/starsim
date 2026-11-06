@@ -50,7 +50,7 @@ def test_export():
     assert isinstance(resampled, ss.Result)
     assert len(resampled.values) < len(rs1.infection.values)
     assert resampled[0] == rs1.infection[:12].sum() # The first year's period is the steps that start in it, as resample() says
-    assert resampled.values.sum() == rs1.infection.values.sum()
+    assert resampled.values.sum() == rs1.infection.values[:-1].sum() # Whole years only, so not the step from 2050 (one month of 2050)
     assert rs1.infected.resample('year')[0] == rs1.infected[0] # The start of the first year
 
     # Results.resample() resamples all the results in the group
@@ -76,7 +76,7 @@ def test_export():
 
     # Calendar periods are labeled by their start, not by the first weekly time point in them (2001-01-06 for 2001), or the start of the run if later
     weekly = ss.Sim(ss.SIR(), solver='ode', start='2000-01-01', stop='2004-06-01', dt=ss.weeks(1), verbose=0).run().results.sir.infection
-    assert [str(d) for d in weekly.resample('year').timevec] == ['2000-01-01', '2001-01-01', '2002-01-01', '2003-01-01', '2004-01-01']
+    assert [str(d) for d in weekly.resample('year').timevec] == ['2000-01-01', '2001-01-01', '2002-01-01', '2003-01-01'] # Not 2004, of which the run has five months
     assert str(weekly.resample('month').timevec[1]) == '2000-02-01'
 
     # Plot
@@ -210,7 +210,7 @@ def test_summarize_by():
             self.results.timer[self.ti] = self.ti
     sim = ss.Sim(ss.SIS(), solver='ode', analyzers=Timer(name='a'), start=2000, stop=2002, dt=ss.months(1), verbose=0).run()
     annual = sim.results.resample('year')
-    assert 'timer' not in annual.a and len(annual.sis.I) == 3 # 2000, 2001, and the step from 2002-01-01
+    assert 'timer' not in annual.a and len(annual.sis.I) == 2 # 2000 and 2001, not the step from 2002-01-01, one month of 2002
     assert 'a_timer' not in sim.to_df(resample='year') and 'a_timer' in sim.to_df()
 
     # What has no one number is left out of the summary, rather than failing the run: a 2D result with no columns=, a list, and other data

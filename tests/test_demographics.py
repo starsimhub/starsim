@@ -2,6 +2,7 @@
 Test demographic consistency
 """
 
+import warnings
 import numpy as np
 import pandas as pd
 import sciris as sc
@@ -549,6 +550,21 @@ def test_unborn():
 
 
 @sc.timer()
+def test_orphans():
+    """ The fetuses of a mother who dies die in the same step, without a warning """
+    sc.heading('Testing the deaths of the unborn...')
+    sim = ss.Sim(demographics=[ss.Pregnancy(fertility_rate=ss.peryear(0.05), rate_per=1), ss.Deaths(death_rate=ss.peryear(0.2), rate_per=1)],
+                 networks=ss.PrenatalNet(), n_agents=5000, start=2000, stop=2005, verbose=0)
+    with warnings.catch_warnings():
+        warnings.filterwarnings('error', message='.*requested after')
+        sim.run() # Before, every such death was requested too late in the step, and so happened in the next one
+    ppl = sim.people
+    unborn = ppl.unborn_uids()
+    assert len(unborn) and ppl.alive.raw[ppl.parent.raw[unborn]].all() # No live fetus has a dead mother
+    return sim
+
+
+@sc.timer()
 def test_cause_of_death():
     """ Someone whose death two modules request in one step dies once, of one cause, counted once """
     sc.heading('Testing causes of death...')
@@ -668,6 +684,7 @@ if __name__ == '__main__':
     s13b = test_declared_demographics_alone()
     s14 = test_births_parents()
     s15 = test_unborn()
+    s16 = test_orphans()
     s17 = test_cause_of_death()
     s18 = test_split_by_age()
     s19 = test_declared_newborns()

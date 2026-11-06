@@ -8,6 +8,7 @@ import time
 import _thread
 import functools
 import itertools
+from unittest import mock
 import pytest
 import numpy as np
 import pandas as pd
@@ -1078,6 +1079,37 @@ def test_wholestep():
 
 
 @sc.timer()
+def test_compiled_draws():
+    """ The compiled moves of the agent engine make the draws its own moves make, so a sim gives the same numbers whichever takes its moves (e.g. with an intervention the compiled moves do not take, and without it) """
+    sc.heading('Testing that the compiled moves draw the numbers of the agent engine\'s own moves')
+    def make(seed):
+        S, E, I, H, R, F = ss.states('S E I H R F')
+        infection = S >> E @ ss.perday(0.3)*(I + H)
+        d = ss.Disease(S, E, I, H, R, F, infection=infection,
+            onset   = ss.Transition(E, [I, R], p=[0.8, None], dur=ss.lognormal(ss.days(3), ss.days(1))), # A split after a dwell time
+            severe  = ss.Transition(I, H, p=0.2, dur=ss.weibull(c=2, scale=ss.days(4))), # Branches chosen on entry
+            mild    = ss.Transition(I, [R, ss.stay], p=[0.9, None], dur=ss.uniform(ss.days(3), ss.days(9))),
+            flag    = ss.Transition(E, F, on=infection, dur=ss.days(2)), # A time after an event
+            unflag  = ss.Transition(F, [I, R], dur=0, p=[0.5, None]), # Taken on in the same step
+            release = ss.Transition(H, R, on=H.time_in > ss.days(5)), # A condition
+            die     = H >> ss.null @ ss.perday(0.03), # A competing rate beside a dwell time
+            wane    = ss.Transition(R, S, dur=ss.normal(ss.by(sex=dict(female=ss.days(25), male=ss.days(35))), ss.days(5))), # Drawn by the engine after the call
+            init_prev=0.02, name='d')
+        return ss.Sim(d, networks=ss.RandomNet(n_contacts=4, method='safe'), n_agents=1000, unit='day', stop=60, rand_seed=seed, **kw)
+    for seed in [0, 1]:
+        sims = [make(seed).run()]
+        with mock.patch.object(ss.solvers.agents_compiled, 'compiled_reasons', lambda engine: ['off']): # The agent engine's own moves
+            sims.append(make(seed).run())
+        compiled, own = [sim.diseases.d for sim in sims]
+        assert not compiled.engine.uncompiled and own.engine.uncompiled == ['off']
+        assert ss.debugtools.check_sims_match(*sims)
+        for k,v in compiled.__dict__.items():
+            if isinstance(v, ss.Arr):
+                assert np.array_equal(v.raw, own[k].raw, equal_nan=True), f'{k} differs between the compiled moves and the agent engine\'s own'
+    return sims
+
+
+@sc.timer()
 def test_lifelong():
     """ A function marked with ss.lifelong() is worked out once for each person, and gives the same run as unmarked """
     sc.heading('Testing values fixed for life')
@@ -1511,6 +1543,7 @@ if __name__ == '__main__':
     split = test_split_timing()
     infst = test_infection_step()
     whole = test_wholestep()
+    draws = test_compiled_draws()
     life2 = test_lifelong()
     stays = test_stays()
     casc  = test_cascade()

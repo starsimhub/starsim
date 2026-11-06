@@ -362,6 +362,7 @@ def outputs(sim):
             flow = req['flow_name']
             tnames = [k for k in dis.transitions.keys() if k == flow or k.startswith(f'{flow}_')]
             val = sum(select(res[t], {**req.get('source_strata', {}), **req.get('dest_strata', {})}) for t in tnames)/dt
+            val = np.concatenate([[0], val[:-1]]) # summer2's flow at a time is the step that ends there; Starsim's row k is the step from time point k
         elif kind == 'comp':
             val = sum(select(res[c], req.get('strata') or {}) for c in req['compartments'])
         elif kind == 'agg':

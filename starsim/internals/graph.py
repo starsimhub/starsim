@@ -10,7 +10,7 @@ import itertools
 import numpy as np
 import sciris as sc
 import starsim as ss
-from .expressions import as_expr, BinOp, Count, count_power, did_you_mean, Expr, is_one, linear, par, per_person, unheld
+from .expressions import as_expr, BinOp, Count, count_power, did_you_mean, Expr, Func, is_one, linear, par, per_person, unheld
 from .parameters import by, TimeValue
 from ..transitions import FlowSum, outcome, State, Transition
 
@@ -957,11 +957,18 @@ class Graph:
         """
         The counts in a rate that a contact matrix acts on (see `ss.solvers.Mixing.count_terms()`): in the rate of an acquisition, the number
         (`I.n`, or weighted: `(ss.by(w)*I).n`, `I.n_infectious`) or share (`I.frac`) of the people in states of this disease that it does not take
-        people from, as `I` in `S >> I @ beta*I.n`
+        people from, as `I` in `S >> I @ beta*I.n`; not one inside a function of the rate (e.g. `np.clip(I.n/K, 0, 1)`), which modifies the rate by
+        the total rather than being met
         """
+        def outside(expr): # The leaves of a rate outside any function in it
+            if isinstance(expr, Func):
+                return []
+            if isinstance(expr, BinOp):
+                return outside(expr.a) + outside(expr.b)
+            return expr.leaves
         out = {}
         for tr in self.acquisitions:
-            for leaf in (tr.rate.leaves if tr.rate is not None else []):
+            for leaf in (outside(tr.rate) if tr.rate is not None else []):
                 if isinstance(leaf, Count) and leaf.kind in ['n', 'frac'] and all(s.people and s.module is self.module and not any(s is src for src in tr.source or []) for s in leaf.states):
                     out[id(leaf)] = leaf
         return list(out.values())

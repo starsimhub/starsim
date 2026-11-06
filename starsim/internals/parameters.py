@@ -1,5 +1,5 @@
 """
-Parameters: the container of a module's or sim's parameters (`ss.parameters.Pars`), and values that vary by level or in time (`ss.by`, `ss.timeseries`, `ss.seasonal`)
+Parameters: the container of a module's or sim's parameters (`ss.Pars`), and values that vary by level or in time (`ss.by`, `ss.timeseries`, `ss.seasonal`)
 
 They exist so that a parameter is checked when set, and can vary in the same way however a model is written or run.
 

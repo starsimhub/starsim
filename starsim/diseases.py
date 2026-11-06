@@ -459,7 +459,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         for key in sc.mergedicts(pars):
             if key not in self.pars:
                 raise sc.KeyNotFoundError(f'"{self.name}" has no parameter named "{key}". Its parameters are {sc.strjoin(self.pars.keys())}{ss.expressions.did_you_mean(key, self.pars.keys())}')
-        self.pars.update(pars) # A declared parameter keeps its bounds and name: see ss.parameters.Pars
+        self.pars.update(pars) # A declared parameter keeps its bounds and name: see ss.Pars
         return
 
     def stratify(self, inplace=True, **kwargs):

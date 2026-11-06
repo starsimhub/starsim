@@ -15,21 +15,6 @@ from .backends import moves as kernel
 __all__ = ['Compiled', 'compiled_reasons']
 
 MAX_HOPS = 64 # The most moves of one agent in one call: more is a loop of moves with no wait
-M64 = (1 << 64) - 1
-GOLDEN = 0x9E3779B97F4A7C15
-
-
-def mix64(z):
-    """ SplitMix64's mixing function, in Python (as `ss.solvers.backends.draws.mix()`) """
-    z = ((z ^ (z >> 30))*0xBF58476D1CE4E5B9) & M64
-    z = ((z ^ (z >> 27))*0x94D049BB133111EB) & M64
-    return z ^ (z >> 31)
-
-
-def call_key(seed, ind):
-    """ The key of a call's draws, from a seed and an index (as `ss.solvers.backends.draws.key()`), as an int64 with the same bits """
-    k = mix64(((seed ^ ((ind*GOLDEN) & M64)) + GOLDEN) & M64)
-    return k - (1 << 64) if k >= 1 << 63 else k
 
 
 def compiled_reasons(engine):
@@ -118,7 +103,8 @@ class Compiled(Agents):
     The agent engine, with the moves of a step compiled: those that are not by contact are one call over the agents, and those after the
     step's infections another, each taking every agent whose time has come through its exits, splits, and moves after events, as the
     same-step cascade does (see `ss.solvers.backends.moves`). Everything else is the agent engine's. A graph with what the call doesn't
-    take yet (see `compiled_reasons()`) runs on the agent engine itself.
+    take yet (see `compiled_reasons()`) runs on the agent engine itself. The call makes the draws the agent engine's moves would make, in
+    the same rounds (see `Moving.new_round()`), so the two give the same numbers.
     """
 
     def init_post(self):
@@ -193,6 +179,9 @@ class Compiled(Agents):
                 if dw.dist is not None:
                     k.dw[i] = self.kadd_dist(f'dwell_{tr.name}', self.dists[f'dwell_{tr.name}'])
                 else:
+                    unit = self.dists[f'dwell_{tr.name}']
+                    if not (type(unit) is ss.expon and unit.pars.scale == 1):
+                        raise ss.CapabilityError(f'the dwell time of {tr.name} has stages (an Erlang distribution), which the compiled moves do not draw yet')
                     k.dw[i] = self.kadd_mean(('dwell', tr.name))
         k.comp_state = np.array([bool(self.competing.get(nm)) for nm in k.names]) # States with competing rates, which the agent engine draws (see step_state())
         k.has_late = np.array([nm in self.late for nm in k.names])
@@ -256,9 +245,22 @@ class Compiled(Agents):
         k.scan_sched = k.sched_k & ~k.comp_state # Exits of a state with competing rates too are taken by leave()
         k.stat1 = (k.sched_k, k.ex_ptr, k.ex_tr, k.nbr, k.br_col, k.loops, k.pos, k.kind, k.split, k.dst_ptr, k.dst_state, k.dst_col, k.dw, k.adj, k.aft, k.has_dw, k.src_mask, k.ae_ptr, k.ae_trig, k.tr_trig)
         k.stat2 = (k.trig_dist, k.trig_fixed, np.zeros(1), k.fam) # (trig_mean is not used: a delay given as a number is an exponential distribution, see kadd_mean())
+
+        # The streams the call draws from, each as the agent engine draws it (see Moving.draw()): each distribution's, and each branch's and split's uniforms
+        def stream(key):
+            if key not in k.streams:
+                k.streams.append(key)
+            return k.streams.index(key)
+        k.streams = []
+        k.dstream = ints([stream(spec[1] if spec[0] == 'dist' else f'{spec[1]}_{spec[2]}') if spec[0] == 'dist' or spec[1] != 'adjust' else -1 for _, spec in self.kspecs] + [-1])
+        k.bstream = ints([stream(f'branch_{s.name}') if k.nbr[i] else -1 for i, s in enumerate(states)])
+        k.tstream = ints([stream(f'dst_{tr.name}') if tr._split else -1 for tr in trs])
+        _, _, back = self.sweep()
+        k.back = np.array([tr.name in back for tr in trs]) # A move by it means another pass, for a trigger before it that waits for its event (see finish_moves())
+        k.againx = np.array([[any(position[e.name] <= position[tr.name] for e in self.exits_of.get(s.name, [])) for s in states] for tr in trs]).reshape(nt, ns) # An arrival by it in a state with a scheduled exit before it in the sweep means another pass
         self.kplan = k
-        self.kseed = self.dists['move'].seed
         self.ktables = None
+        self.kcrn = None
         self.kseen = self.n_batches
         return
 
@@ -336,6 +338,9 @@ class Compiled(Agents):
         for d, (fam, spec) in enumerate(self.kspecs):
             if spec[0] == 'dist':
                 srcs = self.dist_pars(spec[1], spec[2])
+                dist = spec[2]
+                if type(dist) is ss.uniform and dist.ppf(np.full(1, 0.5, dtype=dist.hash_dtype or ss.dtypes.float)).dtype == np.float32: # Parameters that are plain numbers, which NumPy takes in single precision with the uniforms
+                    self.kplan.fam[d] = kernel.FAMILIES['uniform32']
             elif spec[1] == 'adjust':
                 name, changes = spec[2], spec[3]
                 srcs = [self.value_source(lambda u, name=name: self.adjusted(name, u), fixed=not changes)] # Lifelong, unless the exit is rescaled when it changes (see rescale_exits())
@@ -513,20 +518,67 @@ class Compiled(Agents):
         return (S, fdum(sti, f), fdum(ssh, sh_dtype), np.array(kept), fdum([lefts[i] for i in range(len(names))], f),
                 np.array([lefts[i] is not None for i in range(len(names))]), fdum(XT, f), fdum(XW, xw_dtype), TT)
 
-    def run_moves(self, scan, agents=None, arr_tr=None, arr_src=None, arr_kind=None, ti_due=None, ti_enter=None, mode=2, arrivals=None, fresh=True):
-        """ One call of the compiled moves (`fresh`: the agents' draws in the round start again), then their bookkeeping: counts, flows, events """
+    def crn_tables(self):
+        """ For the call's draws (see `ss.solvers.backends.moves.rand()`): the seed of each stream in each round, by the transition the round is for (the first column for none), as `round_seed()` gives it, and the width of its uniforms """
+        k = self.kplan
+        m = max(len(k.streams), 1)
+        RS = np.zeros((m, k.nt + 1), np.int64)
+        ush, usc, z32 = np.zeros(m, np.uint64), np.zeros(m), np.zeros(m, dtype=bool)
+        for r, key in enumerate(k.streams):
+            dist = self.dists[key]
+            seed = dist.seed
+            RS[r] = [seed] + [ss.dists.str2int(f'{seed}:{tr.name}') for tr in k.trs]
+            dtype = np.dtype(dist.hash_dtype or ss.dtypes.float)
+            ush[r], usc[r] = ss.solvers.backends.draws.crn_bits(dtype)
+            z32[r] = dtype.itemsize <= 4 # SciPy's ndtri of these is single precision (see ss.normal.ppf())
+        self.kcrn = (RS, ush, usc, z32)
+        return self.kcrn
+
+    def start_cascade(self):
+        """ A same-step cascade begins, as `finish_moves()` begins one: its first pass is the next round, and the calls it takes (see `run_moves()`) count its passes """
+        self.new_round()
+        self._kbase = self.round[1]
+        again = self.__dict__.get('_kagain')
+        if again is None:
+            again = self._kagain = np.zeros(MAX_HOPS + 2, dtype=bool)
+        again[:] = False
+        self.end_cascade()
+        return
+
+    def end_cascade(self):
+        """ The round the cascade leaves the engine in, as `finish_moves()` leaves it: that of its last pass, for the last transition of the sweep """
+        again = self._kagain
+        npass = 1 if not again[0] else int(np.argmin(again)) + 1 if not again.all() else len(again)
+        self.round = (self.step_key(), self._kbase + npass - 1, self.sweep()[0][-1].name)
+        self._drawn = {}
+        return
+
+    def pass_of(self, tr, after, p):
+        """ The pass of the cascade in which agents who arrived somewhere by transition `after` (by index, in pass `p`) are taken on by `tr`, as `finish_moves()` comes to it: in the same pass if it is later in the sweep, else in the next (which there is, since they wait to be sent) """
+        k = self.kplan
+        later = k.pos[tr] > k.pos[after]
+        if not np.all(later):
+            self._kagain[np.unique(np.asarray(p)[~np.asarray(later)])] = True
+        return np.where(later, p, np.asarray(p) + 1)
+
+    def in_round(self, p, tr):
+        """ Draw as the agent engine would in pass `p` of the cascade, in the round of transition `tr` (by index) """
+        self.round = (self.step_key(), self._kbase + int(p), self.kplan.trs[int(tr)].name)
+        self._drawn = {}
+        return
+
+    def run_moves(self, scan, agents=None, arr_tr=None, arr_src=None, arr_kind=None, arr_p=None, arr_q=None, ti_due=None, ti_enter=None, mode=2, arrivals=None, cont=False):
+        """ One call of the compiled moves (`cont`: in the cascade the last call began; else a new one), then their bookkeeping: counts, flows, events """
         k = self.kplan
         people = self.sim.people
         n = len(self.mod.rel_sus.raw)
-        self.new_round()
-        key = call_key(self.kseed, ROUNDS + self.step_key()*ROUND_MAX + self.round[1])
-        ctr = self.__dict__.get('_kctr')
-        if ctr is None or len(ctr) != n: # Made as needed (and again after shrink())
-            ctr = self._kctr = np.zeros(n, np.int64)
+        if not cont:
+            self.start_cascade()
+        if self.__dict__.get('_kmark') is None or len(self._kmark) != n: # Made as needed (and again after shrink())
             self._kmark, self._kidx = np.zeros(n, dtype=bool), np.empty(n, np.int64)
             self._karrays = None
         if self.__dict__.get('_kev') is None:
-            self._kev = tuple(np.empty(4096, np.int64) for _ in range(4))
+            self._kev = tuple(np.empty(4096, np.int64) for _ in range(5))
         t = self.refresh(n)
         S, STI, SSH, kept, LEFT, has_left, XT, XW, TT = self.arrays(n)
         alive = people.alive.raw
@@ -534,7 +586,6 @@ class Compiled(Agents):
         if ti_due is None:
             ti_due = ti
         if scan: # Those with a move due, as a list to look at
-            ctr[:] = 0
             for g, srcs in k.cond_trigs: # Due now for those in its source for whom the condition holds (and for anyone who enters it, in the call)
                 inside = S[srcs[0]].copy() if len(srcs) == 1 else np.logical_or.reduce([S[i] for i in srcs])
                 inside &= t.WH[k.trig_cond[g]]
@@ -550,8 +601,10 @@ class Compiled(Agents):
                 arr_kind = np.concatenate([np.zeros(len(arrivals[0]), np.int64), arr_kind])
             if not len(agents):
                 return
-        elif fresh:
-            ctr[agents] = 0
+        if arr_p is None: # In the first pass, with no move yet
+            arr_p = self._kzeros(len(agents))
+        if arr_q is None:
+            arr_q = self._kzeros(len(agents), -1)
         self.fill_new(agents)
         self.vary(agents)
         weighted = people.scale.weighted
@@ -559,53 +612,60 @@ class Compiled(Agents):
         if ti_enter is None:
             ti_enter = ti
         shift = self.index_of(ti_enter) - ti_enter
+        slots = people.slot_raw()
+        RS, ush, usc, z32 = self.kcrn or self.crn_tables()
+        crn = (np.empty(0, np.int64) if slots is None else slots, ROUNDS + self.step_key()*ROUND_MAX + self._kbase, RS, ush, usc, z32, k.dstream, k.bstream, k.tstream, k.back, k.againx, self._kagain)
         flow, flowdst, dlive = np.zeros(k.nt), np.zeros((k.nt, k.flowdst_w)), np.zeros(k.ns, np.int64)
         logs = []
-        batch = (agents, arr_tr, arr_src, arr_kind)
+        batch = (agents, arr_tr, arr_src, arr_kind, arr_p, arr_q)
         while batch is not None:
-            agents, arr_tr, arr_src, arr_kind = batch
+            agents, arr_tr, arr_src, arr_kind, arr_p, arr_q = batch
             total = len(agents)
-            pend = tuple(np.empty(max(total, 1), np.int64) for _ in range(4))
+            pend = tuple(np.empty(max(total, 1), np.int64) for _ in range(6))
             n_pend = np.zeros(1, np.int64)
             start = 0
             while True:
                 ev = self._kev
-                start, n_ev = kernel.step_moves(agents, arr_tr, arr_src, arr_kind, False, start, float(ti_due), float(ti), float(ti_enter), float(shift), key, ctr, alive,
-                    S, STI, SSH, kept, LEFT, has_left, XT, XW, *k.stat1, TT, k.trig_where, t.WH, *k.stat2, t.pcol, t.PA, t.PS, t.E, people.phase(), k.dt, w, weighted,
+                start, n_ev = kernel.step_moves(agents, arr_tr, arr_src, arr_kind, arr_p, arr_q, False, start, float(ti_due), float(ti), float(ti_enter), float(shift), alive,
+                    S, STI, SSH, kept, LEFT, has_left, XT, XW, *k.stat1, TT, k.trig_where, t.WH, *k.stat2, t.pcol, t.PA, t.PS, t.E, people.phase(), k.dt, w, weighted, *crn,
                     *ev, 0, flow, flowdst, dlive, MAX_HOPS, mode, k.comp_state, k.LATE, k.has_late, k.halved, k.trig_cond, k.lazy, *pend, n_pend)
                 logs.append(tuple(x[:n_ev].copy() for x in ev)) # Copies, since the buffer is used again by the next call, and the events and deaths booked keep these arrays
                 if start >= total:
                     break
-                self._kev = tuple(np.empty(2*len(ev[0]), np.int64) for _ in range(4)) # The log was full: more room, for the rest
+                self._kev = tuple(np.empty(2*len(ev[0]), np.int64) for _ in range(5)) # The log was full: more room, for the rest
             batch = self.fill_pending(pend, int(n_pend[0]))
-        arrived = self.book(logs, flow, flowdst, dlive, ti_enter)
+        arrived = self.book(logs, flow, flowdst, dlive, ti_enter, ti_due)
         due, self._kdue = self.__dict__.get('_kdue'), None
-        if due: # Scheduled after the call, and due now: taken by another
-            more = self.run_moves(scan=False, agents=np.concatenate([u for u, _, _ in due]), arr_tr=np.concatenate([t_ for _, t_, _ in due]), arr_src=np.concatenate([s_ for _, _, s_ in due]),
-                                  arr_kind=np.zeros(sum(len(u) for u, _, _ in due), np.int64), ti_due=ti_due, ti_enter=ti_enter, mode=mode, fresh=False)
+        if due: # Scheduled after the call, and due now: taken by another, in the passes they come in
+            cat = lambda i: np.concatenate([x[i] for x in due])
+            more = self.run_moves(scan=False, agents=cat(0), arr_tr=cat(1), arr_src=cat(2), arr_kind=np.zeros(len(cat(0)), np.int64), arr_p=cat(3), arr_q=cat(4), ti_due=ti_due, ti_enter=ti_enter, mode=mode, cont=True)
             if more is not None:
-                arrived = more if arrived is None else (np.concatenate([arrived[0], more[0]]), np.concatenate([arrived[1], more[1]]))
+                arrived = more if arrived is None else tuple(np.concatenate([x, y]) for x, y in zip(arrived, more))
+        self.end_cascade()
         return arrived
 
     def fill_pending(self, pend, m):
         """ The agents a call stopped at a split whose shares were not worked out: their shares, worked out now, and them to take on from there, as the next batch (None if there are none) """
         if not m:
             return None
-        pa, pt, ps, pk = [x[:m].copy() for x in pend]
+        pa, pt, ps, pk, pp, pq = [x[:m].copy() for x in pend]
         E = self.ktables.E
         for i in np.unique(pt).tolist():
             c, width, get = self.klazy[i]
             uids = pa[pt == i]
             E[uids, c:c + width] = get(ss.uids(uids))
-        return pa, pt, ps, pk # Kind 0 takes the transition again as an arrival, from the state they are in; kind 1 looks again
+        return pa, pt, ps, pk, pp, pq # Kind 0 takes the transition again as an arrival, from the state they are in; kind 1 looks again; each where it was in the cascade
 
-    def _kzeros(self, m):
-        z = self.__dict__.get('_kz')
+    def _kzeros(self, m, value=0):
+        """ An array of `m` zeros (or of -1s), kept for the next call, which the call only reads """
+        key = '_kz' if value == 0 else '_kneg'
+        z = self.__dict__.get(key)
         if z is None or len(z) < m:
-            z = self._kz = np.zeros(max(m, 2*len(z) if z is not None else 1024), np.int64)
+            z = np.full(max(m, 2*len(z) if z is not None else 1024), value, np.int64)
+            self.__dict__[key] = z
         return z[:m]
 
-    def book(self, logs, flow, flowdst, dlive, ti_enter=None):
+    def book(self, logs, flow, flowdst, dlive, ti_enter=None, ti_due=None):
         """ After a call: the counts of the states, the flows, and the moves as events (`dis.<transition>`, and the events triggers read); then what the engine does for those who entered a state (see after_call()) """
         k = self.kplan
         live = self.live
@@ -621,7 +681,7 @@ class Compiled(Agents):
                 for j, key in enumerate(k.dst_keys[i]):
                     if flowdst[i, j]:
                         fc[key] += flowdst[i, j]
-        ev_a, ev_t, ev_s, ev_d = [np.concatenate(x) for x in zip(*logs)] if len(logs) > 1 else logs[0]
+        ev_a, ev_t, ev_s, ev_d, ev_p = [np.concatenate(x) for x in zip(*logs)] if len(logs) > 1 else logs[0]
         n = len(ev_a)
         if not n:
             self.kseen = self.n_batches
@@ -631,7 +691,7 @@ class Compiled(Agents):
             groups = [(0, n)]
         else:
             order = code.argsort(kind='stable')
-            ev_a, ev_t, ev_s, ev_d, code = ev_a[order], ev_t[order], ev_s[order], ev_d[order], code[order]
+            ev_a, ev_t, ev_s, ev_d, ev_p, code = ev_a[order], ev_t[order], ev_s[order], ev_d[order], ev_p[order], code[order]
             cuts = ((code[1:] != code[:-1]).nonzero()[0] + 1).tolist()
             groups = list(zip([0] + cuts, cuts + [n]))
         events = self.events
@@ -652,17 +712,19 @@ class Compiled(Agents):
         self._news = True
         self.kseen = self.n_batches
         if self.kdefer or self.krescaled:
-            self.after_call(ev_a, ev_s, ev_d, self.ti if ti_enter is None else ti_enter)
+            self.after_call(ev_a, ev_t, ev_s, ev_d, ev_p, self.ti if ti_enter is None else ti_enter, self.ti if ti_due is None else ti_due)
         entered = k.comp_state[np.maximum(ev_d, 0)] & (ev_d >= 0)
-        return ev_a[entered], ev_d[entered] # Who arrived in a state with competing rates (see step_state())
+        return ev_a[entered], ev_d[entered], ev_t[entered], ev_p[entered] # Who arrived in a state with competing rates, by which transition, in which pass (see step_state())
 
-    def after_call(self, ev_a, ev_s, ev_d, ti_enter):
+    def after_call(self, ev_a, ev_t, ev_s, ev_d, ev_p, ti_enter, ti_due):
         """
         For those who left or entered a state in a call: in a state the engine schedules (`kdefer`, whose dwell time is a function), the exit
-        cleared, or scheduled as they enter (those due now are kept for another call, in `_kdue`); in one whose exits are rescaled
-        (`krescaled`), how fast each exit ran when it was drawn, as `schedule()` records it
+        cleared, or scheduled as they enter, with the draws of the round they entered in (those due now are kept for another call, in `_kdue`,
+        in the pass the cascade takes them in); in one whose exits are rescaled (`krescaled`), how fast each exit ran when it was drawn, as
+        `schedule()` records it
         """
         mod = self.mod
+        k = self.kplan
         index = self.state_index
         due = []
         for nm in self.kdefer:
@@ -671,19 +733,23 @@ class Compiled(Agents):
             if len(left):
                 left = np.unique(left)
                 self.clear_exit(nm, ss.uids(left[~mod[nm].raw[left]]))
-            new = ev_a[ev_d == i]
-            if not len(new):
+            into = ev_d == i
+            if not into.any():
                 continue
-            new = np.unique(new)
-            new = ss.uids(new[mod[nm].raw[new]])
-            self.clear_exit(nm, new)
-            self.schedule(self.graph.states[nm], new, entered=ti_enter)
-            now = new[mod[f'ti_exit_{nm}'].raw[new] <= self.ti]
-            if len(now):
-                which = mod[f'exit_{nm}'].raw[now]
-                now, which = now[which >= 0], which[which >= 0]
-                tids = np.array([self.kplan.tid[tr.name] for tr in self.exits_of[nm]], np.int64)
-                due.append((np.asarray(now, np.int64), tids[which.astype(np.int64)], np.full(len(now), i, np.int64)))
+            rounds = ev_p[into]*(k.nt + 1) + ev_t[into] # By the round they entered in
+            for r in np.unique(rounds).tolist():
+                p, tr = divmod(r, k.nt + 1)
+                new = np.unique(ev_a[into][rounds == r])
+                new = ss.uids(new[mod[nm].raw[new]])
+                self.clear_exit(nm, new)
+                self.in_round(p, tr)
+                self.schedule(self.graph.states[nm], new, entered=ti_enter)
+                now = new[mod[f'ti_exit_{nm}'].raw[new] <= ti_due] # Due by the call's time (the step's end, for those infected)
+                if len(now):
+                    which = mod[f'exit_{nm}'].raw[now]
+                    now, which = now[which >= 0], which[which >= 0]
+                    tids = np.array([k.tid[e.name] for e in self.exits_of[nm]], np.int64)[which.astype(np.int64)]
+                    due.append((np.asarray(now, np.int64), tids, np.full(len(now), i, np.int64), self.pass_of(tids, tr, p).astype(np.int64), np.full(len(now), -1, np.int64)))
         for nm in self.krescaled:
             new = ev_a[ev_d == index[nm]]
             if not len(new):
@@ -794,26 +860,35 @@ class Compiled(Agents):
         arrived = self.run_moves(scan=True, mode=0, arrivals=arrivals)
         n = len(self.mod.rel_sus.raw)
         row = None
-        while arrived is not None and len(arrived[0]) and not self.wholestep: # Those who arrived in a state with competing rates have half a step of them now, once a step each, as the agent engine's arrive() gives them
+        while arrived is not None and len(arrived[0]) and not self.wholestep: # Those who arrived in a state with competing rates have half a step of them now, once a step each, as the agent engine's arrive() gives them, in the round of their arrival
             if row is None:
                 row = np.zeros(n, dtype=bool)
-            self._collect = []
-            try:
-                for i in np.unique(arrived[1]).tolist():
-                    nm = k.names[i]
-                    uids = arrived[0][arrived[1] == i]
-                    uids = uids[self.mod[nm].raw[uids] & ~row[uids]]
-                    row[uids] = True
-                    if len(uids):
-                        self.draw_competing(self.graph.states[nm], ss.uids(uids), 0.5*self.dt, key=f'entry_{nm}')
-            finally:
-                collected, self._collect = self._collect, None
-            if not collected:
+            ag, st, tr, ps = arrived
+            rounds = (ps*(k.nt + 1) + tr)*k.ns + st
+            parts = []
+            for r in np.unique(rounds).tolist():
+                rnd, i = divmod(r, k.ns)
+                p, t = divmod(rnd, k.nt + 1)
+                nm = k.names[i]
+                uids = np.unique(ag[rounds == r])
+                uids = uids[self.mod[nm].raw[uids] & ~row[uids]]
+                row[uids] = True
+                if not len(uids):
+                    continue
+                self._collect = []
+                try:
+                    self.in_round(p, t)
+                    self.draw_competing(self.graph.states[nm], ss.uids(uids), 0.5*self.dt, key=f'entry_{nm}')
+                finally:
+                    collected, self._collect = self._collect, None
+                for c, src, u in collected: # Taken by the cascade at the turn of the rate they left by
+                    tid = k.tid[c.name]
+                    parts.append((np.asarray(u, np.int64), np.full(len(u), tid, np.int64), np.full(len(u), self.state_index[src.name], np.int64), np.full(len(u), self.pass_of(tid, t, p), np.int64)))
+            if not parts:
                 break
-            arrived = self.run_moves(scan=False, agents=np.concatenate([np.asarray(u) for _, _, u in collected]).astype(np.int64),
-                                     arr_tr=np.concatenate([np.full(len(u), k.tid[tr.name]) for tr, _, u in collected]).astype(np.int64),
-                                     arr_src=np.concatenate([np.full(len(u), self.state_index[src.name]) for _, src, u in collected]).astype(np.int64),
-                                     arr_kind=np.zeros(sum(len(u) for _, _, u in collected), np.int64), mode=0)
+            cat = lambda j: np.concatenate([x[j] for x in parts])
+            arrived = self.run_moves(scan=False, agents=cat(0), arr_tr=cat(1), arr_src=cat(2), arr_kind=np.zeros(len(cat(0)), np.int64), arr_p=cat(3), mode=0, cont=True)
+        self.step_transfers(self.dt) # None, but its round, as the agent engine takes it
         if self._news:
             self._news = False
             self.notify(self.ti)
@@ -822,7 +897,7 @@ class Compiled(Agents):
     def shrink(self):
         """ Forget the tables and buffers of the call, which hold a value for each agent (they are made again if the sim runs on), and the functions that make them """
         super().shrink()
-        for key in ['_kctr', '_kmark', '_kidx', '_kev', '_karrays', '_kz', 'kedges', 'kedge_src', 'kpar_src', 'lifelong']:
+        for key in ['_kmark', '_kidx', '_kev', '_karrays', '_kz', '_kneg', 'kedges', 'kedge_src', 'kpar_src', 'lifelong']:
             self.__dict__.pop(key, None)
         if self.__dict__.get('kplan') is not None:
             self.kplan.LATE = None
@@ -864,6 +939,8 @@ class Compiled(Agents):
         if agents:
             self.run_moves(scan=False, agents=np.concatenate(agents).astype(np.int64), arr_tr=np.concatenate(trs).astype(np.int64), arr_src=np.concatenate(srcs).astype(np.int64),
                            arr_kind=np.concatenate(kinds).astype(np.int64), ti_due=ti, ti_enter=ti)
+        else: # Its rounds all the same
+            self.start_cascade()
         if self._news:
             self._news = False
             self.notify(ti)
@@ -904,6 +981,8 @@ class Compiled(Agents):
                 agents = np.concatenate(agents).astype(np.int64)
                 self.run_moves(scan=False, agents=agents, arr_tr=np.concatenate(trs).astype(np.int64), arr_src=np.concatenate(srcs).astype(np.int64),
                                arr_kind=np.zeros(len(agents), np.int64), ti_due=mod.ti + 1, ti_enter=mod.ti + 1, mode=1) # Infections are dated at the step's end, the next time point
+            else:
+                self.start_cascade()
             if self._news:
                 self._news = False
                 self.notify(mod.ti + 1)
