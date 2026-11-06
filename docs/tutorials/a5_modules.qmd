@@ -23,7 +23,7 @@ Rather than subclassing `ss.Module` directly, you almost always want to subclass
 
 | Base class | Use for | Added to the sim via |
 |---|---|---|
-| `ss.Disease`, `ss.Infection` | Disease natural history and transmission | `diseases=` |
+| `ss.Disease`, `ss.AgentDisease` | Disease natural history and transmission | `diseases=` |
 | `ss.Network` | Who contacts whom | `networks=` |
 | `ss.Demographics` | Births, deaths, migration | `demographics=` |
 | `ss.Intervention` | Actions that change the simulation | `interventions=` |
@@ -265,7 +265,7 @@ The number of contacts is the same, but when they are close in age, the epidemic
 | Declared | States, transitions, deliveries, modifiers | Everything: `describe()`, every solver, fitting | Nothing, if it can say what you need |
 | Declared, with a little code | A function of the sim as a rate, a condition, or a modifier's amount | Results, solvers that can take the function, fitting | Speed (the function runs once a step), and showing what the function does |
 | A module written as code | A class with `step()` (and states, results, parameters) | Time, people, random numbers, parallel runs, its results | Showing what the module does, and solvers other than agents if it keeps a value for each person |
-| A disease or network written as code | A subclass of `ss.Infection` or `ss.Network` | The same, and transmission over the sim's networks | The same, and fitting its structure |
+| A disease or network written as code | A subclass of `ss.AgentDisease` or `ss.Network` | The same, and transmission over the sim's networks | The same, and fitting its structure |
 
 Start declared, and move down the table only for the part that needs it. Here, the SIRS model didn't need code at all; the antibodies needed a module, but only for the antibody level itself, with a declared disease and a modifier for the rest; and the network needed code for its rule of who meets whom. When code is slow, because it loops over agents in Python, `@ss.jit` compiles a function with Numba, with no change to what it does; see [Custom modules](../user_guide/building_modules.qmd) in the user guide, which also covers the order in which Starsim calls a module's methods, demographics and connectors written as code, and the pitfalls.
 

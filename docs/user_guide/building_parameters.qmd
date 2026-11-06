@@ -97,6 +97,8 @@ Where a value is given decides what it means; the form it takes is free. Each of
 | A distribution | `ss.lognormal(mean=ss.days(8), std=ss.days(2))` | Varies between people |
 | A function of the sim and the people | `lambda sim, uids: ...` | One value for each person (agents only) |
 
+A function takes any of `self` (the module whose value it is), `sim`, and `uids` (the people it is for), by those names, in any order: `lambda sim: ...`, `lambda self, sim: ...`, and `lambda self, sim, uids: ...` all work. One that takes `uids` gives a value for each person, so runs as agents only; one that doesn't means the same under every solver.
+
 Any of these can be wrapped in `ss.par()` to give it a name, bounds, or a source. The sections below cover each kind.
 
 ### Values for each group

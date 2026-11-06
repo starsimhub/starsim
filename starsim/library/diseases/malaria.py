@@ -59,7 +59,7 @@ class Malaria(ss.Disease):
     mu_v  = ss.par(ss.perday(0.143),  doc='Death rate of mosquitoes',                                source='Keeling and Rohani (2008), Program 4.4')
 
     Sh = ss.State(label='Susceptible people')
-    Ih = ss.State(init=0.001, label='Infectious people')
+    Ih = ss.State(init=0.001, label='Infectious people', infected=True) # Counted in the results infected and prevalence
     Rh = ss.State(label='Recovered people')
     Sv = ss.State(people=False, label='Susceptible mosquitoes')
     Iv = ss.State(people=False, label='Infectious mosquitoes')
@@ -73,7 +73,6 @@ class Malaria(ss.Disease):
     mortality  = Sv + Iv >> ss.null @ mu_v
     births     = ss.birth(Sh, rate=mu_h)
     deaths     = ss.death(rate=mu_h)
-    prevalence = Ih/(Sh + Ih + Rh)
 
 
 class MalariaImmunity(ss.Disease):
@@ -151,5 +150,5 @@ class MalariaImmunity(ss.Disease):
     births        = ss.birth(x1, rate=delta)
     deaths        = ss.death(rate=delta)
 
-    prevalence = (y1 + y2 + y3)/(x1 + x2 + x3 + x4 + y1 + y2 + y3) # The true parasite rate
+    prevalence = (y1 + y2 + y3)/(x1 + x2 + x3 + x4 + y1 + y2 + y3) # Explicit form: the true parasite rate, a measure of its own, so not from states marked infected (ss.State(infected=True))
     detected   = (y1 + y2 + q3*y3)/(x1 + x2 + x3 + x4 + y1 + y2 + y3) # What a blood examination finds

@@ -5,7 +5,7 @@ Example maternal infection with congenital outcomes.
 congenital infection, normal) to unborn agents infected via `PrenatalNet`.
 
 How it works:
-    1. Mother-to-child transmission happens via `PrenatalNet`: `ss.Infection`
+    1. Mother-to-child transmission happens via `PrenatalNet`: `ss.AgentDisease`
        calls `set_congenital()` when the target is an unborn agent (age <= 0),
        which by default does nothing.
     2. `CongenitalDisease.set_congenital()` samples an outcome from

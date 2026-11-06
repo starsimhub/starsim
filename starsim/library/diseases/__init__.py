@@ -6,7 +6,7 @@ written as code.
 These are illustrative, lightly-parameterized models intended as starting points
 for building your own disease modules, not as validated models for any specific
 setting. Each one says in its docstring where its structure and its default
-parameters came from. Core disease base classes (`ss.Disease`, `ss.Infection`,
+parameters came from. Core disease base classes (`ss.Disease`, `ss.AgentDisease`,
 `ss.SIR`, etc.) live in `starsim.diseases`.
 """
 from .agents      import AgentSIR, AgentSEIR, AgentSIS

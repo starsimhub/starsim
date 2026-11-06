@@ -608,10 +608,14 @@ class Stepping:
                 self.events[tr.name] = forced
                 self._news = True
         pairs = [(tr, src) for tr in self.graph.transmissions for src in tr.source + (self.immune_states if not getattr(tr, 'generated', False) else [])] # With protection due to a state or memory: people who have had one strain can be infected by another
-        together = self.transmit_together(pairs) if len(pairs) > 1 else None
+        custom = self.custom_transmissions(pairs) if mod.custom_transmit else None # By the disease's own transmit()
+        together = self.transmit_together(pairs) if len(pairs) > 1 and custom is None else None
         self._step_pairs = [] # Who infected whom by each of them, for sources()
         for i,(tr,src) in enumerate(pairs):
-            uids = self.transmit(tr, src) if together is None else together[i]
+            if custom is not None:
+                uids, self._pairs = custom[i]
+            else:
+                uids = self.transmit(tr, src) if together is None else together[i]
             self._step_pairs += self._pairs
             if mod.infection_log is not None:
                 self.log_infections(uids)
@@ -766,6 +770,44 @@ class Stepping:
             for name in dict.fromkeys(choice): # In a fixed order, since the draws are made in it
                 engine.enter(mod.graph.states[name], new[choice == name], ti)
         return new
+
+    def transmit_sources(self, tr):
+        """ The states a transmission infects people from: its sources, and with strains, the states whose people can be infected by another (see step()) """
+        return tr.source + (self.immune_states if not getattr(tr, 'generated', False) else [])
+
+    def transmitted(self, tr):
+        """ Who is infected in the step by a transmission, as the engine works it out: the default of a declared disease's `transmit()` (see `ss.Disease.transmit()`) """
+        out, pairs = [], []
+        for src in self.transmit_sources(tr):
+            out.append(self.transmit(tr, src))
+            pairs += self._pairs
+        self._pairs = pairs
+        return ss.uids.concatenate(out).unique() if out else ss.uids()
+
+    def custom_transmissions(self, pairs):
+        """ Who is infected by each pair of a transmission and the state they are infected from, by the disease's own `transmit()`: called once for each transmission, and split by the state each new case is in (anyone not in one of its source states is not moved); with who infected whom, where the engine worked it out (`super().transmit()`) """
+        mod = self.mod
+        out, done = [], {}
+        for tr,src in pairs:
+            first = tr.name not in done
+            if first:
+                self._pairs = []
+                new = self.as_cases(mod.call_transmit(tr), tr)
+                done[tr.name] = (new, self._pairs)
+            new, found = done[tr.name]
+            out.append((new[mod[src.name].raw[new]], found if first else []))
+        return out
+
+    def as_cases(self, out, tr):
+        """ The new cases a disease's own `transmit()` gives as agents: UIDs, or a boolean array over the agents """
+        if isinstance(out, ss.BoolArr):
+            return out.uids
+        arr = np.asarray(out)
+        if arr.dtype == bool and arr.ndim == 1 and len(arr) == len(self.mod.rel_sus.raw):
+            return ss.uids(np.flatnonzero(arr))
+        if arr.size and not np.issubdtype(arr.dtype, np.integer):
+            raise TypeError(f'transmit() of "{self.mod.name}" gives who is infected by "{tr.name}" as agents: their UIDs (ss.uids), not {arr.dtype} values {arr[:5]}')
+        return ss.uids(arr).unique()
 
     def susceptibility(self, tr, src):
         """ The effective susceptibility of each agent (by UID) to a transmission from a state: `rel_sus` for those in the state, with the state's own, the modifiers on it and on the transmission, and the adjust= of the stratifications """

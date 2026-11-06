@@ -138,9 +138,9 @@ class Cond:
             raise TypeError(errormsg)
         return Event(kind, states)
 
-    def __or__(self, other):  return Cond('|', self, other)
+    def __or__(self, other):  return Cond('|', self, unbracketed(self, other))
     def __rand__(self, other): return Cond('&', other, self)
-    def __ror__(self, other):  return Cond('|', other, self)
+    def __ror__(self, other):  return Cond('|', unbracketed(self, other), self)
     def __invert__(self):     return Cond('~', self)
 
     @property
@@ -176,6 +176,23 @@ class Cond:
         return ss.expressions.Count(states, kind='n')
 
     @property
+    def frac(self):
+        """ For a set of states (`(E | I).frac`, the same as `(E + I).frac`), the share of the module's people in them """
+        return ss.expressions.Count(self.as_states('frac'), kind='frac')
+
+    @property
+    def total(self):
+        """ For a set of states (`(E | I).total`, the same as `(E + I).total`), the number in them in the whole population """
+        return ss.expressions.Count(self.as_states('total'), kind='total')
+
+    def as_states(self, kind):
+        """ The states a condition is a set of, for a count of them (see `n`) """
+        states = state_objects(self)
+        if states is None:
+            raise TypeError(f'{self!r}.{kind} is known only for a set of states (e.g. (sir.I | sir.R).{kind})')
+        return states
+
+    @property
     def uids(self):
         """ The agents the condition holds for now, in a sim that is running or has run (agents only): e.g. `sim.interventions.screening.ever.uids`, everyone ever screened (the sim's copy of the delivery, not the one given, which the sim copies) """
         sim = self.evaluate_in(sim_only=True)
@@ -189,8 +206,12 @@ class Cond:
         return Cond('memory', self, kind)
 
     def __rshift__(self, other):
-        errormsg = 'A condition is not states: several sources of a transition are a sum of states, S + I + R >> D @ rate (| on states is a condition, for where=)'
-        raise TypeError(errormsg)
+        """ (I | R) >> D: a set of states as the sources of a transition, the same as I + R >> D """
+        states = state_objects(self)
+        if states is None:
+            errormsg = f'Only a set of states can be the sources of a transition, e.g. (I | R) >> D or I + R >> D, not the condition {self!r}'
+            raise TypeError(errormsg)
+        return sum(states[1:], states[0]) >> other
     def __add__(self, other): return self.arith('+', self, other)
     def __sub__(self, other): return self.arith('-', self, other)
     def __mul__(self, other): return self.arith('*', self, other)
@@ -432,6 +453,14 @@ class Named:
 
     def __copy__(self): return self
     def __deepcopy__(self, memo): return self
+
+
+def unbracketed(cond, other):
+    """ Raise an error for states and a transition joined by |, as in I | R >> D, which Python reads as I | (R >> D): the sources need brackets """
+    if isinstance(other, ss.Transition) and state_objects(cond) is not None:
+        errormsg = f'In "A | B >> C", Python applies >> before |, so it reads as A | (B >> C). Put brackets around the sources: (A | B) >> C, or write A + B >> C (here: | {other})'
+        raise TypeError(errormsg)
+    return other
 
 
 def state_objects(cond):
@@ -718,7 +747,7 @@ def group_reasons(cond, sim):
     if isinstance(cond, ss.expressions.mother):
         return [f'{cond} reads each person\'s mother, which only agents know']
     if callable(cond) and not isinstance(cond, (Cond, ss.expressions.Expr)):
-        return [f'the function "{getattr(cond, "__name__", "function")}" takes uids'] if ss.utils.n_args(cond) >= 2 else []
+        return [f'the function "{getattr(cond, "__name__", "function")}" takes uids'] if ss.utils.takes_uids(cond) else []
     if isinstance(cond, Cond) and cond.op == 'people' and not is_static(cond, sim):
         prop = cond.args[0]
         if prop == 'female':
@@ -1188,14 +1217,13 @@ class Selector(sc.prettyobj):
         if cond is None:
             return self.everyone()
         if callable(cond) and not isinstance(cond, Cond):
-            nargs = ss.utils.n_args(cond)
-            if nargs >= 2:
+            if ss.utils.takes_uids(cond):
                 if not self.abm:
                     raise ss.CapabilityError(f'the function "{getattr(cond, "__name__", "function")}" cannot run with solver="{sim.solver}".\n'
                                              f'     It takes uids, which exist only per agent. Run with solver="abm".')
-                out = cond(sim, sim.people.auids if uids is None else uids)
+                out = ss.utils.call_fn(cond, self=self.mod, sim=sim, uids=sim.people.auids if uids is None else uids)
             else:
-                out = cond(sim)
+                out = ss.utils.call_fn(cond, self=self.mod, sim=sim)
         elif isinstance(cond, ss.Arr) and cond.initialized: # An array with values, e.g. sir.I | sir.R in a run as agents
             out = cond
         else:
@@ -1255,8 +1283,8 @@ class Selector(sc.prettyobj):
         out = out > 0 if out.dtype != bool and out.dtype.kind in 'iu' else out
         return np.broadcast_to(out, self.shape).astype(float)
 
-    def per_person(self, val, convert=None, mask=None):
-        """ A value (a number, `ss.by`, or a function of the sim) as a scalar or one value per agent or per group; given a mask (see `expr()`), one that reads a clock is worked out only for those in it """
+    def per_person(self, val, convert=None, mask=None, owner=None):
+        """ A value (a number, `ss.by`, or a function of the sim, and of `self`, the module it belongs to: `owner`, or the selector's module) as a scalar or one value per agent or per group; given a mask (see `expr()`), one that reads a clock is worked out only for those in it """
         sim = self.sim
         if isinstance(val, ss.expressions.Expr) and any(isinstance(leaf, (ss.State, ss.expressions.Prop)) for leaf in val.leaves): # Of people's properties or states (of any module), read for each person as where= reads them, e.g. multiply=1 - 0.9*meth.on
             val = person_cond(val)
@@ -1271,7 +1299,7 @@ class Selector(sc.prettyobj):
             ds, grid = val.grid(sim)
             return grid[tuple(self.dim(sim.groups.strats[d].name) for d in ds)]
         if callable(val) and not isinstance(val, ss.Dist):
-            val = val(sim)
+            val = ss.utils.call_fn(val, self=self.mod if owner is None else owner, sim=sim)
         if isinstance(val, ss.TimePar) and convert is not None:
             val = convert(val)
         if isinstance(val, ss.Arr):

@@ -44,7 +44,7 @@ def agent_solver(module, sim, why=False):
 
 class Transmission(Effects):
     """
-    Transmission as agents, the same for a declared disease (`Agents`, for its transmissions) and one written as code (`ss.Infection.transmit_route()`,
+    Transmission as agents, the same for a declared disease (`Agents`, for its transmissions) and one written as code (`ss.AgentDisease.transmit_route()`,
     through its engine, `ss.solvers.Undeclared`): who can transmit and be infected, with the modifiers and products on `rel_trans` and `rel_sus`
     applied (`current_value()`); who is infected over a network (`over_network()`); and who infected whom (`first_infections()`)
 
@@ -148,6 +148,160 @@ class Transmission(Effects):
     def unprotected(self, name, uids, kept):
         """ Which of some agents reached by a strain are infected by it: each with the chance `kept`, the share of the force of infection of the strain that reaches them (1 − their protection against it), drawn from `protect_<name>` """
         return self.step_draw(f'protect_{name}', uids) < kept
+
+
+    # Transmission written as code: what ss.Disease.transmit() and the methods it calls do, so that each can be overridden on its own
+
+    def code_transmit(self):
+        """
+        Who is infected in the step by a disease's transmission written as code (`ss.Disease.transmit()`): over each of the sim's routes in turn
+        (`transmit_route()`), from the disease's effective transmissibility and susceptibility (`transmissibility()`, `susceptibility()`) and the
+        beta of each route (`route_betas()`), keeping the first infection of each agent (`finalize_infections()`). With strains, every strain is
+        transmitted in one pass, at the infectiousness of the strain each carries, and each new case is infected by one of those who reached
+        them, at random, whose strain they take (`self.mod.strain`), unless protected against it (`strain_sus()`), as for a declared disease
+        (`pick_sources()`, `unprotected()`)
+
+        Returns:
+            A tuple of the UIDs of the new cases, and of their sources and network IDs
+        """
+        dis = self.mod
+        if 'beta' not in dis.pars: # A disease that is not transmitted, such as ssl.NCD, has no beta
+            return dis.finalize_infections([], [], [])
+        betamap = dis.route_betas()
+        rel_trans, rel_sus = dis.transmissibility(), dis.susceptibility()
+        strains = dis.strains
+        if strains is not None: # The infectiousness of the strain each carries (none for someone without one)
+            held = dis.strain.raw
+            rel = strains.values.rel_trans if 'rel_trans' in strains.values else np.ones(len(strains))
+            trans = rel_trans.raw*np.where(held >= 0, rel[np.maximum(held, 0)], 0.0)
+            rel_trans = rel_trans.asnew(trans, copy=False)
+        out = []
+        for i, (nkey,route) in enumerate(self.sim.networks.items()):
+            betas = betamap[ss.networks.standardize_netkey(nkey)]
+            if strains is None:
+                out.append(dis.transmit_route(i, route, betas, rel_trans, rel_sus))
+            elif isinstance(route, ss.Network): # On a network, each case has a source, whose strain they take
+                target_uids, source_uids, network_ids = dis.transmit_route(i, route, betas, rel_trans, rel_sus)
+                out.append((source_uids, target_uids, network_ids, held[source_uids]))
+            else: # Another route gives no sources, so each strain is transmitted over it by those who carry it
+                for k in range(len(strains)):
+                    target_uids, source_uids, network_ids = dis.transmit_route(i, route, betas, rel_trans.asnew(trans*(held == k), copy=False), rel_sus)
+                    out.append((source_uids, target_uids, network_ids, k))
+        if strains is None:
+            return dis.finalize_infections(*zip(*out)) if out else dis.finalize_infections([], [], [])
+        elif not out:
+            return self.first_infections(out)
+        return self.code_strain_cases(out, trans)
+
+    def code_strain_cases(self, pairs, trans):
+        """ With strains, each agent reached in the step, once, by one of those who reached them, at random, whose strain they take unless protected against it (see `code_transmit()`) """
+        dis = self.mod
+        new_cases, sources, networks, strain = self.pick_sources(pairs, 'infection')
+        kept = np.ones(len(new_cases))
+        for k in np.unique(strain):
+            kept[strain == k] = np.broadcast_to(dis.strain_sus(k), trans.shape)[new_cases[strain == k]]
+        ok = self.unprotected('infection', new_cases, kept)
+        new_cases, sources, networks, strain = new_cases[ok], sources[ok], networks[ok], strain[ok]
+        dis.strain[new_cases] = strain
+        return new_cases, sources, networks
+
+    def code_route(self, i, route, betas, rel_trans, rel_sus):
+        """
+        The transmission of a disease written as code along a single network (or other route): see `ss.Disease.transmit_route()`
+
+        On a network, each edge transmits with probability `rel_trans·rel_sus·net_beta()` (see `ss.Network.transmit()`), times the modifiers
+        of the network's contacts and of `rel_sus` on the route (`ss.modify(..., network=)`), as for a declared disease run as agents, by the same
+        code (`over_network()`), with beta as the probability in the step. The modifiers of `rel_trans` and `rel_sus` (including products) are
+        applied here, so a disease that overrides `transmit()` has them too.
+        """
+        dis = self.mod
+        rel_trans = times(rel_trans.raw, self.mult_raw('rel_trans'))
+        rel_sus = times(rel_sus.raw, self.mult_raw('rel_sus'))
+
+        # Main use case: networks
+        if isinstance(route, ss.Network):
+            pairs = self.over_network(i, route, rel_trans, rel_sus, betas, 'rel_sus')
+
+        # Handle everything else: mixing pools, environmental transmission, etc.
+        elif isinstance(route, ss.networks.Route):
+            beta = betas[0].to_prob(dis.t.dt) if isinstance(betas[0], ss.Rate) else betas[0] # Mixing pools are unidirectional, so only the first beta is used
+            rel_sus = times(rel_sus, self.route_mult('rel_sus', route)(None, slice(None)))
+            target_uids = route.compute_transmission(dis.rel_sus.asnew(rel_sus, copy=False), dis.rel_trans.asnew(rel_trans, copy=False), beta, disease=dis)
+            pairs = [(np.full(len(target_uids), dtype=ss.dtypes.int, fill_value=ss.dtypes.int_nan), target_uids, i)]
+        else:
+            errormsg = f'Cannot compute transmission via route {type(route)}; please subclass ss.networks.Route and define a compute_transmission() method'
+            raise TypeError(errormsg)
+
+        new_cases = ss.uids.concatenate([pair[1] for pair in pairs])
+        sources = ss.uids.concatenate([pair[0] for pair in pairs])
+        networks = np.full(len(new_cases), dtype=ss.dtypes.int, fill_value=i)
+        return new_cases, sources, networks
+
+    def code_betas(self):
+        """ The beta of a disease written as code for each of the sim's networks (by name), as a pair (p1 to p2, p2 to p1), checked against them: see `ss.Disease.route_betas()` """
+        dis = self.mod
+        sim = self.sim
+        β = dis.pars.beta
+        unit = getattr(sim, 'unit', None) # None if time is counted in steps, when a bare number is a probability per step
+
+        def scalar_beta(β):
+            return isinstance(β, ss.Rate) or sc.isnumber(β)
+
+        nets = {ss.networks.standardize_netkey(k):net for k,net in sim.networks.items()}
+        def in_unit(k, β): # A bare number is a rate in the sim's unit, as in a declared disease (on a network with acts, a probability per act)
+            has_acts = getattr(nets.get(ss.networks.standardize_netkey(k)), 'has_acts', False)
+            return ss.per(β, unit) if sc.isnumber(β) and β and unit and not has_acts else β
+
+        def both_ways(k, β): # A single beta applies in both directions, except on a maternal network: from mother to child only
+            net = nets.get(ss.networks.standardize_netkey(k))
+            return [β, β*0] if getattr(net, 'one_way', False) else [β, β]
+
+        def as_pair(β, nkey):
+            """ A probability per act is one value for both [p1 to p2, p2 to p1]; with directions, an array of a value for each of the network's (see `code_route()`) """
+            if not isinstance(β, ss.peract):
+                return β
+            net = nets.get(nkey)
+            vals = β.resolve(net) if net is not None else β.values
+            if len(vals) == 1:
+                return vals*2
+            return [np.asarray(vals, dtype=float)]*2
+
+        # If beta is a scalar, apply this bi-directionally to all networks
+        if scalar_beta(β) or isinstance(β, ss.peract):
+            betamap = {ss.networks.standardize_netkey(k):both_ways(k, in_unit(k, β)) if scalar_beta(β) else as_pair(β, ss.networks.standardize_netkey(k)) for k in sim.networks.keys()}
+
+        # If beta is a dict, check all entries are bi-directional; a default is the beta of every network it does not name, and the names that are not networks are not used
+        elif isinstance(β, dict):
+            betamap = dict()
+            if 'default' in β:
+                unknown = [k for k in β if k != 'default' and ss.networks.standardize_netkey(k) not in nets]
+                if unknown:
+                    ss.note(f'the beta of "{dis.name}" names {sc.strjoin(unknown)}, which {"is not a network" if len(unknown) == 1 else "are not networks"} of the sim, so {"it is" if len(unknown) == 1 else "they are"} not used; the networks not named take the default', sim=sim)
+                β = {k:ss.networks.route_beta(β, k) for k in sim.networks.keys()}
+            for k,thisbeta in β.items():
+                nkey = ss.networks.standardize_netkey(k)
+                if scalar_beta(thisbeta):
+                    betamap[nkey] = both_ways(nkey, in_unit(k, thisbeta))
+                elif isinstance(thisbeta, ss.peract):
+                    betamap[nkey] = as_pair(thisbeta, nkey)
+                else:
+                    betamap[nkey] = [in_unit(k, b) for b in thisbeta]
+
+        else:
+            errormsg = f'Invalid type {type(β)} for beta'
+            raise TypeError(errormsg)
+
+        # Check that it matches the network
+        netkeys = [ss.networks.standardize_netkey(k) for k in list(sim.networks.keys())]
+        if set(betamap.keys()) != set(netkeys):
+            missing = sorted(set(netkeys) - set(betamap.keys()))
+            extra = sorted(set(betamap.keys()) - set(netkeys))
+            errormsg = f'Network keys ({netkeys}) and beta keys ({list(betamap.keys())}) do not match for disease "{dis.name}"'
+            if missing: errormsg += f'; missing beta for network(s) {missing}'
+            if extra:   errormsg += f'; no network(s) found matching {extra}'
+            raise ValueError(errormsg)
+
+        return betamap
 
 
 class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
@@ -651,10 +805,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
             if seed is not None:
                 first = self.members(self.graph.default_state)
                 # A share for each agent: from their own properties (ss.by), or a function of the sim (and the agents)
-                if not isinstance(seed, ss.by) and self.n_args(seed) > 2:
-                    errormsg = f'init_prev of "{mod.name}" is a function of {self.n_args(seed)} arguments; it takes the sim, or the sim and the agents (sim, uids), and returns the share of each that starts infected'
-                    raise TypeError(errormsg)
-                p = seed.lookup(self.sim, self.convert)[first] if isinstance(seed, ss.by) else seed(self.sim, first) if self.n_args(seed) == 2 else seed(self.sim)
+                p = seed.lookup(self.sim, self.convert)[first] if isinstance(seed, ss.by) else ss.utils.call_fn(seed, self=mod, sim=self.sim, uids=first) # Of any of self, sim, and uids
                 p = np.asarray(p.raw if isinstance(p, ss.Arr) else p, dtype=float)
                 p = p[first] if np.ndim(p) and len(p) == len(self.mod.rel_sus.raw) and len(p) != len(first) else p # One value per agent, by UID
                 chosen = first[self.draw('seed_who', first) < p]
@@ -1206,7 +1357,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         return
 
     def call_uids(self, func, p=None):
-        return func(self.sim, self._uids)
+        return ss.utils.call_fn(func, self=self.mod, sim=self.sim, uids=self._uids)
 
     def weighted_events(self, key, weight, integer):
         """ An outcome weighted per person (e.g. years of life lost by each person's age): the weight of each person who went through the transition this step, summed by group """
@@ -1227,7 +1378,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         out = super().call(func, p)
         if isinstance(out, ss.Arr):
             out = out.raw
-        if np.ndim(out) != 1 or isinstance(out, ss.uids) or isinstance(func, ss.parameters.TimeValue) or self.n_args(func) >= 2:
+        if np.ndim(out) != 1 or isinstance(out, ss.uids) or isinstance(func, ss.parameters.TimeValue) or self.takes_uids(func):
             return out
         people = self.sim.people
         n, alive = people.uid.len_tot, people.auids

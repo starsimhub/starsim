@@ -1759,7 +1759,49 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             mult = flow.rel_sus*self.mult_raw('rel_sus', state=flow.state)
         if self.adjust[tr.name] is not None:
             mult = mult*self.adjust[tr.name]
+        if flow.kind == 'contact' and self.mod.custom_transmit and not getattr(self, '_own_rates', False): # Moved by the disease's own transmit() at each step instead (see step_transmit())
+            return 0.0
         return mult*self.mult_raw('transition', tr.name, state=flow.state) # An inflow's too
+
+    def transmitted(self, tr):
+        """
+        The number infected in the step in each group by a transmission, as the solver works it out at the start of the step: the
+        people in each of its source compartments times the chance of the flow in the step, 1 − exp(−rate·dt) (the default of a declared
+        disease's `transmit()`, see `ss.Disease.transmit()`)
+        """
+        self._own_rates = True
+        try:
+            total = np.zeros(self.n_groups)
+            for flow in self.flows:
+                if flow.tr is tr and flow.kind == 'contact':
+                    rate = np.broadcast_to(np.asarray(self.flow_base(flow)*self.flow_mult(flow), dtype=float), self.n_groups)
+                    total += self.y[flow.src]*-np.expm1(-np.maximum(rate, 0)*self.dt)
+        finally:
+            self._own_rates = False
+        return total
+
+    def step_transmit(self):
+        """ Move those a declared disease's own `transmit()` gives for each of its transmissions, at the start of the step (see `ss.Disease.transmit()`): from its source states in proportion, in each group, counted in its flow """
+        mod = self.mod
+        if self.sim.solver == 'ode' and not getattr(self, '_noted_transmit', False):
+            self._noted_transmit = True
+            ss.note(f'"{mod.name}" has a transmit() of its own, which is taken once a step, at its start, so the ODE does not integrate its transmissions within the step (first order in dt); give a rate instead, e.g. S >> I @ (lambda self, sim: ...), to keep it exact', sim=self.sim)
+        for tr in self.graph.transmissions:
+            out = mod.call_transmit(tr)
+            if isinstance(out, (ss.uids, ss.BoolArr)):
+                raise ss.CapabilityError(f'transmit() of "{mod.name}" gave agents (UIDs) for "{tr.name}", but it is run with solver="{self.sim.solver}", which has no agents: give the number infected in each group (or one number), e.g. with if self.sim.solver == "abm": ... else: ...')
+            count = np.broadcast_to(np.asarray(out, dtype=float), self.n_groups)
+            if self.strain is not None or len(tr.dest) > 1:
+                raise ss.CapabilityError(f'transmit() of "{mod.name}" for "{tr.name}" ({"with strains" if self.strain is not None else "with several destinations"}) cannot run with solver="{self.sim.solver}" yet; run with solver="abm"')
+            comps = sorted({flow.src for flow in self.flows if flow.tr is tr and flow.kind == 'contact'})
+            states = list({id(self.comps[c].state):self.comps[c].state for c in comps}.values())
+            have = sum(self.y[c] for c in comps) if comps else np.zeros(self.n_groups)
+            share = np.clip(np.divide(count, have, out=np.zeros(self.n_groups), where=have > 0), 0, 1)
+            frac = np.zeros(self.selector.shape)
+            for state in states:
+                frac[self.selector.states.index(state.name)] = share
+            self.force(frac, tr, tr.dest[0], srcs=states)
+        return
 
     def rates(self):
         """ The rate of every flow, per unit time and per member of its source compartment (or in total, for an inflow) """
@@ -3282,6 +3324,8 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             self.update_targets()
             self.sweep_triggers()
         self.step_rates()
+        if self.mod.custom_transmit: # Its own transmit(), taken at the start of the step
+            self.step_transmit()
         owner = self.owner
         if owner is not self and self is not owner.engines[-1]: # In a crossing, the last disease to step takes the step for all of them, once each has worked out its rates
             return

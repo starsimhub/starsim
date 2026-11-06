@@ -10,11 +10,13 @@ sir_S: 1099.0
 sir_births: 4438.0
 sir_death: 0.0
 sir_deaths: 2225.0
+sir_infected: 1564.0
 sir_infection: 12665.0
 sir_prevalence: 0.30020611776071127
 sir_recovery: 10553.0
 sis_I: 10372.0
 sis_S: 1814.0
+sis_infected: 10372.0
 sis_infection: 22795.0
 sis_prevalence: 0.49882141407857405
 sis_recovery: 11359.0

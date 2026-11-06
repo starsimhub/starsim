@@ -457,7 +457,7 @@ class Engine(Telling, Effects):
         self.solver = solver or sim.solver
         self.graph = module.graph
         self.fixed = dict() # Converted values of plain parameters, which hold for the whole run
-        self.arities = dict() # The number of arguments of each user function: see n_args()
+        self.arities = dict() # Whether each user function takes uids: see takes_uids()
         self.held_series = dict() # Values that vary in time, at the start of each step of the sim: see held_value()
         self.rng = self.make_rng() # For draws that are not per agent
         self.dwells = sc.obj() # Dwell-time information for each transition that has one
@@ -582,7 +582,7 @@ class Engine(Telling, Effects):
     def step_funcs(self):
         """ Call the module's custom per-step functions, after its transitions """
         for func in self.graph.funcs.values():
-            func(self.sim)
+            ss.utils.call_fn(func, self=self.mod, sim=self.sim)
         return
 
     def shrink(self):
@@ -1256,11 +1256,11 @@ class Engine(Telling, Effects):
             raise ValueError(f'the probability per act of "{self.mod.name}" on "{route.name}" is {val}, which gives {ps.tolist()}, outside 0 to 1')
         return -np.log1p(-np.minimum(ps, 1 - 1e-15))
 
-    def n_args(self, func):
-        """ The number of arguments a user function takes, worked out once for each function """
+    def takes_uids(self, func):
+        """ Whether a user function takes the agents (`uids`), worked out once for each function (see `ss.utils.fn_args()`) """
         known = self.arities.get(id(func))
         if known is None or known[0] is not func:
-            known = self.arities[id(func)] = (func, ss.utils.n_args(func))
+            known = self.arities[id(func)] = (func, ss.utils.takes_uids(func))
         return known[1]
 
     def call(self, func, p=None):
@@ -1269,11 +1269,11 @@ class Engine(Telling, Effects):
             if self.year is None or ss.solvers.Compartmental.held(func): # A step function is held at its value at the start of the step, as in a whole run (see Compartmental.tables())
                 return self.held_value(func)
             return self.held_value(func, self.year)
-        if self.n_args(func) >= 2:
+        if self.takes_uids(func):
             return self.call_uids(func, p)
         key = ('called', id(func))
         if key not in self.cache:
-            self.cache[key] = func(self.sim)
+            self.cache[key] = ss.utils.call_fn(func, self=self.mod, sim=self.sim)
         return self.cache[key]
 
     def series_over(self, func, years, key):
@@ -1868,9 +1868,9 @@ class Engine(Telling, Effects):
             for end in tr._ends: # A flow for each destination, e.g. res.cin.X, whose sum is the total
                 dst = graph.states.get(end)
                 results += ss.Result(f'{name}.{end}', dtype=float, scale=scale, label=f'{tr.label or name} to {"death" if dst is None else dst.label or dst.name}', kind='flow', auto_plot=False)
-        if graph.auto_prevalence and 'prevalence' in mod.results: # Its own takes the place of the automatic one
-            graph.auto_prevalence = False
-            del graph.exprs['prevalence']
+        for name in [name for name in graph.marked_results if name in mod.results]: # Its own takes the place of one worked out from the states marked infected
+            graph.marked_results.discard(name)
+            del graph.exprs[name]
         for name,expr in graph.exprs.items(): # A ratio, a sum of flows, or otherwise a stock
             if len(ratio_parts(expr)) == 2: # Including one scaled by a number, e.g. I/N*1e5
                 kind = 'ratio'

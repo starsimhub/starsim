@@ -48,7 +48,7 @@ for label, beta in {'No transmission': 0, 'Transmission': ss.peryear(20)}.items(
 
 Among the children infected before birth, the numbers of stillbirths and congenital infections follow the probabilities in `birth_outcomes`.
 
-To use this in a disease of your own, build on `ssl.mnch.CongenitalDisease` (or copy its `set_congenital()` and `step_congenital()`; `ss.Infection` calls `set_congenital()` for each person infected before birth): define `birth_outcome_keys` and `birth_outcomes` in its parameters, add a `ti_<key>` state for each outcome (and a true/false state for each outcome that doesn't kill), and call `self.step_congenital()` from `step_state()`. Outcomes named `'stillborn'`, `'miscarriage'`, or `'neonatal_death'` are deaths; the first two happen before delivery and the third after it. `ssl.HIV` (see [Library: diseases](library_diseases.qmd)) also uses `set_congenital()`, to infect children of infected mothers at birth.
+To use this in a disease of your own, build on `ssl.mnch.CongenitalDisease` (or copy its `set_congenital()` and `step_congenital()`; `ss.AgentDisease` calls `set_congenital()` for each person infected before birth): define `birth_outcome_keys` and `birth_outcomes` in its parameters, add a `ti_<key>` state for each outcome (and a true/false state for each outcome that doesn't kill), and call `self.step_congenital()` from `step_state()`. Outcomes named `'stillborn'`, `'miscarriage'`, or `'neonatal_death'` are deaths; the first two happen before delivery and the third after it. `ssl.HIV` (see [Library: diseases](library_diseases.qmd)) also uses `set_congenital()`, to infect children of infected mothers at birth.
 
 ## Neonatal deaths
 

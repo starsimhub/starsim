@@ -962,12 +962,16 @@ class Compiled(Agents):
                 self.events[tr.name] = forced
                 self._news = True
         pairs = [(tr, src) for tr in self.graph.transmissions for src in tr.source + (self.immune_states if not getattr(tr, 'generated', False) else [])]
-        together = self.transmit_together(pairs) if len(pairs) > 1 else None
+        custom = self.custom_transmissions(pairs) if mod.custom_transmit else None # By the disease's own transmit()
+        together = self.transmit_together(pairs) if len(pairs) > 1 and custom is None else None
         self._step_pairs = []
         k = self.kplan
         agents, trs, srcs = [], [], []
         for i, (tr, src) in enumerate(pairs):
-            uids = self.transmit(tr, src) if together is None else together[i]
+            if custom is not None:
+                uids, self._pairs = custom[i]
+            else:
+                uids = self.transmit(tr, src) if together is None else together[i]
             self._step_pairs += self._pairs
             if mod.infection_log is not None:
                 self.log_infections(uids)

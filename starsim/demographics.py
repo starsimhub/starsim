@@ -870,12 +870,12 @@ class Pregnancy(Demographics, ss.Disease):
             fertility = self.graph.pars.fertility_rate.raw # conception_rate() unless a function was given
             if not callable(fertility):
                 rate = np.full(len(sim.people.uid.raw), float(engine.convert(fertility)))
-            elif ss.utils.n_args(fertility) >= 2: # A function of the agents given (sim, uids): put in place by UID
+            elif ss.utils.takes_uids(fertility): # A function of the agents given (e.g. sim, uids): put in place by UID
                 uids = sim.people.auids
                 rate = np.zeros(len(sim.people.uid.raw))
-                rate[uids] = engine.convert(fertility(sim, uids))
+                rate[uids] = engine.convert(ss.utils.call_fn(fertility, self=self, sim=sim, uids=uids))
             else:
-                rate = np.asarray(engine.convert(fertility(sim)), dtype=float)
+                rate = np.asarray(engine.convert(ss.utils.call_fn(fertility, self=self, sim=sim)), dtype=float)
             return -np.expm1(-rate*dt*steps)*kept
         def after(kept, before): # A delivery before the start (then a new pregnancy) counts in the parity of the woman, and in her pregnancies with the one she has at the start (a loss before the start counts in neither, so deliveries plus losses are pregnancies); and the fetuses of those pregnant at the start are there at the start
             delivered = np.maximum(self.sim.people.parity.raw[kept] - before['parity'], 0) if 'parity' in before else 0

@@ -49,7 +49,7 @@ Starsim 4 adds a way to write a model as declared states and transitions, which 
   - results are named after their states (`sim.results.sir.I`, not `n_I`);
   - `sim.calibrate()` is `sim.fit()`;
   - deliveries take `at=` and `where=` (were `years=`/`dates=` and `eligible=`);
-  - `ss.Infection` transmits in `transmit()` (was `infect()`);
+  - `ss.Infection` is `ss.AgentDisease`, and transmits in `transmit()` (was `infect()`);
   - lactation is part of `ss.Pregnancy`.
 - *Migration*: `ss.Births` and `ss.Deaths` have the flows `birth` and `death` (were `new`), with totals `birth.cum` and `death.cum` (were `cumulative`).
 - *Migration*: `ss.Pregnancy` results are `preterm`, `very_preterm`, `unborn`, `maternal_death`, and `neonatal_death`; `ssl.FetalHealth` results are `birth`, `lbw`, `vlbw`, `sga`, and `svn`.
@@ -57,17 +57,19 @@ Starsim 4 adds a way to write a model as declared states and transitions, which 
 - *Migration*: `ss.strains.Family` is removed, so `ss.Strains` takes the names of strains that share a disease's states, without `shared=` or diseases as strains, and `ss.immunity()` takes `protection=` due to a state, without `rel_trans=`, `dur=`, or an attribute. Strains with courses of their own are one disease per strain, connected by a connector (see the [Diseases](https://docs.starsim.org/user_guide/building_diseases.html#strains) guide). `ssl.Dengue()` is now a list of serotypes, with results `sim.results.den1` and so on, not `sim.results.dengue`.
 - *Migration*: many names were made clearer, without aliases (the full list is in `docs/migration/v4_changelog.md`), e.g. `ss.person` (was `ss.ppl`), `ss.population()` (was `ss.people()`), `ss.lognormal` (was `ss.lognorm_ex`/`lognorm_im`), `ss.boxcar` (was `ss.box`), `approximations=` and `require_kernels=` on the sim (were `approx=` and `nopython=`), `aging=`, `fractions=` (was `split=`), deliveries' `product=` and `every=`, and `X.time_in`.
 - *Migration*: there is no model spec: `sim.to_code()`, `ss.diff()` and `sim.hash()` are removed.
-- *Migration*: `ss.Disease` is the one disease class, declared, written as code, or both; `ss.Infection` adds only transmission.
+- *Migration*: `ss.Disease` is the base of every disease, declared, written as code, or both; `ss.AgentDisease` (was `ss.Infection`) adds transmission written as code for agents, done by the solver, with each piece (`transmissibility()`, `susceptibility()`, `route_betas()`, `transmit_route()`, `finalize_infections()`) a method to override on its own.
 - *Migration*: an unnamed transition that is a disease's only transmission is named `infection`, a duration written inline is named by its state (`dur_I`), and a rate by its transition (`rate_death`).
 - *Migration*: `sim.summarize()` is a dataframe, the same table as `msim.summarize()`; `ss.data.population()` and `ss.data.contacts()` return labeled dataframes rather than tuples.
-- *Migration*: some things that used to pass silently now raise: `at_age=` in a compartmental run needs an age group starting at that age, and an `ss.Infection` with a nonzero `beta` needs a network or mixing pool.
+- *Migration*: some things that used to pass silently now raise: `at_age=` in a compartmental run needs an age group starting at that age, and an `ss.AgentDisease` with a nonzero `beta` needs a network or mixing pool.
 - `ss.SIR`, `ss.SIS`, and `ss.SEIR` are plain declared diseases: a bare `dur_inf=10` is in the model's unit, and `beta` is required on a network with acts.
 - Declared diseases take `init_prev=` as a share, a number of people, or a function, not a distribution.
 - `ss.days(1) + 1` raises, as `ss.perday(1) + 1` does.
 - `sim.fit()` keeps four SciPy methods: `'nelder-mead'`, `'l-bfgs-b'`, `'powell'`, and `'slsqp'`.
 - Removed `ss.Pregnancy(p_loss=)`, `Network.custom_beta`, `Network.edge_net_beta()`, `Agents.backdate()`, `Pars.dict_update()`, `Dist.state_int`, `Arr.notnanvals`, and the options `warn_convert`, `install_fonts`, and `keep_memory`. `python -m starsim.converters.migrate` handles or flags these.
 - Triggers are `on=`, on deliveries (`ss.treat(drug, on=screening.positive)`) and transitions (`ss.Transition(PP, NP, on=preg.delivery, dur=ss.months(6))`, or `@ ss.on(...)`); `where=` only restricts, `who=` chooses people or compartments, and `when=` is a condition on time.
-- `ss.Infection`'s results are `infection` and `infection.cum`, as for a declared disease, not `new_infections` and `cum_infections`.
+- A declared disease can write a transmission as code with its own `transmit(transition)`, and user functions take any of `self`, `sim`, and `uids` by name.
+- *Regression*: `prevalence` comes only from states marked infected (`ss.State(infected=True)`); a declared disease with none marked no longer has one worked out from its transitions. `ss.SIR`, `ss.SEIR`, and `ss.SIS` mark theirs, and also have `infected`.
+- `ss.AgentDisease`'s results are `infection` and `infection.cum`, as for a declared disease, not `new_infections` and `cum_infections`.
 - The sim's results `new_deaths`, `cum_deaths`, and `new_emigrants` are now `died`, `died.cum`, and `emigrated`, so that they don't shadow a disease's `death` flow; `ssl.HIV`, `ssl.NCD`, and `ssl.Cholera` now have the flow `death`, and `ss.DegreeNet`'s `new_partnerships` is now `formed`.
 - `ss.change()` is removed: use `ss.modify()` of an `ss.timeseries()`.
 - `msim.to_df()` gives one row per run by default; pass `quantiles=` for quantiles.

@@ -1040,8 +1040,9 @@ def test_waning_functions():
     inf = sim.results.mal.infection
     assert inf[12:55].sum() < inf[65:108].sum() # Acquisition protected for 50 days only (transmission for good)
     assert two(dict(acquisition=box, transmission=box), solver='ode').solver == 'ode'
+    assert two(lambda t, uids: np.ones(len(uids))).results.mal.infection.sum() > 0 # A function of any of t, self, sim, and uids, by name
     with pytest.raises(TypeError):
-        two(lambda t, uids: 1.0) # A function of (t, sim, uids), or of t
+        two(lambda a, b: 1.0) # By position, a function of t, or of (t, sim, uids)
     with pytest.raises(ss.CapabilityError):
         two(dict(acquisition=ss.boxcar(plateau=ss.days(50)), transmission=None), solver='ode')
 

@@ -118,7 +118,7 @@ modeling = '''
     options style show save load import_from export_to
 '''.split()
 extension = '''
-    Module Network DynamicNetwork Infection Demographics Intervention Product Connector Analyzer
+    Module Network DynamicNetwork AgentDisease Demographics Intervention Product Connector Analyzer
     Arr FloatArr IntArr BoolArr BoolState CatArr TimeArr uids DateArray Timeline Dist multi_random
     register_modules required compile jit plot_args return_fig ndict Pars SimPars TimePar Rate warn note CapabilityError AlreadyRunError
 '''.split()

@@ -367,7 +367,7 @@ prof = big.profile(follow=ss.RandomNet.add_pairs, plot=False)
 prof.disp(maxentries=5)
 ```
 
-The function names are those of the code actually run, which for an inherited method is the class that defines it (a module that inherits its `step()` from `ss.Infection` shows as `Infection.step`). The same works for a method of a module you wrote, which is where the time usually goes in a slow model: a loop over people in Python, where an operation on the whole array would do. `sim.cprofile()` profiles every function the run calls, which is useful when you don't yet know where to look. Only functions called during the run can be followed this way; for anything else, such as the building of the sim, use `sc.profile()` from Sciris directly.
+The function names are those of the code actually run, which for an inherited method is the class that defines it (a module that inherits its `step()` from `ss.AgentDisease` shows as `AgentDisease.step`). The same works for a method of a module you wrote, which is where the time usually goes in a slow model: a loop over people in Python, where an operation on the whole array would do. `sim.cprofile()` profiles every function the run calls, which is useful when you don't yet know where to look. Only functions called during the run can be followed this way; for anything else, such as the building of the sim, use `sc.profile()` from Sciris directly.
 
 When the time is in your own code, the usual remedies, roughly in order of how much they help:
 

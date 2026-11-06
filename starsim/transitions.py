@@ -45,6 +45,7 @@ class State(Nameable, Expr):
         people (bool): whether this state holds people (the default), or is a count of something else (`people=False`: bacteria in the water, mosquitoes); `people=True` says so explicitly, for a group of people that only an inflow fills
         rel_sus (float): susceptibility multiplier while in this state (one value; for a value by group, see `stratify(adjust=)`)
         rel_trans (float): infectiousness multiplier while in this state (likewise)
+        infected (bool): whether the people in it are infected; the disease then has the results `infected`, the number in its infected states, and `prevalence`, their share of everyone in its states (unless it defines its own)
         keep_time (bool): as agents, keep the time each person entered the state (`ti_<name>`) for code to read, e.g. the years since onset; by default it is kept only if the model reads it (a clock, a scheduled exit), to save memory
         label (str): a human-readable name, for plots
 
@@ -55,11 +56,12 @@ class State(Nameable, Expr):
         E = ss.State(init_n=10)     # 10 people
         V = ss.State(rel_sus=0.2, label='Vaccinated')
         A = ss.State(keep_time=True) # Code reads mod.ti_A
+        E, I = ss.states(2, infected=True) # Counted in the results infected and prevalence
         ```
     """
     _counter = itertools.count() # States are ordered by when they were created
 
-    def __init__(self, name=None, init=None, init_n=None, people=None, rel_sus=1.0, rel_trans=1.0, keep_time=False, label=None, **kwargs):
+    def __init__(self, name=None, init=None, init_n=None, people=None, rel_sus=1.0, rel_trans=1.0, infected=False, keep_time=False, label=None, **kwargs):
         if kwargs:
             raise TypeError(f'ss.State() got unexpected arguments: {sc.strjoin(kwargs)}')
         self.name = name
@@ -68,6 +70,7 @@ class State(Nameable, Expr):
         self.declared_init = (init, init_n) # As declared, before a disease's init= or init_n= (see ss.graph.Graph), so a copy for another disease starts from these
         self.people = people is not False
         self.people_given = people is not None # Said explicitly, so not checked (see ss.graph.Graph.check_counts())
+        self.infected = bool(infected) # Whether the people in it are infected, as the model says: the states counted in the results infected and prevalence (see ss.graph.Graph.resolve_derived())
         self.infectious = False # Whether it is a source of infection: in the rate of a transmission (see ss.graph.Graph.resolve_transitions())
         for key,val in dict(rel_sus=rel_sus, rel_trans=rel_trans).items():
             if isinstance(val.raw if isinstance(val, par) else val, by): # The engines take one number for everyone in a state
@@ -123,7 +126,7 @@ class State(Nameable, Expr):
         """ The event of leaving this state """
         return ss.conditions.Event('exit', [self])
 
-    def __or__(self, other): # As a condition: the people in either state, e.g. where=sir.I | sir.R (a set of sources is a sum: S + I >> D)
+    def __or__(self, other): # As a condition: the people in either state, e.g. where=sir.I | sir.R; as sources, the same as a sum: (S | I) >> D is S + I >> D
         return ss.conditions.as_cond(self) | other
 
     def __ror__(self, other):
@@ -303,7 +306,7 @@ def lifelong(func):
     value is worked out as each person is first needed, and kept: one read before its array is set would be kept for life.
 
     Args:
-        func (callable): a function of the sim (`fn(sim)`, giving a value for everyone), or of the sim and agents (`fn(sim, uids)`)
+        func (callable): a function of any of `self`, `sim`, and `uids`, by name (see `ss.utils.fn_args()`): without `uids` (e.g. `fn(sim)`), giving a value for everyone; with them (`fn(sim, uids)`), for those agents
 
     Returns:
         A copy of the function, marked (the function given is not changed)
@@ -775,7 +778,7 @@ class Transition(Nameable):
     def __or__(self, other):
         if self.source is not None and not isinstance(other, State): # As events: the people who went through either, e.g. on=a.infection | b.infection
             return ss.conditions.as_cond(self) | other
-        errormsg = 'Several sources are a sum of states: write S + I + R >> D @ rate (| on states is a condition, for where=)'
+        errormsg = 'Several sources are a set of states: write (S | I | R) >> D @ rate, or S + I + R >> D @ rate'
         raise TypeError(errormsg)
 
     def __ror__(self, other):

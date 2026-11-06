@@ -229,7 +229,7 @@ def test_independence(do_plot=False, thresh=0.1):
     arrs.age = st.age.values
     arrs.sex = st.female.values
     for key,disease in sim.diseases.items():
-        arrs[f'{key}_init'] = (disease.infected if isinstance(disease, ss.Infection) else disease.I).values # Written as code, or declared
+        arrs[f'{key}_init'] = (disease.infected if isinstance(disease, ss.AgentDisease) else disease.I).values # Written as code, or declared
     for key,network in sim.networks.items():
         data = np.zeros(len(sim.people))
         for p in ['p1', 'p2']:
@@ -307,7 +307,7 @@ def test_crn_option():
     """ The opt-in non-CRN fast path (ss.options.crn=False) for transmission """
     def run(crn, seed=1):
         with ss.options.context(crn=crn):
-            sim = ss.Sim(diseases=ssl.AgentSIS(name='sis', beta=0.1, init_prev=0.05), networks=ss.RandomNet(), # The transmission of ss.Infection
+            sim = ss.Sim(diseases=ssl.AgentSIS(name='sis', beta=0.1, init_prev=0.05), networks=ss.RandomNet(), # The transmission of ss.AgentDisease
                          n_agents=2000, dur=30, rand_seed=seed, verbose=0)
             sim.run()
         return sim.results['sis']['infected'].values

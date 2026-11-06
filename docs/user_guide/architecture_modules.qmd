@@ -27,7 +27,7 @@ What kind of module it is decides only where in each step it is called, and wher
 
 | Kind | Base class | Kept in | Examples |
 |---|---|---|---|
-| Diseases | `ss.Disease` | `sim.diseases` | a declared `ss.Disease`, `ss.SIR`, `ss.Infection` and its subclasses, `ssl.HIV` |
+| Diseases | `ss.Disease` | `sim.diseases` | a declared `ss.Disease`, `ss.SIR`, `ss.AgentDisease` and its subclasses, `ssl.HIV` |
 | Networks | `ss.networks.Route` | `sim.networks` | `ss.RandomNet`, `ss.SexualNet`, `ss.MixingPool` |
 | Demographics | `ss.Demographics` | `sim.demographics` | `ss.Births`, `ss.Deaths`, `ss.Pregnancy` |
 | Interventions | `ss.Intervention` | `sim.interventions` | `ss.vaccinate`, `ss.screen`, `ss.treat` (deliveries, which hold products) |
@@ -103,7 +103,7 @@ Forgetting to call `super()` is the commonest mistake in writing a module, so th
 A disease can be declared (states and transitions), written as code (arrays and a `step_state()` and `step()` of its own), or both. The difference is in what the module hands to its engine:
 
 - A **declared** disease's graph is run by its engine, `ss.solvers.Agents` or `ss.solvers.Compartmental`, made by `ss.solvers.make_engine()`. `ss.Disease.step()` is three calls to the engine: the transitions that are not contact-mediated, then those that are, then any functions of the model. No method of `ss.Disease` asks which solver it has.
-- A disease **written as code** (an `ss.Infection` subclass, or an `ss.Disease` that declares nothing) gets an engine that has nothing to run (`ss.solvers.Undeclared`), so `super().step()` is harmless, and its own code does the work. An `ss.Infection` transmits through the same code a declared disease uses as agents (`ss.solvers.Transmission`), so modifiers and products act on it in the same way.
+- A disease **written as code** (an `ss.AgentDisease` subclass, or an `ss.Disease` that declares nothing) gets an engine that has nothing to run (`ss.solvers.Undeclared`), so `super().step()` is harmless, and its own code does the work. An `ss.AgentDisease` transmits through the same code a declared disease uses as agents (`ss.solvers.Transmission`), so modifiers and products act on it in the same way.
 - A class can be **both**: declared states and transitions, plus code in `step()` after `super().step()` has taken them, reading or writing arrays of its own.
 
 Every other kind of module is written as code (apart from the deliveries and modifiers, which are declared in their own way, by keywords). So a sim is often a mixture, and Starsim has to decide whether it can run as compartments. It never runs code to find out. Instead it looks at what each module written as code keeps (`init_capabilities()` in `starsim/solvers/choose.py`):
@@ -179,7 +179,7 @@ Modules don't hold references to each other: a module reaches the rest of the si
 
 States are shared by reading them: any module can read `sir.I` or another module's array, and the arrays always have one value per agent alive, in the same order, since the people grow and shrink them all together. A property of people that several modules use (a measure of wealth, say) can be added once with `people.add_state()` and read by all of them. Writing is a different matter. A module can write into another's arrays (an intervention that cures people sets `sir.I[uids] = False`), and for a declared disease the write is tracked so its counts stay right, but Starsim can't see what was changed or why. The declared alternative is `ss.modify`, which never overwrites anything: it keeps the quantity's base value and applies itself on top, so modifiers can't clobber each other, and `sim.what_modifies()` can list them ([Transmission](architecture_transmission.qmd#effects-what-changes-what)). To move people between a declared disease's states, `ss.move()` does it the same way under every solver.
 
-An array that most agents never change (a relative susceptibility that is 1 until something sets it) can be made with `shared=True`, which takes no memory per agent until a value is set; `ss.Infection`'s `rel_sus` and `rel_trans` are made this way.
+An array that most agents never change (a relative susceptibility that is 1 until something sets it) can be made with `shared=True`, which takes no memory per agent until a value is set; `ss.AgentDisease`'s `rel_sus` and `rel_trans` are made this way.
 
 ## Reading the loop
 

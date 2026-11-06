@@ -9,7 +9,7 @@ import starsim as ss
 __all__ = ['HIV', 'ART', 'CD4_analyzer']
 
 
-class HIV(ss.Infection):
+class HIV(ss.AgentDisease):
     """
     Simple HIV model with CD4 count dynamics and ART.
 

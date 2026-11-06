@@ -431,7 +431,7 @@ class by_func:
 
     def levels(self, sim, convert):
         """ The function's values now, converted to numbers in the sim's unit: one number, or an `ss.by` over the dimension, which each solver reads as it reads any """
-        vals = convert(self.func(sim))
+        vals = convert(ss.utils.call_fn(self.func, sim=sim))
         if np.ndim(vals) == 0:
             return vals
         groups = sim.groups

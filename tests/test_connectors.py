@@ -262,7 +262,7 @@ def test_member():
     with pytest.raises(sc.KeyNotFoundError, match='does not belong to a module'): # Not a member, it has no module
         ss.Sim(diseases='sis', networks='random', connectors=ss.modify('rel_trans', multiply=0.5), n_agents=100, verbose=0).init()
     with pytest.raises(ss.CapabilityError, match='declared disease'):
-        class Coded(ss.Infection):
+        class Coded(ss.AgentDisease):
             fading = ss.modify('rel_trans', multiply=0.5)
         Coded()
     return

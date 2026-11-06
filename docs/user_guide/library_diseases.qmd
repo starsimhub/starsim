@@ -45,11 +45,11 @@ The library has two groups of diseases. The first, below, are written as code, s
 | `ssl.Measles` | `ssl.AgentSEIR` | Measles as an SEIR model, with natural history parameters from the US CDC |
 | `ssl.Ebola` | `ssl.AgentSEIR` | Ebola, with severe disease and continued transmission from unburied bodies |
 | `ssl.Cholera` | `ssl.AgentSEIR` | Cholera, with symptomatic and asymptomatic infection, plus indirect transmission through a decaying environmental reservoir |
-| `ssl.HIV` | `ss.Infection` | HIV, with CD4 counts, deaths that depend on them, and transmission from mother to child |
+| `ssl.HIV` | `ss.AgentDisease` | HIV, with CD4 counts, deaths that depend on them, and transmission from mother to child |
 | `ssl.ART` | `ss.Intervention` | Antiretroviral therapy for `ssl.HIV`, scaled up over the years given |
 | `ssl.CD4_analyzer` | `ss.Analyzer` | Records every agent's CD4 count at every step, for `ssl.HIV` |
 | `ssl.NCD` | `ss.Disease` | A non-communicable disease: a risk factor, the condition, and death from it; not transmitted |
-| `ssl.AgentSIR`, `ssl.AgentSIS`, `ssl.AgentSEIR` | `ss.Infection` | Starsim 3's SIR, SIS (with waning immunity), and SEIR, written as code: the classes to build on for a disease that changes how infection, progression, or recovery happens for each agent |
+| `ssl.AgentSIR`, `ssl.AgentSIS`, `ssl.AgentSEIR` | `ss.AgentDisease` | Starsim 3's SIR, SIS (with waning immunity), and SEIR, written as code: teaching examples of what the declared `ss.SIR`, `ss.SIS`, and `ss.SEIR` do under the hood as agents, and starting points for a disease written as code (for the models themselves, use the declared ones) |
 
 ## Outbreak diseases: measles, Ebola, and cholera
 
