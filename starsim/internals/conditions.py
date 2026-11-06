@@ -225,7 +225,8 @@ class Cond:
 
     @staticmethod
     def arith(op, a, b):
-        """ Arithmetic on a condition: with an expression (a parameter, a state's count), a typed value (ss.peryear(0.02)), or a value by level or in time (ss.by, ss.timeseries), it is an expression for a rate, e.g. b*ss.person.age; otherwise a condition """
+        """ Arithmetic on a condition: with an expression (a parameter, a state's count), a typed value (ss.peryear(0.02)), or a value by level or in time (ss.by, ss.timeseries), it is an expression for a rate, e.g. b*ss.person.age; otherwise a condition. A set of states (Ia | Is) is their sum, so 0.3*(Ia | Is) is 0.3*(Ia + Is) """
+        a, b = [ss.expressions.as_expr(x) if ss.expressions.states_of(x) is not None else x for x in (a, b)]
         if any(isinstance(x, (ss.expressions.Expr, ss.TimePar, ss.by, ss.parameters.TimeValue)) for x in (a, b)):
             return ss.expressions.BinOp(op, a, b) # A value by level or in time is a parameter in it, as when it is the whole rate
         elif op == '**':
