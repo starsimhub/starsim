@@ -62,7 +62,7 @@ def prior_of(val):
     elif dist == 'uniform':
         return ss.uniform(low=num('low'), high=num('high'))
     elif dist == 'lognorm':
-        return ss.lognorm_im(mean=num('meanlog'), std=num('sdlog'))
+        return ss.lognormal(log_mean=num('meanlog'), log_std=num('sdlog'))
     return None
 
 
@@ -278,7 +278,7 @@ def load_flepimop(filename, scenario=None, verbose=None, **kwargs):
     # Places, as a stratification with commuting; and their initial numbers
     if places:
         mob = None if away is None or not away.any() else ss.geo.Mobility(matrix=away, kind='visit')
-        src.stratify(subpop=places, split=list(sizes/sizes.sum()), kind='space', mobility=mob)
+        src.stratify(subpop=places, fractions=list(sizes/sizes.sum()), kind='space', mobility=mob)
         if mob is not None:
             notes.append('subpop: commuting as visits, each traveler away for half the day (flepiMoP\'s percent_day_away)')
 
@@ -302,7 +302,7 @@ def load_flepimop(filename, scenario=None, verbose=None, **kwargs):
 
     # What is not translated
     for key,why in dict(seeding='seeding (scheduled importations): an ss.geo.Mobility(data=...) register would carry it',
-                        inference='inference (fitting to data): use sim.fit() with ss.simdata()',
+                        inference='inference (fitting to data): use sim.fit() with ss.SimData()',
                         outcome_modifiers='outcome modifiers (changes to the outcomes\' probabilities over date ranges): ss.modify on the weights would carry them').items():
         if cfg.get(key):
             src.skip(key, why)
@@ -370,7 +370,7 @@ def modifiers(scenario, mods, disease, places, methods, src, quiet=False):
 
 
 def outcome(name, o, dims, src, notes):
-    """ An outcome: a share of a flow (or of another outcome), with a delay and a duration """
+    """ An outcome: a share of a flow (or of another outcome), with a delay and a stay """
     source = o.get('source')
     if isinstance(source, dict) and 'incidence' in source:
         want = {d:[str(v) for v in sc.tolist(lev)] for d,lev in source['incidence'].items()}
@@ -392,8 +392,8 @@ def outcome(name, o, dims, src, notes):
     if 'delay' in o:
         kw['delay'] = ss.days(mean_of(o['delay']['value'], f'outcomes: {name}.delay', src))
     if 'duration' in o:
-        kw['duration'] = ss.constant(mean_of(o['duration']['value'], f'outcomes: {name}.duration', src), unit='days') # A fixed stay, as in flepiMoP
-        notes.append(f'outcomes: {name} has a duration of {kw["duration"]}; the number in it is n_{name} (flepiMoP\'s {o["duration"].get("name", name + "_curr")})')
+        kw['stay'] = ss.constant(mean_of(o['duration']['value'], f'outcomes: {name}.duration', src), unit='days') # A fixed stay, as in flepiMoP
+        notes.append(f'outcomes: {name} has a stay of {kw["stay"]}; the number in it is n_{name} (flepiMoP\'s {o["duration"].get("name", name + "_curr")})')
     src.add_outcome(name, flows, p=p, doc=f'the probability of {name}', **kw)
     return
 
@@ -484,7 +484,7 @@ def to_flepimop(sim, subpop='all'):
     flat = ss.converters.export.flatten(sim)
     times = ss.converters.export.timing(sim)
     lost = list(flat.lost)
-    scale = float(ss.dur(1, base=flat.unit).to('day').value) # Days in the sim's unit
+    scale = float(ss.Duration(1, base=flat.unit).to('day').value) # Days in the sim's unit
     if scale != 1:
         lost.append(f'changed: the time in {flat.unit}s is written in days (as flepiMoP\'s is), with the rates divided by {scale:n}')
     start = pd.Timestamp(str(times.date)[:10] if times.date is not None else '2020-01-01')

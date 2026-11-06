@@ -53,7 +53,7 @@ The levels of a dimension are given as a list, or as a dict with the share of pe
 | True and false | `vaccinated=[False, True]` | False, True |
 | A dict of levels and shares | `age={0: 0.3, 15: 0.6, 65: 0.1}`, `risk={'low': 0.8, 'high': 0.2}` | The same, with these shares of people |
 
-The shares can also be given as `split=` (`risk=['low', 'high'], split=[0.8, 0.2]`). If they aren't given, they come from the population where it has them (the ages of a named population such as `ss.people('Kenya')`), or else from the world's population by age for age groups, everyone in the first level for true and false, and equal shares otherwise, each marked as a guess by `describe()`. A level is referred to by its label (`'0-14'`) or its position (`0`). What a dimension is, its `kind`, comes from its name and levels: `age=` with numbers is age groups (people age between them), a geography or `mobility=` makes places, and anything else is plain groups; `kind='age'`, `'space'`, or `'plain'` says so instead. The [appendix](#appendix-names-that-mean-something) lists the names that mean something to Starsim.
+The shares can also be given as `fractions=` (`risk=['low', 'high'], fractions=[0.8, 0.2]`). If they aren't given, they come from the population where it has them (the ages of a named population such as `ss.population('Kenya')`), or else from the world's population by age for age groups, everyone in the first level for true and false, and equal shares otherwise, each marked as a guess by `describe()`. A level is referred to by its label (`'0-14'`) or its position (`0`). What a dimension is, its `kind`, comes from its name and levels: `age=` with numbers is age groups (people age between them), a geography or `mobility=` makes places, and anything else is plain groups; `kind='age'`, `'space'`, or `'plain'` says so instead. The [appendix](#appendix-names-that-mean-something) lists the names that mean something to Starsim.
 
 ## How groups differ
 
@@ -99,7 +99,7 @@ res.infection.by('vaccinated').plot()
 
 With 90% vaccinated, the outbreak is much smaller, and about two in five of those infected are vaccinated: when nearly everyone is vaccinated, the few vaccine failures among them can be a large share of cases, though each vaccinated person is far less likely to be infected.
 
-`sim.describe()` lists each dimension with its levels, the share of people in each (`split: False 0.1, True 0.9`), and its adjustments (`adjust: rel_sus × 1, 0.03`), so the parts of the model that a stratification adds can be checked there.
+`sim.describe()` lists each dimension with its levels, the share of people in each (`fractions: False 0.1, True 0.9`), and its adjustments (`adjust: rel_sus × 1, 0.03`), so the parts of the model that a stratification adds can be checked there.
 
 A share given for each level of a dimension applies within each level of the others: here 90% of each age group is vaccinated. Shares that differ by age are an `ss.by()` over both dimensions; see [T8 – Stratification and co-transmission](../tutorials/t8_strata.qmd).
 
@@ -128,19 +128,19 @@ sim.results.measles.I.by('severity').plot()
 
 People can move between the levels of a dimension, without changing their disease state:
 
-- **Aging.** In a model with births or deaths, people move up the age groups as they get older, at the rate the age groups give. A closed population (with no births or deaths) doesn't age, since its age groups would empty, and `describe()` says so; `use_aging=True` on the sim ages it anyway.
+- **Aging.** In a model with births or deaths, people move up the age groups as they get older, at the rate the age groups give. A closed population (with no births or deaths) doesn't age, since its age groups would empty, and `describe()` says so; `aging=True` on the sim ages it anyway.
 - **Transfers.** `ss.transfer()` moves people between levels at a rate: `ss.transfer(vaccinated=True, rate=ss.peryear(0.2))` vaccinates 20% of the unvaccinated a year, whatever their disease state, and `ss.transfer(risk=('low', 'high'), rate=ss.peryear(0.1))` moves people from low to high risk. A transfer is given to `stratify()` by keyword, and has a result of its own, as a transition does:
 
 ```python
 measles.stratify(vaccinated=[False, True], adjust={'rel_sus': [1, 0.03]}, campaign=ss.transfer(vaccinated=True, rate=ss.peryear(0.2)))
 ```
 
-- **Counters.** `increment=` on a transition moves people up a dimension of whole numbers each time it happens to them, e.g. the number of infections, doses, or births. A rate reads each person's count as a property of people, `ss.ppl.infections` (in a compartmental run, each level's count), e.g. a susceptibility that falls with each past infection:
+- **Counters.** `increment=` on a transition moves people up a dimension of whole numbers each time it happens to them, e.g. the number of infections, doses, or births. A rate reads each person's count as a property of people, `ss.person.infections` (in a compartmental run, each level's count), e.g. a susceptibility that falls with each past infection:
 
 ```python
 S, I = ss.states('S I')
 tppi = ss.par(0.5) # Protection per past infection
-infection = ss.Transition(S, I, rate=(1 - tppi)**ss.ppl.infections*ss.perday(0.3)*I, increment='infections')
+infection = ss.Transition(S, I, rate=(1 - tppi)**ss.person.infections*ss.perday(0.3)*I, increment='infections')
 sis = ss.Disease(infection, I >> S @ ss.days(7), init=dict(I=0.01), name='sis')
 sis.stratify(infections=[0, 1, 2, 3, 4]) # 0, 1, 2, 3, 4+
 ```
@@ -216,7 +216,7 @@ Run as compartments, each state has one compartment for each combination of leve
 | Argument | What it gives |
 |---|---|
 | The dimension, by keyword | Its name and levels: bin edges for a number such as age (`age=[0, 15, 65]`), labels (`risk=['low', 'high']`), true and false, a dict of levels and shares, or a geography (`patch=ss.geo.geography(...)`) |
-| `split` | The share of people in each level, unless the levels are a dict of them; by default from the population, the world's ages, everyone at the first level (for true and false, or a dimension people are moved along), or equal shares |
+| `fractions` | The share of people in each level, unless the levels are a dict of them; by default from the population, the world's ages, everyone at the first level (for true and false, or a dimension people are moved along), or equal shares |
 | `adjust` | Multipliers in each level, by name: on a transition's rate (a duration is divided) or on a branch's probability, and on `rel_sus` and `rel_trans` |
 | `kind` | `'age'`, `'space'`, or `'plain'`, if not as its name and levels say |
 | `states` | The states it applies to (by default, every state of people), e.g. `states=[I]` for severity |
@@ -232,7 +232,7 @@ Most dimensions are plain groups, whatever they are called (`risk`, `vaccinated`
 | Name or form | What it means |
 |---|---|
 | `age`, with numbers | Age groups: people age between them (in a model with births or deaths), a contact matrix by age is converted to them, and the shares come from a named population or the world's ages |
-| `sex` | People's sex (`ss.ppl.female` as agents): two levels, one of them `'female'` (e.g. `sex=['female', 'male']`) |
+| `sex` | People's sex (`ss.person.female` as agents): two levels, one of them `'female'` (e.g. `sex=['female', 'male']`) |
 | A geography, or `mobility=` | Places (`kind='space'`), with movement between them; see [Geography](populations_geography.qmd) |
 | `patch`, `region`, `district`, `county`, `province`, `place`, `location`, with only names | Plain groups that mix as one population, with a note, since a list of names alone gives no movement; give a geography or `mobility=` for places |
 | `strain` | Made by `ss.Strains` on the disease ([Strains](building_diseases.qmd#strains)), not by `stratify()` |

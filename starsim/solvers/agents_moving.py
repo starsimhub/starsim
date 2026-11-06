@@ -118,7 +118,7 @@ class Moving:
                 if name in triggers:
                     for t,state,uids in self.triggered([tr]):
                         self.move(t, state, uids)
-                for src in tr.src: # Those whose exit by it is due already
+                for src in tr.source: # Those whose exit by it is due already
                     uids = arrived.get(src.name)
                     if uids is not None and tr in self.exits_of[src.name]:
                         uids = uids[mod[src.name].raw[uids]]
@@ -144,7 +144,7 @@ class Moving:
                 break
         else:
             items = [item for v in sent.values() for item in v]
-            cycle = sc.strjoin(sorted({f'{tr.name} ({state.name} -> {sc.strjoin([d.name for d in tr.dst]) or "out"})' for tr,state,_ in items})) or sc.strjoin(sorted(arrived))
+            cycle = sc.strjoin(sorted({f'{tr.name} ({state.name} -> {sc.strjoin([d.name for d in tr.dest]) or "out"})' for tr,state,_ in items})) or sc.strjoin(sorted(arrived))
             timed = sorted({tr.name for tr,_,_ in items if tr.name in self.dwells})
             hint = (f'{sc.strjoin(timed)} {"has a dwell time" if len(timed) == 1 else "have dwell times"} shorter than a step, so for many people it rounds to no steps and they go round again within the step (a dwell is rounded to whole steps at random, keeping its mean). Use a smaller dt, or a longer dwell time.' if timed else
                     'Give one of them a rate or a duration, or change the branches so they do not lead back.')
@@ -166,11 +166,11 @@ class Moving:
             after = {tr.name:set() for tr in trs} # The transitions each comes after
             events = {tr.name:self.event_transitions(tr) for tr in trs}
             for t in trs:
-                srcs = {s.name for s in t.src}
-                after[t.name] |= {u.name for u in trs if u is not t and any(getattr(d, 'name', None) in srcs for d in (u.dst or []))}
+                srcs = {s.name for s in t.source}
+                after[t.name] |= {u.name for u in trs if u is not t and any(getattr(d, 'name', None) in srcs for d in (u.dest or []))}
                 after[t.name] |= events[t.name] - {t.name}
                 if t.trigger is not None:
-                    for s in t.src:
+                    for s in t.source:
                         after.update({u.name:after[u.name] | {t.name} for u in self.exits_of.get(s.name, []) if u is not t and u.trigger is None})
             order, done = [], set()
             while len(order) < len(trs):
@@ -194,7 +194,7 @@ class Moving:
         if 'tr' in spec:
             return {spec['tr']}
         names = set(spec.get('enter', ()) or spec.get('exit', ()))
-        key = 'dst' if 'enter' in spec else 'src'
+        key = 'dest' if 'enter' in spec else 'source'
         return {t.name for t in self.graph.transitions.values() if any(getattr(s, 'name', None) in names for s in (getattr(t, key) or []))}
 
     def send(self, moved, ti):
@@ -216,9 +216,9 @@ class Moving:
         for name,(tr,srcs,uidlist) in by_tr.items():
             uids = ss.uids.concatenate(uidlist) if len(uidlist) > 1 else uidlist[0]
             frm = np.concatenate([np.full(len(u), index.get(s.name, -1)) for s,u in zip(srcs, uidlist)]) # The state each came from
-            if tr.outflow:
+            if tr._outflow:
                 self.fire(tr, uids, frm, -1)
-                self.record(tr, uids, frm, -1) # An event, e.g. for the children of ss.birth(per=) of a death at delivery
+                self.record(tr, uids, frm, -1) # An event, e.g. for the children of ss.birth(on=) of a death at delivery
                 if tr.migration:
                     self.sim.people.request_removal(uids)
                 else:
@@ -226,8 +226,8 @@ class Moving:
                     self._died.append((tr, srcs, uidlist)) # Counted once each death has one cause: see uncount_deaths()
                 continue
             entering = ng > 1 and any(self.enters(tr, src) for src in srcs) # Into a dimension: recorded at the level they arrive at
-            if not tr.split:
-                dsts = [(tr.dst[0], uids, frm)]
+            if not tr._split:
+                dsts = [(tr.dest[0], uids, frm)]
             else:
                 dsts = self.destinations(tr, srcs, uidlist, uids, frm, entering)
             for dst,inds,came in dsts:
@@ -237,7 +237,7 @@ class Moving:
                 self.enter(dst, inds, ti, tr=tr, srcs=came) # Once their levels are known, since dwell times can depend on them
                 if entering and not (tr.contact and self.strain is not None):
                     self.add_flow_groups(name, self.groups(inds, dst), inds)
-                    if tr.ends:
+                    if tr._ends:
                         self.add_flow_groups(f'{name}.{dst.name}', self.groups(inds, dst), inds)
                 if len(inds) and (dst.name in self.scheduled or (row is not None and self.competing[dst.name])):
                     arrived.setdefault(dst.name, []).append(inds)
@@ -248,13 +248,13 @@ class Moving:
         edges = self.dest_edges(tr, uids, frm)
         rvs = self.draw(f'dst_{tr.name}', uids)
         masks = [(rvs >= edges[i]) & (rvs < edges[i+1]) for i in range(len(edges) - 1)]
-        dsts = [(dst, uids[mask], frm[mask]) for dst,mask in zip(tr.dst, masks)]
+        dsts = [(dst, uids[mask], frm[mask]) for dst,mask in zip(tr.dest, masks)]
         if tr.dies: # Those who took ss.null die, as by an outflow
             self.split_deaths(tr, srcs, uidlist, uids[masks[-1]], frm[masks[-1]])
         if tr.stays: # What the others leave over stays: the move is canceled
             stayed = rvs >= edges[-1]
             self.stay(tr, uids[stayed], frm[stayed])
-        if tr.ends: # The flow to each destination
+        if tr._ends: # The flow to each destination
             left = np.concatenate([self.groups(u, src) for u,src in zip(uidlist, srcs)]) if self.sim.groups.n_groups > 1 and not entering else None # The groups they left, where the total is recorded (see move()), before any change of level
             for (dst,inds,_),mask in zip(dsts + [(ss.transitions.null, uids[masks[-1]], None)]*tr.dies, masks):
                 key = f'{tr.name}.{"null" if dst is ss.transitions.null else dst.name}'
@@ -269,7 +269,7 @@ class Moving:
         fixed = self.__dict__.setdefault('_fixed', {}).get(key)
         if fixed is None:
             dies = not tr.dies or (self.is_fixed(getattr(tr, 'p_die', None)) and self.is_fixed(getattr(tr, 'p_stay', None)) and self.unmodified('branch', f'{tr.name}.null')) # The share of ss.null, from those of the others, and of ss.stay (see die_share())
-            fixed = self._fixed[key] = dies and all(self.is_fixed(p) for p in tr.p) and all(self.unmodified('branch', f'{tr.name}.{dst.name}') for dst in tr.dst)
+            fixed = self._fixed[key] = dies and all(self.is_fixed(p) for p in tr.p) and all(self.unmodified('branch', f'{tr.name}.{dst.name}') for dst in tr.dest)
         return self.fixed_edges(key, fixed, lambda u: self.dest_edges_for(tr, u, frm if u is uids else np.full(len(u), -1)), uids)
 
     def dest_edges_for(self, tr, uids, frm):
@@ -331,7 +331,7 @@ class Moving:
         out = []
         taken = None # Whom an earlier trigger moves now, by UID
         for tr in (self.triggers if triggers is None else triggers):
-            srcs = [s for s in tr.src if s.people]
+            srcs = [s for s in tr.source if s.people]
             names = [s.name for s in srcs]
             if tr.trigger.event:
                 uids = self.new_events(tr) # Seen whether or not anyone is in the source, so an old event does not move people who enter later
@@ -392,7 +392,7 @@ class Moving:
         """ The agents an event trigger's event has happened to since it last looked """
         event = tr.trigger.x
         name = ss.conditions.modname(event.module)
-        engine = self if name in [None, self.mod.name] else self.sim.get_declared(name).engine
+        engine = self if name in [None, self.mod.name] else self.sim._declared_module(name).engine
         spec = event.spec()
         if len(spec) == 1 and 'tr' in spec and engine.last_batch.get(spec['tr'], 0) <= self._seen.get(tr.name, 0): # Nothing of its transition since it looked
             self._seen[tr.name] = max(self._seen.get(tr.name, 0), engine.batches[-1].n if engine.batches else 0) # As unseen() would mark it
@@ -401,28 +401,28 @@ class Moving:
         return engine.event_uids(**spec, batches=fresh) if fresh else ss.uids() # Each once, in order (event_uids() gives them so)
 
     def step_per(self, ti):
-        """ Births driven by a flow (`ss.birth(per=)`): children for the people who went through the transition since this last looked, made by the module that owns the transition; then whatever moves at once, including the children's own exits due now (e.g. a `dur=0` split) """
+        """ Births driven by a flow (`ss.birth(on=)`): children for the people who went through the transition since this last looked, made by the module that owns the transition; then whatever moves at once, including the children's own exits due now (e.g. a `dur=0` split) """
         born = []
         for tr in self.graph.inflows:
-            if getattr(tr, 'per', None) is None or not tr.people or ss.conditions.modname(tr.per.module) not in [None, self.mod.name]: # Another module's transition: that module makes the children, who are placed here by this inflow's state (see into())
+            if getattr(tr, 'birth_on', None) is None or not tr.people or ss.conditions.modname(tr.birth_on.module) not in [None, self.mod.name]: # Another module's transition: that module makes the children, who are placed here by this inflow's state (see into())
                 continue
-            parents = self.fresh(('per', tr.name), tr.per.name, unique=False) # Once for each time, e.g. twice for a parent whose dwell times rounded to no steps
+            parents = self.fresh(('per', tr.name), tr.birth_on.name, unique=False) # Once for each time, e.g. twice for a parent whose dwell times rounded to no steps
             if not len(parents):
                 continue
             new = self.mod.make_children(tr, parents, ti) # E.g. ss.Pregnancy's, which also records events on the mothers
             self.fire_entered(new, tr)
             self.flowcounts[tr.name] += self.n_of(new)
             if len(new):
-                self.record(tr, new, -1, self.state_index[tr.dst[0].name]) # An event, e.g. preg.birth
+                self.record(tr, new, -1, self.state_index[tr.dest[0].name]) # An event, e.g. preg.birth
                 self.events[tr.name] = new if tr.name not in self.events else ss.uids.concatenate([self.events[tr.name], new])
                 if self.sim.groups.n_groups > 1:
                     self.flow_groups[tr.name] = self.flow_groups.get(tr.name, 0) + np.bincount(self.groups(new), weights=self.weights(new), minlength=self.sim.groups.n_groups)
-                for mod in self.sim.declared: # Counted in the flow of each module's own ss.birth(per=) of the same transition, and recorded there as its event (for on= and conditions)
-                    other = next((o for o in mod.graph.inflows if mod is not self.mod and getattr(o, 'per', None) is not None and o.per.name == tr.per.name and ss.conditions.modname(o.per.module) == self.mod.name), None)
+                for mod in self.sim.declared: # Counted in the flow of each module's own ss.birth(on=) of the same transition, and recorded there as its event (for on= and conditions)
+                    other = next((o for o in mod.graph.inflows if mod is not self.mod and getattr(o, 'birth_on', None) is not None and o.birth_on.name == tr.birth_on.name and ss.conditions.modname(o.birth_on.module) == self.mod.name), None)
                     if other is not None:
                         engine = mod.engine
                         engine.flowcounts[other.name] += self.n_of(new)
-                        engine.record(other, new, -1, engine.state_index[other.dst[0].name])
+                        engine.record(other, new, -1, engine.state_index[other.dest[0].name])
                         engine.events[other.name] = new if other.name not in engine.events else ss.uids.concatenate([engine.events[other.name], new])
                 born.append(new)
         if born:
@@ -500,13 +500,13 @@ class Moving:
         return new
 
     def into(self, tr):
-        """ The names of the states that children born by a transition are put in: this inflow's, and that of each declared module's own `ss.birth(per=)` of the same transition """
-        out = [d.name for d in tr.dst]
-        per = (ss.conditions.modname(tr.per.module) or self.mod.name, tr.per.name)
+        """ The names of the states that children born by a transition are put in: this inflow's, and that of each declared module's own `ss.birth(on=)` of the same transition """
+        out = [d.name for d in tr.dest]
+        per = (ss.conditions.modname(tr.birth_on.module) or self.mod.name, tr.birth_on.name)
         for mod in self.sim.declared:
             for other in mod.graph.inflows:
-                if getattr(other, 'per', None) is not None and (ss.conditions.modname(other.per.module) or mod.name, other.per.name) == per:
-                    out += [d.name for d in other.dst]
+                if getattr(other, 'birth_on', None) is not None and (ss.conditions.modname(other.birth_on.module) or mod.name, other.birth_on.name) == per:
+                    out += [d.name for d in other.dest]
         return list(dict.fromkeys(out))
 
     def fresh(self, key, tr, unique=True):
@@ -621,7 +621,7 @@ class Moving:
                 if name in self._junctions:
                     exits = self.graph.exits[name]
                     for tr in exits.branches + sc.tolist(exits.remainder):
-                        for dst in tr.dst:
+                        for dst in tr.dest:
                             walk(dst.name, path + (name,))
                 return
             for name in sorted(self._junctions):
@@ -640,7 +640,7 @@ class Moving:
 
     def stay(self, tr, uids, src_idx):
         """
-        People who took ss.stay in a split: back in the state they left, with no new dwell time, so `X.time` keeps running; not counted in the flow
+        People who took ss.stay in a split: back in the state they left, with no new dwell time, so `X.time_in` keeps running; not counted in the flow
 
         After a split taken at the end of a dwell time, they have no exit scheduled (the dwell was this transition's); after one
         triggered by an event or a condition (`on=`), they keep the exit they had, e.g. their clearance (see `move()`).
@@ -691,7 +691,7 @@ class Moving:
             self._memo = None
         if any(np.ndim(p) > 1 for p in ps): # e.g. a function giving a row of shares for each person (a switching matrix): not supported yet
             raise ss.CapabilityError(f'p= of "{tr.name}" gave a row of probabilities for each person, but each entry of p= is one destination\'s probability (one value per person); '
-                                     f'give one per destination, e.g. p=[f_{tr.dst[0].name}, None], where each function returns one value per person')
+                                     f'give one per destination, e.g. p=[f_{tr.dest[0].name}, None], where each function returns one value per person')
 
         return self.dest_shares(tr, ps, uids, stay=self.ends_given(tr, lambda p: self.eval_for(p, uids))) # With ss.stay or ss.null, what the states leave over stays or dies
 
@@ -1040,7 +1040,7 @@ class Moving:
     def branch_edges_for(self, state, uids):
         """ As branch_edges(), worked out for these agents """
         branches = self.branches_of(state.name)
-        ps = [None if tr.p is None or tr.split else np.broadcast_to(self.eval_for(tr.p[0], uids), len(uids)) for tr in branches] # A split between several destinations takes what the branches leave over
+        ps = [None if tr.p is None or tr._split else np.broadcast_to(self.eval_for(tr.p[0], uids), len(uids)) for tr in branches] # A split between several destinations takes what the branches leave over
         mults = self.where_mults(branches, state, [self.branch_mult(tr, uids) for tr in branches], uids)
         ps = [np.broadcast_to(p, len(uids)) for p in self.branch_shares(branches, ps, mults)]
         return np.cumsum([np.zeros(len(uids))] + ps, axis=0)
@@ -1198,7 +1198,7 @@ class Moving:
         sim = self.sim
         people = sim.people
         share = np.asarray(sp.share(), dtype=float)
-        pool = self.members(self.graph.first)
+        pool = self.members(self.graph.default_state)
         p = share[pool] if share.ndim else np.full(len(pool), share)
         u = self.draw('burnin', pool)
         yes = u < p
@@ -1237,7 +1237,7 @@ class Moving:
             return
         mod = self.mod
         self.new_round()
-        first = self.graph.first.name
+        first = self.graph.default_state.name
         for state in self.graph.people_states:
             inds = uids[mod[state.name].raw[uids]]
             mod[state.name][inds] = False
@@ -1262,7 +1262,7 @@ class Moving:
             return
         mod = self.mod
         graph = self.graph
-        first = graph.first
+        first = graph.default_state
         saved = mod.t.ti
         saved_round = self.round # The rounds of the step they are back-dated to (see new_round())
         self._backfill = True

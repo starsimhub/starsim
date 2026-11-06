@@ -20,7 +20,7 @@ sim = ss.import_from('model.json', format='memilio') # A sim, with how each rate
 The importer writes each model's equations as MEmilio's C++ has them (`cpp/models/ode_*/model.h`), with the parameters, populations, and contacts from the file. It translates, exactly:
 
 - parameters by age group, as `ss.by(..., dims=['age'])` where they differ, and age groups as labels (`'0'`, `'1'`, ...) with `ss.contacts(...)`, the matrix at the start summed over MEmilio's matrices;
-- dampings as a factor on the force of infection (`contacts`, an `ss.timeseries` with `mode='cosine'`), from the matrix MEmilio uses at the start and either side of each damping, so the levels and types of the dampings are already combined;
+- dampings as a factor on the force of infection (`contacts`, an `ss.timeseries` with `interpolation='cosine'`), from the matrix MEmilio uses at the start and either side of each damping, so the levels and types of the dampings are already combined;
 - seasonality (`season`, an `ss.seasonal` with the peak from `StartDay`);
 - test and trace (`risk`) and ICU capacity (`critical_share`), as functions of the total counts, along MEmilio's half cosine;
 - deaths as outflows (`death`, and `severe_death` with `DeathsPerSevere` or an ICU capacity), since MEmilio leaves the dead out of the total; MEmilio's `Dead` is `death.cum` (plus `severe_death.cum`, plus any who start dead), one index earlier, since a running total includes its own step (`death.cum[k - 1]` is the dead at time point `k`);
@@ -43,12 +43,12 @@ It lists (`ImportIncomplete`): a parameter that differs by age group where it be
 | `RiskOfInfectionFromSymptomatic` rising to `Max...` with `TestAndTraceCapacity` | An expression of counts: `excess = np.clip((0.91/2*INS.n - 35)/(5*35 - 35), 0, 1)`, `risk = 0.35 - 0.1*np.cos(np.pi*excess)` | Exact |
 | `Seasonality` with `StartDay` | `ss.seasonal(mean=beta, amplitude=0.2, peak=(-StartDay/365) % 1)` (or a start date and `peak=0`) | Exact |
 | `ContactMatrix` by age | `dis.stratify(age=['0', '1', '2'])` and `networks=ss.contacts(matrix)` | Exact |
-| `Damping(coeffs, t, ...)` (a cut in contacts, smoothed over the day before) | `ss.timeseries({0: 1.0, t-1: 1.0, t: 1 - coeff}, mode='cosine')` as a factor of the rate | Exact |
+| `Damping(coeffs, t, ...)` (a cut in contacts, smoothed over the day before) | `ss.timeseries({0: 1.0, t-1: 1.0, t: 1 - coeff}, interpolation='cosine')` as a factor of the rate | Exact |
 | Populations by age and state | `init_n=dict(E=100, INS=50, ...)` (split evenly over groups by default) and `total_pop=` | Exact |
 | `...Confirmed` states that nothing flows into | Leave out | Exact |
 | `ICUCapacity` (unlimited by default) | Leave out unless set; otherwise a condition on `ICr.n` | Exact when unlimited |
 | `simulate(t0, tmax, dt)` | `ss.Sim(..., stop=ss.days(tmax))` (solver `ode`, RK4 with substeps) | Exact to the reference's interpolation error |
-| `MobilityGraph` with `add_node(id, model)` and `add_edge(i, j, MobilityParameters(c))`, run by `MobilitySimulation` | `dis.stratify(patch=ids, split=ss.by(pop/pop.sum(), dims=['age', 'patch']), mobility=ss.geo.Mobility(matrix=0.5*M, kind='commute'))` | Close: a share of time rather than an exchange, and symptomatic commuters not reduced (see below) |
+| `MobilityGraph` with `add_node(id, model)` and `add_edge(i, j, MobilityParameters(c))`, run by `MobilitySimulation` | `dis.stratify(patch=ids, fractions=ss.by(pop/pop.sum(), dims=['age', 'patch']), mobility=ss.geo.Mobility(matrix=0.5*M, kind='commute'))` | Close: a share of time rather than an exchange, and symptomatic commuters not reduced (see below) |
 | `UncertainValue.set_distribution(ParameterDistributionUniform(lo, hi))`, `GraphParameterStudy(graph, t0, tmax, dt, n)` | `ss.par(value, prior=ss.uniform(lo, hi))`, then `ss.parallel(sim, n_runs=n, priors=True)` | Exact in distribution (MEmilio's draws given by `pars=` agree run by run to 2%) |
 
 ## What needs care
@@ -56,7 +56,7 @@ It lists (`ImportIncomplete`): a parameter that differs by age group where it be
 - **The equations are not in the script.** Read the model's `get_derivatives()` in the C++ source for the exact flows (e.g. the flow from `INS` to `ISy` is `(1 - mu_CR)/TimeInfectedNoSymptoms * INS`). The rates are per day.
 - **The threshold is on a flow.** Test-and-trace capacity compares the number becoming symptomatic each day with the capacity; Starsim cannot name a transition's current flow in a rate, so write the flow as a count expression (`0.91/2*INS.n`, repeating the probability and the time), with a comment.
 - **Inside a function, a declared state's `.n` is symbolic.** Use NumPy functions of count expressions in the rate itself (`np.clip`, `np.cos`), which run in the kernels; in a function of the sim, read `sim.diseases.<name>.<state>.n`.
-- **Dampings are smoothed.** MEmilio smooths every damping along half a cosine over the day before its time: `mode='cosine'` matches.
+- **Dampings are smoothed.** MEmilio smooths every damping along half a cosine over the day before its time: `interpolation='cosine'` matches.
 - **Seasonality's day 0.** MEmilio's day 0 is `StartDay` of a 365-day year; with no dates, `ss.seasonal` starts at the beginning of a year, so the peak is `(-StartDay/365) % 1` (the peak is a fraction of the year from 0 to 1, or a time of year such as `ss.days(305)`).
 - **Age groups are labels.** Name them as MEmilio numbers them (`'0'`, `'1'`, `'2'`); Starsim treats strings as labels and does not age anyone.
 - **A damping within a step.** The import runs in steps of a day; a value that varies in time is taken at the start, middle, and end of each step, so MEmilio's one-day smoothing of a damping is approximated within the step, and `substeps=` does not help. With `dt=0.1`, the import agrees with a tightly integrated MEmilio run to 1e-7 of the population; with steps of a day, to about 2e-4.
@@ -70,7 +70,7 @@ It lists (`ImportIncomplete`): a parameter that differs by age group where it be
 
 ```python
 beta     = ss.seasonal(mean=0.05, amplitude=0.2, peak=ss.days(305)) # Highest on 1 Jan, day 305 (day 0 is 2 Mar)
-contacts = ss.timeseries({0: 1.0, 29: 1.0, 30: 0.3}, mode='cosine') # Cut by 70% over day 29, as MEmilio's damping
+contacts = ss.timeseries({0: 1.0, 29: 1.0, 30: 0.3}, interpolation='cosine') # Cut by 70% over day 29, as MEmilio's damping
 S, E, INS, ISy, ISev, ICr, R = ss.states(7)
 excess = np.clip((0.91/2*INS.n - 35)/(5*35 - 35), 0, 1) # People becoming symptomatic each day, beyond the 35 that can be traced
 risk = 0.35 - 0.1*np.cos(np.pi*excess) # From 0.25 to 0.45, along half a cosine

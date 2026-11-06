@@ -172,7 +172,7 @@ A result that changes by more than a few percent when the step is halved depends
 
 A state's count at a time point is the state at the end of the step before it, so as agents it includes the people infected in that step, who can't infect anyone until the next one. At a coarse step, a stock therefore reads a little high compared with the ODE, even at equilibrium: an SIS with R0 = 1.25 and 5 days infectious settles at 21.4% infectious with daily steps, against 20% for the ODE, of whom 18.1% are transmitting during a step. The difference shrinks in proportion to the step (20.5% with steps of a quarter of a day), and the average over a step of the number infectious is close to the ODE's (19.8% with daily steps).
 
-A threshold on a clock acts at the step boundaries, since the clock is read once a step. A rate that applies until 13 weeks of pregnancy (`where=preg.P.time < ss.weeks(13)`), on monthly steps, applies while the clock reads 0, 1, and 2 months, and someone who arrives during a step spends on average half of it at 0: so it applies for about 2.5 of the 3 months it should, and the event it governs happens less often than the inputs imply (11.9% of pregnancies miscarry against 14.1%, in FPsim's case). `sim.check_dt()` shows it, and a shorter step reduces it.
+A threshold on a clock acts at the step boundaries, since the clock is read once a step. A rate that applies until 13 weeks of pregnancy (`where=preg.P.time_in < ss.weeks(13)`), on monthly steps, applies while the clock reads 0, 1, and 2 months, and someone who arrives during a step spends on average half of it at 0: so it applies for about 2.5 of the 3 months it should, and the event it governs happens less often than the inputs imply (11.9% of pregnancies miscarry against 14.1%, in FPsim's case). `sim.check_dt()` shows it, and a shorter step reduces it.
 
 ### Contacts between particular people
 
@@ -189,7 +189,7 @@ agents = ss.Sim(flu, networks=contacts, n_agents=10_000, stop=ss.days(150), dt=s
 mixing = ss.Sim(flu, networks=contacts, total_pop=10_000, stop=ss.days(150), solver='ode').run()
 ```
 
-With random mixing (the ODE), R0 = 0.05 × 8 × 8 = 3.2; on the fixed network, the epidemic peaks later and lower, and fewer people are infected. If the structure of contacts is part of the question (partnerships, households, contact tracing), use agents; if only the average number of contacts matters, compartments are enough. `approx=False` makes any such approximation an error instead of a note.
+With random mixing (the ODE), R0 = 0.05 × 8 × 8 = 3.2; on the fixed network, the epidemic peaks later and lower, and fewer people are infected. If the structure of contacts is part of the question (partnerships, households, contact tracing), use agents; if only the average number of contacts matters, compartments are enough. `approximations='error'` makes any such approximation an error instead of a note.
 
 ## Speed
 
@@ -251,11 +251,11 @@ The properties of each solver, for looking up; the table at the top of the page 
 | `'gillespie'` | No | Continuous, one event at a time (exact) | | No | Yes, as for `'ode'` | No |
 | `'tau'` | No | Continuous, many events at a time (close to exact) | | No | Yes, as for `'ode'` | No |
 | `'abm'`, `'abm-midstep'`, `'abm-wholestep'` | No | Whole steps; by midsteps, those who arrive during a step face its rates for the rest of it | `n_agents=`, `dt=`, `rescale=`, `even_draws=`, `ss.options.crn` | `'abm'`, when anything in the model needs agents | No: a step at a time, with compiled passes over the agents | No |
-| `'abm-events'` | No | Continuous within each step; what is stepped (networks, interventions, other modules) is held for the step | `n_agents=`, `dt=` (how often results are recorded, and how late stepped changes are seen) | No | No: one compiled pass of events each step | No. Not yet taken (each a `CapabilityError`): strains, movement between places, dimensions that only some states or people have, moves between levels, `ss.MixingPools` with pools of their own, minimum stays, states that are not people. Triggers (`ss.on`) are taken at the end of the step of their event |
+| `'abm-events'` | No | Continuous within each step; what is stepped (networks, interventions, other modules) is held for the step | `n_agents=`, `dt=` (how often results are recorded, and how late stepped changes are seen) | No | No: one compiled pass of events each step | No. Not yet taken (each a `CapabilityError`): strains, movement between places, dimensions that only some states or people have, moves between levels, `ss.networks.MixingPools` with pools of their own, minimum stays, states that are not people. Triggers (`ss.on`) are taken at the end of the step of their event |
 
 ## Appendix: every set of kernels
 
-The kernels are the compiled code under every solver. All the sets give the same numbers, so the choice is about speed and convenience, not the answer; `ss.options.kernels` sets it (or the environment variable `STARSIM_KERNELS`), and `ss.compile_status().summary` says which is in use and whether it is compiled. Speeds and how each is built are in [Engines and kernels](architecture_solvers.qmd#the-kernels) in the architecture section.
+The kernels are the compiled code under every solver. All the sets give the same numbers, so the choice is about speed and convenience, not the answer; `ss.options.kernels` sets it (or the environment variable `STARSIM_KERNELS`), and `ss.kernels.compile_status().summary` says which is in use and whether it is compiled. Speeds and how each is built are in [Engines and kernels](architecture_solvers.qmd#the-kernels) in the architecture section.
 
 | `ss.options.kernels` | What it is | When `'auto'` uses it | Use it for |
 |---|---|---|---|
@@ -278,7 +278,7 @@ rules = ss.solvers.solver_table()
 rules[rules.compartments == 'no'][['what']].style.hide(axis='index')
 ```
 
-And a model with any of these runs as agents under `solver='auto'`, but a compartmental solver asked for by name runs it, approximately, with a note (an error with `approx=False`):
+And a model with any of these runs as agents under `solver='auto'`, but a compartmental solver asked for by name runs it, approximately, with a note (an error with `approximations='error'`):
 
 ```{python}
 rules[rules.compartments == 'if asked'][['what']].style.hide(axis='index')

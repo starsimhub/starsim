@@ -31,7 +31,7 @@ def memory_layout(sim, key):
     cache = sim.__dict__.setdefault('_memory_layout', {})
     if key not in cache:
         name, outcome = key
-        cache[key] = None if not ss.interventions.memory_needs(sim).get(key) else ss.dimensions.Strat(f'ever_{name if outcome is None else f"{name}_{outcome}"}', [False, True], split=[1.0, 0.0])
+        cache[key] = None if not ss.interventions.memory_needs(sim).get(key) else ss.dimensions.Strat(f'ever_{name if outcome is None else f"{name}_{outcome}"}', [False, True], fractions=[1.0, 0.0])
     return cache[key]
 
 
@@ -67,7 +67,7 @@ def trigger_groups(owner, outcome, mod, tr, event, cond, sel, eng, before):
     """ In a compartmental run: the transition `tr` of `mod`, triggered by an event of a delivery or product, moves the share of the people it happened to who are in its sources (see `ss.interventions.trigger_moves()`) """
     sim = owner.sim
     tgt = mod.engine
-    srcs = [s for s in tr.src if s.people]
+    srcs = [s for s in tr.source if s.people]
     after = eng.state_counts()
     now = sel if before is None else np.clip(np.divide(sel*before, after, out=np.zeros_like(after), where=after>0), 0, 1) # The same people, as a share of those now in each state and group
     if tgt is not eng:
@@ -294,12 +294,12 @@ class CompartmentalDelivery(sc.prettyobj):
     #%% Choosing
 
     def delivered(self, out):
-        """ Who a deliver= function says receives the product, given as a number of people per group """
+        """ Who a function given as who= says receives the product, given as a number of people per group """
         d = self.delivery
         n = self.eng.n_people(total=False)
         out = np.asarray(out, dtype=float)
         if out.shape != n.shape:
-            errormsg = f'In a compartmental run, the deliver= function of "{d.name}" has to return a number of people per group ({len(n)} values), not an array of shape {out.shape}'
+            errormsg = f'In a compartmental run, the function given as who= of "{d.name}" has to return a number of people per group ({len(n)} values), not an array of shape {out.shape}'
             raise ValueError(errormsg)
         frac = np.clip(np.divide(out, n, out=np.zeros(len(n)), where=n>0), 0, 1)
         return np.broadcast_to(frac[None, :], self.selector.shape).astype(float)
@@ -418,7 +418,7 @@ class CompartmentalDelivery(sc.prettyobj):
         cur = home
         parts = []
         for dis in diseases:
-            eng = sim.get_declared(dis).engine
+            eng = sim._declared_module(dis).engine
             if eng is not cur:
                 if cross is None or eng.cross is not cross:
                     raise ss.CapabilityError(f'"{d.name}" treats "{dis}" and "{cur.mod.name}", whose states are not tracked jointly, with solver="{sim.solver}". Run with solver="abm".')
@@ -488,7 +488,7 @@ class CompartmentalDelivery(sc.prettyobj):
         moves = (product is None and (d.move_states is None or self.plain_move())) or (product is not None and product.holds and getattr(product, 'take', None) is None) # A move between states only within each group, and not an all-or-nothing vaccine, whose doses are not all held
         scheduled = d.routine or (d.in_rounds and d.trigger is None)
         watched = d.name in [ss.conditions.modname(leaf.args[0]) for mod in sim.interventions() if isinstance(mod, ss.Delivery) for leaf in ss.conditions.event_leaves(mod.trigger)] or d._needs # Its events are read, which the kernels do not keep
-        typed = isinstance(d.coverage, ss.TimePar) and not d.in_rounds # A rate among those eligible, the same share at each step
+        typed = isinstance(d.coverage, ss.time.TimePar) and not d.in_rounds # A rate among those eligible, the same share at each step
         static = ss.conditions.is_static(d.eligible, sim) and (sc.isnumber(d.coverage) or d.coverage is None or isinstance(d.coverage, ss.by) or typed)
         past = d.at_age is not None # The people past the age are left out on the first step: see ss.Delivery.skip_past()
         limited = d.capacity is not None or d.queue is not None or bool(getattr(product, 'doses', None)) or getattr(product, 'during', None) is not None # Served in an order, given in doses, or held only in some states, which the kernels do not take
@@ -513,7 +513,7 @@ class CompartmentalDelivery(sc.prettyobj):
         eng = self.eng
         selector = self.selector
         npts = sim.t.npts
-        due = np.zeros(npts, dtype=np.bool_) # By the step, which is the time point it starts from (see ss.Loop)
+        due = np.zeros(npts, dtype=np.bool_) # By the step, which is the time point it starts from (see ss.loop.Loop)
         for ti in range(npts):
             due[ti] = d.ti_start <= ti < d.ti_stop and (d.round_tis is None or ti in d.round_tis)
         sel = d.offer(d.default_eligible() if d.eligible is None else selector.select(d.eligible))

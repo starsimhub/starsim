@@ -27,7 +27,7 @@ Usage::
         demographics=[ss.Pregnancy(fertility_rate=ss.time.freq(30, 'year')), ss.Deaths()],
         connectors=ssl.mnch.fetal_infection(),
         interventions=ssl.mnch.treat_pregnant(disease='sir', start_year=2025),
-        custom=ssl.mnch.FetalHealth(),
+        modules=ssl.mnch.FetalHealth(),
         networks=[ss.PrenatalNet(), ss.RandomNet()],
     )
     sim.run()
@@ -100,7 +100,7 @@ class FetalHealth(ss.Module):
 
         sim = ss.Sim(
             demographics=[ss.Pregnancy(fertility_rate=10), ss.Deaths(death_rate=10)],
-            custom=ssl.mnch.FetalHealth(),
+            modules=ssl.mnch.FetalHealth(),
             networks=ss.PrenatalNet(),
         )
         sim.run()
@@ -502,7 +502,7 @@ class fetal_infection(ss.Connector):
     def __init__(self, pars=None, **kwargs):
         super().__init__()
         self.define_pars(
-            timing_shift   = ss.lognorm_ex(mean=3.0, std=1.0),
+            timing_shift   = ss.lognormal(mean=3.0, std=1.0),
             growth_penalty = 0.15,
         )
         self.update_pars(pars, **kwargs)

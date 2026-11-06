@@ -100,7 +100,7 @@ With the same infectiousness and a fixed infectious period, the offspring are Po
 
 ```{python}
 S, E, I, R = ss.states('S E I R')
-latent = ss.lognorm_ex(mean=ss.days(5), std=ss.days(10)) # Most become infectious within a few days, a few only after weeks
+latent = ss.lognormal(mean=ss.days(5), std=ss.days(10)) # Most become infectious within a few days, a few only after weeks
 seir = ss.Disease(S >> E @ 0.4*I, E >> I @ latent, I >> R @ ss.days(5), init_n=dict(I=10), name='seir')
 solvers = {'Renewal equation (ide)': 'ide', 'Erlang stages (ode)': 'ode'}
 sims = {label: ss.Sim(seir, total_pop=1e6, branching=True, solver=solver, stop=ss.days(60), verbose=0) for label, solver in solvers.items()}

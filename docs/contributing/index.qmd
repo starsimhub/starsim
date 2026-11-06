@@ -23,7 +23,7 @@ A *minimal reproducible example* is the shortest complete script that shows a pr
 1. **Start from what fails, in a fresh session.** Restart the notebook's kernel (or run the script from the command line) and check that the problem is still there. A notebook can hold values from cells that were changed or deleted since, and a disease that was stratified twice.
 2. **Remove what doesn't matter, one thing at a time.** Take out interventions, analyzers, extra diseases, networks, and data, and after each removal check that the problem is still there. Put back the last thing removed if it goes away: that is part of the cause.
 3. **Make it small and quick.** Use fewer agents (or none: if the problem shows in an ODE, use that), a shorter run, and plain numbers in place of values read from files.
-4. **Replace private data with made-up data.** A few rows typed in, or data drawn from a run of the model with `sim.to_data()`, show the same problem without sharing anything.
+4. **Replace private data with made-up data.** A few rows typed in, or data drawn from a run of the model with `sim.to_synthetic_data()`, show the same problem without sharing anything.
 5. **Fix the random seed** (`rand_seed=` in `ss.Sim`), so that a stochastic run gives the same numbers every time.
 6. **Say what you expected, and what you got.** Print the numbers, or include the plot, and give the reason you expected something else (a known result, another model, a calculation by hand).
 

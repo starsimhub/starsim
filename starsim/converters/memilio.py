@@ -188,7 +188,7 @@ def load_memilio(source, verbose=None, **kwargs):
     # Groups and contacts
     totals = np.sum([pops[s] for s in keep if s != dead], axis=0) # Age group by node
     if n > 1:
-        src.stratify(age=[str(i) for i in range(n)], split=(totals.sum(1)/totals.sum()).tolist())
+        src.stratify(age=[str(i) for i in range(n)], fractions=(totals.sum(1)/totals.sum()).tolist())
         matrix = np.array(d['contacts']['samples'][0]['matrix'])
         src.config.networks = Code(f'ss.contacts({matrix.tolist()!r})')
         src.notes.append(f'contacts      the {n} age groups as labels ("0" to "{n-1}"), with MEmilio\'s contact matrix at the start (summed over its {len(d["contacts"]["matrices"])} matrices)')
@@ -268,12 +268,12 @@ def nodes_of(src, d, places, totals):
     if damped:
         src.skip('commuting dampings', f'{damped} dampings of the commuting, which are not translated')
     if not M.any():
-        src.stratify(patch=places, split=ss.by(totals/totals.sum(), dims=['age', 'patch']) if n > 1 else (totals[0]/totals.sum()).tolist())
+        src.stratify(patch=places, fractions=ss.by(totals/totals.sum(), dims=['age', 'patch']) if n > 1 else (totals[0]/totals.sum()).tolist())
         src.notes.append(f'places        the {len(nodes)} nodes as the places "{places[0]}" to "{places[-1]}", with no commuting')
         return
     away = 0.5*M # The share of their time that people spend in each other place
     split = ss.by(totals/totals.sum(), dims=['age', 'patch']) if n > 1 else (totals[0]/totals.sum()).tolist()
-    src.stratify(patch=places, split=split, mobility=ss.geo.Mobility(matrix=away.tolist(), kind='commute'))
+    src.stratify(patch=places, fractions=split, mobility=ss.geo.Mobility(matrix=away.tolist(), kind='commute'))
     src.notes.append(f'places        the {len(nodes)} nodes as the places "{places[0]}" to "{places[-1]}", and the {len(edges)} edges as commuting: MEmilio moves an edge\'s share of a node\'s people to the other node for every other step and back, so they spend half their time there (ss.geo.Mobility(kind="commute") with half the share); '
                      f'MEmilio integrates the commuters in the other node, where Starsim weights each place\'s exposure by the time spent there, so counties whose epidemic starts from commuters can differ (see the convert-model skill\'s guide to MEmilio)')
     if d['model'] == 'osecir':
@@ -309,7 +309,7 @@ def factor(src, c, n, t0):
     if len(set(points.values())) == 1:
         val = points[times[0]]
         return None if val == 1 else val
-    return ss.timeseries({t:points[t] for t in times}, mode='cosine')
+    return ss.timeseries({t:points[t] for t in times}, interpolation='cosine')
 
 
 def sampled(src, c, n, t0):
@@ -334,7 +334,7 @@ def sampled(src, c, n, t0):
         if i + 1 < len(damps): # Until the next damping replaces it
             nxt = damps[i+1]['time'] - t0
             on.update({nxt - 1: 1.0, nxt: 0.0})
-        src.add_par(f'{name}_on', ss.timeseries(on, mode='cosine'), doc=f'When {name} applies, smoothed over the day before (as MEmilio does)')
+        src.add_par(f'{name}_on', ss.timeseries(on, interpolation='cosine'), doc=f'When {name} applies, smoothed over the day before (as MEmilio does)')
         terms.append(f'{name}*{name}_on')
     src.exprs['damped'] = f'(1 - {" - ".join(terms)})'
     src.notes.append(f'contacts      the {len(damps)} damping(s) drawn in the study, which replace the contact matrices\' own there')

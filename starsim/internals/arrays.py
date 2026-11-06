@@ -93,14 +93,14 @@ class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
         if attr in ['__deepcopy__', '__getstate__', '__setstate__']:
             return self.__getattribute__(attr)
         elif self.columns is not None and attr in self.columns:
-            return self.col(attr)
+            return self[attr] # The column, as a 1D array or result
         else:
             return object.__getattribute__(self, 'values').__getattribute__(attr) # Be explicit to avoid possible recursion
 
     def __setattr__(self, attr, value):
         """ Set the values of a named column, e.g. arr.alpha = 0; also needed so arr.alpha += 1 doesn't store the column as an attribute """
         if self.columns is not None and attr in self.columns:
-            self.col(attr)[:] = value
+            self[attr][:] = value
         else:
             object.__setattr__(self, attr, value)
         return
@@ -158,7 +158,7 @@ class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
         inputs = [self._arr(x) for x in inputs]
         kwargs = {k:self._arr(v) for k,v in kwargs.items()}
         for x in itertools.chain(inputs, kwargs.values()):
-            if isinstance(x, ss.TimePar):
+            if isinstance(x, ss.time.TimePar):
                 return NotImplemented # Operations involving a TimePar and a BaseArr won't return a BaseArr, and will be handled by a TimePar operator
         result = getattr(ufunc, method)(*inputs, **kwargs)
 
@@ -586,7 +586,7 @@ class Arr(BaseArr):
         if not self.initialized and not inplace and op in ss.conditions.ops: # Before the sim exists, this builds a lazy condition instead, as a comparison does (or, with a typed value, an expression for a rate): see ss.conditions.Cond
             arr = ss.conditions.from_arr(self)
             return ss.conditions.Cond.arith(op, other, arr) if reverse else ss.conditions.Cond.arith(op, arr, other)
-        if isinstance(other, (ss.TimePar, ss.date)):
+        if isinstance(other, (ss.time.TimePar, ss.date)):
             return NotImplemented # Not implemented here, at least for now. But allow falling back to the other classes if they have an implementation
 
         if inplace and self.shared is not None:
@@ -1263,6 +1263,14 @@ class BoolArr(Arr):
         super().__init__(name=name, dtype=ss_bool, nan=False, **kwargs)
         return
 
+    @property
+    def n(self):
+        """ The number of people it is True for now, each counted by their weight and the sim's scale, as `(sir.I | sir.R).n` counts them under every solver (`count()` is the number of agents) """
+        sim = getattr(self.people, 'sim', None)
+        if sim is None or not getattr(sim, 'initialized', False):
+            return float(self.count())
+        return ss.conditions.count_now(sim, self)
+
     def __eq__(self, other):
         if isinstance(other, uids):
             out = ~self.raw
@@ -1392,11 +1400,11 @@ class BoolState(BoolArr):
         ss.solvers.engine.no_set_count(getattr(self.mod, 'name', 'module'), self.name)
 
     @property
-    def time(self):
+    def time_in(self):
         """
         For a state of a declared disease run as agents: the time each person in it (or leaving it) has spent there, by
-        UID, as `P.time` is in `p=`; e.g. `hpv.P.time[uids]` in a function. A duration in the sim's unit, so
-        `preg.P.time < ss.weeks(13)` compares like with like; NaN for anyone not in the state
+        UID, as `P.time_in` is in `p=`; e.g. `hpv.P.time_in[uids]` in a function. A duration in the sim's unit, so
+        `preg.P.time_in < ss.weeks(13)` compares like with like; NaN for anyone not in the state
         """
         engine = getattr(self.watch, 'engine', None)
         if engine is None:
@@ -1419,7 +1427,7 @@ class BoolState(BoolArr):
         difference of two times of entering (`ti_I - ti_E`) is not, since each reads as the step its move happened in,
         which can make it a step long (see `ss.TimeArr`).
 
-        Those still in the state are left out (`.time` gives how long they have been there so far), so a run that ends
+        Those still in the state are left out (`.time_in` gives how long they have been there so far), so a run that ends
         while many are in it understates the mean; so are those who died in it, or left it other than by the
         disease's transitions. Those placed in it at the start (e.g. seeded cases in I) count from the start of the run.
         The engine keeps when each person last left every state whose time of entering is kept, so this works whenever

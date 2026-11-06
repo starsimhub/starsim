@@ -83,7 +83,7 @@ import numpy as np
 import starsim as ss
 
 beta     = ss.seasonal(mean=0.05, amplitude=0.2, peak=ss.days(-60)) # Highest on 1 Jan; day 0 is 2 Mar
-contacts = ss.timeseries({0: 1.0, 29: 1.0, 30: 0.3}, mode='cosine') # Cut by 70% over day 29, as MEmilio's damping
+contacts = ss.timeseries({0: 1.0, 29: 1.0, 30: 0.3}, interpolation='cosine') # Cut by 70% over day 29, as MEmilio's damping
 S, E, INS, ISy, ISev, ICr, R = ss.states(7)
 excess = np.clip((0.91/2*INS.n - 35)/(5*35 - 35), 0, 1) # People becoming symptomatic each day, beyond the 35 that can be traced (to 5 times that)
 risk = 0.35 - 0.1*np.cos(np.pi*excess) # So symptomatic people infect more: from 0.25 to 0.45, along half a cosine

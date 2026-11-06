@@ -108,7 +108,7 @@ class MalariaImmunity(ss.Disease):
         alpha1 (`ss.per`): the rate of losing infectivity
         alpha2 (`ss.per`): the rate of acquiring a high recovery rate (immunity)
         delta (`ss.per`): the birth and death rate
-        dur_inc (`ss.dur`): the incubation period in people
+        dur_inc (`ss.Duration`): the incubation period in people
         q3 (float): the chance that an immune positive person is detected by a blood examination
         kwargs (dict): passed to `ss.Disease`, e.g. `init` or `name`
 

@@ -60,19 +60,19 @@ class TransitionTable(sc.obj):
             return 'No transitions'
         rows = [['name', 'from', 'to', 'driven by', 'kind']]
         for name,tr in self.items():
-            src = ' | '.join(s.name for s in tr.src) or '(outside)'
-            dst = ' | '.join(s.name for s in tr.dst) or '(outside)'
+            src = ' | '.join(s.name for s in tr.source) or '(outside)'
+            dst = ' | '.join(s.name for s in tr.dest) or '(outside)'
             kind = f'transmission, from {" + ".join(s.name for s in tr.terms)}' if tr.contact else 'spontaneous'
-            rows.append([name, src, dst, tr.driver_str, kind])
+            rows.append([name, src, dst, tr._driver_str, kind])
         widths = [max(len(row[i]) for row in rows) + 2 for i in range(5)]
         out = '\n'.join(''.join(cell.ljust(w) for cell,w in zip(row, widths)).rstrip() for row in rows)
 
         # The matrix
-        names = list(dict.fromkeys(s.name for tr in self.values() for s in tr.src + tr.dst))
+        names = list(dict.fromkeys(s.name for tr in self.values() for s in tr.source + tr.dest))
         grid = {(a,b):[] for a in names for b in names}
         for name,tr in self.items():
-            for a in tr.src:
-                for b in tr.dst:
+            for a in tr.source:
+                for b in tr.dest:
                     grid[(a.name, b.name)].append(name)
         cells = [[''] + names] + [[a] + [', '.join(grid[(a,b)]) or '.' for b in names] for a in names]
         widths = [max(len(row[i]) for row in cells) + 2 for i in range(len(names) + 1)]
@@ -97,15 +97,15 @@ class Graph:
         init_prev (float): the initial prevalence, seeded through the transmission (by default 0.01, unless a state is given an initial value)
         init (dict): the share of people who start in each state, by name
         init_n (dict): the number of people who start in each state, by name
-        first (str): the state people are in unless they are put elsewhere (by default, the one named `S` or `susceptible`, else the first made; see `resolve_people()`)
+        default_state (str): the state people are in unless they are put elsewhere (by default, the one named `S` or `susceptible`, else the first made; see `resolve_people()`)
         names (dict): the names of the variables of the code that made the module, by the id of what they hold (see `ss.utils.caller_names()`), which name the states, transitions, and parameters given without one
     """
     grouped = ['transitions', 'results', 'outcomes'] # The keywords that each take several members, e.g. ss.Disease(transitions=[...])
 
-    def __init__(self, module, args=None, members=None, init_prev=None, init=None, init_n=None, first=None, names=None):
+    def __init__(self, module, args=None, members=None, init_prev=None, init=None, init_n=None, default_state=None, names=None):
         self.module = module
         self.names = names or {}
-        self.first_given = first # The state people are in unless they are put elsewhere, if given
+        self.default_given = default_state # The state people are in unless they are put elsewhere, if given
         self.init_prev = init_prev
         if isinstance(init_prev, par): # So it can be fitted
             init_prev.name = init_prev.name or 'init_prev'
@@ -210,7 +210,7 @@ class Graph:
                 self.add(self.outcomes, obj.name, obj)
             elif isinstance(obj, par):
                 self._add_par(obj, name=obj.name)
-            elif isinstance(obj, Expr) and ss.expressions.per_person_in(obj): # A helper with a value for each person, e.g. gain = cd4_potential - cd4_preart, age = ss.ppl.age/A, or duration = affected.time, used through the objects; not a result
+            elif isinstance(obj, Expr) and ss.expressions.per_person_in(obj): # A helper with a value for each person, e.g. gain = cd4_potential - cd4_preart, age = ss.person.age/A, or duration = affected.time_in, used through the objects; not a result
                 continue
             elif isinstance(obj, Expr): # A sum or ratio of states is a result
                 name = name or self.names.get(id(obj))
@@ -274,7 +274,7 @@ class Graph:
         for tr in trs:
             if tr.rate is not None:
                 tr.rate = unheld(tr.rate) # A rate held in a parameter, e.g. ss.par(beta*I), is that rate
-            for side,ends in [('source', tr.src or []), ('destination', tr.dst or [])]:
+            for side,ends in [('source', tr.source or []), ('destination', tr.dest or [])]:
                 for end in ends:
                     if not isinstance(end, State):
                         raise TypeError(bad_end(end, side))
@@ -296,7 +296,7 @@ class Graph:
             if state.name is None:
                 state.name = self.names.get(id(state))
             if state.name is None:
-                used = [tr.name or tr.arrow for tr in trs if any(end is state for end in (tr.src or []) + (tr.dst or []))]
+                used = [tr.name or tr._arrow for tr in trs if any(end is state for end in (tr.source or []) + (tr.dest or []))]
                 raise ValueError(f'state number {i+1} of the module has no name. It is used in {used}, and no variable or keyword holding it was found.\n'
                                       f"     Give the names up front: S, I, R = ss.states('S I R').")
         for state in statelist:
@@ -323,21 +323,21 @@ class Graph:
     def resolve_transitions(self):
         """ Give every transition a name, a source, and a rate or a dwell time """
         for tr in list(self.transitions.values()) + self._unnamed:
-            name = tr.name or tr.arrow # Not named yet: see below
-            if tr.dst is None and not (tr.inflow and not tr.state_given): # A birth with no state is into the first state (see resolve_people())
+            name = tr.name or tr._arrow # Not named yet: see below
+            if tr.dest is None and not (tr._inflow and not tr.state_given): # A birth with no state is into the first state (see resolve_people())
                 errormsg = f'The transition "{name}" has no destination'
                 raise ValueError(errormsg)
 
             if tr.undriven: # Built before (the same transition in another module): its rate of 0 is set again in resolve_exits()
                 tr.rate = None
-            if tr.rate is None and tr.dur is None and tr.p is None and tr.trigger is None and getattr(tr, 'per', None) is None and not tr.every_state:
-                if not tr.src:
-                    raise ValueError(f'the inflow "{name}" ({tr.arrow}) has no rate. Give it one, e.g. {tr.arrow.replace(" -> ", " >> ")} @ 0.1')
+            if tr.rate is None and tr.dur is None and tr.p is None and tr.trigger is None and getattr(tr, 'birth_on', None) is None and not tr.every_state:
+                if not tr.source:
+                    raise ValueError(f'the inflow "{name}" ({tr._arrow}) has no rate. Give it one, e.g. {tr._arrow.replace(" -> ", " >> ")} @ 0.1')
                 tr.undriven = True
 
             # Derive the kind from the rate, written per person (a rate written as the whole flow, e.g. beta*S*I/N, is divided by its source)
             if tr.rate is not None:
-                rate = per_person(tr.rate, tr.src, [st for st in self.states.values() if st.people])
+                rate = per_person(tr.rate, tr.source, [st for st in self.states.values() if st.people])
                 if rate is not tr.rate:
                     tr.flow_given, tr.rate = tr.rate, rate
             tr.const, tr.terms = (None, {}) if tr.rate is None else linear(tr.rate)
@@ -348,12 +348,12 @@ class Graph:
         # Fallback names: the only transmission is the infection (as in ss.SIR), the rest are named after their endpoints
         contacts = [tr for tr in list(self.transitions.values()) + self._unnamed if tr.contact]
         for tr in self._unnamed:
-            src = '_'.join([s.name for s in tr.src or []]) or 'in'
-            dst = '_'.join([s.name for s in tr.dst or []]) or 'out'
+            src = '_'.join([s.name for s in tr.source or []]) or 'in'
+            dst = '_'.join([s.name for s in tr.dest or []]) or 'out'
             if contacts == [tr] and not self.taken('infection'):
                 base, why = 'infection', 'given to the only transmission'
             else:
-                base = f'{src}_to_{dst}' if tr.dst is not None else 'immigration' if tr.migration else 'births' # A birth with no state given is into the first state, found later
+                base = f'{src}_to_{dst}' if tr.dest is not None else 'immigration' if tr.migration else 'births' # A birth with no state given is into the first state, found later
                 why = 'built from its endpoints'
             name = base
             count = 1
@@ -368,8 +368,8 @@ class Graph:
     def resolve_init_prev(self):
         """ By default, 1% of people start infected, seeded through the transmission (frequency- or density-dependent), unless a state is given a starting value """
         given = any(state.given_init for state in self.states.values())
-        counted = lambda tr: {id(st) for leaf in tr.rate.leaves if isinstance(leaf, Count) for st in leaf.states if st.module is self.module} - {id(st) for st in tr.src or []} # The module's states whose numbers the rate reads, other than its source: I in beta*I.n
-        transmitted = any(tr.contact or (not tr.inflow and tr.rate is not None and count_power(tr.rate) > 0 and counted(tr)) for tr in self.transitions.values()) # Births at a rate on counts (ss.null >> N @ b*N.n) are not a transmission
+        counted = lambda tr: {id(st) for leaf in tr.rate.leaves if isinstance(leaf, Count) for st in leaf.states if st.module is self.module} - {id(st) for st in tr.source or []} # The module's states whose numbers the rate reads, other than its source: I in beta*I.n
+        transmitted = any(tr.contact or (not tr._inflow and tr.rate is not None and count_power(tr.rate) > 0 and counted(tr)) for tr in self.transitions.values()) # Births at a rate on counts (ss.null >> N @ b*N.n) are not a transmission
         if self.init_prev is None and not given and transmitted:
             self.init_prev = par(0.01)
             self._add_par(self.init_prev, name='init_prev')
@@ -395,14 +395,14 @@ class Graph:
         """ The states of people that transmission (by contact, or at a rate on counts of others) takes people from """
         out = {}
         for tr in self.transitions.values():
-            if tr.src and not tr.inflow and (tr.contact or (tr.rate is not None and count_power(tr.rate) > 0)):
-                out.update({id(s):s for s in tr.src if s.people})
+            if tr.source and not tr._inflow and (tr.contact or (tr.rate is not None and count_power(tr.rate) > 0)):
+                out.update({id(s):s for s in tr.source if s.people})
         return list(out.values())
 
     def resolve_people(self):
         """
         Which states are people: every state, unless it is declared a count (`ss.State(people=False)`, e.g. mosquitoes or
-        bacteria in the water); and the first state, where people are unless they are put elsewhere: `first=` if given,
+        bacteria in the water); and the first state, where people are unless they are put elsewhere: `default_state=` if given,
         else the state named `S` or `susceptible` (in any case), else the one state transmission infects people from, else the first state of people made (states are kept in the
         order they were created: see `resolve_states()`), which `describe()` shows as a guess. Not the state a birth goes to
         (`ss.birth(NB)` says where births go, not where everyone starts), nor the order of the transitions
@@ -410,24 +410,24 @@ class Graph:
         states = list(self.states.values())
         self.people_states = [s for s in states if s.people]
         self.count_states = [s for s in states if not s.people]
-        if self.first_given is not None:
-            name = self.first_given.name if isinstance(self.first_given, State) else self.first_given
+        if self.default_given is not None:
+            name = self.default_given.name if isinstance(self.default_given, State) else self.default_given
             if name not in self.states:
-                raise sc.KeyNotFoundError(f'first="{name}" is not a state of "{self.module.name}". Its states are {sc.strjoin(self.states.keys())}{did_you_mean(name, list(self.states.keys()))}')
-            self.first = self.states[name]
+                raise sc.KeyNotFoundError(f'default_state="{name}" is not a state of "{self.module.name}". Its states are {sc.strjoin(self.states.keys())}{did_you_mean(name, list(self.states.keys()))}')
+            self.default_state = self.states[name]
         elif any(s.name.lower() in ['s', 'susceptible'] for s in self.people_states):
-            self.first = next(s for s in self.people_states if s.name.lower() in ['s', 'susceptible'])
+            self.default_state = next(s for s in self.people_states if s.name.lower() in ['s', 'susceptible'])
         elif len(sources := self.transmitted_from()) == 1: # The one state transmission infects people from, e.g. Ca in Ca >> P @ beta*P
-            self.first = sources[0]
-            self.guessed['first'] = f'{self.first.name} is where people start, the state infected from (or give first=)'
+            self.default_state = sources[0]
+            self.guessed['default_state'] = f'{self.default_state.name} is where people start, the state infected from (or give default_state=)'
         elif self.people_states:
-            self.first = self.people_states[0]
-            self.guessed['first'] = f'{self.first.name} is where people start, the first state made (or give first=)'
+            self.default_state = self.people_states[0]
+            self.guessed['default_state'] = f'{self.default_state.name} is where people start, the first state made (or give default_state=)'
         else:
-            self.first = None # Nothing is people (e.g. a model of mosquitoes alone)
+            self.default_state = None # Nothing is people (e.g. a model of mosquitoes alone)
         for tr in self.transitions.values(): # A birth or immigration with no state given
-            if tr.dst is None and self.first is not None:
-                tr.dst = [self.first]
+            if tr.dest is None and self.default_state is not None:
+                tr.dest = [self.default_state]
         self.resolve_rest()
 
         # Now that the people are known, fill in the things that depend on them
@@ -439,7 +439,7 @@ class Graph:
                                              f'       rate = {tr.rate}\n'
                                              f'     A bare state means contact with people in that state, and there is no contact with a count.\n'
                                              f'     Write {state.name}.n for the number itself, or leave out people=False if {state.name} is people.')
-            ends = (tr.src or []) + (tr.dst or [])
+            ends = (tr.source or []) + (tr.dest or [])
             tr.people = all(s.people for s in ends)
             if not tr.people and any(s.people for s in ends):
                 counts = [s.name for s in ends if not s.people]
@@ -453,14 +453,14 @@ class Graph:
         Refuse a forgotten `people=False`: a group of states of people that no transition links to the first state
         and that only an inflow (not a birth) fills, as mosquitoes are, would otherwise silently become agents
         """
-        if not any(s is self.first for s in self.people_states): # No first state given (sim.init() raises), or not one of people
+        if not any(s is self.default_state for s in self.people_states): # No first state given (sim.init() raises), or not one of people
             return
-        group = {id(s) for s in next(g for g in self.linked() if any(s is self.first for s in g))} # The states linked to the first
+        group = {id(s) for s in next(g for g in self.linked() if any(s is self.default_state for s in g))} # The states linked to the first
         for tr in self.transitions.values():
-            dst = [s for s in tr.dst or [] if id(s) not in group]
-            if tr.inflow and tr.people and dst and not getattr(tr, 'per_capita', False) and tr.per is None and not any(s.people_given for s in dst):
+            dst = [s for s in tr.dest or [] if id(s) not in group]
+            if tr._inflow and tr.people and dst and not getattr(tr, 'per_capita', False) and tr.birth_on is None and not any(s.people_given for s in dst):
                 others = [s.name for s in self.people_states if id(s) not in group]
-                raise ValueError(f'"{tr.name}" ({tr.arrow}) fills {sc.strjoin(others)}, which no transition links to {self.first.name}, where people start, so {"it looks like" if len(others) == 1 else "they look like"} a count of something else (e.g. mosquitoes). '
+                raise ValueError(f'"{tr.name}" ({tr._arrow}) fills {sc.strjoin(others)}, which no transition links to {self.default_state.name}, where people start, so {"it looks like" if len(others) == 1 else "they look like"} a count of something else (e.g. mosquitoes). '
                                                 f'Every state is people unless declared a count: if {"it is" if len(others) == 1 else "they are"} not people, declare {sc.strjoin(others)} with ss.State(people=False) (or ss.states(n, people=False)); if {"it is" if len(others) == 1 else "they are"} people, say so with people=True.')
         return
 
@@ -468,7 +468,7 @@ class Graph:
         """ The groups of states of people that transitions link, in either direction: one, unless the people are in separate chains of states (e.g. a chain for each host species) """
         links = {id(s):{id(s)} for s in self.people_states}
         for tr in self.transitions.values():
-            ends = [s for s in (tr.src or []) + (tr.dst or []) if s.people]
+            ends = [s for s in (tr.source or []) + (tr.dest or []) if s.people]
             for s in ends:
                 links[id(s)].update(id(e) for e in ends)
         groups, seen = [], set()
@@ -491,18 +491,18 @@ class Graph:
         with no initial value, with a note in `guessed`; with none or several, there is no such state, and the initial values
         must sum to 1 (see `Engine.init_fractions()`)
         """
-        seeded = {id(st) for tr in self.transitions.values() if tr.contact for st in tr.dst or []} if self.init_prev is not None else set() # Where init_prev puts people
+        seeded = {id(st) for tr in self.transitions.values() if tr.contact for st in tr.dest or []} if self.init_prev is not None else set() # Where init_prev puts people
         both = [s.name for s in self.people_states if id(s) in seeded and s.given_init]
         if both:
             errormsg = f'"{self.module.name}" is given both init_prev= and init= for {sc.strjoin(both)}, where init_prev= puts people; give one or the other'
             raise ValueError(errormsg)
-        self.rest = self.first
-        if self.first is None or not self.first.given_init:
+        self.rest = self.default_state
+        if self.default_state is None or not self.default_state.given_init:
             return
         unset = [s for s in self.people_states if not s.given_init and id(s) not in seeded]
         if len(unset) == 1:
             self.rest = unset[0]
-            self.guessed['rest'] = f'{self.rest.name}, the only state with no initial value, since {self.first.name} has one'
+            self.guessed['rest'] = f'{self.rest.name}, the only state with no initial value, since {self.default_state.name} has one'
         else:
             self.rest = None
         return
@@ -515,8 +515,8 @@ class Graph:
         whatever its rate (a bite rate, an EIR, a count of bacteria), unless a transition out of that state is contact-mediated, which
         is then the acquisition (so `S -> V` alongside `S -> I @ beta * I` is a vaccination). `acquisition=` on the transition says it outright.
         """
-        first = self.first
-        out_of_first = [tr for tr in self.transitions.values() if any(src is first for src in tr.src or [])]
+        first = self.default_state
+        out_of_first = [tr for tr in self.transitions.values() if any(src is first for src in tr.source or [])]
         by_contact = [tr.name for tr in out_of_first if tr.contact]
         for name,tr in self.transitions.items():
             given = getattr(tr, 'acquisition_given', None)
@@ -524,7 +524,7 @@ class Graph:
                 tr.acquisition = bool(given)
             elif tr.contact:
                 tr.acquisition = True
-            elif tr in out_of_first and tr.people and not tr.outflow:
+            elif tr in out_of_first and tr.people and not tr._outflow:
                 tr.acquisition = not by_contact
                 tr.guessed['acquisition'] = f'contact-mediated {sc.strjoin(by_contact)} is' if by_contact else f'out of {first.name}'
             else:
@@ -534,7 +534,7 @@ class Graph:
     def fill_people(self, tr):
         """ Fill in what depends on which states are people: the sources of the deaths of everyone (`ss.death()` with no state), and the people a birth rate is per person of (`ss.birth()`) """
         if tr.every_state:
-            tr.src = list(self.people_states)
+            tr.source = list(self.people_states)
         if tr.per_capita:
             tr.per_person = tr.rate # Kept for a rate by level, whose births are from the people at each level (see ss.solvers.Engine.per_level())
             tr.rate = tr.rate * Count(list(self.people_states), kind='n')
@@ -552,7 +552,7 @@ class Graph:
                 raise sc.KeyNotFoundError(f'"{name}={value}" was given to "{self.module.name}", but it has no parameter called "{name}"; its parameters are {sc.strjoin(self.pars.keys())}.\n'
                                           f'     To add a parameter, use it in a transition, e.g. infection = S >> I @ {name} * I with {name} = ss.par({value}).\n'
                                           f'     If another module reads it from this disease, add it after making the disease: {self.module.name}.define_pars({name}={value!r}).' +
-                                          (f'\n     Condoms (or other protection used in some acts) are an intervention on the transmission instead, e.g. ss.modify({self.module.name}.infection, efficacy={value!r}, share=0.3, route="sexualnet").' if 'condom' in name else ''))
+                                          (f'\n     Condoms (or other protection used in some acts) are an intervention on the transmission instead, e.g. ss.modify({self.module.name}.infection, efficacy={value!r}, share=0.3, network="sexualnet").' if 'condom' in name else ''))
             ss.parameters.replaced_dist(name, self.pars[name].value, value)
             self.pars[name].value = value
         return
@@ -570,7 +570,7 @@ class Graph:
         if tr.rate is not None:
             for leaf in tr.rate.leaves:
                 if isinstance(leaf, par):
-                    leaf.slot = 'rate' if isinstance(leaf.raw, (ss.TimePar, ss.Dist)) else None
+                    leaf.slot = 'rate' if isinstance(leaf.raw, (ss.time.TimePar, ss.Dist)) else None
             if isinstance(tr.rate, par):
                 tr.rate.slot = 'rate'
                 slots.append(('rate', tr.rate))
@@ -604,9 +604,9 @@ class Graph:
         inner |= {q.name or self.names.get(id(q)) for tr,slot,p in slots if isinstance(p.value, Expr) for q in p.value.leaves if isinstance(q, par) and q is not p} # And inside an expression in a slot, e.g. dur=dur_rec*k
         inner |= {p.name or self.names.get(id(p)) for tr,slot,p in slots if not any(p is q for _,_,q in anon)} # And the explicit ones in the slots, registered below, e.g. dur = ss.par(ss.days(6)) in one transition and a bare ss.days(100) in another
         taken = lambda name: name in self.pars or name in self.states or name in self.transitions or name in inner
-        timed = lambda state: sum(tr.dur is not None and any(s is state for s in tr.src or []) for tr in self.transitions.values()) # The number of timed exits from a state
+        timed = lambda state: sum(tr.dur is not None and any(s is state for s in tr.source or []) for tr in self.transitions.values()) # The number of timed exits from a state
         for tr,slot,p in anon:
-            qual = tr.src[0].name if slot == 'dur' and len(tr.src or []) == 1 and timed(tr.src[0]) == 1 else tr.name # A dwell time is the mean time in its state (dur_E), unless the state has several timed exits
+            qual = tr.source[0].name if slot == 'dur' and len(tr.source or []) == 1 and timed(tr.source[0]) == 1 else tr.name # A dwell time is the mean time in its state (dur_E), unless the state has several timed exits
             name = f'{slot}_{qual}' if slot in ['dur', 'rate'] or counts[slot] > 1 or taken(slot) else slot
             if qual != tr.name and taken(name):
                 name = f'{slot}_{tr.name}'
@@ -659,24 +659,24 @@ class Graph:
         self.inflows = []
         for tr in self.transitions.values():
             if tr.undriven: # To the engines, a rate of 0 that nothing modifies; a delivery moves people along it (see ss.Treatment)
-                tr.rate = par(0.0, literal=True)
+                tr.rate = par.inline(0.0)
                 tr.const, tr.terms = linear(tr.rate)
-            if tr.inflow:
+            if tr._inflow:
                 self.inflows.append(tr)
-            if tr.immediate and tr.where is not None and tr.trigger is None and (tr.p is None or tr.split): # dur=0 with where=: as soon as the condition holds, as ss.on() does (a branch with p= waits in its source until where= holds instead)
+            if tr._immediate and tr.where is not None and tr.trigger is None and (tr.p is None or tr._split): # dur=0 with where=: as soon as the condition holds, as ss.on() does (a branch with p= waits in its source until where= holds instead)
                 tr.trigger = ss.on(tr.where)
-            for state in tr.src:
+            for state in tr.source:
                 exits = self.exits[state.name]
                 if tr.contact:
                     exits.contact.append(tr)
                 elif tr.trigger is not None: # Moved as soon as its condition holds, or its event happens: see ss.on
                     exits.triggered.append(tr)
-                elif tr.p is not None and not tr.split: # One branch of several out of this state
+                elif tr.p is not None and not tr._split: # One branch of several out of this state
                     exits.branches.append(tr)
-                elif tr.dur is not None and not tr.immediate:
+                elif tr.dur is not None and not tr._immediate:
                     exits.timed.append(tr)
-                elif tr.rate is None and len(tr.dst) > 1 and not tr.immediate: # Several destinations and no wait: say how to write an immediate split
-                    names = [d.name for d in tr.dst]
+                elif tr.rate is None and len(tr.dest) > 1 and not tr._immediate: # Several destinations and no wait: say how to write an immediate split
+                    names = [d.name for d in tr.dest]
                     raise ValueError(f'the transition "{tr.name}" ({state.name} -> {sc.strjoin(names)}) has p= but no rate and no duration (dur=), so nothing says when people leave. '
                                                 f'For a split as soon as people arrive, give it dur=0, e.g. ss.Transition({state.name}, [{", ".join(names)}], dur=0, p={[None if v is None else v.raw if isinstance(v, par) else v for v in tr.p]}); or give it a duration.')
                 elif tr.rate is None: # Immediate: dur=0, one destination and ss.stay, or what the branches leave over
@@ -742,52 +742,52 @@ class Graph:
     def check(self):
         """ Checks that do not need the sim """
         for name,tr in self.transitions.items():
-            tr.check_dimensions()
-            if tr.trigger is not None and (tr.contact or tr.inflow or (tr.p is not None and not tr.split and not tr.trigger.outcome)): # On an outcome, p= is the share of its people who move; a split with ss.stay or ss.null is a split, though neither is a state
-                raise ValueError(f'"{name}" is triggered by {tr.trigger}, so it cannot be {"a transmission" if tr.contact else "an inflow" if tr.inflow else "one branch of several with p="}; '
-                                        f'give the destinations of a triggered split together, e.g. "{tr.arrow} | B" with p=[...].')
+            tr._check_dimensions()
+            if tr.trigger is not None and (tr.contact or tr._inflow or (tr.p is not None and not tr._split and not tr.trigger.outcome)): # On an outcome, p= is the share of its people who move; a split with ss.stay or ss.null is a split, though neither is a state
+                raise ValueError(f'"{name}" is triggered by {tr.trigger}, so it cannot be {"a transmission" if tr.contact else "an inflow" if tr._inflow else "one branch of several with p="}; '
+                                        f'give the destinations of a triggered split together, e.g. "{tr._arrow} | B" with p=[...].')
             for inc in [c for c in ss.expressions.nodes([tr.rate, tr.dur] + sc.tolist(tr.p)) if isinstance(c, ss.conditions.Cond) and c.op == 'incidence']: # A flow over a window, in a rate, would be a delay equation
                 flow = inc.args[0]
                 mod = ss.conditions.modname(getattr(flow, 'module', None)) or getattr(self.module, 'name', None)
                 path = f'{mod}.{flow.name}' if mod else flow.name
-                dst = (flow.dst or [None])[0]
+                dst = (flow.dest or [None])[0]
                 raise ss.CapabilityError(f'"{name}" reads the incidence of "{flow.name}" in its rate, which is not supported yet: a flow over a window, in a rate, needs the history of the flow in every solver.\n'
                                          f'     Use a count of a state instead, e.g. {getattr(dst, "name", "X")}.n, which is about the flow into it times the time people spend there. '
                                          f'The incidence can be used in where= of ss.modify(), e.g. ss.modify(..., multiply=0.6, where={path}.incidence(over=ss.days(7)) > 0.001)')
             for clock in ss.expressions.clocks_in([tr.rate, tr.dur] + sc.tolist(tr.p)): # A clock has a value only inside its states, and progress needs a scheduled dwell
                 if clock.module not in [None, self.module] or not all(n in self.states for n in clock.names):
                     continue # Another module's clock: checked when it runs
-                outside = [src.name for src in tr.src or [] if src.name not in clock.names]
+                outside = [src.name for src in tr.source or [] if src.name not in clock.names]
                 if outside:
                     raise ValueError(f'"{name}" reads {clock}, which has a value only for people in {sc.strjoin(clock.names)}, but moves people from {sc.strjoin(outside)}.')
                 if clock.kind == 'progress':
                     ex = self.exits[clock.names[0]]
                     if not (ex.branches or ex.remainder or ex.timed):
                         raise ValueError(f'"{name}" reads {clock}, but {clock.names[0]} has only rates out of it, so no dwell time is scheduled when people enter it.')
-                if len(tr.dst or []) <= 1 and any(c is clock for c in ss.expressions.clocks_in(sc.tolist(tr.p))):
+                if len(tr.dest or []) <= 1 and any(c is clock for c in ss.expressions.clocks_in(sc.tolist(tr.p))):
                     raise ss.CapabilityError(f'"{name}" has p= with {clock}, but a branch with p= is decided when people enter {sc.strjoin(clock.names)}, when no time has passed. '
-                                             f'Write one transition with several destinations, decided when they leave, e.g. ss.Transition({tr.src[0].name}, [{tr.dst[0].name}, ...], dur=..., p=[f({clock}), None])')
-            if tr.stays and not tr.dst and not tr.dies:
+                                             f'Write one transition with several destinations, decided when they leave, e.g. ss.Transition({tr.source[0].name}, [{tr.dest[0].name}, ...], dur=..., p=[f({clock}), None])')
+            if tr.stays and not tr.dest and not tr.dies:
                 raise ValueError(f'"{name}" has ss.stay as its only destination; give it with another, e.g. [B, ss.stay] with p=[0.3, None].')
-            if tr.p is not None and tr.split:
+            if tr.p is not None and tr._split:
                 ps = tr.p
-                if len(ps) == 1 and len(tr.dst) == 2 and not tr.stays: # With two destinations, a single value is the first one's probability
+                if len(ps) == 1 and len(tr.dest) == 2 and not tr.stays: # With two destinations, a single value is the first one's probability
                     ps = tr.p = [ps[0], None]
                 ends = ps + [tr.p_stay]*tr.stays + [tr.p_die]*tr.dies # One entry for each destination, with ss.stay and ss.null
-                if len(ps) != len(tr.dst):
-                    raise ValueError(f'"{name}" has {len(tr.dst) + tr.stays + tr.dies} destinations but {len(ps) + (tr.p_stay is not None) + (tr.p_die is not None)} branch probabilities; give one for each (or None for the one that takes the rest).')
+                if len(ps) != len(tr.dest):
+                    raise ValueError(f'"{name}" has {len(tr.dest) + tr.stays + tr.dies} destinations but {len(ps) + (tr.p_stay is not None) + (tr.p_die is not None)} branch probabilities; give one for each (or None for the one that takes the rest).')
                 given = [p for p in ends if p is not None]
                 if len(given) < len(ends) - 1:
-                    which = [label for label,p in zip([d.name for d in tr.dst] + ['ss.stay']*tr.stays + ['ss.null']*tr.dies, ends) if p is None]
+                    which = [label for label,p in zip([d.name for d in tr.dest] + ['ss.stay']*tr.stays + ['ss.null']*tr.dies, ends) if p is None]
                     raise ValueError(f'"{name}" leaves the rest to {sc.strjoin(which)}; only one destination can take the rest, so give the others a p=.')
                 if all(isinstance(p, par) and sc.isnumber(p.raw) for p in given):
                     total = sum(p.raw for p in given)
                     if (len(given) == len(ends) and not np.isclose(total, 1)) or total > 1 + 1e-9:
                         raise ValueError(f'the branch probabilities of "{name}" sum to {total:n}, not 1.')
-            elif tr.p is None and tr.split:
-                raise ValueError(f'"{name}" has {len(tr.dst)} destinations but no branch probabilities; give them with p=[...].')
-            if tr.dst is not None and len(tr.dst) > 1: # Each destination's flow is res.<transition>.<state>, so it cannot be named like an attribute of a result
-                clash = [d.name for d in tr.dst if d.name in ss.Result.reserved()]
+            elif tr.p is None and tr._split:
+                raise ValueError(f'"{name}" has {len(tr.dest)} destinations but no branch probabilities; give them with p=[...].')
+            if tr.dest is not None and len(tr.dest) > 1: # Each destination's flow is res.<transition>.<state>, so it cannot be named like an attribute of a result
+                clash = [d.name for d in tr.dest if d.name in ss.Result.reserved()]
                 if clash:
                     raise ValueError(f'the flow of "{name}" to {sc.strjoin(clash)} is a result read as res.{name}.{clash[0]}, which is already an attribute of every result; rename the state {sc.strjoin(clash)}')
         for name,a in self.attrs.items(): # Each case of a derived attribute reads clocks only of states it is for
@@ -798,7 +798,7 @@ class Graph:
                     outside = [n for n in names if n not in [c.name for c in clock.states]]
                     if outside:
                         raise ValueError(f'the attribute "{name}" reads {clock} for people in {sc.strjoin(outside)}, but it has a value only for people in {sc.strjoin(c.name for c in clock.states)}.')
-        self.dwell_trs = {name for name,tr in self.transitions.items() if len(tr.dst or []) > 1 and ss.expressions.clocks_in(sc.tolist(tr.p))} # Split as people leave, by their time in the state
+        self.dwell_trs = {name for name,tr in self.transitions.items() if len(tr.dest or []) > 1 and ss.expressions.clocks_in(sc.tolist(tr.p))} # Split as people leave, by their time in the state
         return
 
     def resolve_attrs(self):
@@ -906,15 +906,15 @@ class Graph:
 
     def add_flow(self, tr):
         """ Add a birth, death, or migration declared for the whole population (`ss.Sim(demographics=[ss.birth(...)])`), after the graph is built; see `ss.solvers.choose.init_flows()` """
-        name = tr.name or ('births' if tr.per_capita else 'immigration' if tr.inflow else 'emigration' if tr.migration else 'deaths')
+        name = tr.name or ('births' if tr.per_capita else 'immigration' if tr._inflow else 'emigration' if tr.migration else 'deaths')
         if name in self.transitions:
             raise ValueError(f'"{self.module.name}" already has a transition named "{name}"; give the one in demographics= another name, e.g. ss.birth(..., name="{name}2")')
         tr.name = name
-        if tr.inflow: # Born into (or arriving in) the state given, or else the state people are in unless they are put elsewhere
-            dst = tr.dst[0] if tr.state_given else self.first
+        if tr._inflow: # Born into (or arriving in) the state given, or else the state people are in unless they are put elsewhere
+            dst = tr.dest[0] if tr.state_given else self.default_state
             if not any(s is dst for s in self.people_states):
                 raise sc.KeyNotFoundError(f'"{name}" in demographics= adds people to "{getattr(dst, "name", None)}", which is not a state of people of "{self.module.name}"; its states are {sc.strjoin(s.name for s in self.people_states)}')
-            tr.dst = [dst]
+            tr.dest = [dst]
         if tr.rate is None and tr.dur is None:
             raise ValueError(f'"{name}" in demographics= has no rate; give it one, e.g. ss.birth(rate=ss.peryear(0.02))')
         tr.const, tr.terms = linear(tr.rate) if tr.rate is not None else (None, {})
@@ -949,20 +949,20 @@ class Graph:
         for tr in self.acquisitions:
             if tr.rate is not None and not tr.contact:
                 out.update({id(leaf.states[0]):leaf.states[0] for leaf in tr.rate.leaves if isinstance(leaf, Count) and len(leaf.states) == 1
-                            and leaf.states[0].people and leaf.states[0].module is self.module and not any(leaf.states[0] is src for src in tr.src or [])})
+                            and leaf.states[0].people and leaf.states[0].module is self.module and not any(leaf.states[0] is src for src in tr.source or [])})
         return list(out.values())
 
     @property
     def met_counts(self):
         """
         The counts in a rate that a contact matrix acts on (see `ss.solvers.Mixing.count_terms()`): in the rate of an acquisition, the number
-        (`I.n`, or weighted: `(ss.by(w)*I).n`, `I.n_trans`) or share (`I.frac`) of the people in states of this disease that it does not take
+        (`I.n`, or weighted: `(ss.by(w)*I).n`, `I.n_infectious`) or share (`I.frac`) of the people in states of this disease that it does not take
         people from, as `I` in `S >> I @ beta*I.n`
         """
         out = {}
         for tr in self.acquisitions:
             for leaf in (tr.rate.leaves if tr.rate is not None else []):
-                if isinstance(leaf, Count) and leaf.kind in ['n', 'frac'] and all(s.people and s.module is self.module and not any(s is src for src in tr.src or []) for s in leaf.states):
+                if isinstance(leaf, Count) and leaf.kind in ['n', 'frac'] and all(s.people and s.module is self.module and not any(s is src for src in tr.source or []) for s in leaf.states):
                     out[id(leaf)] = leaf
         return list(out.values())
 
@@ -979,12 +979,12 @@ class Graph:
     def uninfected(self):
         """ The names of the states people can be in without ever having been infected: those reached from the first state by transitions that are not an acquisition """
         seen = []
-        todo = [self.first] if self.first is not None else []
+        todo = [self.default_state] if self.default_state is not None else []
         while todo:
             state = todo.pop()
             if state.name not in seen and state.people:
                 seen.append(state.name)
-                todo += [dst for tr in self.transitions.values() if not tr.acquisition and state in tr.src for dst in tr.dst]
+                todo += [dst for tr in self.transitions.values() if not tr.acquisition and state in tr.source for dst in tr.dest]
         return seen
 
     @property
@@ -999,15 +999,15 @@ class Graph:
         for tr in self.transitions.values():
             if not tr.people and tr.rate is not None:
                 sources.update({id(leaf.states[0]):leaf.states[0] for leaf in tr.rate.leaves if isinstance(leaf, Count) and len(leaf.states) == 1 and leaf.states[0].people})
-        out = {id(s):s for tr in self.acquisitions for s in tr.dst}
+        out = {id(s):s for tr in self.acquisitions for s in tr.dest}
         if not sources:
             stop = set(self.uninfected)
             todo = list(out.values())
             while todo:
                 state = todo.pop()
                 for tr in self.transitions.values():
-                    if state in (tr.src or []) and tr.people and not tr.acquisition:
-                        for dst in tr.dst or []:
+                    if state in (tr.source or []) and tr.people and not tr.acquisition:
+                        for dst in tr.dest or []:
                             if dst.people and dst.name not in stop and id(dst) not in out:
                                 out[id(dst)] = dst
                                 todo.append(dst)
@@ -1016,13 +1016,13 @@ class Graph:
 
     def unit_values(self):
         """ All the typed values (durations and rates) in the graph, used to infer the sim's unit """
-        vals = [p.raw for p in self.all_pars()] + [val for oc in self.outcomes.values() for val in [oc.delay, oc.duration]]
+        vals = [p.raw for p in self.all_pars()] + [val for oc in self.outcomes.values() for val in [oc.delay, oc.stay]]
         return unit_values(vals)
 
     def modifier_kind(self, name):
         """ What a modifier on a transition acts on: its probability if it is one branch of several with p= (chosen on entry) or one destination of a transition with several (`'recovery.R'`), and otherwise its rate """
         tr = self.transitions.get(name)
-        if tr is not None and tr.p is not None and not tr.split and not tr.contact:
+        if tr is not None and tr.p is not None and not tr._split and not tr.contact:
             return 'branch'
         if self.destination(name) is not None:
             return 'branch'
@@ -1031,22 +1031,22 @@ class Graph:
     def dwell_not_branch(self, name, how, modname):
         """ For a multiplier (`how`, e.g. 'the modifier "m"') on a transition with several destinations chosen with p= and a dwell time: a note that it changes the dwell, not a branch, naming the destinations that would; otherwise None """
         tr = self.transitions.get(name)
-        if tr is None or tr.p is None or tr.dst is None or len(tr.dst) < 2 or tr.dur is None:
+        if tr is None or tr.p is None or tr.dest is None or len(tr.dest) < 2 or tr.dur is None:
             return None
-        dsts = sc.strjoin([f"'{modname}.{name}.{dst.name}'" for dst in tr.dst])
-        return f'{how} on "{name}" changes how long people take to leave {sc.strjoin(s.name for s in tr.src)}, not which destination they go to; to change the probability of one destination, name it instead: {dsts}'
+        dsts = sc.strjoin([f"'{modname}.{name}.{dst.name}'" for dst in tr.dest])
+        return f'{how} on "{name}" changes how long people take to leave {sc.strjoin(s.name for s in tr.source)}, not which destination they go to; to change the probability of one destination, name it instead: {dsts}'
 
     def destination(self, name):
         """ For the name of one destination of a transition with several, `'<transition>.<state>'` (e.g. `'progression.C'`): the transition; otherwise None """
         trname, _, dst = name.rpartition('.')
         tr = self.transitions.get(trname)
-        if tr is None or tr.dst is None or len(tr.dst) < 2 or dst not in [d.name for d in tr.dst]:
+        if tr is None or tr.dest is None or len(tr.dest) < 2 or dst not in [d.name for d in tr.dest]:
             return None
         return tr
 
     def destinations(self):
         """ The names of the destinations of the transitions with several, as `destination()` takes them """
-        return [f'{name}.{end}' for name,tr in self.transitions.items() for end in tr.ends]
+        return [f'{name}.{end}' for name,tr in self.transitions.items() for end in tr._ends]
 
     def leaves(self):
         """ The leaves of the rates and branch probabilities of its transitions """
@@ -1064,7 +1064,7 @@ class Graph:
         return list(out.values())
 
     def spread_pars(self):
-        """ The parameters whose value is a distribution across people (e.g. `beta=ss.lognorm_ex(0.3, 0.1)`), other than dwell times, which are stages or are sampled on entry """
+        """ The parameters whose value is a distribution across people (e.g. `beta=ss.lognormal(0.3, 0.1)`), other than dwell times, which are stages or are sampled on entry """
         dwells = [tr.dur for tr in self.transitions.values()]
         dwells += [scaled[0] for tr in self.transitions.values() if tr.dur is not None and isinstance(tr.dur.raw, Expr) and (scaled := ss.transitions.scaled_dist(tr.dur.raw)) is not None] # A distribution times a factor, e.g. dur=d*ss.weeks(1), is drawn on entry too
         return [p for p in self.all_pars() if isinstance(p.raw, ss.Dist) and not any(p is dur for dur in dwells)]
@@ -1079,9 +1079,9 @@ def unit_values(vals):
     """ The units of the typed values (durations and rates) among some values, including those inside distributions and values by level or in time """
     out = []
     def check(val):
-        if isinstance(val, ss.dur) and not isinstance(val, ss.datedur):
+        if isinstance(val, ss.Duration) and not isinstance(val, ss.datedur):
             out.append(type(val).base)
-        elif isinstance(val, ss.Rate) and val.unit is not None:
+        elif isinstance(val, ss.time.Rate) and val.unit is not None:
             out.append(type(val.unit).base)
         elif isinstance(val, ss.Dist):
             if val.unit is not None:

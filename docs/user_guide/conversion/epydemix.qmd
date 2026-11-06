@@ -32,7 +32,7 @@ df_quantiles_comps = results.get_quantiles_compartments()
 ax = plot_quantiles(df_quantiles_comps, columns=["Infected_total", "Susceptible_total", "Recovered_total"], legend_loc="center right")
 ```
 
-In Starsim, `ss.contacts('Kenya')` and `ss.people('Kenya')` are bundled (Prem 2021 contact matrices and UN population estimates), so nothing is downloaded. `solver='binomial'` runs the model as a chain binomial, as epydemix does, and `use_aging=False` keeps people in their age group for the four months:
+In Starsim, `ss.contacts('Kenya')` and `ss.population('Kenya')` are bundled (Prem 2021 contact matrices and UN population estimates), so nothing is downloaded. `solver='binomial'` runs the model as a chain binomial, as epydemix does, and `aging=False` keeps people in their age group for the four months:
 
 ```{python}
 import starsim as ss
@@ -44,8 +44,8 @@ sir = ss.Disease(
     init_n    = dict(I=10),
 )
 sir.stratify(age=[0, 5, 20, 50, 65])
-sim = ss.Sim(sir, networks=ss.contacts('Kenya'), people=ss.people('Kenya', year=2020), start='2019-12-01', stop='2020-04-02',
-             solver='binomial', use_aging=False, verbose=0)
+sim = ss.Sim(sir, networks=ss.contacts('Kenya'), people=ss.population('Kenya', year=2020), start='2019-12-01', stop='2020-04-02',
+             solver='binomial', aging=False, verbose=0)
 msim = sim.run(n_runs=100)
 
 res = msim.results.sir
@@ -89,13 +89,13 @@ These are from Starsim's switching demo for epydemix users (`tests/switching/tes
 | A particle filter on a model whose transmission is a fitted value times a season times a mobility series | **Works**: the log-likelihood peaks at the true value |
 | A posterior with no likelihood (ABC-SMC, with `wmape` as the distance), then projections from it under scenarios, as quantile tables | **Works**: `sim.fit(method='abc-smc')`, `fit.project(scenarios, n=)`, and `.to_df(quantiles=)`, below |
 | A posterior with a likelihood | **Works**: particle MCMC for a stochastic model, NUTS for an ODE, with R-hat and ESS |
-| Populations and contact matrices for US states (`load_epydemix_population("United_States__Massachusetts")`) | **Fails** until `starsim_data` publishes them: `ss.people('United States:Massachusetts')` (US Census, 2023) and `ss.contacts('United States:Massachusetts', layer='school')` (Mistry et al. 2021) read the 50 states and DC, but the files cannot be downloaded yet |
+| Populations and contact matrices for US states (`load_epydemix_population("United_States__Massachusetts")`) | **Fails** until `starsim_data` publishes them: `ss.population('United States:Massachusetts')` (US Census, 2023) and `ss.contacts('United States:Massachusetts', layer='school')` (Mistry et al. 2021) read the 50 states and DC, but the files cannot be downloaded yet |
 | Other solvers: the same model as an ODE, by Gillespie's method, or as agents | **Works**: `solver='ode'`, `'gillespie'`, or `'abm'` |
 
 A posterior with no likelihood, then projections from it. Here the model is an SIR in a million people whose transmission is a fitted value `b` times a season times a mobility series, fitted to weekly infections drawn from a run at `b = 0.5`:
 
 ```{python}
-mobility = ss.timeseries({'2020-02-23': 1.0, '2020-05-31': 0.3}, mode='linear') # Falls steadily from 1 to 0.3
+mobility = ss.timeseries({'2020-02-23': 1.0, '2020-05-31': 0.3}, interpolation='linear') # Falls steadily from 1 to 0.3
 season = ss.seasonal(mean=0.9, amplitude=0.1/0.9, peak=ss.days(14))
 
 def make_sim(b, data=None, rand_seed=1):
@@ -105,7 +105,7 @@ def make_sim(b, data=None, rand_seed=1):
 
 # The data: weekly new infections from one run at b = 0.5, with a seed of its own; the run is already stochastic, so its counts are used as they are
 truth = make_sim(ss.par(0.5), rand_seed=2).run()
-data = truth.to_data('infection', resample='week', noise=None) # Compared with the result infection
+data = truth.to_synthetic_data('infection', resample='week', noise=None) # Compared with the result infection
 
 sim = make_sim(ss.par(0.5, bounds=[0.1, 1]), data=data)
 fit = sim.fit(method='abc-smc', particles=50, generations=3, rand_seed=1, verbose=0)

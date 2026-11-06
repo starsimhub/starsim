@@ -9,12 +9,12 @@ import pytest
 import starsim as ss
 
 kw = dict(start=2000, stop=2010, dt=ss.months(1), verbose=0)
-strat = [dict(sex=['female', 'male']), dict(age=[0, 15, 50], split=[0.3, 0.4, 0.3])]
+strat = [dict(sex=['female', 'male']), dict(age=[0, 15, 50], fractions=[0.3, 0.4, 0.3])]
 
 
 def test_burnin_ode():
     sc.heading('Testing burnin= in the small compartmental form: women pregnant at the start, as many as agents have, with a note')
-    pars = dict(start=2000, stop=2003, dt=ss.months(1), verbose=0, stratify=strat, use_aging=False)
+    pars = dict(start=2000, stop=2003, dt=ss.months(1), verbose=0, stratify=strat, aging=False)
     make = lambda: ss.Pregnancy(fertility_rate=ss.freqperyear(100), p_abortion=0.1)
     ode = ss.Sim(demographics=make(), solver='ode', total_pop=20_000, **pars).run()
     abm = ss.Sim(demographics=make(), n_agents=20_000, **pars).run()
@@ -45,7 +45,7 @@ def test_burnin_pregnancies():
 
     # With deliveries before the start (short pregnancies), counted in parity, and losses in the run
     preg = ss.Pregnancy(fertility_rate=ss.freqperyear(600), dur_pregnancy=ss.uniform(ss.weeks(10), ss.weeks(70)), p_abortion=0.1, loss_rate=ss.probperweek(0.01))
-    preg.stratify(parity=['0', '1', '2', '3+'], split=[1, 0, 0, 0])
+    preg.stratify(parity=['0', '1', '2', '3+'], fractions=[1, 0, 0, 0])
     sim = snapshot(ss.Sim(demographics=preg, analyzers=check, n_agents=10_000, start=2000, stop=2004, dt=ss.months(1), verbose=0).init()).run()
     n, npreg, parity = seen.start
     assert np.all(npreg == 1 + parity) and np.sum(parity > 0) > 10, 'A delivery before the start counts as a pregnancy too'
@@ -60,7 +60,7 @@ def test_burnin_pregnancies():
 @sc.timer()
 def test_mmr():
     sc.heading('Testing the maternal mortality ratio, and infant mortality')
-    preg = ss.Pregnancy(fertility_rate=ss.freqperyear(100), p_maternal_death=ss.bernoulli(0.05), p_infertile=ss.bernoulli(0.2), infant_rate=ss.peryear(0.05))
+    preg = ss.Pregnancy(fertility_rate=ss.freqperyear(100), p_maternal_death=ss.bernoulli(0.05), p_infertile=ss.bernoulli(0.2), infant_death_rate=ss.peryear(0.05))
     sim = ss.Sim(demographics=preg, n_agents=5000, start=2000, stop=2010, dt=ss.months(1), verbose=0).run()
     r = sim.results.pregnancy
     births, md = r.birth.values, r.maternal_death.values
@@ -79,7 +79,7 @@ def test_mmr():
 
 
 def make_fetal():
-    preg = ss.Pregnancy(fertility_rate=ss.freqperyear(100), maternal_rate=ss.peryear(0.05))
+    preg = ss.Pregnancy(fertility_rate=ss.freqperyear(100), maternal_death_rate=ss.peryear(0.05))
     S, I, C, Cs = ss.states('S I C Cs')
     d = ss.Disease(S, I, C, Cs,
         infection = S >> I @ ss.peryear(0.1),
@@ -101,24 +101,24 @@ def agents_only(make, match):
 
 def test_fetus_ode():
     sc.heading('Testing fetuses (ss.mother() and a maternal network): agents only')
-    agents_only(lambda: dict(zip(['demographics', 'diseases'], make_fetal()), networks=ss.MaternalNet()), match='mother')
+    agents_only(lambda: dict(zip(['demographics', 'diseases'], make_fetal()), networks=ss.PrenatalNet()), match='mother')
     agents_only(lambda: dict(zip(['demographics', 'diseases'], make_fetal())), match='mother') # ss.mother() alone
     S, I = ss.states('S I')
-    agents_only(lambda: dict(demographics=ss.Pregnancy(), diseases=ss.Disease(infection=ss.Transition(S, I, rate=dict(maternalnet=0.3) * I)), networks=ss.MaternalNet()), match='MaternalNet')
-    agents_only(lambda: dict(demographics=ss.Pregnancy(fetus=True)), match='fetus=True')
+    agents_only(lambda: dict(demographics=ss.Pregnancy(), diseases=ss.Disease(infection=ss.Transition(S, I, rate=dict(prenatalnet=0.3) * I)), networks=ss.PrenatalNet()), match='PrenatalNet')
+    agents_only(lambda: dict(demographics=ss.Pregnancy(fetal_agents=True)), match='fetal_agents=True')
 
 
 def make_hiv_vertical(bf=True):
     preg = ss.Pregnancy(fertility_rate=ss.freqperyear(120), p_breastfeed=0.8)
     S, I = ss.states('S I')
-    beta = dict(maternalnet=ss.peryear(0.2), breastfeedingnet=ss.peryear(0.3 if bf else 0))
+    beta = dict(prenatalnet=ss.peryear(0.2), breastfeedingnet=ss.peryear(0.3 if bf else 0))
     hiv = ss.Disease(S, I, infection=ss.Transition(S, I, rate=beta * I), death=ss.Transition(I, ss.null, rate=ss.peryear(0.05)), init=dict(I=0.2), name='hiv')
-    return dict(demographics=preg, diseases=hiv, networks=[ss.MaternalNet(), ss.BreastfeedingNet()])
+    return dict(demographics=preg, diseases=hiv, networks=[ss.PrenatalNet(), ss.BreastfeedingNet()])
 
 
 def test_hiv_vertical_ode():
-    sc.heading('Testing HIV vertical transmission (MaternalNet, BreastfeedingNet): agents only')
-    agents_only(make_hiv_vertical, match='MaternalNet')
+    sc.heading('Testing HIV vertical transmission (PrenatalNet, BreastfeedingNet): agents only')
+    agents_only(make_hiv_vertical, match='PrenatalNet')
 
 
 def test_delivery_shift():
@@ -160,7 +160,7 @@ def make_syphilis():
     return dict(demographics=preg, diseases=syph)
 
 
-syph_kw = dict(stratify=strat, use_aging=False, **kw)
+syph_kw = dict(stratify=strat, aging=False, **kw)
 syph_keys = ['mtct', 'stillbirth', 'nnd', 'born_cs', 'born_ok']
 
 
@@ -170,13 +170,13 @@ def test_syphilis_ode():
 
 
 def test_two_sims():
-    """ Each sim's pregnancy drives its births by its own delivery: ss.birth(per=) kept the class's transition, so a second sim reached into the first sim's objects """
+    """ Each sim's pregnancy drives its births by its own delivery: ss.birth(on=) kept the class's transition, so a second sim reached into the first sim's objects """
     sc.heading('Testing two pregnancy sims in a row')
     sims = []
     for i in range(2):
         sim = ss.Sim(demographics=ss.Pregnancy(fertility_rate=ss.freqperyear(100)), n_agents=300, start=2000, stop=2002, verbose=0).run()
         trs = sim.demographics.pregnancy.graph.transitions
-        assert trs.birth.per.tr is trs.delivery and trs.delivery is not ss.Pregnancy.delivery
+        assert trs.birth.birth_on.tr is trs.delivery and trs.delivery is not ss.Pregnancy.delivery
         assert trs.delivery.dur.raw.sim is sim
         sims.append(sim)
     assert sims[0].results.pregnancy.birth.sum() > 0 and sims[1].results.pregnancy.birth.sum() > 0
@@ -184,15 +184,15 @@ def test_two_sims():
 
 
 def test_path_triggers():
-    """ A trigger on another module's transition by path (ss.state('pregnancy.delivery')) is its event, as ss.on(preg.delivery) is, so it reaches fetuses at their mother's delivery (it was a condition that never held for them) """
+    """ A trigger on another module's transition by path (ss.ref('pregnancy.delivery')) is its event, as ss.on(preg.delivery) is, so it reaches fetuses at their mother's delivery (it was a condition that never held for them) """
     sc.heading('Testing triggers on a transition by path')
     def make(by_path):
         preg = ss.Pregnancy(fertility_rate=ss.freqperyear(100))
         S, I, Cs = ss.states('S I Cs')
-        delivery = ss.state('pregnancy.delivery') if by_path else preg.delivery
+        delivery = ss.ref('pregnancy.delivery') if by_path else preg.delivery
         d = ss.Disease(S, I, Cs, infection=S >> I @ ss.peryear(0.1), mtct=ss.Transition(S, Cs, rate=ss.peryear(3)*ss.mother(I)),
-                       still=ss.Transition(Cs, ss.null, where=delivery), name='d')
-        return ss.Sim(demographics=preg, diseases=d, networks=ss.MaternalNet(), n_agents=5000, start=2000, stop=2005, verbose=0).run()
+                       still=ss.Transition(Cs, ss.null, on=delivery), name='d')
+        return ss.Sim(demographics=preg, diseases=d, networks=ss.PrenatalNet(), n_agents=5000, start=2000, stop=2005, verbose=0).run()
     direct, path = make(False), make(True)
     assert path.results.d.still.sum() > 0, 'A fetus is removed at its mother\'s delivery'
     assert np.array_equal(direct.results.d.still.values, path.results.d.still.values)

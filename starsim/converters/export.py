@@ -99,7 +99,7 @@ def rename(text, names, unit):
             if func == 'mean' and len(n.args) == 1:
                 return self.visit(n.args[0])
             cls = getattr(ss, func, None) if func else None
-            if isinstance(cls, type) and issubclass(cls, ss.TimePar) and all(isinstance(a, ast.Constant) for a in n.args):
+            if isinstance(cls, type) and issubclass(cls, ss.time.TimePar) and all(isinstance(a, ast.Constant) for a in n.args):
                 return ast.Constant(float(ss.solvers.convert(cls(*[a.value for a in n.args]), unit)))
             self.generic_visit(n)
             return n
@@ -156,12 +156,12 @@ def timeseries_expr(raw, sim, year, unit):
     years = [float(y) for y in raw.years(sim)]
     vals = [float(ss.solvers.convert(ss.parameters.const_value(v), unit)) for v in raw.values]
     if raw.period is not None: # Fold the time into one period from the first time
-        period = raw.period.years if isinstance(raw.period, ss.dur) else float(raw.period)
+        period = raw.period.years if isinstance(raw.period, ss.Duration) else float(raw.period)
         year = f'({year}) - {period!r} * floor((({year}) - {years[0]!r}) / {period!r})'
     out = repr(vals[-1])
     for i in reversed(range(len(vals) - 1)):
         w = f'(({year}) - {years[i]!r}) / {years[i+1] - years[i]!r}'
-        w = dict(constant=None, linear=w, cosine=f'(1 - cos(pi * {w})) / 2')[raw.mode]
+        w = dict(step=None, linear=w, cosine=f'(1 - cos(pi * {w})) / 2')[raw.interpolation]
         value = repr(vals[i]) if w is None else f'{vals[i]!r} + {vals[i+1] - vals[i]!r} * ({w})'
         out = f'where(({year}) < {years[i+1]!r}, {value}, {out})'
     return f'where(({year}) < {years[0]!r}, {vals[0]!r}, {out})'
@@ -316,8 +316,8 @@ def in_unit(sim, unit='day'):
     flat.year = float(t.yearvec[0])
     flat.start = t.datevec[0] if isinstance(t.datevec[0], ss.date) else None
     if flat.unit != unit:
-        up = float(ss.solvers.convert(ss.dur(1, base=flat.unit), unit)) # The new unit in each of the sim's, e.g. 365 days in a year
-        down = float(ss.solvers.convert(ss.dur(1, base=unit), flat.unit)) # The sim's unit in each of the new one, e.g. 365 days in a year for a sim in days
+        up = float(ss.solvers.convert(ss.Duration(1, base=flat.unit), unit)) # The new unit in each of the sim's, e.g. 365 days in a year
+        down = float(ss.solvers.convert(ss.Duration(1, base=unit), flat.unit)) # The sim's unit in each of the new one, e.g. 365 days in a year for a sim in days
         per = (lambda text: f'{text} / {up!r}') if up >= 1 else (lambda text: f'{text} * {down!r}') # A rate in the new unit from one in the sim's, and the time in the sim's from the time in the new one
         class Time(ast.NodeTransformer):
             def visit_Name(self, n):
@@ -711,7 +711,7 @@ def to_hub(msim, targets, origin_date=None, by=None, every='week', output_type='
         hub = ss.converters.to_hub(msim, targets=dict(infection=['inc inf', 'cum inf']), origin_date='2020-03-01', by='patch')
         ```
     """
-    msim.check_run('to_hub')
+    msim._check_ran('to_hub')
     steps = dict(day=1, week=7)[every]
     output_type = sc.tolist(output_type)
     if not set(output_type) <= {'quantile', 'sample'}:
@@ -728,7 +728,7 @@ def to_hub(msim, targets, origin_date=None, by=None, every='week', output_type='
         dated = isinstance(dates[0], ss.date)
         origin = dates[0] if origin_date is None else ss.date(origin_date) if dated else float(origin_date) # Without dates, a time in the sim's unit
         i0 = next((i for i,d in enumerate(dates) if d >= origin), len(dates)) # The values after the origin
-        places = res.by(by).by_column() if by is not None else {location or 'total':res}
+        places = res.by(by)._columns() if by is not None else {location or 'total':res}
         for place,sub in places.items():
             vals = sub.values[:, i0+1:]
             n = vals.shape[1]//steps

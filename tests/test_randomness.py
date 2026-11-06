@@ -437,7 +437,7 @@ def test_crn_undriven():
     sc.heading('Testing that an undriven transition leaves the draws as they were')
     def make(extra=None, strains=False):
         S, L, I, R, C = ss.states('S L I R C')
-        kw = dict(strains=ss.Strains(['DS', 'RIF'], split=[0.8, 0.2], rel_trans=[1, 0.6])) if strains else {}
+        kw = dict(strains=ss.Strains(['DS', 'RIF'], fractions=[0.8, 0.2], rel_trans=[1, 0.6])) if strains else {}
         trs = dict(infection=S >> L @ ss.peryear(4)*I, activation=L >> I @ ss.peryear(0.5), recovery=I >> R @ ss.years(1), waning=R >> S @ ss.years(2))
         if extra == 'undriven':
             trs['clear'] = ss.Transition(L, C) # Taken only by a product's moves=

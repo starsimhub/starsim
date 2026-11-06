@@ -53,7 +53,7 @@ def test_camdl_ir():
     tr = sim.diseases.sir.graph.transitions
     assert str(tr.infection.rate) == 'beta * I', 'infection should be read as exposure'
     pars = sim.diseases.sir.graph.pars
-    assert pars.beta.bounds == [0.05, 1.0] and isinstance(pars.beta.prior, ss.lognorm_im), 'bounds and priors should be kept'
+    assert pars.beta.bounds == [0.05, 1.0] and isinstance(pars.beta.prior, ss.lognormal) and pars.beta.prior.log_form, 'bounds and priors should be kept'
     assert pars.beta.doc == 'transmission rate'
     assert isinstance(sim.diseases.sir.graph.outcomes.cases.likelihood, ss.nbinom), 'the likelihood should be kept'
 
@@ -112,11 +112,11 @@ def test_camdl_flat():
 def export_sims():
     """ An SIR with bounds and a prior on beta, and an SEIRD with births, deaths, and a lognormal dwell time (written as Erlang stages) """
     S, I, R = ss.states('S I R')
-    beta = ss.par(ss.perday(0.3), bounds=[0.1, 0.9], prior=ss.lognorm_im(mean=-1, sigma=0.5), doc='transmission rate')
+    beta = ss.par(ss.perday(0.3), bounds=[0.1, 0.9], prior=ss.lognormal(log_mean=-1, log_std=0.5), doc='transmission rate')
     sir = ss.Sim(ss.Disease(infection=S >> I @ beta*I, recovery=I >> R @ ss.days(10), init_n=dict(I=10), name='sir'), total_pop=1e4, unit='day', stop=80, verbose=0)
     S, E, I, R, D = ss.states('S E I R D')
     seird = ss.Disease(births=ss.birth(S, rate=ss.peryear(0.02)), infection=ss.Transition(S, E, rate=ss.perday(0.4)*I), onset=ss.Transition(E, I, dur=ss.days(4)),
-                       outcome=ss.Transition(I, [R, D], dur=ss.lognorm_ex(ss.days(8), ss.days(3)), p=[None, 0.1]), deaths=ss.death([S, E, I, R], rate=ss.peryear(0.01)), init_prev=0.01, name='seird')
+                       outcome=ss.Transition(I, [R, D], dur=ss.lognormal(ss.days(8), ss.days(3)), p=[None, 0.1]), deaths=ss.death([S, E, I, R], rate=ss.peryear(0.01)), init_prev=0.01, name='seird')
     return dict(sir=sir, seird=ss.Sim(seird, total_pop=1e5, unit='day', stop=120, verbose=0))
 
 
@@ -151,7 +151,7 @@ def test_camdl_export_run(tmp_path, monkeypatch):
             assert np.allclose(ref[k].values, stages(res, k), rtol=1e-9, atol=1e-6), f'{name}: {k} should be the same read back'
         if name == 'sir':
             p = back.diseases.sir.graph.pars.beta
-            assert p.bounds == [0.1, 0.9] and isinstance(p.prior, ss.lognorm_im) and p.doc == 'transmission rate'
+            assert p.bounds == [0.1, 0.9] and isinstance(p.prior, ss.lognormal) and p.prior.log_form and p.doc == 'transmission rate'
 
         # In camdl itself, which writes counts as whole numbers
         traj = tmp_path/f'{name}.tsv'

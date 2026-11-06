@@ -40,7 +40,7 @@ The data are a year of weekly reported cases, drawn from a run with `beta = 1.9`
 true_values = dict(beta=1.9, dur_inf=ss.days(8), report=0.5)
 truth = ss.Sim(measles, pars=true_values, rand_seed=2, **pars)
 truth.run()
-data = truth.to_data('cases', resample='week')
+data = truth.to_synthetic_data('cases', resample='week')
 
 sim = ss.Sim(measles, data=data, **pars)
 fit = sim.fit()
@@ -140,7 +140,7 @@ known = ss.Sim(measles, pars=dict(dur_inf=ss.days(8)), **pars) # The infectious 
 rows = []
 for seed in range(1, 7):
     epidemic = ss.Sim(measles, pars=true_values, solver='binomial', rand_seed=seed, verbose=0, **pars).run()
-    epidemic_data = epidemic.to_data('cases', resample='week', seed=seed)
+    epidemic_data = epidemic.to_synthetic_data('cases', resample='week', seed=seed)
     est = known.fit(data=epidemic_data, pars=['beta', 'report'], verbose=False)
     rows.append(dict(seed=seed, total_cases=epidemic_data.cases.sum(), beta=est.pars.beta, report=est.pars.report))
 pd.DataFrame(rows).round(3)

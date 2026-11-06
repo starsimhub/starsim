@@ -58,7 +58,7 @@ class HumanSEIS(ss.Infection):
             b = 0.5, # The chance an infectious bite infects a human
             c = 0.5, # The chance a bite on an infectious human infects a mosquito
             dur_exp = ss.normal(loc=ss.days(12), scale=ss.days(2)),
-            dur_inf = ss.lognorm_ex(mean=ss.days(180), std=ss.days(60)),
+            dur_inf = ss.lognormal(mean=ss.days(180), std=ss.days(60)),
             p_bite = ss.bernoulli(p=0), # Set each step
             het = ss.gamma(a=2, scale=0.5), # Biting heterogeneity, mean 1
         )
@@ -120,7 +120,7 @@ def make_fseis(n_agents=10_000, years=2):
     eir = 6.0/365 # A target EIR of 6 a year
     emergence = eir/(0.3*0.5*0.4)/10*np.array([0.5, 0.5, 0.7, 1.0, 1.4, 1.8, 1.8, 1.4, 1.0, 0.7, 0.5, 0.5]) # Per human per day, seasonal
     return ss.Sim(diseases=HumanSEIS(init_prev=0.15), connectors=MosquitoODE(emergence), demographics=True, n_agents=n_agents,
-                  start=2000, stop=2000 + years, dt=ss.days(1), use_aging=False, rand_seed=0, verbose=0)
+                  start=2000, stop=2000 + years, dt=ss.days(1), aging=False, rand_seed=0, verbose=0)
 
 
 #%% counts: a declared model with counts
@@ -132,17 +132,17 @@ def make_counts(n_agents=10_000):
     Sv, Ev, Iv = ss.states(3, people=False)
     Nh = (Sh + Eh + Ih + Rh).n
     malaria = ss.Disease(
-        infection  = Sh >> Eh @ a * b * Iv.n / Nh,
-        latency    = Eh >> Ih @ ss.days(12),
-        recovery   = Ih >> Rh @ ss.days(100),
-        waning     = Rh >> Sh @ ss.days(365),
-        emergence  = ss.null >> Sv @ ss.perday(5_000),
-        biting     = Sv >> Ev @ a * c * Ih.n / Nh,
-        incubation = Ev >> Iv @ ss.days(10),
-        mortality  = Sv + Ev + Iv >> ss.null @ ss.days(10),
-        init       = dict(Ih=0.01, Sv=50_000),
-        first      = 'Sh',
-        name = 'malaria',
+        infection     = Sh >> Eh @ a * b * Iv.n / Nh,
+        latency       = Eh >> Ih @ ss.days(12),
+        recovery      = Ih >> Rh @ ss.days(100),
+        waning        = Rh >> Sh @ ss.days(365),
+        emergence     = ss.null >> Sv @ ss.perday(5_000),
+        biting        = Sv >> Ev @ a * c * Ih.n / Nh,
+        incubation    = Ev >> Iv @ ss.days(10),
+        mortality     = Sv + Ev + Iv >> ss.null @ ss.days(10),
+        init          = dict(Ih=0.01, Sv=50_000),
+        default_state = 'Sh',
+        name          = 'malaria',
     )
     return ss.Sim(malaria, solver='abm', unit='day', start=0, stop=365, n_agents=n_agents, rand_seed=1, verbose=0)
 
@@ -172,7 +172,7 @@ def make_by_age(n_agents=20_000):
     ages = np.arange(100)
     mx = 0.0005*np.exp(0.07*ages)
     mortality = ss.by(dict(age=np.r_[ages, ages], sex=['female']*100 + ['male']*100, value=ss.peryear(np.r_[mx, 1.2*mx]))) * ss.timeseries({2020: 1.0, 2021: 0.9})
-    dur = lambda days: ss.lognorm_ex(mean=ss.days(days), std=ss.days(days/3))
+    dur = lambda days: ss.lognormal(mean=ss.days(days), std=ss.days(days/3))
     S, E, Ia, Ip, Im, Is, Ic, R = ss.states('S E Ia Ip Im Is Ic R')
     covid = ss.Disease(
         infection = S >> E @ ss.probperday(0.016) * (Ia + Ip + Im + Is + Ic),
@@ -190,7 +190,7 @@ def make_by_age(n_agents=20_000):
     )
     sus = ss.modify(covid.rel_sus, multiply=by_age('sus'), name='sus_by_age')
     return ss.Sim(diseases=covid, connectors=sus, demographics=[ss.death(rate=mortality)], networks=ss.RandomNet(n_contacts=20), n_agents=n_agents,
-                  start='2020-03-01', dur=ss.days(120), dt=ss.days(1), use_aging=False, rand_seed=0, verbose=0)
+                  start='2020-03-01', dur=ss.days(120), dt=ss.days(1), aging=False, rand_seed=0, verbose=0)
 
 
 #%% tb: tbsim's LSHTM spectrum of disease, as agents on a network
@@ -237,7 +237,7 @@ def make_contra(n_agents=10_000):
     st = {n: ss.State(n) for n in ['young', 'male', 'never', 'none'] + methods}
     dests = [st['none']] + [st[m] for m in methods]
     never_kind = [st['never']] + dests[1:]
-    ppl = ss.ppl
+    ppl = ss.person
     ages = np.arange(15, 50)
     age_bins = [0, 18, 20, 25, 35]
     def p_use(ever):
@@ -266,9 +266,9 @@ def make_contra(n_agents=10_000):
         tr[f'from_{m}'] = ss.Transition(st[m], dests, dur=dur(i + 1), p=branch(m, 1), where=fecund)
     women = sum([s for k, s in st.items() if k not in ['male', 'young']], st['young'])
     users = sum([st[m] for m in methods[1:]], st[methods[0]])
-    contra = ss.Disease(*st.values(), **tr, cpr=users/women, first='young', name='contra')
+    contra = ss.Disease(*st.values(), **tr, cpr=users/women, default_state='young', name='contra')
     people = ss.People(n_agents, extra_states=[ss.BoolState('urban', default=ss.bernoulli(0.3)), ss.FloatArr('parity', default=ss.poisson(2))])
-    return ss.Sim(diseases=contra, people=people, start=2000, stop=2010, dt=ss.months(1), use_aging=True, rand_seed=1, verbose=0)
+    return ss.Sim(diseases=contra, people=people, start=2000, stop=2010, dt=ss.months(1), aging=True, rand_seed=1, verbose=0)
 
 
 #%% strains_ode: a TB-like course with four strains carried in pairs, as an ODE
@@ -280,11 +280,11 @@ def make_strains_ode(substeps=1):
     under the ODE, 2000-2020 in steps of 0.1 years; substeps=1 since the automatic substeps take minutes here
     """
     S, L, I, Tx, R = ss.states('S L I Tx R')
-    strains = ss.Strains(['DS', 'RIF', 'INH', 'MDR'], max_strains=2, split=[0.85, 0.05, 0.05, 0.05], rel_trans=[1, 0.6, 0.8, 0.5], cure=[0.9, 0.4, 0.7, 0.3],
-                         immunity=ss.immunity(due_to=L, rel_sus=0.7))
+    strains = ss.Strains(['DS', 'RIF', 'INH', 'MDR'], max_strains=2, fractions=[0.85, 0.05, 0.05, 0.05], rel_trans=[1, 0.6, 0.8, 0.5], cure=[0.9, 0.4, 0.7, 0.3],
+                         immunity=ss.immunity(due_to=L, protection=0.7))
     DS, RIF, INH, MDR = strains
     tb = ss.Disease(infection=S >> L @ ss.peryear(4)*I, activation=L >> I @ ss.peryear(0.3), diagnosis=I >> Tx @ ss.peryear(2),
-                    treatment=ss.Transition(Tx, [R, I], p='cure', rate=ss.peryear(2), per='strain'),
+                    treatment=ss.Transition(Tx, [R, I], p='cure', rate=ss.peryear(2), per_strain=True),
                     fail_rif=ss.Transition(Tx, I, rate=ss.peryear(0.1), move=DS >> (DS, RIF)),
                     fail_inh=ss.Transition(Tx, I, rate=ss.peryear(0.1), move=DS >> (DS, INH)),
                     relapse=R >> S @ ss.years(2), init=dict(I=0.02), name='tb', strains=strains)

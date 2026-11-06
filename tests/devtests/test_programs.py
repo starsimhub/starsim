@@ -67,7 +67,7 @@ def test_people():
 def test_priority():
     sc.heading('Testing priority: tiers, a score highest first, and a score per agent')
     def make(priority=None, **kwargs):
-        sir = make_sir().stratify(risk=['low', 'high'], split=[0.8, 0.2]).stratify(age=[0, 15, 65])
+        sir = make_sir().stratify(risk=['low', 'high'], fractions=[0.8, 0.2]).stratify(age=[0, 15, 65])
         stock = ss.vaccinate(ss.Vaccine(efficacy=0.9), capacity=ss.perday(500), priority=priority(sir) if priority else None)
         return ss.Sim(sir, interventions=stock, **kwargs)
     sims = run_both(make, stop=40, priority=lambda sir: [sir.risk == 'high']) # All of the high-risk first (10,000 people, 20 days)
@@ -75,7 +75,7 @@ def test_priority():
         by = sim.results.stock.delivered.by('risk').values
         assert np.allclose(by[0:20, 1], 500) and np.allclose(by[0:20, 0], 0), f'{solver}: {by[:22]}'
         assert by[21:39, 0].sum() > 0.95*500*18
-    sims = run_both(make, stop=40, priority=lambda sir: ss.ppl.age) # Oldest first
+    sims = run_both(make, stop=40, priority=lambda sir: ss.person.age) # Oldest first
     for solver,sim in sims.items():
         by = sim.results.stock.delivered.by('age').values
         n_old = sim.results.sir.S.by('age').values[0, 2] + sim.results.sir.I.by('age').values[0, 2]
@@ -83,12 +83,12 @@ def test_priority():
         assert np.allclose(by[0:first, 2], 500) and by[0:first, :2].sum() == 0, f'{solver}: {by[:first+3]}'
     check_close(sims, lambda sim: sim.results.stock.delivered.sum(), rtol=0.01)
 
-    # A score per agent: under an explicit compartmental solver it is ignored with a note; with approx=False it is an error; left to choose, the model runs as agents
+    # A score per agent: under an explicit compartmental solver it is ignored with a note; with approximations='error' it is an error; left to choose, the model runs as agents
     uids = lambda sir: lambda sim, uids: -uids
     keyed = make(priority=uids, solver='ode', total_pop=50_000, stop=10, **kw).run()
     assert any('priority ignored' in note for note in keyed.notes)
     with pytest.raises(ss.CapabilityError):
-        make(priority=uids, solver='ode', approx=False, total_pop=50_000, stop=10, **kw).run()
+        make(priority=uids, solver='ode', approximations='error', total_pop=50_000, stop=10, **kw).run()
     assert make(priority=uids, total_pop=50_000, stop=10, **kw).init().solver == 'abm'
     lowest = make(priority=uids, solver='abm', total_pop=50_000, n_agents=10_000, stop=3, **kw).run()
     got = lowest.people.has_vaccine.raw[:10_000].astype(bool)
@@ -105,7 +105,7 @@ def test_queue():
     sc.heading('Testing queues: dropped, waiting up to a limit (agents only), and leaving when no longer eligible')
     def make(queue=None, **kwargs):
         sis = make_sis()
-        clinic = ss.treat(ss.Treatment(moves=sis.cure), who=sis.I, where=sis.infection, capacity=ss.perday(20), queue=queue)
+        clinic = ss.treat(ss.Treatment(moves=sis.cure), who=sis.I, on=sis.infection, capacity=ss.perday(20), queue=queue)
         return ss.Sim(sis, interventions=clinic, **kwargs)
     out = sc.obj()
     for label,queue in dict(none=None, days=ss.days(5), true=True).items():
@@ -184,7 +184,7 @@ def test_memory():
         sir = make_sir()
         vx = ss.Vaccine(efficacy=0.8, doses=[0.5, 1.0])
         first = ss.vaccinate(vx, coverage=0.6, at=[5])
-        second = ss.vaccinate(vx, who=vx.ever & (vx.since >= ss.days(30)), coverage=0.5, interval=1) if since else ss.vaccinate(vx, who=vx.ever, coverage=0.5, at=[35], name='second')
+        second = ss.vaccinate(vx, who=vx.ever & (vx.since >= ss.days(30)), coverage=0.5, every=1) if since else ss.vaccinate(vx, who=vx.ever, coverage=0.5, at=[35], name='second')
         held = ss.vaccinate(ss.Vaccine(efficacy=0.1, name='other'), where=vx.held, at=[60])
         return ss.Sim(sir, interventions=[first, second, held], **kwargs)
     check_agents(doses, stop=80)
@@ -206,9 +206,9 @@ def test_same_visit():
     def make(**kwargs):
         sis = make_sis()
         drug = ss.Treatment(moves={sis.cure: 0.9})
-        visit = ss.treat(drug, where=sis.I, coverage=0.3, interval=ss.days(10))
-        visit_then1 = ss.vaccinate(ss.Vaccine(efficacy=0.5), who=visit)
-        visit_then2 = ss.screen(ss.Diagnostic(), who=visit, coverage=0.5)
+        visit = ss.treat(drug, where=sis.I, coverage=0.3, every=ss.days(10))
+        visit_then1 = ss.vaccinate(ss.Vaccine(efficacy=0.5), on=visit)
+        visit_then2 = ss.screen(ss.Diagnostic(), on=visit, coverage=0.5)
         return ss.Sim(sis, interventions=[visit, visit_then1, visit_then2], **kwargs)
     sims = run_both(make, stop=60, pop=200_000, n_agents=200_000)
     for solver,sim in sims.items():
@@ -275,7 +275,7 @@ def test_clinic():
         syndromic = ss.treat(discharge, where=ng.C | ct.C, capacity=ss.perweek(200), queue=ss.days(28))
         left = lambda sim: 200 - sim.interventions.syndromic.results.delivered[sim.ti] # What symptomatic care leaves of the clinic's week (it runs first)
         screening = ss.screen(ss.Diagnostic(sensitivity=0.9), disease='ng', coverage=ss.probperyear(0.5), capacity=left)
-        treatment = ss.treat(discharge, who=screening.positive)
+        treatment = ss.treat(discharge, on=screening.positive)
         return ss.Sim([ng, ct], interventions=[syndromic, screening, treatment], dt=7, **kwargs)
     check_agents(make, stop=364, pop=20_000) # The queue
     sim = run_abm(make, stop=364, pop=20_000, n_agents=20_000).abm

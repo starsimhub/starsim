@@ -141,7 +141,7 @@ def prior(spec):
     """ A camdl prior as an `ss.Dist`, or None (a flat prior is the bounds) """
     (name, kw), = spec['dist'].items()
     if name == 'log_normal':
-        return ss.lognorm_im(mean=kw['mu'], sigma=kw['sigma'])
+        return ss.lognormal(log_mean=kw['mu'], log_std=kw['sigma'])
     elif name == 'normal':
         return ss.normal(loc=kw.get('mu', kw.get('mean')), scale=kw.get('sigma', kw.get('sd')))
     elif name == 'beta':
@@ -402,7 +402,7 @@ reserved = {'t', 't_start', 't_end', 'dt', 'pi', 'e', 'rate', 'probability', 'po
 camdl_funcs = dict(minimum='min', maximum='max', absolute='abs', ceiling='ceil')
 camdl_units = dict(day='days', week='weeks', month='months', year='years')
 priors = dict( # Each Starsim prior as camdl's, the reverse of prior()
-    lognorm_im = lambda p: f'log_normal(mu = {p.mean!r}, sigma = {p.sigma!r})',
+    lognormal  = lambda p: 'log_normal(mu = {!r}, sigma = {!r})'.format(*((p.log_mean, p.log_std) if 'log_mean' in p else map(float, ss.lognormal.log_moments(p.mean, p.std)))),
     normal     = lambda p: f'normal(mu = {p.loc!r}, sigma = {p.scale!r})',
     beta_dist  = lambda p: f'beta(alpha = {p.a!r}, beta = {p.b!r})',
     gamma      = lambda p: f'gamma(shape = {p.a!r}, rate = {1/p.scale!r})',
@@ -435,7 +435,7 @@ def camdl_expr(text, unit):
 def par_decl(name, p, lost):
     """ The declaration of a parameter: its kind (from its Starsim type), bounds, and prior """
     raw = getattr(p, 'raw', None)
-    kind = 'rate' if isinstance(raw, ss.per) else 'duration' if isinstance(raw, (ss.dur, ss.Dist)) else 'real'
+    kind = 'rate' if isinstance(raw, ss.per) else 'duration' if isinstance(raw, (ss.Duration, ss.Dist)) else 'real'
     out = f'{camdl_name(name)} : {kind}'
     prior = getattr(p, 'prior', None)
     bounds = getattr(p, 'bounds', None)

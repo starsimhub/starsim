@@ -67,7 +67,7 @@ def export_sim():
     """ An SEIR with dates, a dwell time written as Erlang stages, deaths from I, and births, which flepiMoP has no form for """
     S, E, I, R = ss.states('S E I R')
     seir = ss.Disease(births=ss.birth(S, rate=ss.peryear(0.02)), infection=S >> E @ ss.perday(0.4)*I, onset=E >> I @ ss.days(3),
-                      recovery=ss.Transition(I, R, dur=ss.lognorm_ex(ss.days(8), ss.days(3))), deaths=ss.death(I, rate=ss.perday(0.01)), init_prev=0.01, name='seir')
+                      recovery=ss.Transition(I, R, dur=ss.lognormal(ss.days(8), ss.days(3))), deaths=ss.death(I, rate=ss.perday(0.01)), init_prev=0.01, name='seir')
     return ss.Sim(seir, total_pop=1000, unit='day', start='2021-03-01', stop='2021-05-30', verbose=0)
 
 

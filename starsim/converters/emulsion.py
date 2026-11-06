@@ -9,7 +9,7 @@ a duration whose only way out has a probability of 1 becomes a fixed dwell time.
 is listed as not translated (conditions, calendars, actions on crossing, offspring and
 productions, levels above the population, and variables of individuals) is left for a
 person, or the convert-model skill, to add; a minimum stay (a state's duration) becomes
-`after=` on the ways out of it.
+`min_stay=` on the ways out of it.
 
 `to_emulsion()` (`ss.export_to(sim, 'emulsion')`) is the reverse: it writes the
 compartmental form of a sim (`ss.converters.export.flatten()`) as one state machine run as
@@ -252,7 +252,7 @@ def load_emulsion(filename, verbose=None):
 
         # Transitions
         durations = {s:info['duration'] for s,info in states if 'duration' in info}
-        stays = set() # The states whose minimum stay was translated, as after= on the ways out
+        stays = set() # The states whose minimum stay was translated, as min_stay= on the ways out
         def stay(frm, t):
             """ The minimum stay before a way out of a state applies (EMULSION's duration), unless it is an escape """
             if frm not in durations or t.get('escape') is True or number(durations[frm], values) is None:
@@ -272,7 +272,7 @@ def load_emulsion(filename, verbose=None):
                 src.skip(what, f'uses {sc.strjoin(sorted(missing))}, which {"is" if len(missing) == 1 else "are"} not a state, parameter, or expression of them (e.g. a variable of individuals or of a level, or a function)')
                 continue
             if 'rate' in t:
-                src.add_flow(frm, dst, use(t['rate']), label=label, after=stay(frm, t))
+                src.add_flow(frm, dst, use(t['rate']), label=label, min_stay=stay(frm, t))
             elif 'proba' in t or t.get('amount-all-but') == 0: # Everyone, once any minimum stay is over
                 p = t.get('proba', 1)
                 if isinstance(p, list):
@@ -290,7 +290,7 @@ def load_emulsion(filename, verbose=None):
                         src.skip(what, 'happens with probability 1 at the next step ("as soon as"); written as a very high rate would be the closest')
                         continue
                 else: # A probability per time unit (EMULSION makes it 1 - (1 - p)**delta_t for a step): the rate that gives it
-                    src.add_flow(frm, dst, f'-log(1 - ({use(p)}))', label=label, after=stay(frm, t))
+                    src.add_flow(frm, dst, f'-log(1 - ({use(p)}))', label=label, min_stay=stay(frm, t))
             else:
                 src.skip(what, 'has neither a rate nor a probability')
                 continue
@@ -417,7 +417,7 @@ def to_emulsion(sim):
     times = ss.converters.export.timing(sim)
     lost = list(flat.lost)
     unit = emulsion_units.get(flat.unit, 'days')
-    scale = float(ss.dur(1, base=flat.unit).to('day').value) if flat.unit not in emulsion_units else 1.0 # Days in the sim's unit, for a unit EMULSION does not have
+    scale = float(ss.Duration(1, base=flat.unit).to('day').value) if flat.unit not in emulsion_units else 1.0 # Days in the sim's unit, for a unit EMULSION does not have
     if scale != 1:
         lost.append(f'changed: the time in {flat.unit}s is written in days, with the rates divided by {scale:n}')
     if sim.solver != 'binomial':

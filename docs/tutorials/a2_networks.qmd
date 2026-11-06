@@ -120,24 +120,24 @@ What differs is only how often partners change, which a snapshot doesn't show. `
 
 ## Mothers and children
 
-Some infections, such as HIV, syphilis, and hepatitis B, can pass from a mother to her child during pregnancy or birth. `ss.MaternalNet()` links each pregnant woman with her unborn child, so it needs pregnancy in the model: `ss.Pregnancy()` gives women of reproductive age pregnancies that end in births (and `ss.Deaths()` keeps the population from growing without limit; see [A3](a3_demographics.qmd)). As new agents are born, they are linked to their mothers automatically.
+Some infections, such as HIV, syphilis, and hepatitis B, can pass from a mother to her child during pregnancy or birth. `ss.PrenatalNet()` links each pregnant woman with her unborn child, so it needs pregnancy in the model: `ss.Pregnancy()` gives women of reproductive age pregnancies that end in births (and `ss.Deaths()` keeps the population from growing without limit; see [A3](a3_demographics.qmd)). As new agents are born, they are linked to their mothers automatically.
 
-Here is a simplified HIV model, with infection for life (no deaths from HIV or treatment, to keep it short), in which 10% of adults, and no children, have HIV at the start. Its β is given for each network: per act on the sexual network, at about the estimates for heterosexual transmission without treatment, and as a rate per month of pregnancy on the maternal network, so that about 24% of the children of mothers with HIV are infected. Splitting the disease by age (`stratify()`, as in [T4](t4_ages.qmd)) gives results for children, and gives the share infected at the start by age (`ss.by(age=...)`). To compare, a second sim adds prevention of mother-to-child transmission, which is 90% effective: an `ss.modify()` of the infection on the maternal network only (`route=`):
+Here is a simplified HIV model, with infection for life (no deaths from HIV or treatment, to keep it short), in which 10% of adults, and no children, have HIV at the start. Its β is given for each network: per act on the sexual network, at about the estimates for heterosexual transmission without treatment, and as a rate per month of pregnancy on the maternal network, so that about 24% of the children of mothers with HIV are infected. Splitting the disease by age (`stratify()`, as in [T4](t4_ages.qmd)) gives results for children, and gives the share infected at the start by age (`ss.by(age=...)`). To compare, a second sim adds prevention of mother-to-child transmission, which is 90% effective: an `ss.modify()` of the infection on the maternal network only (`network=`):
 
 ```{python}
 S, I = ss.states('S I')
 beta = dict(
     sexualnet   = ss.peract(m2f=0.002, f2m=0.001),  # Chance of infection per sex act
-    maternalnet = ss.permonth(0.03),                # Rate of infection per month of pregnancy
+    prenatalnet = ss.permonth(0.03),                # Rate of infection per month of pregnancy
 )
 infection = S >> I @ beta*I
 hiv = ss.Disease(infection, init_prev=ss.by(age=[0, 0.1])) # 10% of adults, and no children
 hiv.stratify(age=[0, 15]) # Children (0-14) and adults (15+)
 
-prevention = ss.modify(hiv.infection, efficacy=0.9, route='maternalnet')
+prevention = ss.modify(hiv.infection, efficacy=0.9, network='prenatalnet')
 
 pars = dict(
-    networks     = [ss.SexualNet(), ss.MaternalNet()],
+    networks     = [ss.SexualNet(), ss.PrenatalNet()],
     demographics = [ss.Pregnancy(fertility_rate=ss.peryear(150)), ss.Deaths(death_rate=ss.peryear(10))], # Per 1,000 women, and per 1,000 people, a year
     n_agents     = 5000,
     start        = 2000,
@@ -158,7 +158,7 @@ No child has HIV at the start, so every child with HIV was infected by their mot
 
 A mixing pool is a group whose members mix at random: everyone in it is equally likely to meet everyone else. Unlike a network, it doesn't list who is in contact with whom, so it can give people many contacts at no extra cost. It suits large groups in which who meets whom doesn't matter, such as a school or a town, while a network suits small groups in which it does, such as households and partnerships.
 
-`src=` and `dst=` say who is in a pool: the people who can infect others in it and the people who can be infected. Here measles spreads through two pools: a school, in which children aged 5 to 14 have 10 contacts a day with each other, and the community, in which everyone has 2 contacts a day:
+`source=` and `target=` say who is in a pool: the people who can infect others in it and the people who can be infected. Here measles spreads through two pools: a school, in which children aged 5 to 14 have 10 contacts a day with each other, and the community, in which everyone has 2 contacts a day:
 
 ```{python}
 S, I, R = ss.states('S I R')
@@ -167,7 +167,7 @@ recovery  = I >> R @ ss.days(8)
 measles = ss.Disease(infection, recovery, init_prev=0.001)
 measles.stratify(age=[0, 5, 15]) # Ages 0-4, 5-14, and 15+, for the results
 
-school    = ss.MixingPool(name='school', src=ss.AgeGroup(5, 15), dst=ss.AgeGroup(5, 15), n_contacts=10)
+school    = ss.MixingPool(name='school', source=(ss.person.age >= 5) & (ss.person.age < 15), target=(ss.person.age >= 5) & (ss.person.age < 15), n_contacts=10)
 community = ss.MixingPool(name='community', n_contacts=2)
 sim = ss.Sim(measles, networks=[school, community], n_agents=10_000, stop=ss.days(100))
 sim.run()
@@ -183,7 +183,7 @@ The epidemic starts in the school-age children, who have the most contacts, and 
 | Many brief contacts, at random | No network (homogeneous mixing), or `ss.MixingPool()` | Compartments or agents |
 | At random, but more within some groups (e.g. by age) | `ss.contacts()` with a stratified disease | Compartments or agents |
 | The same few people, again and again (households, partners) | A network: `ss.RandomNet(dynamic=False)`, `ss.SexualNet()`, or the library's household networks | Agents |
-| From mother to child | `ss.MaternalNet()`, with `ss.Pregnancy()` | Agents |
+| From mother to child | `ss.PrenatalNet()`, with `ss.Pregnancy()` | Agents |
 
 Networks and mixing pools can be used together, as a list, and a disease can have a different β on each. To see how many infections came through each, give the sim `analyzers='infection_log'`: the log records the route of each infection over a network, and who infected whom (see [Analyzers](../user_guide/interventions_analyzers.qmd#the-infection-log)). [Contact networks](../user_guide/populations_networks.qmd) in the user guide covers the other networks Starsim provides, including households (`ssl.ClusterNet`) and the [library's networks](../user_guide/library_networks.qmd). To make your own network, with your own rules for who pairs with whom, see [A5](a5_modules.qmd).
 

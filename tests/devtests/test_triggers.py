@@ -1,5 +1,5 @@
 """
-Test triggered moves (ss.on), the rest staying (ss.stay), lazy handles (ss.ppl, ss.state), and distributions by group
+Test triggered moves (ss.on), the rest staying (ss.stay), lazy handles (ss.person, ss.ref), and distributions by group
 """
 import numpy as np
 import sciris as sc
@@ -12,14 +12,14 @@ kw = dict(verbose=0)
 @sc.timer()
 def test_bv_debut():
     sc.heading('Testing BV debut as soon as women turn 15, with ss.on(), as agents and as compartments')
-    adult_f = ss.ppl.female & (ss.ppl.age >= 15)
+    adult_f = ss.person.female & (ss.person.age >= 15)
     def make():
         U, CST1, CST4 = ss.states('U CST1 CST4')
         return ss.Disease(U, CST1, CST4,
-            debut = ss.Transition(U, [CST1, CST4], where=adult_f, p=[0.8, None]), # Was rate=ss.perday(1), where=adult_f
+            debut = ss.Transition(U, [CST1, CST4], on=adult_f, p=[0.8, None]), # Was rate=ss.perday(1), where=adult_f
             onset = CST1 >> CST4 @ ss.peryear(0.2),
             clear = CST4 >> CST1 @ ss.months(6),
-            first='U', name='bv')
+            default_state='U', name='bv')
     checked = sc.obj(n=0)
     def check(sim): # After every module has stepped, nobody who qualifies is still waiting
         bv, ppl = sim.diseases.bv, sim.people
@@ -41,7 +41,7 @@ def test_bv_debut():
 
     # As compartments: the compartments of women 15+ in U are empty at the start, and aging into them is moved on at each step
     strat = [dict(sex=['female', 'male']), dict(age=[0, 10, 15, 50, 100])]
-    ode = ss.Sim(make(), solver='ode', total_pop=10_000, stratify=strat, use_aging=True, start=2000, stop=2010, dt=ss.months(1), unit='year', **kw).run() # v4 ages people only with births or deaths, unless asked
+    ode = ss.Sim(make(), solver='ode', total_pop=10_000, stratify=strat, aging=True, start=2000, stop=2010, dt=ss.months(1), unit='year', **kw).run() # v4 ages people only with births or deaths, unless asked
     r = ode.results.bv
     waiting = r.U.select(sex='female', age='15-49')
     assert waiting[0] == 0 and waiting.max() < 10 and r.debut[2:].sum() > 50 # Only those who aged in during the step
@@ -66,9 +66,9 @@ def test_on_event():
     def by_path(path):
         a = make_a()
         S, F, G = ss.states('S F G')
-        b = ss.Disease(S, F, G, flag=S >> F @ ss.on(ss.state('a.I').enter if path else a.I.enter), unflag=F >> S @ ss.years(0.2), name='b')
-        on = [ss.state('a.I').exit] if path else [a.I.exit] # A transition by path (ss.state('a.sa')) is not known to be an event when the delivery is made, so is not an on=
-        dx = [ss.screen(ss.Diagnostic(), where=x, name=f'dx{i}') for i,x in enumerate(on)]
+        b = ss.Disease(S, F, G, flag=S >> F @ ss.on(ss.ref('a.I').enter if path else a.I.enter), unflag=F >> S @ ss.years(0.2), name='b')
+        on = [ss.ref('a.I').exit] if path else [a.I.exit]
+        dx = [ss.screen(ss.Diagnostic(), on=x, name=f'dx{i}') for i,x in enumerate(on)]
         return ss.Sim([a, b], interventions=dx, n_agents=3000, start=2000, stop=2005, dt=ss.months(1), unit='year', **kw).run().results
     direct, path = by_path(False), by_path(True)
     assert path.b.flag.sum() > 100 and np.array_equal(path.b.flag.values, direct.b.flag.values)
@@ -128,9 +128,9 @@ def test_memory_slots(form):
         A, B = ss.states('A B')
         back = ss.Transition(B, A, rate=ss.peryear(1))
         preg = ss.Pregnancy(fertility_rate=ss.freqperyear(100)) if form == 'recorded' else None # An event it records that is not a transition
-        cond = dict(since=back.since < ss.years(1), ever=back.ever, count=back.count >= 1, recorded=preg.live_birth.since < ss.years(1) if preg else None)[form]
+        cond = dict(since=back.since < ss.years(1), ever=back.ever, count=back.n_times >= 1, recorded=preg.live_birth.since < ss.years(1) if preg else None)[form]
         go = ss.Transition(A, B, rate=ss.peryear(2)*cond if slot == 'rate' else ss.peryear(2), where=cond if slot == 'where' else None)
-        d = ss.Disease(A, B, go=go, back=back, init=dict(B=0.5), first='A', name='d')
+        d = ss.Disease(A, B, go=go, back=back, init=dict(B=0.5), default_state='A', name='d')
         mods = ss.modify(d.go, multiply=cond) if slot == 'modifier' else None
         sim = ss.Sim(d, demographics=preg, connectors=mods, n_agents=2000, start=2000, stop=2005, dt=ss.months(1), rand_seed=1, **kw).run()
         return sim.results.d.go.values.sum()

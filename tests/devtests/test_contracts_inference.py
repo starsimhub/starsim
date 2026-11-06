@@ -57,7 +57,7 @@ def make_inside(x, data=None, **kwargs):
     b, a, g = [ss.par(v, bounds=[0.05, 1]) for v in x]
     S, I, R = ss.states('S I R')
     infection = S >> I @ ss.seasonal(mean=b, amplitude=a, peak=14/365)*I
-    recovery = I >> R @ ss.timeseries({start:g, stop:0.5*g + 0.1}, mode='linear')
+    recovery = I >> R @ ss.timeseries({start:g, stop:0.5*g + 0.1}, interpolation='linear')
     dis = ss.Disease(infection, recovery, init_n=dict(I=100), name='sir')
     return corpus.make_sim(dis, kwargs, total_pop=1e6, unit='day', start=start, stop=stop, data=data)
 
@@ -94,7 +94,7 @@ def jax_loglik(sim, points, likelihood=None):
     fitted = fitted_pars(sim)
     names = list(fitted)
     x0 = np.array([p.raw for p in fitted.values()], dtype=float)
-    set_pars = lambda x: sim.restart(pars=dict(zip(names, x)))
+    set_pars = lambda x: sim._restart(pars=dict(zip(names, x)))
     density = ss.gradients.Density(sim, fitted, x0, set_pars, likelihood=likelihood)
     out = []
     for x in points:
@@ -152,7 +152,7 @@ def test_particle_filter(key):
     pf = {}
     direct = {}
     for x in values:
-        sim.restart(pars={name:x})
+        sim._restart(pars={name:x})
         pf[x] = np.array([filt(n_particles=50, seed=seed) for seed in range(n_seeds)])
         direct[x] = np.array([ss.fit.loglik(model.build(x, data=data, solver='tau', rand_seed=seed, **kw).run(), likelihood=lik) for seed in range(n_seeds)])
         print(f'{key} at {x:.3g}: filter {pf[x].mean():.2f} +- {pf[x].std(ddof=1)/np.sqrt(n_seeds):.2f}; direct runs {direct[x].mean():.2f} +- {direct[x].std(ddof=1)/np.sqrt(n_seeds):.2f}')
@@ -344,7 +344,7 @@ def test_value_per_level():
     truth = make([0.25, 0.4]).run().results.sir.infection
     total = lambda lab, t: np.asarray(truth.select(patch=lab))[t:t+5].sum() # Data on a flow are its totals over each period, from its time
     df = pd.DataFrame([dict(time=t, patch=lab, infection=total(lab, t)) for lab in ['a', 'b'] for t in range(0, 56, 5)]).set_index('time')
-    fit = make([0.3, 0.3], data=ss.simdata(df)).fit(verbose=0)
+    fit = make([0.3, 0.3], data=ss.SimData(df)).fit(verbose=0)
     assert list(fit.table.par) == ['beta[a]', 'beta[b]'] and np.allclose(fit.pars.beta.values, [0.25, 0.4], rtol=1e-4) # Each level is fitted
     assert np.allclose(fit.sim.diseases.sir.pars.beta.raw.values, [0.25, 0.4], rtol=1e-4) # And the fitted sim has them
     one = fit.sim.new(pars={'beta[b]': 0.1}) # One level by name
@@ -375,7 +375,7 @@ def test_fitted_where_used():
     truth = make(0.4, ss.days(12)).run().results.sir.infection
     df = pd.DataFrame(dict(time=np.arange(0, 56, 5), infection=[np.asarray(truth)[t:t+5].sum() for t in range(0, 56, 5)])).set_index('time') # Each over the five days from its time
     sim = make(ss.par(0.6, bounds=[0.1, 1], name='effect'), ss.par(ss.days(8), bounds=[ss.days(3), ss.weeks(4)], name='dur'))
-    sim.data = ss.simdata(df)
+    sim.data = ss.SimData(df)
     assert np.isclose(sim.new(pars=dict(effect=0.4, dur=ss.days(12))).run().results.sir.infection[-1], truth[-1]) # Each can be set by name
     fit = sim.fit(verbose=0)
     assert np.isclose(fit.pars.effect, 0.4, rtol=1e-3) and np.isclose(fit.pars.dur.value, 12, rtol=1e-3) and isinstance(fit.pars.dur, ss.days)
@@ -385,7 +385,7 @@ def test_fitted_where_used():
     # A loss that is a function of the sim needs no data
     plain = make(ss.par(0.6, bounds=[0.1, 1], name='effect'), ss.days(12))
     loss = lambda sim: (np.sum(sim.results.sir.infection) - np.sum(truth))**2 # The total, which rises with the effect
-    assert np.isclose(plain.fit(gof=loss, verbose=0).pars.effect, 0.4, rtol=1e-2)
+    assert np.isclose(plain.fit(loss=loss, verbose=0).pars.effect, 0.4, rtol=1e-2)
 
     # A network's parameter, which a compartmental run turns into contact rates
     def netted(n_contacts):
@@ -394,7 +394,7 @@ def test_fitted_where_used():
         return ss.Sim(sir, networks=ss.RandomNet(n_contacts=n_contacts), solver='ode', unit='day', stop=40, verbose=0)
     n_I = netted(6).run().results.sir.I
     sim = netted(ss.par(4, bounds=[2, 10]))
-    sim.data = ss.simdata(pd.DataFrame(dict(time=np.arange(5, 41, 5), I=np.asarray(n_I)[5::5])).set_index('time'))
+    sim.data = ss.SimData(pd.DataFrame(dict(time=np.arange(5, 41, 5), I=np.asarray(n_I)[5::5])).set_index('time'))
     assert np.isclose(sim.fit(verbose=0).pars.n_contacts, 6, rtol=1e-2) # It was not fitted
     return fit
 
@@ -435,7 +435,7 @@ def test_profile():
     rng = np.random.default_rng(1)
     days = np.arange(0, len(truth) - 6, 7) # Whole weeks, each from its day
     sim = make()
-    sim.data = ss.simdata(pd.DataFrame(dict(time=days, cases=[rng.poisson(truth[t:t+7].sum()) for t in days])))
+    sim.data = ss.SimData(pd.DataFrame(dict(time=days, cases=[rng.poisson(truth[t:t+7].sum()) for t in days])))
     prof = ss.fit.profile(sim, 'beta', values=np.linspace(0.37, 0.43, 7))
     low, high = prof.interval
     assert low < 0.4 < high and 0.37 < low and high < 0.43, f'Expected a 95% interval around 0.4 within the values, not {prof.interval}'
@@ -453,12 +453,12 @@ def test_data_files(tmp_path):
     sc.heading('Testing data from a file separated by tabs, and a column that several modules could have')
     path = tmp_path/'data.tsv'
     pd.DataFrame(dict(time=[10, 20, 30], infection=[50.0, 100.0, 80.0])).to_csv(path, sep='\t', index=False)
-    assert list(ss.simdata(path).load().columns) == ['time', 'infection']
+    assert list(ss.SimData(path).load().columns) == ['time', 'infection']
     def make(name):
         S, I, R = ss.states(3)
         return ss.Disease(infection=S >> I @ 0.2*I.frac, recovery=I >> R @ ss.days(10), init_n=dict(I=10), name=name)
     with pytest.raises(KeyError, match='flu.infection'):
-        ss.Sim([make('flu'), make('rsv')], unit='day', stop=60, verbose=0, data=ss.simdata(path)).fit()
+        ss.Sim([make('flu'), make('rsv')], unit='day', stop=60, verbose=0, data=ss.SimData(path)).fit()
     return path
 
 

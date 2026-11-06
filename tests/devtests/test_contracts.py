@@ -33,7 +33,7 @@ def declared_sir(**kwargs):
 
 
 def lognormal(stages):
-    dur = ss.lognorm_ex(mean=10, std=4, unit='days')
+    dur = ss.lognormal(mean=10, std=4, unit='days')
     S, I, R = ss.states('S I R')
     return ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=dur, stages=stages), init_prev=0.01, name='sir')
 
@@ -256,7 +256,7 @@ def test_exit_order(solver):
         I = ss.State(name='I')
         dests = {key:ss.State(name=key.upper()) for key in 'abc'}
         exits = {key:I >> dests[key] @ ss.perday(1.0) for key in order} # Three equal exits, fast compared with the step
-        dis = ss.Disease(I, *dests.values(), **exits, first='I', name='exits')
+        dis = ss.Disease(I, *dests.values(), **exits, default_state='I', name='exits')
         agents = dict(n_agents=20_000) if solver == 'abm' else {}
         sim = ss.Sim(dis, unit='day', stop=5, solver=solver, total_pop=100_000, verbose=0, **agents).run()
         assert sim.solver == solver
@@ -275,15 +275,15 @@ def test_dwell_forms():
         rate         = lambda I, R, D: dict(out=ss.Transition(I, R, rate=ss.perday(0.25))),
         fixed        = lambda I, R, D: dict(out=ss.Transition(I, R, dur=ss.constant(ss.days(4)))),
         erlang       = lambda I, R, D: dict(out=ss.Transition(I, R, dur=ss.days(4), stages=3)),
-        lognormal    = lambda I, R, D: dict(out=ss.Transition(I, R, dur=ss.lognorm_ex(ss.days(4), ss.days(2)))),
+        lognormal    = lambda I, R, D: dict(out=ss.Transition(I, R, dur=ss.lognormal(ss.days(4), ss.days(2)))),
         branches     = lambda I, R, D: dict(a=ss.Transition(I, R, p=0.7, dur=ss.days(4)), b=ss.Transition(I, D, p=0.3, dur=ss.days(2))), # Decided on entry
         destinations = lambda I, R, D: dict(out=ss.Transition(I, [R, D], p=[0.7, 0.3], dur=ss.days(4))), # Decided at exit
         competing    = lambda I, R, D: dict(out=ss.Transition(I, R, dur=ss.constant(ss.days(4))), die=ss.Transition(I, D, rate=ss.perday(0.1))),
-        after        = lambda I, R, D: dict(out=ss.Transition(I, R, rate=ss.perday(0.5), after=ss.days(2))), # A minimum stay, then a rate
+        after        = lambda I, R, D: dict(out=ss.Transition(I, R, rate=ss.perday(0.5), min_stay=ss.days(2))), # A minimum stay, then a rate
     )
     def run(form, solver):
         I, R, D = ss.states('I R D')
-        dis = ss.Disease(I, R, D, **forms[form](I, R, D), first='I', name='cohort')
+        dis = ss.Disease(I, R, D, **forms[form](I, R, D), default_state='I', name='cohort')
         size = dict(n_agents=20_000) if solver == 'abm' else dict(total_pop=20_000)
         res = ss.Sim(dis, unit='day', dt=0.05, stop=15, solver=solver, rand_seed=1, verbose=0, **size).run().results.cohort
         return np.array([res.I.values.mean(), res.R[-1], res.D[-1]])/20_000 # Time infected, and where people end up
@@ -297,7 +297,7 @@ def test_wide_dwell():
     sc.heading('Testing that a dwell time too variable for Erlang stages runs as agents under auto, and warns under the ODE')
     def make(c, solver='auto'):
         A, B = ss.states('A B')
-        dis = ss.Disease(A, B, go=A >> B @ ss.peryear(1), back=ss.Transition(B, A, dur=ss.weibull(c=c, scale=ss.years(1))), first='A', name='m')
+        dis = ss.Disease(A, B, go=A >> B @ ss.peryear(1), back=ss.Transition(B, A, dur=ss.weibull(c=c, scale=ss.years(1))), default_state='A', name='m')
         return ss.Sim(dis, total_pop=1000, stop=2010, solver=solver, verbose=0).init()
     assert make(0.5).solver == 'ode' # A coefficient of variation of 2.2
     assert make(0.3).solver == 'abm' # Of 5.4: one exponential stage at its mean of 9.3 years kept nearly everyone in B
@@ -310,7 +310,7 @@ def test_destinations():
     sc.heading('Testing that every solver agrees on the flow to each destination, by age')
     def run(solver, seed=1):
         I, R, D = ss.states('I R D')
-        dis = ss.Disease(I, R, D, out=ss.Transition(I, [R, D], p=[0.7, 0.3], dur=ss.days(4)), init_n=dict(I=1000), first='I', name='cohort')
+        dis = ss.Disease(I, R, D, out=ss.Transition(I, [R, D], p=[0.7, 0.3], dur=ss.days(4)), init_n=dict(I=1000), default_state='I', name='cohort')
         dis.stratify(age=ss.years([0, 40]))
         res = ss.Sim(dis, n_agents=1000, unit='day', stop=40, solver=solver, rand_seed=seed, verbose=0).run().results.cohort
         return np.array([res.out.D.select(age=age).sum() for age in [0, 1]])
@@ -347,14 +347,14 @@ def test_crossing_conservation(dwell):
         exponential = lambda P, NP: ss.Transition(P, NP, dur=ss.months(9)),
         fixed       = lambda P, NP: ss.Transition(P, NP, dur=ss.constant(ss.months(9))), # A conveyor: the ODE lost 9% of people
         erlang      = lambda P, NP: ss.Transition(P, NP, dur=ss.months(9), stages=3),
-        lognormal   = lambda P, NP: ss.Transition(P, NP, dur=ss.lognorm_ex(ss.months(9), ss.months(3))),
-        after       = lambda P, NP: ss.Transition(P, NP, rate=ss.peryear(2), after=ss.months(3)),
+        lognormal   = lambda P, NP: ss.Transition(P, NP, dur=ss.lognormal(ss.months(9), ss.months(3))),
+        after       = lambda P, NP: ss.Transition(P, NP, rate=ss.peryear(2), min_stay=ss.months(3)),
     )
     for solver in ['ode', 'binomial', 'abm']:
         M = ss.states('M0 M1 M2')
-        m = ss.Disease(*M, **{f'go{i}':M[i] >> M[(i+1) % 3] @ ss.peryear(1.0) for i in range(3)}, first='M0', name='m')
+        m = ss.Disease(*M, **{f'go{i}':M[i] >> M[(i+1) % 3] @ ss.peryear(1.0) for i in range(3)}, default_state='M0', name='m')
         NP, P = ss.states('NP P')
-        p = ss.Disease(NP, P, conception=NP >> P @ ss.peryear(0.25), birth=dwells[dwell](P, NP), first='NP', name='p')
+        p = ss.Disease(NP, P, conception=NP >> P @ ss.peryear(0.25), birth=dwells[dwell](P, NP), default_state='NP', name='p')
         mod = ss.modify(p.conception, multiply=0.1, where=M[1]) # Crosses the two
         size = dict(n_agents=2000) if solver == 'abm' else dict(total_pop=2000)
         sim = ss.Sim([m, p], connectors=mod, start=2000, stop=2010, dt=ss.months(1), solver=solver, verbose=0, **size).run()
@@ -371,7 +371,7 @@ def test_empty_place():
         S, I, R = ss.states('S I R')
         sir = ss.Disease(infection=ss.Transition(S, I, rate=ss.perday(0.2)*I.frac + ss.perday(1e-5)*I.n + ss.perday(1e-6)*I.total), recovery=ss.Transition(I, R, dur=10), init_prev=0.01, name='sir')
         if places:
-            sir.stratify(place=['a', 'b'], kind='space', split=[1.0, 0.0])
+            sir.stratify(place=['a', 'b'], kind='space', fractions=[1.0, 0.0])
         return ss.Sim(sir, solver=solver, total_pop=10_000, unit='day', stop=60, verbose=0)
     one = make('ode', places=False).run().results.sir.R.values
     for solver in ['ode', 'jax', 'binomial', 'tau', 'gillespie']:
@@ -389,7 +389,7 @@ def test_identities():
 
     # Constant-rate decay is exponential
     I, R = ss.states('I R')
-    decay = ss.Disease(recovery=ss.Transition(I, R, rate=ss.perday(0.1)), first='I', name='decay')
+    decay = ss.Disease(recovery=ss.Transition(I, R, rate=ss.perday(0.1)), default_state='I', name='decay')
     res = ss.Sim(decay, total_pop=1e6, unit='day', stop=50, solver='ode', verbose=0).run().results.decay
     t = np.arange(51)
     assert np.allclose(res.I.values, 1e6*np.exp(-0.1*t), rtol=1e-5) # RK4's error is about 1e-7 a step at this rate
@@ -397,7 +397,7 @@ def test_identities():
     # A fixed branch share is the share that leaves by each branch
     for solver in ['ode', 'binomial', 'abm']:
         I, R, D = ss.states('I R D')
-        branch = ss.Disease(course=ss.Transition(I, [R, D], dur=5, p=[None, 0.2]), first='I', name='branch')
+        branch = ss.Disease(course=ss.Transition(I, [R, D], dur=5, p=[None, 0.2]), default_state='I', name='branch')
         agents = dict(n_agents=50_000) if solver == 'abm' else {}
         res = ss.Sim(branch, total_pop=1e6, unit='day', stop=100, solver=solver, verbose=0, **agents).run().results.branch
         share = res.D[-1]/(res.R[-1] + res.D[-1])
@@ -408,12 +408,12 @@ def test_identities():
     E, I = ss.states(2)
     for solver in ['ode', 'binomial', 'gillespie', 'abm']:
         size = dict(n_agents=1000) if solver == 'abm' else dict(total_pop=1000)
-        cohort = ss.Disease(onset=E >> I @ ss.constant(ss.days(10)), first='E', name='cohort')
+        cohort = ss.Disease(onset=E >> I @ ss.constant(ss.days(10)), default_state='E', name='cohort')
         n_E = ss.Sim(cohort, unit='day', stop=20, solver=solver, verbose=0, **size).run().results.cohort.E.values
         assert n_E[10] == 1000 and n_E[11] == 0, f'{solver}: {n_E[10]:n} in E on day 10 and {n_E[11]:n} on day 11, not 1000 and 0'
 
     # With a constant inflow as well, E holds the inflow over the delay: exactly in the ODE at every step, and on average in the stochastic solvers
-    flow = ss.Disease(arrival=ss.null >> E @ ss.perday(100), onset=E >> I @ ss.constant(ss.days(10)), first='E', name='flow')
+    flow = ss.Disease(arrival=ss.null >> E @ ss.perday(100), onset=E >> I @ ss.constant(ss.days(10)), default_state='E', name='flow')
     exact = np.r_[1000 + 100*np.arange(11), np.full(20, 1000)] # Those who started in E leave on day 10, and the arrivals of each day 10 days later
     n_E = ss.Sim(flow, total_pop=1000, unit='day', stop=30, verbose=0).run().results.flow.E.values
     assert np.allclose(n_E, exact, rtol=1e-9)
@@ -448,7 +448,7 @@ def behavior(solver, seed=1, n=2000):
     """ A choice of method: a regression over two boolean dimensions and a counter, and a switching row by age, one entry per destination """
     from scipy.special import expit
     none, pill, iud, P = ss.states('none pill iud P')
-    p_use = expit(-1.0 + 0.5*ss.ppl.urban + 0.3*ss.ppl.edu + 0.4*ss.ppl.parity) # Parity is a counter, so is exact as compartments
+    p_use = expit(-1.0 + 0.5*ss.person.urban + 0.3*ss.person.edu + 0.4*ss.person.parity) # Parity is a counter, so is exact as compartments
     mix = ss.par(ss.by(age=[0.7, 0.4])) # The share choosing the pill by age (the rest choose the IUD)
     contra = ss.Disease(none, pill, iud, P,
         start    = ss.Transition(none, [pill, iud], rate=ss.peryear(0.3)*p_use, p=[mix, None]),
@@ -456,12 +456,12 @@ def behavior(solver, seed=1, n=2000):
         remove   = ss.Transition(iud, none, rate=ss.peryear(0.1)),
         conceive = ss.Transition(none, P, rate=ss.peryear(0.2)),
         deliver  = ss.Transition(P, none, dur=ss.months(9), increment='parity'),
-        mix=mix, first='none', name='contra')
+        mix=mix, default_state='none', name='contra')
     size = dict(n_agents=n) if solver == 'abm' else dict(total_pop=n)
-    sim = ss.Sim(contra, solver=solver, rand_seed=seed, start=2000, stop=2006, dt=ss.months(1), use_aging=False, verbose=0, **size)
+    sim = ss.Sim(contra, solver=solver, rand_seed=seed, start=2000, stop=2006, dt=ss.months(1), aging=False, verbose=0, **size)
     sim.stratify(age=[0, 30])
-    sim.stratify(urban=[False, True], split=[0.4, 0.6])
-    sim.stratify(edu=[False, True], split=[0.5, 0.5])
+    sim.stratify(urban=[False, True], fractions=[0.4, 0.6])
+    sim.stratify(edu=[False, True], fractions=[0.5, 0.5])
     sim.stratify(parity=[0, 1, 2, 3])
     return sim
 
@@ -578,7 +578,7 @@ def test_joint_population():
     ba, bb = ss.peryear(0.5), ss.peryear(0.3)
     joint = ss.Disease(SS, SI, IS, II, a1=SS >> IS @ ba*(IS + II), a2=SI >> II @ ba*(IS + II), b1=SS >> SI @ bb*(SI + II), b2=IS >> II @ bb*(SI + II),
                        r1=SI >> SS @ ss.years(3), r2=II >> IS @ ss.years(3), d1=ss.Transition(IS, ss.null, dur=2), d2=ss.Transition(II, ss.null, dur=2),
-                       init=dict(SS=0.81, SI=0.09, IS=0.09, II=0.01), first='SS', name='ab')
+                       init=dict(SS=0.81, SI=0.09, IS=0.09, II=0.01), default_state='SS', name='ab')
     j = ss.Sim(joint, total_pop=20_000, stop=2030, verbose=0).run().results.ab
     res = pair().run().results
     assert np.allclose(res.a.I.values, j.IS.values + j.II.values, rtol=1e-9) and np.allclose(res.b.I.values, j.SI.values + j.II.values, rtol=1e-9)

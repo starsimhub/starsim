@@ -189,7 +189,7 @@ plt.xlabel('Number of infections in 3 years')
 plt.ylabel('Number of people');
 ```
 
-Everyone is infected at least once, most people 3 to 5 times, and the number varies by chance from person to person, even though everyone here is alike. A person's history can be read in a model too: e.g. `ss.modify(cold.rel_sus, multiply=0.5, where=cold.infection.count >= 2)` would halve the susceptibility of people who have been infected at least twice.
+Everyone is infected at least once, most people 3 to 5 times, and the number varies by chance from person to person, even though everyone here is alike. A person's history can be read in a model too: e.g. `ss.modify(cold.rel_sus, multiply=0.5, where=cold.infection.n_times >= 2)` would halve the susceptibility of people who have been infected at least twice.
 
 ## Writing a disease as code
 

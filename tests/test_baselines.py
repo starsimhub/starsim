@@ -175,7 +175,7 @@ def perf_cases():
     return {
         'bare_init':          (bare, 'init', True),
         'bare_run':           (bare, 'run', True),
-        'bare_run_no_people': (lambda: bare(people_results=False), 'run', True),
+        'bare_run_no_people': (lambda: bare(record_people=False), 'run', True),
         'het_init':           (het, 'init', True),
         'births_run':         (births, 'run', True),
         'crn_false_run':      (crnf, 'run', False),

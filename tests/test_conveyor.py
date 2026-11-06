@@ -25,12 +25,12 @@ def make_seir(dur=ss.constant(ss.days(14)), beta=ss.perday(0.4), **kwargs):
 
 @sc.timer()
 def test_exit_split():
-    sc.heading('A split taken by the dwell just completed (HPV: CIN from P.time), read as people leave: as agents only')
+    sc.heading('A split taken by the dwell just completed (HPV: CIN from P.time_in), read as people leave: as agents only')
     k = 0.5
     def make():
         P, C, R = ss.states('P C R')
-        p_cin = logf2(P.time/ss.years(1), k)
-        return ss.Disease(P, C, R, precin=ss.Transition(P, [C, R], p=[p_cin, None], dur=ss.lognorm_ex(ss.years(3), ss.years(2))), first='P', name='hpv')
+        p_cin = logf2(P.time_in/ss.years(1), k)
+        return ss.Disease(P, C, R, precin=ss.Transition(P, [C, R], p=[p_cin, None], dur=ss.lognormal(ss.years(3), ss.years(2))), default_state='P', name='hpv')
     kw2 = dict(start=2000, stop=2030, dt=0.25, unit='year', **kw)
     sigma2 = np.log(1 + (2/3)**2) # The lognormal of mean 3 and sd 2, in whole steps as agents leave at the one nearest their dwell
     dwell = np.random.default_rng(0).lognormal(np.log(3) - sigma2/2, np.sqrt(sigma2), 1_000_000)
@@ -38,7 +38,7 @@ def test_exit_split():
     abm = ss.Sim(make(), n_agents=50_000, **kw2).run().results.hpv
     assert abs(abm.C[-1]/50_000 - q) < 0.01
     for solver in ['ode', 'binomial']:
-        with pytest.raises(ss.CapabilityError, match='P.time is a clock'):
+        with pytest.raises(ss.CapabilityError, match='P.time_in is a clock'):
             ss.Sim(make(), solver=solver, total_pop=50_000, **kw2).init()
     assert ss.Sim(make(), total_pop=50_000, **kw2).init().solver == 'abm'
     return abm
@@ -46,7 +46,7 @@ def test_exit_split():
 
 @sc.timer()
 def test_syphilis_clock():
-    sc.heading('A clock of a set of states as agents only: syphilis latent infectiousness by (EL | LL).time (run in devtests/test_clocks.py::test_syphilis_latent)')
+    sc.heading('A clock of a set of states as agents only: syphilis latent infectiousness by (EL | LL).time_in (run in devtests/test_clocks.py::test_syphilis_latent)')
     def make(**kwargs):
         S, E, EL, LL = ss.states('S E EL LL')
         syph = ss.Disease(S, E, EL, LL,
@@ -54,7 +54,7 @@ def test_syphilis_clock():
             latency   = E >> EL @ ss.months(3),
             to_late   = EL >> LL @ ss.years(2),
             init_prev = 0.02, init=dict(EL=0.01, LL=0.01), name='syph')
-        latent = (EL | LL).time
+        latent = (EL | LL).time_in
         decay = ss.modify(syph.rel_trans, multiply=0.5**(latent/ss.years(1)), where=EL | LL, name='latent_decay')
         return ss.Sim(syph, connectors=decay, start=2000, stop=2010, dt=ss.months(1), unit='year', **kw, **kwargs)
     with pytest.raises(ss.CapabilityError):
@@ -66,17 +66,17 @@ def test_syphilis_clock():
 
 @sc.timer()
 def test_bv_clock():
-    sc.heading('The time in a state in a rate, as agents only: BV recurrence by P.time')
+    sc.heading('The time in a state in a rate, as agents only: BV recurrence by P.time_in')
     def cohort(): # A cohort that starts in P leaves at the hazard of its time in P: as agents, the hazard at the start of each step
         P, R = ss.states('P R')
-        return ss.Disease(P, R, recur=P >> R @ ss.permonth(0.06)*np.exp(-P.time/ss.months(3)), first='P', name='bv')
+        return ss.Disease(P, R, recur=P >> R @ ss.permonth(0.06)*np.exp(-P.time_in/ss.months(3)), default_state='P', name='bv')
     kw2 = dict(start=2000, stop=2003, dt=ss.months(1), unit='year', **kw)
     abm = ss.Sim(cohort(), n_agents=10_000, **kw2).run().results.bv
     h = 0.06*np.exp(-np.arange(len(abm.P))/3) # Per month, at the start of each month in P
     expected = 10_000*np.exp(-np.concatenate([[0], np.cumsum(h)[:-1]]))
     assert np.allclose(abm.P, expected, rtol=0.03)
     for solver in ['ode', 'gillespie']:
-        with pytest.raises(ss.CapabilityError, match='P.time is a clock'):
+        with pytest.raises(ss.CapabilityError, match='P.time_in is a clock'):
             ss.Sim(cohort(), solver=solver, total_pop=10_000, **kw2).init()
     assert ss.Sim(cohort(), total_pop=10_000, **kw2).init().solver == 'abm'
     return abm
@@ -92,8 +92,8 @@ def test_conveyor_limits():
         ss.Sim(make(), solver='ode', **kw).init()
     assert ss.Sim(make(), **kw).init().solver == 'abm'
     d = make_seir(init_prev=0.01)
-    vx = ss.vaccinate(ss.Vaccine(efficacy=0), who=d.E & (d.E.time >= ss.days(2)), name='vx')
-    with pytest.raises(ss.CapabilityError, match='E.time is a clock'): # A delivery reading a clock
+    vx = ss.vaccinate(ss.Vaccine(efficacy=0), who=d.E & (d.E.time_in >= ss.days(2)), name='vx')
+    with pytest.raises(ss.CapabilityError, match='E.time_in is a clock'): # A delivery reading a clock
         ss.Sim(d, interventions=vx, solver='ode', **kw).init()
     d = make_seir(init_prev=0.01)
     with pytest.raises(ss.CapabilityError): # A modifier of a conveyor's rate

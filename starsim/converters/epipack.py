@@ -153,7 +153,7 @@ def load_epipack(source, stop=None, solver=None, pars=None, verbose=None, **kwar
         src.skip('time', 'a rate uses the time, t; a value that changes in time could be an ss.timeseries')
 
     solver = sc.ifelse(solver, run.get('solver'), 'ode')
-    src.config.update(unit='day', dt=1, start=0, stop=stop, solver=solver, total_pop=people, use_aging=False)
+    src.config.update(unit='day', dt=1, start=0, stop=stop, solver=solver, total_pop=people, aging=False)
     return build(src, verbose=verbose, **kwargs)
 
 

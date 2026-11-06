@@ -31,9 +31,9 @@ class Influenza(ss.Disease):
 
     Args:
         beta (`ss.seasonal`/`ss.per`): the transmission rate over the year, as a cycle around its mean
-        dur_exp (`ss.dur`): the mean time from infection to being infectious
-        dur_inf (`ss.dur`): the mean time infectious
-        dur_imm (`ss.dur`): the mean time immune after recovering
+        dur_exp (`ss.Duration`): the mean time from infection to being infectious
+        dur_inf (`ss.Duration`): the mean time infectious
+        dur_imm (`ss.Duration`): the mean time immune after recovering
         birth_rate (`ss.per`): the birth and death rate, which supplies new susceptible people
         kwargs (dict): passed to `ss.Disease`, e.g. `init` or `name`
 
@@ -87,10 +87,10 @@ class RSV(ss.Disease):
 
     Args:
         beta (`ss.seasonal`/`ss.per`): the transmission rate over the year, as a cycle around its mean
-        dur_mat (`ss.dur`): the mean time babies are protected by maternal antibodies
-        dur_exp (`ss.dur`): the mean time from infection to being infectious
-        dur_inf (`ss.dur`): the mean time infectious
-        dur_imm (`ss.dur`): the mean time immune after recovering
+        dur_mat (`ss.Duration`): the mean time babies are protected by maternal antibodies
+        dur_exp (`ss.Duration`): the mean time from infection to being infectious
+        dur_inf (`ss.Duration`): the mean time infectious
+        dur_imm (`ss.Duration`): the mean time immune after recovering
         birth_rate (`ss.per`): the birth and death rate; babies are born into `M`
         kwargs (dict): passed to `ss.Disease`, e.g. `init` or `name`
 
@@ -146,9 +146,9 @@ class Pertussis(ss.Disease):
 
     Args:
         beta (`ss.per`): the transmission rate (R0 of 13 with the default infectious period)
-        dur_exp (`ss.dur`): the mean latent period
-        dur_inf (`ss.dur`): the mean infectious period
-        dur_imm (`ss.dur`): the mean time immune after recovering
+        dur_exp (`ss.Duration`): the mean latent period
+        dur_inf (`ss.Duration`): the mean infectious period
+        dur_imm (`ss.Duration`): the mean time immune after recovering
         birth_rate (`ss.per`): the birth and death rate
         kwargs (dict): passed to `ss.Disease`, e.g. `init` or `name`
 

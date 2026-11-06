@@ -121,7 +121,7 @@ class VaccineDemand(ss.Intervention):
         # The doses sought, limited by what the clinics can give
         share = self.remembered/(self.remembered + self.pars.half)
         seeking = (self.pars.max_rate*share).to_prob(dt)
-        doses = seeking*measles.count(measles.S)
+        doses = seeking*measles.S.n
         if self.pars.capacity is not None:
             doses = min(doses, self.pars.capacity.to_events(dt))
 
@@ -132,7 +132,7 @@ class VaccineDemand(ss.Intervention):
         return
 ```
 
-`measles.count(measles.S)` is the number of people in `S` now, under every solver, and `ss.move(..., n=...)` moves a number of people rather than a share. `self.sim.results.measles.cases[self.ti-1]` is the reported cases of the last step: a module that is not a disease steps before the diseases, so the cases of the step now being run aren't known yet. Because the module keeps only numbers for the whole population, the sim runs as an ODE, as before. Given to the sim, the module is named after its class in lower case, so its results are in `sim.results.vaccinedemand`.
+`measles.S.n` is the number of people in `S` now, under every solver, and `ss.move(..., n=...)` moves a number of people rather than a share. `self.sim.results.measles.cases[self.ti-1]` is the reported cases of the last step: a module that is not a disease steps before the diseases, so the cases of the step now being run aren't known yet. Because the module keeps only numbers for the whole population, the sim runs as an ODE, as before. Given to the sim, the module is named after its class in lower case, so its results are in `sim.results.vaccinedemand`.
 
 ## Comparing scenarios
 

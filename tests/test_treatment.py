@@ -38,7 +38,7 @@ def test_undriven():
 
     # Named by a product; a rate of 0 is not undriven
     sis = make_sis(forms['op'])
-    sim = ss.Sim(sis, interventions=ss.treat(ss.Treatment(transition='cure'), coverage=0.2, interval=5, name='tx'), stop=10, **kw).init()
+    sim = ss.Sim(sis, interventions=ss.treat(ss.Treatment(moves='cure'), coverage=0.2, every=5, name='tx'), stop=10, **kw).init()
     assert 'undriven: moved by treatment' in sim.diseases.sis.describe(output=True)
     sis = make_sis(lambda S, I: I >> S @ 0)
     assert not sis.cure.undriven
@@ -46,7 +46,7 @@ def test_undriven():
     # Moved by a treatment, as agents and compartments
     for solver,pars in [('ode', dict(total_pop=10_000)), ('abm', dict(n_agents=10_000))]:
         sis = make_sis(forms['op'])
-        tx = ss.treat(ss.Treatment(cure=0.9, transition='cure'), coverage=0.3, at=[ss.days(20)])
+        tx = ss.treat(ss.Treatment(cure=0.9, moves='cure'), coverage=0.3, at=[ss.days(20)])
         sim = ss.Sim(sis, interventions=tx, solver=solver, stop=40, **kw, **pars).run()
         res = sim.results
         assert np.isclose(res.sis.cure.sum(), 0.9*res.tx.delivered.sum(), rtol=0.05)

@@ -56,7 +56,7 @@ def test_pregnancy_risks():
     """ A chance per week of a loss is per week whatever the time step, and the relative risk of preterm birth changes the share born preterm """
     sc.heading('Testing pregnancy risks...')
     def run(dt, p_loss=0, rr=1.0):
-        preg = ss.Pregnancy(fertility_rate=ss.peryear(150), loss_rate=ss.probperweek(p_loss), rr_ptb=ss.constant(1), rr_ptb_age=np.array([[18, 35, 1000], [rr, rr, rr]]), burnin=False)
+        preg = ss.Pregnancy(fertility_rate=ss.peryear(150), loss_rate=ss.probperweek(p_loss), rel_preterm=ss.constant(1), rel_preterm_age=np.array([[18, 35, 1000], [rr, rr, rr]]), burnin=False)
         sim = ss.Sim(n_agents=10_000, start=2000, stop=2003, dt=dt, demographics=preg, rand_seed=1, verbose=0).run()
         p = sim.demographics.pregnancy
         ga = p.gestation_at_birth.raw[~np.isnan(p.gestation_at_birth.raw)]

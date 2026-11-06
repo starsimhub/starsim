@@ -46,7 +46,7 @@ closure = ss.modify(school, multiply=0, start=ss.days(200), stop=ss.days(260))
 ## Result
 
 ```{python}
-pars = dict(people=ss.people('United Kingdom'), networks=[home, school, work, community], stop=ss.days(600))
+pars = dict(people=ss.population('United Kingdom'), networks=[home, school, work, community], stop=ss.days(600))
 sims = {
     'Schools open': ss.Sim(flu, **pars),
     'Schools closed for 60 days': ss.Sim(flu, interventions=closure, **pars),

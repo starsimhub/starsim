@@ -17,7 +17,7 @@ The data by place comes from the package `starsim_data`: populations by age and 
 
 | What | In a model | The data itself |
 |---|---|---|
-| Population by age and sex (UN World Population Prospects) | `ss.people('Kenya')` | `ss.data.population('Kenya')`, `ss.data.age('Kenya')` |
+| Population by age and sex (UN World Population Prospects) | `ss.population('Kenya')` | `ss.data.population('Kenya')`, `ss.data.age('Kenya')` |
 | Contact matrix by 5-year age group (Prem et al. 2021) | `ss.contacts('Kenya')` | `ss.data.contacts('Kenya')` |
 | Birth and death rates by year (and by age and sex, for deaths) | `ss.Births(birth_rate='Kenya')`, `ss.Deaths(death_rate='Kenya')` | `ss.data.rates('Kenya', 'births')`, `ss.data.rates('Kenya', 'deaths')` |
 | Fertility rates by year and 5-year age group of the mother | `ss.Pregnancy(fertility_rate='Kenya')` | `ss.data.rates('Kenya', 'fertility')` |
@@ -26,7 +26,7 @@ The data by place comes from the package `starsim_data`: populations by age and 
 
 A named population gives the sim its size (`total_pop`) and the share of people in each age group, so a model stratified by age needs no shares of its own; as agents, it gives the agents their ages and sex (see [People and agents](populations_people.qmd)). Birth and death rates are on [Demographics](populations_demographics.qmd), and administrative units on [Geography](populations_geography.qmd).
 
-`ss.people()` and `ss.contacts()` take a year and a source: `ss.people('Kenya', year=2030)` (from 1950 to 2100, with the years between the UN's decadal values interpolated), and `ss.contacts('Japan', source='mistry2021')` for the matrices of Mistry et al. (2021), by single year of age, for 36 countries (the sources are listed in the [appendix](#appendix-every-dataset)). A US state is named with its country, `ss.people('United States:Massachusetts')` and `ss.contacts('United States:Massachusetts')`, from the US Census and Mistry et al. The data is given as tables (dataframes), with the age groups labeled as a stratification by age labels them (`'0-4'`, `'5-9'`, ..., `'100+'`) and where the data came from in `.attrs['ref']`:
+`ss.population()` and `ss.contacts()` take a year and a source: `ss.population('Kenya', year=2030)` (from 1950 to 2100, with the years between the UN's decadal values interpolated), and `ss.contacts('Japan', source='mistry2021')` for the matrices of Mistry et al. (2021), by single year of age, for 36 countries (the sources are listed in the [appendix](#appendix-every-dataset)). A US state is named with its country, `ss.population('United States:Massachusetts')` and `ss.contacts('United States:Massachusetts')`, from the US Census and Mistry et al. The data is given as tables (dataframes), with the age groups labeled as a stratification by age labels them (`'0-4'`, `'5-9'`, ..., `'100+'`) and where the data came from in `.attrs['ref']`:
 
 ```{python}
 import starsim as ss
@@ -180,7 +180,7 @@ seir.stratify(patch=[f'patch{i}' for i in range(20)], kind='space')
 sim = ss.Sim(seir, networks=ss.contacts(beta, dims='patch'), total_pop=20, unit='day')
 ```
 
-`equations()` says what a matrix acts on in each rate. Only contact matrices act on a count: other networks (a mixing pool of everyone, or a network of individual contacts) don't, and `I.total` is always the whole population. A matrix acts on a count of the disease's own states in the rate of an infection (`I.n` in `S >> I @ beta*I.n`); in a model with places, *N* is everyone in the same place. It acts on a weighted count in the same way: `beta*(ss.by(risk=w)*I).n` is β Σ~j~ *C*~ij~ *w*~j~ *I*~j~, and `beta*I.n_trans` weights each group by its infectiousness (its `rel_trans`, with any product or modifier on it). As agents, a matrix acts on a count in the same way, if it is over the model's own groups (e.g. `ss.contacts(matrix, dims='risk')`, or `ss.contacts(matrix)` over the model's age groups).
+`equations()` says what a matrix acts on in each rate. Only contact matrices act on a count: other networks (a mixing pool of everyone, or a network of individual contacts) don't, and `I.total` is always the whole population. A matrix acts on a count of the disease's own states in the rate of an infection (`I.n` in `S >> I @ beta*I.n`); in a model with places, *N* is everyone in the same place. It acts on a weighted count in the same way: `beta*(ss.by(risk=w)*I).n` is β Σ~j~ *C*~ij~ *w*~j~ *I*~j~, and `beta*I.n_infectious` weights each group by its infectiousness (its `rel_trans`, with any product or modifier on it). As agents, a matrix acts on a count in the same way, if it is over the model's own groups (e.g. `ss.contacts(matrix, dims='risk')`, or `ss.contacts(matrix)` over the model's age groups).
 
 ## Contact matrices by setting
 
@@ -197,7 +197,7 @@ layers = ss.contacts('Kenya', layer=['home', 'school', 'work', 'community'])
 home, school, work, community = layers
 closure = ss.modify(school, multiply=0, start=ss.days(10)) # No school contacts from day 10
 
-kw = dict(people=ss.people('Kenya'), networks=layers, stop=ss.days(100), verbose=0)
+kw = dict(people=ss.population('Kenya'), networks=layers, stop=ss.days(100), verbose=0)
 scenarios = {
     'Schools open': ss.Sim(flu, **kw),
     'Schools closed from day 10': ss.Sim(flu, interventions=closure, **kw),
@@ -220,12 +220,12 @@ print('Source:', school.attrs['ref']['study'])
 Everything above runs as agents too. Given `n_agents`, the people take their ages from the population, and each agent is counted in the matrix's age groups by its exact age:
 
 ```{python}
-sim = ss.Sim(flu, people=ss.people('Kenya', n_agents=10_000), networks=layers, stop=ss.days(100), verbose=0)
+sim = ss.Sim(flu, people=ss.population('Kenya', n_agents=10_000), networks=layers, stop=ss.days(100), verbose=0)
 sim.run()
 sim.results.flu.I.by('age').plot()
 ```
 
-As agents, a contact matrix works as a set of mixing pools, one for each pair of groups (`ss.MixingPools`; see [Contact networks](populations_networks.qmd#mixing-pools)). It is not a network: nobody has particular contacts, so contact tracing needs a network instead.
+As agents, a contact matrix works as a set of mixing pools, one for each pair of groups (`ss.networks.MixingPools`; see [Contact networks](populations_networks.qmd#mixing-pools)). It is not a network: nobody has particular contacts, so contact tracing needs a network instead.
 
 ## Data of your own
 

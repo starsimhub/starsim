@@ -24,11 +24,11 @@ def make_hiv(init_prev=0.05, init=None, art=ss.peryear(0.2)):
         post_art = ss.State()
         infected = acute + latent + falling + on_art + post_art # A sum of states, as a source and for states=
         infection   = S >> acute @ ss.peryear(0.15)*(acute + latent + falling + on_art + post_art)
-        latency     = ss.Transition(acute, latent, dur=ss.lognorm_ex(ss.months(1.7), ss.months(1)), stages=3)
-        progression = ss.Transition(latent, falling, dur=ss.lognorm_ex(ss.years(10), ss.years(3)))
-        aids_death  = ss.Transition(falling, ss.null, dur=ss.lognorm_ex(ss.years(3), ss.years(1)), stages=9)
+        latency     = ss.Transition(acute, latent, dur=ss.lognormal(ss.months(1.7), ss.months(1)), stages=3)
+        progression = ss.Transition(latent, falling, dur=ss.lognormal(ss.years(10), ss.years(3)))
+        aids_death  = ss.Transition(falling, ss.null, dur=ss.lognormal(ss.years(3), ss.years(1)), stages=9)
         start_art   = (acute + latent + falling + post_art) >> on_art @ art
-        dropout     = ss.Transition(on_art, post_art, dur=ss.lognorm_ex(ss.years(3), ss.years(1.5)))
+        dropout     = ss.Transition(on_art, post_art, dur=ss.lognormal(ss.years(3), ss.years(1.5)))
 
         cd4_start     = ss.attr(ss.normal(800, 50), on=infection)
         cd4_latent    = ss.attr(ss.normal(500, 50), on=infection)
@@ -40,7 +40,7 @@ def make_hiv(init_prev=0.05, init=None, art=ss.peryear(0.2)):
             acute:    cd4_start - (cd4_start - cd4_latent)*acute.progress,
             latent:   cd4_latent,
             falling:  np.maximum(1, cd4_latent*(1 - falling.progress)),
-            on_art:   cd4_preart + gain*(2/(1 + np.exp(-art_cd4_growth*on_art.time/ss.months(1))) - 1),
+            on_art:   cd4_preart + gain*(2/(1 + np.exp(-art_cd4_growth*on_art.time_in/ss.months(1))) - 1),
             post_art: np.maximum(1, cd4_stop*(1 - post_art.progress)),
         })
         post_art_death = ss.Transition(post_art, ss.null, dur=np.maximum(np.log(cd4_preart)*cd4_stop/cd4_potential, 0.1)*ss.years(1), stages=10)
@@ -50,7 +50,7 @@ def make_hiv(init_prev=0.05, init=None, art=ss.peryear(0.2)):
     hiv.stratify(cd4=[0, 50, 200, 350, 500], states=hiv.infected) # Derived: no groups
     mods = [
         ss.modify(hiv.cd4_death, multiply=rel_art_mort, where=hiv.on_art, name='art_mort'),
-        ss.modify(hiv.rel_trans, multiply=1 - eff_art*np.minimum(hiv.on_art.time/ss.years(time_to_eff), 1), where=hiv.on_art, name='art_trans'),
+        ss.modify(hiv.rel_trans, multiply=1 - eff_art*np.minimum(hiv.on_art.time_in/ss.years(time_to_eff), 1), where=hiv.on_art, name='art_trans'),
         ss.modify(hiv.rel_trans, multiply=rel_trans_aids, where=(hiv.cd4 < 200) & (hiv.falling | hiv.post_art), name='aids_trans'),
     ]
     return hiv, mods
@@ -60,7 +60,7 @@ def make_hpv(name, beta=ss.peryear(0.4), m_sus=None):
     """ One genotype: infection, clearance or CIN, and antibodies that seroconversion at clearance gives, the highest kept """
     S, P, C = ss.states('S P C')
     infection = S >> P @ beta*(P + C)
-    precin = ss.Transition(P, [C, S], p=[0.2, None], dur=ss.lognorm_ex(ss.years(1.5), ss.years(1)))
+    precin = ss.Transition(P, [C, S], p=[0.2, None], dur=ss.lognormal(ss.years(1.5), ss.years(1)))
     cin = ss.Transition(C, S, dur=ss.years(2))
     nab = ss.attr(ss.uniform(0.5, 0.95)*ss.bernoulli(0.6), on=precin.to('S') | cin, combine='max', init=0)
     return ss.Disease(S, P, C, infection=infection, precin=precin, cin=cin, nab=nab, init_prev=0.1, name=name)
@@ -141,8 +141,8 @@ def test_trait_ode():
     sim = make(solver='ode').run()
     assert np.allclose(sim.results.sir.I, make(trait=False, solver='ode').run().results.sir.I) and any('uses its mean' in note for note in sim.notes)
     assert make().init().solver == 'abm'
-    with pytest.raises(ss.CapabilityError, match='approx=False'):
-        make(solver='ode', approx=False).init()
+    with pytest.raises(ss.CapabilityError, match='approximations="error"'):
+        make(solver='ode', approximations='error').init()
     return
 
 
@@ -194,7 +194,7 @@ def test_attr_errors():
     sc.heading('Attributes: read where they have no value')
     with pytest.raises(ValueError): # A case of a derived attribute reads a clock of another state
         A, B = ss.states('A B')
-        ss.Disease(A, B, ab=A >> B @ 0.1, x=ss.attr({B: A.time}), first='A', name='d')
+        ss.Disease(A, B, ab=A >> B @ 0.1, x=ss.attr({B: A.time_in}), default_state='A', name='d')
     S, I = ss.states('S I')
     infection = S >> I @ ss.perday(0.1)*I
     rec = ss.attr(ss.normal(10, 1), on=infection)
@@ -258,7 +258,7 @@ def test_attr_grown_by_code():
             new = self.sim.people.grow(20)
             self.sim.people.age[new] = -0.5
     S, I = ss.states('S I')
-    d = ss.Disease(S, I, inf=S >> I @ ss.peryear(0), age0=ss.attr(ss.constant(v=lambda sim, uids: sim.people.age[uids])), name='d')
+    d = ss.Disease(S, I, inf=S >> I @ ss.peryear(0), age0=ss.attr(ss.constant(value=lambda sim, uids: sim.people.age[uids])), name='d')
     sim = ss.Sim(d, demographics=Maker(), n_agents=1000, start=2000, stop=2002, unit='year', **kw).run()
     new = sim.people.auids[sim.people.auids >= 1000]
     assert len(new) and np.all(sim.diseases.d.age0.raw[new] == -0.5)

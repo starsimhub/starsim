@@ -14,7 +14,7 @@ Everything a sim runs, apart from the people themselves, is a *module*: each dis
 A module is an instance of `ss.Module` (`starsim/internals/modules.py`), or of a subclass. Every module has the same parts:
 
 - a **name** (`sir`, `randomnet`), unique in the sim, and a **label** for plots;
-- its **parameters**, `mod.pars` (an `ss.Pars`), given with `define_pars()` and set from the user's arguments with `update_pars()`, which raises an error for one that wasn't defined;
+- its **parameters**, `mod.pars` (an `ss.parameters.Pars`), given with `define_pars()` and set from the user's arguments with `update_pars()`, which raises an error for one that wasn't defined;
 - its **timeline**, `mod.t` (an `ss.Timeline`), which is the sim's unless the module is given a `dt`, `start` or `stop` of its own;
 - its **distributions**, each with a random number stream of its own, found by searching the module when the sim is initialized ([Randomness](architecture_randomness.qmd));
 - its **states**, arrays with one value per agent (`define_states()`), which the people grow and shrink with the population;
@@ -96,7 +96,7 @@ A method that is sure to do nothing in this sim (the base class's own `record_fl
 
 **Finalized.** After the last step, `finalize()` calls `finalize_results()` on each module, which scales the results that count people by the number of people each agent stands for. A module can override `finalize_results()` to work out results from others; it calls `super().finalize_results()` first. A module that has been finalized can't be stepped again: running it again raises `ss.AlreadyRunError`, which says to copy it first.
 
-Forgetting to call `super()` is the commonest mistake in writing a module, so the base class's methods that must be called are marked with `@ss.required()`. After a run, `sim.check_method_calls()` warns about any that weren't, naming the method and the module.
+Forgetting to call `super()` is the commonest mistake in writing a module, so the base class's methods that must be called are marked with `@ss.required()`. After a run, `sim.run()` warns about any that weren't, naming the method and the module.
 
 ## Declared modules and modules written as code
 
@@ -139,7 +139,7 @@ class Exposure(ss.Module):
         self.days_infectious[infectious] += 1
 
 for mod in [None, Alarm(), Exposure()]:
-    sim = ss.Sim(make_sir(), custom=mod, unit='day', stop=ss.days(100), verbose=0)
+    sim = ss.Sim(make_sir(), modules=mod, unit='day', stop=ss.days(100), verbose=0)
     sim.init()
     label = type(mod).__name__ if mod else 'No module'
     print(f'{label}: {sim.solver}, since {sim.solver_reason}')
@@ -148,7 +148,7 @@ for mod in [None, Alarm(), Exposure()]:
 The SIR alone and the SIR with `Alarm` run as an ODE; `Exposure` makes the sim run as agents, and the reason names it and says how to change that. `Alarm` still costs something: a compartmental run is usually taken by the kernels in one call, with no Python loop, but a module with a step of its own makes the run go step by step, and `sim.kernel_reason()` says so:
 
 ```{python}
-sim = ss.Sim(make_sir(), custom=Alarm(), unit='day', stop=ss.days(100), verbose=0)
+sim = ss.Sim(make_sir(), modules=Alarm(), unit='day', stop=ss.days(100), verbose=0)
 sim.init()
 sim.kernel_reason()
 ```
@@ -157,7 +157,7 @@ The same `Alarm` runs as agents too, unchanged: `sir.I.n` is the number infectio
 
 ```{python}
 for kw in [dict(), dict(n_agents=5000)]:
-    sim = ss.Sim(make_sir(), custom=Alarm(), unit='day', stop=ss.days(100), verbose=0, **kw).run()
+    sim = ss.Sim(make_sir(), modules=Alarm(), unit='day', stop=ss.days(100), verbose=0, **kw).run()
     print(f'{sim.solver}: {sim.custom.alarm.days_over} days with more than 5% infectious')
 ```
 
@@ -169,11 +169,11 @@ Modules don't hold references to each other: a module reaches the rest of the si
 
 | To reach | Write | Notes |
 |---|---|---|
-| A module, by kind and name | `self.sim.diseases.sir`, `self.sim.networks.randomnet` | the usual way; each kind is an `ss.ndict`, so `sim.diseases[0]` works too |
+| A module, by kind and name | `self.sim.diseases.sir`, `self.sim.networks.randomnet` | the usual way; each kind is an `ss.utils.ndict`, so `sim.diseases[0]` works too |
 | A module, by name alone | `self.sim.sir` | if the name is unique and isn't an attribute of the sim |
 | A module through the people | `self.sim.people.sir` | the people hold every module with states |
 | A state by its full name | `self.sim.people.states['sir.I']` | every module's states, flat, as `<module>.<state>` |
-| A property of people | `self.sim.people.age`, or `ss.ppl.age` in a condition written before the sim exists | `ss.ppl` is a lazy reference, evaluated when it is needed |
+| A property of people | `self.sim.people.age`, or `ss.person.age` in a condition written before the sim exists | `ss.person` is a lazy reference, evaluated when it is needed |
 | A result | `self.sim.results.sir.I`, `self.sim.diseases.sir.results.I` | the same object: a module's results are nested in the sim's |
 | The time | `self.ti`, `self.now`, `self.t.dt` | the module's own; with a timeline of its own, `self.ti` counts its own steps |
 
@@ -183,7 +183,7 @@ An array that most agents never change (a relative susceptibility that is 1 unti
 
 ## Reading the loop
 
-The loop (`sim.loop`, an `ss.Loop` in `starsim/internals/loop.py`) is built at the end of `sim.init()` by `Loop.collect_funcs()`, which walks the sim's modules in the order above and collects each method to call. Its plan is every (time, method) pair, sorted by time and then by that order; a module with a timeline of its own appears only at its own times. `sim.loop.to_df()` gives the plan as a table, so the order can always be checked rather than remembered. For the sim above, as agents, one step is:
+The loop (`sim.loop`, an `ss.loop.Loop` in `starsim/internals/loop.py`) is built at the end of `sim.init()` by `Loop.collect_funcs()`, which walks the sim's modules in the order above and collects each method to call. Its plan is every (time, method) pair, sorted by time and then by that order; a module with a timeline of its own appears only at its own times. `sim.loop.to_df()` gives the plan as a table, so the order can always be checked rather than remembered. For the sim above, as agents, one step is:
 
 ```{python}
 sim = ss.Sim(

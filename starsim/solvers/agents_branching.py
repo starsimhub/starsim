@@ -56,10 +56,10 @@ class Branching:
                 self.mod[name][uids] = True
                 self.stamp(name, uids, self.seed_ti(name))
                 self.add_infectors(uids, np.full(len(uids), -1))
-                if self.mod.infection_log is not None and any(state.name == name for tr in self.graph.transmissions for state in tr.dst):
+                if self.mod.infection_log is not None and any(state.name == name for tr in self.graph.transmissions for state in tr.dest):
                     self.log_infections(uids, seeds=True)
-        self.held_trs = [tr for tr in self.graph.transitions.values() if tr.people and not tr.acquisition and (all(src.name in self.uninfected for src in tr.src) if tr.src else tr.inflow and all(dst.name in self.uninfected for dst in tr.dst))] # The uninfected side's own flows
-        back = [tr.name for tr in self.graph.transitions.values() if tr.src and any(src.name not in self.uninfected for src in tr.src) and any(dst.name in self.uninfected for dst in tr.dst or [])]
+        self.held_trs = [tr for tr in self.graph.transitions.values() if tr.people and not tr.acquisition and (all(src.name in self.uninfected for src in tr.source) if tr.source else tr._inflow and all(dst.name in self.uninfected for dst in tr.dest))] # The uninfected side's own flows
+        back = [tr.name for tr in self.graph.transitions.values() if tr.source and any(src.name not in self.uninfected for src in tr.source) and any(dst.name in self.uninfected for dst in tr.dest or [])]
         if back:
             ss.note(f'"{self.mod.name}" runs as a branching process, so people who go back to the uninfected ({sc.strjoin(back)}) leave it: they are not counted there, nor infected again', sim=sim)
         return
@@ -219,14 +219,14 @@ class Branching:
                 mult = self.mult_raw('transition', tr.name)*(1.0 if self.adjust[tr.name] is None else self.adjust[tr.name])
                 if np.ndim(mult) and np.shape(mult)[-1] != ng:
                     raise ss.CapabilityError(f'a modifier of "{self.mod.name}.{tr.name}" has a condition on people, which the uninfected of a branching process, who are counts by group, cannot take; give it no where=, or run with a compartmental solver')
-                if tr.inflow:
+                if tr._inflow:
                     inflow = np.broadcast_to(np.asarray(self.eval(tr.rate), dtype=float)*mult*self.inflow_split(tr), ng)*dt
                     if getattr(tr, 'per_capita', False):
                         inflow = inflow*self.held_n()
                     sources = [None]
                 else:
                     hazard = 1/self.dwell_mean(tr.name) if tr.dur is not None else np.asarray(self.eval(tr.rate), dtype=float)
-                    sources = [src.name for src in tr.src]
+                    sources = [src.name for src in tr.source]
                 total = np.zeros(ng)
                 for name in sources:
                     if name is None:
@@ -234,7 +234,7 @@ class Branching:
                     else:
                         amount = np.broadcast_to(self.held[name], ng)*-np.expm1(-np.maximum(hazard*mult, 0)*dt)
                         self.held[name] = np.broadcast_to(self.held[name], ng) - amount
-                    for dst,p in zip(tr.dst or [], self.branch_probs(tr)):
+                    for dst,p in zip(tr.dest or [], self.branch_probs(tr)):
                         if dst.name in self.held:
                             self.held[dst.name] = np.broadcast_to(self.held[dst.name], ng) + amount*p
                     total = total + amount
@@ -287,7 +287,7 @@ class Branching:
         rel_sus = mod.rel_sus.asnew(sus_raw, copy=False)
         new_cases = []
         pairs = [] # Who infected whom, where that is known, so the strain can be passed on
-        pools = any(isinstance(route, (ss.MixingPool, ss.MixingPools)) for nkey,route in routes)
+        pools = any(isinstance(route, (ss.MixingPool, ss.networks.MixingPools)) for nkey,route in routes)
         pool_hazard = [np.zeros(len(sus_raw)) for strain in strains] if pools else None
         any_pools = False
         by_strain = 1.0 # The infectiousness of each agent's strain
@@ -298,7 +298,7 @@ class Branching:
         for i,(nkey,route) in enumerate(routes):
             if on_route is not None and not on_route[i]: # Nothing on it to transmit (see carries())
                 continue
-            if isinstance(route, (ss.MixingPool, ss.MixingPools)) and mod not in route.diseases: # Not one of the diseases it is for
+            if isinstance(route, (ss.MixingPool, ss.networks.MixingPools)) and mod not in route.diseases: # Not one of the diseases it is for
                 continue
             if isinstance(route, ss.Network) and route.has_acts: # A probability per act, in each direction
                 if len(route):
@@ -324,7 +324,7 @@ class Branching:
                 for pair in self.over_network(i, route, rel_trans.raw, route_sus.raw, [beta, beta], tr.name):
                     new_cases.append(pair[1])
                     pairs.append(pair)
-            elif isinstance(route, (ss.MixingPool, ss.MixingPools)) and route.name in sim.mixing.pool_terms: # A contact matrix within each place: see ss.solvers.Mixing.init_pools()
+            elif isinstance(route, (ss.MixingPool, ss.networks.MixingPools)) and route.name in sim.mixing.pool_terms: # A contact matrix within each place: see ss.solvers.Mixing.init_pools()
                 any_pools = True
                 groups = sim.groups.group_raw()
                 auids = sim.people.auids
@@ -334,20 +334,20 @@ class Branching:
                     infectious = np.bincount(groups[auids], weights=(rel_trans.raw*share)[auids], minlength=sim.groups.n_groups)
                     expo = sim.mixing.term_exposure(sim.mixing.pool_terms[route.name], infectious, n)
                     pool_hazard[k] += ref*expo[groups]*route_sus.raw*mult(None, slice(None))
-            elif isinstance(route, ss.MixingPools) and not route.pools: # A matrix of numbers: from the share of each group or band that is infectious
+            elif isinstance(route, ss.networks.MixingPools) and not route.pools: # A matrix of numbers: from the share of each group or band that is infectious
                 any_pools = True
                 for k,strain in enumerate(strains):
                     share = 1.0 if strain is None else self.strain_weights[strain_raw, strain]
                     auids, expo = route.exposure(rel_trans.raw*share)
                     pool_hazard[k][auids] += ref*expo*route_sus.raw[auids]*mult(None, auids)
-            elif isinstance(route, (ss.MixingPool, ss.MixingPools)): # Has no direction
+            elif isinstance(route, (ss.MixingPool, ss.networks.MixingPools)): # Has no direction
                 any_pools = True
-                for pool in (route.pools if isinstance(route, ss.MixingPools) else [route]):
-                    if len(pool.src_uids) and len(pool.dst_uids):
-                        dst = pool.dst_uids
+                for pool in (route.pools if isinstance(route, ss.networks.MixingPools) else [route]):
+                    if len(pool.source_uids) and len(pool.target_uids):
+                        dst = pool.target_uids
                         for k,strain in enumerate(strains):
-                            share = 1.0 if strain is None else self.strain_weights[strain_raw[pool.src_uids], strain]
-                            trans = np.mean(rel_trans.raw[pool.src_uids]*share) # The infectiousness-weighted fraction of the source group that is infectious
+                            share = 1.0 if strain is None else self.strain_weights[strain_raw[pool.source_uids], strain]
+                            trans = np.mean(rel_trans.raw[pool.source_uids]*share) # The infectiousness-weighted fraction of the source group that is infectious
                             pool_hazard[k][dst] += pool.pars.beta*ref*trans*pool.eff_contacts.raw[dst]*route_sus.raw[dst]*mult(None, dst)
             else: # Any other route works out its own transmission
                 new_cases.append(ss.uids(route.compute_transmission(route_sus, rel_trans, beta, disease=mod)))

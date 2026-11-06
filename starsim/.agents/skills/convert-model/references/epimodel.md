@@ -75,7 +75,7 @@ hiv = ss.Disease(
     linkage    = care(('dx', 'art'), 0.1), # Not link, which is a method of every module
     init_n     = dict(A=2, C=98, D=20),
 )
-hiv.stratify(care=['undx', 'dx', 'art', 'supp', 'off'], states=[A, C, D], split=[1, 0, 0, 0, 0],
+hiv.stratify(care=['undx', 'dx', 'art', 'supp', 'off'], states=[A, C, D], fractions=[1, 0, 0, 0, 0],
              adjust=dict(rel_trans=[1, 1, 0.3, 0.01, 1], aids_death=[1, 1, 1, 0.1, 1]))
 main   = ss.DegreeNet(n_contacts=0.5, concurrency=0.04, max_contacts=2, dur=200)
 casual = ss.DegreeNet(n_contacts=0.3, concurrency=0.10, dur=26)

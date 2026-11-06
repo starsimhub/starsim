@@ -123,7 +123,7 @@ The outbreak moves outward from Riverton, reaching Fairfield last. `map(t='2025-
 
 ```{python}
 infected = sim.results.measles.infection.by('patch').summarize() # Infections in each town over the year
-towns.plot(values=infected/towns.pop, label='Share infected')
+towns.plot(values=infected/towns.populations, label='Share infected')
 ```
 
 ## How much movement matters

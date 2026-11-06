@@ -58,7 +58,7 @@ class Expressions:
         - a part that has one value for each group (made of numbers, values in time, values by the sim's dimensions, and counts:
           see `groupwise()`) is worked out for the groups, and then taken for each agent from their group, which is much less
           arithmetic than for each agent when there are many agents and few groups (e.g. a rate by place that reads counts by place);
-        - a product with a condition (e.g. `infant_rate*((ss.ppl.age >= 0) & (ss.ppl.age < 1))`) is worked out only for the agents
+        - a product with a condition (e.g. `infant_death_rate*((ss.person.age >= 0) & (ss.person.age < 1))`) is worked out only for the agents
           the condition holds for (0 for the others), so a function rate in it is called only for them (see `gated()`);
         - a part evaluated again for the same agents while `self._memo` is kept (e.g. the factor that the terms of a transmission share)
           is taken from it.
@@ -213,7 +213,7 @@ class Expressions:
 
     @staticmethod
     def is_condition(expr):
-        """ Whether a part of an expression is a condition, which is 1 or 0 for each person (not a property, e.g. `ss.ppl.age`, which is its value) """
+        """ Whether a part of an expression is a condition, which is 1 or 0 for each person (not a property, e.g. `ss.person.age`, which is its value) """
         cond = expr.cond if isinstance(expr, ss.expressions.Prop) else expr
         return isinstance(cond, ss.conditions.Cond) and (cond.op in ss.conditions.comparisons or cond.op in ['&', '|', '~', 'isin', 'state'])
 
@@ -255,17 +255,17 @@ class Expressions:
         return engine.clock_values(clock, self._uids)
 
     def mother(self, expr):
-        """ `ss.mother(x)`: x evaluated on each unborn agent's mother (by UID; with born=True, each agent's), and 0 for everyone else """
+        """ `ss.mother(x)`: x evaluated on each unborn agent's mother (by UID; with include_born=True, each agent's), and 0 for everyone else """
         ppl = self.sim.people
         parent = ppl.parent.raw
         who = parent != ppl.parent.nan
-        if not expr.born:
+        if not expr.include_born:
             who &= ppl.age.raw < 0
         out = np.zeros(len(parent))
         if who.any():
             moms = ss.uids(parent[who])
             x = expr.x
-            if isinstance(x, ss.conditions.Cond): # A value (e.g. ss.ppl.age) is read as it is, and a condition as 1/0
+            if isinstance(x, ss.conditions.Cond): # A value (e.g. ss.person.age) is read as it is, and a condition as 1/0
                 vals = x.eval(self.selector)
                 numeric = isinstance(vals, np.ndarray) and vals.dtype != bool and vals.shape == self.selector.shape
                 vals = vals[moms] if numeric else self.selector.to_selection(vals, x)[moms]
@@ -301,7 +301,7 @@ class Expressions:
             raise ValueError(errormsg)
         start = np.asarray(arr.raw[uids], dtype=float)
         ti = self.ti
-        if clock.kind == 'time':
+        if clock.kind == 'time_in':
             out = np.maximum(ti - start, 0)*self.dt # In the sim's unit; someone who entered at the end of this step (by transmission) has had none of it
         else:
             name = names[0]
@@ -481,13 +481,13 @@ class Expressions:
     def paths(self):
         """ For each state, the transitions on the shortest path to it from the first state, as (transition, source, destination) """
         graph = self.graph
-        out = {graph.first.name: []}
-        todo = [graph.first.name]
+        out = {graph.default_state.name: []}
+        todo = [graph.default_state.name]
         while todo:
             name = todo.pop(0)
             for tr in graph.transitions.values():
-                if any(s.name == name for s in tr.src or []):
-                    for d in tr.dst or []:
+                if any(s.name == name for s in tr.source or []):
+                    for d in tr.dest or []:
                         if d.people and d.name not in out:
                             out[d.name] = out[name] + [(tr, name, d.name)]
                             todo.append(d.name)

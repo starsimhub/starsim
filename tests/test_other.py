@@ -207,8 +207,8 @@ class Counter(ss.Module):
     assert text == "a = sim.results.births.birth; b = res.deaths.death.cum[-1]; c = sim.results.pregnancy.preterm; d = preg.results.neonatal_death; msim.plot('births.birth')"
     mine = migrate_text("self.define_results(ss.Result('new_infections'))\nx = self.results.new_infections")
     assert 'res' in mine[0] and mine[1] == [] # One the package makes keeps its name
-    text, changes, todo = migrate_text("a = ss.treat(cure=0.9, on=sir.infection, capacity=5)\nb = ss.Transition(I, R, on=a.failed, where=ss.ppl.female)\nc = ss.modify(sir.pars.beta, multiply=0.5, when=lambda sim: sim.ti > 5)\nd = ss.attr(1, on=infection)")
-    assert 'ss.treat(cure=0.9, where=sir.infection, capacity=5)' in text and 'ss.attr(1, on=infection)' in text and [line for line,_ in todo] == [2, 3] # Keywords: on= is where=, when= is time only
+    text, changes, todo = migrate_text("a = ss.treat(cure=0.9, on=sir.infection, capacity=5)\nb = ss.Transition(I, R, on=a.failed, where=ss.person.female)\nc = ss.modify(sir.pars.beta, multiply=0.5, when=lambda sim: sim.ti > 5)\nd = ss.attr(1, on=infection)")
+    assert 'ss.treat(cure=0.9, on=sir.infection, capacity=5)' in text and 'ss.Transition(I, R, on=a.failed, where=ss.person.female)' in text and 'ss.attr(1, on=infection)' in text and [line for line,_ in todo] == [3] # Keywords: on= stays, when= is time only
     text = migrate_text("x = ss.change(sir.pars.beta, at=[30, 60], by=[0.5, 1.0], name='m')\ny = ss.change('sir.pars.beta', at=2005, to=0.1)\nz = ss.change(beta, at=times, by=vals)")
     assert "ss.modify(sir.pars.beta, multiply=ss.timeseries({30: 0.5, 60: 1.0}), start=30, name='m')" in text[0] and "ss.modify('sir.pars.beta', set=0.1, start=2005)" in text[0] and text[2][0][0] == 3
     assert 'ss.treat(' in migrate_text('from starsim.interventions import treat_num, Intervention')[2][0][1] # An import of a removed name
@@ -219,7 +219,7 @@ class Counter(ss.Module):
     assert 'ss.SIR(init_prev=0.1, p_death=0.2, dur_inf=ss.years(10), beta=0.1)' in new and 'ss.SEIR(init_prev=20, beta=0.1)' in new
     assert 'ss.Pregnancy(loss_rate=ss.probperweek(0.01))' in new and 'ss.Pregnancy(loss_rate=ss.probpermonth(0.02))' in new
     _, _, todo = migrate_text("f = lambda self, sim, uids: 0.1\na = ss.SIS(init_prev=ss.bernoulli(p=f), dur_inf=[10, 2])\nnet = ss.MFNet()\nclass Net(ss.SexualNet):\n    def net_beta(self, disease_beta=None, uids=None, disease=None):\n        pass")
-    assert all(any(word in message for _,message in todo) for word in ['drop self', 'lognorm_ex', 'needs a beta', 'inds='])
+    assert all(any(word in message for _,message in todo) for word in ['drop self', 'lognormal', 'needs a beta', 'inds='])
 
     old = "new = ss.uids.cat(a, b); bf = preg.breastfeeding\nnet = ss.RandomNet(n_contacts=10, uniform_targets=True)"
     assert migrate_text(old)[0] == "new = ss.uids.concatenate(a, b); bf = preg.lactating\nnet = ss.RandomNet(n_contacts=10, method='uniform')"

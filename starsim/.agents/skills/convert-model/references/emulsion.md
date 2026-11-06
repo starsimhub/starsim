@@ -12,13 +12,13 @@ An EMULSION model is one YAML file: `time_info` (unit, `delta_t`, `total_duratio
 | `rate: expr` | The rate per person, classified (`beta * total_I / total_population` is exposure, `beta * I`) | yes |
 | `proba: p` | `-log(1 - p)`, the rate that gives it: `p` is per time unit, not per step (EMULSION makes it `1 - (1 - p)**delta_t` for a step) | yes |
 | `duration:` on a state whose only way out is `proba: 1` or `amount-all-but: 0` | A fixed dwell, `ss.constant(ss.days(d))` | yes |
-| `duration:` on a state with other ways out | A minimum stay: `after=` on the ways out (and nothing on an escape), as agents or compartments | yes |
+| `duration:` on a state with other ways out | A minimum stay: `min_stay=` on the ways out (and nothing on an escape), as agents or compartments | yes |
 | `autoremove: yes` (a dead state) | An outflow to `ss.null` | yes |
-| `escape: yes` | Nothing: a way out with no `after=` applies throughout | yes |
+| `escape: yes` | Nothing: a way out with no `min_stay=` applies throughout | yes |
 | `escape: cond`, `cond: is_X` | `where=` on the transition, against the other machine's state | no |
 | `when: calendar_period` | A parameter that is an `ss.timeseries` of 0 and 1, multiplying the rate | no |
 | `StrictLessThan(total_Q, K)` and the like | A comparison of counts: `(Q.n < K)` | yes |
-| `on_cross`, `produce_offspring`, `set_var` | Offspring into one state: a birth driven by the transition, `ss.birth(NB, per=farrowing, n=10)`; anything else, custom code on the transition's events (agents) | no |
+| `on_cross`, `produce_offspring`, `set_var` | Offspring into one state: a birth driven by the transition, `ss.birth(NB, on=farrowing, n=10)`; anything else, custom code on the transition's events (agents) | no |
 | `statevars` (age, counters) | A stratification, a property of people, or a state array in a subclass | no |
 | `prototypes`, `initial_conditions` | `init_n=dict(...)` counts on each disease | yes |
 | `outputs.extra_vars` | Results on the disease, where they are expressions of counts | yes |

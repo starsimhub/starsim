@@ -17,7 +17,7 @@ An Atomica model is a framework workbook (compartments, characteristics, paramet
 | Format `number` | The whole flow, divided among the source's people | yes |
 | Format `proportion` (junctions) | The shares of a branch (below) | yes |
 | A parameter function | An expression of counts (`ch_prev * transpercontact`); `floor(x)` written as `x` (listed if `x` is not whole) | yes |
-| Databook values by year | `ss.timeseries(..., mode='linear')`, held constant outside, as Atomica does | yes |
+| Databook values by year | `ss.timeseries(..., interpolation='linear')`, held constant outside, as Atomica does | yes |
 | Initial numbers | Solved from the databook's compartments and characteristics at the first year, as Atomica does: those with a setup weight (by default, those in the databook or with a default), zeros fixed, least squares with the smallest norm | yes |
 | Several population types (`Population types` sheet) | The first type as the disease; the others (each would be a disease of its own) and the interactions between them listed | no |
 | `SRC_POP_AVG()`, `SRC_POP_SUM()`, where every pair of populations interacts alike | A count in all of them (`I.total`) | yes |

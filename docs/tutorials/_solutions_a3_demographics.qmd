@@ -12,8 +12,8 @@ import matplotlib.pyplot as plt
 import starsim as ss
 
 pars = dict(start=2020, stop=2040)
-constant = ss.Sim(people=ss.people('Niger', n_agents=5000), demographics=[ss.birth(rate=ss.peryear(0.045)), ss.death(rate=ss.peryear(0.009))], **pars)
-un = ss.Sim(people=ss.people('Niger', n_agents=5000), demographics=[ss.Births(birth_rate='Niger'), ss.Deaths(death_rate='Niger')], **pars)
+constant = ss.Sim(people=ss.population('Niger', n_agents=5000), demographics=[ss.birth(rate=ss.peryear(0.045)), ss.death(rate=ss.peryear(0.009))], **pars)
+un = ss.Sim(people=ss.population('Niger', n_agents=5000), demographics=[ss.Births(birth_rate='Niger'), ss.Deaths(death_rate='Niger')], **pars)
 msim = ss.parallel({'Constant rates': constant, 'UN rates': un})
 msim.plot('alive')
 
@@ -82,7 +82,7 @@ sims = {}
 for label in ['Baseline', 'Contraception']:
     pregnancy = ss.Pregnancy(fertility_rate='Nigeria')
     contraception = ss.modify(pregnancy.conception, multiply=0.7, start=2010) if label == 'Contraception' else None
-    people = ss.people('Nigeria', n_agents=5000)
+    people = ss.population('Nigeria', n_agents=5000)
     sims[label] = ss.Sim(people=people, demographics=[pregnancy, ss.Deaths(death_rate='Nigeria')], interventions=contraception, **pars)
 
 msim = ss.parallel(sims)

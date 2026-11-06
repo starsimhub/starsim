@@ -17,7 +17,7 @@ camdl is a compartmental modeling language (a compiler, `camdlc`, in OCaml; a ru
 | `I --> R @ gamma * I`, `E --> I @ E / 5 'days` | `I >> R @ gamma`, `E >> I @ 0.2` (time literals in the model's unit) | yes |
 | A birth or death (`--> S`, `S -->`) | An inflow or an outflow against `ss.null` | yes |
 | `let N = S + I + R` | A named expression, written out where it is used | yes |
-| Parameters with bounds, priors (`log_normal`, `normal`, `beta`, `gamma`, `exponential`, `uniform`, `truncated_normal`, `half_normal`; a flat prior is the bounds), and docs | `ss.par(value, bounds=[...], prior=ss.lognorm_im(mean=mu, sigma=sigma), doc=...)` | yes |
+| Parameters with bounds, priors (`log_normal`, `normal`, `beta`, `gamma`, `exponential`, `uniform`, `truncated_normal`, `half_normal`; a flat prior is the bounds), and docs | `ss.par(value, bounds=[...], prior=ss.lognormal(log_mean=mu, log_std=sigma), doc=...)` | yes |
 | Observations of a flow (`incidence(...)`) with a share (`rho * projected`), weekly (`closing_at(time, 7 'days)`), and a likelihood (`neg_binomial`, `poisson`, `normal` with a fixed sd) | `ss.outcome(rho * infection, likelihood=ss.nbinom(n=k))` (weekly data is compared with the total over each week) | yes |
 | `time_unit`, `simulate { from, to }`, `dt` | `unit=`, `start=`, `stop=`, `dt=` | yes |
 | `init`, including expressions of parameters and other compartments | `init_n=dict(...)` (worked out to numbers of people) | yes |
@@ -33,7 +33,7 @@ camdl is a compartmental modeling language (a compiler, `camdlc`, in OCaml; a ru
 
 ## What needs care
 
-- **Rewrite a stratified import as `stratify()`.** The IR has the dimensions spelled out, so the import is flat: right, but long. For a model like the stratified SEIR, the declared form is `seir.stratify(age=[0, 5, 50])`, `seir.stratify(patch=[...], kind='space', split=pop, mobility=ss.geo.Mobility(matrix=..., kind='migrate'))`, and `networks=ss.contacts(contacts, ages=[0, 5, 50])` (see the worked example). Check it against the flat import as `validate.md` says before replacing one with the other.
+- **Rewrite a stratified import as `stratify()`.** The IR has the dimensions spelled out, so the import is flat: right, but long. For a model like the stratified SEIR, the declared form is `seir.stratify(age=[0, 5, 50])`, `seir.stratify(patch=[...], kind='space', fractions=pop, mobility=ss.geo.Mobility(matrix=..., kind='migrate'))`, and `networks=ss.contacts(contacts, ages=[0, 5, 50])` (see the worked example). Check it against the flat import as `validate.md` says before replacing one with the other.
 - **A one-off move between states is a delivery that moves people.** camdl's `transfer(S --> R, fraction=0.6, at=20)` is listed; write it as `ss.Delivery(move=S >> R, coverage=0.6, at=[20])`, which moves that share of `S` at that time, under every solver.
 - **Interventions are off unless enabled**, in camdl as in pycamdl (`--enable vaccinate`, `run(enable=[...])`); events always happen.
 - **Give the solver.** The import runs as an ODE (`solver='ode'`, camdl's `--backend ode`); camdl's default backend is chain-binomial (`solver='binomial'`). At a step of a day the binomial import's mean infectious curve is within 0.9% of camdl's 200 runs; at a quarter of a day it is 12% away, since the two schemes differ by order dt.
@@ -56,8 +56,8 @@ seir = ss.Disease(
     init_n    = dict(I=ss.by(age=[10, 0, 0], patch=[1, 0])),
 )
 seir.stratify(age=[0, 5, 50]) # Children, adults, and elders, who age at 1/5 and 1/45 a year
-seir.stratify(patch=['north', 'south'], kind='space', split=pop, mobility=ss.geo.Mobility(matrix=[[0, 0.01], [0.01, 0]], kind='migrate'))
-sim = ss.Sim(seir, networks=ss.contacts(contacts, ages=[0, 5, 50]), total_pop=13_510, unit='day', stop=150, use_aging=True)
+seir.stratify(patch=['north', 'south'], kind='space', fractions=pop, mobility=ss.geo.Mobility(matrix=[[0, 0.01], [0.01, 0]], kind='migrate'))
+sim = ss.Sim(seir, networks=ss.contacts(contacts, ages=[0, 5, 50]), total_pop=13_510, unit='day', stop=150, aging=True)
 ```
 
 Over camdl's own test models (85 files), 84 import and run; 54 with nothing listed, and the rest listing forcing functions of time (17), observations of numbers in states (11), ODE compartments (7), and events (7).

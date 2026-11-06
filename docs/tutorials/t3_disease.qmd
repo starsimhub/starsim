@@ -77,7 +77,7 @@ As an ODE, Starsim runs an Erlang distribution as `k` stages that people go thro
 seir_erlang.equations()
 ```
 
-As agents, each person draws their own time from the distribution instead. Other distributions, such as `ss.lognorm_ex(mean=ss.days(10), std=ss.days(2))`, are covered in [Distributions](../user_guide/mechanics_distributions.qmd). The rest of the tutorials keep to exponential durations, for simplicity.
+As agents, each person draws their own time from the distribution instead. Other distributions, such as `ss.lognormal(mean=ss.days(10), std=ss.days(2))`, are covered in [Distributions](../user_guide/mechanics_distributions.qmd). The rest of the tutorials keep to exponential durations, for simplicity.
 
 ## Waning immunity
 

@@ -43,7 +43,7 @@ class immunity:
     """
     Protection between strains: what having (or having had) one strain does against each strain
 
-    `rel_sus=` is the protection against being infected: a matrix, with rows from the strain held and
+    `protection=` is the protection against being infected: a matrix, with rows from the strain held and
     columns against the strain (1 is complete), or a single number, the same protection from any strain
     held against every strain. Each person's protection against a strain is combined over the strains
     they hold by `combine=`, and multiplies `rel_sus` by `1 − protection`. Several `ss.immunity` objects,
@@ -58,7 +58,7 @@ class immunity:
 
     Args:
         due_to (State/str): what protects, as above
-        rel_sus (array/float): the protection against being infected
+        protection (array/float): the protection against being infected (0 is none, 1 is complete)
         combine (str/func): how protection from several strains adds up: 'max' (the strongest, the default), 'sum' (added, at most 1),
             'multiply' (independent sources: `1 − Π(1 − p)`), or a function of one array of protections, with the strains held on the first axis
             (0 for those not held), that returns the protection, e.g. `lambda p: np.minimum(1, p.max(0) + 0.5*(p.sum(0) - p.max(0)))`;
@@ -66,27 +66,27 @@ class immunity:
 
     Examples:
         ```python
-        strains = ss.Strains(['DS', 'RIF'], max_strains=2, immunity=ss.immunity(due_to=L, rel_sus=0.79)) # Latent infection protects in part against another strain
+        strains = ss.Strains(['DS', 'RIF'], max_strains=2, immunity=ss.immunity(due_to=L, protection=0.79)) # Latent infection protects in part against another strain
         ```
     """
-    def __init__(self, *args, due_to=None, rel_sus=None, combine='max'):
+    def __init__(self, *args, due_to=None, protection=None, combine='max'):
         if args:
-            errormsg = 'ss.immunity() takes the protection as rel_sus=, e.g. ss.immunity(due_to=R, rel_sus=matrix); it takes no positional arguments'
+            errormsg = 'ss.immunity() takes the protection by keyword, e.g. ss.immunity(due_to=R, protection=matrix); it takes no positional arguments'
             raise TypeError(errormsg)
         if not (callable(combine) or combine in rules):
             errormsg = f'combine= is {sc.strjoin(rules)}, or a function of the protections from each source; not {combine!r}'
             raise ValueError(errormsg)
         self.due_to = due_to
         self.combine = combine
-        if rel_sus is None:
-            errormsg = 'ss.immunity() needs the protection, e.g. rel_sus=matrix'
+        if protection is None:
+            errormsg = 'ss.immunity() needs the protection, e.g. protection=matrix'
             raise ValueError(errormsg)
-        val = np.array(rel_sus, dtype=float)
+        val = np.array(protection, dtype=float)
         if val.ndim not in [0, 2] or (val.ndim == 2 and val.shape[0] != val.shape[1]):
             raise ValueError(f'the protection has shape {val.shape}; it is a square matrix (rows from the strain held, columns against the strain) or a single number')
         if np.any(val < 0) or np.any(val > 1):
             raise ValueError(f'the protection is {val.min():n} to {val.max():n}; a protection is between 0 (none) and 1 (complete)')
-        self.rel_sus = val
+        self.protection = val
         return
 
     def __repr__(self):
@@ -111,7 +111,7 @@ class immunity:
         Args:
             n (int): the number of strains
         """
-        val = self.rel_sus
+        val = self.protection
         if val.ndim == 0:
             return np.full((n, n), float(val))
         if val.shape != (n, n):
@@ -237,21 +237,21 @@ class Strains:
         immunity (immunity/list): protection between strains, one `ss.immunity` or a list of them; the matrices have rows and columns in the order of the strains
         max_strains (int): the most strains anyone carries at once (default 1)
         transmit (str): what a carrier of several strains passes on: 'one' (the default: one strain per transmission, chosen in proportion to the strains' rel_trans, at the infectiousness of the most infectious), or 'each' (each strain at its own rate)
-        split (list/dict): the share of each strain among the people infected at the start (default: equal); or, by label, the share of each strain or set of strains carried together, e.g. `split={'DS': 0.5, 'DS+INH': 0.5}`
+        fractions (list/dict): the share of each strain among the people infected at the start (default: equal); or, by label, the share of each strain or set of strains carried together, e.g. `fractions={'DS': 0.5, 'DS+INH': 0.5}`
         name (str): the name of the strain dimension, for results (`res.I.by('strain')`) and conditions (default 'strain')
         values (dict): values for each strain by parameter, e.g. `rel_trans=[1, 0.575], cure=[1, 1/3]`
 
     Examples:
         ```python
         # TB: one course for the person, several strains in it
-        strains = ss.Strains(dict(DS=dict(rel_trans=1, cure=1), RIF=dict(rel_trans=0.575, cure=1/3)), max_strains=2, split=[0.9, 0.1],
-                             immunity=ss.immunity(due_to=L, rel_sus=0.79)) # Latent infection protects in part against a new strain
+        strains = ss.Strains(dict(DS=dict(rel_trans=1, cure=1), RIF=dict(rel_trans=0.575, cure=1/3)), max_strains=2, fractions=[0.9, 0.1],
+                             immunity=ss.immunity(due_to=L, protection=0.79)) # Latent infection protects in part against a new strain
         DS, RIF = strains
         failure = ss.Transition(Tx, I, rate=ss.peryear(0.1), move=DS >> (DS, RIF)) # Treatment fails, and DS acquires resistance
         tb = ss.Disease(..., failure, strains=strains)
         ```
     """
-    def __init__(self, strains, immunity=None, max_strains=None, transmit='one', split=None, name='strain', label=None, **values):
+    def __init__(self, strains, immunity=None, max_strains=None, transmit='one', fractions=None, name='strain', label=None, **values):
         self.name = name
         self.label = label or name
         if isinstance(strains, dict): # By strain: the values of each
@@ -293,13 +293,13 @@ class Strains:
             errormsg = f'max_strains= is the most strains anyone carries at once, a whole number of at least 1, not {max_strains!r}'
             raise ValueError(errormsg)
         self.max_strains = min(n, int(max_strains)) if max_strains is not None else 1
-        self.split_sets = None # By label, with sets of strains carried together (see strat())
-        if isinstance(split, dict):
-            self.split_sets = {str(k):float(v) for k,v in split.items()}
-            split = None
-        self.split = None if split is None else np.array(split, dtype=float)
-        if self.split is not None and self.split.shape != (n,):
-            raise ValueError(f'split= of "{name}" has {len(self.split)} entries, but there are {n} strains ({sc.strjoin(names)}); for sets of strains carried together, give it by label, e.g. split={{"{names[0]}": 0.5, "{"+".join(names[:2])}": 0.5}}')
+        self.fraction_sets = None # By label, with sets of strains carried together (see strat())
+        if isinstance(fractions, dict):
+            self.fraction_sets = {str(k):float(v) for k,v in fractions.items()}
+            fractions = None
+        self.fractions = None if fractions is None else np.array(fractions, dtype=float)
+        if self.fractions is not None and self.fractions.shape != (n,):
+            raise ValueError(f'fractions= of "{name}" has {len(self.fractions)} entries, but there are {n} strains ({sc.strjoin(names)}); for sets of strains carried together, give it by label, e.g. fractions={{"{names[0]}": 0.5, "{"+".join(names[:2])}": 0.5}}')
         self.immunity = immunity
         self._init_sets()
         return
@@ -314,7 +314,7 @@ class Strains:
         value = sc.tolist(value)
         for imm in value:
             if not isinstance(imm, immunity_class):
-                errormsg = f'immunity= of "{self.name}" takes ss.immunity() objects, e.g. ss.immunity(due_to=R, rel_sus=matrix); not {type(imm).__name__}'
+                errormsg = f'immunity= of "{self.name}" takes ss.immunity() objects, e.g. ss.immunity(due_to=R, protection=matrix); not {type(imm).__name__}'
                 raise TypeError(errormsg)
         self._immunity = value
         return
@@ -399,8 +399,8 @@ class Strains:
         while changed:
             changed = False
             for tr in graph.transitions.values():
-                if tr.people and not tr.acquisition and any(s.name in names for s in tr.dst or []):
-                    for s in tr.src or []:
+                if tr.people and not tr.acquisition and any(s.name in names for s in tr.dest or []):
+                    for s in tr.source or []:
                         if s.people and s.name not in names and s.name not in uninfected:
                             names.add(s.name)
                             changed = True
@@ -417,22 +417,22 @@ class Strains:
         """ The strain dimension that runs the strains (see `ss.dimensions.Strat`) """
         n = len(self.sets)
         split = np.zeros(n)
-        if self.split_sets is not None:
-            for label,share in self.split_sets.items():
+        if self.fraction_sets is not None:
+            for label,share in self.fraction_sets.items():
                 parts = label.split('+')
                 unknown = [p for p in parts if p not in self.names]
                 if unknown:
-                    raise ValueError(f'split= of "{self.name}" names {sc.strjoin(unknown)}, which {"is" if len(unknown) == 1 else "are"} not among its strains ({sc.strjoin(self.names)})')
-                split[self.level_of([self.names.index(p) for p in parts], what=f'split= of "{self.name}" at "{label}"')] += share
+                    raise ValueError(f'fractions= of "{self.name}" names {sc.strjoin(unknown)}, which {"is" if len(unknown) == 1 else "are"} not among its strains ({sc.strjoin(self.names)})')
+                split[self.level_of([self.names.index(p) for p in parts], what=f'fractions= of "{self.name}" at "{label}"')] += share
         else:
-            split[:len(self.names)] = self.split if self.split is not None else 1/len(self.names)
+            split[:len(self.names)] = self.fractions if self.fractions is not None else 1/len(self.names)
         adjust = {key:self._level_values(key) for key in self.values}
         if self.transmit == 'each' and self.max_strains > 1: # Each strain at its own rate: a set is as infectious as all of its strains
             rel = self.values.rel_trans if 'rel_trans' in self.values else np.ones(len(self.names))
             adjust['rel_trans'] = np.array([rel[list(s)].sum() for s in self.sets])
-        strat = ss.dimensions.Strat(self.name, list(self.labels), split=split, adjust=adjust, kind='strain')
-        if self.split is None and self.split_sets is None:
-            strat.guessed['split'] = 'equal between the strains'
+        strat = ss.dimensions.Strat(self.name, list(self.labels), fractions=split, adjust=adjust, kind='strain')
+        if self.fractions is None and self.fraction_sets is None:
+            strat.guessed['fractions'] = 'equal between the strains'
         strat.strains = self
         return strat
 
@@ -443,7 +443,7 @@ class Strains:
         per = {tr.name:tr.per_given for tr in graph.transitions.values() if getattr(tr, 'per_given', None)}
         chances = {p['p']:name for name,p in per.items() if isinstance(p.get('p'), str)}
         for key,vals in self.values.items():
-            how = f' (each strain\'s chance in {chances[key]})' if key in chances else ' (the sum of a set\'s, each strain alone)' if per.get(key, {}).get('alone') else ' (a set takes the largest)' if self.max_strains > 1 and key != 'rel_trans' else ''
+            how = f' (each strain\'s chance in {chances[key]})' if key in chances else ' (the sum of a set\'s, each strain alone)' if per.get(key, {}).get('single_strain') else ' (a set takes the largest)' if self.max_strains > 1 and key != 'rel_trans' else ''
             out.add('', f'{key}: {sc.strjoin(f"{v:.4g}" for v in vals)}{how}')
         how = dict(one='one strain per transmission, chosen in proportion to rel_trans, at the infectiousness of the most infectious', each='each strain at its own rate')
         out.add('', f'transmit: {how[self.transmit]}' + (' (from a set)' if self.max_strains > 1 else ''))
@@ -480,7 +480,7 @@ def attach(dis, strains):
     infected = set(strat.carried)
     for tr in graph.transmissions:
         refuse_by_strain(strat, tr, tr.rate, f'the rate of "{tr.name}"')
-    primary = [tr for tr in graph.transmissions if all(s.name in graph.uninfected for s in tr.src)] # The transmissions to people who carry no strain
+    primary = [tr for tr in graph.transmissions if all(s.name in graph.uninfected for s in tr.source)] # The transmissions to people who carry no strain
     super_states = []
     for imm in strains.immunity:
         if imm.due_to is None:
@@ -512,12 +512,12 @@ def attach(dis, strains):
 
 def prepare(strains, trs):
     """
-    Before a disease with strains is built: its transitions with an outcome for each strain carried (`per='strain'`), as a branch
+    Before a disease with strains is built: its transitions with an outcome for each strain carried (`per_strain=True`), as a branch
     probability and a change of strains for each level of the strain dimension (see `ss.Transition`)
 
     With `p=`, each strain k carried takes the first destination with probability c_k (cured, say), independently: everyone takes it with
-    probability Π c_k, and the others take the second, carrying the strains left. With `alone=True`, each strain has its own rate, and the
-    first to happen moves on alone: the rate of a set is the sum, and the strain is chosen in proportion to its rate.
+    probability Π c_k, and the others take the second, carrying the strains left. With `single_strain=True`, each strain has its own rate, and the
+    first to happen moves on as the only strain carried: the rate of a set is the sum, and the strain is chosen in proportion to its rate.
     """
     n, L = len(strains.names), len(strains.sets)
     for name,tr in trs: # By the name it will have (a keyword, before the disease names it)
@@ -526,18 +526,18 @@ def prepare(strains, trs):
         name = tr.name or name
         vals = strains.values.get(name, np.ones(n))
         Q = np.zeros((L, L)) # Where the people at each level go (rows sum to 1)
-        if tr.alone:
+        if tr.single_strain:
             if tr.p is not None or tr.rate is None:
-                errormsg = f'"{name}" has per="strain" and alone=True, so each strain carried has its own rate, given as rate=; not dur= or p='
+                errormsg = f'"{name}" has single_strain=True, so each strain carried has its own rate, given as rate=; not dur= or p='
                 raise ValueError(errormsg)
             tr.strain_adjust = np.array([vals[list(s)].sum() for s in strains.sets]) # The rate of a set: the sum of its strains'
             for l,s in enumerate(strains.sets):
                 for k in s:
                     Q[l, strains.level_of([k])] += vals[k]/tr.strain_adjust[l]
-            tr.per_given = dict(alone=True)
+            tr.per_given = dict(single_strain=True)
         else:
-            if tr.p is None or len(tr.dst or []) != 2:
-                errormsg = f'"{name}" has per="strain", so each strain carried has its own outcome: give p=, the chance of each strain taking the first destination (e.g. cured), and two destinations, the first for those with none left and the second for the rest, e.g. ss.Transition(Tx, [R, I], p=0.9, per="strain")'
+            if tr.p is None or len(tr.dest or []) != 2:
+                errormsg = f'"{name}" has per_strain=True, so each strain carried has its own outcome: give p=, the chance of each strain taking the first destination (e.g. cured), and two destinations, the first for those with none left and the second for the rest, e.g. ss.Transition(Tx, [R, I], p=0.9, per_strain=True)'
                 raise ValueError(errormsg)
             given = tr.p[0] if len(tr.p) == 1 else tr.p
             given = getattr(given, 'raw', given)
@@ -549,7 +549,7 @@ def prepare(strains, trs):
             elif sc.isnumber(given):
                 c = float(given)*vals
             else:
-                errormsg = f'p= of "{name}" with per="strain" is the chance of each strain taking the first destination: a number, or the name of values of the strains; not {given!r}'
+                errormsg = f'p= of "{name}" with per_strain=True is the chance of each strain taking the first destination: a number, or the name of values of the strains; not {given!r}'
                 raise TypeError(errormsg)
             if np.any(c < 0) or np.any(c > 1):
                 raise ValueError(f'the chance of each strain taking the first destination of "{name}" is {np.round(c, 4).tolist()}; each is between 0 and 1')

@@ -38,11 +38,11 @@ def test_capabilities_two_modules():
     sc.heading('Testing solver capabilities over several modules')
     class A(ss.Disease):
         S, I = ss.states('S I')
-        recover = ss.Transition(I, S, dur=ss.lognorm_ex(ss.years(1), ss.years(1)))
+        recover = ss.Transition(I, S, dur=ss.lognormal(ss.years(1), ss.years(1)))
         catch = ss.Transition(S, I, rate=ss.peryear(0.1))
     class B(ss.Disease):
         X, Y = ss.states('X Y')
-        first = 'X'
+        default_state = 'X'
         h = ss.par(None)
         go = ss.Transition(X, Y, rate=h)
         def __init__(self, **kwargs):
@@ -218,22 +218,22 @@ def test_complex_api():
     )
 
     # Test with explicit initialization
-    pars2 = ss.SimPars(n_agents=1000, label='v1', verbose=0, stop=2020)
+    pars2 = ss.sim.SimPars(n_agents=1000, label='v1', verbose=0, stop=2020)
 
     net1 = ss.RandomNet(name='random1', n_contacts=6)
     net2 = ss.RandomNet(name='random2', n_contacts=4)
-    networks = ss.ndict(net1, net2)
+    networks = ss.utils.ndict(net1, net2)
 
     dis1 = ss.SIR(dur_inf=ss.expon(scale=ss.years(6.0)))
     dis2 = ss.SIS(beta=ss.prob(0.07, 'year'), init_prev=0.1)
-    diseases = ss.ndict(dis1, dis2)
+    diseases = ss.utils.ndict(dis1, dis2)
 
     dem1 = ss.Births(birth_rate=ss.time.freq(20, 'year'))
     dem2 = ss.Deaths(death_rate=ss.time.freq(20, 'year'))
-    demographics = ss.ndict(dem1, dem2)
+    demographics = ss.utils.ndict(dem1, dem2)
 
     int1 = ss.Intervention.from_func(jump_age)
-    interventions = ss.ndict(int1)
+    interventions = ss.utils.ndict(int1)
 
     # Assemble and run
     s1 = ss.Sim(pars1).run()
@@ -244,7 +244,7 @@ def test_complex_api():
     assert out.count('%') == 4, out
     with pytest.raises(ValueError):
         ss.Sim(n_agents=100, verbose=-1).init()
-    assert len(ss.Sim(n_agents=100, networks=[['random', 'sexual'], 'maternal'], demographics='pregnancy', verbose=0).init().networks) == 3 # One level of nested lists, e.g. from a helper that returns several modules
+    assert len(ss.Sim(n_agents=100, networks=[['random', 'sexual'], 'prenatal'], demographics='pregnancy', verbose=0).init().networks) == 3 # One level of nested lists, e.g. from a helper that returns several modules
 
     return s1
 
@@ -256,8 +256,8 @@ def test_shared_product(do_plot=do_plot):
 
     # Make interventions
     vax = ss.Vaccine(efficacy=0.5)
-    routine1 = ss.vaccinate(vax, name='early-small', start=2010, coverage=0.05, interval=ss.years(1))
-    routine2 = ss.vaccinate(vax, name='late-big', start=2020, coverage=0.5, interval=ss.years(1))
+    routine1 = ss.vaccinate(vax, name='early-small', start=2010, coverage=0.05, every=ss.years(1))
+    routine2 = ss.vaccinate(vax, name='late-big', start=2020, coverage=0.5, every=ss.years(1))
 
     # Make and run sims
     pars = make_sim_pars()
@@ -317,7 +317,7 @@ def test_creation_syntax():
     pars = dict(n_agents=100, dur=10)
     sim = ss.Sim(
         pars = pars,
-        custom = [mod1, dem],
+        modules = [mod1, dem],
         demographics = 'deaths',
         connectors = mod2,
         diseases = dis,
@@ -326,8 +326,7 @@ def test_creation_syntax():
     sim.run()
     
     assert isinstance(sim.custom[0], FirstClass)
-    assert isinstance(sim.custom[1], ss.Demographics)
-    assert isinstance(sim.demographics[0], ss.Demographics)
+    assert len(sim.demographics) == 2 and all(isinstance(mod, ss.Demographics) for mod in sim.demographics())
     assert isinstance(sim.connectors[0], SecondClass)
     assert isinstance(sim.diseases[0], ss.Disease)
     assert isinstance(sim.networks[0], ss.Network)
@@ -417,7 +416,7 @@ def test_locked_pars():
 
 @sc.timer()
 def test_new_after_init():
-    """ What a sim takes once it is initialized (values and a seed from restart(), data, jax) is kept by running it again and by sim.new() """
+    """ What a sim takes once it is initialized (values and a seed from run(pars=, rand_seed=), data, jax) is kept by running it again and by sim.new() """
     sc.heading('Testing sim.new() after init')
     import pandas as pd
     def make(beta=0.3):
@@ -426,7 +425,7 @@ def test_new_after_init():
         return ss.Sim(sir, unit='day', stop=60, total_pop=1000, verbose=0, solver='binomial')
     ref = make(0.5).new(rand_seed=3).run().results.sir.I[-1]
     sim = make().init()
-    assert sim.restart(pars=dict(beta=0.5), rand_seed=3).run().results.sir.I[-1] == ref
+    assert sim.run(pars=dict(beta=0.5), rand_seed=3).results.sir.I[-1] == ref
     assert sim.run().results.sir.I[-1] == ref and sim.new().run().results.sir.I[-1] == ref, 'Run again, or new, with the values of the restart'
     df = pd.DataFrame({'time':[10, 20], 'sir.I':[50, 100]})
     sim.data = df # Not settings of the run, so they can be set after init
@@ -446,23 +445,23 @@ def test_update_pars():
         warnings.simplefilter('error')
         ssl.AgentSIR(init_prev=0.05, dur_inf=ss.constant(6))
     assert isinstance(sir.pars.init_prev, ss.bernoulli) and sir.pars.init_prev.pars.p == 0.05 # A probability
-    assert isinstance(sir.pars.dur_inf, ss.lognorm_ex) and sir.pars.dur_inf.pars.mean == ss.years(6) # Its mean, in the unit of the default
+    assert isinstance(sir.pars.dur_inf, ss.lognormal) and sir.pars.dur_inf.pars.mean == ss.years(6) # Its mean, in the unit of the default
     assert isinstance(ss.SexualNet(dur=ss.days(15)).pars.dur, ss.expon) and isinstance(ss.SexualNet(dur=ss.constant(ss.days(15))).pars.dur, ss.constant) # A single duration on a network of partnerships is a mean, ending at a constant rate; a fixed value is a constant
     assert isinstance(ss.RandomNet(n_contacts=dict(type='poisson', lam=4)).pars.n_contacts, ss.poisson) # A distribution given by its type
     for value in [[6, 2], dict(mean=6)]: # The distribution's arguments, or values? Neither: use its own method
         with pytest.raises(TypeError, match='set'):
             ssl.AgentSIR(dur_inf=value)
-    sir.pars.dur_inf = ss.lognorm_ex(mean=ss.years(6), std=ss.years(1))
+    sir.pars.dur_inf = ss.lognormal(mean=ss.years(6), std=ss.years(1))
     sir.pars.dur_inf.set(mean=8) # Keeps the standard deviation, and the unit
     assert sir.pars.dur_inf.pars.mean == ss.years(8) and sir.pars.dur_inf.pars.std == ss.years(1)
 
     # A sim parameter set before init() is kept, as if given (e.g. by a subclass of ss.Sim, as STIsim's does)
     sim = ss.Sim(n_agents=100, start=2000, stop=2002, verbose=0)
-    sim.pars.use_aging = True
+    sim.pars.aging = True
     sim.init()
     age0 = sim.people.age.raw[:100].copy()
     sim.run()
-    assert sim.pars.use_aging and np.allclose(sim.people.age.raw[:100] - age0, 3) # A step from each of 2000, 2001, and 2002
+    assert sim.pars.aging and np.allclose(sim.people.age.raw[:100] - age0, 3) # A step from each of 2000, 2001, and 2002
     return
 
 
@@ -473,7 +472,7 @@ def test_save():
     f = sc.obj() # Filenames
     f.sim  = 'temp.sim'
     f.json = 'sim.json'
-    sim = ss.Sim(n_agents=n_agents, diseases=ss.SIS(dur_inf=ss.lognorm_ex(mean=ss.years(10))), networks='random').run()
+    sim = ss.Sim(n_agents=n_agents, diseases=ss.SIS(dur_inf=ss.lognormal(mean=ss.years(10))), networks='random').run()
 
     # Run the methods
     sim.save(filename=f.sim)
@@ -591,7 +590,7 @@ def test_copied_modules():
     toy = ss.Disease(S, I, inf=S >> I @ ss.peryear(2.0), rec=I >> S @ ss.days(90), name='toy')
     hs = HS(name='hs')
     deliver = lambda sim: sim.interventions.hs.served_now # The sim's copy, which runs
-    sims = [ss.Sim(toy, interventions=[hs, ss.treat(ss.Treatment(cure=1.0), deliver=deliver, name='tx')], n_agents=2000, stop=ss.days(100), dt=ss.days(1), verbose=0).run() for _ in range(2)]
+    sims = [ss.Sim(toy, interventions=[hs, ss.treat(ss.Treatment(cure=1.0), who=deliver, name='tx')], n_agents=2000, stop=ss.days(100), dt=ss.days(1), verbose=0).run() for _ in range(2)]
     assert sims[0].results.tx.delivered.values.sum() > 400
     assert sims[0].results.tx.delivered.values.sum() == sims[1].results.tx.delivered.values.sum() # The same modules, given to two sims
     assert not toy.initialized and sims[0].diseases.toy is not toy # Neither ran the module itself
@@ -613,7 +612,7 @@ def test_init_order():
         def init_post(self):
             super().init_post()
             self.unset = np.mean(self.sim.demographics[0].district[self.sim.people.auids] < 0)
-    sim = ss.Sim(n_agents=1000, demographics=Demography(), custom=Lifestyle(name='life'), start=2010, stop=2011, verbose=0).init()
+    sim = ss.Sim(n_agents=1000, demographics=Demography(), modules=Lifestyle(name='life'), start=2010, stop=2011, verbose=0).init()
     assert sim.custom.life.unset == 0 # Was 1: the custom module came first
 
     # Whatever reads the disease in init_post() sees who starts infected
@@ -624,11 +623,37 @@ def test_init_order():
             seen[self.name] = self.sim.diseases.sir.I.n
         def step(self):
             pass
-    class Custom(Reader, ss.Module):
-        pass
+    class Custom(ss.Module): # Of no standard type, so kept in sim.custom
+        def init_post(self):
+            super().init_post()
+            seen[self.name] = self.sim.diseases.sir.I.n
     sir = ss.SIR(init_n=dict(I=10), name='sir')
-    ss.Sim(n_agents=1000, diseases=sir, connectors=Reader(name='conn'), custom=Custom(name='cust'), stop=1, verbose=0).init()
+    ss.Sim(n_agents=1000, diseases=sir, connectors=Reader(name='conn'), modules=Custom(name='cust'), stop=1, verbose=0).init()
     assert seen == dict(conn=10, cust=10) # Was 0 from the connector
+    return sim
+
+
+@sc.timer()
+def test_step_order():
+    """ Test that modules step in the order they were given with step_order='given', and by kind otherwise """
+    sc.heading('Testing the order modules step in')
+    log = []
+    class Mark(ss.Module):
+        def step(self):
+            log.append(self.name)
+    class Net(ss.RandomNet):
+        def step(self):
+            log.append(self.name)
+            return super().step()
+    make = lambda order: ss.Sim(modules=[Mark(name='first'), Net(name='net'), ss.SIR(name='sir'), Mark(name='last')], step_order=order, n_agents=200, stop=2001, verbose=0)
+    make('type').run()
+    assert log[:3] == ['first', 'last', 'net'] # Modules of no standard kind first, then the networks
+    log.clear()
+    sim = make('given').run()
+    assert log[:3] == ['first', 'net', 'last']
+    assert len(sim.custom) == 2 and len(sim.networks) == 1 # Still found by kind
+    with pytest.raises(sc.KeyNotFoundError): # Modules of no standard kind are given with modules=
+        ss.Sim(custom=Mark(), n_agents=100)
     return sim
 
 
@@ -690,7 +715,7 @@ def test_given_modules():
 
     # The model's modules are sorted into their kinds when the sim is made, after those given by keyword, as they are once it is initialized
     sim = ss.Sim(ss.SIR(), [ss.RandomNet(), Status(name='status')], diseases=ss.SIS(), n_agents=10, verbose=0)
-    assert [d.name for d in sim.pars.diseases] == ['sis', 'sir'] and len(sim.pars.networks) == 1 and len(sim.pars.custom) == 1 and not sim.pars.modules
+    assert [d.name for d in sim.pars.diseases] == ['sis', 'sir'] and len(sim.pars.networks) == 1 and len(sim.pars.modules) == 1 # Of no standard kind: in sim.custom once initialized
     assert list(sim.init().diseases.keys()) == ['sis', 'sir']
 
     # Whole days are ints, as for pandas
@@ -718,7 +743,7 @@ def test_printed_output():
 
     # In proportions (total_pop=1), shares and not counts, and no note about chance
     sim = ss.Sim(ss.Disease(S >> I @ 1.4*I, I >> R @ ss.perday(0.14), init=dict(I=1e-6), name='sir'), total_pop=1, **kw).run()
-    assert 'in proportions' in sim.start_lines()[0] and 'at most 0.66' in sim.end_line()
+    assert 'in proportions' in sim._start_lines()[0] and 'at most 0.66' in sim._end_line()
     assert not any('chance' in note for note in sim.notes) and 'in proportions' in sim.describe(output=True)
 
     # No notes on models written as the docs write them: density dependence, a chain binomial in whole steps, and typed rates
@@ -759,9 +784,9 @@ def test_printed_output():
 @sc.timer()
 def test_small_fixes():
     sc.heading('Testing small fixes: rel_trans adjusted for a count of infectiousness, until=False, a module named after a method of the results, and times from whole steps')
-    S, I = ss.states('S I') # A count of infectiousness (I.n_trans) with rel_trans adjusted by level (a garbled error)
+    S, I = ss.states('S I') # A count of infectiousness (I.n_infectious) with rel_trans adjusted by level (a garbled error)
     SV, IV = ss.State(people=False), ss.State(people=False)
-    d = ss.Disease(infection=S >> I @ 0*I.n, bites=SV >> IV @ ss.perday(0.01)*I.n_trans/(S + I).n, init_n=dict(I=100, SV=1000), name='d')
+    d = ss.Disease(infection=S >> I @ 0*I.n, bites=SV >> IV @ ss.perday(0.01)*I.n_infectious/(S + I).n, init_n=dict(I=100, SV=1000), name='d')
     d.stratify(species=dict(a=0.5, b=0.5), adjust={'rel_trans': [2.0, 2.0]})
     res = ss.Sim(d, total_pop=1000, unit='day', stop=10, verbose=0).run().results.d
     assert np.isclose(res.IV[-1], 1000*(1 - np.exp(-0.02*0.1*10))) # Twice the infectiousness
@@ -803,6 +828,7 @@ if __name__ == '__main__':
     update = test_update_pars()
     test_copied_modules()
     test_init_order()
+    test_step_order()
     test_printed_output()
     test_small_fixes()
 

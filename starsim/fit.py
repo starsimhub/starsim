@@ -28,9 +28,9 @@ __all__ = ['mismatch', 'loglik', 'prior_draws', 'sensitivity', 'profile', 'optim
 
 #%% Data and fitting for models with declared parameters
 
-def mismatch(sim, df=None, weights=None, gof=None):
+def mismatch(sim, df=None, weights=None, loss=None):
     """
-    The goodness of fit between a sim and its data (smaller is better)
+    The loss of a sim against its data: the mismatch between them (smaller is better)
 
     By default, for each data series, the normalized absolute error: the mean of
     |model − data| divided by the mean of the data; the series are then averaged.
@@ -41,17 +41,17 @@ def mismatch(sim, df=None, weights=None, gof=None):
         sim (`ss.Sim`): a sim that has been run
         df (df): the data, if not the sim's
         weights (dict): the relative weight of each data series (default: equal)
-        gof (str/func): 'nae' (default), 'rmse', or a function of the sim returning a number
+        loss (str/func): 'nae' (default), 'rmse', or a function of the sim returning a number
     """
-    check_gof(gof)
-    if callable(gof):
-        return gof(sim)
+    check_loss(loss)
+    if callable(loss):
+        return loss(sim)
     total = 0.0
     wsum = 0.0
     for col,(expected,model) in compare(sim, df).items():
         scale = np.abs(expected).mean() or np.abs(model).mean() or 1.0 # An all-zero series by the model's own size, so it cannot swamp the others
         diff = model - expected
-        value = np.sqrt(np.mean(diff**2))/scale if gof == 'rmse' else np.mean(np.abs(diff))/scale
+        value = np.sqrt(np.mean(diff**2))/scale if loss == 'rmse' else np.mean(np.abs(diff))/scale
         weight = series_weight(weights, col)
         total += weight*value
         wsum += weight
@@ -100,7 +100,7 @@ def logpdf(dist, observed, model, xp=np, pars=None):
     `n` as the dispersion), `ss.binom` (with `n` the number of trials, the data the
     positives among them, as counts, and the model's value the probability),
     `ss.bernoulli` (an observation of 0 or 1, with the model's value its probability),
-    `ss.normal` (with `scale`), and `ss.lognorm_ex` (with `std`).
+    `ss.normal` (with `scale`), and `ss.lognormal` (with `std`).
     The counts of a Poisson or negative binomial need not be whole numbers (e.g. weekly
     averages): the factorials are taken as gamma functions, which gives the same values
     for whole numbers.
@@ -110,7 +110,7 @@ def logpdf(dist, observed, model, xp=np, pars=None):
     lacks (e.g. a normal whose variance grows with the mean). It is worked out with
     NumPy, so the log-density in JAX does not cover it: the default fit then uses
     Nelder-Mead, which needs no gradients, and NUTS samples with Python in the loop,
-    which is much slower, only with `sim.fit(method='nuts', nopython=False)`.
+    which is much slower, only with `sim.fit(method='nuts', require_jax=False)`.
 
     Args:
         dist (`ss.Dist`/func): the likelihood
@@ -157,20 +157,20 @@ def logpdf(dist, observed, model, xp=np, pars=None):
             errormsg = f'A normal likelihood is centered on the model\'s value, so it takes scale= only, not loc={pars["loc"]}'
             raise ValueError(errormsg)
         return norm.logpdf(observed, model, pars['scale'])
-    elif isinstance(dist, ss.lognorm_ex): # The log of the value is normal
-        sigma2 = xp.log1p(pars['std']**2/mean**2)
+    elif isinstance(dist, ss.lognormal): # The log of the value is normal, with the model's value as the mean
+        sigma2 = pars['log_std']**2 if dist.log_form else xp.log1p(pars['std']**2/mean**2)
         logobs = np.log(np.where(observed > 0, observed, 1.0))
         return xp.where(observed > 0, norm.logpdf(logobs, xp.log(mean) - sigma2/2, xp.sqrt(sigma2)) - logobs, -np.inf)
-    errormsg = f'{type(dist).__name__} cannot be used as a likelihood; use ss.poisson(), ss.nbinom(n=...), ss.binom(n=...), ss.bernoulli(), ss.normal(scale=...), or ss.lognorm_ex(std=...)'
+    errormsg = f'{type(dist).__name__} cannot be used as a likelihood; use ss.poisson(), ss.nbinom(n=...), ss.binom(n=...), ss.bernoulli(), ss.normal(scale=...), or ss.lognormal(std=...) (or log_std=...)'
     raise TypeError(errormsg)
 
 
 def draw(dist, model, rng):
     """
-    Values drawn from a likelihood, with the model's values as its mean, as `logpdf()` reads them: what `sim.to_data(noise=)` draws
+    Values drawn from a likelihood, with the model's values as its mean, as `logpdf()` reads them: what `sim.to_synthetic_data(noise=)` draws
 
     Args:
-        dist (`ss.Dist`): the likelihood: `ss.poisson()`, `ss.nbinom(n=...)`, `ss.binom(n=...)`, `ss.bernoulli()`, `ss.normal(scale=...)`, or `ss.lognorm_ex(std=...)`
+        dist (`ss.Dist`): the likelihood: `ss.poisson()`, `ss.nbinom(n=...)`, `ss.binom(n=...)`, `ss.bernoulli()`, `ss.normal(scale=...)`, or `ss.lognormal(std=...)`
         model (array): the model's values
         rng (`np.random.Generator`): the random numbers
     """
@@ -189,10 +189,10 @@ def draw(dist, model, rng):
         return (rng.random(np.shape(model)) < model).astype(float)
     elif isinstance(dist, ss.normal):
         return rng.normal(model, pars['scale'])
-    elif isinstance(dist, ss.lognorm_ex):
+    elif isinstance(dist, ss.lognormal):
         sigma2 = np.log1p(pars['std']**2/np.maximum(mean, 1e-9)**2)
         return rng.lognormal(np.log(np.maximum(mean, 1e-9)) - sigma2/2, np.sqrt(sigma2))
-    errormsg = f'{type(dist).__name__} is not a likelihood to draw data from; use ss.poisson(), ss.nbinom(n=...), ss.binom(n=...), ss.bernoulli(), ss.normal(scale=...), or ss.lognorm_ex(std=...)'
+    errormsg = f'{type(dist).__name__} is not a likelihood to draw data from; use ss.poisson(), ss.nbinom(n=...), ss.binom(n=...), ss.bernoulli(), ss.normal(scale=...), or ss.lognormal(std=...)'
     raise TypeError(errormsg)
 
 
@@ -224,7 +224,7 @@ def logprior(par, x, xp=np):
     With `xp` as `jax.numpy`, in JAX (for the log-density in JAX), which covers normal, lognormal, gamma, beta, exponential, and uniform priors.
     """
     prior = par.prior
-    low, high = [b.value if isinstance(b, ss.TimePar) else b for b in par.bounds] # Uniform over the bounds is a constant, so the unit of typed bounds does not matter
+    low, high = [b.value if isinstance(b, ss.time.TimePar) else b for b in par.bounds] # Uniform over the bounds is a constant, so the unit of typed bounds does not matter
     if prior is None:
         return -np.log(high - low)
     stats = sps if xp is np else ss.gradients.jax().scipy.stats
@@ -232,7 +232,7 @@ def logprior(par, x, xp=np):
         return stats.uniform.logpdf(x, prior.pars.low, prior.pars.high - prior.pars.low)
     frozen = sc.dcp(prior).init(force=True).dist
     if frozen is None:
-        errormsg = f'The prior of "{par.name}" ({type(prior).__name__}) has no density to use; use e.g. ss.normal(), ss.lognorm_ex(), ss.gamma(), ss.beta_dist(), or ss.uniform()'
+        errormsg = f'The prior of "{par.name}" ({type(prior).__name__}) has no density to use; use e.g. ss.normal(), ss.lognormal(), ss.gamma(), ss.beta_dist(), or ss.uniform()'
         raise TypeError(errormsg)
     elif xp is np:
         return frozen.logpdf(x)
@@ -1102,7 +1102,7 @@ def product_pairs(sim, names):
         for tf in graph.transfers.values():
             uses += [tf.rate, tf.dur] + sc.tolist(tf.p)
         for oc in graph.outcomes.values():
-            uses += [oc.source, oc.delay, oc.duration]
+            uses += [oc.source, oc.delay, oc.stay]
         uses += list(graph.exprs.values()) + [init for state in graph.states.values() for init in [state.init, state.init_n]]
     uses += [m.amount for mods in sim.modifiers.values() for m in mods]
     uses = [use for use in uses if isinstance(use, ss.expressions.Expr)]
@@ -1151,7 +1151,7 @@ def correlated_pairs(names, values, threshold):
     return out
 
 
-gof_names = ['nae', 'rmse'] # The goodness-of-fit measures that mismatch() knows
+loss_names = ['nae', 'rmse'] # The losses that mismatch() knows
 max_scan = 100 # The most points a scan before a search tries by default: 10 per parameter up to 10 parameters
 scipy_methods = ['nelder-mead', 'powell', 'l-bfgs-b', 'slsqp'] # With and without gradients, all keeping to the bounds
 
@@ -1244,7 +1244,7 @@ def optimize(sim, total=None, maximize=None, minimize=None, at=None, start=None,
         """ A spending parameter's value at the start of the new allocation """
         if isinstance(raw, ss.timeseries):
             return float(raw.at(as_year(sc.ifelse(begin, t0)), probe))
-        return float(raw.value if isinstance(raw, ss.TimePar) else raw)
+        return float(raw.value if isinstance(raw, ss.time.TimePar) else raw)
     before = np.array([level(current[name]) for name in names])
     total = float(sc.ifelse(total, before.sum()))
     by_program = bounds if isinstance(bounds, dict) else {}
@@ -1288,7 +1288,7 @@ def optimize(sim, total=None, maximize=None, minimize=None, at=None, start=None,
     def run(amounts):
         n_runs[0] += 1
         if restart:
-            return runner.restart(pars=values(amounts)).run()
+            return runner._restart(pars=values(amounts)).run()
         return sim.new(pars=values(amounts), verbose=0).run()
     value_before = read(run(before))
     scale = max(abs(value_before), 1e-12)
@@ -1355,7 +1355,7 @@ def optimize(sim, total=None, maximize=None, minimize=None, at=None, start=None,
 
 def bound_value(b, raw):
     """ A bound of a parameter in the unit of its value: a typed bound (e.g. `ss.days(3)`) is converted to the type of the parameter """
-    return (type(raw)(b) if isinstance(raw, ss.TimePar) else b).value if isinstance(b, ss.TimePar) else b
+    return (type(raw)(b) if isinstance(raw, ss.time.TimePar) else b).value if isinstance(b, ss.time.TimePar) else b
 
 
 def bounded_pars(probe, pars=None, unused=()):
@@ -1367,7 +1367,7 @@ def bounded_pars(probe, pars=None, unused=()):
         pars (list): the names to take (default: all with bounds)
         unused (set): the ids of parameters to leave out (those of likelihoods not used)
 
-    Returns the parameters by name, and the names of those that set the mixing when the sim is built: of networks that a compartmental run turns into contact rates (those of the movement between places are worked out again on a restart: see `ss.Sim.restart()`).
+    Returns the parameters by name, and the names of those that set the mixing when the sim is built: of networks that a compartmental run turns into contact rates (those of the movement between places are worked out again on a restart: see `ss.Sim._restart()`).
     """
     fitted = sc.obj()
     for mod in probe.declared:
@@ -1380,7 +1380,7 @@ def bounded_pars(probe, pars=None, unused=()):
                 fitted[key] = p
     mixed = getattr(probe, 'mixed', []) if probe.solver != 'abm' else [] # Networks that a compartmental run turns into contact rates
     contacts = [] # Their parameters that are fitted, which set the contact rates when the sim is built
-    coded = [(mod, name, p) for mod in list(probe.modules) + mixed if isinstance(mod.pars, ss.Pars) for name,p in mod.pars.bounded().items()] # A parameter that a module's code reads (written as code, or the coded part of a declared one), given as ss.par with bounds, e.g. ssl.HIV(beta=ss.par(0.01, bounds=[0.001, 0.1])); see ss.Pars.bounded()
+    coded = [(mod, name, p) for mod in list(probe.modules) + mixed if isinstance(mod.pars, ss.parameters.Pars) for name,p in mod.pars.bounded().items()] # A parameter that a module's code reads (written as code, or the coded part of a declared one), given as ss.par with bounds, e.g. ssl.HIV(beta=ss.par(0.01, bounds=[0.001, 0.1])); see ss.parameters.Pars.bounded()
     for mod,name,p in coded:
         if any(p is q for q in fitted.values()): # One ss.par shared by several modules (e.g. a beta for every genotype) is fitted once
             continue
@@ -1436,7 +1436,7 @@ def with_element(raw, i, val, whole=None):
     """ An array or a time series with element i set to val: in `whole` if given (a copy made by an earlier call), else in a copy of raw """
     if whole is None:
         if isinstance(raw, ss.timeseries):
-            whole = ss.timeseries(list(raw.times), list(raw.values), mode=raw.mode, period=raw.period)
+            whole = ss.timeseries(list(raw.times), list(raw.values), interpolation=raw.interpolation, period=raw.period)
         else:
             whole = np.array(raw, dtype=float)
     if isinstance(whole, ss.timeseries):
@@ -1473,8 +1473,8 @@ def entry(name, p, levels=None, elements=None):
 
 def start_values(raws):
     """ The values of entries of `expand()` as numbers, and the type of each typed one (to keep its unit), or None """
-    x0 = np.array([raw.value if isinstance(raw, ss.TimePar) else raw for raw in raws], dtype=float)
-    return x0, [type(raw) if isinstance(raw, ss.TimePar) else None for raw in raws]
+    x0 = np.array([raw.value if isinstance(raw, ss.time.TimePar) else raw for raw in raws], dtype=float)
+    return x0, [type(raw) if isinstance(raw, ss.time.TimePar) else None for raw in raws]
 
 
 def sensitivity(sim, pars=None, results=None, n=100, rand_seed=None, verbose=None):
@@ -1574,7 +1574,7 @@ def profile(sim, par, values=None, level=0.95, **kwargs):
         ```
     """
     kwargs.setdefault('verbose', 0)
-    problem = Problem(sim, **{k:kwargs[k] for k in ['pars', 'data', 'weights', 'likelihood', 'gof', 'penalty', 'n_runs', 'reseed', 'rand_seed', 'nopython'] if k in kwargs}, verbose=0)
+    problem = Problem(sim, **{k:kwargs[k] for k in ['pars', 'data', 'weights', 'likelihood', 'loss', 'penalty', 'n_runs', 'reseed', 'rand_seed', 'require_jax'] if k in kwargs}, verbose=0)
     name_of = lambda key: key.rpartition('[')[0] if key in problem.levels else key
     if par not in problem.names[:problem.n_model] and values is None:
         errormsg = f'profile() takes a parameter of the model that is fitted (one with bounds), or its values=; "{par}" is not one of {sc.strjoin(dict.fromkeys(map(name_of, problem.names)))}'
@@ -1701,7 +1701,7 @@ def fit_stages(sim, stages, verbose=None, **kwargs):
         infection = S >> I @ beta*I
         sir = ss.Disease(infection, I >> R @ ss.days(8), init=dict(I=0.01), name='sir')
         pars = dict(total_pop=10_000, unit='day', stop=60)
-        data = ss.Sim(sir, pars=dict(beta=0.5), **pars).run().to_data('I')
+        data = ss.Sim(sir, pars=dict(beta=0.5), **pars).run().to_synthetic_data('I')
         fit = ss.Sim(sir, data=data, **pars).fit(method=['optuna', dict(method='nelder-mead', maxiter=100)], n_trials=30) # A search, then a polish
         print(fit.pars)
         ```
@@ -1731,10 +1731,10 @@ def fit_stages(sim, stages, verbose=None, **kwargs):
     return fit
 
 
-def check_gof(gof):
-    """ Raise an error for a goodness of fit that is not known (rather than using the default in its place) """
-    if gof is not None and not callable(gof) and gof not in gof_names:
-        errormsg = f'Unknown goodness of fit gof="{gof}"; the choices are {sc.strjoin(gof_names)}, or a function of the sim that returns a number'
+def check_loss(loss):
+    """ Raise an error for a loss that is not known (rather than using the default in its place) """
+    if loss is not None and not callable(loss) and loss not in loss_names:
+        errormsg = f'Unknown loss="{loss}"; the choices are {sc.strjoin(loss_names)}, or a function of the sim that returns a number'
         raise ValueError(errormsg)
     return
 
@@ -1777,9 +1777,9 @@ class Problem(sc.prettyobj):
 
     Args: as for `sim.fit()`
     """
-    def __init__(self, sim, pars=None, data=None, weights=None, likelihood=None, gof=None, penalty=None, n_runs=None, reseed=None, rand_seed=None, nopython=True, verbose=None):
+    def __init__(self, sim, pars=None, data=None, weights=None, likelihood=None, loss=None, penalty=None, n_runs=None, reseed=None, rand_seed=None, require_jax=True, verbose=None):
         base = sim.new(verbose=0)
-        self.nopython = nopython
+        self.require_jax = require_jax
         self.rand_seed = sc.ifelse(rand_seed, base.pars.rand_seed) # A fit is reproducible, as a sim is
         if data is not None:
             base.data = data
@@ -1787,17 +1787,17 @@ class Problem(sc.prettyobj):
         if data is not None:
             probe.data = data
         probe.init()
-        if probe.data is None and not callable(gof): # A loss that is a function of the sim brings its own data
-            raise ValueError('fit() needs data: attach it to the sim with ss.Sim(..., data=...), with one column named like each result to fit; or give gof= as a function of the sim that returns the loss.')
+        if probe.data is None and not callable(loss): # A loss that is a function of the sim brings its own data
+            raise ValueError('fit() needs data: attach it to the sim with ss.Sim(..., data=...), with one column named like each result to fit; or give loss= as a function of the sim that returns the loss.')
         self.verbose = verbose = sc.ifelse(verbose, ss.options.verbose)
-        check_gof(gof)
-        if probe.data is not None and not callable(gof): # Every column is compared with its result, so one that matches none is an error; a loss that is a function of the sim reads what it needs
+        check_loss(loss)
+        if probe.data is not None and not callable(loss): # Every column is compared with its result, so one that matches none is an error; a loss that is a function of the sim reads what it needs
             ss.results.check_data(probe, probe.data, die=True)
-        self.base, self.likelihood, self.weights, self.gof = base, likelihood, weights, gof
+        self.base, self.likelihood, self.weights, self.loss = base, likelihood, weights, loss
 
         # The parameters
         liks = likelihoods(probe, likelihood=likelihood)
-        self.use_lik = use_lik = all(lik is not None for lik in liks.values()) and gof is None
+        self.use_lik = use_lik = all(lik is not None for lik in liks.values()) and loss is None
         used = [id(val) for lik in liks.values() if use_lik and lik is not None for val in lik_pars(lik).values()]
         unused = [id(val) for mod in probe.declared for oc in mod.graph.outcomes.values() if oc.likelihood is not None for val in lik_pars(oc.likelihood).values() if id(val) not in used]
         fitted, contacts = bounded_pars(probe, pars, unused)
@@ -1813,7 +1813,7 @@ class Problem(sc.prettyobj):
             if verbose:
                 print(f'Using the likelihood: the sum of the log-likelihoods of {sc.strjoin(liks.keys())}, treated as independent' + (' (weighted)' if weights else ''))
         elif any(lik is not None for lik in liks.values()) and verbose:
-            why = f'gof="{gof}" was given' if gof is not None else 'not every data series has a likelihood'
+            why = f'loss="{loss}" was given' if loss is not None else 'not every data series has a likelihood'
             print(f'Note: {why}, so the likelihoods of {sc.strjoin([k for k,v in liks.items() if v is not None])} are not used')
         if not fitted:
             raise ValueError('fit() found no parameter with bounds; give the parameters to fit bounds, e.g. beta = ss.par(0.1, bounds=[0.01, 0.5]).')
@@ -1886,20 +1886,20 @@ class Problem(sc.prettyobj):
 
     def restart(self, x):
         """ The runner, restarted with these values """
-        return self.runner.restart(pars=self.to_pars(x))
+        return self.runner._restart(pars=self.to_pars(x))
 
     def run(self, x, seed=None, fresh=False):
         """ A run of the sim with these values: the runner restarted if it can be, else a new sim """
         if self.can_restart and not fresh:
-            return self.runner.restart(pars=self.to_pars(x), rand_seed=seed).run()
+            return self.runner._restart(pars=self.to_pars(x), rand_seed=seed).run()
         kw = {} if seed is None else dict(rand_seed=seed)
         new = self.base.new(pars=self.to_pars(x), **kw)
         new.data = self.base.data
         return new.run()
 
     def measure(self, sim):
-        """ The score of a run: minus its log-likelihood, or its goodness of fit """
-        return -loglik(sim, likelihood=self.likelihood, weights=self.weights) if self.use_lik else mismatch(sim, weights=self.weights, gof=self.gof)
+        """ The score of a run: minus its log-likelihood, or its loss """
+        return -loglik(sim, likelihood=self.likelihood, weights=self.weights) if self.use_lik else mismatch(sim, weights=self.weights, loss=self.loss)
 
     def logprior(self, x):
         """ The log of the priors' density at these values """
@@ -1982,9 +1982,9 @@ class Problem(sc.prettyobj):
         return None
 
     def python_in_loop(self, why, what):
-        """ Take something (e.g. the gradients) with Python in the loop, which is much slower, only if `nopython=False`; otherwise say why it can't be taken in JAX """
-        if self.nopython:
-            errormsg = f'The fit would take {what} with Python in the loop, which is much slower, since {why}; to fit this way anyway, use sim.fit(..., nopython=False)'
+        """ Take something (e.g. the gradients) with Python in the loop, which is much slower, only if `require_jax=False`; otherwise say why it can't be taken in JAX """
+        if self.require_jax:
+            errormsg = f'The fit would take {what} with Python in the loop, which is much slower, since {why}; to fit this way anyway, use sim.fit(..., require_jax=False)'
             raise ss.CapabilityError(errormsg)
         if self.verbose:
             print(f'Note: taking {what} with Python in the loop, which is slower, since {why}')
@@ -2170,7 +2170,7 @@ class Problem(sc.prettyobj):
             out.why += f'; but rerun with the same seeds, the best values score {mismatch:.4g}, worse than the initial values ({self.mismatch_before:.4g}), so the best trial may have been chance; try more trials (n_trials=) or more runs a point (n_runs=)'
         if self.verbose:
             print(f'{"Converged" if out.converged else "Not converged"}: {out.why}')
-            print(f'The {"negative log-posterior" if self.use_map else "negative log-likelihood" if self.use_lik else "goodness of fit"} is {mismatch:.4g} at the best values and {self.mismatch_before:.4g} at the initial values')
+            print(f'The {"negative log-posterior" if self.use_map else "negative log-likelihood" if self.use_lik else "loss"} is {mismatch:.4g} at the best values and {self.mismatch_before:.4g} at the initial values')
         best_pars = sc.obj()
         for name,val,cls,p in zip(names, best, self.types, self.fitted.values()):
             val = cls(val) if cls is not None else float(val)
@@ -2186,7 +2186,7 @@ class Problem(sc.prettyobj):
         diagnostics = sc.obj(divergences=out.get('divergences'), acceptance=out.get('acceptance'), band=out.get('band'))
         return Fit(sim=after, before=before, pars=best_pars, table=out.table, trials=pd.DataFrame(self.trials), method=method,
                    mismatch=mismatch, mismatch_before=self.mismatch_before,
-                   measure='negative log-posterior' if self.use_map else 'negative log-likelihood' if self.use_lik else 'goodness of fit',
+                   measure='negative log-posterior' if self.use_map else 'negative log-likelihood' if self.use_lik else 'loss',
                    samples=out.get('samples'), diagnostics=diagnostics, converged=out.converged, why=out.why, scores=scores, study=out.get('study'))
 
 
@@ -2214,7 +2214,7 @@ def fit_scipy(problem, method='nelder-mead', scan=None, restarts=None, **options
         infection = S >> I @ beta*I
         sir = ss.Disease(infection, I >> R @ ss.days(8), ss.outcome(0.5*infection, name='cases'), init=dict(I=0.01), name='sir')
         pars = dict(total_pop=10_000, unit='day', stop=60)
-        data = ss.Sim(sir, pars=dict(beta=0.5), rand_seed=2, **pars).run().to_data('cases', resample='week')
+        data = ss.Sim(sir, pars=dict(beta=0.5), rand_seed=2, **pars).run().to_synthetic_data('cases', resample='week')
         fit = ss.Sim(sir, data=data, **pars).fit(method='nelder-mead', scan=5, restarts=2, maxiter=200)
         print(fit.pars, fit.converged)
         ```
@@ -2305,13 +2305,13 @@ def optuna_worker(worker, n, problem, storage, kwargs):
     return
 
 
-def fit_optuna(problem, n_trials=100, n_workers=None, storage=None, **kwargs): # The search starts from the initial values, not from a scan
+def fit_optuna(problem, n_trials=100, workers=None, storage=None, **kwargs): # The search starts from the initial values, not from a scan
     """
     Optuna's tree-structured Parzen estimator, from the initial values: a best fit, with the spread of the best trials, and Optuna's study (`fit.study`)
 
     Args:
         n_trials (int): the number of trials (each one point, run once for agents), including any already in `storage`
-        n_workers (int): the number of processes that propose and run trials at once, sharing what they have learned (default 1)
+        workers (int): the number of processes that propose and run trials at once, sharing what they have learned (default 1)
         storage (str): where the trials are kept, so that a fit that stopped can be resumed by calling it again with the same storage:
             a file name (kept as an Optuna journal), a database URL (e.g. `'sqlite:///fit.db'`), or an Optuna storage
         kwargs (dict): Optuna's own keywords for `study.optimize()`, e.g. `timeout=600`
@@ -2329,27 +2329,27 @@ def fit_optuna(problem, n_trials=100, n_workers=None, storage=None, **kwargs): #
         infection = S >> I @ beta*I
         sir = ss.Disease(infection, I >> R @ ss.days(8), ss.outcome(0.5*infection, name='cases'), init=dict(I=0.01), name='sir')
         pars = dict(total_pop=10_000, unit='day', stop=60, solver='binomial')
-        data = ss.Sim(sir, pars=dict(beta=0.5), rand_seed=2, **pars).run().to_data('cases', resample='week')
+        data = ss.Sim(sir, pars=dict(beta=0.5), rand_seed=2, **pars).run().to_synthetic_data('cases', resample='week')
         fit = ss.Sim(sir, data=data, **pars).fit(method='optuna', n_trials=50, n_runs=4)
         print(fit.pars, fit.converged)
         ```
     """
     import optuna
     p = problem
-    n_workers = n_workers or 1
+    workers = workers or 1
     temp = None
-    if n_workers > 1 and storage is None: # The workers share their trials through a file, deleted afterwards
+    if workers > 1 and storage is None: # The workers share their trials through a file, deleted afterwards
         storage = temp = os.path.join(tempfile.gettempdir(), f'starsim_fit_{sc.uuid().hex}.log')
     study = optuna_study(p, storage)
     if not study.trials: # The initial values, already scored by Problem.start()
         dists = {name:optuna.distributions.FloatDistribution(lo, hi, log=bool(log)) for name,lo,hi,log in zip(p.names, p.lows, p.highs, p.logs)}
         study.add_trial(optuna.trial.create_trial(params=dict(zip(p.names, p.x0)), distributions=dists, value=p.mismatch_before))
     remaining = n_trials - len(study.trials)
-    if remaining > 0 and n_workers > 1:
-        shares = [len(part) for part in np.array_split(np.arange(remaining), n_workers)]
+    if remaining > 0 and workers > 1:
+        shares = [len(part) for part in np.array_split(np.arange(remaining), workers)]
         method = ss.kernels.start_method()
         with ss.kernels.starting_workers(method): # The workers share the cores, so each takes one thread, as in ss.parallel()
-            sc.parallelize(ss.kernels.worker(optuna_worker), iterarg=list(enumerate(shares)), kwargs=dict(problem=p, storage=storage, kwargs=kwargs), ncpus=n_workers, start_method=method)
+            sc.parallelize(ss.kernels.worker(optuna_worker), iterarg=list(enumerate(shares)), kwargs=dict(problem=p, storage=storage, kwargs=kwargs), ncpus=workers, start_method=method)
         study = optuna_study(p, storage)
     elif remaining > 0:
         study.optimize(functools.partial(optuna_trial, p), n_trials=remaining, **kwargs)
@@ -2410,14 +2410,14 @@ def fit_if2(problem, particles=1000, iterations=50, cooling=0.5, sd=0.05, chains
         infection = S >> I @ beta*I
         sir = ss.Disease(infection, I >> R @ ss.days(8), ss.outcome(0.5*infection, name='cases'), init=dict(I=0.01), name='sir')
         pars = dict(total_pop=10_000, unit='day', stop=60, solver='binomial')
-        data = ss.Sim(sir, pars=dict(beta=0.5), rand_seed=2, **pars).run().to_data('cases', resample='week')
+        data = ss.Sim(sir, pars=dict(beta=0.5), rand_seed=2, **pars).run().to_synthetic_data('cases', resample='week')
         sim = ss.Sim(sir, data=data, **pars)
         fit = sim.fit(method='if2', likelihood=dict(cases=ss.poisson()), particles=300, iterations=50)
         print(fit.pars, fit.converged)
         ```
     """
     p = problem
-    filt = ParticleFilter(p.runner.restart(), likelihood=p.likelihood, weights=p.weights)
+    filt = ParticleFilter(p.runner._restart(), likelihood=p.likelihood, weights=p.weights)
     swarm = Swarm(p.runner, p.fitted, p.restart, p.to_x, p.to_z(p.x0), sd=sd, cooling=cooling, n_points=len({row for s in filt.series for row in s.rows}))
     rng = np.random.default_rng(p.rand_seed)
     T = sc.timer()
@@ -2476,19 +2476,19 @@ def fit_pmcmc(problem, scan=None, particles=None, draws=1000, warmup=1000, chain
         infection = S >> I @ beta*I
         sir = ss.Disease(infection, I >> R @ ss.days(8), ss.outcome(0.5*infection, name='cases'), init=dict(I=0.01), name='sir')
         pars = dict(total_pop=10_000, unit='day', stop=60, solver='binomial')
-        data = ss.Sim(sir, pars=dict(beta=0.5), rand_seed=2, **pars).run().to_data('cases', resample='week')
+        data = ss.Sim(sir, pars=dict(beta=0.5), rand_seed=2, **pars).run().to_synthetic_data('cases', resample='week')
         sim = ss.Sim(sir, data=data, **pars)
         fit = sim.fit(method='pmcmc', likelihood=dict(cases=ss.poisson()), draws=200, warmup=200, chains=2, particles=100)
         print(fit.table, fit.samples.head())
         ```
     """
     p = problem
-    filt = ParticleFilter(p.runner.restart(), likelihood=p.likelihood, weights=p.weights)
+    filt = ParticleFilter(p.runner._restart(), likelihood=p.likelihood, weights=p.weights)
     rng = np.random.default_rng(p.rand_seed)
 
     def logpost_pf(z, rng, n):
         x, share = p.to_x(z)
-        p.runner.restart(pars=p.to_pars(x), rand_seed=int(rng.integers(2**31))) # Each with its own start, if the start is drawn
+        p.runner._restart(pars=p.to_pars(x), rand_seed=int(rng.integers(2**31))) # Each with its own start, if the start is drawn
         return filt(n_particles=n, seed=int(rng.integers(2**31))) + p.logprior(x) + p.logjac(x, share)
 
     starts = [p.x0] + list(p.spread(p.scan_size(scan or None)))
@@ -2501,7 +2501,7 @@ def fit_abc_smc(problem, particles=None, generations=8, quantile=0.5, tolerance=
     """
     A posterior without a likelihood, by approximate Bayesian computation (see `abc_smc()`): the runs within a shrinking distance of the data
 
-    For any sim, including agents. The distance is the goodness of fit (`gof=`), and each generation takes many runs of the sim. It has converged
+    For any sim, including agents. The distance is the loss (`loss=`), and each generation takes many runs of the sim. It has converged
     once the tolerance has stopped shrinking.
 
     Args:
@@ -2520,7 +2520,7 @@ def fit_abc_smc(problem, particles=None, generations=8, quantile=0.5, tolerance=
         infection = S >> I @ beta*I
         sir = ss.Disease(infection, I >> R @ ss.days(8), ss.outcome(0.5*infection, name='cases'), init=dict(I=0.01), name='sir')
         pars = dict(total_pop=10_000, unit='day', stop=60, solver='binomial')
-        data = ss.Sim(sir, pars=dict(beta=0.5), rand_seed=2, **pars).run().to_data('cases', resample='week')
+        data = ss.Sim(sir, pars=dict(beta=0.5), rand_seed=2, **pars).run().to_synthetic_data('cases', resample='week')
         fit = ss.Sim(sir, data=data, **pars).fit(method='abc-smc', particles=100, generations=6)
         print(fit.table, fit.samples.head())
         ```
@@ -2546,7 +2546,7 @@ def fit_abc_smc(problem, particles=None, generations=8, quantile=0.5, tolerance=
 
 def fit_nuts(problem, draws=500, warmup=500, chains=4, scan=None):
     """
-    The No-U-Turn sampler, each chain from an optimum found from one of the best points of a scan that are apart: the best, and others nearly as good (so that chains caught in different modes disagree, and none starts in a mode far below the best), on the log-density as one function in JAX if the model allows (see `ss.gradients.Density`), else with Python in the loop (only with `nopython=False`)
+    The No-U-Turn sampler, each chain from an optimum found from one of the best points of a scan that are apart: the best, and others nearly as good (so that chains caught in different modes disagree, and none starts in a mode far below the best), on the log-density as one function in JAX if the model allows (see `ss.gradients.Density`), else with Python in the loop (only with `require_jax=False`)
 
     For a deterministic sim with gradients, with a likelihood for every data series. It gives a posterior (`fit.samples`), and needs JAX and BlackJAX.
 
@@ -2566,7 +2566,7 @@ def fit_nuts(problem, draws=500, warmup=500, chains=4, scan=None):
         infection = S >> I @ beta*I
         sir = ss.Disease(infection, I >> R @ ss.days(8), ss.outcome(0.5*infection, name='cases'), init=dict(I=0.01), name='sir')
         pars = dict(total_pop=10_000, unit='day', stop=60)
-        data = ss.Sim(sir, pars=dict(beta=0.5), rand_seed=2, **pars).run().to_data('cases', resample='week')
+        data = ss.Sim(sir, pars=dict(beta=0.5), rand_seed=2, **pars).run().to_synthetic_data('cases', resample='week')
         sim = ss.Sim(sir, data=data, **pars)
         fit = sim.fit(method='nuts', likelihood=dict(cases=ss.poisson()), draws=200, warmup=200, chains=2)
         print(fit.table, fit.samples.head())
@@ -2820,9 +2820,9 @@ def compare_models(sims, data=None, holdout=0.25, folds=None, **kwargs):
 
     # Fit and predict
     liks = [likelihoods(probe, likelihood=kwargs.get('likelihood')) for probe in probes]
-    use_lik = all(lik is not None for lk in liks for lik in lk.values()) and kwargs.get('gof') is None
+    use_lik = all(lik is not None for lk in liks for lik in lk.values()) and kwargs.get('loss') is None
     if not use_lik: # One measure for every model, even one whose series all have a likelihood
-        kwargs['gof'] = kwargs.get('gof') or 'nae'
+        kwargs['loss'] = kwargs.get('loss') or 'nae'
     fits = sc.obj()
     rows = []
     for label,sim,probe in zip(labels, sims, probes):
@@ -2836,7 +2836,7 @@ def compare_models(sims, data=None, holdout=0.25, folds=None, **kwargs):
                 if use_lik:
                     out.append(-loglik(fit.sim, df=df_part, likelihood=kwargs.get('likelihood'), weights=kwargs.get('weights')))
                 else:
-                    out.append(mismatch(fit.sim, df=df_part, weights=kwargs.get('weights'), gof=kwargs['gof']))
+                    out.append(mismatch(fit.sim, df=df_part, weights=kwargs.get('weights'), loss=kwargs['loss']))
         fits[label] = fold_fits if folds else fold_fits[0]
         row = dict(model=label, fitted_pars=len(fold_fits[0].pars), fit_error=np.mean(fit_errors), prediction_error=np.mean(errors))
         if folds:
@@ -2851,6 +2851,6 @@ def compare_models(sims, data=None, holdout=0.25, folds=None, **kwargs):
     if folds and len(table) > 1:
         diff = table['prediction_error'].iloc[1] - table['prediction_error'].iloc[0]
         clear = diff > table['spread'].iloc[:2].max()
-    measure = 'the negative log predictive density' if use_lik else 'the normalized absolute error' if kwargs['gof'] == 'nae' else f'the goodness of fit ({kwargs["gof"]})'
+    measure = 'the negative log predictive density' if use_lik else 'the normalized absolute error' if kwargs['loss'] == 'nae' else f'the loss ({kwargs["loss"]})'
     comp = ModelComparison(fits=fits, table=table, holdout=desc, measure=measure, splits=splits, clear=clear)
     return comp

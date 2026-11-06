@@ -42,18 +42,18 @@ def test_events():
     for on, flow in [(lambda d: (d.E | d.I).enter, 'infection'), (lambda d: d.outcome.to(d.D), None)]:
         d, infected = make_seir()
         event = on(d)
-        vx = ss.vaccinate(ss.Vaccine(efficacy=0), where=event, name='vx')
+        vx = ss.vaccinate(ss.Vaccine(efficacy=0), on=event, name='vx')
         res = ss.Sim(d, interventions=vx, n_agents=5000, unit='day', stop=60, **kw).run().results
         target = res.d[flow][:-1].sum() if flow else res.d.D[-1] # Events in a step are acted on by the next, so not those of the last (D[-1] is the state at the last step's start)
         assert np.isclose(res.vx.delivered.sum(), target, rtol=0.02), f'{event}: {res.vx.delivered.sum()} delivered, {target} expected'
 
     # A branch is an event under a compartmental solver too; entering a state is not, yet
     d, infected = make_seir()
-    ode = ss.Sim(d, interventions=ss.vaccinate(ss.Vaccine(efficacy=0), where=d.outcome.to(d.D), name='vx'), solver='ode', total_pop=5000, unit='day', stop=60, **kw).run().results
+    ode = ss.Sim(d, interventions=ss.vaccinate(ss.Vaccine(efficacy=0), on=d.outcome.to(d.D), name='vx'), solver='ode', total_pop=5000, unit='day', stop=60, **kw).run().results
     assert np.isclose(ode.vx.delivered.sum(), 0.1*ode.d.outcome[:-1].sum(), rtol=0.01)
     d, infected = make_seir()
     with pytest.raises(ss.CapabilityError):
-        ss.Sim(d, interventions=ss.vaccinate(ss.Vaccine(efficacy=0), where=infected.enter), solver='ode', **kw).run()
+        ss.Sim(d, interventions=ss.vaccinate(ss.Vaccine(efficacy=0), on=infected.enter), solver='ode', **kw).run()
     with pytest.raises(ValueError):
         d.outcome.to(d.E)
     return sim
@@ -61,7 +61,7 @@ def test_events():
 
 @sc.timer()
 def test_syphilis_latent():
-    sc.heading('Testing syphilis latent infectiousness decays with time since latent onset, (EL | LL).time')
+    sc.heading('Testing syphilis latent infectiousness decays with time since latent onset, (EL | LL).time_in')
     hl = 1.0 # Years
     def make(form, ll=True):
         S, E, EL, LL = ss.states('S E EL LL')
@@ -76,7 +76,7 @@ def test_syphilis_latent():
                 return np.exp(-np.log(2)/hl*(sim.ti - 1 - s.ti_EL.raw)*sim.t.dt.years) # The engine's own times (NaN if never in EL), from the start of the step, as the clock reads them; ti_EL itself reads as the step of entering, a step later for a move at a step's end
             amount = latent_decay
         else:
-            amount = 0.5**((EL | LL).time/ss.years(hl))
+            amount = 0.5**((EL | LL).time_in/ss.years(hl))
         decay = ss.modify(syph.rel_trans, multiply=amount, where=EL | LL, name='latent_decay')
         return ss.Sim(syph, connectors=decay, n_agents=5000, start=2000, stop=2010, dt=ss.months(1), unit='year', **kw)
     old, new = [make(form, ll=False).run().results.syph for form in ['old', 'new']] # With no seeds in LL, the workaround is right, and the same
@@ -89,7 +89,7 @@ def test_syphilis_latent():
     assert not np.isnan(eff).any() and eff.min() < 0.3
     late = s.LL.uids[s.ti_EL[s.LL.uids] > 0]
     latent = s.states.EL | s.states.LL
-    assert np.allclose(s.engine.eval_for(latent.time, late), (s.ti - 1 - s.ti_EL.raw[late])/12) # From latent onset to the start of the last step, as the workaround meant
+    assert np.allclose(s.engine.eval_for(latent.time_in, late), (s.ti - 1 - s.ti_EL.raw[late])/12) # From latent onset to the start of the last step, as the workaround meant
     with pytest.raises(ValueError, match='is NaN for some of the people it applies to'): # The workaround with seeds in LL is NaN for them
         make('old').run()
     return sim
@@ -97,11 +97,11 @@ def test_syphilis_latent():
 
 class BV(ss.Disease):
     CST1, CST4, P = ss.states('CST1 CST4 P')
-    first = 'CST1'
+    default_state = 'CST1'
     recur0, recur_tau = ss.par(ss.permonth(0.06)), ss.par(ss.months(3))
     onset  = CST1 >> CST4 @ ss.permonth(0.05)
     tx     = CST4 >> P @ ss.months(2) # Treated after two months, on average: a dwell time, which ends in the state-change row
-    recur  = ss.Transition(P, CST4, rate=recur0*np.exp(-P.time/recur_tau)) # Largest on entry
+    recur  = ss.Transition(P, CST4, rate=recur0*np.exp(-P.time_in/recur_tau)) # Largest on entry
     settle = ss.Transition(P, CST1, dur=ss.months(6))
 
 
@@ -121,7 +121,7 @@ def test_keep_time():
             S = ss.State()
             I = ss.State(keep_time=keep)
             inf = S >> I @ ss.perday(0.05)
-            duration = I.time # Not a result
+            duration = I.time_in # Not a result
         return C(init_prev=0)
     sim = ss.Sim(diseases=make(True), n_agents=200, dur=ss.days(20), dt=ss.days(1), **kw).run()
     c = sim.diseases.c

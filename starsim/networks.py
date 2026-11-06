@@ -1,7 +1,7 @@
 """
 Networks and mixing pools: who meets whom, and so who can infect whom
 
-A network holds the contacts (edges) between people, over which a disease spreads. Mixing pools (`ss.MixingPool`, `ss.MixingPools`) and contact matrices (`ss.contacts()`) spread it between groups instead, without edges. These exist so that a model's contacts are separate from its diseases, and one network can carry several diseases. In a compartmental run, a network is replaced by what it implies: contact rates, a matrix, or a model of partner change.
+A network holds the contacts (edges) between people, over which a disease spreads. Mixing pools (`ss.MixingPool`, `ss.networks.MixingPools`) and contact matrices (`ss.contacts()`) spread it between groups instead, without edges. These exist so that a model's contacts are separate from its diseases, and one network can carry several diseases. In a compartmental run, a network is replaced by what it implies: contact rates, a matrix, or a model of partner change.
 
 Used with: agents and compartments; declared and coded modules
 """
@@ -147,7 +147,7 @@ def people_mask(sim, cond):
     Who a condition over people holds for, as a boolean per agent (indexed by UID)
 
     Args:
-        cond (Cond/str/func): a condition (`ss.ppl.pwid`), the name of a level of a stratification or of a boolean property of people (`'fsw'`), or a function of the sim
+        cond (Cond/str/func): a condition (`ss.person.pwid`), the name of a level of a stratification or of a boolean property of people (`'fsw'`), or a function of the sim
     """
     if isinstance(cond, str):
         strat = next((strat for strat in sim.groups.strats if cond in strat.labels), None)
@@ -272,7 +272,7 @@ class Network(Route):
 
     #%% Sides, directions, and acts
 
-    sides = None # The kinds of people at the two ends of its edges: a dict of a short label to a condition over people (e.g. dict(m=~ss.ppl.female, f=ss.ppl.female)), from which its directions follow
+    sides = None # The kinds of people at the two ends of its edges: a dict of a short label to a condition over people (e.g. dict(m=~ss.person.female, f=ss.person.female)), from which its directions follow
     same_side = False # Whether an edge can join two people on the same side (e.g. partnerships between anyone, by sex)
     one_way = False # Whether it transmits only from p1 to p2 (mother to child), whose sides are then where they are in an edge
 
@@ -336,7 +336,7 @@ class Network(Route):
         """
         The edges that transmit in a step, in each direction the network transmits in (p1 to p2, then p2 to p1 unless it is one way)
 
-        An edge from `src` to `trg` transmits with probability `rel_trans[src]·rel_sus[trg]·beta`, or `prob()` if it is given.
+        An edge from `source` to `target` transmits with probability `rel_trans[source]·rel_sus[target]·beta`, or `prob()` if it is given.
         Random numbers are drawn only for the edges that can transmit: with CRN, each edge's number depends only on its source
         and target, so this gives the same result as drawing one for every edge. The beta is worked out only for the edges from
         someone infectious to someone susceptible, which are found for both directions in one pass over the edges, or, once the
@@ -361,23 +361,23 @@ class Network(Route):
         edges = self.edges
         found = ss.solvers.backends.passes.candidates(edges.p1, edges.p2, rel_trans, rel_sus, two_way=not self.one_way, index=self.edge_index()) # Mother-to-child networks transmit one way
         for d,inds in enumerate(found):
-            src, trg = [ends[inds] for ends in self.ends(d)]
-            beta = edge_beta(d, inds, src, trg)
+            source, target = [ends[inds] for ends in self.ends(d)]
+            beta = edge_beta(d, inds, source, target)
             if beta is None:
                 continue
             beta = np.asarray(beta, dtype=ss_float) if np.ndim(beta) == 0 else beta # One value for all edges
-            can = ss.solvers.backends.passes.can_transmit(src, trg, rel_trans, rel_sus, beta) # Of those, the ones with a chance above 0, exactly as over every edge
+            can = ss.solvers.backends.passes.can_transmit(source, target, rel_trans, rel_sus, beta) # Of those, the ones with a chance above 0, exactly as over every edge
             if len(can) < len(inds):
-                inds, src, trg = inds[can], src[can], trg[can]
+                inds, source, target = inds[can], source[can], target[can]
                 beta = beta[can] if np.ndim(beta) else beta
-            rvs = rng.rvs(src, trg) # Called even if empty, to keep CRN draws in sync
+            rvs = rng.rvs(source, target) # Called even if empty, to keep CRN draws in sync
             if prob is None:
                 beta = np.broadcast_to(beta, len(inds)) if np.ndim(beta) == 0 else beta
-                src, trg = nb_transmit(np.asarray(src), np.asarray(trg), rel_trans, rel_sus, beta, rvs)
+                source, target = nb_transmit(np.asarray(source), np.asarray(target), rel_trans, rel_sus, beta, rvs)
             else:
-                hit = rvs < (beta if prob is True else prob(d, inds, src, trg))
-                src, trg = np.asarray(src)[hit], np.asarray(trg)[hit]
-            out.append((src.view(ss.uids), trg.view(ss.uids))) # View (no copy): the kernel's output is its own int64 array
+                hit = rvs < (beta if prob is True else prob(d, inds, source, target))
+                source, target = np.asarray(source)[hit], np.asarray(target)[hit]
+            out.append((source.view(ss.uids), target.view(ss.uids))) # View (no copy): the kernel's output is its own int64 array
         return out
 
     def edge_index(self, now=False):
@@ -512,15 +512,12 @@ class Network(Route):
                     self.edges[key] = ss.uids(arr)
         return
 
-    def validate(self, force=True):
+    def validate(self):
         """
         Check the integrity of the network: right types, right lengths.
 
         If dtype is incorrect, try to convert automatically; if length is incorrect,
         do not.
-
-        Args:
-            force (bool): not used
         """
         if not len(self.edges): # No edges have been added yet
             return
@@ -538,17 +535,17 @@ class Network(Route):
         self.validate_uids()
         return
 
-    def eligible(self, age_range=None):
+    def eligible(self, where=None):
         """
-        Return the agents who can form edges: alive, born, and (optionally) within an age range
+        Return the agents who can form edges: alive, born, and (optionally) those a condition holds for
 
         Args:
-            age_range (list): if supplied, only include agents with `age_range[0] <= age < age_range[1]`
+            where (Cond/str/func): if given, only these people: a condition over people (e.g. `(ss.person.age >= 18) & (ss.person.age < 65)`), as for `ss.DegreeNet`
         """
         people = self.sim.people
         eligible = people.alive & (people.age > 0)
-        if age_range is not None:
-            eligible = eligible & (people.age >= age_range[0]) & (people.age < age_range[1])
+        if where is not None:
+            eligible = eligible & people_mask(self.sim, where)
         return eligible
 
     def get_inds(self, inds, remove=False):
@@ -862,7 +859,7 @@ class DynamicNetwork(Network):
     def remember(self, p1, p2):
         """ With memory=: keep the partnerships that end now, and forget those that ended longer ago than it """
         m, sim, ti = self.pars.memory, self.sim, self.t.ti
-        steps = (ss.solvers.convert(m, sim.unit_base) if isinstance(m, ss.TimePar) else m)/self.t.dt.to(sim.unit_base).value
+        steps = (ss.solvers.convert(m, sim.unit_base) if isinstance(m, ss.time.TimePar) else m)/self.t.dt.to(sim.unit_base).value
         h = self.history if self.history is not None else sc.obj(p1=p1[:0], p2=p2[:0], ti=np.zeros(0, dtype=np.int32))
         keep = h.ti > ti - steps
         self.history = sc.obj(p1=np.concatenate([h.p1[keep], p1]), p2=np.concatenate([h.p2[keep], p2]), ti=np.concatenate([h.ti[keep], np.full(len(p1), ti, dtype=np.int32)]))
@@ -887,18 +884,18 @@ def check_acts(net, acts):
     partnership; a bare number, or a count per step drawn once, would depend on the step, so is an error
     """
     name = net.name or type(net).__name__.lower()
-    example = 'e.g. ss.freqperweek(2), or ss.lognorm_ex(ss.freqperyear(80), ss.freqperyear(30)) for a rate that varies between partnerships'
+    example = 'e.g. ss.freqperweek(2), or ss.lognormal(ss.freqperyear(80), ss.freqperyear(30)) for a rate that varies between partnerships'
     if acts is None or isinstance(acts, ss.freq):
         return
-    rates = [acts] if isinstance(acts, ss.Rate) else []
+    rates = [acts] if isinstance(acts, ss.time.Rate) else []
     if isinstance(acts, ss.Dist):
-        rates = [v for v in acts.pars.values() if isinstance(v, ss.Rate) and not isinstance(v, ss.freq)]
+        rates = [v for v in acts.pars.values() if isinstance(v, ss.time.Rate) and not isinstance(v, ss.freq)]
     if rates: # E.g. ss.peryear(80), which as agents would be the chance of an act in a step, not a number of them
         raise ValueError(f'acts= of "{name}" is a number of acts per unit time, not a hazard or probability per unit time (ss.{rates[0]!r}): give a frequency, {example}')
     elif sc.isnumber(acts):
         raise ValueError(f'acts= of "{name}" is a number of acts per unit time in each partnership; a bare number ({acts}) would be acts in a step, which depends on the step. Give a rate, {example}')
     elif isinstance(acts, ss.Dist):
-        timed = acts.unit is not None or any(isinstance(v, ss.TimePar) for v in acts.pars.values())
+        timed = acts.unit is not None or any(isinstance(v, ss.time.TimePar) for v in acts.pars.values())
         if not timed:
             raise ValueError(f'acts= of "{name}" is a number of acts per unit time in each partnership, so a distribution of them needs its parameters as rates ({acts} has none), {example}')
         if isinstance(acts, (ss.poisson, ss.nbinom, ss.binom, ss.randint, ss.bernoulli)):
@@ -945,9 +942,9 @@ class RandomNet(DynamicNetwork):
 
     Args:
         n_contacts (int/`ss.Dist`): the average number of (bidirectional) contacts between agents
-        dur (int/`ss.dur`): the duration of each contact
-        beta (float): the default beta value for each edge
-        age_range (list): if supplied, only agents with `age_range[0] <= age < age_range[1]` are included
+        dur (int/`ss.Duration`): the duration of each contact
+        beta (float): the default beta value for each edge (the weight of each contact)
+        where (Cond/str/func): if given, who takes part: a condition over people (e.g. `(ss.person.age >= 18) & (ss.person.age < 65)`), as for `ss.DegreeNet`; nobody else is in the network
         dynamic (bool): if True (default), edges are replaced once their duration ends; if False, edges are created once and never change
             (so agents who join later, e.g. newborns, are not added)
         method (str): how the other end of each contact is drawn: 'fast' (the default), 'exact', 'uniform', or 'safe' (see above)
@@ -962,19 +959,19 @@ class RandomNet(DynamicNetwork):
     Example:
         ```python
         # Static network with Poisson-distributed contacts among adults, as in Covasim v3
-        net = ss.RandomNet(n_contacts=ss.poisson(20), age_range=[18, 65], dynamic=False, method='uniform')
+        net = ss.RandomNet(n_contacts=ss.poisson(20), where=(ss.person.age >= 18) & (ss.person.age < 65), dynamic=False, method='uniform')
         ```
     """
     methods = ['fast', 'exact', 'uniform', 'safe']
 
-    def __init__(self, pars=None, n_contacts=_, dur=_, beta=_, age_range=_, dynamic=_, method=_, remove_self_loops=_, **kwargs):
+    def __init__(self, pars=None, n_contacts=_, dur=_, beta=_, where=_, dynamic=_, method=_, remove_self_loops=_, **kwargs):
         """ Initialize """
         super().__init__()
         self.define_pars(
             n_contacts = ss.constant(10),
             dur = ss.years(0), # Note; network edge durations are required to have the same unit as the network
             beta = 1.0,
-            age_range = None,
+            where = None,
             dynamic = True,
             method = 'fast',
             remove_self_loops = False,
@@ -1129,7 +1126,7 @@ class RandomNet(DynamicNetwork):
         None. Only with common random numbers, since without them a draw not made would change the draws after it.
         """
         nc = self.pars.n_contacts
-        v = nc.pars.v if isinstance(nc, ss.constant) and nc.unit is None else None
+        v = nc.pars.value if isinstance(nc, ss.constant) and nc.unit is None else None
         if not ss.options.crn or not sc.isnumber(v) or not float(v).is_integer() or not n or not v:
             return None
         orig = v*n
@@ -1141,7 +1138,7 @@ class RandomNet(DynamicNetwork):
         """ Generate edges """
         p = self.pars
         people = self.sim.people
-        uids = self.eligible(p.age_range).uids
+        uids = self.eligible(p.where).uids
         current = len(self)
         n_conn = self.same_contacts(len(uids), current)
         if n_conn is None:
@@ -1220,9 +1217,9 @@ class DegreeNet(DynamicNetwork):
 
     Args:
         n_contacts (float/`ss.Dist`/`ss.by`/dict): the number of partners a person has at a time: a distribution over whole numbers (e.g. `ss.poisson(0.7)`), or a number, which is the mean of a Poisson; or a number for each level of a property of people (`ss.by(risk=[0.4, 1.6])`), as EpiModel's nodefactor; or one for each group of `between`, e.g. `dict(fsw=3, client=0.5)` (each partnership has one of each, so these should give the two groups about as many partners in all); or None, for at most one partner, pairing people who have none on every step
-        dur (float/`ss.dur`/`ss.Dist`): how long partnerships last: a mean (they end at a constant rate), or a distribution; a bare number is in the sim's unit
+        dur (float/`ss.Duration`/`ss.Dist`): how long partnerships last: a mean (they end at a constant rate), or a distribution; a bare number is in the sim's unit
         acts (rate/`ss.Dist`): if given, the number of acts per unit time in each partnership: a rate such as `ss.freqperweek(2)`, or a distribution of rates drawn once for each partnership; a disease's beta is then per act (see `ss.peract`)
-        where (Cond/str/func): if given, who takes part: a condition over people (e.g. `ss.ppl.pwid`), as for `ss.modify()`; nobody else is in the network
+        where (Cond/str/func): if given, who takes part: a condition over people (e.g. `ss.person.pwid`), as for `ss.modify()`; nobody else is in the network
         between (str/tuple): if given, who partnerships are between: `'mf'`, a man and a woman, so its directions are `m2f` and `f2m` and a disease's beta on it is `ss.peract(m2f=..., f2m=...)`, or one value for both; `'mm'`, two men, with one beta; or a pair of groups, each the name of a boolean property of people or of a level of a stratification, e.g. `('fsw', 'client')`, whose directions are `fsw2client` and `client2fsw` (nobody can be in both)
         concurrency (float): if given, the share of people with two or more partners at once; the distribution of `n_contacts` is adjusted to give it, keeping its mean
         max_contacts (int): if given, nobody has more partners than this at once
@@ -1244,7 +1241,7 @@ class DegreeNet(DynamicNetwork):
         net = ss.DegreeNet(n_contacts=ss.by(risk=[0.4, 1.6]), dur=50, match=dict(risk=0.8))
 
         # Needle sharing among people who inject drugs (a boolean property of people), with 20 injections a month in each partnership
-        needles = ss.DegreeNet(name='needles', where=ss.ppl.pwid, n_contacts=2, dur=ss.months(6), acts=ss.freqpermonth(20))
+        needles = ss.DegreeNet(name='needles', where=ss.person.pwid, n_contacts=2, dur=ss.months(6), acts=ss.freqpermonth(20))
 
         # Sex work, between female sex workers and their clients (boolean properties of people)
         sw = ss.DegreeNet(name='sw', between=('fsw', 'client'), n_contacts=dict(fsw=5, client=0.5), dur=ss.months(1), acts=ss.freqperweek(1))
@@ -1343,14 +1340,14 @@ class DegreeNet(DynamicNetwork):
             return
         p = self.pars
         check_acts(self, p.acts)
-        if isinstance(p.acts, ss.TimePar):
+        if isinstance(p.acts, ss.time.TimePar):
             self.acts_per_step = ss.solvers.convert(p.acts, sim.unit_base)*self.t.dt.to(sim.unit_base).value
         if isinstance(p.dur, ss.Dist):
             self.mean_dur = None # Only for partnerships that end at a constant rate
             mean = ss.transitions.dwell_stats(p.dur, lambda v: ss.solvers.convert(v, sim.unit_base))[0]
             self.mean_steps = mean/self.t.dt.to(sim.unit_base).value
         else:
-            dur = ss.solvers.convert(p.dur, sim.unit_base) if isinstance(p.dur, ss.TimePar) else p.dur
+            dur = ss.solvers.convert(p.dur, sim.unit_base) if isinstance(p.dur, ss.time.TimePar) else p.dur
             self.mean_dur = self.mean_steps = dur/self.t.dt.to(sim.unit_base).value # In steps
             if self.mean_dur < 1:
                 errormsg = f'Partnerships of "{self.name}" last {self.mean_dur:n} steps on average; they need to last at least one'
@@ -1397,7 +1394,7 @@ class DegreeNet(DynamicNetwork):
             k = np.arange(sc.ifelse(top, int(mean + 10*np.sqrt(mean) + 10)) + 1)
             base = ss.dists.sps.poisson.pmf(k, mean)
         elif isinstance(n_contacts, ss.constant):
-            mean = int(pars['v'])
+            mean = int(pars['value'])
             k = np.arange(sc.ifelse(top, mean) + 1)
             base = (k == mean).astype(float)
         else: # Any other distribution, by sampling a copy of it
@@ -1756,7 +1753,7 @@ class SexualNet(DegreeNet):
     a probability per act (see `ss.peract`), and the share of them in which a condom is used
     (`condoms`, 0 unless set, e.g. by a subclass in `add_pairs()`), which a modifier of the
     transmission on the network reads, e.g.
-    `ss.modify(hiv.infection, efficacy=0.8, share=lambda net: net.edges.condoms, route='sexualnet')`.
+    `ss.modify(hiv.infection, efficacy=0.8, share=lambda net: net.edges.condoms, network='sexualnet')`.
 
     A subclass that overrides `step()` forms its own partnerships: the base starts none for
     it, and has none of the parameters for forming them, only `between`.
@@ -1768,7 +1765,7 @@ class SexualNet(DegreeNet):
 
     Args:
         between (str/tuple): who partnerships are between: `'mf'` (the default), a man and a woman, so its directions are `m2f` and `f2m` and a disease's beta on it is `ss.peract(m2f=..., f2m=...)`, or one value for both; `'mm'`, two men (men who have sex with men), with one beta; or a pair of groups, each the name of a boolean property of people or of a level of a stratification, e.g. `('fsw', 'client')`, whose directions are `fsw2client` and `client2fsw` (nobody can be in both)
-        dur (`ss.Dist`/`ss.dur`): the duration of each partnership; can vary by age, year, and individual pair (default: lognormal, mean 15 years, standard deviation 1 year); a single duration, e.g. `ss.months(6)`, is a mean, and partnerships end at a constant rate (an exponential); give a distribution for any other spread, e.g. `ss.lognorm_ex(mean=ss.months(6), std=ss.months(3))`
+        dur (`ss.Dist`/`ss.Duration`): the duration of each partnership; can vary by age, year, and individual pair (default: lognormal, mean 15 years, standard deviation 1 year); a single duration, e.g. `ss.months(6)`, is a mean, and partnerships end at a constant rate (an exponential); give a distribution for any other spread, e.g. `ss.lognormal(mean=ss.months(6), std=ss.months(3))`
         debut (`ss.Dist`): the age of debut; can vary by using callable parameter values
         acts (`ss.freq`/`ss.Dist`): the number of acts per unit time in each partnership: a frequency (e.g. `ss.freqperweek(2)`; a hazard such as `ss.peryear(80)` is an error), or a distribution of them drawn once for each partnership (default: lognormal, mean 80 a year, standard deviation 30)
         participation (`ss.Dist`): whether each person takes part, drawn at their debut; can vary by individual properties (age, sex, ...) using callable parameter values
@@ -1782,8 +1779,8 @@ class SexualNet(DegreeNet):
     Examples:
         ```python
         net = ss.SexualNet() # Men and women, at most one partner at a time
-        msm = ss.SexualNet(name='msm', between='mm', participation=0.1, dur=ss.lognorm_ex(mean=ss.years(2), std=ss.years(1)))
-        net = ss.SexualNet(n_contacts=ss.poisson(0.7), dur=ss.lognorm_ex(mean=ss.years(2), std=ss.years(1)), concurrency=0.1, match=dict(risk=0.8))
+        msm = ss.SexualNet(name='msm', between='mm', participation=0.1, dur=ss.lognormal(mean=ss.years(2), std=ss.years(1)))
+        net = ss.SexualNet(n_contacts=ss.poisson(0.7), dur=ss.lognormal(mean=ss.years(2), std=ss.years(1)), concurrency=0.1, match=dict(risk=0.8))
         sw = ss.SexualNet(name='sw', between=('fsw', 'client'), n_contacts=dict(fsw=5, client=0.5), dur=ss.months(1)) # With boolean attributes fsw and client
         ```
     """
@@ -1793,14 +1790,14 @@ class SexualNet(DegreeNet):
         if not self.forms_own: # A subclass that forms its own partnerships uses none of these
             self.define_pars(
                 n_contacts = None,
-                dur = ss.lognorm_ex(mean=ss.years(15), std=ss.years(1)),  # Can vary by age, year, and individual pair
-                acts = ss.lognorm_ex(ss.freqperyear(80), ss.freqperyear(30)), # Acts per unit time, drawn once for each partnership
+                dur = ss.lognormal(mean=ss.years(15), std=ss.years(1)),  # Can vary by age, year, and individual pair
+                acts = ss.lognormal(ss.freqperyear(80), ss.freqperyear(30)), # Acts per unit time, drawn once for each partnership
                 debut = ss.normal(loc=16),  # Age of debut can vary by using callable parameter values
                 participation = ss.bernoulli(p=0.9),  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
             )
-        if not self.forms_own and isinstance(dur, ss.dur): # A single duration is a mean, and partnerships end at a constant rate (not the default's standard deviation of a year)
+        if not self.forms_own and isinstance(dur, ss.Duration): # A single duration is a mean, and partnerships end at a constant rate (not the default's standard deviation of a year)
             dur = ss.expon(scale=dur) # Given as the distribution, rather than as the mean of the default
-        elif not self.forms_own and isinstance((pars or {}).get('dur'), ss.dur):
+        elif not self.forms_own and isinstance((pars or {}).get('dur'), ss.Duration):
             pars = dict(pars) | dict(dur=ss.expon(scale=pars['dur']))
         self.update_pars(pars, **kwargs)
         given = dur if dur is not None else (pars or {}).get('dur')
@@ -1808,7 +1805,7 @@ class SexualNet(DegreeNet):
             self.pars.dur = ss.expon(scale=self.pars.dur.pars.mean) # The mean set by update_pars()
         self.set_between()
         self.meta.acts = ss_float # Acts in each partnership in a step: its acts per unit time times the step, a real number
-        self.meta.condoms = ss_float # The share of acts with a condom, e.g. for ss.modify(..., share=lambda net: net.edges.condoms, route=)
+        self.meta.condoms = ss_float # The share of acts with a condom, e.g. for ss.modify(..., share=lambda net: net.edges.condoms, network=)
         self.edge_defaults['condoms'] = 0.0
         self.debut = ss.FloatArr('debut') # Drawn for each person on their first step in the sim, whether born, arrived, or there at the start
         self.decided = ss.BoolArr('decided') # Whether a person's participation has been drawn, which happens at their debut, so a probability by age is read at that age
@@ -1894,17 +1891,6 @@ class PrenatalNet(Network):
         return n
 
 
-class MaternalNet(PrenatalNet):
-    """
-    Mother-to-child network, for when prenatal and postnatal transmission need not be told apart
-
-    For now the same as `ss.PrenatalNet`, but named `maternalnet`.
-
-    Note: CRN safe.
-    """
-    pass
-
-
 class PostnatalNet(DynamicNetwork):
     """
     Network to track postnatal processes
@@ -1924,7 +1910,7 @@ class PostnatalNet(DynamicNetwork):
 
     Args:
         pars (dict): passed to `ss.DynamicNetwork`
-        dur (ss.dur/ss.Dist): edge duration (postpartum period); if None, edges persist until agents die
+        dur (ss.Duration/ss.Dist): edge duration (postpartum period); if None, edges persist until agents die
         **kwargs (dict): merged with `pars`
     """
 
@@ -2000,38 +1986,6 @@ class BreastfeedingNet(PostnatalNet):
 
 
 
-class AgeGroup(sc.prettyobj):
-    """ A simple age-based filter that returns uids of agents that match the criteria
-
-    Args:
-        low (float): the lower age, inclusive
-        high (float): the upper age, exclusive (None for no upper limit)
-        do_cache (bool): whether to reuse the UIDs within a step
-    """
-    def __init__(self, low, high, do_cache=True):
-        self.low = low
-        self.high = high
-
-        self.do_cache = do_cache
-        self.uids = None # Cached
-        self.ti_cache = -1
-
-        self.name = repr(self)
-        return
-
-    def __call__(self, sim):
-        if (not self.do_cache) or (self.ti_cache != sim.ti):
-            in_group = sim.people.age >= self.low
-            if self.high is not None:
-                in_group = in_group & (sim.people.age < self.high)
-            self.uids = ss.uids(in_group)
-            self.ti_cache = sim.ti
-        return self.uids
-
-    def __repr__(self):
-        return f'age({self.low}-{self.high})'
-
-
 class MixingPools(Route):
     """
     A container for creating a rectangular array of MixingPool instances
@@ -2040,8 +1994,8 @@ class MixingPools(Route):
 
     Args:
         diseases (str): the diseases that transmit via these mixing pools
-        src (inds): source agents; can be AgeGroup(), ss.uids(), or lambda(sim); None indicates all alive agents
-        dst (inds): destination agents; as above
+        source (Cond/uids/func): the infectious side: a condition over people (e.g. `ss.person.age < 15`), UIDs, or a function of the sim; None for everyone alive
+        target (Cond/uids/func): the susceptible side; as above
         beta (float): overall transmission via these mixing pools, for a disease written as code (a declared disease's beta is in its transmission)
         n_contacts (array): the number of contacts of each destination group with each source group: a number is the same for everyone in the group, and a `ss.Dist` is drawn once for each person in the group, which is much slower (a state for each pair of groups, and a draw for each pair for each new person)
         pars (dict): the same parameters, as a dict
@@ -2049,22 +2003,22 @@ class MixingPools(Route):
     Examples:
         ```python
         import starsim as ss
-        mps = ss.MixingPools(
+        mps = ss.networks.MixingPools(
             diseases = 'sis',
-            src = {'0-15': ss.AgeGroup(0, 15), '15+': ss.AgeGroup(15, None)},
-            dst = {'0-15': ss.AgeGroup(0, 15), '15+': ss.AgeGroup(15, None)},
+            source = {'0-15': ss.person.age < 15, '15+': ss.person.age >= 15},
+            target = {'0-15': ss.person.age < 15, '15+': ss.person.age >= 15},
             n_contacts = [[2.4, 0.49], [0.91, 0.16]],  # Illustrative contact matrix
         )
         sim = ss.Sim(diseases='sis', networks=mps).run()
         sim.plot()
         ```
     """
-    def __init__(self, pars=None, diseases=_, src=_, dst=_, beta=_, n_contacts=_, **kwargs):
+    def __init__(self, pars=None, diseases=_, source=_, target=_, beta=_, n_contacts=_, **kwargs):
         super().__init__()
         self.define_pars(
             diseases = None,
-            src = None,
-            dst = None,
+            source = None,
+            target = None,
             beta = 1.0,
             n_contacts = None,
         )
@@ -2072,8 +2026,8 @@ class MixingPools(Route):
         self.validate_pars()
         self.pools = [] # A pool for each pair of groups, only if contacts differ between people or beta is not a number: see plain_contacts()
         self.matrix = None # Otherwise, the number of contacts between groups, [source, destination]
-        self.src_uids = None # With a matrix: the people in each source group and each destination group, from step()
-        self.dst_uids = None
+        self.source_uids = None # With a matrix: the people in each source group and each destination group, from step()
+        self.target_uids = None
         self.diseases = None
         self.edges = None # The lower edges of the matrix's own age bands (from ss.contacts()), whose exposure agents work out by band: see band_exposure()
         self.dims = None # The matrices over the model's own dimensions (from ss.contacts())
@@ -2100,25 +2054,25 @@ class MixingPools(Route):
         except: return 0
 
     def validate_pars(self):
-        """ Check that src and dst have correct types, and contacts is the correct shape """
+        """ Check that source and target have correct types, and contacts is the correct shape """
         p = self.pars
 
-        # Validate src and dst
-        if not isinstance(p.src, dict):
-            errormsg = f'src must be provided as a dictionary, not {type(self.pars.src)}'
+        # Validate source and target
+        if not isinstance(p.source, dict):
+            errormsg = f'source= of ss.networks.MixingPools is a dict of groups, not {type(p.source)}'
             raise TypeError(errormsg)
-        if not isinstance(p.dst, dict):
-            errormsg = f'dst must be provided as a dictionary, not {type(p.dst)}'
+        if not isinstance(p.target, dict):
+            errormsg = f'target= of ss.networks.MixingPools is a dict of groups, not {type(p.target)}'
             raise TypeError(errormsg)
-        p.src = sc.obj(p.src)
-        p.dst = sc.obj(p.dst)
+        p.source = sc.obj(p.source)
+        p.target = sc.obj(p.target)
 
         # Validate the n_contacts
         if p.n_contacts is None:
-            p.n_contacts = np.ones((len(p.src), len(p.dst)))
+            p.n_contacts = np.ones((len(p.source), len(p.target)))
         p.n_contacts = np.array(p.n_contacts)
         actual = p.n_contacts.shape
-        expected = (len(p.src), len(p.dst))
+        expected = (len(p.source), len(p.target))
         if actual != expected:
             errormsg = f'The number of source and destination groups must match the number of rows and columns in the mixing matrix, but {actual} != {expected}.'
             raise ValueError(errormsg)
@@ -2143,7 +2097,7 @@ class MixingPools(Route):
     def plain_contacts(self):
         """ The contacts as an array of numbers, if each is the same for everyone in its group and beta is a number; else None """
         p = self.pars
-        values = [n.pars.v if isinstance(n, ss.constant) else n for n in p.n_contacts.flat]
+        values = [n.pars.value if isinstance(n, ss.constant) else n for n in p.n_contacts.flat]
         if sc.isnumber(p.beta) and all(sc.isnumber(v) for v in values):
             return np.array(values, dtype=float).reshape(p.n_contacts.shape)
         return None
@@ -2164,13 +2118,13 @@ class MixingPools(Route):
         self.matrix = self.plain_contacts()
         if self.matrix is not None: # Everyone in a group has the same contacts, so one pass over the groups does the work of a pool for each pair
             return
-        for i,sk,src in p.src.enumitems():
-            for j,dk,dst in p.dst.enumitems():
+        for i,sk,source in p.source.enumitems():
+            for j,dk,target in p.target.enumitems():
                 n_contacts = p.n_contacts[i,j]
                 if sc.isnumber(n_contacts): # If it's a number, convert to a distribution
                     n_contacts = ss.poisson(lam=n_contacts)
                 name = f'{self.name}:{sk}->{dk}' # Named after the whole, so that two of them (e.g. home and school contacts) can be in one sim
-                mp = MixingPool(name=name, diseases=p.diseases, beta=p.beta, n_contacts=n_contacts, src=src, dst=dst, **time_args)
+                mp = MixingPool(name=name, diseases=p.diseases, beta=p.beta, n_contacts=n_contacts, source=source, target=target, **time_args)
                 mp.init_pre(sim) # Initialize the pool
                 self.pools.append(mp)
         return
@@ -2206,9 +2160,9 @@ class MixingPools(Route):
         As agents, for a matrix of numbers: the UIDs of the people alive, and the exposure of each, as the pools for each pair of
         groups would give, from the infectiousness-weighted share of each source group (`weights`, one for each agent)
         """
-        share = np.array([weights[uids].mean() if len(uids) else 0.0 for uids in self.src_uids])
+        share = np.array([weights[uids].mean() if len(uids) else 0.0 for uids in self.source_uids])
         expo = np.zeros(len(weights))
-        for uids,value in zip(self.dst_uids, self.matrix.T @ share): # A person in several destination groups has the exposure of each
+        for uids,value in zip(self.target_uids, self.matrix.T @ share): # A person in several destination groups has the exposure of each
             expo[uids] += value
         auids = self.sim.people.auids
         return auids, self.pars.beta*expo[auids]
@@ -2251,7 +2205,7 @@ class MixingPools(Route):
         """
         for mp in self.pools:
             mp.remove_uids(uids)
-        for key in ['src', 'dst']:
+        for key in ['source', 'target']:
             groups = self.pars[key]
             for k,group in groups.items():
                 if isinstance(group, ss.uids):
@@ -2263,8 +2217,8 @@ class MixingPools(Route):
         for mp in self.pools:
             mp.step()
         if self.matrix is not None:
-            self.src_uids = [pool_uids(self.sim, group) for group in self.pars.src.values()]
-            self.dst_uids = [pool_uids(self.sim, group) for group in self.pars.dst.values()]
+            self.source_uids = [pool_uids(self.sim, group) for group in self.pars.source.values()]
+            self.target_uids = [pool_uids(self.sim, group) for group in self.pars.target.values()]
         return
 
     def shrink(self):
@@ -2274,9 +2228,31 @@ class MixingPools(Route):
             mp.shrink()
         shrunk = ss.utils.shrink()
         self.diseases = shrunk
-        self.src_uids = shrunk
-        self.dst_uids = shrunk
+        self.source_uids = shrunk
+        self.target_uids = shrunk
         return
+
+
+def age_band(group):
+    """
+    The ages a group of a mixing pool is for, as (low, high), if it is a condition on age alone: e.g. (5, 15) for
+    `(ss.person.age >= 5) & (ss.person.age < 15)`, and (65, inf) for `ss.person.age >= 65`; else None. A compartmental run
+    reads these to regroup the contacts to the model's age groups (see `ss.solvers.Mixing.age_matrix()`)
+
+    Args:
+        group (any): the group
+    """
+    Cond = ss.conditions.Cond
+    if not isinstance(group, Cond):
+        return None
+    elif group.op == '&':
+        a, b = age_band(group.args[0]), age_band(group.args[1])
+        return None if a is None or b is None else (max(a[0], b[0]), min(a[1], b[1]))
+    elif group.op in ['>=', '>', '<', '<=']:
+        age, value = group.args
+        if isinstance(age, Cond) and age.op == 'people' and age.args == ('age',) and sc.isnumber(value):
+            return (value, np.inf) if group.op in ['>=', '>'] else (0, value)
+    return None
 
 
 def transmits(disease):
@@ -2310,16 +2286,19 @@ def pool_uids(sim, group):
 
     Args:
         sim (Sim): the sim
-        group (func/uids): the people, as a function of the sim or as UIDs (default: all active agents)
+        group (Cond/func/uids): the people, as a condition over people (e.g. `ss.person.age < 15`), a function of the sim, or UIDs (default: all active agents)
     """
     if group is None:
         return sim.people.auids
+    elif isinstance(group, (ss.conditions.Cond, str)):
+        auids = sim.people.auids
+        return auids[people_mask(sim, group)[auids]]
     elif callable(group):
         out = group(sim)
         return out.uids if isinstance(out, ss.BoolArr) else out # A boolean array (e.g. sim.people.female) is over the agents alive, so is converted to their UIDs
     elif isinstance(group, ss.uids):
         return group
-    errormsg = f'src must be either a callable function, e.g. lambda sim: ss.uids(sim.people.age<5), or an array of uids, not {type(group)}'
+    errormsg = f'A group of a mixing pool is a condition over people (e.g. ss.person.age < 5), a function of the sim, or UIDs, not {type(group)}'
     raise TypeError(errormsg)
 
 
@@ -2331,8 +2310,8 @@ class MixingPool(Route):
 
     Args:
         diseases (str): the diseases that transmit via this mixing pool
-        src (inds): source agents; can be AgeGroup(), ss.uids(), or lambda(sim); None indicates all alive agents
-        dst (inds): destination agents; as above
+        source (Cond/uids/func): the infectious side: a condition over people (e.g. `ss.person.age < 15`), UIDs, or a function of the sim; None for everyone alive
+        target (Cond/uids/func): the susceptible side; as above
         beta (float): overall transmission, for a disease written as code (a declared disease's beta is in its transmission) (note: use a float, not a TimePar; the time component is usually handled by the disease beta)
         n_contacts (Dist): the number of effective contacts of the destination agents
 
@@ -2342,8 +2321,8 @@ class MixingPool(Route):
 
         # Set the parameters
         mp_pars = dict(
-            src = lambda sim: sim.people.male, # only males are infectious
-            dst = None, # all agents are susceptible
+            source = ss.person.male, # Only men are infectious
+            target = None, # Everyone is susceptible
             n_contacts = ss.poisson(lam=4),
         )
 
@@ -2359,12 +2338,12 @@ class MixingPool(Route):
         sim.plot()
         ```
     """
-    def __init__(self, pars=None, diseases=_, src=_, dst=_, beta=_, n_contacts=_, **kwargs):
+    def __init__(self, pars=None, diseases=_, source=_, target=_, beta=_, n_contacts=_, **kwargs):
         super().__init__()
         self.define_pars(
             diseases = None,
-            src = None,
-            dst = None, # Same as src
+            source = None,
+            target = None, # Same as source
             beta = 1.0,
             n_contacts = ss.constant(10),
         )
@@ -2376,16 +2355,16 @@ class MixingPool(Route):
 
         self.pars.diseases = sc.tolist(self.pars.diseases)
         self.diseases = None
-        self.src_uids = None
-        self.dst_uids = None
+        self.source_uids = None
+        self.target_uids = None
         self.p_acquire = ss.bernoulli(p=0) # Placeholder value
         return
 
     def agent_reasons(self, sim):
         """ A pool of some people has no compartmental form yet, and a number of contacts that differs between people is approximated """
         n_contacts = self.pars.n_contacts
-        if self.pars.src is not None or self.pars.dst is not None:
-            return [f'the mixing pool "{self.name}" is between some people (src= or dst=), which only agents have']
+        if self.pars.source is not None or self.pars.target is not None:
+            return [f'the mixing pool "{self.name}" is between some people (source= or target=), which only agents have']
         elif isinstance(n_contacts, ss.Dist) and not isinstance(n_contacts, ss.constant):
             return [ss.modules.Preference(f'the mixing pool "{self.name}" has a number of contacts that differs between people ({type(n_contacts).__name__})')]
         return []
@@ -2395,14 +2374,14 @@ class MixingPool(Route):
         super().shrink()
         shrunk = ss.utils.shrink()
         self.diseases = shrunk
-        self.src_uids = shrunk
-        self.dst_uids = shrunk
+        self.source_uids = shrunk
+        self.target_uids = shrunk
         self.setattribute('t', shrunk) # Its own copy of the timeline, for each of what can be many pools
         return
 
     def __len__(self):
         try:
-            return len(self.pars.dst)
+            return len(self.pars.target)
         except:
             return 0
 
@@ -2413,8 +2392,8 @@ class MixingPool(Route):
             sim (Sim): the sim being initialized
         """
         n = self.pars.n_contacts
-        rate = n.pars.v if isinstance(n, ss.constant) else n
-        if isinstance(rate, ss.Rate):
+        rate = n.pars.value if isinstance(n, ss.constant) else n
+        if isinstance(rate, ss.time.Rate):
             self.pars.n_contacts = ss.constant(ss.solvers.convert(rate, sim.unit_base))
             self.eff_contacts.default = self.pars.n_contacts
         super().init_pre(sim)
@@ -2432,7 +2411,7 @@ class MixingPool(Route):
         Args:
             uids (array): the agents to remove
         """
-        for key in ['src', 'dst']:
+        for key in ['source', 'target']:
             inds = self.pars[key]
             if isinstance(inds, ss.uids):
                 self.pars[key] = inds.remove(uids)
@@ -2456,26 +2435,26 @@ class MixingPool(Route):
 
         # Determine the mixing pool beta value
         beta = self.pars.beta
-        if isinstance(beta, ss.Rate):
+        if isinstance(beta, ss.time.Rate):
             ss.warn('In mixing pools, beta should typically be a float')
             beta = beta.to_prob(self.t.dt)
         if sc.isnumber(beta) and beta == 0:
             return []
 
-        if len(self.src_uids) == 0 or len(self.dst_uids) == 0:
+        if len(self.source_uids) == 0 or len(self.target_uids) == 0:
             return []
 
         # Calculate transmission: the hazard of the step, from beta, is multiplied by the infectious share and the contacts before being turned back into a probability, as for a declared disease (see ss.solvers.Transmission)
-        trans = np.mean(rel_trans[self.src_uids])
-        acq = self.eff_contacts[self.dst_uids] * rel_sus[self.dst_uids]
+        trans = np.mean(rel_trans[self.source_uids])
+        acq = self.eff_contacts[self.target_uids] * rel_sus[self.target_uids]
         p = 1 - (1 - disease_beta)**(beta*trans*acq) # I.e. 1 - exp(-hazard*dt), with the hazard -log(1 - disease_beta)/dt
         self.p_acquire.set(p=p)
-        return self.p_acquire.filter(self.dst_uids)
+        return self.p_acquire.filter(self.target_uids)
 
     def step(self):
-        """ Update source and target UIDs """
-        self.src_uids = pool_uids(self.sim, self.pars.src)
-        self.dst_uids = pool_uids(self.sim, self.pars.dst)
+        """ Update the UIDs of the source and target """
+        self.source_uids = pool_uids(self.sim, self.pars.source)
+        self.target_uids = pool_uids(self.sim, self.pars.target)
         return
 
 
@@ -2492,7 +2471,7 @@ def check_contacts(matrix, dim):
 
 def contacts(matrix=None, ages=None, dims=None, name=None, source=None, layer='all', unit=None):
     """
-    Mixing between groups from a contact matrix; returns `ss.MixingPools`
+    Mixing between groups from a contact matrix; returns `ss.networks.MixingPools`
 
     A matrix, and what it is over:
 
@@ -2509,7 +2488,7 @@ def contacts(matrix=None, ages=None, dims=None, name=None, source=None, layer='a
     - `beta*I`: the share of each group who are infectious, β·Σ_j C_ij·I_j/N_j, with C the contacts of a person and β per contact (as for contact surveys);
     - `beta*I.n`: their number, β·Σ_j C_ij·I_j, density-dependent (as in Lloyd & Jansen's metapopulation);
     - `beta*I.frac` (or `beta*I.n/N`): their number over everyone, β·Σ_j C_ij·I_j/N (as in Keeling & Rohani's matrices, and WAIFW matrices).
-    - a weighted count, `beta*(ss.by(w)*I).n` or `beta*I.n_trans`: their number, each counted by its weight, β·Σ_j C_ij·w_j·I_j (for `n_trans`, w_j is each group's infectiousness).
+    - a weighted count, `beta*(ss.by(w)*I).n` or `beta*I.n_infectious`: their number, each counted by its weight, β·Σ_j C_ij·w_j·I_j (for `n_infectious`, w_j is each group's infectiousness).
 
     So a textbook's matrix goes in as the textbook gives it, with no rescaling. See the user guide's page on population data for more.
 
@@ -2578,7 +2557,7 @@ def contacts(matrix=None, ages=None, dims=None, name=None, source=None, layer='a
             errormsg = f'ss.contacts(matrix, dims={over}) needs a matrix of shape (levels of each, then levels of each again), e.g. (2, 3, 2, 3) for 2 and 3 levels, or square over the combinations of levels, e.g. (6, 6); got shape {matrix.shape}'
             raise ValueError(errormsg)
         check_contacts(matrix, sc.strjoin(over, sep=' and '))
-        out = MixingPools(src={}, dst={}, n_contacts=np.zeros((0, 0)), name=name)
+        out = MixingPools(source={}, target={}, n_contacts=np.zeros((0, 0)), name=name)
         out.full = sc.obj(dims=over, matrix=matrix, levels=levels) # So a compartmental run can use the matrix directly
         out.unit = unit
         return out
@@ -2607,7 +2586,7 @@ def contacts(matrix=None, ages=None, dims=None, name=None, source=None, layer='a
                 errormsg = f'The contact matrix of ss.contacts() for "{dim}" needs to be square, with a row and a column for each level of "{dim}"; got shape {mat.shape}'
                 raise ValueError(errormsg)
             check_contacts(mat, dim)
-        out = MixingPools(src={}, dst={}, n_contacts=np.zeros((0, 0)), name=name)
+        out = MixingPools(source={}, target={}, n_contacts=np.zeros((0, 0)), name=name)
         out.dims = mats # So a compartmental run can use the matrices directly
         out.age_edges = age_edges # The lower edges of the age matrix's own groups, if given with ages= (see ss.solvers.Mixing.dim_matrices())
         out.unit = unit
@@ -2624,8 +2603,8 @@ def contacts(matrix=None, ages=None, dims=None, name=None, source=None, layer='a
         errormsg = f'The age groups of ss.contacts() are given by their lower edges, which need to increase, e.g. ages=[0, 15, 65]; got ages={list(ages)}'
         raise ValueError(errormsg)
     highs = list(ages[1:]) + [None]
-    groups = {(f'{lo}-{hi}' if hi is not None else f'{lo}+'): AgeGroup(lo, hi) for lo,hi in zip(ages, highs)}
-    out = MixingPools(src=groups, dst=sc.dcp(groups), n_contacts=matrix.T, name=name) # ss.MixingPools is indexed [source, destination]
+    groups = {(f'{lo}-{hi}' if hi is not None else f'{lo}+'): (ss.person.age >= lo) & (ss.person.age < hi) if hi is not None else ss.person.age >= lo for lo,hi in zip(ages, highs)}
+    out = MixingPools(source=groups, target=dict(groups), n_contacts=matrix.T, name=name) # ss.networks.MixingPools is indexed [source, target]
     out.ref = ref # Where a named matrix came from
     out.edges = np.asarray(ages, dtype=float)
     out.unit = unit or ('day' if ref is not None else None) # A country's matrix is contacts a day, whatever the sim's unit

@@ -36,7 +36,7 @@ def test_fetal_health(do_plot=do_plot):
             ss.Pregnancy(fertility_rate=ss.time.freq(30, 'year'), burnin=True),
             ss.Deaths(death_rate=ss.time.freq(10/1010*1000, 'year')),
         ]
-    sir_kw = dict(dur_inf=ss.lognorm_ex(mean=ss.years(6), std=ss.years(1)), beta=0.1, init_prev=0.1)
+    sir_kw = dict(dur_inf=ss.lognormal(mean=ss.years(6), std=ss.years(1)), beta=0.1, init_prev=0.1)
 
     def mean_bw(sim):
         bw = sim.results.fetal_health.mean_birth_weight
@@ -45,7 +45,7 @@ def test_fetal_health(do_plot=do_plot):
     # -- 1. Baseline (no disease) --
     sim_baseline = ss.Sim(
         demographics=demog(),
-        custom=ssl.mnch.FetalHealth(),
+        modules=ssl.mnch.FetalHealth(),
         networks=ss.PrenatalNet(),
         **sim_kw,
     )
@@ -74,7 +74,7 @@ def test_fetal_health(do_plot=do_plot):
         demographics=demog(),
         diseases=ssl.AgentSIR(name='sir', **sir_kw),
         connectors=ssl.mnch.fetal_infection(),
-        custom=ssl.mnch.FetalHealth(),
+        modules=ssl.mnch.FetalHealth(),
         networks=[ss.PrenatalNet(), ss.RandomNet()],
         **sim_kw,
     )
@@ -95,7 +95,7 @@ def test_fetal_health(do_plot=do_plot):
         diseases=ssl.AgentSIR(name='sir', **sir_kw),
         connectors=ssl.mnch.fetal_infection(),
         interventions=ssl.mnch.treat_pregnant(disease='sir'),
-        custom=ssl.mnch.FetalHealth(),
+        modules=ssl.mnch.FetalHealth(),
         networks=[ss.PrenatalNet(), ss.RandomNet()],
         **sim_kw,
     )
@@ -268,7 +268,7 @@ def test_coded_modifiers():
             return
 
     cond = Condition(name='cond')
-    sim = ss.Sim(diseases=cond, interventions=ss.modify(cond.rel_sus, multiply=0.0, where=ss.ppl.female), n_agents=2000, start=2000, stop=2005, verbose=0).run()
+    sim = ss.Sim(diseases=cond, interventions=ss.modify(cond.rel_sus, multiply=0.0, where=ss.person.female), n_agents=2000, start=2000, stop=2005, verbose=0).run()
     ppl, d = sim.people, sim.diseases.cond
     assert np.all(d.affected[ppl.female.uids] == ppl.housing[ppl.female.uids]) # Only those housed: the onset of women is modified away
     assert (d.affected & ppl.male & ~ppl.housing).sum() > 100
@@ -280,7 +280,7 @@ def test_coded_modifiers():
 
     # A property nobody added has the default given; added after the sim is made, it has values at once
     S, D = ss.states('S D')
-    dis = ss.Disease(S, D, onset=S >> D @ ss.peryear(0.2)*(1 + 4*ss.ppl.get('housing', 0)), name='dep')
+    dis = ss.Disease(S, D, onset=S >> D @ ss.peryear(0.2)*(1 + 4*ss.person.get('housing', 0)), name='dep')
     sim = ss.Sim(diseases=dis, n_agents=1000, start=2000, stop=2001, verbose=0).run()
     assert 'housing' not in sim.people and sim.results.dep.D[-1] > 0
     assert len(sim.people.add_state(ss.FloatArr('adherence', default=ss.uniform())).values) == len(sim.people)
@@ -299,7 +299,7 @@ def test_coded_modifiers():
     assert np.isclose(share, 0.9, atol=0.02), share
     S, I = ss.states('S I')
     dis = ss.Disease(S, I, infection=S >> I @ ss.peryear(1), death=I >> ss.null @ ss.peryear(0.3), name='d')
-    sim = ss.Sim(diseases=dis, interventions=ss.modify(dis.death, multiply=0.5, where=ss.ppl.female), n_agents=500, start=2000, stop=2001, verbose=0).run()
+    sim = ss.Sim(diseases=dis, interventions=ss.modify(dis.death, multiply=0.5, where=ss.person.female), n_agents=500, start=2000, stop=2001, verbose=0).run()
     uids = sim.people.auids
     assert np.allclose(sim.diseases.d.death.hazard(uids), np.where(sim.people.female[uids], 0.15, 0.3))
     return sim

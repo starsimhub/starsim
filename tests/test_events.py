@@ -75,7 +75,7 @@ def test_events_more():
 def test_events_refuse():
     sc.heading('What the events do not take yet is a CapabilityError that says what')
     m = make_sirs()
-    m.stratify(patch=ss.geo.geography(names=['a', 'b'], pop=[600, 400], x=[0, 20], y=[0, 0]), mobility=ss.geo.gravity(away=0.01))
+    m.stratify(patch=ss.geo.geography(names=['a', 'b'], populations=[600, 400], x=[0, 20], y=[0, 0]), mobility=ss.geo.gravity(away=0.01))
     with pytest.raises(ss.CapabilityError, match='move between places'):
         ss.Sim(m, networks=ss.MixingPool(n_contacts=3), n_agents=500, solver='abm-events', **kw).init()
     with pytest.raises(ss.CapabilityError, match='no route'):

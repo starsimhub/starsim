@@ -56,7 +56,7 @@ def compiled_reasons(engine):
         out.append('sets with clocks')
     for name, ex in graph.exits.items():
         for tr in engine.competing.get(name, []):
-            if getattr(tr, 'after', None) is not None:
+            if getattr(tr, 'min_stay', None) is not None:
                 out.append(f'{tr.name}: a competing rate with a minimum stay')
     if not engine.scheduled and not any(tr.trigger is not None for tr in graph.transitions.values() if not tr.contact):
         out.append('nothing scheduled (every exit is a competing rate, which the agent engine draws in a compiled pass already)')
@@ -65,9 +65,9 @@ def compiled_reasons(engine):
             out.append(f'{tr.name}: migration')
         if engine.moves(tr):
             out.append(f'{tr.name}: a change of level')
-        if getattr(tr, 'per', None) is not None:
+        if getattr(tr, 'birth_on', None) is not None:
             out.append(f'{tr.name}: births by a flow')
-        if any(not getattr(d, 'people', False) or d.name not in engine.state_index for d in (tr.dst or [])):
+        if any(not getattr(d, 'people', False) or d.name not in engine.state_index for d in (tr.dest or [])):
             out.append(f'{tr.name}: a destination that is not a state of people')
         if tr.contact:
             continue
@@ -152,7 +152,7 @@ class Compiled(Agents):
         k.pos = ints([position.get(tr.name, nt) for tr in trs])
         rated = {tr.name for name in k.names for tr in self.competing.get(name, [])}
         k.kind = ints([2 if tr.contact else 1 if tr.trigger is not None else 3 if tr.name in rated else 0 for tr in trs])
-        k.split = np.array([bool(tr.split) for tr in trs])
+        k.split = np.array([bool(tr._split) for tr in trs])
         k.sched = np.array([s.name in self.scheduled for s in states])
         self.kdefer = [s.name for s in states if any(calls_back(self, tr) for tr in self.exits_of.get(s.name, []))] # Scheduled by the engine, after the call (see after_call())
         k.defer = np.array([nm in self.kdefer for nm in k.names])
@@ -166,11 +166,11 @@ class Compiled(Agents):
         k.loops = np.concatenate([self.loops_of[s.name] for s in states] + [np.zeros(0, bool)]).astype(bool)
 
         # Destinations
-        dsts = [[index[d.name] for d in (tr.dst or [])] + [-1]*bool(tr.outflow or tr.dies) for tr in trs] # -1 for a death
+        dsts = [[index[d.name] for d in (tr.dest or [])] + [-1]*bool(tr._outflow or tr.dies) for tr in trs] # -1 for a death
         k.dst_ptr, k.dst_state = ptr(dsts), ints([d for x in dsts for d in x])
         k.src_mask = np.zeros((nt, ns), dtype=bool)
         for i, tr in enumerate(trs):
-            for s in tr.src or []:
+            for s in tr.source or []:
                 if s.people and s.name in index:
                     k.src_mask[i, index[s.name]] = True
 
@@ -228,7 +228,7 @@ class Compiled(Agents):
                 k.trig_cond[g] = len(self.kwhere)
                 self.kwhere.append(tr.trigger.x)
         k.trigs = trigs
-        k.cond_trigs = [(g, [index[s.name] for s in tr.src if s.people and s.name in index]) for g, tr in enumerate(trigs) if not tr.trigger.event]
+        k.cond_trigs = [(g, [index[s.name] for s in tr.source if s.people and s.name in index]) for g, tr in enumerate(trigs) if not tr.trigger.event]
 
         # The columns of the table of shares: each state's branches, and each split's destinations
         self.kedges = [] # (key, function of uids giving the cumulative shares, one row per edge)
@@ -241,7 +241,7 @@ class Compiled(Agents):
                 self.kedges.append((('branch', s.name), lambda u, s=s: self.branch_edges(s, u)))
                 ncol += k.nbr[i] + 1
         for i, tr in enumerate(trs):
-            if tr.split:
+            if tr._split:
                 k.dst_col[i] = ncol
                 self.kedges.append((('dest', tr.name), lambda u, tr=tr: self.dest_edges(tr, u, np.full(len(u), -1))))
                 ncol += len(dsts[i]) + 1
@@ -252,7 +252,7 @@ class Compiled(Agents):
         k.nt, k.ns, k.ntrig = nt, ns, len(trigs)
         k.one = np.ones(1)
         k.dt = float(self.dt)
-        k.dst_keys = [[f'{tr.name}.{d.name}' for d in (tr.dst or [])] + [f'{tr.name}.null']*bool(tr.dies) for tr in trs]
+        k.dst_keys = [[f'{tr.name}.{d.name}' for d in (tr.dest or [])] + [f'{tr.name}.null']*bool(tr.dies) for tr in trs]
         k.scan_sched = k.sched_k & ~k.comp_state # Exits of a state with competing rates too are taken by leave()
         k.stat1 = (k.sched_k, k.ex_ptr, k.ex_tr, k.nbr, k.br_col, k.loops, k.pos, k.kind, k.split, k.dst_ptr, k.dst_state, k.dst_col, k.dw, k.adj, k.aft, k.has_dw, k.src_mask, k.ae_ptr, k.ae_trig, k.tr_trig)
         k.stat2 = (k.trig_dist, k.trig_fixed, np.zeros(1), k.fam) # (trig_mean is not used: a delay given as a number is an exponential distribution, see kadd_mean())
@@ -290,7 +290,7 @@ class Compiled(Agents):
     def dist_pars(self, key, dist):
         """ The parameters of a distribution, as the call takes them (SciPy's, see `ss.solvers.backends.moves.draw()`), each a number or a function giving one value per agent (by UID) """
         if isinstance(dist, ss.constant):
-            names = ['v']
+            names = ['value']
         elif type(dist) is ss.uniform:
             names = ['low', 'high']
         else:
@@ -617,7 +617,7 @@ class Compiled(Agents):
         for i in flow.nonzero()[0].tolist():
             tr = k.trs[i]
             fc[tr.name] += flow[i]
-            if tr.ends:
+            if tr._ends:
                 for j, key in enumerate(k.dst_keys[i]):
                     if flowdst[i, j]:
                         fc[key] += flowdst[i, j]
@@ -713,7 +713,7 @@ class Compiled(Agents):
                 continue
             if tr.where is not None:
                 uids = uids[np.asarray(self.selector.select(tr.where), dtype=bool)[uids]]
-            for src in tr.src:
+            for src in tr.source:
                 if src.people:
                     inside = np.asarray(uids[mod[src.name].raw[uids]], np.int64)
                     if len(inside):
@@ -884,7 +884,7 @@ class Compiled(Agents):
             if forced is not None:
                 self.events[tr.name] = forced
                 self._news = True
-        pairs = [(tr, src) for tr in self.graph.transmissions for src in tr.src + (self.immune_states if not getattr(tr, 'generated', False) else [])]
+        pairs = [(tr, src) for tr in self.graph.transmissions for src in tr.source + (self.immune_states if not getattr(tr, 'generated', False) else [])]
         together = self.transmit_together(pairs) if len(pairs) > 1 else None
         self._step_pairs = []
         k = self.kplan

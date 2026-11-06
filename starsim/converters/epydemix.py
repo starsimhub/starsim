@@ -272,14 +272,14 @@ def load_epydemix(source, start=None, stop=None, verbose=None, **kwargs):
     matrix = np.sum([np.array(m, dtype=float) for m in pop['contacts'].values()], axis=0) if pop['contacts'] else np.ones((n, n))
     if n > 1:
         levels = edges if edges is not None else list(groups)
-        src.stratify(**{dim:levels}, split=(people/people.sum()).tolist())
+        src.stratify(**{dim:levels}, fractions=(people/people.sum()).tolist())
         src.config.networks = Code(f'ss.contacts({matrix.tolist()!r}' + (f', dims={dim!r}' if dim != 'age' else '') + ')')
         src.notes.append(f'contacts      the {len(pop["contacts"])} settings of {pop["name"]} ({sc.strjoin(pop["contacts"].keys())}) added together')
 
     # Run settings: epydemix's end date is the last day it steps through, so the sim stops a day later
     src.config.update(unit='day', dt=dt, start=start, stop=str(np.datetime64(stop, 'D') + np.timedelta64(1, 'D')), solver='binomial', substeps=1, total_pop=float(people.sum()))
     if edges is not None:
-        src.config.use_aging = False
+        src.config.aging = False
     return build(src, verbose=verbose, **kwargs)
 
 
@@ -312,7 +312,7 @@ def to_epydemix(sim):
     flat = ss.converters.export.flatten(sim)
     lost = list(flat.lost) + ['changed: epydemix runs the model as a chain binomial, in steps of the sim\'s dt']
     t = ss.converters.export.initialized(sim).t
-    days = float(ss.dur(1, flat.unit).to('day').value) # Days in the sim's unit of time
+    days = float(ss.Duration(1, flat.unit).to('day').value) # Days in the sim's unit of time
     dt = float(t.dt.to(flat.unit).value)
     n = len(t.tvec) - 1 # epydemix's steps, each recorded at its end, on its date
     start = np.datetime64(str(t.start), 'D') if isinstance(t.start, ss.date) else np.datetime64('2020-01-01')

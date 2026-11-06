@@ -21,7 +21,7 @@ class COVID(ss.Disease):
     people without symptoms and with symptoms.
 
     This version is not age-structured. Since the severity of COVID-19 rises steeply with age, a real model would
-    be: `covid.stratify(age=[0, 20, 60], split=[0.25, 0.5, 0.25], adjust=dict(severe=[0.2, 1, 4]))`, with a
+    be: `covid.stratify(age=[0, 20, 60], fractions=[0.25, 0.5, 0.25], adjust=dict(severe=[0.2, 1, 4]))`, with a
     contact matrix given to the sim (see the user guide on stratification).
 
     Note: CRN safe as agents.
@@ -30,11 +30,11 @@ class COVID(ss.Disease):
         beta (`ss.per`): the contact rate (per contact, with a network)
         rel_ins (float): the infectiousness of people without symptoms, relative to the contact rate
         rel_sym (float): the infectiousness of people with symptoms, relative to the contact rate
-        dur_exp (`ss.dur`): the mean time from infection to being infectious
-        dur_ins (`ss.dur`): the mean time without symptoms
-        dur_sym (`ss.dur`): the mean time with symptoms
-        dur_sev (`ss.dur`): the mean time with severe disease
-        dur_crit (`ss.dur`): the mean time with critical disease
+        dur_exp (`ss.Duration`): the mean time from infection to being infectious
+        dur_ins (`ss.Duration`): the mean time without symptoms
+        dur_sym (`ss.Duration`): the mean time with symptoms
+        dur_sev (`ss.Duration`): the mean time with severe disease
+        dur_crit (`ss.Duration`): the mean time with critical disease
         p_sym (float): the share of people without symptoms who go on to have symptoms
         p_sev (float): the share of people with symptoms whose disease becomes severe
         p_crit (float): the share of severe cases that become critical

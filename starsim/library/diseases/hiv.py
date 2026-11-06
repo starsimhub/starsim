@@ -155,7 +155,7 @@ class ART(ss.Intervention):
         self.coverage = sc.toarray(coverage)
         super().__init__()
         self.define_pars(
-            art_delay = ss.constant(v=ss.years(1.0)) # Value in years
+            art_delay = ss.constant(ss.years(1.0)) # Value in years
         )
         self.update_pars(pars, **kwargs)
 

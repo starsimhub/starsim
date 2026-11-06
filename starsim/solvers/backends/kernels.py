@@ -373,7 +373,7 @@ def compile(verbose=True):
     Compiling takes about five minutes (`compile_all_seconds`), once per install (and after an upgrade); the result is kept in Numba's cache,
     beside the package (or, if that cannot be written to, in the user's cache folder, then a temporary folder, or in
     `NUMBA_CACHE_DIR` if it is set). Until the kernels are compiled, small runs are taken as plain Python: see `ss.options.kernels`. With the
-    Rust kernels in use, there is nothing to compile: they are compiled already. To see which is the case, use `ss.compile_status()`.
+    Rust kernels in use, there is nothing to compile: they are compiled already. To see which is the case, use `ss.kernels.compile_status()`.
 
     Example:
         ```python
@@ -424,7 +424,7 @@ def compile_status():
 
     Example:
         ```python
-        print(ss.compile_status().summary)
+        print(ss.kernels.compile_status().summary)
         ```
     """
     from . import passes
@@ -473,7 +473,7 @@ def typical_sims():
         ss.Sim(diseases=[ss.SIS(beta=dict(randomnet=0.05, sexualnet=ss.peract(0.05))), ss.SIR(beta=dict(randomnet=0.1, sexualnet=ss.peract(0.1)))], networks=['random', 'sexual'], demographics=True, **small),
         ss.Sim(diseases=ssl.HIV(), networks='sexual', demographics=True, **small),
         ss.Sim(diseases=ssl.AgentSIR(), networks='random', interventions=ss.vaccinate(ss.Vaccine(efficacy=0.9), coverage=0.5), **small),
-        ss.Sim(demographics=[ss.Pregnancy(), ss.Deaths()], networks='maternal', **small),
+        ss.Sim(demographics=[ss.Pregnancy(), ss.Deaths()], networks='prenatal', **small),
     ]
     if ss.options.threads != 1 and nb.get_num_threads() > 1: # The threaded passes, for a sim large enough to share among threads
         sims.append(ss.Sim(diseases='sir', networks='random', n_agents=ss.solvers.backends.passes.min_threaded, start=2000, stop=2001, verbose=0))
@@ -2273,7 +2273,7 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, varying):
                     for g in range(ng):
                         everyone += y[c, g]
                 least = 1e-9*everyone # Not a compartment that is only starting to fill, whose growth follows another's: of everyone, not of its group (a group of 1e-13 people, of a strain only starting to emerge, would take millions of substeps a step)
-                for g in range(ng): # Not through people moving in from other groups (a cohort moving through the stages of a box), which are linear and as fast as the movers' rates, which the substeps allow for already
+                for g in range(ng): # Not through people moving in from other groups (a cohort moving through the stages of a boxcar), which are linear and as fast as the movers' rates, which the substeps allow for already
                     for c in range(nc):
                         gain = dy[0, c, g] - (moved_in[c, g] if len(moved_in) else 0.0)
                         if gain > 0 and y[c, g] > least:

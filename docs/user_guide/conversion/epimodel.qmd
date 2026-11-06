@@ -109,7 +109,7 @@ sis = ss.Disease(
     init_n    = dict(I=10),
 )
 sim = ss.Sim(sis, networks=net, n_agents=1000, stop=300, verbose=0)
-sim.stratify(risk=['low', 'high'], split=[0.8, 0.2])
+sim.stratify(risk=['low', 'high'], fractions=[0.8, 0.2])
 sim.run()
 
 res = sim.results.sis

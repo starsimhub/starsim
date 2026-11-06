@@ -36,8 +36,8 @@ def test_hist_plotting():
     return
 
 
-def test_lognorm_im_unit():
-    """ Unit= on ss.lognorm_im() (whose parameters are of the log) scales its draws, as a dwell time """
+def test_lognormal_log_unit():
+    """ Unit= on ss.lognormal(log_mean=, log_std=) (whose parameters are of the log) scales its draws, as a dwell time """
     def mean_dwell(dur):
         class M(ss.Disease):
             S, I, R = ss.states('S I R')
@@ -46,10 +46,10 @@ def test_lognorm_im_unit():
         I = sim.results.m.I.values
         return I.sum()/I[0]
     mu, sigma = np.log(3), 0.5
-    a = mean_dwell(ss.lognorm_im(mean=mu, sigma=sigma, unit='week'))
-    b = mean_dwell(ss.par(ss.lognorm_im(mean=mu, sigma=sigma), name='d')*ss.weeks(1))
+    a = mean_dwell(ss.lognormal(log_mean=mu, log_std=sigma, unit='week'))
+    b = mean_dwell(ss.par(ss.lognormal(log_mean=mu, log_std=sigma), name='d')*ss.weeks(1))
     f = lambda self, sim, uids: np.full(len(uids), mu) # A function of the agents
-    c = mean_dwell(ss.lognorm_im(mean=f, sigma=sigma, unit='week'))
+    c = mean_dwell(ss.lognormal(log_mean=f, log_std=sigma, unit='week'))
     assert a == b == c
     assert abs(a - 7*np.exp(mu + sigma**2/2)) < 2 # In days, not weeks (or 7× too short)
     return a
@@ -57,18 +57,18 @@ def test_lognorm_im_unit():
 
 def test_dist_default_warnings():
     """ A typed duration for a distribution default sets its mean, and says so; in a declared model, a single value replaces the distribution, and says so """
-    defaults = dict(dur=ss.lognorm_ex(mean=ss.days(200), std=ss.days(200)))
+    defaults = dict(dur=ss.lognormal(mean=ss.days(200), std=ss.days(200)))
     with pytest.warns(RuntimeWarning, match='set only the mean'):
         p = ss.pars(defaults, dur=ss.days(100))
-    assert isinstance(p.dur.raw, ss.lognorm_ex) and p.dur.raw.pars.mean == 100
+    assert isinstance(p.dur.raw, ss.lognormal) and p.dur.raw.pars.mean == 100
     class M(ss.Disease):
         S, I = ss.states('S I')
-        dur = ss.par(ss.lognorm_ex(ss.days(5), ss.days(5)))
+        dur = ss.par(ss.lognormal(ss.days(5), ss.days(5)))
         inf = S >> I @ ss.perday(0.1)*I
         rec = I >> S @ dur
     with pytest.warns(RuntimeWarning, match='replaced its default distribution'):
         m = M(dur=ss.days(10))
-    assert isinstance(m.pars.dur.raw, ss.dur)
+    assert isinstance(m.pars.dur.raw, ss.Duration)
     return
 
 
@@ -81,6 +81,6 @@ if __name__ == '__main__':
 
     o14 = test_hist_plotting()
 
-    test_lognorm_im_unit()
+    test_lognormal_log_unit()
     test_dist_default_warnings()
     T.toc()

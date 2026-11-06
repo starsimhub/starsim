@@ -43,7 +43,7 @@ class VaccineDemand(ss.Intervention):
         measles = self.sim.diseases.measles
         dt = self.t.dt
         self.remembered += self.sim.results.measles.cases[self.ti-1] - self.remembered*(dt/self.pars.memory)
-        doses = (self.pars.max_rate*self.share()).to_prob(dt)*measles.count(measles.S)
+        doses = (self.pars.max_rate*self.share()).to_prob(dt)*measles.S.n
         if self.pars.capacity is not None:
             doses = min(doses, self.pars.capacity.to_events(dt))
         ss.move(measles.S, measles.R, n=doses*self.pars.efficacy)
@@ -100,4 +100,4 @@ for sim in msim.sims:
     print(sim.label, '(' + sim.solver + ') - infections:', round(res.measles.infection.sum()), '- doses:', round(res.vaccinedemand.doses.sum()))
 ```
 
-The module runs unchanged as agents, and the two agree to within a few percent; the agents are one run of a random process, so they differ a little from run to run. The module needs no change because it uses only what works under every solver: a result of the sim (`cases`), the number of people in a state (`measles.count(measles.S)`), and `ss.move()` with a number of people, which as agents moves that many agents (chosen at random) from `S` to `R`. A module that picked out particular people, e.g. with `measles.S.uids`, would run only as agents ([A5](a5_modules.qmd)).
+The module runs unchanged as agents, and the two agree to within a few percent; the agents are one run of a random process, so they differ a little from run to run. The module needs no change because it uses only what works under every solver: a result of the sim (`cases`), the number of people in a state (`measles.S.n`), and `ss.move()` with a number of people, which as agents moves that many agents (chosen at random) from `S` to `R`. A module that picked out particular people, e.g. with `measles.S.uids`, would run only as agents ([A5](a5_modules.qmd)).

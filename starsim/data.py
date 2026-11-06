@@ -8,7 +8,7 @@ Data by place: ages, populations, birth and death rates, contact matrices, and a
     ss.data.geography('Kenya', level=1)     # Administrative units, with populations and positions
 
 These are tables. The model objects that take a place by name read them from here:
-`ss.people('Kenya')`, `ss.geo.geography('Kenya', level=1)`, `ss.contacts('Kenya')`,
+`ss.population('Kenya')`, `ss.geo.geography('Kenya', level=1)`, `ss.contacts('Kenya')`,
 `ss.Births(birth_rate='Kenya')`, `ss.Deaths(death_rate='Kenya')`, and `ss.Pregnancy(fertility_rate='Kenya')`. The data comes from
 `starsim_data` (https://github.com/starsimhub/starsim_data), which bundles what is
 small and common and fetches the rest on demand. Each lookup returns the data with a
@@ -70,7 +70,7 @@ def age_pyramid(sim, strat=None):
         return named.ages, named.counts
     elif getattr(sim, 'given_pyramid', None) is not None:
         return sim.given_pyramid
-    elif strat is None or strat.guessed.get('split') == world.guess:
+    elif strat is None or strat.guessed.get('fractions') == world.guess:
         return world.ages, world.counts
     return None
 
@@ -122,7 +122,7 @@ def provider():
     try:
         import starsim_data as ssd
     except ImportError as E:
-        errormsg = 'Data by place (ss.data, ss.people("Kenya"), ss.contacts("Kenya")) comes from the starsim_data package: pip install starsim_data'
+        errormsg = 'Data by place (ss.data, ss.population("Kenya"), ss.contacts("Kenya")) comes from the starsim_data package: pip install starsim_data'
         raise ImportError(errormsg) from E
     return ssd
 
@@ -172,7 +172,7 @@ def nodes(ssd, place, level, year):
                 rest = max(national - df.population[~missing].sum(), 0)
                 df = df.copy()
                 df.loc[missing, 'population'] = rest*df.area_km2[missing]/df.area_km2[missing].sum()
-                ss.warn(f'starsim_data has no population for {missing.sum()} of the {len(df)} units of {place} at level {level}; they share the rest of the national total by area, which is a guess: give pop= by hand if it matters')
+                ss.warn(f'starsim_data has no population for {missing.sum()} of the {len(df)} units of {place} at level {level}; they share the rest of the national total by area, which is a guess: give populations= by hand if it matters')
         else: # Another year, or a finer level: fetched (this needs starsim_data's geospatial extra)
             df = ssd.fetch_nodes(place, level=level, year=year)
     except KeyError as E:
@@ -253,7 +253,7 @@ def rates(place, which, revision=None):
 
 def population(place, year=None, revision=None):
     """
-    The population of a named place by age and sex, for `ss.people('Kenya', year=2024)`
+    The population of a named place by age and sex, for `ss.population('Kenya', year=2024)`
 
     For a country, the UN World Population Prospects give it every ten years (1950 to 2100); a year in
     between is interpolated linearly, group by group. For a US state, the US Census gives it for 2023

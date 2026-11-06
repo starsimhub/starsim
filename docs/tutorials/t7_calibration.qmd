@@ -29,7 +29,7 @@ import pandas as pd
 
 S, E, I, R = ss.states('S E I R')
 beta = ss.par(0.14, bounds=[0.05, 0.5])  # The rate of infection per contact with an infectious person, per day
-reported = ss.par(0.5, bounds=[0.05, 1], prior=ss.beta_mean(mean=0.35, var=0.01)) # The share of infections that are reported: about a third, from earlier outbreaks
+reported = ss.par(0.5, bounds=[0.05, 1], prior=ss.beta_dist(mean=0.35, std=0.1)) # The share of infections that are reported: about a third, from earlier outbreaks
 
 infection   = S >> E @ beta*I         # Infection, at a rate of β times the contacts with infectious people
 progression = E >> I @ ss.days(10)   # Latent for 10 days on average
@@ -67,7 +67,7 @@ This data is illustrative, not real. It was made once, from an agent-based run o
 ```python
 import numpy as np
 truth = ss.Sim(measles, pars=dict(beta=0.16, reported=0.4), n_agents=100_000, rand_seed=3, **settings).run()
-weekly = truth.to_data('cases', resample='week', noise=None) # Weekly reported cases, each dated by the first day of its week
+weekly = truth.to_synthetic_data('cases', resample='week', noise=None) # Weekly reported cases, each dated by the first day of its week
 rng = np.random.default_rng(3)
 weekly['cases'] = rng.negative_binomial(30, 30/(30 + weekly.cases)) # With extra variation (negative binomial counts)
 weekly[weekly.date <= ss.date('2025-03-12')].to_csv('data/measles_cases.csv', index=False)

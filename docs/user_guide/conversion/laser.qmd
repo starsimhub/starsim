@@ -86,7 +86,7 @@ names  = ['Central City'] + [f'Town {i+1}' for i in range(5)] + [f'Interim {i+1}
 pop    = [1_000_000] + [100_000]*5 + [25_000]*10
 dist   = [0] + [150]*5 + [50, 100]*5 # Distance from the city, in km
 angle  = [0] + list(angles) + list(np.repeat(angles, 2))
-places = ss.geo.geography(names=names, pop=pop, x=dist*np.cos(angle), y=dist*np.sin(angle))
+places = ss.geo.geography(names=names, populations=pop, x=dist*np.cos(angle), y=dist*np.sin(angle))
 
 S, E, I, R = ss.states('S E I R')
 seir = ss.Disease(
@@ -95,7 +95,7 @@ seir = ss.Disease(
     recovery  = ss.Transition(I, R, dur=ss.normal(14, 2, unit='days')),
     init_n    = dict(I=ss.by(patch=[0, 100] + [0]*14)), # 100 infectious people in Town 1
 )
-seir.stratify(patch=places, mobility=ss.geo.Mobility(ss.geo.gravity(c=2.5), kind='force', away=3/32))
+seir.stratify(patch=places, mobility=ss.geo.Mobility(ss.geo.gravity(distance_power=2.5), kind='force', away=3/32))
 sim = ss.Sim(seir, total_pop=sum(pop), n_agents=175_000, stop=ss.days(365), verbose=0)
 sim.run()
 sim.plot()
@@ -131,13 +131,13 @@ These are from Starsim's switching demo for LASER users (`tests/switching/test_l
 | Speed per agent-step | **Works** on 4 or more threads, **fails** on one: on the demo's 149 places, from 1 to 3.3 million agents, 3.7 ns per agent-step on one thread, 1.8 to 1.9 on 4, 1.6 on 8, and 1.4 on 16 (25 October 2026, on a machine with a load of 2.5 to 5 from other jobs), against the demo's target of 3.3 ns (three times LASER's 1.1 ns on 20 threads). At the same thread counts, LASER's own SEIR on the same places (without births) takes 1.7, 0.4, 0.4, and 0.23 ns, so it is 2.2 to 6 times faster; on the hub and spoke at LASER's size (1.75 million agents, a year), LASER takes 3.9 to 4.1, 1.6, 1.2, and 0.71 s on 1, 4, 8, and 16 threads, and Starsim 4.8, 2.6 to 2.7, 2.4, and 2.2 s. The passes over the agents are threaded for a population of 200,000 or more; the rest of Starsim's step is not, which is why it gains less from more threads |
 | Memory per agent | **Works**: about 51 to 53 bytes per agent at the peak, against LASER's 30 (the demo's target is 55). A run of LASER's full England and Wales (30 million agents) would need about 1.5 GB, against LASER's 1.2 GB |
 | Life-table deaths | **Works**: `ss.death(lifetable=ss.lifetable(ages, deaths))`, below; as agents each person's age at death is drawn once, and in a compartmental run stratified by age it is a death rate for each age group |
-| Seeding a fixed number of people on a schedule | **Works**: `ss.Delivery(move=S >> I, capacity=3, interval=ss.days(30))`, below |
+| Seeding a fixed number of people on a schedule | **Works**: `ss.Delivery(move=S >> I, capacity=3, every=ss.days(30))`, below |
 | Radiation mobility, as well as gravity | **Works**: `ss.geo.Mobility(ss.geo.radiation(), kind='force', away=...)`, with the same interface as `ss.geo.gravity()` and no parameters to choose |
 | Gravity scaled to a mean share away, with a cap, as LASER scales it | **Works**: the matrix scaled in NumPy, as `ss.geo.Mobility(matrix=..., kind='force')`, below |
 | Life tables and seeding, as agents and as compartments | **Works**: the same text (with an age stratification, for the life table as compartments) gives the same number of infections within 20% in one run of each |
 | The national model as compartments | **Works**: LASER's full England and Wales (954 places, 30.2 million people, a 40-stage latent period, with a constant death rate and importation as a rate) runs as a chain binomial in 12 s per simulated year |
 | A campaign for children 9 months to 5 years in some regions | **Works**: one `ss.vaccinate(...)` with `where=(ppl.age >= 0.75) & (ppl.age < 5) & measles.district.isin(names)`, which reached exactly those children |
-| Fitting | **Works**: `sim.fit()`, with your own loss (`gof=`) if you have one; LASER has no fitting of its own |
+| Fitting | **Works**: `sim.fit()`, with your own loss (`loss=`) if you have one; LASER has no fitting of its own |
 | Places and populations from shapefiles and rasters (`laser-init`) | **Works** for shapes: `ss.geo.geography(scenario)` takes a `GeoDataFrame`, or a .shp, .geojson, or .gpkg file (with geopandas installed), with columns `name` and `population` (or `pop`), and puts each place at the centroid of its shape. **Not yet** for rasters: give the populations by hand |
 
 The England and Wales model in miniature, with the life table, the seeding, and the gravity coupling declared: 20 places and 100,000 agents for a year:
@@ -149,7 +149,7 @@ w = 0.5 + rng.lognormal(0, 0.8, n)
 pop = np.round(100_000*w/w.sum())
 ages = np.arange(89)
 pyramid = np.exp(-0.017*ages) # The stable age pyramid for births of 0.017 a year
-places = ss.geo.geography(names=[f'p{i}' for i in range(n)], pop=pop, x=rng.uniform(0, 300, n), y=rng.uniform(0, 300, n))
+places = ss.geo.geography(names=[f'p{i}' for i in range(n)], populations=pop, x=rng.uniform(0, 300, n), y=rng.uniform(0, 300, n))
 
 S, E, I, R = ss.states('S E I R')
 measles = ss.Disease(
@@ -168,7 +168,7 @@ np.fill_diagonal(M, 0)
 M *= 0.045/M.sum(axis=1).mean()
 M *= np.minimum(1, 0.2/M.sum(axis=1))[:, None]
 measles.stratify(patch=places, mobility=ss.geo.Mobility(matrix=M, kind='force'))
-seeding = ss.Delivery(move=S >> I, capacity=3, interval=ss.days(30), name='seeding') # 3 people every 30 days
+seeding = ss.Delivery(move=S >> I, capacity=3, every=ss.days(30), name='seeding') # 3 people every 30 days
 people = ss.People(int(pop.sum()), age_data=np.array([ages, pyramid]).T)
 sim = ss.Sim(measles, people=people, interventions=seeding, unit='day', stop=365, verbose=0)
 sim.run()

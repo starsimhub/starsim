@@ -68,4 +68,4 @@ jobs:
     - name: Install and run it
       run: |
         python3 -m pip install wheelhouse/*.whl
-        python3 -c "import starsim as ss; assert ss.solvers.backends.rust.on; print(ss.compile_status())"
+        python3 -c "import starsim as ss; assert ss.solvers.backends.rust.on; print(ss.kernels.compile_status())"

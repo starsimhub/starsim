@@ -17,10 +17,10 @@ their meaning), a `beta` pair on `ss.MFNet` (`beta={'mf': [0.08, 0.04]}`, which 
 way), `copy_inputs=` (removed: a sim always copies its inputs), `ss.uids.cat()` (now `ss.uids.concatenate()`), an override of `ss.Infection`'s `infect()` (now `transmit()`), of `step_die(uids)` (now `on_death(uids)`), `preg.breastfeeding`
 (now `preg.lactating`), `ss.RandomNet(uniform_targets=True)` (now `method='uniform'`), the keywords of `ss.SIR`, `ss.SIS`, and `ss.SEIR` that Starsim 3 read itself
 (`init_prev=ss.bernoulli(0.1)` and `p_death=ss.bernoulli(0.1)` are numbers, `init_prev=ss.choose_n(20)` is `init_prev=20`, and `dur_inf=10` is
-`ss.years(10)`, since a bare number is in the model's unit), `p_loss=` of `ss.Pregnancy` (now `loss_rate=ss.probperweek(...)`), and the counts of the states of Starsim's own
+`ss.years(10)`, since a bare number is in the model's unit), `p_loss=` of `ss.Pregnancy` (now `loss_rate=ss.probperweek(...)`), `rate_units=` (now `rate_per=`, 1000 for Starsim 3's 1e-3) and `rr_ptb=` (now `rel_preterm=`), `ss.MaternalNet` (now `ss.PrenatalNet`, so `maternalnet` keys are `prenatalnet`), `ss.MixingPools` (now `ss.networks.MixingPools`), `ss.AgeGroup(lo, hi)` (now a condition on age), `src=` and `dst=` of mixing pools (now `source=` and `target=`), `age_range=[lo, hi]` of `ss.RandomNet` (now `where=`, a condition on age), and the counts of the states of Starsim's own
 modules after results (`results.n_alive`, `res['n_infected']`, now `results.alive`, `res['infected']`; a result the code makes
 itself keeps its name, and other counts are listed), the results of `ss.Infection` (`new_infections` is `infection`, and `cum_infections` is
-`infection.cum`), the deaths and emigrants of the sim (`new_deaths` is `died`, `cum_deaths` is `died.cum`, and `new_emigrants` is `emigrated`) and of a disease (`death`), results of demographics (`births.new` is `births.birth`, `deaths.cumulative` is `deaths.death.cum`, `pregnancy.n_preterm` is `pregnancy.preterm`, `maternal_deaths` is `maternal_death`), `on=` of a delivery or transition (now `where=`), and `ss.change()` (now `ss.modify()` of an `ss.timeseries()`). Read the diff
+`infection.cum`), the deaths and emigrants of the sim (`new_deaths` is `died`, `cum_deaths` is `died.cum`, and `new_emigrants` is `emigrated`) and of a disease (`death`), results of demographics (`births.new` is `births.birth`, `deaths.cumulative` is `deaths.death.cum`, `pregnancy.n_preterm` is `pregnancy.preterm`, `maternal_deaths` is `maternal_death`), `on=` of a delivery or transition (now `where=`), `ss.change()` (now `ss.modify()` of an `ss.timeseries()`), `use_aging=` (now `aging=`), `n_cpus=` (now `workers=`), `custom=` of the sim (now `modules=`), and `debug=True` of a MultiSim (now `parallel=False`). Read the diff
 afterwards: each change is listed with its line.
 
 Used with: agents; coded modules
@@ -45,8 +45,8 @@ renames = [
     (r'\bss\.(ClusterNet|HybridNet|StaticNet)\b', r'ssl.\1', 'these networks moved to the library (ssl.)'),
     (r'\bss\.MFNet\b',            'ss.SexualNet',                   "ss.MFNet is ss.SexualNet (between='mf' is its default)"),
     (r'\bss\.(networks\.)?SexualNetwork\b', 'ss.SexualNet',         'ss.SexualNetwork is ss.SexualNet, which has parameters and forms partnerships itself, unless a subclass overrides step()'),
-    (r'\bss\.MSMNet\(\)',          "ss.SexualNet(between='mm')",       "ss.MSMNet is ss.SexualNet(between='mm'), whose defaults are those of ss.SexualNet: give participation=0.1, dur=ss.lognorm_ex(mean=ss.years(2), std=ss.years(1)) for Starsim 3's"),
-    (r'\bss\.MSMNet\(',            "ss.SexualNet(between='mm', ",      "ss.MSMNet is ss.SexualNet(between='mm'), whose defaults are those of ss.SexualNet: give participation=0.1, dur=ss.lognorm_ex(mean=ss.years(2), std=ss.years(1)) for Starsim 3's"),
+    (r'\bss\.MSMNet\(\)',          "ss.SexualNet(between='mm')",       "ss.MSMNet is ss.SexualNet(between='mm'), whose defaults are those of ss.SexualNet: give participation=0.1, dur=ss.lognormal(mean=ss.years(2), std=ss.years(1)) for Starsim 3's"),
+    (r'\bss\.MSMNet\(',            "ss.SexualNet(between='mm', ",      "ss.MSMNet is ss.SexualNet(between='mm'), whose defaults are those of ss.SexualNet: give participation=0.1, dur=ss.lognormal(mean=ss.years(2), std=ss.years(1)) for Starsim 3's"),
     (r'\bss\.NCD\b',              'ssl.NCD',                        'ss.NCD moved to the library (ssl.NCD)'),
     (r'\bss\.Route\b',             'ss.networks.Route',              'ss.Route is ss.networks.Route'),
     (r'\bss\.InfectionLog\b',      'ss.diseases.InfectionLog',       'ss.InfectionLog is ss.diseases.InfectionLog'),
@@ -70,6 +70,28 @@ renames = [
     (r'\b(super\(\)|self)\.step_die\((?!\s*\))', r'\1.on_death(',  "A module's hook for the agents who die in a step is on_death(uids), for every kind of module (people.step_die() is the step that resolves the deaths)"),
     (r'\buids\.cat\(',             'uids.concatenate(',              'ss.uids.cat() is ss.uids.concatenate()'),
     (r'\bss\.library\.',          'ssl.',                           'ss.library is imported by itself: import starsim.library as ssl, then ssl.X'),
+    (r'\bss\.dur\(([^(),]+)\)',     r'ss.years(\1)',                  "ss.dur(x) with no unit was years: ss.years(x)"),
+    (r'\bss\.dur\b',                'ss.Duration',                    'ss.dur is ss.Duration (to make one, ss.years(), ss.days(), ...)'),
+    (r'\bss\.constant\(\s*v\s*=',      'ss.constant(value=',             'ss.constant(v=) is ss.constant(value=)'),
+    (r'\bss\.lognorm_ex\(',        'ss.lognormal(',                  'ss.lognorm_ex(mean=, std=) is ss.lognormal(mean=, std=)'),
+    (r'\bss\.lognorm_im\(\s*mean\s*=([^,()]*),\s*sigma\s*=', r'ss.lognormal(log_mean=\1, log_std=', 'ss.lognorm_im(mean=, sigma=) is ss.lognormal(log_mean=, log_std=)'),
+    (r'''(\btype\s*[=:]\s*)(['"])lognorm_ex\2''', r'\1\2lognormal\2', "a distribution of type 'lognorm_ex' is 'lognormal'"),
+    (r'\buse_aging\b',             'aging',                          'use_aging= of the sim is aging='),
+    (r'\bn_cpus(\s*=)',             r'workers\1',                     'n_cpus= of ss.parallel() and MultiSim runs is workers='),
+    (r'\brate_units(\s*=\s*)(1e-3|1e-03|0\.001)(?![\w.])', r'rate_per\g<1>1000', 'rate_units of ss.Births, ss.Deaths, and ss.Pregnancy is rate_per, the number of people the rates are per: 1000 (was 1e-3) or 1'),
+    (r'\brate_units\b',            'rate_per',                       'rate_units of ss.Births, ss.Deaths, and ss.Pregnancy is rate_per, the number of people the rates are per: 1000 (was 1e-3) or 1'),
+    (r'\brr_ptb(_age)?\b',          r'rel_preterm\1',                "ss.Pregnancy's rr_ptb and rr_ptb_age are rel_preterm and rel_preterm_age"),
+    (r'\bss\.(networks\.)?MaternalNet\b', 'ss.PrenatalNet',          'ss.MaternalNet is ss.PrenatalNet (named prenatalnet, so a beta or route= keyed maternalnet is now prenatalnet)'),
+    (r'''(['"])maternal(net)?\1''', r'\1prenatal\2\1',                  'ss.MaternalNet is ss.PrenatalNet, named prenatalnet'),
+    (r'\bmaternalnet\b',            'prenatalnet',                    'ss.MaternalNet is ss.PrenatalNet, named prenatalnet'),
+    (r'\bmaternal(net)?(\s*=)(?!=)', r'prenatal\1\2',                  'ss.MaternalNet is ss.PrenatalNet, so a beta keyed maternal= is prenatal='),
+    (r'\bss\.MixingPools\b',        'ss.networks.MixingPools',        'ss.MixingPools is ss.networks.MixingPools (ss.contacts() makes one from a contact matrix)'),
+    (r'\bss\.AgeGroup\((\w+(?:\.\w+)?),\s*None\)', r'ss.person.age >= \1', 'ss.AgeGroup(low, high) is a condition on age, e.g. (ss.person.age >= 5) & (ss.person.age < 15)'),
+    (r'\bss\.AgeGroup\((\w+(?:\.\w+)?),\s*(\w+(?:\.\w+)?)\)', r'(ss.person.age >= \1) & (ss.person.age < \2)', 'ss.AgeGroup(low, high) is a condition on age, e.g. (ss.person.age >= 5) & (ss.person.age < 15)'),
+    (r'\b(ss\.(?:networks\.)?MixingPools?\(.*?)\bsrc(\s*=)', r'\1source\2',      'src= and dst= of a mixing pool are source= and target='),
+    (r'\b(ss\.(?:networks\.)?MixingPools?\(.*?)\bdst(\s*=)', r'\1target\2', 'src= and dst= of a mixing pool are source= and target='),
+    (r'\b(ss\.RandomNet\(.*?)\bage_range\s*=\s*\[\s*([\w.]+)\s*,\s*([\w.]+)\s*\]', r'\1where=(ss.person.age >= \2) & (ss.person.age < \3)', 'age_range=[lo, hi] of ss.RandomNet is where=(ss.person.age >= lo) & (ss.person.age < hi), a condition over people'),
+    (r'\.validate\(\s*force\s*=\s*\w+\s*\)', '.validate()',        "force= of a network's validate() was removed: it did nothing"),
 ]
 
 # Internal helpers that are now only in their submodules, by submodule
@@ -77,42 +99,53 @@ moved = dict(
     distributions = 'dist_list',
     dists         = 'link_dists make_dist Dists',
     settings      = 'load_fonts',
-    modules       = 'module_map module_types find_modules',
+    modules       = 'module_map module_types find_modules Base',
     results       = 'validate_sim_data',
     debugtools    = 'metadata diff_sims check_sims_match Profile Diagnostics mock_time mock_sim mock_people mock_module',
-    utils         = 'standardize_data shrink',
+    utils         = 'standardize_data shrink ndict',
+    time          = 'TimePar Rate',
+    parameters    = 'Pars',
+    loop          = 'Loop',
+    sim           = 'SimPars',
+    kernels       = 'compile_status',
     networks      = 'find_contacts standardize_netkey',
-    arrays        = 'BaseArr',
+    arrays        = 'BaseArr IndexArr',
 )
 for submodule, names in moved.items():
     renames.append((rf"\bss\.({'|'.join(names.split())})\b", rf'ss.{submodule}.\1', f'internal helpers are in their submodule (ss.{submodule}.)'))
 
 # What needs a person: a regular expression, and what to write instead
 flags = [
+    (r'\bss\.beta_mean\b', "ss.beta_mean(mean=m, var=v) is ss.beta_dist(mean=m, std=s), with the standard deviation s = sqrt(v)"),
+    (r'\bss\.lognorm_im\b|\blognorm_im\b', "ss.lognorm_im(m, s) is ss.lognormal(log_mean=m, log_std=s) (by keyword, since ss.lognormal(m, s) is its own mean and standard deviation)"),
     (r'\bss\.RandomSafeNet\b', "ss.RandomSafeNet is ss.RandomNet(method='safe'), with n_contacts twice its n_edges"),
     (r'\bss\.(distributions\.)?(scale_types|rand_raw)\b', "ss.scale_types and ss.rand_raw were removed: a distribution's scaling is a string on the class ('predraw', 'postdraw', both as a list, or None; see the ss.Dist docstring), and raw uint64 draws for ss.combine_rands() are ss.randint(low=0, high=np.iinfo('uint64').max, dtype=np.uint64)"),
-    (r'\bss\.(routine|campaign)_(vx|screening|triage)\b', "a delivery: ss.vaccinate(efficacy=e, coverage=p, start=y, interval=ss.years(1)) for routine (Starsim 3's prob= was a share reached each year), at=[...] for a campaign; ss.screen() for screening, and for triage a second ss.screen(who=screening.positive) of its own"),
+    (r'\bss\.(routine|campaign)_(vx|screening|triage)\b', "a delivery: ss.vaccinate(efficacy=e, coverage=p, start=y, every=ss.years(1)) for routine (Starsim 3's prob= was a share reached each year), at=[...] for a campaign; ss.screen() for screening, and for triage a second ss.screen(on=screening.positive) of its own"),
     (r'\bss\.(RoutineDelivery|CampaignDelivery|BaseTest|BaseScreening|BaseTriage|BaseTreatment|BaseVaccination)\b', "Starsim 3's delivery classes were removed: ss.screen(), ss.vaccinate(), or ss.treat() with coverage= (prob=p is coverage=ss.probperyear(p), offered at every step), start= and stop= (start_year=, end_year=; stop is not included), at= (a campaign's years=), and where= (eligibility=); a subclass that overrides step() is an ss.Intervention written as code"),
-    (r'\bss\.treat_num\b', 'ss.treat(cure=e, where=dis.infection (or who=screening.positive), capacity=n, queue=True): those not served wait, and leave the queue when no longer eligible'),
-    (r'\bss\.(Dx|Tx|Vx)\b', "Starsim 3's products written as code were removed: ss.Diagnostic (a table of more than two results is results=dict(...), most severe first), ss.Treatment (cure=, or cure=dict(<state>=...) by state), ss.Vaccine (efficacy=); an administer() of your own is administer(self, uids) on a subclass of ss.Product, returning its outcomes as dict(positive=uids)"),
+    (r'\bss\.treat_num\b', 'ss.treat(cure=e, on=dis.infection (or on=screening.positive), capacity=n, queue=True): those not served wait, and leave the queue when no longer eligible'),
+    (r'\bss\.(Dx|Tx|Vx)\b', "Starsim 3's products written as code were removed: ss.Diagnostic (a table of more than two results is outcomes=dict(...), most severe first), ss.Treatment (cure=, or cure=dict(<state>=...) by state), ss.Vaccine (efficacy=); an administer() of your own is administer(self, uids) on a subclass of ss.Product, returning its outcomes as dict(positive=uids)"),
     (r'\bself\.results(\.new\b|\.cumulative\b|\[.(new|cumulative).\])', "if this is a subclass of ss.Births or ss.Deaths, the flow is results.birth or results.death (was new), and its total is .cum (was cumulative), so nothing stores it"),
     (r'\bss\.simple_vx\b', 'ss.Vaccine(efficacy=e)'),
-    (r'\bclass\s+\w+\(\s*(ss\.)?Pregnancy\s*\)', "ss.Pregnancy is now the declared module (states and transitions, with Starsim 3's arguments), and Starsim 3's pregnancy written as code was removed: its old methods are never called, so a subclass that overrides them does nothing. Rewrite onto its seams: conception_rate(sim) for who conceives, ss.modify() of its transitions (preg.conception, preg.miscarriage, ...), infant_rate= for infant mortality, since_birth and preg.lactating for postpartum and breastfeeding, ss.on(preg.birth) or preg.add_callback(preg.birth, fn) at a delivery"),
+    (r'\bclass\s+\w+\(\s*(ss\.)?Pregnancy\s*\)', "ss.Pregnancy is now the declared module (states and transitions, with Starsim 3's arguments), and Starsim 3's pregnancy written as code was removed: its old methods are never called, so a subclass that overrides them does nothing. Rewrite onto its seams: conception_rate(sim) for who conceives, ss.modify() of its transitions (preg.conception, preg.miscarriage, ...), infant_death_rate= for infant mortality, since_birth and preg.lactating for postpartum and breastfeeding, ss.on(preg.birth) or preg.add_callback(preg.birth, fn) at a delivery"),
     (r'\.add_(conception|delivery)_callback\(', "ss.Pregnancy's add_conception_callback(fn) is preg.add_callback(preg.conception, fn); add_delivery_callback(fn), which was called with (mothers, newborns), is preg.add_callback(preg.birth, fn), called with the newborns (their mothers are sim.people.parent[newborns]). Both are called at the end of the pregnancy's step"),
-    (r'\bss\.(demographics\.)?PregnancyPars\b', "ss.PregnancyPars was removed: ss.Pregnancy defines its parameters itself, and ss.Pregnancy().pars has them (e.g. k in ss.Pregnancy().pars; its fertility is the conception rate, a method, so leave it out when passing the values on). A subclass of it is an ss.Pars with the keys it uses"),
-    (r'\b(slot_scale|min_slots|p_survive_maternal_death|trimesters)\s*=(?!=)', "if this is a parameter of ss.Pregnancy, it was removed, since nothing read it: drop slot_scale, min_slots, and p_survive_maternal_death; for trimesters, the gestational age is preg.P.time (e.g. preg.P & (preg.P.time < ss.weeks(13)))"),
-    (r'\.find_(unborn_)?children\(', "People.find_children() and Starsim 3's pregnancy's find_unborn_children() were removed: the children of some parents are ss.uids(ppl.auids[np.isin(ppl.parent, parents)]); with fetuses as agents (ss.Pregnancy(fetus=True)), those not yet born are also preg.fetal"),
+    (r'\bss\.(demographics\.)?PregnancyPars\b', "ss.PregnancyPars was removed: ss.Pregnancy defines its parameters itself, and ss.Pregnancy().pars has them (e.g. k in ss.Pregnancy().pars; its fertility_rate is the conception rate, a method, so leave it out when passing the values on). A subclass of it is an ss.Pars with the keys it uses"),
+    (r'\b(slot_scale|min_slots|p_survive_maternal_death|trimesters)\s*=(?!=)', "if this is a parameter of ss.Pregnancy, it was removed, since nothing read it: drop slot_scale, min_slots, and p_survive_maternal_death; for trimesters, the gestational age is preg.P.time_in (e.g. preg.P & (preg.P.time_in < ss.weeks(13)))"),
+    (r'\.find_(unborn_)?children\(', "People.find_children() and Starsim 3's pregnancy's find_unborn_children() were removed: the children of some parents are ss.uids(ppl.auids[np.isin(ppl.parent, parents)]); with fetuses as agents (ss.Pregnancy(fetal_agents=True)), those not yet born are also preg.fetal"),
     (r'\bss\.(utils\.)?(parse_age_range|apply_age_range)\(', "ss.parse_age_range() and ss.utils.apply_age_range() moved to STIsim (sti.parse_age_range(), sti.apply_age_range()); in Starsim, an age band is a condition, e.g. (ppl.age >= 15) & (ppl.age < 25), or a stratification (sim.stratify(age=[15, 25, 50]))"),
     (r'\b\w*preg\w*\.ti_delivery\b', "ss.Pregnancy's scheduled delivery is ti_exit_P (fractional: np.ceil(preg.ti_exit_P[uids]) is Starsim 3's step); a loss can end the pregnancy first"),
-    (r'\b\w*preg\w*\.tri[123]_uids\b', "ss.Pregnancy has no trimesters: the gestational age is the time in P, e.g. weeks = (sim.ti - preg.ti_P[uids])*sim.t.dt_year*52 for the pregnant (preg.P.uids), or preg.P.time in a declared condition"),
-    (r'\b\w*preg\w*\.(gestation|n_miscarriages|n_stillbirths|carrying_multiple)\b', "removed from ss.Pregnancy: the gestational age is the time in P (preg.P.time); losses per woman are ss.attr(1, on=preg.miscarriage, combine='sum')"),
+    (r'\b\w*preg\w*\.tri[123]_uids\b', "ss.Pregnancy has no trimesters: the gestational age is the time in P, e.g. weeks = (sim.ti - preg.ti_P[uids])*sim.t.dt_year*52 for the pregnant (preg.P.uids), or preg.P.time_in in a declared condition"),
+    (r'\b\w*preg\w*\.(gestation|n_miscarriages|n_stillbirths|carrying_multiple)\b', "removed from ss.Pregnancy: the gestational age is the time in P (preg.P.time_in); losses per woman are ss.attr(1, on=preg.miscarriage, combine='sum')"),
     (r'\.(make_embryos|make_pregnancies|make_p_conceive|select_conceivers|process_delivery|process_newborns|process_maternal_deaths|process_neonatal_deaths|process_prenatal_deaths|progress_pregnancies|update_breastfeeding|update_maternal_deaths|set_breastfeeding|set_rel_sus|draw_dur_pregnancy|updates_pre)\(', "a method of Starsim 3's pregnancy written as code, which was removed; ss.Pregnancy does this with its transitions and events (preg.conception, preg.delivery, preg.birth), or preg.add_callback(event, fn) from code"),
     (r'\bss\.SIS\(.*\b(waning|imm_boost)\s*=', "ssl.AgentSIS(waning=..., imm_boost=...): the declared ss.SIS has no immunity level"),
     (r'''\bss\.(SIR|SIS|SEIR)\(|\b(type|diseases)\s*=\s*['"](sir|sis|seir)['"]''', "ss.SIR, ss.SIS, and ss.SEIR are now the textbook models (an exponential dur_inf and dur_exp, and p_death=0): for Starsim 3's model (a lognormal dur_inf and p_death=0.01), use ssl.AgentSIR, ssl.AgentSIS, or ssl.AgentSEIR"),
     (r'\binit_prev\s*=\s*ss\.(bernoulli|choose_n)\(', "if this is a declared disease (ss.SIR, ss.Disease with transitions, ...): init_prev is a share, a number of people above 1, or a function of (sim, uids) giving a share; for a function that took (self, sim, uids), drop self. A disease written as code keeps its distribution"),
-    (r'\bdur_(inf|exp)\s*=\s*(dict\(|\{|\[)', "if this is ss.SIR, ss.SIS, or ss.SEIR: give the distribution itself, e.g. dur_inf=ss.lognorm_ex(mean=ss.years(10), std=ss.years(2)) for [10, 2] or dict(type='lognorm_ex', ...); a duration is otherwise the mean of an exponential"),
-    (r'\bdef net_beta\(', "net_beta() of a network is called for the edges of a disease written as code as net_beta(disease_beta=None, inds=None, disease=None): the edges are inds= (not uids=), and disease_beta has a value for each of them. A declared disease does not call it on a network with acts: use ss.modify(dis.infection, route=net.name, efficacy=e, share=s)"),
+    (r'\bdur_(inf|exp)\s*=\s*(dict\(|\{|\[)', "if this is ss.SIR, ss.SIS, or ss.SEIR: give the distribution itself, e.g. dur_inf=ss.lognormal(mean=ss.years(10), std=ss.years(2)) for [10, 2] or dict(type='lognormal', ...); a duration is otherwise the mean of an exponential"),
+    (r'\bdef net_beta\(', "net_beta() of a network is called for the edges of a disease written as code as net_beta(disease_beta=None, inds=None, disease=None): the edges are inds= (not uids=), and disease_beta has a value for each of them. A declared disease does not call it on a network with acts: use ss.modify(dis.infection, network=net.name, efficacy=e, share=s)"),
     (r'\bp_loss\s*=', "if this is a parameter of ss.Pregnancy, it is loss_rate=ss.probperweek(p) (or any other rate), the hazard of a spontaneous loss"),
+    (r'\bsex_ratio\s*=', "if this is a parameter of ss.Pregnancy, it is p_female= (the share of babies born female), as on ss.People and ss.birth()"),
+    (r'\bmetadata\s*=\s*(dict\(|\{)', "if this is metadata= of ss.Births, ss.Deaths, or ss.Pregnancy, it is columns=, the data's column for each standard key directly: columns=dict(year='Time', value='CBR') for metadata=dict(data_cols=dict(year='Time', value='CBR')), with sex_keys=dict(...) inside it for the labels of the sexes"),
+    (r'\bage_range\s*=', "if this is age_range= of a network (ss.RandomNet, ssl.ClusterNet) or of net.eligible(), it is where=, a condition over people: where=(ss.person.age >= lo) & (ss.person.age < hi)"),
+    (r'\bss\.AgeGroup\(', "ss.AgeGroup was removed: a group of a mixing pool is a condition on people, e.g. (ss.person.age >= 5) & (ss.person.age < 15), or ss.person.age >= 65 for an open group"),
     (r'\bss\.seasonality\b', 'ss.modify(dis.rel_trans, multiply=ss.seasonal(amplitude=a, peak=p)), in connectors='),
     (r'\bss\.multi_run\(', 'ss.parallel(sim, n_runs=n).sims (iterpars= is pars=)'),
     (r'\bss\.single_run\(', 'ss.single_run() was removed: sim.run() runs one sim (sim.copy().run() keeps the original as it was), and ss.parallel() runs many; a subclass of ss.MultiSim changes the sim of each run in its make_run()'),
@@ -121,10 +154,10 @@ flags = [
     (r'\b(prenatal|postnatal|congenital)_death_keys\b', "Starsim 3's congenital outcomes on ss.Infection (prenatal_death_keys and the like) were removed: set_congenital(uids, sources) is called for those infected before birth, and ssl.CongenitalDisease (import starsim.library as ssl) schedules the outcomes at birth (birth_outcome_keys=, each with a ti_<key> state)"),
     (r'\.compute_transmission\(', "Starsim 3's route.compute_transmission() was removed: a disease written as code transmits over every route in transmit() (ss.Infection's, by default), or over one route with self.transmit_route(i, route, betas, rel_trans, rel_sus), which returns the targets, sources, and network IDs of the new infections"),
     (r'\b(?!(?:np|pd|jnp|torch)\b)\w+\.concat\(', "if this is the concat() of ss.uids, it is concatenate() (x.concatenate(y), or ss.uids.concatenate(x, y))"),
-    (r'\bss\.(calibration\.)?(Calibration|CalibComponent|BetaBinomial|Binomial|DirichletMultinomial|GammaPoisson|Normal)\b|\bss\.calibration\b|\b(linear_interp|linear_accum|step_containing)\b', "Starsim 3's calibration was removed: bounds on the parameters (ss.par(v, bounds=[lo, hi])), the data on the sim (ss.Sim(..., data=df)), and sim.fit(); a likelihood by series (likelihood=dict(prevalence=ss.normal(scale=s)), or ss.binom, ss.nbinom, ss.poisson), or gof=fn(sim) for a measure of your own"),
+    (r'\bss\.(calibration\.)?(Calibration|CalibComponent|BetaBinomial|Binomial|DirichletMultinomial|GammaPoisson|Normal)\b|\bss\.calibration\b|\b(linear_interp|linear_accum|step_containing)\b', "Starsim 3's calibration was removed: bounds on the parameters (ss.par(v, bounds=[lo, hi])), the data on the sim (ss.Sim(..., data=df)), and sim.fit(); a likelihood by series (likelihood=dict(prevalence=ss.normal(scale=s)), or ss.binom, ss.nbinom, ss.poisson), or loss=fn(sim) for a measure of your own"),
     (r'\.plot_compare\(', 'msim.compare(do_plot=True) (with t= and sim_inds= as before)'),
     (r'\bss\.dynamics_by_age\b', "ss.dynamics_by_age was removed: stratify the sim by age (sim.stratify(age=[0, 20, 40])) and read a result by age group (res.I.by('age')), or write an analyzer of your own (see the user guide on analyzers)"),
-    (r'\b(ppl|people)\.filter\(', "People.filter() and its Filter were removed: use the states as arrays and conditions, e.g. ppl.female.uids, (ppl.female & (ppl.age > 5)).uids, or where=ss.ppl.age < 15"),
+    (r'\b(ppl|people)\.filter\(', "People.filter() and its Filter were removed: use the states as arrays and conditions, e.g. ppl.female.uids, (ppl.female & (ppl.age > 5)).uids, or where=ss.person.age < 15"),
     (r'\.to_df\(.*\bdescend\s*=', 'results.to_df() always includes the results of the modules too (as sim.to_df() did), with the times as the column time, or as the index with set_date_index=True'),
     (r'''\[\s*['"]timevec['"]\s*\]|columns=dict\(timevec=''', "if this is a column of to_df(), the times are the column time (sim.results.timevec is unchanged)"),
     (r'\bss\.(Samples|Dataset|samples)\b', 'ss.Samples and ss.Dataset were removed: ss.parallel(sim, n_runs=n) gives the runs (msim.results, msim.to_df()); save their dataframes to keep them'),
@@ -133,12 +166,13 @@ flags = [
     (r'\bss\.Sim\(.*\b(birth|death)_rate\s*=', 'demographics=[ss.Births(birth_rate=...), ss.Deaths(death_rate=...)] (per 1,000, as before), or ss.birth(rate=ss.peryear(...)) per person'),
     (r'\bss\.(MFNet|SexualNet)\(.*\bduration\s*=', 'dur= (as every other network); net.pars.duration is net.pars.dur'),
     (r'\brel_part_rates\s*=', 'participation= (rel_part_rates was removed: its multiplier goes in the probability, e.g. participation=0.45 for 0.9 times 0.5)'),
-    (r'''(['"])(mf|mfnet|msm|msmnet)\1''', "ss.MFNet and ss.MSMNet are ss.SexualNet, named 'sexualnet' unless given a name: networks='sexual', and a beta or route= keyed 'sexual' (or ss.SexualNet(name='mf'))"),
+    (r'''(['"])(mf|mfnet|msm|msmnet)\1''', "ss.MFNet and ss.MSMNet are ss.SexualNet, named 'sexualnet' unless given a name: networks='sexual', and a beta or ss.modify(network=) keyed 'sexual' (or ss.SexualNet(name='mf'))"),
     (r'\bfloat\((?![^)]*(\.raw|\.values|\[|_units\b|_steps\b))[^)]*(rate|dur_)[^)]*\)', 'if this is a rate or duration (ss.peryear, ss.years, ...), its number is .value (float() of one is refused)'),
     (r'\bclass\s+\w+\(.*\bss\.SexualNet\b', 'ss.SexualNet has parameters and forms partnerships itself (between=, n_contacts=, dur=, ...): a subclass that forms its own overrides step(), and the base then starts none for it'),
     (r'\bkeep_case\s*=', 'Results.flatten() always keeps the case of keys now (as to_df() does): drop keep_case='),
     (r'\bmatch_result_keys\b', 'ss.utils.match_result_keys() is gone: res.flatten() gives a flat dict of results'),
     (r'\bss\.change\(', 'ss.change() is ss.modify() of a time series, from its first time: ss.modify(target, multiply=ss.timeseries({t1: x1, t2: x2}), start=t1) for by=, and set= for to='),
+    (r'\.col\(', "if this is a column of a 2D result, res.col('alpha') is res['alpha'] (or res.select(column='alpha')); arr.col() of a 2D array is unchanged"),
 ]
 
 # The names of results that depend on the rest of the code: the counts of states (n_<state>), and the results of ss.SIR and the others
@@ -458,18 +492,28 @@ def migrate_ast(text, analyzers=None):
                     edits.add(kw, "method='uniform'", "uniform_targets=True of ss.RandomNet is method='uniform'")
                 elif kw.value.value is False:
                     remove_kw(call, kw, 'uniform_targets=False of ss.RandomNet is the default')
+            elif kw.arg == 'custom' and func == 'ss.Sim':
+                if any(k.arg == 'modules' for k in call.keywords):
+                    found.append((kw.lineno, 'custom= of ss.Sim is gone: put these modules in modules=, which keeps those of no standard type in sim.custom'))
+                else:
+                    edits.replace(kw.lineno, kw.col_offset, kw.col_offset + len('custom'), 'modules', 'custom= of ss.Sim is modules=, which keeps the modules of no standard type in sim.custom')
+            elif kw.arg == 'debug' and func in ['ss.MultiSim', 'ss.parallel'] and isinstance(kw.value, ast.Constant):
+                if kw.value.value is True:
+                    edits.add(kw, 'parallel=False', f'debug=True of {func} is parallel=False')
+                else:
+                    remove_kw(call, kw, f'debug=False of {func} is the default')
             elif kw.arg == 'copy_inputs':
                 if remove_kw(call, kw, 'copy_inputs= is removed: a sim always copies the modules it is given'):
                     found.append((kw.lineno, 'a sim copies the modules it is given (copy_inputs= is removed): read them, and their results, from the sim (sim.diseases.sir, sim.analyzers.myanalyzer), not from the objects given'))
 
-    # Keywords of deliveries and transitions: on= is where=, and when= is a condition on time; ss.change() is ss.modify() of a time series
+    # Keywords of deliveries, modifiers, and transitions: on= of a modifier is where=, and when= is a condition on time; ss.change() is ss.modify() of a time series
     for call in [n for n in ast.walk(tree) if isinstance(n, ast.Call)]:
         func = ast.unparse(call.func)
         keywords = {kw.arg:kw for kw in call.keywords}
-        if func in targeted and 'on' in keywords:
+        if func == 'ss.modify' and 'on' in keywords:
             kw = keywords['on']
             if 'where' in keywords:
-                found.append((kw.lineno, f'on= of {func} is where=, and this call has a where= too: join them with &, e.g. where=event & condition (for a delivery, the condition can stay as who=)'))
+                found.append((kw.lineno, f'on= of {func} is where=, and this call has a where= too: join them with &'))
             else:
                 edits.replace(kw.lineno, kw.col_offset, kw.col_offset + len('on'), 'where', f'on= of {func} is where=')
         if func in targeted and 'when' in keywords:

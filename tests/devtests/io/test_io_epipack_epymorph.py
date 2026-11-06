@@ -39,7 +39,7 @@ def seird_sim():
         births    = ss.birth(S, rate=ss.peryear(0.02)),
         infection = ss.Transition(S, E, rate=ss.perday(0.4) * I),
         onset     = ss.Transition(E, I, dur=ss.days(4)),
-        outcome   = ss.Transition(I, [R, D], dur=ss.lognorm_ex(ss.days(8), ss.days(3)), p=[None, 0.1]),
+        outcome   = ss.Transition(I, [R, D], dur=ss.lognormal(ss.days(8), ss.days(3)), p=[None, 0.1]),
         deaths    = ss.death([S, E, I, R], rate=ss.peryear(0.01)),
         init_prev = 0.01, name='seird')
     return ss.Sim(dis, total_pop=1e5, unit='day', stop=120, verbose=0)

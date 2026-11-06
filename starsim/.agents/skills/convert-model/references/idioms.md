@@ -14,7 +14,7 @@ What to write for the pieces that `ss.import_from()` lists as not translated (`I
 | A mean duration | `I >> R @ ss.days(10)` (exponential) |
 | A fixed duration | `Q >> R @ ss.constant(ss.days(30))` |
 | An Erlang or gamma duration, or stages | `E >> I @ ss.erlang(k=3, mean=ss.days(10))`, or `stages=3` on the transition |
-| A lognormal or other distribution | `dur=ss.lognorm_ex(mean=ss.days(10), std=ss.days(3))` (agents sample it; compartments use Erlang stages, with a note) |
+| A lognormal or other distribution | `dur=ss.lognormal(mean=ss.days(10), std=ss.days(3))` (agents sample it; compartments use Erlang stages, with a note) |
 | "As soon as", probability 1 at the next step | If it happens on entry, a branch with `p=` and no rate on the transition into the state (nobody waits in it, under every solver). If it waits on a condition (`where=`), a rate of a few per step, such as `rate=ss.perday(5)` for a daily step (99% leave within the step); not a very high rate such as `ss.perday(1e9)`, since a compartmental solver takes as many substeps as the fastest rate needs, and hangs |
 | A delay that is exact (odin's `delay()`, a lag) | `ss.outcome(source, delay=ss.days(14))` for a reported quantity; for people, a fixed dwell (`ss.constant`), which every solver takes exactly, as a conveyor of whole steps |
 | Rates that change in time | `ss.timeseries({'2020-01-01': 1, '2020-04-01': 0.5})` as the value of a parameter, `ss.seasonal(mean=, amplitude=, peak=)`, or `ss.modify(sir.pars.beta, multiply=ss.timeseries({...}), start=...)` |
@@ -27,9 +27,9 @@ What to write for the pieces that `ss.import_from()` lists as not translated (`I
 | A condition on another state machine or disease (`cond: is_A`, `escape: is_I`) | `where=` on the transition: `ss.Transition(NG, G, rate=..., where=lambda sim: sim.diseases.growth.A)` |
 | A condition on age, sex, or another property | `where=ppl.age >= 15` (with `ppl = ss.People(n)` in scope); for a compartmental run, a bin edge at 15 in the age stratification |
 | A capacity (fewer than K in a state) | A comparison of counts in the rate: `I >> Q @ 0.01 * (Q.n < K)` |
-| A minimum stay before the other ways out apply | `after=` on each way out (`ss.Transition(E, I, rate=0.3, after=ss.days(10))`); a way out with no `after=` applies throughout (EMULSION's escape) |
+| A minimum stay before the other ways out apply | `min_stay=` on each way out (`ss.Transition(E, I, rate=0.3, min_stay=ss.days(10))`); a way out with no `min_stay=` applies throughout (EMULSION's escape) |
 | A variable that is not a flow (odin's `update()` of a lag, a running maximum, a switch) | A module written as code keeps it in its `step()` (a connector with `self.peak = max(self.peak, I.n/N)`), and a function in the rate reads it (`lambda sim: np.exp(-5*sim.connectors.track.peak)`); agents only |
-| Groups (age, place, risk) | `dis.stratify(age=[0, 15, 65], split=..., adjust={'infection': [...]})`; places with `ss.geo.geography(...)` and `ss.geo.Mobility(...)` |
+| Groups (age, place, risk) | `dis.stratify(age=[0, 15, 65], fractions=..., adjust={'infection': [...]})`; places with `ss.geo.geography(...)` and `ss.geo.Mobility(...)` |
 
 ## People coming and going
 
@@ -39,8 +39,8 @@ What to write for the pieces that `ss.import_from()` lists as not translated (`I
 | Deaths from some states, or from all | `S + R >> ss.null @ mu`, `ss.death(rate=mu)` (from every state) |
 | An absorbing dead state that is removed (`autoremove`) | An outflow to `ss.null` |
 | Immigration and emigration | `ss.immigration(S, rate=)`, `ss.emigration(rate=)` |
-| Aging between age groups | `use_aging=True` on the sim with an age stratification; or `ss.transfer` between levels |
-| Offspring produced on a transition (EMULSION's `produce_offspring`) | Into one state: a birth driven by the transition, `ss.birth(NB, per=farrowing, n=10)` (under every solver); by prototype across several machines: custom code on the transition's events, see below |
+| Aging between age groups | `aging=True` on the sim with an age stratification; or `ss.transfer` between levels |
+| Offspring produced on a transition (EMULSION's `produce_offspring`) | Into one state: a birth driven by the transition, `ss.birth(NB, on=farrowing, n=10)` (under every solver); by prototype across several machines: custom code on the transition's events, see below |
 | Scheduled moves, entries, and exits (SimInf's events) | `ss.geo.Mobility(data=df)` with columns for the time, `from`, `to`, the number, and the states chosen from |
 
 Actions on crossing a transition, such as offspring or a counter, as agents:
@@ -68,7 +68,7 @@ A numeric variable that only gates transitions (age, a counter) is either a stra
 | Homogeneous mixing | Nothing: the default; a bare state in a rate is `I.n / N` |
 | A contact matrix by age | `networks=ss.contacts(matrix, ages=[...])`, with the disease stratified by the same bins (or a coarser set; a note says how it was aggregated) |
 | A matrix for each of several dimensions | `ss.contacts(dict(age=M1, location=M2))` |
-| Coupling between places | `ss.geo.Mobility(matrix=M)` (commuting), `ss.geo.Mobility(kind='force')` (the force of infection moves), `ss.geo.gravity(k=, a=, b=, c=)` |
+| Coupling between places | `ss.geo.Mobility(matrix=M)` (commuting), `ss.geo.Mobility(kind='force')` (the force of infection moves), `ss.geo.gravity(scale=, source_power=, dest_power=, distance_power=)` |
 | A dynamic partnership network (ERGM-style targets) | `ss.DegreeNet(n_contacts=, concurrency=, dur=, match=dict(risk=0.9))` (`between=` for two groups), or `ss.SexualNet(n_contacts=, concurrency=, max_contacts=)` for men and women (`between='mm'` for men); `ss.DegreeNet(n_contacts=, dur=)` for lasting partnerships between anyone (`where=` for some people) |
 | A random network | `ss.RandomNet(n_contacts=)`, with `method='exact'` for a fixed number of contacts each |
 
@@ -80,7 +80,7 @@ A numeric variable that only gates transitions (age, a counter) is either a stra
 | A change for some people or under a condition | `ss.modify(sir.rel_sus, multiply=0.6, where=..., start=, stop=, when=)` |
 | Vaccination as a move between strata | `sir.stratify(vaccinated=[False, True], adjust={'infection': [1, 0.15]})` and `ss.Delivery(move=dict(vaccinated=True), coverage=, at=)` |
 | A product delivered to people | `ss.vaccinate(efficacy=0.85, coverage=0.7, at=[...], where=...)`, `ss.screen(...)`, `ss.treat(...)` |
-| A trigger (start when prevalence passes a threshold) | `where=lambda sim: ...` on a modifier or delivery (no memory); a rule with memory is a delivery's `deliver=` function |
+| A trigger (start when prevalence passes a threshold) | `where=lambda sim: ...` on a modifier or delivery (no memory); a rule with memory is a delivery's `who=` as a function |
 | Scenarios | One sim per scenario, run together with `ss.parallel(baseline=sim, vaccine=sim2)` |
 
 ## Outputs

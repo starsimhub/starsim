@@ -21,7 +21,7 @@ def make_community_measles(coverage=0.6, rate=None):
         transfers['catchup'] = ss.transfer(vaccinated=True, rate=ss.peryear(ss.by(community=rate)), states=['S'])
     measles = make_measles()
     measles.stratify(community={'general': 0.95, 'close-knit': 0.05})
-    measles.stratify(vaccinated=[False, True], split=split, states=['S'], adjust={'rel_sus': [1, 0.03]}, **transfers)
+    measles.stratify(vaccinated=[False, True], fractions=split, states=['S'], adjust={'rel_sus': [1, 0.03]}, **transfers)
     return measles
 
 age_contacts = [[10, 6, 1], [3, 8, 1], [3, 6, 3]]

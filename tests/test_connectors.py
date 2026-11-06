@@ -87,7 +87,7 @@ class TreatSIS(ss.Intervention):
 def make_args():
     """ Make people, HIV, SIS, and network """
     pars = dict(n_agents=2000, verbose=0)
-    mf = ss.SexualNet(dur=ss.lognorm_ex(mean=5, std=0.5, unit=ss.years))
+    mf = ss.SexualNet(dur=ss.lognormal(mean=5, std=0.5, unit=ss.years))
     hiv = ssl.diseases.HIV(beta={'sexual': [0.0008, 0.0004]}, init_prev=0.2)
     sis = ssl.AgentSIS(name='sis', beta={'sexual': [0.02, 0.01]}, init_prev=0.05) # Written as code, since the connector and TreatSIS set its arrays directly; low enough per act for rel_sus to matter
     return dict(pars=pars, networks=mf, diseases=[hiv, sis])
@@ -201,25 +201,31 @@ def test_where_count():
 
 
 def test_keywords():
-    sc.heading('who= chooses people, when= is a condition on time, and where= is everything else')
+    sc.heading('who= chooses people, on= is an event, when= is a condition on time, and where= is everything else')
     d = ss.SIR(beta=ss.perday(0.1), name='d')
-    with pytest.raises(TypeError, match='who= chooses people'): # A function, a count, or a number does not say who
-        ss.vaccinate(ss.Vaccine(efficacy=0.9), who=lambda sim: sim.ti > 5)
+    with pytest.raises(TypeError, match='who= chooses people'): # A count or a number does not say who
+        ss.vaccinate(ss.Vaccine(efficacy=0.9), who=d.I.n > 5)
+    with pytest.raises(TypeError, match='give the event as on='): # An event triggers, so it is not who= (nor where=)
+        ss.vaccinate(ss.Vaccine(efficacy=0.9), who=d.infection)
+    with pytest.raises(TypeError, match='on= of a delivery is the event'): # A condition is not an event
+        ss.vaccinate(ss.Vaccine(efficacy=0.9), on=d.I)
+    with pytest.raises(TypeError, match='give the event as on='): # where= of a transition only restricts
+        ss.Transition(d.S, d.R, where=d.infection)
     with pytest.raises(TypeError, match='use where='): # A state is not a time
         ss.modify(d.pars.beta, multiply=0.5, when=d.I)
     with pytest.raises(AttributeError, match='goes in where='): # when= is given the timeline, not the sim
         ss.Sim(d, connectors=ss.modify(d.pars.beta, multiply=0.5, when=lambda sim: sim.results), n_agents=100, stop=5, verbose=0).run()
     make = lambda intv: ss.Sim(ss.SIR(beta=ss.perday(0.1), init_prev=0.1, name='d'), networks='random', interventions=intv, n_agents=200, unit='day', stop=10, solver='abm', verbose=0).run().results.vx.delivered.sum()
-    assert make(ss.vaccinate(ss.Vaccine(efficacy=0), where='d.infection', name='vx')) > 0 # An event in where= triggers it, here by its path
+    assert make(ss.vaccinate(ss.Vaccine(efficacy=0), on='d.infection', name='vx')) > 0 # An event in on= triggers it, here by its path
 
     # The same on a transition: an event, or a condition with no other driver, is what moves people
     S, I, F = ss.states('S I F')
-    flag = ss.Transition(I, F, where=ss.ppl.age >= 0)
+    flag = ss.Transition(I, F, on=ss.person.age >= 0)
     assert flag.trigger is not None and flag.where is None
     tr = S >> I @ ss.perday(1)
     with pytest.raises(ValueError, match='takes no rate='):
-        ss.Transition(S, I, rate=ss.perday(1), where=tr)
-    timed = ss.Transition(I, F, dur=ss.days(3), where=ss.ppl.age >= 0) # A condition with a driver is who it applies to
+        ss.Transition(S, I, rate=ss.perday(1), on=tr)
+    timed = ss.Transition(I, F, dur=ss.days(3), where=ss.person.age >= 0) # A condition with a driver is who it applies to
     assert timed.trigger is None and timed.where is not None
     return
 
@@ -234,7 +240,7 @@ def test_member():
         infection = S >> E @ beta*I
         onset = E >> I @ ss.days(3)
         recovery = I >> R @ ss.days(8)
-        fading = ss.modify('rel_trans', multiply=0.5**(I.time/ss.days(3)), where=I)
+        fading = ss.modify('rel_trans', multiply=0.5**(I.time_in/ss.days(3)), where=I)
         distancing = ss.modify(beta, multiply=0.5, start=20)
         slower = ss.modify(recovery, multiply=2, start=30)
 
@@ -243,7 +249,7 @@ def test_member():
     S, E, I, R = ss.states('S E I R')
     beta = ss.par(ss.perday(0.1))
     d = ss.Disease(S, E, I, R, beta=beta, infection=S >> E @ beta*I, onset=E >> I @ ss.days(3), recovery=I >> R @ ss.days(8), init_prev=0.1, name='a')
-    given = [ss.modify(d.rel_trans, multiply=0.5**(d.I.time/ss.days(3)), where=d.I), ss.modify(d.pars.beta, multiply=0.5, start=20), ss.modify(d.recovery, multiply=2, start=30)]
+    given = [ss.modify(d.rel_trans, multiply=0.5**(d.I.time_in/ss.days(3)), where=d.I), ss.modify(d.pars.beta, multiply=0.5, start=20), ss.modify(d.recovery, multiply=2, start=30)]
     assert np.array_equal(held.results.a.I, ss.Sim(d, connectors=given, **kw).run().results.a.I)
 
     # Two of the same class, each with its own, and one by keyword, under any solver
@@ -280,7 +286,7 @@ def test_coded():
         assert wealth.seen == [1, 1, 2, 2, 3, 3] and link.seen == [1, 3, 3, 4, 4, 4], f'{solver}: {wealth.seen} and {link.seen}' # A step from each year 0 to 5
         assert wealth.pars.rate == 1
     with pytest.raises(ValueError, match='cannot differ between people'):
-        ss.Sim(diseases=ss.SIR(beta=ss.perday(0.1)), modules=Wealth(name='wealth'), connectors=ss.modify('wealth.pars.rate', multiply=2, where=ss.ppl.age > 5), n_agents=100, verbose=0).init()
+        ss.Sim(diseases=ss.SIR(beta=ss.perday(0.1)), modules=Wealth(name='wealth'), connectors=ss.modify('wealth.pars.rate', multiply=2, where=ss.person.age > 5), n_agents=100, verbose=0).init()
     return
 
 
@@ -291,7 +297,7 @@ def test_modifier_tables():
         season = ss.seasonal(amplitude=0.5, peak=ss.days(50), period=ss.days(180))
         rate = ss.par(beta*season, name='beta') if wrap else ss.par(beta, name='beta')*season # A parameter given as an expression varies in time as one with the factor outside
         d = ss.Disease(S, I, R, infection=S >> I @ rate*I, recovery=I >> R @ ss.days(10), init=dict(I=0.001), name='d')
-        d.stratify(age=[0, 20, 60], split=[0.3, 0.5, 0.2])
+        d.stratify(age=[0, 20, 60], fractions=[0.3, 0.5, 0.2])
         mods = [ss.modify(d.rel_sus, multiply=ss.by(age=[0.5, 1, 0.8]), start=start, stop=150),
                 ss.modify(d.rel_trans, multiply=ss.par(cut, name='cut'), stop=100),
                 ss.modify(d.recovery, multiply=ss.timeseries({0: 1, 60: 2}), start=20)]
@@ -303,13 +309,13 @@ def test_modifier_tables():
     assert np.array_equal(I(sim.run()), ref), 'A rerun gives the same'
     assert np.allclose(I(make().run(until=200)), ref, rtol=1e-12), 'A run a step at a time gives the same'
     assert np.array_equal(I(make(wrap=True).run()), ref), 'The seasonal factor inside a parameter varies in time'
-    assert np.array_equal(I(sim.restart(pars=dict(beta=0.4)).run()), I(make(beta=0.4).run())), 'A new value of a parameter'
-    assert np.array_equal(I(sim.restart(pars=dict(cut=0.2)).run()), I(make(beta=0.4, cut=0.2).run())), 'A new value of a parameter in a modifier'
+    assert np.array_equal(I(sim.run(pars=dict(beta=0.4))), I(make(beta=0.4).run())), 'A new value of a parameter'
+    assert np.array_equal(I(sim.run(pars=dict(cut=0.2))), I(make(beta=0.4, cut=0.2).run())), 'A new value of a parameter in a modifier'
     sim = make().run()
     sim.interventions()[0].start = 60
     assert np.array_equal(I(sim.run()), I(make(start=60).run())), 'A modifier changed in place'
     sim = make().run()
-    sim.interventions()[2].amount.mode = 'linear'
+    sim.interventions()[2].amount.interpolation = 'linear'
     assert not np.array_equal(I(sim.run()), ref), 'A time series changed in place, in how it goes between its values'
     sim = make().run()
     assert np.array_equal(I(sim.new(interventions=make(start=60).pars.interventions).run()), I(make(start=60).run())), 'sim.new() with other modifiers'

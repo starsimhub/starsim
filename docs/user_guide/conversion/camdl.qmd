@@ -64,8 +64,8 @@ In Starsim, parameters carry their bounds and priors, a bare state in a rate is 
 ```{python}
 import starsim as ss
 
-beta  = ss.par(ss.perday(0.4),  bounds=[0.05, 1.0], prior=ss.lognorm_im(mean=-1.0, sigma=0.5), doc='transmission rate')
-gamma = ss.par(ss.perday(0.15), bounds=[0.01, 0.5], prior=ss.lognorm_im(mean=-2.0, sigma=0.5), doc='recovery rate')
+beta  = ss.par(ss.perday(0.4),  bounds=[0.05, 1.0], prior=ss.lognormal(log_mean=-1.0, log_std=0.5), doc='transmission rate')
+gamma = ss.par(ss.perday(0.15), bounds=[0.01, 0.5], prior=ss.lognormal(log_mean=-2.0, log_std=0.5), doc='recovery rate')
 rho   = ss.par(0.6, doc='reporting fraction')
 k     = ss.par(10,  doc='dispersion of the reported counts')
 
@@ -145,7 +145,7 @@ def make_polio(with_sia=False):
         init_n      = dict(I=ss.by(patch=[5, 0, 0, 0, 0])),
         name        = 'seir',
     )
-    seir.stratify(patch=patches, kind='space', split=N0/N0.sum())
+    seir.stratify(patch=patches, kind='space', fractions=N0/N0.sum())
     sias = [ss.vaccinate(move=S >> V, at=days, coverage=ss.by(patch=[0.8*(q == p) for q in patches]), name=f'sia_{p}') for p, days in sia_days.items()]
     return ss.Sim(seir, networks=ss.contacts(np.diag(R0*gamma) + kappa*W, dims='patch'), interventions=sias if with_sia else None,
                   total_pop=N0.sum(), unit='day', stop=3*365, solver='ode', verbose=0)

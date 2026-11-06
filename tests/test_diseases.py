@@ -52,7 +52,7 @@ def test_sir():
     assert abs(a.infection.sum() - b.infection.sum())/b.infection.sum() < 0.01 # 714,770 each; 785,847 with Starsim 3's lognormal
     assert a.death.sum() == 0
     agent = ssl.AgentSIR()
-    assert isinstance(agent.pars.dur_inf, ss.lognorm_ex) and agent.pars.p_death.pars.p == 0.01 # Starsim 3's defaults
+    assert isinstance(agent.pars.dur_inf, ss.lognormal) and agent.pars.p_death.pars.p == 0.01 # Starsim 3's defaults
     return sim
 
 
@@ -92,7 +92,7 @@ def test_seir():
     # A longer latent period should delay and flatten the epidemic
     sims = []
     for dur_exp in [ss.days(1), ss.days(20)]:
-        seir = ss.SEIR(dur_exp=ss.lognorm_ex(mean=dur_exp), dur_inf=ss.lognorm_ex(mean=ss.days(10)), beta=ss.perday(0.05))
+        seir = ss.SEIR(dur_exp=ss.lognormal(mean=dur_exp), dur_inf=ss.lognormal(mean=ss.days(10)), beta=ss.perday(0.05))
         sim = ss.Sim(n_agents=n_agents, diseases=seir, networks='random', dur=ss.years(1), dt=ss.days(1), verbose=0)
         sim.run()
         sims.append(sim)
@@ -110,7 +110,7 @@ def test_seir():
     assert np.array_equal(res.infection.cum, np.cumsum(res.infection)), 'Cumulative infections should be the running sum of new infections'
 
     # Latent agents should not transmit: with no infectious period, there should be no epidemic
-    latent = ss.SEIR(dur_exp=ss.lognorm_ex(mean=ss.days(1000)), init_prev=0.1, beta=ss.perday(0.5))
+    latent = ss.SEIR(dur_exp=ss.lognormal(mean=ss.days(1000)), init_prev=0.1, beta=ss.perday(0.5))
     nosim = ss.Sim(n_agents=n_agents, diseases=latent, networks='random', dur=ss.days(100), dt=ss.days(1), verbose=0).run()
     assert nosim.results.seir.infection.cum[-1] == 0, 'Exposed agents should not transmit'
 
@@ -414,8 +414,8 @@ def test_current_state():
     # Only the people for whom a condition holds (where=), under every solver
     for kw in [dict(n_agents=1000), dict(solver='ode')]:
         d = ss.Sim(diseases=ss.SIR(), stratify=dict(age=[0, 15]), stop=2001, verbose=0, **kw).init().diseases.sir
-        young = d.count((ss.ppl.age < 15) & d.S)
-        assert np.isclose(d.move(d.S, d.R, where=ss.ppl.age < 15), young) and np.isclose(d.count(d.R), young)
+        young = ((ss.person.age < 15) & d.S).n
+        assert np.isclose(d.move(d.S, d.R, where=ss.person.age < 15), young) and np.isclose(d.R.n, young)
     S, I, R = ss.states('S I R')
     ode = ss.Sim(diseases=ss.Disease(name='sir', infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=4)), stop=2001, verbose=0).init()
     with pytest.raises(ss.CapabilityError, match='agents'):
@@ -483,7 +483,7 @@ def test_same_transmission():
 def test_same_strains():
     sc.heading('Testing that strains declared and written as code are passed on the same, by the same code: one pass, one of several sources at random, then protection')
     seeds = lambda self, sim, uids: (uids % 50 == 0).astype(float) # Every 50th agent, so seeding takes no random numbers
-    strains = lambda imm: ss.Strains(['a', 'b'], rel_trans=[1, 2], immunity=ss.immunity(due_to=imm, rel_sus=[[1, 0.5], [0.5, 1]]) if imm else None)
+    strains = lambda imm: ss.Strains(['a', 'b'], rel_trans=[1, 2], immunity=ss.immunity(due_to=imm, protection=[[1, 0.5], [0.5, 1]]) if imm else None)
 
     class CodedSIR(ss.Infection):
         def __init__(self, seed_strain, imm=None, **kwargs):
@@ -558,7 +558,7 @@ def test_coded_strains():
             self.ti_infected[uids] = self.ti
             self.ti_recovered[uids] = self.ti + self.pars.dur_inf*self.strain_value('dur', uids)
 
-    strains = ss.Strains(['a', 'b'], rel_trans=[1, 2], dur=[0.5, 1], split=[0.9, 0.1], immunity=ss.immunity(due_to='recovered', rel_sus=[[1, 0.2], [0.2, 1]]))
+    strains = ss.Strains(['a', 'b'], rel_trans=[1, 2], dur=[0.5, 1], fractions=[0.9, 0.1], immunity=ss.immunity(due_to='recovered', protection=[[1, 0.2], [0.2, 1]]))
     sim = ss.Sim(diseases=SIRS(strains=strains, name='flu'), networks=ss.RandomNet(n_contacts=4), analyzers=ss.infection_log(), n_agents=n_agents, stop=60, unit='day', verbose=0).run()
     flu = sim.diseases.flu
     log = sim.analyzers[0].to_df()
@@ -605,7 +605,7 @@ def test_mixed_disease():
     mixed = sim.diseases.mixed
     assert sim.solver == 'abm' # The coded array needs agents
     assert mixed.results.infection.sum() > 0 and mixed.years_infected.sum() > 0 # Both parts ran
-    assert np.isclose(mixed.years_infected.sum(), (mixed.results.I[1:].sum() + mixed.count(mixed.I))*sim.t.dt_year) # One step for each step spent infected, the last step's included
+    assert np.isclose(mixed.years_infected.sum(), (mixed.results.I[1:].sum() + mixed.I.n)*sim.t.dt_year) # One step for each step spent infected, the last step's included
     fitted, _ = ss.fit.bounded_pars(ss.Sim(diseases=Mixed(rate=ss.par(1.0, bounds=[0.5, 2])), n_agents=100, verbose=0).init())
     assert list(fitted.keys()) == ['rate'] # Its code's parameter can be fitted too
     with pytest.raises(ss.CapabilityError): # A declared transition never calls set_prognoses()
@@ -646,7 +646,7 @@ def test_code_seams():
         S, I, T, R = ss.states('S I T R')
         tb = ss.Disease(S, I, T, R, infection=S >> I @ p.beta*I, diagnosis=I >> T @ p.dur, cure=ss.Transition(T, R, rate=ss.peryear(4)),
                         fast=ss.Transition(T, R, rate=ss.peryear(20), where=TPT.held), init=dict(I=0.05), name='tb', eff=ss.par(0.9)).stratify(age=[0, 15])
-        give = ss.vaccinate(TPT(efficacy=0.01, name='tpt'), who=tb.diagnosis.since <= ss.years(1), coverage=0.5, interval=1)
+        give = ss.vaccinate(TPT(efficacy=0.01, name='tpt'), who=tb.diagnosis.since <= ss.years(1), coverage=0.5, every=1)
         return ss.Sim(tb, interventions=give, start=2000, stop=2004, dt=ss.months(1), verbose=0, **kwargs), p
     sim, p = make(n_agents=2000)
     assert p.beta.value == ss.peryear(3) and p.beta.bounds is not None and p.cure is None
@@ -658,12 +658,12 @@ def test_code_seams():
     assert list(tb.strats.age.edges) == [0, 15]
     assert sum(len(uids) for uids in seen) == tb.results.diagnosis.sum() == tb.count_diagnosis.raw.sum()
     assert tb.results.fast.sum() > 0 and sim.results.give.delivered.sum() > 0 # Those diagnosed in the last year, then cured by holding a product of the kind
-    assert np.isclose(tb.count(tb.I), np.count_nonzero(tb.I.raw & sim.people.alive.raw)*ss.results.people_scale(sim)) and np.isclose(tb.count(), sim.people.alive.raw.sum()*ss.results.people_scale(sim)) # The people in each state now, after the last step
+    assert np.isclose(tb.I.n, np.count_nonzero(tb.I.raw & sim.people.alive.raw)*ss.results.people_scale(sim)) and np.isclose(sim.people.alive.n, sim.people.alive.raw.sum()*ss.results.people_scale(sim)) # The people in each state now, after the last step
     assert np.allclose(np.ones(2)*(1 - tb.pars.eff), 0.1) # A declared parameter read by code during a run is its number
     S, I = ss.states('S I')
     sis = ss.Disease(S >> I @ ss.peryear(2)*I, I >> S @ ss.years(1), ss.death(rate=ss.peryear(0.02)), init=dict(I=0.05), name='sis')
     ode = ss.Sim(sis, total_pop=1000, start=2000, stop=2004, verbose=0).run() # The people results agents give the sim
-    assert ode.results.alive[0] == 1000 and np.isclose(ode.diseases.sis.count(), 1000 - ode.results.died.cum[-1]) # The people after the run are the start less every step's deaths
+    assert ode.results.alive[0] == 1000 and np.isclose((ode.diseases.sis.S | ode.diseases.sis.I).n, 1000 - ode.results.died.cum[-1]) # The people after the run are the start less every step's deaths
     return sim
 
 
@@ -784,8 +784,8 @@ def test_init_in_class():
         infection = S >> E @ ss.perday(0.5)*I
         onset = E >> I @ ss.constant(dur_inc)
     dis = Incubation(dur_inc=ss.days(30))
-    assert dis.graph.transitions.onset.dur.raw.pars.v is dis.graph.pars.dur_inc, 'The distribution should hold the parameter of the instance'
-    assert Incubation.onset.dur.raw.pars.v is Incubation.dur_inc and float(Incubation.dur_inc.raw.value) == 15, 'The class should be unchanged'
+    assert dis.graph.transitions.onset.dur.raw.pars.value is dis.graph.pars.dur_inc, 'The distribution should hold the parameter of the instance'
+    assert Incubation.onset.dur.raw.pars.value is Incubation.dur_inc and float(Incubation.dur_inc.raw.value) == 15, 'The class should be unchanged'
     return
 
 

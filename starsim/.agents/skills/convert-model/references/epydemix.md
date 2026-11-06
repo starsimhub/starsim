@@ -29,10 +29,10 @@ Then, in Starsim, `sim = ss.import_from('model.json')`. The dump records the las
 | An array by age (`convert_to_2Darray`) | `ss.by([...], dims=['age'])` | yes |
 | An array over time and by age | Its first row, by age (listed) | no |
 | `override_parameter()` of a number | Folded into the parameter's `ss.timeseries` | yes |
-| Age groups (`"0-4"`, `"65+"`) and `Nk` | `stratify(age=[0, 5, ...], split=Nk)`, `use_aging=False` (epydemix does not age people) | yes |
+| Age groups (`"0-4"`, `"65+"`) and `Nk` | `stratify(age=[0, 5, ...], fractions=Nk)`, `aging=False` (epydemix does not age people) | yes |
 | Groups that are not ages | `stratify(group=[...])` | yes |
 | Contact matrices by setting | `networks=ss.contacts(sum of the settings)` | yes |
-| Initial numbers by group (recorded run) | `init_n=dict(I=ss.by([...], dims=['age']))`, the state with most people taking the rest (it is made the first state, `first=`) | yes |
+| Initial numbers by group (recorded run) | `init_n=dict(I=ss.by([...], dims=['age']))`, the state with most people taking the rest (it is made the first state, `default_state=`) | yes |
 | Daily steps of a chain binomial | `solver='binomial'`, `substeps=1`, `unit='day'`, stop a day after `end_date` | yes |
 | `add_intervention()` on one setting | Listed; by hand (`ss.modify(dis.S_to_E, multiply=..., start=..., stop=...)` if every setting is reduced alike, or the contacts as two networks) | no |
 | A custom transition kind (`register_transition_kind`) | Listed; by hand | no |
@@ -41,7 +41,7 @@ Then, in Starsim, `sim = ss.import_from('model.json')`. The dump records the las
 | Seasonality from a sine with a peak date | The array passed to the run is imported; by hand, `ss.seasonal(mean=(1 + smin)/2, amplitude=(1 - smin)/(1 + smin), peak=14/365)` | no |
 | Initial numbers drawn at random in each run | The recorded draw, fixed | no |
 | Scenarios (contacts higher from a date) | `ss.modify(dis.S_to_E, multiply=1.3, start='2020-06-01')` | no |
-| `ABCSampler` (ABC-SMC) | `ss.par(..., bounds=[...])`, `data=ss.simdata(...)`, `sim.fit(method='abc-smc')`, or by default a point estimate | no |
+| `ABCSampler` (ABC-SMC) | `ss.par(..., bounds=[...])`, `data=ss.SimData(...)`, `sim.fit(method='abc-smc')`, or by default a point estimate | no |
 
 ## What needs care
 

@@ -26,7 +26,7 @@ def make_seir():
 pars = dict(total_pop=100_000, start='2025-01-01', stop='2026-01-01')
 truth = ss.Sim(make_seir(), pars=dict(beta=1.9, report=0.5), rand_seed=2, verbose=0, **pars)
 truth.run()
-data = truth.to_data('cases', resample='week')
+data = truth.to_synthetic_data('cases', resample='week')
 ```
 
 ## Does the model match the data?
@@ -210,5 +210,5 @@ Each message a fit can print, what it means, and what to do. Warnings are Python
 | Two parameters are almost perfectly correlated in the posterior (r above 0.95), or change the fitted results in almost the same way | Note | Practically unidentifiable from these data | More data, or data of another kind, or fix one |
 | The scan tries fewer than 10 points for each parameter | Note | With more than 10 parameters, the scan is capped at 100 points | `scan=` to change it |
 | The R-hat and effective sample size need JAX | Note | Without BlackJAX, they are NaN, so a posterior can't be checked | `pip install "starsim[jax]"` |
-| The fit would take the gradients (or the posterior) with Python in the loop | Error, `ss.CapabilityError` | A method with gradients was asked for, but something in the model or the likelihood can't be run in JAX (e.g. a likelihood given as a function), so they would be much slower (the default method falls back to Nelder-Mead by itself) | A method without gradients (e.g. `method='nelder-mead'`, or no `method=`), or `nopython=False` to accept the slower way |
-| A data column matches no result | Note when the sim is initialized, and an error when it is fitted | A typo in a header, or a result that doesn't exist | Rename the column (`ss.simdata(aliases=...)`) |
+| The fit would take the gradients (or the posterior) with Python in the loop | Error, `ss.CapabilityError` | A method with gradients was asked for, but something in the model or the likelihood can't be run in JAX (e.g. a likelihood given as a function), so they would be much slower (the default method falls back to Nelder-Mead by itself) | A method without gradients (e.g. `method='nelder-mead'`, or no `method=`), or `require_jax=False` to accept the slower way |
+| A data column matches no result | Note when the sim is initialized, and an error when it is fitted | A typo in a header, or a result that doesn't exist | Rename the column (`ss.SimData(aliases=...)`) |

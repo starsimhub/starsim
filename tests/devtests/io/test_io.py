@@ -162,7 +162,7 @@ def test_emulsion(tmp_path):
 def emulsion_export_sims():
     """ An SEIR with a dwell time written as Erlang stages and deaths from I, and an SIR with births and deaths """
     S, E, I, R = ss.states('S E I R')
-    seir = ss.Disease(infection=S >> E @ ss.perday(0.4)*I, onset=E >> I @ ss.days(3), recovery=ss.Transition(I, R, dur=ss.lognorm_ex(ss.days(8), ss.days(3))), deaths=ss.death(I, rate=ss.perday(0.01)), init_prev=0.01, name='seir')
+    seir = ss.Disease(infection=S >> E @ ss.perday(0.4)*I, onset=E >> I @ ss.days(3), recovery=ss.Transition(I, R, dur=ss.lognormal(ss.days(8), ss.days(3))), deaths=ss.death(I, rate=ss.perday(0.01)), init_prev=0.01, name='seir')
     S, I, R = ss.states('S I R')
     sir = ss.Disease(births=ss.birth(S, rate=ss.peryear(0.5)), infection=S >> I @ ss.perday(0.3)*I, recovery=I >> R @ ss.days(10), deaths=ss.death([S, I, R], rate=ss.peryear(0.2)), init_prev=0.01, name='sir')
     return dict(seir=ss.Sim(seir, total_pop=1000, unit='day', stop=80, verbose=0), sir=ss.Sim(sir, total_pop=1000, unit='day', stop=60, verbose=0))
@@ -229,21 +229,21 @@ def test_code(tmp_path):
     src.add_state('I', init=ss.by(risk=[30, 20]), label='Infectious')
     src.add_state('R')
     src.add_state('D')
-    src.add_par('beta', ss.timeseries({0: 0.3, 20.5: 0.2}, mode='linear'), bounds=[0.1, 1], prior=ss.uniform(0.1, 1))
+    src.add_par('beta', ss.timeseries({0: 0.3, 20.5: 0.2}, interpolation='linear'), bounds=[0.1, 1], prior=ss.uniform(0.1, 1))
     src.add_par('season', ss.seasonal(mean=1.0, amplitude=0.2, peak=0.25))
     src.add_par('k', 5.0)
     src.add_flow('S', 'I', 'beta * season * S * I / N', per='total', name='infection')
-    src.add_flow('I', ['R', 'D'], dur=ss.lognorm_ex(mean=ss.days(10), std=ss.days(3)), p=['0.99', None], name='recovery')
+    src.add_flow('I', ['R', 'D'], dur=ss.lognormal(mean=ss.days(10), std=ss.days(3)), p=['0.99', None], name='recovery')
     src.add_outcome('cases', 'infection', p=0.5, delay=ss.days(3), likelihood=lambda ps: ss.nbinom(n=ps['k']))
     src.results['prev'] = 'I / N'
     src.totals = ['N']
-    src.stratify(risk=['lo', 'hi'], split=[0.6, 0.4], adjust={'rel_sus': [1, 2]})
+    src.stratify(risk=['lo', 'hi'], fractions=[0.6, 0.4], adjust={'rel_sus': [1, 2]})
     src.config.update(unit='day', stop=ss.days(60), solver='ode')
     sim = ss.converters.build(src, verbose=False)
     code = check(sim)
-    for text in ["beta = ss.par(ss.timeseries({0: 0.3, 20.5: 0.2}, mode='linear'), bounds=[0.1, 1], prior=ss.uniform(low=0.1, high=1))",
+    for text in ["beta = ss.par(ss.timeseries({0: 0.3, 20.5: 0.2}, interpolation='linear'), bounds=[0.1, 1], prior=ss.uniform(low=0.1, high=1))",
                  'infection = S >> I @ (beta * season * I)', 'p=[0.99, None]', 'likelihood=ss.nbinom(n=k, p=0.5)', 'cases = ss.outcome(p_cases*infection, delay=ss.days(3)',
-                 "model.stratify(risk=['lo', 'hi'], split=[0.6, 0.4], adjust=dict(rel_sus=[1, 2]))"]:
+                 "model.stratify(risk=['lo', 'hi'], fractions=[0.6, 0.4], adjust=dict(rel_sus=[1, 2]))"]:
         assert text in code, f'Expected "{text}" in the code'
     assert sim.results.model.cases.sum() > 0
 
@@ -258,7 +258,7 @@ def test_code(tmp_path):
     code_value = ss.converters.core.code_value
     for val in [pd.DataFrame(dict(I=[5.0, 20, 40]), index=[10, 20, 30]), pd.DataFrame(dict(I=[1.0, 2]), index=pd.to_datetime(['2020-01-01', '2020-02-01']))]:
         assert eval(code_value(val), dict(pd=pd)).equals(val)
-    rate = eval(code_value(ss.Rate(0.3, ss.weeks(2))), dict(ss=ss))
+    rate = eval(code_value(ss.time.Rate(0.3, ss.weeks(2))), dict(ss=ss))
     assert rate.value == 0.3 and rate.unit == ss.weeks(2)
 
     # Several sources: a disease's variable is not a name another source defines (here a state)

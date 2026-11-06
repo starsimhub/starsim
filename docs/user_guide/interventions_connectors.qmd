@@ -81,7 +81,7 @@ class FadingSIR(ss.Disease):
     S, I, R = ss.states('S I R')
     infection = S >> I @ 0.5*I
     recovery  = I >> R @ ss.days(10)
-    fading    = ss.modify('rel_trans', multiply=0.5**(I.time/ss.days(3)), where=I) # Half as infectious after 3 days, a quarter after 6, ...
+    fading    = ss.modify('rel_trans', multiply=0.5**(I.time_in/ss.days(3)), where=I) # Half as infectious after 3 days, a quarter after 6, ...
 
 class PlainSIR(ss.Disease):
     S, I, R = ss.states('S I R')
@@ -102,7 +102,7 @@ With constant infectiousness, β = 0.5 per day for 10 days gives an R0 of 5. Wit
 Because an interaction is a condition, not a value that was set, it follows whatever changes who meets the condition. Here the STI is treated from 2015 on: as each person is cured, they leave `sti.I`, and their HIV risk falls back with no extra code:
 
 ```{python}
-treatment = ss.treat(cure=0.9, disease='sti', coverage=0.8, interval=ss.years(1), start='2015')
+treatment = ss.treat(cure=0.9, disease='sti', coverage=0.8, every=ss.years(1), start='2015')
 scenarios = {
     'With interactions': ss.Sim([hiv, sti], connectors=interactions, **kw),
     'With interactions and STI treatment': ss.Sim([hiv, sti], connectors=interactions, interventions=treatment, **kw),

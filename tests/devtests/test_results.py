@@ -23,10 +23,10 @@ def test_groups_kept(monkeypatch, tmp_path):
     S, I, R = ss.states(3)
     sir = ss.Disease(infection=S >> I @ 0.3 * I, recovery=I >> R @ ss.days(10), share=I / (S + I + R), init=dict(I=0.01), name='sir')
     make = lambda solver, **kw: ss.Sim(sir, unit='day', stop=91, total_pop=10_000, n_agents=medium, solver=solver, stratify=dict(age=[0, 50]), verbose=0, **kw)
-    res = make('ode', results=['I', 'infection']).run().results.sir
+    res = make('ode', group_results=['I', 'infection']).run().results.sir
     assert res.I.strata is not None and getattr(res.S, 'strata', None) is None and res.infection.cum.strata is not None # Only the named results by group (and the cumulative total of a flow kept by group)
     with pytest.raises(sc.KeyNotFoundError):
-        make('ode', results=['J']).init()
+        make('ode', group_results=['J']).init()
     for solver in ['ode', 'binomial', 'abm']: # A whole run in parts, and a stepped run
         full = make(solver).run().results.sir
         monkeypatch.setattr(ss.solvers.Engine, 'group_bytes', 1000) # Too little to keep them by group at every step

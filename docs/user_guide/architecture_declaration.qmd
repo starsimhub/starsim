@@ -55,7 +55,7 @@ The first three are the same model, and give the same results. This is a rule of
 
 ## Rates are expressions
 
-When you write `0.3 * I`, nothing is computed. `I` is a state, so the result is an expression (`ss.expressions.Expr`, in `starsim/internals/expressions.py`): a small tree whose leaves are parameters, states, counts (`I.n`), and properties of people (`ss.ppl.age`), joined by arithmetic and NumPy functions. Each engine evaluates the same tree in its own terms: a value for each group of a compartmental model, for each agent, or as JAX arrays so a gradient can be taken through the run. This is what lets a model written once be run by any solver.
+When you write `0.3 * I`, nothing is computed. `I` is a state, so the result is an expression (`ss.expressions.Expr`, in `starsim/internals/expressions.py`): a small tree whose leaves are parameters, states, counts (`I.n`), and properties of people (`ss.person.age`), joined by arithmetic and NumPy functions. Each engine evaluates the same tree in its own terms: a value for each group of a compartmental model, for each agent, or as JAX arrays so a gradient can be taken through the run. This is what lets a model written once be run by any solver.
 
 Two kinds of leaf differ. **`I.n`** is the number of people in `I`, used literally (or, in an acquisition's rate with a contact matrix, the number met through it). A **bare `I`** means contact with people in `I`: with no network that's `I.n / N`, so `beta * I` is the textbook `beta * S * I / N`, and with a network each engine works it out from who actually meets whom, which no single formula can say. Since that is a sum over contacts, a rate must be linear in its bare states (`beta * I * I` raises a `ValueError` that suggests the two ways to say what was probably meant). [Transmission](architecture_transmission.qmd) covers how each engine turns a bare state into a force of infection.
 
@@ -106,7 +106,7 @@ S, I, R = ss.states('S I R')
 beta = ss.par(bounds=[0.1, 1.0], source='to be fitted')
 sir = ss.Disease(
     infection = S >> I @ beta * I,
-    recovery  = I >> R @ ss.lognorm_ex(mean=ss.days(10), std=ss.days(3)),
+    recovery  = I >> R @ ss.lognormal(mean=ss.days(10), std=ss.days(3)),
     init_prev = 0.01,
 )
 sim = ss.Sim(sir, stop=100)

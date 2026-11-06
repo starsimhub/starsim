@@ -32,13 +32,13 @@ def test_hpv_algorithm():
             excised   = CIN >> I, # Undriven: clears the lesion, not the infection
             init=dict(I=0.1, CIN=0.03), name='hpv',
         ).stratify(age=[0, 30, 50])
-        women = (ss.ppl.age >= 30) & (ss.ppl.age < 50)
+        women = (ss.person.age >= 30) & (ss.person.age < 50)
         hpv_dna = ss.Diagnostic(sensitivity=dict(I=0.9, CIN=0.95), specificity=0.97)
         primary = ss.screen(hpv_dna, who=women & (hpv_dna.since >= ss.years(5)), coverage=ss.probperyear(0.3), start=2020)
-        tx_visit = ss.screen(ss.Diagnostic(sensitivity=0.9, specificity=0.9, detects=~hpv.CA), who=primary.positive, coverage=0.8, capacity=ss.perweek(10), queue=ss.months(6))
-        ablate = ss.treat(ss.Treatment(moves={hpv.excised: 0.85}, name='ablation'), who=tx_visit.positive)
-        excise = ss.treat(ss.Treatment(moves={hpv.excised: 0.95}, name='excision'), who=tx_visit.negative)
-        return ss.Sim(hpv, interventions=[primary, tx_visit, ablate, excise], start=2015, stop=2030, dt=ss.months(3), use_aging=False, **kwargs)
+        tx_visit = ss.screen(ss.Diagnostic(sensitivity=0.9, specificity=0.9, detects=~hpv.CA), on=primary.positive, coverage=0.8, capacity=ss.perweek(10), queue=ss.months(6))
+        ablate = ss.treat(ss.Treatment(moves={hpv.excised: 0.85}, name='ablation'), on=tx_visit.positive)
+        excise = ss.treat(ss.Treatment(moves={hpv.excised: 0.95}, name='excision'), on=tx_visit.negative)
+        return ss.Sim(hpv, interventions=[primary, tx_visit, ablate, excise], start=2015, stop=2030, dt=ss.months(3), aging=False, **kwargs)
     with pytest.raises(ss.CapabilityError): # The queue, and hpv_dna.since
         make(solver='ode', total_pop=100_000, verbose=0).init()
     sim = make(total_pop=100_000, n_agents=20_000, verbose=0).run()
@@ -80,10 +80,10 @@ def test_two_doses():
         S, I = ss.states('S I')
         sir = ss.Disease(infection=ss.Transition(S, I, rate=ss.peryear(1.5) * I), recovery=ss.Transition(I, S, dur=ss.years(1)), init_prev=0.05, name='sis').stratify(age=[0, 9, 15])
         vx = ss.Vaccine(efficacy=0.9, doses=[0.6, 1.0])
-        girls = (ss.ppl.age >= 9) & (ss.ppl.age < 15)
+        girls = (ss.person.age >= 9) & (ss.person.age < 15)
         first = ss.vaccinate(vx, who=girls & ~vx.ever, coverage=ss.probperyear(0.5), start=2020)
         second = ss.vaccinate(vx, who=vx.ever & (vx.since >= ss.months(6)), coverage=0.9) # The next dose, for those who had the first
-        return ss.Sim(sir, interventions=[first, second], start=2019, stop=2026, dt=ss.months(1), use_aging=False, **kwargs)
+        return ss.Sim(sir, interventions=[first, second], start=2019, stop=2026, dt=ss.months(1), aging=False, **kwargs)
     with pytest.raises(ss.CapabilityError): # vx.since
         make(solver='ode', total_pop=50_000, verbose=0).init()
     sim = make(total_pop=50_000, n_agents=25_000, verbose=0).run()

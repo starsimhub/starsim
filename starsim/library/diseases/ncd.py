@@ -21,8 +21,8 @@ class NCD(ss.Disease):
 
     Args:
         initial_risk (float/`ss.bernoulli`): initial prevalence of risk factors
-        dur_risk (float/`ss.dur`/`ss.Dist`): how long a person is at risk for
-        prognosis (float/`ss.dur`/`ss.Dist`): time in years between first becoming affected and death
+        dur_risk (float/`ss.Duration`/`ss.Dist`): how long a person is at risk for
+        prognosis (float/`ss.Duration`/`ss.Dist`): time in years between first becoming affected and death
     """
     def __init__(self, pars=None, initial_risk=_, dur_risk=_, prognosis=_, **kwargs):
         super().__init__()

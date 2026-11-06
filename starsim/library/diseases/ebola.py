@@ -71,12 +71,12 @@ class Ebola(AgentSEIR):
             unburied_factor = 2.1,
 
             # Natural history parameters, all specified in days
-            dur_exp         = ss.lognorm_ex(mean=ss.days(12.7)), # Add source
-            dur_symp2sev    = ss.lognorm_ex(mean=ss.days(6)), # Add source
-            dur_sev2dead    = ss.lognorm_ex(mean=ss.days(1.5)), # Add source
-            dur_dead2buried = ss.lognorm_ex(mean=ss.days(2)), # Add source
-            dur_symp2rec    = ss.lognorm_ex(mean=ss.days(10)), # Add source
-            dur_sev2rec     = ss.lognorm_ex(mean=ss.days(10.4)), # Add source
+            dur_exp         = ss.lognormal(mean=ss.days(12.7)), # Add source
+            dur_symp2sev    = ss.lognormal(mean=ss.days(6)), # Add source
+            dur_sev2dead    = ss.lognormal(mean=ss.days(1.5)), # Add source
+            dur_dead2buried = ss.lognormal(mean=ss.days(2)), # Add source
+            dur_symp2rec    = ss.lognormal(mean=ss.days(10)), # Add source
+            dur_sev2rec     = ss.lognormal(mean=ss.days(10.4)), # Add source
             p_sev           = ss.bernoulli(p=0.7), # Add source
             p_death         = ss.bernoulli(p=0.55), # Add source
             p_safe_bury     = ss.bernoulli(p=0.25), # Probability of a safe burial - should be linked to diagnoses

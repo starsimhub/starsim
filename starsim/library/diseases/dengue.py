@@ -10,9 +10,9 @@ def serotype(name, pars, others=(), **kwargs):
     """ One dengue serotype: people are susceptible, infectious, or recovered, with mosquitoes of its own; having recovered from any of the others protects in part """
     p = pars
     if others: # The strongest protection from any serotype had, which is the same one from each
-        had = ss.state(f'{others[0]}.R')
+        had = ss.ref(f'{others[0]}.R')
         for other in others[1:]:
-            had = had | ss.state(f'{other}.R')
+            had = had | ss.ref(f'{other}.R')
         kwargs['cross_protection'] = ss.modify('rel_sus', multiply=1 - p['cross'], where=had)
     S, R = ss.states('S R')
     I = ss.State('I', init=p['init'], label='Infectious')
@@ -61,8 +61,8 @@ def Dengue(n_serotypes=4, cross=0.3, a=ss.perday(0.5), b=0.5, c=0.5, m=2.0,
         b (float): the chance that a bite by an infectious mosquito infects a person
         c (float): the chance that a bite on an infectious person infects a mosquito
         m (float): mosquitoes per person
-        dur_inf (`ss.dur`): the mean time a person is infectious (viremic)
-        eip (`ss.dur`): the extrinsic incubation period: the mean time from a mosquito being infected to being infectious
+        dur_inf (`ss.Duration`): the mean time a person is infectious (viremic)
+        eip (`ss.Duration`): the extrinsic incubation period: the mean time from a mosquito being infected to being infectious
         mu_v (`ss.per`): the death rate of mosquitoes, which emerge at the same rate
         init (float): the share of people who start infectious with each serotype
         kwargs (dict): passed to `ss.Disease` for each serotype

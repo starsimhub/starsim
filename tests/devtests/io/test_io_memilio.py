@@ -49,7 +49,7 @@ def test_seir():
 
     # The same model by hand
     Susceptible, Exposed, Infected, Recovered = ss.states(4)
-    contacts = ss.timeseries({0: 1.0, 9: 1.0, 10: 0.5}, mode='cosine') # MEmilio smooths a damping over the day before it
+    contacts = ss.timeseries({0: 1.0, 9: 1.0, 10: 0.5}, interpolation='cosine') # MEmilio smooths a damping over the day before it
     seir = ss.Disease(
         infection = Susceptible >> Exposed @ contacts*ss.by([0.05, 0.08], dims=['age'])*Infected,
         onset     = Exposed >> Infected @ ss.by([1/3, 1/4], dims=['age']),
@@ -57,7 +57,7 @@ def test_seir():
         init_n    = dict(Exposed=ss.by([10, 0], dims=['age']), Infected=ss.by([5, 10], dims=['age'])),
         name      = 'oseir',
     )
-    seir.stratify(age=['0', '1'], split=[0.6, 0.4])
+    seir.stratify(age=['0', '1'], fractions=[0.6, 0.4])
     ref = ss.Sim(seir, networks=ss.contacts([[4.0, 1.0], [1.0, 3.0]]), total_pop=10_000, unit='day', stop=ss.days(60), solver='ode', verbose=0).run()
     for s in ['Susceptible', 'Exposed', 'Infected', 'Recovered']:
         assert np.allclose(res[s].values, ref.results.oseir[s].values, rtol=1e-9), f'{s} should match the model written by hand'
@@ -114,7 +114,7 @@ def test_graph_json():
 
     # The same model by hand: commuters are away half the time
     Susceptible, Exposed, Infected, Recovered = ss.states(4)
-    contacts = ss.timeseries({0: 1.0, 9: 1.0, 10: 0.5}, mode='cosine')
+    contacts = ss.timeseries({0: 1.0, 9: 1.0, 10: 0.5}, interpolation='cosine')
     seir = ss.Disease(
         infection = Susceptible >> Exposed @ contacts*ss.by([0.05, 0.08], dims=['age'])*Infected,
         onset     = Exposed >> Infected @ ss.by([1/3, 1/4], dims=['age']),
@@ -123,8 +123,8 @@ def test_graph_json():
         name      = 'oseir',
     )
     totals = np.array([[6000, 2000], [4000, 1000]])
-    seir.stratify(age=['0', '1'], split=[8/13, 5/13])
-    seir.stratify(patch=['0', '1'], split=ss.by(totals/totals.sum(), dims=['age', 'patch']), mobility=ss.geo.Mobility(matrix=[[0, 0.05], [0.1, 0]], kind='commute'))
+    seir.stratify(age=['0', '1'], fractions=[8/13, 5/13])
+    seir.stratify(patch=['0', '1'], fractions=ss.by(totals/totals.sum(), dims=['age', 'patch']), mobility=ss.geo.Mobility(matrix=[[0, 0.05], [0.1, 0]], kind='commute'))
     ref = ss.Sim(seir, networks=ss.contacts([[4.0, 1.0], [1.0, 3.0]]), total_pop=13_000, unit='day', stop=ss.days(60), solver='ode', verbose=0).run()
     assert np.allclose(res.Infected.values, ref.results.oseir.Infected.values, rtol=1e-9), 'The import should match the model written by hand'
     return sim

@@ -57,7 +57,7 @@ class CapabilityError(ValueError):
     """
     The requested solver cannot run part of the model. Three cases: there is no sensible approximation (contact tracing,
     transmission trees, agent-only custom code); a function or condition asked for something that exists only per agent in a
-    compartmental run; or an approximation would be needed and `approx=False`. Names the part, what it asked for, and what
+    compartmental run; or an approximation would be needed and `approximations="error"`. Names the part, what it asked for, and what
     would fix it
     """
 

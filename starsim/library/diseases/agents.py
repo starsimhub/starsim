@@ -46,7 +46,7 @@ class AgentSIR(ss.Infection):
     Args:
         beta (float/`ss.prob`): the infectiousness
         init_prev (float/`ss.bernoulli`): the fraction of people to start off being infected
-        dur_inf (float/`ss.dur`/`ss.Dist`): how long (in years) people are infected for
+        dur_inf (float/`ss.Duration`/`ss.Dist`): how long (in years) people are infected for
         p_death (float/`ss.bernoulli`): the probability of death from infection
     """
     plot_states = ['susceptible', 'infected', 'recovered'] # Which results to show in plot()
@@ -56,7 +56,7 @@ class AgentSIR(ss.Infection):
         self.define_pars(
             beta = ss.peryear(0.1),
             init_prev = ss.bernoulli(p=0.01),
-            dur_inf = ss.lognorm_ex(mean=ss.years(6)),
+            dur_inf = ss.lognormal(mean=ss.years(6)),
             p_death = ss.bernoulli(p=0.01),
         )
         self.update_pars(pars, **kwargs)
@@ -169,8 +169,8 @@ class AgentSEIR(AgentSIR):
     Args:
         beta (float/`ss.prob`): the infectiousness
         init_prev (float/`ss.bernoulli`): the fraction of people to start off being infected
-        dur_exp (float/`ss.dur`/`ss.Dist`): how long people are exposed (latent) for
-        dur_inf (float/`ss.dur`/`ss.Dist`): how long people are infectious for
+        dur_exp (float/`ss.Duration`/`ss.Dist`): how long people are exposed (latent) for
+        dur_inf (float/`ss.Duration`/`ss.Dist`): how long people are infectious for
         p_death (float/`ss.bernoulli`): the probability of death from infection
     """
     plot_states = ['susceptible', 'exposed', 'infectious', 'recovered']
@@ -178,7 +178,7 @@ class AgentSEIR(AgentSIR):
     def __init__(self, pars=None, dur_exp=_, **kwargs):
         super().__init__()
         self.define_pars(
-            dur_exp = ss.lognorm_ex(mean=ss.years(0.5)),
+            dur_exp = ss.lognormal(mean=ss.years(0.5)),
         )
         self.update_pars(pars, **kwargs)
 
@@ -245,7 +245,7 @@ class AgentSIS(ss.Infection):
     Args:
         beta (float/`ss.prob`): the infectiousness
         init_prev (float/`ss.bernoulli`): the fraction of people to start off being infected
-        dur_inf (float/`ss.dur`/`ss.Dist`): how long (in years) people are infected for
+        dur_inf (float/`ss.Duration`/`ss.Dist`): how long (in years) people are infected for
         waning (float/`ss.per`): how quickly immunity wanes
         imm_boost (float): how much an infection boosts immunity
     """
@@ -254,7 +254,7 @@ class AgentSIS(ss.Infection):
         self.define_pars(
             beta = ss.peryear(0.05),
             init_prev = ss.bernoulli(p=0.01),
-            dur_inf = ss.lognorm_ex(mean=ss.years(10)),
+            dur_inf = ss.lognormal(mean=ss.years(10)),
             waning = ss.peryear(0.05),
             imm_boost = 1.0,
         )

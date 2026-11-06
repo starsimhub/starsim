@@ -30,7 +30,7 @@ measles.stratify(age=[0, 1, 5, 15, 65])
 demographics = [ss.birth(rate=ss.peryear(0.03)), ss.death(rate=ss.peryear(0.01))]
 pars = dict(demographics=demographics, total_pop=1_000_000, start='2000', stop='2030', dt=ss.months(1), verbose=0)
 
-routine = ss.vaccinate(efficacy=0.95, leaky=False, coverage=0.8, where=ss.ppl.age < 1, interval=ss.years(1), start='2010', cost=5.0)
+routine = ss.vaccinate(efficacy=0.95, leaky=False, coverage=0.8, where=ss.person.age < 1, every=ss.years(1), start='2010', cost=5.0)
 
 base = ss.Sim(measles, **pars)
 msim = ss.parallel({'No vaccination': base, 'Routine vaccination': base.new(interventions=routine)})
@@ -73,7 +73,7 @@ Each infection averted costs a little more than the price of a dose, since most 
 When there are several programs, the question is usually what each one adds over the next cheapest: its incremental cost per outcome averted (an incremental cost-effectiveness ratio, or ICER). Here the routine program is compared with the same program plus a campaign every four years that reaches 90% of children under five, at $8 a dose (a campaign costs more per child than routine delivery):
 
 ```{python}
-campaign = ss.vaccinate(efficacy=0.95, leaky=False, coverage=0.9, where=ss.ppl.age < 5, interval=ss.years(4), start='2010', cost=8.0)
+campaign = ss.vaccinate(efficacy=0.95, leaky=False, coverage=0.9, where=ss.person.age < 5, every=ss.years(4), start='2010', cost=8.0)
 
 costed = base.new(analyzers=ssl.Costs()) # Adds up the cost of every delivery, as the result costs.total
 msim = ss.parallel({
@@ -100,8 +100,8 @@ infection = S >> I @ ss.peryear(2)*I  # β = 2 per year
 recovery  = I >> S @ ss.years(1)      # Infected for a year on average, then susceptible again
 sis = ss.Disease(infection, recovery, deaths=ss.death(I, rate=ss.peryear(0.01)), init_prev=0.1, name='sis')
 
-screening = ss.screen(sensitivity=0.9, specificity=0.98, coverage=0.5, interval=ss.years(1), start='2010', cost=4.0)
-treatment = ss.treat(cure=0.95, who=screening.positive, coverage=0.8, cost=20.0)
+screening = ss.screen(sensitivity=0.9, specificity=0.98, coverage=0.5, every=ss.years(1), start='2010', cost=4.0)
+treatment = ss.treat(cure=0.95, on=screening.positive, coverage=0.8, cost=20.0)
 
 analyzers = [ssl.Costs(), ssl.DALYs(weights={'sis.I': 0.05})]
 base = ss.Sim(sis, analyzers=analyzers, n_agents=5000, total_pop=100_000, start=2000, stop=2020, dt=ss.months(1), verbose=0)

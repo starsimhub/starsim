@@ -115,7 +115,7 @@ class Source:
         self.pars[name] = sc.obj(value=value, doc=doc, bounds=bounds, prior=prior)
         return
 
-    def add_flow(self, src, dst, rate=None, per='person', dur=None, name=None, label=None, p=None, after=None):
+    def add_flow(self, src, dst, rate=None, per='person', dur=None, name=None, label=None, p=None, min_stay=None):
         """
         A flow between states
 
@@ -128,12 +128,12 @@ class Source:
             name (str): the name in the source, if it has one
             label (str): a description
             p (list): for a branch (dst a list of states), the probability of each destination, as expressions of parameters (None for the rest)
-            after (dur): a minimum stay in src before the flow can happen (see `ss.Transition`)
+            min_stay (dur): a minimum stay in src before the flow can happen (see `ss.Transition`)
         """
-        self.flows.append(sc.obj(src=src, dst=dst, rate=None if rate is None else str(rate), per=per, dur=dur, name=name, label=label, p=p, after=after))
+        self.flows.append(sc.obj(src=src, dst=dst, rate=None if rate is None else str(rate), per=per, dur=dur, name=name, label=label, p=p, min_stay=min_stay))
         return
 
-    def add_outcome(self, name, source, p=None, delay=None, duration=None, doc=None, likelihood=None):
+    def add_outcome(self, name, source, p=None, delay=None, stay=None, doc=None, likelihood=None):
         """
         A reported quantity: a share of a flow, or of another outcome, with a delay (see `ss.outcome`)
 
@@ -142,11 +142,11 @@ class Source:
             source (str/list): the name of a flow (from `add_flow()`), several to add together, or another outcome
             p (float/str): the share of the source, as a number (a parameter named p_<name>) or the name of a parameter
             delay (any): the time from the source event, as a duration or a distribution
-            duration (any): how long each stays in the outcome, if the number in it is wanted
+            stay (any): how long each stays in the outcome, if the number in it is wanted
             doc (str): a description of the share, for its parameter
             likelihood (func): a function of the parameters (by name) that gives the likelihood, e.g. `lambda pars: ss.nbinom(n=pars.k)`
         """
-        self.outcomes[name] = sc.obj(source=source, p=p, delay=delay, duration=duration, doc=doc, likelihood=likelihood)
+        self.outcomes[name] = sc.obj(source=source, p=p, delay=delay, stay=stay, doc=doc, likelihood=likelihood)
         return
 
     def stratify(self, **kwargs):
@@ -414,7 +414,7 @@ class Code(str):
 def expr_code(text, names):
     """
     A rate, a share, or a result as Python: each name in it must be a state or parameter of the model (in names);
-    functions are NumPy's (and SciPy's expit), typed quantities Starsim's, and people's properties (people.age) ss.ppl's.
+    functions are NumPy's (and SciPy's expit), typed quantities Starsim's, and people's properties (people.age) ss.person's.
     Anything else raises a ValueError, so that a flow the code cannot say is listed as not translated
     """
     def visit(n):
@@ -426,7 +426,7 @@ def expr_code(text, names):
                 raise ValueError(errormsg)
             return n
         elif isinstance(n, ast.Attribute) and isinstance(n.value, ast.Name) and n.value.id == 'people':
-            return ast.Attribute(ast.Attribute(ast.Name('ss'), 'ppl'), n.attr)
+            return ast.Attribute(ast.Attribute(ast.Name('ss'), 'person'), n.attr)
         elif isinstance(n, ast.Attribute) and n.attr in ['n', 'frac', 'total', 'dwell']:
             return ast.Attribute(visit(n.value), n.attr)
         elif isinstance(n, ast.BinOp) and isinstance(n.op, (ast.Add, ast.Sub, ast.Mult, ast.Div, ast.Pow, ast.BitAnd, ast.BitOr)):
@@ -475,9 +475,9 @@ def code_value(val, pars=None):
         return '{' + ', '.join(f'{cv(k)}: {cv(v)}' for k,v in val.items()) + '}'
     elif isinstance(val, ss.datedur):
         return f'ss.datedur({kwargs(val.kwds)})'
-    elif type(val) is ss.Rate: # A rate with no class of its own keeps its unit, e.g. ss.Rate(0.3, ss.weeks(2))
-        return f'ss.Rate({cv(val.value)}, {cv(val.unit)})'
-    elif isinstance(val, (ss.dur, ss.Rate)):
+    elif type(val) is ss.time.Rate: # A rate with no class of its own keeps its unit, e.g. ss.time.Rate(0.3, ss.weeks(2))
+        return f'ss.time.Rate({cv(val.value)}, {cv(val.unit)})'
+    elif isinstance(val, (ss.Duration, ss.time.Rate)):
         return f'ss.{type(val).__name__}({cv(val.value)})'
     elif isinstance(val, ss.peract):
         return f'ss.peract({cv(val.value) if val.value is not None else kwargs(val.directions)})'
@@ -495,7 +495,7 @@ def code_value(val, pars=None):
         return f'ss.by({kwargs(val.given)})'
     elif isinstance(val, ss.timeseries):
         items = ', '.join(f'{cv(t)}: {cv(v)}' for t,v in zip(val.times, val.values))
-        mode = '' if val.mode == 'constant' else f', mode={val.mode!r}'
+        mode = '' if val.interpolation == 'step' else f', interpolation={val.interpolation!r}'
         period = '' if val.period is None else f', period={cv(val.period)}'
         return f'ss.timeseries({{{items}}}{mode}{period})'
     elif isinstance(val, ss.seasonal):
@@ -686,14 +686,14 @@ def disease_code(source, var, total=None):
             choices.append(f'  {arrow:16s} {flow.rate} : {"; ".join(how)} => {text}')
         if flow.get('p') is not None:
             kw.p = '[' + ', '.join('None' if v is None else expr_code(named.fold(ast.unparse(rates.counts_of(rates.parse(v)))), code_names) for v in flow.p) + ']' # States as their counts (a share that changes with them)
-        if flow.get('after') is not None:
-            kw.after = code_value(flow.after)
+        if flow.get('min_stay') is not None:
+            kw.min_stay = code_value(flow.min_stay)
         if flow.label is not None:
             kw.label = repr(flow.label)
         if guess:
             guessed.setdefault(name, {})['name'] = 'built from its endpoints'
         rate = ast.parse(kw.rate, mode='eval').body if list(kw.keys()) == ['rate'] else None
-        bare = isinstance(rate, ast.Name) and isinstance(getattr(source.pars.get(rate.id), 'value', None), (ss.dur, ss.Dist)) # A dwell time written with @
+        bare = isinstance(rate, ast.Name) and isinstance(getattr(source.pars.get(rate.id), 'value', None), (ss.Duration, ss.Dist)) # A dwell time written with @
         if rate is not None and not branch and not bare: # In the operator form
             members.append((name, f'{src} >> {dst} @ {kw.rate if isinstance(rate, (ast.Name, ast.Constant, ast.Call, ast.Attribute)) else f"({kw.rate})"}'))
         else:
@@ -711,12 +711,12 @@ def disease_code(source, var, total=None):
         share = o.p if isinstance(o.p, str) else f'p_{name}'
         base = ' + '.join(parts)
         expr = base if whole else f'{share}*{base if len(parts) == 1 else f"({base})"}'
-        kw = {k:code_value(o[k]) for k in ['delay', 'duration'] if o[k] is not None}
+        kw = {k:code_value(o[k]) for k in ['delay', 'stay'] if o[k] is not None}
         if o.get('likelihood') is not None:
             kw['likelihood'] = code_value(o.likelihood(objs), pars=objs)
         members.append((name, f'ss.outcome({expr}{"".join(f", {k}={v}" for k,v in kw.items())})'))
         taken.add(name)
-        choices.append(f'  {name:16s} an outcome: {"" if whole else f"{share} × "}{" + ".join(parts)}' + ''.join(f', {k} {o[k]}' for k in ['delay', 'duration'] if o[k] is not None))
+        choices.append(f'  {name:16s} an outcome: {"" if whole else f"{share} × "}{" + ".join(parts)}' + ''.join(f', {k} {o[k]}' for k in ['delay', 'stay'] if o[k] is not None))
     choices += [f'  {note}' for note in source.notes]
     defs = named.definitions()
     if defs:
@@ -764,15 +764,15 @@ def disease_code(source, var, total=None):
     strains = None
     for kw in [kw for kw in source.strats if kw.get('kind') == 'strain']:
         dim = next(k for k in kw if k not in ss.dimensions.strat_options)
-        split = kw.get('split')
-        strains = dict(name=dim, split=None if isinstance(split, ss.by) else split, **(kw.get('adjust') or {}))
+        split = kw.get('fractions')
+        strains = dict(name=dim, fractions=None if isinstance(split, ss.by) else split, **(kw.get('adjust') or {}))
         add(f'strains = ss.Strains({code_value(list(kw[dim]))}, {", ".join(f"{k}={code_value(v)}" for k,v in strains.items())})')
         add('')
 
     # The disease, and its stratifications
     args = list(source.states) + [name for name,code in members]
     kw = sc.obj(results)
-    kw.update(init=code_value(init) if init else None, init_n=code_value(init_n) if init_n else None, first=None if first is None else repr(first), name=repr(source.name), strains='strains' if strains else None)
+    kw.update(init=code_value(init) if init else None, init_n=code_value(init_n) if init_n else None, default_state=None if first is None else repr(first), name=repr(source.name), strains='strains' if strains else None)
     add(f'{var} = ss.Disease(')
     for i in range(0, len(args), 8):
         add(f'    {", ".join(args[i:i+8])},')

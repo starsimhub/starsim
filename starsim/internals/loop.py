@@ -74,6 +74,9 @@ class Loop:
         18. people:           finish_step()    # Clean up dead agents
         19. sim:              finish_step()    # Finish the step
 
+    With `ss.Sim(step_order='given')`, steps 4 to 10 are instead each module's step in the
+    order the modules were given (a disease's `step_state()` and then its `step()`).
+
     A sim that is nothing but compartments the kernels can run from start to finish goes
     through them in one call instead, not this order step by step (see `sim.kernel_reason()`).
 
@@ -190,7 +193,7 @@ class Loop:
 
         # Record the state at the start of the step. A module's record_stocks() is skipped only when it is the inherited
         # base method and the module has no auto-generated boolean-state results to count (see _null_record())
-        if sim.pars.get('people_results', True): # People results can be opted out for lightweight sims
+        if sim.pars.get('record_people', True): # People results can be opted out for lightweight sims
             self += sim.people.record_stocks
         for mod in sim.modules:
             if self._keep(mod.record_stocks):
@@ -199,6 +202,43 @@ class Loop:
         # Rescale the population if needed
         if sim.pars.rescale:
             self += sim.rescale
+
+        if sim.pars.step_order == 'given': # Each module steps in the order it was given in (analyzers still last, after the results)
+            self.collect_given(sim)
+        else:
+            self.collect_by_type(sim)
+
+        # Update people who died -- calls each module's on_death() internally
+        if self._keep(sim.people.step_die):
+            self += sim.people.step_die
+
+        # Record what happened in the step
+        if sim.pars.get('record_people', True):
+            self += sim.people.record_flows
+        for mod in sim.modules:
+            if self._keep(mod.record_flows):
+                self += mod.record_flows
+
+        # Apply analyzers
+        for ana in sim.analyzers():
+            if self._keep(ana.step):
+                self += ana.step
+
+        # Clean up dead agents, and perform other housekeeping tasks
+        for func in [mod.finish_step for mod in sim.modules] + [sim.people.finish_step]:
+            if self._keep(func):
+                self += func
+        self += sim.finish_step
+
+        return self.funcs
+
+    def _on_sim_time(self, mod):
+        """ Whether a module shares the sim's timeline (the usual case), so its time moves with the sim's """
+        t, sim_t = mod.t, self.sim.t
+        return len(t.yearvec) == len(sim_t.yearvec) and t.tvec.unit is sim_t.tvec.unit and np.array_equal(t.yearvec, sim_t.yearvec)
+
+    def collect_by_type(self, sim):
+        """ The steps of the modules, each kind at its place in the loop (the default; see `ss.Loop`) """
 
         # Update any nonspecific modules
         for mod in sim.custom():
@@ -233,38 +273,22 @@ class Loop:
         # Carry out autonomous state changes in the disease modules, including transmission (but excluding deaths)
         for disease in sim.diseases():
             self += disease.step
+        return
 
-        # Update people who died -- calls each module's on_death() internally
-        if self._keep(sim.people.step_die):
-            self += sim.people.step_die
-
-        # Record what happened in the step
-        if sim.pars.get('people_results', True):
-            self += sim.people.record_flows
-        for mod in sim.modules:
-            if self._keep(mod.record_flows):
-                self += mod.record_flows
-
-        # Apply analyzers
-        for ana in sim.analyzers():
-            if self._keep(ana.step):
-                self += ana.step
-
-        # Clean up dead agents, and perform other housekeeping tasks
-        for func in [mod.finish_step for mod in sim.modules] + [sim.people.finish_step]:
-            if self._keep(func):
-                self += func
-        self += sim.finish_step
-
-        return self.funcs
-
-    def _on_sim_time(self, mod):
-        """ Whether a module shares the sim's timeline (the usual case), so its time moves with the sim's """
-        t, sim_t = mod.t, self.sim.t
-        return len(t.yearvec) == len(sim_t.yearvec) and t.tvec.unit is sim_t.tvec.unit and np.array_equal(t.yearvec, sim_t.yearvec)
+    def collect_given(self, sim):
+        """ The steps of the modules in the order they were given in, with `ss.Sim(step_order='given')`; a disease takes its state changes and then its step together, and analyzers still step last """
+        mods = [mod for mod in sim.modules if not isinstance(mod, (ss.Analyzer, ss.Product))]
+        mods.sort(key=lambda mod: getattr(mod, '_given_index', np.inf)) # Modules added later (e.g. by sim.add_module()) after those given, by kind
+        for mod in mods:
+            if isinstance(mod, ss.Disease):
+                self += mod.step_state
+                self += mod.step
+            elif not isinstance(mod, (ss.Connector, ss.Intervention)) or self._keep(mod.step):
+                self += mod.step
+        return
 
     def _keep(self, func):
-        """ Whether to put a call in the plan (see `_noop()`); one left out counts as called, for `ss.Sim.check_method_calls()` """
+        """ Whether to put a call in the plan (see `_noop()`); one left out counts as called, for `ss.Sim._check_method_calls()` """
         if not self._noop(func):
             return True
         required = getattr(func.__self__, '_call_required', {})
@@ -326,7 +350,7 @@ class Loop:
         Collect time arrays for each module
 
         Two parallel arrays are stored per module: `abs_tvecs` holds the ground-truth
-        time objects (`ss.date`/`ss.dur`, used verbatim as each plan entry's time), and
+        time objects (`ss.date`/`ss.Duration`, used verbatim as each plan entry's time), and
         `abs_numvecs` holds the canonical numeric representation (float years). The
         numeric arrays are what `make_plan()` uses to decide uniformity and to sort,
         so that date/dur objects are never compared during plan construction.
@@ -498,7 +522,7 @@ class Loop:
 
         # Convert e.g. '2020-01-01' or ss.years(5) to a time on the timeline, as interventions read them (see ss.connectors.to_time())
         cond = None
-        if isinstance(until, (str, ss.date, ss.dur)):
+        if isinstance(until, (str, ss.date, ss.Duration)):
             until = ss.connectors.to_time(self.sim, until)
         elif isinstance(until, ss.expressions.Expr) or callable(until): # A condition, e.g. sir.I.n == 0
             cond, until = until, None
@@ -510,7 +534,7 @@ class Loop:
             entry = plan[self.index]
             if until is not None and entry.label == 'sim.advance' and self.sim.t.tvec[entry.ti] > until: # Stop before a step that starts after the time asked for
                 break
-            if cond is not None and entry.label == 'sim.advance' and self.sim.holds(cond): # It holds at the end of the step just taken
+            if cond is not None and entry.label == 'sim.advance' and self.sim._condition_holds(cond): # It holds at the end of the step just taken
                 self.stopped = self.sim.t.ti
                 break
             if verbose:
@@ -663,7 +687,7 @@ class Loop:
         # Compute the main dataframe
         if self.plan is not None:
             df = self.plan_metadata()
-            df['time'] = [float(t.value) if isinstance(t, ss.dur) else t for t in df['time']] # Plain numbers (on the module's own axis), or dates, rather than durations
+            df['time'] = [float(t.value) if isinstance(t, ss.Duration) else t for t in df['time']] # Plain numbers (on the module's own axis), or dates, rather than durations
         else:
             errormsg = f'Simulation "{self.sim}" needs to be initialized before exporting the Loop dataframe'
             raise RuntimeError(errormsg)

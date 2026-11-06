@@ -57,7 +57,7 @@ dim(I) <- n_age
 dim(R) <- n_age
 ```
 
-In Starsim, the age groups are a stratification and the contact matrix is `ss.contacts()`, so there is no `dim()`, no index bookkeeping, and no `1 - exp(-r*dt)`. `solver='binomial'` runs it as a chain binomial, as odin does. `use_aging=False` keeps people in their age group, as odin's arrays do:
+In Starsim, the age groups are a stratification and the contact matrix is `ss.contacts()`, so there is no `dim()`, no index bookkeeping, and no `1 - exp(-r*dt)`. `solver='binomial'` runs it as a chain binomial, as odin does. `aging=False` keeps people in their age group, as odin's arrays do:
 
 ```{python}
 import numpy as np
@@ -70,9 +70,9 @@ ages = [0, 5, 18, 65]
 S, E, I, R = ss.states(4)
 infection = S >> E @ ss.seasonal(mean=ss.perday(0.012), amplitude=0.3, peak=0) * I
 seir = ss.Disease(infection, E >> I @ ss.perday(0.2), I >> R @ ss.perday(0.1), init_n=dict(I=ss.by(age=[10, 0, 0, 0])))
-seir.stratify(age=ages, split=pop/pop.sum())
+seir.stratify(age=ages, fractions=pop/pop.sum())
 sim = ss.Sim(seir, networks=ss.contacts(ages=ages, matrix=m), total_pop=pop.sum(), unit='day', dt=0.25, stop=365,
-             solver='binomial', use_aging=False, verbose=0)
+             solver='binomial', aging=False, verbose=0)
 
 msim = sim.run(n_runs=20)
 msim.plot()

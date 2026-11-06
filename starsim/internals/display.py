@@ -302,7 +302,7 @@ class Diagram(str):
 def unit_name(graph, sim=None):
     """ The unit its numbers are read in: the sim's, or outside a sim, the unit a sim would take from the typed values (as in ss.solvers.choose.init_unit()), if they agree """
     if sim is not None:
-        return sim.unit_name
+        return sim._unit_name
     units = {u.removesuffix('s') for u in graph.unit_values()}
     return units.pop() if len(units) == 1 else 'time unit'
 
@@ -332,7 +332,7 @@ def describe_graph(graph, sim=None, out=None):
         add('', f'{state.name} a count, not people', f'guessed: {guess}' if guess else None)
     for state in graph.infectious:
         add('', f'{state.name} infectious' + (f', rel_trans = {value_str(state.rel_trans)}' if rel_str(state.rel_trans) else ''))
-    for state in {id(s):s for tr in graph.acquisitions for s in tr.src or [] if rel_str(s.rel_sus)}.values(): # Where it applies: to an acquisition from the state
+    for state in {id(s):s for tr in graph.acquisitions for s in tr.source or [] if rel_str(s.rel_sus)}.values(): # Where it applies: to an acquisition from the state
         add('', f'{state.name} susceptible, rel_sus = {value_str(state.rel_sus)}')
     infected = [s.name for s in graph.infected if s.people]
     if infected and not graph.transmissions: # With a transmission, they are its destination and its source, as above
@@ -342,24 +342,24 @@ def describe_graph(graph, sim=None, out=None):
     if graph.init_prev is not None and not (sc.isnumber(graph.init_prev) and graph.init_prev == 0):
         inits['init_prev'] = value_str(graph.init_prev.raw) if isinstance(graph.init_prev, par) else graph.init_prev
     rest_in = graph.rest if not getattr(engine, 'rest_empty', False) else None # Not said when the initial values account for everyone
-    guesses = [graph.guessed[key] for key in ['init', 'init_prev', 'first', 'rest'] if key in graph.guessed and (key != 'rest' or rest_in is not None)]
+    guesses = [graph.guessed[key] for key in ['init', 'init_prev', 'default_state', 'rest'] if key in graph.guessed and (key != 'rest' or rest_in is not None)]
     if inits:
         rest = f'; the rest in {rest_in.name}' if rest_in is not None else ''
         add('', 'init: ' + ', '.join(f'{k} = {v}' for k,v in inits.items()) + rest, f'guessed: {"; ".join(guesses)}' if guesses else None)
-    elif graph.first is not None:
-        add('', f'init: {graph.first.name} = 1.0', f'guessed: {"; ".join(["nothing given"] + guesses)}')
+    elif graph.default_state is not None:
+        add('', f'init: {graph.default_state.name} = 1.0', f'guessed: {"; ".join(["nothing given"] + guesses)}')
     add('', '')
 
     def flow_line(tr):
         if tr.flow_given is not None:
-            add('', f'written as the whole flow, {format_expr(tr.flow_given, mul="×")}, so per person in {tr.src[0].name}: {format_expr(tr.rate, mul="×")}')
+            add('', f'written as the whole flow, {format_expr(tr.flow_given, mul="×")}, so per person in {tr.source[0].name}: {format_expr(tr.rate, mul="×")}')
     for name,tr in graph.transitions.items():
         if tr.contact:
             leaf = beta_leaf(tr)
             weight = lambda coef: format_expr(coef.b) + ' ' if isinstance(coef, BinOp) and coef.op == '*' and coef.a is leaf else '' # A weight on a source (beta * (I + 0.5*A))
             source = ' + '.join(f'{weight(coef)}{s.name}' for s,coef in tr.terms.items())
             guess = f'name {tr.guessed["name"]}' if 'name' in tr.guessed else None
-            add(name, f'{tr.arrow}   transmission, from {source}', f'guessed: {guess}' if guess else None)
+            add(name, f'{tr._arrow}   transmission, from {source}', f'guessed: {guess}' if guess else None)
             flow_line(tr)
             for leaf in tr.rate.leaves:
                 if isinstance(leaf, par) and not leaf.literal:
@@ -376,24 +376,24 @@ def describe_graph(graph, sim=None, out=None):
             for text in (route_lines(mod, tr, sim) if sim is not None else []):
                 add('', text)
         elif tr.trigger is not None:
-            add(name, f'{tr.arrow}   on {getattr(tr.trigger.x, "__name__", tr.trigger.x)} ({"when it happens" if tr.trigger.event else "as soon as it holds"}, in the same step)')
+            add(name, f'{tr._arrow}   on {getattr(tr.trigger.x, "__name__", tr.trigger.x)} ({"when it happens" if tr.trigger.event else "as soon as it holds"}, in the same step)')
         elif tr.undriven:
             movers = ss.interventions.movers(sim, mod.name, name) if sim is not None else None
-            add(name, f'{tr.arrow}   undriven: moved by {sc.strjoin(movers) if movers else "nothing" if sim is not None else "products, deliveries, or code"}')
+            add(name, f'{tr._arrow}   undriven: moved by {sc.strjoin(movers) if movers else "nothing" if sim is not None else "products, deliveries, or code"}')
         else:
             guess = sc.strjoin(([f'name {tr.guessed["name"]}'] if 'name' in tr.guessed else []) + ([f'acquisition: {tr.guessed["acquisition"]}'] if 'acquisition' in tr.guessed else []), sep='; ')
             kind = 'density-dependent' if tr.rate is not None and ss.expressions.count_power(tr.rate) > 0 else 'spontaneous' # A rate per person that grows with a number of people, e.g. beta*I.n
-            if tr.inflow:
+            if tr._inflow:
                 kind = f'inflow, in total per {unit or "step"}'
             elif tr.acquisition:
                 kind += ', an acquisition'
             elif 'acquisition' in tr.guessed: # Out of the first state, alongside a transmission
                 kind += ', not an acquisition'
-            add(name, f'{tr.arrow}   {kind}', f'guessed: {guess}' if guess else None)
+            add(name, f'{tr._arrow}   {kind}', f'guessed: {guess}' if guess else None)
             flow_line(tr)
-            if tr.immediate:
+            if tr._immediate:
                 add('', 'immediately (dur=0), in the step people arrive')
-            elif not tr.inflow and (tr.dur is not None or (engine is not None and name in engine.dwells)):
+            elif not tr._inflow and (tr.dur is not None or (engine is not None and name in engine.dwells)):
                 p = tr.dur if tr.dur is not None else tr.rate
                 raw = p.raw
                 dw = engine.dwells.get(name) if engine is not None else None
@@ -401,7 +401,7 @@ def describe_graph(graph, sim=None, out=None):
                 scaled = ss.transitions.scaled_dist(raw) if tr.dur is not None and isinstance(raw, ss.expressions.Expr) else None # A distribution times a factor, each draw scaled (see Engine.init_dwells())
                 if scaled is not None:
                     raw = scaled[0].raw
-                within = f'time in {" | ".join(s.name for s in tr.src)} ~' # The time people spend in the state before leaving this way
+                within = f'time in {" | ".join(s.name for s in tr.source)} ~' # The time people spend in the state before leaving this way
                 if isinstance(raw, ss.Dist):
                     text = f'{within} {dist_str(raw, unit)}' +(f' × {format_expr(scaled[1], values="number", unit=unit, mul="×")}' if scaled is not None else '')
                     if dw is not None and dw.fixed:
@@ -424,15 +424,15 @@ def describe_graph(graph, sim=None, out=None):
             elif tr.p is not None:
                 add('', 'happens immediately on entry')
         if tr.p is not None:
-            at_exit = f'decided as people leave, from their time in {tr.src[0].name}' if name in graph.dwell_trs else None
+            at_exit = f'decided as people leave, from their time in {tr.source[0].name}' if name in graph.dwell_trs else None
             stays = [f'{label}: ' + ('the rest' if p is None else format_expr(p, values=True)) for label,p,given in [('null', tr.p_die, tr.dies), ('stay', tr.p_stay, tr.stays)] if given]
             add('', f'p = {", ".join(["the rest" if p is None else format_expr(p, values=True) for p in tr.p] + stays)}', at_exit)
         elif 'p' in tr.guessed:
             add('', f'p = {tr.guessed["p"]}', 'guessed: what the other branches leave')
-        if tr.ends: # A result for each destination, e.g. res.cin.X
-            add('', 'flows: ' + ', '.join([f'{name} (total)'] + [f'{name}.{end}' for end in tr.ends]))
-        if getattr(tr, 'after', None) is not None: # A minimum stay
-            add('', f'not before {quantity_str(tr.after, "dur", unit)} in {sc.strjoin(s.name for s in tr.src)}')
+        if tr._ends: # A result for each destination, e.g. res.cin.X
+            add('', 'flows: ' + ', '.join([f'{name} (total)'] + [f'{name}.{end}' for end in tr._ends]))
+        if getattr(tr, 'min_stay', None) is not None: # A minimum stay
+            add('', f'not before {quantity_str(tr.min_stay, "dur", unit)} in {sc.strjoin(s.name for s in tr.source)}')
         if tr.guessed.get('import'):
             add('', f'imported as {tr.guessed["import"]}', 'guessed')
         for expr in [tr.rate, tr.dur] + sc.tolist(tr.p): # The other parameters of the transition that are documented (or labeled) or can be fitted, each with its value
@@ -443,8 +443,8 @@ def describe_graph(graph, sim=None, out=None):
     for name,oc in graph.outcomes.items(): # Each outcome as it is defined, e.g. "0.5 × onset, after 4 days (exponential)"
         source = oc.source_str().replace(' * ', ' × ')
         text = f'outcome: {source}' + (f', after {delay_str(oc.delay, unit)}' if oc.delay is not None else '')
-        if oc.duration is not None:
-            text += f'; n_{name} for {delay_str(oc.duration, unit)}'
+        if oc.stay is not None:
+            text += f'; n_{name} for {delay_str(oc.stay, unit)}'
         if oc.likelihood is not None:
             text += f'; likelihood {getattr(oc.likelihood, "__name__", type(oc.likelihood).__name__)}'
         add(name, text)
@@ -467,11 +467,11 @@ def graph_edges(graph):
     out = []
     for name,tr in graph.transitions.items():
         kind = 'contact' if tr.contact else 'spontaneous'
-        dsts = (tr.dst or [None]) + [None]*bool(tr.dst and tr.dies) # ss.null as one of several destinations is an edge of its own
-        ps = (list(tr.p) if tr.p is not None else [None]*len(tr.dst or [None])) + [getattr(tr, 'p_die', None)]*bool(tr.dst and tr.dies)
+        dsts = (tr.dest or [None]) + [None]*bool(tr.dest and tr.dies) # ss.null as one of several destinations is an edge of its own
+        ps = (list(tr.p) if tr.p is not None else [None]*len(tr.dest or [None])) + [getattr(tr, 'p_die', None)]*bool(tr.dest and tr.dies)
         if tr.p is None and not tr.dies:
             ps = [False]*len(dsts)
-        for src in tr.src or [None]:
+        for src in tr.source or [None]:
             for dst,p in zip(dsts, ps):
                 out.append((src, dst, name, kind, p))
     return out
@@ -530,7 +530,7 @@ def equation_symbols(graph, engine=None):
         lines.append(f'In each equation, a state is its number in each group of {sc.strjoin([s.name for s in graph.strats], sep=" and ")}, and I / N is over the whole population here; '
                      f'the equations of the disease in a sim, sim.diseases.{name}.equations(), use its contacts')
     if graph.transmissions and mixing is not None and getattr(mixing, 'terms', None):
-        unit = sim.unit_name
+        unit = sim._unit_name
         for term in mixing.terms:
             net = f' of "{term.name}"' if term.name else ''
             if term.kind == 'matrix' and 'cells' not in term and term.matrix.shape[0] == sim.groups.strats[term.dim].n:
@@ -549,7 +549,7 @@ def equation_symbols(graph, engine=None):
         nets = sc.strjoin(f'"{term.name}"' for term in mixing.terms if mixing.counts(term))
         for leaf in dict.fromkeys(str(leaf) for leaf in graph.met_counts if id(leaf) in met):
             frac = leaf.endswith('.frac')
-            each = leaf.removesuffix('.frac').removesuffix('.n') # What is counted in each group: I for I.n, I.n_trans as itself
+            each = leaf.removesuffix('.frac').removesuffix('.n') # What is counted in each group: I for I.n, I.n_infectious as itself
             lines.append(f'In a rate, {leaf} in group i is the sum over groups j of C[i, j] * {each}[j]{" / N" if frac else ""}, with C the contact matrix of {nets}{" and N everyone in the same place" if frac else ""}')
     for name,p in graph.pars.items():
         raw = p.raw
@@ -573,7 +573,7 @@ def flow_terms(graph, engine=None, contacts=None):
     """
     mod = graph.module
     if engine is None or not engine.compartmental: # Not in a compartmental sim, so lay the model out with a stand-in
-        mock = sc.obj(unit_base='day', solver='ode', groups=sc.obj(n_groups=1), pars=sc.obj(rand_seed=0, total_pop=1, approx=True, solver='ode', branching=False), unit=None, unit_name='day', crossings=[])
+        mock = sc.obj(unit_base='day', solver='ode', groups=sc.obj(n_groups=1), pars=sc.obj(rand_seed=0, total_pop=1, approximations='allow', solver='ode', branching=False), unit=None, _unit_name='day', crossings=[])
         engine = ss.solvers.Compartmental(mod, mock)
         engine.init_dwells()
         engine.build_layout()
@@ -589,7 +589,7 @@ def flow_terms(graph, engine=None, contacts=None):
         for track in engine.tracks[name]:
             w = weight if track.p is None else f'{weight}{factor_str(track.p)} * '
             if track.immediate:
-                for dst,share in zip(track.tr.dst, branch_shares(track.tr)[0]):
+                for dst,share in zip(track.tr.dest, branch_shares(track.tr)[0]):
                     out += entry(dst.name, f'{w}{share}')
             else:
                 out.append((track.first, w))
@@ -635,7 +635,7 @@ def flow_terms(graph, engine=None, contacts=None):
             dsts.append((flow.to, term))
         else:
             shares, leaving = branch_shares(tr)
-            for dst,w in zip(tr.dst, shares):
+            for dst,w in zip(tr.dest, shares):
                 for ind,weight in entry(dst.name, w):
                     dsts.append((ind, f'{weight}{term}'))
             term = f'{leaving}{term}' # With ss.stay, only those who do not stay leave
@@ -674,7 +674,7 @@ def check_dt(sim, factor=2, output=False):
     df = sc.dataframe(rows).sort_values('change', ascending=False).reset_index(drop=True)
     if output:
         return df
-    dt, unit = coarse.t.dt.to(coarse.unit_base).value, coarse.unit_name
+    dt, unit = coarse.t.dt.to(coarse.unit_base).value, coarse._unit_name
     inner = lambda sim: [mod.engine.dt/max(mod.engine.substeps(), 1) for mod in sim.declared if mod.engine.compartmental]
     if coarse.solver == 'binomial' and coarse.pars.substeps is None and len(inner(coarse)) and np.allclose(inner(coarse), inner(fine)): # It takes substeps of the same size whatever the step
         print(f'The chain-binomial solver takes enough substeps by default (here of {inner(coarse)[0]:n} {unit}s) that the step does not change its results: '
@@ -701,7 +701,7 @@ def what_modifies(sim, target, output=False):
             text = f'{modname}.pars.{name}\n  modifiers: none; "{modname}" is written as code, so its own code reads its parameters, and only its rel_sus and rel_trans can be modified'
             return text if output else print(text)
     else:
-        graph = sim.get_declared(modname).graph
+        graph = sim._declared_module(modname).graph
         if kind is None:
             kind = 'transition' if name in graph.transitions else 'par'
         if kind == 'transition':
@@ -725,7 +725,7 @@ def describe_sim(sim, output=False, verbose=False):
         sim._quiet = True
         sim.init()
     pars = sim.pars
-    unit = sim.unit_name
+    unit = sim._unit_name
     mods = list(sim.modules)
     desc = Description()
     add = desc.add
@@ -777,14 +777,14 @@ def describe_sim(sim, output=False, verbose=False):
                     ref = strat.geo.ref
                     text += f"; places from starsim_data {ref['version']} ({ref.get('boundaries', '?')} boundaries; population: {ref.get('population', '?')})"
             elif strat.kind == 'age':
-                text += (f'; split as the population of {named.place}' if named is not None else '; split as the ages of the people given') if getattr(strat, 'split_from', None) == 'people' else '' # A named population, or ss.People(age_data=...)
-                text += '; people do not age (use_aging=False)' if not pars.use_aging else '; nobody ages, since time is in timesteps' if sim.unit is None else '; people age between the groups'
+                text += (f'; split as the population of {named.place}' if named is not None else '; split as the ages of the people given') if getattr(strat, 'fractions_from', None) == 'people' else '' # A named population, or ss.People(age_data=...)
+                text += '; people do not age (aging=False)' if not pars.aging else '; nobody ages, since time is in timesteps' if sim.unit is None else '; people age between the groups'
             text += sim.groups.moved_by(strat)
             if strat.name in getattr(sim.groups, 'kept', set()):
                 text += f'; people.{strat.attr}, from the people given'
             guesses = list(strat.guessed.values())
-            if strat.kind == 'age' and 'use_aging' not in sim.given:
-                guesses.append('aging, since people are born or die' if pars.use_aging else 'no aging, since nobody is born or dies')
+            if strat.kind == 'age' and 'aging' not in sim.given:
+                guesses.append('aging, since people are born or die' if pars.aging else 'no aging, since nobody is born or dies')
             add('dimension', text, f'guessed: {"; ".join(guesses)}' if guesses else None)
             for row in strat_rows(strat):
                 add('', row)
@@ -822,7 +822,7 @@ def describe_sim(sim, output=False, verbose=False):
             ti = getattr(mod.engine, 'group_ti', None)
             if ti is not None: # Kept by group every few steps
                 text += f'; by group every {ti[1]} {unit}s'
-            add('results', text, 'guessed: to keep them by group within 100 MB; results=[...] keeps fewer, more often' if ti is not None else None)
+            add('results', text, 'guessed: to keep them by group within 100 MB; group_results=[...] keeps fewer, more often' if ti is not None else None)
         if verbose: # What runs where, which is about the solver and not the model: the declared modules in the kernels or as agents, and the rest in Python (see sim.kernel_reason())
             stepped = {func['module'] for func in sim.loop.funcs} - {'sim', 'people'}
             declared = [mod.name for mod in sim.declared]
@@ -861,9 +861,9 @@ def describe_sim(sim, output=False, verbose=False):
 
 def describe_steps(sim, desc):
     """ The sections of `describe(verbose=True)`, added to `desc` (a `Description`): each rate and dwell time per step of its module """
-    unit = sim.unit_name
+    unit = sim._unit_name
     def plain(raw): # A single value in the sim's unit, or None if it varies (by group, by person, or in time)
-        if sc.isnumber(raw) or (isinstance(raw, ss.TimePar) and np.ndim(raw.value) == 0):
+        if sc.isnumber(raw) or (isinstance(raw, ss.time.TimePar) and np.ndim(raw.value) == 0):
             return ss.solvers.engine.convert(raw, sim.unit_base)
         return None
     for mod in sim.declared:
@@ -903,9 +903,9 @@ def strat_rows(strat, most=6):
         return ', '.join(items) if len(items) <= most else ', '.join(items[:most-1]) + f', and {len(items) - most + 1} more'
     rows = []
     if strat.joint is not None:
-        rows.append(f'split: by {sc.strjoin([d for d in strat.joint.dims if d != strat.name] or strat.joint.dims)}, as given')
-    elif strat.split is not None:
-        rows.append('split: ' + short([f'{label} {share:.3g}' for label,share in zip(strat.labels, strat.split)]))
+        rows.append(f'fractions: by {sc.strjoin([d for d in strat.joint.dims if d != strat.name] or strat.joint.dims)}, as given')
+    elif strat.fractions is not None:
+        rows.append('fractions: ' + short([f'{label} {share:.3g}' for label,share in zip(strat.labels, strat.fractions)]))
     if strat.adjust and strat.kind != 'strain': # A strain's are shown with its strains
         rows.append('adjust: ' + '; '.join(f'{key} × {short([f"{v:n}" for v in vals])}' for key,vals in strat.adjust.items()))
     return rows
@@ -924,9 +924,9 @@ def factor_str(expr):
 
 def branch_shares(tr):
     """ The share of a transition's flow that goes to each of its destination states, as a factor to put before it (e.g. "0.3 * ", or "" for all of it), and the share that leaves its source ("" unless ss.stay is one of its destinations); what ss.null takes goes nowhere """
-    if not tr.split:
-        return ['']*len(tr.dst), ''
-    ps = list(tr.p or [None]*len(tr.dst))
+    if not tr._split:
+        return ['']*len(tr.dest), ''
+    ps = list(tr.p or [None]*len(tr.dest))
     ends = ps + [tr.p_stay]*tr.stays + [tr.p_die]*tr.dies # One entry for each destination, with ss.stay and ss.null
     given = [factor_str(p) for p in ends if p is not None]
     shares = [f'{factor_str(p)} * ' if p is not None else f'(1 - {" - ".join(given)}) * ' for p in ends] # The destination with p=None takes the rest
@@ -973,7 +973,7 @@ def midpoint_guess(p):
 
 
 def delay_str(val, unit):
-    """ A delay or a duration of an outcome: a distribution as written, or a mean, which is exponential """
+    """ A delay or a stay of an outcome: a distribution as written, or a mean, which is exponential """
     if isinstance(val, ss.Dist):
         return dist_str(val, unit)
     elif callable(val):
@@ -988,11 +988,11 @@ def dist_str(dist, unit):
     if isinstance(dist, ss.gamma) and sc.isnumber(pars.a) and sc.isnumber(pars.loc) and pars.loc == 0: # As ss.erlang() or ss.gamma(mean=, std=) take it
         mean = pars.a*pars.scale
         return f'erlang(k={int(pars.a)}, mean={q(mean)})' if pars.a == int(pars.a) else f'gamma(mean={q(mean)}, std={q(mean/float(np.sqrt(pars.a)))})'
-    name = dict(lognorm_ex='lognormal', expon='exponential').get(type(dist).__name__, type(dist).__name__)
+    name = dict(expon='exponential').get(type(dist).__name__, type(dist).__name__)
     unitless = dist.unitless_pars or []
     vals = {k:value_str(v) if k in unitless else q(v) for k,v in pars.items() if not (k == 'loc' and sc.isnumber(v) and v == 0)} # Leaving out the default location
-    if list(vals) == ['v']: # ss.constant(), by its value alone
-        return f'{name}({vals["v"]})'
+    if list(vals) == ['value']: # ss.constant(), by its value alone
+        return f'{name}({vals["value"]})'
     return f'{name}({", ".join(f"{k}={v}" for k,v in vals.items())})'
 
 
@@ -1001,10 +1001,10 @@ def quantity_str(raw, kind, unit):
     unit = unit or 'step'
     if isinstance(raw, ss.seasonal):
         return seasonal_str(raw, quantity_str(raw.mean, kind, unit)) + ', t in years'
-    if isinstance(raw, ss.dur):
+    if isinstance(raw, ss.Duration):
         base = type(raw).base
         return f'{raw.value:n} {base if raw.value != 1 else base.removesuffix("s")}'
-    elif isinstance(raw, ss.Rate) and raw.unit is not None:
+    elif isinstance(raw, ss.time.Rate) and raw.unit is not None:
         word = 'per' if isinstance(raw, ss.per) else 'probability per' if isinstance(raw, ss.prob) else 'events per'
         return f'{raw.value:n} {word} {type(raw.unit).base.removesuffix("s")}'
     elif sc.isnumber(raw) and kind == 'rate':
@@ -1036,7 +1036,7 @@ def route_lines(mod, tr, sim):
     nets = sim.all_networks() if hasattr(sim, 'all_networks') else {}
     if leaf is None or not nets:
         return []
-    unit = sim.unit_name
+    unit = sim._unit_name
     lines = []
     for name,net in nets.items():
         val = route_beta(leaf.raw, net)
@@ -1052,7 +1052,7 @@ def route_lines(mod, tr, sim):
             sides = f" ({net.name}'s {net.sides_str()})" if dirs else ''
             lines.append(f'beta on {name}: per act, {values}{sides}')
             acts = net.pars.get('acts')
-            if isinstance(acts, ss.Rate):
+            if isinstance(acts, ss.time.Rate):
                 lines.append(f'    acts {quantity_str(acts, None, unit)} in each partnership')
             elif acts is not None:
                 lines.append(f'    acts per unit time in each partnership ~ {acts}, drawn once for each')
@@ -1088,7 +1088,7 @@ def partnership_lines(mod, tr, sim, name):
                 key = f'{sides[src]}2{sides[pt.group_side[g]]}' if sides else 'each'
                 chances[f'{key} from {state}' if len(tr.terms) > 1 else key] = out[g]
     chances = ', '.join(f'{k} {v:.2g}' for k,v in chances.items())
-    return [f'    partner-change model (approx): partnerships formed at {pt.formed:.2g} a {sim.unit_name}; chance over a partnership {chances}']
+    return [f'    partner-change model (approx): partnerships formed at {pt.formed:.2g} a {sim._unit_name}; chance over a partnership {chances}']
 
 
 def seasonal_str(raw, mean):
@@ -1107,9 +1107,9 @@ def timeseries_str(raw, most=4):
 
 def quantity_json(raw, kind, unit):
     """ A value as plain data, for `sim.to_json()`: a typed quantity, a distribution, or a plain number """
-    if isinstance(raw, ss.dur):
+    if isinstance(raw, ss.Duration):
         return dict(type='dur', value=float(raw.value), unit=type(raw).base.removesuffix('s'))
-    elif isinstance(raw, ss.Rate):
+    elif isinstance(raw, ss.time.Rate):
         types = {ss.per:'per', ss.prob:'prob', ss.time.freq:'freq'}
         key = [v for k,v in types.items() if isinstance(raw, k)][0]
         return dict(type=key, value=float(raw.value), unit=None if raw.unit is None else type(raw.unit).base.removesuffix('s'))
@@ -1131,8 +1131,8 @@ def quantity_json(raw, kind, unit):
         return dict(type='peract') | {k:quantity_json(v, None, unit) for k,v in items.items()}
     elif isinstance(raw, Expr):
         return format_expr(raw, exact=True)
-    elif isinstance(raw, ss.box): # Waning as a box, then a decay
-        return dict(box=quantity_json(raw.dur, None, unit), decay=None if raw.decay is None else quantity_json(raw.decay, None, unit), stages=raw.stages)
+    elif isinstance(raw, ss.boxcar): # Waning as a plateau, then a decay
+        return dict(plateau=quantity_json(raw.plateau, None, unit), decay=None if raw.decay is None else quantity_json(raw.decay, None, unit), stages=raw.stages)
     elif callable(raw):
         return func_json(raw)
     elif isinstance(raw, dict): # A bare number as the default of a beta for each route stays bare, since it is per act on the routes with acts it applies to

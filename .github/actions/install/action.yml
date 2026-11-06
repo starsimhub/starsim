@@ -51,7 +51,7 @@ runs:
       shell: bash
       run: |
         echo "STARSIM_KERNELS=rust" >> "$GITHUB_ENV"
-        STARSIM_KERNELS=rust python -c "import starsim as ss; assert ss.solvers.backends.rust.on; print(ss.compile_status().summary)"
+        STARSIM_KERNELS=rust python -c "import starsim as ss; assert ss.solvers.backends.rust.on; print(ss.kernels.compile_status().summary)"
     - name: Find Numba's cache
       id: numba
       if: inputs.numba == 'true'

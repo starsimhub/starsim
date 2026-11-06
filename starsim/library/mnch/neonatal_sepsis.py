@@ -65,7 +65,7 @@ class NeonatalSepsis(AgentSIR):
         self.define_pars(
             beta      = 0,                                         # No ongoing transmission — infection is set at birth
             init_prev = ss.bernoulli(p=0.3),                       # 30% of newborns infected at birth
-            dur_inf   = ss.lognorm_ex(mean=ss.days(7), std=ss.days(3)),  # ~1 week illness
+            dur_inf   = ss.lognormal(mean=ss.days(7), std=ss.days(3)),  # ~1 week illness
             p_death   = ss.bernoulli(p=0.5),                       # 50% case fatality
         )
         self.update_pars(pars, **kwargs)

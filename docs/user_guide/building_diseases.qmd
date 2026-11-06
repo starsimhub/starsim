@@ -91,9 +91,9 @@ Anything that is not transmission is a rate per person, or a duration:
 | an expression with a bare state | transmission | `S >> I @ beta*I` |
 | an expression of counts | a rate that depends on how many people are in each state | `S >> I @ beta*W.n/(W.n + K)` |
 | a function of the sim | a rate worked out at each step | `S >> I @ my_rate` |
-| a trigger, `ss.on()` | a move as soon as a condition holds, or when an event happens to the person (as agents) | `U >> A @ ss.on(ss.ppl.age >= 15)` |
+| a trigger, `on=` or `@ ss.on()` | a move as soon as a condition holds, or when an event happens to the person (as agents) | `U >> A @ ss.on(ss.person.age >= 15)` |
 
-A trigger has no rate: anyone in the source state for whom the condition holds moves in the step it first holds, and an event (a transition, `tr.to(B)`, `X.enter`, `X.exit`) moves the people it happened to, in the same step. A condition on a state of another disease that may not exist yet is written by its path, `ss.state('hpv18.X')`. See [`ss.on`](../api/transitions.qmd).
+A trigger has no rate: anyone in the source state for whom the condition holds moves in the step it first holds, and an event (a transition, `tr.to(B)`, `X.enter`, `X.exit`) moves the people it happened to, in the same step. A condition on a state of another disease that may not exist yet is written by its path, `ss.ref('hpv18.X')`. See [`ss.on`](../api/transitions.qmd).
 
 A bare number after `@` is always a rate, never a duration: `I >> R @ 8` means a rate of 8 per day, so that people stay infectious for an eighth of a day. A duration is always typed (`ss.days(8)`), or given as `dur=` (`ss.Transition(I, R, dur=8)`).
 
@@ -136,7 +136,7 @@ The distributions most used for durations are:
 | Exponential | The ODE default; a constant rate of leaving | `ss.days(10)` |
 | Erlang (a gamma distribution with a whole number of stages, `k`) | A duration with less spread: the standard deviation is the mean divided by √k | `ss.erlang(k=4, mean=ss.days(10))` |
 | Fixed | Everyone stays exactly this long, e.g. a reporting delay | `ss.constant(ss.days(10))` |
-| Lognormal | A duration given by its mean and standard deviation, e.g. from a study | `ss.lognorm_ex(mean=ss.days(10), std=ss.days(2))` |
+| Lognormal | A duration given by its mean and standard deviation, e.g. from a study | `ss.lognormal(mean=ss.days(10), std=ss.days(2))` |
 
 Any other distribution of durations works too; see [Distributions](mechanics_distributions.qmd). As agents, each person draws their own time in the state. As compartments, an Erlang distribution is run exactly, as `k` stages in a row; a fixed duration is run exactly too (as one compartment for each step people have been in the state), and so is a choice of whole numbers of steps (`ss.choice(a=ss.days([3, 4, 5]), p=[0.2, 0.5, 0.3])` with daily steps, leaving each of those compartments at its own chance; as Erlang stages instead, with a note, if it has a minimum stay of its own, `after=`, or is one of several dwell times out of the state kept apart with `where=`); and any other distribution is run as Erlang stages with the same mean and standard deviation, with a note that says so. `stages=k` on a transition (`ss.Transition(E, I, dur=ss.days(10), stages=4)`) says how many stages to use, under every solver.
 
@@ -232,7 +232,7 @@ sim.diseases.cholera.plot('I', 'W') # The infectious, and the bacteria in the wa
 
 Since nobody catches cholera from a person here, the infection is **spontaneous** (its rate has no bare state), but it is still the acquisition of the disease: it is what a vaccine or a lower susceptibility acts on.
 
-A count can weight each person: `(ss.by(biting=[0.5, 1, 2])*I).n` counts each infectious person by how much they are bitten (in a model stratified by `biting`), and `I.n_trans` by how infectious they are (their `rel_trans`, with any product or modifier on it), so a treatment that halves infectiousness also halves what the treated shed: `shedding = ss.null >> W @ xi*I.n_trans`. A weighted count works under every solver; in a compartmental run the kernels work it out within each step, as they do `I.n`, except in diseases tracked jointly (two diseases whose states depend on each other), where it is worked out once a step and held through it, as `sim.kernel_reason()` says. A contact matrix acts on a weighted count in a rate as it does on `I.n` (see [Population data](populations_data.qmd)).
+A count can weight each person: `(ss.by(biting=[0.5, 1, 2])*I).n` counts each infectious person by how much they are bitten (in a model stratified by `biting`), and `I.n_infectious` by how infectious they are (their `rel_trans`, with any product or modifier on it), so a treatment that halves infectiousness also halves what the treated shed: `shedding = ss.null >> W @ xi*I.n_infectious`. A weighted count works under every solver; in a compartmental run the kernels work it out within each step, as they do `I.n`, except in diseases tracked jointly (two diseases whose states depend on each other), where it is worked out once a step and held through it, as `sim.kernel_reason()` says. A contact matrix acts on a weighted count in a rate as it does on `I.n` (see [Population data](populations_data.qmd)).
 
 ## Susceptibility and infectiousness
 
@@ -327,7 +327,7 @@ strains = ss.Strains(
     ['wild', 'variant'],
     rel_trans = [1, 1.5],     # The variant is 1.5 times as transmissible
     split     = [0.99, 0.01], # The share of each among the first infections
-    immunity  = ss.immunity(due_to=R, rel_sus=[[1, 0.5], [0.5, 1]]), # Full protection against the same strain, half against the other
+    immunity  = ss.immunity(due_to=R, protection=[[1, 0.5], [0.5, 1]]), # Full protection against the same strain, half against the other
 )
 flu = ss.Disease(
     infection = S >> I @ ss.perday(0.35)*I,
@@ -343,7 +343,7 @@ sim.results.flu.I.by('strain').plot()
 
 Although it starts rare, the variant grows faster, and has the first epidemic nearly to itself: it infects more than four times as many people as the wild strain in the first year. The wild strain then barely circulates, held down by the immunity the variant leaves, while the variant comes back each year as immunity wanes, in epidemics that get smaller as they settle towards an endemic level.
 
-With `max_strains=2`, people can carry two strains at once, and `transmit=` says what a carrier of several passes on: one strain per transmission (`'one'`, the default) or each strain at its own rate (`'each'`). `split=` gives the share of each strain among the first infections (equal by default), and `name=` the name of the strain dimension, for results such as `res.I.by('strain')`. A transition with `per='strain'` acts on each strain a person carries, e.g. a cure that clears some strains and not others. See [`ss.Strains`](../api/strains.qmd).
+With `max_strains=2`, people can carry two strains at once, and `transmit=` says what a carrier of several passes on: one strain per transmission (`'one'`, the default) or each strain at its own rate (`'each'`). `fractions=` gives the share of each strain among the first infections (equal by default), and `name=` the name of the strain dimension, for results such as `res.I.by('strain')`. A transition with `per_strain=True` acts on each strain a person carries, e.g. a cure that clears some strains and not others. See [`ss.Strains`](../api/strains.qmd).
 
 The results by strain come in two forms, which differ when people carry several. `res.I.by('strain')` has a column for each strain, and someone who carries two is counted in both, so with `max_strains=2` the columns add up to more than `res.I`. `res.I.select(strain=...)` works on the sets of strains carried instead, each person once: with strains `A` and `B`, the levels are `'A'`, `'B'`, and `'A+B'`, so `select(strain='A+B')` is those who carry both, and `select(strain=['A', 'A+B'])` everyone who carries `A`. With more strains than can be carried at once (say three, two at a time), the sets are in the order the strains were acquired, so that the oldest is the one replaced, and both `'A+B'` and `'B+A'` are levels; list both (`res.I.axes()['strain'][0]` lists the levels). With one strain carried at a time, the two agree. The dimension is named `strain` unless `name=` gives another (e.g. `res.I.by('resistance')`). As agents, the [infection log](interventions_analyzers.qmd#the-infection-log) also has the strain passed on in each infection.
 
@@ -363,8 +363,8 @@ for label in ['No cross-protection', 'Cross-protection for 2 years']:
     cross = []
     if label != 'No cross-protection':
         cross = [
-            ss.modify(den1.rel_sus, multiply=0, where=den2.R & (den2.R.time < ss.years(2))), # Recovered from DENV-2 within 2 years
-            ss.modify(den2.rel_sus, multiply=0, where=den1.R & (den1.R.time < ss.years(2))),
+            ss.modify(den1.rel_sus, multiply=0, where=den2.R & (den2.R.time_in < ss.years(2))), # Recovered from DENV-2 within 2 years
+            ss.modify(den2.rel_sus, multiply=0, where=den1.R & (den1.R.time_in < ss.years(2))),
         ]
     sim = ss.Sim([den1, den2], connectors=cross, n_agents=5_000, unit='day', stop=365, verbose=0).run()
     print(label)
@@ -399,7 +399,7 @@ In transmission, the chance that infection passes along a contact from an infect
 import starsim.library as ssl
 
 for protect in [False, True]:
-    sir = ssl.AgentSIR(beta=ss.perday(0.03), dur_inf=ss.lognorm_ex(mean=ss.days(10), std=ss.days(3)), p_death=0, init_prev=0.01)
+    sir = ssl.AgentSIR(beta=ss.perday(0.03), dur_inf=ss.lognormal(mean=ss.days(10), std=ss.days(3)), p_death=0, init_prev=0.01)
     sim = ss.Sim(sir, networks='random', n_agents=2000, stop=ss.days(120), verbose=0)
     sim.init()
     sir = sim.diseases.agentsir # The sim's copy of the disease
@@ -437,23 +437,23 @@ The parts of a module written as code (its parameters, states, results, and the 
 
 ## Appendix: every argument of a transition
 
-`ss.Transition()` takes these arguments; the operators (`S >> I @ rate`) give `src`, `dst`, and `rate` or `dur`, and the others are given by keyword. `ss.birth()` and `ss.death()` also make a transition. See [`ss.Transition`](../api/transitions.qmd) for the details.
+`ss.Transition()` takes these arguments; the operators (`S >> I @ rate`) give `source`, `dest`, and `rate` or `dur`, and the others are given by keyword. `ss.birth()` and `ss.death()` also make a transition. See [`ss.Transition`](../api/transitions.qmd) for the details.
 
 | Argument | What it gives | See |
 |---|---|---|
-| `src` | The source state; several states, as a list or a sum (`S + V`); or `ss.null`, for an inflow from outside the model | [Ways to write a transition](#ways-to-write-a-transition) |
-| `dst` | The destination state; a list of states, for a branch decided on leaving; or `ss.null`, for an outflow | [Branching](#branching) |
+| `source` | The source state; several states, as a list or a sum (`S + V`); or `ss.null`, for an inflow from outside the model | [Ways to write a transition](#ways-to-write-a-transition) |
+| `dest` | The destination state; a list of states, for a branch decided on leaving; or `ss.null`, for an outflow | [Branching](#branching) |
 | `rate` | A hazard: a number, a typed rate, a probability per period, an expression of states and parameters, or a function of the sim; with a bare state in it, a transmission | [Transmission](#transmission), [Other rates](#other-rates) |
 | `dur` | A dwell time instead of a rate: a duration, or a distribution of durations | [Durations](#durations) |
 | `p` | The share of people who take this transition (separate transitions out of one state), or a list of shares, one for each destination | [Branching](#branching) |
 | `stages` | The number of stages used to run the dwell time, under every solver | [Durations](#durations) |
-| `where` | Who it applies to: a condition (e.g. `ss.ppl.age > 30`), with a rate of 0 for everyone else; with no `rate` or `dur`, a trigger; or an event, which moves the people it happens to (or `dur` after it), as agents | [Other rates](#other-rates), [Demographics](populations_demographics.qmd) |
+| `where` | Who it applies to: a condition (e.g. `ss.person.age > 30`), with a rate of 0 for everyone else; with no `rate` or `dur`, a trigger; or an event, which moves the people it happens to (or `dur` after it), as agents | [Other rates](#other-rates), [Demographics](populations_demographics.qmd) |
 | `move` | A change of level in a dimension as well as of state (`move=dict(risk=('low', 'high'))`), or a change of strains (`move=DS >> (DS, RIF)`) | [Stratification](building_stratification.qmd#moving-between-groups) |
 | `increment` | A counter that goes up each time the transition happens to someone (`increment='infections'`), or by another amount (`increment=dict(parity=2)`) | [Stratification](building_stratification.qmd#moving-between-groups) |
-| `after` | A minimum stay: nobody takes the transition until they have been in the source state this long | |
+| `min_stay` | A minimum stay: nobody takes the transition until they have been in the source state this long | |
 | `acquisition` | Whether it is an acquisition of the disease, which `rel_sus`, a product's efficacy against acquisition, and `ss.treat` act on (by default, every transmission, or the first transition out of the first state if there is none) | [Susceptibility and infectiousness](#susceptibility-and-infectiousness) |
-| `per` | `'strain'`: an event in a state the strains share with an outcome for each strain a person carries, e.g. a cure that clears some strains and not others | [Strains](#strains) |
-| `alone` | With `per='strain'` and a rate: each strain carried has its own rate, and the first to happen moves on alone (the others are dropped), e.g. one of two strains progressing | [Strains](#strains) |
+| `per_strain` | `True`: an event in a state the strains share with an outcome for each strain a person carries, e.g. a cure that clears some strains and not others | [Strains](#strains) |
+| `single_strain` | With a rate: each strain carried has its own rate, and the first to happen moves on as the only strain carried (the others are dropped), e.g. one of two strains progressing | [Strains](#strains) |
 | `name`, `label` | The name (by default, from the keyword or variable), and a human-readable name for plots | |
 
 ## Appendix: every argument of a state
@@ -471,4 +471,4 @@ The parts of a module written as code (its parameters, states, results, and the 
 | `keep_time` | As agents, keep the time each person entered the state (`ti_<name>`) for code to read; by default, kept only if the model reads it |
 | `label` | A human-readable name, for plots |
 
-In rates and conditions, a state also gives: `.n` (the number in it, in the same place, in a model with places), `.total` (in the whole population), `.frac` (the share of everyone in the model), `.n_trans` (the number weighted by infectiousness), `.time` (the time since each person entered it), `.progress` (the share of each person's scheduled stay that has passed), and the events `.enter` and `.exit`, for `where=` and `ss.on()`.
+In rates and conditions, a state also gives: `.n` (the number in it, in the same place, in a model with places), `.total` (in the whole population), `.frac` (the share of everyone in the model), `.n_infectious` (the number weighted by infectiousness), `.time_in` (the time since each person entered it), `.progress` (the share of each person's scheduled stay that has passed), and the events `.enter` and `.exit`, for `where=` and `ss.on()`.

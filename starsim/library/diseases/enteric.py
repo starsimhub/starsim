@@ -27,8 +27,8 @@ class Typhoid(ss.Disease):
         beta (`ss.per`): the transmission rate (R0 of 2.8 with the defaults)
         rel_carrier (float): the infectiousness of a chronic carrier, relative to an acute case
         p_carrier (float): the share of cases who become chronic carriers
-        dur_inf (`ss.dur`): the mean duration of acute infection
-        dur_imm (`ss.dur`): the mean time immune after recovering (lifelong by default)
+        dur_inf (`ss.Duration`): the mean duration of acute infection
+        dur_imm (`ss.Duration`): the mean time immune after recovering (lifelong by default)
         birth_rate (`ss.per`): the birth and death rate
         kwargs (dict): passed to `ss.Disease`, e.g. `init` or `name`
 
@@ -82,8 +82,8 @@ class Polio(ss.Disease):
 
     Args:
         beta (`ss.per`): the transmission rate (R0 of 6 with the defaults)
-        dur_exp (`ss.dur`): the mean time from infection to shedding
-        dur_inf (`ss.dur`): the mean time shedding
+        dur_exp (`ss.Duration`): the mean time from infection to shedding
+        dur_inf (`ss.Duration`): the mean time shedding
         p_paralysis (float): the share of infections that cause paralysis
         birth_rate (`ss.per`): the birth and death rate, which supplies the susceptible children
         kwargs (dict): passed to `ss.Disease`, e.g. `init` or `name`

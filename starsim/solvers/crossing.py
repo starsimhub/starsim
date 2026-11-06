@@ -106,7 +106,7 @@ class Crossing:
             if self.sim.mixing.register is not None:
                 ev = self.sim.mixing.events()
                 named = {name for key in ev.sets for states in key if states is not None for name in states}
-                counts = [len(named & set(self.sim.get_declared(name).graph.states)) for name in self.names]
+                counts = [len(named & set(self.sim._declared_module(name).graph.states)) for name in self.names]
                 self._lead = self.names[int(np.argmax(counts))]
         return self._lead
 
@@ -157,7 +157,7 @@ class Crossing:
     def init(self):
         """ Start the diseases independent of each other: the share of people in each compartment of one is the same in every compartment of the others """
         sim = self.sim
-        self.engines = [sim.get_declared(name).engine for name in self.names]
+        self.engines = [sim._declared_module(name).engine for name in self.names]
         self.check()
         if self.layout is None:
             self.init_layout()
@@ -180,7 +180,7 @@ class Crossing:
             view[rows] = engine.y[rows]
             engine.y = view
         if sim.mixing.register is not None: # The events dated at the start, for everyone
-            lead = sim.get_declared(self.lead).engine
+            lead = sim._declared_module(self.lead).engine
             self.register = self.join_register(lead.init_register())
             self.check_short(self.kernels().apply_events(lead.make_rng(stream=2), self.y, self.register, 0, lead.integer))
         for engine in self.engines:
@@ -204,7 +204,7 @@ class Crossing:
             if len(set(flags.values())) < 2:
                 continue
             owners = [e for e in self.engines if any(e.applies[s.name][d] for s in e.graph.people_states)]
-            first = owners[0].graph.first.name
+            first = owners[0].graph.default_state.name
             if len(owners) > 1 or owners[0].applies[first][d]:
                 some = [name for name,flag in flags.items() if flag]
                 raise ss.CapabilityError(f'"{strat.name}" applies to some states of {sc.strjoin(self.names)} ({sc.strjoin(some)}) but not to others, so their states cannot be tracked jointly with solver="{sim.solver}" yet. '
@@ -552,7 +552,7 @@ class Crossing:
         J = self.numbers([{key:getattr(p, key) for key in ['inflow', 'tgt_w', 'crd_w', 'maps']} for p in progs])
         self.program = self.program._replace(**J)
         self.built = [id(p) for p in progs]
-        self.register = self.join_register(self.sim.get_declared(self.lead).engine.register)
+        self.register = self.join_register(self.sim._declared_module(self.lead).engine.register)
         self.shifts = self.no_shifts()
         return self.program
 
@@ -734,7 +734,7 @@ class Crossing:
 
     def check_short(self, short):
         """ Warn if events of a movement register asked for more people than there were: by the disease that moves people for the sim (see `lead`) """
-        return self.sim.get_declared(self.lead).engine.check_short(short)
+        return self.sim._declared_module(self.lead).engine.check_short(short)
 
     def run_many(self, seeds):
         """ Many runs that differ only in their seed, as `ss.solvers.Compartmental.run_many()` takes them for one engine: returns, for each engine, its name and its results """

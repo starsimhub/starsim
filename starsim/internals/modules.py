@@ -1,5 +1,5 @@
 """
-The base classes of the parts of a sim: `ss.Base` and `ss.Module`, which diseases, networks, interventions, and the rest inherit from
+The base classes of the parts of a sim: `ss.modules.Base` and `ss.Module`, which diseases, networks, interventions, and the rest inherit from
 
 They exist so that every part of a model has the same parameters, timeline, results, and place in the integration loop.
 
@@ -235,7 +235,7 @@ class Base:
 
     def copy(self, die=True):
         """
-        Perform a deep copy of the module/sim
+        Perform a deep copy of the module/sim, as it is (for a sim, with its results); to run a sim again, use `sim.run()`, and for a new, uninitialized sim, `sim.new()`
 
         Args:
             die (bool): whether to raise an exception if copy fails (else, try a shallow copy)
@@ -301,7 +301,7 @@ class Module(Base):
         super().__init_subclass__(**kwargs)
         if 'update_results' in cls.__dict__:
             errormsg = (f'{cls.__name__} defines update_results(), which Starsim no longer calls: split it into record_stocks(), for the results that are the state at '
-                        f'the start of the step (e.g. a count of a state), and record_flows(), for those about what happened in the step (e.g. new infections); see ss.Loop')
+                        f'the start of the step (e.g. a count of a state), and record_flows(), for those about what happened in the step (e.g. new infections); see ss.loop.Loop')
             raise TypeError(errormsg)
         return
 
@@ -312,7 +312,7 @@ class Module(Base):
         self._collect_required() # First, collect methods marked as required on creation
 
         # Handle parameters
-        self.pars = ss.Pars() # Usually populated via self.define_pars()
+        self.pars = ss.parameters.Pars() # Usually populated via self.define_pars()
         self._default_name = True # Whether the name is the class default, in which case the sim can rename it to make it unique
         self._implicit = False # Whether it was made or named by the sim (from the transitions it was given, or its states), so its results are at the top of the sim's (e.g. sim.results.I) even beside other diseases
         named = type(self) is ss.Disease or isinstance(self, (ss.modify, ss.Delivery, ss.Product)) # The modules that take the name of their variable (see ss.Sim._name_modules())
@@ -515,7 +515,7 @@ class Module(Base):
         `name` is taken from the function's name.
 
         This is the mechanism behind "function-based" interventions and analyzers:
-        passing a function to `interventions=`, `analyzers=`, or `custom=`
+        passing a function to `interventions=`, `analyzers=`, or `modules=`
         automatically calls `from_func()` on the appropriate class
         (`ss.Intervention`, `ss.Analyzer`, or `ss.Module` respectively), so usually
         you don't need to call this method directly. Call it explicitly when you want
@@ -587,7 +587,7 @@ class Module(Base):
                 self.pars.update(**given)
             self.pars.forget_bare(kwargs) # A module's own defaults are in the unit it means
         else: # Or overwrite
-            self.pars = ss.Pars(**kwargs)
+            self.pars = ss.parameters.Pars(**kwargs)
         return self.pars
 
     def _value(self, p):
@@ -621,7 +621,7 @@ class Module(Base):
             **kwargs (dict): more parameters, merged into `pars`
         """
         # Merge pars and kwargs
-        if isinstance(pars, ss.Pars): # E.g. a package's full set of defaults for the module: those given as ss.par keep their bounds
+        if isinstance(pars, ss.parameters.Pars): # E.g. a package's full set of defaults for the module: those given as ss.par keep their bounds
             pars = pars.with_bounded()
         pars = sc.mergedicts(pars, kwargs)
 
@@ -803,7 +803,7 @@ class Module(Base):
             result.update(module=self.label, shape=self.t.npts, timevec=self.t.timevec)
             if getattr(result, 'groups', False): # Its values by group too, as a declared module's are: see ss.Result.set_groups()
                 groups = self.sim.groups
-                result.init_groups(groups.strats, [strat.name for strat in groups.strats], (self.t.npts, groups.n_groups))
+                result._init_groups(groups.strats, [strat.name for strat in groups.strats], (self.t.npts, groups.n_groups))
 
             # Add the result to the dict of results; does automatic checking
             if result.name in self.results and result.name in auto_names:
@@ -851,13 +851,13 @@ class Module(Base):
             self.t.init(sim=self.sim) # Initialize time vector
             self.link_timepars() # Add module dt to the timepars
             self.check_bare_units(sim)
-            if isinstance(self.pars, ss.Pars) and getattr(self, 'graph', None) is None: # A declared module checks its own, against its graph (see ss.Disease.init_pre())
+            if isinstance(self.pars, ss.parameters.Pars) and getattr(self, 'graph', None) is None: # A declared module checks its own, against its graph (see ss.Disease.init_pre())
                 self.pars.check_added(self.name) # A parameter set but never defined, e.g. renamed
-            if isinstance(self.pars, ss.Pars):
+            if isinstance(self.pars, ss.parameters.Pars):
                 self.pars.bind(self) # Arithmetic on a value that varies is on its value now, once the sim is initialized
             if self.name not in sim.pars: # Add a new key, which is allowed even if the sim's parameters are locked
                 sim.pars.update({self.name: self.pars}, create=True)
-            elif isinstance(sim.pars[self.name], ss.Pars): # Not a setting of the sim with the same name, e.g. a module called "branching", which is left as it is
+            elif isinstance(sim.pars[self.name], ss.parameters.Pars): # Not a setting of the sim with the same name, e.g. a module called "branching", which is left as it is
                 sim.pars[self.name] = self.pars
             sim.results[self.name] = self.results
             sim.people.add_module(self) # Connect the states to the people
@@ -867,14 +867,14 @@ class Module(Base):
         return
 
     def check_bare_units(self, sim):
-        """ Warn about parameters given as bare numbers in a unit other than the sim's (see `ss.Pars.bare_units()`) """
+        """ Warn about parameters given as bare numbers in a unit other than the sim's (see `ss.parameters.Pars.bare_units()`) """
         if getattr(sim, 'declared', None): # In a declared model, bare numbers are in the sim's unit (None for timesteps)
             unit = sim.unit and ss.time.normalize_unit(sim.unit)
         else: # Otherwise in its timestep's, if it has one (not in a mock sim)
             unit = getattr(sim.t.dt, 'base', None)
             if unit is None:
                 return
-        if isinstance(self.pars, ss.Pars):
+        if isinstance(self.pars, ss.parameters.Pars):
             self.pars.bare_units(unit, label=self.name)
         return
 
@@ -889,7 +889,7 @@ class Module(Base):
         Args:
             force (bool): whether to relink parameters that are already linked
         """
-        timepars = sc.search(self, type=ss.TimePar, skip=dict(keys=ss.utils.skipkeys(['sim', 'module', 't'] + list(getattr(self, 'timepar_skip', []))), subclasses=ss.dists.no_dists())) # Skip the timeline, else the module's own dt would be linked to itself
+        timepars = sc.search(self, type=ss.time.TimePar, skip=dict(keys=ss.utils.skipkeys(['sim', 'module', 't'] + list(getattr(self, 'timepar_skip', []))), subclasses=ss.dists.no_dists())) # Skip the timeline, else the module's own dt would be linked to itself
 
         # Initialize them with the parent module
         dt = self.t.dt
@@ -910,7 +910,7 @@ class Module(Base):
         Result for 'susceptible' (the number susceptible). For identical behavior that does not automatically
         generate results, use `ss.BoolArr` instead of `ss.BoolState`.
         """
-        self.results.timevec = self.t.timevec # Store the timevec in the results for plotting; not a Result so don't use ss.ndict.append()
+        self.results.timevec = self.t.timevec # Store the timevec in the results for plotting; not a Result so don't use ss.utils.ndict.append()
         results = sc.autolist()
         for state in self.auto_state_list:
             results += ss.Result(state.name, dtype=int, scale=True, label=state.label, kind='stock')
@@ -1069,7 +1069,7 @@ class Module(Base):
         """
         Record the results that are the state at the start of the step (stocks), at its index; by default, the count of each state
 
-        Called at the start of every step, before any module's step (see `ss.Loop`), so the results at a time point
+        Called at the start of every step, before any module's step (see `ss.loop.Loop`), so the results at a time point
         are the state there: e.g. `self.results.n_on_art[self.ti] = self.on_art.sum()`. A result about what happens
         in the step (a flow, or one that needs a flow) goes in `record_flows()` instead.
 
@@ -1093,7 +1093,7 @@ class Module(Base):
         """
         Record the results about what happened in the step (flows), at its index: e.g. `self.results.doses[self.ti] = self.n_doses`
 
-        Called at the end of every step, after every module's step and the deaths (see `ss.Loop`). The state then is
+        Called at the end of every step, after every module's step and the deaths (see `ss.loop.Loop`). The state then is
         that of the next time point, so a result that also needs a stock reads it from its result, recorded at the
         start of the step (e.g. `self.sim.results.alive[self.ti]`), or is worked out over the whole run in
         `finalize_results()`.
@@ -1131,7 +1131,7 @@ class Module(Base):
         scale = self.sim.result_scale(self)
         for res in self.results.flatten().values():
             if res.scale:
-                res.apply_scale(scale)
+                res._apply_scale(scale)
         return
 
     def to_json(self):

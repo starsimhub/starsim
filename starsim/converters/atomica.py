@@ -238,7 +238,7 @@ def as_value(constant, series, factor=1.0, lo=None, hi=None):
     kept = [pt for i,pt in enumerate(points) if i in (0, len(points) - 1) or not points[i-1][1] == pt[1] == points[i+1][1]] # Not a point equal to those on either side, which changes nothing (e.g. a databook given month by month)
     if len(kept) == 2 and kept[0][1] == kept[1][1]:
         return kept[0][1]
-    return ss.timeseries(dict(kept), mode='linear')
+    return ss.timeseries(dict(kept), interpolation='linear')
 
 
 def same(a, b):
@@ -703,7 +703,7 @@ def load_atomica(framework, databook=None, progbook=None, calibration=None, star
     # Populations, and the initial numbers
     if len(pops) > 1:
         totals = init.sum(axis=1)
-        src.stratify(population=list(pops), kind='space', split=list(totals/totals.sum()), **transfers) # A place, so that a count in a rate (.n) is the count in each population, as in Atomica
+        src.stratify(population=list(pops), kind='space', fractions=list(totals/totals.sum()), **transfers) # A place, so that a count in a rate (.n) is the count in each population, as in Atomica
         for j,s in enumerate(states): # Every state, as the fraction of each population
             vals = init[:, j]
             if vals.any():
