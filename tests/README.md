@@ -33,5 +33,6 @@ The tests also run the tests of the following downstream repositories to prevent
 - [mighti](https:github.com/starsimhub/mighti)
 - [rotasim](https:github.com/starsimhub/rotasim)
 - [rstarsim](https:github.com/starsimhub/rstarsim)
+- [stisim](https:github.com/starsimhub/stisim)
 - [tbsim](https:github.com/starsimhub/tbsim)
 - [typhoidsim](https:github.com/starsimhub/typhoidsim)
