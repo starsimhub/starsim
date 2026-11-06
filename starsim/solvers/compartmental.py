@@ -2720,7 +2720,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         self._mover_rates = self.mover_rates()
         for i,matrix in enumerate(self._mover_rates):
             self.program.mov_rate[self.program.mov_starts[1, i]:self.program.mov_starts[1, i+1]] = matrix.data
-        solver = ss.kernels.solvers[sim.integrator if sim.solver == 'ode' else sim.solver]
+        solver = ss.kernels.solver_code(sim)
         if self.register is None:
             self.init_register()
         self.init_shifts()
@@ -2733,7 +2733,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
     def plain_seconds(self):
         """ About how long the run would take as plain Python, from the size of its program and its rates at the start (see `ss.kernels.plain_seconds()`) """
         p = self.program
-        solver = ss.kernels.solvers[self.sim.integrator if self.solver == 'ode' else self.solver]
+        solver = ss.kernels.solver_code(self.sim)
         n_sub = ss.kernels.substeps(np.concatenate(self.start_rates() + [p.mov_rate]), self.dt, self.substeps(), solver)
         return ss.kernels.plain_seconds(p, self.y, self.mod.t.npts, solver, n_sub)
 
@@ -3245,7 +3245,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         sim, dt, kn, rng = self.sim, first.dt, owner.kernels(), owner.kernel_rng
         solver = sim.integrator if sim.solver == 'ode' else sim.solver
         tables, row = owner.step_tables()
-        y, flows = kn.one_step(rng, owner.y, owner.program, dt, ss.kernels.solvers[solver], first.substeps(), tables, row)
+        y, flows = kn.one_step(rng, owner.y, owner.program, dt, ss.kernels.solver_code(sim), first.substeps(), tables, row)
         if sim.mixing.register is not None: # The events dated at the end of the step, the next time point
             owner.check_short(kn.apply_events(rng, y, owner.register, first.mod.ti + 1, first.integer))
         if solver == 'gillespie' and owner.program.local and owner.program.has_det: # By place, the counts are settled after the events, as in SimInf

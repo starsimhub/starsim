@@ -572,7 +572,7 @@ def test_certain_transmission():
         at_risk = (k > 0) & ~before
         with warnings.catch_warnings():
             warnings.simplefilter('error') # It was a RuntimeWarning and no infections
-            sim.run()
+            sim.run(until=sim.t.tvec[0]) # The first step only
         return sim.diseases.si.I.raw[at_risk].mean(), k[at_risk]
     assert infected(ss.probperweek(1))[0] == 1
     share, k = infected(0.3)

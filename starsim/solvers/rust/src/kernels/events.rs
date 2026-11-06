@@ -319,7 +319,7 @@ pub fn draw_chain(rng: Rng, y: A2<f64>, p: &Program, w: &Work, s: usize, dt: f64
 }
 
 /// Draw whole numbers of events over a time dt, and add them to the flows (`draw()`): for each compartment, the number who leave it, then which flow each leaves by
-pub fn draw(rng: Rng, y: A2<f64>, p: &Program, w: &Work, dt: f64, flows: A2<f64>, tau: bool) {
+pub fn draw(rng: Rng, y: A2<f64>, p: &Program, w: &Work, dt: f64, flows: A2<f64>, tau: bool, whole: bool) {
     let ng = y.n1();
     let (rates, groups, new, rows) = (w.rates, w.groups, w.yt, w.rows);
     let (total, left, n, prob) = (groups.row(3), groups.row(4), groups.row(5), rows.row(1));
@@ -339,6 +339,7 @@ pub fn draw(rng: Rng, y: A2<f64>, p: &Program, w: &Work, dt: f64, flows: A2<f64>
             continue;
         }
         if src >= 0 {
+            let transmits = (0..p.set_comps.len()).any(|k| p.set_comps.at(k) == src); // As draw(): whether people here are a source of infection
             let src = src as usize;
             for g in 0..ng {
                 let mut t = 0.0;
@@ -346,7 +347,7 @@ pub fn draw(rng: Rng, y: A2<f64>, p: &Program, w: &Work, dt: f64, flows: A2<f64>
                     t += mx(rates.at(p.src_flows.u(k), g), 0.0);
                 }
                 total.set(g, t);
-                prob.set(g, if tau { t*y.at(src, g)*dt } else { -(-t*dt).exp_m1() });
+                prob.set(g, if tau { t*y.at(src, g)*dt } else if transmits && !whole { (t*dt).min(1.0) } else { -(-t*dt).exp_m1() }); // As draw()
             }
             if tau {
                 poissons(rng, prob, left, rows);

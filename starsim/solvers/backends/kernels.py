@@ -314,7 +314,7 @@ def plain_seconds(p, y, npts, solver, n_sub=1):
     """
     if solver == solvers['gillespie']:
         return y.sum()*len(p.src)*(1e-5 + 3e-7*work(p, y))
-    draws = npts*max(n_sub, 1)*len(p.src)*y.shape[1]*7e-5 if solver in [solvers['binomial'], solvers['tau']] else 0.0
+    draws = npts*max(n_sub, 1)*len(p.src)*y.shape[1]*7e-5 if solver in [solvers['binomial'], solvers['whole'], solvers['tau']] else 0.0
     return evals(npts, solver, n_sub)*(1e-5 + 6e-7*work(p, y)) + draws
 
 
@@ -791,13 +791,14 @@ def draw_chain(rng, y, p, w, s, dt, new, flows):
 
 
 @kernel(inline='always') # Compiled into step(), since a call that is passed the program costs about as much as a small step (see into_many())
-def draw(rng, y, p, w, dt, flows, tau):
+def draw(rng, y, p, w, dt, flows, tau, whole):
     """
     Draw whole numbers of events over a time dt, and add them to the flows
 
     For each compartment, the number who leave it (binomial for the chain-binomial solver;
     for tau-leaping, Poisson, and no more than are there), then one multinomial draw of
-    which flow each leaves by. Called by `step()`, which has worked out the rates.
+    which flow each leaves by. Called by `step()`, which has worked out the rates. The chance of leaving a source of
+    infection is the rate times dt, unless `whole` (the chain binomial in whole steps, as discrete-time models are written).
     """
     ng = y.shape[1]
     rates, groups, new, rows = w[0], w[3], w[7], w[10]
@@ -815,11 +816,21 @@ def draw(rng, y, p, w, dt, flows, tau):
             draw_chain(rng, y, p, w, s, dt, new, flows)
             continue
         if src >= 0:
+            transmits = False # Whether people here are a source of infection (a member of an exposure set)
+            for k in range(len(p.set_comps)):
+                if p.set_comps[k] == src:
+                    transmits = True
+                    break
             for g in range(ng):
                 total[g] = 0
                 for k in range(a, b):
                     total[g] += max(rates[p.src_flows[k], g], 0.0)
-                prob[g] = total[g]*y[src, g]*dt if tau else -np.expm1(-total[g]*dt)
+                if tau:
+                    prob[g] = total[g]*y[src, g]*dt
+                elif transmits and not whole: # The rate times the substep's length, so each stay counts in transmission (from the substep after it starts) for 1/rate in time on average, as in the ODE; 1 - exp(-rate*dt) would keep people half a substep longer, as if R0 were R0*(1 + rate*dt/2)
+                    prob[g] = min(total[g]*dt, 1.0)
+                else: # Exact for a rate held over the substep (e.g. the force of infection)
+                    prob[g] = -np.expm1(-total[g]*dt)
             if tau:
                 poissons(rng, prob, left, rows)
             else:
@@ -2177,7 +2188,7 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, varying):
                 else:
                     if solver == 3: # Tau-leaping: a leap short enough that the rates change little over it
                         h = min(end - elapsed, 0.03/max(fastest, 1e-12))
-                    draw(rng, y, p, w, h, flows, solver == 3)
+                    draw(rng, y, p, w, h, flows, solver == 3, solver == 5)
                 if p.has_det and not by_place: # By place, the counts are settled after the step's events: see settle_places()
                     settle(y, p, w, h, flows)
                 elapsed += h
@@ -2396,7 +2407,15 @@ def apply_events(rng, y, r, ti, whole):
 
 #%% A whole run
 
-solvers = dict(rk4=0, euler=1, binomial=2, tau=3, gillespie=4)
+solvers = dict(rk4=0, euler=1, binomial=2, tau=3, gillespie=4, whole=5) # whole: the chain binomial in whole steps (substeps=1), with 1 - exp(-r*dt) for every exit, as discrete-time chain-binomial models are written (see draw())
+
+def solver_code(sim):
+    """ The kernels' number for the sim's solver (see `solvers`): for the ODE, its integrator; the chain binomial in whole steps (`substeps=1`) is the discrete-time model as written, for which `draw()` keeps the exponential for every exit """
+    if sim.solver == 'ode':
+        return solvers[sim.integrator]
+    if sim.solver == 'binomial' and sim.pars.substeps == 1:
+        return solvers['whole']
+    return solvers[sim.solver]
 
 @jit
 def apply_shifts(rng, y, sh, ti, whole, tally):

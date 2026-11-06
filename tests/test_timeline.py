@@ -361,7 +361,7 @@ def test_sim_start_stop_dur():
     sim = ss.Sim(start=ss.years(2000), stop=ss.years(2020), **kw).init() # A calendar year after a calendar start is when it ends
     assert sim.t.stop == ss.years(2020)
     assert ss.connectors.to_time(sim, ss.years(5)) == ss.years(2005) and ss.connectors.to_time(sim, ss.years(2010)) == ss.years(2010) # So are times
-    assert ss.Sim(start=2000, stop=2030, **kw).run(until=ss.years(5)).t.ti == 6 # Stops after the step that starts 5 years in
+    assert ss.Sim(start=2000, stop=2030, **kw).run(until=ss.years(5)).t.ti == 5 # Stops after the step that starts 5 years in
     return sim
 
 

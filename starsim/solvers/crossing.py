@@ -693,7 +693,7 @@ class Crossing:
     def plain_seconds(self):
         """ About how long the run would take as plain Python, from the size of the program and the rates of its diseases at the start, as `ss.solvers.Compartmental.plain_seconds()` works it out for one engine """
         first = self.engines[0]
-        solver = ss.kernels.solvers[self.sim.integrator if self.sim.solver == 'ode' else self.sim.solver]
+        solver = ss.kernels.solver_code(self.sim)
         n_sub = ss.kernels.substeps(np.concatenate([rate for e in self.engines for rate in e.start_rates()] + [self.program.mov_rate]), first.dt, first.substeps(), solver)
         return ss.kernels.plain_seconds(self.program, self.y, first.mod.t.npts, solver, n_sub)
 

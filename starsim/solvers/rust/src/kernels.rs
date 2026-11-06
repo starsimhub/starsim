@@ -704,7 +704,7 @@ fn step_groups<const ONE: bool>(rng: Rng, y: A2<f64>, p: &Program, w: &Work, dt:
                     if solver == 3 {
                         h = mn(end - elapsed, 0.03/mx(fastest, 1e-12));
                     }
-                    draw(rng, y, p, w, h, flows, solver == 3);
+                    draw(rng, y, p, w, h, flows, solver == 3, solver == 5);
                 }
                 if p.has_det && !by_place {
                     settle(y, p, w, h, flows);
