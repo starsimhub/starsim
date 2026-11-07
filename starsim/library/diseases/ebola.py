@@ -7,19 +7,24 @@ Original version by @domdelport and @RomeshA
 
 import numpy as np
 import starsim as ss
+from .agents import AgentSEIR
+
+__all__ = ['Ebola']
 
 
-class Ebola(ss.SEIR):
+class Ebola(AgentSEIR):
     """
     Ebola, including severe disease and transmission from unburied bodies.
 
-    Extends `ss.SEIR` with severe and buried states. Exposed agents become
+    Extends `ssl.AgentSEIR` with severe and buried states. Exposed agents become
     infectious, a fraction progress to severe disease, and a fraction of those
     die; everyone else recovers. Severe agents are more infectious
     (`sev_factor`), and dead agents remain infectious until buried
     (`unburied_factor`), with safe burials happening immediately and unsafe
     burials after a delay. Bodies are only removed from the population (i.e.
     counted as deaths by the sim) once they are buried.
+
+    Note: CRN safe.
 
     Args:
         init_prev (Dist):           initial prevalence
@@ -39,10 +44,10 @@ class Ebola(ss.SEIR):
     Attributes:
         exposed (BoolState):    infected but not yet infectious
         severe (BoolState):     currently severely ill
-        buried (BoolState):     dead and buried (no longer infectious)
+        buried (BoolArr):       dead and buried (no longer infectious): each is taken out of the population at the end of the step of their burial, so the result `burial` counts them, a flow
         ti_exposed (FloatArr):  timestep of exposure
-        ti_severe (FloatArr):   timestep severe symptoms began
-        ti_buried (FloatArr):   timestep of burial
+        ti_severe (TimeArr):    timestep severe symptoms began
+        ti_buried (TimeArr):    timestep of burial
 
     Examples:
         ```python
@@ -66,12 +71,12 @@ class Ebola(ss.SEIR):
             unburied_factor = 2.1,
 
             # Natural history parameters, all specified in days
-            dur_exp         = ss.lognorm_ex(mean=ss.days(12.7)), # Add source
-            dur_symp2sev    = ss.lognorm_ex(mean=ss.days(6)), # Add source
-            dur_sev2dead    = ss.lognorm_ex(mean=ss.days(1.5)), # Add source
-            dur_dead2buried = ss.lognorm_ex(mean=ss.days(2)), # Add source
-            dur_symp2rec    = ss.lognorm_ex(mean=ss.days(10)), # Add source
-            dur_sev2rec     = ss.lognorm_ex(mean=ss.days(10.4)), # Add source
+            dur_exp         = ss.lognormal(mean=ss.days(12.7)), # Add source
+            dur_symp2sev    = ss.lognormal(mean=ss.days(6)), # Add source
+            dur_sev2dead    = ss.lognormal(mean=ss.days(1.5)), # Add source
+            dur_dead2buried = ss.lognormal(mean=ss.days(2)), # Add source
+            dur_symp2rec    = ss.lognormal(mean=ss.days(10)), # Add source
+            dur_sev2rec     = ss.lognormal(mean=ss.days(10.4)), # Add source
             p_sev           = ss.bernoulli(p=0.7), # Add source
             p_death         = ss.bernoulli(p=0.55), # Add source
             p_safe_bury     = ss.bernoulli(p=0.25), # Probability of a safe burial - should be linked to diagnoses
@@ -82,45 +87,51 @@ class Ebola(ss.SEIR):
         self.define_states(
             # SEIR states are added automatically, here we add severe and buried
             ss.BoolState('severe', label='Severe'),
-            ss.BoolState('buried', label='Buried'),
+            ss.BoolArr('buried', label='Buried'), # Not counted as a state: see burial
 
             # Timepoint states
-            ss.FloatArr('ti_severe', label='Time of severe symptoms'),
-            ss.FloatArr('ti_buried', label='Time of burial'),
+            ss.TimeArr('ti_severe', label='Time of severe symptoms'),
+            ss.TimeArr('ti_buried', label='Time of burial'),
         )
         return
 
     def step_state(self):
         """ Progress exposed -> infectious -> severe -> recovered/dead -> buried """
         p = self.pars
-        ti = self.ti
 
-        # Progress exposed -> infectious (as in ss.SEIR; super() isn't called since it would remove bodies before burial)
-        infectious = (self.exposed & (self.ti_infectious <= ti)).uids
+        # Progress exposed -> infectious (as in ssl.AgentSEIR; super() isn't called since it would remove bodies before burial)
+        infectious = (self.exposed & self.ti_infectious.due()).uids
         self.exposed[infectious] = False
         self.infectious[infectious] = True
 
         # Progress infectious -> severe
-        severe = (self.infectious & (self.ti_severe <= ti)).uids
+        severe = (self.infectious & self.ti_severe.due()).uids
         self.severe[severe] = True
 
         # Progress infectious/severe -> recovered
-        recovered = (self.infectious & (self.ti_recovered <= ti)).uids
+        recovered = (self.infectious & self.ti_recovered.due()).uids
         self.clear_infection(recovered)
         self.recovered[recovered] = True
         self.severe[recovered] = False
 
         # Progress dead -> buried: unburied bodies stay in the population (and infectious) until burial, when they are removed
-        self.severe[self.ti_dead <= ti] = False
-        buried = (self.ti_buried <= ti).uids
+        dead = self.ti_dead.due()
+        self.severe[dead] = False
+        buried = self.ti_buried.due().uids
         self.buried[buried] = True
-        self.sim.people.request_death(buried)
+        self.results.burial[self.ti] = len(buried)
+        self.sim.people.request_death(buried, cause=self)
 
         # Update transmissibility: severe agents and unburied bodies are more infectious
         self.rel_trans[:] = 1.0
         self.rel_trans[self.severe] = p.sev_factor
-        unburied = ((self.ti_dead <= ti) & (self.ti_buried > ti)).uids
+        unburied = (dead & ~self.ti_buried.due()).uids
         self.rel_trans[unburied] = p.unburied_factor
+        return
+
+    def init_results(self):
+        super().init_results()
+        self.define_results(ss.Result('burial', dtype=int, kind='flow', label='Burials'))
         return
 
     def set_progression(self, uids):
@@ -146,8 +157,8 @@ class Ebola(ss.SEIR):
         self.ti_buried[unsafe_buried] = self.ti_dead[unsafe_buried] + p.dur_dead2buried.rvs(unsafe_buried)
         return
 
-    def step_die(self, uids):
+    def on_death(self, uids):
         """ Reset states for dead agents """
-        super().step_die(uids)
+        super().on_death(uids)
         self.severe[uids] = False
         return

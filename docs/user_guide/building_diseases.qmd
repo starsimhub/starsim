@@ -1,0 +1,510 @@
+---
+title: Diseases
+jupyter: python3
+authorship:
+  human: 10
+  ai: 90
+  note: Written by AI, with the section on diseases written as code adapted from the Starsim 3 user guide page on diseases; examples made realistic and appendices added by AI
+---
+
+A disease in Starsim is declared the way a compartmental model is drawn: as the states people can be in (the compartments) and the transitions between them (the flows), each with what drives it, a rate or a duration. This page is the reference for writing them: the ways to write a transition, transmission and other rates, durations and their distributions, branching, how an epidemic starts, births and deaths, quantities that are not people, and susceptibility. A disease declared this way runs as a compartmental model or as agents, unchanged.
+
+For a step-by-step introduction, see [T2 – Building a model](../tutorials/t2_model.qmd) and [T3 – Building a disease](../tutorials/t3_disease.qmd); for diseases among agents, [A1 – Diseases](../tutorials/a1_diseases.qmd). A disease that needs more than states and transitions can be written as code ([below](#diseases-written-as-code)).
+
+## A disease in brief
+
+The simplified measles model used throughout these pages is an SIR model:
+
+```{python}
+import starsim as ss
+
+S, I, R = ss.states('S I R')
+infection = S >> I @ 1.9*I        # From S to I, at a rate of 1.9 per day times the share infectious
+recovery  = I >> R @ ss.days(8)   # From I to R, after 8 days on average
+measles = ss.Disease(infection, recovery, init_prev=0.001)
+
+measles.equations()
+```
+
+`ss.states()` makes the states, named in one string. A transition is written `source >> destination @ driver`: "S goes to I at 1.9 times I". What follows `@` is one of:
+
+- a **rate**, per person in the source state per unit of time, such as `ss.perday(0.125)`, or an expression of states and parameters, such as `1.9*I`;
+- a **duration**, such as `ss.days(8)`: the average time people spend in the source state before they take this transition. A duration of 8 days and a rate of 1/8 per day are the same transition.
+
+A bare number in a rate takes the model's unit of time, here days, from `ss.days(8)`; see [Parameters](building_parameters.qmd#units-of-time). Names come from the variables: the states are `S`, `I`, and `R`, the transitions `infection` and `recovery`, and the disease `measles`, and so are their results (`sim.results.measles.infection`).
+
+## Ways to write a transition
+
+There is one kind of transition, `ss.Transition`, and the operators are a short way to write it. These build the same model:
+
+```{python}
+# Operators: the usual form
+S, I, R = ss.states('S I R')
+measles = ss.Disease(S >> I @ 1.9*I, I >> R @ ss.days(8), init_prev=0.001)
+
+# Named by keyword, e.g. when the transitions are written inline
+S, I, R = ss.states('S I R')
+measles = ss.Disease(
+    infection = S >> I @ 1.9*I,
+    recovery  = I >> R @ ss.days(8),
+    init_prev = 0.001,
+)
+
+# Fully explicit, e.g. to build a model in a loop, or from R
+S, I, R = ss.states('S I R')
+measles = ss.Disease(
+    ss.Transition(S, I, rate=1.9*I, name='infection'),
+    ss.Transition(I, R, dur=ss.days(8), name='recovery'),
+    init_prev = 0.001,
+    name = 'measles',
+)
+```
+
+A transition that has no variable or keyword to be named by is named `infection` if it is the disease's only transmission, and otherwise gets a name from its states (`I_to_R`). A disease can also be written as a class, which is the form for a disease that goes into a library ([below](#diseases-as-classes)).
+
+## Transmission
+
+A bare state in a rate, like `I` in `1.9*I`, means contact with the people in that state. With no contacts given (homogeneous mixing), that is the share of the population in it, `I/N`, so `S >> I @ beta*I` is the textbook frequency-dependent transmission, with a flow of β S I / N. With a contact matrix or a network, the same rate is worked out from whom each person actually meets, and β is the rate per contact (see [Stratification](building_stratification.qmd) and [Population data](populations_data.qmd)). A transition whose rate contains a bare state is **contact-mediated**, and that state is a source of infection.
+
+For density-dependent transmission, in which the number of contacts grows with the size of the population (as is often assumed for animal or vector populations), write the count itself, `I.n`. The flow is then β S I:
+
+```{python}
+S, I, R = ss.states('S I R')
+measles_density = ss.Disease(S >> I @ 1.9e-5*I.n, I >> R @ ss.days(8), init_prev=0.001)
+measles_density.equations()
+```
+
+A rate can also be written as the whole flow, as in the equations of other frameworks: `S >> I @ beta*S*I/N` (with `N = S + I + R`) is the same frequency-dependent model as `beta*I`, and `beta*S*I` the same density-dependent model as `beta*I.n`.
+
+**Infected states and prevalence.** Mark the states whose people are infected, and the disease has two more results, `infected` (the number in them) and `prevalence` (their share of everyone in its states). Nothing is guessed: a disease with no state marked has neither, and one that defines its own `infected` or `prevalence` keeps it. `ss.SIR`, `ss.SEIR`, and `ss.SIS` mark theirs.
+
+```{python}
+S, R = ss.states('S R')
+E, I = ss.states('E I', infected=True) # Or E = ss.State(label='Exposed', infected=True)
+seir = ss.Disease(S >> E @ ss.perday(0.3)*I, E >> I @ ss.days(5), I >> R @ ss.days(8), init_prev=0.01, name='seir')
+res = ss.Sim(seir, stop=ss.days(120), verbose=0).run().results.seir
+print('Peak prevalence:', round(res.prevalence.max(), 3))
+```
+
+A set of states is written with `+` or `|`, which mean the same for states: `E | I` and `E + I` are the number in either, `(E | I).frac` their share, `0.3*(E | I)` exposure to either in a rate, and `(E | I) >> R` a transition from either. Without brackets, Python reads `E | I >> R` as `E | (I >> R)`, which raises an error saying so. Someone who dies of the disease leaves the population, `I >> ss.dead` (or a branch to it), and the deaths so far are `res.death.cum`; a state `D` for them would keep them among the people, and in the denominator of `prevalence`.
+
+**Several sources of infection** are a sum: `S >> E @ beta*(I + 0.5*A)` says that people in `A` (say, without symptoms) are half as infectious as those in `I`. A rate must be linear in its bare states, since exposure on a network is a sum over contacts; anything nonlinear is written with counts (`I.n`).
+
+**Transmission as code.** What an expression can't say can be written in Python, in two ways, without leaving the declared disease:
+
+- **A rate that is a function**, `S >> I @ fn`, gives the rate for each person leaving `S`. It takes any of `self` (the disease), `sim`, and `uids` (the people it is for), by those names: `lambda self, sim: self.pars.beta*self.I.n/sim.people.n_alive` means the same as agents and as compartments, while one that takes `uids` gives each person their own rate and runs as agents only. This keeps every solver exact. In a class, the function can be a method: `infection = S >> I @ custom_infection` in the class body, after `def custom_infection(self, sim): ...`, or `rate=self.custom_infection` in `define_transitions()`.
+- **The disease's own `transmit()`** gives who is infected in each step by a transmission: as agents, their UIDs; as compartments, the number in each group. `super().transmit(transition)` is what the solver would do, so an override can add to it or take from it. A disease with several transmissions is told which one, `def transmit(self, transition)`; with one, the argument can be left out. Under the ODE, it is taken once a step, at its start, so that transmission is first order in the step (a note says so).
+
+```{python}
+class WithImports(ss.SIR):
+    """ An SIR with 5 imported cases each step, as agents or as compartments """
+    def transmit(self):
+        new = super().transmit()
+        if self.sim.solver == 'abm':
+            people = self.sim.people.auids
+            return new | people[self.S.raw[people]][:5] # Five susceptible people (the first five, for simplicity)
+        return new + 5
+
+for solver in ['abm', 'ode']:
+    sim = ss.Sim(WithImports(beta=ss.peryear(0.5), init_prev=0), solver=solver, n_agents=2000, dt=ss.days(7), start=2000, stop=2002, verbose=0)
+    sim.run()
+    print(solver, "- infections:", round(sim.results.withimports.infection.sum()))
+```
+
+## Other rates
+
+Anything that is not transmission is a rate per person, or a duration:
+
+| After `@` | Means | Example |
+|---|---|---|
+| a duration | the mean time in the source state | `I >> R @ ss.days(8)` |
+| a distribution of durations | the time in the source state, with that distribution | `I >> R @ ss.erlang(k=4, mean=ss.days(8))` |
+| a rate, or a bare number | a rate per person per unit of time | `R >> S @ ss.peryear(0.1)`, `R >> S @ 0.1` |
+| a probability per period | the chance of moving in each period, as a rate | `I >> R @ ss.prob(0.12, 'day')` |
+| an expression with a bare state | transmission | `S >> I @ beta*I` |
+| an expression of counts | a rate that depends on how many people are in each state | `S >> I @ beta*W.n/(W.n + K)` |
+| a function of the sim | a rate worked out at each step | `S >> I @ my_rate` |
+| a trigger, `on=` or `@ ss.on()` | a move as soon as a condition holds, or when an event happens to the person (as agents) | `U >> A @ ss.on(ss.person.age >= 15)` |
+
+A trigger has no rate: anyone in the source state for whom the condition holds moves in the step it first holds, and an event (a transition, `tr.to(B)`, `X.enter`, `X.exit`) moves the people it happened to, in the same step. A condition on a state of another disease that may not exist yet is written by its path, `ss.ref('hpv18.X')`. See [`ss.on`](../api/transitions.qmd).
+
+A bare number after `@` is always a rate, never a duration: `I >> R @ 8` means a rate of 8 per day, so that people stay infectious for an eighth of a day. A duration is always typed (`ss.days(8)`), or given as `dur=` (`ss.Transition(I, R, dur=8)`).
+
+Transitions out of the same state that are driven by rates (or durations with an exponential distribution) compete: the total rate of leaving is their sum, and each takes its share of those who leave. The order in which they are written doesn't matter.
+
+## Durations
+
+A single duration is the mean of an exponential distribution, as in an ODE model, and `describe()` marks this as a guess. An exponential distribution has a lot of spread: with a mean of 10 days, a third of people leave within 4 days, and one in twenty stays more than 30. The real latent period of measles (from infection to becoming infectious) is about 10 days in nearly everyone. A distribution with less spread is given in its place:
+
+```{python}
+import numpy as np
+
+def make_measles(latent):
+    """ Measles with a latent period: S -> E -> I -> R """
+    S, E, I, R = ss.states('S E I R')
+    infection = S >> E @ 1.9*I
+    onset     = E >> I @ latent
+    recovery  = I >> R @ ss.days(8)
+    return ss.Disease(infection, onset, recovery, init=dict(I=0.001), name='measles')
+
+latents = {
+    'Exponential':      ss.days(10),
+    'Erlang, 4 stages': ss.erlang(k=4, mean=ss.days(10)),
+    'Fixed':            ss.constant(ss.days(10)),
+}
+sims = {label: ss.Sim(make_measles(latent), total_pop=100_000, stop=ss.days(60), verbose=0) for label, latent in latents.items()}
+msim = ss.parallel(sims)
+msim.plot('measles.I')
+for label, sim in sims.items():
+    I = sim.results.measles.I
+    print(label, '- peak infectious:', round(I.max()), 'on day', np.argmax(I.values))
+```
+
+All three have the same mean, and so the same R0, but with an exponential latent period some people become infectious within days, which brings the epidemic forward. The more realistic the distribution, the later and higher the peak.
+
+The distributions most used for durations are:
+
+| Distribution | Use | Example |
+|---|---|---|
+| Exponential | The ODE default; a constant rate of leaving | `ss.days(10)` |
+| Erlang (a gamma distribution with a whole number of stages, `k`) | A duration with less spread: the standard deviation is the mean divided by √k | `ss.erlang(k=4, mean=ss.days(10))` |
+| Fixed | Everyone stays exactly this long, e.g. a reporting delay | `ss.constant(ss.days(10))` |
+| Lognormal | A duration given by its mean and standard deviation, e.g. from a study | `ss.lognormal(mean=ss.days(10), std=ss.days(2))` |
+
+Any other distribution of durations works too; see [Distributions](mechanics_distributions.qmd). As agents, each person draws their own time in the state. As compartments, an Erlang distribution is run exactly, as `k` stages in a row; a fixed duration is run exactly too (as one compartment for each step people have been in the state), and so is a choice of whole numbers of steps (`ss.choice(a=ss.days([3, 4, 5]), p=[0.2, 0.5, 0.3])` with daily steps, leaving each of those compartments at its own chance; as Erlang stages instead, with a note, if it has a minimum stay of its own, `after=`, or is one of several dwell times out of the state kept apart with `where=`); and any other distribution is run as Erlang stages with the same mean and standard deviation, with a note that says so. `stages=k` on a transition (`ss.Transition(E, I, dur=ss.days(10), stages=4)`) says how many stages to use, under every solver.
+
+## Branching
+
+Some people go one way and some another: most people with measles recover, but a small share die. There are two ways to say this, and they differ in when the branch is decided.
+
+**Separate transitions with `p=`** are decided when people enter the state, and each branch can have its own duration. Here 0.2% of people with measles die, and `ss.dead` is outside the model:
+
+```{python}
+S, I, R = ss.states('S I R')
+infection = S >> I @ 1.9*I
+recovery  = ss.Transition(I, R, dur=ss.days(8), p=0.998)
+death     = ss.Transition(I, ss.dead, dur=ss.days(8), p=0.002)
+measles = ss.Disease(infection, recovery, death, init_prev=0.001)
+
+sim = ss.Sim(measles, total_pop=100_000, stop=ss.days(50), verbose=0)
+sim.run()
+print('Deaths:', round(sim.results.measles.death.sum()))
+```
+
+**One transition with several destinations** is decided when people leave. Give each destination with its share, as a dict: `I >> {ss.dead: 0.002, R: None} @ ss.days(8)` says that after the infectious period, 0.2% die and the rest (`None`) recover. Its result is the total, and each destination has a result of its own, `<transition>.<state>` (or `<transition>.dead` for those who die):
+
+```{python}
+S, I, R = ss.states('S I R')
+infection = S >> I @ 1.9*I
+outcome   = I >> {ss.dead: 0.002, R: None} @ ss.days(8)
+measles = ss.Disease(infection, outcome, init_prev=0.001)
+
+sim = ss.Sim(measles, total_pop=100_000, stop=ss.days(50), verbose=0)
+sim.run()
+res = sim.results.measles
+print('Deaths:', round(res['outcome.dead'].sum()))
+```
+
+The long form is `ss.Transition(I, {ss.dead: 0.002, R: None}, dur=ss.days(8))`. The destinations and their shares can also be two lists, `ss.Transition(I, [ss.dead, R], p=[0.002, None], dur=ss.days(8))`, which is the same and suits destinations built by code. After `@`, the duration (or rate) must be a Starsim value (`ss.days(8)`, `ss.par(...)`), not a bare number, for Python to apply it to the dict.
+
+**Outside the model** are where people come from and go to: `ss.unborn` for births (`ss.unborn >> S`), `ss.dead` for deaths (`I >> ss.dead`), and `ss.outside` for people who arrive or leave alive (`ss.outside >> S`, `S >> ss.outside`), who are counted as arrivals and emigrants rather than births and deaths. Someone who dies leaves the people, so is not kept in a state; the deaths so far are the cumulative flow, `res.death.cum`.
+
+The shares out of one state must add up to 1; one of them can be left as `None`, for the rest. A share can vary by age group or in time, like any other value ([Parameters](building_parameters.qmd)).
+
+## How the epidemic starts
+
+Three options say who is in which state at the start, and everyone not placed elsewhere starts in the first state (`S`):
+
+- `init_prev=` is the share of people who start infected (the initial prevalence). They start in the state that an infection leads to: `I` in an SIR model, but `E` in an SEIR model, where nobody is then infectious at the start (a note says so). A number above 1 is a number of people.
+- `init=` is the share of people who start in each state, e.g. `init=dict(I=0.001, R=0.9)` for an outbreak in a population that is 90% immune.
+- `init_n=` is the number of people who start in each state, e.g. `init_n=dict(I=10)`.
+
+If nothing is given, a disease with transmission starts with 1% of people infected (`init_prev=0.01`), which `describe()` marks as a guess. The first state is the first one made: `ss.states('S I R')` makes them in that order. People who start in a state with a dwell time start at the beginning of their stay, as if they had just arrived: as agents each draws a whole dwell time, and as compartments they start in the first of its Erlang stages, or the first step of a fixed delay. Values can also be given by group, with `ss.by()`; see [Stratification](building_stratification.qmd#values-by-group).
+
+## Births and deaths in a disease
+
+Births and deaths of everyone are usually given to the sim, as `demographics=`, so that the same people are born into and die from every disease ([Demographics](populations_demographics.qmd)). With one disease, they can also be declared in it: `ss.birth(S, rate=...)` is a crude birth rate into `S` (a typed rate is per person; a bare number is per year, and above 1 per 1,000 people), and `ss.death(rate=...)` with no state is a death rate in every state, read the same way. A death from one state, `ss.death(I, rate=...)`, is a rate like any other: a bare number is in the model's unit.
+
+New births are the supply of susceptible people that keeps measles endemic. Here is measles in a city of a million, starting from a population in which it has circulated before, so that only 7% of people are still susceptible. Since this model has values in both days and years, the unit of a bare number can't be known, so β is given as `ss.perday()`:
+
+```{python}
+S, I, R = ss.states('S I R')
+measles = ss.Disease(
+    infection = S >> I @ ss.perday(1.9)*I,
+    recovery  = I >> R @ ss.days(8),
+    births    = ss.birth(S, rate=ss.peryear(0.02)), # 20 births per 1,000 people per year
+    deaths    = ss.death(rate=ss.peryear(0.02)),    # The same death rate, so the population is stable
+    init      = dict(S=0.07, I=0.0001),             # The rest start in R, immune
+)
+sim = ss.Sim(measles, total_pop=1_000_000, start='2000-01-01', stop='2020-01-01', dt=ss.days(1))
+sim.run()
+sim.results.measles.infection.resample('month').plot()
+```
+
+(The sim prints R0 = 15.2 and, since 93% start immune, R = 1.06 at the start; see [The reproduction number](building_writing.qmd#the-reproduction-number).) Each epidemic uses up the susceptible people faster than births replace them, and then dies down until births have built them up again. So epidemics recur, here about every two years, and get smaller, towards a steady endemic level at which births balance infections. The period is close to the classical approximation 2π√(AD), with A ≈ 1/(μ(R0 − 1)) ≈ 3.6 years the mean age at infection (for a death rate μ of 0.02 per year) and D = 8 days the infectious period. In this deterministic model the epidemics damp out; [Parameters over time](building_time.qmd#values-that-change-over-time) shows how seasonal contacts keep them going. In a stochastic model the infection can also die out between epidemics in a small population; see [Solvers](running_solvers.qmd).
+
+## States that are not people
+
+Some of what a model tracks is not people: bacteria in water, or a population of mosquitoes. These are states too, declared with `people=False`. They are counts, not people: they are never agents, aren't counted in the population, and are used in rates as counts (`W.n`). Here is a cholera model with bacteria shed into the water by infectious people (after Codeço, 2001):
+
+```{python}
+beta = 0.5 # Rate of infection per day at a high concentration of bacteria
+K    = 1e5 # Concentration of bacteria (cells/mL) that gives half that rate
+xi   = 10  # Cells/mL shed per infectious person per day
+
+S, I, R = ss.states('S I R')
+W = ss.State(people=False) # Bacteria in the water: a count, not people
+cholera = ss.Disease(
+    infection = S >> I @ beta * W.n/(W.n + K),
+    recovery  = I >> R @ ss.days(5),
+    shedding  = ss.outside >> W @ xi*I.n,    # An inflow: the total per day
+    decay     = W >> ss.dead @ ss.days(30), # The mean lifetime in the water
+    init      = dict(I=0.001),
+)
+sim = ss.Sim(cholera, total_pop=100_000, unit='day', stop=365, verbose=0)
+sim.run()
+sim.diseases.cholera.plot('I', 'W') # The infectious, and the bacteria in the water
+```
+
+Since nobody catches cholera from a person here, the infection is **spontaneous** (its rate has no bare state), but it is still the acquisition of the disease: it is what a vaccine or a lower susceptibility acts on.
+
+A count can weight each person: `(ss.by(biting=[0.5, 1, 2])*I).n` counts each infectious person by how much they are bitten (in a model stratified by `biting`), and `I.n_infectious` by how infectious they are (their `rel_trans`, with any product or modifier on it), so a treatment that halves infectiousness also halves what the treated shed: `shedding = ss.outside >> W @ xi*I.n_infectious`. A weighted count works under every solver; in a compartmental run the kernels work it out within each step, as they do `I.n`, except in diseases tracked jointly (two diseases whose states depend on each other), where it is worked out once a step and held through it, as `sim.kernel_reason()` says. A contact matrix acts on a weighted count in a rate as it does on `I.n` (see [Population data](populations_data.qmd)).
+
+## Susceptibility and infectiousness
+
+A state can make the people in it less susceptible, or less infectious, than others, with `rel_sus` and `rel_trans`. For example, people vaccinated against measles (`V`) are 97% protected:
+
+```{python}
+def make_measles(coverage):
+    S, I, R = ss.states('S I R')
+    V = ss.State(rel_sus=0.03) # Vaccinated: 3% as susceptible as others
+    infection = S + V >> I @ 1.9*I
+    recovery  = I >> R @ ss.days(8)
+    return ss.Disease(infection, recovery, init=dict(V=coverage, I=0.0001), name='measles')
+
+for coverage in [0.85, 0.90, 0.95]:
+    sim = ss.Sim(make_measles(coverage), total_pop=100_000, stop=ss.days(365), verbose=0)
+    sim.run()
+    print('Coverage', coverage, '- infections in a year:', round(sim.results.measles.infection.sum()))
+```
+
+`S + V >> I` is one transition from either state. Even 95% coverage doesn't stop the outbreak: with R0 ≈ 15, the share of people who must be immune to stop spread (the herd immunity threshold, 1 − 1/R0) is 93%, and 95% coverage with a vaccine that is 97% effective protects 92%.
+
+Each person also has their own `rel_sus` and `rel_trans`, which interventions and connectors change: a vaccine lowers the `rel_sus` of those who get it ([Products](interventions_products.qmd)), and `ss.modify(hiv.rel_sus, ...)` can make one disease change the risk of another ([Connectors](interventions_connectors.qmd)). These act on the transitions that are an **acquisition** of the disease: every transmission, and any other transition out of the first state if the disease has no transmission (as for cholera above). To say otherwise, give `acquisition=True` or `False` to the transition; `describe()` lists which transitions it took as acquisitions.
+
+## Built-in SIR, SIS, and SEIR
+
+`ss.SIR`, `ss.SIS`, and `ss.SEIR` are declared diseases with named parameters: `beta`, `dur_inf`, `init_prev`, `p_death` (0 by default), and `dur_exp` for the SEIR. Their results are the same as any declared disease's, a result for each state and transition, plus a `prevalence` that each declares as a ratio of its states (`prevalence = I/(S + I + R)` in the SIR, `(E + I)/(S + E + I + R)` in the SEIR):
+
+```{python}
+sir = ss.SIR(beta=ss.perday(1.9), dur_inf=ss.days(8), init_prev=0.001)
+sim = ss.Sim(sir, total_pop=100_000, stop=ss.days(50), verbose=0)
+sim.run()
+print(sim.results.sir.keys())
+```
+
+The library has ready-made models of many diseases (HIV, cholera, Ebola, measles, malaria, TB, and more), most of them declared, as `ssl.<Name>` after `import starsim.library as ssl`; [Library diseases](library_diseases.qmd) lists them, with their states and parameters.
+
+## Diseases as classes
+
+A disease can also be a class, with its states, parameters, and transitions in the class body. This is the form for a disease that goes into a library, or that is made many times with different values. Its parameters can then be given when it is made:
+
+```{python}
+class Measles(ss.Disease):
+    S, E, I, R = ss.states('S E I R')
+    beta      = ss.par(ss.perday(1.9), bounds=[1, 3], doc='Transmission rate', source='Gives R0 of about 15')
+    infection = S >> E @ beta*I
+    onset     = E >> I @ ss.erlang(k=4, mean=ss.days(10))
+    recovery  = I >> R @ ss.days(8)
+
+measles = Measles(beta=1.5, init=dict(I=0.001)) # Named "measles", after the class
+sim = ss.Sim(measles, total_pop=100_000, stop=ss.days(150), verbose=0)
+sim.run()
+sim.results.measles.plot()
+```
+
+The starting values can also go in the class body (`init = dict(I=0.001)`), as defaults that `init=` given to the disease replaces. A count can start from the number of people, e.g. `init = dict(W=10*N)`, with `N = (S + I + R).n`.
+
+A class can also have methods, for behavior that isn't a transition: override `step()`, and call `super().step()` to run the declared transitions ([Custom modules](building_modules.qmd)).
+
+### Declaring in `__init__()`
+
+A class body runs once, for the class, so it can't hold a state or transition that only some versions of the model have. Such a model declares them in its `__init__()`, on `self`, with `define_states()`, `define_transitions()`, and `define_results()`. Each one is an attribute at once (`self.R`), and they are built together once the model is made:
+
+```{python}
+class SIRS(ss.Disease):
+    def __init__(self, waning=None, **kwargs):
+        super().__init__(init=dict(I=0.001), **kwargs)
+        beta = ss.par(ss.perday(0.3))
+        self.define_states(ss.states('S I R'))
+        self.define_transitions(
+            infection = self.S >> self.I @ beta*self.I,
+            recovery  = self.I >> self.R @ ss.days(10),
+        )
+        if waning is not None: # Immunity wanes only if asked for
+            self.define_transitions(waning=self.R >> self.S @ waning)
+        self.define_results(prevalence=self.I.frac) # A share of everyone in the model
+
+for waning in [None, ss.days(90)]:
+    sim = ss.Sim(SIRS(waning=waning), total_pop=100_000, stop=ss.days(365), verbose=0)
+    sim.run()
+    print('Waning:', waning, '- prevalence after a year:', round(sim.results.sirs.prevalence[-1], 4))
+```
+
+States and transitions can also be given as lists, or one at a time with `name=` (e.g. in a loop over strains); `overwrite=True` replaces one that was declared already, e.g. with its rate changed. To give such a class named parameters, as the class body would, `ss.pars(defaults, **kwargs)` makes them all at once from a dict of defaults and the values given to `__init__()`: each is an `ss.par` named after its key, so it can be set by name and fitted, and a name that isn't a default is an error ([`ss.pars`](../api/transitions.qmd)).
+
+## Strains
+
+A disease can have several strains that share its states: a person has one course through the states, carrying one strain or several, and each strain has its own values, given as multipliers on the transitions and on `rel_trans`. `ss.immunity()` gives the protection between them, here against infection in people who have recovered. In this influenza-like model, people are infectious for 4 days and immune for a year on average; a variant that is half as transmissible again as the wild strain (R0 of 2.1 against 1.4) starts in 1% of the first infections, and recovery from either strain halves susceptibility to the other:
+
+```{python}
+S, I, R = ss.states('S I R')
+strains = ss.Strains(
+    ['wild', 'variant'],
+    rel_trans = [1, 1.5],     # The variant is 1.5 times as transmissible
+    fractions = [0.99, 0.01], # The share of each among the first infections
+    immunity  = ss.immunity(due_to=R, protection=[[1, 0.5], [0.5, 1]]), # Full protection against the same strain, half against the other
+)
+flu = ss.Disease(
+    infection = S >> I @ ss.perday(0.35)*I,
+    recovery  = I >> R @ ss.days(4),
+    waning    = R >> S @ ss.years(1),
+    init      = dict(I=0.001),
+    strains   = strains,
+    name      = 'flu',
+)
+sim = ss.Sim(flu, total_pop=100_000, start='2025-01-01', stop='2028-01-01', verbose=0).run()
+sim.results.flu.I.by('strain').plot()
+```
+
+Although it starts rare, the variant grows faster, and has the first epidemic nearly to itself: it infects more than four times as many people as the wild strain in the first year. The wild strain then barely circulates, held down by the immunity the variant leaves, while the variant comes back each year as immunity wanes, in epidemics that get smaller as they settle towards an endemic level.
+
+With `max_strains=2`, people can carry two strains at once, and `transmit=` says what a carrier of several passes on: one strain per transmission (`'one'`, the default) or each strain at its own rate (`'each'`). `fractions=` gives the share of each strain among the first infections (equal by default), and `name=` the name of the strain dimension, for results such as `res.I.by('strain')`. A transition with `per_strain=True` acts on each strain a person carries, e.g. a cure that clears some strains and not others. See [`ss.Strains`](../api/strains.qmd).
+
+The results by strain come in two forms, which differ when people carry several. `res.I.by('strain')` has a column for each strain, and someone who carries two is counted in both, so with `max_strains=2` the columns add up to more than `res.I`. `res.I.select(strain=...)` works on the sets of strains carried instead, each person once: with strains `A` and `B`, the levels are `'A'`, `'B'`, and `'A+B'`, so `select(strain='A+B')` is those who carry both, and `select(strain=['A', 'A+B'])` everyone who carries `A`. With more strains than can be carried at once (say three, two at a time), the sets are in the order the strains were acquired, so that the oldest is the one replaced, and both `'A+B'` and `'B+A'` are levels; list both (`res.I.axes()['strain'][0]` lists the levels). With one strain carried at a time, the two agree. The dimension is named `strain` unless `name=` gives another (e.g. `res.I.by('resistance')`). As agents, the [infection log](interventions_analyzers.qmd#the-infection-log) also has the strain passed on in each infection.
+
+### Strains with courses of their own
+
+Some diseases don't fit this, because each strain moves through the states on its own: someone can have CIN from one HPV genotype and be clearing another.
+
+If the strains can share one course, use `ss.Strains` as above. Otherwise, make each strain a disease of its own, and connect them with a [connector](interventions_connectors.qmd). For protection that depends only on which states people are in, that is one `ss.modify()` for each strain. Here two dengue serotypes circulate together, in a toy model with no mosquitoes (R0 = 2.1 for each); recovery from one serotype gives complete protection against the other for the next two years, as dengue's cross-protection is temporary, and the run is compared with one in which the serotypes don't interact:
+
+```{python}
+def serotype(name):
+    S, I, R = ss.states('S I R')
+    return ss.Disease(infection=S >> I @ ss.perday(0.3)*I, recovery=I >> R @ ss.days(7), init=dict(I=0.001), name=name)
+
+for label in ['No cross-protection', 'Cross-protection for 2 years']:
+    den1, den2 = serotype('den1'), serotype('den2')
+    cross = []
+    if label != 'No cross-protection':
+        cross = [
+            ss.modify(den1.rel_sus, multiply=0, where=den2.R & (den2.R.time_in < ss.years(2))), # Recovered from DENV-2 within 2 years
+            ss.modify(den2.rel_sus, multiply=0, where=den1.R & (den1.R.time_in < ss.years(2))),
+        ]
+    sim = ss.Sim([den1, den2], connectors=cross, n_agents=5_000, unit='day', stop=365, verbose=0).run()
+    print(label)
+    print('  Infections with DENV-1:', round(sim.results.den1.infection.sum()))
+    print('  Infections with DENV-2:', round(sim.results.den2.infection.sum()))
+```
+
+Without cross-protection, each serotype infects most of the population, independently of the other. With it, the two compete for the same susceptible people: whichever gets ahead early (here, by chance, DENV-2) protects people from the other, and there are about two-fifths fewer infections in all. Real dengue is more complex: after cross-protection wanes, a second infection with another serotype is more likely to be severe.
+
+Each strain then has its own results (`sim.results.den1`), and a delivery can act on several (`disease=[den1, den2]`). `ssl.Dengue` is built this way. Anything more involved, such as a matrix of protection from each person's antibody levels, is a connector written as code; this is how HPVsim's `cross_genotype.py` works.
+
+## Diseases written as code
+
+A disease that needs something states and transitions can't say, such as a quantity that each person carries and that changes continuously (a CD4 count, a viral load, or an immunity level that wanes), is written as a Python class, with arrays for each person and methods that update them. It runs as agents, and can sit in the same sim as declared diseases. There are two base classes:
+
+- **`ss.Disease`**, for a disease with no transmission between people, such as a non-communicable disease.
+- **`ss.AgentDisease`**, for a transmitted disease. It adds the states `susceptible` and `infected`, each agent's relative susceptibility and infectiousness (`rel_sus` and `rel_trans`), and transmission over the sim's networks with a `beta` for each, which is rarely worth writing again. The transmission is done by the solver, by the same code as for a declared disease run as agents, and each piece of it can be overridden on its own: who can transmit and be infected (`transmissibility()`, `susceptibility()`), the betas (`route_betas()`), one route (`transmit_route()`), how the routes' infections are combined (`finalize_infections()`), or the whole step (`transmit()`, e.g. calling `super().transmit()` and adding a route of its own, as `ssl.Cholera` adds the environment). `ssl.AgentSIR` and `ssl.AgentSEIR` (`import starsim.library as ssl`) are complete examples, and good bases for a disease of your own.
+
+A disease written as code fills in some of these methods:
+
+| Method | What it does | When to override it |
+|--------|---------|------------------|
+| `__init__()` | Gives the parameters (`define_pars()`) and states (`define_states()`) | Always |
+| `set_prognoses(uids, sources)` | Sets what happens to the people just infected: when they recover, whether they die | Always, for an `ss.AgentDisease`; call `super().set_prognoses()` first |
+| `step_state()` | Moves people between states each step, before transmission (e.g. those whose recovery is due) | When the disease has states of its own |
+| `on_death(uids)` | Clears the states of people who died | When the disease has states of its own |
+| `transmit()` | Transmission over the networks | Rarely: the built-in version handles the networks, `beta`, `rel_sus`, and `rel_trans` |
+
+In transmission, the chance that infection passes along a contact from an infectious person to a susceptible one is, in essence, β × `rel_trans` of the source × `rel_sus` of the target, where β is the transmission rate of that network. `rel_sus` and `rel_trans` are 1 by default, and are the levers that the rest of a model pulls: a vaccine lowers `rel_sus`, a treatment lowers `rel_trans`, and a connector between two diseases can raise one disease's `rel_sus` in people infected with the other. Because they are ordinary arrays, they can also be set directly. Here everyone under 20 is fully protected (`rel_sus = 0`), and compared with no protection:
+
+```{python}
+import starsim.library as ssl
+
+for protect in [False, True]:
+    sir = ssl.AgentSIR(beta=ss.perday(0.03), dur_inf=ss.lognormal(mean=ss.days(10), std=ss.days(3)), p_death=0, init_prev=0.01)
+    sim = ss.Sim(sir, networks='random', n_agents=2000, stop=ss.days(120), verbose=0)
+    sim.init()
+    sir = sim.diseases.agentsir # The sim's copy of the disease
+    young = (sim.people.age < 20).uids
+    older = (sim.people.age >= 20).uids
+    if protect:
+        sir.rel_sus[young] = 0.0 # Under-20s can't be infected
+    sim.run()
+    ever_infected = sir.ti_infected.notnan
+    print('Under-20s protected:', protect)
+    print('  Ever infected, under 20:', ever_infected[young].sum(), 'of', len(young))
+    print('  Ever infected, 20 and over:', ever_infected[older].sum(), 'of', len(older))
+```
+
+The few under-20s infected even when protected were infected at the start (`init_prev`). Protecting them also protects older people, a little under a third of whom now escape infection, since there are fewer people to pass it on. In a model with a vaccine, the same protection would come from a [product](interventions_products.qmd), and between diseases from a [connector](interventions_connectors.qmd), rather than by setting `rel_sus` by hand.
+
+**Infected and infectious** are different things once a disease has a latent period. In `ssl.AgentSEIR`, people in `E` and `I` are both infected (and count towards prevalence), but only those in `I` are infectious; `infectious` drives transmission, and `infected` is worked out from the two. A disease whose latent people transmit too would give the exposed a `rel_trans` above 0 instead. In both classes, `set_prognoses()` calls `set_infection()` and then `set_progression()`, which can be overridden one at a time. A stage of your own after a latent period is timed from `ti_infectious`, not from the time of infection, or the latent period takes the place of part of the infectious period rather than delaying it.
+
+The parts of a module written as code (its parameters, states, results, and the order in which Starsim calls its methods) are covered in [Custom modules](building_modules.qmd), and [A1 – Diseases](../tutorials/a1_diseases.qmd) builds a disease among agents step by step.
+
+## Pitfalls
+
+- **A bare number after `@` is a rate.** `I >> R @ 8` is a rate of 8 per day, not 8 days; write `ss.days(8)`.
+- **A rate with no state in it is not transmission.** `S >> I @ 0.2` infects everyone in `S` at 0.2 per day whether or not anyone is infectious. Transmission names its source: `S >> I @ beta*I`.
+- **`init_prev` in an SEIR model starts people in `E`.** To start some people infectious, give `init=dict(I=...)`.
+- **`set_prognoses()` without `super()`.** In a disease written as code, people are still infected, but the result `infection` stays at 0, with no error. Call `super().set_prognoses(uids, sources)`.
+
+## Further reading
+
+- [Appropriate models for the management of infectious diseases](https://doi.org/10.1371/journal.pmed.0020174): how exponential and less variable (Erlang) durations change the course and control of an epidemic
+- [Endemic and epidemic dynamics of cholera: the role of the aquatic reservoir](https://doi.org/10.1186/1471-2334-1-1): the cholera model with bacteria in the water used above
+- [Compartmental models in epidemiology](https://en.wikipedia.org/wiki/Compartmental_models_in_epidemiology): SIR, SEIR, SIS, and models with births and deaths
+- [EpiModel](https://www.epimodel.org/): compartmental and network disease models in R
+- [Epicookbook](https://epirecip.es/epicookbook/): the same textbook models written in several languages
+
+## Appendix: every argument of a transition
+
+`ss.Transition()` takes these arguments; the operators (`S >> I @ rate`) give `source`, `dest`, and `rate` or `dur`, and the others are given by keyword. `ss.birth()` and `ss.death()` also make a transition. See [`ss.Transition`](../api/transitions.qmd) for the details.
+
+| Argument | What it gives | See |
+|---|---|---|
+| `source` | The source state; several states, as a list or a sum (`S + V`); or `ss.unborn` (births) or `ss.outside` (arrivals), for an inflow from outside the model | [Ways to write a transition](#ways-to-write-a-transition) |
+| `dest` | The destination state; several, for a branch decided on leaving, as a dict of each and its probability (`{D: p_death, R: None}`) or a list with `p=`; or `ss.dead` (deaths) or `ss.outside` (leaving), for an outflow | [Branching](#branching) |
+| `rate` | A hazard: a number, a typed rate, a probability per period, an expression of states and parameters, or a function of the sim; with a bare state in it, a transmission | [Transmission](#transmission), [Other rates](#other-rates) |
+| `dur` | A dwell time instead of a rate: a duration, or a distribution of durations | [Durations](#durations) |
+| `p` | The share of people who take this transition (separate transitions out of one state), or a list of shares, one for each destination | [Branching](#branching) |
+| `stages` | The number of stages used to run the dwell time, under every solver | [Durations](#durations) |
+| `where` | Who it applies to: a condition (e.g. `ss.person.age > 30`), with a rate of 0 for everyone else; with no `rate` or `dur`, a trigger; or an event, which moves the people it happens to (or `dur` after it), as agents | [Other rates](#other-rates), [Demographics](populations_demographics.qmd) |
+| `move` | A change of level in a dimension as well as of state (`move=dict(risk=('low', 'high'))`), or a change of strains (`move=DS >> (DS, RIF)`) | [Stratification](building_stratification.qmd#moving-between-groups) |
+| `increment` | A counter that goes up each time the transition happens to someone (`increment='infections'`), or by another amount (`increment=dict(parity=2)`) | [Stratification](building_stratification.qmd#moving-between-groups) |
+| `min_stay` | A minimum stay: nobody takes the transition until they have been in the source state this long | |
+| `acquisition` | Whether it is an acquisition of the disease, which `rel_sus`, a product's efficacy against acquisition, and `ss.treat` act on (by default, every transmission, or the first transition out of the first state if there is none) | [Susceptibility and infectiousness](#susceptibility-and-infectiousness) |
+| `per_strain` | `True`: an event in a state the strains share with an outcome for each strain a person carries, e.g. a cure that clears some strains and not others | [Strains](#strains) |
+| `single_strain` | With a rate: each strain carried has its own rate, and the first to happen moves on as the only strain carried (the others are dropped), e.g. one of two strains progressing | [Strains](#strains) |
+| `name`, `label` | The name (by default, from the keyword or variable), and a human-readable name for plots | |
+
+## Appendix: every argument of a state
+
+`ss.State()` takes these arguments; `ss.states('S I R')` makes several states with the defaults. See [`ss.State`](../api/transitions.qmd).
+
+| Argument | What it gives |
+|---|---|
+| `name` | The name; by default, from the keyword or variable |
+| `init` | The share of people who start in the state; for a state that is not people, its starting amount |
+| `init_n` | The number of people who start in the state, instead |
+| `people` | Whether the state holds people (the default), or is a count of something else (`people=False`: bacteria, mosquitoes) |
+| `rel_sus` | A multiplier on the susceptibility of people in the state (e.g. 0.03 for vaccinated people) |
+| `rel_trans` | A multiplier on the infectiousness of people in the state (e.g. 0.5 for people without symptoms) |
+| `keep_time` | As agents, keep the time each person entered the state (`ti_<name>`) for code to read; by default, kept only if the model reads it |
+| `label` | A human-readable name, for plots |
+
+In rates and conditions, a state also gives: `.n` (the number in it, in the same place, in a model with places), `.total` (in the whole population), `.frac` (the share of everyone in the model), `.n_infectious` (the number weighted by infectiousness), `.time_in` (the time since each person entered it), `.progress` (the share of each person's scheduled stay that has passed), and the events `.enter` and `.exit`, for `where=` and `ss.on()`.

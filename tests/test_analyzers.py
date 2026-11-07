@@ -2,6 +2,7 @@
 Test analyzers
 """
 
+import numpy as np
 import sciris as sc
 import starsim as ss
 sc.options(interactive=False) # Assume not running interactively
@@ -18,6 +19,9 @@ def test_infection_log(do_plot=False):
     assert len(df) > 900, 'Expect almost everyone to be infected'
     assert set(df.network.dropna()) == {'randomnet'} # Network recorded for each transmission
     assert df.network.isna().sum() == df.source.lt(0).sum() # Seed infections have no network
+    assert df.t.dtype == float # Times as numbers, which can be subtracted (they were durations)
+    mixed = ss.Sim(ss.SIR(beta=0.3), n_agents=300, unit='day', stop=10, analyzers=ss.infection_log(), verbose=0).run().analyzers[0].to_df()
+    assert 'network' not in mixed.columns # With no networks no route is known, so no column of blanks
     if do_plot:
         log.plot()
         log.animate()
@@ -25,19 +29,26 @@ def test_infection_log(do_plot=False):
 
 
 @sc.timer()
-def test_dynamics_by_age(do_plot=False):
-    """ Test dynamics by age """
-    sc.heading('Testing dynamics by age')
-    by_age = ss.dynamics_by_age('sis.infected', age_bins=(0, 10, 30, 100))
-    sim = ss.Sim(diseases='sis', networks='random', analyzers=by_age, copy_inputs=False)
-    sim.run()
+def test_shared_log():
+    """ Several infection logs share the disease's, each step's entries can be read as the sim runs, and the strain transmitted is logged """
+    sc.heading('Testing a shared infection log')
+    class steps(ss.Analyzer):
+        def init_pre(self, sim):
+            super().init_pre(sim)
+            self.n = []
+        def step(self):
+            self.n.append(len(self.sim.diseases.d.infection_log.to_df(ti=self.ti)))
 
-    # Tests
-    h = by_age.hist
-    assert h[0].sum() < h[10].sum() < h[30].sum(), 'Expected larger bins to have more infections'
-    if do_plot:
-        by_age.plot()
-    return by_age
+    S, I, R = ss.states('S I R')
+    dis = ss.Disease(infection=S >> I @ ss.peryear(1)*I, recovery=I >> R @ ss.years(2), init=dict(I=0.05), strains=ss.Strains(['A', 'B']), name='d')
+    sim = ss.Sim(dis, n_agents=500, dur=5, networks='random', analyzers=[ss.infection_log(name='a'), ss.infection_log(name='b'), steps()], verbose=0).run()
+    a, b = sim.analyzers.a, sim.analyzers.b
+    assert a.log is b.log is sim.diseases.d.infection_log # Shared, not taken by the first
+    df = a.to_df()
+    assert sim.analyzers.steps.n == np.bincount(np.searchsorted(sim.t.yearvec, df.t), minlength=sim.t.npts).tolist() # Each step's entries, as they were logged
+    assert sim.analyzers.steps.n[1:] == sim.results.d.infection.values[1:].tolist() # After the seeds, the step's infections
+    assert set(df.strain) == {'A', 'B'}
+    return sim
 
 
 if __name__ == '__main__':
@@ -46,6 +57,6 @@ if __name__ == '__main__':
     T = sc.timer()
 
     log    = test_infection_log(do_plot=do_plot)
-    by_age = test_dynamics_by_age(do_plot=do_plot)
+    shared = test_shared_log()
 
     T.toc()

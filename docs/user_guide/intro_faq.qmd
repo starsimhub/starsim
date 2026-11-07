@@ -1,0 +1,77 @@
+---
+title: FAQ
+authorship:
+  human: 60
+  ai: 40
+  note: Some parts written by humans, the rest written by AI; all reviewed by humans
+---
+
+Short answers to common questions, each with a link to the page that covers it in full.
+
+## Do I need to understand all of Starsim to use it?
+
+No! Starsim covers a lot (compartmental and agent-based models, networks, demographics, geography, calibration, and more), but you only need the parts your model uses, and the rest stays out of the way. (By analogy: you probably use `pandas`, but you've probably never used [`extractall`](https://pandas.pydata.org/docs/reference/api/pandas.Series.str.extractall.html).) A simple SIR model is a few lines, and needs nothing from the pages on networks or custom modules.
+
+To get started with **compartmental modeling**, read:
+
+1. [T1 – Getting started](../tutorials/t1_intro.qmd), [T2 – Building a model](../tutorials/t2_model.qmd), and [T3 – Building a disease](../tutorials/t3_disease.qmd): states, transitions, parameters, and results
+2. [T4 – Age groups and contacts](../tutorials/t4_ages.qmd) and [T5 – Interventions and scenarios](../tutorials/t5_interventions.qmd), if your model has age groups or interventions
+3. [T7 – Data and calibration](../tutorials/t7_calibration.qmd), to fit the model to data
+4. [Writing models](building_writing.qmd) and [Solvers and backends](running_solvers.qmd) in this user guide, to look things up as you go
+
+To get started with **agent-based modeling**, read:
+
+1. [T1 – Getting started](../tutorials/t1_intro.qmd) and [T2 – Building a model](../tutorials/t2_model.qmd): agent-based models in Starsim are written the same way as compartmental ones
+2. [A1 – Diseases](../tutorials/a1_diseases.qmd) and [A2 – Networks](../tutorials/a2_networks.qmd): diseases as agents, and who is in contact with whom
+3. [A3 – Demographics](../tutorials/a3_demographics.qmd), [A4 – Interventions](../tutorials/a4_interventions.qmd), and [A5 – Custom modules](../tutorials/a5_modules.qmd), as your model needs them
+4. [People and agents](populations_people.qmd), [Contact networks](populations_networks.qmd), and [Array indexing](mechanics_indexing.qmd) in this user guide, to look things up as you go
+
+The [Architecture](architecture_index.qmd) pages, on how Starsim works inside, are for those who want to know; no model needs them.
+
+## Should I build a compartmental model or an agent-based model?
+
+You don't have to decide up front. A model written as states and transitions can run either way: by default it runs as an ODE, and as agents once something in it needs individuals, such as a contact network or a value kept for each person. You can also ask for a solver by name (`ss.Sim(..., solver='abm')`), and run the same model both ways to see what the individual detail changes. [Solvers and backends](running_solvers.qmd#which-to-use) has a table of which to use for which question.
+
+## Can I write parts of a model as Python code?
+
+Yes. A model can be fully declared (states, transitions, and rates), fully written as code, or a mix of the two, e.g. a declared disease with an intervention written as a function. Declared parts get diagrams, equations, every solver, and fast fitting without any more work; coded parts can do anything Python can. See [What can be declared](building_declared.qmd#mixing-declared-and-coded-parts) for how to mix them, and [Custom modules](building_modules.qmd) for writing modules as code.
+
+## Why is my first run slow?
+
+The first run after installing Starsim may compile its kernels with Numba, which takes a few minutes, once; they are then kept on disk. (The wheels from `pip install starsim` include a Rust copy of the kernels, compiled ahead of time, which avoids this.) To compile everything up front, e.g. when building a Docker image or before a batch of runs on a cluster, run `ss.compile()`, or `starsim init compile` from the command line. See [Solvers and backends](running_solvers.qmd#backends).
+
+## How large a population can Starsim model?
+
+As compartments, any size: a compartmental run takes the same time for a thousand people as for a billion (except with Gillespie's method, which takes one event at a time). As agents, the time grows with the number of agents, so a large population is usually represented by having each agent stand for several people. See [Branching and rescaling](running_branching.qmd) and [Getting the most speed](running_performance.qmd).
+
+## How do I fit a model to data?
+
+Give the parameters you want fitted bounds, give the sim data whose columns are named like its results, and call `sim.fit()`. There is no function to write that puts the values into the model or pulls out the results to compare. See [T7 – Data and calibration](../tutorials/t7_calibration.qmd) to start, and [Fitting a model](calibration_fitting.qmd) for the details.
+
+## Why do two runs give different results, and how do I make them match?
+
+A stochastic run (agents, or a stochastic compartmental solver) depends on its random seed, `rand_seed`: the same seed gives the same results, and different seeds give different ones. One stochastic run is not a result, so run several seeds and look at the spread. When comparing scenarios, Starsim uses *common random numbers*, so that the difference between two runs with the same seed comes from what was changed rather than from chance. See [Scenarios](running_scenarios.qmd#seeds) and [Random numbers](mechanics_random.qmd).
+
+## Are the models in the library ready to use?
+
+They are starting points, not models of a particular setting. The [library](library_diseases.qmd) of diseases, networks, and maternal-child health modules is illustrative rather than validated: some parameter values are placeholders, and interfaces may change between versions. Copy one and adapt it, with parameters from the evidence for your setting and checks against data. The same goes for any runnable example in these docs.
+
+## I have a model in Starsim 3 or another framework. Can I bring it over?
+
+In almost all cases, yes. Starsim can import models from several frameworks, including EpiModel, odin, and epydemix; others, such as LASER, have a guide to translating by hand (or by agent); Starsim 3 libraries like [STIsim](https://stisim.org) were automatically rewritten for this version by a migration script (`python -m starsim.converters.migrate`). See [Conversion](conversion/index.qmd), which has a page for each. If a model doesn't translate and you'd like it to, [email us](mailto:info@starsim.org) or [open an issue](https://github.com/starsimhub/starsim/issues) and we'll see if we can get it to work.
+
+## Can I use Starsim with an AI coding agent?
+
+Yes. Run `starsim init ai` in your project: it gives your agent (Claude Code, Codex, and others) Starsim's skills, which match the installed version, for writing, checking, running, and converting models. See [ai.starsim.org](https://ai.starsim.org).
+
+## Is Starsim available in R?
+
+Yes: see [R-Starsim](https://r.starsim.org).
+
+## Why is Starsim built this way?
+
+The answer is "it's complicated" (because disease modeling is complicated!). In brief, we were fed up with the limitations of existing disease models (especially our own!), and so we asked the question "Can we build a disease modeling framework that functions as a 'lingua franca', that pays homage to the best aspects of all the other disease models that have come before?". The answer is of course "lol no", but we did our best! For an (extremely) detailed explanation of the Starsim design process, see the [Lingua Franca](https://starsim.org/lingua_franca/) docs.
+
+## Where can I get help?
+
+[Email us](mailto:info@starsim.org)! Or if you prefer, you can look at [Profiling and debugging](running_debugging.qmd), which covers common pitfalls and how to find what is wrong. If that doesn't find it, cut the problem down to the smallest script that shows it and open an issue on [GitHub](https://github.com/starsimhub/starsim/issues), with the script, what it printed, and what you expected.

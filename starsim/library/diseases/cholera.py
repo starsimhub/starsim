@@ -7,9 +7,12 @@ Original version by Dom Delport 2024
 
 import numpy as np
 import starsim as ss
+from .agents import AgentSEIR
+
+__all__ = ['Cholera']
 
 
-class Cholera(ss.SEIR):
+class Cholera(AgentSEIR):
     """
     Cholera, with both direct and environmental (waterborne) transmission.
 
@@ -22,6 +25,8 @@ class Cholera(ss.SEIR):
     with a dose-response governed by `half_sat_rate`.
 
     Parameter values are drawn from the literature; see the source for citations.
+
+    Note: CRN safe.
 
     Args:
         beta (prob):            per-contact transmission probability
@@ -45,9 +50,9 @@ class Cholera(ss.SEIR):
         symptomatic (BoolState):    currently symptomatic
         recovered (BoolState):      recovered and immune
         ti_exposed (FloatArr):      timestep of exposure
-        ti_symptomatic (FloatArr):  timestep symptoms began
-        ti_recovered (FloatArr):    timestep of recovery
-        ti_dead (FloatArr):         timestep of death
+        ti_symptomatic (TimeArr):   timestep symptoms began
+        ti_recovered (TimeArr):     timestep of recovery
+        ti_dead (TimeArr):          timestep of death
 
     Examples:
         ```python
@@ -69,18 +74,18 @@ class Cholera(ss.SEIR):
             init_prev = ss.bernoulli(0.005),
 
             # Natural history parameters, all specified in days
-            dur_exp       = ss.lognorm_ex(mean=ss.days(2.772), std=ss.days(4.737)), # Calculated from Azman et al. estimates https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3677557/
+            dur_exp       = ss.lognormal(mean=ss.days(2.772), std=ss.days(4.737)), # Calculated from Azman et al. estimates https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3677557/
             dur_asymp2rec = ss.uniform(low=ss.days(1), high=ss.days(10)), # From WHO cholera fact sheet, asymptomatic individuals shed bacteria for 1-10 days (https://www.who.int/news-room/fact-sheets/detail/cholera)
-            dur_symp2rec  = ss.lognorm_ex(mean=ss.days(5), std=ss.days(1.8)), # According to Fung most modelling studies assume 5 days of symptoms (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3926264/), but found a range of 2.9-14 days. Distribution approximately fit to these values
-            dur_symp2dead = ss.lognorm_ex(mean=ss.days(1), std=ss.days(0.5)), # There does not appear to be differences in timing/duration of mild vs severe disease, but death from severe disease happens rapidly https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5767916/
+            dur_symp2rec  = ss.lognormal(mean=ss.days(5), std=ss.days(1.8)), # According to Fung most modeling studies assume 5 days of symptoms (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3926264/), but found a range of 2.9-14 days. Distribution approximately fit to these values
+            dur_symp2dead = ss.lognormal(mean=ss.days(1), std=ss.days(0.5)), # There does not appear to be differences in timing/duration of mild vs severe disease, but death from severe disease happens rapidly https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5767916/
             p_death       = ss.bernoulli(p=0.005), # Probability of death is typically less than 1% when treated
-            p_symp        = ss.bernoulli(p=0.5), # Proportion of infected which are symptomatic, mid range of ~25% and 57% estimates from Jaclson et al (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3795095/) and Nelson et al (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3842031/), respectively
+            p_symp        = ss.bernoulli(p=0.5), # Proportion of infected which are symptomatic, mid range of ~25% and 57% estimates from Jackson et al (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3795095/) and Nelson et al (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3842031/), respectively
             asymp_trans   = 0.01, # Reduction in transmission probability for asymptomatic infection, asymptomatic carriers shed 100-1000 times less bacteria than symptomatic carriers (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3084143/ and https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3842031/). Previous models assume a 10% relative transmissibility (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4238032/)
 
             # Environmental parameters
             beta_env = ss.prob(0.5 / 3), # Scaling factor for transmission from environment,
             half_sat_rate = 1_000_000, # Infectious dose in water sufficient to produce infection in 50% of exposed, from Mukandavire et al. (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3102413/)
-            shedding_rate = ss.freqperday(10), # Rate at which infectious people shed bacteria to the environment (per day), from Mukandavire et al. (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3102413/)
+            shedding_rate = ss.time.freq(10, 'day'), # Rate at which infectious people shed bacteria to the environment (per day), from Mukandavire et al. (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3102413/)
             decay_rate = ss.perday(0.033), # Rate at which bacteria in the environment dies (per day), from Chao et al. and Mukandavire et al. citing https://pubmed.ncbi.nlm.nih.gov/8882180/
             p_env_transmit = ss.bernoulli(p=0), # Probability of environmental transmission - filled out later
         )
@@ -92,7 +97,7 @@ class Cholera(ss.SEIR):
             ss.BoolState('symptomatic', label='Symptomatic'),
 
             # Timepoint states
-            ss.FloatArr('ti_symptomatic', label='Time of symptoms'),
+            ss.TimeArr('ti_symptomatic', label='Time of symptoms'),
 
             # Aliases
             asymptomatic = lambda self: self.infectious & ~self.symptomatic, # Infectious, but shedding much less
@@ -103,8 +108,7 @@ class Cholera(ss.SEIR):
         """ Initialize results """
         super().init_results()
         self.define_results(
-            ss.Result('new_deaths', dtype=int,   label='Deaths'),
-            ss.Result('cum_deaths', dtype=int,   label='Cumulative deaths'),
+            ss.Result('death',    dtype=int,   label='Deaths', kind='flow'),
             ss.Result('env_prev',   dtype=float, label='Environmental prevalence'),
             ss.Result('env_conc',   dtype=float, label='Environmental concentration'),
         )
@@ -116,10 +120,9 @@ class Cholera(ss.SEIR):
         Original version by Dom Delport
         """
         super().step_state()
-        ti = self.ti
 
         # Progress infectious -> symptomatic
-        symptomatic = (self.infectious & (self.ti_symptomatic <= ti)).uids
+        symptomatic = (self.infectious & self.ti_symptomatic.due()).uids
         self.symptomatic[symptomatic] = True
 
         # Recovery ends symptoms too
@@ -169,10 +172,10 @@ class Cholera(ss.SEIR):
 
         return
 
-    def infect(self):
+    def transmit(self):
         """ Add indirect transmission """
         # Make new cases via direct transmission
-        new_cases, sources, networks = super().infect()
+        new_cases, sources, networks = super().transmit()
 
         # Make new cases via indirect transmission
         pars = self.pars
@@ -188,16 +191,15 @@ class Cholera(ss.SEIR):
 
         return new_cases, sources, networks
 
-    def step_die(self, uids):
+    def on_death(self, uids):
         """ Reset infected/recovered flags for dead agents """
-        super().step_die(uids)
+        super().on_death(uids)
         self.symptomatic[uids] = False
         return
 
-    def update_results(self):
-        super().update_results()
+    def record_flows(self):
+        super().record_flows()
         res = self.results
         ti = self.ti
-        res.new_deaths[ti] = np.count_nonzero((self.ti_dead > ti - 1) & (self.ti_dead <= ti)) # Deaths requested this step, since ti_dead is fractional
-        res.cum_deaths[ti] = np.sum(res.new_deaths[:ti+1])
+        res.death[ti] = np.count_nonzero(self.ti_dead.isclose(ti)) # Deaths requested in this step, as due() rounds ti_dead
         return

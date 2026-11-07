@@ -1,0 +1,129 @@
+"""
+Errors, warnings, and notes.
+
+Most errors are Python's own (`ValueError`, `TypeError`, a `KeyError` for a name
+that is not found); the few kept as classes here are those that code may want to
+catch by kind, e.g. `ss.CapabilityError`. A note is a line about something that
+was assumed or approximated: it is kept in `sim.notes` and printed when `verbose`
+is 1 or more (see `ss.note()`).
+
+Used with: agents and compartments; declared and coded modules
+"""
+import re
+import sciris as sc
+import starsim as ss
+
+__all__ = ['note', 'CapabilityError', 'AlreadyRunError'] # The error for what a solver cannot run and the error for a sim that has already run are also ss.<Name>; the rest are ss.errors.<Name>
+
+
+def note(msg, sim=None, verbose=None):
+    """
+    Say something that was assumed or approximated, in one line
+
+    The note is kept in `sim.notes` (if a sim is supplied), whatever the verbosity,
+    and is printed if `verbose` (by default the sim's) is 1 or more.
+
+    Args:
+        msg (str): what was assumed or approximated
+        sim (Sim): the sim to keep the note in
+        verbose (int): whether to print it
+
+    Example:
+        ```python
+        ss.note("unit='day' (from start and stop dates)", sim=sim)
+        ```
+    """
+    if sim is not None and not hasattr(sim, 'notes'): # A stand-in, e.g. for a disease's equations before it is in a sim
+        sim = None
+    if sim is not None:
+        if msg in sim.notes: # Only say it once
+            return
+        sim.notes.append(msg)
+        if verbose == 0: # Kept, but not said
+            return
+        if getattr(sim, '_held', None) is not None: # Said after the line that starts the run (see ss.Sim.init()), once, though the notes may be kept again as the sim is laid out again
+            if msg not in sim._held:
+                sim._held.append(msg)
+            return
+        verbose = sc.ifelse(verbose, sim.pars.verbose)
+    verbose = sc.ifelse(verbose, ss.options.verbose)
+    if verbose > 0:
+        print(f'  Note: {msg}')
+    return
+
+
+#%% Errors
+
+def starsim3(names=None, keys=None, call='ss.Sim'):
+    """
+    The end of an error for a name of Starsim 3's (`ss.<name>`) or keywords that Starsim 4 does not have, saying what replaces it and where the migration guide is; '' if none is one
+
+    Args:
+        names (str/list): names looked up at the root of Starsim, e.g. 'lognorm_ex'
+        keys (str/list): keywords given to `call`, e.g. 'n_cpus'
+        call (str): what the keywords were given to, e.g. 'ss.Sim' or 'ss.Pregnancy'
+    """
+    from starsim.converters import migrate # Only when there is an error, so that import starsim stays fast
+    found = [(f'ss.{name}', migrate.removed(name)) for name in sc.tolist(names)] + [(f'{key}=', migrate.removed_keyword(key, call)) for key in sc.tolist(keys)]
+    for subject, text in found:
+        if text:
+            if not re.search(r"Starsim 3|removed", text): # Otherwise the text says it already
+                text = f'{subject} is from Starsim 3: {text}'
+            return f'\n     {text}. See https://docs.starsim.org/v3v4 for help migrating from Starsim 3' # No full stop, since Python may add one with "Did you mean"
+    return ''
+
+
+class CapabilityError(ValueError):
+    """
+    The requested solver cannot run part of the model. Three cases: there is no sensible approximation (contact tracing,
+    transmission trees, agent-only custom code); a function or condition asked for something that exists only per agent in a
+    compartmental run; or an approximation would be needed and `approximations="error"`. Names the part, what it asked for, and what
+    would fix it
+    """
+
+class NoAgentAttribute(CapabilityError, AttributeError):
+    """ An attribute of people that exists only per agent, asked for in a compartmental run: also an `AttributeError`, so `hasattr()` gives False """
+
+class AlreadyRunError(RuntimeError):
+    """ A sim that has already run (or been finalized) is stepped, finalized, or added to again; `sim.run()` runs it again from the start """
+    def __init__(self, *args):
+        default = 'To run it again from the start, call sim.run()'
+        args = (f'{args[0]}\n{default}',) + args[1:] if args else (default,)
+        super().__init__(*args)
+
+class DistNotInitializedError(RuntimeError):
+    """ A distribution made with `strict=True` is sampled before it is initialized (by the sim, or with `dist.init()` or `dist.mock()`) """
+    def __init__(self, dist=None, msg=None):
+        if msg is None:
+            msg = f'{dist} has not been initialized. In a module, make it in __init__() (e.g. self.dist = {dist}), where the sim finds it; on its own, outside a sim, call dist.mock() or dist.init().'
+        super().__init__(msg)
+
+class DistSeedRepeatError(RuntimeError):
+    """ Two distributions of a sim have the same seed, or a distribution is jumped back to a state it has passed, so that it would draw the same random numbers twice """
+    def __init__(self, dist1=None, dist2=None, msg=None):
+        if msg is None:
+            msg = f'A common seed was found between {dist1} and {dist2}. This is likely caused by incorrect initialization of the parent Dists object.'
+        super().__init__(msg)
+
+class BooleanOperationError(NotImplementedError):
+    """ A logical operation (and, or, xor, not) is applied to an array of people's values that is not Boolean, e.g. `ppl.age & ppl.female` """
+    def __init__(self, arr):
+        super().__init__(f'Logical operations are only valid on Boolean arrays, not {arr.dtype}')
+
+
+#%% Warnings
+
+class AtBound(RuntimeWarning):
+    """ A best-fit value is at or near one of its bounds """
+
+class NotConverged(RuntimeWarning):
+    """ The chains of a posterior disagree (R-hat above 1.01), or some draws diverged """
+
+class LossyExport(RuntimeWarning):
+    """ An export to another format left something out or changed it. Lists each item """
+
+class ImportIncomplete(RuntimeWarning):
+    """
+    An import could not translate something in the source. Lists each item by name, says what to ask an AI assistant with the
+    `convert-model` skill to finish it, and warns again when the sim is first run
+    """

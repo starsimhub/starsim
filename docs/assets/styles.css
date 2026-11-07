@@ -36,3 +36,7 @@ p:has(+ ul) {
 table td:first-child a {
   white-space: nowrap;
 }
+/* Bold every top-level sidebar section; a section with its own page (href) can't use **bold** in its title, since Quarto shows it literally */
+#quarto-sidebar li.sidebar-item-section:not(ul.sidebar-section li) > .sidebar-item-container .menu-text {
+  font-weight: bold;
+}

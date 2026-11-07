@@ -1,0 +1,77 @@
+## T3 – Building a disease
+
+```{python}
+import starsim as ss
+```
+
+
+### Exercise 1
+
+**Measles has a latent period of 10 to 12 days. Run the SEIR model with a latent period of 12 days, using `pars=`. Does R0 change? How do the timing and height of the peak change?**
+
+R0 doesn't change (15.2), since it depends only on β and the infectious period. A longer latent period makes the generation time longer, so the epidemic grows more slowly: it peaks about 3 days later, and a little lower.
+
+```{python}
+S, E, I, R = ss.states('S E I R')
+beta           = ss.par(1.9, bounds=[1, 3], doc='Transmission rate per day')
+dur_latent     = ss.par(ss.days(10), bounds=[ss.days(7), ss.days(14)], doc='Average latent period')
+dur_infectious = ss.par(ss.days(8), doc='Average infectious period')
+infection   = S >> E @ beta*I
+progression = E >> I @ dur_latent
+recovery    = I >> R @ dur_infectious
+measles = ss.Disease(infection, progression, recovery, init=dict(I=0.001))
+
+latent10 = ss.Sim(measles, total_pop=100_000, stop=ss.days(150))
+latent12 = ss.Sim(measles, pars=dict(dur_latent=ss.days(12)), total_pop=100_000, stop=ss.days(150))
+msim = ss.parallel({'Latent period of 10 days': latent10, 'Latent period of 12 days': latent12})
+msim.plot('measles.I')
+```
+
+### Exercise 2
+
+**Give the infectious period an Erlang distribution too, with `k=4`. Using `R0()` and a plot of `I`, check whether R0 or the course of the epidemic changes.**
+
+R0 is unchanged, since the average infectious period is still 8 days. The epidemic peaks a few days sooner and higher: with an exponential infectious period, some people stay infectious for a long time, which spreads their infections out, whereas with an Erlang distribution most people are infectious for close to 8 days.
+
+```{python}
+S, E, I, R = ss.states('S E I R')
+infection   = S >> E @ 1.9*I
+progression = E >> I @ ss.days(10)
+recovery    = I >> R @ ss.days(8)
+measles = ss.Disease(infection, progression, recovery, init=dict(I=0.001))
+exponential = ss.Sim(measles, total_pop=100_000, stop=ss.days(150))
+
+S, E, I, R = ss.states('S E I R')
+infection   = S >> E @ 1.9*I
+progression = E >> I @ ss.days(10)
+recovery    = I >> R @ ss.erlang(k=4, mean=ss.days(8)) # An Erlang infectious period
+measles = ss.Disease(infection, progression, recovery, init=dict(I=0.001))
+erlang = ss.Sim(measles, total_pop=100_000, stop=ss.days(150))
+erlang.run()
+print('R0:', round(erlang.diseases.measles.R0(), 1))
+
+msim = ss.parallel({'Exponential': exponential, 'Erlang': erlang})
+msim.plot('measles.I')
+```
+
+### Exercise 3
+
+**About 1 in 10 people with measles in this town are admitted to hospital, after 4 days of being infectious on average, and stay for 7 days. Add a state for people in hospital (assume they don't transmit), and find the largest number of people in hospital at once.**
+
+People leaving `I` now branch: 10% go to hospital (`H`) after 4 days on average, and 90% recover after 8. People in hospital are not in `I`, so they don't transmit, which is why R0 falls a little, to 14.4: those admitted are infectious for 4 days instead of 8.
+
+```{python}
+S, E, I, H, R = ss.states('S E I H R')
+infection   = S >> E @ 1.9*I
+progression = E >> I @ ss.days(10)
+admission   = ss.Transition(I, H, dur=ss.days(4), p=0.1) # 10% go to hospital...
+recovery    = ss.Transition(I, R, dur=ss.days(8), p=0.9) # ...and the rest recover
+discharge   = H >> R @ ss.days(7)
+measles = ss.Disease(infection, progression, admission, recovery, discharge, init=dict(I=0.001))
+
+sim = ss.Sim(measles, total_pop=100_000, stop=ss.days(150))
+sim.run()
+print('Most people in hospital at once:', round(sim.results.measles.H.max()))
+sim.results.measles.H.plot()
+```
+

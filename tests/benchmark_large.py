@@ -9,16 +9,17 @@ benchmark_tests.py, so results are comparable across machines.
 For best results (avoiding thread locking), run from a terminal:
     ./benchmark_large.py            # run and compare against saved versions
     ./benchmark_large.py save       # run and save the entry for the current version
-    ./benchmark_large.py repeats=10 # use 10 repeats instead of the default 5
+    ./benchmark_large.py repeats=5  # use 5 repeats instead of the default 10
 """
 import sciris as sc
 import starsim as ss
+from timing import REF_MOPS
 
 filename = sc.thisdir(__file__, 'benchmark_large.yaml')
 
 # Define the parameters
 default_repeats = 10
-pars = sc.objdict(
+pars = sc.obj(
     n_agents = 100_000,   # Number of agents
     dur      = 100,       # Number of years to simulate
     dt       = 1.0,       # Timestep
@@ -30,8 +31,6 @@ pars = sc.objdict(
 
 def run_benchmark(repeats=default_repeats):
     """ Run the large sim `repeats` times and return the best (normalized) result. """
-    ref = 270 # Reference benchmark for sc.benchmark(which='numpy') on an Intel i7-12700H (for scaling performance)
-
     # Test CPU performance before the run
     r1 = sc.benchmark(which='numpy')
 
@@ -48,11 +47,11 @@ def run_benchmark(repeats=default_repeats):
 
     # Test CPU performance after the run and compute the performance ratio
     r2 = sc.benchmark(which='numpy')
-    perf_ratio = (r1+r2)/2/ref
+    perf_ratio = (r1+r2)/2/REF_MOPS
 
     # Keep the best (fastest) run and normalize by the performance ratio
     best = min(times)
-    out = sc.objdict()
+    out = sc.obj()
     out.version = ss.__version__
     out.date = sc.getdate(dateformat='%Y-%m-%d')
     out.cpu_performance = round(perf_ratio, 3)
@@ -64,9 +63,9 @@ def run_benchmark(repeats=default_repeats):
 def load_benchmarks():
     """ Load the saved per-version benchmarks, or an empty dict if none exist yet. """
     try:
-        return sc.objdict(sc.loadyaml(filename))
+        return sc.obj(sc.loadyaml(filename))
     except FileNotFoundError:
-        return sc.objdict()
+        return sc.obj()
 
 
 def compare_benchmark(out):

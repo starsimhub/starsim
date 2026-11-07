@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 sc.options(dpi=150)
 
 # Data -- from running manually
-d = sc.objdict()
+d = sc.obj()
 d.starsim   = dict(flex=9, lines= 25, times=[2.48, 2.53, 2.50])
 d.python    = dict(flex=8, lines=239, times=[2.43, 2.24, 2.31])
 d.numba     = dict(flex=5, lines=371, times=[1.90, 1.87, 1.71])

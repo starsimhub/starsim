@@ -6,6 +6,8 @@ import os
 import pytest
 import sciris as sc
 import starsim as ss
+import benchmark_models as bm
+from timing import REF_MOPS, SLOWDOWN as REGRESSION_FACTOR # Fail if a normalized time exceeds its baseline by more than this
 
 baseline_filename   = sc.thisdir(__file__, 'baseline.yaml')
 benchmark_filename  = sc.thisdir(__file__, 'benchmark.yaml')
@@ -13,11 +15,8 @@ perf_guard_filename = sc.thisdir(__file__, 'perf_guard.yaml')
 sc.options(interactive=False) # Assume not running interactively
 # ss.options.warnings = 'error' # For additional debugging
 
-REGRESSION_FACTOR = 1.5 # Performance guard: fail if a normalized time exceeds its baseline by more than this
-REF_MOPS = 270 # Reference sc.benchmark(which='numpy') MOPS (Intel i7-12700H), used for CPU normalization
-
 # Define the parameters
-pars = sc.objdict(
+pars = sc.obj(
     n_agents  = 10e3, # Number of agents
     start     = 2000, # Starting year
     dur       = 20,   # Number of years to simulate
@@ -32,8 +31,9 @@ def make_sim(run=False, **kwargs):
     Define a default simulation for testing the baseline. If run directly (not
     via pytest), also plot the sim by default.
     """
-    diseases = ['sir', 'sis']
-    networks = ['random', 'mf', 'prenatal']
+    diseases = [dict(type='sir', beta=dict(random=ss.peryear(0.1), sexual=ss.peract(0.02))), # A probability per act on ss.SexualNet, about the default rate's chance in a step of 0.2 years
+                dict(type='sis', beta=dict(random=ss.peryear(0.05), sexual=ss.peract(0.01)))]
+    networks = ['random', 'sexual']
     sim = ss.Sim(pars=pars | kwargs, networks=networks, diseases=diseases, demographics=True)
 
     # Optionally run and plot
@@ -75,7 +75,7 @@ def test_baseline():
     new.run()
 
     # Compute the comparison
-    ss.diff_sims(old, new, die=True)
+    ss.debugtools.diff_sims(old, new, die=True)
 
     return new
 
@@ -92,34 +92,19 @@ def test_benchmark(do_save=False, repeats=1, verbose=True):
 
     t_inits = []
     t_runs  = []
-    ref = 270 # Reference benchmark for sc.benchmark(which='numpy') on a Intel i7-12700H (for scaling performance)
 
-    # Test CPU performance before the run
+    # Time initializing and running, bracketed by CPU benchmarks for normalization
     r1 = sc.benchmark(which='numpy')
-
-    # Do the actual benchmarking
     for r in range(repeats):
-
-        print(f'Repeat {r}')
-
-        # Time initialization
         t0 = sc.tic()
         sim = make_sim()
         sim.init()
-        t_init = sc.toc(t0, output=True)
-
-        # Time running
+        t_inits.append(sc.toc(t0, output=True))
         t0 = sc.tic()
         sim.run()
-        t_run = sc.toc(t0, output=True)
-
-        # Store results
-        t_inits.append(t_init)
-        t_runs.append(t_run)
-
-    # Test CPU performance after the run
+        t_runs.append(sc.toc(t0, output=True))
     r2 = sc.benchmark(which='numpy')
-    ratio = (r1+r2)/2/ref
+    ratio = (r1+r2)/2/REF_MOPS
     t_init = ratio*min(t_inits)
     t_run  = ratio*min(t_runs)
 
@@ -168,8 +153,13 @@ def perf_cases():
     - bare_run_no_people: the People-results opt-out (largest removable per-tick cost)
     - het_init: the heterogeneous-dt numeric-sort plan fallback
     - births_run: demographics (birth draw + grow)
-    - crn_false_run: the crn=False path (guards the distribution jumping gate; all other
-      cases run crn=True and so would not catch a reinstated per-step/per-draw RNG jump)
+    - crn_false_run: the crn=False path (guards the distribution jumping gate; most other
+      cases run crn=True and so would not catch a per-step or per-draw RNG jump)
+    - fseis10, counts, coded, by_age (init and run): the models in benchmark_models.py, a model written as code
+      beside a coded ODE (malariasim), counts stepped beside agents, a coded disease on a network, and ss.by age tables
+    - tb, contra (init and run), tb1k_run, strains_ode_run: the fixed cost of a declared
+      step as agents (tbsim, at two sizes), choices by tables (FPsim), and many sets of strains under the ODE; their
+      init cases also guard the time to build a sim
 
     Each case is (factory, which, crn).
     """
@@ -185,10 +175,24 @@ def perf_cases():
     return {
         'bare_init':          (bare, 'init', True),
         'bare_run':           (bare, 'run', True),
-        'bare_run_no_people': (lambda: bare(people_results=False), 'run', True),
+        'bare_run_no_people': (lambda: bare(record_people=False), 'run', True),
         'het_init':           (het, 'init', True),
         'births_run':         (births, 'run', True),
         'crn_false_run':      (crnf, 'run', False),
+        'fseis10_init':       (bm.make_fseis, 'init', False),
+        'fseis10_run':        (bm.make_fseis, 'run', False),
+        'counts_init':        (bm.make_counts, 'init', True),
+        'counts_run':         (bm.make_counts, 'run', True),
+        'coded_init':         (bm.make_coded, 'init', True),
+        'coded_run':          (bm.make_coded, 'run', True),
+        'by_age_init':        (bm.make_by_age, 'init', True),
+        'by_age_run':         (bm.make_by_age, 'run', True),
+        'tb_init':            (bm.make_tb, 'init', True),
+        'tb_run':             (bm.make_tb, 'run', True),
+        'tb1k_run':           (lambda: bm.make_tb(n_agents=1000), 'run', True),
+        'contra_init':        (bm.make_contra, 'init', True),
+        'contra_run':         (bm.make_contra, 'run', True),
+        'strains_ode_run':    (bm.make_strains_ode, 'run', True),
     }
 
 
@@ -215,10 +219,9 @@ def test_performance_guard(do_save=False, verbose=True):
 
     Measures a small matrix of CPU-normalized wall-clock times (each guarding a distinct cost
     term) and fails if any exceeds its recorded baseline by more than REGRESSION_FACTOR (1.5x).
-    Baselines track the *improved* state, so this catches only major regressions (e.g. reinstating
-    the timeline deepcopy or the object-key plan sort), not normal drift. Times use min-of-repeats
-    with CPU normalization (see test_benchmark) to cancel machine speed. Refresh with
-    ./update_benchmarks.py after an intended speedup.
+    Baselines are the current times, so this catches only major regressions, not normal drift.
+    Times use min-of-repeats with CPU normalization (see test_benchmark) to cancel machine speed.
+    Refresh with ./update_benchmarks.py after an intended speedup.
 
     Note: this test is timing-sensitive, so it is skipped when running under pytest-xdist
     (parallel contention makes per-test wall-clock unreliable). Run it serially to gate, e.g.
@@ -229,6 +232,8 @@ def test_performance_guard(do_save=False, verbose=True):
         pytest.skip('Performance guard is timing-sensitive; run serially (pytest test_baselines.py::test_performance_guard).')
 
     repeats = dict(bare_init=8, bare_run=4, bare_run_no_people=4, het_init=8, births_run=4, crn_false_run=4)
+    repeats.update({f'{name}_{which}':(8 if which == 'init' else 3) for name in ['fseis10', 'counts', 'coded', 'by_age', 'tb'] for which in ['init', 'run']})
+    repeats.update(contra_init=4, contra_run=2, tb1k_run=3, strains_ode_run=2)
 
     # Measure, bracketed by CPU benchmarks for normalization
     r1 = sc.benchmark(which='numpy')

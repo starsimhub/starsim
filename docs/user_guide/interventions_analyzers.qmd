@@ -1,0 +1,245 @@
+---
+title: Analyzers
+jupyter: python3
+authorship:
+  human: 10
+  ai: 90
+  note: Based on the AI-written v4 draft, with the description of the infection log and of function analyzers adapted from the Starsim 3 user guide page on analyzers; the comparison of mixing patterns written by AI; example made realistic and appendix added by AI
+---
+
+An analyzer records something during a run that the results don't keep, without changing the model. It is called at the end of each step, after everything else has been updated, and reports on the state of things then. Most quantities don't need one: every state and transition of a declared disease has a result, ratios and outcomes are declared with the model (see [Results](building_results.qmd) and [Outcomes](building_outcomes.qmd)), and results by age or any other group come from [stratifying](building_stratification.qmd) the model. An analyzer is for the rest: something about individual agents (their ages when infected, who infected whom), or a quantity worked out from several modules at once. Besides the infection log in core Starsim, the library has analyzers for costs, DALYs, and cost-effectiveness (on [Costs](interventions_costs.qmd)) and for the CD4 counts of `ssl.HIV`; all are listed in the [appendix](#appendix-every-analyzer).
+
+## When an analyzer runs
+
+An analyzer runs at the end of each step, from the first, after the step's results have been recorded. In the analyzer, `sim.ti` (or `self.ti` in a class) is the index of the step, where its results go: the stocks there are the state at the step's start, and the flows the totals over the step, while the people it sees are as they are at the step's end (the next time point). A declared disease dates each entry into a state by the step in which it happened, in its state `ti_<state>` (for an SEIR model, infection is the entry into `E`, so `ti_E`), so the people infected during this step are those with `ti_E.isclose(ti)` (`==` raises for a time, since a time drawn between steps never equals one exactly). An analyzer that acts every few steps (`if self.ti % 7 == 0`) acts at the end of steps 0, 7, 14, and so on, so the first time after the first step, not before anything has happened. A result about the state at the start of a step belongs in `record_stocks()` (see [Custom modules](building_modules.qmd)), which runs before any module's step. An analyzer that needs something set up before its first `step()`, such as the state of each agent at the start to compare the next step with, sets it in `init_post()`, which runs once the initial states are set and before the first step (see [below](#following-agents-from-step-to-step)).
+
+## A function as an analyzer
+
+The simplest analyzer is a function of the sim, given in `analyzers=`. This one records the mean age of the people infected in each step, which is a common measure for measles (where vaccination of children raises it). The model is measles in a population with no immunity, as on an island it has not reached for decades (an SEIR model with an R0 of about 15, latent for 10 days and infectious for 8). It needs individual ages, so the sim runs as agents:
+
+```{python}
+import numpy as np
+import starsim as ss
+
+S, E, I, R = ss.states('S E I R')
+infection   = S >> E @ 1.9*I        # β = 1.9 per day
+progression = E >> I @ ss.days(10)  # Latent for 10 days on average
+recovery    = I >> R @ ss.days(8)   # Infectious for 8 days on average
+measles = ss.Disease(infection, progression, recovery, init_prev=0.001)
+
+ages = []
+def age_at_infection(sim):
+    new = sim.diseases.measles.ti_E.isclose(sim.ti) # People infected during this step
+    ages.append(sim.people.age[new].mean() if new.any() else np.nan)
+
+sim = ss.Sim(measles, n_agents=10_000, stop=ss.days(90), analyzers=age_at_infection, verbose=0)
+sim.run()
+print('Mean age at infection, each week:', np.round(ages[7::7], 1))
+```
+
+Here people mix at random, so the mean age at infection is close to the mean age of the population (34); with a contact matrix in which children mix most, it is not (see below).
+
+A function is quick to write, but what it records lives outside the sim: it is not plotted or exported with the results, and when the sim is run in another process (by `ss.parallel()`), the list in this process stays empty. For anything kept, use a class.
+
+## An analyzer as a class
+
+An analyzer written as a class (a subclass of `ss.Analyzer`) declares results of its own, which are then stored, plotted, and exported with the sim's other results. This one records the mean age at infection, and the new infections among children and adults, as one result with a column for each:
+
+```{python}
+class AgeAtInfection(ss.Analyzer):
+    """ The mean age of the people infected in each step, and the number of them who are children and adults """
+    def init_results(self):
+        super().init_results()
+        self.define_results(
+            ss.Result('mean_age', label='Mean age at infection'), # An average (a ratio), so not scaled by the people each agent stands for
+            ss.Result('new_infections', columns=['children', 'adults'], label='New infections'),
+        )
+
+    def step(self):
+        new = self.sim.diseases.measles.ti_E.isclose(self.ti)
+        if new.any():
+            age = self.sim.people.age
+            self.results.mean_age[self.ti] = age[new].mean()
+            self.results.new_infections[self.ti] = [np.count_nonzero(new & (age < 15)), np.count_nonzero(new & (age >= 15))]
+        else:
+            self.results.mean_age[self.ti] = np.nan # No infections, so no mean age (rather than 0)
+
+sim = ss.Sim(measles, n_agents=10_000, stop=ss.days(90), analyzers=AgeAtInfection(), verbose=0)
+sim.run()
+sim.results.ageatinfection.new_infections.plot()
+```
+
+The analyzer's results are under its name in lower case, `sim.results.ageatinfection`. A result with columns has each as a result of its own (`res.new_infections.children`), and each is a column of `sim.to_df()`:
+
+```{python}
+sim.to_df().columns.tolist()
+```
+
+An analyzer is a way to compare what the results don't show. Here the same analyzer is added to two versions of the model: the one above, with homogeneous mixing, and one with a contact matrix in which children have the most contacts, mostly with each other (the matrix of [Population data](populations_data.qmd#a-contact-matrix-by-age), with β per contact chosen to give a similar epidemic):
+
+```{python}
+S, E, I, R = ss.states('S E I R')
+infection   = S >> E @ 0.15*I       # β = 0.15 per contact
+progression = E >> I @ ss.days(10)
+recovery    = I >> R @ ss.days(8)
+measles_ages = ss.Disease(infection, progression, recovery, init_prev=0.001, name='measles')
+contacts = ss.contacts(ages=[0, 15, 65], matrix=[[10, 4, 0.5], [2, 8, 0.5], [1.5, 3, 2]]) # Contacts a day
+
+kw = dict(n_agents=10_000, stop=ss.days(90), verbose=0)
+msim = ss.parallel({
+    'Homogeneous mixing': ss.Sim(measles, analyzers=AgeAtInfection(), **kw),
+    'Contact matrix by age': ss.Sim(measles_ages, networks=contacts, analyzers=AgeAtInfection(), **kw),
+})
+msim.plot('ageatinfection.mean_age')
+```
+
+With homogeneous mixing, the mean age at infection stays near the mean age of the population throughout. With the contact matrix, children are infected first, and the mean age rises as the epidemic goes on, until the last people infected are mostly older adults, who have the fewest contacts. Nearly everyone is infected by measles in the end either way, so a result such as the total number infected would not show this.
+
+A result that is a count (a flow or a stock) is multiplied by the number of people each agent stands for when the run ends; an average or a share (a ratio, which `mean_age` is guessed to be from its name) is not. `scale=` overrides this.
+
+## The infection log
+
+The infection log records each infection: when it happened, who was infected, and, where there is a network, by whom. It needs agents and a contact network, since otherwise nobody is the source of a particular infection: an infection by a mixing pool (`ss.MixingPool`), a contact matrix, or mixing with everyone comes from the share infectious in a group, not from a particular person, so its `source` and `network` are NaN (seeds have a source of -1). Give `analyzers='infection_log'`:
+
+```{python}
+S, I, R = ss.states('S I R')
+flu = ss.Disease(S >> I @ 0.05*I, I >> R @ ss.days(8), init_prev=0.002, name='flu')
+
+sim = ss.Sim(flu, networks=ss.RandomNet(n_contacts=8), n_agents=5_000, stop=ss.days(100), analyzers='infection_log', verbose=0)
+sim.run()
+log = sim.analyzers.infection_log.log
+df = log.to_df()
+df.tail()
+```
+
+Each row is one infection: the time (`t`), the infected agent (`target`), the agent who infected them (`source`, which is −1 for the people infected at the start), and the network it happened on (`network`). The log also plots who infected whom over time, and `log.to_graph()` gives the chains of transmission as a NetworkX graph:
+
+```{python}
+sim.analyzers.infection_log.plot()
+```
+
+`animate()` shows the same infections as they happen, one frame per time point: each agent infected is a dot on a grid, colored by when it was infected. It draws each frame in turn, so run it in a Python session rather than a notebook:
+
+```{python}
+#| eval: false
+sim.analyzers.infection_log.animate(framerate=20)
+```
+
+From the log, the generation interval (the time from a person's infection to the infection of each person they infect) is the time of each infection minus the time its source was infected:
+
+```{python}
+infected_at = df.set_index('target').t        # When each agent was infected
+df['generation'] = df.t - df.source.map(infected_at)
+print('Mean generation interval:', round(df.generation.mean(), 1), 'days')
+```
+
+If a person's contacts all stayed susceptible, the mean would be the mean infectious period, 8 days. It is shorter because they don't: on a network, a person's contacts are soon infected by others or immune, so people infect fewer of them late in their infectious period.
+
+For a disease with [strains](building_diseases.qmd#strains), each row also has the strain passed on (`strain`; for the people infected at the start, the strains they start with).
+
+A disease written as code can add data to each infection, such as the variant (`log.add_entries(uids, sources, time, variant=variants)`), or to each agent's latest infection later on, such as a diagnosis (`log.add_data(uids, diagnosed=True)`). See [Custom modules](building_modules.qmd).
+
+## Following agents from step to step
+
+An analyzer can keep a value for each agent, declared with `define_states()` as a module's states are (`ss.BoolArr`, `ss.FloatArr`, and so on), for instance to compare each person's state with the one at the previous time point. It seeds the previous state in `init_post()`, which runs after the initial states are set and before the first `step()`. To follow transmission as the sim runs, it reads the infections of each step from the infection log, `disease.infection_log.to_df(ti=self.ti)`, which needs an `ss.infection_log` analyzer in the sim (any number of analyzers can read the same log).
+
+This analyzer, in an SIS model with infections lasting about three months, at monthly steps, counts each step's new infections in two ways, from the log and from the people who are infected now but were not at the previous time point, and counts how many times each person is infected:
+
+```{python}
+class Reinfections(ss.Analyzer):
+    """ New infections each step, from the infection log and from the states, and the number of times each person is infected """
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.define_states(
+            ss.BoolArr('was_infected'),           # Infected at the previous time point
+            ss.FloatArr('infections', default=0), # The times each person has been infected
+        )
+
+    def init_results(self):
+        super().init_results()
+        self.define_results(
+            ss.Result('from_log', label='New infections (from the log)'),
+            ss.Result('from_states', label='Newly infected (from the states)'),
+        )
+
+    def init_post(self):
+        super().init_post()
+        self.was_infected[:] = self.sim.diseases.sis.I # The people infected at the start
+
+    def step(self):
+        sis = self.sim.diseases.sis
+        if self.ti > 0: # At time point 0, the log has the people infected at the start
+            new = sis.infection_log.to_df(ti=self.ti) # The infections of this step
+            self.infections[ss.uids(new.target.to_numpy(dtype=int))] += 1
+            self.results.from_log[self.ti] = len(new)
+            self.results.from_states[self.ti] = np.count_nonzero(sis.I & ~self.was_infected)
+        self.was_infected[:] = sis.I
+
+S, I = ss.states('S I')
+sis = ss.Disease(S >> I @ ss.peryear(2)*I, I >> S @ ss.months(3), init_prev=0.05, name='sis')
+sim = ss.Sim(sis, networks=ss.RandomNet(n_contacts=4), demographics=True, n_agents=5_000, start=2000, stop=2010, dt=ss.months(1),
+             analyzers=[ss.infection_log(), Reinfections()], verbose=0)
+sim.run()
+res = sim.results.reinfections
+print('Infections, from the log:      ', res.from_log.sum())
+print('Infections, from the states:   ', res.from_states.sum())
+print('Infections, from the results:  ', sim.results.sis.infection[1:].sum())
+print('Mean times infected per person:', round(sim.analyzers.reinfections.infections.mean(), 1))
+```
+
+The log agrees with the disease's own result, `infection`, but the states miss many infections: an agent can move more than once in a step, and here someone who recovers during a step can be infected again in the same step, so is infected at both time points. Get flows from the results of the transitions (`sim.results.sis.infection`, by group with `.by()`; see [Results](building_results.qmd)), or who moved from the infection log, rather than from differences of states between steps.
+
+An array of values for each agent also has slots that are not people: those who have died, and room at the end for people born later, which hold NaN in an `ss.FloatArr` (not its default). So use the array itself, or `.values` (the people alive), to sum or average over people, as `infections.mean()` does above, not `.raw`, the array underneath, whose mean here is NaN:
+
+```{python}
+infections = sim.analyzers.reinfections.infections
+print(infections.mean(), infections.values.mean(), np.mean(infections.raw))
+```
+
+## Analyzers in a compartmental run
+
+An analyzer can be given to a model that runs as compartments, as any module written as code can that keeps nothing for each person. There, it sees the number of people in each compartment, not individuals: `sim.diseases.measles.I.n` is the number infectious. The run then goes a step at a time, so it is slower; for a quantity that can be worked out from the results after the run, such as the effective reproduction number R0 × S/N, compute it from the results instead.
+
+## Pitfalls
+
+- **An analyzer must not change the model.** To change something during a run, use an [intervention](interventions_interventions.qmd).
+- **Results kept outside the sim are lost** when the sim runs in another process (`ss.parallel()`); declare results in a class.
+- **Counts of agents are scaled; averages are not.** A result's `kind` decides this: a flow or stock is scaled, a ratio is not. Give `kind=` (or `scale=`) when the guess from the name is wrong.
+- **Check whether a result already exists.** Stratifying the model gives results by age or any other group, under every solver, with no analyzer.
+
+## See also
+
+- [T9 – Custom modules](../tutorials/t9_modules.qmd) and [A5 – Custom modules](../tutorials/a5_modules.qmd), the tutorials with modules written as code, including analyzers
+- [Results](building_results.qmd), for the results a sim keeps
+- [Custom modules](building_modules.qmd), for the methods of a module, including `init_results()` and `finalize_results()`
+
+The API reference for this page: [Analyzers](../api/analyzers.qmd).
+
+## Further reading
+
+- [epicontacts (CRAN): Handling and visualizing transmission chains](https://cran.r-project.org/package=epicontacts): an R package for line lists and transmission trees, such as the infection log gives
+- [NetworkX: Algorithms](https://networkx.org/documentation/stable/reference/algorithms/index.html): for analyzing the graph of who infected whom from `log.to_graph()`
+- [Mesa: Data collection](https://mesa.readthedocs.io/latest/apis/datacollection.html): the equivalent of analyzers in another agent-based framework
+
+## Appendix: every analyzer
+
+The analyzers in Starsim and its library, with the first line of each one's documentation (see the API reference, [Analyzers](../api/analyzers.qmd), [Economics](../api/library.econ.qmd), and [Diseases in the library](../api/library.diseases.qmd)):
+
+```{python}
+import inspect
+import starsim.library as ssl
+
+def subclasses(cls):
+    """ Every subclass of a class, and every subclass of those """
+    for sub in cls.__subclasses__():
+        yield sub
+        yield from subclasses(sub)
+
+for sub in subclasses(ss.Analyzer):
+    if sub.__module__.startswith('starsim'): # Not those defined on this page
+        prefix = 'ssl' if sub.__module__.startswith('starsim.library') else 'ss'
+        print(f'{prefix}.{sub.__name__}: {inspect.getdoc(sub).splitlines()[0]}')
+```
+
+The infection log is given by name (`analyzers='infection_log'`), or as `ss.infection_log()`. Its log, `sim.analyzers.infection_log.log`, has `to_df()` (a row per infection, with the columns `t`, `target`, `source`, and `network`, and `strain` for a disease with strains; `to_df(ti=...)` for those of one step), `to_graph()` (a NetworkX graph of who infected whom), and `add_entries()` and `add_data()` (for diseases written as code); the analyzer has `plot()` and `animate()`.
+

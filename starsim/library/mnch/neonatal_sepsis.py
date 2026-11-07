@@ -23,21 +23,26 @@ Usage::
 
     sim = ss.Sim(
         diseases=ssl.mnch.NeonatalSepsis(),
-        demographics=[ss.Pregnancy(fertility_rate=ss.freqperyear(30)), ss.Deaths()],
+        demographics=[ss.Pregnancy(fertility_rate=ss.time.freq(30, 'year')), ss.Deaths()],
         networks=[ss.PrenatalNet(), ss.RandomNet()],
     )
     sim.run()
 
     # NND results are on the Pregnancy module, not the disease
-    print('Neonatal deaths:', sim.results.pregnancy.neonatal_deaths.sum())
-    print('Total births:', sim.results.pregnancy.births.sum())
+    print('Neonatal deaths:', sim.results.pregnancy.neonatal_death.sum())
+    print('Total births:', sim.results.pregnancy.birth.sum())
+
+Used with: agents; coded modules
 """
 
 import numpy as np
 import starsim as ss
+from ..diseases.agents import AgentSIR
+
+__all__ = ['NeonatalSepsis']
 
 
-class NeonatalSepsis(ss.SIR):
+class NeonatalSepsis(AgentSIR):
     """
     Minimal neonatal sepsis model.
 
@@ -45,11 +50,14 @@ class NeonatalSepsis(ss.SIR):
     fraction (`p_death`) within a short window (`dur_inf`). Useful for
     testing passive neonatal death detection in the Pregnancy module.
 
+    Note: CRN safe.
+
     Args:
         beta (float):       transmission rate — set to 0 since infection is only at birth
         init_prev (Dist):   fraction of newborns infected at birth
         dur_inf (Dist):     time from infection to death (for those who die)
         p_death (Dist):     case fatality rate among infected neonates
+        pars (dict): the same parameters, as a dict
     """
 
     def __init__(self, pars=None, **kwargs):
@@ -57,7 +65,7 @@ class NeonatalSepsis(ss.SIR):
         self.define_pars(
             beta      = 0,                                         # No ongoing transmission — infection is set at birth
             init_prev = ss.bernoulli(p=0.3),                       # 30% of newborns infected at birth
-            dur_inf   = ss.lognorm_ex(mean=ss.days(7), std=ss.days(3)),  # ~1 week illness
+            dur_inf   = ss.lognormal(mean=ss.days(7), std=ss.days(3)),  # ~1 week illness
             p_death   = ss.bernoulli(p=0.5),                       # 50% case fatality
         )
         self.update_pars(pars, **kwargs)
@@ -95,6 +103,10 @@ class NeonatalSepsis(ss.SIR):
 
         Non-neonates who get infected (via init_prev at sim start) just recover
         normally via the base SIR logic.
+
+        Args:
+            uids (array): the agents infected
+            sources (array): the agents who infected them
         """
         super().set_prognoses(uids, sources) # Schedules death for a fraction p_death, and recovery for everyone else
 

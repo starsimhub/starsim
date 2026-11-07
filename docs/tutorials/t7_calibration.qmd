@@ -1,0 +1,175 @@
+---
+title: "T7 – Data and calibration"
+jupyter: python3
+authorship:
+  human: 0
+  ai: 100
+  note: Written by AI, from the earlier AI-written calibration tutorials; its data, the posterior, and the check against what happened next rewritten by AI
+---
+
+**How big will this outbreak get, and would a vaccination campaign now make a difference?**
+
+A model's parameters are rarely all known. The rate of infection per contact, or the share of cases that are reported, can't be measured directly, but they shape what the model predicts. Calibration is fitting a model's parameters to data: finding the values that make the model's results match what was observed. A model calibrated to an outbreak so far can then be used to ask what happens next, and what an intervention would do.
+
+In this tutorial, it is late March. Measles cases have been reported each week since January, and they are still rising. The health office is weighing a vaccination campaign for children, and asks how many cases it would prevent, and how much it matters how soon it starts. By the end, you will be able to:
+
+- say what the data measure, as an outcome of the model;
+- load data from a file and attach it to the model's results by name;
+- fit the model's parameters to the data, and check the fit;
+- find the range of values consistent with the data, and project from it, with and without a campaign;
+- judge the projection against what happened next.
+
+## The model and what the data measure
+
+This is the model from [T5 – Interventions and scenarios](t5_interventions.qmd): measles in a town of 100,000 people in three age groups, most of them already immune, with 10 people infectious on 1 January.
+
+```{python}
+import starsim as ss
+import pandas as pd
+
+S, E, I, R = ss.states('S E I R')
+beta = ss.par(0.14, bounds=[0.05, 0.5])  # The rate of infection per contact with an infectious person, per day
+reported = ss.par(0.5, bounds=[0.05, 1], prior=ss.beta_dist(mean=0.35, std=0.1)) # The share of infections that are reported: about a third, from earlier outbreaks
+
+infection   = S >> E @ beta*I         # Infection, at a rate of β times the contacts with infectious people
+progression = E >> I @ ss.days(10)   # Latent for 10 days on average
+recovery    = I >> R @ ss.days(8)    # Infectious for 8 days on average
+cases       = ss.outcome(reported*infection) # Reported cases: a share of new infections
+measles = ss.Disease(infection, progression, recovery, cases,
+    init = dict(R=ss.by(age=[0.8, 0.92, 0.98])), # The share immune in each age group
+    init_n = dict(I=10),                          # 10 people infectious at the start
+)
+measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1}) # Ages 0-14, 15-64, and 65+
+
+contacts = ss.contacts(ages=[0, 15, 65], matrix=[[10, 6, 1], [3, 8, 1], [3, 6, 3]]) # Contacts a day, between age groups
+settings = dict(networks=contacts, total_pop=100_000, start='2025-01-01', stop='2025-09-01')
+```
+
+Two things are new. First, data rarely measure a model's states directly. A health office doesn't count everyone infected, only the cases that are reported: people who saw a doctor, whose measles was recognized, and whose case was notified. For measles, this is often less than half of all infections. An **outcome** is a result that the model computes from its states and transitions, to be compared with what was observed (see [Outcomes](../user_guide/building_outcomes.qmd)). Here, `cases` is a share of new infections (`reported*infection`): on each day, the number of reported cases is `reported` times the number of people infected that day. Like any result, it is in `sim.results.measles.cases` after a run.
+
+Second, neither β nor the share reported is known, so each is a parameter with bounds (`ss.par(..., bounds=...)`). The bounds say which values are plausible, and so which values a fit may try; the values given (0.14 and 0.5) are the starting guesses. The two parameters do different things: β sets how fast the outbreak grows and how many people it infects, while the share reported only scales how many of those infections appear in the data.
+
+## The data
+
+The file `data/measles_cases.csv` has the number of measles cases reported each week, from the week starting 1 January to the week starting 12 March:
+
+```{python}
+data = pd.read_csv('data/measles_cases.csv')
+data
+```
+
+The counts jump around from week to week, as real counts do: by chance, and because reporting itself varies (a clinic closed for a holiday, a backlog cleared the week after).
+
+::: {.callout-note}
+## Where this data comes from
+This data is illustrative, not real. It was made once, from an agent-based run of this model (in which each infection is a chance event, so the outbreak is not the smooth curve of the ODE), with β = 0.16 and 40% of infections reported, and its weekly totals were then drawn with more variation than Poisson counts would have, as reported counts usually do. So, as with real data, no values of the model's parameters fit it exactly:
+
+```python
+import numpy as np
+truth = ss.Sim(measles, pars=dict(beta=0.16, reported=0.4), n_agents=100_000, rand_seed=3, **settings).run()
+weekly = truth.to_synthetic_data('cases', resample='week', noise=None) # Weekly reported cases, each dated by the first day of its week
+rng = np.random.default_rng(3)
+weekly['cases'] = rng.negative_binomial(30, 30/(30 + weekly.cases)) # With extra variation (negative binomial counts)
+weekly[weekly.date <= ss.date('2025-03-12')].to_csv('data/measles_cases.csv', index=False)
+weekly[weekly.date > ss.date('2025-03-12')].to_csv('data/measles_cases_after.csv', index=False) # What happens next
+```
+:::
+
+The data is matched to the model's results by name: the column `cases` is compared with the outcome `cases`, and the column `date` gives the time of each row (the first day of the week). Since each row is a week's total, it is compared with the total of the model's daily cases over that week, the seven days from its date. To attach the data, give it to the sim. Plotting the cases then shows the data with the model's results, here with the starting guesses:
+
+```{python}
+sim = ss.Sim(measles, data=data, **settings)
+sim.run()
+sim.plot('measles.cases')
+```
+
+With the starting guesses, the model's outbreak rises more slowly than the data's.
+
+## Fitting and checking the fit
+
+`sim.fit()` fits every parameter that has bounds (here β and `reported`) to every result that has data (here `cases`). It tries values within the bounds, runs the model with each, and keeps the values whose results are closest to the data. By default, "closest" is the smallest mismatch: the average difference between the model's cases and the data, relative to the size of the data. The fit says how it searched, and whether the search converged (here, whether searches from different starting points ended in the same place):
+
+```{python}
+fit = sim.fit()
+```
+
+The original sim is not changed: the fit holds the values it found (`fit.pars`), the sim with the starting guesses (`fit.before`), and a sim run with the fitted values (`fit.sim`).
+
+A fit always finds some values, so check that they make sense. First, the values, and how much better they fit than the starting guesses:
+
+```{python}
+fit.summarize()
+```
+
+Second, look at the model against the data, before and after fitting:
+
+```{python}
+fit.plot()
+```
+
+The fitted model ("After") follows the rise of the data, with the data scattered around it. Look for departures that are systematic rather than random: a rise that is too steep or too slow, or residuals that are all on one side for weeks at a time. Here, the data scatter on both sides of the model, so the departures look like chance. Third, check what the values imply. R0 is in proportion to β, so with β ≈ 0.17 rather than 0.14, R0 is about 16 × 0.17 / 0.14 ≈ 19, a little above the range usually given for measles (12 to 18), and about a quarter of infections are reported, which is plausible. If a value had ended at the edge of its bounds, or had implied an R0 of 50, the model or the bounds would need another look.
+
+## How sure is the fit?
+
+The fit gives one set of values, but others may fit the data almost as well: in its report above, one of its searches ended at β ≈ 0.145 with about half of infections reported, with a mismatch nearly as small. The data so far cover only the rise of the outbreak, and while an outbreak is growing, a smaller outbreak with more of it reported looks much like a larger outbreak with less of it reported: both give the same rise in reported cases. Only the peak, when susceptible people start to run out, says how many have been infected. When the data can't tell two parameters apart like this, they are not *identifiable* from it (see [Parameter identification](../user_guide/calibration_identification.qmd)).
+
+The range of values consistent with the data is a **posterior**. Finding it takes two more things. A **likelihood** says how the data vary around the model: here, as counts that vary more than Poisson counts (`ss.nbinom(n=20)`, a negative binomial). A **prior** says what is known about a parameter before seeing the data: the share reported was given one above (`prior=`), from earlier outbreaks: about a third of infections, give or take 10 percentage points (a beta distribution with mean 0.35 and variance 0.01, so a standard deviation of 0.1). β has none, so its prior is uniform over its bounds. The best fit above ignored the prior, since it doesn't use a likelihood. The sampler, NUTS, then draws values in proportion to how probable they are, given both:
+
+```{python}
+post = sim.fit(method='nuts', likelihood=dict(cases=ss.nbinom(n=20)), draws=1000, warmup=1000)
+post.summarize()
+```
+
+The table gives, for each parameter, the median and the 95% interval (`lower` and `upper`) of the posterior, with checks that the sampler's chains agree (`rhat` at most 1.01). The interval for the share reported is wide, from under a fifth to almost half: the data so far can't say much more about it than the prior did.
+
+## Projecting from the fit
+
+The data ends in mid-March, but the fitted model runs to September, so it projects the rest of the outbreak. `post.project()` runs the model under each scenario, once for each of a number of draws from the posterior, so that the spread of the runs carries the uncertainty in the values. The scenarios are a campaign that vaccinates 80% of children under 15 on 1 April, two weeks from now, or on 1 May, if it takes six weeks to organize:
+
+```{python}
+def campaign(date):
+    return ss.vaccinate(efficacy=0.93, where=measles.age < 15, coverage=0.8, at=date)
+
+scenarios = {
+    'No campaign':         None,
+    'Campaign on 1 April': campaign('2025-04-01'),
+    'Campaign on 1 May':   campaign('2025-05-01'),
+}
+proj = post.project(scenarios, n=100)
+proj.plot('measles.cases')
+```
+
+```{python}
+proj.summarize().loc['measles_cases']
+```
+
+Without a campaign, the model projects about 2,800 reported cases in all, with a 95% interval of 1,800 to 4,100: the share reported, and so the size of the outbreak, is still uncertain. A campaign on 1 April prevents about 600 of them, since it comes before the peak, when most infections are still to come; a campaign on 1 May, after the peak, prevents only about 100. The projection is uncertain about how big the outbreak will be, but not about the decision: the sooner the campaign, the more it prevents.
+
+## What happened next
+
+Since this data is illustrative, we can see what the coming weeks would have brought, with no campaign. `project()` passes other arguments on to the sims it makes, so it can give them all the data, to plot the projection against it:
+
+```{python}
+after = pd.read_csv('data/measles_cases_after.csv')
+everything = pd.concat([data, after])
+proj = post.project({'No campaign': None}, n=100, data=everything)
+proj.plot('measles.cases')
+```
+
+The outbreak peaked in the week starting 2 April, at 465 reported cases, well above the projection's median of about 350, and 3,470 cases were reported in all, against a median of about 2,800. Both are within the projection's range, near its top: about 40% of infections were in fact reported, which the data up to March couldn't tell from a smaller share. A decision based on the median alone would have underestimated the outbreak, and what the campaign would prevent; one based on the range would not.
+
+This is the usual situation: data from early in an outbreak say how fast it is growing, but not how big it will get, and a projection from them is only as good as its range. [Fitting a model](../user_guide/calibration_fitting.qmd) in the user guide covers fitting stochastic and agent-based models, other ways to measure the mismatch, and the choice of method; [Fit diagnostics](../user_guide/calibration_diagnostics.qmd) covers what else to check.
+
+## Exercises
+
+1. Start the fit from different guesses, e.g. β = 0.3 and 20% reported (`ss.Sim(measles, pars=dict(beta=0.3, reported=0.2), data=data, **settings)`). Does it find the same values?
+2. Find the posterior without the prior on the share reported (make `reported` again with no `prior=`, and the disease from it). How do the interval for the share reported, and the range of the projection, change? What does this say about where the narrower range came from?
+3. How many reported cases would a campaign on 15 April prevent? And one on 1 April that reaches only 50% of children?
+
+[Solutions](solutions.qmd#t7-data-and-calibration) · Next: [T8 – Stratification and co-transmission](t8_strata.qmd)
+
+## Further reading
+
+- [pomp: Simulation-based inference for epidemiological dynamics](https://kingaa.github.io/sbied/): a full course on fitting stochastic epidemic models to case data, with a [case study of measles](https://kingaa.github.io/sbied/measles/index.html)
+- [Stan: Bayesian workflow for disease transmission modeling](https://mc-stan.org/learn-stan/case-studies/boarding_school_case_study.html): fitting an SIR model to an outbreak, with checks of the fit and of its identifiability
+- [epydemix: Calibration of epidemic models to data](https://epydemix.readthedocs.io/en/latest/tutorials/04_Model_Calibration_part1.html): fitting a compartmental model to case data by approximate Bayesian computation

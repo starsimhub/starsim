@@ -1,7 +1,7 @@
 """
 Fuller port of laser_example_orig.py, using Starsim's naming conventions
 
-Requires starsim>=3.0
+Requires starsim>=4.0
 """
 import sciris as sc
 import numpy as np
@@ -26,6 +26,9 @@ class SIRModel(ss.Module):
         )
 
     def step(self):
+        pass # Nothing to do in the step itself
+
+    def record_stocks(self): # Called at the start of each step, so each result is the state at its time point
         ti = self.ti
         susceptible = (self.disease_state == 0).sum()
         infected = (self.disease_state == 1).sum()
@@ -121,7 +124,7 @@ def run_sim(run=True, plot=False):
     sir_model = SIRModel()
 
     # Initialize the model
-    sim = ss.Sim(pars, modules=[intrahost, transmission, sir_model], copy_inputs=False)
+    sim = ss.Sim(pars, modules=[intrahost, transmission, sir_model])
 
     # Run the simulation
     if run:
@@ -129,11 +132,11 @@ def run_sim(run=True, plot=False):
 
     # Plot results
     if plot:
-        sir_model.plot_results()
+        sim.custom.sirmodel.plot_results() # The sim's copy of sir_model, which ran
     return sim
 
 
 if __name__ == '__main__':
     with sc.timer():
-        sir_model = run_sim()
-    sir_model.plot_results()
+        sim = run_sim()
+    sim.custom.sirmodel.plot_results()

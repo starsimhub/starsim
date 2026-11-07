@@ -1,0 +1,304 @@
+---
+title: Population data
+jupyter: python3
+authorship:
+  human: 0
+  ai: 100
+  note: Based on the AI-written v4 drafts (Claude's page on contact matrices and data by place, with the table of source data and the advice on using data of your own from Codex's); the coverage of the data, looking up a place, and the appendices of places and datasets added by AI
+---
+
+A model of a particular setting needs data about its people: how many there are and of what ages, how fast they are born and die, and who has contact with whom. Starsim has these for 187 countries and territories, by name, and takes data of your own in the same forms. This page covers the data that comes with Starsim, contact matrices (by age and by other groups, under compartments and agents), and using data of your own.
+
+These data describe a setting; they don't set the disease's parameters, and a model that uses them still needs checking against data on the disease itself (see [Fitting a model](calibration_fitting.qmd)). Networks of individual contacts are on [Contact networks](populations_networks.qmd), places and the movement between them on [Geography](populations_geography.qmd), and the tutorial [T4 – Age groups and contacts](../tutorials/t4_ages.qmd) uses a contact matrix for measles.
+
+## Data by place
+
+The data by place comes from the package `starsim_data`: populations by age and sex, rates of birth, death, fertility, and migration, contact matrices, and administrative units (counties, provinces, and states). Coverage differs by dataset: the UN's demographic data is there for 187 countries and territories, the default contact matrices for 177 of them, and the first-level administrative units for 184. What is small and common is bundled with the package, so it needs no download: the UN data, the contact matrices of Prem et al., and administrative units at levels 0 (the country) and 1 (its counties, provinces, or states). The rest (the units at level 2, populations for another year, and the other contact matrices) is downloaded on first use and kept in a cache. Which places have which data is in the [appendix](#appendix-every-place-and-its-data). The model objects that use a place take its name, and `ss.data` gives the data itself, for looking at or using elsewhere:
+
+| What | In a model | The data itself |
+|---|---|---|
+| Population by age and sex (UN World Population Prospects) | `ss.population('Kenya')` | `ss.data.population('Kenya')`, `ss.data.age('Kenya')` |
+| Contact matrix by 5-year age group (Prem et al. 2021) | `ss.contacts('Kenya')` | `ss.data.contacts('Kenya')` |
+| Birth and death rates by year (and by age and sex, for deaths) | `ss.Births(birth_rate='Kenya')`, `ss.Deaths(death_rate='Kenya')` | `ss.data.rates('Kenya', 'births')`, `ss.data.rates('Kenya', 'deaths')` |
+| Fertility rates by year and 5-year age group of the mother | `ss.Pregnancy(fertility_rate='Kenya')` | `ss.data.rates('Kenya', 'fertility')` |
+| Net migration rates by year | (see [Demographics](populations_demographics.qmd#migration)) | `ss.data.rates('Kenya', 'migration')` |
+| Administrative units, with their populations and positions | `ss.geo.geography('Kenya', level=1)` | `ss.data.geography('Kenya', level=1)` |
+
+A named population gives the sim its size (`total_pop`) and the share of people in each age group, so a model stratified by age needs no shares of its own; as agents, it gives the agents their ages and sex (see [People and agents](populations_people.qmd)). Birth and death rates are on [Demographics](populations_demographics.qmd), and administrative units on [Geography](populations_geography.qmd).
+
+`ss.population()` and `ss.contacts()` take a year and a source: `ss.population('Kenya', year=2030)` (from 1950 to 2100, with the years between the UN's decadal values interpolated), and `ss.contacts('Japan', source='mistry2021')` for the matrices of Mistry et al. (2021), by single year of age, for 36 countries (the sources are listed in the [appendix](#appendix-every-dataset)). A US state is named with its country, `ss.population('United States:Massachusetts')` and `ss.contacts('United States:Massachusetts')`, from the US Census and Mistry et al. The data is given as tables (dataframes), with the age groups labeled as a stratification by age labels them (`'0-4'`, `'5-9'`, ..., `'100+'`) and where the data came from in `.attrs['ref']`:
+
+```{python}
+import starsim as ss
+
+births = ss.data.rates('Kenya', 'births') # Crude birth rates per 1,000 people, by year
+print(births.head())
+
+pop = ss.data.population('Kenya', year=2024) # Women and men by 5-year age group
+print(pop.head())
+print('Population of Kenya in 2024:', round(pop.values.sum()))
+print('Source:', pop.attrs['ref']['study'])
+```
+
+Every piece of data records where it came from, which `describe()` shows. Record the source and year with an analysis: the data don't all have the same reference year.
+
+### Looking up a place
+
+A place can be named in several ways: by its name (`'Kenya'`), its ISO code (`'KE'` or `'KEN'`), its official name, or a common alias (`'Czechia'` for the Czech Republic), without regard to case or accents. `starsim_data` can say what it has for a place, and plot it as a check before it goes into a model, here an age pyramid, the crude birth rate over time, death rates by age, and the contact matrix:
+
+```{python}
+import starsim_data as ssd
+
+info = ssd.location_info('KEN') # The name, codes, aliases, and sources of the contact matrices
+print(info.location, info.iso3, info.official_name, '- contact matrices:', info.contact_sources)
+print('Places with a contact matrix of Prem et al. 2021:', len(ssd.list_locations('prem2021')))
+ssd.plot('Kenya');
+```
+
+`ssd.list_locations(dataset)` lists the places in a dataset, and `ssd.list_datasets(detailed=True)` the datasets, as in the appendices below. The data that is downloaded is kept in a cache (`ssd.cache_dir()`; `ssd.cache_info()` lists what is in it), so it is downloaded once; on a computer with no connection to the internet, a dataset that is not bundled or already in the cache raises a `ConnectionError` that says so.
+
+The UN's net migration rates (`ss.data.rates('Kenya', 'migration')`, per 1,000 people a year, positive for more people arriving than leaving) are part of the UN's estimates of the population, so a model with births and deaths but no migration drifts from the UN's totals where migration is large. [Demographics](populations_demographics.qmd#migration) shows how to use them.
+
+## A contact matrix by age
+
+A contact matrix needs groups to act between, so the model is stratified by age first (see [Stratification](building_stratification.qmd)): here into children (0–14), adults (15–64), and older people (65+), with the share of the population in each. `ss.contacts()` takes the matrix and the lower edge of each of its age groups. With a contact matrix, β is the probability that a contact with an infectious person infects.
+
+The infection here is a flu-like one, much less transmissible than measles, so that the differences between groups show:
+
+```{python}
+import starsim as ss
+
+S, I, R = ss.states('S I R')
+infection = S >> I @ 0.03*I       # β = 0.03 per contact
+recovery  = I >> R @ ss.days(5)   # Infectious for 5 days on average
+flu = ss.Disease(infection, recovery, init_prev=0.001)
+flu.stratify(age={0: 0.3, 15: 0.6, 65: 0.1}) # Ages 0-14, 15-64, and 65+, with the share of people in each
+
+contacts = ss.contacts(ages=[0, 15, 65], matrix=[[10, 4, 0.5], [2, 8, 0.5], [1.5, 3, 2]]) # Contacts a day
+sim = ss.Sim(flu, networks=contacts, total_pop=100_000, stop=ss.days(150))
+sim.run()
+sim.results.flu.I.by('age').plot()
+```
+
+Children have the most contacts, mostly with each other, and older people the fewest, so the share infected falls with age:
+
+```{python}
+infections = sim.results.flu.infection.by('age').summarize() # The total in each age group
+people = [30_000, 60_000, 10_000]
+print('Share infected in each age group:', (infections/people).round(2))
+```
+
+The R0 that the sim prints comes from the matrix: with a contact matrix, R0 is β × the infectious period × the largest eigenvalue of the matrix, which is about 12.2 here, so R0 = 0.03 × 5 × 12.2 ≈ 1.8.
+
+To see what the matrix adds, compare it with homogeneous mixing with the same R0: a mixing pool with 12.2 contacts a day for everyone:
+
+```{python}
+homogeneous = ss.Sim(flu, networks=ss.MixingPool(n_contacts=12.2), total_pop=100_000, stop=ss.days(150), verbose=0)
+homogeneous.run()
+print('Share infected, homogeneous mixing:', (homogeneous.results.flu.infection.by('age').summarize()/people).round(2))
+print('Infections, contact matrix:', round(sim.results.flu.infection.sum()))
+print('Infections, homogeneous mixing:', round(homogeneous.results.flu.infection.sum()))
+```
+
+With homogeneous mixing, every age group has the same share infected, 74%. With the matrix, children, who have the most contacts, are infected most and older people least, and fewer people are infected in all, though R0 is the same: the epidemic burns out among the groups that drive it while others are still mostly susceptible. Who is infected matters for anything that differs by age, such as severity, and for targeting interventions.
+
+### Reciprocity
+
+Each contact between two groups is counted from both sides: the contacts that children have with adults, over all children, should equal those that adults have with children, over all adults. So with *N* the number of people in each group, *N*~i~ × *C*~ij~ = *N*~j~ × *C*~ji~. The matrix above is reciprocal for the shares given: 30% of people with 4 contacts each with adults, and 60% with 2 each with children. A matrix from a contact survey is reciprocal for the population surveyed but not necessarily for the model's own; Starsim uses a matrix as given, with each row as the contacts of a person in that group, and says so in a note when it is not reciprocal for the model's shares (for a matrix with its own age groups, once it is aggregated to the model's).
+
+## The forms of a matrix
+
+`ss.contacts()` takes a matrix and what it is over:
+
+| Form | Example | The groups |
+|---|---|---|
+| A matrix with its own age groups | `ss.contacts(matrix, ages=[0, 15, 65])` | The matrix's own, given by their lower edges; they need not be the model's |
+| A matrix over the model's groups | `ss.contacts(matrix)` (its age groups), `ss.contacts(matrix, dims='risk')` | The levels of the model's stratification by that name, in order |
+| One matrix over several stratifications together | `ss.contacts(matrix, dims=['sex', 'risk'])` | Every combination of their levels |
+| A matrix for each of several stratifications | `ss.contacts(dict(age=..., risk=...))` | Every combination of their levels, with the product of the entries for each |
+| A country's matrix, by name | `ss.contacts('Kenya')` | 5-year age groups, from a published study |
+
+A matrix with its own age groups suits data, which comes with the age groups of the study. In a compartmental run it is aggregated to the model's age groups, weighted by population, with a note that says so. As agents, each person has an exact age and is counted in whichever of the matrix's groups it falls in.
+
+Groups need not be ages. A list of names makes groups of any kind, and `ss.contacts()` then takes a matrix over them, with the name of the stratification as `dims=`. Here 20% of people are at high risk, and they have four times as many contacts with each other as people at low risk have:
+
+```{python}
+S, I = ss.states('S I')
+infection = S >> I @ 0.05*I
+recovery  = I >> S @ ss.days(10) # No lasting immunity
+sis = ss.Disease(infection, recovery, init_prev=0.01)
+sis.stratify(risk={'low': 0.8, 'high': 0.2})
+
+mixing = ss.contacts([[2, 1], [4, 8]], dims='risk') # Reciprocal: 80% × 1 = 20% × 4
+sim = ss.Sim(sis, networks=mixing, total_pop=100_000, stop=ss.days(200))
+sim.run()
+sim.results.sis.I.by('risk').plot()
+```
+
+With a matrix for each of several stratifications (`ss.contacts(dict(age=..., risk=...))`, with `ages=` if the one by age has its own age groups), the contacts between two groups are the product of the entries for each. When that is not how people mix (men mix with women, and by risk differently for each sex), one matrix over the stratifications together says it, with an axis for each, rows before columns:
+
+```python
+import numpy as np
+matrix = np.zeros((2, 2, 2, 2)) # [sex, risk, sex, risk], with sex ['female', 'male'] and risk ['low', 'high']
+matrix[0, :, 1, :] = [[0.8, 0.2], [0.5, 1.5]] # Women's contacts with men
+matrix[1, :, 0, :] = [[0.8, 0.5], [0.2, 2.0]] # Men's contacts with women
+mixing = ss.contacts(matrix, dims=['sex', 'risk'])
+```
+
+### Units
+
+The entries of a matrix are contacts per unit time, in the sim's unit unless `unit=` says otherwise (e.g. `ss.contacts(matrix, ages=[0, 15], unit='day')`). A country's matrix is always contacts a day, as the studies give them, whatever the sim's unit.
+
+## What a matrix acts on
+
+The rate of the infection says what the matrix multiplies: the share of each group who are infectious, their number, or their number as a share of everyone. With *C* the matrix, *I*~j~ and *N*~j~ the number infectious and the number of people in group *j*, and *N* everyone:
+
+| The rate | The force of infection on group *i* | The matrix is | As in |
+|---|---|---|---|
+| `beta*I` | β Σ~j~ *C*~ij~ *I*~j~ / *N*~j~ | Contacts per person with each group, and β is per contact | Contact surveys and the matrices of countries; frequency-dependent models |
+| `beta*I.n` | β Σ~j~ *C*~ij~ *I*~j~ | A rate for each pair of people (density-dependent) | Lloyd & Jansen (2004), and metapopulation models in densities |
+| `beta*I.frac`, or `beta*I.n/N` | β Σ~j~ *C*~ij~ *I*~j~ / *N* | A rate on the share of everyone who are infectious in each group | Keeling & Rohani (2008), chapter 3; the WAIFW (who acquires infection from whom) matrices of Bjørnstad (2018) |
+
+So a matrix from a textbook goes in as the textbook gives it, with the rate written as the textbook writes it, and no rescaling (rescaling a matrix by *N*~j~ / *N* is exact only while the groups keep their sizes, which they don't with aging, births, or migration). Keeling & Rohani's Program 3.1, an SIS in a high- and a low-risk group whose β acts on shares of the whole population, is:
+
+```{python}
+import numpy as np
+beta = np.array([[10, 0.1], [0.1, 1]]) # Per year: row i is the group infected, column j the group infecting
+S, I = ss.states('S I')
+sis = ss.Disease(S >> I @ I.frac, I >> S @ ss.peryear(1), init=dict(I=ss.by(risk=[1e-5/0.2, 1e-3/0.8])), name='sis')
+sis.stratify(risk={'high': 0.2, 'low': 0.8})
+sim = ss.Sim(sis, networks=ss.contacts(beta, dims='risk'), total_pop=1, stop=15, unit='year')
+sim.run()
+print('Infectious at year 15, as shares of everyone:', sim.results.sis.I.by('risk').values[-1].round(6)) # The book's 0.100132 and 0.026810
+```
+
+The β is in the matrix, so the rate is just `I.frac`; the same model as counts is `S >> I @ I.n/N` with `N` the size of the population. For a matrix on counts, as in Lloyd & Jansen's metapopulation, where patch *i* is infected at Σ~j~ β~ij~ *I*~j~ from the number infectious in every patch:
+
+```python
+seir = ss.Disease(S >> E @ I.n, E >> I @ ss.perday(1/3), I >> R @ ss.perday(1/3), name='seir') # With beta a 20 × 20 matrix of rates per day
+seir.stratify(patch=[f'patch{i}' for i in range(20)], kind='space')
+sim = ss.Sim(seir, networks=ss.contacts(beta, dims='patch'), total_pop=20, unit='day')
+```
+
+`equations()` says what a matrix acts on in each rate. Only contact matrices act on a count: other networks (a mixing pool of everyone, or a network of individual contacts) don't, and `I.total` is always the whole population. A matrix acts on a count of the disease's own states in the rate of an infection (`I.n` in `S >> I @ beta*I.n`); in a model with places, *N* is everyone in the same place. It acts on a weighted count in the same way: `beta*(ss.by(risk=w)*I).n` is β Σ~j~ *C*~ij~ *w*~j~ *I*~j~, and `beta*I.n_infectious` weights each group by its infectiousness (its `rel_trans`, with any product or modifier on it). As agents, a matrix acts on a count in the same way, if it is over the model's own groups (e.g. `ss.contacts(matrix, dims='risk')`, or `ss.contacts(matrix)` over the model's age groups).
+
+## Contact matrices by setting
+
+A country's contact matrix can be split by setting: `ss.contacts('Kenya', layer=['home', 'school', 'work', 'community'])` gives a matrix for each, named after it, which together make up the whole (`layer='all'`, the default, is the whole). Every source has these four settings. By default, a country's matrix is from Prem et al. (2021), which is bundled; for the 10 places it lacks, including Japan and Australia, it is from their earlier matrices (2017), downloaded on first use, so every one of the 187 places has a matrix. `source=` picks one study (`'prem2021'`, `'prem2017'`, or `'mistry2021'`), and the reference of a matrix (`.attrs['ref']`) says which it came from. Each can then be changed on its own with `ss.modify()`; here schools close from day 10:
+
+```{python}
+S, I, R = ss.states('S I R')
+infection = S >> I @ 0.03*I
+recovery  = I >> R @ ss.days(5)
+flu = ss.Disease(infection, recovery, init_prev=0.001)
+flu.stratify(age=[0, 5, 15, 65]) # The shares in each come from the population
+
+layers = ss.contacts('Kenya', layer=['home', 'school', 'work', 'community'])
+home, school, work, community = layers
+closure = ss.modify(school, multiply=0, start=ss.days(10)) # No school contacts from day 10
+
+kw = dict(people=ss.population('Kenya'), networks=layers, stop=ss.days(100), verbose=0)
+scenarios = {
+    'Schools open': ss.Sim(flu, **kw),
+    'Schools closed from day 10': ss.Sim(flu, interventions=closure, **kw),
+}
+msim = ss.parallel(scenarios)
+msim.plot('flu.I')
+```
+
+See [Interventions](interventions_interventions.qmd) for `ss.modify()`. Each layer's matrix is also in `ss.data`, as a table by age group, which `ss.contacts()` also takes (e.g. after changing it):
+
+```{python}
+school = ss.data.contacts('Kenya', layer='school')
+print('Age groups:', list(school.index))
+print('Contacts a day of a child aged 10-14 at school with children aged 10-14:', round(school.loc['10-14', '10-14'], 1))
+print('Source:', school.attrs['ref']['study'])
+```
+
+## Contact matrices as agents
+
+Everything above runs as agents too. Given `n_agents`, the people take their ages from the population, and each agent is counted in the matrix's age groups by its exact age:
+
+```{python}
+sim = ss.Sim(flu, people=ss.population('Kenya', n_agents=10_000), networks=layers, stop=ss.days(100), verbose=0)
+sim.run()
+sim.results.flu.I.by('age').plot()
+```
+
+As agents, a contact matrix works as a set of mixing pools, one for each pair of groups (`ss.networks.MixingPools`; see [Contact networks](populations_networks.qmd#mixing-pools)). It is not a network: nobody has particular contacts, so contact tracing needs a network instead.
+
+## Data of your own
+
+Data of your own takes the same forms as the data by place. Ages are a table of counts or shares by age group, for `ss.People(n_agents, age_data=...)` (see [People and agents](populations_people.qmd#ages-and-sex)), and `ss.data.age()` gives a country's in that form, for a different year or to change before use:
+
+```{python}
+ppl = ss.People(10_000, age_data=ss.data.age('Kenya', year=2000))
+```
+
+For data by 5-year age group and a model with other age groups, `ss.data.age_split(edges, ages, counts)` gives the share of people in each of the model's groups (with ages spread evenly within each 5-year group), and `ss.data.age_labels(edges)` labels groups as Starsim does (`'0-14'`, `'15-64'`, `'65+'`).
+
+Birth and death rates are tables by year (and by sex and age for deaths), for `ss.Births()` and `ss.Deaths()` (see [Demographics](populations_demographics.qmd#data-of-your-own)); a contact matrix is an array, with the lower edges of its age groups, for `ss.contacts(matrix, ages=...)`, as above, or a table labeled by age group (`'0-14'`, `'15-64'`, `'65+'`), as `ss.data.contacts()` gives, for `ss.contacts(table)`; and places are a table of names, populations, and positions, for `ss.geo.geography()` (see [Geography](populations_geography.qmd)).
+
+Data on the disease itself (cases, deaths, prevalence) is a different input: it is given to the sim with `data=`, to plot with the results and fit the model to (see [Fitting a model](calibration_fitting.qmd)). Before using any data, check its units, its denominators, and the period it covers: a contact survey gives contacts a day, a crude birth rate is per 1,000 people a year, and a blank cell means not observed, while a zero is a count of none.
+
+## Pitfalls
+
+- **A contact matrix needs groups.** `ss.contacts(...)` or `ss.contacts(..., dims='risk')` on a model that is not stratified by that name raises an error that says to stratify it. A matrix with its own age groups, on a model with no age groups, stratifies it by the matrix's groups, with the shares of the world's population in each: a guess, which `describe()` marks. Give the shares (or a named population) if they matter.
+- **β is per contact.** Adding a contact matrix to a model whose β was a rate per day with homogeneous mixing multiplies its R0 by roughly the mean number of contacts. Check the R0 that the sim prints.
+- **Whose age groups.** `ss.contacts(matrix, ages=[...])` has the matrix's own age groups, regrouped to the model's; `ss.contacts(matrix)` is over the model's own age groups, so its shape has to match them.
+- **Reciprocity.** A matrix that is not reciprocal for the model's population means groups disagree about how many contacts they have with each other. Starsim uses it as given; check a matrix that you wrote by hand.
+- **Units.** A bare matrix is contacts per unit time in the sim's unit. In a sim whose unit is years, `matrix=[[10, ...]]` means 10 contacts a year; give `unit='day'` for contacts a day.
+
+The API reference for this page: [ss.data](../api/data.qmd).
+
+## Further reading
+
+- [UN World Population Prospects](https://population.un.org/wpp/): the populations, birth rates, and death rates that come with Starsim
+- [Prem et al. 2021: Projecting contact matrices in 177 geographical regions](https://doi.org/10.1371/journal.pcbi.1009098): the source of the contact matrices by country
+- [socialmixr: Contact matrices from surveys](https://epiforecasts.io/socialmixr/): an R package for making contact matrices from the POLYMOD and other contact surveys
+- [epydemix: Populations](https://epydemix.readthedocs.io/en/latest/guide/populations.html): populations and contact matrices by place, for compartmental models
+
+## Appendix: every dataset
+
+The datasets of `starsim_data`, with how each is reached: bundled with the package, fetched (downloaded on first use from the files published with it), or downloaded from the original source (here, the UN), and the administrative levels and number of places each has:
+
+```{python}
+datasets = ssd.list_datasets(detailed=True)
+datasets[['dataset', 'description', 'access', 'levels', 'locations', 'license']]
+```
+
+The contact matrices (`prem2021`, `prem2017`, `prem`, `mistry2021`, and, for US states, `mistry2021_us`) are the `source=` of `ss.contacts()` and `ss.data.contacts()`. Those of Prem et al. are by 5-year age group, from 0-4 to 75+; those of Mistry et al. by single year of age, from 0 to 84+. Each has the settings `'home'`, `'school'`, `'work'`, and `'community'` (`layer=`), and their sum, `'all'`. The administrative units at level 2 and below are not in a dataset of their own: `ss.geo.geography(place, level=2)` downloads the boundaries (from geoBoundaries or UN OCHA, where they have that level for the place) and the populations, and needs the optional geopandas (`pip install starsim_data[spatial]`). `indicators` and `life_table` are the UN's other tables, which `ssd.download(place, which='life_table')` gives.
+
+## Appendix: every place and its data
+
+Every place that has data, with its ISO code, the contact matrices it has, and its number of first-level administrative units (blank where there are none bundled). Every place listed has the UN's population, birth, death, fertility, and migration data:
+
+```{python}
+import pandas as pd
+
+places = ssd.list_all_locations()
+sources = ['prem2021', 'prem2017', 'mistry2021']
+has = {source: set(ssd.list_locations(source)) for source in sources}
+with_units = set(ssd.list_locations('nodes'))
+un_data = all(set(ssd.list_locations(ds)) == set(places) for ds in ['population', 'births', 'deaths', 'fertility', 'migration'])
+print('Every place has all the UN data:', un_data)
+
+rows = []
+for place in places:
+    row = dict(place=place.replace('_', ' '), code=ssd.location_info(place).iso3)
+    row['contact matrices'] = ', '.join(source for source in sources if place in has[source])
+    row['level-1 units'] = len(ssd.load_nodes(place, level=1)) if place in with_units else None
+    rows.append(row)
+table = pd.DataFrame(rows).set_index('place')
+table['level-1 units'] = table['level-1 units'].astype('Int64')
+print(len(table), 'places')
+```
+
+::: {.callout-note collapse="true" title="The table of places"}
+```{python}
+pd.set_option('display.max_rows', 250)
+table
+```
+:::
+
+US states are named with their country, e.g. `'United States:Massachusetts'`, and have their own populations (from the US Census) and contact matrices (Mistry et al.); `ssd.list_locations('population_us')` lists them.

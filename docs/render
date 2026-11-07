@@ -5,6 +5,7 @@ set -euo pipefail # Fail fast if needed
 SECONDS=0
 
 # Do the render!
+export STARSIM_SKILL_NOTE=0 # No note from Starsim in the output of the pages
 quarto render $@
 
 echo -e "Done: docs built in ${SECONDS} s"

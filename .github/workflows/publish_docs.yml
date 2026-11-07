@@ -6,13 +6,13 @@ name: Publish docs
 on:
   push:
     tags:
-      - 'v*'
+      - 'v[0-9]+.[0-9]+.[0-9]+' # Not pre-releases, which aren't what pip installs, so leave the docs alone
   workflow_dispatch:
 
 jobs:
   publish:
     name: Quarto
-    timeout-minutes: 15
+    timeout-minutes: 45
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -25,15 +25,11 @@ jobs:
       with:
         python-version: "3.13"
 
-    - name: Install Starsim
-      run: pip install -e .[dev]
+    - uses: ./.github/actions/install
+      with:
+        extras: '[dev]'
 
-    - name: Set up Quarto
-      uses: quarto-dev/quarto-actions/setup@v2
-
-    - name: Install Quarto interlinks
-      working-directory: ./docs
-      run: quarto add machow/quartodoc --no-prompt
+    - uses: ./.github/actions/quarto
 
     - name: Custom Quarto publish
       working-directory: ./docs

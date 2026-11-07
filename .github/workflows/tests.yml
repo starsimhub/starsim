@@ -7,16 +7,21 @@ on:
       - main
   pull_request:
 
+concurrency: # A newer push to a pull request replaces its older runs, which would only queue ahead of it
+  group: tests-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   install_and_test:
     name: Tests
-    timeout-minutes: 5
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       max-parallel: 8
       matrix:
         os: ['ubuntu-latest']
-        python-version: ['3.11', '3.14']
+        python-version: ['3.12', '3.14']
+        kernels: ['rust', 'numba'] # The suite with each (both are built, so test_kernel_sets.py compares them either way)
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout sources
@@ -25,14 +30,19 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           architecture: x64
-      - name: Install Starsim
-        run: pip install -e .[dev]
+      - uses: ./.github/actions/install
+        with:
+          extras: '[dev]'
+          numba: true
       - name: Run API tests
         working-directory: ./tests
-        run: pytest test_*.py -n auto --durations=0 --junitxml=test-results.xml # Run actual tests
+        env:
+          STARSIM_KERNELS: ${{ matrix.kernels }}
+          STARSIM_RUST_REQUIRED: 1 # So the comparison with Rust's kernels fails rather than skips if they weren't built
+        run: pytest test_*.py -n logical --durations=0 --junitxml=test-results.xml # Run actual tests; logical since auto counts physical cores, 2 on GitHub's runners
       - name: Publish Test Report
         uses: mikepenz/action-junit-report@v6
         if: always()
         with:
           report_paths: './tests/test-results.xml'
-          check_name: 'Test Report (Python ${{ matrix.python-version }})'
+          check_name: 'Test Report (Python ${{ matrix.python-version }}, ${{ matrix.kernels }})'
