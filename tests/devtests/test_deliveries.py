@@ -1087,7 +1087,7 @@ def test_weighted_counts():
     # Shedding by infectiousness: a treatment that halves it halves what the treated shed
     def shed(solver, eff):
         S, A = ss.states('S A')
-        E = ss.State('E', people=False)
+        E = ss.State(people=False)
         d = ss.Disease(infection=S >> A @ ss.perday(0.001)*E.n/(S + A).n, recovery=A >> S @ ss.days(20), shed=ss.outside >> E @ ss.perday(1.0)*A.n_infectious, decay=E >> ss.dead @ ss.days(1), init_prev=0.1, name='ty')
         drug = ss.Treatment(efficacy=dict(transmission=eff), during=d.A, name='drug')
         size = dict(n_agents=10_000) if solver == 'abm' else dict(total_pop=10_000)

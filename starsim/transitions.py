@@ -39,29 +39,29 @@ class State(Nameable, Expr):
     over agents when it runs as agents; the declaration is the same.
 
     Args:
-        name (str): the name; if not given, taken from the keyword or the variable the state is assigned to
+        label (str): a human-readable name, for plots (e.g. `S = ss.State('Susceptible')`)
         init (float): the share of people who start in the state (1.0 is everyone); for a state that is not people, its starting amount
         init_n (int): instead, the number of people who start in the state
         people (bool): whether this state holds people (the default), or is a count of something else (`people=False`: bacteria in the water, mosquitoes); `people=True` says so explicitly, for a group of people that only an inflow fills
         rel_sus (float): susceptibility multiplier while in this state (one value; for a value by group, see `stratify(adjust=)`)
         rel_trans (float): infectiousness multiplier while in this state (likewise)
-        infected (bool): whether the people in it are infected; the disease then has the results `infected`, the number in its infected states, and `prevalence`, their share of everyone in its states (unless it defines its own)
+        infected (bool): whether the people in it are infected, which the disease otherwise works out from its force of infection (the states people are infected into, and those that infect them: `E` and `I` in `S >> E @ beta*I`); once any state is said to be, the infected states are exactly those said to be. The disease's infected states give the results `infected`, the number in them, and `prevalence`, their share of everyone in its states (unless it defines its own); `infected = E + I`, given to the disease, says the same for several states
         keep_time (bool): as agents, keep the time each person entered the state (`ti_<name>`) for code to read, e.g. the years since onset; by default it is kept only if the model reads it (a clock, a scheduled exit), to save memory
-        label (str): a human-readable name, for plots
+        name (str): the name, if it is not the variable or keyword the state is given as (which it is taken from); a state that no variable holds takes its label as its name, if that is one word (`ss.Disease(ss.State('S'), ...)`)
 
     Examples:
         ```python
         S, R = ss.states(2)
         I = ss.State(init=0.01)     # 1% of people
         E = ss.State(init_n=10)     # 10 people
-        V = ss.State(rel_sus=0.2, label='Vaccinated')
+        V = ss.State('Vaccinated', rel_sus=0.2)
         A = ss.State(keep_time=True) # Code reads mod.ti_A
-        E, I = ss.states(2, infected=True) # Counted in the results infected and prevalence
+        H = ss.State('Hospitalized', infected=True) # Counted in the results infected and prevalence, though it does not transmit
         ```
     """
     _counter = itertools.count() # States are ordered by when they were created
 
-    def __init__(self, name=None, init=None, init_n=None, people=None, rel_sus=1.0, rel_trans=1.0, infected=False, keep_time=False, label=None, **kwargs):
+    def __init__(self, label=None, init=None, init_n=None, people=None, rel_sus=1.0, rel_trans=1.0, infected=False, keep_time=False, name=None, **kwargs):
         if kwargs:
             raise TypeError(f'ss.State() got unexpected arguments: {sc.strjoin(kwargs)}')
         self.name = name
@@ -70,7 +70,8 @@ class State(Nameable, Expr):
         self.declared_init = (init, init_n) # As declared, before a disease's init= or init_n= (see ss.graph.Graph), so a copy for another disease starts from these
         self.people = people is not False
         self.people_given = people is not None # Said explicitly, so not checked (see ss.graph.Graph.check_counts())
-        self.infected = bool(infected) # Whether the people in it are infected, as the model says: the states counted in the results infected and prevalence (see ss.graph.Graph.resolve_derived())
+        self.infected_given = bool(infected) # Whether the model says the people in it are infected
+        self.infected = self.infected_given # Whether they are, as the disease works out (see ss.graph.Graph.resolve_derived()): the states counted in the results infected and prevalence
         self.infectious = False # Whether it is a source of infection: in the rate of a transmission (see ss.graph.Graph.resolve_transitions())
         for key,val in dict(rel_sus=rel_sus, rel_trans=rel_trans).items():
             if isinstance(val.raw if isinstance(val, par) else val, by): # The engines take one number for everyone in a state
@@ -155,13 +156,15 @@ class State(Nameable, Expr):
         return Count([self], kind='total')
 
 
-def states(arg, **kwargs):
+def states(arg, infected=False, **kwargs):
     """
     Create several states at once
 
     Args:
         arg (int/str): the number of states, which take their names from the variables they
             are assigned to; or a string of names (e.g. `'S I R'`), which are used directly
+        infected (bool/str/list): which of them are infected (see `ss.State`): all of them (`True`); some, by name, with names given
+            up front (`'E I'`); or some, by position, with a number of states (`[1, 2]`, or `range(1, 6)`)
         kwargs (dict): passed to each `ss.State`, e.g. `people=False`
 
     Examples:
@@ -169,13 +172,35 @@ def states(arg, **kwargs):
         S, I, R = ss.states(3)
         S, I, R = ss.states('S I R') # The same, with the names given up front
         Sv, Ev, Iv = ss.states(3, people=False) # Mosquitoes: counts, not people
+        S, E, I, H, R = ss.states('S E I H R', infected='E I H') # H does not transmit, so is not infected unless said
+        S, E, I, H, R = ss.states(5, infected=range(1, 4)) # The same, by position
         ```
     """
     if isinstance(arg, str):
-        out = [State(name, **kwargs) for name in arg.replace(',', ' ').split()]
+        names = arg.replace(',', ' ').split()
+        n = len(names)
     else:
-        out = [State(**kwargs) for i in range(arg)]
-    return out
+        names = [None]*arg
+        n = arg
+    if isinstance(infected, (bool, np.bool_)):
+        flags = [bool(infected)]*n
+    elif isinstance(infected, str):
+        if not isinstance(arg, str):
+            raise TypeError(f'infected={infected!r} names states, so the states need names too, e.g. ss.states(\'S E I R\', infected=\'E I\'); with a number of states, give their positions, e.g. infected=[1, 2]')
+        chosen = infected.replace(',', ' ').split()
+        unknown = [name for name in chosen if name not in names]
+        if unknown:
+            raise ValueError(f'infected= names {sc.strjoin(unknown)}, which {"is not one" if len(unknown) == 1 else "are not"} of the states {sc.strjoin(names)}')
+        flags = [name in chosen for name in names]
+    else:
+        if isinstance(arg, str):
+            raise TypeError(f'with the states named ({arg!r}), name the infected ones too, e.g. infected=\'E I\', not {infected!r}')
+        chosen = [int(i) for i in (infected if np.iterable(infected) else [infected])]
+        bad = [i for i in chosen if not 0 <= i < n]
+        if bad:
+            raise ValueError(f'infected= gives the positions {bad} of states, but there are {n} (positions 0 to {n-1})')
+        flags = [i in chosen for i in range(n)]
+    return [State(name=name, infected=flag, **kwargs) for name,flag in zip(names, flags)]
 
 
 def pars(defaults, **kwargs):

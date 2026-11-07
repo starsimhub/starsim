@@ -236,7 +236,7 @@ def test_names():
         ss.Sim(make_sir(), data=pd.DataFrame({'time': [50], 'I': [10]}), stop=100, **kw).fit()
 
     # Operators that would silently drop something
-    W = ss.State('W', people=False) # The water first: the first state of people is still S
+    W = ss.State(people=False) # The water first: the first state of people is still S
     S, I, R = ss.states('S I R')
     water = ss.Disease(S >> I @ ss.perday(0.5)*W.n/(W.n + 1e5), I >> R @ ss.days(5), ss.unborn >> W @ 10*I.n, W >> ss.dead @ ss.days(30), init=dict(I=0.001), name='water')
     assert [s.name for s in water.graph.people_states] == ['S', 'I', 'R']
@@ -606,7 +606,7 @@ def test_describe():
     seeded = ss.Sim(ss.Disease(S >> I @ ss.perday(0.1)*I.n, I >> R @ ss.days(1), init_n=dict(I=1)), total_pop=21, **kw)
     assert np.isclose(seeded.init().diseases[0].R0(), 0.1*20) # β(N - 1)/γ (it was βN/γ = 2.1)
     S, I, R = ss.states('S I R')
-    H = ss.State('H', rel_sus=2) # At high risk
+    H = ss.State(rel_sus=2) # At high risk
     inflow = ss.Disease(S + H >> I @ ss.perday(0.2)*I, I >> R @ ss.days(5), ss.unborn >> S @ ss.perday(8), ss.unborn >> H @ ss.perday(2), ss.death(rate=ss.perday(0.001)),
                         init_n=dict(S=990, I=10), name='inflow')
     split = ss.Sim(inflow, total_pop=1000, unit='day', **kw).init()
@@ -1443,7 +1443,7 @@ def test_split_null():
     with pytest.raises(TypeError, match=r'ss.dead.*alone'):
         ss.Sim(ss.Disease(S, I, x=ss.Transition([I, ss.dead], S, rate=0.1), name='x'), n_agents=100, verbose=0).init()
     S, E, P, A = ss.states('S E P A')
-    assert 'prevalence' not in ss.Disease(S, E, infection=S >> E @ 0.3*E, recovery=E >> S @ ss.days(5)).graph.exprs # Not guessed: only from states marked infected
+    assert 'prevalence' in ss.Disease(S, E, infection=S >> E @ 0.3*E, recovery=E >> S @ ss.days(5)).graph.exprs # From the force of infection: E is infected
     assert 'E + P + A' in repr(ss.Transition(E | P | A, S, rate=0.1)) # Printed before it is built
     with pytest.raises(TypeError, match=r'\[E, P, A\].*E \+ P \+ A'):
         ss.Sim(ss.Disease(S, E, P, A, x=ss.Transition(E | P | A, S, rate=0.1), name='x'), n_agents=100, verbose=0).init()
@@ -1542,9 +1542,9 @@ def test_branch_ends():
 
 @sc.timer()
 def test_infected_sources():
-    sc.heading('Testing that a source of infection counts as infected when only some states are marked, and that alive exists during a compartmental run')
+    sc.heading('Testing that only the states marked infected count when some are marked, even without a source of infection, and that alive exists during a compartmental run')
     S, I, R = ss.states('S I R')
-    E = ss.State(name='E', infected=True) # I, the source of infection, is not marked
+    E = ss.State(infected=True) # I, the source of infection, is not marked
     d = ss.Disease(S, E, I, R, infection=S >> E @ ss.perday(0.5)*I, onset=E >> I @ ss.days(3), recovery=I >> ss.dead @ ss.days(7), init_n=dict(I=10), name='seir')
     seen = {} # The number alive read during each step
     sim = ss.Sim(d, connectors=ss.modify('seir.infection', multiply=lambda sim: seen.update({sim.ti: sim.results.alive[sim.ti]}) or 1.0), total_pop=10_000, stop=ss.days(60), verbose=0, solver='ode').run()
@@ -1552,7 +1552,7 @@ def test_infected_sources():
     assert np.allclose([seen[ti] for ti in tis], sim.results.alive[tis]) and seen[tis[-1]] < seen[0] # During the run, as after it
     assert np.isclose(sim.diseases.seir.R0(), 3.5)
     r = sim.results.seir
-    assert np.allclose(r.infected, r.E + r.I)
+    assert np.allclose(r.infected, r.E) and not d.graph.states.I.infected # As said, though I is the source
     return
 
 if __name__ == '__main__':

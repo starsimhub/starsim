@@ -813,7 +813,7 @@ def test_rel_sus_per_act():
 
 
 def test_derived_results():
-    sc.heading('Testing the results of states marked infected, a list of transitions, and | for sources')
+    sc.heading('Testing the infected states and their results, a list of transitions, and | for sources')
 
     # A list of transitions and outcomes, and | for several sources; infected and prevalence count the states marked infected, beside the user's own
     S, R = ss.states(2)
@@ -830,17 +830,38 @@ def test_derived_results():
     with pytest.raises(TypeError, match='brackets'):
         Ia | Iw >> R @ 0.05 # Read by Python as Ia | (Iw >> R)
 
-    # Nothing marked, nothing guessed; | on states is + in a result too; a state called infected among several marked ones is an error
-    S, I, R = ss.states(3)
-    res = ss.Sim(ss.Disease(S >> I @ 0.1*I, I >> R @ 0.05, init=dict(I=0.01), ever=I | R, share=(I | R).frac, name='d'), n_agents=200, verbose=0).run().results.d
-    assert 'prevalence' not in res and 'infected' not in res
-    assert np.array_equal(res.ever, res.I + res.R) and np.allclose(res.share, res.ever/(res.S + res.ever))
+    # Nothing marked: the states of the force of infection are infected (E and I in S >> E @ beta*I), and each state says so; | on states is + in a result too
+    S, E, I, R = ss.states(4)
+    dis = ss.Disease(S >> E @ 0.1*I, E >> I @ 0.2, I >> R @ 0.05, init=dict(I=0.01), ever=I | R, share=(I | R).frac, name='d')
+    res = ss.Sim(dis, n_agents=200, verbose=0).run().results.d
+    assert [s.name for s in dis.graph.states.values() if s.infected] == ['E', 'I']
+    assert np.array_equal(res.infected, res.E + res.I) and np.allclose(res.prevalence, res.infected/(res.S + res.E + res.I + res.R))
+    assert np.array_equal(res.ever, res.I + res.R) and np.allclose(res.share, res.ever/(res.S + res.E + res.ever))
+
+    # Declared, as a result given positionally (infected = E | I, the same as E + I), or by name or position in ss.states(); none for a staged condition
+    S, E, I, H, R = ss.states(5)
+    infected = E | I | H # H does not transmit, so is infected only if said
+    trs = [S >> E @ 0.1*I, E >> I @ 0.2, I >> H @ 0.1, H >> R @ 0.05]
+    dis = ss.Disease(*trs, infected, name='d')
+    assert [s.name for s in dis.graph.states.values() if s.infected] == ['E', 'I', 'H'] and 'prevalence' in dis.graph.exprs
+    for states in [ss.states('S E I H R', infected='E I H'), ss.states(5, infected=range(1, 4))]:
+        assert [st.infected for st in states] == [False, True, True, True, False]
+    with pytest.raises(ValueError, match='not one of the states'):
+        ss.states('S I R', infected='X')
+    Hl, C1, C2 = ss.states(3)
+    dis = ss.Disease(Hl >> C1 @ 0.01, C1 >> C2 @ 0.1, name='d')
+    assert not any(s.infected for s in dis.graph.states.values()) and 'prevalence' not in dis.graph.exprs
     with pytest.raises(ValueError, match='value for each person'): # Not silently dropped
         ss.Disease(S >> I @ 0.1*I, I >> R @ 0.05, p=I/ss.person.n, name='d')
-    susceptible, recovered = ss.states(2)
-    exposed, infected = ss.states(2, infected=True)
-    with pytest.raises(ValueError, match='rename the state'):
-        ss.Disease(susceptible >> exposed @ 0.1*infected, exposed >> infected @ 0.1, infected >> recovered @ 0.05, name='d')
+    dis = ss.Disease(*trs, infected=I, name='d') # Exactly what is said: not E, though people are infected into it (by keyword: as a variable, I would have two names)
+    assert [s.name for s in dis.graph.states.values() if s.infected] == ['I'] and 'prevalence' in dis.graph.exprs
+
+    # A state called infected keeps the name, with no prevalence; a state no variable holds is named by its label
+    susceptible, exposed, infected, recovered = ss.states(4)
+    dis = ss.Disease(susceptible >> exposed @ 0.1*infected, exposed >> infected @ 0.1, infected >> recovered @ 0.05, name='d')
+    assert 'prevalence' not in dis.graph.exprs and dis.graph.states.infected.infected
+    dis = ss.Disease(ss.State('S'), name='d')
+    assert list(dis.graph.states.keys()) == ['S'] and dis.graph.states.S.label == 'S'
     return res
 
 

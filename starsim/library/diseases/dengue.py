@@ -15,10 +15,10 @@ def serotype(name, pars, others=(), **kwargs):
             had = had | ss.ref(f'{other}.R')
         kwargs['cross_protection'] = ss.modify('rel_sus', multiply=1 - p['cross'], where=had)
     S, R = ss.states('S R')
-    I = ss.State('I', init=p['init'], label='Infectious')
-    Sv = ss.State('Sv', people=False, label='Susceptible mosquitoes')
-    Ev = ss.State('Ev', people=False, label='Infected mosquitoes, incubating')
-    Iv = ss.State('Iv', people=False, label='Infectious mosquitoes')
+    I = ss.State(init=p['init'], label='Infectious')
+    Sv = ss.State(people=False, label='Susceptible mosquitoes')
+    Ev = ss.State(people=False, label='Infected mosquitoes, incubating')
+    Iv = ss.State(people=False, label='Infectious mosquitoes')
     N = (S + I + R).n
     return ss.Disease(S, I, R, Sv, Ev, Iv,
         infection  = S >> I @ p['a']*p['b']*Iv.n/N,

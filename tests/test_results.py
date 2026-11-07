@@ -393,10 +393,10 @@ def test_plot():
     lines = lambda fig: [[line.get_label() for line in ax.get_lines()] for ax in fig.axes]
     assert lines(sim.sir.plot()) == [['S', 'I', 'R']] # The states, together
     assert [len(ax.get_lines()) for ax in sim.sir.plot('flows').axes] == [1, 1] # Each flow, apart
-    assert len(sim.sir.plot('all').axes) == 5 # The states and the flows (no state is marked infected, so there is no prevalence)
+    assert len(sim.sir.plot('all').axes) == 7 # The states and the flows, and infected and prevalence (I, from the force of infection)
     assert lines(sim.sir.plot(['S', 'I'])) == [['S', 'I']]
     assert len(sim.sir.plot('S', 'I').axes) == 2
-    assert len(sim.plot().axes) == 5 # The number alive and the deaths of a closed population are left out
+    assert len(sim.plot().axes) == 7 # The number alive and the deaths of a closed population are left out
 
     # In Jupyter, the figure is returned when not shown, and a figure given is not shown; results can be overlaid, on a log scale, and saved
     res = sim.results.sir

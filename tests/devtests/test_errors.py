@@ -102,7 +102,7 @@ def _():
 @trigger('there is no contact with a count', ValueError)
 def _():
     S, I = ss.states('S I')
-    W = ss.State('W', people=False)
+    W = ss.State(people=False)
     ss.Disease(infection=S >> I @ 0.5*W, shedding=ss.outside >> W @ 10*I.n)
 
 @trigger('adjust= names a transition "recovry"', KeyError)

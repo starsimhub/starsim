@@ -103,8 +103,8 @@ class Polio(ss.Disease):
     p_paralysis = ss.par(1/200, doc='Share of infections that cause paralysis',   source='US CDC Pink Book: about 1 in 200 for wild type 1')
     birth_rate  = ss.par(ss.peryear(0.03), doc='Birth and death rate',            source='Illustrative')
 
-    S = ss.State('S')
-    E = ss.State('E', infected=True) # Counted in the results infected and prevalence
+    S = ss.State()
+    E = ss.State(infected=True) # Counted in the results infected and prevalence
     I = ss.State(init=0.001, label='Shedding', infected=True)
     R = ss.State()
     P = ss.State(label='Paralysed')

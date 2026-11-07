@@ -13,7 +13,7 @@ kw = dict(verbose=0)
 
 def make_sir():
     S, R = ss.states('S R')
-    I = ss.State('I', infected=True) # So the disease has the result prevalence
+    I = ss.State(infected=True) # So the disease has the result prevalence
     return ss.Disease(infection=ss.Transition(S, I, rate=ss.perday(0.3) * I), recovery=ss.Transition(I, R, dur=ss.days(7)), init_prev=0.001, name='sir')
 
 
