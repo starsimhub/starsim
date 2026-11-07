@@ -202,7 +202,7 @@ def load_sbml(filename, unit=None, stop=None, solver='ode', verbose=None, **kwar
             else:
                 src.skip(f'{kind} {var or ""}'.strip(), f'a {kind} is not translated: a rate rule for a parameter is a state that is not people (ss.State(people=False)) with inflows and outflows')
     for ev in children(child(model, 'listOfEvents'), 'event'):
-        src.skip(f'event {ev.get("id") or ev.get("name") or ""}'.strip(), 'events are not translated: one at a fixed time is an intervention or an ss.timeseries, and one on a condition is an intervention with a where= condition')
+        src.skip(f'event {ev.get("id") or ev.get("name") or ""}'.strip(), 'events are not translated: one at a fixed time is an intervention or an ss.timeseries, and one on a condition is an intervention with a who= condition')
 
     # Reactions: a species used and one made, with the kinetic law as the flow in total
     for r in children(child(model, 'listOfReactions'), 'reaction'):

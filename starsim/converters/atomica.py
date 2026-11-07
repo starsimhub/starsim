@@ -690,7 +690,7 @@ def load_atomica(framework, databook=None, progbook=None, calibration=None, star
                 continue
             src.add_par(tname, as_value(c, series, factor((code, a), b), 0.0), doc=f'{code}, from {a} to {b} ({units})')
             rate = f'1/{tname}' if kind == 'duration' else tname
-            transfers[tname] = Code(f'ss.transfer(population=({a!r}, {b!r}), rate={rate}, states={[s for s in states if s not in sinks]!r})')
+            transfers[tname] = Code(f'ss.transfer(dict(population=({a!r}, {b!r})), rate={rate}, states={[s for s in states if s not in sinks]!r})')
 
     # Atomica's safe division, written out once nothing more needs to see it
     for k in src.exprs.keys():
@@ -710,10 +710,10 @@ def load_atomica(framework, databook=None, progbook=None, calibration=None, star
     else:
         for j,s in enumerate(states[1:], start=1):
             src.states[s].init = init[0, j]
-    src.config.update(start=float(start), stop=float(stop), dt=float(dt), unit='year', solver='ode', integrator='euler', substeps=1, total_pop=float(init.sum()))
+    src.config.update(start=float(start), stop=float(stop), dt=float(dt), unit='year', solver=ss.ode(integrator='euler', substeps=1), total_pop=float(init.sum()))
     sim = build(src, verbose=verbose)
     if programs:
-        sim.imported.programs = programs # For ss.fit.optimize()
+        sim.imported.programs = programs # For sim.optimize()
     return sim
 
 

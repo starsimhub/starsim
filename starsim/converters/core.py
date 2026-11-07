@@ -133,7 +133,7 @@ class Source:
         self.flows.append(sc.obj(src=src, dst=dst, rate=None if rate is None else str(rate), per=per, dur=dur, name=name, label=label, p=p, min_stay=min_stay))
         return
 
-    def add_outcome(self, name, source, p=None, delay=None, stay=None, doc=None, likelihood=None):
+    def add_outcome(self, name, source, p=None, delay=None, dur=None, doc=None, likelihood=None):
         """
         A reported quantity: a share of a flow, or of another outcome, with a delay (see `ss.outcome`)
 
@@ -142,11 +142,11 @@ class Source:
             source (str/list): the name of a flow (from `add_flow()`), several to add together, or another outcome
             p (float/str): the share of the source, as a number (a parameter named p_<name>) or the name of a parameter
             delay (any): the time from the source event, as a duration or a distribution
-            stay (any): how long each stays in the outcome, if the number in it is wanted
+            dur (any): how long each stays in the outcome, if the number in it is wanted
             doc (str): a description of the share, for its parameter
             likelihood (func): a function of the parameters (by name) that gives the likelihood, e.g. `lambda pars: ss.nbinom(n=pars.k)`
         """
-        self.outcomes[name] = sc.obj(source=source, p=p, delay=delay, stay=stay, doc=doc, likelihood=likelihood)
+        self.outcomes[name] = sc.obj(source=source, p=p, delay=delay, dur=dur, doc=doc, likelihood=likelihood)
         return
 
     def stratify(self, **kwargs):
@@ -397,7 +397,7 @@ class Rates(sc.prettyobj):
 
 # What a rate can use besides the model's states and parameters: typed quantities from Starsim (perday(0.5)), and functions from NumPy (and SciPy's expit)
 time_names = ['days', 'weeks', 'months', 'years', 'perday', 'perweek', 'permonth', 'peryear',
-              'probperday', 'probperweek', 'probpermonth', 'probperyear', 'freqperday', 'freqperweek', 'freqpermonth', 'freqperyear']
+              'probperday', 'probperweek', 'probpermonth', 'probperyear']
 func_names = ['exp', 'log', 'sqrt', 'absolute', 'sin', 'cos', 'expit', 'minimum', 'maximum']
 reserved = {'ss', 'ssl', 'np', 'pd', 'expit', 'sim'} # Names the code uses for itself
 
@@ -463,6 +463,9 @@ def code_value(val, pars=None):
         return 'np.nan' if np.isnan(val) else f'{"-" if val < 0 else ""}np.inf'
     elif isinstance(val, (bool, str, type(None))) or sc.isnumber(val):
         return repr(val)
+    elif isinstance(val, ss.schedule): # e.g. the when= of a modifier
+        times = val.every if val.every is not None else val.at
+        return 'ss.schedule(' + ', '.join(([cv(times)] if times is not None else []) + [f'{k}={cv(v)}' for k,v in dict(start=val.start, stop=val.stop).items() if v is not None]) + ')'
     elif isinstance(val, np.ndarray):
         return cv(val.tolist())
     elif isinstance(val, list):
@@ -473,8 +476,11 @@ def code_value(val, pars=None):
         if all(isinstance(k, str) and k.isidentifier() and not keyword.iskeyword(k) for k in val):
             return f'dict({kwargs(val)})'
         return '{' + ', '.join(f'{cv(k)}: {cv(v)}' for k,v in val.items()) + '}'
-    elif isinstance(val, ss.datedur):
-        return f'ss.datedur({kwargs(val.kwds)})'
+    elif isinstance(val, ss.dates.datedur): # Internal: one unit is that duration (a whole one follows the calendar), else the calendar duration itself
+        kw = val.kwds
+        return f'ss.{next(iter(kw))}({cv(next(iter(kw.values())))})' if len(kw) == 1 else f'ss.dates.datedur({kwargs(kw)})'
+    elif isinstance(val, ss.rescale):
+        return repr(val)
     elif type(val) is ss.Rate: # A rate with no class of its own keeps its unit, e.g. ss.Rate(0.3, ss.weeks(2))
         return f'ss.Rate({cv(val.value)}, {cv(val.unit)})'
     elif isinstance(val, (ss.Duration, ss.Rate)):
@@ -501,9 +507,11 @@ def code_value(val, pars=None):
     elif isinstance(val, ss.seasonal):
         period = '' if val.period is None else f', period={cv(val.period)}'
         return f'ss.seasonal(mean={cv(val.mean)}, amplitude={cv(val.amplitude)}, peak={cv(val.peak)}{period})'
+    elif isinstance(val, ss.geo.register):
+        return f'ss.geo.register({cv(val.data)})'
     elif isinstance(val, ss.geo.Mobility) and val.model is None:
         given = val.given.toarray() if hasattr(val.given, 'toarray') else val.given
-        args = dict(matrix=given, data=val.data, kind=val.kind, away=val.away)
+        args = dict(matrix=given, kind=val.kind, away=val.away)
         return f'ss.geo.Mobility({kwargs({k:v for k,v in args.items() if v is not None})})'
     elif isinstance(val, pd.Timestamp):
         return f'pd.Timestamp({str(val)!r})'
@@ -683,7 +691,11 @@ def disease_code(source, var, total=None):
                 guessed.setdefault(name, {})['import'] = how[-1]
             choices.append(f'  {arrow:16s} {flow.rate} : {"; ".join(how)} => {text}')
         if flow.get('p') is not None:
-            kw.p = '[' + ', '.join('None' if v is None else expr_code(named.fold(ast.unparse(rates.counts_of(rates.parse(v)))), code_names) for v in flow.p) + ']' # States as their counts (a share that changes with them)
+            shares = ['None' if v is None else expr_code(named.fold(ast.unparse(rates.counts_of(rates.parse(v)))), code_names) for v in flow.p] # States as their counts (a share that changes with them)
+            if branch: # Each destination with its share
+                dst = '{' + ', '.join(f'{d}: {v}' for d,v in zip(flow.dst, shares)) + '}'
+            else:
+                kw.p = shares[0] if len(shares) == 1 else '[' + ', '.join(shares) + ']'
         if flow.get('min_stay') is not None:
             kw.min_stay = code_value(flow.min_stay)
         if flow.label is not None:
@@ -709,12 +721,12 @@ def disease_code(source, var, total=None):
         share = o.p if isinstance(o.p, str) else f'p_{name}'
         base = ' + '.join(parts)
         expr = base if whole else f'{share}*{base if len(parts) == 1 else f"({base})"}'
-        kw = {k:code_value(o[k]) for k in ['delay', 'stay'] if o[k] is not None}
+        kw = {k:code_value(o[k]) for k in ['delay', 'dur'] if o[k] is not None}
         if o.get('likelihood') is not None:
             kw['likelihood'] = code_value(o.likelihood(objs), pars=objs)
         members.append((name, f'ss.outcome({expr}{"".join(f", {k}={v}" for k,v in kw.items())})'))
         taken.add(name)
-        choices.append(f'  {name:16s} an outcome: {"" if whole else f"{share} × "}{" + ".join(parts)}' + ''.join(f', {k} {o[k]}' for k in ['delay', 'stay'] if o[k] is not None))
+        choices.append(f'  {name:16s} an outcome: {"" if whole else f"{share} × "}{" + ".join(parts)}' + ''.join(f', {k} {o[k]}' for k in ['delay', 'dur'] if o[k] is not None))
     choices += [f'  {note}' for note in source.notes]
     defs = named.definitions()
     if defs:
@@ -761,7 +773,7 @@ def disease_code(source, var, total=None):
     # Strains, which are part of the disease (their states are those of infection)
     strains = None
     for kw in [kw for kw in source.strats if kw.get('kind') == 'strain']:
-        dim = next(k for k in kw if k not in ss.dimensions.strat_options)
+        dim = next(k for k in kw if k not in strat_options)
         split = kw.get('fractions')
         strains = dict(name=dim, fractions=None if isinstance(split, ss.by) else split, **(kw.get('adjust') or {}))
         add(f'strains = ss.Strains({code_value(list(kw[dim]))}, {", ".join(f"{k}={code_value(v)}" for k,v in strains.items())})')
@@ -771,6 +783,11 @@ def disease_code(source, var, total=None):
     args = list(source.states) + [name for name,code in members]
     kw = sc.obj(results)
     kw.update(init=code_value(init) if init else None, init_n=code_value(init_n) if init_n else None, default_state=None if first is None else repr(first), name=repr(source.name), strains='strains' if strains else None)
+    plain = [kwargs for kwargs in source.strats if kwargs.get('kind') != 'strain']
+    for kwargs in plain: # A multiplier by level, as a modifier of the disease
+        dim = next(k for k in kwargs if k not in strat_options)
+        for key,vals in (kwargs.get('adjust') or {}).items():
+            kw[f'{key.replace(".", "_")}_by_{dim}'] = f'ss.modify({f"{source.name}.{key}"!r}, multiply=ss.by({dim}={code_value(list(vals))}))'
     add(f'{var} = ss.Disease(')
     for i in range(0, len(args), 8):
         add(f'    {", ".join(args[i:i+8])},')
@@ -778,11 +795,30 @@ def disease_code(source, var, total=None):
         if v is not None:
             add(f'    {k} = {v},')
     add(')')
-    for kwargs in source.strats:
-        if kwargs.get('kind') != 'strain':
-            add(f'{var}.stratify({", ".join(f"{k}={code_value(v)}" for k,v in kwargs.items())})')
+    for kwargs in plain:
+        add(f'{var}.stratify({strat_code(kwargs)})')
     add('')
     return lines, choices, guessed
+
+
+strat_options = ['fractions', 'adjust', 'kind', 'states', 'where', 'mobility'] # The options of a stratification as an importer gives it (Source.stratify()), beside its dimension
+
+
+def strat_code(kwargs):
+    """ The arguments of `stratify()` for a stratification as an importer gives it: its dimension, with the shares in each level as a dict, and its other options in `ss.levels()` (a multiplier by level, `adjust`, is written as a modifier: see `disease_code()`) """
+    dim = next(k for k in kwargs if k not in strat_options)
+    levels, fractions = kwargs[dim], kwargs.get('fractions')
+    if fractions is not None and not isinstance(fractions, ss.by):
+        levels, fractions = dict(zip(levels, np.asarray(fractions, dtype=float).tolist())), None
+    opts = dict(states=kwargs.get('states'), kind=kwargs.get('kind'), mobility=kwargs.get('mobility'), fractions=fractions)
+    where = kwargs.get('where')
+    if where: # As a condition on the other dimensions
+        conds = [f'(ss.person.{k} == {code_value(v)})' if not isinstance(v, (list, tuple)) else f'ss.person.{k}.isin({code_value(list(v))})' for k,v in where.items()]
+        opts['who'] = Code(' & '.join(conds))
+    opts = {k:v for k,v in opts.items() if v is not None}
+    if not opts:
+        return f'{dim}={code_value(levels)}'
+    return f'{dim}=ss.levels({code_value(levels)}, {", ".join(f"{k}={code_value(v)}" for k,v in opts.items())})'
 
 
 def total_init(val):
@@ -820,6 +856,11 @@ def write(sources, **kwargs):
     cfg = sc.obj()
     for source in sources:
         cfg.update(source.config)
+    solver, given = cfg.get('solver'), kwargs.get('solver')
+    if isinstance(solver, ss.sim.Solver) and type(given) is str: # Another solver by name keeps the import's options that it also takes (e.g. epydemix's whole daily steps, substeps=1)
+        helper = getattr(ss, given, None)
+        if isinstance(helper, type) and issubclass(helper, ss.sim.Solver):
+            kwargs = kwargs | dict(solver=helper(**{k:v for k,v in vars(solver).items() if k in helper.options}))
     cfg.update(kwargs)
     if 'total_pop' not in cfg:
         cfg.total_pop = max(sum(total_init(s.init) for s in src.states.values() if s.people) for src in sources) or cfg.get('n_agents')

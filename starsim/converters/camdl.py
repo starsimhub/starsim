@@ -143,17 +143,17 @@ def prior(spec):
     if name == 'log_normal':
         return ss.lognormal(log_mean=kw['mu'], log_std=kw['sigma'])
     elif name == 'normal':
-        return ss.normal(loc=kw.get('mu', kw.get('mean')), scale=kw.get('sigma', kw.get('sd')))
+        return ss.normal(mean=kw.get('mu', kw.get('mean')), std=kw.get('sigma', kw.get('sd')))
     elif name == 'beta':
         return ss.beta_dist(a=kw['alpha'], b=kw['beta'])
     elif name == 'gamma':
-        return ss.gamma(a=kw['shape'], scale=1/kw['rate'])
+        return ss.gamma(shape=kw['shape'], scale=1/kw['rate'])
     elif name == 'truncated_normal':
-        return ss.truncnorm(loc=kw['mean'], scale=kw['sd'], low=kw.get('lower', -np.inf), high=kw.get('upper', np.inf))
+        return ss.truncnorm(mean=kw['mean'], std=kw['sd'], low=kw.get('lower', -np.inf), high=kw.get('upper', np.inf))
     elif name == 'half_normal':
-        return ss.truncnorm(loc=0, scale=kw['sigma'], low=0)
+        return ss.truncnorm(mean=0, std=kw['sigma'], low=0)
     elif name == 'exponential':
-        return ss.expon(scale=1/kw['rate'])
+        return ss.expon(mean=1/kw['rate'])
     elif name == 'uniform':
         return ss.uniform(low=kw.get('lo', kw.get('low')), high=kw.get('hi', kw.get('high')))
     return None
@@ -353,7 +353,7 @@ def load_camdl(filename, pars=None, scenario=None, solver='ode', camdlc=None, ve
             likelihood = lambda ps: ss.poisson()
         elif lkind == 'normal' and arg(lkw.get('sd', lkw.get('sigma', {'expr': {}}))):
             sd = arg(lkw.get('sd', lkw.get('sigma')))
-            likelihood = lambda ps, sd=sd: ss.normal(scale=sd(ps))
+            likelihood = lambda ps, sd=sd: ss.normal(std=sd(ps))
         elif lkind is not None:
             src.skip(f'{oname} (likelihood)', f'the {lkind} likelihood has no translation')
 
@@ -373,16 +373,16 @@ def load_camdl(filename, pars=None, scenario=None, solver='ode', camdlc=None, ve
         if iv.get('kind') != 'event' and not names & set(enabled): # An intervention, unlike an event, is off unless enabled: listed all the same, since a scenario that enables it is the model's question
             where = [k for k,scen in scens.items() if names & set(scen.get('enable', []))]
             src.skip(iv['name'], f'an intervention ({acts}, {when}) that is off unless enabled{", as scenario " + sc.strjoin(where) + " does" if where else ""}; '
-                                 f'write it as a one-off move, ss.Delivery(move=S >> V, ...), with its times')
+                                 f'write it as a one-off move, ss.Event(S >> V, when=...)')
             continue
-        src.skip(iv['name'], f'a scheduled effect ({acts}, {when}); write it as a one-off move, ss.Delivery(move=S >> V, ...), with its times')
+        src.skip(iv['name'], f'a scheduled effect ({acts}, {when}); write it as a one-off move, ss.Event(S >> V, when=...)')
 
     # The run
     simulation = m.get('simulation', {})
     tdur = getattr(ss, f'{unit}s')
     cfg = dict(unit=unit, solver=solver)
     if solver in ['ode', 'binomial']: # camdl's ODE backend takes one RK4 step a step, and its chain binomial whole steps, so the numbers are its own
-        cfg['substeps'] = 1
+        cfg['solver'] = getattr(ss, solver)(substeps=1)
     if simulation.get('t_end') is not None:
         cfg['stop'] = tdur(simulation['t_end'])
     if simulation.get('t_start'):
@@ -403,11 +403,11 @@ camdl_funcs = dict(minimum='min', maximum='max', absolute='abs', ceiling='ceil')
 camdl_units = dict(day='days', week='weeks', month='months', year='years')
 priors = dict( # Each Starsim prior as camdl's, the reverse of prior()
     lognormal  = lambda p: 'log_normal(mu = {!r}, sigma = {!r})'.format(*((p.log_mean, p.log_std) if 'log_mean' in p else map(float, ss.lognormal.log_moments(p.mean, p.std)))),
-    normal     = lambda p: f'normal(mu = {p.loc!r}, sigma = {p.scale!r})',
+    normal     = lambda p: f'normal(mu = {p.mean!r}, sigma = {p.std!r})',
     beta_dist  = lambda p: f'beta(alpha = {p.a!r}, beta = {p.b!r})',
-    gamma      = lambda p: f'gamma(shape = {p.a!r}, rate = {1/p.scale!r})',
-    truncnorm  = lambda p: f'truncated_normal(mean = {p.loc!r}, sd = {p.scale!r})',
-    expon      = lambda p: f'exponential(rate = {1/p.scale!r})',
+    gamma      = lambda p: f'gamma(shape = {p.shape!r}, rate = {1/p.scale!r})',
+    truncnorm  = lambda p: f'truncated_normal(mean = {p.mean!r}, sd = {p.std!r})',
+    expon      = lambda p: f'exponential(rate = {1/p.mean!r})',
     uniform    = lambda p: f'uniform(lower = {p.low!r}, upper = {p.high!r})',
 )
 

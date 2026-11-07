@@ -39,7 +39,7 @@ infection = S >> I @ 1.9*I
 recovery  = I >> R @ ss.days(8)
 measles = ss.Disease(infection, recovery, init_prev=0.001)
 
-vaccination = ss.vaccinate(efficacy=0.9, coverage=0.9, at=ss.days(0))
+vaccination = ss.vaccinate(efficacy=0.9, when=ss.days(0), coverage=0.9)
 sim = ss.Sim(measles, interventions=vaccination, total_pop=100_000, stop=ss.days(100), rand_seed=1)
 sim.run()
 

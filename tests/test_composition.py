@@ -28,7 +28,7 @@ class NumpySIR(ss.Module):
 
     def init_results(self):
         super().init_results()
-        self.define_results(ss.Result('I', label='Infectious'))
+        self.define_results(ss.Result('I', label='Infectious', kind='stock'))
         return
 
     def step(self):
@@ -161,7 +161,7 @@ def test_coded_and_declared():
 
     # A disease written as code takes a declared vaccine
     kw = dict(networks='random', n_agents=5000, stop=100, rand_seed=2, verbose=0)
-    infections = [ss.Sim(ssl.AgentSIR(beta=0.1, init_prev=0.02), interventions=vx, **kw).run().results.agentsir.infection.cum[-1] for vx in [None, ss.vaccinate(ss.Vaccine(efficacy=0.9), coverage=0.5, at=0)]]
+    infections = [ss.Sim(ssl.AgentSIR(beta=0.1, init_prev=0.02), interventions=vx, **kw).run().results.agentsir.infection.cum[-1] for vx in [None, ss.vaccinate(ss.Vaccine(efficacy=0.9), when=0, coverage=0.5)]]
     assert infections[1] < 0.8*infections[0]
     return sim
 

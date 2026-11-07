@@ -27,7 +27,7 @@ def make_seird():
         births    = ss.birth(S, rate=ss.peryear(0.02)),
         infection = ss.Transition(S, E, rate=ss.perday(0.4) * I),
         onset     = ss.Transition(E, I, dur=ss.days(4)),
-        outcome   = ss.Transition(I, [R, D], dur=ss.lognormal(ss.days(8), ss.days(3)), p=[None, 0.1]),
+        outcome   = ss.Transition(I, {R: None, D: 0.1}, dur=ss.lognormal(ss.days(8), ss.days(3))),
         deaths    = ss.death([S, E, I, R], rate=ss.peryear(0.01)),
         init_prev = 0.01, name='seird')
     return ss.Sim(seird, total_pop=1e5, unit='day', stop=120, **kw)
@@ -129,7 +129,7 @@ def test_hub():
         S, I, R = ss.states('S I R')
         sir = ss.Disease(infection=S >> I @ ss.par(0.4, prior=ss.uniform(0.3, 0.5))*I, recovery=I >> R @ 0.2, init_n=dict(I=10), name='sir')
         return ss.Sim(sir, interventions=ss.modify(sir.infection, multiply=beta), total_pop=1e5, start='2020-02-01', stop='2020-05-01', unit='day', label=label, **kw)
-    msim = ss.parallel(make(1.0, 'base'), make(0.5, 'lockdown'), n_runs=4, priors=True, parallel=False)
+    msim = ss.parallel(make(1.0, 'base'), make(0.5, 'lockdown'), n_runs=4, priors=True, workers=1)
     hub = ss.converters.to_hub(msim, targets=dict(infection=['inc inf', 'cum inf', 'peak size inf']), origin_date='2020-03-01', output_type=['quantile', 'sample'], location='US')
     assert list(hub.columns) == ['origin_date', 'scenario_id', 'location', 'target', 'horizon', 'output_type', 'output_type_id', 'value']
     assert set(hub.scenario_id) == {'base', 'lockdown'} and set(hub.origin_date) == {'2020-03-01'}
@@ -145,7 +145,7 @@ def test_hub():
     assert peak.horizon.isna().all() and np.allclose(peak.value.values, inc.groupby(['scenario_id', 'output_type_id']).value.max().values)
     med = hub[(hub.target == 'inc inf') & (hub.output_type_id == 0.5)].groupby('scenario_id').value.sum()
     assert med['lockdown'] < med['base'], 'The scenarios should not be pooled'
-    undated = ss.parallel(make(1.0, 'base').new(start=None, stop=60), n_runs=2, parallel=False) # Without dates, the origin is a time (it was an AttributeError on strftime)
+    undated = ss.parallel(make(1.0, 'base').new(start=None, stop=60), n_runs=2, workers=1) # Without dates, the origin is a time (it was an AttributeError on strftime)
     assert set(ss.converters.to_hub(undated, targets=dict(infection=['inc inf'])).origin_date) == {0.0}
     return hub
 

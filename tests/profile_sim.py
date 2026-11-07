@@ -6,7 +6,7 @@ import sciris as sc
 import starsim as ss
 
 def make_sim():
-    kw = dict(n_agents=100e3, start=2000, dur=100, diseases='sis', networks='random', demographics=True)
+    kw = dict(n_agents=100e3, start=2000, stop=ss.years(100), diseases='sis', networks='random', demographics=True)
     sim = ss.Sim(**kw)
     return sim
 
@@ -23,7 +23,7 @@ if 'profile' in to_run:
 
 if 'cprofile' in to_run:
     sim = make_sim()
-    cprf = sim.cprofile()
+    cprf = sim.profile(kind='function')
 
 if 'time' in to_run:
     sim = make_sim()

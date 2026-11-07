@@ -37,9 +37,9 @@ def bad_end(end, side):
     if outside and side == 'source':
         return f'{end} cannot be one of several sources of a transition: for an inflow, give it alone, e.g. ss.Transition({end}, S, rate=0.1)'
     elif end is stay and side == 'source':
-        return 'ss.stay is a destination, not a source: give it as one destination of a split, e.g. ss.Transition(I, [R, ss.stay], p=[0.3, None], dur=10)'
+        return 'ss.stay is a destination, not a source: give it as one destination of a split, e.g. ss.Transition(I, {R: 0.3, ss.stay: None}, dur=10)'
     elif outside or end is stay:
-        return f'{end} is one destination of a split, with at least one other, e.g. ss.Transition(I, [R, {end}], p=[0.9, 0.1], dur=10)'
+        return f'{end} is one destination of a split, with at least one other, e.g. ss.Transition(I, {{R: 0.9, {end}: 0.1}}, dur=10)'
     if isinstance(end, str):
         return f'the {side} of a transition is a state, not its name "{end}": declare the states and give them, e.g. S, I, R = ss.states(3) and ss.Transition(S, I, rate=beta * I)'
     if isinstance(end, ss.conditions.Cond):
@@ -51,7 +51,7 @@ def bad_end(end, side):
         return f'the {side} of a transition is a state or a list of states, not {end}'
     elif side == 'source':
         return f'the source of a transition is a state or a list of states, not {end}; for people moving out of any of them, write [{", ".join(names)}] or the sum {" + ".join(names)}'
-    return f'the destination of a transition is a state or a list of states (a split, with p=), not {end}; for a split between them, write [{", ".join(names)}] with p=[...]'
+    return f'the destination of a transition is a state, or a dict of states and their probabilities (a split), not {end}; for a split between them, write {{{", ".join(f"{n}: ..." for n in names)}}}'
 
 
 class TransitionTable(sc.obj):
@@ -98,18 +98,27 @@ class Graph:
         init_prev (float): the initial prevalence, seeded through the transmission (by default 0.01, unless a state is given an initial value)
         init (dict): the share of people who start in each state, by name
         init_n (dict): the number of people who start in each state, by name
+        seed_n (bool): whether `init_prev` is a number of people (given as `init_n=10`) rather than a share
         default_state (str): the state people are in unless they are put elsewhere (by default, the one named `S` or `susceptible`, else the first made; see `resolve_people()`)
         names (dict): the names of the variables of the code that made the module, by the id of what they hold (see `ss.utils.caller_names()`), which name the states, transitions, and parameters given without one
     """
-    grouped = ['transitions', 'results', 'outcomes'] # The keywords that each take several members, e.g. ss.Disease(transitions=[...])
+    removed = ['transitions', 'outcomes', 'results'] # Keywords that were lists of members, which are now given positionally (e.g. ss.Disease(infection, recovery, prevalence))
 
-    def __init__(self, module, args=None, members=None, init_prev=None, init=None, init_n=None, default_state=None, names=None):
+    def __init__(self, module, args=None, members=None, init_prev=None, init=None, init_n=None, default_state=None, names=None, seed_n=False):
         self.module = module
         self.names = names or {}
         self.default_given = default_state # The state people are in unless they are put elsewhere, if given
-        self.init_prev = init_prev
+        self.init_prev = init_prev # A share of people seeded through the transmission, or a number of them (init_n=10), if seed_n
+        self.seed_n = seed_n
         if isinstance(init_prev, par): # So it can be fitted
-            init_prev.name = init_prev.name or 'init_prev'
+            init_prev.name = init_prev.name or ('init_n' if seed_n else 'init_prev')
+        name = getattr(module, 'name', None) or type(module).__name__
+        if init is not None and not isinstance(init, dict):
+            errormsg = f'init= of "{name}" is a dict of the starting value of each state, e.g. init=dict(I=0.01), not {init!r}; a share of people seeded through the transmission is init_prev={init!r}'
+            raise TypeError(errormsg)
+        if init_n is not None and not isinstance(init_n, dict): # A number is a seeding, turned into init_prev before here (see ss.Disease.init_graph())
+            errormsg = f'init_n= of "{name}" is a number of people seeded through the transmission, or a dict of the number in each state, e.g. init_n=dict(I=10), not {init_n!r}'
+            raise TypeError(errormsg)
         self.init = dict(init or {})
         self.init_n = dict(init_n or {})
         self.states = sc.obj()
@@ -183,8 +192,10 @@ class Graph:
         """ Sort the members by what they are, and name them """
         module = self.module
         named = [] # (name, obj) pairs
-        for key in self.grouped:
-            args = args + sc.tolist(members.pop(key, None))
+        for key in self.removed:
+            if key in members and isinstance(members[key], (list, tuple)):
+                errormsg = f'ss.Disease() takes no {key}=; give the {key} positionally, e.g. ss.Disease(infection, recovery, prevalence, ...), or as keywords by name, e.g. ss.Disease(infection=S >> I @ beta*I, ...)'
+                raise TypeError(errormsg)
         for arg in args:
             named.append((None, arg))
         named += list(members.items())
@@ -263,7 +274,7 @@ class Graph:
 
     def add(self, container, name, obj):
         """ Add a named member, checking the name """
-        reserved = set(self.grouped) | set(dir(ss.Module)) | {'sim', 'pars', 't', 'dists', 'name', 'label', 'graph', 'engine'} # The attributes of every module
+        reserved = set(self.removed) | set(dir(ss.Module)) | {'sim', 'pars', 't', 'dists', 'name', 'label', 'graph', 'engine'} # The attributes of every module
         if container is not self.pars: # And this module's methods, e.g. a transition named "describe" would replace the method (parameters are kept in pars, so may be named "R0")
             reserved |= {key for cls in type(self.module).__mro__ for key,val in vars(cls).items() if isinstance(val, (types.FunctionType, property, classmethod, staticmethod))}
         if name in reserved:
@@ -526,9 +537,10 @@ class Graph:
         must sum to 1 (see `Engine.init_fractions()`)
         """
         seeded = {id(st) for tr in self.transitions.values() if tr.contact for st in tr.dest or []} if self.init_prev is not None else set() # Where init_prev puts people
-        both = [s.name for s in self.people_states if id(s) in seeded and s.given_init]
+        both = [s for s in self.people_states if id(s) in seeded and s.given_init]
         if both:
-            errormsg = f'"{self.module.name}" is given both init_prev= and init= for {sc.strjoin(both)}, where init_prev= puts people; give one or the other'
+            keys = sc.strjoin(sorted({'init_n=' if s.init_n is not None else 'init=' for s in both}), sep=' or ')
+            errormsg = f'"{self.module.name}" is given both init_prev= and {keys} for {sc.strjoin(s.name for s in both)}, where init_prev= puts people; give one or the other'
             raise ValueError(errormsg)
         self.rest = self.default_state
         if self.default_state is None or not self.default_state.given_init:
@@ -697,7 +709,7 @@ class Graph:
                 tr.const, tr.terms = linear(tr.rate)
             if tr._inflow:
                 self.inflows.append(tr)
-            if tr._immediate and tr.where is not None and tr.trigger is None and (tr.p is None or tr._split): # dur=0 with where=: as soon as the condition holds, as ss.on() does (a branch with p= waits in its source until where= holds instead)
+            if tr._immediate and tr.where is not None and tr.trigger is None and (tr.p is None or tr._split): # dur=0 with who=: as soon as the condition holds, as ss.on() does (a branch with p= waits in its source until who= holds instead)
                 tr.trigger = ss.on(tr.where)
             for state in tr.source:
                 exits = self.exits[state.name]
@@ -712,13 +724,13 @@ class Graph:
                 elif tr.rate is None and len(tr.dest) > 1 and not tr._immediate: # Several destinations and no wait: say how to write an immediate split
                     names = [d.name for d in tr.dest]
                     raise ValueError(f'the transition "{tr.name}" ({state.name} -> {sc.strjoin(names)}) has p= but no rate and no duration (dur=), so nothing says when people leave. '
-                                                f'For a split as soon as people arrive, give it dur=0, e.g. ss.Transition({state.name}, [{", ".join(names)}], dur=0, p={[None if v is None else v.raw if isinstance(v, par) else v for v in tr.p]}); or give it a duration.')
+                                                f'For a split as soon as people arrive, give it dur=0, e.g. ss.Transition({state.name}, {{{", ".join(f"{n}: {None if v is None else v.raw if isinstance(v, par) else v}" for n,v in zip(names, tr.p))}}}, dur=0); or give it a duration.')
                 elif tr.rate is None: # Immediate: dur=0, one destination and ss.stay, or what the branches leave over
                     exits.rest.append(tr)
                 else:
                     exits.hazards.append(tr)
 
-        # A single timed transition with no p= (or an immediate split) takes whatever the branches leave over: the only one, or the only one for the same people (the same where=) as the branches; one with no driver and no p= is undriven, not the remainder
+        # A single timed transition with no p= (or an immediate split) takes whatever the branches leave over: the only one, or the only one for the same people (the same who=) as the branches; one with no driver and no p= is undriven, not the remainder
         for name,exits in self.exits.items():
             exits.remainder = None
             rest = exits.pop('rest')
@@ -726,7 +738,7 @@ class Graph:
                 raise ValueError(f'{sc.strjoin(tr.name for tr in rest)} out of state "{name}" have no p=, rate, or duration; only one transition can take what the branches leave over.')
             elif rest:
                 exits.remainder = rest[0]
-            apart = [] # Timed exits for other people (another where=), which compete as before
+            apart = [] # Timed exits for other people (another who=), which compete as before
             if exits.branches and len(exits.timed) > 1:
                 wheres = {id(getattr(tr, 'where', None)) for tr in exits.branches}
                 same = [tr for tr in exits.timed if len(wheres) == 1 and id(getattr(tr, 'where', None)) in wheres]
@@ -749,7 +761,7 @@ class Graph:
                         group, total = bad[0]
                         undriven = [tr.name for tr in exits.hazards if tr.undriven]
                         driven = [tr for tr in exits.hazards if not tr.undriven]
-                        why = f' {sc.strjoin(undriven)} {"has" if len(undriven) == 1 else "have"} no rate, duration, or p=, so {"is" if len(undriven) == 1 else "are"} undriven, not the remainder; for an immediate split, give the destinations together, e.g. ss.Transition({name}, [A, B], dur=0, p=[{total:n}, None]).' if undriven else ''
+                        why = f' {sc.strjoin(undriven)} {"has" if len(undriven) == 1 else "have"} no rate, duration, or p=, so {"is" if len(undriven) == 1 else "are"} undriven, not the remainder; for an immediate split, give the destinations together, e.g. ss.Transition({name}, {{A: {total:n}, B: None}}, dur=0).' if undriven else ''
                         why += f' {sc.strjoin(tr.name for tr in driven)} {"has" if len(driven) == 1 else "have"} a rate and no p=, so {"it competes" if len(driven) == 1 else "they compete"} with the branches rather than taking the rest: give it p={1 - total:n}, or a duration (dur=), which takes the rest.' if total < 1 and driven and not exits.timed else ''
                         why += f' For the rest to stay in {name}, give the destinations as one split with ss.stay, e.g. [A, ss.stay] with p=[{total:n}, None].' if total < 1 else ''
                         raise ValueError(f'the branch probabilities out of state "{name}" sum to {total:n}, not 1 '
@@ -787,7 +799,7 @@ class Graph:
                 dst = (flow.dest or [None])[0]
                 raise ss.CapabilityError(f'"{name}" reads the incidence of "{flow.name}" in its rate, which is not supported yet: a flow over a window, in a rate, needs the history of the flow in every solver.\n'
                                          f'     Use a count of a state instead, e.g. {getattr(dst, "name", "X")}.n, which is about the flow into it times the time people spend there. '
-                                         f'The incidence can be used in where= of ss.modify(), e.g. ss.modify(..., multiply=0.6, where={path}.incidence(over=ss.days(7)) > 0.001)')
+                                         f'The incidence can be used in who= of ss.modify(), e.g. ss.modify(..., multiply=0.6, who={path}.incidence(over=ss.days(7)) > 0.001)')
             for clock in ss.expressions.clocks_in([tr.rate, tr.dur] + sc.tolist(tr.p)): # A clock has a value only inside its states, and progress needs a scheduled dwell
                 if clock.module not in [None, self.module] or not all(n in self.states for n in clock.names):
                     continue # Another module's clock: checked when it runs
@@ -800,7 +812,7 @@ class Graph:
                         raise ValueError(f'"{name}" reads {clock}, but {clock.names[0]} has only rates out of it, so no dwell time is scheduled when people enter it.')
                 if len(tr.dest or []) <= 1 and any(c is clock for c in ss.expressions.clocks_in(sc.tolist(tr.p))):
                     raise ss.CapabilityError(f'"{name}" has p= with {clock}, but a branch with p= is decided when people enter {sc.strjoin(clock.names)}, when no time has passed. '
-                                             f'Write one transition with several destinations, decided when they leave, e.g. ss.Transition({tr.source[0].name}, [{tr.dest[0].name}, ...], dur=..., p=[f({clock}), None])')
+                                             f'Write one transition with several destinations, decided when they leave, e.g. ss.Transition({tr.source[0].name}, {{{tr.dest[0].name}: f({clock}), ...: None}}, dur=...)')
             if tr.stays and not tr.dest and not tr.may_die:
                 raise ValueError(f'"{name}" has ss.stay as its only destination; give it with another, e.g. [B, ss.stay] with p=[0.3, None].')
             if tr.p is not None and tr._split:
@@ -872,7 +884,7 @@ class Graph:
                 a.by_event = [(ss.expressions.events_in(key, self), val if isinstance(val, ss.Dist) else as_expr(val)) for key,val in a.value.items()]
             elif isinstance(a.value, dict):
                 if a.on is not None:
-                    errormsg = f'The attribute "{name}" is a dict by state, which is derived (worked out when it is read), so it takes no on='
+                    errormsg = f'The attribute "{name}" is a dict by state, which is derived (worked out when it is read), so it takes no when='
                     raise ValueError(errormsg)
                 a.cases = [(names_of(key), as_expr(val)) for key,val in a.value.items()]
                 seen = [n for names,expr in a.cases for n in names]
@@ -895,15 +907,21 @@ class Graph:
         """ Stratify the graph by one or more dimensions; see `ss.Disease.stratify()` """
         by_attr = [key for key in kwargs if key in self.attrs] # By a derived attribute: its level is worked out from the attribute, so it adds no groups
         if by_attr:
-            others = [key for key in kwargs if key not in by_attr and key != 'states']
+            others = [key for key in kwargs if key not in by_attr]
             if others:
-                errormsg = f'A stratification by the attribute "{by_attr[0]}" is worked out from it, so takes only states=; give a value by level in a rate with ss.by({by_attr[0]}=[...]), not {sc.strjoin(others)}'
+                errormsg = f'A stratification by the attribute "{by_attr[0]}" is worked out from it, so is given in a stratify() of its own, not with {sc.strjoin(others)}'
                 raise ValueError(errormsg)
-            states = kwargs.get('states')
-            if states is not None:
-                states = [leaf.name for leaf in states.leaves if isinstance(leaf, State)] if isinstance(states, Expr) and not isinstance(states, State) else [s if isinstance(s, str) else s.name for s in sc.tolist(states)]
             for name in by_attr:
                 a, levels = self.attrs[name], kwargs[name]
+                states = None
+                if isinstance(levels, ss.dimensions.levels):
+                    extra = [key for key,val in levels.options.items() if val is not None and key != 'states']
+                    if extra:
+                        errormsg = f'A stratification by the attribute "{name}" is worked out from it, so takes only states=; give a value by level in a rate with ss.by({name}=[...]), not {sc.strjoin(extra)}'
+                        raise ValueError(errormsg)
+                    levels, states = levels.levels, levels.options['states']
+                if states is not None:
+                    states = [leaf.name for leaf in states.leaves if isinstance(leaf, State)] if isinstance(states, Expr) and not isinstance(states, State) else [s if isinstance(s, str) else s.name for s in sc.tolist(states)]
                 if a.kind != 'derived' or not all(sc.isnumber(v) for v in levels):
                     errormsg = f'A stratification by the attribute "{name}" takes bin edges, and the attribute must be derived (worked out when it is read); "{name}" is {a.kind}'
                     raise ValueError(errormsg)
@@ -1077,7 +1095,7 @@ class Graph:
 
     def unit_values(self):
         """ All the typed values (durations and rates) in the graph, used to infer the sim's unit """
-        vals = [p.raw for p in self.all_pars()] + [val for oc in self.outcomes.values() for val in [oc.delay, oc.stay]]
+        vals = [p.raw for p in self.all_pars()] + [val for oc in self.outcomes.values() for val in [oc.delay, oc.dur]]
         return unit_values(vals)
 
     def modifier_kind(self, name):
@@ -1150,7 +1168,7 @@ def unit_values(vals):
     """ The units of the typed values (durations and rates) among some values, including those inside distributions and values by level or in time """
     out = []
     def check(val):
-        if isinstance(val, ss.Duration) and not isinstance(val, ss.datedur):
+        if isinstance(val, ss.Duration) and not isinstance(val, ss.dates.datedur):
             out.append(type(val).base)
         elif isinstance(val, ss.Rate) and val.unit is not None:
             out.append(type(val.unit).base)

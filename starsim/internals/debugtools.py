@@ -19,7 +19,7 @@ class Profile(sc.profile):
     """
     Class to profile the performance of a simulation
 
-    Typically invoked via `sim.profile()`.
+    Typically invoked via `sim.profile()` (`kind='line'`, the default).
 
     Args:
         sim (`ss.Sim`): the sim to profile
@@ -52,7 +52,8 @@ class Profile(sc.profile):
         # Initialize: copy the sim and time initialization
         sim = self.orig_sim.copy() # Copy so the sim can be reused
         self.sim = sim
-        self.run_func = sim.run # This is used internally by sc.profile.run()
+        self.run_func = sim._run # This is used internally by sc.profile.run()
+        self.kwargs = sc.mergedicts(self.kwargs, dict(profile=True)) # A step at a time, recording the time of each call of the loop too (for plot_cpu())
         self.init_prof = None # Profiling the initialization
 
         # Optionally run
@@ -86,7 +87,7 @@ class Profile(sc.profile):
         # Get the functions from the initialized sim
         if self.ss_follow is None:
             loop_funcs = [e['func'] for e in sim.loop.funcs]
-            self.follow = [sim.run] + loop_funcs
+            self.follow = [sim._run] + loop_funcs
         else:
             self.follow = self.ss_follow
 
@@ -311,7 +312,7 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
     values which differ.
 
     Args:
-        sim1 (Sim/MultiSim/dict): either a simulation/MultiSim object or a dict of its summary (e.g. sim.summary.value.to_dict())
+        sim1 (Sim/MultiSim/dict): either a simulation/MultiSim object or a dict of its summary (e.g. sim.summarize().value.to_dict())
         sim2 (Sim/MultiSim/dict): ditto
         skip_key_diffs (bool): whether to skip keys that don't match between sims
         skip (list): a list of values to skip
@@ -341,7 +342,7 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
         sim2 = as_dict(sim2)
     for sim in [sim1, sim2]:
         if not isinstance(sim, dict):  # pragma: no cover
-            errormsg = f'Cannot compare object of type {type(sim)}, must be a sim or a sim.summary dict'
+            errormsg = f'Cannot compare object of type {type(sim)}, must be a sim or a dict of its summary'
             raise TypeError(errormsg)
 
     # Check if it's a multisim
@@ -483,7 +484,7 @@ def check_sims_match(*args, full=False):
     Examples:
         ```python
         s1 = ss.Sim(diseases='sir', networks='random').run()
-        s2 = ss.Sim(pars=dict(diseases='sir', networks='random')).run()
+        s2 = ss.Sim(dict(diseases='sir', networks='random')).run()
         s3 = ss.Sim(diseases=ss.SIR(), networks=ss.RandomNet()).run()
         assert ss.debugtools.check_sims_match(s1, s2, s3)
         ```

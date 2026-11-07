@@ -53,7 +53,7 @@ class Joint:
 
 class Crossing:
     """
-    Diseases whose states are tracked jointly in a compartmental run, since a condition in one refers to a state of another (e.g. `ss.modify(hiv.rel_trans, multiply=3, where=syph.I)`)
+    Diseases whose states are tracked jointly in a compartmental run, since a condition in one refers to a state of another (e.g. `ss.modify(hiv.rel_trans, multiply=3, who=syph.I)`)
 
     Each disease in the crossing is a dimension of the sim, named after it, whose levels are
     its compartments and which applies to the people of the others. Each keeps its own engine,
@@ -587,7 +587,7 @@ class Crossing:
                             ent_w=np.array(ent_w, dtype=float).reshape(len(ent_comps), R), pg_starts=ints(pg_starts), pg_groups=ints(pg_groups), step=step)
 
     def no_shifts(self):
-        """ The deliveries that the kernels take: none, since deliveries are taken in Python when several diseases are declared (see `ss.Delivery.tabulated`) """
+        """ The deliveries that the kernels take: none, since deliveries are taken in Python when several diseases are declared (see `ss.Event.tabulated`) """
         npts = self.engines[0].mod.t.npts
         if any(getattr(engine, 'deliveries', None) for engine in self.engines):
             errormsg = 'The deliveries of diseases tracked jointly are not taken by the kernels'

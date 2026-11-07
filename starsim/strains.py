@@ -129,11 +129,11 @@ class Strain:
     """
     One strain of an `ss.Strains`: unpacked from it (`DS, RIF = strains`)
 
-    A strain is a condition, the people who carry it (`where=RIF`; `where=A & B` for both), and `>>` changes
+    A strain is a condition, the people who carry it (`who=RIF`; `who=A & B` for both), and `>>` changes
     the strains people carry, on the transition that causes it: `move=DS >> RIF` (replacement) or
     `move=DS >> (DS, RIF)` (emergence: DS acquires resistance). A tuple is a set of strains carried
     together (`move=(A, B) >> A`: of someone carrying both, only A progresses); between two tuples,
-    which `>>` cannot write, use `strains.move((A, B), (A, C))`.
+    which `>>` cannot write, use `strains.change((A, B), (A, C))`.
 
     Args:
         name (str): the name of the strain
@@ -359,8 +359,8 @@ class Strains:
     def __repr__(self):
         return f'Strains({self.name}: {sc.strjoin(self.names)})'
 
-    def move(self, src, dst):
-        """ A change of the strains people carry, from a strain or a tuple of them to a strain or a tuple of them: `strains.move((DS, INH), (RIF, INH))`, for what `>>` cannot write between two tuples
+    def change(self, src, dst):
+        """ A change of the strains people carry, from a strain or a tuple of them to a strain or a tuple of them: `strains.change((DS, INH), (RIF, INH))`, for what `>>` cannot write between two tuples
 
         Args:
             src (Strain/tuple): the strain or strains people carry
@@ -504,7 +504,7 @@ def attach(dis, strains):
     if strains.max_strains > 1 or super_states:
         strat.init_carriage(strains)
     graph.strats.append(strat)
-    if not hasattr(dis, strains.name): # So the strains can be used in a condition, e.g. where=tb.strain == 'RIF'
+    if not hasattr(dis, strains.name): # So the strains can be used in a condition, e.g. who=tb.strain == 'RIF'
         dis.setattribute(strains.name, ss.conditions.Cond('dim', strains.name))
     dis.strains = strains
     return
@@ -516,7 +516,7 @@ def prepare(strains, trs):
     probability and a change of strains for each level of the strain dimension (see `ss.Transition`)
 
     With `p=`, each strain k carried takes the first destination with probability c_k (cured, say), independently: everyone takes it with
-    probability Π c_k, and the others take the second, carrying the strains left. With `single_strain=True`, each strain has its own rate, and the
+    probability Π c_k, and the others take the second, carrying the strains left. With `per_strain='first'`, each strain has its own rate, and the
     first to happen moves on as the only strain carried: the rate of a set is the sum, and the strain is chosen in proportion to its rate.
     """
     n, L = len(strains.names), len(strains.sets)
@@ -528,7 +528,7 @@ def prepare(strains, trs):
         Q = np.zeros((L, L)) # Where the people at each level go (rows sum to 1)
         if tr.single_strain:
             if tr.p is not None or tr.rate is None:
-                errormsg = f'"{name}" has single_strain=True, so each strain carried has its own rate, given as rate=; not dur= or p='
+                errormsg = f'"{name}" has per_strain="first", so each strain carried has its own rate, given as rate=; not dur= or a split'
                 raise ValueError(errormsg)
             tr.strain_adjust = np.array([vals[list(s)].sum() for s in strains.sets]) # The rate of a set: the sum of its strains'
             for l,s in enumerate(strains.sets):
@@ -537,9 +537,9 @@ def prepare(strains, trs):
             tr.per_given = dict(single_strain=True)
         else:
             if tr.p is None or len(tr.dest or []) != 2:
-                errormsg = f'"{name}" has per_strain=True, so each strain carried has its own outcome: give p=, the chance of each strain taking the first destination (e.g. cured), and two destinations, the first for those with none left and the second for the rest, e.g. ss.Transition(Tx, [R, I], p=0.9, per_strain=True)'
+                errormsg = f'"{name}" has per_strain=True, so each strain carried has its own outcome: give two destinations, the first for those with none left, with the chance of each strain taking it (e.g. cured), and the second for the rest, e.g. ss.Transition(Tx, {{R: 0.9, I: None}}, per_strain=True)'
                 raise ValueError(errormsg)
-            given = tr.p[0] if len(tr.p) == 1 else tr.p
+            given = tr.p[0] if len(tr.p) == 1 or (len(tr.p) == 2 and tr.p[1] is None) else tr.p # The first destination's: the rest take the second
             given = getattr(given, 'raw', given)
             if isinstance(given, str):
                 if given not in strains.values:

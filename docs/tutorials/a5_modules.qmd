@@ -45,7 +45,7 @@ class SIRS(ssl.AgentSIR):
     def __init__(self, pars=None, *args, **kwargs):
         super().__init__()
         self.define_pars(
-            dur_imm = ss.expon(scale=ss.days(180)), # How long immunity lasts after recovery
+            dur_imm = ss.expon(mean=ss.days(180)), # How long immunity lasts after recovery
         )
         self.update_pars(pars, **kwargs)
 
@@ -80,7 +80,7 @@ The new class includes the following main changes:
 Here it is next to the declared SIRS of A1, with the same R0 (0.4 per day × 7 days = 2.8) and durations. A disease whose transmission is written as code transmits over the sim's networks, so both are given a mixing pool in which everyone has one contact a day, which is the same as homogeneous mixing with β = 0.4 per day:
 
 ```{python}
-coded = SIRS(beta=ss.perday(0.4), dur_inf=ss.expon(scale=ss.days(7)), p_death=0, init_prev=0.01, name='cold')
+coded = SIRS(beta=ss.perday(0.4), dur_inf=ss.expon(mean=ss.days(7)), p_death=0, init_prev=0.01, name='cold')
 
 S, I, R = ss.states('S I R')
 declared = ss.Disease(
@@ -140,7 +140,7 @@ class Antibodies(ss.Module):
     def init_results(self):
         super().init_results()
         self.define_results(
-            ss.Result('mean_level', label='Mean antibody level'), # A mean (a ratio), so not scaled by the number of people per agent
+            ss.Result('mean_level', label='Mean antibody level', kind='ratio'), # A mean (a ratio), so not scaled by the number of people per agent
         )
         return
 
@@ -220,7 +220,7 @@ class AgeNet(ss.Network):
             p2.append(order[k:])
         p1 = np.concatenate(p1)
         p2 = np.concatenate(p2)
-        self.append(p1=p1, p2=p2, beta=np.ones(len(p1)))
+        self.append(p1=p1, p2=p2, weight=np.ones(len(p1)))
         return
 
     def step(self):

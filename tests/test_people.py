@@ -95,9 +95,9 @@ def test_ppl_construction(do_plot=False):
         loc[sim.people.female[uids]] = 21
         return loc
 
-    net = ss.SexualNet(debut=ss.normal(loc=init_debut, scale=2)) # Age of debut can vary by using callable parameter values
+    net = ss.SexualNet(debut=ss.normal(mean=init_debut, std=2)) # Age of debut can vary by using callable parameter values
     hiv = ssl.diseases.HIV(beta={'sexual': [0.08, 0.04]})
-    sim = ss.Sim(pars=dict(networks=[net], n_agents=small), diseases=[hiv])
+    sim = ss.Sim(dict(networks=[net], n_agents=small), diseases=[hiv])
     sim.run()
     if do_plot:
         plt.figure()

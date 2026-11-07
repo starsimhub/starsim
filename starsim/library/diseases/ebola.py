@@ -1,164 +1,87 @@
 """
 Ebola, with severe disease and transmission from unburied bodies.
 
-Adapted from https://github.com/optimamodel/gavi-outbreaks/blob/main/stisim/gavi/ebola.py
+Originally adapted from https://github.com/optimamodel/gavi-outbreaks/blob/main/stisim/gavi/ebola.py
 Original version by @domdelport and @RomeshA
 """
 
-import numpy as np
 import starsim as ss
-from .agents import AgentSEIR
 
 __all__ = ['Ebola']
 
 
-class Ebola(AgentSEIR):
+class Ebola(ss.Disease):
     """
-    Ebola, including severe disease and transmission from unburied bodies.
+    Ebola, including severe disease and transmission from unburied bodies
 
-    Extends `ssl.AgentSEIR` with severe and buried states. Exposed agents become
-    infectious, a fraction progress to severe disease, and a fraction of those
-    die; everyone else recovers. Severe agents are more infectious
-    (`sev_factor`), and dead agents remain infectious until buried
-    (`unburied_factor`), with safe burials happening immediately and unsafe
-    burials after a delay. Bodies are only removed from the population (i.e.
-    counted as deaths by the sim) once they are buried.
+    People infected are latent (`E`) for `dur_exp`, then symptomatic (`I`). A share `p_sev` become severely ill
+    (`Sev`), and the rest recover; of the severe, a share `p_death` die, and the rest recover. Severe cases are more
+    infectious (`sev_factor`), and so are the bodies of those who have died (`D`), until they are buried
+    (`unburied_factor`): a share `p_safe_bury` are buried safely, at once, and the rest after `dur_dead2buried`.
+    Bodies are people until they are buried, when they leave the population; the outcome `burials` counts both
+    kinds of burial, and `deaths` every death. It is declared, so it runs under any solver.
 
-    Note: CRN safe.
+    Sources: the structure follows the model of Legrand J et al., "Understanding the dynamics of Ebola epidemics",
+    *Epidemiol Infect* 2007;135(4):610-621 (https://doi.org/10.1017/S0950268806007217), with funeral transmission;
+    the durations and probabilities are illustrative of the 2014 West African epidemic (WHO Ebola Response Team,
+    *N Engl J Med* 2014;371:1481-1495, https://doi.org/10.1056/NEJMoa1411100), and `beta` gives an R0 of about 1.7,
+    within its estimates of 1.5 to 2.0.
+
+    Note: CRN safe as agents.
 
     Args:
-        init_prev (Dist):           initial prevalence
-        beta (prob):                per-contact transmission probability
-        sev_factor (float):         relative transmissibility of severe agents
-        unburied_factor (float):    relative transmissibility of unburied bodies
-        dur_exp (Dist):             duration from exposure to symptoms (i.e. infectiousness)
-        dur_symp2sev (Dist):        duration from symptoms to severe disease
-        dur_sev2dead (Dist):        duration from severe disease to death
-        dur_dead2buried (Dist):     duration from death to (unsafe) burial
-        dur_symp2rec (Dist):        duration from symptoms to recovery, non-severe agents
-        dur_sev2rec (Dist):         duration from severe disease to recovery
-        p_sev (Dist):               probability of progressing to severe disease
-        p_death (Dist):             probability of death among severe agents
-        p_safe_bury (Dist):         probability of a safe (immediate) burial
-
-    Attributes:
-        exposed (BoolState):    infected but not yet infectious
-        severe (BoolState):     currently severely ill
-        buried (BoolArr):       dead and buried (no longer infectious): each is taken out of the population at the end of the step of their burial, so the result `burial` counts them, a flow
-        ti_exposed (FloatArr):  timestep of exposure
-        ti_severe (TimeArr):    timestep severe symptoms began
-        ti_buried (TimeArr):    timestep of burial
+        beta (`ss.per`): the transmission rate from a symptomatic person (per contact, if there are networks)
+        sev_factor (float): the relative transmissibility of severe cases
+        unburied_factor (float): the relative transmissibility of unburied bodies
+        dur_exp (`ss.Duration`): the mean time from infection to symptoms (and being infectious)
+        dur_symp2sev (`ss.Duration`): the mean time from symptoms to severe disease, for those who become severe
+        dur_symp2rec (`ss.Duration`): the mean time from symptoms to recovery, for those who do not
+        dur_sev2dead (`ss.Duration`): the mean time from severe disease to death, for those who die
+        dur_sev2rec (`ss.Duration`): the mean time from severe disease to recovery, for those who recover
+        dur_dead2buried (`ss.Duration`): the mean time from death to an unsafe burial
+        p_sev (float): the probability of severe disease
+        p_death (float): the probability of death, of the severe
+        p_safe_bury (float): the probability of a safe burial, at once
+        kwargs (dict): passed to `ss.Disease`, e.g. `init_prev`, `init` or `name`
 
     Examples:
         ```python
         import starsim as ss
         import starsim.library as ssl
 
-        sim = ss.Sim(diseases=ssl.Ebola(), networks='random')
+        sim = ss.Sim(diseases=ssl.Ebola(), total_pop=10_000, start='2025-01-01', stop='2026-01-01')
         sim.run()
-        sim.plot()
+        sim.plot('ebola')
         ```
     """
-    def __init__(self, pars=None, **kwargs):
-        """ Initialize with parameters """
-        super().__init__()
-        self.pars.pop('dur_inf') # Ebola schedules its own outcomes, so it doesn't use SIR's single infectious duration
-        self.define_pars(
-            # Initial conditions and beta
-            init_prev       = ss.bernoulli(p=0.005),
-            beta            = ss.prob(1.0, ss.days(1)), # Placeholder value
-            sev_factor      = 2.2,
-            unburied_factor = 2.1,
+    beta            = ss.par(ss.perday(0.1), doc='Transmission rate from a symptomatic person, giving R0 of about 1.7', source='WHO Ebola Response Team (2014)')
+    sev_factor      = ss.par(2.2, doc='Relative transmissibility of severe cases', source='Illustrative')
+    unburied_factor = ss.par(2.1, doc='Relative transmissibility of unburied bodies', source='Illustrative')
+    dur_exp         = ss.par(ss.days(12.7), doc='Mean time from infection to symptoms', source='Illustrative')
+    dur_symp2sev    = ss.par(ss.days(6),    doc='Mean time from symptoms to severe disease', source='Illustrative')
+    dur_symp2rec    = ss.par(ss.days(10),   doc='Mean time from symptoms to recovery, if not severe', source='Illustrative')
+    dur_sev2dead    = ss.par(ss.days(1.5),  doc='Mean time from severe disease to death', source='Illustrative')
+    dur_sev2rec     = ss.par(ss.days(10.4), doc='Mean time from severe disease to recovery', source='Illustrative')
+    dur_dead2buried = ss.par(ss.days(2),    doc='Mean time from death to an unsafe burial', source='Illustrative')
+    p_sev           = ss.par(0.7,  doc='Probability of severe disease', source='Illustrative')
+    p_death         = ss.par(0.55, doc='Probability of death, of the severe', source='Illustrative')
+    p_safe_bury     = ss.par(0.25, doc='Probability of a safe burial', source='Illustrative')
+    init_prev       = 0.005
 
-            # Natural history parameters, all specified in days
-            dur_exp         = ss.lognormal(mean=ss.days(12.7)), # Add source
-            dur_symp2sev    = ss.lognormal(mean=ss.days(6)), # Add source
-            dur_sev2dead    = ss.lognormal(mean=ss.days(1.5)), # Add source
-            dur_dead2buried = ss.lognormal(mean=ss.days(2)), # Add source
-            dur_symp2rec    = ss.lognormal(mean=ss.days(10)), # Add source
-            dur_sev2rec     = ss.lognormal(mean=ss.days(10.4)), # Add source
-            p_sev           = ss.bernoulli(p=0.7), # Add source
-            p_death         = ss.bernoulli(p=0.55), # Add source
-            p_safe_bury     = ss.bernoulli(p=0.25), # Probability of a safe burial - should be linked to diagnoses
-        )
-        self.update_pars(pars, **kwargs)
+    S   = ss.State()
+    E   = ss.State('Exposed', infected=True)
+    I   = ss.State('Symptomatic', infected=True)
+    Sev = ss.State('Severe', infected=True)
+    R   = ss.State()
+    D   = ss.State('Dead, not yet buried') # Still people, until they are buried
 
-        # Boolean states
-        self.define_states(
-            # SEIR states are added automatically, here we add severe and buried
-            ss.BoolState('severe', label='Severe'),
-            ss.BoolArr('buried', label='Buried'), # Not counted as a state: see burial
-
-            # Timepoint states
-            ss.TimeArr('ti_severe', label='Time of severe symptoms'),
-            ss.TimeArr('ti_buried', label='Time of burial'),
-        )
-        return
-
-    def step_state(self):
-        """ Progress exposed -> infectious -> severe -> recovered/dead -> buried """
-        p = self.pars
-
-        # Progress exposed -> infectious (as in ssl.AgentSEIR; super() isn't called since it would remove bodies before burial)
-        infectious = (self.exposed & self.ti_infectious.due()).uids
-        self.exposed[infectious] = False
-        self.infectious[infectious] = True
-
-        # Progress infectious -> severe
-        severe = (self.infectious & self.ti_severe.due()).uids
-        self.severe[severe] = True
-
-        # Progress infectious/severe -> recovered
-        recovered = (self.infectious & self.ti_recovered.due()).uids
-        self.clear_infection(recovered)
-        self.recovered[recovered] = True
-        self.severe[recovered] = False
-
-        # Progress dead -> buried: unburied bodies stay in the population (and infectious) until burial, when they are removed
-        dead = self.ti_dead.due()
-        self.severe[dead] = False
-        buried = self.ti_buried.due().uids
-        self.buried[buried] = True
-        self.results.burial[self.ti] = len(buried)
-        self.sim.people.request_death(buried, cause=self)
-
-        # Update transmissibility: severe agents and unburied bodies are more infectious
-        self.rel_trans[:] = 1.0
-        self.rel_trans[self.severe] = p.sev_factor
-        unburied = (dead & ~self.ti_buried.due()).uids
-        self.rel_trans[unburied] = p.unburied_factor
-        return
-
-    def init_results(self):
-        super().init_results()
-        self.define_results(ss.Result('burial', dtype=int, kind='flow', label='Burials'))
-        return
-
-    def set_progression(self, uids):
-        """ Schedule severe disease, recovery, death, and burial """
-        p = self.pars
-
-        # Determine who progresses to severe and when
-        sev_uids = p.p_sev.filter(uids)
-        self.ti_severe[sev_uids] = self.ti_infectious[sev_uids] + p.dur_symp2sev.rvs(sev_uids)
-
-        # Determine who dies and who recovers and when
-        dead_uids = p.p_death.filter(sev_uids)
-        self.ti_dead[dead_uids] = self.ti_severe[dead_uids] + p.dur_sev2dead.rvs(dead_uids)
-        rec_sev_uids = np.setdiff1d(sev_uids, dead_uids)
-        self.ti_recovered[rec_sev_uids] = self.ti_severe[rec_sev_uids] + p.dur_sev2rec.rvs(rec_sev_uids)
-        rec_symp_uids = np.setdiff1d(uids, sev_uids)
-        self.ti_recovered[rec_symp_uids] = self.ti_infectious[rec_symp_uids] + p.dur_symp2rec.rvs(rec_symp_uids)
-
-        # Determine time of burial - either immediate (safe burials) or after a delay (unsafe)
-        safe_buried = p.p_safe_bury.filter(dead_uids)
-        unsafe_buried = np.setdiff1d(dead_uids, safe_buried)
-        self.ti_buried[safe_buried] = self.ti_dead[safe_buried]
-        self.ti_buried[unsafe_buried] = self.ti_dead[unsafe_buried] + p.dur_dead2buried.rvs(unsafe_buried)
-        return
-
-    def on_death(self, uids):
-        """ Reset states for dead agents """
-        super().on_death(uids)
-        self.severe[uids] = False
-        return
+    infection    = S >> E @ beta*(I + sev_factor*Sev + unburied_factor*D)
+    onset        = E >> I @ dur_exp
+    severe       = ss.Transition(I, Sev, dur=dur_symp2sev, p=p_sev)
+    recovery     = ss.Transition(I, R, dur=dur_symp2rec, p=1 - p_sev)
+    death        = ss.Transition(Sev, D, dur=dur_sev2dead, p=p_death*(1 - p_safe_bury)) # Dies, and is buried later, unsafely
+    safe_burial  = ss.Transition(Sev, ss.dead, dur=dur_sev2dead, p=p_death*p_safe_bury) # Dies, and is buried at once, safely
+    recovery_sev = ss.Transition(Sev, R, dur=dur_sev2rec, p=1 - p_death)
+    burial       = D >> ss.dead @ dur_dead2buried
+    burials      = safe_burial + burial # Both kinds of burial
+    deaths       = death + safe_burial # Every death

@@ -1,5 +1,5 @@
 """
-Test branching processes (ss.Sim(branching=True)) under every solver, stopping a run with until=, and the 'ide' solver
+Test branching processes (ss.Sim(branching=True)) under every solver, stopping a run with until=, and exact dwell times (ss.ode(dwells='exact'))
 """
 
 # %% Imports and settings
@@ -73,7 +73,7 @@ def test_extinction():
     for solver in ['gillespie', 'abm']:
         sir = make_sir()
         sim = ss.Sim(sir, total_pop=1e6, branching=True, solver=solver, unit='day', stop=100, **kw)
-        msim = ss.parallel(sim, n_runs=100, parallel=False, run_args=dict(until=sir.I.n + sir.R.n >= 50)) # In series: each run takes a few milliseconds
+        msim = ss.parallel(sim, n_runs=100, workers=1, run_args=dict(until=sir.I.n + sir.R.n >= 50)) # In series: each run takes a few milliseconds
         b = msim.branching
         assert set(b.outcomes) == {'extinct', 'stopped'}, solver
         assert abs(b.p_extinct - 1/3) < 0.15, (solver, b.p_extinct) # About three standard errors
@@ -86,7 +86,7 @@ def test_offspring():
     sc.heading('As agents: a gamma-distributed infectiousness gives negative binomial offspring, and each case has an infector and a generation')
     k = 0.5
     S, I, R = ss.states(3)
-    dis = ss.Disease(S >> I @ ss.perday(0.15)*I, I >> R @ ss.constant(ss.days(8)), init_n=dict(I=300), rel_trans=ss.attr(ss.gamma(a=k, scale=1/k)), name='sir')
+    dis = ss.Disease(S >> I @ ss.perday(0.15)*I, I >> R @ ss.constant(ss.days(8)), init_n=dict(I=300), rel_trans=ss.attr(ss.gamma(shape=k, scale=1/k)), name='sir')
     sim = ss.Sim(dis, total_pop=1e7, branching=True, solver='abm', unit='day', stop=100, **kw).run()
     b = sim.branching
     R0, kfit = ss.run.Branching.fit_offspring(b.offspring[b.complete])
@@ -101,12 +101,13 @@ def test_offspring():
 
 @sc.timer()
 def test_ide():
-    sc.heading('The ide solver: a dwell time as it is, and under branching, the renewal equation')
+    sc.heading('Exact dwell times (ss.ode(dwells="exact")): a dwell time as it is, and under branching, the renewal equation')
     def make(dur, solver, dt=1.0, branching=False, stop=150):
         S, E, I, R = ss.states(4)
         dis = ss.Disease(S >> E @ ss.perday(0.4)*I, E >> I @ dur, I >> R @ ss.perday(0.2), init_n=dict(I=10), name='seir')
+        solver = ss.ode(dwells='exact') if solver == 'ide' else solver
         return ss.Sim(dis, total_pop=1e6, solver=solver, unit='day', dt=dt, stop=stop, branching=branching, **kw).run().results.seir
-    gamma = ss.gamma(a=4, scale=ss.days(2)) # Exact as four Erlang stages
+    gamma = ss.gamma(shape=4, scale=ss.days(2)) # Exact as four Erlang stages
     ode, ide = make(gamma, 'ode', 0.25), make(gamma, 'ide', 0.25)
     assert np.allclose(ode.I.values, ide.I.values, rtol=2e-3, atol=1)
     delay = ss.constant(ss.days(6)) # Exact as a conveyor, as it already is

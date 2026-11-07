@@ -1,7 +1,7 @@
 """
 Not for the user: Starsim's compiled kernels in Rust, as the other kernels to Numba's: with `ss.options.kernels = 'auto'` (the default) when they are there (in
 the wheels, or built), or `'rust'` (or `STARSIM_KERNELS=rust`), the
-serial and threaded passes over the agents and a network's edges (`ss.solvers.backends.passes`), the pass of `solver='abm-events'` (`ss.solvers.backends.events`), the small kernels of `ss.arrays`, `ss.networks`,
+serial and threaded passes over the agents and a network's edges (`ss.solvers.backends.passes`), the pass of `solver=ss.abm(step='events')` (`ss.solvers.backends.events`), the small kernels of `ss.arrays`, `ss.networks`,
 `ss.dists`, `ss.distributions` and `ss.People`, the draws of `ss.Dist` (`draws.many`), and the compartmental kernels (`ss.kernels`: see
 `compartmental()`) run in Rust, with the same arguments and results (the same
 numbers, bit for bit, whatever the number of threads). The Rust kernels are compiled ahead of time, so a first run takes no compiling, and

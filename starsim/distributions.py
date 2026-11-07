@@ -110,15 +110,30 @@ class normal(Dist):
     Normal distribution
 
     Args:
-        loc (float): the mean of the distribution (default 0.0)
-        scale (float): the standard deviation of the distribution (default 1.0)
+        mean (float): the mean of the distribution (default 0.0)
+        std (float): the standard deviation of the distribution (default 1.0)
 
+    Examples:
+        ```python
+        ss.normal(5, 1) # A mean of 5 and a standard deviation of 1
+        ss.normal(mean=ss.days(8), std=ss.days(2))
+        ```
     """
+    renamed = dict(loc='mean', scale='std')
     scaling = ['predraw', 'postdraw']
-    unit_pars = ('loc', 'scale')
-    def __init__(self, loc=0.0, scale=1.0, **kwargs): # Does not accept dtype
-        super().__init__(distname='normal', dist='norm', loc=loc, scale=scale, **kwargs)
+    unit_pars = ('mean', 'std')
+    def __init__(self, mean=0.0, std=1.0, **kwargs): # Does not accept dtype
+        super().__init__(distname='normal', dist='norm', mean=mean, std=std, **kwargs)
         return
+
+    def sync_pars(self):
+        """ Translate to SciPy's names """
+        spars = dict(loc=self._pars.mean, scale=self._pars.std)
+        self.update_dist_pars(spars)
+        return spars
+
+    def make_rvs(self):
+        return self.rng.normal(loc=self._pars.mean, scale=self._pars.std, size=self._size)
 
     def ppf(self, rands):
         """ The inverse CDF: the same arithmetic as SciPy's, without its checking of the arguments, which is most of the cost of a small draw """
@@ -134,29 +149,30 @@ class truncnorm(Dist):
     Normal distribution truncated to an interval
 
     Args:
-        loc (float): the mean of the normal distribution before truncation (default 0.0)
-        scale (float): its standard deviation (default 1.0)
+        mean (float): the mean of the normal distribution before truncation (default 0.0)
+        std (float): its standard deviation (default 1.0)
         low (float): the lowest value (default -inf)
         high (float): the highest value (default inf)
 
     Examples:
         ```python
-        ss.truncnorm(loc=2.5, scale=0.5, low=1.0, high=4.0, strict=False).rvs(1000)
+        ss.truncnorm(2.5, 0.5, low=1.0, high=4.0, strict=False).rvs(1000)
         ```
     """
+    renamed = dict(loc='mean', scale='std')
     scaling = ['predraw', 'postdraw']
-    unit_pars = ('loc', 'scale', 'low', 'high')
+    unit_pars = ('mean', 'std', 'low', 'high')
 
-    def __init__(self, loc=0.0, scale=1.0, low=-np.inf, high=np.inf, **kwargs):
-        super().__init__(distname='truncnorm', loc=loc, scale=scale, low=low, high=high, **kwargs)
+    def __init__(self, mean=0.0, std=1.0, low=-np.inf, high=np.inf, **kwargs):
+        super().__init__(distname='truncnorm', mean=mean, std=std, low=low, high=high, **kwargs)
         return
 
     def ppf(self, rands):
         """ The inverse CDF: a uniform draw between the normal's CDF at the two ends """
         p = self._pars
-        a = sp_special.ndtr((p.low - p.loc)/p.scale)
-        b = sp_special.ndtr((p.high - p.loc)/p.scale)
-        return p.loc + p.scale*sp_special.ndtri(a + rands*(b - a))
+        a = sp_special.ndtr((p.low - p.mean)/p.std)
+        b = sp_special.ndtr((p.high - p.mean)/p.std)
+        return p.mean + p.std*sp_special.ndtri(a + rands*(b - a))
 
     def make_rvs(self):
         return self.ppf(self.rand(self._size))
@@ -183,6 +199,7 @@ class lognormal(Dist):
         ss.lognormal(mean=ss.days(10), std=ss.days(3)) # A duration
         ```
     """
+    renamed = dict(loc='mean', scale='std', s='log_std', sigma='log_std')
     scaling = ['predraw', 'postdraw'] # Given by its log moments, only 'postdraw'
     unit_pars = ('mean', 'std')
 
@@ -271,12 +288,27 @@ class expon(Dist):
     Exponential distribution
 
     Args:
-        scale (float): the scale of the distribution (default 1.0)
+        mean (float): the mean of the distribution, e.g. a duration (default 1.0); its rate is 1/mean
+
+    Examples:
+        ```python
+        ss.expon(ss.days(5)) # A mean of 5 days
+        ```
     """
+    renamed = dict(scale='mean', lam='mean')
     scaling = ['predraw', 'postdraw']
-    def __init__(self, scale=1.0, **kwargs):
-        super().__init__(distname='exponential', dist='expon', scale=scale, **kwargs)
+    def __init__(self, mean=1.0, **kwargs):
+        super().__init__(distname='exponential', dist='expon', mean=mean, **kwargs)
         return
+
+    def sync_pars(self):
+        """ Translate to SciPy's names """
+        spars = dict(scale=self._pars.mean)
+        self.update_dist_pars(spars)
+        return spars
+
+    def make_rvs(self):
+        return self.rng.exponential(scale=self._pars.mean, size=self._size)
 
     def ppf(self, rands):
         """ The inverse CDF, compiled (see `ss.solvers.backends.draws`); SciPy's for unusual parameters """
@@ -291,25 +323,29 @@ class poisson(Dist):
     """
     Poisson distribution
 
-    Note: unlike rate-based distributions, the Poisson lambda parameter is not
+    Note: unlike rate-based distributions, a plain-number mean is not
     automatically scaled by dt. If using this distribution in a context where
-    dt != 1, you may need to scale lambda manually (e.g., lam*dt).
+    dt != 1, give the mean as a rate (e.g. `ss.poisson(ss.peryear(3))`) or scale it manually.
 
     Args:
-        lam (float): the scale of the distribution (default 1.0)
+        mean (float): the mean of the distribution, often written λ (default 1.0)
     """
+    renamed = dict(lam='mean', mu='mean')
     scaling = 'predraw'
-    def __init__(self, lam=1.0, **kwargs):
-        super().__init__(distname='poisson', dist='poisson', lam=lam, **kwargs)
-        self._ppf_lam = None # Cached lambda for the fast ppf (see ppf())
+    def __init__(self, mean=1.0, **kwargs):
+        super().__init__(distname='poisson', dist='poisson', mean=mean, **kwargs)
+        self._ppf_lam = None # Cached mean for the fast ppf (see ppf())
         self._ppf_cdf = None # Cached CDF for the fast ppf
         return
 
     def sync_pars(self):
-        """ Translate between NumPy and SciPy parameters """
-        spars = dict(mu=self._pars.lam)
+        """ Translate to SciPy's names """
+        spars = dict(mu=self._pars.mean)
         self.update_dist_pars(spars)
         return spars
+
+    def make_rvs(self):
+        return self.rng.poisson(lam=self._pars.mean, size=self._size)
 
     def ppf(self, rands):
         """
@@ -317,12 +353,12 @@ class poisson(Dist):
 
         SciPy's generic discrete `ppf` is very slow (it root-finds per element),
         and for CRN draws it is called every time an `ss.poisson` is sampled by
-        UID. For a scalar `lam` we instead precompute the CDF once and map each
+        UID. For a scalar mean we instead precompute the CDF once and map each
         uniform via `np.searchsorted`, which is 30-60x faster and produces
-        bitwise-identical results. Array-valued `lam` is inverted by `ss.solvers.backends.draws`
+        bitwise-identical results. An array-valued mean is inverted by `ss.solvers.backends.draws`
         (SciPy's above a mean of 30, and for unusual values).
         """
-        lam = self._pars.lam
+        lam = self._pars.mean
         if np.isscalar(lam) or (isinstance(lam, np.ndarray) and lam.ndim == 0):
             lam = float(lam)
             if self._ppf_lam != lam: # Rebuild the CDF only when lambda changes
@@ -413,6 +449,7 @@ class nbinom(Dist):
         ss.nbinom(mean=20, n=0.5) # A mean of 20 and a variance of 820
         ```
     """
+    prob_pars = ('p',)
     scaling = 'predraw'
     unitless_pars = ('n',)
     def __init__(self, n=1, p=None, mean=None, **kwargs):
@@ -453,6 +490,7 @@ class binom(Dist):
         n (int): the number of trials (default 1)
         p (float): the probability of success in [0,1], (default 0.5)
     """
+    prob_pars = ('p',)
     scaling = 'predraw'
     unitless_pars = ('n',)
     def __init__(self, n=1, p=0.5, **kwargs):
@@ -527,21 +565,29 @@ class weibull(Dist):
     Weibull distribution (specifically, scipy.stats.weibull_min)
 
     Args:
-        c (float): the shape parameter, sometimes called k (default 1.0)
+        shape (float): the shape parameter, sometimes called k (default 1.0)
         scale (float): the scale parameter, sometimes called λ (default 1.0)
-        loc (float): the location parameter, which shifts the position of the distribution (default 0.0); by keyword only, so `ss.weibull(2, 5)` is a shape and a scale
+        loc (float): a shift of the whole distribution, e.g. a shortest duration (default 0.0); by keyword only, so `ss.weibull(2, 5)` is a shape and a scale
 
     Examples:
         ```python
-        ss.weibull(c=1.4, scale=ss.days(8))
+        ss.weibull(shape=1.4, scale=ss.days(8))
         ```
     """
+    renamed = dict(c='shape', k='shape', a='shape')
     scaling = 'postdraw'
-    unitless_pars = ('c',)
+    unitless_pars = ('shape',)
     unit_pars = ('scale', 'loc')
-    def __init__(self, c=1.0, scale=1.0, *, loc=0.0, **kwargs):
-        super().__init__(distname='weibull', dist='weibull_min', c=c, scale=scale, loc=loc, **kwargs)
+    def __init__(self, shape=1.0, scale=1.0, *, loc=0.0, **kwargs):
+        super().__init__(distname='weibull', dist='weibull_min', shape=shape, scale=scale, loc=loc, **kwargs)
         return
+
+    def sync_pars(self):
+        """ Translate to SciPy's names """
+        p = self._pars
+        spars = dict(c=p.shape, scale=p.scale, loc=p.loc)
+        self.update_dist_pars(spars)
+        return spars
 
     def ppf(self, rands):
         """ The inverse CDF, compiled (see `ss.solvers.backends.draws`); SciPy's for unusual parameters """
@@ -565,36 +611,44 @@ class gamma(Dist):
     Given by its shape and scale, or by its mean and standard deviation.
 
     Args:
-        a (float): the shape parameter, sometimes called k (default 1.0)
+        shape (float): the shape parameter, sometimes called k or α (default 1.0)
         scale (float): the scale parameter, sometimes called θ (default 1.0)
-        loc (float): the location parameter, which shifts the position of the distribution (default 0.0); by keyword only, so `ss.gamma(2, 5)` is a shape and a scale
-        mean (float): the mean, instead of `a` and `scale` (with `std`)
+        loc (float): a shift of the whole distribution, e.g. a shortest duration (default 0.0); by keyword only, so `ss.gamma(2, 5)` is a shape and a scale
+        mean (float): the mean, instead of `shape` and `scale` (with `std`)
         std (float): the standard deviation, with `mean`
 
     Examples:
         ```python
-        ss.gamma(a=2, scale=ss.days(5)) # A mean of 10 days
+        ss.gamma(shape=2, scale=ss.days(5)) # A mean of 10 days
         ss.gamma(mean=ss.days(10), std=ss.days(7)) # About the same
         ss.par(1800, prior=ss.gamma(mean=1800, std=400))
         ```
     """
+    renamed = dict(a='shape', k='shape')
     scaling = 'postdraw'
-    unitless_pars = ('a',)
+    unitless_pars = ('shape',)
     unit_pars = ('scale', 'loc')
-    def __init__(self, a=None, scale=None, *, loc=0.0, mean=None, std=None, **kwargs):
+    def __init__(self, shape=None, scale=None, *, loc=0.0, mean=None, std=None, **kwargs):
         if mean is not None or std is not None:
-            if mean is None or std is None or a is not None or scale is not None:
-                errormsg = f'ss.gamma() is given by a and scale, or by mean and std, not by {sc.strjoin([k for k,v in dict(a=a, scale=scale, mean=mean, std=std).items() if v is not None])}'
+            if mean is None or std is None or shape is not None or scale is not None:
+                errormsg = f'ss.gamma() is given by shape and scale, or by mean and std, not by {sc.strjoin([k for k,v in dict(shape=shape, scale=scale, mean=mean, std=std).items() if v is not None])}'
                 raise ValueError(errormsg)
             given = dict(mean=mean, std=std) | (dict(loc=loc) if loc else {})
-            a = float((mean/std)**2) # A mean of a×scale and a variance of a×scale²
-            scale = mean/a
-        a = sc.ifelse(a, 1.0)
+            shape = float((mean/std)**2) # A mean of shape×scale and a variance of shape×scale²
+            scale = mean/shape
+        shape = sc.ifelse(shape, 1.0)
         scale = sc.ifelse(scale, 1.0)
-        super().__init__(distname='gamma', dist='gamma', a=a, scale=scale, loc=loc, **kwargs)
+        super().__init__(distname='gamma', dist='gamma', shape=shape, scale=scale, loc=loc, **kwargs)
         if mean is not None:
             self.given = ('gamma', given)
         return
+
+    def sync_pars(self):
+        """ Translate to SciPy's names """
+        p = self._pars
+        spars = dict(a=p.shape, scale=p.scale, loc=p.loc)
+        self.update_dist_pars(spars)
+        return spars
 
     def make_rvs(self):
         """ Use SciPy rather than NumPy to include the scale parameter """
@@ -606,7 +660,7 @@ def erlang(k=1, mean=1.0, **kwargs):
     """
     Erlang distribution: the sum of `k` exponential stages, given by its number of stages and its mean
 
-    This is `ss.gamma` with an integer shape: `ss.erlang(k=3, mean=10)` is `ss.gamma(a=3, scale=10/3)`.
+    This is `ss.gamma` with an integer shape: `ss.erlang(k=3, mean=10)` is `ss.gamma(shape=3, scale=10/3)`.
     As a dwell time, it has an exact compartmental form (`k` sub-stages), so runs the same under every solver.
 
     Args:
@@ -622,7 +676,7 @@ def erlang(k=1, mean=1.0, **kwargs):
     if k != int(k) or k < 1:
         errormsg = f'The number of stages of an Erlang distribution must be a positive whole number, not {k}; for other shapes, use ss.gamma()'
         raise ValueError(errormsg)
-    dist = gamma(a=int(k), scale=mean/k, **kwargs)
+    dist = gamma(shape=int(k), scale=mean/k, **kwargs)
     dist.given = ('erlang', dict(k=int(k), mean=mean) | ({'loc':kwargs['loc']} if kwargs.get('loc') else {}))
     return dist
 
@@ -659,6 +713,7 @@ class bernoulli(Dist):
         p (float): the probability of returning True (default 0.5)
     """
     valid_pars = ['p']
+    prob_pars = ('p',)
     scaling = 'predraw'
 
     def __init__(self, p=0.5, **kwargs):

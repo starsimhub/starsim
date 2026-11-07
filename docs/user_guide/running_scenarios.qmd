@@ -23,8 +23,8 @@ recovery  = I >> R @ ss.days(8)       # Infectious for 8 days on average
 measles = ss.Disease(infection, recovery, init=dict(R=0.9), init_n=dict(I=50)) # 90% immune, 50 infectious
 
 base = ss.Sim(measles, total_pop=20_000, start='2025-01-01', stop='2025-07-01')
-february = ss.vaccinate(efficacy=0.95, coverage=0.5, at='2025-02-01')
-march    = ss.vaccinate(efficacy=0.95, coverage=0.5, at='2025-03-01')
+february = ss.vaccinate(efficacy=0.95, when='2025-02-01', coverage=0.5)
+march    = ss.vaccinate(efficacy=0.95, when='2025-03-01', coverage=0.5)
 ```
 
 `sim.new()` makes a new sim from the same inputs, with whatever is given changed, so each scenario is the base sim with its intervention, and the base itself is left as it was (`ss.parallel()` runs the sims it is given and labels them, so a sim given to it directly comes back run and relabeled). `ss.parallel()` runs a dict of sims by label, at the same time on the computer's cores:
@@ -47,15 +47,15 @@ msim.summarize()
 
 A campaign in February averts about 490 of the 1,190 infections; by March, most of the outbreak has happened, and it averts about 140. A scenario contains exactly the interventions given to it, so the baseline is a scenario like any other. Where each sim has one disease, a result can also be named without it, as for a single sim: `msim.plot('I')` and `msim.results.I` find `I` in each sim's disease, even if the diseases are named differently (say, `sir` in one scenario and `seir` in another); a sim with several diseases needs the disease named (`'measles.I'`). The sims themselves are kept in `msim.sims`, by position (`msim.sims[0]`), or by label (`msim.sims['Campaign in March']`, which gives the list of that scenario's runs).
 
-`msim.compare()` puts the scenarios side by side as columns, one row per result: by default each result over the whole run, as above, or with `t=` its value on a date (or at a time index):
+`msim.summarize(each=True)` puts the runs side by side as columns, one row per result: by default each result over the whole run, as above, or with `t=` its value on a date (or at a time index):
 
 ```{python}
-msim.compare(t='2025-03-01')
+msim.summarize(each=True, t='2025-03-01')
 ```
 
-On 1 March, a month after the February campaign, about 28 people are infectious with it and 106 without. `output=True` returns the table as a dataframe instead of printing it.
+On 1 March, a month after the February campaign, about 28 people are infectious with it and 106 without. Without `each=True`, `t=` gives the statistics across the runs of each scenario at that time point instead.
 
-`ss.parallel()` also takes a list of sims (each labeled by its own `label`), or several sims as arguments. Sims with different time points (different steps, or a solver that keeps its own) can't be put together as runs at each time point; `msim.plot()` then draws each run on its own time axis (with `msim.plot_each()`), if each scenario has one run or with `lines=True`. It is a shortcut for `ss.MultiSim(sims).run()`; options given to it, such as `verbose=0`, are passed to every run.
+`ss.parallel()` also takes a list of sims (each labeled by its own `label`), or several sims as arguments. Sims with different time points (different steps, or a solver that keeps its own) can't be put together as runs at each time point; `msim.plot()` then draws each run on its own time axis (with `msim.plot_each()`), if each scenario has one run or with `lines=True`. It is a shortcut for `ss.MultiSim(sims).run()`; options given to it, such as `verbose=0`, are passed to every run. Sims are given as arguments, a list, or a dict by label, never as keywords: the keywords of `ss.parallel()` are only how to run them.
 
 ## Many runs of one model
 
@@ -68,11 +68,11 @@ sim.run();
 ```
 
 ```{python}
-msim = sim.run(solver='gillespie', n_runs=50)
+msim = ss.parallel(sim.new(solver='gillespie'), n_runs=50)
 msim.plot('measles.I')
 ```
 
-`sim.run(n_runs=50)` runs it 50 times, each with its own random seed (the same as `ss.parallel(sim, n_runs=50)`). The ODE gave one outbreak peaking at about 137 infectious on day 74. The plot of the runs shows their median at each time point, and the range that holds 95% of them. `lines=True` shows each run instead, which shows what the median hides:
+`ss.parallel(sim, n_runs=50)` runs it 50 times, each with its own random seed (`sim.run()` runs it once, and always returns the sim; `sim.new(solver='gillespie')` is the same sim, built for the Gillespie solver). The ODE gave one outbreak peaking at about 137 infectious on day 74. The plot of the runs shows their median at each time point, and the range that holds 95% of them. `lines=True` shows each run instead, which shows what the median hides:
 
 ```{python}
 msim.plot('measles.I', lines=True)
@@ -117,7 +117,7 @@ Each summary is over the runs of each scenario separately. With several scenario
 The interval is estimated from the runs, so with few runs its ends are uncertain themselves. The ends of a 95% interval rest on the most extreme 2.5% of runs at each end: one run in 40. With 500 runs:
 
 ```{python}
-many = sim.run(solver='gillespie', n_runs=500)
+many = ss.parallel(sim.new(solver='gillespie'), n_runs=500)
 many.summarize().loc['measles_infection']
 ```
 
@@ -244,7 +244,7 @@ A sim copies the modules it is given, so the same disease or intervention can be
 
 By default, `ss.parallel()` keeps the results of each run but not the people in it, which keeps memory use down when there are many runs. For many thousands of runs, keep only what you need from each: `msim.summarize()`, `msim.to_df()`, or a function of each sim, saved as a table, rather than the MultiSim itself. `ss.converters.to_hub()` writes runs as the quantile tables that forecasting hubs take.
 
-`ss.parallel()` runs the sims in separate processes. In a script (rather than a notebook), on Windows and macOS, put the code that runs them under `if __name__ == '__main__':`, as Python's multiprocessing requires; and on a system that cannot start processes, `ss.parallel(..., parallel=False)` runs the same sims one after the other. For larger studies, build the sims with a `make_sim()` function (see [Running sims](running_sim.qmd#larger-projects-make_sim)), and for running them on a cluster, see [Deployment](running_deploy.qmd).
+`ss.parallel()` runs the sims in separate processes. In a script (rather than a notebook), on Windows and macOS, put the code that runs them under `if __name__ == '__main__':`, as Python's multiprocessing requires; and on a system that cannot start processes, `ss.parallel(..., workers=1)` runs the same sims one after the other. For larger studies, build the sims with a `make_sim()` function (see [Running sims](running_sim.qmd#larger-projects-make_sim)), and for running them on a cluster, see [Deployment](running_deploy.qmd).
 
 ## Pitfalls
 
@@ -272,7 +272,7 @@ import inspect
 import pandas as pd
 pd.set_option('display.max_colwidth', None) # Show each entry in full
 
-names = ['plot', 'plot_each', 'summarize', 'compare', 'diff', 'to_df', 'combine', 'merge', 'split', 'shrink', 'copy', 'branching', 'run_pars']
+names = ['plot', 'plot_each', 'summarize', 'diff', 'to_df', 'combine', 'merge', 'split', 'shrink', 'copy', 'branching', 'run_pars']
 docs = {name: inspect.getdoc(getattr(ss.MultiSim, name)).split('\n')[0] for name in names}
 pd.DataFrame.from_dict(docs, orient='index', columns=['What it gives'])
 ```
@@ -291,17 +291,15 @@ pd.DataFrame.from_dict(docs, orient='index', columns=['What it gives'])
 
 | Keyword | Default | What it does |
 |---|---|---|
-| the sims | | One sim, a list of sims, a dict of them by label, or sims as keywords (`ss.parallel(baseline=s1, vaccine=s2)`) |
-| `n_runs` | 1 (4 for `ss.MultiSim()` of one sim) | Run each sim this many times, with the seeds `rand_seed`, `rand_seed + 1`, ... |
+| the sims | | One sim, a list of sims, several sims as arguments, or a dict of them by label (`ss.parallel({'baseline': s1, 'vaccine': s2})`) |
+| `n_runs` | 1 | Run each sim this many times, with the seeds `rand_seed`, `rand_seed + 1`, ... |
 | `pars` | none | Sets of values of the model's parameters, each a scenario of its own: a dict of lists, taken value by value, or a list of dicts |
 | `priors` | False | Draw `n_runs` sets of values from the parameters' priors (or bounds), on a Latin hypercube; or the draws themselves, e.g. from a posterior |
-| `parallel` | True | Run in separate processes; False runs one after the other |
-| `workers` | one per CPU | The number of processes |
+| `workers` | one per CPU | The number of processes; 1 runs the sims one after the other in this process |
 | `shrink` | True | Remove the people from each sim once it has run, keeping the results |
 | `inplace` | True | Update the sims given (with no `n_runs` or `pars`) with their results; False runs copies |
 | `verbose` | the sims' own | How much each run prints; by default the MultiSim shows the progress of the runs |
+| `until` | none | As for `sim.run()`, for each run: a time, or a condition that stops it |
 | `run_args` | none | Passed to each `sim.run()` |
 | `par_args` | none | Passed to `sc.Parallel()`, which runs the processes |
 | `label` | none | A name for the MultiSim |
-| `initialize` | False | Make and initialize the sim of each run now, rather than when it runs |
-| `debug` | False | Run one after the other, as `parallel=False` |

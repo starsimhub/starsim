@@ -318,13 +318,13 @@ def by_age(edges, cols, info):
     return df
 
 
-def contacts(place, source=None, layer='all'):
+def contacts(place, study=None, layer='all'):
     """
     A contact matrix by age for a named place, for `ss.contacts('Kenya')`
 
     Args:
         place (str): a country, by name or code; or a US state, e.g. 'United States:Massachusetts'
-        source (str): the study: 'prem2021' (bundled; 177 places), 'prem' (Prem 2021, with Prem 2017 for the places it lacks; 187), 'prem2017' (152), 'mistry2021' (36, by single year of age), or 'mistry2021_us' (the default for a US state; the 50 states and DC, by single year of age); all but the first are fetched on first use. The default for a country is 'prem': the bundled 'prem2021' where it has the country, else Prem 2017 (e.g. for Japan and Australia)
+        study (str): the study: 'prem2021' (bundled; 177 places), 'prem' (Prem 2021, with Prem 2017 for the places it lacks; 187), 'prem2017' (152), 'mistry2021' (36, by single year of age), or 'mistry2021_us' (the default for a US state; the 50 states and DC, by single year of age); all but the first are fetched on first use. The default for a country is 'prem': the bundled 'prem2021' where it has the country, else Prem 2017 (e.g. for Japan and Australia)
         layer (str): the setting: 'all', 'home', 'school', 'work', or 'community'
 
     Returns:
@@ -338,6 +338,7 @@ def contacts(place, source=None, layer='all'):
         ```
     """
     ssd = provider()
+    source = study # The dataset's key in starsim_data
     if source is None and subnational(ssd, place):
         source = 'mistry2021_us'
     elif source is None: # Prem 2021, bundled, where it has the place; else Prem 2017, fetched
@@ -352,7 +353,7 @@ def contacts(place, source=None, layer='all'):
     try:
         ds = ssd.registry.dataset(source)
     except ValueError as E:
-        errormsg = f'source="{source}" is not a contact matrix in starsim_data: {E}'
+        errormsg = f'study="{source}" is not a contact matrix in starsim_data: {E}'
         raise ValueError(errormsg) from E
     try:
         df = ssd.load(place, which=source, kind=layer) if ds.tier == 0 else fetch(ssd, place, source, kind=layer)
@@ -362,7 +363,7 @@ def contacts(place, source=None, layer='all'):
         except KeyError:
             unknown(place, E)
         others = [s for s in ['prem', 'prem2021', 'prem2017', 'mistry2021', 'mistry2021_us'] if s != source and key in ssd.list_locations(s)]
-        hint = f'; it is in {sc.strjoin(others)}, e.g. ss.contacts("{place}", source="{others[0]}")' if others else ''
+        hint = f'; it is in {sc.strjoin(others)}, e.g. ss.contacts("{place}", study="{others[0]}")' if others else ''
         raise sc.KeyNotFoundError(f'"{source}" has no contact matrix for {key}{hint}.')
     labels = age_labels([float(a) for a in df.index])
     out = pd.DataFrame(df.values.astype(float), index=pd.Index(labels, name='age'), columns=pd.Index(labels, name='contact age'))

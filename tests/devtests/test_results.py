@@ -49,13 +49,13 @@ def test_groups_kept(monkeypatch, tmp_path):
 
     # Many runs: a ratio by group is the ratio of its parts in each run, as in one sim (before: the numerator, or an error)
     for solver in ['binomial', 'abm']:
-        msim = make(solver).run(n_runs=3)
+        msim = ss.parallel(make(solver), n_runs=3)
         share = msim.results.sir.share.select(age='0-49')
         assert np.isclose(share.values[-1, -1], msim.sims[-1].results.sir.share.select(age='0-49')[-1]) and share.values.max() <= 1 # The last run's sim
 
     # Many runs: by group every few steps too, if all of them would take too much memory
     monkeypatch.setattr(ss.solvers.Compartmental, 'max_bytes', 1000)
-    n_I = make('binomial').run(n_runs=3).results.sir.I
+    n_I = ss.parallel(make('binomial'), n_runs=3).results.sir.I
     young, old = n_I.select(age='0-49').values, n_I.select(age='50+').values
     assert young.shape == (3, len(n_I.group_ti)) and np.allclose(young + old, n_I.values[:, n_I.group_ti])
     return sim

@@ -15,16 +15,16 @@ An EMULSION model is one YAML file: `time_info` (unit, `delta_t`, `total_duratio
 | `duration:` on a state with other ways out | A minimum stay: `min_stay=` on the ways out (and nothing on an escape), as agents or compartments | yes |
 | `autoremove: yes` (a dead state) | An outflow to `ss.dead` | yes |
 | `escape: yes` | Nothing: a way out with no `min_stay=` applies throughout | yes |
-| `escape: cond`, `cond: is_X` | `where=` on the transition, against the other machine's state | no |
+| `escape: cond`, `cond: is_X` | `who=` on the transition, against the other machine's state | no |
 | `when: calendar_period` | A parameter that is an `ss.timeseries` of 0 and 1, multiplying the rate | no |
 | `StrictLessThan(total_Q, K)` and the like | A comparison of counts: `(Q.n < K)` | yes |
-| `on_cross`, `produce_offspring`, `set_var` | Offspring into one state: a birth driven by the transition, `ss.birth(NB, on=farrowing, n=10)`; anything else, custom code on the transition's events (agents) | no |
+| `on_cross`, `produce_offspring`, `set_var` | Offspring into one state: a birth driven by the transition, `ss.birth(NB, when=farrowing, children=10)`; anything else, custom code on the transition's events (agents) | no |
 | `statevars` (age, counters) | A stratification, a property of people, or a state array in a subclass | no |
 | `prototypes`, `initial_conditions` | `init_n=dict(...)` counts on each disease | yes |
 | `outputs.extra_vars` | Results on the disease, where they are expressions of counts | yes |
 | `aggregation_type` | `solver='binomial'` for `compartment`, `'abm'` for `IBM` and `hybrid` | yes |
 | `productions: {from: A, to: J, rate: b}` (births) | An inflow, `ss.unborn >> J @ b*A.n`; with several machines, cross them into one disease first, so the newborns enter each machine's state together | no |
-| A level with `aggregation_type: metapopulation` (herds) | A place dimension, `dis.stratify(pop=[...], kind='space')`, with the initial numbers by place (`ss.by(pop=...)`) and movement between places as a route | no |
+| A level with `aggregation_type: metapopulation` (herds) | A place dimension, `dis.stratify(pop=ss.levels([...], kind='space'))`, with the initial numbers by place (`ss.by(pop=...)`) and movement between places as a route | no |
 | A level or process in a Python add-on (`file:`, `class_name:`) | Custom code, or a declared form if one fits (e.g. a trade register as a route) | no |
 | `total_<level>` (e.g. `total_herd`) | The number of people (in each place, once stratified) | yes |
 
@@ -51,9 +51,9 @@ health = ss.Disease(
     ...
 )
 life = Life(
-    conception = ss.Transition(NG, G, rate=stay('life', 'NG', 90, 0.05), where=lambda sim: sim.diseases.growth.A),
+    conception = ss.Transition(NG, G, rate=stay('life', 'NG', 90, 0.05), who=lambda sim: sim.diseases.growth.A),
     farrowing  = G >> NG @ ss.constant(ss.days(240)),
-    abortion   = ss.Transition(G, NG, rate=ss.perday(abortion), where=lambda sim: sim.diseases.health.I),
+    abortion   = ss.Transition(G, NG, rate=ss.perday(abortion), who=lambda sim: sim.diseases.health.I),
 )
 ```
 

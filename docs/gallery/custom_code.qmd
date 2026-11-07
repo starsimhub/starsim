@@ -30,7 +30,7 @@ def severity(sim):
 
 S, I, H, R = ss.states('S I H R')
 infection = S >> I @ 0.3*I
-course    = ss.Transition(I, [H, R], p=severity, dur=ss.days(7))
+course    = ss.Transition(I, {H: severity, R: None}, dur=ss.days(7))
 discharge = H >> R @ ss.days(10)
 flu = ss.Disease(infection, course, discharge, init=dict(I=0.001), name='flu')
 ```

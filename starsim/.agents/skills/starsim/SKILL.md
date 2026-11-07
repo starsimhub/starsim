@@ -33,7 +33,7 @@ import starsim as ss
 S, I, R = ss.states('S I R')
 measles = ss.Disease(S >> I @ 1.9*I, I >> R @ ss.days(8), init_prev=0.001, name='measles')
 base = ss.Sim(measles, total_pop=20_000, stop=ss.days(120), verbose=0)
-vaccination = ss.vaccinate(efficacy=0.9, coverage=0.7, at=[ss.days(5)])
+vaccination = ss.vaccinate(efficacy=0.9, when=[ss.days(5)], coverage=0.7)
 msim = ss.parallel({'No vaccine': base, 'Vaccine': base.new(interventions=vaccination)})
 msim.summarize()
 ```
@@ -48,10 +48,10 @@ msim.summarize()
 ## How to work
 
 1. **Start with the smallest model** that has the structure of the question, with few people and a short run.
-2. **Read what Starsim says.** A run prints what it ran and how, R0, and any notes. `sim.describe()` lists what each part means and what Starsim guessed (marked `[guessed: ...]`). Fix every guess that is wrong, rather than leaving it.
+2. **Read what Starsim says.** A run prints what it ran and how, R0, and any notes. `sim.describe()` lists what each part means and what Starsim guessed (marked `[guessed: ...]`); it returns the text, so in a script, `print(sim.describe())`. Fix every guess that is wrong, rather than leaving it.
 3. **Check it against what you expect:** R0, the size and timing of the peak, the population over time, and the units of each rate. A model that runs isn't yet a model that is right; many mistakes give no error.
 4. **Add one thing at a time,** rerunning each time, so that any change in the results has one cause.
-5. **Report with the assumptions.** Say which values came from the user, which from data, and which you chose. For a stochastic model, run several seeds (`sim.run(n_runs=10)`) before reporting a difference.
+5. **Report with the assumptions.** Say which values came from the user, which from data, and which you chose. For a stochastic model, run several seeds (`ss.parallel(sim, n_runs=10)`) before reporting a difference.
 
 Ask the user, rather than choosing, when a value would change the answer and has no source (e.g. a transmission rate for a specific setting), and before a run or fit likely to take many minutes.
 

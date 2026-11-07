@@ -195,7 +195,7 @@ def make_dist(pars=None, **kwargs):
     Make a distribution from a dictionary
 
     Args:
-        pars (dict): the distribution, with its name under `type`, e.g. `dict(type='normal', loc=1, scale=0.5)`
+        pars (dict): the distribution, with its name under `type`, e.g. `dict(type='normal', mean=1, std=0.5)`
         **kwargs (dict): merged into `pars`
     """
     pars = sc.mergedicts(pars, kwargs)
@@ -371,9 +371,11 @@ class Dist:
     Base class for tracking one random number generator associated with one distribution,
     i.e. one decision per timestep.
 
-    See `ss.distributions.dist_list` for a full list of supported distributions. Parameter inputs
-    tend to follow SciPy's, rather than NumPy's, definitions (although in most
-    cases they're the same).
+    See `ss.distributions.dist_list` for a full list of supported distributions. Their parameters
+    are named by their moments where they have them (`ss.normal(mean, std)`, `ss.expon(mean)`,
+    `ss.poisson(mean)`), and otherwise by their usual names (`ss.gamma(shape, scale)`); each is
+    translated to SciPy's or NumPy's names inside (`sync_pars()`), and a keyword a distribution
+    doesn't take is a `TypeError` when it is made.
 
     Distributions scale in different ways, such as converting between time units, given by `scaling`.
     Some distributions can't be scaled at all (e.g. `ss.beta_dist()`, whose values are shares).
@@ -431,9 +433,9 @@ class Dist:
         p_death.rvs(50) # Create 50 draws
 
         # Create a normal distribution that's also a timepar
-        dur_infection = ss.normal(loc=12, scale=2, unit='years')
-        dur_infection = ss.normal(loc=ss.years(12), scale=2) # Same as above
-        dur_infection = ss.normal(loc=ss.years(12), scale=ss.months(24)) # Same as above, perform time unit conversion internally
+        dur_infection = ss.normal(mean=12, std=2, unit='years')
+        dur_infection = ss.normal(mean=ss.years(12), std=2) # Same as above
+        dur_infection = ss.normal(mean=ss.years(12), std=ss.months(24)) # Same as above, perform time unit conversion internally
         dur_infection.init(force=True).plot_hist() # Show results
 
         # Create a duration that is rounded to the nearest whole number of days
@@ -464,7 +466,9 @@ class Dist:
     valid_pars = None
     scaling = None # See "scaling" above
     unit_pars = None # Parameters that must share the same time units, e.g. ('mean', 'std') for ss.lognormal(); None means no check
-    unitless_pars = None # Parameters that cannot have time units, e.g. ('c',), the shape parameter, for ss.weibull(); None means no check
+    unitless_pars = None # Parameters that cannot have time units, e.g. ('shape',) for ss.weibull(); None means no check
+    prob_pars = None # Parameters that are probabilities, e.g. ('p',) for ss.bernoulli(): a rate given for one is the chance in a step (rate*dt), where for any other it is the number of events in the step (rate.to_events(dt))
+    renamed = None # SciPy's or NumPy's names that a distribution takes as others, e.g. dict(loc='mean', scale='std') for ss.normal(), for the error
     hash_dtype = None # The dtype of the CRN uniforms passed to ppf(); None for ss.dtypes.float
 
     def __init__(self, dist=None, distname=None, name=None, unit=None, round=False, seed=None, offset=None,
@@ -507,6 +511,8 @@ class Dist:
         self.called = 0 # The number of times the distribution has been called
         self.history = [] # Previous states
         self.initialized = False
+        if type(self).__init__ is not Dist.__init__: # One of the distributions, which takes only its own parameters
+            self.check_kwargs(kwargs)
         if self.valid_pars is not None:
             self.validate_pars()
 
@@ -896,6 +902,29 @@ class Dist:
         self._slots = slots
         return size, slots
 
+    @classmethod
+    def par_names(cls):
+        """ The parameters a distribution takes, from its signature (e.g. ['mean', 'std'] for `ss.normal`); not for the user """
+        if '_par_names' not in cls.__dict__:
+            kinds = (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
+            names = [k for k,v in inspect.signature(cls.__init__).parameters.items() if k != 'self' and v.kind in kinds]
+            cls._par_names = names + [k for k in (cls.valid_pars or []) if k not in names]
+        return cls._par_names
+
+    def check_kwargs(self, kwargs):
+        """ Raise a TypeError for a keyword the distribution does not take, naming those it does; not for the user """
+        names = self.par_names()
+        unknown = [k for k in kwargs if k not in names]
+        if unknown:
+            cls = type(self).__name__
+            renamed = self.renamed or {}
+            hints = [f'{renamed[k]}= for {k}=' for k in unknown if k in renamed]
+            hint = f'; use {sc.strjoin(hints)}' if hints else ''
+            options = 'name, unit, round, seed, strict'
+            errormsg = f'ss.{cls}() got {sc.strjoin([f"{k}=" for k in unknown])}, which it does not take{hint}. It takes {sc.strjoin(names)} (and the options of every distribution: {options})'
+            raise TypeError(errormsg)
+        return
+
     def validate_pars(self):
         """ Check if parameters are valid; only used for non-SciPy distributions """
         valid = set(self.valid_pars)
@@ -982,7 +1011,7 @@ class Dist:
         on the timestep of the parent module for this `Dist`. The conversion for these types is
 
         - Durations are divided by `dt` (so the result will be a number of timesteps)
-        - Rates are multiplied by `dt` (so the result will be a number of events, or else the equivalent multiplicative value for the timestep)
+        - Rates are multiplied by `dt`: the number of events in the step, or, for a parameter that is a probability (`prob_pars`, e.g. the `p` of `ss.bernoulli()`) or an `ss.prob`, the chance in the step
         """
         # Check through and see if anything is a timepar
         timepar_dict = {key:type(tp) for key,val in self._pars.items() if (tp := timepar_of(val)) is not None}
@@ -1027,8 +1056,9 @@ class Dist:
                 dt = self.step_dt() # Outside a sim, in the distribution's own unit
                 if issubclass(timepar_type, ss.Duration):
                     self._pars[key] = v/dt
-                elif issubclass(timepar_type, ss.Rate):
-                    self._pars[key] = v*dt # Usually to_prob, but may be n_events
+                elif issubclass(timepar_type, ss.Rate): # A number of events in the step (e.g. the mean of ss.poisson(ss.peryear(3))), or, for a probability (e.g. the p of ss.bernoulli()), the chance in the step
+                    events = isinstance(v, ss.Rate) and not isinstance(v, ss.prob) and key not in (self.prob_pars or ())
+                    self._pars[key] = v.to_events(dt) if events else v*dt
                 else:
                     errormsg = f'Unknown timepar type {v}'
                     raise NotImplementedError(errormsg)

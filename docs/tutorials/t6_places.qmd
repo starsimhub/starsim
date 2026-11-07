@@ -23,7 +23,8 @@ This is the model from [T5 – Interventions and scenarios](t5_interventions.qmd
 ```{python}
 import starsim as ss
 
-S, E, I, R = ss.states('S E I R')
+S, R = ss.states('S R')
+E, I = ss.states('E I', infected=True) # Infected: counted in the results infected and prevalence
 beta = ss.par(0.14, bounds=[0.05, 0.5]) # The rate of infection per contact with an infectious person, per day
 infection   = S >> E @ beta*I
 progression = E >> I @ ss.days(10) # Latent for 10 days on average
@@ -82,7 +83,7 @@ How much people move between places, and where they go, is often not known in de
 ```{python}
 away = ss.par(0.01, bounds=[0.001, 0.1]) # People spend 1% of their time in other towns
 measles = make_measles(init_n=ss.by(patch=[10, 0, 0, 0]))
-measles.stratify(patch=towns, mobility=ss.geo.gravity(away=away))
+measles.stratify(patch=ss.levels(towns, mobility=ss.geo.gravity(away=away)))
 
 sim = ss.Sim(measles, **settings)
 sim.run()
@@ -141,7 +142,7 @@ That last part isn't realistic. In an ODE, a small fraction of an infectious per
 
 ```{python}
 sim = ss.Sim(measles, pars=dict(away=0.001), solver='binomial', **settings)
-msim = sim.run(n_runs=30)
+msim = ss.parallel(sim, n_runs=30)
 msim.results.measles.I.select(patch='Fairfield').plot(lines=True)
 ```
 
@@ -171,7 +172,7 @@ Places can also be a country's regions, by name: `ss.geo.geography('Kenya', leve
 ```{python}
 kenya = ss.geo.geography('Kenya', level=1)
 measles = make_measles(init_n=ss.by(patch={'Nairobi': 10})) # 10 infectious people in Nairobi, and none elsewhere
-measles.stratify(patch=kenya, mobility=ss.geo.gravity(away=away))
+measles.stratify(patch=ss.levels(kenya, mobility=ss.geo.gravity(away=away)))
 
 sim = ss.Sim(measles, **settings)
 sim.run()
@@ -185,7 +186,7 @@ Movement can come from a gravity model, from the radiation model (`ss.geo.radiat
 ## Exercises
 
 1. Lakeview's children are less often vaccinated: only 65% of them are immune. Give the share immune by age and town (`ss.by()` with both, multiplied together: e.g. `ss.by(age=[0.8, 0.92, 0.98], patch=[1, 1, 0.8125, 1])`), and run the model. How does Lakeview's outbreak compare with the others'?
-2. A campaign that vaccinates 80% of children under 15 in Riverton only, on 1 March (`where=(measles.age < 15) & (measles.patch == 'Riverton')`): how many infections does it prevent in Riverton, and how many in the other towns? Why so few in the other towns, in this model?
+2. A campaign that vaccinates 80% of children under 15 in Riverton only, on 1 March (`who=(measles.age < 15) & (measles.patch == 'Riverton')`): how many infections does it prevent in Riverton, and how many in the other towns? Why so few in the other towns, in this model?
 3. Replace the gravity model with the radiation model (`ss.geo.radiation(away=away)`). Which towns' outbreaks come earlier or later, and why?
 
 [Solutions](solutions.qmd#t6-geography-and-mixing) · Next: [T7 – Data and calibration](t7_calibration.qmd)

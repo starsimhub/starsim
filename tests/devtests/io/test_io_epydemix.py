@@ -62,13 +62,13 @@ def test_epydemix():
     seird = ss.Disease(
         S_to_E = S >> E @ 0.3*r*I,
         E_to_I = E >> I @ eps,
-        I_to_D_or_R = ss.Transition(I, [D, R], rate=0.2, p=[ss.by([0.01, 0.1], dims=['age']), None]),
+        I_to_D_or_R = ss.Transition(I, {D: ss.by([0.01, 0.1], dims=['age']), R: None}, rate=0.2),
         init_n = dict(I=ss.by([10, 10], dims=['age'])),
         name = 'epydemix',
     )
-    seird.stratify(age=[0, 20], fractions=[0.6, 0.4])
+    seird.stratify(age={0: 0.6, 20: 0.4})
     ref = ss.Sim(seird, networks=ss.contacts([[5.0, 1.0], [1.5, 2.0]]), total_pop=10_000, unit='day', start='2020-01-01', stop='2020-03-02',
-                 solver='ode', substeps=1, aging=False, verbose=0).run()
+                 solver=ss.ode(substeps=1), aging=False, verbose=0).run()
     for c in 'SEIRD':
         ours, theirs = res[c].values, ref.results.epydemix[c].values
         assert np.allclose(ours, theirs, rtol=1e-9), f'{c} should match the model written by hand'
@@ -88,7 +88,7 @@ def seird_export(births=False):
     trs = dict(
         infection = ss.Transition(S, E, rate=ss.perday(0.4)*I),
         onset     = ss.Transition(E, I, dur=ss.days(4)),
-        outcome   = ss.Transition(I, [R, D], dur=ss.lognormal(ss.days(8), ss.days(3)), p=[None, 0.1]),
+        outcome   = ss.Transition(I, {R: None, D: 0.1}, dur=ss.lognormal(ss.days(8), ss.days(3))),
     )
     if births:
         trs.update(births=ss.birth(S, rate=ss.peryear(0.02)), deaths=ss.death([S, E, I, R], rate=ss.peryear(0.01)))
@@ -123,7 +123,7 @@ def test_epydemix_export_run(tmp_path):
         for args in [[dumper, script, dumped], ['-c', run, script, ran]]: # The JSON that load_epydemix() reads, and the mean of 20 of epydemix's runs
             out = subprocess.run([str(epydemix_python), *map(str, args)], capture_output=True, text=True, cwd=tmp_path, timeout=300)
             assert out.returncode == 0, out.stderr
-        back = load_epydemix(str(dumped), solver='ode', substeps=None, **kw)
+        back = load_epydemix(str(dumped), solver='ode', **kw)
         assert back.imported.incomplete == []
         sim.run(); back.run()
         ours, again = sim.results[sim.diseases[0].name], back.results.epydemix

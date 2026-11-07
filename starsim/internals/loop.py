@@ -520,9 +520,9 @@ class Loop:
         if profile is not None:
             self.profile = profile
 
-        # Convert e.g. '2020-01-01' or ss.years(5) to a time on the timeline, as interventions read them (see ss.connectors.to_time())
+        # Convert e.g. '2020-01-01' or 2020 to a time on the timeline, as interventions read them (see ss.connectors.to_time()); a duration is a time on the timeline already (e.g. sim.t.tvec[5]: sim.run() converts one given as a time after the start)
         cond = None
-        if isinstance(until, (str, ss.date, ss.Duration)):
+        if isinstance(until, (str, ss.date)) or sc.isnumber(until):
             until = ss.connectors.to_time(self.sim, until)
         elif isinstance(until, ss.expressions.Expr) or callable(until): # A condition, e.g. sir.I.n == 0
             cond, until = until, None
@@ -655,7 +655,7 @@ class Loop:
                 if not sim.metadata.get('updated'):
                     print(f'Updating beta values on {sim.now}')
                     sim.diseases.sis.pars.beta = 0.1
-                    sim.networks.randomnet.edges.beta[:] = 0.5
+                    sim.networks.randomnet.edges.weight[:] = 0.5
                     sim.metadata.updated = True
                 return
 
@@ -681,7 +681,7 @@ class Loop:
         Return a user-friendly version of the plan, omitting object columns
 
         The `cpu_time` column is populated only if the run recorded per-entry timing
-        (i.e. `sim.run(profile=True)`); otherwise it is `NaN`. This is built lazily and
+        (i.e. `sim.profile(kind="loop")`); otherwise it is `NaN`. This is built lazily and
         cached in `self.df`/`self.cpu_df`.
         """
         # Compute the main dataframe
@@ -773,7 +773,7 @@ class Loop:
         if self.cpu_df is None:
             self.to_df()
         if not len(self.cpu_time): # No per-entry timing was recorded
-            ss.warn('No CPU timing was recorded: run with sim.run(profile=True) (or loop.run(profile=True)) to populate cpu_time.')
+            ss.warn('No CPU timing was recorded: profile the sim with sim.profile(kind="loop") (or loop.run(profile=True)) to populate cpu_time.')
         df = self.cpu_df
         ylabels = df.index.values.copy() # Copy to avoid mutating the cached cpu_df when labels are assembled below
         if bytime:

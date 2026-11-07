@@ -30,7 +30,7 @@ measles.stratify(age=[0, 1, 5, 15, 65])
 demographics = [ss.birth(rate=ss.peryear(0.03)), ss.death(rate=ss.peryear(0.01))]
 pars = dict(demographics=demographics, total_pop=1_000_000, start='2000', stop='2030', dt=ss.months(1), verbose=0)
 
-routine = ss.vaccinate(efficacy=0.95, leaky=False, coverage=0.8, where=ss.person.age < 1, every=ss.years(1), start='2010', cost=5.0)
+routine = ss.vaccinate(efficacy=0.95, leaky=False, who=ss.person.age < 1, when=ss.schedule(every=ss.years(1), start='2010'), coverage=0.8, cost=5.0)
 
 base = ss.Sim(measles, **pars)
 msim = ss.parallel({'No vaccination': base, 'Routine vaccination': base.new(interventions=routine)})
@@ -73,7 +73,7 @@ Each infection averted costs a little more than the price of a dose, since most 
 When there are several programs, the question is usually what each one adds over the next cheapest: its incremental cost per outcome averted (an incremental cost-effectiveness ratio, or ICER). Here the routine program is compared with the same program plus a campaign every four years that reaches 90% of children under five, at $8 a dose (a campaign costs more per child than routine delivery):
 
 ```{python}
-campaign = ss.vaccinate(efficacy=0.95, leaky=False, coverage=0.9, where=ss.person.age < 5, every=ss.years(4), start='2010', cost=8.0)
+campaign = ss.vaccinate(efficacy=0.95, leaky=False, who=ss.person.age < 5, when=ss.schedule(every=ss.years(4), start='2010'), coverage=0.9, cost=8.0)
 
 costed = base.new(analyzers=ssl.Costs()) # Adds up the cost of every delivery, as the result costs.total
 msim = ss.parallel({
@@ -100,8 +100,8 @@ infection = S >> I @ ss.peryear(2)*I  # β = 2 per year
 recovery  = I >> S @ ss.years(1)      # Infected for a year on average, then susceptible again
 sis = ss.Disease(infection, recovery, deaths=ss.death(I, rate=ss.peryear(0.01)), init_prev=0.1, name='sis')
 
-screening = ss.screen(sensitivity=0.9, specificity=0.98, coverage=0.5, every=ss.years(1), start='2010', cost=4.0)
-treatment = ss.treat(cure=0.95, on=screening.positive, coverage=0.8, cost=20.0)
+screening = ss.screen(sensitivity=0.9, specificity=0.98, when=ss.schedule(every=ss.years(1), start='2010'), coverage=0.5, cost=4.0)
+treatment = ss.treat(cure=0.95, when=screening.positive, coverage=0.8, cost=20.0)
 
 analyzers = [ssl.Costs(), ssl.DALYs(weights={'sis.I': 0.05})]
 base = ss.Sim(sis, analyzers=analyzers, n_agents=5000, total_pop=100_000, start=2000, stop=2020, dt=ss.months(1), verbose=0)
@@ -117,7 +117,7 @@ Most of the DALYs here are years of life lost, since a death in middle age loses
 
 ## Comparing during a run
 
-`ssl.ICER` can also be an analyzer, after `ssl.Costs` and `ssl.DALYs`. The sim then counts as one more scenario, compared at each step with the finished sims it is given, over the same period, so that a sim can act on the result: for example, an intervention can follow `sim.analyzers.icer.best(wtp=1000)`. `window=1` compares the latest step alone.
+`ssl.ICER` can also be an analyzer, after `ssl.Costs` and `ssl.DALYs`. The sim then counts as one more scenario, compared at each step with the finished sims it is given, over the same period, so that a sim can act on the result: for example, an intervention can follow `sim.analyzers.icer.best(wtp=1000)`. `window=ss.years(1)` compares the latest year alone.
 
 ## Costs with uncertainty
 
@@ -155,15 +155,15 @@ print('Discounted infections averted:', round(averted))
 print('Discounted cost per infection averted ($):', round(cost/averted, 2))
 ```
 
-Other costs work the same way, with the results that drive them. A cost that does not depend on deliveries, such as running a program (staff, cold chain, training), is an amount per year over the years the program runs. The cost of the disease itself, such as care for each case, is a cost per infection (or per case, if the model declares one), times the infections; the infections averted then save that cost, and the net cost of a program is its cost less the savings. `ssl.Costs` takes both: `fixed=`, a cost per year from `start=`, and `unit_costs=`, the cost of each event of any result, by its path (and `deliveries=False` leaves out the costs of the deliveries, for a table of the other costs alone). Here the program costs $20,000 a year to run from 2010, and each infection $50 of care, in both scenarios, so that the difference between them is the net cost:
+Other costs work the same way, with the results that drive them. A cost that does not depend on deliveries, such as running a program (staff, cold chain, training), is an amount per year over the years the program runs. The cost of the disease itself, such as care for each case, is a cost per infection (or per case, if the model declares one), times the infections; the infections averted then save that cost, and the net cost of a program is its cost less the savings. `ssl.Costs` takes both: `fixed=`, a cost per unit time from `start=` (e.g. `ss.peryear(20_000)`), and `unit_costs=`, the cost of each event of any result, by its path (and `deliveries=False` leaves out the costs of the deliveries, for a table of the other costs alone). Here the program costs $20,000 a year to run from 2010, and each infection $50 of care, in both scenarios, so that the difference between them is the net cost:
 
 ```{python}
 care = {'measles.infection': 50} # $50 of care for each infection
 msim = ss.parallel({
     'No vaccination': ss.Sim(measles, analyzers=ssl.Costs(unit_costs=care), **pars),
-    'Routine':        ss.Sim(measles, interventions=routine, analyzers=ssl.Costs(unit_costs=care, fixed=20_000, start=2010), **pars),
+    'Routine':        ss.Sim(measles, interventions=routine, analyzers=ssl.Costs(unit_costs=care, fixed=ss.peryear(20_000), start=2010), **pars),
 })
-df = ssl.ICER(msim, outcome='measles.infection', rate=0.03, start=2010).df # Discounted, as above
+df = ssl.ICER(msim, outcome='measles.infection', discount=0.03, discount_from=2010).df # Discounted, as above
 print(df[['cost', 'averted']].round())
 net = df.cost['Routine'] - df.cost['No vaccination']
 print('Net cost per infection averted ($):', round(net/df.averted['Routine'], 2))
@@ -173,7 +173,7 @@ A net cost below zero means a program saves more than it costs; `ssl.ICER` then 
 
 ## Optimizing spending
 
-The examples above cost given programs. The reverse question, how best to divide a budget between programs, is an optimization: `ss.fit.optimize()` allocates a total between programs whose spending is a parameter of the model, to maximize or minimize a result, or finds the least total that reaches a target. The spending parameters, and how spending turns into coverage, come from the model: from a program book imported with the model (as from Atomica), or from parameters you write. See [Optimization](calibration_optimization.qmd).
+The examples above cost given programs. The reverse question, how best to divide a budget between programs, is an optimization: `sim.optimize()` allocates a total between programs whose spending is a parameter of the model, to maximize or minimize a result, or finds the least total that reaches a target. The spending parameters, and how spending turns into coverage, come from the model: from a program book imported with the model (as from Atomica), or from parameters you write. See [Optimization](calibration_optimization.qmd).
 
 ## Under compartments and agents
 
@@ -210,7 +210,7 @@ The columns of `ssl.ICER(...).df`, one row for each scenario:
 
 | Column | Meaning |
 |---|---|
-| `cost` | The total cost (discounted, with `rate=`), from `ssl.Costs` unless `cost=` names another result |
+| `cost` | The total cost (discounted, with `discount=`), from `ssl.Costs` unless `cost=` names another result |
 | `outcome` | The total of the outcome, from `ssl.DALYs` unless `outcome=` names another result |
 | `averted` | The outcome of the baseline less the scenario's |
 | `incremental cost` | The cost more than the next cheaper scenario that is not dominated |

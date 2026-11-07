@@ -98,7 +98,7 @@ class ICER(ss.Analyzer):
     """
     Compare the costs and effects of scenarios: incremental cost-effectiveness ratios
 
-    Each scenario's cost and outcome are totaled (discounted if `rate` is given), and the
+    Each scenario's cost and outcome are totaled (discounted if `discount` is given), and the
     outcome averted is that of the baseline less the scenario's. The scenarios are ordered
     by cost, and each is compared with the next cheaper one that isn't dominated. A
     scenario is dominated if it costs more and averts no more than a cheaper one, and
@@ -116,9 +116,9 @@ class ICER(ss.Analyzer):
         outcome (str): the path of the result to avert (default: the total of `ssl.DALYs`), e.g. 'measles.infection'
         cost (str): the path of the cost result (default: the total of `ssl.Costs`)
         baseline (str): the label of the scenario to compare with (default: the first)
-        rate (float): the discount rate per year for both costs and outcomes (see `ssl.discount()`)
-        start (float/str): when discounting starts
-        window (int): in a sim, the number of steps to compare, ending with the latest (default: all of them so far); 1 compares the last step alone
+        discount (float): the discount rate per year for both costs and outcomes (see `ssl.discount()`)
+        discount_from (float/str): when discounting starts (default: the first time point)
+        window (dur): in a sim, how long a time to compare, ending with the latest step (default: all of it so far); one step long compares the last step alone, e.g. `window=ss.years(1)` with yearly steps
 
     Attributes:
         df (dataframe): a row for each scenario, with columns `cost`, `outcome`, `averted`, `incremental cost`, `incremental averted`, `ICER`, `dominated`, and `extended`
@@ -127,24 +127,31 @@ class ICER(ss.Analyzer):
         ```python
         # After the runs
         msim = ss.parallel({'Nothing': base, 'Vaccine': base.new(interventions=vx)}, n_runs=20)
-        icer = ssl.ICER(msim, rate=0.03, start=2010)
+        icer = ssl.ICER(msim, discount=0.03, discount_from=2010)
         icer.df
         icer.plot()
         icer.plot_ceac()
         icer.best(wtp=1000)
 
         # During a run, compared with a finished sim
-        icer = ssl.ICER(dict(Nothing=base.run()), window=1)
+        icer = ssl.ICER(dict(Nothing=base.run()), window=ss.years(1))
         sim = ss.Sim(..., analyzers=[ssl.Costs(), ssl.DALYs(weights=...), icer])
         ```
     """
-    def __init__(self, sims=None, outcome='dalys.dalys', cost='costs.total', baseline=None, rate=0, start=None, window=None, **kwargs):
+    def __init__(self, sims=None, outcome='dalys.dalys', cost='costs.total', baseline=None, discount=0, discount_from=None, window=None, **kwargs):
+        for old, new in dict(rate='discount', start='discount_from').items():
+            if old in kwargs:
+                errormsg = f'ssl.ICER() takes no {old}=; use {new}='
+                raise TypeError(errormsg)
+        if window is not None and not isinstance(window, ss.Duration):
+            errormsg = f'window= of ssl.ICER() is a duration, e.g. window=ss.years(1); not {window!r}'
+            raise TypeError(errormsg)
         super().__init__(**kwargs)
         self.outcome = outcome
         self.cost = cost
         self.baseline = baseline
-        self.rate = rate
-        self.start = start
+        self.discount = discount
+        self.discount_from = discount_from
         self.window = window
         self.t_years = None
         self.scenarios = sc.obj() if sims is None else self.collect(sims) # By label, the cost and outcome of each run at each time point, so the sims themselves aren't kept
@@ -187,10 +194,10 @@ class ICER(ss.Analyzer):
     def totals(self):
         """ The discounted total cost and outcome of each scenario, as arrays with one value per run, by label """
         t = self.t_years
-        start = t[0] if self.start is None else in_years(ss.date(self.start))
-        weights = (1 + self.rate) ** -np.maximum(t - start, 0)
+        start = t[0] if self.discount_from is None else in_years(ss.date(self.discount_from))
+        weights = (1 + self.discount) ** -np.maximum(t - start, 0)
         stop = getattr(self, '_ti', len(t) - 1) + 1
-        first = 0 if self.window is None else max(stop - self.window, 0)
+        first = 0 if self.window is None else int(np.searchsorted(t[:stop], t[stop-1] - in_years(self.window), side='right')) # The time points within the window, ending with the latest
         out = sc.obj()
         total = lambda arr: np.nansum((arr*weights)[:, first:stop], axis=1)
         for label,data in self.scenarios.items():

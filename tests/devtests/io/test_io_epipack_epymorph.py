@@ -39,7 +39,7 @@ def seird_sim():
         births    = ss.birth(S, rate=ss.peryear(0.02)),
         infection = ss.Transition(S, E, rate=ss.perday(0.4) * I),
         onset     = ss.Transition(E, I, dur=ss.days(4)),
-        outcome   = ss.Transition(I, [R, D], dur=ss.lognormal(ss.days(8), ss.days(3)), p=[None, 0.1]),
+        outcome   = ss.Transition(I, {R: None, D: 0.1}, dur=ss.lognormal(ss.days(8), ss.days(3))),
         deaths    = ss.death([S, E, I, R], rate=ss.peryear(0.01)),
         init_prev = 0.01, name='seird')
     return ss.Sim(dis, total_pop=1e5, unit='day', stop=120, verbose=0)
@@ -267,7 +267,7 @@ def test_epymorph_places():
 def sir_births(**kwargs):
     """ An SIR with births and deaths, to export """
     pars = dict(diseases=ss.SIR(beta=ss.perday(0.3), dur_inf=ss.days(10), init_prev=0.01), demographics=[ss.birth(rate=ss.peryear(0.5)), ss.death(rate=ss.peryear(0.5))],
-                total_pop=10_000, unit='day', dur=60, solver='ode', verbose=0)
+                total_pop=10_000, unit='day', stop=ss.days(60), solver='ode', verbose=0)
     return ss.Sim(**(pars | kwargs))
 
 
@@ -312,7 +312,7 @@ def test_epymorph_roundtrip(tmp_path):
            'print(json.dumps(np.mean([BasicSimulator(rume).run(rng_factory=default_rng(i)).compartments[:, 0, 1:3].sum(axis=1) for i in range(10)], axis=0).tolist()))'
     out = subprocess.run([epymorph_python, '-c', code], check=True, capture_output=True, text=True)
     infected = np.array(json.loads(out.stdout.splitlines()[-1]))
-    euler = sim.new(integrator='euler', substeps=1).run().results.sir.I.values[1:] # epymorph's values are at the end of each day
+    euler = sim.new(solver=ss.ode(integrator='euler', substeps=1)).run().results.sir.I.values[1:] # epymorph's values are at the end of each day
     assert abs(infected.max()/euler.max() - 1) < 0.03, 'The peak should match Euler\'s method with a step of a day'
     assert abs(infected.argmax() - euler.argmax()) <= 2
     return back

@@ -38,11 +38,11 @@ def test_single(do_plot=do_plot):
     sims.uids = run(ss.MixingPool(source=ss.uids(np.arange(k)), target=ss.uids(np.arange(k, n_agents))), do_plot=do_plot)
 
     # Incidence must decline because 0-15 --> 15+ transmission only
-    mp = ss.MixingPool(source=ss.person.age < 15, target=ss.person.age >= 15, beta=1.0, n_contacts=ss.poisson(lam=5))
+    mp = ss.MixingPool(source=ss.person.age < 15, target=ss.person.age >= 15, n_contacts=ss.poisson(mean=5))
     sims.age = run(mp, ss.SIR(init_prev=0.1), do_plot=do_plot) # Enough seeds under 15 that some infect
 
     # Female to male (only) transmission
-    mp = ss.MixingPool(source=lambda sim: sim.people.female, target=lambda sim: sim.people.male, beta=1.0, n_contacts=ss.poisson(lam=4))
+    mp = ss.MixingPool(source=lambda sim: sim.people.female, target=lambda sim: sim.people.male, n_contacts=ss.poisson(mean=4))
     sir = ss.SIR(init_prev=lambda sim, uids: 0.05*sim.people.female[uids]) # Seed 5% of the female population
     sims.sex = sim = run(mp, sir, do_plot=do_plot)
     assert sim.people.male[sim.diseases.sir.ti_I>0].all() # All new infections should be in men
@@ -51,14 +51,13 @@ def test_single(do_plot=do_plot):
 
 @sc.timer()
 def test_single_errors():
-    """ Test a single MixingPool with an NCD, and with a missing disease """
+    """ A mixing pool takes no beta= or diseases=, which are the disease's to say: each says what to give instead """
     sc.heading('Testing mixing pool errors...')
-    mp_pars = dict(source=ss.person.age < 15, target=ss.person.age >= 15, beta=1.0, n_contacts=ss.poisson(lam=5))
-    for disease, pool_disease in [(ssl.NCD(), 'ncd'), (ss.SIR(), 'hiv')]:
-        sim = ss.Sim(n_agents=n_agents, diseases=disease, networks=ss.MixingPool(diseases=pool_disease, **mp_pars))
-        with pytest.raises(Exception):
-            sim.run()
-    return sim
+    for kw, match in [(dict(beta=1.0), 'by route'), (dict(diseases='sir'), 'its beta on the pool as 0')]:
+        for make in [ss.MixingPool, lambda **kw: ss.networks.MixingPools(source={'all':None}, target={'all':None}, **kw)]:
+            with pytest.raises(TypeError, match=match):
+                make(**kw)
+    return
 
 
 @sc.timer()
@@ -70,7 +69,7 @@ def test_multi(do_plot=do_plot):
         'Female': lambda sim: sim.people.female,
         'Male': lambda sim: sim.people.male,
     }
-    mps = ss.networks.MixingPools(n_contacts=np.array([[1.4, 0.5], [1.2, 0.7]]), beta=1.0, source=groups, target=groups)
+    mps = ss.networks.MixingPools(n_contacts=np.array([[1.4, 0.5], [1.2, 0.7]]), source=groups, target=groups)
     sim2 = run(mps, do_plot=do_plot)
     return sim1, sim2
 
@@ -80,7 +79,7 @@ def test_coded_declared():
     sc.heading('Testing that a disease written as code gives the same epidemic on a mixing pool as a declared one')
     S, I, R = ss.states('S I R')
     pars = dict(networks=ss.MixingPool(n_contacts=1), n_agents=5000, stop=ss.days(150), verbose=0)
-    coded = ss.Sim(ssl.AgentSIR(beta=ss.perday(0.4), dur_inf=ss.expon(scale=ss.days(7)), p_death=0, init_prev=0.01, name='sir'), **pars).run()
+    coded = ss.Sim(ssl.AgentSIR(beta=ss.perday(0.4), dur_inf=ss.expon(mean=ss.days(7)), p_death=0, init_prev=0.01, name='sir'), **pars).run()
     declared = ss.Sim(ss.Disease(S >> I @ 0.4*I, I >> R @ ss.days(7), init_prev=0.01, name='sir'), **pars).run()
     sizes = coded.results.sir.recovered[-1], declared.results.sir.R[-1]
     assert np.isclose(*sizes, rtol=0.03), sizes # The hazard is multiplied by the share infectious before it is a probability (when it was not, the coded epidemic was about 5% smaller, and its peak a fifth lower)
@@ -112,7 +111,7 @@ def test_contacts_coded():
     ages = [0, 15, 65]
     matrix = np.array([[6.0, 2, 1], [2, 8, 2], [1, 3, 4]])
     groups = {str(low):(ss.person.age >= low) & (ss.person.age < high) if high is not None else ss.person.age >= low for low,high in zip(ages, [15, 65, None])}
-    pools = ss.networks.MixingPools(source=groups, target=sc.dcp(groups), n_contacts=np.vectorize(lambda v: ss.constant(float(v)), otypes=[object])(matrix.T))
+    pools = ss.networks.MixingPools(source=groups, target=sc.dcp(groups), n_contacts=np.vectorize(lambda v: ss.constant(float(v)), otypes=[object])(matrix)) # Indexed as ss.contacts() is: row i, the contacts of a person in group i
     cases = [ss.Sim(diseases=ssl.AgentSIR(init_prev=0.02, beta=ss.perday(0.05), dur_inf=ss.days(6)), networks=net, n_agents=n_agents, unit='day', stop=60, verbose=0).run().results.agentsir.infection.sum() for net in [ss.contacts(matrix, ages=ages), pools]]
     assert cases[0] > 0.5*n_agents and np.isclose(*cases, rtol=0.05)
     return
@@ -134,14 +133,14 @@ def test_matrix():
     sim = ss.Sim(ss.SIS(init_prev=0.1, beta=ss.perday(0.05)), networks=ss.networks.MixingPools(source=dict(a=uids, b=None), target=dict(a=uids, b=None), n_contacts=[[1, 1], [1, 1]]), demographics=ss.Deaths(), n_agents=1000, unit='year', stop=30, solver='abm', verbose=0).run()
     assert len(sim.networks[0].pars.source.a) < 100
 
-    # A pool transmits only the diseases it is for, written as code or declared
-    def make(name, cls=None):
+    # A disease whose beta on a pool is 0 does not spread there, written as code or declared
+    def make(name, beta, cls=None):
         S, I = ss.states('S I')
-        return cls(init_prev=0.05, beta=ss.perday(0.1), name=name) if cls else ss.Disease(S >> I @ 0.1*I, I >> S @ ss.days(10), init_prev=0.05, name=name)
+        return cls(init_prev=0.05, beta=dict(pool=ss.perday(beta)), name=name) if cls else ss.Disease(S >> I @ dict(pool=beta)*I, I >> S @ ss.days(10), init_prev=0.05, name=name)
     for cls in [None, ssl.AgentSIR]:
-        for net in [ss.MixingPool(diseases='a', n_contacts=4), ss.networks.MixingPools(diseases='a', source=dict(x=None), target=dict(x=None), n_contacts=[[4]])]:
-            sim = ss.Sim(diseases=[make('a', cls), make('b', cls)], networks=net, n_agents=1000, unit='day', stop=20, solver='abm', verbose=0).run()
-            assert sim.results.a.infection.sum() > 10*sim.results.b.infection.sum()
+        for net in [ss.MixingPool(n_contacts=4, name='pool'), ss.networks.MixingPools(source=dict(x=None), target=dict(x=None), n_contacts=[[4]], name='pool')]:
+            sim = ss.Sim(diseases=[make('a', 0.1, cls), make('b', 0, cls)], networks=net, n_agents=1000, unit='day', stop=20, solver='abm', verbose=0).run()
+            assert sim.results.a.infection.sum() > 10 and sim.results.b.infection.sum() == 0
     return
 
 
@@ -154,7 +153,7 @@ def test_counts():
     def make(rate, solver='ode', **kwargs):
         S, I = ss.states('S I')
         sis = ss.Disease(infection=S >> I @ rate(S, I), recovery=I >> S @ ss.peryear(1), init=dict(I=0.01), name='sis').stratify(risk={'high':split[0], 'low':split[1]})
-        sim = ss.Sim(sis, networks=ss.contacts(beta, dims='risk'), total_pop=pop, stop=15, unit='year', dt=0.05, solver=solver, verbose=0, **kwargs).run()
+        sim = ss.Sim(sis, networks=ss.contacts(risk=beta), total_pop=pop, stop=15, unit='year', dt=0.05, solver=solver, verbose=0, **kwargs).run()
         return np.array([sim.results.sis.I.select(risk=risk).values for risk in ['high', 'low']])/pop
     t = np.arange(0, 15.01, 0.05)
     solve = lambda w: solve_ivp(lambda t, I: (beta @ (w*I))*(split - I) - I, [0, 15], 0.01*split, t_eval=t, rtol=1e-10, atol=1e-12).y
@@ -172,10 +171,10 @@ def test_counts():
     # A matrix with no terms between places still acts on a count (it was ignored)
     def spread(networks):
         S, I = ss.states('S I')
-        d = ss.Disease(S >> I @ (3*I.n), I >> S @ ss.perday(1), init=dict(I=ss.by(patch=[0.01, 0, 0])), name='d').stratify(patch=['a', 'b', 'c'], kind='space')
+        d = ss.Disease(S >> I @ (3*I.n), I >> S @ ss.perday(1), init=dict(I=ss.by(patch=[0.01, 0, 0])), name='d').stratify(patch=ss.levels(['a', 'b', 'c'], kind='space'))
         return ss.Sim(d, networks=networks, total_pop=3, stop=20, solver='ode', verbose=0).run().results.d.I.by('patch').values[-1]
-    assert np.allclose(spread(ss.contacts(np.ones((3, 3)), dims='patch')), 8/9)
-    assert np.allclose(spread(ss.contacts(np.eye(3), dims='patch')), spread(None))
+    assert np.allclose(spread(ss.contacts(patch=np.ones((3, 3)))), 8/9)
+    assert np.allclose(spread(ss.contacts(patch=np.eye(3))), spread(None))
 
     # A count inside a function of the rate modifies it by the total, and is not met: three groups mixing evenly are one group
     def capped(groups):

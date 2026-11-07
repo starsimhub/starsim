@@ -70,7 +70,7 @@ df = sim.people.to_df()
 df.loc[:, ['uid', 'age', 'female', 'measles.S', 'measles.R', 'measles.ti_E', 'measles.ti_I']].head()
 ```
 
-`sim.people.person(uid)` gives everything about one person, and a state gives the IDs (UIDs) of the people in it: `measles.R.uids` are those who have recovered. Since each person draws their own latent period, you can look at the spread of them directly. In [T3](t3_disease.qmd), an Erlang latent period changed the course of the epidemic, compared with an exponential one of the same average; as agents, you can see why, person by person:
+`sim.people.get_person(uid)` gives everything about one person, and a state gives the IDs (UIDs) of the people in it: `measles.R.uids` are those who have recovered. Since each person draws their own latent period, you can look at the spread of them directly. In [T3](t3_disease.qmd), an Erlang latent period changed the course of the epidemic, compared with an exponential one of the same average; as agents, you can see why, person by person:
 
 ```{python}
 S, E, I, R = ss.states('S E I R')
@@ -138,7 +138,7 @@ def make_sim(k=None):
     if k is None: # Everyone equally infectious
         measles = ss.Disease(infection, progression, recovery, init=dict(R=0.9), init_n=dict(I=1))
         return ss.Sim(measles, **pars)
-    infectiousness = ss.attr(ss.gamma(a=k, scale=1/k)) # A mean of 1, and a shape (dispersion) of k
+    infectiousness = ss.attr(ss.gamma(shape=k, scale=1/k)) # A mean of 1, and a shape (dispersion) of k
     measles = ss.Disease(infection, progression, recovery, infectiousness=infectiousness, init=dict(R=0.9), init_n=dict(I=1))
     superspreading = ss.modify(measles.rel_trans, multiply=infectiousness)
     return ss.Sim(measles, connectors=superspreading, **pars)
@@ -151,7 +151,7 @@ for label, k in {'Everyone equally infectious': None, 'k = 1': 1, 'k = 0.2': 0.2
 
 The average number each case infects is the same in all three, about 1.5, but the more transmission is concentrated, the more often an introduction dies out: with k = 0.2, about 4 in 5 do, since the first case is most likely one of the many who infect nobody. The outbreaks that do take off are of a similar size in all three. For control, this is the good news of superspreading; the bad news is that the outbreaks that occur can start explosively, from a single event. A compartmental model can't say this, since it has no individuals to differ.
 
-`ss.attr()` can also draw a value when something happens to a person (e.g. a severity at infection, with `on=infection`), or record one; see [Diseases](../user_guide/building_diseases.qmd). A person's susceptibility can differ in the same way, with `ss.modify(measles.rel_sus, ...)`.
+`ss.attr()` can also draw a value when something happens to a person (e.g. a severity at infection, with `when=infection`), or record one; see [Diseases](../user_guide/building_diseases.qmd). A person's susceptibility can differ in the same way, with `ss.modify(measles.rel_sus, ...)`.
 
 ## Step 5: Immunity that wanes
 
@@ -162,7 +162,7 @@ def make_cold(waning):
     S, I, R = ss.states('S I R')
     infection = S >> I @ 0.4*I        # β = 0.4 per day
     recovery  = I >> R @ ss.days(7)   # Infectious for 7 days on average
-    infections = ss.attr(1, on=infection, combine='sum', init=0) # The number of times each person has been infected
+    infections = ss.attr(1, when=infection, combine='sum', init=0) # The number of times each person has been infected
     transitions = dict(infection=infection, recovery=recovery)
     if waning:
         transitions['waning'] = R >> S @ ss.days(180) # Immune for 6 months on average
@@ -189,7 +189,7 @@ plt.xlabel('Number of infections in 3 years')
 plt.ylabel('Number of people');
 ```
 
-Everyone is infected at least once, most people 3 to 5 times, and the number varies by chance from person to person, even though everyone here is alike. A person's history can be read in a model too: e.g. `ss.modify(cold.rel_sus, multiply=0.5, where=cold.infection.n_times >= 2)` would halve the susceptibility of people who have been infected at least twice.
+Everyone is infected at least once, most people 3 to 5 times, and the number varies by chance from person to person, even though everyone here is alike. A person's history can be read in a model too: e.g. `ss.modify(cold.rel_sus, multiply=0.5, who=cold.infection.n_times >= 2)` would halve the susceptibility of people who have been infected at least twice.
 
 ## Writing a disease as code
 

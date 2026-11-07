@@ -16,7 +16,7 @@ def test_bv_debut():
     def make():
         U, CST1, CST4 = ss.states('U CST1 CST4')
         return ss.Disease(U, CST1, CST4,
-            debut = ss.Transition(U, [CST1, CST4], on=adult_f, p=[0.8, None]), # Was rate=ss.perday(1), where=adult_f
+            debut = ss.Transition(U, {CST1: 0.8, CST4: None}, when=adult_f), # Was rate=ss.perday(1), where=adult_f
             onset = CST1 >> CST4 @ ss.peryear(0.2),
             clear = CST4 >> CST1 @ ss.months(6),
             default_state='U', name='bv')
@@ -31,7 +31,7 @@ def test_bv_debut():
     res = sim.results.bv
     assert checked.n >= len(res.timevec) - 1 and res.debut[1:].sum() > 100
     assert res.U[0] < 0.7*5000 # Those 15+ at the start debuted before it
-    assert 'as soon as it holds' in sim.diseases.bv.describe(output=True)
+    assert 'as soon as it holds' in sim.diseases.bv.describe()
     assert ss.Sim(make(), stratify=dict(sex=['female', 'male']), n_agents=100, start=2000, stop=2001, unit='year', **kw).init().solver == 'abm' # As agents for now
 
     # A trigger has no rate to modify
@@ -40,7 +40,7 @@ def test_bv_debut():
         ss.Sim(bv, connectors=ss.modify(bv.debut, multiply=2), n_agents=100, **kw).init()
 
     # As compartments: the compartments of women 15+ in U are empty at the start, and aging into them is moved on at each step
-    strat = [dict(sex=['female', 'male']), dict(age=[0, 10, 15, 50, 100])]
+    strat = dict(sex=['female', 'male'], age=[0, 10, 15, 50, 100])
     ode = ss.Sim(make(), solver='ode', total_pop=10_000, stratify=strat, aging=True, start=2000, stop=2010, dt=ss.months(1), unit='year', **kw).run() # v4 ages people only with births or deaths, unless asked
     r = ode.results.bv
     waiting = r.U.select(sex='female', age='15-49')
@@ -68,7 +68,7 @@ def test_on_event():
         S, F, G = ss.states('S F G')
         b = ss.Disease(S, F, G, flag=S >> F @ ss.on(ss.ref('a.I').enter if path else a.I.enter), unflag=F >> S @ ss.years(0.2), name='b')
         on = [ss.ref('a.I').exit] if path else [a.I.exit]
-        dx = [ss.screen(ss.Diagnostic(), on=x, name=f'dx{i}') for i,x in enumerate(on)]
+        dx = [ss.screen(ss.Diagnostic(), when=x, name=f'dx{i}') for i,x in enumerate(on)]
         return ss.Sim([a, b], interventions=dx, n_agents=3000, start=2000, stop=2005, dt=ss.months(1), unit='year', **kw).run().results
     direct, path = by_path(False), by_path(True)
     assert path.b.flag.sum() > 100 and np.array_equal(path.b.flag.values, direct.b.flag.values)
@@ -87,13 +87,13 @@ def test_join_events():
     sc.heading('Testing events joined with |: branches and whole transitions, in any order, before they are named')
     def make(join):
         S, P, C, X = ss.states('S P C X')
-        precin = ss.Transition(P, [C, S], p=[0.2, None], dur=ss.years(1.5))
-        cin = ss.Transition(C, [S, X], p=[0.5, None], dur=ss.years(2))
+        precin = ss.Transition(P, {C: 0.2, S: None}, dur=ss.years(1.5))
+        cin = ss.Transition(C, {S: 0.5, X: None}, dur=ss.years(2))
         clear = ss.Transition(X, S, dur=ss.years(1))
         on = join(precin, cin, clear, S)
         kinds = sorted(e.args[0] for e in ss.expressions.events_in(on))
         assert kinds == ['to', 'to', 'tr'], kinds
-        nab = ss.attr(ss.uniform(0.5, 0.95), on=on, combine='max', init=0)
+        nab = ss.attr(ss.uniform(0.5, 0.95), when=on, combine='max', init=0)
         return ss.Disease(S, P, C, X, infection=S >> P @ ss.peryear(0.4)*(P + C), precin=precin, cin=cin, clear=clear, nab=nab, init_prev=0.3, name='hpv')
     joins = [
         lambda a, b, tr, S: a.to(S) | b.to(S) | tr,
@@ -127,9 +127,9 @@ def test_memory_slots(form):
     def run(slot):
         A, B = ss.states('A B')
         back = ss.Transition(B, A, rate=ss.peryear(1))
-        preg = ss.Pregnancy(fertility_rate=ss.freqperyear(100)) if form == 'recorded' else None # An event it records that is not a transition
+        preg = ss.Pregnancy(fertility_rate=ss.peryear(0.1)) if form == 'recorded' else None # An event it records that is not a transition
         cond = dict(since=back.since < ss.years(1), ever=back.ever, count=back.n_times >= 1, recorded=preg.live_birth.since < ss.years(1) if preg else None)[form]
-        go = ss.Transition(A, B, rate=ss.peryear(2)*cond if slot == 'rate' else ss.peryear(2), where=cond if slot == 'where' else None)
+        go = ss.Transition(A, B, rate=ss.peryear(2)*cond if slot == 'rate' else ss.peryear(2), who=cond if slot == 'where' else None)
         d = ss.Disease(A, B, go=go, back=back, init=dict(B=0.5), default_state='A', name='d')
         mods = ss.modify(d.go, multiply=cond) if slot == 'modifier' else None
         sim = ss.Sim(d, demographics=preg, connectors=mods, n_agents=2000, start=2000, stop=2005, dt=ss.months(1), rand_seed=1, **kw).run()

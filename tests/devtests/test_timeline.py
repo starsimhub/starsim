@@ -18,7 +18,7 @@ def test_mixed_timesteps():
     sc.heading('Test behavior of different combinations of timesteps')
     SIS = ssl.AgentSIS # Written as code, since a declared disease cannot yet have a timestep of its own
 
-    siskw = dict(dur_inf=ss.datedur(days=50), beta=ss.perday(0.01), waning=ss.perday(0.005))
+    siskw = dict(dur_inf=ss.days(50), beta=ss.perday(0.01), waning=ss.perday(0.005))
     kw = dict(n_agents=medium, start='2001-01-01', stop='2001-07-01', networks='random', verbose=0)
 
     print('Year-year')
@@ -37,7 +37,7 @@ def test_mixed_timesteps():
     sis4 = SIS(name='sis', dt=ss.years(1/365), **sc.dcp(siskw))
     sim4 = ss.Sim(dt=ss.days(1), diseases=sis4, label='year-day', **kw)
 
-    msim = ss.parallel(sim1, sim2, sim3, sim4, parallel=False) # Serially, since starting processes takes longer than these short runs
+    msim = ss.parallel(sim1, sim2, sim3, sim4, workers=1) # Serially, since starting processes takes longer than these short runs
 
     # Check that all results are close
     threshold = 0.02
@@ -58,15 +58,12 @@ def test_units(do_plot=False):
         name = 'sis',
         beta = ss.prob(0.05, 'day'),
         init_prev = ss.bernoulli(p=0.1),
-        dur_inf = ss.lognormal(mean=ss.datedur(days=10)),
+        dur_inf = ss.lognormal(mean=ss.days(10)),
         waning = ss.perday(0.05),
         imm_boost = 1.0,
     )
 
-    rnet = ss.RandomNet(
-        n_contacts = 10,
-        dur = 0, # Note; network edge durations are required to have the same unit as the network
-    )
+    rnet = ss.RandomNet(n_contacts=10)
 
     pars = dict(
         diseases = sis,
@@ -85,7 +82,7 @@ def test_units(do_plot=False):
 
     # Check that results match to within stochastic uncertainty
     rtol = 0.05
-    vals = [sim.summary.value.sis_infection for sim in [sims.y, sims.d]]
+    vals = [sim.summarize().value.sis_infection for sim in [sims.y, sims.d]]
     assert np.isclose(*vals, rtol=rtol), f'Values for infection do not match ({vals})'
 
     return sims

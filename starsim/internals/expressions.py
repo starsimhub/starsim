@@ -54,7 +54,7 @@ def as_expr(obj):
             return sum(states[1:], states[0])
         return Prop(obj)
     elif isinstance(obj, ss.transitions.Transition) and obj.source is None: # e.g. S >> I + R @ 0.1, where @ binds before +
-        errormsg = f'"@" binds before "+", so the destination of a transition is not a sum: several destinations are a list, with p= for the share of each, e.g. ss.Transition(I, [R, D], dur=10, p=[0.9, 0.1])'
+        errormsg = f'"@" binds before "+", so the destination of a transition is not a sum: several destinations are a dict of each and its share, e.g. ss.Transition(I, {{R: 0.9, D: 0.1}}, dur=10)'
         raise TypeError(errormsg)
     elif isinstance(obj, ss.transitions.Transition):
         errormsg = f'A transition ({obj}) cannot be used inside a rate; did you mean one of its states?'
@@ -389,7 +389,7 @@ class Stock(Expr):
 
     A bare state means something else in each place it can be written, and each is told apart when the
     model is made: in a rate, exposure to the people in it (`beta * I`); in a result, this; in a condition
-    (`where=I`), being in it; and its number over every group is `I.n` (a `Count`).
+    (`who=I`), being in it; and its number over every group is `I.n` (a `Count`).
     """
     def __init__(self, state):
         self.state = state
@@ -480,7 +480,7 @@ def substitute(expr, subs):
 
 def unheld(expr):
     """ A rate with each parameter that holds an expression of states or counts (`ss.par(beta*I)`) replaced by that expression, since that is what it is: worked out as the rate is, under every solver, rather than as a value """
-    if isinstance(expr, par) and isinstance(expr.value, Expr) and any(isinstance(part, (ss.transitions.State, Count, Coverage)) for part in nodes(expr.value)):
+    if isinstance(expr, par) and isinstance(expr.value, Expr) and any(isinstance(part, (ss.transitions.State, Count, HeldShare)) for part in nodes(expr.value)):
         if expr.bounds is not None or expr.prior is not None:
             errormsg = f'The parameter {expr.name or ""} holds the rate {expr.value}, which reads the model\'s states, so it cannot be fitted as a value; give the bounds or prior to the parameters inside it instead, e.g. beta = ss.par(0.3, bounds=[0.1, 1]) in ss.par(beta*I)'
             raise ValueError(errormsg)
@@ -517,11 +517,11 @@ class Func(Expr):
         return [leaf for arg in self.args for leaf in arg.leaves]
 
 
-class Coverage(Expr):
+class HeldShare(Expr):
     """
-    A product's coverage, as a quantity in a rate (`itn.coverage`): the share of the people in the same place who hold it,
+    The share holding a product, as a quantity in a rate (`itn.held_share`): the share of the people in the same place who hold it,
     each counted by how much protection they have left (the product's `waning=`, if it is a function of time), or by a function
-    of the time since delivery: `itn.coverage(lambda t: ...)`, as `waning=` takes it (`fn(t)` or `fn(t, sim, uids)`)
+    of the time since delivery: `itn.held_share(lambda t: ...)`, as `waning=` takes it (`fn(t)` or `fn(t, sim, uids)`)
 
     In a compartmental run, the people holding it are counted at each level of holding it (see `ss.boxcar`); a function is read
     at the middle of each level's time, relative to the plateau (so a product of boxcars of the same length, e.g. a bed net's usage,
@@ -534,7 +534,7 @@ class Coverage(Expr):
     Examples:
         ```python
         itn = ss.Vaccine(efficacy=dict(bite_indoor=0.6), waning=ss.boxcar(plateau=ss.years(3)), name='itn')
-        mortality = Sv >> ss.dead @ 1/life + a*f_in*itn.coverage(lambda t: kill(t)) # Mosquitoes killed by nets, in proportion to the nets in use
+        mortality = Sv >> ss.dead @ 1/life + a*f_in*itn.held_share(lambda t: kill(t)) # Mosquitoes killed by nets, in proportion to the nets in use
         ```
     """
     def __init__(self, product, weight=None):
@@ -544,11 +544,11 @@ class Coverage(Expr):
 
     @property
     def name(self):
-        return f'{self.product.name}.coverage'
+        return f'{self.product.name}.held_share'
 
     def __call__(self, weight):
-        """ The coverage with each holder counted by a function of the time since delivery """
-        return Coverage(self.product, weight)
+        """ The share with each holder counted by a function of the time since delivery """
+        return HeldShare(self.product, weight)
 
     def __copy__(self): return self
     def __deepcopy__(self, memo): return self
@@ -631,7 +631,7 @@ class mother(Expr):
     """
     A condition or expression evaluated on each unborn agent's mother (1/0 for a condition, or its value), and 0 for anyone born, unless include_born=True
 
-    Usable in rates, `p=`, `where=`, `who=`, `ss.on()`, and modifier conditions. Agents only: `solver='auto'` chooses them, and a compartmental solver stops with a `CapabilityError`.
+    Usable in rates, `p=`, `who=`, `when=ss.on()`, and modifier conditions. Agents only: `solver='auto'` chooses them, and a compartmental solver stops with a `CapabilityError`.
 
     With `include_born=True` it is evaluated on the mother of anyone who has one, born or not, e.g. to reach the newborns
     of mothers who tested positive. An agent with no mother in the sim gets 0. A mother who has died or left is in
@@ -645,7 +645,7 @@ class mother(Expr):
         ```python
         mtct = S >> C @ beta_m2c * ss.mother(Pv | Ph | S2 | EL | LL)
         fetal_eff = 0.98 - 0.23*(ss.mother(preg.P.time_in) > ss.weeks(27)) # 0.75 after 27 weeks; a comparison is 1 or 0
-        newborn = ss.screen(test, on=preg.birth, who=ss.mother(anc.positive.since <= ss.years(1), include_born=True))
+        newborn = ss.screen(test, who=ss.mother(anc.positive.since <= ss.years(1), include_born=True), when=preg.birth)
         ```
     """
     def __init__(self, x, include_born=False):
@@ -705,16 +705,16 @@ class attr(Expr):
     """
     A value for each person: drawn at an event, recorded at an event, drawn once when the person is made (a trait), or derived
 
-    Which it is depends on `value` and `on=`: a distribution with `on=` is drawn when the event happens to
-    someone; an expression (or the name of another attribute) with `on=` is recorded then, as it was just
+    Which it is depends on `value` and `when=`: a distribution with `when=` is drawn when the event happens to
+    someone; an expression (or the name of another attribute) with `when=` is recorded then, as it was just
     before the move; a dict of them by event (a transition, `tr.to(B)`, `X.enter`, ...) records each event's
-    own value, with no `on=`; a distribution with no `on=` is a trait; and an expression, or a dict of one by state
-    (states not listed give NaN), with no `on=` is derived, worked out when it is read. Attributes set on
+    own value, with no `when=`; a distribution with no `when=` is a trait; and an expression, or a dict of one by state
+    (states not listed give NaN), with no `when=` is derived, worked out when it is read. Attributes set on
     the same event are set in the order they are declared, and each sees the ones before it. As agents only.
 
     Args:
         value (Dist/Expr/str/dict): the distribution, the expression, the name of another attribute, a dict of expressions by state (or by a sum of states), or a dict of distributions or expressions by event
-        on (Event/Transition): the event(s) that set it, joined with `|`; none for a trait or a derived attribute
+        when (Event/Transition): the event(s) that set it, joined with `|`; none for a trait or a derived attribute
         combine (str/func): how a new value is combined with the one already held: 'last' (the default), 'first', 'max', 'min', 'sum', or `fn(old, new)`
         init (float/Dist/Expr): the value before any event (default NaN, or 0 for `combine='sum'`): a number, or a distribution or an expression (e.g. of `ss.person`) drawn or worked out for each person when they are made (at the start, once placed in their states, and at birth)
         name (str): the name; if not given, taken from the keyword or class attribute it is assigned to
@@ -722,16 +722,23 @@ class attr(Expr):
 
     Examples:
         ```python
-        cd4_latent = ss.attr(ss.normal(500, 50), on=infection)                  # Drawn
-        cd4_preart = ss.attr('cd4', on=start_art)                               # Recorded, just before starting
+        cd4_latent = ss.attr(ss.normal(500, 50), when=infection)                  # Drawn
+        cd4_preart = ss.attr('cd4', when=start_art)                               # Recorded, just before starting
         rel_sev    = ss.attr(ss.normal(1, 0.2))                                 # A trait
         cd4        = ss.attr({latent: cd4_latent, falling: cd4_latent*(1 - falling.progress)}) # Derived
         dose       = ss.attr({contact: dose_hi, environment: cfu.n/N*share})        # Recorded, a value for each event
-        nab        = ss.attr(ss.uniform(0.5, 0.95), on=clearance, combine='max', init=0)
-        n_inf      = ss.attr(1, on=I.enter, combine='sum', init=ss.poisson(lam=ss.person.age/20)) # Past infections at the start
+        nab        = ss.attr(ss.uniform(0.5, 0.95), when=clearance, combine='max', init=0)
+        n_inf      = ss.attr(1, when=I.enter, combine='sum', init=ss.poisson(mean=ss.person.age/20)) # Past infections at the start
         ```
     """
-    def __init__(self, value, on=None, combine='last', init=None, name=None, label=None):
+    def __init__(self, value, when=None, combine='last', init=None, name=None, label=None, **kwargs):
+        ss.transitions.check_renamed(kwargs, 'ss.attr()', dict(on='when=, the event(s) that set it'))
+        if isinstance(when, ss.on):
+            if when.delay is not None:
+                errormsg = f'when= of an attribute is the event(s) that set it, at once; it takes no delay ({when})'
+                raise ValueError(errormsg)
+            when = when.x
+        on = when
         if not (callable(combine) or combine in combines):
             errormsg = f'combine= is one of {sc.strjoin(combines)}, or a function of (old, new); not {combine!r}'
             raise ValueError(errormsg)
@@ -739,7 +746,7 @@ class attr(Expr):
         self.by_event = None # For a dict by event: (events, value) for each, set in ss.graph.Graph.resolve_attrs()
         if isinstance(value, dict) and value and all(is_event(key) for key in value):
             if on is not None:
-                errormsg = f'The attribute {name or ""} is a dict by event, whose keys are the events that set it, so it takes no on='
+                errormsg = f'The attribute {name or ""} is a dict by event, whose keys are the events that set it, so it takes no when='
                 raise ValueError(errormsg)
             on = list(value.keys())
         self.on = on
@@ -751,7 +758,7 @@ class attr(Expr):
         self.events = [] # The events that set it, as ss.conditions.Event: see ss.graph.Graph.resolve_attrs()
         self.cases = None # For a derived attribute: (state names, expression) for each case
         if self.kind == 'derived' and (combine != 'last' or init is not None):
-            errormsg = f'A derived attribute ({self.label_name}) is worked out when it is read, so takes no combine= or init=; give it on= to record it at an event'
+            errormsg = f'A derived attribute ({self.label_name}) is worked out when it is read, so takes no combine= or init=; give it when= to record it at an event'
             raise ValueError(errormsg)
         return
 
@@ -817,7 +824,7 @@ def dists_in(expr):
 
 
 def events_in(on, graph=None):
-    """ The events of an on=: a transition, a branch (`tr.to(B)`), `X.enter` or `X.exit`, or several joined with `|` """
+    """ The events of an attribute's when=: a transition, a branch (`tr.to(B)`), `X.enter` or `X.exit`, or several joined with `|` """
     if isinstance(on, ss.transitions.Transition):
         return [ss.conditions.Event('tr', on)]
     elif isinstance(on, ss.conditions.Event):
@@ -826,7 +833,7 @@ def events_in(on, graph=None):
         return [e for arg in on.args for e in events_in(arg, graph)]
     elif isinstance(on, (list, tuple)):
         return [e for item in on for e in events_in(item, graph)]
-    errormsg = f'on= takes an event: a transition, a branch of one (tr.to(B)), X.enter, or X.exit, or several joined with |; not {on!r}'
+    errormsg = f'when= of an attribute takes an event: a transition, a branch of one (tr.to(B)), X.enter, or X.exit, or several joined with |; not {on!r}'
     raise TypeError(errormsg)
 
 
@@ -1038,7 +1045,7 @@ def evaluate(expr, ctx):
         if expr.name == 'expit': # The logistic function, 1/(1 + exp(-x)), which NumPy does not have
             return 1/(1 + xp.exp(-args[0]))
         return 1.0*getattr(xp, expr.name)(*args) # A comparison is 1 or 0
-    elif isinstance(expr, (Prop, ss.conditions.Cond)): # A condition is 1 or 0 for each person, as in a rate: its leaves are evaluated as where= evaluates them (see ss.conditions.Selector.leaf())
+    elif isinstance(expr, (Prop, ss.conditions.Cond)): # A condition is 1 or 0 for each person, as in a rate: its leaves are evaluated as who= evaluates them (see ss.conditions.Selector.leaf())
         return ctx.prop(expr.cond if isinstance(expr, Prop) else expr)
     elif isinstance(expr, par):
         return ctx.value(expr)
@@ -1054,8 +1061,8 @@ def evaluate(expr, ctx):
         return ctx.flow(expr)
     elif isinstance(expr, Clock):
         return ctx.clock(expr)
-    elif isinstance(expr, Coverage):
-        return ctx.coverage(expr)
+    elif isinstance(expr, HeldShare):
+        return ctx.held_share(expr)
     elif isinstance(expr, attr):
         return ctx.attr(expr)
     elif isinstance(expr, mother):
@@ -1161,7 +1168,7 @@ def format_expr(expr, values=False, bare=None, mul='*', exact=False, unit=None):
             names = [s.label_name if s not in weights else f'{fmt(weights[s])}{mul}{s.label_name}' for s in e.states]
             inner = names[0] if len(names) == 1 and not weights else '(' + ' + '.join(names) + ')'
             return f'{inner}.{e.kind}{"_infectious" if e.trans else ""}'
-        elif isinstance(e, (Clock, mother, Coverage)):
+        elif isinstance(e, (Clock, mother, HeldShare)):
             return e.to_str()
         return str(e.name) # A flow
     return fmt(expr)

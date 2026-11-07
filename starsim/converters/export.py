@@ -23,7 +23,7 @@ the usual kinds, for formats that have kinds of flow), `timing()`, `declared_par
 The runs of a MultiSim are written as a submission to a hub (by scenario, as quantiles or samples) by `ss.converters.to_hub()`.
 
 All are written from the compartmental form of the model (what
-`sir.equations()` prints), with the numbers in the sim's unit of time: a dwell time
+`sir.equations()` gives), with the numbers in the sim's unit of time: a dwell time
 that is not exponential is its Erlang stages, each stratification is summed into one
 group, a network is its mean contacts, and a parameter that varies in time is its formula
 in the time (where the format can carry it). Each is read back by `ss.import_from()`, except a rate that varies in
@@ -73,7 +73,7 @@ def compartmental(sim):
     sim = initialized(sim)
     if sim.solver != 'abm':
         return sim, None
-    return sim.new(solver='ode', verbose=0).init(), 'changed: the agent-based sim was written as its compartmental form (an ODE)'
+    return ss.sim.as_ode(sim, verbose=0).init(), 'changed: the agent-based sim was written as its compartmental form (an ODE)'
 
 
 def strata(sim, mod):
@@ -721,7 +721,7 @@ def to_hub(msim, targets, origin_date=None, by=None, every='week', output_type='
 
     Example:
         ```python
-        msim = ss.parallel(baseline=s1, lockdown=s2, n_runs=20)
+        msim = ss.parallel({'baseline': s1, 'lockdown': s2}, n_runs=20)
         hub = ss.converters.to_hub(msim, targets=dict(infection=['inc inf', 'cum inf']), origin_date='2020-03-01', by='patch')
         ```
     """

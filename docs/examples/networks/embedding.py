@@ -26,7 +26,7 @@ class EmbeddingNet(ss.SexualNet):
         super().__init__()
         self.define_pars(
             inherit = True, # ss.SexualNet already comes with pars, we want to keep those
-            embedding_func = ss.normal(name='EmbeddingNet', loc=self.embedding_loc, scale=2),
+            embedding_func = ss.normal(name='EmbeddingNet', mean=self.embedding_loc, std=2),
             male_shift = 5,
         )
         self.update_pars(pars, **kwargs)
@@ -60,9 +60,9 @@ class EmbeddingNet(ss.SexualNet):
         # Finalize pairs
         p1 = available_m[ind_m]
         p2 = available_f[ind_f]
-        beta = np.ones(n_pairs)
+        weight = np.ones(n_pairs)
         dur_vals = self.pars.dur.rvs(p1)
         act_vals = self.pars.acts.rvs(p1)
 
-        self.append(p1=p1, p2=p2, beta=beta, dur=dur_vals, acts=act_vals)
-        return len(beta)
+        self.append(p1=p1, p2=p2, weight=weight, dur=dur_vals, acts=act_vals)
+        return len(weight)

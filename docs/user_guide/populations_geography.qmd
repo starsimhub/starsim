@@ -11,7 +11,7 @@ An outbreak in one town reaches the next through the people who travel between t
 
 ## Towns linked by commuting
 
-A **geography** (`ss.geo.geography`) is a set of named places, with the population of each and where they are. Stratifying a disease by it (`stratify(patch=towns)`) makes a copy of each state for each place, and `mobility=` says how people move between them. Here are three towns of measles: Riverton, with 60,000 people, Hillside (30,000) 20 km away, and Lakeside (10,000) 50 km away, with 10 infectious people in Riverton at the start. People spend 0.1% of their time in the other towns, split between them by a gravity model (more to bigger and nearer towns):
+A **geography** (`ss.geo.geography`) is a set of named places, with the population of each and where they are. Stratifying a disease by it (`stratify(patch=towns)`) makes a copy of each state for each place, and `mobility=` says how people move between them, given with the places as `stratify(patch=ss.levels(towns, mobility=...))`. Here are three towns of measles: Riverton, with 60,000 people, Hillside (30,000) 20 km away, and Lakeside (10,000) 50 km away, with 10 infectious people in Riverton at the start. People spend 0.1% of their time in the other towns, split between them by a gravity model (more to bigger and nearer towns):
 
 ```{python}
 import starsim as ss
@@ -23,11 +23,12 @@ towns = ss.geo.geography(
     y           = [0, 0, 10],
 )
 
-S, I, R = ss.states('S I R')
+S, R = ss.states('S R')
+I = ss.State('I', infected=True) # Infected: counted in the results infected and prevalence
 infection = S >> I @ 1.9*I        # β = 1.9 per day
 recovery  = I >> R @ ss.days(8)   # Infectious for 8 days on average
 measles = ss.Disease(infection, recovery, init_n=dict(I=ss.by(patch=[10, 0, 0]))) # 10 infectious people in Riverton
-measles.stratify(patch=towns, mobility=ss.geo.gravity(away=0.001))
+measles.stratify(patch=ss.levels(towns, mobility=ss.geo.gravity(away=0.001)))
 
 sim = ss.Sim(measles, stop=ss.days(60))
 sim.run()
@@ -79,7 +80,7 @@ measles_kenya = ss.Disease(infection, recovery,
     init   = dict(R=0.9),                         # 90% immune at the start
     init_n = dict(I=ss.by(patch={'Nairobi': 10})), # 10 infectious people in Nairobi, and none in the other 46 counties
 )
-measles_kenya.stratify(patch=kenya, mobility=ss.geo.gravity(away=0.001))
+measles_kenya.stratify(patch=ss.levels(kenya, mobility=ss.geo.gravity(away=0.001)))
 
 sim = ss.Sim(measles_kenya, start='2025-01-01', stop='2026-01-01', verbose=0)
 sim.run()
@@ -91,7 +92,7 @@ for county in ['Nairobi', 'Kiambu', 'Mombasa', 'Turkana']:
 
 Kiambu borders Nairobi, Mombasa is the second city, 440 km away, and Turkana is a remote county in the northwest. Nairobi's outbreak peaks first, in June; Kiambu's follows in July, and Mombasa's and Turkana's in September, near the peaks of most other counties. The gravity model sends Nairobi's travelers to every county, near or far, in proportion to its population, so distance matters less than it might: Turkana, remote as it is, peaks within days of Mombasa. As an ODE, a county's outbreak starts as soon as the first fraction of an infected person arrives (see [below](#under-compartments-and-agents) for why agents differ).
 
-A geography with no populations (`names=` only) gives places of equal size, unless the stratification is given a `fractions=`. A place's population sets the share of people who start there.
+A geography with no populations (`names=` only) gives places of equal size. A place's population sets the share of people who start there.
 
 ## Maps
 
@@ -129,7 +130,7 @@ Movement has three parts: its shape (which places people go to), its amount (how
 
 **The amount** is `away=`, the share of their time that people spend away from home, split between the other places by the shape. With neither `away=` nor `scale=`, it is 10%, which `describe()` marks as guessed. `scale=` instead gives the amount as a constant in the gravity formula; its units depend on the powers, so no value fits both three towns and a country, and it is for an amount that has been fitted to data.
 
-**The kind** is given with `ss.geo.Mobility(model, kind=...)`; a movement model given directly to `mobility=` is commuting. The kinds are different mechanisms, and the numbers of a matrix mean different things under each (a share of time, or a rate of moving home), so changing the kind without changing the numbers does not give an equivalent model:
+**The kind** is given with `kind=`, on the movement model or the matrix (`ss.geo.gravity(kind='visit')`, `ss.geo.Mobility(M, kind='migrate')`); by default it is commuting. The kinds are different mechanisms, and the numbers of a matrix mean different things under each (a share of time, or a rate of moving home), so changing the kind without changing the numbers does not give an equivalent model:
 
 | Kind | What it means | Used for |
 |---|---|---|
@@ -145,10 +146,10 @@ $$\lambda_i = \sum_k T_{ik} \, \beta \, \frac{\sum_j T_{jk} I_j}{\sum_j T_{jk} N
 the standard time-share form: people are exposed in each place in proportion to the time they spend there, to whoever is there. It needs no change to the time step, and does not follow the time of day.
 
 ```python
-ss.geo.Mobility(ss.geo.gravity(), away=0.2)                    # Commuting, 20% of time away
-ss.geo.Mobility(ss.geo.gravity(), away=0.2, kind='visit')      # Visiting
-ss.geo.Mobility(ss.geo.gravity(scale=2e-5), kind='migrate')        # Migration, at rates from the gravity model
-ss.geo.Mobility(ss.geo.radiation(), away=0.1, kind='force')    # A moving force of infection, as in LASER
+ss.geo.gravity(away=0.2)                    # Commuting, 20% of time away
+ss.geo.gravity(away=0.2, kind='visit')      # Visiting
+ss.geo.gravity(scale=2e-5, kind='migrate')  # Migration, at rates from the gravity model
+ss.geo.radiation(away=0.1, kind='force')    # A moving force of infection, as in LASER
 ```
 
 ### Movement between neighbors
@@ -157,7 +158,7 @@ With movement only across borders, infection spreads as a wave, from each county
 
 ```{python}
 measles_borders = ss.Disease(infection, recovery, init=dict(R=0.9), init_n=dict(I=ss.by(patch={'Nairobi': 10})))
-measles_borders.stratify(patch=kenya, mobility=ss.geo.Mobility(matrix=kenya.adjacency, away=0.001))
+measles_borders.stratify(patch=ss.levels(kenya, mobility=ss.geo.Mobility(matrix=kenya.adjacency, away=0.001)))
 
 borders = ss.Sim(measles_borders, start='2025-01-01', stop='2026-01-01', verbose=0)
 borders.run()
@@ -172,7 +173,7 @@ The outbreak in Nairobi is the same, but it now reaches only the counties next t
 
 ### A movement register
 
-A table of moves on given dates (a movement register, such as livestock sales between farms) is `ss.geo.Mobility(data=...)`, a file name or a DataFrame with columns `date`, `from`, `to`, and `n`, and optionally `states`. Each row moves `n` people from one place to another on that date: a row with no `from` adds people (births, purchases), and one with no `to` removes them (deaths, sales out of the model). The people who move are chosen at random from those in `states` (by default, everyone), and people added go into the first state, unless `states` says otherwise. Here 100 people move from Riverton to Lakeside on day 5, while measles is spreading there, and 50 people (all susceptible) join Hillside, which has no other link to Riverton:
+A table of moves on given dates (a movement register, such as livestock sales between farms) is `ss.geo.register(...)`, a file name or a DataFrame with columns `date`, `from`, `to`, and `n`, and optionally `states`. Each row moves `n` people from one place to another on that date: a row with no `from` adds people (births, purchases), and one with no `to` removes them (deaths, sales out of the model). The people who move are chosen at random from those in `states` (by default, everyone), and people added go into the first state, unless `states` says otherwise. Here 100 people move from Riverton to Lakeside on day 5, while measles is spreading there, and 50 people (all susceptible) join Hillside, which has no other link to Riverton:
 
 ```{python}
 import pandas as pd
@@ -184,7 +185,7 @@ register = pd.DataFrame({
     'n':    [100, 50],
 })
 measles_moves = ss.Disease(infection, recovery, init_n=dict(I=ss.by(patch=[10, 0, 0])))
-measles_moves.stratify(patch=towns, mobility=ss.geo.Mobility(data=register))
+measles_moves.stratify(patch=ss.levels(towns, mobility=ss.geo.register(register)))
 
 sim = ss.Sim(measles_moves, stop=ss.days(60), verbose=0)
 sim.run()
@@ -205,7 +206,7 @@ Places and movement work the same under every solver: with agents, each agent ha
 
 ```{python}
 measles_slow = ss.Disease(infection, recovery, init_n=dict(I=ss.by(patch=[10, 0, 0])))
-measles_slow.stratify(patch=towns, mobility=ss.geo.gravity(away=0.0001))
+measles_slow.stratify(patch=ss.levels(towns, mobility=ss.geo.gravity(away=0.0001)))
 
 kw = dict(stop=ss.days(60), verbose=0)
 for label, sim in {'As an ODE': ss.Sim(measles_slow, **kw), 'As agents': ss.Sim(measles_slow, n_agents=10_000, **kw)}.items():
@@ -218,7 +219,7 @@ As an ODE, Hillside and Lakeside peak 3 or 4 days after Riverton; as agents, 7 a
 
 ## Pitfalls
 
-- **A name does not make a place.** A stratification is spatial when it is given a geography (`patch=towns`) or `kind='space'` (`stratify(patch=['a', 'b'], kind='space')`). A list of names alone, even `patch=['north', 'south']`, makes ordinary groups, whose people mix with each other; a stratification named like places (`patch`, `region`, `district`, `county`, `province`, `place`, or `location`) given only names says so in a note, unless `kind=` is given. `describe()` gives the kind of each stratification: `patch (space)` or `patch (plain)`.
+- **A name does not make a place.** A stratification is spatial when it is given a geography (`patch=towns`) or `kind='space'` (`stratify(patch=ss.levels(['a', 'b'], kind='space'))`). A list of names alone, even `patch=['north', 'south']`, makes ordinary groups, whose people mix with each other; a stratification named like places (`patch`, `region`, `district`, `county`, `province`, `place`, or `location`) given only names says so in a note, unless `kind=` is given. `describe()` gives the kind of each stratification: `patch (space)` or `patch (plain)`.
 
 - **A movement model needs a geography.** `ss.geo.gravity()` and `ss.geo.radiation()` work out the movement from the places' populations and distances, so on a stratification with no geography they raise an error; give a geography, or the movement itself as a matrix.
 - **Too much movement.** With `scale=` instead of `away=`, the gravity formula can send people from a small place to a large one for more than all of their time; Starsim then caps it at all of it, with a warning. Give `away=` unless `k` has been fitted.

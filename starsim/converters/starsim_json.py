@@ -3,7 +3,7 @@ Starsim's own form of a model as JSON: `ss.export_to(sim, 'json')` writes it, an
 
 The file is a declared model as plain data, in the words of its code: each value and
 rate is written as it would be in Python without the `ss.` (`"days(10)"`,
-`"S >> I @ beta * I"`), each stratification is the arguments of `stratify()`, and
+`"S >> I @ beta * I"`), the stratifications are the arguments of `stratify()`, and
 what was left at its default is left out. For example:
 
     {
@@ -18,7 +18,7 @@ what was left at its default is left out. For example:
           "recovery":  "I >> R @ dur_inf"
         },
         "init": {"I": 0.01},
-        "stratify": [{"patch": ["urban", "rural"]}]
+        "stratify": {"patch": ["urban", "rural"]}
       }],
       "networks": [{"type": "RandomNet", "n_contacts": 5}]
     }
@@ -49,9 +49,9 @@ from .core import code_value, time_names, func_names
 __all__ = ['to_json', 'load_json']
 
 # The settings of a sim that the file carries, as they were given
-settings = ['label', 'n_agents', 'total_pop', 'pop_scale', 'start', 'stop', 'dur', 'dt', 'unit', 'solver', 'rand_seed', 'branching', 'approximations', 'integrator', 'substeps', 'aging']
+settings = ['label', 'n_agents', 'total_pop', 'start', 'stop', 'dt', 'unit', 'solver', 'rand_seed', 'branching', 'approximations', 'aging']
 module_keys = ['networks', 'demographics', 'interventions', 'analyzers', 'connectors']
-values = ['par', 'seasonal', 'peract', 'timeseries', 'by', 'Rate', 'date', 'datedur', 'dur'] # Starsim's values that can be written as calls, besides typed quantities and distributions
+values = ['par', 'seasonal', 'peract', 'timeseries', 'by', 'Rate', 'date', 'dur', 'ode', 'binomial', 'abm', 'rescale', 'levels'] # Starsim's values that can be written as calls, besides typed quantities and distributions
 dist_names = sorted(name for name in dir(ss) if isinstance(getattr(ss, name), type) and issubclass(getattr(ss, name), ss.Dist) and name != 'Dist')
 constants = dict(pi='np.pi', inf='np.inf', nan='np.nan', unborn='ss.unborn', dead='ss.dead', outside='ss.outside', stay='ss.stay')
 
@@ -81,7 +81,9 @@ class Writer:
         """ A value as JSON: numbers, text, lists, and dicts as they are, `ss.by` as `{"by": {...}}`, a parameter as its name, and anything else as its code without the `ss.` """
         pars = pars or {}
         v = lambda x: self.value(x, pars)
-        if isinstance(val, ss.par):
+        if isinstance(val, ss.sim.Solver): # A solver with options as its call, e.g. ode(integrator='euler'); with none, its name
+            return drop_prefixes(repr(val)) if val.given() else str(val)
+        elif isinstance(val, ss.par):
             name = next((k for k,p in pars.items() if p is val), None)
             return name if name is not None else v(val.raw)
         elif isinstance(val, np.generic):
@@ -148,21 +150,21 @@ class Writer:
         return {k:v for k,v in out.items() if v is not None}
 
     def strat(self, s):
-        """ A stratification, as the arguments of `stratify()` """
+        """ A stratification, as its argument of `stratify()`: its levels (a dict of their shares, if given), or `levels(...)` with its options """
         if s.geo is not None or s.mobility is not None:
             self.lost.append(f'changed: the places of "{s.name}" are written as names, without their geography or movement')
-        out = {s.name: self.value(s.edges if s.edges is not None else s.labels)}
-        if s.fractions_given:
-            out['fractions'] = self.value(s.fractions)
-        if s.adjust:
-            out['adjust'] = self.value(dict(s.adjust))
+        if s.who is not None:
+            self.lost.append(f'not exported: the who= of the stratification "{s.name}"')
+        if s.joint is not None:
+            self.lost.append(f'not exported: the shares of "{s.name}" by the levels of other dimensions')
+        levels = list(s.edges) if s.edges is not None else list(s.labels)
+        value = dict(zip(levels, s.fractions)) if s.fractions_given and s.joint is None else levels
         default = 'age' if s.name == 'age' else 'plain'
-        if s.kind != default:
-            out['kind'] = s.kind
-        for key in ['states', 'where']:
-            if getattr(s, key) is not None:
-                out[key] = self.value(getattr(s, key))
-        return out
+        opts = dict(states=s.states, kind=s.kind if s.kind != default else None)
+        opts = {k:v for k,v in opts.items() if v is not None}
+        if not opts:
+            return self.value(value) if not isinstance(value, dict) or all(isinstance(k, str) for k in value) else drop_prefixes(code_value(value)) # Levels that are not text (ages, or True and False) as code, so they keep their type
+        return drop_prefixes(f'ss.levels({code_value(value)}, {", ".join(f"{k}={code_value(v)}" for k,v in opts.items())})')
 
     def disease(self, mod):
         """ A declared disease """
@@ -193,10 +195,10 @@ class Writer:
             if vals:
                 out[key] = vals
         if g.init_prev is not None and 'init_prev' not in g.guessed: # Not the default, which is worked out again
-            out.init_prev = self.value(getattr(g.init_prev, 'raw', g.init_prev))
+            out['init_n' if g.seed_n else 'init_prev'] = self.value(getattr(g.init_prev, 'raw', g.init_prev))
         if g.default_given is not None:
             out.default_state = g.default_given
-        strats = [self.strat(s) for s in g.strats if s.kind != 'strain']
+        strats = {s.name:self.strat(s) for s in g.strats if s.kind != 'strain'}
         if strats:
             out.stratify = strats
         for key,what in [('outcomes', 'outcome'), ('modifiers', 'modifier'), ('funcs', 'function'), ('attrs', 'attribute'), ('transfers', 'transfer')]:
@@ -421,8 +423,18 @@ class Reader:
         unknown = set(tr) - {'source', 'dest', 'rate', 'dur', 'p', 'min_stay', 'label', 'stages'}
         if unknown:
             self.error(where, f'{sc.strjoin(sorted(unknown))} is not an argument of a transition here')
-        args = [self.ends(tr.get('source') or 'unborn', names, where), self.ends(tr['dest'] if isinstance(tr.get('dest'), str) else '[' + ', '.join(x or 'dead' for x in tr['dest']) + ']' if tr.get('dest') else 'dead', names, where)]
+        dest = tr.get('dest')
+        split = isinstance(dest, list) and len(dest) > 1
+        if split: # Several destinations: a dict of each and its probability (None for the rest)
+            ps = sc.tolist(tr.get('p')) if tr.get('p') is not None else []
+            ps = ps + [None]*(len(dest) - len(ps))
+            dst = '{' + ', '.join(f'{self.ends(x or "dead", names, where)}: {"None" if v is None else self.value(v, names, where)}' for x,v in zip(dest, ps)) + '}'
+        else:
+            dst = self.ends(dest if isinstance(dest, str) else '[' + ', '.join(x or 'dead' for x in dest) + ']' if dest else 'dead', names, where)
+        args = [self.ends(tr.get('source') or 'unborn', names, where), dst]
         for key in ['rate', 'dur', 'p', 'min_stay', 'stages', 'label']:
+            if key == 'p' and split:
+                continue
             if tr.get(key) is not None:
                 val = repr(tr[key]) if key == 'label' else self.value(tr[key], names, where)
                 args.append(f'{key}={val}')
@@ -505,8 +517,11 @@ class Reader:
         for k,v in kw.items():
             lines.append(f'    {k} = {v},')
         lines.append(')')
-        for strat in d.get('stratify', []):
-            lines.append(f'{var}.stratify({kwargs(strat, lambda x: self.value(x, names, f"{where}, stratify"))})')
+        strats = d.get('stratify')
+        if strats is not None and not isinstance(strats, dict):
+            self.error(where, 'stratify is a dict of the dimensions and their levels, as stratify() takes them, e.g. {"patch": ["urban", "rural"]}')
+        if strats:
+            lines.append(f'{var}.stratify({kwargs(strats, lambda x: self.value(x, names, f"{where}, stratify"))})')
         return lines
 
     def module(self, m, key):

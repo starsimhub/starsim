@@ -22,7 +22,7 @@ In Starsim, a branching process is not a different model, but the same model run
 | Solver | What it gives |
 |---|---|
 | `'ode'` | The expected course: exponential growth at the rate that goes with R0 |
-| `'ide'` | The same, with each dwell time as it is, which is the renewal equation (below) |
+| `ss.ode(dwells='exact')` | The same, with each dwell time as it is, which is the renewal equation (below) |
 | `'gillespie'`, `'binomial'`, `'tau'` | A branching process of counts: the chance of extinction, and the distribution of chain sizes |
 | `'abm'` | A branching process of individuals: who infected whom, and differences between people |
 
@@ -43,7 +43,7 @@ recovery  = I >> R @ ss.days(10)  # Infectious for 10 days on average: R0 = 2
 sir = ss.Disease(infection, recovery, init_n=dict(I=1), name='sir') # One imported case
 
 sim = ss.Sim(sir, total_pop=1e6, stop=ss.days(100), solver='gillespie', branching=True, verbose=0)
-msim = sim.run(n_runs=100, until=sir.I.n + sir.R.n >= 100)
+msim = ss.parallel(sim, n_runs=100, until=sir.I.n + sir.R.n >= 100)
 b = msim.branching
 print(f'Share of introductions that died out: {b.p_extinct:.2f} (95% interval {b.p_extinct_ci[0]:.2f} to {b.p_extinct_ci[1]:.2f}; theory: 1/R0 = 0.5)')
 ```
@@ -76,11 +76,11 @@ To give the cases different infectiousness, give the disease `rel_trans` as an a
 ```{python}
 k = 0.2
 offspring = {}
-for label, extra in [('Same infectiousness', {}), (f'Overdispersed (k = {k})', dict(rel_trans=ss.attr(ss.gamma(a=k, scale=1/k))))]: # Each person's infectiousness, with mean 1
+for label, extra in [('Same infectiousness', {}), (f'Overdispersed (k = {k})', dict(rel_trans=ss.attr(ss.gamma(shape=k, scale=1/k))))]: # Each person's infectiousness, with mean 1
     S, I, R = ss.states('S I R')
     sars = ss.Disease(S >> I @ 0.2*I, I >> R @ ss.constant(ss.days(10)), init_n=dict(I=20), name='sars', **extra)
     sim = ss.Sim(sars, total_pop=10e6, stop=ss.days(60), solver='abm', branching=True, verbose=0)
-    msim = sim.run(n_runs=8)
+    msim = ss.parallel(sim, n_runs=8)
     b = msim.branching
     offspring[label] = b.offspring
     print(f'{label}: R = {b.R:.2f}, k = {b.k:.2g}')
@@ -96,18 +96,18 @@ With the same infectiousness and a fixed infectious period, the offspring are Po
 
 ### The renewal equation
 
-`solver='ide'` is the deterministic solver that takes each dwell time as it is, rather than as the Erlang stages that `'ode'` uses: an integro-differential model. As a branching process, it is the renewal equation that EpiEstim, EpiNow2, and epidemia are built on, with the generation interval that the model's latent and infectious periods give:
+`solver=ss.ode(dwells='exact')` is the deterministic solver that takes each dwell time as it is, rather than as the Erlang stages that `'ode'` uses: an integro-differential model. As a branching process, it is the renewal equation that EpiEstim, EpiNow2, and epidemia are built on, with the generation interval that the model's latent and infectious periods give:
 
 ```{python}
 S, E, I, R = ss.states('S E I R')
 latent = ss.lognormal(mean=ss.days(5), std=ss.days(10)) # Most become infectious within a few days, a few only after weeks
 seir = ss.Disease(S >> E @ 0.4*I, E >> I @ latent, I >> R @ ss.days(5), init_n=dict(I=10), name='seir')
-solvers = {'Renewal equation (ide)': 'ide', 'Erlang stages (ode)': 'ode'}
+solvers = {'Renewal equation (exact dwells)': ss.ode(dwells='exact'), 'Erlang stages (ode)': 'ode'}
 sims = {label: ss.Sim(seir, total_pop=1e6, branching=True, solver=solver, stop=ss.days(60), verbose=0) for label, solver in solvers.items()}
 ss.parallel(sims).plot('seir.I')
 ```
 
-The latent period here is lognormal, with a long tail: a mean of 5 days and a standard deviation of 10. `'ide'` keeps it as it is, as a conveyor of whole steps with the distribution's own chance of leaving after each one; `'ode'` approximates it with Erlang stages that match its mean and standard deviation, but Erlang stages can be no more variable than an exponential, so it keeps the mean and gives a standard deviation of 5 days (the sim notes this). With the same R0, a more variable generation interval means more of the infections come early, so the epidemic grows faster under `'ide'`: by day 60 it has about half as many again infectious as under `'ode'`. For a latent period no more variable than an exponential (a lognormal with a standard deviation of 3 days, say), the two are close. For a reproduction number that varies in time, give `beta` as an `ss.timeseries`, which `sim.fit()` can fit.
+The latent period here is lognormal, with a long tail: a mean of 5 days and a standard deviation of 10. `dwells='exact'` keeps it as it is, as a conveyor of whole steps with the distribution's own chance of leaving after each one; `'ode'` approximates it with Erlang stages that match its mean and standard deviation, but Erlang stages can be no more variable than an exponential, so it keeps the mean and gives a standard deviation of 5 days (the sim notes this). With the same R0, a more variable generation interval means more of the infections come early, so the epidemic grows faster with exact dwell times: by day 60 it has about half as many again infectious as under `'ode'`. For a latent period no more variable than an exponential (a lognormal with a standard deviation of 3 days, say), the two are close. For a reproduction number that varies in time, give `beta` as an `ss.timeseries`, which `sim.fit()` can fit.
 
 ## Population rescaling
 
@@ -130,14 +130,14 @@ sir = ss.Disease(infection, recovery, init_prev=0.001)
 
 ode    = ss.Sim(sir, total_pop=1e6, stop=ss.days(150)).run()               # A million people, as compartments
 agents = ss.Sim(sir, total_pop=1e6, stop=ss.days(150), solver='abm').run() # The same, as 10,000 agents
-print('People per agent:', agents.pars.pop_scale)
+print('People per agent:', agents.pop_scale)
 ```
 
 Each agent stands for 100 people, and the counts in the agents' results are multiplied by 100. The two agree on the size of the epidemic and of its peak; the peak comes a few days later as agents, partly by chance and partly because agents take whole daily steps.
 
 ### Static scaling
 
-The number of people each agent stands for is `pop_scale`, which is `total_pop / n_agents` unless it is given itself. Results that are counts (such as `I`) are multiplied by it when the run ends; results that are shares or averages (such as prevalence) are not.
+The number of people each agent stands for is `sim.pop_scale`, which is `total_pop / n_agents`: give the number of people and the number of agents, and the scale follows. Results that are counts (such as `I`) are multiplied by it when the run ends; results that are shares or averages (such as prevalence) are not.
 
 The cost is resolution. With 5,000 agents for a million people, each agent is 200 people, so an epidemic can't start from fewer than 200 people, and an outbreak started by 10 people can't be represented at all:
 
@@ -147,7 +147,7 @@ static = ss.Sim(sir, total_pop=1e6, n_agents=5_000, stop=ss.days(150), label='St
 static.run();
 ```
 
-Starsim notes the problem: 10 people are 0.05 of an agent, so the run starts with one agent infectious, which is 200 people: if it takes off, its epidemic is that of 200 cases, not 10, and here, by chance, that one agent recovers without infecting anyone, so there is no epidemic at all. With static scaling, a seed is a whole number of agents: to seed 10 agents, give 10 times as many people as each agent stands for, here 2,000 people (`init_prev=2000` would do the same, since an `init_prev` above 1 is a number of people, not of agents):
+Starsim notes the problem: 10 people are 0.05 of an agent, so the run starts with one agent infectious, which is 200 people: if it takes off, its epidemic is that of 200 cases, not 10, and here, by chance, that one agent recovers without infecting anyone, so there is no epidemic at all. With static scaling, a seed is a whole number of agents: to seed 10 agents, give 10 times as many people as each agent stands for, here 2,000 people (`init_n=2000`, seeded through the transmission, would do the same: `init_n` is a number of people, not of agents):
 
 ```{python}
 sir = ss.Disease(infection, recovery, init_n=dict(I=2000)) # 2,000 people, 10 agents of 200, infectious at the start
@@ -157,10 +157,10 @@ static.run();
 
 ### Dynamic rescaling
 
-With `rescale=True`, each agent starts by standing for one person, and the number grows as the epidemic does, up to `pop_scale`. At the end of each step, the sim:
+With `rescale=True`, each agent starts by standing for one person, and the number grows as the epidemic does, up to `sim.pop_scale`. At the end of each step, the sim:
 
 1. checks the share of agents who are no longer naive (who have left the first state of any disease);
-2. if that share is more than `rescale_threshold` (5% by default), multiplies the number of people per agent by at least `rescale_factor` (1.2 by default), without going past `pop_scale`;
+2. if that share is more than a threshold (5% by default), multiplies the number of people per agent by at least a factor (1.2 by default), without going past `sim.pop_scale`;
 3. makes enough of the agents who are not naive naive again (if the number of people per agent doubles, half of them), so that the infected people are spread over fewer agents.
 
 So every agent always stands for the same number of people, and agents are freed to stand for the part of the population that has not been infected yet. With dynamic rescaling, each agent stands for one person at the start, so the 10 people infectious at the start, as in the first static sim, are 10 agents:
@@ -171,6 +171,8 @@ dynamic = ss.Sim(sir, total_pop=1e6, n_agents=5_000, stop=ss.days(150), rescale=
 dynamic.run()
 dynamic.results.pop_scale.plot()
 ```
+
+The threshold and the factor are options: `rescale=ss.rescale(threshold=0.05, factor=1.2)` is the same as `rescale=True`. Rescaling is for agents only; a compartmental run, which has no agents, raises an error if given it.
 
 The number of people per agent (`sim.results.pop_scale`) starts at 1, and grows as the epidemic does, to 200. Here are the three runs:
 

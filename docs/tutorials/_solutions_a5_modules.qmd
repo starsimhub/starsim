@@ -66,7 +66,7 @@ class AgeNet(ss.Network):
         order = uids[np.argsort(age, kind='stable')]
         p1 = np.concatenate([order[:-k] for k in range(1, self.pars.n_contacts//2 + 1)])
         p2 = np.concatenate([order[k:] for k in range(1, self.pars.n_contacts//2 + 1)])
-        self.append(p1=p1, p2=p2, beta=np.ones(len(p1)))
+        self.append(p1=p1, p2=p2, weight=np.ones(len(p1)))
         return
 
     def step(self):
@@ -93,7 +93,7 @@ With half of the 4 contacts at random, the epidemic is almost the same as with a
 
 **Q: Write an `SIRS` in which immunity is lost with a constant chance each step, using an `ss.bernoulli` distribution in `step_state()`. Does it give the same epidemic?**
 
-A: A constant chance each step gives an exponential (or, in whole steps, geometric) duration of immunity, with the same mean as `ss.expon(scale=ss.days(180))` if the chance per day is 1/180, so the waning works the same way, and the epidemic is the same up to chance:
+A: A constant chance each step gives an exponential (or, in whole steps, geometric) duration of immunity, with the same mean as `ss.expon(mean=ss.days(180))` if the chance per day is 1/180, so the waning works the same way, and the epidemic is the same up to chance:
 
 ```{python}
 class SIRS(ssl.AgentSIR):
@@ -110,7 +110,7 @@ class SIRS(ssl.AgentSIR):
         self.susceptible[waning] = True
         return
 
-coded = SIRS(beta=ss.perday(0.4), dur_inf=ss.expon(scale=ss.days(7)), p_death=0, init_prev=0.01, name='cold')
+coded = SIRS(beta=ss.perday(0.4), dur_inf=ss.expon(mean=ss.days(7)), p_death=0, init_prev=0.01, name='cold')
 sim = ss.Sim(coded, networks=ss.MixingPool(n_contacts=1), n_agents=10_000, stop=ss.days(2*365), dt=ss.days(1), verbose=0)
 sim.run()
 sim.results.cold.infected.plot()

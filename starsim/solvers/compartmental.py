@@ -105,6 +105,10 @@ def run_many_parts(owner, rngs, ys, args, n_cols, outputs, state_of, rows, grp_s
     return
 
 
+def exact_dwells(sim):
+    """ Whether each dwell time is run as it is, rather than as Erlang stages: `solver=ss.ode(dwells='exact')` """
+    return getattr(sim.solver if sim.solver is not None else sim.pars.solver, 'dwells', None) == 'exact'
+
 class Compartmental(Engine): # Never searched for distributions (see ss.dists.no_dists()): it draws from its own generator, and the distributions in the model are found through its graph
     """
     Runs a graph as compartments: deterministically (`ode`, `ide`) or stochastically
@@ -244,7 +248,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         """
         The rates of a mover from group to group, as a sparse matrix (each group's people move along one dimension, so to only a few groups)
 
-        Moving into a group with no level of a dimension is moving to its first level, so people outside a dimension's `where=` do not move along it.
+        Moving into a group with no level of a dimension is moving to its first level, so people outside a dimension's `who=` do not move along it.
         """
         ng = self.n_groups
         fold = self.sim.groups.group_fold
@@ -427,7 +431,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                     p = tr.p[0] if tr.p is not None and not tr._split else None # A split between several destinations takes what the branches leave over
                     tracks.append(Bunch(tr=tr, p=p, immediate=tr.rate is None and (tr.dur is None or tr._immediate))) # With neither (or dur=0), nobody waits in the branch
             else:
-                apart = len(staged) > 1 # Several, each for other people (where=, e.g. by sex): a track for each, which each group enters by the one it has (see apart_shares())
+                apart = len(staged) > 1 # Several, each for other people (who=, e.g. by sex): a track for each, which each group enters by the one it has (see apart_shares())
                 if apart and (stays or any(self.dwells[tr.name].fixed for tr in staged)):
                     self.unsupported(staged[1], f'two non-exponential dwell times out of "{name}" when one is a fixed delay or the state has min_stay=')
                 if apart and any(tr.where is None for tr in staged): # For the same people: they race, as one track of stages by each (see add_raced())
@@ -497,7 +501,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             flow.expr = None if (flow.kind in ['stage', 'conveyor', 'slot'] or (flow.kind != 'contact' and tr.dur is not None)) else tr.rate
             if flow.strain and tr.const is not None: # A part of the rate with no source of infection has no strain, so is counted once, with the first
                 flow.expr = flow.expr - tr.const
-            flow.dynamic = flow.expr is not None and any(isinstance(leaf, (ss.State, ss.expressions.Count, ss.expressions.Coverage)) for leaf in flow.expr.leaves)
+            flow.dynamic = flow.expr is not None and any(isinstance(leaf, (ss.State, ss.expressions.Count, ss.expressions.HeldShare)) for leaf in flow.expr.leaves)
             flow.held = self.uninfected is not None and tr.acquisition and flow.src is not None and flow.state.name in self.uninfected # An infection in a branching process: an inflow at its rate per member of its source, which it takes no one from (see init_program())
             if flow.held:
                 if flow.expr is None:
@@ -589,7 +593,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                                      f'     Run with solver="abm", give stages= on the transition, or allow the approximation.')
         else:
             fixed = ' (nearly fixed, not exponential)' if dw.std < dw.mean/2 else '' # e.g. ss.SIR(dur_inf=ss.days(7)), whose std is 1 day
-            ide = ', since solver="ide" has no distribution function for it' if sim.pars.solver == 'ide' else ''
+            ide = ', since solver=ss.ode(dwells="exact") has no distribution function for it' if exact_dwells(sim) else ''
             self.tell(ss.note, f'{name} has a {dw.family} dwell time{fixed}, approximated by {what}{ide}', sim=sim, verbose=0 if approximations == 'allow' else None)
             if dw.std > ss.solvers.choose.max_cv*dw.mean: # solver='auto' runs it as agents
                 self.tell(ss.warn, f'{name} has a {dw.family} dwell time whose coefficient of variation is {dw.std/dw.mean:.3g}, so one exponential stage keeps only its mean, and its long tail is lost; run with solver="abm" to keep it')
@@ -1049,7 +1053,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         return recorded
 
     def move_states(self, frac, srcs, dst, syn=None, y=None, move=None, given=None):
-        """ Move a fraction of the people in each of some states, and each group, to a state: along a transition (see `force()`), or along none, as a one-off move (`ss.vaccinate(move=S >> V)`); with `syn` (synchronized flows), also returns the moves in this module's own groups; with `y`, of those people rather than the engine's; with `given`, the number to move from each compartment instead (see `move_some()`) """
+        """ Move a fraction of the people in each of some states, and each group, to a state: along a transition (see `force()`), or along none, as a one-off move (`ss.vaccinate(S >> V)`); with `syn` (synchronized flows), also returns the moves in this module's own groups; with `y`, of those people rather than the engine's; with `given`, the number to move from each compartment instead (see `move_some()`) """
         y = self.y if y is None else y
         total = np.zeros(self.n_groups)
         recorded = np.zeros(self.n_groups)
@@ -1111,7 +1115,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
 
     def step_triggers(self):
         """
-        The transitions moved by an event of this module (`on=` one of its transitions), at the end of each step: the share of each
+        The transitions moved by an event of this module (`when=` one of its transitions), at the end of each step: the share of each
         source state and group the step's event happened to moves then, as a delivery's people do (triggers on conditions are
         passed straight through instead: see `update_targets()` and `sweep_triggers()`)
         """
@@ -1170,8 +1174,8 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         num = sum(self.count([state], total=False)*self.weight(expr, state) for state in states) if expr.weighted else self.count(states, total=False)
         return mixing.exposure(num, self.n_people(total=False), mults, counts=True)
 
-    def coverage(self, expr):
-        """ A product's coverage (`itn.coverage`): the share of the people in the same place who hold it, by what each level of holding it counts as (see `ss.expressions.Coverage.level_weights()`) """
+    def held_share(self, expr):
+        """ The share holding a product (`itn.held_share`): the share of the people in the same place who hold it, by what each level of holding it counts as (see `ss.expressions.HeldShare.level_weights()`) """
         sim = self.sim
         product = self.product_of(expr)
         weights = expr.level_weights(sim)
@@ -1256,7 +1260,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                 if self.cross is None or mod.name not in self.cross.names:
                     raise ss.CapabilityError(f'{where}: "{mod.name}" and "{self.mod.name}" are not tracked jointly. Run with solver="abm".')
                 if otr.where is not None:
-                    raise ss.CapabilityError(f'{where} with where=: a synchronized flow moves everyone in its source. Put the condition in the source states, or run with solver="abm".')
+                    raise ss.CapabilityError(f'{where} with who=: a synchronized flow moves everyone in its source. Put the condition in the source states, or run with solver="abm".')
                 if id(tr) not in moved:
                     raise ss.CapabilityError(f'{where}: "{self.mod.name}.{tr.name}" moves people with no wait (passed through on entry), so it has no flow of its own to synchronize with. Run with solver="abm".')
                 if not otr.dest or any(not st.people for st in otr.source + otr.dest):
@@ -1427,7 +1431,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             plain = [tr for tr in tracks if not getattr(tr, 'trigger', False)]
             apart = [track for track in plain if getattr(track, 'apart', False)]
             ps = self.apart_shares(name, apart) if apart else [None if tr.p is None else self.eval(tr.p) for tr in plain]
-            mults = self.where_mults([tr.tr for tr in plain], name, [self.branch_mult(tr.tr) for tr in plain]) # With each branch's where=: closed in the groups it does not hold in
+            mults = self.where_mults([tr.tr for tr in plain], name, [self.branch_mult(tr.tr) for tr in plain]) # With each branch's who=: closed in the groups it does not hold in
             probs[name] = self.branch_shares([tr.tr for tr in plain], ps, mults)
             if len(plain) < len(tracks): # Triggers on states and strata: in the groups where one holds, arrivals pass straight through (the compartments vanish)
                 left = np.ones(self.n_groups)
@@ -1529,12 +1533,12 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
     def as_is(self, dwell):
         """
         Whether a dwell time runs as it is, as a conveyor of whole steps (see slot_rates()), rather than as Erlang stages: under
-        solver='ide', any whose distribution function is known; under every compartmental solver, one that takes only whole
+        solver=ss.ode(dwells='exact'), any whose distribution function is known; under every compartmental solver, one that takes only whole
         numbers of steps (an `ss.choice` of them, e.g. days with daily steps), which is then exact, as it is for agents
         """
         if getattr(dwell, 'dist', None) is None or getattr(dwell, 'scale', None) is not None or getattr(dwell, 'varying', False) or self.step_known() is None: # e.g. a transfer's stages (see ss.dimensions.transfer_stages()), which have no distribution here
             return False
-        elif self.sim.pars.solver == 'ide':
+        elif exact_dwells(self.sim):
             return ss.transitions.dwell_cdf(dwell.raw, self.convert) is not None
         elif not isinstance(dwell.raw, ss.choice):
             return False
@@ -1562,26 +1566,26 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             q = (G[j] - before)/left
             rates.append(-np.log1p(-min(q, 1 - 1e-15))/dt)
             before = G[j]
-        raise ss.CapabilityError(f'the dwell time of "{self.mod.name}.{tr.name}" lasts more than {most} steps, too many slots for solver="ide"; take a longer step, or run with solver="ode" (Erlang stages)')
+        raise ss.CapabilityError(f'the dwell time of "{self.mod.name}.{tr.name}" lasts more than {most} steps, too many slots for exact dwell times (solver=ss.ode(dwells="exact")); take a longer step, or run with solver="ode" (Erlang stages)')
 
     def gives_back(self, src, dst):
         """ In a branching process, whether a move from one state to another is from the infected side back into the uninfected side, which it takes people out of the model by instead """
         return self.uninfected is not None and src is not None and src not in self.uninfected and dst in self.uninfected
 
     def apart_shares(self, name, tracks):
-        """ For several non-exponential dwell times out of a state, each for other people (where=): the share of each group that enters each one's track, 1 for the one it has (the first, if none) """
+        """ For several non-exponential dwell times out of a state, each for other people (who=): the share of each group that enters each one's track, 1 for the one it has (the first, if none) """
         ng = self.n_groups
         firsts = [next(flow for flow in self.flows if flow.tr is track.tr and flow.src == track.first) for track in tracks]
         active = np.array([np.broadcast_to(np.asarray(self.flow_mult(flow)) > 0, (ng,)) for flow in firsts], dtype=float)
         both = active.sum(axis=0) > 1
         if both.any():
             trs = [track.tr.name for track,a in zip(tracks, active[:, both]) if a.any()]
-            raise ss.CapabilityError(f'"{trs[0]}" and "{trs[1]}" are non-exponential dwell times out of "{name}" for the same people, which have no compartmental form yet; give each a where= for other people (e.g. ss.person.female and ss.person.male), or run with solver="abm"')
+            raise ss.CapabilityError(f'"{trs[0]}" and "{trs[1]}" are non-exponential dwell times out of "{name}" for the same people, which have no compartmental form yet; give each a who= for other people (e.g. ss.person.female and ss.person.male), or run with solver="abm"')
         active[0] += active.sum(axis=0) == 0 # Those with none of them stay in the first, where nothing moves them
         return list(active)
 
     def add_per_births(self):
-        """ After a step: the children of those who went through a transition with births driven by its flow (`ss.birth(on=)`), `n` for each, in the youngest groups of their parents' place """
+        """ After a step: the children of those who went through a transition with births driven by its flow (`ss.birth(when=)`), `n` for each, in the youngest groups of their parents' place """
         for tr in self.graph.inflows:
             if getattr(tr, 'birth_on', None) is None or ss.conditions.modname(tr.birth_on.module) not in [None, self.mod.name]: # Another module's children, placed here by the crossing (see ss.solvers.init_crossings())
                 continue
@@ -1595,7 +1599,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             if self.integer: # Whole children
                 born = self.rng.poisson(born).astype(float)
             self.arrive(tr.dest[0].name, born, self.y)
-            for engine,other in self.births_of(tr): # Counted as this module's births, and as the children other modules place (ss.birth(on=) of this transition)
+            for engine,other in self.births_of(tr): # Counted as this module's births, and as the children other modules place (ss.birth(when=) of this transition)
                 engine.flowcounts[other.name] += np.sum(born)
                 engine.last_flows[other.name] = engine.last_flows.get(other.name, 0.0) + born
                 if engine.n_groups > 1:
@@ -1603,7 +1607,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         return
 
     def births_of(self, tr):
-        """ The engine and inflow of each declared module with an `ss.birth(on=)` of the same transition as `tr` (this module's own first) """
+        """ The engine and inflow of each declared module with an `ss.birth(when=)` of the same transition as `tr` (this module's own first) """
         per = (ss.conditions.modname(tr.birth_on.module) or self.mod.name, tr.birth_on.name)
         out = []
         for mod in self.sim.declared:
@@ -1728,7 +1732,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         return rate
 
     def branch_where(self, tr):
-        """ Whether a transition is a branch out of each of its sources whose where= is on states and strata, so closes it at entry (see `branch_mult()`) rather than changing its rate """
+        """ Whether a transition is a branch out of each of its sources whose who= is on states and strata, so closes it at entry (see `branch_mult()`) rather than changing its rate """
         return tr.where is not None and ss.conditions.is_static(tr.where, self.sim) and all(tr in self.graph.exits[s.name].branches + sc.tolist(self.graph.exits[s.name].remainder) for s in tr.source if s.people)
 
     @staticmethod
@@ -1748,7 +1752,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         tr = flow.tr
         mult = 1.0
         if flow.kind == 'conveyor': # When people leave a conveyor is fixed
-            mods = [m for m in self.sim.modifiers.get((self.mod.name, 'transition', tr.name), []) if not (m.name == f'where_{self.mod.name}_{tr.name}' and self.branch_where(tr))] # A branch's own where= closes it at entry instead: see branch_mult()
+            mods = [m for m in self.sim.modifiers.get((self.mod.name, 'transition', tr.name), []) if not (m.name == f'where_{self.mod.name}_{tr.name}' and self.branch_where(tr))] # A branch's own who= closes it at entry instead: see branch_mult()
             if flow.named and mods:
                 raise ss.CapabilityError(f'"{tr.name}" has a fixed delay and a modifier, which cannot run with solver="{self.solver}": a compartmental run keeps the delay as a conveyor of whole steps, so cannot shorten or lengthen it.\n'
                                          f'     Run with solver="abm".')
@@ -1824,7 +1828,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         A value that is a function of the sim is called once a step (see `refresh_program()`),
         and held within it, unless it gives an expression of the model's states (`I.n`), which
         is flattened in its place (and again whenever the expression changes). A beta for each
-        route, and a modifier of a network's contacts for some people only (`where=`), make the
+        route, and a modifier of a network's contacts for some people only (`who=`), make the
         contacts through each term differ by exposure and group (see `set_contacts()`).
         """
         self.init_func_exprs()
@@ -1840,7 +1844,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
 
     def inline_modifiers(self):
         """
-        Make each modifier that multiplies a rate while a comparison of this module's counts holds (`where=I.n >= 1000`) part of the rate, as `1 + (multiply - 1)*(I.n >= 1000)`
+        Make each modifier that multiplies a rate while a comparison of this module's counts holds (`who=I.n >= 1000`) part of the rate, as `1 + (multiply - 1)*(I.n >= 1000)`
 
         The kernels work this out as they do any rate, so the run needs no Python between its steps. The ODE reads the
         comparison at each stage of a step, not once a step. Anything else about the modifier leaves it to be applied each step.
@@ -2049,9 +2053,9 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                 if id(expr) not in self.foreign_pars:
                     self.foreign_pars[id(expr)] = ss.par.inline((lambda e: lambda sim: self.count_expr(e))(expr), name=f'{ss.expressions.format_expr(expr)} (counted by its disease)')
                 return flatten(self.foreign_pars[id(expr)], strain, routes, rtr)
-            elif isinstance(expr, ss.expressions.Coverage): # A product's coverage, worked out once a step
+            elif isinstance(expr, ss.expressions.HeldShare): # The share holding a product, worked out once a step
                 if id(expr) not in self.foreign_pars:
-                    self.foreign_pars[id(expr)] = ss.par.inline((lambda e: lambda sim: self.coverage(e))(expr), name=f'{expr} (worked out each step)')
+                    self.foreign_pars[id(expr)] = ss.par.inline((lambda e: lambda sim: self.held_share(e))(expr), name=f'{expr} (worked out each step)')
                 return flatten(self.foreign_pars[id(expr)], strain, routes, rtr)
             elif isinstance(expr, ss.expressions.Count):
                 ops.append(kn.COUNT if expr.kind == 'n' else kn.TOTAL if expr.kind == 'total' else kn.FRAC)
@@ -2409,7 +2413,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
 
     @property
     def euler(self):
-        return self.sim.solver == 'ode' and self.sim.integrator == 'euler'
+        return self.sim.solver == 'ode' and self.sim.solver.integrator == 'euler'
 
     def at_middle(self):
         """ Take values that vary smoothly in time at the middle of the step, which runs from time point `ti` to the next, as `tables()` does, so that a stepped run takes the same values as a whole one """
@@ -2836,10 +2840,10 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         return [np.ravel(self.flow_base(flow)*self.flow_mult(flow)) for flow in self.flows if flow.src is not None and not flow.dynamic and flow.kind != 'conveyor']
 
     def init_shifts(self):
-        """ The deliveries that the kernels take in a whole run (see `ss.Delivery.tabulated`), as arrays: see `ss.kernels.Shifts` """
+        """ The deliveries that the kernels take in a whole run (see `ss.Event.tabulated`), as arrays: see `ss.kernels.Shifts` """
         sim = self.sim
         nc, ng, npts = len(self.comps), self.n_groups, self.mod.t.npts
-        self.deliveries = [mod for mod in sim.interventions() if isinstance(mod, ss.Delivery) and mod.dis is self.mod and mod.tabulated]
+        self.deliveries = [mod for mod in sim.interventions() if isinstance(mod, ss.Event) and mod.dis is self.mod and mod.tabulated]
         rows = [] # Each delivery, and for routine delivery that records who has been offered it, the new spells of being eligible before it (and after a transfer), each as a delivery that reaches nobody: see CompartmentalDelivery.respell()
         self.shift_of = [] # The row of each delivery, whose tally is its results
         for mod in self.deliveries:
@@ -3267,11 +3271,11 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         Each substep is off the ODE by an amount of order rate × dt (an acute stage of 1.7
         months at monthly steps can take everyone infected from 9% to 51%). It moves people through as many stages of a dwell time as
         they pass in a substep (see `ss.kernels.draw_chain()`), so it is the dwell's mean
-        that counts, not its stages; a fixed delay is a conveyor of whole steps, so its length doesn't count. `substeps=1`
+        that counts, not its stages; a fixed delay is a conveyor of whole steps, so its length doesn't count. `ss.binomial(substeps=1)`
         takes whole steps, as most chain-binomial models (and frameworks' discrete-time
         models) do.
         """
-        n_sub = self.sim.pars.substeps
+        n_sub = getattr(self.sim.solver, 'substeps', None)
         if n_sub is None and self.solver == 'binomial':
             if self._n_sub is None:
                 self._n_sub = self.binomial_substeps()
@@ -3289,7 +3293,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         0.1 × |R0 - 1|, for a bias of about 5% (a model of TB resistance, +12% at 3 substeps a month, is +3% at
         12; an SIS with R0 = 1.05 gave 0.083 for 0.048 at whole steps). A fixed delay doesn't count, since its people
         don't leave at a rate: a model whose only exits are fixed delays takes whole steps, which keeps its final size
-        but lowers its peak (by about 15% for an SIR at a fifth of the delay a step); `substeps=3` gives about 5%, for
+        but lowers its peak (by about 15% for an SIR at a fifth of the delay a step); `ss.binomial(substeps=3)` gives about 5%, for
         about twice the time.
         """
         totals = {} # The rates out of each compartment, summed: e.g. recovery and death from I
@@ -3339,7 +3343,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             return
         first = owner.engines[0] # Whose step and substeps the program takes (the diseases of a crossing have the same step)
         sim, dt, kn, rng = self.sim, first.dt, owner.kernels(), owner.kernel_rng
-        solver = sim.integrator if sim.solver == 'ode' else sim.solver
+        solver = sim.solver.integrator if sim.solver == 'ode' else sim.solver
         tables, row = owner.step_tables()
         y, flows = kn.one_step(rng, owner.y, owner.program, dt, ss.kernels.solver_code(sim), first.substeps(), tables, row)
         if sim.mixing.register is not None: # The events dated at the end of the step, the next time point
@@ -3400,7 +3404,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             self.flowcounts[name] += totals[ind] # Moves by an intervention are counted already
             flow = flows[ind]
             if forced:
-                flow = flow + forced.pop(name, 0) # As the transition's own, for where= and the results by group
+                flow = flow + forced.pop(name, 0) # As the transition's own, for who= and the results by group
             self.last_flows[name] = flow
             if grouped:
                 self.flow_groups[name] = flow

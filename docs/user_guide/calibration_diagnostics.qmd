@@ -69,7 +69,7 @@ A pattern in the residuals points to the structure of the model, or to how the d
 | Different starts giving different answers | Several optima, too short a search, a noisy objective |
 | A good fit but an unstable projection | Parameters the data can't tell apart; a change in the epidemic the model doesn't have |
 
-Before blaming the model, check that like is compared with like: incidence with case counts over the same interval, prevalence with a survey at a time, hospital admissions with admissions rather than beds occupied, and dates aligned (Starsim dates a count by the start of its period, so a week starting on a Monday is dated by that Monday, and data dated by the end of each week needs moving back a week). The fit's measure (`fit.mismatch`) helps compare fits to the same data, here 0.38 for the SIR model against 0.10 for the SEIR model, but the plot shows *where* a model fails.
+Before blaming the model, check that like is compared with like: incidence with case counts over the same interval, prevalence with a survey at a time, hospital admissions with admissions rather than beds occupied, and dates aligned (Starsim dates a count by the start of its period, so a week starting on a Monday is dated by that Monday, and data dated by the end of each week needs moving back a week). The fit's measure (`fit.objective`) helps compare fits to the same data, here 0.38 for the SIR model against 0.10 for the SEIR model, but the plot shows *where* a model fails.
 
 ## Did the search converge?
 
@@ -102,14 +102,14 @@ import pandas as pd
 stochastic = ss.Sim(make_seir(), data=data, solver='binomial', **pars)
 rows = []
 for seed in [1, 2]:
-    fit = stochastic.fit(n_trials=100, rand_seed=seed, verbose=False)
+    fit = stochastic.fit(rand_seed=seed, verbose=False, method=ss.fit.method('optuna', n_trials=100))
     rows.append(dict(rand_seed=seed, beta=fit.pars.beta, report=fit.pars.report, converged=fit.converged))
 pd.DataFrame(rows).round(3)
 ```
 
 The two fits differ, by more in the share reported than in β (against true values of 1.9 and 0.5), and the `converged` column says whether each search had stopped improving by its end. Even a fit that says it has converged has only stopped improving; that doesn't make the answer precise. The noise in the scores is large compared with the difference that `report` makes to them. More trials, or more runs for each trial (`n_runs=`, 4 by default for a stochastic compartmental model), reduce this; so does a likelihood, which weighs the data by how much they vary. The fit also reruns its best values with the same seeds as the search, and warns when they then score worse than the starting values: the best trial may have been a lucky run.
 
-For a stochastic model, also check the fit against many runs, not one: `fit.sim.run(n_runs=20)`, as in [Fitting a model](calibration_fitting.qmd#a-stochastic-model). The data should lie within the range of the runs about as often as the interval says.
+For a stochastic model, also check the fit against many runs, not one: `ss.parallel(fit.sim, n_runs=20)`, as in [Fitting a model](calibration_fitting.qmd#a-stochastic-model). The data should lie within the range of the runs about as often as the interval says.
 
 ## Does the time step matter?
 
@@ -189,7 +189,7 @@ The rule by which each method sets `fit.converged` (and says why in `fit.why`), 
 | Iterated filtering (`'if2'`) | Chains from different starts end within 2 of the best log-likelihood | More passes (`iterations=`) or particles (`particles=`); better bounds, if a chain has wandered off where the outbreak dies out |
 | NUTS (`'nuts'`) | The chains agree (R-hat at most 1.01) and no draws diverged | More warm-up (`warmup=`) and draws; check identifiability |
 | Particle MCMC (`'pmcmc'`) | The chains agree (R-hat at most 1.01) | More draws and warm-up; more particles, if the acceptance is low |
-| ABC-SMC (`'abc-smc'`) | The tolerance has stopped shrinking: the last generation's is more than 90% of the one before | More generations (`generations=`) or particles |
+| ABC-SMC (`'abc-smc'`) | The tolerance has stopped shrinking: the last generation's is more than 90% of the one before | More generations (`generations=`) or samples (`samples=`) |
 | A list of methods | Its last stage converged; a stage that doesn't stops the list, with a warning, and its fit (or the last that converged) is returned | Make that stage converge, by its own rule |
 
 A best fit of a stochastic model that converged is also marked as not converged if, rerun with the same seeds, its best values score worse than the starting values: the best trial may have been a lucky run.

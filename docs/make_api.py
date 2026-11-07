@@ -54,7 +54,7 @@ notes = [
     'The library `ss.SIR`, `ss.SIS`, and `ss.SEIR` are the textbook models: a duration is the mean of an exponential, and nobody dies of the infection unless `p_death` is given. Starsim 3\'s versions (lognormal `dur_inf`, `p_death=0.01`) are `ssl.AgentSIR`, `ssl.AgentSIS`, and `ssl.AgentSEIR`.',
     '`init_prev=` seeds the state a new infection enters (`E` in an SEIR, so nobody starts infectious); `init_n=dict(I=10)` starts people in a named state.',
     'The population of a sim is `total_pop=`, under every solver. `n_agents=` is the number of agents: giving it makes `solver="auto"` run as agents, and a compartmental run uses it as `total_pop` if that is not given.',
-    'Many runs (`sim.run(n_runs=10)` or `ss.parallel(sim, n_runs=10)`) give an `ss.MultiSim`, whose results have a run axis first: `msim.results.sir.infection.values` has one row per run, and `.median()` and `.quantiles()` summarize over the runs. `msim.sims` has the sim of each run.',
+    'Many runs (`ss.parallel(sim, n_runs=10)`) give an `ss.MultiSim`, whose results have a run axis first: `msim.results.sir.infection.values` has one row per run, and `.median()` and `.quantiles()` summarize over the runs. `msim.sims` has the sim of each run.',
 ]
 links = [ # Extra pointers, following the llms.txt convention
     ('Documentation', 'https://starsim.org/v4', 'tutorials, user guide, and API reference'), # V4-PREVIEW: restore to https://docs.starsim.org (and in the docstring above) for normal publishing
@@ -103,16 +103,16 @@ module_order = list(module_titles.keys())
 # at the top level that is in neither list is an error here, as is a listed name that no longer exists: add each new export
 # to one list (or move it to its submodule), so that what the index presents as Starsim is chosen, not whatever dir(ss) has
 modeling = '''
-    Sim MultiSim parallel demo
+    Sim MultiSim parallel demo ode binomial abm rescale maximize minimize
     People population
-    Disease SIR SIS SEIR State states pars par Transition move birth death lifetable immigration emigration outcome lifelong
-    on attr mother ref transfer by timeseries seasonal Strains immunity
+    Disease SIR SIS SEIR State states pars par Transition move birth death lifetable immigration emigration migration outcome lifelong
+    on attr mother ref transfer levels by timeseries seasonal Strains immunity
     RandomNet DegreeNet SexualNet PrenatalNet PostnatalNet BreastfeedingNet MixingPool contacts
-    Births Deaths Pregnancy
-    Delivery vaccinate screen treat Vaccine Diagnostic Treatment boxcar modify infection_log
+    Births Deaths Pregnancy preterm
+    Event Delivery at_age capacity vaccinate screen treat Vaccine Diagnostic Treatment boxcar modify infection_log
     Result Results SimData
-    years months weeks days Duration per prob freq peract perday perweek permonth peryear
-    probperday probperweek probpermonth probperyear freqperday freqperweek freqpermonth freqperyear date datedur schedule
+    years months weeks days Duration per prob peract perday perweek permonth peryear
+    probperday probperweek probpermonth probperyear date schedule
     uniform normal truncnorm lognormal expon poisson nbinom binom beta_dist weibull gamma erlang constant randint
     bernoulli choose_n choice histogram random
     options style show save load import_from export_to

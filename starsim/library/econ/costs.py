@@ -33,13 +33,13 @@ class Costs(ss.Analyzer):
 
     Each delivery made with a `cost=` (e.g. `ss.vaccinate(..., cost=5)`) already has a
     `cost` result; this adds them up, along with a cost for each event of any other
-    result (e.g. care for each infection) and a fixed cost per year. Every cost is a
+    result (e.g. care for each infection) and a fixed cost per unit time. Every cost is a
     result of this analyzer, named after where it came from, and `total` is their sum.
 
     Args:
         unit_costs (dict): the cost of each event of a result, by the result's path, e.g. `{'measles.infection': 50}` for $50 of care for each infection, or `{'routine.delivered': 5}` for $5 a dose of a delivery made without its own `cost=`
-        fixed (float): a cost per year that does not depend on any result, such as running a program (staff, cold chain, training)
-        start (float/str): when the fixed cost starts, read as any time is (see `ss.connectors.to_time()`: a number from 1900 on is a year; default: the start of the sim)
+        fixed (rate): a cost per unit time that does not depend on any result, such as running a program (staff, cold chain, training), e.g. `ss.peryear(1000)`
+        start (float/str): when the fixed cost starts, read as any time is (see `ss.connectors.to_time()`: a bare number is a year if the sim has a calendar; default: the start of the sim)
         deliveries (bool): whether to include the `cost` result of every module that has one
 
     Examples:
@@ -47,17 +47,22 @@ class Costs(ss.Analyzer):
         import starsim as ss
         import starsim.library as ssl
 
-        vx = ss.vaccinate(efficacy=0.9, coverage=0.5, where=ss.person.age < 5, every=ss.years(1), cost=5)
-        costs = ssl.Costs(unit_costs={'sir.infection': 50}, fixed=1000)
+        vx = ss.vaccinate(efficacy=0.9, who=ss.person.age < 5, when=ss.years(1), coverage=0.5, cost=5)
+        costs = ssl.Costs(unit_costs={'sir.infection': 50}, fixed=ss.peryear(1000))
         sim = ss.Sim(diseases='sir', networks='random', interventions=vx, analyzers=costs)
         sim.run()
         sim.results.costs.plot()
         print(sim.results.costs.total.sum())
         ```
     """
-    def __init__(self, unit_costs=None, fixed=0, start=None, deliveries=True, **kwargs):
+    def __init__(self, unit_costs=None, fixed=None, start=None, deliveries=True, **kwargs):
         super().__init__(**kwargs)
         self.unit_costs = sc.mergedicts(unit_costs)
+        if fixed is None or (sc.isnumber(fixed) and fixed == 0):
+            fixed = None
+        elif not isinstance(fixed, ss.Rate):
+            errormsg = f'fixed= of ssl.Costs() is a cost per unit time, so give it a unit, e.g. fixed=ss.peryear({fixed}); not {fixed!r}'
+            raise TypeError(errormsg)
         self.fixed = fixed
         self.start = start
         self.deliveries = deliveries
@@ -67,7 +72,7 @@ class Costs(ss.Analyzer):
         super().init_results()
         names = [mod.name for mod in self.sim.modules if self.deliveries and mod is not self and 'cost' in mod.results]
         names += [path.replace('.', '_') for path in self.unit_costs]
-        names += ['fixed'] if self.fixed else []
+        names += ['fixed'] if self.fixed is not None else []
         self.define_results(*[ss.Result(name, kind='flow') for name in names + ['total']]) # Costs in each step; filled in again after the sim's results are scaled
         return
 
@@ -79,11 +84,11 @@ class Costs(ss.Analyzer):
                 res[mod.name][ind] = mod.results.cost[ind]
         for path, unit_cost in self.unit_costs.items():
             res[path.replace('.', '_')][ind] = unit_cost * get_result(self.sim.results, path)[ind]
-        if self.fixed:
+        if self.fixed is not None:
             t = self.t.yearvec
             start = t[0] if self.start is None else in_years(ss.connectors.to_time(self.sim, self.start))
             width = np.diff(t, append=t[-1]) # The years from each time point to the next
-            res.fixed[ind] = (self.fixed * width * (t >= start))[ind]
+            res.fixed[ind] = (self.fixed.to('year').value * width * (t >= start))[ind]
         res.total[ind] = sum(np.asarray(r.values)[ind] for k, r in res.items() if isinstance(r, ss.Result) and k not in ['total', 'timevec'])
         return
 

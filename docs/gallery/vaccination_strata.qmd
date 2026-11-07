@@ -26,16 +26,16 @@ import starsim as ss
 
 def make_sir():
     S, I, R = ss.states('S I R')
-    infection = S >> I @ 0.3*I
+    infection = S >> I @ 0.3*ss.by(vaccinated=[1.0, 0.1])*I
     recovery  = I >> R @ ss.days(10)
     sir = ss.Disease(infection, recovery, init=dict(I=0.001), name='sir')
-    sir.stratify(vaccinated=[False, True], fractions=[1, 0], adjust={'infection': [1.0, 0.1]})
+    sir.stratify(vaccinated={False: 1, True: 0})
     return sir
 
-campaign = ss.Delivery(move=dict(vaccinated=True), coverage=0.5, at=ss.days(10), name='campaign')
+campaign = ss.Event(dict(vaccinated=True), when=ss.days(10), p=0.5, name='campaign')
 ```
 
-`stratify()` splits each state in two, with everyone unvaccinated at the start (`fractions=[1, 0]`), and `adjust=` multiplies the rate of infection by 1 for the unvaccinated and 0.1 for the vaccinated. The campaign is a delivery that moves people to the vaccinated group: it needs no vaccine product, since the effect of vaccination is in the stratification. The diagram, from `diagram()`, is an SIR's, since the vaccinated and unvaccinated groups split each state:
+`stratify()` splits each state in two, with everyone unvaccinated at the start (`{False: 1, True: 0}`), and `ss.by()` in the rate of infection multiplies it by 1 for the unvaccinated and 0.1 for the vaccinated. The campaign is a delivery that moves people to the vaccinated group: it needs no vaccine product, since the effect of vaccination is in the stratification. The diagram, from `diagram()`, is an SIR's, since the vaccinated and unvaccinated groups split each state:
 
 ```{python}
 make_sir().diagram()

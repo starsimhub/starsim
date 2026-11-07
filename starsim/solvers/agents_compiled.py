@@ -36,8 +36,6 @@ def compiled_reasons(engine):
         out.append('states that are not people')
     if graph.inflows or graph.transfers:
         out.append('births or transfers')
-    if engine.lifetables:
-        out.append('a life table')
     for key in ['attrs', 'sets', 'derived', 'derived_trs', 'also', 'on_event']:
         if getattr(engine, key, None):
             out.append(key)
@@ -173,7 +171,7 @@ class Compiled(Agents):
         k.has_dw = np.array([tr.name in self.dwells and tr.name in scheduled and not tr.contact and tr.trigger is None and not calls_back(self, tr) for tr in trs])
         rescaled = {tr.name for nm in self.krescaled for i in self.rescaled_of(nm) for tr in [self.exits_of[nm][i]]}
         self.kmeans = {} # The transitions whose dwell times are exponential with a mean worked out each step (no distribution)
-        k.adj = np.full(nt, -1, np.int64) # The multiplier on each dwell's rate (e.g. 0 outside its where=), worked out each step
+        k.adj = np.full(nt, -1, np.int64) # The multiplier on each dwell's rate (e.g. 0 outside its who=), worked out each step
         for i, tr in enumerate(trs):
             if k.has_dw[i]:
                 k.adj[i] = self.kadd_mean(('adjust', tr.name, tr.name in rescaled))
@@ -184,7 +182,7 @@ class Compiled(Agents):
                     k.dw[i] = self.kadd_dist(f'dwell_{tr.name}', self.dists[f'dwell_{tr.name}'])
                 else:
                     unit = self.dists[f'dwell_{tr.name}']
-                    if not (type(unit) is ss.expon and unit.pars.scale == 1):
+                    if not (type(unit) is ss.expon and unit.pars.mean == 1):
                         raise ss.CapabilityError(f'the dwell time of {tr.name} has stages (an Erlang distribution), which the compiled moves do not draw yet')
                     k.dw[i] = self.kadd_mean(('dwell', tr.name))
         k.comp_state = np.array([bool(self.competing.get(nm)) for nm in k.names]) # States with competing rates, which the agent engine draws (see step_state())

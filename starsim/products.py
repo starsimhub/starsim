@@ -16,7 +16,7 @@ class EventSource:
     """
     What a delivery and a product share as events: the people it reached on the step (`screening`), its outcomes (`screening.positive`), and their memory
 
-    Each is a condition that triggers a delivery (`ss.treat(on=screening.positive)`), and remembers per person whether
+    Each is a condition that triggers a delivery (`ss.treat(when=screening.positive)`), and remembers per person whether
     (`.ever`), how often (`.n_times`), and how long ago (`.since`) it happened, including on the current step once the delivery
     that fired it has run. As agents, the memory of every event of a delivery is kept (two numbers per agent each), so it can be
     read after a run too, e.g. `sim.interventions.screening.ever.uids`; a product's, and in a compartmental run (only `.ever`) any
@@ -72,7 +72,7 @@ class EventSource:
         self._live = {} # Outcome (None for the event itself): the selections fired on the last step it was fired, as (time index, selection, people in each state and group then, engine)
         self._pending = [] # Fired, not yet in the memory: (outcome, entry)
         needs = ss.interventions.memory_needs(sim)
-        every = sim.solver == 'abm' and isinstance(self, ss.Delivery) # As agents, every event of a delivery, for reading after a run; a product's (any of its deliveries) only if read
+        every = sim.solver == 'abm' and isinstance(self, ss.Event) # As agents, every event of a delivery, for reading after a run; a product's (any of its deliveries) only if read
         self._needs = {o:needs.get((self.name, o), set()) for o in [None] + self.outcome_names() if every or (self.name, o) in needs}
         self._mem = {}
         if sim.solver == 'abm':
@@ -106,7 +106,7 @@ class EventSource:
         """
         The people an event happened to on this step, as a selection for a module's selector
 
-        While a delayed delivery reads its trigger (see `ss.Delivery.delayed_arrivals()`), `selector.reading` is (step, marks, new):
+        While a delayed delivery reads its trigger (see `ss.Event.delayed_arrivals()`), `selector.reading` is (step, marks, new):
         the people of that step (this one or the one before) that it has not read yet, as `marks` says, with what it has now read put in `new`.
         """
         reading = selector.__dict__.get('reading')
@@ -138,7 +138,7 @@ class EventSource:
             raise ss.CapabilityError(f'"{self.name}".reached() is the UIDs of the people it reached, which exist only per agent; with solver="{self.sim.solver}", read its results')
         if outcome is not None and outcome not in self.outcome_names():
             raise self.no_outcome(outcome)
-        ti = self.__dict__.get('_ti_step') # Set by its deliveries: see ss.Delivery.step()
+        ti = self.__dict__.get('_ti_step') # Set by its deliveries: see ss.Event.step()
         entries = [e[1] for e in self.__dict__.get('_live', {}).get(outcome, []) if e[0] == ti]
         return ss.uids.concatenate(entries).unique() if entries else ss.uids()
 
@@ -181,6 +181,8 @@ class Product(EventSource, ss.Module):
         try:
             return super().__getattr__(attr)
         except AttributeError:
+            if attr == 'coverage' and hasattr(type(self), 'held_share'): # Renamed in Starsim 4
+                raise AttributeError(f'{type(self).__name__} has no attribute "coverage": the share of people who hold it is .held_share (e.g. itn.held_share, a quantity for a rate), and the share a delivery reaches is its p=') from None
             if not attr.startswith('_') and self.outcome_names():
                 raise self.no_outcome(attr) from None
             raise
@@ -289,7 +291,7 @@ class Effect(sc.prettyobj):
 
     def describe(self):
         mult = f'{1 - self.efficacy:.12g}' if sc.isnumber(self.efficacy) else self.efficacy # At the precision given: 0.1, not 0.09999999999999998
-        return f'{self.name:<16s} multiply={mult}   where={self.product.dim} ({self.key} efficacy of {type(self.product).__name__.lower()})'
+        return f'{self.name:<16s} multiply={mult}   who={self.product.dim} ({self.key} efficacy of {type(self.product).__name__.lower()})'
 
 
 class StrainEffect(Effect):
@@ -305,11 +307,11 @@ class StrainEffect(Effect):
         return value # It acts only through for_strain()
 
     def describe(self):
-        return f'{self.name:<16s} multiply=1 − efficacy of each strain {self.efficacy.tolist()}   where={self.product.dim} (acquisition, by strain)'
+        return f'{self.name:<16s} multiply=1 − efficacy of each strain {self.efficacy.tolist()}   who={self.product.dim} (acquisition, by strain)'
 
 
 class held_cond:
-    """ The condition `vx.held` (whether each person holds this product), which on a class is whether they hold any product of that kind (`where=ss.Vaccine.held`), for a model built before its products """
+    """ The condition `vx.held` (whether each person holds this product), which on a class is whether they hold any product of that kind (`who=ss.Vaccine.held`), for a model built before its products """
     def __get__(self, obj, cls):
         if obj is None:
             return ss.conditions.Cond('kind', cls)
@@ -436,12 +438,12 @@ class Held(Product):
         """ The name of the property of people that says whether they hold the product """
         return f'has_{self.name}'
 
-    held = held_cond() # Whether each person holds it now (until it is lost, or none of its protection is left), as a condition: `ss.modify(..., where=vx.held)`; or any product of a kind: `where=ss.Vaccine.held`
+    held = held_cond() # Whether each person holds it now (until it is lost, or none of its protection is left), as a condition: `ss.modify(..., who=vx.held)`; or any product of a kind: `who=ss.Vaccine.held`
 
     @property
-    def coverage(self):
-        """ Its coverage, as a quantity in a rate: the share of the people in the same place who hold it, each by the protection they have left, e.g. `itn.coverage`, or `itn.coverage(fn)` by a function of the time since delivery (see `ss.expressions.Coverage`) """
-        return ss.expressions.Coverage(self)
+    def held_share(self):
+        """ The share of the people in the same place who hold it, as a quantity in a rate, each counted by the protection they have left, e.g. `itn.held_share`, or `itn.held_share(fn)` by a function of the time since delivery (see `ss.expressions.HeldShare`) """
+        return ss.expressions.HeldShare(self)
 
     @property
     def effects(self):
@@ -619,7 +621,7 @@ class Held(Product):
             return
         self._ti_waned = sim.ti
         if self.during is not None and sim.solver != 'abm': # Held only while in some states: in a compartmental run, the share of each group not in them stops holding it
-            delivery = next(d for d in sim.interventions() if isinstance(d, ss.Delivery) and d.product is self)
+            delivery = next(d for d in sim.interventions() if isinstance(d, ss.Event) and d.product is self)
             selector = delivery.selector
             gone = (selector.dim(self.dim) > 0)*selector.everyone()*(1 - selector.select(self.during))
             if np.any(gone):
@@ -629,7 +631,7 @@ class Held(Product):
             return
         if self.during is not None: # Held only while in some states
             arr = sim.people[self.dim]
-            delivery = next(d for d in sim.interventions() if isinstance(d, ss.Delivery) and d.product is self)
+            delivery = next(d for d in sim.interventions() if isinstance(d, ss.Event) and d.product is self)
             gone = (arr.raw > 0) & ~np.asarray(delivery.selector.select(self.during), dtype=bool)
             gone[len(arr.raw):] = False
             lost = ss.uids(np.flatnonzero(gone[:len(arr.raw)]))
@@ -687,7 +689,7 @@ class Vaccine(Held):
             protection is left (as agents, e.g. at the end of a boxcar), and a delivery gives a product that fades by a shape or function
             again to those who hold it, restarting it. A dict gives each effect its own (e.g.
             `dict(acquisition=ss.boxcar(plateau=ss.years(1)), transmission=None)`). For other shapes under every solver (two rates in turn),
-            write the protection as states and move people into them: see `ss.Delivery`'s `move=`
+            write the protection as states and move people into them: see `ss.Event`
         doses (list): for a vaccine given in doses, the relative efficacy after each (e.g. `[0.85, 1.0]`); holding it then has a
             level per dose, and each delivery to someone who holds it gives them the next dose
         leaky (bool): if True (the default), everyone who receives it is partly protected (by `efficacy`); if False, a share `efficacy` of them are fully protected and the rest not at all ("all or nothing")
@@ -747,29 +749,33 @@ class Treatment(Held):
     A treatment can cure (`cure=`, once, when it is given), change rates for as long as it is held
     (`efficacy=`), or both. By default it is given to the people who are infected. A treatment that cures
     has the outcomes `cured`, `failed` (infected, and not cured), and `unneeded` (not in a state it cures: not
-    infected, or with `moves=`, in no source of its transitions), which are results and events of its deliveries.
+    infected, or in no source of the transitions it cures along), which are results and events of its deliveries.
 
-    A treatment can instead name what it moves people along (`moves=`): transitions of the disease, usually
-    undriven ones (`cure = A + C >> S`, with no `@`), whose flows count the people moved; or a move written with
-    the states (`moves=I + CIN >> S`), which no flow counts, e.g. for a cure to one of several states that
-    recoveries lead to. Each person treated who is in a source of one of them moves along it with its
-    probability (cured), or does not (failed); one in no source is unneeded. The transitions can be of several
-    diseases, and the probability for each can differ; a modifier of an undriven transition
-    (`ss.modify(ng.cure, multiply=0.5, where=...)`) multiplies the probability for the people it applies to.
-    It is then given to the people in their sources. What happens at failure (resistance) is a transition of
-    the disease triggered by the outcome: `ss.Transition(I, R_res, on=drug.failed, p=0.05)`.
+    A cure is a probability (`cure=0.9`): the person leaves whichever infected state they are in for the state the
+    disease's recovery leads to. It can instead be a dict of probabilities, keyed in one of two ways:
+
+    - By state (`cure=dict(I=0.9)`, or `cure={hpv.CIN: 0.9}`): the people in those states are cured, to the state the
+      recovery leads to, and people in other states are not.
+    - By what cured people move along: transitions of the disease, usually undriven ones (`cure = A + C >> S`, with no
+      `@`), whose flows count the people moved (`cure={syph.cure_early: 0.98, syph.cure_late: 0.95}`); or a move
+      written with the states (`cure={I + CIN >> S: 0.9}`), which no flow counts, e.g. for a cure to one of several
+      states that recoveries lead to. Each person treated who is in a source of one of them moves along it with its
+      probability (cured), or does not (failed); one in no source is unneeded. The transitions can be of several
+      diseases (`cure={ng.cure: 0.95, ct.cure: 0.95}`); a modifier of an undriven transition
+      (`ss.modify(ng.cure, multiply=0.5, who=...)`) multiplies the probability for the people it applies to.
+      It is then given to the people in their sources.
+
+    A name as a key (`cure=dict(cure=0.9)`) is a state of the disease, or else one of its transitions (it is an error
+    if it is both); `'ng.cure'` is the transition `cure` of `ng`. What happens at failure (resistance) is a
+    transition of the disease triggered by the outcome: `ss.Transition(I, R_res, when=drug.failed, p=0.05)`.
 
     Note: CRN safe as agents.
 
     Args:
-        cure (float/dict): the probability that treatment cures: the person leaves whichever infected state they are in for the
-            state the disease's recovery leads to (if its recoveries lead to several, `moves=` says which); 1 if neither `cure` nor `efficacy` is given.
-            A dict gives one for each state (each a number or an `ss.by`), and people in other states are not cured; for a disease written
-            as code, its boolean states (e.g. `dict(precin=0.9, cin=0.9)`), each cured by its `clear_infection()`
+        cure (float/dict): the probability that treatment cures (1 if neither `cure` nor `efficacy` is given); or a dict of
+            probabilities (each a number, an `ss.by`, a time series, or a function of the sim), by state or by transition, as above.
+            For a disease written as code, the keys are its boolean states (e.g. `dict(precin=0.9, cin=0.9)`), each cured by its `clear_infection()`
         efficacy (dict): the effects while it is held, as for `ss.Vaccine` (e.g. `dict(transmission=0.96, mortality=0.9)`)
-        moves (Transition/str/list/dict): instead, what people move along: transitions of the disease (by name too), or a move written with
-            the states (e.g. `I + CIN >> S`); or a dict of the probability for each (a number, `ss.by`, a time series, or a function of the sim;
-            otherwise `cure`); a person must not be in the sources of two of one disease's
         waning (dur/boxcar/func/dict): as for `ss.Vaccine`, for the effects while held
         during (Cond): as for `ss.Vaccine`: held (and its effects acting) only while people are in these states, e.g. `during=typhoid.acute`
         cost (float): the cost of each delivery
@@ -782,22 +788,67 @@ class Treatment(Held):
         drug = ss.Treatment(efficacy=dict(transmission=0.5), during=typhoid.acute) # Half as infectious while acute
         art = ss.Treatment(efficacy=dict(transmission=0.96, mortality=0.9))
         both = ss.Treatment(cure=0.3, efficacy=dict(transmission=0.9))
-        bpg = ss.Treatment(moves={syph.cure_early: 0.98, syph.cure_late: 0.95}) # A destination for each stage
-        ablation = ss.Treatment(cure=0.9, moves=hpv.I + hpv.CIN >> hpv.S) # Cured to S, though its recoveries lead to S and R
-        kit = ss.Treatment(moves={ng.cure: 0.95, ct.cure: 0.95}) # Two diseases, one product
+        bpg = ss.Treatment(cure={syph.cure_early: 0.98, syph.cure_late: 0.95}) # A destination for each stage
+        ablation = ss.Treatment(cure={hpv.I + hpv.CIN >> hpv.S: 0.9}) # Cured to S, though its recoveries lead to S and R
+        kit = ss.Treatment(cure={ng.cure: 0.95, ct.cure: 0.95}) # Two diseases, one product
         ```
     """
-    def __init__(self, cure=None, efficacy=None, moves=None, **kwargs):
+    def __init__(self, cure=None, efficacy=None, **kwargs):
+        if 'moves' in kwargs:
+            errormsg = 'ss.Treatment() takes no moves=; give what it moves people along as the keys of cure=, with the probability of each (e.g. cure={sir.recovery: 0.9}, or cure={I + CIN >> S: 0.9})'
+            raise TypeError(errormsg)
         if efficacy is not None and not isinstance(efficacy, dict):
             errormsg = f'The efficacy= of ss.Treatment() is its effects while it is held, as a dict (e.g. efficacy=dict(transmission=0.96)); the probability that it cures is cure= (e.g. ss.Treatment(cure={efficacy}))'
             raise ValueError(errormsg)
-        if cure is None and efficacy is None and moves is None:
+        if isinstance(cure, (ss.Transition, str, list, tuple)):
+            example = cure[0] if isinstance(cure, (list, tuple)) and len(cure) else cure
+            errormsg = f'cure= of ss.Treatment() is a probability, or a dict of them by state or by transition: give what it cures along as a key, with its probability (e.g. cure={{{example!r}: 1.0}})'
+            raise TypeError(errormsg)
+        if cure is None and efficacy is None:
             cure = 1.0
         super().__init__(efficacy=efficacy, **kwargs)
-        self.cure = cure
-        self.moves = moves
+        self.cure, self.moves = self.split(cure)
         self.cures = None # What a cure does, once the disease is known: see recovery()
         self.members = None # The diseases it cures, if a delivery gives several (disease=[...]): see key_by()
+        return
+
+    @staticmethod
+    def split(cure):
+        """
+        A cure as (by state, by transition): a number or a dict by state name, or None; and a dict by transition (or move
+        written with the states, or a name with its disease), or None. A name alone is a state until the disease is known (see `along()`)
+        """
+        if not isinstance(cure, dict):
+            return cure, None
+        states, moves, names = {}, {}, {}
+        for key,p in cure.items():
+            if isinstance(key, ss.Transition) or (isinstance(key, str) and '.' in key):
+                moves[key] = p
+            elif isinstance(key, ss.State):
+                states[key.name] = p
+            elif isinstance(key, str):
+                names[key] = p
+            else:
+                errormsg = f'The keys of cure= in ss.Treatment() are states or transitions of the disease (or their names), not {key!r}'
+                raise TypeError(errormsg)
+        if moves and states:
+            errormsg = f'cure= of ss.Treatment() is keyed by states ({sc.strjoin(states)}) or by transitions, not both: use a transition for each (e.g. cure={{I + CIN >> S: 0.9}})'
+            raise ValueError(errormsg)
+        if moves:
+            return None, moves | names # A name beside transitions is a transition
+        return states | names, None
+
+    def along(self, graph):
+        """ With a cure by name only, those that are transitions of the disease rather than states: then what it moves people along """
+        if self.moves is not None or not isinstance(self.cure, dict):
+            return
+        trs = [k for k in self.cure if k in graph.transitions]
+        both = [k for k in trs if k in graph.states]
+        if both:
+            errormsg = f'cure= of the treatment "{self.name}" names {sc.strjoin(both)}, which {"is" if len(both) == 1 else "are"} both a state and a transition of the disease; use the state or the transition itself as the key'
+            raise ValueError(errormsg)
+        if trs:
+            self.cure, self.moves = None, dict(self.cure)
         return
 
     def key_by(self, mods):
@@ -813,23 +864,19 @@ class Treatment(Held):
 
     @property
     def curing(self):
-        """ Whether it moves people out of a state when given (a cure, or moves=), and so has the outcomes cured, failed, and unneeded """
+        """ Whether it moves people out of a state when given (a cure), and so has the outcomes cured, failed, and unneeded """
         return self.__dict__.get('cure') is not None or self.__dict__.get('moves') is not None
 
     def outcome_names(self):
         return ['cured', 'failed', 'unneeded'] if self.curing else []
 
     def edge_specs(self):
-        """ The transitions of moves= as given, each with its probability: (transition or name, probability) """
-        moves = self.moves
-        default = 1.0 if self.cure is None else self.cure
-        if isinstance(moves, dict):
-            return list(moves.items())
-        return [(tr, default) for tr in sc.tolist(moves)]
+        """ What it cures along, as given, each with its probability: (transition, move, or name, probability) """
+        return list(self.moves.items())
 
     @staticmethod
     def is_arrow(tr):
-        """ Whether a move of moves= is written with the states (e.g. `I + CIN >> S`), rather than a transition of the disease """
+        """ Whether a key of cure= is a move written with the states (e.g. `I + CIN >> S`), rather than a transition of the disease """
         return isinstance(tr, ss.Transition) and tr.name is None
 
     @staticmethod
@@ -865,13 +912,15 @@ class Treatment(Held):
 
         Args:
             sim (`ss.Sim`): the sim
-            disease (str): the disease of a transition given by name alone, and of the cure if `moves=` is not given
+            disease (str): the disease of a transition given by name alone, and of a cure by state
         """
         if not self.curing:
             return []
         if self.moves is None and self.members and disease in self.members: # Each disease's infected, for a delivery with disease=[...]
             return self.resolve_each(sim)
         coded = ss.interventions.coded_disease(sim, disease) if self.moves is None else None
+        if coded is None and self.moves is None:
+            self.along(sim._declared_module(disease).graph)
         if coded is not None: # Written as code: its infected, or the people in each state named, are cured by its clear_infection()
             cures = self.cure if isinstance(self.cure, dict) else {'infected':self.cure}
             states = coded_states(coded)
@@ -891,7 +940,7 @@ class Treatment(Held):
             graph = dis.graph
             if self.is_arrow(spec): # A move written with the states, counted in no flow
                 if len(spec.dest or []) != 1 or not spec.source or spec.rate is not None or spec.dur is not None or spec.p is not None:
-                    raise ValueError(f'moves= of the treatment "{self.name}" takes a move from one state (or several) to another, written with the states (e.g. moves=I + CIN >> S), not {spec!r}')
+                    raise ValueError(f'cure= of the treatment "{self.name}" takes a move from one state (or several) to another, written with the states (e.g. cure={{I + CIN >> S: 0.9}}), not {spec!r}')
                 names = [st.name for st in spec.source + spec.dest]
                 unknown = [n for n in names if n not in graph.states or not graph.states[n].people]
                 if unknown:
@@ -926,8 +975,8 @@ class Treatment(Held):
         How a cured person leaves: the transition whose flow counts them (or None), the state they go to, and the states they leave
 
         A cure takes people out of whichever infected state they are in (the states counted in prevalence, and those that
-        people infected reach on the way to the state cured people go to), never only the sources of one transition (`moves=`
-        moves people along transitions, from their own sources).
+        people infected reach on the way to the state cured people go to), never only the sources of one transition (a cure
+        by transition moves people along transitions, from their own sources).
         """
         graph = dis.graph
         infected = [s for s in graph.infected if s.people]
@@ -941,7 +990,7 @@ class Treatment(Held):
             example = example if example is not None else next(iter(ends + reached), graph.default_state)
             srcs = ' + '.join(s.name for s in infected) or 'I'
             raise sc.KeyNotFoundError(f'the treatment "{self.name}" cures, so it needs the state that cured people of "{dis.name}" go to, and its recoveries lead to {"none" if not dsts else "several: " + sc.strjoin(s.name for s in dsts.values())} ({sc.strjoin(options.keys()) or "no transition"}).\n'
-                                   f'     Say what it moves people along with moves=: a transition (e.g. moves={dis.name}.{next(iter(options), "recovery")}), or a move written with the states (e.g. moves={srcs} >> {example.name}); or give efficacy as a dict for a treatment that changes rates without curing.')
+                                   f'     Say what it moves people along as the key of cure=: a transition (e.g. cure={{{dis.name}.{next(iter(options), "recovery")}: 0.9}}), or a move written with the states (e.g. cure={{{srcs} >> {example.name}: 0.9}}); or give efficacy as a dict for a treatment that changes rates without curing.')
         dst = list(dsts.values())[0]
         into = [t for t in options.values() if t.dest[0] is dst and getattr(t, 'where', None) is None] # The flow that counts the cured: the one recovery into that state, if there is one, and if it is for everyone (not, say, only men)
         tr = into[0] if len(into) == 1 else None
@@ -958,7 +1007,7 @@ class Treatment(Held):
             for name in self.cure:
                 state = graph.states.get(name)
                 if state is None or not state.people:
-                    raise sc.KeyNotFoundError(f'the treatment "{self.name}" has a cure for "{name}", which is not a state of people of "{dis.name}". Its states are {sc.strjoin(k for k,v in graph.states.items() if v.people)}.')
+                    raise sc.KeyNotFoundError(f'the treatment "{self.name}" has a cure for "{name}", which is not a state of people or a transition of "{dis.name}". Its states are {sc.strjoin(k for k,v in graph.states.items() if v.people)}, and its transitions {sc.strjoin(graph.transitions.keys())}.')
                 if state is not dst:
                     named.append(state)
             srcs = named
@@ -1005,7 +1054,7 @@ class Diagnostic(Product):
             none of the states keyed in any result (of any disease the test is keyed by), e.g. a false positive: it is counted once,
             whereas a result for a state (`susceptible=0.1`) is one for each disease. For someone in states of several diseases, there is a
             result for each disease, and the most severe of them is theirs (for a positive and a negative result, each disease is detected independently)
-        result_delay (dur/dict): the time from the test to its result (agents only); a dict gives one for each outcome. (A delivery's own `delay=` is the time from its trigger to the test.)
+        result_delay (dur/dict): the time from the test to its result (agents only); a dict gives one for each outcome. (The delay of a delivery's `when=ss.on(event, delay=...)` is the time from its trigger to the test.)
         detects (Cond/func): the condition the test detects (default: being in an infected state of the disease)
         cost (float): the cost of each delivery
         name (str): the name; if not given, taken from the variable the test is assigned to

@@ -93,7 +93,7 @@ def test_dists(n=n, do_plot=False):
         obj = sc.prettyobj()
         obj.a = sc.obj()
         obj.a.mylist = [ss.random(), ss.Dist(distname='uniform', low=2, high=3)]
-        obj.b = dict(d3=ss.weibull(c=2), d4=ss.constant(value=0.3))
+        obj.b = dict(d3=ss.weibull(shape=2), d4=ss.constant(value=0.3))
         dists = ss.dists.Dists(obj).init(sim=make_sim())
 
         # Call each distribution twice
@@ -203,7 +203,7 @@ def test_callable(n=n):
         return out
 
     scale = 1
-    d1 = ss.normal(name='callable', loc=custom_loc, scale=scale).init(sim=sim)
+    d1 = ss.normal(name='callable', mean=custom_loc, std=scale).init(sim=sim)
     d2 = ss.lognormal(name='callable', mean=custom_loc, std=scale).init(sim=sim)
 
     uids = np.array([1, 3, 7, 9])
@@ -216,7 +216,7 @@ def test_callable(n=n):
         meandiff = np.abs(sim.people.age[uids] - draws).mean()
         assert meandiff < scale*3, 'Outputs should match ages'
 
-    d3 = ss.normal(name='callable2', loc=custom_loc, scale=lambda uids: np.zeros(len(uids))).init(sim=sim)
+    d3 = ss.normal(name='callable2', mean=custom_loc, std=lambda uids: np.zeros(len(uids))).init(sim=sim)
     assert np.allclose(d3.rvs(uids), sim.people.age[uids]), 'Functions with different signatures, and scale=0, should work'
 
     return d1
@@ -276,7 +276,7 @@ def test_poisson_ppf():
     import scipy.stats as sps
     u = np.linspace(1e-4, 1-1e-4, 5000) # Deterministic grid of uniforms spanning (0, 1)
     for lam in [0.5, 3.7, 10, 50, 200]:
-        d = ss.poisson(lam=lam, strict=False).init(slots=np.arange(10))
+        d = ss.poisson(mean=lam, strict=False).init(slots=np.arange(10))
         d.process_pars() # Populate _pars so ppf() can read lam
         fast = d.ppf(u)
         ref = sps.poisson.ppf(u, mu=lam)
@@ -376,7 +376,7 @@ def test_timepar_dists():
     v = sc.obj()
     v.base = 30.0
     v.dur = ss.years(30)
-    v.freq = ss.time.freq(30, 'year')
+    v.freq = ss.per(30, 'year')
 
     rtol = 0.1  # Be somewhat generous with the uncertainty
 
@@ -385,9 +385,9 @@ def test_timepar_dists():
     linear_dists = dict(
         constant   = 'value',
         uniform    = 'high',
-        normal     = 'loc',
+        normal     = 'mean',
         lognormal  = 'mean',
-        expon      = 'scale',
+        expon      = 'mean',
         weibull    = 'scale',
         gamma      = 'scale',
     )
@@ -422,10 +422,10 @@ def test_timepar_dists():
         assert np.isclose(mean, expected, rtol=rtol), f'Choice values do not match: {mean:n} ≠ {expected:n}'
 
     print('Testing Poisson distribution ...')
-    for lam in [ss.time.freq(1, 'year'), ss.perday(1)]:
+    for lam in [ss.per(1, 'year'), ss.perday(1)]:
         for module in mock_mods.values():
-            mean = ss.poisson(lam=lam, module=module, strict=False).init().rvs(n).mean()
-            expected = lam*module.t.dt
+            mean = ss.poisson(mean=lam, module=module, strict=False).init().rvs(n).mean()
+            expected = lam.to_events(module.t.dt) # The number in a step
             assert np.isclose(mean, expected, rtol=rtol), f'Poisson values do not match for {lam}: {mean:n} ≠ {expected:n}'
 
     print('Testing Bernoulli distribution ...')
@@ -535,7 +535,7 @@ def test_dtype_consistency():
 
     # ss.poisson yields integer counts, so both paths must return ss.dtypes.int. Regression: the CRN
     # ppf cast counts to float64 (`searchsorted(...).astype(float)`) while the native path was int64.
-    native, crn = path_dtypes(ss.poisson(lam=3, name='p'))
+    native, crn = path_dtypes(ss.poisson(mean=3, name='p'))
     assert native == crn == ss.dtypes.int, f'poisson: by-count={native}, by-UID={crn}, expected {ss.dtypes.int}'
 
     # Other dists aren't independently vulnerable to this issue, but the two paths must still agree
@@ -569,7 +569,7 @@ def test_choose_n():
     assert (heavy < 500).mean() > 0.8 # Higher weights are chosen more often (expected 0.9)
 
     # In a sim: exact seeding
-    sim = ss.Sim(n_agents=500, diseases=ss.SIR(init_prev=20), networks='random', verbose=0).init()
+    sim = ss.Sim(n_agents=500, diseases=ss.SIR(init_n=20), networks='random', verbose=0).init()
     assert sim.diseases.sir.I.sum() == 20 # A number of people rather than a probability
     return chosen
 
@@ -604,7 +604,7 @@ def test_shape_scale():
     assert np.isclose(vals.mean(), 1800, rtol=0.01) and np.isclose(vals.std(), 400, rtol=0.02)
     assert isinstance(ss.gamma(mean=ss.days(10), std=ss.days(5)).pars.scale, ss.days)
     with pytest.raises(ValueError):
-        ss.gamma(a=2, mean=10, std=5)
+        ss.gamma(shape=2, mean=10, std=5)
 
     # The negative binomial can be given by its mean, with n as the dispersion: the variance is mean + mean²/n
     counts = ss.nbinom(mean=20, n=0.5, strict=False).rvs(n)
@@ -613,6 +613,14 @@ def test_shape_scale():
     assert np.array_equal(ss.nbinom(mean=20, n=0.5, strict=False, seed=1).rvs(100), same) # The same as the equivalent p
     with pytest.raises(ValueError):
         ss.nbinom(mean=20, p=0.5)
+
+    # Moments by keyword, the same draws as by position; SciPy's names, or any keyword a distribution doesn't take, raise when it is made, naming those it takes
+    assert np.array_equal(ss.normal(mean=5, std=1, strict=False, seed=1).rvs(10), ss.normal(5, 1, strict=False, seed=1).rvs(10))
+    assert np.isclose(ss.truncnorm(mean=5, std=1, low=0, strict=False).rvs(n).mean(), 5, rtol=0.02) # It drew N(0, 1) truncated at 0, silently
+    for make, hint in [(lambda: ss.normal(loc=5), 'mean='), (lambda: ss.expon(scale=5), 'mean='), (lambda: ss.poisson(lam=3), 'mean='), (lambda: ss.gamma(a=2), 'shape='),
+                       (lambda: ss.weibull(c=2), 'shape='), (lambda: ss.lognormal(loc=5, scale=2), 'mean='), (lambda: ss.truncnorm(5, 2, a=0, b=10), 'low, high')]:
+        with pytest.raises(TypeError, match=hint):
+            make()
     return vals
 
 
@@ -621,7 +629,7 @@ def test_own_unit():
     """ Test that a distribution with a unit draws and plots in it outside a sim, and shows what it was made from """
     sc.heading('Testing distributions in their own unit')
     dist = ss.erlang(k=4, mean=ss.days(10))
-    assert repr(dist) == 'ss.erlang(k=4, mean=ss.days(10))' # Not ss.gamma(a=4, scale=2.5, loc=0.0)
+    assert repr(dist) == 'ss.erlang(k=4, mean=ss.days(10))' # Not ss.gamma(shape=4, scale=2.5, loc=0.0)
     vals = dist.rvs(n) # In days, with no sim and no strict=False
     assert np.isclose(vals.mean(), 10, rtol=0.05) and np.isclose(vals.std(), 5, rtol=0.1)
     dist.plot_hist()
@@ -630,8 +638,8 @@ def test_own_unit():
     assert np.isclose(ss.normal(3, 0.1, unit='weeks').rvs(n).mean(), 3, rtol=0.01)
     with pytest.raises(ss.errors.DistNotInitializedError): # One with no unit still needs a sim, or strict=False
         ss.normal(0, 1).rvs(5)
-    dist.set(a=3)
-    assert repr(dist).startswith('ss.gamma(a=3') # Changed, so shown by its parameters
+    dist.set(shape=3)
+    assert repr(dist).startswith('ss.gamma(shape=3') # Changed, so shown by its parameters
     return vals
 
 
@@ -639,7 +647,7 @@ def test_engine_copy():
     """ Test that the copy of a distribution a declared model draws from (in the sim's unit) draws what the distribution does """
     sc.heading('Testing that the engine draws what each distribution draws')
     year = ss.debugtools.mock_module(dt=ss.years(1)) # Typed values are drawn in steps of a year, the unit the copy is in
-    dists = [ss.random(), ss.uniform(1, 3), ss.normal(5, 1), ss.truncnorm(5, 2, a=0, b=10), ss.lognormal(log_mean=1, log_std=0.5), ss.lognormal(5, 2),
+    dists = [ss.random(), ss.uniform(1, 3), ss.normal(5, 1), ss.truncnorm(5, 2, low=0, high=10), ss.lognormal(log_mean=1, log_std=0.5), ss.lognormal(5, 2),
              ss.expon(4), ss.poisson(3), ss.beta_dist(2, 3), ss.beta_dist(mean=0.3, std=0.1), ss.nbinom(3, 0.5), ss.binom(10, 0.3), ss.randint(0, 10),
              ss.weibull(2, 3), ss.gamma(2, 3), ss.constant(7), ss.bernoulli(0.3), ss.choice([1, 5, 9], p=[0.2, 0.3, 0.5]),
              ss.histogram(values=[0.6, 0.3, 0.1], bins=[0, 6, 12, 18]), ss.lognormal(ss.days(50), ss.days(20)), ss.normal(5, 1, unit='month'),
@@ -673,7 +681,7 @@ def test_even_draws():
     assert 0 < even.min() < 1/1000 and even.max() < 1
 
     def final_size(seed, **kwargs):
-        sim = ss.Sim(n_agents=1000, dur=ss.days(100), dt=ss.days(1), rand_seed=seed, verbose=0, solver='abm', diseases=ss.SIR(beta=ss.perday(0.25), dur_inf=ss.days(10), init_prev=0.02), **kwargs).run()
+        sim = ss.Sim(n_agents=1000, stop=ss.days(100), dt=ss.days(1), rand_seed=seed, verbose=0, solver='abm', diseases=ss.SIR(beta=ss.perday(0.25), dur_inf=ss.days(10), init_prev=0.02), **kwargs).run()
         return sim.results.sir.S[-1]
     plain, spaced = [np.std([final_size(seed, even_draws=even) for seed in range(8)]) for even in [False, True]]
     assert spaced < plain, f'Evenly spaced draws should reduce the spread of final sizes, but it went from {plain} to {spaced}'

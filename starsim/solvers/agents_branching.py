@@ -218,7 +218,7 @@ class Branching:
             for tr in self.held_trs:
                 mult = self.mult_raw('transition', tr.name)*(1.0 if self.adjust[tr.name] is None else self.adjust[tr.name])
                 if np.ndim(mult) and np.shape(mult)[-1] != ng:
-                    raise ss.CapabilityError(f'a modifier of "{self.mod.name}.{tr.name}" has a condition on people, which the uninfected of a branching process, who are counts by group, cannot take; give it no where=, or run with a compartmental solver')
+                    raise ss.CapabilityError(f'a modifier of "{self.mod.name}.{tr.name}" has a condition on people, which the uninfected of a branching process, who are counts by group, cannot take; give it no who=, or run with a compartmental solver')
                 if tr._inflow:
                     inflow = np.broadcast_to(np.asarray(self.eval(tr.rate), dtype=float)*mult*self.inflow_split(tr), ng)*dt
                     if getattr(tr, 'per_capita', False):
@@ -348,7 +348,7 @@ class Branching:
                         for k,strain in enumerate(strains):
                             share = 1.0 if strain is None else self.strain_weights[strain_raw[pool.source_uids], strain]
                             trans = np.mean(rel_trans.raw[pool.source_uids]*share) # The infectiousness-weighted fraction of the source group that is infectious
-                            pool_hazard[k][dst] += pool.pars.beta*ref*trans*pool.eff_contacts.raw[dst]*route_sus.raw[dst]*mult(None, dst)
+                            pool_hazard[k][dst] += ref*trans*pool.eff_contacts.raw[dst]*route_sus.raw[dst]*mult(None, dst)
             else: # Any other route works out its own transmission
                 new_cases.append(ss.uids(route.compute_transmission(route_sus, rel_trans, beta, disease=mod)))
         if self.strain is not None and pairs: # Each new case takes the strain of whoever infected them, one of those who reached them (see Transmission)
@@ -593,7 +593,7 @@ class Branching:
     def by_target(self, coefs, route):
         """
         The coefficients of a transmission's source states on a route that is not a network with acts, when some have a value for each agent (e.g.
-        `ss.by(sex=...)*I` over `ss.contacts(matrix, dims='sex')`): a value for whoever is infected, times a weight for each source state. Returns the weights,
+        `ss.by(sex=...)*I` over `ss.contacts(sex=matrix)`): a value for whoever is infected, times a weight for each source state. Returns the weights,
         and the value for each agent (None if no coefficient differs between agents)
         """
         arrays = [np.asarray(c, dtype=float) for c in coefs.values() if np.ndim(c)]
@@ -655,7 +655,7 @@ class Branching:
             return act
 
         source = functools.reduce(operator.add, [w for h,w in shared]) # Whether each agent is infectious, with the rel_trans of their state
-        weight = lambda inds: route.edges.beta[inds]*route.edges.acts[inds]
+        weight = lambda inds: route.edges.weight[inds]*route.edges.acts[inds]
         prob = lambda d, inds, src, trg: -np.expm1(-weight(inds)*act_hazard(src, trg)*trans[src]*rel_sus.raw[trg]*mult(inds, trg))
         out = route.transmit(trans*source, rel_sus.raw, lambda d, inds, src, trg: weight(inds), mod.trans_rng, prob=prob)
         for srcs, trgs in out:

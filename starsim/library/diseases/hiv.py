@@ -6,7 +6,7 @@ import numpy as np
 import sciris as sc
 import starsim as ss
 
-__all__ = ['HIV', 'ART', 'CD4_analyzer']
+__all__ = ['HIV', 'ART', 'ARTDrug', 'CD4_analyzer']
 
 
 class HIV(ss.AgentDisease):
@@ -33,8 +33,8 @@ class HIV(ss.AgentDisease):
         cd4_rate (float):       number of timesteps to close the CD4 gap
         art_efficacy (float):   proportional reduction in transmission on ART
         init_prev (Dist):       initial prevalence
-        death_dist (Dist):      death probability, by default CD4-modulated `p_death`
-        p_death (rate):         baseline death rate per unit time (not per infection)
+        death_dist (Dist):      death probability, by default from `death_rate`, modulated by CD4
+        death_rate (rate):      baseline rate of death of the infected, per unit time (not a probability per infection)
 
     Attributes:
         on_art (BoolState):     currently on ART
@@ -50,13 +50,16 @@ class HIV(ss.AgentDisease):
         sim = ss.Sim(
             diseases = ssl.HIV(beta=0.02, init_prev=0.05),
             networks = 'random',
-            interventions = ssl.ART(year=[2000, 2020], coverage=[0, 0.8]),
+            interventions = ssl.ART(coverage=ss.timeseries({2000: 0, 2020: 0.8}, 'linear')),
         )
         sim.run()
         sim.plot()
         ```
     """
     def __init__(self, pars=None, **kwargs):
+        if 'p_death' in kwargs or 'p_death' in (pars or {}):
+            errormsg = 'ssl.HIV() takes no p_death=; its death is a rate per unit time, death_rate= (e.g. death_rate=ss.peryear(0.05))'
+            raise TypeError(errormsg)
         super().__init__()
         self.define_pars(
             beta = 0.0, # Placeholder value: set it for transmission to occur
@@ -65,8 +68,8 @@ class HIV(ss.AgentDisease):
             cd4_rate = 5,
             art_efficacy = 0.96,
             init_prev = ss.bernoulli(p=0.05),
-            death_dist = ss.bernoulli(p=self.death_prob_func), # Uses p_death by default, modulated by CD4
-            p_death = ss.peryear(0.05), # NB: this is death per unit time, not death per infection
+            death_dist = ss.bernoulli(p=self.death_prob_func), # Uses death_rate by default, modulated by CD4
+            death_rate = ss.peryear(0.05), # A rate per unit time, not a probability per infection
         )
         self.update_pars(pars, **kwargs)
 
@@ -84,7 +87,7 @@ class HIV(ss.AgentDisease):
         p = module.pars
         dur = module.t.dt
         scale = (module.cd4[uids] - p.cd4_max)**2 / (p.cd4_min - p.cd4_max)**2 # Scale by cd4
-        out = p.p_death.to_prob(dur, scale=scale)
+        out = p.death_rate.to_prob(dur, scale=scale)
         return out
 
     def step_state(self):
@@ -128,68 +131,65 @@ class HIV(ss.AgentDisease):
 
 # %% HIV-related interventions
 
-class ART(ss.Intervention):
+class ART(ss.Delivery):
     """
-    Scale up antiretroviral therapy over time.
+    Antiretroviral therapy, delivered as `ss.treat()` delivers a treatment
 
-    Each timestep, agents infected `art_delay` ago are offered ART, and are
-    treated with a probability interpolated from `coverage` at the corresponding
-    `year`. Requires the `HIV` module.
+    By default, ART is offered once to each person who has been infected with `HIV` for `art_delay`
+    and is not on it, with the probability `coverage`; `who=` restricts who among them is offered it,
+    and `when=` when, as for any delivery (see `ss.Delivery`). The people treated are on ART for good:
+    their CD4 count recovers, and they are less infectious (see `HIV`). Requires the `HIV` module.
 
     Note: CRN safe.
 
     Args:
-        year (float/array):     year(s) at which coverage is specified
-        coverage (float/array): probability of ART initiation at each year
-        art_delay (Dist):       par: delay from infection to ART eligibility
+        coverage (float/timeseries): the probability that each person eligible starts ART, e.g. scaled up over time with `ss.timeseries({2000: 0, 2020: 0.8}, 'linear')`
+        who (Cond/func): who among the people eligible is offered it (e.g. `ss.person.female`)
+        when (various): when it is offered, as for any delivery (default: on every step, once to each person when they become eligible)
+        art_delay (dur): the time from infection to being eligible
+        kwargs (dict): passed to `ss.Delivery` (e.g. `capacity=`, `name=`)
 
     Examples:
         ```python
+        import starsim as ss
         import starsim.library as ssl
 
-        art = ssl.ART(year=[2000, 2010, 2020], coverage=[0, 0.4, 0.8])
+        art = ssl.ART(coverage=ss.timeseries({2000: 0, 2010: 0.4, 2020: 0.8}, 'linear'))
         ```
     """
-    def __init__(self, year, coverage, pars=None, **kwargs):
-        self.year = sc.toarray(year)
-        self.coverage = sc.toarray(coverage)
-        super().__init__()
-        self.define_pars(
-            art_delay = ss.constant(ss.years(1.0)) # Value in years
-        )
-        self.update_pars(pars, **kwargs)
-
-        prob_art = lambda self, sim, uids: np.interp(self.t.now('year'), self.year, self.coverage)
-        self.prob_art_at_infection = ss.bernoulli(p=prob_art)
+    def __init__(self, coverage=1.0, who=None, when=None, art_delay=ss.years(1), name=None, **kwargs):
+        for old, new in dict(year='coverage=ss.timeseries(...)', pars='art_delay=').items():
+            if old in kwargs:
+                errormsg = f'ssl.ART() takes no {old}=; use {new}'
+                raise TypeError(errormsg)
+        self.art_delay = art_delay
+        eligible = self.eligible if who is None else ss.conditions.Cond('&', who, self.eligible)
+        super().__init__(ARTDrug(name='art_drug'), who=eligible, when=when, coverage=coverage, disease='hiv', name=name, **kwargs)
         return
+
+    def eligible(self, sim):
+        """ The people infected for at least art_delay who are not on ART """
+        hiv = sim.diseases.hiv
+        delay = self.art_delay/sim.t.dt if isinstance(self.art_delay, ss.Duration) else self.art_delay
+        return hiv.infected & ~hiv.on_art & (sim.ti - hiv.ti_infected >= delay)
 
     def init_results(self):
         super().init_results()
-        self.define_results(ss.Result('n_art', dtype=int, label='Number on ART'))
+        self.define_results(ss.Result('n_art', dtype=int, label='Number on ART', kind='stock'))
         return
-
-    def step(self):
-        ti = self.ti
-        if self.t.now('year') < self.year[0]:
-            return 0
-
-        hiv = self.sim.diseases.hiv
-        infected = hiv.infected.uids
-        ti_delay = np.round(self.pars.art_delay.rvs(infected)).astype(int)
-        recently_infected = infected[hiv.ti_infected[infected] == ti - 1 - ti_delay] # Infected in the step before (the disease steps after the interventions), or ti_delay steps before that
-
-        n_added = 0
-        if len(recently_infected) > 0:
-            inds = self.prob_art_at_infection.filter(recently_infected)
-            hiv.on_art[inds] = True
-            hiv.ti_art[inds] = ti
-            n_added = len(inds)
-
-        return n_added
 
     def record_stocks(self):
         super().record_stocks()
         self.results['n_art'][self.ti] = np.count_nonzero(self.sim.diseases.hiv.on_art)
+        return
+
+
+class ARTDrug(ss.Product):
+    """ What `ART` delivers: the people given it are on ART from then on """
+    def administer(self, uids):
+        hiv = self.sim.diseases.hiv
+        hiv.on_art[uids] = True
+        hiv.ti_art[uids] = self.sim.ti
         return
 
 

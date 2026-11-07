@@ -25,6 +25,35 @@ class BuiltAfterInit(type):
         return self
 
 
+def check_init_prev(init_prev, seed_n, name):
+    """ init_prev= is a share of people, so more than 1 raises (pointing to init_n=, a number of people), and a whole number 1 is everyone, with a warning, as for init=; init_n= is not negative """
+    value = init_prev.raw if isinstance(init_prev, ss.par) else init_prev
+    if not sc.isnumber(value):
+        return
+    if seed_n:
+        if value < 0:
+            raise ValueError(f'init_n= of "{name}" is a number of people, not {value:n}')
+        return
+    if value > 1:
+        errormsg = f'init_prev= of "{name}" is a share of people (1.0 is everyone), not {value:n}; for a number of people, use init_n={value:n}'
+        raise ValueError(errormsg)
+    if value == 1 and isinstance(value, (int, np.integer)):
+        ss.warn(f'init_prev= of "{name}" is the whole number 1, which is read as a share: everyone starts infected. Write 1.0 for everyone, or init_n=1 for one person')
+    return
+
+
+def check_stratify(stratify, where):
+    """ The `stratify=` of a disease or a sim: one dict of dimensions, as `stratify()` takes them """
+    if isinstance(stratify, (list, tuple)):
+        merged = {k:v for call in stratify if isinstance(call, dict) for k,v in call.items()}
+        errormsg = f'{where}(stratify=) takes one dict of dimensions, e.g. stratify={merged or dict(age=[0, 15])!r}, not a list of them (options of a dimension are ss.levels())'
+        raise TypeError(errormsg)
+    if not isinstance(stratify, dict):
+        errormsg = f'{where}(stratify=) takes a dict of dimensions, e.g. stratify=dict(age=[0, 15, 65]), not {type(stratify).__name__}'
+        raise TypeError(errormsg)
+    return stratify
+
+
 class Disease(ss.Module, metaclass=BuiltAfterInit):
     """
     A disease: states people are in and the transitions between them (declared), code, or both
@@ -60,14 +89,14 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         transitions (list): transitions, as a list (for longer models)
         results (list): extra results: sums and ratios of states
         outcomes (list): `ss.outcome` objects
-        init_prev (float): the initial prevalence, seeded through the transmission (by default 0.01, unless a state is given an initial value)
+        init_prev (float): the initial prevalence, a share of people (up to 1), seeded through the transmission (by default 0.01, unless a state is given an initial value)
         init (dict): the share of people who start in each state, e.g. `dict(S=0.90, I=0.01, R=0.09)`, and, for a state that is not people, its amount, which can be read from the people (e.g. `dict(Sv=m*N)`, with `N = (S + I).n`); each value can be an `ss.by` or a function of the sim (in the class form, `init = dict(I=0.01)` in the class body; likewise `init_n` and `init_prev`)
-        init_n (dict): instead, the number of people who start in each state, e.g. `dict(I=1)` for one person
+        init_n (int/dict): instead, a number of people: one number is seeded through the transmission, as `init_prev` is (e.g. `init_n=10`, a parameter, like `init_prev`); a dict is the number who start in each state, e.g. `dict(I=1)` for one person
         default_state (str): the state that everyone not put elsewhere starts in, and is born into; by default, the one named `S` or `susceptible`, else the first state of people made (in the class form, `default_state = 'N'` in the class body)
         strains (Strains): its strains (`ss.Strains`), which share its states; then `dis.strains`
-        stratify (dict/list): as `stratify()`, e.g. `dict(age={0: 0.3, 15: 0.6, 65: 0.1})`; a list of dicts for one call each
-        solver (str): its own solver in a sim of agents, instead of the sim's: `'abm-midstep'` (by steps, with those who arrive in a state during a step facing its rates for the rest of it), `'abm-wholestep'` (by steps, with rates over whole steps only, for those in the state at the start of the step, as code with `ss.bernoulli()` takes them: faster, and a little less exact at a coarse step), `'abm-events'` (event by event, in continuous time), or `'abm'` (its `suggested_solver`, whatever the sim's); a class can instead suggest one, `suggested_solver = 'abm-wholestep'` in the class body, which the sim's `solver='abm'` (or `'auto'`) follows and any other agent solver overrides (see `ss.solvers.agent_solver()`)
-        kwargs (dict): one keyword per state, transition, parameter, result, function, or modifier (`ss.modify()`, of its own quantities, e.g. `fading=ss.modify('rel_trans', multiply=0.5, where=I)`); also `name`, `label`, and `dt`
+        stratify (dict): the dimensions, as `stratify()` takes them, e.g. `dict(age={0: 0.3, 15: 0.6, 65: 0.1}, risk=ss.levels(['low', 'high'], states=[I]))`
+        solver (abm): its own way of running as agents, which the sim's does not override, e.g. `ss.abm(step='wholestep')` (by steps, with rates over whole steps only, for those in the state at the start of the step, as code with `ss.bernoulli()` takes them: faster, and a little less exact at a coarse step) or `ss.abm(step='events')` (event by event, in continuous time); by default, the sim's (see `ss.abm()` and `ss.solvers.agent_solver()`). An error for a compartmental run
+        kwargs (dict): one keyword per state, transition, parameter, result, function, or modifier (`ss.modify()`, of its own quantities, e.g. `fading=ss.modify('rel_trans', multiply=0.5, who=I)`); also `name`, `label`, and `dt`
 
     The results are the number in each state (`I`), the flow along each transition by its
     name (`infection`, with its cumulative total as `res.infection.cum`), and the results and
@@ -106,7 +135,6 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
     graph = None # Its declared states and transitions (`ss.graph.Graph`); None for a disease written as code
     engine = None # Runs the declared part (see ss.solvers.make_engine()); created when the sim is initialized
     infection_log = None # An InfectionLog, if the sim has an ss.infection_log analyzer
-    suggested_solver = None # For a declared module, how it suggests running as agents, one of ss.solvers.agent_solvers (e.g. 'abm-wholestep'), which the sim's solver='abm' (or 'auto') follows: see ss.solvers.agent_solver()
     code_pars = () # Parameters of a declared module that its own code reads rather than its graph (e.g. ss.Pregnancy's fertility rates)
     allow_modifiers = () # For a disease written as code: which of rel_sus, rel_trans, and its parameters its own code reads, with current_value(), so ss.modify() of them is applied (an ss.AgentDisease with a beta reads both)
 
@@ -139,9 +167,14 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
     def __init__(self, *args, pars=None, strains=None, stratify=None, solver=None, _names=None, **kwargs):
         super().__init__()
         self.strains = strains # Its ss.Strains, if it has strains: set now, so a subclass's __init__() can read it before the disease is built (see ss.strains.attach())
-        if solver not in [None, 'abm'] + ss.solvers.agent_solvers:
-            raise ValueError(f'solver must be one of {sc.strjoin(ss.solvers.agent_solvers)} (a module\'s own solver, as agents), "abm" (its suggested one), or None to follow the sim\'s, not {solver!r}')
-        self.solver = solver # Its own solver, as agents (see ss.solvers.agent_solver()); None follows the sim's
+        if solver is not None:
+            try:
+                solver = ss.sim.as_solver(solver)
+            except ValueError as e:
+                raise ValueError(f'{e} (a module\'s own solver is a way of running as agents, e.g. ss.abm(step="wholestep"))') from None
+            if solver != 'abm':
+                raise ValueError(f'A module\'s own solver is a way of running as agents, ss.abm(step=...), not {solver!r}: the sim\'s solver= says how the whole model runs')
+        self.solver = solver # Its own way of running as agents (see ss.solvers.agent_solver()); None follows the sim's
         self.callbacks = [] # Functions called with the agents an event happened to: see add_callback()
         if len(args) and (args[0] is None or isinstance(args[0], dict)): # Parameters can also be the first argument
             pars, args = args[0], args[1:]
@@ -177,7 +210,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
     def has_structure(kwargs):
         """ Whether these keywords declare part of a model, not just a parameter's value """
         declared = (ss.State, ss.Transition, ss.outcome, ss.expressions.Expr, ss.transitions.FlowSum, ss.modify)
-        return any((isinstance(v, declared) and not isinstance(v, ss.par)) or key in ss.graph.Graph.grouped for key,v in kwargs.items())
+        return any((isinstance(v, declared) and not isinstance(v, ss.par)) or key in ss.graph.Graph.removed for key,v in kwargs.items())
 
     def build_graph(self):
         """ Build the graph from what was declared: when the disease is made, or for one declared in its __init__(), after that (see `BuiltAfterInit`) """
@@ -192,8 +225,8 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         self.add_code_pars(d.code_pars)
         if d.strains is not None:
             ss.strains.attach(self, d.strains)
-        for call in sc.tolist(d.stratify):
-            self.stratify(**call)
+        if d.stratify is not None:
+            self.stratify(**check_stratify(d.stratify, 'ss.Disease'))
         return
 
     def declare(self, args=(), kwargs=None, names=None, overwrite=False):
@@ -347,14 +380,14 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         pars = {}
         endpoints = set() # States that the transitions given move people between, which this disease will own
         counted = {} # States counted in a rate (I.n), which may be another disease's
-        conds = [] # Conditions in a where=, which may be on another disease's states
+        conds = [] # Conditions in a who=, which may be on another disease's states
         def walk(obj, depth=0, where=False): # The states, transitions, and parameters in what was given
             if isinstance(obj, (list, tuple)):
                 for item in obj:
                     walk(item, depth, where)
             elif isinstance(obj, ss.conditions.Cond):
                 conds.append(obj)
-            elif isinstance(obj, ss.State) and where: # A state in a where=, e.g. where=hpv16.Ca
+            elif isinstance(obj, ss.State) and where: # A state in a who=, e.g. who=hpv16.Ca
                 counted[id(obj)] = obj
             elif isinstance(obj, ss.par):
                 pars[id(obj)] = obj
@@ -381,9 +414,8 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         if not owners:
             return args, members
         members = dict(members)
-        grouped = [obj for key in ss.graph.Graph.grouped for obj in sc.tolist(members.pop(key, None))]
         positional = []
-        for obj in list(args) + grouped: # Named first, as keywords, since a copy is not bound to the variable
+        for obj in list(args): # Named first, as keywords, since a copy is not bound to the variable
             name = getattr(obj, 'name', None) or (None if isinstance(obj, ss.State) else (names or {}).get(id(obj)))
             if name is None or isinstance(obj, ss.State):
                 positional.append(obj)
@@ -420,10 +452,19 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
             if key not in kwargs and (isinstance(given, dict) or sc.isnumber(given)):
                 kwargs[key] = dict(given) if isinstance(given, dict) else given
         init_prev = kwargs.pop('init_prev', None)
-        if sc.isnumber(init_prev): # A parameter, so it can be set (sir.pars.init_prev = 0.05) or fitted like the others
-            init_prev = ss.par(init_prev)
         init = kwargs.pop('init', None)
         init_n = kwargs.pop('init_n', None)
+        seed_n = init_n is not None and not isinstance(init_n, dict) # A number of people, seeded through the transmission as init_prev is (init_n=dict(I=10) is by state)
+        if seed_n:
+            if init_prev is not None:
+                errormsg = f'"{self.name}" is given both init_prev= (a share of people) and init_n= (a number of people), which both seed the transmission; give one or the other'
+                raise ValueError(errormsg)
+            init_prev, init_n = init_n, None
+        check_init_prev(init_prev, seed_n, self.name)
+        if sc.isnumber(init_prev): # A parameter, so it can be set (sir.pars.init_prev = 0.05) or fitted like the others
+            init_prev = ss.par(init_prev, name='init_n' if seed_n else 'init_prev')
+        elif isinstance(init_prev, ss.par) and seed_n:
+            init_prev.name = init_prev.name or 'init_n'
         default_state = kwargs.pop('default_state') if isinstance(kwargs.get('default_state'), str) else getattr(type(self), 'default_state', None) # A state named "default_state" can still be declared by keyword; in the class form, default_state = 'N' in the class body
         default_state = default_state if isinstance(default_state, str) else None
         self.set_metadata(**meta)
@@ -437,7 +478,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         holds_expr = lambda leaf: isinstance(leaf.raw, ss.expressions.Expr) and any(inner is m for inner in leaves(leaf.raw) for m in members.values()) # One holding the class's parameters, copied with them
         memo = {id(leaf):leaf for val in members.values() if isinstance(val, ss.Transition) for expr in [val.rate, val.dur, getattr(val, 'p_die', None), getattr(val, 'p_stay', None)] + sc.tolist(getattr(val, 'p', None)) if isinstance(expr, ss.expressions.Expr) for leaf in leaves(expr) if isinstance(leaf, ss.par) and not any(leaf is m for m in members.values()) and not holds_members(leaf) and not holds_expr(leaf)}
         members = sc.dcp(members, memo=memo) # Copy class members (together, so they still refer to each other) so instances do not share them; a parameter defined outside the class (rate = ss.par(...) at module level) stays shared, as in the operator form, so it keeps its name
-        for tr in [val for val in members.values() if isinstance(val, ss.Transition)]: # A sibling as an event (vax = ss.Transition(R, V, on=recovery)) is the copy
+        for tr in [val for val in members.values() if isinstance(val, ss.Transition)]: # A sibling as an event (vax = ss.Transition(R, V, when=recovery)) is the copy
             tr.where = ss.conditions.rebind(tr.where, memo)
             if tr.trigger is not None and (x := ss.conditions.rebind(tr.trigger.x, memo)) is not tr.trigger.x:
                 delay, tr.trigger = tr.trigger.delay, ss.on(x)
@@ -454,7 +495,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
                 raise ValueError(errormsg)
         members = sc.mergedicts(members, kwargs)
         args, members = self.reuse(args, members, names)
-        self.graph = ss.graph.Graph(self, args, members, init_prev=init_prev, init=init, init_n=init_n, default_state=default_state, names=names)
+        self.graph = ss.graph.Graph(self, args, members, init_prev=init_prev, init=init, init_n=init_n, default_state=default_state, names=names, seed_n=seed_n)
         for name,obj in list(self.graph.states.items()) + list(self.graph.transitions.items()) + list(self.graph.attrs.items()):
             self.setattribute(name, obj) # e.g. sir.S, sir.infection, hiv.cd4
         for tr in list(self.graph.transitions.values()) + list(self.graph.transfers.values()):
@@ -479,23 +520,25 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         """
         Stratify the disease by a property of the people in it (age, risk, place, ...), in place, and return it
 
+        Every keyword is a dimension, with its levels: bin edges (for a continuous property such as age) or labels,
+        or a dict of the share of the population in each level (if not given: from a named population or geography;
+        for age groups, the world's ages; for a boolean dimension, or one that people are moved along, everyone at
+        the first level; otherwise equal). `ss.levels()` adds the options that are needed less often: the states it
+        applies to (`states=`), the people it applies to (`who=`), its kind, and the movement between places.
+        A value by level, e.g. a rate, is `ss.by()`: `S >> I @ beta*ss.by(risk=[1, 3])*I`, or for a disease
+        already written, `ss.modify(sir.infection, multiply=ss.by(risk=[1, 3]))`.
+
         Args:
-            fractions (list): the share of the population in each level, unless the levels are a dict of them (if not given: from a named population or geography; for age groups, the world's ages; for a boolean dimension, or one that people are moved along, everyone at the first level; otherwise equal)
-            adjust (dict): multipliers on named transitions, one per level, e.g. `{'recovery': [1.5, 1.0, 0.5]}`: on its rate (a duration is divided), or on its probability for a branch chosen with p=
-            kind (str): 'age', 'space', or 'plain'; if not given, from the value: 'space' for an `ss.geo.geography` or with `mobility=`, 'age' for `age=`, and otherwise 'plain' (whatever the name); strains are `strains=ss.Strains(...)` on the disease
-            states (list): the states the dimension applies to (default: every state that is people)
-            where (dict): the groups the dimension applies to, e.g. `dict(sex='female')`; people in other groups have no level of it, so selecting a level of it leaves them out (default: every group)
-            mobility (gravity/radiation/Mobility/array): for a place (e.g. `patch=`), the movement between its levels: `ss.geo.gravity()`, `ss.geo.radiation()`, `ss.geo.Mobility()`, or a matrix
             inplace (bool): if False, return a stratified copy and leave this disease unchanged
-            kwargs (dict): the dimension and its levels (bin edges or labels), e.g. `age=[0, 15, 65]`;
+            kwargs (dict): each dimension and its levels, e.g. `age=[0, 15, 65]`, `risk={'low': 0.8, 'high': 0.2}`, or `severity=ss.levels(['mild', 'severe'], states=[I])`;
                 an `ss.transfer` passed as a keyword is added under that name
 
         Examples:
             ```python
-            sir.stratify(age=[0, 15, 65], adjust={'recovery': [1.5, 1.0, 0.5]})
             sir.stratify(age={0: 0.3, 15: 0.6, 65: 0.1}) # With the share of people in each age group
-            sir.stratify(risk=['low', 'high'], fractions=[0.8, 0.2], adjust={'infection': [1.0, 3.0]})
-            sir.stratify(parity=['0', '1-2', '3+'], where=dict(sex='female')) # Only women have a parity
+            sir.stratify(age=[0, 15, 65], risk={'low': 0.8, 'high': 0.2})
+            sir.stratify(sex=['female', 'male'], parity=ss.levels(['0', '1-2', '3+'], who=ss.person.female)) # Only women have a parity
+            sir.stratify(severity=ss.levels({'mild': 0.9, 'severe': 0.1}, states=[sir.I]))
             ```
         """
         if self.graph is None:
@@ -503,7 +546,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
             raise ValueError(errormsg)
         mod = self if inplace else self.copy()
         mod.graph.stratify(**kwargs)
-        for strat in mod.graph.strats: # So a dimension can be used in a condition, e.g. where=~sir.vaccinated
+        for strat in mod.graph.strats: # So a dimension can be used in a condition, e.g. who=~sir.vaccinated
             if not hasattr(mod, strat.name):
                 cond = ss.conditions.Cond('dim', strat.name)
                 cond.owner = mod # So a delivery whose condition reads it is for this disease (see ss.conditions.state_refs())
@@ -530,12 +573,11 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         """ Its stratifications by name, e.g. `tb.strats.age.edges` or `tb.strats.risk.labels` (as a condition, a level is `tb.age`) """
         return sc.obj({strat.name:strat for strat in self.graph.strats}) if self.graph is not None else sc.obj()
 
-    def describe(self, output=False, out=None):
+    def describe(self, out=None):
         """
-        Print the resolved model, with every guessed default marked
+        The resolved model, with every guessed default marked, as text that shows itself (`ss.display.Text`), as `diagram()` is
 
         Args:
-            output (bool): if True, return the text rather than printing it
             out (`ss.display.Description`): if given, add the description to it and return it
         """
         desc = ss.display.Description() if out is None else out
@@ -551,17 +593,13 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
                 desc.add('strains', f'{sc.strjoin(self.strains.names)}, one carried at a time')
         if out is not None:
             return desc
-        return str(desc) if output else desc.show()
+        return desc.as_text()
 
-    def equations(self, output=False):
+    def equations(self):
         """
-        Print the ODE system of the declared transitions, with symbolic parameter names
-
-        Args:
-            output (bool): if True, return the text rather than printing it
+        The ODE system of the declared transitions, with symbolic parameter names, as text that shows itself (`ss.display.Text`; `print()` it in a script)
         """
-        text = '\n'.join(ss.display.equations(self.graph, self.engine))
-        return text if output else print(text)
+        return ss.display.Text('\n'.join(ss.display.equations(self.graph, self.engine)))
 
     def diagram(self):
         """
@@ -617,7 +655,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
             ```
         """
         if self.sim is not None and self.sim.initialized:
-            sim = self.sim.new(solver='ode', verbose=0).init()
+            sim = ss.sim.as_ode(self.sim, verbose=0).init()
             dis = sim.diseases[self.name]
         else: # This disease alone, whatever the sim names it
             sim = ss.Sim(sc.dcp(self), solver='ode', verbose=0).init()
@@ -651,7 +689,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         if sim is None or not sim.results_ready:
             errormsg = f'"{self.name}" has no run to take R over time from: run the sim first, e.g. sim.run(), then sim.diseases.{self.name}.Rt() (for the start alone, see R0())'
             raise RuntimeError(errormsg)
-        copy = sim.new(solver='ode', verbose=0).init()
+        copy = ss.sim.as_ode(sim, verbose=0).init()
         engine = copy.diseases[self.name].engine
         results = sim.results[self.name]
         stored = {} # The people in each state of each group at each kept time point
@@ -687,7 +725,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
                 raise ValueError(errormsg)
             values[row] = float(np.max(np.abs(np.linalg.eigvals(ngm))))
         timevec = sim.results.timevec[tis]
-        return ss.Result(name='Rt', label=f'R over time ({self.name})', module=self.name, scale=False, timevec=timevec, values=values)
+        return ss.Result(name='Rt', label=f'R over time ({self.name})', module=self.name, kind='ratio', scale=False, timevec=timevec, values=values)
 
     @ss.required()
     def init_pre(self, sim):
@@ -708,7 +746,9 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         self.remembered = [name for mod,name in needs if mod == self.name and name in self.graph.transitions] # Transitions whose memory something reads, e.g. tb.diagnosis.since
         if self.abm and (sim.pars.keep_times if isinstance(sim, ss.Sim) else ss.options.keep_times): # Or every transition's, to read after the run
             self.remembered += [name for name in self.graph.transitions if name not in self.remembered]
-        for name in self.remembered:
+        events = sim.__dict__.get('_memory_events', {}) if needs else {}
+        self.remembered_events = {key:events[(mod, key)].spec() for mod,key in needs if mod == self.name and (mod, key) in events} # Other events whose memory something reads, e.g. sir.I.enter.ever: what the engine asks of each move (see ss.solvers.Agents.record())
+        for name in self.remembered + list(self.remembered_events):
             self.define_states(ss.FloatArr(f'last_{name}', label=f'Time index of the last {name}'), ss.FloatArr(f'count_{name}', default=0, label=f'Number of times: {name}'))
         super().init_pre(sim)
         if any(isinstance(a, ss.infection_log) for a in sim.analyzers.values()):
@@ -742,7 +782,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         return None
 
     def make_children(self, tr, parents, ti):
-        """ As agents, the children of the parents who went through a transition with births (`ss.birth(on=)`); returns their UIDs
+        """ As agents, the children of the parents who went through a transition with births (`ss.birth(when=)`); returns their UIDs
 
         Args:
             tr (Transition): the transition with births
@@ -929,7 +969,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         if self.engine is None:
             raise RuntimeError(f'"{self.name}" infects people once the sim is initialized (sim.init())')
         if self.sim.solver != 'abm':
-            raise ss.CapabilityError(f'disease.infect() infects agents, but "{self.name}" is run with solver="{self.sim.solver}"; use ss.Delivery(move=S >> I) for a compartmental run')
+            raise ss.CapabilityError(f'disease.infect() infects agents, but "{self.name}" is run with solver="{self.sim.solver}"; use ss.Event(S >> I) for a compartmental run')
         return self.engine.infect_now(ss.uids(uids), strain)
 
     def transmit(self, transition=None):
@@ -1406,7 +1446,7 @@ class AgentDisease(Disease):
 
         Each piece can be overridden on its own: the effective transmissibility and susceptibility (`transmissibility()`, `susceptibility()`),
         the betas (`route_betas()`), the transmission over each route (`transmit_route()`), and how the routes' infections are combined
-        (`finalize_infections()`); or this whole step, e.g. to add a route of its own (as `ssl.Cholera` adds the environment).
+        (`finalize_infections()`); or this whole step, e.g. to add a route of its own (such as an environment written as code).
 
         Returns:
             A tuple of the UIDs of the new cases, and of their sources and network IDs
@@ -1641,7 +1681,7 @@ class InfectionLog:
             class new_infections(ss.Analyzer):
                 def init_results(self):
                     super().init_results()
-                    self.define_results(ss.Result('known', label='Infections from a known source'))
+                    self.define_results(ss.Result('known', label='Infections from a known source', kind='flow'))
 
                 def step(self):
                     df = self.sim.diseases.sir.infection_log.to_df(ti=self.ti)
@@ -1733,7 +1773,7 @@ class SIR(Disease):
 
     Args:
         beta (float/`ss.per`/dict): the transmission rate (per contact, if there are networks, over each step of the contact, so `ss.probperday(p)` gives each contact a chance p in a day; a dict gives one per network, and `default=` for the networks it does not name)
-        init_prev (float): the fraction of people who start infected (or, above 1, a number of people)
+        init_prev (float): the fraction of people who start infected (for a number of people, give `init_n=` instead, e.g. `init_n=10`)
         dur_inf (float/`ss.Duration`/`ss.Dist`): the mean time that people are infected for (by default 6 years), as an exponential; give a distribution (e.g. `ss.lognormal(mean=ss.years(6))`) for another shape
         p_death (float): the probability of death from infection, at the end of the infection (by default 0)
         kwargs (dict): passed to `ss.Disease`, e.g. `name`
@@ -1767,7 +1807,7 @@ class SEIR(Disease):
 
     Args:
         beta (float/`ss.per`/dict): the transmission rate (per contact, if there are networks, over each step of the contact, so `ss.probperday(p)` gives each contact a chance p in a day; a dict gives one per network, and `default=` for the networks it does not name)
-        init_prev (float): the fraction of people who start infected, who start exposed, in `E` (or, above 1, a number of people); to start people infectious, give `init=dict(I=0.01)` or `init_n=dict(I=10)` instead
+        init_prev (float): the fraction of people who start infected, who start exposed, in `E` (for a number of people, give `init_n=` instead); to start people infectious, give `init=dict(I=0.01)` or `init_n=dict(I=10)` instead
         dur_exp (float/`ss.Duration`/`ss.Dist`): the mean time that people are exposed (latent) for (by default 0.5 years; a number is in the model's unit), as an exponential
         dur_inf (float/`ss.Duration`/`ss.Dist`): the mean time that people are infectious for (by default 6 years), as an exponential
         p_death (float): the probability of death from infection, at the end of the infection (by default 0)
@@ -1803,7 +1843,7 @@ class SIS(Disease):
 
     Args:
         beta (float/`ss.per`/dict): the transmission rate (per contact, if there are networks, over each step of the contact, so `ss.probperday(p)` gives each contact a chance p in a day; a dict gives one per network, and `default=` for the networks it does not name)
-        init_prev (float): the fraction of people who start infected (or, above 1, a number of people)
+        init_prev (float): the fraction of people who start infected (for a number of people, give `init_n=` instead, e.g. `init_n=10`)
         dur_inf (float/`ss.Duration`/`ss.Dist`): the mean time that people are infected for (by default 10 years), as an exponential unless a distribution is given
         kwargs (dict): passed to `ss.Disease`, e.g. `name`
         pars (dict): the same parameters, as a dict

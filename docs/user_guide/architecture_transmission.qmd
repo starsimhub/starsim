@@ -59,18 +59,18 @@ Each edge's random number is drawn by its source and target, from a stream named
 
 There are two ways for one module to change another, and both are first-class:
 
-- **`ss.modify`**, for the common case: while a condition holds, multiply (or add to, or set) a named quantity. `ss.modify(hiv.rel_trans, multiply=2.0, where=syphilis.active)` reads "for people with active syphilis, multiply HIV transmissibility by 2".
+- **`ss.modify`**, for the common case: while a condition holds, multiply (or add to, or set) a named quantity. `ss.modify(hiv.rel_trans, multiply=2.0, who=syphilis.active)` reads "for people with active syphilis, multiply HIV transmissibility by 2".
 - **Ordinary Python in a module's `step()`**, for everything else: several sources and targets, boolean flags, schedules, memory.
 
 A modifier never overwrites what it changes. Each modifiable quantity has a *base* value (what its module set) and an *effective* value (the base with every active modifier applied). Reading `sir.rel_sus[uids]` gives the base, assigning to it sets the base, and `sir.current_value('rel_sus', uids)` is what transmission will use (whether the disease is declared or written as code, which share the code that applies it: `ss.solvers.Transmission`). When a modifier switches off, the quantity is simply back at its base: there is nothing to save or restore, and two modules can't clobber each other. Several modifiers on one quantity combine by one fixed rule, whatever order they were declared in: **set, then multiply, then add**.
 
-Conditions (`where=`) use the sim's real attributes. Written before the sim exists, `ss.person.age > 65` is a lazy expression (an `ss.conditions.Cond`), evaluated each time it's needed. Nothing is analyzed in advance: a condition is tried on whatever the solver provides, agents or groups. `age > 65` works on groups if 65 is an age bin edge; for `age > 70` inside a bin, `auto` runs agents and an explicit `solver='ode'` stops and says why.
+Conditions (`who=`) use the sim's real attributes. Written before the sim exists, `ss.person.age > 65` is a lazy expression (an `ss.conditions.Cond`), evaluated each time it's needed. Nothing is analyzed in advance: a condition is tried on whatever the solver provides, agents or groups. `age > 65` works on groups if 65 is an age bin edge; for `age > 70` inside a bin, `auto` runs agents and an explicit `solver='ode'` stops and says why.
 
 Because modifiers are declared, Starsim can list them all, before anything runs. Products are modifiers too, so a vaccine shows up in the same list:
 
 ```{python}
-masks       = ss.modify(sir.rel_sus, multiply=0.6, where=ss.person.age > 65, start=ss.days(20))
-vaccination = ss.vaccinate(efficacy=0.85, who=ss.person.age < 15, coverage=0.7, at=[ss.days(30)])
+masks       = ss.modify(sir.rel_sus, multiply=0.6, who=ss.person.age > 65, when=ss.schedule(start=ss.days(20)))
+vaccination = ss.vaccinate(efficacy=0.85, who=ss.person.age < 15, when=[ss.days(30)], coverage=0.7)
 sim = ss.Sim(sir, interventions=[masks, vaccination], pars=dict(beta=0.5), stratify=dict(age=[0, 15, 65]), unit='day', stop=ss.days(100), verbose=0)
 sim.what_modifies(sir.rel_sus)
 ```
@@ -79,19 +79,19 @@ Code that writes another module's arrays directly is allowed, but isn't tracked.
 
 ## Interventions: products and delivery
 
-An intervention has two parts. *What* is a product (`ss.Vaccine`, `ss.Diagnostic`, `ss.Treatment`: nouns) or a change to a quantity (`ss.modify`). *Delivery* is who gets it, when, and how many (`ss.vaccinate`, `ss.screen`, `ss.treat`: verbs), given by keywords (`who=`, `on=`, `coverage=`, `capacity=`, `at=`, `every=`, `at_age=`), or by one function as `who=` when those depend on each other. Routine versus campaign delivery is a keyword, not a class. A delivery takes its product's keywords and makes the product itself (`ss.vaccinate(efficacy=0.85, ...)` makes an `ss.Vaccine`); a product is made on its own only when several deliveries give the same one.
+An intervention has two parts. *What* is a product (`ss.Vaccine`, `ss.Diagnostic`, `ss.Treatment`: nouns) or a change to a quantity (`ss.modify`). *Delivery* is who gets it, when, and how many (`ss.vaccinate`, `ss.screen`, `ss.treat`: verbs), given by keywords (`who=`, `when=`, `coverage=`, `capacity=`), with optional helpers for the less common cases (`ss.schedule()`, `ss.on(event, delay=...)`, `ss.at_age()`, `ss.capacity()`). Routine versus campaign delivery is a keyword, not a class. A delivery takes its product's keywords and makes the product itself (`ss.vaccinate(efficacy=0.85, ...)` makes an `ss.Vaccine`); a product is made on its own only when several deliveries give the same one.
 
 A cascade of care is a list of ordinary deliveries, each triggered by the outcome of another:
 
 ```python
-screening = ss.screen(sensitivity=0.8, specificity=0.95, coverage=0.1, every=ss.days(7))  # a rapid test
-confirm   = ss.screen(sensitivity=0.95, specificity=0.99, on=screening.positive, coverage=0.9) # a follow-up is a step of its own
-treatment = ss.treat(cure=0.95, on=confirm.positive, capacity=ss.perday(50))                # while stocks last
+screening = ss.screen(sensitivity=0.8, specificity=0.95, when=ss.days(7), coverage=0.1)  # a rapid test
+confirm   = ss.screen(sensitivity=0.95, specificity=0.99, when=screening.positive, coverage=0.9) # a follow-up is a step of its own
+treatment = ss.treat(cure=0.95, when=confirm.positive, capacity=ss.perday(50))                # while stocks last
 ```
 
 An outcome such as `screening.positive` is an *event*: the people it happened to this step. Events can be joined (`a | b`), and they remember: `screening.positive.ever`, `.n_times`, and `.since` work anywhere a condition does. Each step runs after the steps whose events trigger it, whatever order they are listed in, so a follow-up acts on the same step as its trigger. Every delivery has results of its own (`delivered`, `eligible`, `coverage`, ...).
 
-The same declarations run under every solver where they can. This cascade runs as an ODE, with the tests as flows thinned by sensitivity and specificity and capacity as a cap on the total flow. Some things need individuals: a test result that comes after a `delay=`, the joint of two events, `.since`, `trace=` (delivery to contacts), or a product whose effect is your own code. Under `auto` any of these makes the sim run as agents, and the reason it prints names the part.
+The same declarations run under every solver where they can. This cascade runs as an ODE, with the tests as flows thinned by sensitivity and specificity and capacity as a cap on the total flow. Some things need individuals: a delay (a test's `result_delay=`, or `when=ss.on(event, delay=...)`), the joint of two events, `.since`, `trace=` (delivery to contacts), or a product whose effect is your own code. Under `auto` any of these makes the sim run as agents, and the reason it prints names the part.
 
 A rule with memory ("reopen schools only after four weeks below the threshold") is a small intervention class whose `step()` keeps a flag, plus a modifier that reads it. A scenario is just a sim with its interventions; `ss.parallel({'Baseline': base, 'Masks': masks})` runs several as one `ss.MultiSim`, labeled by scenario.
 
@@ -107,7 +107,7 @@ A sim is one run. Many runs are an `ss.MultiSim`, whose results are the same `ss
 S, I, R = ss.states('S I R')
 small = ss.Disease(infection=S >> I @ 0.2 * I, recovery=I >> R @ ss.days(10), init_n=dict(I=3), name='sir')
 sim = ss.Sim(small, solver='gillespie', total_pop=1000, unit='day', stop=ss.days(120), verbose=0)
-msim = sim.run(n_runs=20)
+msim = ss.parallel(sim, n_runs=20)
 
 totals = msim.results.sir.infection.summarize() # The total infections of each run
 print('Total infections in each run:', totals)
@@ -119,7 +119,7 @@ Extinction and bimodality can't be seen in a median, which is why `msim.plot(lin
 ## Limits
 
 - Modifiers on one quantity combine by the one rule above. Protection from several strains a person holds needs a different rule (the strongest, or a capped sum), which is `ss.immunity`; anything else is `step()` code.
-- Functions in `where=` and `ss.modify` keep no memory apart from `hold=`; anything that must remember is a class.
+- Functions in `who=` and `ss.modify` keep no memory apart from `until=`; anything that must remember is a class.
 
 The code is in `starsim/networks.py` and `solvers/mixing.py` (routes), `connectors.py` and `internals/conditions.py` (effects), `interventions.py`, `products.py` and `solvers/deliveries.py` (interventions), and `results.py`. For the modeler's view, see the user guide on [contact networks](populations_networks.qmd), [population data and contact matrices](populations_data.qmd), [geography](populations_geography.qmd), [connectors](interventions_connectors.qmd), [products](interventions_products.qmd), [interventions](interventions_interventions.qmd), [results](building_results.qmd), and [scenarios and many runs](running_scenarios.qmd).
 

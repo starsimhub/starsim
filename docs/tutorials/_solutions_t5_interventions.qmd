@@ -30,7 +30,7 @@ settings = dict(networks=contacts, total_pop=100_000, start='2025-01-01', stop='
 ```{python}
 sims = {'No intervention': ss.Sim(measles, **settings)}
 for date in ['2025-02-01', '2025-03-01', '2025-05-01']:
-    campaign = ss.vaccinate(efficacy=0.93, where=measles.age < 15, coverage=0.8, at=date)
+    campaign = ss.vaccinate(efficacy=0.93, who=measles.age < 15, when=date, coverage=0.8)
     sims['Campaign on ' + date] = ss.Sim(measles, interventions=campaign, **settings)
 msim = ss.parallel(sims)
 msim.plot('measles.I')
@@ -42,8 +42,8 @@ A campaign on 1 February prevents about 90% of the outbreak; on 1 March, about t
 **2. The campaign and the response together.**
 
 ```{python}
-campaign = ss.vaccinate(efficacy=0.93, where=measles.age < 15, coverage=0.8, at='2025-03-01')
-response = ss.modify(measles.pars.beta, multiply=0.7, start='2025-03-01')
+campaign = ss.vaccinate(efficacy=0.93, who=measles.age < 15, when='2025-03-01', coverage=0.8)
+response = ss.modify(measles.pars.beta, multiply=0.7, when=ss.schedule(start='2025-03-01'))
 sims = {
     'No intervention': ss.Sim(measles, **settings),
     'Campaign':        ss.Sim(measles, interventions=campaign, **settings),
@@ -61,7 +61,7 @@ Together, they prevent more than either alone, but less than the sum of what eac
 
 ```{python}
 sim = ss.Sim(make_measles(init_n=2), solver='binomial', **settings)
-msim = sim.run(n_runs=50)
+msim = ss.parallel(sim, n_runs=50)
 totals = msim.results.measles.infection.summarize() # The total infections in each run
 print('Outbreak died out in', sum(totals < 100), 'of 50 runs; (1/R)^2 =', round((1/2.46)**2, 2))
 ```

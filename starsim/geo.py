@@ -1,7 +1,7 @@
 """
-Places and the movement between them: a geography (`ss.geo.geography`), and movement between its places (`ss.geo.Mobility`, from a matrix, a data file of moves, or a movement model: `ss.geo.gravity` or `ss.geo.radiation`)
+Places and the movement between them: a geography (`ss.geo.geography`), and movement between its places: a movement model (`ss.geo.gravity`, `ss.geo.radiation`), a matrix (`ss.geo.Mobility`), or a register of moves on given dates (`ss.geo.register`)
 
-These exist so that a model of more than one place can be built from named places and a standard movement model. Movement applies to a declared model stratified by place (`sir.stratify(patch=...)`); a geography can also be used by a network (`ssl.GeoNet`), for a disease of either kind.
+These exist so that a model of more than one place can be built from named places and a standard movement model. Movement applies to a model stratified by place (`sir.stratify(patch=...)`), whose networks then pair people within each place.
 
 Used with: agents and compartments; declared and coded modules
 """
@@ -11,7 +11,7 @@ import scipy.sparse as spsp
 import sciris as sc
 import starsim as ss
 
-__all__ = ['geography', 'gravity', 'radiation', 'Mobility']
+__all__ = ['geography', 'gravity', 'radiation', 'Mobility', 'register']
 
 shapefiles = ('.shp', '.geojson', '.gpkg') # Files of shapes, read with geopandas
 
@@ -46,7 +46,7 @@ class geography:
         districts = ss.geo.geography('districts.shp') # Your own shapes, with columns name and population
         S, I, R = ss.states(3)
         sir = ss.Disease(infection=S >> I @ 0.3*I, recovery=ss.Transition(I, R, dur=10), init_prev=0.01)
-        sir.stratify(patch=towns, mobility=ss.geo.gravity(scale=0.01))
+        sir.stratify(patch=ss.levels(towns, mobility=ss.geo.gravity(scale=0.01)))
         ```
     """
     def __init__(self, data=None, names=None, populations=None, x=None, y=None, lat=None, lon=None, distances=None, adjacency=None, level=1, year=None, places=None):
@@ -323,26 +323,30 @@ class gravity:
     that people spend away from home, split between the other places by gravity. `scale` has units
     of distance^distance_power / pop^(source_power+dest_power−1), so no default fits both three towns
     and a country; give it only if it has been calibrated. With neither, people spend 10% of their time away.
+    `kind=` says how people move (see `ss.geo.Mobility`).
 
     Args:
-        away (float): for commuting and visiting, the share of their time people spend away from home (default 0.1, unless `scale` is given)
+        away (float): for commuting and visiting, the share of their time people spend away from home (for 'force', the share of each place's force of infection that goes to the others; default 0.1, unless `scale` is given)
         scale (float): the overall amount of movement, instead of `away`; for migration, the scale of the rates (required)
+        kind (str): 'commute' (the default), 'visit', 'migrate', or 'force' (see `ss.geo.Mobility`)
         source_power (float): the exponent of the population of the place people come from
         dest_power (float): the exponent of the population of the place they go to
         distance_power (float): the exponent of the distance between the two
 
     Examples:
         ```python
-        sir.stratify(patch=towns, mobility=ss.geo.gravity(away=0.1, source_power=1.0, dest_power=1.0, distance_power=2.0))
-        sir.stratify(patch=towns, mobility=ss.geo.gravity(scale=2e-4)) # A calibrated amount
+        sir.stratify(patch=ss.levels(towns, mobility=ss.geo.gravity(away=0.1, source_power=1.0, dest_power=1.0, distance_power=2.0)))
+        sir.stratify(patch=ss.levels(towns, mobility=ss.geo.gravity(scale=2e-4))) # A calibrated amount
+        sir.stratify(patch=ss.levels(towns, mobility=ss.geo.gravity(away=0.1, kind='visit'))) # Travelers do not infect the people they visit
         ```
     """
-    def __init__(self, away=None, scale=None, source_power=1.0, dest_power=1.0, distance_power=2.0):
+    def __init__(self, away=None, scale=None, kind=None, source_power=1.0, dest_power=1.0, distance_power=2.0):
         if away is not None and scale is not None:
             errormsg = 'ss.geo.gravity() takes away= (the share of time spent away) or scale= (a calibrated amount of movement), not both'
             raise ValueError(errormsg)
         self.away = away
         self.scale = scale
+        self.kind = kind
         self.source_power = source_power
         self.dest_power = dest_power
         self.distance_power = distance_power
@@ -350,7 +354,8 @@ class gravity:
 
     def __repr__(self):
         amount = f'away={self.away}, ' if self.away is not None else f'scale={self.scale}, ' if self.scale is not None else ''
-        return f'gravity({amount}source_power={self.source_power}, dest_power={self.dest_power}, distance_power={self.distance_power})'
+        kind = f'kind={self.kind!r}, ' if self.kind is not None else ''
+        return f'gravity({amount}{kind}source_power={self.source_power}, dest_power={self.dest_power}, distance_power={self.distance_power})'
 
     def matrix(self, strat):
         """ The movement between each pair of levels of a stratification, from its geography
@@ -379,29 +384,31 @@ class radiation:
     It is used as `ss.geo.gravity` is, with the populations and distances of the geography of the dimension it is used on
     (`ss.geo.geography`): the model gives where people go, and `away=` how much they travel. With neither `away` nor `scale`,
     people spend 10% of their time away. The shares are normalized to sum to 1 for each place, so for migration `scale` is the
-    rate at which each person moves.
+    rate at which each person moves. `kind=` says how people move (see `ss.geo.Mobility`).
 
     Args:
-        away (float): for commuting and visiting, the share of their time people spend away from home (default 0.1, unless `scale` is given)
+        away (float): for commuting and visiting, the share of their time people spend away from home (for 'force', the share of each place's force of infection that goes to the others; default 0.1, unless `scale` is given)
         scale (float): the overall amount of movement, instead of `away`: the share of their time away, or for migration the rate of moving (required)
+        kind (str): 'commute' (the default), 'visit', 'migrate', or 'force' (see `ss.geo.Mobility`)
 
     Examples:
         ```python
-        sir.stratify(patch=towns, mobility=ss.geo.radiation(away=0.1))
-        sir.stratify(patch=towns, mobility=ss.geo.Mobility(ss.geo.radiation(scale=2e-5), kind='migrate')) # 2e-5 moves per person per unit of time
+        sir.stratify(patch=ss.levels(towns, mobility=ss.geo.radiation(away=0.1)))
+        sir.stratify(patch=ss.levels(towns, mobility=ss.geo.radiation(scale=2e-5, kind='migrate'))) # 2e-5 moves per person per unit of time
         ```
     """
-    def __init__(self, away=None, scale=None):
+    def __init__(self, away=None, scale=None, kind=None):
         if away is not None and scale is not None:
             errormsg = 'ss.geo.radiation() takes away= (the share of time spent away) or scale= (the amount of movement), not both'
             raise ValueError(errormsg)
         self.away = away
         self.scale = scale
+        self.kind = kind
         return
 
     def __repr__(self):
-        amount = f'away={self.away}' if self.away is not None else f'scale={self.scale}' if self.scale is not None else ''
-        return f'radiation({amount})'
+        args = [f'away={self.away}' if self.away is not None else f'scale={self.scale}' if self.scale is not None else '', f'kind={self.kind!r}' if self.kind is not None else '']
+        return f'radiation({", ".join(a for a in args if a)})'
 
     def matrix(self, strat):
         """ The movement between each pair of levels of a stratification, from its geography
@@ -430,7 +437,7 @@ class radiation:
 
 class Mobility:
     """
-    Movement between the levels of a spatial stratification
+    Movement between the levels of a spatial stratification, given as a matrix
 
     People either commute (they keep their home, and spend a share of their time in
     other places, where they are exposed and expose others), visit (the same, but
@@ -440,54 +447,60 @@ class Mobility:
     from place i to place k, each place keeps `1 − Σ_k M[i,k]` of its own force of infection
     and receives `M[k,i]` of each other place's.
 
+    The movement models (`ss.geo.gravity()`, `ss.geo.radiation()`) take the same `kind=` and `away=`
+    themselves, and a register of moves on given dates is `ss.geo.register()`.
+
     Other forms are written with the general pieces. Commuters who come back at a finite
     rate (Keeling and Rohani's model 7.3) are a second spatial dimension of where people
     are now, with transfers between its levels at rates by home.
 
-    A movement register (`data=`) is a table of events on given dates, with columns
-    `date`, `from`, `to`, `n`, and optionally `states`. Each row moves `n` people from
-    one place to another; a row with no `from` adds them to `to` (births, purchases),
-    and one with no `to` removes them from `from` (deaths, sales out of the model).
-    The people who move or leave are chosen at random from those in `states` (by
-    default, everyone); people who are added go into `states` (by default, the first
-    state). Each event happens at the start of the first step that begins on or after
-    its date, before that step's transitions, and the events of a step happen in the
-    order of the table.
-
     Note: CRN safe as agents.
 
     Args:
-        model (gravity/radiation): a movement model (instead of `matrix`)
         matrix (array): the movement from each place (rows) to each place: for commuting the share of time spent there, and for migration the rate of moving there (a SciPy sparse array for many places, most pairs of which share no one)
-        data (str/df): a movement register: a file name or a dataframe (instead of `model` or `matrix`)
-        kind (str): 'commute', 'visit', 'migrate', or 'force'; by default 'migrate' for a register and 'commute' otherwise
+        kind (str): 'commute', 'visit', 'migrate', or 'force' (default 'commute')
         away (float): for commuting and visiting, the share of their time people spend away from home (for 'force', the share of each place's force of infection that goes to the others); the movement is rescaled to give every place that share (to keep the differences between places, scale the matrix by hand and give no `away=`)
 
     Examples:
         ```python
-        sir.stratify(patch=towns, mobility=ss.geo.Mobility(ss.geo.gravity(), kind='commute', away=0.4))
-        sir.stratify(patch=['a', 'b'], mobility=ss.geo.Mobility(matrix=[[0, 0.1], [0.2, 0]]))
-        sir.stratify(herd=herds, mobility=ss.geo.Mobility(data='movements.csv'))
+        sir.stratify(patch=ss.levels(['a', 'b'], mobility=ss.geo.Mobility([[0, 0.1], [0.2, 0]])))
 
         # LASER's coupling, with the force of infection moving: M[i,k] is the share of i's force that goes to k
-        sir.stratify(patch=places, mobility=ss.geo.Mobility(matrix=M, kind='force'))
+        sir.stratify(patch=ss.levels(places, mobility=ss.geo.Mobility(M, kind='force')))
         ```
     """
-    def __init__(self, model=None, matrix=None, kind=None, away=None, data=None):
-        if sum(arg is not None for arg in [model, matrix, data]) != 1:
-            errormsg = 'ss.geo.Mobility() takes one of a movement model (e.g. ss.geo.gravity()), matrix=, or data='
+    def __init__(self, matrix=None, kind=None, away=None, **kwargs):
+        if isinstance(matrix, (gravity, radiation)) or 'model' in kwargs:
+            model = kwargs.get('model', matrix)
+            errormsg = f'ss.geo.Mobility() takes a matrix; a movement model is given on its own, with its kind and amount, e.g. mobility=ss.geo.{type(model).__name__}(kind={kind or "commute"!r}{f", away={away}" if away is not None else ""})'
+            raise TypeError(errormsg)
+        if 'data' in kwargs:
+            errormsg = "a movement register is ss.geo.register(data), e.g. mobility=ss.geo.register('moves.csv')"
+            raise TypeError(errormsg)
+        if kwargs:
+            errormsg = f'ss.geo.Mobility() takes matrix=, kind=, and away=, not {sc.strjoin(kwargs)}'
+            raise TypeError(errormsg)
+        if matrix is None:
+            errormsg = 'ss.geo.Mobility() takes a matrix of the movement between places; for a movement model, give it on its own (e.g. mobility=ss.geo.gravity()), and for a register of moves, ss.geo.register()'
             raise ValueError(errormsg)
-        if kind is None:
-            kind = 'migrate' if data is not None else 'commute'
+        self.setup(kind=kind, away=away, given=matrix)
+        return
+
+    @classmethod
+    def from_model(cls, model):
+        """ The movement of a movement model (`ss.geo.gravity()`, `ss.geo.radiation()`), with its kind and amount """
+        out = cls.__new__(cls)
+        out.setup(kind=model.kind, away=model.away, model=model)
+        return out
+
+    def setup(self, kind=None, away=None, model=None, given=None, data=None):
+        """ Check the kind and amount, and set them """
+        kind = kind or ('migrate' if data is not None else 'commute')
         if kind not in ['commute', 'visit', 'migrate', 'force']:
-            errormsg = f'The kind of ss.geo.Mobility() is "commute", "visit", "migrate", or "force", not "{kind}"'
-            raise ValueError(errormsg)
-        if data is not None and kind != 'migrate':
-            errormsg = f'A movement register moves people from one place to another, so its kind is "migrate", not "{kind}"'
+            errormsg = f'The kind of movement is "commute", "visit", "migrate", or "force", not "{kind}"'
             raise ValueError(errormsg)
         self.guessed = None
-        if isinstance(model, (gravity, radiation)): # The amount of movement: away= here, or on the movement model, or its scale
-            away = sc.ifelse(away, model.away)
+        if model is not None: # The amount of movement: away=, or the model's scale
             if kind == 'migrate' and model.scale is None:
                 errormsg = f'ss.geo.{type(model).__name__}() for migration needs scale=, the scale of the rates of moving; the share of time away (away=) is for commuting and visiting'
                 raise ValueError(errormsg)
@@ -495,7 +508,7 @@ class Mobility:
                 away = 0.1
                 self.guessed = '10% of time away, since neither away= nor scale= was given'
         self.model = model
-        self.given = None if matrix is None else spsp.csr_array(matrix, dtype=float) if spsp.issparse(matrix) else np.array(matrix, dtype=float)
+        self.given = None if given is None else spsp.csr_array(given, dtype=float) if spsp.issparse(given) else np.array(given, dtype=float)
         self.data = None if data is None else self.load(data)
         self.kind = kind
         self.away = away
@@ -666,3 +679,32 @@ class Mobility:
         out.eliminate_zeros()
         out.sort_indices()
         return out
+
+
+class register(Mobility):
+    """
+    A movement register: a table of moves between places on given dates, e.g. livestock sales between farms
+
+    It has columns `date`, `from`, `to`, `n`, and optionally `states` (and `to_states`). Each row moves `n` people from
+    one place to another; a row with no `from` adds them to `to` (births, purchases),
+    and one with no `to` removes them from `from` (deaths, sales out of the model).
+    The people who move or leave are chosen at random from those in `states` (by
+    default, everyone); people who are added go into `states` (by default, the first
+    state). With `to_states`, they also move from each of `states` to the matching one of `to_states`.
+    Each event happens at the start of the first step that begins on or after
+    its date, before that step's transitions, and the events of a step happen in the
+    order of the table.
+
+    Note: CRN safe as agents.
+
+    Args:
+        data (str/df): the register: a file name or a dataframe
+
+    Examples:
+        ```python
+        sir.stratify(herd=ss.levels(herds, mobility=ss.geo.register('movements.csv')))
+        ```
+    """
+    def __init__(self, data):
+        self.setup(kind='migrate', data=data)
+        return

@@ -261,7 +261,7 @@ class CountState:
     def no_agents(self, what):
         """ A read of agents, which a compartmental run does not have (e.g. a module that reads each person's state, run beside the compartments) """
         raise ss.CapabilityError(f'{self.engine.mod.name}.{self.name}{what} was asked for, but a compartmental run has the number in each state ({self.engine.mod.name}.{self.name}.n), not agents.\n'
-                                 f'     Run with solver="abm", e.g. ss.Sim(..., solver="abm") or sim.run(solver="abm"); a module written as code that reads agents can say so with compartmental = False, so that solver="auto" runs them.')
+                                 f'     Run with solver="abm", e.g. ss.Sim(..., solver="abm") or sim.new(solver="abm").run(); a module written as code that reads agents can say so with compartmental = False, so that solver="auto" runs them.')
 
     @property
     def uids(self):
@@ -580,9 +580,9 @@ class Engine(Telling, Effects):
         """ The value of a clock (`X.time_in`), as an expression reads it """
         raise self.undefined('clock')
 
-    def coverage(self, expr):
-        """ The coverage of a product, as an expression reads it """
-        raise self.undefined('coverage')
+    def held_share(self, expr):
+        """ The share holding a product, as an expression reads it """
+        raise self.undefined('held_share')
 
     def mother(self, expr):
         """ The value of an expression for each person's mother (`ss.mother()`) """
@@ -672,7 +672,7 @@ class Engine(Telling, Effects):
                 product = np.prod([sim.groups.strats[d].fractions[coords[:, d]] for d in ds], axis=0)
                 split = split*np.divide(grid[tuple(coords[:, d] for d in ds)], product, out=np.zeros(sim.groups.n_groups), where=product>0)
             self.applies[state.name] = np.array(flags, dtype=bool)
-            self.state_split[state.name] = sim.groups.fold(split) # People in a group with no level of a dimension (outside its where=) are counted at its first level
+            self.state_split[state.name] = sim.groups.fold(split) # People in a group with no level of a dimension (outside its who=) are counted at its first level
             self.inflow_splits[state.name] = sim.groups.fold(inflow)
             self.inflow_factors[state.name] = factors
             self.inflow_local[state.name] = sim.groups.fold(local)
@@ -808,7 +808,7 @@ class Engine(Telling, Effects):
     def inflow_split(self, tr):
         """ Where an inflow arrives: people are born into the youngest group, and a count into the groups of its own dimensions """
         name = tr.dest[0].name
-        if tr.rate is None: # Driven by a flow (ss.birth(on=)), whose children are placed by their parents' groups (see Compartmental.birth_map())
+        if tr.rate is None: # Driven by a flow (ss.birth(when=)), whose children are placed by their parents' groups (see Compartmental.birth_map())
             return self.inflow_splits[name]
         dims = self.inflow_dims(tr)
         factors = self.inflow_factors[name]
@@ -1000,7 +1000,7 @@ class Engine(Telling, Effects):
 
     def where_mults(self, branches, state, mults, uids=None):
         """
-        The branches' multipliers with their where=: a branch is closed to the people (or groups) it does not hold for, so the
+        The branches' multipliers with their who=: a branch is closed to the people (or groups) it does not hold for, so the
         others share the rest; but if every branch is closed to someone, they are split as before and wait until one opens
         """
         ws = [self.where_share(tr, state, uids) if tr is not None and getattr(tr, 'where', None) is not None else None for tr in branches]
@@ -1016,7 +1016,7 @@ class Engine(Telling, Effects):
         return out
 
     def where_share(self, tr, state, uids=None):
-        """ For a branch with where=: 1 for the people it is open to and 0 for the others (agents: for `uids`; compartments: for each group of `state`, if the condition is on states and strata), or None """
+        """ For a branch with who=: 1 for the people it is open to and 0 for the others (agents: for `uids`; compartments: for each group of `state`, if the condition is on states and strata), or None """
         sel = self.selector
         if sel.abm:
             mask = np.asarray(sel.select(tr.where))
@@ -1027,7 +1027,7 @@ class Engine(Telling, Effects):
         return np.clip(frac[sel.states.index(getattr(state, 'name', state))], 0, 1)
 
     def branch_mult_of(self, name, uids=None):
-        """ As `branch_mult()`, by name: a transition, or one destination of a transition with several (`'progression.C'`); with the adjust= of the stratifications on a branch """
+        """ As `branch_mult()`, by name: a transition, or one destination of a transition with several (`'progression.C'`); with the multipliers by level of the stratifications (a strain's) on a branch """
         adjust = self.branch_adjust.get(name)
         if not self.sim.modifiers.get((self.mod.name, 'branch', name)):
             if adjust is None:
@@ -1108,7 +1108,7 @@ class Engine(Telling, Effects):
         return out
 
     def mult_raw(self, kind, name=None, state=None):
-        """ The multiplier on a quantity that is not a parameter (`rel_sus`, `rel_trans`, or a transition's rate) from its modifiers (once a step), and from the adjust= of the stratifications """
+        """ The multiplier on a quantity that is not a parameter (`rel_sus`, `rel_trans`, or a transition's rate) from its modifiers (once a step), and from the multipliers by level of the stratifications (a strain's) """
         out = 1.0
         if self.sim.modifiers.get((self.mod.name, kind, name)):
             key = (kind, name, state.name if state is not None else None)
@@ -1121,7 +1121,7 @@ class Engine(Telling, Effects):
         return out
 
     def adjusted_rel(self, kind, state=None):
-        """ The multiplier on rel_trans or rel_sus for each group in a state, from the adjust= of the stratifications: see the subclasses """
+        """ The multiplier on rel_trans or rel_sus for each group in a state, from the multipliers by level of the stratifications (a strain's): see the subclasses """
         out = 1.0
         for d,vals in self.rel_adjust[kind]:
             if state is None or self.applies[state.name][d]:
@@ -1167,7 +1167,7 @@ class Engine(Telling, Effects):
         return
 
     def init_adjust(self):
-        """ The multiplier on each transition in each group, from the adjust= of every stratification """
+        """ The multiplier on each transition in each group, from the multipliers by level of every stratification (a strain's) """
         sim = self.sim
         self.check_counted_strains()
         self.adjust = sc.obj({name:None for name in self.graph.transitions})
@@ -1200,7 +1200,7 @@ class Engine(Telling, Effects):
                 else:
                     tr = self.graph.transitions[name]
                     if tr.trigger is not None:
-                        raise sc.KeyNotFoundError(f'the adjustment of "{name}" by "{strat.name}" cannot apply, since "{name}" is triggered by {tr.trigger} and has no rate to scale; use where= on the transition, or a p= branch.')
+                        raise sc.KeyNotFoundError(f'the adjustment of "{name}" by "{strat.name}" cannot apply, since "{name}" is triggered by {tr.trigger} and has no rate to scale; use who= on the transition, or a p= branch.')
                     if tr.source and not any(self.applies[src.name][d] for src in tr.source) and not (d == self.strain and tr.contact):
                         raise ValueError(f'the adjustment of "{name}" by "{strat.name}" cannot apply, since the people it moves ({sc.strjoin(src.name for src in tr.source)}) have no level of "{strat.name}". '
                                                    f'To make where they arrive depend on it, give "{strat.name}" a split instead.')
@@ -1229,8 +1229,35 @@ class Engine(Telling, Effects):
                                 dim = sim.groups.strats[d].name
                                 raise sc.KeyNotFoundError(f'"{name}" uses a value by level of "{dim}" ({leaf.raw}), but {sc.strjoin(s.name for s in ends)} {"has" if len(ends) == 1 else "have"} no level of "{dim}", so there is no level to take it from.\n'
                                                           f'     Stratify {sc.strjoin(s.name for s in ends)} by "{dim}" too, or give the value without ss.by(); for a count with each person weighted by their level (e.g. how much each infectious person is bitten), weight the states inside the count: (ss.by({dim}=...)*I).n.')
+        self.check_modifier_levels()
         self.init_strain_weights()
         self.note_function_reads()
+        return
+
+    def check_modifier_levels(self):
+        """ A modifier whose amount is a value by level (`ss.modify(sir.recovery, multiply=ss.by(severity=[1, 2]))`) of a dimension that the people it is for have no level of: there is no level to take, so it is an error, as for a value by level in a rate """
+        sim = self.sim
+        for (modname, kind, name),mods in sim.modifiers.items():
+            if modname != self.mod.name or kind not in ['transition', 'branch', 'rel_sus', 'rel_trans']:
+                continue
+            if kind == 'rel_sus':
+                states = [src for tr in self.graph.acquisitions for src in tr.source]
+            elif kind == 'rel_trans':
+                states = list(self.graph.infectious)
+            else:
+                tr = self.graph.transitions.get(name) or (self.graph.destination(name) if name else None)
+                states = (tr.source or []) if tr is not None else []
+            states = [state for state in states if state.name in self.applies]
+            for m in mods:
+                amount = getattr(m, 'amount', None)
+                for leaf in (amount.leaves if isinstance(amount, ss.expressions.Expr) else [amount]):
+                    raw = getattr(leaf, 'raw', leaf)
+                    if not isinstance(raw, ss.by) or raw.on_people(sim):
+                        continue
+                    for d in raw.check(sim)[0]:
+                        if states and d != self.strain and not any(self.applies[state.name][d] for state in states):
+                            dim = sim.groups.strats[d].name
+                            raise ValueError(f'the modifier "{m.name}" of {modname}.{name or kind} is a value by level of "{dim}" ({raw}), but the people it is for ({sc.strjoin(state.name for state in states)}) have no level of "{dim}", so there is no level to take it from')
         return
 
     def note_function_reads(self):
@@ -1431,10 +1458,10 @@ class Engine(Telling, Effects):
         raise NotImplementedError
 
     def product_of(self, expr):
-        """ The sim's copy of the product of a coverage (`itn.coverage`, see `ss.expressions.Coverage`) """
+        """ The sim's copy of the product of a share holding it (`itn.held_share`, see `ss.expressions.HeldShare`) """
         product = next((p for p in self.sim.products() if p.name == expr.product.name), None)
         if product is None or not product.holds:
-            errormsg = f'{expr} is the coverage of "{expr.product.name}", which is not a product that people hold delivered in the sim; deliver it, e.g. ss.vaccinate({expr.product.name}, ...)'
+            errormsg = f'{expr} is the share holding "{expr.product.name}", which is not a product that people hold delivered in the sim; deliver it, e.g. ss.vaccinate({expr.product.name}, ...)'
             raise ValueError(errormsg)
         return product
 
@@ -1527,8 +1554,8 @@ class Engine(Telling, Effects):
             if m.op != 'set':
                 continue
             if m.where is not None or m.holding:
-                raise ss.CapabilityError(f'the modifier "{m.name}" sets {path}, the dwell time of "{name}", with where= or hold=, which is not supported yet for a dwell time that is a distribution; set it for everyone, or use multiply= with where=.')
-            new = m.amount if isinstance(m.amount, ss.Dist) else ss.expon(scale=m.amount) if isinstance(m.amount, ss.TimePar) or sc.isnumber(m.amount) else None
+                raise ss.CapabilityError(f'the modifier "{m.name}" sets {path}, the dwell time of "{name}", with who= or until=, which is not supported yet for a dwell time that is a distribution; set it for everyone, or use multiply= with who=.')
+            new = m.amount if isinstance(m.amount, ss.Dist) else ss.expon(mean=m.amount) if isinstance(m.amount, ss.TimePar) or sc.isnumber(m.amount) else None
             if new is None or ss.transitions.varying_pars(new):
                 raise ss.CapabilityError(f'the modifier "{m.name}" sets {path}, the dwell time of "{name}", to {m.amount}; a dwell time that is a distribution can be set to another distribution with fixed parameters, or to a duration (the mean of an exponential).')
             mean, std = ss.transitions.dwell_stats(new, to_unit)
@@ -1562,7 +1589,7 @@ class Engine(Telling, Effects):
             if sim.pars.approximations == 'error':
                 raise ss.CapabilityError(f'{msg}, which approximations="error" does not allow.\n     Run with solver="ode", or allow the approximation; a shorter step follows the values more closely.')
             ss.note(f'{msg}; a shorter step follows them more closely', sim=sim, verbose=0 if sim.pars.approximations == 'allow' else None)
-        euler = sim.solver == 'ode' and sim.integrator == 'euler' and sim.pars.substeps is not None # Euler with steps of a given size; otherwise the ODE takes enough substeps
+        euler = sim.solver == 'ode' and sim.solver.integrator == 'euler' and sim.solver.substeps is not None # Euler with steps of a given size; otherwise the ODE takes enough substeps
         unit = sim._unit_name
         inflows = [tr.name for tr in self.graph.inflows] # Their rate is a number of people per unit time, so nobody leaves
         if sim.solver not in ['abm', 'binomial'] and not euler: # The solver is right whatever the step, but a bare number for a rate with a mean dwell shorter than a step is usually meant as a duration (rate=10)
@@ -1572,9 +1599,9 @@ class Engine(Telling, Effects):
                     if np.ndim(mean) == 0 and 0 < mean < self.dt:
                         ss.note(f'{name} has a mean dwell of {mean:.2g} {unit}{"s" if mean != 1 else ""}, shorter than the step; a duration is written dur=, or ss.days(10)', sim=sim)
             return
-        if sim.solver == 'binomial': # It takes enough substeps (see ss.solvers.Compartmental.substeps()), or those it was given (substeps=1 for a model written in discrete time)
+        if sim.solver == 'binomial': # It takes enough substeps (see ss.solvers.Compartmental.substeps()), or those it was given (ss.binomial(substeps=1) for a model written in discrete time)
             return
-        dt = self.dt/(sim.pars.substeps if euler else 1)
+        dt = self.dt/(sim.solver.substeps if euler else 1)
         step = 'step' if dt == self.dt else 'substep'
         plural = lambda n: f'{n:.2g} {unit}{"s" if n != 1 else ""}'
         fast = [] # What is fast compared with the step, as (rate × step, its name, what it is)
@@ -1612,7 +1639,7 @@ class Engine(Telling, Effects):
         if fast:
             x, _, what = fast[0]
             others = f' (and {sc.strjoin(f[1] for f in fast[1:])} {"is" if len(fast) == 2 else "are"} fast too)' if len(fast) > 1 else ''
-            fixes = 'a shorter step (dt=) or more substeps=' if euler else f'a shorter step (e.g. dt=ss.{unit}s({dt/4:.2g}))'
+            fixes = 'a shorter step (dt=) or more substeps (ss.ode(substeps=))' if euler else f'a shorter step (e.g. dt=ss.{unit}s({dt/4:.2g}))'
             msg = f'consider {fixes}: each {step} is {plural(dt)}, and {what}{others}'
             if euler:
                 msg += ' (Euler scales outflows that would take more than everyone down together)' if x > 1 else ''
@@ -1720,7 +1747,7 @@ class Engine(Telling, Effects):
                         cells = sorted({'(' + ', '.join(f'{strats[d].name}={strats[d].labels[ix[g]]}' for d,ix in zip(ds, index) if ix[g] < strats[d].n) + ')' for g in np.flatnonzero(lost)})
                         msg = f'init= of "{state.name}" in "{self.mod.name}" is given at {sc.strjoin(cells[:3])}{" and more" if len(cells) > 3 else ""}, where the split puts nobody'
                         if not np.any((vals > 0) & (size > 0)):
-                            raise ValueError(f'{msg}, so nobody would start in {state.name}. Give a fractions= that puts people there, or init= at levels that have people.')
+                            raise ValueError(f'{msg}, so nobody would start in {state.name}. Give shares of the levels that put people there, or init= at levels that have people.')
                         ss.note(f'{msg}; nobody starts in {state.name} there', sim=sim)
                 else:
                     share = np.divide(self.state_split[state.name], split, out=np.zeros(sim.groups.n_groups), where=split>0) # Its split over the other dimensions
@@ -1740,7 +1767,7 @@ class Engine(Telling, Effects):
         if isinstance(init_prev, ss.expressions.par): # A parameter (e.g. sir.pars.init_prev), whose value can be a value for each level (worked out for each group below, not for each agent)
             init_prev = init_prev.raw if isinstance(init_prev.raw, (ss.Dist, ss.by)) else self.value(init_prev)
         if isinstance(init_prev, ss.Dist):
-            raise TypeError(f'init_prev of "{self.mod.name}" is {init_prev!r}: for a declared disease, give a share, a number of people above 1, or a function of the sim')
+            raise TypeError(f'init_prev of "{self.mod.name}" is {init_prev!r}: for a declared disease, give a share, or a function of the sim; or init_n= for a number of people')
         if init_prev is not None and self.seed_dist() is not None: # Drawn for each agent instead: see Agents.init_post()
             init_prev = None
         if isinstance(init_prev, ss.by): # A share for each level of some dimensions (a property of each person that is not one raises here, unless run as agents: see seed_dist())
@@ -1748,10 +1775,14 @@ class Engine(Telling, Effects):
         elif callable(init_prev): # A function of the sim, giving a share (or one for each group)
             init_prev = self.call(init_prev)
         if init_prev is not None and np.any(init_prev):
-            if np.ndim(init_prev) and np.any(np.asarray(init_prev) > 1):
-                raise ValueError(f'init_prev of "{self.mod.name}" gives a share of more than 1 for some groups ({np.max(init_prev):n}); a value for each group is a share of the people in it')
-            elif np.ndim(init_prev) == 0 and init_prev > 1: # More than 1 is a number of people, and up to 1 a share (1.0 is everyone)
+            if graph.seed_n: # A number of people (init_n=10), as a share of everyone
+                if np.ndim(init_prev):
+                    raise ValueError(f'init_n= of "{self.mod.name}" is one number of people, seeded through the transmission; for the number in each state, give init_n=dict(I=...)')
                 init_prev = init_prev/self.total_pop
+            elif np.ndim(init_prev) and np.any(np.asarray(init_prev) > 1):
+                raise ValueError(f'init_prev of "{self.mod.name}" gives a share of more than 1 for some groups ({np.max(init_prev):n}); a value for each group is a share of the people in it')
+            elif np.ndim(init_prev) == 0 and init_prev > 1: # A share (1.0 is everyone), so more than 1 is a mistake
+                raise ValueError(f'init_prev of "{self.mod.name}" is a share of people (1.0 is everyone), not {init_prev:n}; for a number of people, use init_n={init_prev:n}')
             trs = self.seed_transmissions()
             if not trs:
                 errormsg = f'"{self.mod.name}" has no transmission or acquisition to seed init_prev through; use init= on a state instead'
@@ -1777,7 +1808,7 @@ class Engine(Telling, Effects):
                 groups, g = self.sim.groups, int(np.argmax(total))
                 where = ', '.join(f'{strat.name}={strat.labels[lev]}' for strat,lev in zip(groups.strats, groups.group_levels[g]) if lev >= 0)
                 room = self.total_pop*groups.group_split[g]
-                errormsg = f'init_n= of "{self.mod.name}" puts {total[g]*room:,.6g} people at {where}, but the split of the stratification puts {room:,.6g} there (of total_pop={self.total_pop:,.6g}); give the stratification a split= that agrees with init_n='
+                errormsg = f'init_n= of "{self.mod.name}" puts {total[g]*room:,.6g} people at {where}, but the split of the stratification puts {room:,.6g} there (of total_pop={self.total_pop:,.6g}); give the stratification shares that agree with init_n= (its levels as a dict, e.g. age={{0: 0.3, 15: 0.7}})'
             else:
                 errormsg = f'The initial fractions of "{self.mod.name}" sum to {np.max(total):n}, which is more than 1: {dict(fracs)}. If some of these states are not people (e.g. mosquitoes), declare them with ss.State(people=False), whose init= is a count'
             raise ValueError(errormsg)
@@ -2054,15 +2085,15 @@ class Engine(Telling, Effects):
                 info.kernel = kernel
                 info.pending = np.zeros((len(kernel) + 1, self.sim.groups.n_groups)) # The events still to be reported at each of the next steps (in turn, as a ring), by group, so an outcome can be selected by stratum
                 info.p_leave = info.stay = None
-                if isinstance(oc.stay, ss.Dist): # The share who stay each number of steps (at least one)
-                    rvs = self.sample(oc.stay, 20_000)
+                if isinstance(oc.dur, ss.Dist): # The share who stay each number of steps (at least one)
+                    rvs = self.sample(oc.dur, 20_000)
                     info.stay = np.bincount(np.maximum(np.round(rvs/dt), 1).astype(int))/len(rvs)
                     info.leaving = np.zeros((len(info.stay) + 1, self.sim.groups.n_groups)) # Likewise, those leaving
-                elif oc.stay is not None: # An exponential stay
-                    info.p_leave = -np.expm1(-dt/self.convert(oc.stay))
+                elif oc.dur is not None: # An exponential stay
+                    info.p_leave = -np.expm1(-dt/self.convert(oc.dur))
                 self.outcomes[name] = info
                 results += ss.Result(name, dtype=float, scale=abm, label=oc.label or name, kind='flow')
-                if oc.stay is not None:
+                if oc.dur is not None:
                     results += ss.Result(f'n_{name}', dtype=float, scale=abm, label=f'Number in {oc.label or name}', kind='stock')
                 del todo[name]
                 progress = True

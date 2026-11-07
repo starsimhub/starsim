@@ -218,7 +218,7 @@ class Moving:
             frm = np.concatenate([np.full(len(u), index.get(s.name, -1)) for s,u in zip(srcs, uidlist)]) # The state each came from
             if tr._outflow:
                 self.fire(tr, uids, frm, -1)
-                self.record(tr, uids, frm, -1) # An event, e.g. for the children of ss.birth(on=) of a death at delivery
+                self.record(tr, uids, frm, -1) # An event, e.g. for the children of ss.birth(when=) of a death at delivery
                 if tr.migration:
                     self.sim.people.request_removal(uids)
                 else:
@@ -401,7 +401,7 @@ class Moving:
         return engine.event_uids(**spec, batches=fresh) if fresh else ss.uids() # Each once, in order (event_uids() gives them so)
 
     def step_per(self, ti):
-        """ Births driven by a flow (`ss.birth(on=)`): children for the people who went through the transition since this last looked, made by the module that owns the transition; then whatever moves at once, including the children's own exits due now (e.g. a `dur=0` split) """
+        """ Births driven by a flow (`ss.birth(when=)`): children for the people who went through the transition since this last looked, made by the module that owns the transition; then whatever moves at once, including the children's own exits due now (e.g. a `dur=0` split) """
         born = []
         for tr in self.graph.inflows:
             if getattr(tr, 'birth_on', None) is None or not tr.people or ss.conditions.modname(tr.birth_on.module) not in [None, self.mod.name]: # Another module's transition: that module makes the children, who are placed here by this inflow's state (see into())
@@ -417,7 +417,7 @@ class Moving:
                 self.events[tr.name] = new if tr.name not in self.events else ss.uids.concatenate([self.events[tr.name], new])
                 if self.sim.groups.n_groups > 1:
                     self.flow_groups[tr.name] = self.flow_groups.get(tr.name, 0) + np.bincount(self.groups(new), weights=self.weights(new), minlength=self.sim.groups.n_groups)
-                for mod in self.sim.declared: # Counted in the flow of each module's own ss.birth(on=) of the same transition, and recorded there as its event (for on= and conditions)
+                for mod in self.sim.declared: # Counted in the flow of each module's own ss.birth(when=) of the same transition, and recorded there as its event (for when= and conditions)
                     other = next((o for o in mod.graph.inflows if mod is not self.mod and getattr(o, 'birth_on', None) is not None and o.birth_on.name == tr.birth_on.name and ss.conditions.modname(o.birth_on.module) == self.mod.name), None)
                     if other is not None:
                         engine = mod.engine
@@ -500,7 +500,7 @@ class Moving:
         return new
 
     def into(self, tr):
-        """ The names of the states that children born by a transition are put in: this inflow's, and that of each declared module's own `ss.birth(on=)` of the same transition """
+        """ The names of the states that children born by a transition are put in: this inflow's, and that of each declared module's own `ss.birth(when=)` of the same transition """
         out = [d.name for d in tr.dest]
         per = (ss.conditions.modname(tr.birth_on.module) or self.mod.name, tr.birth_on.name)
         for mod in self.sim.declared:
@@ -643,7 +643,7 @@ class Moving:
         People who took ss.stay in a split: back in the state they left, with no new dwell time, so `X.time_in` keeps running; not counted in the flow
 
         After a split taken at the end of a dwell time, they have no exit scheduled (the dwell was this transition's); after one
-        triggered by an event or a condition (`on=`), they keep the exit they had, e.g. their clearance (see `move()`).
+        triggered by an event or a condition (`when=`), they keep the exit they had, e.g. their clearance (see `move()`).
         """
         kept = self._kept_exits.pop(tr.name, [])
         if not len(uids):
@@ -690,8 +690,8 @@ class Moving:
         finally:
             self._memo = None
         if any(np.ndim(p) > 1 for p in ps): # e.g. a function giving a row of shares for each person (a switching matrix): not supported yet
-            raise ss.CapabilityError(f'p= of "{tr.name}" gave a row of probabilities for each person, but each entry of p= is one destination\'s probability (one value per person); '
-                                     f'give one per destination, e.g. p=[f_{tr.dest[0].name}, None], where each function returns one value per person')
+            raise ss.CapabilityError(f'the destinations of "{tr.name}" gave a row of probabilities for each person, but each is one destination\'s probability (one value per person); '
+                                     f'give one per destination, e.g. {{{tr.dest[0].name}: f_{tr.dest[0].name}, ...: None}}, where each function returns one value per person')
 
         return self.dest_shares(tr, ps, uids, ev=lambda p: self.eval_for(p, uids)) # With ss.stay or ss.dead, what the states leave over stays or dies
 
@@ -754,7 +754,7 @@ class Moving:
             self.check_drawn(key, uids)
         how = self._draw_how.get(key)
         if how is None: # The uniforms themselves (most of them), the unit exponential of a dwell time (see sample_dwell()), a distribution with values by sex, drawn from a table kept for the run (see agent_pars()), or any other as it is
-            how = self._draw_how[key] = 'uniform' if type(dist) is ss.random else 'expon' if (type(dist) is ss.expon and dist.unit is None and not dist.round and dist.pars.scale == 1) else 'agent' if self.agent_pars(key, dist) is not None else 'own'
+            how = self._draw_how[key] = 'uniform' if type(dist) is ss.random else 'expon' if (type(dist) is ss.expon and dist.unit is None and not dist.round and dist.pars.mean == 1) else 'agent' if self.agent_pars(key, dist) is not None else 'own'
         if self.crn_key(key) is not None and (how != 'own' or dist.resolved()): # The uniforms of this round, and the inverse: as rvs() would give them, without its bookkeeping
             if not len(uids):
                 return np.array([], dtype=dist.hash_dtype or ss.dtypes.float) # Uniforms, as below
@@ -920,9 +920,11 @@ class Moving:
         self.last_batch[None if tr is None else tr.name] = self.n_batches
         self._news = True
         if tr is not None and tr.name in self.mod.__dict__.get('remembered', ()): # Its memory, e.g. for tb.diagnosis.since
-            self.mod[f'last_{tr.name}'][uids] = ti
-            count = self.mod[f'count_{tr.name}']
-            np.add.at(count.raw, uids, 1)
+            self.remember(tr.name, uids)
+        for key,spec in self.mod.__dict__.get('remembered_events', {}).items(): # Other events' memory, e.g. for sir.I.enter.ever
+            hit = self.event_uids(**spec, batches=self.batches[-1:], unique=False)
+            if len(hit):
+                self.remember(key, hit)
         if tr is not None and self.also: # Others an event also happens to, e.g. the fetuses of a mother at a delivery
             others = self.mod.also_happened(tr.name, uids)
             if others is not None and len(others):
@@ -931,12 +933,18 @@ class Moving:
                 self.last_batch[tr.name] = self.n_batches
         return
 
+    def remember(self, key, uids):
+        """ Record that an event happened to these agents now, for its memory (`.ever`, `.n_times`, `.since`) """
+        self.mod[f'last_{key}'][uids] = self.ti
+        np.add.at(self.mod[f'count_{key}'].raw, uids, 1)
+        return
+
     def event_uids(self, tr=None, to=None, enter=None, exit=None, batches=None, unique=True):
         """
-        The agents an event happened to, as UIDs: those who went through a transition (as `on=` sees them), or one of
+        The agents an event happened to, as UIDs: those who went through a transition (as `when=` sees them), or one of
         its branches (`to`), or who entered or left a set of states (given as names), from outside it
         """
-        if tr is not None and to is None and batches is None and tr in self.graph.transitions: # As on= sees them
+        if tr is not None and to is None and batches is None and tr in self.graph.transitions: # As when= sees them
             uids = self.events.get(tr)
             return ss.uids() if uids is None else ss.uids(uids).unique() if unique else ss.uids(uids)
         out = []
@@ -1007,7 +1015,7 @@ class Moving:
                 which[chosen] = i
         for i,tr in enumerate(exits.timed, start=len(branches)): # Competing dwell times: the earliest wins
             dur = self.sample_dwell(tr, new) + self.after_of(tr)
-            earlier = (dur < best) | (which < 0) # A dwell that does not end until its rate changes (e.g. outside a where=) is still this exit's, so it can be rescaled
+            earlier = (dur < best) | (which < 0) # A dwell that does not end until its rate changes (e.g. outside a who=) is still this exit's, so it can be rescaled
             best[earlier] = dur[earlier]
             which[earlier] = i
 
@@ -1029,7 +1037,7 @@ class Moving:
         return missed
 
     def branch_edges(self, state, uids):
-        """ Where each branch out of a state starts, as a cumulative probability, for some agents entering it (one row per branch, and its end): with their modifiers, and each branch's where= closed to the others """
+        """ Where each branch out of a state starts, as a cumulative probability, for some agents entering it (one row per branch, and its end): with their modifiers, and each branch's who= closed to the others """
         key = ('branch', state.name)
         fixed = self.__dict__.setdefault('_fixed', {}).get(key)
         if fixed is None:
@@ -1115,7 +1123,7 @@ class Moving:
             raw = self.speed(candidates[i], sel)
             now = np.maximum(raw, 1e-9)
             before = mod[f'mult_{name}'].raw[sel]
-            stalled = before <= 0 # Their rate was 0 when they entered (e.g. outside a where=), so none of their dwell has passed
+            stalled = before <= 0 # Their rate was 0 when they entered (e.g. outside a who=), so none of their dwell has passed
             changed = np.abs(now - before) > 1e-6*np.abs(before) # Not exactly, since the speed is kept in single precision
             if stalled.any():
                 changed = np.where(stalled, raw > 0, changed)
@@ -1176,7 +1184,7 @@ class Moving:
         adjust = self.adjusted(tr.name, uids)
         if np.ndim(adjust) == 0 and adjust == 1.0: # The usual case
             return np.asarray(rvs, dtype=float)
-        with np.errstate(divide='ignore'): # A rate of 0 (e.g. outside a where=) is a dwell that does not end until it changes: see rescale_exits()
+        with np.errstate(divide='ignore'): # A rate of 0 (e.g. outside a who=) is a dwell that does not end until it changes: see rescale_exits()
             return np.asarray(rvs, dtype=float)/adjust # An adjustment multiplies the rate, so divides the duration
 
     def branches_of(self, name):

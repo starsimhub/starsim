@@ -152,7 +152,7 @@ The disease now has four states and four transitions, and it is worth checking t
 sim.describe()
 ```
 
-`equations()` prints the disease as the ODEs it stands for, with the names of the parameters. It is the quickest way to check that every flow leaves one state and enters another, and that the force of infection is what you meant:
+`equations()` gives the disease as the ODEs it stands for, with the names of the parameters. It is the quickest way to check that every flow leaves one state and enters another, and that the force of infection is what you meant:
 
 ```{python}
 measles.equations()

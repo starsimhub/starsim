@@ -1,7 +1,7 @@
 """
 Not for the user: deliveries in a compartmental run
 
-`ss.Delivery` is the one class for deliveries, and its methods are how it runs as agents. In a compartmental
+`ss.Event` (and its subclass `ss.Delivery`) is the one class for events and deliveries, and its methods are how it runs as agents. In a compartmental
 run, a delivery also makes a `CompartmentalDelivery` (`delivery.in_compartments`), which holds what only that
 needs: a selection is the share of the people in each state and group, so who is reached, served, moved,
 cured, or tested is a share of each, and moving them moves shares of the engine's compartments between
@@ -22,7 +22,7 @@ def memory_strats(delivery, sim=None):
     if sim is None or sim.solver in [None, 'abm']:
         return []
     product = delivery.product
-    owners = [delivery.name] + ([product.name] if product is not None and next((d for d in ss.interventions.modules_of(sim, 'interventions') if isinstance(d, ss.Delivery) and d.product is product), None) is delivery else [])
+    owners = [delivery.name] + ([product.name] if product is not None and next((d for d in ss.interventions.modules_of(sim, 'interventions') if isinstance(d, ss.Event) and d.product is product), None) is delivery else [])
     return [strat for key in ss.interventions.memory_needs(sim) if key[0] in owners and (strat := memory_layout(sim, key)) is not None]
 
 
@@ -41,7 +41,7 @@ def remember_levels(owner, outcome, sel, before, eng):
     strat = memory_layout(sim, (owner.name, outcome))
     if strat is None:
         return
-    shifter = owner if isinstance(owner, ss.Delivery) else next(d for d in sim.interventions() if isinstance(d, ss.Delivery) and d.product is owner)
+    shifter = owner if isinstance(owner, ss.Event) else next(d for d in sim.interventions() if isinstance(d, ss.Event) and d.product is owner)
     after = eng.state_counts()
     now = np.clip(np.divide(sel*before, after, out=np.zeros_like(after), where=after>0), 0, 1)
     shifter.in_compartments.follow(now, now, {sim.groups.dim_index(strat.name):1}, ss.conditions.Cond('event', owner, outcome))
@@ -146,7 +146,7 @@ class CompartmentalDelivery(sc.prettyobj):
     """
     A delivery in a compartmental run (`delivery.in_compartments`): what differs from agents, where a selection is the share of the people in each state and group
 
-    Made by `ss.Delivery.init_pre()` when the sim is compartmental; the delivery's own methods call it where they differ.
+    Made by `ss.Event.init_pre()` when the sim is compartmental; the delivery's own methods call it where they differ.
 
     Args:
         delivery (`ss.Delivery`): the delivery
@@ -209,7 +209,7 @@ class CompartmentalDelivery(sc.prettyobj):
 
     def carry_events(self, frac, before, mover=None, target=None, dst=None):
         """
-        Carry the events of this step (see `ss.Delivery.fire()`) along a move the delivery has just made, between groups (to
+        Carry the events of this step (see `ss.Event.fire()`) along a move the delivery has just made, between groups (to
         `target`) or into a state (`dst`), so that the steps that read them later in the step find their people where they now
         are. Of the people of an event, those moved are: all the movers, if the movers are within the event (e.g. a step it
         triggered, `mover`); none, if they are disjoint from it; and otherwise the same share as of everyone in their state and group.
@@ -305,7 +305,7 @@ class CompartmentalDelivery(sc.prettyobj):
         return np.broadcast_to(frac[None, :], self.selector.shape).astype(float)
 
     def take(self, cands, n, key=None, wait=None):
-        """ Choose `n` people from the candidates: whole cells in the order of the priority (`key`) and how long they have waited, and pro rata within a tie (see `ss.Delivery.take()`) """
+        """ Choose `n` people from the candidates: whole cells in the order of the priority (`key`) and how long they have waited, and pro rata within a tie (see `ss.Event.take()`) """
         N = self.eng.state_counts()
         amount = cands*N
         if amount.sum() <= n:
@@ -319,7 +319,7 @@ class CompartmentalDelivery(sc.prettyobj):
     #%% What is given
 
     def give(self, chosen):
-        """ Give what is delivered to the people chosen, and record them (and the outcomes) as its events; see `ss.Delivery.give()` """
+        """ Give what is delivered to the people chosen, and record them (and the outcomes) as its events; see `ss.Event.give()` """
         d = self.delivery
         product = d.product
         eng = self.eng
@@ -359,7 +359,7 @@ class CompartmentalDelivery(sc.prettyobj):
         return self.relocated(chosen, [dim])
 
     def cure(self, chosen):
-        """ Move the people treated along the transitions of the treatment; returns those treated as they now are, in parts (see `ss.Delivery.cure()`) """
+        """ Move the people treated along the transitions of the treatment; returns those treated as they now are, in parts (see `ss.Event.cure()`) """
         d = self.delivery
         diseases = list(dict.fromkeys(e.dis for e in d.edges))
         if diseases == [d.dis.name]:
@@ -479,7 +479,7 @@ class CompartmentalDelivery(sc.prettyobj):
     #%% In a whole run in the kernels
 
     def tabulated(self):
-        """ Whether the kernels can take the delivery in a whole run: see `ss.Delivery.tabulated` """
+        """ Whether the kernels can take the delivery in a whole run: see `ss.Event.tabulated` """
         d = self.delivery
         sim = self.sim
         if len(sim.declared) != 1 or self.eng.cross is not None:
@@ -487,10 +487,10 @@ class CompartmentalDelivery(sc.prettyobj):
         product = d.product
         moves = (product is None and (d.move_states is None or self.plain_move())) or (product is not None and product.holds and getattr(product, 'take', None) is None) # A move between states only within each group, and not an all-or-nothing vaccine, whose doses are not all held
         scheduled = d.routine or (d.in_rounds and d.trigger is None)
-        watched = d.name in [ss.conditions.modname(leaf.args[0]) for mod in sim.interventions() if isinstance(mod, ss.Delivery) for leaf in ss.conditions.event_leaves(mod.trigger)] or d._needs # Its events are read, which the kernels do not keep
+        watched = d.name in [ss.conditions.modname(leaf.args[0]) for mod in sim.interventions() if isinstance(mod, ss.Event) for leaf in ss.conditions.event_leaves(mod.trigger)] or d._needs # Its events are read, which the kernels do not keep
         typed = isinstance(d.coverage, ss.TimePar) and not d.in_rounds # A rate among those eligible, the same share at each step
         static = ss.conditions.is_static(d.eligible, sim) and (sc.isnumber(d.coverage) or d.coverage is None or isinstance(d.coverage, ss.by) or typed)
-        past = d.at_age is not None # The people past the age are left out on the first step: see ss.Delivery.skip_past()
+        past = d.at_age is not None # The people past the age are left out on the first step: see ss.Event.skip_past()
         limited = d.capacity is not None or d.queue is not None or bool(getattr(product, 'doses', None)) or getattr(product, 'during', None) is not None # Served in an order, given in doses, or held only in some states, which the kernels do not take
         return moves and scheduled and static and not limited and d.when is None and not watched and not past
 
@@ -531,7 +531,7 @@ class CompartmentalDelivery(sc.prettyobj):
     def respell(self):
         """
         For routine delivery that records who has been offered it: the share of the people in each state and group who start a new
-        spell of being eligible (offered it, and no longer eligible), and the group they go back to (see `ss.Delivery.new_spells()`);
+        spell of being eligible (offered it, and no longer eligible), and the group they go back to (see `ss.Event.new_spells()`);
         None for any other. The kernels take it as a delivery of its own that reaches nobody, with everyone eligible going to `rest`.
         """
         d = self.delivery

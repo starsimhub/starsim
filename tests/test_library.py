@@ -16,66 +16,43 @@ import starsim.library as ssl
 n_agents = 2_000
 
 # Outbreak diseases specify their natural history in days, so they need a sub-year timestep
-outbreak_pars = dict(start=2000, dur=ss.years(1), dt=ss.days(1), n_agents=n_agents, rand_seed=1, verbose=0)
+outbreak_pars = dict(start=2000, stop=ss.years(1), dt=ss.days(1), n_agents=n_agents, rand_seed=1, verbose=0)
 endemic_pars  = dict(start=2000, stop=2030, n_agents=n_agents, rand_seed=1, verbose=0)
-mnch_pars     = dict(start=2000, dur=ss.years(3), dt=ss.weeks(1), n_agents=n_agents, rand_seed=1, verbose=0)
+mnch_pars     = dict(start=2000, stop=ss.years(3), dt=ss.weeks(1), n_agents=n_agents, rand_seed=1, verbose=0)
 
 
 @sc.timer()
 def test_diseases():
     """
-    Check that each library disease runs and produces infections, and that the SEIR-type ones (written as code) keep consistent compartments
+    Check that the SEIR written as code runs and keeps consistent compartments
 
     'exposed' and 'infectious' are the literal E and I compartments, while 'infected' is
     derived as E plus I. Infections are counted when they happen rather than inferred from
     a ti_ state, so seed infections are excluded exactly once. Regression test for negative
     first-step incidence (issue #1389).
     """
-    sc.heading('Testing library diseases and their compartments...')
-
-    diseases = dict(
-        agentseir = ssl.AgentSEIR(beta=ss.perday(0.3), init_prev=0.1),
-        cholera = ssl.Cholera(beta=ss.perday(0.5), init_prev=0.1),
-        ebola   = ssl.Ebola(beta=ss.perday(0.1), init_prev=0.1),
-        measles = ssl.Measles(beta=ss.perday(0.3), init_prev=0.1),
-    )
-    sims = sc.obj()
-    for name, disease in diseases.items():
-        sim = ss.Sim(diseases=disease, networks=ss.RandomNet(), **outbreak_pars)
-        sim.run()
-        sims[name] = sim
-        dis = sim.diseases[name]
-        res = sim.results[name]
-        n_exp = np.array(res.exposed)
-        n_infectious = np.array(res.infectious)
-        n_inf = np.array(res.infected)
-        new = np.array(res.infection)
-        total = n_exp + n_infectious + np.array(res.susceptible) + np.array(res.recovered)
-        assert res.infection.cum[-1] > 0, f'Expected {name} infections'
-        assert new.min() >= 0, f'{name} has negative infection: seeds are being double-counted'
-        assert new[0] == res.susceptible[0] - res.susceptible[1], f'{name} counted its seed infections as new infections' # Only the first step's infections
-        assert new.sum() == res.infection.cum[-1], f'{name} cumulative infections do not match the sum'
-        assert not (dis.exposed & dis.infectious).any(), f'{name} has agents in both E and I'
-        assert np.array_equal(total, np.array(sim.results.alive)), f'{name} compartments do not sum to the population'
-        assert np.array_equal(n_inf, n_exp + n_infectious), f'{name} should count both E and I as infected'
-        assert (dis.infectious & ~dis.infected).sum() == 0, f'{name} should transmit only from agents that are infected'
-        assert n_exp.max() > 0, f'{name} never had any exposed agents'
-        assert n_inf.max() > 0, f'{name} never had any infectious agents'
-
-    # Cholera should also track its environmental reservoir
-    assert sims.cholera.results.cholera.env_prev.max() > 0, 'Expected nonzero cholera environmental prevalence'
-
-    # Ebola should progress agents to severe disease and bury the dead
-    ebola = sims.ebola.results.ebola
-    assert ebola.severe.max() > 0, 'Expected some severe Ebola cases'
-    assert ebola.burial.sum() > 0, 'Expected some Ebola burials'
-
-    # Cholera dies out completely with a yearly timestep, since its natural history is in days
-    yearly = ss.Sim(diseases=ssl.Cholera(beta=ss.perday(0.5)), networks=ss.RandomNet(),
-                    start=2000, dur=ss.years(1), dt=ss.years(1), n_agents=n_agents, rand_seed=1, verbose=0)
-    yearly.run()
-    assert yearly.results.cholera.infection.cum[-1] == 0, 'Cholera unexpectedly worked with a yearly timestep'
-    return sims
+    sc.heading('Testing the SEIR written as code and its compartments...')
+    name = 'agentseir'
+    sim = ss.Sim(diseases=ssl.AgentSEIR(beta=ss.perday(0.3), init_prev=0.1), networks=ss.RandomNet(), **outbreak_pars)
+    sim.run()
+    dis = sim.diseases[name]
+    res = sim.results[name]
+    n_exp = np.array(res.exposed)
+    n_infectious = np.array(res.infectious)
+    n_inf = np.array(res.infected)
+    new = np.array(res.infection)
+    total = n_exp + n_infectious + np.array(res.susceptible) + np.array(res.recovered)
+    assert res.infection.cum[-1] > 0, f'Expected {name} infections'
+    assert new.min() >= 0, f'{name} has negative infection: seeds are being double-counted'
+    assert new[0] == res.susceptible[0] - res.susceptible[1], f'{name} counted its seed infections as new infections' # Only the first step's infections
+    assert new.sum() == res.infection.cum[-1], f'{name} cumulative infections do not match the sum'
+    assert not (dis.exposed & dis.infectious).any(), f'{name} has agents in both E and I'
+    assert np.array_equal(total, np.array(sim.results.alive)), f'{name} compartments do not sum to the population'
+    assert np.array_equal(n_inf, n_exp + n_infectious), f'{name} should count both E and I as infected'
+    assert (dis.infectious & ~dis.infected).sum() == 0, f'{name} should transmit only from agents that are infected'
+    assert n_exp.max() > 0, f'{name} never had any exposed agents'
+    assert n_inf.max() > 0, f'{name} never had any infectious agents'
+    return sim
 
 
 @sc.timer()
@@ -90,7 +67,7 @@ def test_hiv():
                       analyzers = ssl.CD4_analyzer())
 
     s1 = make('No ART')
-    s2 = make('With ART', ssl.ART(year=[2005, 2015], coverage=[0, 0.9]))
+    s2 = make('With ART', ssl.ART(coverage=ss.timeseries({2005: 0, 2015: 0.9}, 'linear')))
     for sim in [s1, s2]:
         sim.run()
 
@@ -114,14 +91,19 @@ def test_networks():
     """ Library networks, as a sim would use them """
     sc.heading('Testing library networks')
     n = 400
-    nets = dict(geo=ssl.GeoNet('Kenya', n_contacts=6), grid=ssl.GridNet(periodic=True), small=ssl.SmallWorldNet(k=4), free=ssl.ScaleFreeNet(m=2))
-    sims = {k:ss.Sim(n_agents=n, diseases='sis', networks=net, dur=2, verbose=0).run() for k,net in nets.items()}
+    nets = dict(grid=ssl.GridNet(periodic=True), small=ssl.SmallWorldNet(n_contacts=4), free=ssl.ScaleFreeNet(n_contacts=4))
+    sims = {k:ss.Sim(n_agents=n, diseases='sis', networks=net, stop=ss.years(2), verbose=0).run() for k,net in nets.items()}
     degree = {k:np.bincount(np.r_[sim.networks[0].p1, sim.networks[0].p2], minlength=n) for k,sim in sims.items()}
     assert (degree['grid'] == 4).all() and (degree['small'].mean() == 4)
-    assert degree['free'].max() > 3*degree['free'].mean() # A few have many contacts
-    geo = sims['geo'].networks[0]
-    assert np.isclose(degree['geo'].mean(), 6, rtol=0.05)
-    assert (geo.place.raw[geo.p1] == geo.place.raw[geo.p2]).mean() > 0.5 # Mostly within a place
+    assert np.isclose(degree['free'].mean(), 4, rtol=0.05) and degree['free'].max() > 3*degree['free'].mean() # A few have many contacts
+    for net in [ssl.GridNet(), ssl.SmallWorldNet(), ssl.ScaleFreeNet()]: # Each has only its own parameters
+        assert not {'seed', 'p'} & set(net.pars)
+
+    # Contacts across real places, as ssl.GeoNet once made them: a random network in a model stratified by place, with most contacts at home
+    sis = ss.SIS().stratify(patch=ss.levels(ss.geo.geography('Kenya'), mobility=ss.geo.gravity(away=0.1)))
+    sim = ss.Sim(n_agents=n, diseases=sis, networks=ss.RandomNet(n_contacts=6), stop=ss.years(2), verbose=0).run()
+    net, place = sim.networks[0], sim.groups.level_raw(sim.mixing.space)
+    assert (place[net.p1] == place[net.p2]).mean() > 0.5 # Mostly within a place
     return degree
 
 
@@ -134,10 +116,10 @@ def test_econ():
     infection = S >> I @ ss.peryear(2)*I
     recovery  = I >> S @ ss.years(1)
     sis = ss.Disease(infection, recovery, init_prev=0.1)
-    vaccine = ss.vaccinate(efficacy=0.5, coverage=0.5, every=ss.years(1), start=2005, cost=5.0)
-    costs = ssl.Costs(unit_costs={'sis.infection': 0.1}, fixed=1000, start=2005)
+    vaccine = ss.vaccinate(efficacy=0.5, when=ss.schedule(every=ss.years(1), start=2005), coverage=0.5, cost=5.0)
+    costs = ssl.Costs(unit_costs={'sis.infection': 0.1}, fixed=ss.peryear(1000), start=2005)
     base = ss.Sim(sis, analyzers=costs, total_pop=10_000, start=2000, stop=2020, verbose=0)
-    msim = ss.parallel({'None': base, 'Vaccine': base.new(interventions=vaccine)}, parallel=False)
+    msim = ss.parallel({'None': base, 'Vaccine': base.new(interventions=vaccine)}, workers=1)
 
     # The total is the sum of the delivery, care, and fixed costs
     sim = msim.sims['Vaccine']
@@ -156,6 +138,11 @@ def test_econ():
     assert df.averted['None'] == 0 and df.averted['Vaccine'] > 0, 'Expected vaccination to avert infections'
     row = df.loc['Vaccine']
     assert np.isclose(row.ICER, (row.cost - df.cost['None'])/row.averted), 'Expected the ICER to be the incremental cost per infection averted'
+    disc = ssl.ICER(msim, outcome='sis.infection', discount=0.03, discount_from=2005).df
+    assert disc.cost['Vaccine'] < row.cost, 'Expected discounting to lower the cost'
+    last = ssl.ICER(msim, outcome='sis.infection', window=ss.years(1))
+    last._ti = len(last.t_years) - 1
+    assert np.isclose(last.totals()['Vaccine'].cost[0], res.costs.total.values[-1]), 'Expected a window of one step to compare the last step alone'
 
     # A mix of two others can beat a scenario (extended dominance)
     icer = ssl.ICER()
@@ -165,7 +152,7 @@ def test_econ():
     assert icer.df.extended['C'] and np.isnan(icer.df.ICER['C']) and icer.best(wtp=1000) == 'D'
 
     # Years of life lost: from ages with agents, or given; and compared while a sim runs
-    pars = dict(diseases=ss.SIR(p_death=0.2, beta=ss.perday(0.3), dur_inf=ss.days(10)), networks='random', n_agents=1000, start=2000, dur=ss.years(1), dt=ss.days(7), verbose=0)
+    pars = dict(diseases=ss.SIR(p_death=0.2, beta=ss.perday(0.3), dur_inf=ss.days(10)), networks='random', n_agents=1000, start=2000, stop=ss.years(1), dt=ss.days(7), verbose=0)
     make = lambda *extra: [ssl.Costs(unit_costs={'sir.infection': 1}), ssl.DALYs(weights={'sir.I': 0.1})] + list(extra)
     ref = ss.Sim(**pars, analyzers=make()).run()
     dalys = ref.results.dalys
@@ -187,7 +174,7 @@ def malaria(): # The square root of the classical Ross-Macdonald value, m·a²·
 
 
 def malaria_immunity(): # Malaria dies out below the critical vectorial capacity, (alpha1 + delta)/g = 0.022 per day
-    prev = lambda C: ss.Sim(ssl.MalariaImmunity(C=C), total_pop=10_000, unit='day', dt=ss.days(10), stop=365*20, verbose=0).run().results.malariaimmunity
+    prev = lambda C: ss.Sim(ssl.MalariaImmunity(C=C), total_pop=10_000, unit='day', dt=ss.days(10), stop=ss.days(365*20), verbose=0).run().results.malariaimmunity
     assert prev(0.011).prevalence[-1] < 0.001, 'Expected malaria to die out below the critical vectorial capacity'
     above = prev(0.044)
     assert above.prevalence[-1] > 0.1, 'Expected malaria to be endemic above the critical vectorial capacity'
@@ -259,7 +246,34 @@ def sti(): # Both run on a sexual network; syphilis's modifiers lower each laten
     assert gono.results.gonorrhea.prevalence[-1] > 0, 'Expected gonorrhea to persist'
 
 
-declared = dict(malaria=malaria, malaria_immunity=malaria_immunity, tb=tb, covid=covid, influenza=influenza,
+@sc.timer()
+def measles(): # R0 is beta times the infectious period; as agents and as compartments, a share p_death of those leaving I die
+    assert np.isclose(ssl.Measles().R0(), 1.4*11)
+    for solver in ['ode', 'abm']:
+        size = dict(total_pop=10_000) if solver == 'ode' else dict(n_agents=10_000)
+        sim = ss.Sim(diseases=ssl.Measles(), solver=solver, start='2025-01-01', stop='2025-07-01', rand_seed=1, verbose=0, **size).run()
+        res = sim.results.measles
+        out = res.recovery.sum() + res.death.sum()
+        assert res.infection.sum() > 9000 and np.isclose(res.death.sum()/out, 0.005, rtol=0.4), solver
+
+
+@sc.timer()
+def cholera(): # The water carries the epidemic: without it, transmission from person to person alone dies out
+    pars = dict(total_pop=10_000, start='2025-01-01', stop='2026-01-01', verbose=0)
+    water = ss.Sim(diseases=ssl.Cholera(), **pars).run().results.cholera
+    direct = ss.Sim(diseases=ssl.Cholera(beta_env=ss.perday(0)), **pars).run().results.cholera
+    assert water.infection.sum() > 5000 and direct.infection.sum() < 100 and water.W.max() > 1000 and water.env_conc.max() > 0.01
+
+
+@sc.timer()
+def ebola(): # Safe burials prevent infections from bodies; every death is buried
+    pars = dict(total_pop=10_000, start='2025-01-01', stop='2026-01-01', verbose=0)
+    some, every = [ss.Sim(diseases=ssl.Ebola(p_safe_bury=p), **pars).run().results.ebola for p in [0.25, 1.0]]
+    assert every.infection.sum() < some.infection.sum() and every.D.max() < 1e-9 < some.D.max()
+    assert np.isclose(some.deaths.sum(), some.burials.sum() + some.D[-1], rtol=0.01) and some.Sev.max() > 0
+
+
+declared = dict(measles=measles, cholera=cholera, ebola=ebola, malaria=malaria, malaria_immunity=malaria_immunity, tb=tb, covid=covid, influenza=influenza,
                 rsv=rsv, pertussis=pertussis, dengue=dengue, typhoid=typhoid, polio=polio, sti=sti)
 
 

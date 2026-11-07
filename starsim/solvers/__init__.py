@@ -1,8 +1,8 @@
 """
 Solvers: how a module's declared states and transitions are run.
 
-The same `ss.graph.Graph` can be run as compartments (`ode`, `ide`, `binomial`, `gillespie`,
-`tau`) or as agents (`abm`, each declared module as it suggests; `abm-midstep`, by steps, with arrivals during a step facing the rest of it; `abm-wholestep`, rates over whole steps only; or `abm-events`, event by event: see `agent_solver()`). Each module with a graph gets one engine, which is called from
+The same `ss.graph.Graph` can be run as compartments (`ode`, with its dwell times as stages or as they are, `binomial`, `gillespie`,
+`tau`) or as agents (`abm`: by steps, with arrivals during a step facing the rest of it; rates over whole steps only; or event by event: see `ss.abm()` and `agent_solver()`). Each module with a graph gets one engine, which is called from
 the sim's loop like any other module code.
 
 The modules: `engine` (what the engines share), `mixing` (who meets whom in a

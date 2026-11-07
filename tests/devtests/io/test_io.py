@@ -144,7 +144,7 @@ def test_emulsion(tmp_path):
     ode = ss.import_from(filename, format='emulsion', **kw)
     ode.pars.solver = 'ode'
     ode.run()
-    runs = ss.import_from(filename, format='emulsion', **kw).run(n_runs=50).results.seirq.R.values[:, -1].mean()
+    runs = ss.parallel(ss.import_from(filename, format='emulsion', **kw), n_runs=50).results.seirq.R.values[:, -1].mean()
     assert np.isclose(runs, ode.results.seirq.R[-1], rtol=0.1)
 
     # A probability is per time unit, as EMULSION reads it, not per step
@@ -154,7 +154,7 @@ def test_emulsion(tmp_path):
     listed = [name for name,why in weekly.imported.incomplete]
     assert 'levels: metapop' in listed and 'health_state: production R -> S' in listed # Listed, not dropped
     assert 'convert-model' in weekly.imported.prompt # What to ask an AI assistant to finish it
-    left = weekly.new(solver='ode', substeps=None).run().results.weekly.I[1]/1000 # The ODE with its own substeps (EMULSION's compartments take whole steps)
+    left = weekly.new(solver='ode').run().results.weekly.I[1]/1000 # The ODE with its own substeps (EMULSION's compartments take whole steps)
     assert np.isclose(left, 0.9**7, rtol=1e-3) # 47.8% still infectious after a 7-day step, as in EMULSION (90% if the probability were per step)
     return sim
 
@@ -177,9 +177,9 @@ def test_emulsion_export(tmp_path):
     assert 'I: {desc: the expression I, value: total_I_1 + total_I_2' in text and 'aggregation_type: compartment' in text
     sc.savetext(tmp_path/'seir.yaml', text)
     back = ss.import_from(tmp_path/'seir.yaml', format='emulsion', **kw)
-    assert back.pars.solver == 'binomial' and back.pars.substeps == 1 # As EMULSION runs it
+    assert back.pars.solver == ss.binomial(substeps=1) # As EMULSION runs it
     ref = sims['seir'].new(solver='ode').run().results.seir
-    res = back.new(solver='ode', substeps=None).run().results.seir
+    res = back.new(solver='ode').run().results.seir
     for k in ['S', 'E', 'R']:
         assert np.allclose(ref[k].values, res[k].values, rtol=1e-9, atol=1e-9), f'{k} should be the same read back'
     text, summary, lost = ss.converters.emulsion.to_emulsion(sims['sir'])
@@ -198,7 +198,7 @@ def test_emulsion_export_run(tmp_path):
         rows = list(csv.DictReader(open(tmp_path/name/'counts.csv')))
         steps = sorted({int(r['step']) for r in rows})
         I = np.array([np.mean([sum(float(v) for c,v in r.items() if c == 'I' or c.startswith('I_')) for r in rows if int(r['step']) == s]) for s in steps])
-        ref = np.mean([sim.new(solver='binomial', substeps=1, rand_seed=i).run().results[name].I.values for i in range(n_runs)], axis=0) # As EMULSION runs it: in whole steps
+        ref = np.mean([sim.new(solver=ss.binomial(substeps=1), rand_seed=i).run().results[name].I.values for i in range(n_runs)], axis=0) # As EMULSION runs it: in whole steps
         if name == 'seir': # The Erlang stages in whole steps are not the lognormal dwell time in whole steps: compare with the import, whose stages are states
             back = ss.import_from(file, format='emulsion', **kw)
             ref = np.mean([sum(r[c].values for c in r.keys() if c.startswith('I_') and c[2:].isdigit()) for r in [back.new(rand_seed=i).run().results.seir for i in range(n_runs)]], axis=0)
@@ -237,13 +237,13 @@ def test_code(tmp_path):
     src.add_outcome('cases', 'infection', p=0.5, delay=ss.days(3), likelihood=lambda ps: ss.nbinom(n=ps['k']))
     src.results['prev'] = 'I / N'
     src.totals = ['N']
-    src.stratify(risk=['lo', 'hi'], fractions=[0.6, 0.4], adjust={'rel_sus': [1, 2]})
+    src.stratify(risk={'lo': 0.6, 'hi': 0.4}, adjust={'rel_sus': [1, 2]})
     src.config.update(unit='day', stop=ss.days(60), solver='ode')
     sim = ss.converters.build(src, verbose=False)
     code = check(sim)
     for text in ["beta = ss.par(ss.timeseries({0: 0.3, 20.5: 0.2}, interpolation='linear'), bounds=[0.1, 1], prior=ss.uniform(low=0.1, high=1))",
-                 'infection = S >> I @ (beta * season * I)', 'p=[0.99, None]', 'likelihood=ss.nbinom(n=k, p=0.5)', 'cases = ss.outcome(p_cases*infection, delay=ss.days(3)',
-                 "model.stratify(risk=['lo', 'hi'], fractions=[0.6, 0.4], adjust=dict(rel_sus=[1, 2]))"]:
+                 'infection = S >> I @ (beta * season * I)', '{R: 0.99, D: None}', 'likelihood=ss.nbinom(n=k, p=0.5)', 'cases = ss.outcome(p_cases*infection, delay=ss.days(3)',
+                 "model.stratify(risk=dict(lo=0.6, hi=0.4))", "rel_sus_by_risk = ss.modify('model.rel_sus', multiply=ss.by(risk=[1, 2]))"]:
         assert text in code, f'Expected "{text}" in the code'
     assert sim.results.model.cases.sum() > 0
 
@@ -305,7 +305,7 @@ def test_hand(tmp_path):
             init_n     = dict(I=10),
             name       = 'seirq',
         )
-        return ss.Sim(seirq, total_pop=1000, stop=ss.days(100), solver='binomial', substeps=1, **kw)
+        return ss.Sim(seirq, total_pop=1000, stop=ss.days(100), solver=ss.binomial(substeps=1), **kw)
     a, b = [s.new(solver='ode').run().results.seirq for s in [sim, hand()]] # As an ODE, since the import's random numbers are drawn for its other parts too
     for state in 'SEIQR':
         assert np.allclose(a[state], b[state]), state

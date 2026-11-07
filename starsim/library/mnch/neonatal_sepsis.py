@@ -23,7 +23,7 @@ Usage::
 
     sim = ss.Sim(
         diseases=ssl.mnch.NeonatalSepsis(),
-        demographics=[ss.Pregnancy(fertility_rate=ss.time.freq(30, 'year')), ss.Deaths()],
+        demographics=[ss.Pregnancy(fertility_rate=ss.peryear(0.03)), ss.Deaths()],
         networks=[ss.PrenatalNet(), ss.RandomNet()],
     )
     sim.run()
@@ -46,7 +46,7 @@ class NeonatalSepsis(AgentSIR):
     """
     Minimal neonatal sepsis model.
 
-    Infects newborns at birth with probability `init_prev`, then kills a
+    Infects newborns at birth with probability `p_at_birth`, then kills a
     fraction (`p_death`) within a short window (`dur_inf`). Useful for
     testing passive neonatal death detection in the Pregnancy module.
 
@@ -54,7 +54,8 @@ class NeonatalSepsis(AgentSIR):
 
     Args:
         beta (float):       transmission rate — set to 0 since infection is only at birth
-        init_prev (Dist):   fraction of newborns infected at birth
+        p_at_birth (Dist):  fraction of newborns infected at birth
+        init_prev (Dist):   fraction of the people at the start who are infected (none by default)
         dur_inf (Dist):     time from infection to death (for those who die)
         p_death (Dist):     case fatality rate among infected neonates
         pars (dict): the same parameters, as a dict
@@ -64,7 +65,8 @@ class NeonatalSepsis(AgentSIR):
         super().__init__()
         self.define_pars(
             beta      = 0,                                         # No ongoing transmission — infection is set at birth
-            init_prev = ss.bernoulli(p=0.3),                       # 30% of newborns infected at birth
+            p_at_birth = ss.bernoulli(p=0.3),                      # 30% of newborns infected at birth
+            init_prev = ss.bernoulli(p=0),                         # Nobody at the start: infection is at birth
             dur_inf   = ss.lognormal(mean=ss.days(7), std=ss.days(3)),  # ~1 week illness
             p_death   = ss.bernoulli(p=0.5),                       # 50% case fatality
         )
@@ -84,15 +86,14 @@ class NeonatalSepsis(AgentSIR):
         """
         Infect newly born agents.
 
-        `init_prev` only seeds the initial population, so newborns have to be
-        infected explicitly. Each agent is screened once, the first timestep
+        Newborns are infected explicitly, each with `p_at_birth`. Each agent is screened once, the first timestep
         after they are born.
         """
         out = super().step()
         newborns = (~self.screened & (self.sim.people.age >= 0)).uids
         if len(newborns):
             self.screened[newborns] = True
-            new_cases = self.pars.init_prev.filter(newborns)
+            new_cases = self.pars.p_at_birth.filter(newborns)
             if len(new_cases):
                 self.set_prognoses(new_cases, sources=-1)  # -1 = no source agent
         return out
@@ -101,7 +102,7 @@ class NeonatalSepsis(AgentSIR):
         """
         Set prognoses — only apply lethal outcomes to neonates (age < 28 days).
 
-        Non-neonates who get infected (via init_prev at sim start) just recover
+        Non-neonates who get infected (e.g. via init_prev at sim start) just recover
         normally via the base SIR logic.
 
         Args:

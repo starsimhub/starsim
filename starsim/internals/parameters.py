@@ -316,7 +316,7 @@ class Pars(sc.obj):
         If that leaves other parameters that shape it (e.g. the std of a lognormal, but not the shift of 0 of a gamma), it warns, since a single
         value may have been meant: for that, give `ss.constant(...)`. To change other parameters, use its own method, e.g. `pars.dur_inf.set(mean=8, std=2)`.
         """
-        if isinstance(new, dict) and 'type' in new: # A distribution given by its type and parameters, e.g. dict(type='poisson', lam=4)
+        if isinstance(new, dict) and 'type' in new: # A distribution given by its type and parameters, e.g. dict(type='poisson', mean=4)
             new = ss.dists.make_dist(new)
 
         # It's a Dist, e.g. dur_inf = ss.normal(6,2); use directly
@@ -326,7 +326,7 @@ class Pars(sc.obj):
                 raise TypeError(errormsg)
             self[key] = new
 
-        # A single value for a choice, e.g. embryos_per_pregnancy = 1: always that value (as the main parameter, a=1 would be a choice from range(1))
+        # A single value for a choice, e.g. children = 1: always that value (as the main parameter, a=1 would be a choice from range(1))
         elif isinstance(old, ss.choice) and isinstance(new, (Number, ss.Duration)):
             self[key] = ss.constant(new, unit=old.unit if isinstance(new, Number) else None)
 
@@ -1210,17 +1210,18 @@ class timeseries(TimeValue):
     It can be used wherever a value or a function of the sim can: as a rate or a
     duration, as the amount of `ss.modify()`, or as the coverage or capacity of a delivery.
     Before the first time the first value is used, and after the last time the last, so a
-    value that holds from before the sim needs no time of its own: give it at the first year
-    you have (a number before 1900, e.g. 1800, is not a calendar year but a time after the start).
-    A bare number is read in the module's unit, as any other; to give the values a unit, put
+    value that holds from before the sim needs no time of its own: give it at the first time
+    you have. A bare time is read as the sim reads any (see `ss.timeline`): a calendar year if the sim has a
+    calendar (a start that is a date or a year), however small, else a time in its unit from 0; a time after
+    the start is a duration (e.g. `ss.days(91)`). A bare value is read in the module's unit, as any other; to give the values a unit, put
     the series in a type (`ss.peryear(ss.timeseries(...))`, a series of rates per year), or
     give each value one.
 
     Args:
         data (dict/str/dataframe/list): the value at each time, as a dict, a dataframe (the first column is
             the time, the second the value), or the name of a file holding one; or the times, with the values
-            as the second argument (`ss.timeseries(times, values)`). A time is a date, or a number: a calendar
-            year from 1900 on (e.g. `2030`), and otherwise a time in the sim's unit (in a sim with dates, that long after the start)
+            as the second argument (`ss.timeseries(times, values)`). A time is a date, a duration after the start, or a bare number:
+            a calendar year in a sim with a calendar (e.g. `2030`), and otherwise a time in the sim's unit from 0
         values (list): the values, if `data` is the times
         interpolation (str): how to interpolate: 'step' (each value holds until the next), 'linear', or 'cosine' (a smooth S-shaped change between each value and the next, as MEmilio's dampings)
         period (dur): if given, the series repeats with this period, measured from its first time (e.g. `ss.years(1)` for a yearly pattern given over one year)
@@ -1228,7 +1229,7 @@ class timeseries(TimeValue):
     Examples:
         ```python
         beta = ss.timeseries({'2020-01-01': 0.3, '2020-03-15': 0.1, '2020-06-01': 0.2})
-        decay = ss.timeseries({0: 0.1, 91: 0.2, 183: 0.15, 274: 0.1}, period=ss.days(365)) # The same each year
+        decay = ss.timeseries({0: 0.1, 91: 0.2, 183: 0.15, 274: 0.1}, period=ss.days(365)) # The same each year, in a sim in days with no calendar
         mortality = ss.peryear(ss.timeseries({2000: 0.05, 2020: 0.02})) # Rates per year: 0.05 before 2000, and 0.02 after 2020
         S, I, R = ss.states(3)
         sir = ss.Disease(infection=S >> I @ beta*I, recovery=ss.Transition(I, R, dur=10), init_prev=0.01)
@@ -1275,7 +1276,7 @@ class timeseries(TimeValue):
 
     def years(self, sim):
         """
-        The times as years on the sim's timeline (for a sim with no dates, the time since the start, in years)
+        The times as years on the sim's timeline (a bare time is a year if the sim has a calendar, else a time in its unit from 0; a duration is a time after the start)
 
         Args:
             sim (`ss.Sim`): the sim
@@ -1288,11 +1289,14 @@ class timeseries(TimeValue):
             if np.any(np.diff(out) <= 0):
                 errormsg = f'The times of ss.timeseries() must be in order, not {self.times}'
                 if np.all(np.diff(self.times) > 0) if all(sc.isnumber(t) for t in self.times) else False: # In order as given, but not as read: bare numbers are in the sim's unit, and a date has whole days
-                    errormsg += f', which are read as {sc.strjoin([f"{y:.6g}" for y in out])} years (a bare time from {ss.time.cal_year_threshold} on is a calendar year, and any other is in the sim\'s unit, {sim.unit_base}s, after the start); for times in another unit, give typed times, e.g. ss.days(...)'
+                    errormsg += f', which are read as {sc.strjoin([f"{y:.6g}" for y in out])} years ({ss.timeline.how_bare(sim.t)})'
                 raise ValueError(errormsg)
             start, stop = sim.t.yearvec[0], sim.t.yearvec[-1]
-            if len(out) > 1 and (out[-1] < start or out[0] > stop) and any(sc.isnumber(time) for time in self.times): # e.g. days of the year (0 to 365) beside calendar years: the value is flat over the run
-                ss.note(f'every time of an ss.timeseries ({self.times[0]} to {self.times[-1]}) is outside the run, so its value is the same throughout; a bare time from {ss.time.cal_year_threshold} on is a calendar year, and any other is in the sim\'s unit ({sim.unit_base}s) after the start; for another unit, give typed times, e.g. ss.days([...])', sim=sim)
+            early = [time for time in self.times if sc.isnumber(time) and time < 1900] if sim.t.calendar is not None else []
+            if early and start >= 1900: # e.g. days of the year (0 to 365) in a sim with a calendar, which are read as the years 0 to 365
+                ss.warn(f'ss.timeseries() has the bare time{"s" if len(early) > 1 else ""} {sc.strjoin(early)}, read as {"years" if len(early) > 1 else "the year"} {sc.strjoin(early)}, long before the sim starts ({sim.t.start}): {ss.timeline.how_bare(sim.t)}')
+            elif len(out) > 1 and (out[-1] < start or out[0] > stop) and any(sc.isnumber(time) for time in self.times): # Bare times all outside the run: the value is flat over it
+                ss.note(f'every time of an ss.timeseries ({self.times[0]} to {self.times[-1]}) is outside the run, so its value is the same throughout: {ss.timeline.how_bare(sim.t)}', sim=sim)
             self._years = (sim, np.array(out, dtype=float))
         return self._years[1]
 

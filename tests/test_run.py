@@ -18,7 +18,7 @@ def make_sim_pars(beta=0.1, **kwargs):
     pars = sc.obj(
         n_agents = n_agents,
         start = 2000,
-        dur = 10,
+        stop = ss.years(10),
         demographics = True,
         networks = 'random',
         diseases = sc.obj(type='sis', beta=beta), # To allow for modification later
@@ -48,7 +48,7 @@ def test_parallel():
     msim = ss.MultiSim([ss.Sim(pars, label='Sim1'), ss.Sim(pars, label='Sim2')])
     msim.run(shrink=False)
     s1, s2 = msim.sims
-    assert np.allclose(s1.summary.value, s2.summary.value, rtol=0, atol=0, equal_nan=True), "Sims don't match and should" # That non-identical sims don't is checked in test_other()
+    assert np.allclose(s1.summarize().value, s2.summarize().value, rtol=0, atol=0, equal_nan=True), "Sims don't match and should" # That non-identical sims don't is checked in test_other()
 
     # Workers started by forkserver, as they are once Numba's or JAX's threads have started here, give the same runs as by default (fork on Linux, if safe), with a lambda in the sim
     make = lambda: [ss.Sim(make_sim_pars(interventions=lambda sim: None), rand_seed=i) for i in range(2)]
@@ -61,10 +61,10 @@ def test_parallel():
 @sc.timer()
 def test_restarted():
     """ Many runs of a compartmental sim restart one built sim, rather than building each """
-    sc.heading('Testing that sim.run(n_runs=) restarts one sim')
+    sc.heading('Testing that ss.parallel(sim, n_runs=) restarts one sim')
     S, I, R = ss.states(3)
     sir = ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(8), init=dict(I=0.01), name='sir')
-    msim = ss.Sim(sir, unit='day', stop=30, total_pop=1000, solver='binomial', verbose=0).run(n_runs=4)
+    msim = ss.parallel(ss.Sim(sir, unit='day', stop=30, total_pop=1000, solver='binomial', verbose=0), n_runs=4)
     assert len(msim.sims.runners) == 1
 
     # A restart starts from the swept starting values, including init_prev (which a restart once kept as it was)
@@ -78,7 +78,8 @@ def test_multisim():
     """ Check MultiSim methods """
     sc.heading('Testing MultiSim')
     pars = make_sim_pars()
-    msim = ss.MultiSim(ss.Sim(pars))
+    assert len(ss.MultiSim(ss.Sim(pars), workers=1).run()) == 1 # One sim is one run, unless n_runs= says more
+    msim = ss.MultiSim(ss.Sim(pars), n_runs=4)
     msim.init_sims()
     msim.run()
 
@@ -106,7 +107,7 @@ def test_multisim():
 
     # 2D results
     msim2 = ss.MultiSim(ss.Sim(make_sim_pars(analyzers=BySex())), n_runs=3)
-    msim2.run(parallel=False)
+    msim2.run(workers=1)
     res = msim2.results.bysex.infected
     med = res.median()
     assert res.shape == (3, npts, 2) and med.shape == (npts, 2) # The columns are kept
@@ -125,12 +126,12 @@ def test_multisim():
         run_options = ss.MultiSim.run_options + ['beta']
         def make_run(self, sim, values, seed, beta=0.1):
             return super().make_run(sim, dict(values or {}, beta=beta*(1 + seed % 2)), seed)
-    doubled = Doubled(ss.Sim(pars), n_runs=2, beta=0.05).run(parallel=False)
+    doubled = Doubled(ss.Sim(pars), n_runs=2, beta=0.05).run(workers=1)
     assert sorted(float(s.diseases.sis.pars.beta.value) for s in doubled.sims) == [0.05, 0.1]
 
     # The sims by scenario, and the results of a module only one scenario has
     kw = dict(n_agents=300, stop=30, verbose=0)
-    vx = ss.parallel(ss.Sim(ss.SIR(), label='Base', **kw), ss.Sim(ss.SIR(), interventions=ss.vaccinate(efficacy=0.8, coverage=0.5, at=[10], name='vx'), label='Vaccine', **kw), parallel=False)
+    vx = ss.parallel(ss.Sim(ss.SIR(), label='Base', **kw), ss.Sim(ss.SIR(), interventions=ss.vaccinate(efficacy=0.8, when=[10], coverage=0.5, name='vx'), label='Vaccine', **kw), workers=1)
     assert vx.sims['Vaccine'] is vx.sims[1]
     assert list(vx.results.vx.delivered.runs.scenario) == ['Vaccine'] # It was left out, so msim.plot('vx.delivered') raised KeyNotFoundError
     vx.plot('vx.delivered')
@@ -141,16 +142,16 @@ def test_multisim():
     S, I, R = ss.states(3)
     sir = ss.Disease(infection=S >> I @ 0.3*I, recovery=ss.Transition(I, R, dur=10), init_prev=0.01, name='sir')
     for kw in [{}, dict(interventions=lambda sim: None)]:
-        draws = ss.parallel(ss.Sim(sir, solver='binomial', total_pop=10_000, stop=50, verbose=0, **kw), priors=dict(beta=[0.3]*3), parallel=False)
+        draws = ss.parallel(ss.Sim(sir, solver='binomial', total_pop=10_000, stop=50, verbose=0, **kw), priors=dict(beta=[0.3]*3), workers=1)
         assert isinstance(draws.sims, ss.run.RestartedSims) == (not kw) and list(draws.runs.rand_seed) == [1, 2, 3] # They all had seed 1
         assert len(set(draws.results.sir.infection.values.sum(axis=1))) == 3 # So they differ by chance as well as by their values
         assert draws.sims[2].pars.rand_seed == 3 and np.array_equal(draws.sims[2].results.sir.I.values, draws.results.sir.I.values[2])
     drawn = ss.Disease(infection=S >> I @ ss.par(0.3, bounds=[0.2, 0.4])*I, recovery=I >> R @ ss.par(0.1, prior=ss.normal(0.1, 0.01)), init_n=dict(I=10), name='sir')
-    draws = ss.fit.prior_draws(ss.Sim(drawn, total_pop=1000, stop=5, unit='day', solver='ode', verbose=0), n=8, seed=1)
+    draws = ss.fit.prior_draws(ss.Sim(drawn, total_pop=1000, stop=5, unit='day', solver='ode', verbose=0), n=8, rand_seed=1)
     assert sorted(np.floor((np.array(list(draws.values())[0]) - 0.2)/0.2*8)) == list(range(8)) # A Latin hypercube: one draw in each slice of the bounds
     # Runs taken in the kernels have the sim's own results, as runs one at a time do
-    fast = ss.parallel(ss.Sim(sir, solver='binomial', total_pop=10_000, stop=50, verbose=0), n_runs=3, parallel=False)
-    slow = ss.parallel(*[ss.Sim(sir, solver='binomial', total_pop=10_000, stop=50, rand_seed=seed, verbose=0) for seed in [1, 2, 3]], parallel=False)
+    fast = ss.parallel(ss.Sim(sir, solver='binomial', total_pop=10_000, stop=50, verbose=0), n_runs=3, workers=1)
+    slow = ss.parallel(*[ss.Sim(sir, solver='binomial', total_pop=10_000, stop=50, rand_seed=seed, verbose=0) for seed in [1, 2, 3]], workers=1)
     assert list(fast.results.keys()) == list(slow.results.keys())
     assert all(np.array_equal(fast.results.alive.values[i], slow.sims[i].results.alive.values) for i in range(3))
     sweep = ss.parallel(ss.Sim(sir, solver='binomial', total_pop=10_000, stop=50, verbose=0), pars=dict(beta=[0.3, 0.3, 0.4, 0.4], rand_seed=[1, 2, 1, 2]))
@@ -172,14 +173,14 @@ def test_other():
     ss.parallel(s1, s2, inplace=False)
     assert not s1.initialized
     ss.parallel(s1, s2, inplace=True)
-    assert not np.allclose(s1.summary.value, s2.summary.value, rtol=0, atol=0, equal_nan=True), "Sims do match and shouldn't"
+    assert not np.allclose(s1.summarize().value, s2.summarize().value, rtol=0, atol=0, equal_nan=True), "Sims do match and shouldn't"
 
     # Scenarios of a stratified compartmental model restarted for their runs, one with a delivery that adds groups (it raised a ValueError), compared with the baseline, and plotted with weekly data
     S, I, R = ss.states('S I R')
     sir = ss.Disease(infection=S >> I @ 0.3*I, recovery=I >> R @ ss.days(10), init_n=dict(I=5), name='sir').stratify(age={0: 0.3, 15: 0.7})
     kw = dict(total_pop=10_000, stop=ss.days(100), solver='binomial', verbose=0)
     weekly = ss.Sim(sir, **kw).run().to_synthetic_data('sir.infection', resample='week') # Whole weeks only, as resample() keeps: not the last of the 101 steps', which is three days
-    msim = ss.parallel({'Base': ss.Sim(sir, data=weekly, **kw), 'Vaccine': ss.Sim(sir, interventions=ss.vaccinate(efficacy=0.9, coverage=0.5, at=20), **kw)}, n_runs=3)
+    msim = ss.parallel({'Base': ss.Sim(sir, data=weekly, **kw), 'Vaccine': ss.Sim(sir, interventions=ss.vaccinate(efficacy=0.9, when=20, coverage=0.5), **kw)}, n_runs=3)
     averted = msim.summarize(baseline='Base').loc[('sir_infection', 'Vaccine')]
     paired = msim.results.sir.infection.diff('Base').Vaccine.summarize()
     assert averted['median'] < 0 and np.isclose(float(averted['median']), np.median(paired), rtol=1e-3) # The paired differences, as msim.diff() gives
@@ -196,7 +197,7 @@ def test_scenarios():
     sir = ss.Disease(infection=S >> I @ 0.3*I, recovery=I >> R @ ss.days(10), init_n=dict(I=5), name='sir')
     kw = dict(total_pop=1_000, stop=ss.days(50), solver='binomial', verbose=0)
     agents = dict(n_agents=300, stop=ss.days(50), verbose=0)
-    msim = ss.parallel({'Base': ss.Sim(sir, **agents), 'Vaccine': ss.Sim(sir, interventions=ss.vaccinate(efficacy=0.9, coverage=0.5, at=20), **agents)}, n_runs=10, parallel=False)
+    msim = ss.parallel({'Base': ss.Sim(sir, **agents), 'Vaccine': ss.Sim(sir, interventions=ss.vaccinate(efficacy=0.9, when=20, coverage=0.5), **agents)}, n_runs=10, workers=1)
 
     # Every run of a scenario in its color, with as many runs as there are colors (they were all one color), and the same color in axes of a result only one scenario has
     fig = msim.plot(lines=True, do_show=False)
@@ -211,10 +212,10 @@ def test_scenarios():
     assert list(res.summarize().keys()) == ['Base', 'Vaccine'] and len(res.summarize().Base) == 10
     assert msim.summarize('sir.infection').equals(msim.summarize().loc['sir_infection'])
     sim = msim.sims[0]
-    assert sim.summarize('sir.infection') == sim.summary.value.sir_infection
-    once = ss.parallel(ss.Sim(sir, **kw), ss.Sim(sir, **kw, rand_seed=2), parallel=False) # Each scenario run once: the same table as a sim's, with a value column
+    assert sim.summarize('sir.infection') == sim.summarize().value.sir_infection
+    once = ss.parallel(ss.Sim(sir, **kw), ss.Sim(sir, **kw, rand_seed=2), workers=1) # Each scenario run once: the same table as a sim's, with a value column
     for s,(label,table) in zip(once.sims, once.summarize().groupby(level='scenario')):
-        assert table.droplevel('scenario').equals(s.summary) and s.summary.value.died == 0 # Results that are 0 throughout are kept, so the tables line up
+        assert table.droplevel('scenario').equals(s.summarize()) and s.summarize().value.died == 0 # Results that are 0 throughout are kept, so the tables line up
     assert sim.summarize('sir.I', how='max') == sim.results.sir.I.max() and msim.summarize('sir.S', how='min').equals(msim.summarize('sir.S')) # Peaks and troughs by name (S only falls, so its least is its last)
     with pytest.raises(ValueError, match="Unknown how='maxx'"): # Rather than N/A in the table
         sim.summarize(how='maxx')
@@ -244,18 +245,46 @@ def test_scenarios():
 def test_one_disease():
     """ Results across the runs are found in each sim's one disease, even if the diseases are named differently """
     sc.heading('Testing msim results and plots of each sim\'s one disease')
-    kw = dict(n_agents=500, dur=ss.days(30), unit='day', verbose=0)
+    kw = dict(n_agents=500, stop=ss.days(30), unit='day', verbose=0)
     S, E, I, R = ss.states('S E I R')
     sir = ss.Disease(S >> I @ 0.2*I, I >> R @ ss.days(10))
     seir = ss.Disease(S >> E @ 0.2*I, E >> I @ ss.days(3), I >> R @ ss.days(10))
-    msim = ss.parallel(ss.Sim(sir, label='SIR', **kw), ss.Sim(seir, label='SEIR', **kw), parallel=False, shrink=False)
+    msim = ss.parallel(ss.Sim(sir, label='SIR', **kw), ss.Sim(seir, label='SEIR', **kw), workers=1, shrink=False)
     assert np.array_equal(msim.results.I.values, [msim.sims[0].results.sir.I.values, msim.sims[1].results.seir.I.values]) # It was 'I' not found, and msim.plot('I') needed name=
     assert msim.results.E.run_pos == [1] # A result of only one of the diseases is across its runs
     msim.plot(['I', 'infection'])
     plt.close('all')
-    several = ss.parallel(ss.Sim([ss.SIR(), ss.SIS()], label='a', **kw), ss.Sim(ss.SIR(), label='b', **kw), parallel=False)
+    several = ss.parallel(ss.Sim([ss.SIR(), ss.SIS()], label='a', **kw), ss.Sim(ss.SIR(), label='b', **kw), workers=1)
     with pytest.raises(AttributeError):
         several.results.I # A sim with several diseases still needs the disease
+    return msim
+
+
+@sc.timer()
+def test_one_way():
+    """ One way to run each thing: sim.run() returns the sim, ss.parallel() runs many, and the old spellings say what replaced them """
+    sc.heading('Testing the one way to run, summarize, and describe')
+    S, I, R = ss.states(3)
+    sir = ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(8), init=dict(I=0.01), name='sir')
+    sim = ss.Sim(sir, unit='day', stop=30, total_pop=1000, solver='binomial', verbose=0)
+    assert sim.run() is sim and sim.restart(pars=dict(beta=0.4)).run() is sim
+    for key,new in dict(n_runs='ss.parallel', pars='restart', solver='new', profile="kind='loop'").items(): # Each names what replaced it
+        with pytest.raises(TypeError, match=new):
+            sim.run(**{key: 1})
+    with pytest.raises(TypeError, match='dict by label'): # Sims are not keywords, so the keywords are only options
+        ss.parallel(**dict(baseline=sim)) # As keywords (written so, so that rewrite scripts leave it)
+    with pytest.raises(TypeError, match='workers=1'):
+        ss.parallel(sim, **dict(parallel=False))
+    msim = ss.parallel({'a': sim.new(), 'b': sim.new(rand_seed=2)}, n_runs=2, workers=1)
+    each = msim.summarize(each=True) # A column for each run, as compare() gave
+    assert list(each.columns) == ['a (0)', 'a (1)', 'b (2)', 'b (3)'] and each.loc['sir_I', 'a (0)'] == msim.sims[0].results.sir.I[-1]
+    assert msim.summarize(each=True, t=10).loc['sir_I'].tolist() == [s.results.sir.I[10] for s in msim.sims]
+
+    # Text that shows itself, rather than output=
+    text = sim.diseases.sir.equations()
+    assert isinstance(text, str) and text.startswith('dS/dt') and isinstance(sim.describe(), str) and sim.check_dt().table is not None
+    with pytest.raises(AttributeError, match='summarize'):
+        getattr(sim, 'summary') # Removed, for sim.summarize()
     return msim
 
 
@@ -269,6 +298,7 @@ if __name__ == '__main__':
     s3,s4 = test_other()
     msim2 = test_scenarios()
     msim3 = test_one_disease()
+    msim4 = test_one_way()
 
     T.toc()
 

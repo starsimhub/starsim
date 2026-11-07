@@ -22,30 +22,30 @@ Then, in Starsim, `sim = ss.import_from('model.json')`. The dump records the las
 | A compartment | A state | yes |
 | `kind="mediated"`, `params=("beta*r", "I")` | Exposure: `S >> E @ beta * r * I`, through the contacts | yes |
 | `kind="spontaneous"`, `params="eps"` | A rate per day: `E >> I @ eps` | yes |
-| Two exits from a state at `r*X` and `r*(1-X)` (`mu*IFR`, `mu*(1-IFR)`) | One branch, `ss.Transition(I, [D, R], rate=mu, p=[IFR, None])`, named `I_to_D_or_R` | yes |
+| Two exits from a state at `r*X` and `r*(1-X)` (`mu*IFR`, `mu*(1-IFR)`) | One branch, `ss.Transition(I, {D: IFR, R: None}, rate=mu)`, named `I_to_D_or_R` | yes |
 | Other competing exits | Separate transitions from the same state (competing hazards, as epydemix's multinomial) | yes |
 | A number | A parameter | yes |
 | An array over time (1D) | `ss.timeseries({date: value})`, a point only where it changes, from the run's start date | yes |
 | An array by age (`convert_to_2Darray`) | `ss.by([...], dims=['age'])` | yes |
 | An array over time and by age | Its first row, by age (listed) | no |
 | `override_parameter()` of a number | Folded into the parameter's `ss.timeseries` | yes |
-| Age groups (`"0-4"`, `"65+"`) and `Nk` | `stratify(age=[0, 5, ...], fractions=Nk)`, `aging=False` (epydemix does not age people) | yes |
+| Age groups (`"0-4"`, `"65+"`) and `Nk` | `stratify(age=dict(zip([0, 5, ...], Nk)))`, `aging=False` (epydemix does not age people) | yes |
 | Groups that are not ages | `stratify(group=[...])` | yes |
 | Contact matrices by setting | `networks=ss.contacts(sum of the settings)` | yes |
 | Initial numbers by group (recorded run) | `init_n=dict(I=ss.by([...], dims=['age']))`, the state with most people taking the rest (it is made the first state, `default_state=`) | yes |
-| Daily steps of a chain binomial | `solver='binomial'`, `substeps=1`, `unit='day'`, stop a day after `end_date` | yes |
-| `add_intervention()` on one setting | Listed; by hand (`ss.modify(dis.S_to_E, multiply=..., start=..., stop=...)` if every setting is reduced alike, or the contacts as two networks) | no |
+| Daily steps of a chain binomial | `solver=ss.binomial(substeps=1)`, `unit='day'`, stop a day after `end_date` | yes |
+| `add_intervention()` on one setting | Listed; by hand (`ss.modify(dis.S_to_E, multiply=..., when=ss.schedule(start=..., stop=...))` if every setting is reduced alike, or the contacts as two networks) | no |
 | A custom transition kind (`register_transition_kind`) | Listed; by hand | no |
 | A chain of compartments `D0..D3` at `4/Delta` | Kept as compartments (exact); by hand, `ss.Transition(D, Dead, dur=Delta, stages=4)` reads better | no |
 | `beta = R0*mu/rho(C)` (computed in the script) | The value passed to the run is imported; to fit `R0`, write it out: `R0*mu/max(np.linalg.eigvals(matrix).real)` | no |
 | Seasonality from a sine with a peak date | The array passed to the run is imported; by hand, `ss.seasonal(mean=(1 + smin)/2, amplitude=(1 - smin)/(1 + smin), peak=14/365)` | no |
 | Initial numbers drawn at random in each run | The recorded draw, fixed | no |
-| Scenarios (contacts higher from a date) | `ss.modify(dis.S_to_E, multiply=1.3, start='2020-06-01')` | no |
+| Scenarios (contacts higher from a date) | `ss.modify(dis.S_to_E, multiply=1.3, when=ss.schedule(start='2020-06-01'))` | no |
 | `ABCSampler` (ABC-SMC) | `ss.par(..., bounds=[...])`, `data=ss.SimData(...)`, `sim.fit(method='abc-smc')`, or by default a point estimate | no |
 
 ## What needs care
 
-- **One step a day, with no substeps.** epydemix is a discrete-time model in its own right: in a day, `1 - exp(-rate)` of the people leave a state. Starsim's binomial solver takes substeps for an Erlang dwell time (`stages=`), for every transition, which changes the model (deaths by 2 August 6,039 against 10,525 in the COVID example). The import passes `substeps=1`; keep it if you rewrite the death chain with `stages=`.
+- **One step a day, with no substeps.** epydemix is a discrete-time model in its own right: in a day, `1 - exp(-rate)` of the people leave a state. Starsim's binomial solver takes substeps for an Erlang dwell time (`stages=`), for every transition, which changes the model (deaths by 2 August 6,039 against 10,525 in the COVID example). The import passes `solver=ss.binomial(substeps=1)`; keep it if you rewrite the death chain with `stages=`.
 - **Initial numbers are rounded down by age.** `percentage_in_agents` spreads the infections over the age groups and rounds each down (10 became 8 in Kenya); the dump records the actual numbers. The COVID tutorial's own initial conditions lose the odd person in each group (`(infected/2).astype(int)` twice), so they add up to 4 fewer than the population; the import makes the sim's population the initial numbers (epydemix still divides by `Nk` in the force of infection, a difference of 6e-7).
 - **A branch has one result.** `I_to_D_or_R` counts everyone leaving `I`; the number dying is the flow into `D` (`D0_to_D1` and `D0`), or write the two exits as separate transitions to keep both.
 - **Weeks end a day apart.** A Starsim flow summed weekly to a data date covers the week to the end of the day before (the date is the start of that day); epydemix's weeks end on Sunday. Sum the original's daily transitions to the same weeks before comparing.
@@ -63,7 +63,7 @@ r    = ss.par(ss.timeseries({'2020-02-23': 1.0, ...}))
 
 S_to_E       = S >> E @ beta * r * I
 E_to_I       = E >> I @ eps
-I_to_D0_or_R = ss.Transition(I, [D0, R], rate=mu, p=[IFR, None])
+I_to_D0_or_R = ss.Transition(I, {D0: IFR, R: None}, rate=mu)
 D0_to_D1     = D0 >> D1 @ 4.0 / Delta  # ... to D3_to_D4
 ```
 

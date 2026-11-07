@@ -47,12 +47,12 @@ With R0 = 16, an outbreak can only be prevented if more than 1 − 1/16, or abou
 
 ## A vaccination campaign
 
-A vaccine has two parts in a model: the **product**, what the vaccine does to the people who get it (here, it cuts their chance of infection by 93%, about what one dose of measles vaccine does), and the **delivery**, who gets it and when. [`ss.vaccinate()`](../api/interventions.qmd) takes both: the vaccine's efficacy, and the group (`where=`), the share of that group reached (`coverage=`), and when (`at=`, for a campaign on given dates).
+A vaccine has two parts in a model: the **product**, what the vaccine does to the people who get it (here, it cuts their chance of infection by 93%, about what one dose of measles vaccine does), and the **delivery**, who gets it and when. [`ss.vaccinate()`](../api/interventions.qmd) takes both: the vaccine's efficacy, and the group (`who=`), the share of that group reached (`coverage=`), and when (`when=`, e.g. the dates of a campaign).
 
 Suppose the town's health office runs a campaign on 1 March, two months into the outbreak, that reaches 80% of children under 15. A scenario is a sim with its own interventions; to compare scenarios, make a sim for each, labeled with a name that says what it is, and run them together with `ss.parallel()`:
 
 ```{python}
-campaign = ss.vaccinate(efficacy=0.93, where=measles.age < 15, coverage=0.8, at='2025-03-01')
+campaign = ss.vaccinate(efficacy=0.93, who=measles.age < 15, when='2025-03-01', coverage=0.8)
 
 msim = ss.parallel({
     'No intervention': ss.Sim(measles, **settings),
@@ -73,21 +73,21 @@ The vaccine here protects everyone vaccinated by 93% (it is "leaky"). Measles va
 
 ## Vaccination over time, and changing a parameter
 
-A campaign reaches many people on one day. A program can instead reach them over time, for example as children are brought to clinics during the outbreak. Without `at=`, a delivery is routine: each person is offered the vaccine once, when they first become eligible. With a rate as the coverage, they are reached at that rate for as long as they are eligible. Here, children under 15 are reached from 1 January at a rate that would vaccinate 80% of them in a year (`ss.probperyear(0.8)` is a probability of 0.8 over a year, which Starsim converts to the probability for each day of the run):
+A campaign reaches many people on one day. A program can instead reach them over time, for example as children are brought to clinics during the outbreak. Without `when=`, a delivery is routine: each person is offered the vaccine once, when they first become eligible. With a rate as the coverage, they are reached at that rate for as long as they are eligible. Here, children under 15 are reached from 1 January at a rate that would vaccinate 80% of them in a year (`ss.probperyear(0.8)` is a probability of 0.8 over a year, which Starsim converts to the probability for each day of the run):
 
 ```{python}
-gradual = ss.vaccinate(efficacy=0.93, where=measles.age < 15, coverage=ss.probperyear(0.8))
+gradual = ss.vaccinate(efficacy=0.93, who=measles.age < 15, coverage=ss.probperyear(0.8))
 ```
 
-This is not routine childhood immunization, which vaccinates each child as they reach an age (`at_age=ss.months(9)`), and works over years, as each new birth cohort is reached; it matters in a model of many years, with births (see [Interventions](../user_guide/interventions_interventions.qmd#rounds-and-routine-delivery)).
+This is not routine childhood immunization, which vaccinates each child as they reach an age (`who=ss.at_age(ss.months(9))`), and works over years, as each new birth cohort is reached; it matters in a model of many years, with births (see [Interventions](../user_guide/interventions_interventions.qmd#rounds-and-routine-delivery)).
 
-Some interventions don't give people anything, but change how the disease spreads: isolating cases, tracing their contacts, or keeping unvaccinated children home from school. In a model, these are changes to a parameter. [`ss.modify()`](../api/connectors.qmd) changes a parameter from a given date (and, with `stop=`, until another); it never overwrites the parameter, so when it stops, the parameter has its own value again. Here, an outbreak response from 1 March cuts transmission by 30%:
+Some interventions don't give people anything, but change how the disease spreads: isolating cases, tracing their contacts, or keeping unvaccinated children home from school. In a model, these are changes to a parameter. [`ss.modify()`](../api/connectors.qmd) changes a parameter from a given date (and, with `when=ss.schedule(start=..., stop=...)`, until another); it never overwrites the parameter, so when it stops, the parameter has its own value again. Here, an outbreak response from 1 March cuts transmission by 30%:
 
 ```{python}
-response = ss.modify(measles.pars.beta, multiply=0.7, start='2025-03-01')
+response = ss.modify(measles.pars.beta, multiply=0.7, when=ss.schedule(start='2025-03-01'))
 ```
 
-A time series does the same at several dates, each value holding until the next: for example, `ss.modify(measles.pars.beta, multiply=ss.timeseries({'2025-03-01': 0.7, '2025-06-01': 0.9}), start='2025-03-01')` cuts transmission by 30% from March, and by 10% from June, as the response is scaled down. [Interventions](../user_guide/interventions_interventions.qmd) covers the other options, such as changing a parameter only for some people, or only while cases are high.
+A time series does the same at several dates, each value holding until the next: for example, `ss.modify(measles.pars.beta, multiply=ss.timeseries({'2025-03-01': 0.7, '2025-06-01': 0.9}), when=ss.schedule(start='2025-03-01'))` cuts transmission by 30% from March, and by 10% from June, as the response is scaled down. [Interventions](../user_guide/interventions_interventions.qmd) covers the other options, such as changing a parameter only for some people, or only while cases are high.
 
 ## Comparing scenarios
 

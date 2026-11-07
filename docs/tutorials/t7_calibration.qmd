@@ -116,7 +116,7 @@ The fit gives one set of values, but others may fit the data almost as well: in 
 The range of values consistent with the data is a **posterior**. Finding it takes two more things. A **likelihood** says how the data vary around the model: here, as counts that vary more than Poisson counts (`ss.nbinom(n=20)`, a negative binomial). A **prior** says what is known about a parameter before seeing the data: the share reported was given one above (`prior=`), from earlier outbreaks: about a third of infections, give or take 10 percentage points (a beta distribution with mean 0.35 and variance 0.01, so a standard deviation of 0.1). β has none, so its prior is uniform over its bounds. The best fit above ignored the prior, since it doesn't use a likelihood. The sampler, NUTS, then draws values in proportion to how probable they are, given both:
 
 ```{python}
-post = sim.fit(method='nuts', likelihood=dict(cases=ss.nbinom(n=20)), draws=1000, warmup=1000)
+post = sim.fit(method=ss.fit.method('nuts', draws=1000, warmup=1000), likelihood=dict(cases=ss.nbinom(n=20)))
 post.summarize()
 ```
 
@@ -128,14 +128,14 @@ The data ends in mid-March, but the fitted model runs to September, so it projec
 
 ```{python}
 def campaign(date):
-    return ss.vaccinate(efficacy=0.93, where=measles.age < 15, coverage=0.8, at=date)
+    return ss.vaccinate(efficacy=0.93, who=measles.age < 15, when=date, coverage=0.8)
 
 scenarios = {
     'No campaign':         None,
     'Campaign on 1 April': campaign('2025-04-01'),
     'Campaign on 1 May':   campaign('2025-05-01'),
 }
-proj = post.project(scenarios, n=100)
+proj = post.project(scenarios, n_runs=100)
 proj.plot('measles.cases')
 ```
 
@@ -152,7 +152,7 @@ Since this data is illustrative, we can see what the coming weeks would have bro
 ```{python}
 after = pd.read_csv('data/measles_cases_after.csv')
 everything = pd.concat([data, after])
-proj = post.project({'No campaign': None}, n=100, data=everything)
+proj = post.project({'No campaign': None}, n_runs=100, data=everything)
 proj.plot('measles.cases')
 ```
 

@@ -21,11 +21,11 @@ Classes can be accessed either at the top level (`ssl.Measles`) or via their sub
 
 ### Diseases (`diseases/`)
 
-About twenty diseases: outbreak diseases written as code (measles, Ebola, cholera), HIV with treatment and CD4 counts, a non-communicable disease, Starsim 3's SIR, SIS, and SEIR written as code, and declared models of malaria, TB, COVID, influenza, RSV, pertussis, dengue, typhoid, polio, syphilis, and gonorrhea. Each says in its docstring where its structure and its default parameters came from. The user guide page [Library: diseases](https://starsim.org/v4/user_guide/library_diseases.html) describes them, with their sources, and its appendix lists every one, generated from the classes: whether it is declared or written as code, its default parameters (flagging placeholders), and its results.
+About twenty diseases: declared models of measles, Ebola, cholera, malaria, TB, COVID, influenza, RSV, pertussis, dengue, typhoid, polio, syphilis, and gonorrhea; and, written as code, HIV with treatment and CD4 counts, a non-communicable disease, and Starsim 3's SIR, SIS, and SEIR. Each says in its docstring where its structure and its default parameters came from. The user guide page [Library: diseases](https://starsim.org/v4/user_guide/library_diseases.html) describes them, with their sources, and its appendix lists every one, generated from the classes: whether it is declared or written as code, its default parameters (flagging placeholders), and its results.
 
 ### Networks (`networks/`)
 
-Households (`HouseholdNet`, `ClusterNet`, and Covasim's `HybridNet`), space (`DiskNet`, `GridNet`, and `GeoNet` for real places), and theoretical networks (`StaticNet` from any NetworkX graph, `SmallWorldNet`, `ScaleFreeNet`, `ErdosRenyiNet`, and `NullNet`). See [Library: networks](https://starsim.org/v4/user_guide/library_networks.html), whose appendix lists every one with its parameters and whether it keeps common random numbers.
+Households (`HouseholdNet`, `ClusterNet`, and Covasim's `HybridNet`), space (`DiskNet` and `GridNet`), and theoretical networks (`StaticNet` from any NetworkX graph, by default an Erdős–Rényi graph, `SmallWorldNet`, `ScaleFreeNet`, and `NullNet`). See [Library: networks](https://starsim.org/v4/user_guide/library_networks.html), whose appendix lists every one with its parameters and whether it keeps common random numbers.
 
 ### MNCH (`mnch/`)
 
@@ -37,7 +37,7 @@ Maternal, newborn, and child health examples, demonstrating patterns that are mo
 | `NeonatalSepsis` | `AgentSIR` | Infects newborns at birth and kills some within days, exercising the Pregnancy module's passive neonatal death detection |
 | `FetalHealth` | `ss.Module` | Tracks fetal growth and birth weight outcomes (LBW, VLBW, SGA); disease-agnostic, modified by other modules via its methods |
 | `fetal_infection` | `ss.Connector` | Links a disease to fetal health outcomes: preterm risk via delivery timing shifts, low birth weight via growth restriction |
-| `treat_pregnant` | `ss.Intervention` | Treats infected pregnant women and partially reverses accumulated fetal damage |
+| `treat_pregnant` | `ss.Delivery` | Treats infected pregnant women and partially reverses accumulated fetal damage |
 
 ### Economics (`econ/`)
 

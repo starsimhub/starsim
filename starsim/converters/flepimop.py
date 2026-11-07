@@ -56,9 +56,9 @@ def prior_of(val):
     dist = str(val.get('distribution', 'fixed')).lower()
     num = lambda key, default=None: float(val[key]) if key in val else default
     if dist == 'truncnorm':
-        return ss.truncnorm(loc=num('mean'), scale=num('sd'), low=num('a', -np.inf), high=num('b', np.inf))
+        return ss.truncnorm(mean=num('mean'), std=num('sd'), low=num('a', -np.inf), high=num('b', np.inf))
     elif dist in ['norm', 'normal']:
-        return ss.normal(loc=num('mean'), scale=num('sd'))
+        return ss.normal(mean=num('mean'), std=num('sd'))
     elif dist == 'uniform':
         return ss.uniform(low=num('low'), high=num('high'))
     elif dist == 'lognorm':
@@ -293,7 +293,7 @@ def load_flepimop(filename, scenario=None, verbose=None, **kwargs):
         notes.append('integration: flepiMoP\'s "euler" moves 1 - exp(-rate*dt) of each compartment a step; run as an ODE')
     cfg_sim = dict(solver=solver, unit='day', total_pop=float(sizes.sum()))
     if method in ['rk4', 'rk4jit', 'bestcurrent', 'stochastic']: # flepiMoP takes one RK4 step a step, or one chain-binomial step, so the numbers are its own
-        cfg_sim['substeps'] = 1
+        cfg_sim['solver'] = getattr(ss, solver)(substeps=1)
     if cfg.get('start_date'): # flepiMoP's output includes what happens during its end date, so the sim stops a day later
         cfg_sim.update(start=str(cfg['start_date']), stop=str(sc.date(str(cfg['end_date'])) + pd.Timedelta(days=1))[:10])
     if float(integ.get('dt', 1)) != 1:
@@ -301,7 +301,7 @@ def load_flepimop(filename, scenario=None, verbose=None, **kwargs):
     src.config.update(cfg_sim)
 
     # What is not translated
-    for key,why in dict(seeding='seeding (scheduled importations): an ss.geo.Mobility(data=...) register would carry it',
+    for key,why in dict(seeding='seeding (scheduled importations): an ss.geo.register(...) would carry it',
                         inference='inference (fitting to data): use sim.fit() with ss.SimData()',
                         outcome_modifiers='outcome modifiers (changes to the outcomes\' probabilities over date ranges): ss.modify on the weights would carry them').items():
         if cfg.get(key):
@@ -364,7 +364,7 @@ def modifiers(scenario, mods, disease, places, methods, src, quiet=False):
             src.skip(f'seir_modifiers: {key}', f'applies only in {sc.strjoin(sc.tolist(subpops))}; imported for every place')
         if mod.get('subpop_groups') and not quiet:
             src.skip(f'seir_modifiers: {key}', 'subpop_groups (one value drawn for a group of places) were not translated')
-        out.append(dict(target=f'{disease}.pars.{par}', start=str(mod['period_start_date']), stop=stop, name=key, **amount))
+        out.append(dict(target=f'{disease}.pars.{par}', when=ss.schedule(start=str(mod['period_start_date']), stop=stop), name=key, **amount))
     add(scenario)
     return out
 
@@ -392,8 +392,8 @@ def outcome(name, o, dims, src, notes):
     if 'delay' in o:
         kw['delay'] = ss.days(mean_of(o['delay']['value'], f'outcomes: {name}.delay', src))
     if 'duration' in o:
-        kw['stay'] = ss.constant(mean_of(o['duration']['value'], f'outcomes: {name}.duration', src), unit='days') # A fixed stay, as in flepiMoP
-        notes.append(f'outcomes: {name} has a stay of {kw["stay"]}; the number in it is n_{name} (flepiMoP\'s {o["duration"].get("name", name + "_curr")})')
+        kw['dur'] = ss.constant(mean_of(o['duration']['value'], f'outcomes: {name}.duration', src), unit='days') # A fixed stay, as in flepiMoP
+        notes.append(f'outcomes: {name} has a stay of {kw["dur"]}; the number in it is n_{name} (flepiMoP\'s {o["duration"].get("name", name + "_curr")})')
     src.add_outcome(name, flows, p=p, doc=f'the probability of {name}', **kw)
     return
 

@@ -1,5 +1,5 @@
 """
-Not for the user: agents taken event by event in continuous time within each step (`solver='abm-events'`; see `ss.solvers.Events`)
+Not for the user: agents taken event by event in continuous time within each step (`solver=ss.abm(step='events')`; see `ss.solvers.Events`)
 
 Used with: agents; declared modules
 """
@@ -15,7 +15,7 @@ __all__ = ['Events']
 
 class Events(Agents):
     """
-    Runs a graph as agents, event by event in continuous time within each step (`solver='abm-events'`)
+    Runs a graph as agents, event by event in continuous time within each step (`solver=ss.abm(step='events')`)
 
     It exists so that a model whose events are fast against a step (an epidemic on a network) needs neither small steps nor a pass over
     every edge in each of them. The engine is called once a step, as the agent engine is, and takes its agents through the step in one
@@ -39,7 +39,7 @@ class Events(Agents):
         graph = self.graph
         sim = self.sim
         def no(what, why='which the events do not take yet'):
-            raise ss.CapabilityError(f'"{mod.name}" cannot run with solver="abm-events": {what}, {why}. Run it with solver="abm" (a module can have its own, e.g. ss.Disease(..., solver="abm")).')
+            raise ss.CapabilityError(f'"{mod.name}" cannot run with solver=ss.abm(step="events"): {what}, {why}. Run it with solver="abm" (a module can have its own, e.g. ss.Disease(..., solver=ss.abm())).')
         if sim.pars.branching:
             no('the sim is a branching process (branching=True)')
         if self.strain is not None:
@@ -48,7 +48,7 @@ class Events(Agents):
         if mixing.share is not None or mixing.migration is not None or mixing.register is not None:
             no('people move between places (by commuting, visiting, a force between places, migration, or a movement register)', 'which changes who meets whom, or the place people are in, in ways the events do not take yet: they take places whose people stay in them')
         if groups.group_fold is not None:
-            no('a stratification applies to only some people (where=)', 'whose counts the agent engine takes again from the agents at each step, which the events do not do yet')
+            no('a stratification applies to only some people (who=)', 'whose counts the agent engine takes again from the agents at each step, which the events do not do yet')
         for d,strat in enumerate(groups.strats):
             if strat.kind == 'disease' or any(not self.applies[s.name][d] for s in graph.people_states):
                 no(f'the dimension "{strat.name}" is not one that every state of people has', 'so people take a level of it as they enter a state, which the events do not do yet')
@@ -56,8 +56,6 @@ class Events(Agents):
             no(f'{sc.strjoin(s.name for s in graph.count_states)} {"is a state" if len(graph.count_states) == 1 else "are states"} that are not people')
         if self.attrs or self.sets or self.derived:
             no('it has attributes or clocks')
-        if self.lifetables:
-            no('it has a life table')
         if graph.inflows or graph.transfers:
             no('people enter it by a transition (births) or move by a transfer')
         if len(graph.transmissions) > 1:
@@ -111,7 +109,7 @@ class Events(Agents):
             """ Shares that are the same for everyone, as the events take them yet: the cumulative shares (one row per branch, and its end) of the first agent """
             edges = np.asarray(edges, dtype=float).reshape(len(edges), -1)
             if edges.shape[1] > 1 and np.ptp(edges, axis=1).max() > 1e-12:
-                raise ss.CapabilityError(f'"{self.mod.name}" cannot run with solver="abm-events": the shares of {what} differ between people, which the events do not take yet. Run it with solver="abm".')
+                raise ss.CapabilityError(f'"{self.mod.name}" cannot run with solver=ss.abm(step="events"): the shares of {what} differ between people, which the events do not take yet. Run it with solver="abm".')
             return edges[:, 0]
         brs, cums = [], []
         for state in graph.people_states:
@@ -188,18 +186,18 @@ class Events(Agents):
         """
         hazards = {state: np.asarray(h, dtype=float) for state,h in hazards.items()} # By direction
         if any(h.ndim > 1 for h in hazards.values()):
-            raise ss.CapabilityError(f'"{self.mod.name}" cannot run with solver="abm-events": its chance per act of "{tr.name}" on "{nkey}" differs between people, which the events do not take yet. Run it with solver="abm".')
+            raise ss.CapabilityError(f'"{self.mod.name}" cannot run with solver=ss.abm(step="events"): its chance per act of "{tr.name}" on "{nkey}" differs between people, which the events do not take yet. Run it with solver="abm".')
         top = np.max(list(hazards.values()), axis=0)
         on = top > 0
         shares = {}
         for state,h in hazards.items():
             ratio = h[on]/top[on]
             if len(ratio) and np.ptp(ratio) > 1e-12:
-                raise ss.CapabilityError(f'"{self.mod.name}" cannot run with solver="abm-events": the chances per act of the source states of "{tr.name}" on "{nkey}" are not in proportion in every direction, which the events do not take yet. Run it with solver="abm".')
+                raise ss.CapabilityError(f'"{self.mod.name}" cannot run with solver=ss.abm(step="events"): the chances per act of the source states of "{tr.name}" on "{nkey}" are not in proportion in every direction, which the events do not take yet. Run it with solver="abm".')
             shares[state] = float(ratio[0]) if len(ratio) else 0.0
         edges = route.edges
         p1, p2 = np.asarray(edges.p1), np.asarray(edges.p2)
-        rate = np.asarray(edges.beta, dtype=float)*np.asarray(edges.acts, dtype=float)/self.dt # The acts of the step, spread through it
+        rate = np.asarray(edges.weight, dtype=float)*np.asarray(edges.acts, dtype=float)/self.dt # The acts of the step, spread through it
         w1 = rate*top[route.edge_directions(p1, p2)]
         w2 = w1 if route.one_way or not route.sides else rate*top[route.edge_directions(p2, p1)]
         return shares, w1, w2
@@ -221,7 +219,7 @@ class Events(Agents):
         term = mixing.pool_terms.get(route.name)
         if term is None: # By age bands of its own, from the first (younger people have no contacts)
             cell[auids] = sim.people.age_bins(route.edges)[auids] - 1
-            mat = float(route.pars.beta)*np.asarray(route.pars.n_contacts, dtype=float).T # Indexed [source, destination]
+            mat = np.asarray(route.pars.n_contacts, dtype=float) # Indexed [destination, source], as a contact survey
             return cell, mat, len(mat)
         if term.kind == 'homogeneous': # Everyone with everyone in their own place
             of_group, mat, size = mixing.places, np.array([[float(term.contacts)]]), sim.groups.strats[mixing.space].n
@@ -255,19 +253,19 @@ class Events(Agents):
                 if acts:
                     coefs, w1, w2 = self.act_weights(tr, nkey, route, coefs)
                 if any(np.ndim(c) for c in coefs.values()):
-                    raise ss.CapabilityError(f'"{mod.name}" cannot run with solver="abm-events": the coefficient of "{tr.name}" on "{nkey}" differs between people, which the events do not take yet. Run it with solver="abm".')
+                    raise ss.CapabilityError(f'"{mod.name}" cannot run with solver=ss.abm(step="events"): the coefficient of "{tr.name}" on "{nkey}" differs between people, which the events do not take yet. Run it with solver="abm".')
                 ref = max([float(c) for c in coefs.values()] + [0.0])
                 if ref <= 0:
                     continue
                 elif not np.isfinite(ref):
-                    raise ss.CapabilityError(f'"{mod.name}" cannot run with solver="abm-events": the coefficient of "{tr.name}" on "{nkey}" is a probability of 1, an infinite rate, which has no time to the next event. Run it with solver="abm", where it is a certain transmission.')
+                    raise ss.CapabilityError(f'"{mod.name}" cannot run with solver=ss.abm(step="events"): the coefficient of "{tr.name}" on "{nkey}" is a probability of 1, an infinite rate, which has no time to the next event. Run it with solver="abm", where it is a certain transmission.')
                 share = np.zeros(ns)
                 for state,c in coefs.items():
                     share[self.state_index[state.name]] = float(c)/ref*float(state.rel_trans)
                 ctc = np.zeros(n) # Each agent's contacts on a pool or contact matrix (0 if not a source there)
                 if is_net:
                     if not acts:
-                        w1 = w2 = np.asarray(route.edges.beta, dtype=float)
+                        w1 = w2 = np.asarray(route.edges.weight, dtype=float)
                     index = route.edge_index(now=True) # The edges of each agent, kept while the edges are the same
                     if index is None: # No edges
                         index = [np.zeros(1, np.int64)] + [np.zeros(0, np.int64)]*2 + [np.zeros(1, np.int64)] + [np.zeros(0, np.int64)]*2
@@ -302,7 +300,7 @@ class Events(Agents):
                         continue
                     eff = np.asarray(route.eff_contacts.raw, dtype=float)[:n]
                     bound = sus_max*eff[dst].max()
-                    scale = float(route.pars.beta)*ref/len(srcs)
+                    scale = ref/len(srcs)
                     ctc[srcs] = len(dst)
                     out.members.append(dst); out.mem_eff.append(eff[dst]); out.mem_off.append(n_mem); out.mem_n.append(len(dst)); out.x_off.append(0); out.r_n.append(0); out.beta_off.append(0)
                     n_mem += len(dst)
@@ -395,7 +393,7 @@ class Events(Agents):
             sus_state, sus_agent, w_agent, *routes)
         self.kstate = state
         if over:
-            raise RuntimeError(f'"{mod.name}" took a contact whose chance of infecting was above the bound it was drawn at: an edge\'s beta was raised in place (net.edges.beta[...] = ...); give the network new edge arrays instead, e.g. net.edges.beta = new_beta')
+            raise RuntimeError(f'"{mod.name}" took a contact whose chance of infecting was above the bound it was drawn at: an edge\'s weight was raised in place (net.edges.weight[...] = ...); give the network new edge arrays instead, e.g. net.edges.weight = new_weight')
 
         # Written to the agents: who is in each state, the flows, and the events
         moved = np.unique(e_a)

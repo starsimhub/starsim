@@ -60,5 +60,5 @@ Bacteria build up in the water while people are infectious, and outlast them: th
 ## Going further
 
 - [Diseases](../user_guide/building_diseases.qmd) covers states that are counts, and flows from and to `ss.dead`.
-- The library's cholera model, `ssl.diseases.Cholera`, is a fuller version written as code (see the [library's diseases](../user_guide/library_diseases.qmd)).
+- The library's cholera model, `ssl.diseases.Cholera`, is a fuller version of the same model, with a latent period, asymptomatic infection, and deaths (see the [library's diseases](../user_guide/library_diseases.qmd)).
 - Codeço CT (2001). Endemic and epidemic dynamics of cholera: the role of the aquatic reservoir. *BMC Infectious Diseases* 1:1.

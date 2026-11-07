@@ -57,7 +57,7 @@ def test_seir():
         init_n    = dict(Exposed=ss.by([10, 0], dims=['age']), Infected=ss.by([5, 10], dims=['age'])),
         name      = 'oseir',
     )
-    seir.stratify(age=['0', '1'], fractions=[0.6, 0.4])
+    seir.stratify(age={'0': 0.6, '1': 0.4})
     ref = ss.Sim(seir, networks=ss.contacts([[4.0, 1.0], [1.0, 3.0]]), total_pop=10_000, unit='day', stop=ss.days(60), solver='ode', verbose=0).run()
     for s in ['Susceptible', 'Exposed', 'Infected', 'Recovered']:
         assert np.allclose(res[s].values, ref.results.oseir[s].values, rtol=1e-9), f'{s} should match the model written by hand'
@@ -123,8 +123,8 @@ def test_graph_json():
         name      = 'oseir',
     )
     totals = np.array([[6000, 2000], [4000, 1000]])
-    seir.stratify(age=['0', '1'], fractions=[8/13, 5/13])
-    seir.stratify(patch=['0', '1'], fractions=ss.by(totals/totals.sum(), dims=['age', 'patch']), mobility=ss.geo.Mobility(matrix=[[0, 0.05], [0.1, 0]], kind='commute'))
+    seir.stratify(age={'0': 8/13, '1': 5/13})
+    seir.stratify(patch=ss.levels(['0', '1'], fractions=ss.by(totals/totals.sum(), dims=['age', 'patch']), mobility=ss.geo.Mobility(matrix=[[0, 0.05], [0.1, 0]], kind='commute')))
     ref = ss.Sim(seir, networks=ss.contacts([[4.0, 1.0], [1.0, 3.0]]), total_pop=13_000, unit='day', stop=ss.days(60), solver='ode', verbose=0).run()
     assert np.allclose(res.Infected.values, ref.results.oseir.Infected.values, rtol=1e-9), 'The import should match the model written by hand'
     return sim
@@ -132,7 +132,7 @@ def test_graph_json():
 
 def seir_sim(**kwargs):
     """ An SEIR to export """
-    pars = dict(diseases=ss.SEIR(beta=ss.perday(0.4), dur_exp=ss.days(4), dur_inf=ss.days(8), init_prev=0.01), total_pop=10_000, unit='day', dur=100, solver='ode', verbose=0)
+    pars = dict(diseases=ss.SEIR(beta=ss.perday(0.4), dur_exp=ss.days(4), dur_inf=ss.days(8), init_prev=0.01), total_pop=10_000, unit='day', stop=ss.days(100), solver='ode', verbose=0)
     return ss.Sim(**(pars | kwargs))
 
 

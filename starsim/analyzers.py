@@ -54,7 +54,7 @@ class infection_log(Analyzer):
     of -1, and infections by a mixing pool (`ss.MixingPool`), a contact matrix, or
     mixing with everyone (no network) have a source and network of NaN, since they
     come from the share infectious in a group rather than from a particular person
-    (by events, `solver='abm-events'`, each contact is with a particular person, so
+    (by events, `solver=ss.abm(step='events')`, each contact is with a particular person, so
     these have a source and route too). For a disease with strains (`ss.Strains`),
     each entry also has the strain transmitted (`strain`; for seeds, the strains
     they start with). As agents only.
@@ -69,7 +69,7 @@ class infection_log(Analyzer):
     Examples:
         ```python
         import starsim as ss
-        sim = ss.Sim(n_agents=1000, dt=0.2, dur=15, diseases='sir', networks='random', analyzers='infection_log')
+        sim = ss.Sim(n_agents=1000, dt=0.2, stop=ss.years(15), diseases='sir', networks='random', analyzers='infection_log')
         sim.run()
         sim.analyzers[0].plot()
         ```

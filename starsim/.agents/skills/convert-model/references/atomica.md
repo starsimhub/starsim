@@ -21,18 +21,18 @@ An Atomica model is a framework workbook (compartments, characteristics, paramet
 | Initial numbers | Solved from the databook's compartments and characteristics at the first year, as Atomica does: those with a setup weight (by default, those in the databook or with a default), zeros fixed, least squares with the smallest norm | yes |
 | Several population types (`Population types` sheet) | The first type as the disease; the others (each would be a disease of its own) and the interactions between them listed | no |
 | `SRC_POP_AVG()`, `SRC_POP_SUM()`, where every pair of populations interacts alike | A count in all of them (`I.total`) | yes |
-| Those that are not alike, and a flow's value (`x*:ddis`) in a function | Listed (with the transitions that use them): an aggregate over interacting populations is a contact matrix, `ss.contacts(..., dims='population')` | no |
-| Several populations | A stratification `population=[...]` with `kind='space'` (so `sus.n` is the count in each population), values as `ss.by(population=[...])` | yes |
-| Atomica's step | `integrator='euler', substeps=1`, `dt` in years (Atomica's default 0.25) | yes |
+| Those that are not alike, and a flow's value (`x*:ddis`) in a function | Listed (with the transitions that use them): an aggregate over interacting populations is a contact matrix, `ss.contacts(population=...)` | no |
+| Several populations | A stratification `population=ss.levels([...], kind='space')` (so `sus.n` is the count in each population), values as `ss.by(population=[...])` | yes |
+| Atomica's step | `solver=ss.ode(integrator='euler', substeps=1)`, `dt` in years (Atomica's default 0.25) | yes |
 | Programs (a program book, `progbook=`) | A parameter of spending for each program (`spend_<program>`, listed in `sim.imported.programs`), its coverage from spending and unit cost, and each affected parameter moved towards the programs' outcomes by coverage (additive interaction only; others are listed) | yes |
 | A calibration (`calibration=`, Atomica's saved y-factors) | Each value scaled by its y-factor | yes |
-| Junctions | A branch: `ss.Transition(src, [a, b], rate=..., p=[pa, pb])` | yes |
+| Junctions | A branch: `ss.Transition(src, {a: pa, b: pb}, rate=...)` | yes |
 | Transfers between populations (rates, probabilities, durations) | `ss.transfer` on the population stratification | yes |
-| Interactions (a force of infection between populations) | A contact matrix, `ss.contacts([[...]], dims='population')` | no |
+| Interactions (a force of infection between populations) | A contact matrix, `ss.contacts(population=[[...]])` | no |
 
 ## What needs care
 
-- Atomica moves `value × dt` (or `dt / duration`, or `number × dt`) each step, capped at everyone: the Euler step. The import uses `integrator='euler', substeps=1` so that it agrees to rounding error; a finer Starsim run is closer to the continuous model but not to Atomica.
+- Atomica moves `value × dt` (or `dt / duration`, or `number × dt`) each step, capped at everyone: the Euler step. The import uses `solver=ss.ode(integrator='euler', substeps=1)` so that it agrees to rounding error; a finer Starsim run is closer to the continuous model but not to Atomica.
 - Run with the same `dt` as the reference (`ss.import_from(..., dt=1)` for the worked examples): at a different step the numbers differ by order `dt`.
 - Atomica runs from the first year of data to five years after the last (or to 2035 if the model has births); the import does the same unless `start=` and `stop=` are given.
 

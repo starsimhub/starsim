@@ -16,9 +16,9 @@ import starsim.library as ssl
 n_agents = 2_000
 
 # Outbreak diseases specify their natural history in days, so they need a sub-year timestep
-outbreak_pars = dict(start=2000, dur=ss.years(1), dt=ss.days(1), n_agents=n_agents, rand_seed=1, verbose=0)
+outbreak_pars = dict(start=2000, stop=ss.years(1), dt=ss.days(1), n_agents=n_agents, rand_seed=1, verbose=0)
 endemic_pars  = dict(start=2000, stop=2030, n_agents=n_agents, rand_seed=1, verbose=0)
-mnch_pars     = dict(start=2000, dur=ss.years(3), dt=ss.weeks(1), n_agents=n_agents, rand_seed=1, verbose=0)
+mnch_pars     = dict(start=2000, stop=ss.years(3), dt=ss.weeks(1), n_agents=n_agents, rand_seed=1, verbose=0)
 
 
 @sc.timer()
@@ -26,7 +26,7 @@ def test_mnch():
     """ Check that the MNCH modules run and produce their headline outcomes """
     sc.heading('Testing MNCH modules...')
 
-    demographics = lambda: [ss.Pregnancy(fertility_rate=ss.time.freq(100, 'year'), burnin=True), ss.Deaths()]
+    demographics = lambda: [ss.Pregnancy(fertility_rate=ss.peryear(0.1), burnin=True), ss.Deaths()]
     networks = lambda: [ss.PrenatalNet(), ss.RandomNet()]
     sims = sc.obj()
 
@@ -53,7 +53,7 @@ def test_mnch():
     # Fetal health: infection during pregnancy should restrict growth
     sim = ss.Sim(diseases=ssl.AgentSIR(name='sir', beta=ss.peryear(20)), demographics=demographics(),
                  connectors=ssl.mnch.fetal_infection(), modules=ssl.mnch.FetalHealth(),
-                 interventions=ssl.mnch.treat_pregnant(disease='sir', start_year=2001),
+                 interventions=ssl.mnch.treat_pregnant(disease='sir', when=ss.schedule(start=2001)),
                  networks=networks(), **mnch_pars)
     sim.run()
     fh = sim.custom.fetal_health

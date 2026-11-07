@@ -8,7 +8,7 @@ compartment becomes a state; each mediated transition exposure to its agent, thr
 the population's contact matrices (summed over the settings, as epydemix does); each
 spontaneous transition a rate per day; and the population's age groups a
 stratification. epydemix runs in daily steps of a chain binomial, so the sim is
-`solver='binomial'` with `substeps=1`.
+`solver=ss.binomial(substeps=1)`.
 
 Writing the JSON: run as a script, this file runs where epydemix is installed, and
 needs neither Starsim nor Sciris, so it can be copied into any epydemix environment.
@@ -273,11 +273,11 @@ def load_epydemix(source, start=None, stop=None, verbose=None, **kwargs):
     if n > 1:
         levels = edges if edges is not None else list(groups)
         src.stratify(**{dim:levels}, fractions=(people/people.sum()).tolist())
-        src.config.networks = Code(f'ss.contacts({matrix.tolist()!r}' + (f', dims={dim!r}' if dim != 'age' else '') + ')')
+        src.config.networks = Code(f'ss.contacts({matrix.tolist()!r})' if dim == 'age' else f'ss.contacts({dim}={matrix.tolist()!r})')
         src.notes.append(f'contacts      the {len(pop["contacts"])} settings of {pop["name"]} ({sc.strjoin(pop["contacts"].keys())}) added together')
 
     # Run settings: epydemix's end date is the last day it steps through, so the sim stops a day later
-    src.config.update(unit='day', dt=dt, start=start, stop=str(np.datetime64(stop, 'D') + np.timedelta64(1, 'D')), solver='binomial', substeps=1, total_pop=float(people.sum()))
+    src.config.update(unit='day', dt=dt, start=start, stop=str(np.datetime64(stop, 'D') + np.timedelta64(1, 'D')), solver=ss.binomial(substeps=1), total_pop=float(people.sum()))
     if edges is not None:
         src.config.aging = False
     return build(src, verbose=verbose, **kwargs)

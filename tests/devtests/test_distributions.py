@@ -26,9 +26,9 @@ def test_hist_plotting():
     # Based on the distributions page of the user guide
     sir = ss.SIR(
         init_prev = 0.15,
-        dur_inf = ss.weibull(c=2, loc=1, scale=2)
+        dur_inf = ss.weibull(shape=2, loc=1, scale=2)
     )
-    sim = ss.Sim(n_agents=100, diseases=sir, dur=15, networks=ss.RandomNet())
+    sim = ss.Sim(n_agents=100, diseases=sir, stop=ss.years(15), networks=ss.RandomNet())
     sim.run()
 
     # Plot the distribution
@@ -42,7 +42,7 @@ def test_lognormal_log_unit():
         class M(ss.Disease):
             S, I, R = ss.states('S I R')
             rec = ss.Transition(I, R, dur=dur)
-        sim = ss.Sim(diseases=M(init=dict(I=1.0)), n_agents=5000, dur=ss.days(200), dt=ss.days(1), unit='day', verbose=0, rand_seed=1).run()
+        sim = ss.Sim(diseases=M(init=dict(I=1.0)), n_agents=5000, stop=ss.days(200), dt=ss.days(1), unit='day', verbose=0, rand_seed=1).run()
         I = sim.results.m.I.values
         return I.sum()/I[0]
     mu, sigma = np.log(3), 0.5

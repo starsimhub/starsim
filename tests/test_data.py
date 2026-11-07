@@ -43,7 +43,7 @@ def test_contacts():
 
     # A place a source does not have says which do
     with pytest.raises(KeyError, match='mistry2021'):
-        ss.contacts('Japan', source='prem2021')
+        ss.contacts('Japan', study='prem2021')
     assert ss.data.contacts('Japan').attrs['ref']['study'] == 'Prem et al. 2017' # By default, Prem 2021 where it has the place, else Prem 2017
     with pytest.raises(KeyError, match='the place "Kenyaa" was not found'):
         ss.contacts('Kenyaa')
@@ -72,14 +72,14 @@ def test_geo():
 
     # As the places of a model, with travel between them
     sir = make_sir()
-    sir.stratify(patch=kenya, mobility=ss.geo.gravity(away=0.1))
+    sir.stratify(patch=ss.levels(kenya, mobility=ss.geo.gravity(away=0.1)))
     sim = ss.Sim(sir, total_pop=50e6, unit='day', stop=60, **kw).run()
     shares = sim.results.sir.S.strata[0]/sim.results.sir.S.strata[0].sum()
     assert np.allclose(shares, kenya.populations/kenya.populations.sum()) # People start in each county in proportion to its population
-    assert 'starsim_data' in sim.describe(output=True)
+    assert 'starsim_data' in sim.describe()
 
     # Gravity gives the shape of the movement and away= its amount (10% if not given); a k that sends people away more than all their time warns
-    home = lambda mob: ss.Sim(make_sir().stratify(patch=kenya, mobility=mob), unit='day', stop=60, **kw).init().mixing.time_share.diagonal()
+    home = lambda mob: ss.Sim(make_sir().stratify(patch=ss.levels(kenya, mobility=mob)), unit='day', stop=60, **kw).init().mixing.time_share.diagonal()
     assert np.allclose(home(ss.geo.gravity()), 0.9) and np.allclose(home(ss.geo.gravity(away=0.2)), 0.8)
     assert ss.Sim(make_sir().stratify(patch=kenya), unit='day', stop=60, **kw).init().pars.total_pop == kenya.populations.sum() # Places with populations give the population size
     with pytest.warns(RuntimeWarning, match='capped'):
@@ -134,7 +134,7 @@ def test_people():
 
     # As agents, the same ages and the share who are female
     abm = ss.Sim(make_sir(), people=ss.population('Kenya', year=2024, n_agents=20_000), stratify=stratify, unit='day', stop=60, **kw).run()
-    assert abm.solver == 'abm' and abm.pars.pop_scale == total/20_000
+    assert abm.solver == 'abm' and abm.pop_scale == total/20_000
     share = np.histogram(abm.people.age.values, [0, 5, 18, 65, 200])[0]/20_000
     assert np.allclose(share, abm.groups.strats[0].fractions, atol=0.01)
     assert abs(abm.people.female.mean() - female.sum()/(female + male).sum()) < 0.01

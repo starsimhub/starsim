@@ -18,7 +18,7 @@ Then, in Starsim, `sim = ss.import_from('model.json')`, or `ss.import_from('intr
 
 | EpiModel | Starsim | Mechanical |
 |---|---|---|
-| `netsim()` with `type = "SI"`, `"SIS"`, `"SIR"` | States `S`, `I` (and `R`); `infection = S >> I @ beta * I` with `beta = ss.peract(inf.prob)`, and `act.rate` as `acts=` of the network (e.g. `ss.freqperday(2)`), so the chance per partnership per step is `1 - (1 - inf.prob)^act.rate`; `rec.rate` to `S` or `R` | yes |
+| `netsim()` with `type = "SI"`, `"SIS"`, `"SIR"` | States `S`, `I` (and `R`); `infection = S >> I @ beta * I` with `beta = ss.peract(inf.prob)`, and `act.rate` as `acts=` of the network (e.g. `ss.perday(2)`), so the chance per partnership per step is `1 - (1 - inf.prob)^act.rate`; `rec.rate` to `S` or `R` | yes |
 | Probabilities per step | `ss.prob(..., 'day')` (or the `unit=` given: a step is only a name, so `unit='week'` gives the same numbers) | yes |
 | `a.rate`, `ds.rate`, `di.rate`, `dr.rate` | An inflow `a_rate * (S + I + R).n` and an outflow from each state | yes |
 | `i.num`, `r.num`; the network's size | `init_n=dict(S=..., I=..., R=...)` (numbers of people), `n_agents=n`, `solver='abm'` | yes |
@@ -36,9 +36,9 @@ Then, in Starsim, `sim = ss.import_from('model.json')`, or `ss.import_from('intr
 | Two groups (parameters ending in `.g2`) | Listed: `stratify(group=[1, 2])` with rates by group, by hand | no |
 | A parameter by time since infection (`inf.prob` as a vector), `inter.eff`, `inter.start` | Listed; the first value is used | no |
 | A custom module (`infection.FUN = infect`, `type = NULL`) | Listed, with its R source in `sim.imported.modules` (and other functions in `sim.imported.functions`); a model of custom modules only imports its networks, with the parameters in `sim.imported.pars` | no |
-| A node attribute that changes (stage, care state) | A state, or a dimension: `hiv.stratify(care=[...], states=[A, C, D])` with `ss.transfer(care=('undx', 'dx'), rate=...)` | no |
-| An attribute's effect on a rate (`rel_trans` on ART) | `adjust=dict(rel_trans=[...], aids=[...])` on the stratification, or `rel_trans=` on a state | no |
-| A custom module that delivers something (PrEP, testing) | A product and a delivery: `ss.vaccinate(efficacy=..., coverage=..., where=...)`, `ss.treat(...)`; a function for eligibility on the network (below) | no |
+| A node attribute that changes (stage, care state) | A state, or a dimension: `hiv.stratify(care=ss.levels([...], states=[A, C, D]))` with `ss.transfer(dict(care=('undx', 'dx')), rate=...)` | no |
+| An attribute's effect on a rate (`rel_trans` on ART) | A value by level: `ss.modify(hiv.rel_trans, multiply=ss.by(care=[...]))` (likewise for a transition, e.g. `hiv.aids`), or `rel_trans=` on a state | no |
+| A custom module that delivers something (PrEP, testing) | A product and a delivery: `ss.vaccinate(efficacy=..., who=..., coverage=...)`, `ss.treat(...)`; a function for eligibility on the network (below) | no |
 | `dcm()` with a custom derivative function (`new.mod`) | Listed with its source; pair the outflow of one compartment with the inflow of another into a transition, and classify each by the import rules | no |
 
 ## What needs care
@@ -46,7 +46,7 @@ Then, in Starsim, `sim = ss.import_from('model.json')`, or `ss.import_from('intr
 - **Order within a step.** EpiModel lets people recover in the step in which they are infected and counts after that, so its prevalence is about 5% lower for the same epidemic, and it grows a little more slowly (`icm()` SIS: 460 infected at equilibrium against 487; `netsim()` SIS: 227.5 against 234). Compare new infections a step, which agree (the introduction: 12.0 against 11.7 a step at equilibrium, and the statistical comparison passes; `icm()`: 24.1 against 24.7), or allow for it.
 - **Acts per partnership.** EpiModel's chance over a partnership in a step is `1 - (1 - inf.prob*m)^act.rate`, with `m` the infectiousness multiplier of the infected partner. Starsim multiplies `1 - (1 - inf.prob)^act.rate` by `rel_trans`; the difference is small (0.0374 against 0.0370 for an acute partner).
 - **The network matches the targets better than EpiModel's own.** EpiModel's simulated network can undershoot its targets (casual mean degree 0.28 against 0.30), so agreement on the targets does not imply agreement on the network. Compare the simulated network's diagnostics (edges, mean degree, concurrency) as series too.
-- **Conditions on the network are a function.** Eligibility such as "two or more partners across both networks, or a partner with HIV" has no declared form; write a `where=` function that reads `net.edges.p1`/`p2` and mark it as a workaround.
+- **Conditions on the network are a function.** Eligibility such as "two or more partners across both networks, or a partner with HIV" has no declared form; write a `who=` function that reads `net.edges.p1`/`p2` and mark it as a workaround.
 - **Stopping a product at a rate** is written as waning: `ss.Vaccine(efficacy=0.95, waning=-1/np.log(1 - p_stop))`, a mean duration of protection in steps.
 - **A care cascade is a dimension, not a disease.** EpiModel's separate attributes (stage, care state, ART history) become one disease with a `care` dimension on the infected states; "off ART after being on it" is a level of its own (`off`).
 - **Initial infections.** EpiModel draws who is infected (and, in custom models, their stage) at random; the import gives the expected numbers.
@@ -59,7 +59,7 @@ Then, in Starsim, `sim = ss.import_from('model.json')`, or `ss.import_from('intr
 week = ss.prob # EpiModel uses each rate as the probability of an event in a week (a step)
 acts = dict(main=3, casual=1)
 cascade = ss.par(0, doc='Whether the care cascade runs')
-care = lambda move, rate, **kw: ss.transfer(care=move, rate=cascade*week(rate), **kw)
+care = lambda move, rate, **kw: ss.transfer(dict(care=move), rate=cascade*week(rate), **kw)
 S = ss.State()
 A = ss.State(rel_trans=5, label='Acute')
 C = ss.State(label='Chronic')
@@ -75,11 +75,11 @@ hiv = ss.Disease(
     linkage    = care(('dx', 'art'), 0.1), # Not link, which is a method of every module
     init_n     = dict(A=2, C=98, D=20),
 )
-hiv.stratify(care=['undx', 'dx', 'art', 'supp', 'off'], states=[A, C, D], fractions=[1, 0, 0, 0, 0],
-             adjust=dict(rel_trans=[1, 1, 0.3, 0.01, 1], aids_death=[1, 1, 1, 0.1, 1]))
+hiv.stratify(care=ss.levels({'undx': 1, 'dx': 0, 'art': 0, 'supp': 0, 'off': 0}, states=[A, C, D]))
+by_care = [ss.modify(hiv.rel_trans, multiply=ss.by(care=[1, 1, 0.3, 0.01, 1])), ss.modify(hiv.aids_death, multiply=ss.by(care=[1, 1, 1, 0.1, 1]))]
 main   = ss.DegreeNet(n_contacts=0.5, concurrency=0.04, max_contacts=2, dur=200)
 casual = ss.DegreeNet(n_contacts=0.3, concurrency=0.10, dur=26)
-sim = ss.Sim(hiv, networks=dict(main=main, casual=casual), n_agents=1500, stop=1040) # A step is a week
+sim = ss.Sim(hiv, networks=dict(main=main, casual=casual), connectors=by_care, n_agents=1500, stop=1040) # A step is a week
 ```
 
 ## Running the original

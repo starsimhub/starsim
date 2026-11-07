@@ -315,10 +315,12 @@ class Module(Base):
         self.pars = ss.Pars() # Usually populated via self.define_pars()
         self._default_name = True # Whether the name is the class default, in which case the sim can rename it to make it unique
         self._implicit = False # Whether it was made or named by the sim (from the transitions it was given, or its states), so its results are at the top of the sim's (e.g. sim.results.I) even beside other diseases
-        named = type(self) is ss.Disease or isinstance(self, (ss.modify, ss.Delivery, ss.Product)) # The modules that take the name of their variable (see ss.Sim._name_modules())
+        named = type(self) is ss.Disease or isinstance(self, (ss.modify, ss.Event, ss.Product)) # The modules that take the name of their variable (see ss.Sim._name_modules())
         self._assigned = ss.utils.assigned_name(self) if named else None # The variable it was first assigned to, e.g. campaign = ss.vaccinate(...)
         self.set_metadata(name, label) # Usually reset as part of self.update_pars()
         unknown = [key for key in kwargs if key not in ss.Timeline.keywords]
+        if unknown == ['dur']:
+            raise TypeError(f'{type(self).__name__}(): {ss.timeline.removed_dur}')
         if unknown:
             errormsg = f'{type(self).__name__}() got {"an unexpected keyword" if len(unknown) == 1 else "unexpected keywords"} {sc.strjoin(f"{key}=" for key in unknown)} (see the migrate-starsim3 skill for keywords that have changed)'
             raise TypeError(errormsg)
@@ -823,14 +825,15 @@ class Module(Base):
         Args:
             sim (`ss.Sim`): the sim, with its groups and unit worked out, but no solver yet
         """
+        own = [f'"{self.name}" has a solver of its own, solver={self.solver!r}, which is for agents only'] if isinstance(self, ss.Disease) and getattr(self, 'solver', None) is not None else [] # e.g. ss.Disease(..., solver=ss.abm(step='wholestep'))
         flag = getattr(self, 'compartmental', None)
         if flag or getattr(self, 'graph', None) is not None:
-            return []
+            return own
         elif flag is False:
-            return [f'"{self.name}" ({type(self).__name__}) has compartmental = False, so runs only as agents']
+            return own + [f'"{self.name}" ({type(self).__name__}) has compartmental = False, so runs only as agents']
         elif self.state_list:
-            return [f'"{self.name}" ({type(self).__name__}) keeps a value for each person ({sc.strjoin(s.name for s in self.state_list[:3])}), which only agents have; if its code works on groups, set compartmental = True on it']
-        return []
+            return own + [f'"{self.name}" ({type(self).__name__}) keeps a value for each person ({sc.strjoin(s.name for s in self.state_list[:3])}), which only agents have; if its code works on groups, set compartmental = True on it']
+        return own
 
     @required()
     def init_pre(self, sim, force=False):

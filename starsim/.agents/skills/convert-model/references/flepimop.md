@@ -17,19 +17,19 @@ A flepiMoP model is a configuration YAML plus CSV files beside it: `compartments
 | One drawn from another distribution | Its mean (listed) | no |
 | A transition | One flow per combination of levels, written as flepiMoP's total, `rate × source^e × Π (group^e / N)`, then classified (so the force of infection is exposure, `beta * I`) | yes |
 | `integration.method` | `rk4` and `euler` → `'ode'`, `stochastic` → `'binomial'` | yes |
-| `SinglePeriodModifier`, `StackedModifier` | `ss.modify('<disease>.pars.<par>', multiply=..., start=..., stop=...)`, following `stacked_modifier_method` (`product`, `reduction_product`, `sum`) | yes |
+| `SinglePeriodModifier`, `StackedModifier` | `ss.modify('<disease>.pars.<par>', multiply=..., when=ss.schedule(start=..., stop=...))`, following `stacked_modifier_method` (`product`, `reduction_product`, `sum`) | yes |
 | `scenarios` | The chosen one as `interventions` (default: the first); each scenario's modifiers in `sim.imported.scenarios` | yes |
-| `outcomes` from incidence or another outcome | `ss.outcome(p * source, delay=ss.days(d), stay=ss.constant(...))`, with the probability as `p_<outcome>` | yes |
-| A modifier for some places only | `where=` on the `ss.modify`, against the place | no |
+| `outcomes` from incidence or another outcome | `ss.outcome(p * source, delay=ss.days(d), dur=ss.constant(...))`, with the probability as `p_<outcome>` | yes |
+| A modifier for some places only | `who=` on the `ss.modify`, against the place | no |
 | `MultiPeriodModifier`, `subpop_groups`, `outcome_modifiers` | One `ss.modify` per period, by hand | no |
 | A parameter from a `timeseries` file | `ss.timeseries({date: value, ...})`, `ss.by` over places | no |
-| `seeding` (importations on dates) | An `ss.geo.Mobility(data=df)` register (rows with no `from` add people) | no |
+| `seeding` (importations on dates) | A register of moves, `ss.geo.register(df)` (rows with no `from` add people) | no |
 | An outcome from a prevalence | A result (`p * I`), or custom code | no |
 | `inference` | `sim.fit()` with the data | no |
 
 ## What needs care
 
-- Several dimensions are imported as a flat product of states. A cleaner Starsim model keeps the stages as states and the other dimension as a stratification, with moves between its levels as `ss.transfer` and differences as `adjust=`; check the two agree as `validate.md` says before replacing one with the other.
+- Several dimensions are imported as a flat product of states. A cleaner Starsim model keeps the stages as states and the other dimension as a stratification, with moves between its levels as `ss.transfer` and differences by level as a modifier with `ss.by()` (`ss.modify(dis.infection, multiply=ss.by(age=[...]))`) or `ss.by()` in the rate; check the two agree as `validate.md` says before replacing one with the other.
 - A stop date in flepiMoP is the last day that applies; Starsim's `stop=` is the first day that no longer does, so a modifier's stop is the end date plus one day (the import does this). The same holds for the run: flepiMoP's output includes what happens during `end_date`, so the import stops the sim a day later, and its last stock is the day after flepiMoP's last.
 - `subpop_setup.selected` imports only the places listed, with the commuting between them.
 - flepiMoP draws parameters for each run ("slot"). To compare exactly, run Starsim with the values that a slot drew (`spar/*.spar.csv`, `hpar/*.hpar.csv`), as the worked example does.

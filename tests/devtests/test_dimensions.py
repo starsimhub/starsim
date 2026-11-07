@@ -37,7 +37,7 @@ def run(mod, solver, **kwargs):
     return ss.Sim(mod, solver=solver, **pars, **kw, **kwargs).run()
 
 
-def make_malaria():
+def make_malaria(mortality=ss.days(10)):
     """ Ross-Macdonald: humans and mosquitoes as states of one disease """
     a = 0.3 # Bites per mosquito per day
     b = 0.5 # Probability an infectious bite infects a human
@@ -53,7 +53,7 @@ def make_malaria():
         emergence     = ss.unborn >> Sv @ ss.perday(5_000),
         biting        = Sv >> Ev @ a * c * Ih.n / Nh,
         incubation    = Ev >> Iv @ ss.days(10),
-        mortality     = Sv + Ev + Iv >> ss.dead @ ss.days(10),
+        mortality     = Sv + Ev + Iv >> ss.dead @ mortality,
         init          = dict(Ih=0.01, Sv=50_000),
         default_state = 'Sh',
         name          = 'malaria',
@@ -74,7 +74,7 @@ def make_tb():
         name       = 'tb',
         strains    = ss.Strains(['DS', 'MDR'], name='resistance', fractions=[1.0, 0.0], infection=[1.0, 0.7], cure=[1.0, 0.3]),
     )
-    tb.stratify(acquired=ss.transfer(resistance=('DS', 'MDR'), rate=ss.peryear(0.02), states=['on_treatment']))
+    tb.stratify(acquired=ss.transfer(dict(resistance=('DS', 'MDR')), rate=ss.peryear(0.02), states=['on_treatment']))
     return tb
 
 
@@ -88,7 +88,7 @@ def make_towns(**kwargs):
         init_prev = 0, # Seeded by seed_north()
         name = 'sir',
     )
-    return sir.stratify(patch=towns, **kwargs)
+    return sir.stratify(patch=ss.levels(towns, **kwargs))
 
 
 def seed_north(sim):
@@ -113,9 +113,9 @@ def test_states():
     sc.heading('Testing dimensions that apply to some states only')
     sims = sc.obj()
     for solver in solvers:
-        malaria = make_malaria()
+        malaria = make_malaria(mortality=ss.days(10)*ss.by(species=[1.0, 0.5])) # Funestus dies twice as fast
         states = malaria.states
-        malaria.stratify(species=['gambiae', 'funestus'], fractions=[0.75, 0.25], states=[states.Sv, states.Ev, states.Iv], adjust={'mortality': [1.0, 2.0]})
+        malaria.stratify(species=ss.levels({'gambiae': 0.75, 'funestus': 0.25}, states=[states.Sv, states.Ev, states.Iv]))
         sims[solver] = run(malaria, solver, unit='day', stop=365, total_pop=20_000, stratify=dict(age=[0, 5, 15]))
     res = sims.ode.results.malaria
     assert [s.name for s in malaria.graph.count_states] == ['Sv', 'Ev', 'Iv'] # Nobody moves between humans and mosquitoes, so the mosquitoes are counts
@@ -137,9 +137,8 @@ def test_states():
     # A dimension of the people in some states: they take a level when they enter one, and lose it when they leave
     def make():
         S, I = ss.states(2)
-        hiv = ss.Disease(infection=S >> I @ 0.2 * I, recovery=I >> S @ 0.05, init_prev=0.05, name='hiv')
-        hiv.stratify(stage=['early', 'mid', 'late'], fractions=[1, 0, 0], states=[I], adjust={'recovery': [1.0, 0.5, 0.25]},
-                     decline=ss.transfer(stage=('early', 'mid'), rate=0.05), decline2=ss.transfer(stage=('mid', 'late'), rate=0.05))
+        hiv = ss.Disease(infection=S >> I @ 0.2 * I, recovery=I >> S @ (0.05*ss.by(stage=[1.0, 0.5, 0.25])), init_prev=0.05, name='hiv')
+        hiv.stratify(stage=ss.levels({'early': 1, 'mid': 0, 'late': 0}, states=[I]), decline=ss.transfer(dict(stage=('early', 'mid')), rate=0.05), decline2=ss.transfer(dict(stage=('mid', 'late')), rate=0.05))
         return hiv
     staged = sc.obj({solver:run(make(), solver, unit='day', stop=300, total_pop=20_000) for solver in solvers})
     res = staged.ode.results.hiv
@@ -149,15 +148,16 @@ def test_states():
         other = staged[solver].results.hiv
         assert np.allclose(other.I.by('stage').values[-1], res.I.by('stage').values[-1], rtol=0.15), f'Expected {solver} to match the ODE'
 
-    with pytest.raises(KeyError, match='states= names a state "Evv"'):
-        make_malaria().stratify(species=['gambiae', 'funestus'], states=['Sv', 'Evv'])
+    with pytest.raises(KeyError, match='names a state "Evv"'):
+        make_malaria().stratify(species=ss.levels(['gambiae', 'funestus'], states=['Sv', 'Evv']))
 
     # A dimension of some states only, entered with a split that depends on age, as summer2's clinical strata
-    def clinical(adjust=None):
+    def clinical(by=None): # With a multiplier by clinical level on each quantity in by
         S, E, I, R = ss.states('S E I R')
-        seir = ss.Disease(infection=ss.Transition(S, E, rate=0.4 * I), onset=ss.Transition(E, I, dur=3), recovery=ss.Transition(I, R, dur=7), init=dict(I=0.01), name='seir')
-        seir.stratify(age=[0, 20, 60], fractions=[0.3, 0.5, 0.2])
-        seir.stratify(clinical=['mild', 'severe'], states=['I'], fractions=ss.by([[0.9, 0.1], [0.7, 0.3], [0.2, 0.8]], dims=['age', 'clinical']), adjust=adjust)
+        mods = {f'{key}_by_clinical':ss.modify(f'seir.{key}', multiply=ss.by(clinical=vals)) for key,vals in (by or {}).items()}
+        seir = ss.Disease(infection=ss.Transition(S, E, rate=0.4 * I), onset=ss.Transition(E, I, dur=3), recovery=ss.Transition(I, R, dur=7), init=dict(I=0.01), name='seir', **mods)
+        seir.stratify(age={0: 0.3, 20: 0.5, 60: 0.2})
+        seir.stratify(clinical=ss.levels(['mild', 'severe'], fractions=ss.by([[0.9, 0.1], [0.7, 0.3], [0.2, 0.8]], dims=['age', 'clinical']), states=['I']))
         return seir
     for solver,agents in [('ode', {}), ('binomial', {}), ('abm', dict(n_agents=50_000))]:
         res = ss.Sim(clinical(), solver=solver, stop=100, **agents, **kw).run().results.seir
@@ -176,20 +176,21 @@ def test_states():
     assert np.isclose(res.I.select(clinical='mild').values[0], 10) and np.isclose(res.I.values[0], 10)
     assert np.isclose(res.S.values[0], 990)
 
-    with pytest.raises(ValueError, match='have no level of "clinical"'): # People in E have no clinical level, so an adjustment of their onset cannot apply
-        ss.Sim(clinical(adjust={'onset': [1, 2]}), **kw).init()
+
+    with pytest.raises(ValueError, match='have no level of "clinical"'): # People in E have no clinical level, so a multiplier on their onset by clinical level cannot apply
+        ss.Sim(clinical(by={'onset': [1, 2]}), **kw).init()
 
     # Infectiousness by clinical level: none at all stops transmission, and the solvers agree on the rest
-    assert ss.Sim(clinical(adjust={'rel_trans': [0, 0]}), stop=100, **kw).run().results.seir.R.values[-1] < 101
-    sizes = [ss.Sim(clinical(adjust={'rel_trans': [0.5, 2]}), solver=solver, stop=150, total_pop=20_000, **agents, **kw).run().results.seir.R.values[-1]
+    assert ss.Sim(clinical(by={'rel_trans': [0, 0]}), stop=100, **kw).run().results.seir.R.values[-1] < 101
+    sizes = [ss.Sim(clinical(by={'rel_trans': [0.5, 2]}), solver=solver, stop=150, total_pop=20_000, **agents, **kw).run().results.seir.R.values[-1]
              for solver,agents in [('ode', {}), ('abm', dict(n_agents=20_000))]]
     assert np.isclose(*sizes, rtol=0.05)
     with pytest.raises(ValueError, match=r'the people it is for \(S\) have no level of "clinical"'): # Susceptible people have no clinical level
-        ss.Sim(clinical(adjust={'rel_sus': [1, 2]}), **kw).init()
+        ss.Sim(clinical(by={'rel_sus': [1, 2]}), **kw).init()
     with pytest.raises(KeyError): # Nor is there a level to take a value by clinical level from (before, it took the first)
         S, E, I, R = ss.states('S E I R')
         seir = ss.Disease(infection=ss.Transition(S, E, rate=0.4 * I), onset=ss.Transition(E, I, rate=ss.by(clinical=[0.2, 0.4])), recovery=ss.Transition(I, R, dur=7), init=dict(I=0.01), name='seir')
-        seir.stratify(clinical=['mild', 'severe'], states=['I'], fractions=[0.8, 0.2])
+        seir.stratify(clinical=ss.levels({'mild': 0.8, 'severe': 0.2}, states=['I']))
         ss.Sim(seir, **kw).init()
     return sims
 
@@ -270,8 +271,8 @@ def test_carriage():
         A, B = strains
         return ss.Disease(
             infection  = S >> L @ ss.peryear(6)*I,
-            activation = ss.Transition(L, I, rate=ss.peryear(0.5), where=~(A & B)),
-            together   = ss.Transition(L, I, rate=ss.peryear(0.2), where=A & B), # Two strains progress together more slowly
+            activation = ss.Transition(L, I, rate=ss.peryear(0.5), who=~(A & B)),
+            together   = ss.Transition(L, I, rate=ss.peryear(0.2), who=A & B), # Two strains progress together more slowly
             to_A       = ss.Transition(L, I, rate=ss.peryear(0.3), move=(A, B) >> A), # Or only one of the two progresses
             to_B       = ss.Transition(L, I, rate=ss.peryear(0.2), move=(A, B) >> B),
             recovery   = I >> S @ ss.peryear(1),
@@ -306,7 +307,7 @@ def make_resistance(beta=4, immunity=True, cure=(0.9, 0.3), **kwargs):
                          immunity=ss.immunity(due_to=L, protection=0.7) if immunity else None)
     DS, RIF = strains
     return ss.Disease(infection=S >> L @ ss.peryear(beta)*I, activation=L >> I @ ss.peryear(0.3), diagnosis=I >> Tx @ ss.peryear(2),
-                      treatment=ss.Transition(Tx, [R, I], p='cure', rate=ss.peryear(2), per_strain=True),
+                      treatment=ss.Transition(Tx, {R: 'cure', I: None}, rate=ss.peryear(2), per_strain=True),
                       failure=ss.Transition(Tx, I, rate=ss.peryear(0.2), move=DS >> (DS, RIF)), relapse=R >> S @ ss.years(2),
                       name='tb', strains=strains, **kwargs)
 
@@ -322,7 +323,7 @@ def test_strain_emergence():
         strains = ss.Strains(['DS', 'RIF'], fractions=[1, 0])
         DS, RIF = strains
         tb = ss.Disease(infection=S >> I @ ss.perday(0)*I, recovery=I >> R @ ss.days(1000), init=dict(I=0.3), name='tb', strains=strains)
-        mut = ss.Delivery(move=DS >> RIF, coverage=0.5, at=[3], name='mut')
+        mut = ss.Event(DS >> RIF, when=[3], p=0.5, name='mut')
         r = run(tb, solver, interventions=mut, unit='day', stop=6, total_pop=10_000).results
         assert np.isclose(r.mut.eligible.sum(), 3000, rtol=0.05) and np.isclose(r.mut.delivered.sum(), r.tb.I.select(strain='RIF')[-1], rtol=0.05)
     return res
@@ -335,7 +336,7 @@ def test_strain_import():
         S, E, I, R = ss.states('S E I R')
         strains = ss.Strains(['w', 'v'], fractions=[1, 0])
         dis = ss.Disease(infection=S >> E @ ss.perday(0.25)*I, latent=E >> I @ ss.perday(1/3), recovery=I >> R @ ss.perday(1/7), init=dict(I=0.001), strains=strains, name='cov')
-        imp = ss.Delivery(move=S >> E, strain='v', at=[50], capacity=20, name='import_v')
+        imp = ss.Event(S >> E, when=[50], n=20, strain='v', name='import_v')
         res = ss.Sim(dis, interventions=imp, unit='day', stop=60, solver=solver, n_agents=20_000, total_pop=20_000, **kw).run().results.cov
         assert res.E.by('strain')['v'][50] == 0 and 10 < res.E.by('strain')['v'][51] <= 20, solver
     return
@@ -367,10 +368,10 @@ def test_strain_carriers():
             d = ss.Disease(S, I, infection=S >> I @ (ss.by(strain=[1, 1.5]) if way == 'rate' else 1)*ss.peryear(1)*I, init=dict(I=0.01), name='d', strains=ss.Strains(['A', 'B']))
             run(d, 'ode', stop=2001, connectors=ss.modify(d.infection, multiply=ss.by(strain=[1, 1.5])) if way == 'modifier' else None)
 
-    # A carrier of A and B: passes on one at a time (the default), or each at its own rate; progresses with one at a time, each at its own rate (single_strain=True)
+    # A carrier of A and B: passes on one at a time (the default), or each at its own rate; progresses with one at a time, each at its own rate (per_strain='first')
     def together(init, transmit='one', **values):
         S, L, I = ss.states('S L I')
-        return ss.Disease(S, L, I, infection=S >> I @ ss.peryear(1)*I, activation=ss.Transition(L, I, rate=ss.peryear(1), per_strain=True, single_strain=True), init=init,
+        return ss.Disease(S, L, I, infection=S >> I @ ss.peryear(1)*I, activation=ss.Transition(L, I, rate=ss.peryear(1), per_strain='first'), init=init,
                           name='d', strains=ss.Strains(['A', 'B'], max_strains=2, fractions={'A+B': 1}, transmit=transmit, **values))
     first = lambda transmit: run(together(dict(I=0.001), transmit), 'ode', stop=2001, dt=0.01, total_pop=1e6).results.d.infection[0]
     assert np.isclose(first('each'), 2*first('one'), rtol=0.02)
@@ -409,10 +410,10 @@ def test_space():
     mobility = sc.obj(
         none    = None,
         gravity = ss.geo.gravity(scale=2e-4), # Commuting, with the share of time away from the gravity model
-        away    = ss.geo.Mobility(ss.geo.gravity(), away=0.2), # Commuting, with 20% of time spent away
-        visit   = ss.geo.Mobility(ss.geo.gravity(), away=0.2, kind='visit'), # The same, but travelers do not infect the people they visit
-        migrate = ss.geo.Mobility(ss.geo.gravity(scale=2e-5), kind='migrate'),
-        force   = ss.geo.Mobility(ss.geo.gravity(), away=0.2, kind='force'), # Nobody moves; 20% of each town's force of infection goes to the others
+        away    = ss.geo.gravity(away=0.2), # Commuting, with 20% of time spent away
+        visit   = ss.geo.gravity(away=0.2, kind='visit'), # The same, but travelers do not infect the people they visit
+        migrate = ss.geo.gravity(scale=2e-5, kind='migrate'),
+        force   = ss.geo.gravity(away=0.2, kind='force'), # Nobody moves; 20% of each town's force of infection goes to the others
     )
     peaks = sc.obj()
     for key,mob in mobility.items():
@@ -432,7 +433,7 @@ def test_space():
             peaks[f'{key}_{solver}'] = res.I.by('patch').values.argmax(axis=0)
     assert peaks.gravity_ode[0] < peaks.gravity_ode[1] < peaks.gravity_ode[2] # The nearer town is reached first
     assert np.ptp(peaks.away_ode) < 3 < np.ptp(peaks.gravity_ode) # The more time people spend away, the closer together the towns peak
-    text = sim.describe(output=True)
+    text = sim.describe()
     assert 'patch (space): north, south, east' in text and "kind='force'" in text
 
     # The kind of a dimension comes from its value, not its name: places are an ss.geo.geography (or kind='space'), and a name such as region is noted
@@ -450,11 +451,11 @@ def test_space():
         def make(mobility=None):
             S, I, R = ss.states('S I R')
             sir = ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=10), init_n=dict(I=ss.by(place=[10, 0])), name='sir')
-            return sir.stratify(place=['a', 'b'], kind='space', mobility=mobility)
+            return sir.stratify(place=ss.levels(['a', 'b'], kind='space', mobility=mobility))
         for solver in ['ode', 'abm']:
             attack = run(make(ss.geo.Mobility(matrix=M, kind='force')), solver, total_pop=20_000, unit='day', stop=200).results.sir.infection.cum.by('place').values[-1]
             assert attack[0] > 5000 and (attack[1] > 5000) == reached, f'Expected b to be reached: {reached}, with {solver}, not {attack}'
-            contacts = run(make(), solver, networks=ss.contacts(M.T + np.diag(1 - M.sum(axis=1)), dims='place'), total_pop=20_000, unit='day', stop=200).results.sir.infection.cum.by('place').values[-1]
+            contacts = run(make(), solver, networks=ss.contacts(place=M.T + np.diag(1 - M.sum(axis=1))), total_pop=20_000, unit='day', stop=200).results.sir.infection.cum.by('place').values[-1]
             assert np.allclose(contacts, attack), f'Expected the contact matrix to give the same run as kind="force" with {solver}: {contacts} against {attack}'
 
     # A movement matrix may be sparse, for many places; the time share is kept sparse either way, with the same run
@@ -462,7 +463,7 @@ def test_space():
     for matrix in [[[0, 0.1], [0.05, 0]], sps.csr_array([[0, 0.1], [0.05, 0]])]:
         S, I, R = ss.states('S I R')
         sir = ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=10), init_n=dict(I=ss.by(place=[10, 0])), name='sir')
-        sim = run(sir.stratify(place=['a', 'b'], kind='space', mobility=ss.geo.Mobility(matrix=matrix, kind='commute')), 'ode', total_pop=20_000, unit='day', stop=100)
+        sim = run(sir.stratify(place=ss.levels(['a', 'b'], kind='space', mobility=ss.geo.Mobility(matrix=matrix, kind='commute'))), 'ode', total_pop=20_000, unit='day', stop=100)
         assert sps.issparse(sim.mixing.time_share)
         finals.append(sim.results.sir.infection.cum.by('place').values[-1])
     assert np.array_equal(*finals) and finals[0][1] > 1000 # The same with either
@@ -473,12 +474,12 @@ def test_space():
     cholera = ss.Disease(
         infection = S >> I @ 0.5 * W.n / (W.n + 1e5),
         recovery  = I >> R @ ss.days(5),
-        shedding  = ss.outside >> W @ 10 * I.n,
+        shedding  = ss.outside >> W @ 10 * ss.by(patch=[1.0, 0.0]) * I.n, # Nobody sheds downstream
         decay     = W >> ss.dead @ ss.days(30),
         init      = dict(I=0.001),
         name      = 'cholera',
     )
-    cholera.stratify(patch=['upstream', 'downstream'], kind='space', adjust={'shedding': [1.0, 0.0]})
+    cholera.stratify(patch=ss.levels(['upstream', 'downstream'], kind='space'))
     for solver in ['ode', 'abm']:
         res = run(cholera, solver, total_pop=100_000, unit='day', stop=200).results.cholera
         assert res.W.by('patch').values[:, 1].max() == 0 # Nobody sheds downstream ...
@@ -504,7 +505,7 @@ def test_space():
     def commuters(away):
         S, I, R = ss.states('S I R')
         sir = ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=10), init_n=dict(I=ss.by(patch=[10, 0, 0])), name='sir')
-        return sir.stratify(patch=ss.geo.geography(names=['a', 'b', 'c'], populations=[1e5, 1e5, 1e5], x=[0, 100, 200], y=[0, 0, 0]), mobility=ss.geo.Mobility(ss.geo.gravity(), away=away))
+        return sir.stratify(patch=ss.levels(ss.geo.geography(names=['a', 'b', 'c'], populations=[1e5, 1e5, 1e5], x=[0, 100, 200], y=[0, 0, 0]), mobility=ss.geo.gravity(away=away)))
     pars = dict(total_pop=3e5, unit='day', stop=150, **kw)
     for solver in ['ode', 'binomial']:
         truth = ss.Sim(commuters(0.02), solver=solver, **pars).run().results.sir.infection
@@ -516,13 +517,13 @@ def test_space():
     sim = ss.Sim(commuters(away), n_agents=3000, solver='abm', **pars).init()
     shares = [sim.new(pars=dict(away=val)).init().mixing.time_share.diagonal() for val in [0.01, 0.2]] # As agents too: the share of time at home
     assert np.allclose(shares[0], 0.99) and np.allclose(shares[1], 0.8)
-    restarted = ss.Sim(commuters(away), solver='ode', **pars).init().run(pars=dict(away=0.05)).results.sir.I.values # The mixing is worked out again on a restart
+    restarted = ss.Sim(commuters(away), solver='ode', **pars).init().restart(pars=dict(away=0.05)).run().results.sir.I.values # The mixing is worked out again on a restart
     assert np.allclose(restarted, ss.Sim(commuters(0.05), solver='ode', **pars).run().results.sir.I.values)
 
     # A gravity model needs a geography
     with pytest.raises(ValueError):
         I, R = ss.states('I R')
-        sir = ss.Disease(recovery=ss.Transition(I, R, dur=3)).stratify(patch=['a', 'b'], mobility=ss.geo.gravity())
+        sir = ss.Disease(recovery=ss.Transition(I, R, dur=3)).stratify(patch=ss.levels(['a', 'b'], mobility=ss.geo.gravity()))
         ss.Sim(sir, **kw).init()
 
     # The radiation model has no parameters: of the people who travel from a place, the share who go to each other place comes from the populations of the places nearer than it
@@ -536,7 +537,7 @@ def test_space():
     peaks = sim.run().results.sir.I.by('patch').values.argmax(axis=0)
     assert peaks[0] < peaks[1] < peaks[2] # South is nearer to the north than east is, and bigger
     with pytest.raises(ValueError):
-        ss.Sim(ss.Disease(recovery=ss.Transition(I, R, dur=3)).stratify(patch=['a', 'b'], mobility=ss.geo.radiation()), **kw).init()
+        ss.Sim(ss.Disease(recovery=ss.Transition(I, R, dur=3)).stratify(patch=ss.levels(['a', 'b'], mobility=ss.geo.radiation())), **kw).init()
 
     # Places from your own shapes (a GeoDataFrame, or a file of them), each at the centroid of its shape
     try:
@@ -559,8 +560,8 @@ def test_space():
     # Newborns from ss.Births, written as code, are placed by the split, as declared births are (before, all in the first place)
     S, I = ss.states('S I')
     sis = ss.Disease(infection=ss.Transition(S, I, rate=ss.peryear(0.5) * I), recovery=ss.Transition(I, S, dur=ss.years(1)), init_prev=0.1, name='sis')
-    sis.stratify(patch=['a', 'b', 'c'], kind='space', fractions=[0.4, 0.3, 0.3])
-    sim = ss.Sim(sis, n_agents=5_000, demographics=[ss.Births(birth_rate=ss.peryear(40)), ss.Deaths(death_rate=ss.peryear(40))], start=2000, stop=2020, verbose=0).run()
+    sis.stratify(patch=ss.levels({'a': 0.4, 'b': 0.3, 'c': 0.3}, kind='space'))
+    sim = ss.Sim(sis, n_agents=5_000, demographics=[ss.Births(birth_rate=ss.peryear(0.04)), ss.Deaths(death_rate=ss.peryear(0.04))], start=2000, stop=2020, verbose=0).run()
     n = sim.results.sis.S.by('patch').values[-1] + sim.results.sis.I.by('patch').values[-1]
     assert np.allclose(n/n.sum(), [0.4, 0.3, 0.3], atol=0.03) # Was 0.73, 0.13, 0.13
     return peaks
@@ -576,7 +577,7 @@ import starsim as ss
 S, I, R = ss.states(3)
 sir = ss.Disease(infection=S >> I @ 0.3*I, recovery=I >> R @ ss.days(10), init_prev=0.01, name='sir')
 towns = ss.geo.geography(names=['a', 'b'], populations=[6000, 4000], x=[0, 10], y=[0, 0])
-ss.Sim(sir.stratify(patch=towns, mobility=ss.geo.gravity()), networks=ss.contacts([[3, 1], [1, 2]], ages=[0, 18]), unit='day', stop=20, verbose=0).run()
+ss.Sim(sir.stratify(patch=ss.levels(towns, mobility=ss.geo.gravity())), networks=ss.contacts([[3, 1], [1, 2]], ages=[0, 18]), unit='day', stop=20, verbose=0).run()
 ss.Sim(sir, networks=ss.RandomNet(), n_agents=500, unit='day', stop=20, verbose=0).run()
 ss.Sim(ss.SIS(), stratify=dict(age=[0, 15, 65]), solver='ode', verbose=0).run()
 print('starsim_data' in sys.modules)
@@ -598,9 +599,9 @@ def test_mixing():
             name      = 'sir',
         )
         sir.stratify(age=['young', 'old']) # Labels, so not the age that people have
-        sir.stratify(location=['urban', 'rural'], fractions=[0.7, 0.3])
+        sir.stratify(location={'urban': 0.7, 'rural': 0.3})
         return sir
-    mixing = ss.contacts(dict(age=[[0.2, 0.3], [0.5, 0.7]], location=[[0.8, 0.2], [0.2, 0.8]]))
+    mixing = ss.contacts(age=[[0.2, 0.3], [0.5, 0.7]], location=[[0.8, 0.2], [0.2, 0.8]])
     sims = sc.obj({solver:run(make(), solver, networks=mixing, total_pop=10_000, dt=0.1, stop=20) for solver in solvers})
     res = sims.ode.results.sir
     assert sims.ode.groups.strats[0].kind == 'plain'
@@ -611,9 +612,9 @@ def test_mixing():
         assert np.isclose(sims[solver].results.sir.R[-1], res.R[-1], rtol=0.1), f'Expected {solver} to match the ODE'
     assert sims.abm.results.sir.I[0] <= 10 # As agents, the number who start in each state is exact (less anyone who has already recovered)
     with pytest.raises(ValueError, match='has 3 rows, but "location" has 2 levels'):
-        ss.Sim(make(), networks=ss.contacts(np.ones((3, 3)), dims='location'), **kw).init()
+        ss.Sim(make(), networks=ss.contacts(location=np.ones((3, 3))), **kw).init()
     T = sc.timer()
-    ss.Sim(make(), networks=ss.contacts(np.eye(500) + 0.01, dims='place'), **kw) # A matrix over many places is copied into the sim as numbers, not as 250,000 objects
+    ss.Sim(make(), networks=ss.contacts(place=np.eye(500) + 0.01), **kw) # A matrix over many places is copied into the sim as numbers, not as 250,000 objects
     assert T.toc(output=True) < 5 # About 0.1 s; 774 places took 170 s
 
     # Where people start can be given for each level of a dimension
@@ -642,7 +643,7 @@ def test_mixing():
         sir = ss.Disease(infection=ss.Transition(S, I, rate=ss.perday(0.05) * I), recovery=ss.Transition(I, R, dur=ss.days(10)),
                          init_n=dict(I=ss.by(pd.DataFrame(dict(age=['0-4'], place=['a'], value=[10])))), name='sir')
         sir.stratify(age=[0, 5, 50])
-        sir.stratify(place=['a', 'b'], kind='space', fractions=ss.by([[3000, 1000], [5000, 2000], [2000, 500]], dims=['age', 'place']), mobility=mobility)
+        sir.stratify(place=ss.levels(['a', 'b'], fractions=ss.by([[3000, 1000], [5000, 2000], [2000, 500]], dims=['age', 'place']), kind='space', mobility=mobility))
         return ss.Sim(sir, networks=ss.contacts([[12, 4, 1], [4, 8, 2], [1, 2, 3]], ages=[0, 5, 50]), total_pop=13_500, unit='day', stop=100, **kw)
     start = at_start(make_places()).sir
     n = [sum(start[k].select(age=age, place=place)[0] for k in 'SIR') for age in ['0-4', '50+'] for place in ['a', 'b']]
@@ -650,7 +651,7 @@ def test_mixing():
     assert start.I.select(age='0-4', place='a')[0] == 10 and start.I[0] == 10
     alone = make_places().run().results.sir
     assert alone.infection.cum.by('place').values[-1, 1] == 0 and alone.infection.cum[-1] > 5000 # Nobody moves, so the epidemic stays in a
-    many = make_places().new(solver='binomial').run(n_runs=3).results.sir # Many runs keep their values by group too
+    many = ss.parallel(make_places().new(solver='binomial'), n_runs=3).results.sir # Many runs keep their values by group too
     assert many.I.select(age='0-4', place='a').values.shape == (3, 101) and np.all(many.infection.cum.by('place')['b'].values == 0)
     moving = make_places(ss.geo.Mobility(matrix=[[0, 0.01], [0.01, 0]], kind='migrate'))
     assert moving.run().results.sir.infection.cum.by('place').values[-1, 1] > 1000
@@ -668,10 +669,10 @@ def test_mixing():
     def make_net(net, mobility=None, **pars):
         S, I, R = ss.states('S I R')
         sir = ss.Disease(infection=ss.Transition(S, I, rate=ss.perday(0.03) * I), recovery=ss.Transition(I, R, dur=ss.days(10)), init_n=dict(I=ss.by(patch=[20, 0, 0])), name='sir')
-        sir.stratify(patch=['a', 'b', 'c'], kind='space', fractions=[0.5, 0.3, 0.2], mobility=mobility)
+        sir.stratify(patch=ss.levels({'a': 0.5, 'b': 0.3, 'c': 0.2}, kind='space', mobility=mobility))
         return ss.Sim(sir, networks=net, total_pop=30_000, unit='day', stop=120, **kw, **pars)
     commute = ss.geo.Mobility(matrix=[[0, 0.05, 0], [0.05, 0, 0.05], [0, 0.05, 0]], kind='commute')
-    for net in [ss.RandomNet(n_contacts=10, dur=0, name='net'), ss.MixingPool(n_contacts=10, name='net')]:
+    for net in [ss.RandomNet(n_contacts=10, name='net'), ss.MixingPool(n_contacts=10, name='net')]:
         alone = make_net(net, n_agents=30_000).run().results.sir.infection.cum.by('patch').values[-1]
         assert alone[0] > 10_000 and alone[1] == alone[2] == 0
         ode, abm = [make_net(sc.dcp(net), commute, **pars).run().results.sir.infection.cum.by('patch').values[-1] for pars in [dict(solver='ode', approximations='allow'), dict(n_agents=30_000)]]
@@ -705,9 +706,9 @@ def test_mixing():
     for solver in ['ode', 'abm']:
         A = ss.State()
         d = ss.Disease(A, stay=ss.Transition(A, A, rate=0), default_state='A', name='d')
-        d.stratify(k=['x', 'y'], fractions=ss.by([[0.8, 0.2], [0.4, 0.6]], dims=['age', 'k']))
+        d.stratify(k=ss.levels(['x', 'y'], fractions=ss.by([[0.8, 0.2], [0.4, 0.6]], dims=['age', 'k'])))
         size = dict(n_agents=10_000) if solver == 'abm' else dict(total_pop=10_000)
-        n_A = at_start(ss.Sim(d, solver=solver, stratify=dict(age=[0, 30], fractions=[0.9, 0.1]), stop=1, **size, **kw)).d.A
+        n_A = at_start(ss.Sim(d, solver=solver, stratify=dict(age={0: 0.9, 30: 0.1}), stop=1, **size, **kw)).d.A
         assert np.allclose(n_A.by('age').values[0], [9000, 1000], rtol=0.03)
         assert np.allclose([n_A.select(age=a, k='y')[0] for a in ['0-29', '30+']], [1800, 600], rtol=0.1)
 
@@ -715,7 +716,7 @@ def test_mixing():
     def make_init(table):
         A, B = ss.states('A B')
         d = ss.Disease(A, B, ab=A >> B @ ss.peryear(0), init=dict(B=ss.by(np.array(table), dims=['age', 'ever'])), default_state='A', name='d')
-        d.stratify(ever=[False, True], fractions=[1, 0])
+        d.stratify(ever={False: 1, True: 0})
         return ss.Sim(d, total_pop=1000, stratify=dict(age=[0, 30]), stop=1, **kw)
     with pytest.raises(ValueError, match='ever=True'):
         make_init([[0, 0.5], [0, 0.5]]).init()
@@ -728,9 +729,9 @@ def test_ragged():
     sc.heading('Testing a dimension for some groups only: age groups for women')
     def make():
         S, I, R = ss.states('S I R')
-        sir = ss.Disease(infection=ss.Transition(S, I, rate=0.2 * I), recovery=ss.Transition(I, R, dur=10), init=dict(I=ss.by(age=[0.004, 0.002, 0.001, 0.0])), name='sir')
-        sir.stratify(sex=['female', 'male'])
-        sir.stratify(age=[15, 25, 35, 50], where=dict(sex='female'), adjust=dict(recovery=[2, 1, 1, 0.5]))
+        faster = ss.modify('sir.recovery', multiply=ss.by(age=[2, 1, 1, 0.5]))
+        sir = ss.Disease(infection=ss.Transition(S, I, rate=0.2 * I), recovery=ss.Transition(I, R, dur=10), init=dict(I=ss.by(age=[0.004, 0.002, 0.001, 0.0])), name='sir', faster=faster)
+        sir.stratify(sex=['female', 'male'], age=ss.levels([15, 25, 35, 50], who=ss.person.female))
         return sir
     sims = sc.obj({solver:run(make(), solver, unit='day', stop=150, total_pop=100_000) for solver in solvers})
     ode = sims.ode
@@ -748,28 +749,28 @@ def test_ragged():
     # A condition on the dimension leaves out the people who have no level of it
     for solver in ['ode', 'abm']:
         sir = make()
-        sim = run(sir, solver, unit='day', stop=150, total_pop=100_000, interventions=ss.modify(sir.rel_sus, multiply=0, where=sir.age == '15-24'))
+        sim = run(sir, solver, unit='day', stop=150, total_pop=100_000, interventions=ss.modify(sir.rel_sus, multiply=0, who=sir.age == '15-24'))
         r = sim.results.sir
         assert r.infection.cum.select(age='15-24')[-1] == 0 and r.infection.cum.select(sex='male')[-1] > 10_000
 
     # A dimension within a ragged one, set on the sim; contacts by a ragged dimension have no level for the others to mix as
     S, I, R = ss.states('S I R')
     sir = ss.Disease(infection=ss.Transition(S, I, rate=0.2 * I), recovery=ss.Transition(I, R, dur=10), init=dict(I=0.001), name='sir')
-    sim = ss.Sim(sir, stratify=[dict(sex=['female', 'male']), dict(age=[15, 25, 35, 50], where=dict(sex='female')), dict(parity=['0', '1+'], fractions=[0.4, 0.6], where=dict(age=['25-34', '35-49']))], total_pop=10_000, unit='day', stop=50, **kw).run()
+    sim = ss.Sim(sir, stratify=dict(sex=['female', 'male'], age=ss.levels([15, 25, 35, 50], who=ss.person.female), parity=ss.levels({'0': 0.4, '1+': 0.6}, who=ss.person.age.isin(['25-34', '35-49']))), total_pop=10_000, unit='day', stop=50, **kw).run()
     split = next(strat for strat in sim.groups.strats if strat.name == 'age').fractions
     assert (sim.groups.group_levels[:, 2] >= 0).sum() == 4 and np.isclose(sim.results.sir.S.by('parity').values[0].sum(), 5_000*split[1:3].sum(), rtol=0.01) # Women aged 25 to 49
     with pytest.raises(ValueError):
         ss.Sim(make(), networks=ss.contacts([[3, 1, 1, 1], [1, 3, 1, 1], [1, 1, 3, 1], [1, 1, 1, 3]], ages=[15, 25, 35, 50]), **kw).init()
     with pytest.raises(ValueError): # So do contacts by a dimension that the infectious state does not have
-        ss.Sim(sir.copy().stratify(age=[0, 15], states=['S', 'R']), networks=ss.contacts([[3, 1], [1, 3]], ages=[0, 15]), **kw).init()
+        ss.Sim(sir.copy().stratify(age=ss.levels([0, 15], states=['S', 'R'])), networks=ss.contacts([[3, 1], [1, 3]], ages=[0, 15]), **kw).init()
     with pytest.raises(KeyError, match='but the model is not stratified by "sex"'):
-        ss.Sim(sir.copy().stratify(age=[0, 15], where=dict(sex='female')), **kw).init()
+        ss.Sim(sir.copy().stratify(age=ss.levels([0, 15], who=ss.person.female)), **kw).init()
 
     # As agents, a sex dimension is people.female, which a sexual network pairs on
     S, I, R = ss.states('S I R')
     sir = ss.Disease(infection=ss.Transition(S, I, rate=0.5 * I), recovery=ss.Transition(I, R, dur=30), init_prev=0.05, name='sir')
-    sir.stratify(sex=['female', 'male'], fractions=[0.6, 0.4], adjust={'infection': [0, 1]})
-    sim = ss.Sim(sir, networks=ss.SexualNet(), n_agents=5_000, unit='day', stop=50, **kw).run()
+    sir.stratify(sex={'female': 0.6, 'male': 0.4})
+    sim = ss.Sim(sir, connectors=ss.modify(sir.infection, multiply=ss.by(sex=[0, 1])), networks=ss.SexualNet(), n_agents=5_000, unit='day', stop=50, **kw).run()
     res, women = sim.results.sir, sim.people.female.uids
     assert np.isclose(len(women), 3_000, rtol=0.05) and np.all(sim.people.sex[women] == 0) # The split is the share of women
     assert sim.diseases.sir.I[women].sum() + sim.diseases.sir.R[women].sum() == res.I.select(sex='female')[-1] + res.R.select(sex='female')[-1] # Not 51 women infected through the network and 0 in the results
@@ -786,9 +787,9 @@ def test_properties_in_rates():
         none, on = ss.states('none on')
         start = ss.Transition(none, on, rate=ss.peryear(1)*expit(b0 + b_urban*ss.person.urban))
         meth = ss.Disease(start=start, stop=ss.Transition(on, none, rate=ss.peryear(0.5)), b0=b0, b_urban=b_urban, default_state='none', name='meth')
-        intv = ss.modify('meth.pars.b0', set=-np.inf, start=2005) if change else None
-        sim = ss.Sim(meth, interventions=intv, n_agents=20_000, start=2000, stop=2010, dt=1/12, solver=solver, verbose=0)
-        sim.stratify(urban=[False, True], fractions=[0.4, 0.6])
+        intv = ss.modify('meth.pars.b0', set=-np.inf, when=ss.schedule(start=2005)) if change else None
+        sim = ss.Sim(meth, interventions=intv, n_agents=20_000, total_pop=20_000, start=2000, stop=2010, dt=1/12, solver=solver, verbose=0)
+        sim.stratify(urban={False: 0.4, True: 0.6})
         return sim.run()
     on = [make(solver).results.meth.on[-1] for solver in ['abm', 'ode']]
     expected = 20_000*(0.4*expit(-1)/(expit(-1) + 0.5) + 0.6*0.5/(0.5 + 0.5)) # At equilibrium
@@ -874,8 +875,8 @@ def test_by_properties():
     # Several non-exponential dwell times out of a state, each for one sex: a track for each as compartments, as agents as ever
     def clearance(where_m=ss.person.male):
         S, A, R = ss.states('S A R')
-        clear_f = ss.Transition(A, R, dur=ss.lognormal(ss.months(8), ss.months(2)), where=ss.person.female)
-        clear_m = ss.Transition(A, S, dur=ss.lognormal(mean=ss.by(sex=dict(female=ss.months(6), male=ss.months(6))), std=ss.months(3)), where=where_m)
+        clear_f = ss.Transition(A, R, dur=ss.lognormal(ss.months(8), ss.months(2)), who=ss.person.female)
+        clear_m = ss.Transition(A, S, dur=ss.lognormal(mean=ss.by(sex=dict(female=ss.months(6), male=ss.months(6))), std=ss.months(3)), who=where_m)
         return ss.Disease(S, A, R, clear_f=clear_f, clear_m=clear_m, init=dict(S=0.5, A=0.5), name='d').stratify(sex=['female', 'male'])
     left = sc.obj()
     for solver,pop in [('ode', dict(total_pop=20_000)), ('binomial', dict(total_pop=20_000)), ('abm', dict(n_agents=20_000))]:
@@ -930,8 +931,8 @@ def test_counters():
     def campaign(solver, **kw):
         S, I, R = ss.states('S I R')
         sir = ss.Disease(S, I, R, infection=S >> I @ 0.2*I, recovery=ss.Transition(I, R, dur=ss.days(10), increment='episodes'), init=dict(I=0.01), name='sir')
-        sir.stratify(waning=ss.transfer(increment=dict(immunity=-1), rate=ss.peryear(0.5)), immunity=[0, 1, 2, 3], fractions=[0, 0, 0, 1])
-        camp = ss.Delivery(increment='doses', coverage=0.6, at=[1, 2, 3], name='camp')
+        sir.stratify(waning=ss.transfer(increment=dict(immunity=-1), rate=ss.peryear(0.5)), immunity={0: 0, 1: 0, 2: 0, 3: 1})
+        camp = ss.Event(increment='doses', when=[1, 2, 3], p=0.6, name='camp')
         sim = ss.Sim(sir, interventions=camp, solver=solver, start=0, stop=5, dt=ss.days(1), unit='year', verbose=0, **kw)
         sim.stratify(doses=[0, 1, 2, 3], episodes=[0, 1, 2])
         return sim.run()
@@ -965,10 +966,10 @@ def test_rows():
         p_use = expit(b0 + 1.0*ss.person.urban)
         mix = [ss.par(ss.by(age=v), name=f'mix_{m}') for m,v in zip(methods, [[0.6/1.3, 0.2/1.5], [0.6/1.3, 1.0/1.5], [0.1/1.3, 0.3/1.5]])] # The switching row by age, one entry per method
         row = [lambda sim, uids, v=v: np.full(len(uids), v) for v in [0.5, 0.2, 0.2, 0.1]] # A function for each destination
-        trs = {f'from_{src.name}':ss.Transition(src, [none, *on.values()], dur=ss.months(12), p=row if fn else [1 - p_use] + [p_use*m for m in mix]) for src in [none, *on.values()]}
+        trs = {f'from_{src.name}':ss.Transition(src, dict(zip([none, *on.values()], row if fn else [1 - p_use] + [p_use*m for m in mix])), dur=ss.months(12)) for src in [none, *on.values()]}
         sim = ss.Sim(ss.Disease(none, *on.values(), **trs, b0=b0, default_state='none', name='contra'), solver=solver, start=2000, stop=2008, dt=ss.months(1), aging=False, verbose=0, **kw)
         sim.stratify(age=[0, 30])
-        sim.stratify(urban=[False, True], fractions=[0.4, 0.6])
+        sim.stratify(urban={False: 0.4, True: 0.6})
         return sim
     ode = make('ode', total_pop=20_000).run()
     abm = make('abm', n_agents=20_000).run()
@@ -988,12 +989,12 @@ def test_contacts_dims():
     def run(net, solver='ode', seed=1):
         S, I, R = ss.states('S I R')
         sir = ss.Disease(infection=ss.Transition(S, I, rate=ss.perday(0.1) * I), recovery=ss.Transition(I, R, dur=ss.days(10)), init_prev=0.01, name='sir')
-        sim = ss.Sim(sir, networks=net, stratify=[dict(sex=['female', 'male']), dict(risk=['low', 'high'], fractions=[0.8, 0.2])], total_pop=20_000, n_agents=20_000, solver=solver, unit='day', stop=120, rand_seed=seed, **kw)
+        sim = ss.Sim(sir, networks=net, stratify=dict(sex=['female', 'male'], risk={'low': 0.8, 'high': 0.2}), total_pop=20_000, n_agents=20_000, solver=solver, unit='day', stop=120, rand_seed=seed, **kw)
         return sim.run().results.sir.R.values
 
     # A separable matrix given whole is the product of one for each
     for solver in ['ode', 'abm']:
-        assert np.allclose(run(ss.contacts(dict(sex=sex, risk=risk)), solver), run(ss.contacts(np.kron(sex, risk), dims=['sex', 'risk']), solver))
+        assert np.allclose(run(ss.contacts(sex=sex, risk=risk), solver), run(ss.contacts(np.kron(sex, risk), dims=['sex', 'risk']), solver))
 
     # One that is not: men mix with women, and the high-risk with each other more among men; as (2, 2, 2, 2) or (4, 4), first stratification slowest
     m = np.zeros((2, 2, 2, 2))
@@ -1020,18 +1021,18 @@ def test_contacts_ages():
         return m
     pars = dict(total_pop=100_000, n_agents=10_000, stop=ss.days(30), rand_seed=1, **kw)
     for solver in ['abm', 'ode']: # ages= combines with another dimension's matrix as age= does (it was "unrecognized argument area")
-        sims = [ss.Sim(make(), networks=net, solver=solver, **pars).run() for net in [ss.contacts(dict(age=C, area=area)), ss.contacts(dict(age=C, area=area), ages=[0, 15, 65])]]
+        sims = [ss.Sim(make(), networks=net, solver=solver, **pars).run() for net in [ss.contacts(age=C, area=area), ss.contacts(age=C, area=area, ages=[0, 15, 65])]]
         assert np.allclose(*[sim.results.measles.infection.values for sim in sims])
         assert sum('not reciprocal' in note and '"age"' in note for note in sims[1].notes) == 1 # Checked over its own groups, once, as agents too (it was never checked for ages=, and then only in a compartmental run)
     res = sims[0].results.measles.infection
     assert np.allclose(res.by('age').select(area='rural').values, res.select(area='rural').by('age').values) # In either order (it was "is not stratified")
-    assert 'contact matrix by age and area' in sims[0].describe(output=True) # It was "by age"
+    assert 'contact matrix by age and area' in sims[0].describe() # It was "by age"
 
     # Over other age groups than the model's: one note for all the layers, saying "split" when the model has more groups
     sim = ss.Sim(make(False), networks=ss.contacts(ages=[0, 15, 65], matrix=C), stratify=dict(age=[0, 5, 18, 65]), solver='ode', **pars).init()
     assert any('split from 3 age groups into' in note for note in sim.notes)
-    assert 'sim.diseases.measles.equations()' in make().equations(output=True) # The disease as written knows nothing of the sim's contacts, and says where they are (it was silent)
-    assert 'C[i, j]' in ss.Sim(make(), networks=ss.contacts(ages=[0, 15, 65], matrix=C), solver='ode', **pars).init().diseases.measles.equations(output=True)
+    assert 'sim.diseases.measles.equations()' in make().equations() # The disease as written knows nothing of the sim's contacts, and says where they are (it was silent)
+    assert 'C[i, j]' in ss.Sim(make(), networks=ss.contacts(ages=[0, 15, 65], matrix=C), solver='ode', **pars).init().diseases.measles.equations()
     return
 
 
@@ -1045,7 +1046,7 @@ def test_by_place_times_local_count():
         f = ss.par(ss.by(patch=[0.2, 0.8]), name='f')
         sis = ss.Disease(infection=ss.Transition(S, I, rate=f*ss.perday(0.1)*V.n/(S + I).n, acquisition=True), recovery=I >> S @ ss.days(20),
                          hatch=ss.unborn >> V @ ss.perday(1)*(S + I).n, death=V >> ss.dead @ ss.days(1), init=dict(I=0.0, V=ss.by(patch=[500, 500])), name='sis')
-        sis.stratify(patch=['a', 'b'], kind='space')
+        sis.stratify(patch=ss.levels(['a', 'b'], kind='space'))
         pop = dict(n_agents=1000) if solver == 'abm' else dict(total_pop=1000)
         sim = ss.Sim(sis, solver=solver, unit='day', stop=60, verbose=0, **pop).run()
         out[solver] = sim.results.sis.I.by('patch')[-1]
@@ -1082,8 +1083,8 @@ def test_by_function():
             S, I = ss.states('S I')
             m = ss.Disease(S >> I @ ss.by(patch=eir), I >> S @ ss.days(20), name='m')
             m.stratify(patch=ss.geo.geography(names=['a', 'b', 'c'], populations=[1, 1, 1]))
-            intv = [ss.vaccinate(ss.Vaccine(efficacy=dict(acquisition=0.0)), coverage=0.5, at=2000.1)] if vaccine else []
-            sim = ss.Sim(diseases=m, interventions=intv, n_agents=15_000, start=2000, dur=ss.days(200), dt=ss.days(1), verbose=0, solver=solver, rand_seed=1).run()
+            intv = [ss.vaccinate(ss.Vaccine(efficacy=dict(acquisition=0.0)), when=2000.1, coverage=0.5)] if vaccine else []
+            sim = ss.Sim(diseases=m, interventions=intv, n_agents=15_000, start=2000, stop=ss.days(200), dt=ss.days(1), verbose=0, solver=solver, rand_seed=1).run()
             I = sim.results.m.I.by('patch').values[-2]
             N = I + sim.results.m.S.by('patch').values[-2]
             assert np.allclose(I/N, expected, atol=0.03), (solver, vaccine, I/N)
@@ -1091,7 +1092,7 @@ def test_by_function():
     m = ss.Disease(S >> I @ ss.by(patch=lambda sim: ss.perday(np.ones(2))), name='m')
     m.stratify(patch=ss.geo.geography(names=['a', 'b', 'c']))
     with pytest.raises(ValueError, match='3 levels'):
-        ss.Sim(diseases=m, n_agents=300, dur=ss.days(3), dt=ss.days(1), verbose=0).run()
+        ss.Sim(diseases=m, n_agents=300, stop=ss.days(3), dt=ss.days(1), verbose=0).run()
     inflow = lambda rate, S=ss.State('S'): ss.Sim(diseases=ss.Disease(S, arrive=ss.unborn >> S @ rate, name='m').stratify(pop={'a': 0.2, 'b': 0.8}), solver='ode', total_pop=100, stop=2002, verbose=0).run().results.m.arrive.by('pop')[1]
     assert np.allclose(inflow(ss.by(pop=lambda sim: np.array([10., 5.]))), inflow(ss.by(pop=[10., 5.]))) # An inflow by level is the inflow at each level, not shared out again
     return sim

@@ -170,7 +170,7 @@ A rate is worked out for the people who could take it at each step (everyone in 
 
 A function that uses `uids`, or anything else about individual people, needs agents, so a model with one runs as agents. Where the same thing can be said by group (`ss.by(age=...)` on a stratified model), it runs under every solver.
 
-A distribution in a rate gives each person their own rate: in `S >> I @ ss.gamma(a=0.5, scale=3.8)*I`, each person has their own transmission rate (the same as `ss.Transition(S, I, rate=ss.gamma(a=0.5, scale=3.8)*I)`). A distribution on its own after `@` is a dwell time; times a state, it is a rate.
+A distribution in a rate gives each person their own rate: in `S >> I @ ss.gamma(shape=0.5, scale=3.8)*I`, each person has their own transmission rate (the same as `ss.Transition(S, I, rate=ss.gamma(shape=0.5, scale=3.8)*I)`). A distribution on its own after `@` is a dwell time; times a state, it is a rate.
 
 ## Parameters of modules written as code
 
@@ -206,7 +206,7 @@ import starsim.library as ssl
 
 print(ssl.AgentSIR(p_death=0.02).pars.p_death)                  # A probability: the p of the default
 print(ssl.AgentSIR(p_death=ss.bernoulli(p=0.2)).pars.p_death)   # Another Bernoulli distribution
-print(ssl.AgentSIR(dur_inf=ss.gamma(a=4, scale=ss.days(2.5))).pars.dur_inf) # Any distribution of durations: here a mean of 10 days
+print(ssl.AgentSIR(dur_inf=ss.gamma(shape=4, scale=ss.days(2.5))).pars.dur_inf) # Any distribution of durations: here a mean of 10 days
 try:
     ssl.AgentSIR(p_death=ss.lognormal(4))
 except Exception as e:
@@ -248,7 +248,7 @@ A parameter made with `ss.par()` keeps its own name (from the variable, or `name
 S, E, I, A, R = ss.states('S E I A R')
 example = ss.Disease(
     infection = S >> E @ 0.5*(I + 0.5*A),                    # beta (the 0.5 on A is not a parameter)
-    onset     = ss.Transition(E, [I, A], p=[0.6, 0.4], dur=ss.days(5)), # dur_E (the shares are not parameters)
+    onset     = ss.Transition(E, {I: 0.6, A: 0.4}, dur=ss.days(5)), # dur_E (the shares are not parameters)
     recovery  = ss.Transition(I, R, dur=ss.days(7), p=0.99), # dur_recovery and p_recovery, since I has two ways out
     death     = ss.Transition(I, ss.dead, dur=ss.days(9), p=0.01),
     clear     = A >> R @ ss.days(5),                         # dur_A

@@ -26,13 +26,13 @@ import starsim as ss
 
 S, I, R, H, D = ss.states('S I R H D')
 infection = S >> I @ 0.3*I
-course    = ss.Transition(I, [R, H], dur=ss.days(8), p=[None, 0.1])  # Split on entry: 10% to H, the rest to R
+course    = ss.Transition(I, {R: None, H: 0.1}, dur=ss.days(8))  # Split on entry: 10% to H, the rest to R
 discharge = H >> R @ ss.days(10)                                     # Competing hazards: discharge ...
 death     = H >> D @ ss.perday(0.02)                                 # ... and death
 covid = ss.Disease(infection, course, discharge, death, init=dict(I=0.001), name='covid')
 ```
 
-In `p=[None, 0.1]`, `None` stands for the rest (here, 90%). The diagram, from `diagram()`:
+In `{R: None, H: 0.1}`, `None` stands for the rest (here, 90%). The diagram, from `diagram()`:
 
 ```{python}
 covid.diagram()

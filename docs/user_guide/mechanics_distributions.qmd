@@ -21,7 +21,7 @@ import matplotlib.pyplot as plt
 import starsim as ss
 
 durations = {
-    'Exponential':       ss.expon(scale=ss.days(10)),
+    'Exponential':       ss.expon(mean=ss.days(10)),
     'Erlang, 4 stages':  ss.erlang(k=4, mean=ss.days(10)),
     'Lognormal, std 2':  ss.lognormal(mean=ss.days(10), std=ss.days(2)),
 }
@@ -77,7 +77,7 @@ A value that differs by group, rather than at random between people, is better g
 | Histogram | `ss.histogram` | `values`, `bins` | From a histogram of data |
 | Random | `ss.random` | | Between 0 and 1 |
 
-See the [API reference](../api/distributions.qmd) for each, and the [appendix](#appendix-every-distribution) for the full list with their parameters. The names are also in `ss.distributions.dist_list`, and a parameter of a module written as code can be given one as a dict, with its name as `type`: `ss.RandomNet(n_contacts=dict(type='poisson', lam=5))` is `ss.RandomNet(n_contacts=ss.poisson(lam=5))`, which is useful when parameters come from a file.
+See the [API reference](../api/distributions.qmd) for each, and the [appendix](#appendix-every-distribution) for the full list with their parameters. The names are also in `ss.distributions.dist_list`, and a parameter of a module written as code can be given one as a dict, with its name as `type`: `ss.RandomNet(n_contacts=dict(type='poisson', mean=5))` is `ss.RandomNet(n_contacts=ss.poisson(mean=5))`, which is useful when parameters come from a file.
 
 ### Any SciPy distribution
 
@@ -96,13 +96,13 @@ Its time unit is given on its parameters, as here; `unit=` is refused, since Sta
 
 ## A fixed number of people
 
-Some things are a number of people, not a share: to start an outbreak with exactly 5 infectious people, give a number (`init_n=dict(I=5)`, or `init_prev=5`, since above 1 it is a number of people):
+Some things are a number of people, not a share: to start an outbreak with exactly 5 infectious people, give a number (`init_n=dict(I=5)` for the state, or `init_n=5`, seeded through the transmission as `init_prev=` is; `init_prev=` itself is always a share):
 
 ```{python}
 S, I, R = ss.states('S I R')
 infection = S >> I @ 1.9*I
 recovery  = I >> R @ ss.days(8)
-measles = ss.Disease(infection, recovery, init_prev=5)
+measles = ss.Disease(infection, recovery, init_n=5)
 
 sim = ss.Sim(measles, n_agents=10_000, stop=ss.days(50), verbose=0)
 sim.init()
@@ -146,7 +146,7 @@ In a sim, the same distribution draws in steps of its module instead, and from t
 A distribution can round what it draws, which matters for numbers that must be whole, such as a duration in steps: `round=True` rounds each value up or down at random in proportion to how close it is (so the mean is kept), and `round='nearest'` rounds to the nearest whole number. Either can be given when the distribution is made, or when drawing. Here a duration of about 5 days, in a sim with steps of a day, drawn for 10 people three ways (`reset=True` uses the same random numbers each time):
 
 ```{python}
-sim = ss.Sim(n_agents=10, dt=ss.days(1), start='2025-01-01', dur=ss.days(30), verbose=0).init()
+sim = ss.Sim(n_agents=10, dt=ss.days(1), start='2025-01-01', stop=ss.days(30), verbose=0).init()
 dur = ss.lognormal(ss.days(5), ss.days(2), round='nearest', name='Rounded duration')
 dur.init(sim=sim)
 
@@ -200,7 +200,7 @@ def p_by_age(self, sim, uids):
 def make_sim(campaign=None):
     S, I, R = ss.states('S I R')
     measles = ss.Disease(S >> I @ 0.04*I, I >> R @ ss.days(8), init_prev=0.01, name='measles')
-    school = ss.RandomNet(name='school', n_contacts=10, where=(ss.person.age >= 5) & (ss.person.age < 15))
+    school = ss.RandomNet(name='school', n_contacts=10, who=(ss.person.age >= 5) & (ss.person.age < 15))
     community = ss.RandomNet(name='community', n_contacts=2)
     return ss.Sim(measles, networks=[school, community], interventions=campaign, n_agents=5000, stop=ss.days(200))
 
@@ -209,7 +209,7 @@ scenarios = {
     '30% of everyone': make_sim(Campaign(p_vx=0.3)),
     '90% of children, 10% of adults': make_sim(Campaign(p_vx=p_by_age)),
 }
-msim = ss.parallel(scenarios, parallel=False)
+msim = ss.parallel(scenarios, workers=1)
 for label, sim in zip(scenarios, msim.sims):
     doses = sim.results.campaign.n_vaccinated.sum() if 'campaign' in sim.results else 0
     print(label, '- doses:', int(doses), '- largest number infectious:', int(sim.results.measles.I.max()))

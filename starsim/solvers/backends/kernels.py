@@ -2493,10 +2493,10 @@ def apply_events(rng, y, r, ti, whole):
 solvers = dict(rk4=0, euler=1, binomial=2, tau=3, gillespie=4, whole=5) # whole: the chain binomial in whole steps (substeps=1), with 1 - exp(-r*dt) for every exit, as discrete-time chain-binomial models are written (see draw())
 
 def solver_code(sim):
-    """ The kernels' number for the sim's solver (see `solvers`): for the ODE, its integrator; the chain binomial in whole steps (`substeps=1`) is the discrete-time model as written, for which `draw()` keeps the exponential for every exit """
+    """ The kernels' number for the sim's solver (see `solvers`): for the ODE, its integrator; the chain binomial in whole steps (`ss.binomial(substeps=1)`) is the discrete-time model as written, for which `draw()` keeps the exponential for every exit """
     if sim.solver == 'ode':
-        return solvers[sim.integrator]
-    if sim.solver == 'binomial' and sim.pars.substeps == 1:
+        return solvers[sim.solver.integrator]
+    if sim.solver == 'binomial' and sim.solver.substeps == 1:
         return solvers['whole']
     return solvers[sim.solver]
 
@@ -2527,7 +2527,7 @@ def apply_shifts(rng, y, sh, ti, whole, tally):
                 if e <= 0 or n <= 0:
                     continue
                 p = sh.cov[k, c, g]
-                tally[k, 0, sh.rest[k, g]] += n*e*p # The expected number, as a compartmental run counts them, in the group of those offered it (see ss.Delivery.mark_offered())
+                tally[k, 0, sh.rest[k, g]] += n*e*p # The expected number, as a compartmental run counts them, in the group of those offered it (see ss.Event.mark_offered())
                 tally[k, 1, g] += n*e
                 if whole:
                     a = binomial(rng, n, e*p)
