@@ -1288,7 +1288,7 @@ def optimize(sim, total=None, maximize=None, minimize=None, at=None, start=None,
     def run(amounts):
         n_runs[0] += 1
         if restart:
-            return runner._restart(pars=values(amounts)).run()
+            return runner.restart(pars=values(amounts)).run()
         return sim.new(pars=values(amounts), verbose=0).run()
     value_before = read(run(before))
     scale = max(abs(value_before), 1e-12)
@@ -1367,7 +1367,7 @@ def bounded_pars(probe, pars=None, unused=()):
         pars (list): the names to take (default: all with bounds)
         unused (set): the ids of parameters to leave out (those of likelihoods not used)
 
-    Returns the parameters by name, and the names of those that set the mixing when the sim is built: of networks that a compartmental run turns into contact rates (those of the movement between places are worked out again on a restart: see `ss.Sim._restart()`).
+    Returns the parameters by name, and the names of those that set the mixing when the sim is built: of networks that a compartmental run turns into contact rates (those of the movement between places are worked out again on a restart: see `ss.Sim.restart()`).
     """
     fitted = sc.obj()
     for mod in probe.declared:
@@ -1886,12 +1886,12 @@ class Problem(sc.prettyobj):
 
     def restart(self, x):
         """ The runner, restarted with these values """
-        return self.runner._restart(pars=self.to_pars(x))
+        return self.runner.restart(pars=self.to_pars(x))
 
     def run(self, x, seed=None, fresh=False):
         """ A run of the sim with these values: the runner restarted if it can be, else a new sim """
         if self.can_restart and not fresh:
-            return self.runner._restart(pars=self.to_pars(x), rand_seed=seed).run()
+            return self.runner.restart(pars=self.to_pars(x), rand_seed=seed).run()
         kw = {} if seed is None else dict(rand_seed=seed)
         new = self.base.new(pars=self.to_pars(x), **kw)
         new.data = self.base.data
@@ -2417,7 +2417,7 @@ def fit_if2(problem, particles=1000, iterations=50, cooling=0.5, sd=0.05, chains
         ```
     """
     p = problem
-    filt = ParticleFilter(p.runner._restart(), likelihood=p.likelihood, weights=p.weights)
+    filt = ParticleFilter(p.runner.restart(), likelihood=p.likelihood, weights=p.weights)
     swarm = Swarm(p.runner, p.fitted, p.restart, p.to_x, p.to_z(p.x0), sd=sd, cooling=cooling, n_points=len({row for s in filt.series for row in s.rows}))
     rng = np.random.default_rng(p.rand_seed)
     T = sc.timer()
@@ -2483,12 +2483,12 @@ def fit_pmcmc(problem, scan=None, particles=None, draws=1000, warmup=1000, chain
         ```
     """
     p = problem
-    filt = ParticleFilter(p.runner._restart(), likelihood=p.likelihood, weights=p.weights)
+    filt = ParticleFilter(p.runner.restart(), likelihood=p.likelihood, weights=p.weights)
     rng = np.random.default_rng(p.rand_seed)
 
     def logpost_pf(z, rng, n):
         x, share = p.to_x(z)
-        p.runner._restart(pars=p.to_pars(x), rand_seed=int(rng.integers(2**31))) # Each with its own start, if the start is drawn
+        p.runner.restart(pars=p.to_pars(x), rand_seed=int(rng.integers(2**31))) # Each with its own start, if the start is drawn
         return filt(n_particles=n, seed=int(rng.integers(2**31))) + p.logprior(x) + p.logjac(x, share)
 
     starts = [p.x0] + list(p.spread(p.scan_size(scan or None)))

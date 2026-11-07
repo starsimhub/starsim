@@ -57,7 +57,7 @@ class Mixing(Telling):
         return
 
     def init_movement(self):
-        """ The movement between places, from the current values of its parameters (again on a restart with new ones: see `ss.Sim._restart()`) """
+        """ The movement between places, from the current values of its parameters (again on a restart with new ones: see `ss.Sim.restart()`) """
         if self.space is not None:
             strat = self.sim.groups.strats[self.space]
             mobility = strat.mobility

@@ -39,7 +39,7 @@ def test_particle_mcmc():
     assert filt.series[0].spans[-1][0] > 70 # The last weekly point is worked out from its own week, not from the start
     est = {}
     for beta in [0.4, 0.5, 0.6]:
-        sim._restart(pars=dict(beta=beta))
+        sim.restart(pars=dict(beta=beta))
         est[beta] = filt(n_particles=100, seed=1)
     assert est[0.5] > max(est[0.4], est[0.6])
 
@@ -95,7 +95,7 @@ def test_fitted_mobility():
 
     # Its gradient is that of the runs
     h = 1e-5
-    grad = sim._restart(pars=dict(away=0.1)).gradient(results='I', pars='away').away.sir.I
+    grad = sim.restart(pars=dict(away=0.1)).gradient(results='I', pars='away').away.sir.I
     assert np.allclose(grad, (n_I(0.1 + h) - n_I(0.1 - h))/(2*h), rtol=1e-3, atol=1e-2)
 
     # IF2 gives each particle its own movement, and finds the value that made the data

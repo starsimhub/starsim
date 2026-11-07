@@ -400,6 +400,12 @@ class Graph:
         for state in self.states.values():
             state.init, state.init_n = [ss.parameters.starting(v) for v in [state.init, state.init_n]]
         self.init_prev = ss.parameters.starting(self.init_prev)
+        raw = self.init_prev.raw if isinstance(self.init_prev, par) else self.init_prev
+        if isinstance(raw, ss.bernoulli): # The same as its p, e.g. from a coded disease: each person starts infected with that chance anyway
+            if isinstance(self.init_prev, par):
+                self.init_prev.value = raw.pars.p
+            else:
+                self.init_prev = raw.pars.p
         return
 
     def unset_default_init_prev(self):
@@ -786,18 +792,18 @@ class Graph:
                 if len(tr.dest or []) <= 1 and any(c is clock for c in ss.expressions.clocks_in(sc.tolist(tr.p))):
                     raise ss.CapabilityError(f'"{name}" has p= with {clock}, but a branch with p= is decided when people enter {sc.strjoin(clock.names)}, when no time has passed. '
                                              f'Write one transition with several destinations, decided when they leave, e.g. ss.Transition({tr.source[0].name}, [{tr.dest[0].name}, ...], dur=..., p=[f({clock}), None])')
-            if tr.stays and not tr.dest and not tr.dies:
+            if tr.stays and not tr.dest and not tr._to_dead:
                 raise ValueError(f'"{name}" has ss.stay as its only destination; give it with another, e.g. [B, ss.stay] with p=[0.3, None].')
             if tr.p is not None and tr._split:
                 ps = tr.p
                 if len(ps) == 1 and len(tr.dest) == 2 and not tr.stays: # With two destinations, a single value is the first one's probability
                     ps = tr.p = [ps[0], None]
-                ends = ps + [tr.p_stay]*tr.stays + [tr.p_die]*tr.dies # One entry for each destination, with ss.stay and ss.dead
+                ends = ps + [tr.p_stay]*tr.stays + [tr.p_die]*tr._to_dead # One entry for each destination, with ss.stay and ss.dead
                 if len(ps) != len(tr.dest):
-                    raise ValueError(f'"{name}" has {len(tr.dest) + tr.stays + tr.dies} destinations but {len(ps) + (tr.p_stay is not None) + (tr.p_die is not None)} branch probabilities; give one for each (or None for the one that takes the rest).')
+                    raise ValueError(f'"{name}" has {len(tr.dest) + tr.stays + tr._to_dead} destinations but {len(ps) + (tr.p_stay is not None) + (tr.p_die is not None)} branch probabilities; give one for each (or None for the one that takes the rest).')
                 given = [p for p in ends if p is not None]
                 if len(given) < len(ends) - 1:
-                    which = [label for label,p in zip([d.name for d in tr.dest] + ['ss.stay']*tr.stays + ['ss.dead']*tr.dies, ends) if p is None]
+                    which = [label for label,p in zip([d.name for d in tr.dest] + ['ss.stay']*tr.stays + ['ss.dead']*tr._to_dead, ends) if p is None]
                     raise ValueError(f'"{name}" leaves the rest to {sc.strjoin(which)}; only one destination can take the rest, so give the others a p=.')
                 if all(isinstance(p, par) and sc.isnumber(p.raw) for p in given):
                     total = sum(p.raw for p in given)

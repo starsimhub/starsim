@@ -142,7 +142,7 @@ class Events(Agents):
         # Each transition's destinations, with their shares; -1 for a death
         dsts, cums = [], []
         for tr in self.trs:
-            dst = [index[d.name] for d in (tr.dest or [])] + [-1]*bool(tr._outflow or tr.dies)
+            dst = [index[d.name] for d in (tr.dest or [])] + [-1]*bool(tr._outflow or tr._to_dead)
             if tr._split:
                 frm = np.full(len(auids), index[tr.source[0].name])
                 edges = same(self.dest_edges(tr, auids, frm), f'the destinations of "{tr.name}"')

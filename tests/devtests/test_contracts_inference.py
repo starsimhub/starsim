@@ -94,7 +94,7 @@ def jax_loglik(sim, points, likelihood=None):
     fitted = fitted_pars(sim)
     names = list(fitted)
     x0 = np.array([p.raw for p in fitted.values()], dtype=float)
-    set_pars = lambda x: sim._restart(pars=dict(zip(names, x)))
+    set_pars = lambda x: sim.restart(pars=dict(zip(names, x)))
     density = ss.gradients.Density(sim, fitted, x0, set_pars, likelihood=likelihood)
     out = []
     for x in points:
@@ -152,7 +152,7 @@ def test_particle_filter(key):
     pf = {}
     direct = {}
     for x in values:
-        sim._restart(pars={name:x})
+        sim.restart(pars={name:x})
         pf[x] = np.array([filt(n_particles=50, seed=seed) for seed in range(n_seeds)])
         direct[x] = np.array([ss.fit.loglik(model.build(x, data=data, solver='tau', rand_seed=seed, **kw).run(), likelihood=lik) for seed in range(n_seeds)])
         print(f'{key} at {x:.3g}: filter {pf[x].mean():.2f} +- {pf[x].std(ddof=1)/np.sqrt(n_seeds):.2f}; direct runs {direct[x].mean():.2f} +- {direct[x].std(ddof=1)/np.sqrt(n_seeds):.2f}')

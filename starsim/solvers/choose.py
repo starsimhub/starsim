@@ -891,7 +891,7 @@ def check_betas(sim, nets):
 
 def leaves(mod):
     """ The transitions by which people die of a declared disease (to `ss.dead`), who leave the people of every other disease too """
-    return [tr for tr in mod.graph.transitions.values() if tr.people and tr.source and (not tr.dest or tr.dies) and not getattr(tr, 'every_state', False)]
+    return [tr for tr in mod.graph.transitions.values() if tr.people and tr.source and (not tr.dest or tr._to_dead) and not getattr(tr, 'every_state', False)]
 
 
 def crossing_groups(sim):

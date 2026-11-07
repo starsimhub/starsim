@@ -172,7 +172,9 @@ def people_counts(sim, get):
     for mod in mods:
         for tr in mod.graph.transitions.values():
             if tr._deaths is not None and tr._deaths in mod.results:
-                gone['emigrated' if getattr(tr, 'migration', False) else 'died'] += get(mod, tr._deaths)
+                gone['died'] += get(mod, tr._deaths)
+            elif tr._outflow and tr.migration and tr.name in mod.results: # People leaving alive (ss.emigration())
+                gone['emigrated'] += get(mod, tr.name)
     return sc.obj(alive=alive, **{key:np.broadcast_to(val, alive.shape).copy() for key,val in gone.items()})
 
 
@@ -1833,7 +1835,7 @@ class Engine(Telling, Effects):
 
     def die_share(self, tr, shares, ev=None):
         """ The probability of ss.dead in a split (0 if it is not one of the destinations): what the shares of the states leave over, less what ss.stay takes """
-        if not tr.dies:
+        if not tr._to_dead:
             return 0.0
         ev = ev or self.eval
         left = 1.0 - sum(shares, 0.0)

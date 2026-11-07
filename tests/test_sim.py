@@ -802,6 +802,19 @@ def test_small_fixes():
         ss.Sim(n_agents=100, diseases='sis', connectors=Walk(name='walk'), verbose=0).init()
     timevec = ss.Sim(n_agents=10, start=0, stop=2500, dt=ss.years(0.25), unit='year', verbose=0).init().timevec
     assert timevec[366] == 91.5 and timevec[906] == 226.5 # They were 91.50000004 and 226.50000009
+    I0 = lambda ip: ss.Sim(diseases=ss.SIR(init_prev=ip), n_agents=1000, stop=2001, verbose=0, rand_seed=1).run().results.sir.I[0]
+    assert I0(ss.bernoulli(p=lambda sim: 0.1)) == I0(lambda sim: 0.1) and I0(ss.bernoulli(0.1)) == I0(0.1) # A declared disease raised a TypeError
+    S, I, R = ss.states('S I R')
+    trs = dict(death=ss.death(rate=0.01), die=I >> ss.dead @ 0.1, split=ss.Transition(I, [R, ss.dead], dur=5, p=0.9), leave=ss.emigration(rate=0.1), recover=I >> R @ 0.1)
+    assert [tr.dies for tr in trs.values()] == [True, True, True, False, False]
+    res = ss.Sim(demographics=[ss.emigration(rate=ss.peryear(0.1))], diseases='sir', total_pop=1000, stop=2005, solver='ode', verbose=0).run().results
+    assert np.isclose(res.emigrated[:-1].sum(), 1000 - res.alive[-1]) # Up to the last stock, at the start of the last step; a compartmental run counted no one as having left
+    rerun = ss.Sim(diseases='sir', networks='random', n_agents=500, stop=2005, verbose=0).run()
+    rerun.restart(pars=dict(beta=0))
+    assert not rerun.started
+    rerun.run(until=1955) # Its first step (it starts 50 years before the stop)
+    assert rerun.started and rerun.ti == 0 # One step taken: sim.ti + sim.started
+    assert rerun.run().results.sir.infection.sum() == 0
     return sim
 
 if __name__ == '__main__':
