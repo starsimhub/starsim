@@ -17,13 +17,14 @@ A **geography** (`ss.geo.geography`) is a set of named places, with the populati
 import starsim as ss
 
 towns = ss.geo.geography(
-    names = ['Riverton', 'Hillside', 'Lakeside'],
-    pop   = [60_000, 30_000, 10_000],
-    x     = [0, 20, 50], # Positions in km
-    y     = [0, 0, 10],
+    names       = ['Riverton', 'Hillside', 'Lakeside'],
+    populations = [60_000, 30_000, 10_000],
+    x           = [0, 20, 50], # Positions in km
+    y           = [0, 0, 10],
 )
 
-S, I, R = ss.states('S I R')
+S, R = ss.states('S R')
+I = ss.State('I', infected=True) # Infected: counted in the results infected and prevalence
 infection = S >> I @ 1.9*I        # β = 1.9 per day
 recovery  = I >> R @ ss.days(8)   # Infectious for 8 days on average
 measles = ss.Disease(infection, recovery, init_n=dict(I=ss.by(patch=[10, 0, 0]))) # 10 infectious people in Riverton
