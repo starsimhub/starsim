@@ -824,7 +824,7 @@ class Branching(sc.prettyobj):
     Example:
         ```python
         sir = ss.SIR(beta=ss.perday(0.3), dur_inf=ss.days(10), init_n=dict(I=1))
-        sim = ss.Sim(diseases=sir, total_pop=1e6, branching=True, solver='gillespie', unit='day', stop=ss.days(365))
+        sim = ss.Sim(diseases=sir, total_pop=1e6, branching=True, solver='gillespie', unit='day', dur=ss.days(365))
         msim = ss.parallel(sim, n_runs=200, until=sir.I.n + sir.R.n >= 200)
         msim.branching.p_extinct # About 1/R0 = 1/3
         msim.branching.plot()

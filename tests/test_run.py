@@ -18,7 +18,7 @@ def make_sim_pars(beta=0.1, **kwargs):
     pars = sc.obj(
         n_agents = n_agents,
         start = 2000,
-        stop = ss.years(10),
+        dur = ss.years(10),
         demographics = True,
         networks = 'random',
         diseases = sc.obj(type='sis', beta=ss.peryear(beta), dur_inf=ss.years(10)), # To allow for modification later; in years, as the sim is
@@ -178,7 +178,7 @@ def test_other():
     # Scenarios of a stratified compartmental model restarted for their runs, one with a delivery that adds groups (it raised a ValueError), compared with the baseline, and plotted with weekly data
     S, I, R = ss.states('S I R')
     sir = ss.Disease(infection=S >> I @ 0.3*I, recovery=I >> R @ ss.days(10), init_n=dict(I=5), name='sir').stratify(age={0: 0.3, 15: 0.7})
-    kw = dict(total_pop=10_000, stop=ss.days(100), solver='binomial', verbose=0)
+    kw = dict(total_pop=10_000, dur=ss.days(100), solver='binomial', verbose=0)
     weekly = ss.Sim(sir, **kw).run().to_synthetic_data('sir.infection', resample='week') # Whole weeks only, as resample() keeps: not the last of the 101 steps', which is three days
     msim = ss.parallel({'Base': ss.Sim(sir, data=weekly, **kw), 'Vaccine': ss.Sim(sir, interventions=ss.vaccinate(efficacy=0.9, when=20, coverage=0.5), **kw)}, n_runs=3)
     averted = msim.summarize(baseline='Base').loc[('sir_infection', 'Vaccine')]
@@ -195,8 +195,8 @@ def test_scenarios():
     sc.heading('Testing scenarios')
     S, I, R = ss.states('S I R')
     sir = ss.Disease(infection=S >> I @ 0.3*I, recovery=I >> R @ ss.days(10), init_n=dict(I=5), name='sir')
-    kw = dict(total_pop=1_000, stop=ss.days(50), solver='binomial', verbose=0)
-    agents = dict(n_agents=300, stop=ss.days(50), verbose=0)
+    kw = dict(total_pop=1_000, dur=ss.days(50), solver='binomial', verbose=0)
+    agents = dict(n_agents=300, dur=ss.days(50), verbose=0)
     msim = ss.parallel({'Base': ss.Sim(sir, **agents), 'Vaccine': ss.Sim(sir, interventions=ss.vaccinate(efficacy=0.9, when=20, coverage=0.5), **agents)}, n_runs=10, workers=1)
 
     # Every run of a scenario in its color, with as many runs as there are colors (they were all one color), and the same color in axes of a result only one scenario has
@@ -245,7 +245,7 @@ def test_scenarios():
 def test_one_disease():
     """ Results across the runs are found in each sim's one disease, even if the diseases are named differently """
     sc.heading('Testing msim results and plots of each sim\'s one disease')
-    kw = dict(n_agents=500, stop=ss.days(30), unit='day', verbose=0)
+    kw = dict(n_agents=500, dur=ss.days(30), unit='day', verbose=0)
     S, E, I, R = ss.states('S E I R')
     sir = ss.Disease(S >> I @ 0.2*I, I >> R @ ss.days(10))
     seir = ss.Disease(S >> E @ 0.2*I, E >> I @ ss.days(3), I >> R @ ss.days(10))

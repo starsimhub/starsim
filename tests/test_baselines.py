@@ -19,7 +19,7 @@ sc.options(interactive=False) # Assume not running interactively
 pars = sc.obj(
     n_agents  = 10e3, # Number of agents
     start     = 2000, # Starting year
-    stop      = ss.years(20), # Number of years to simulate
+    dur      = ss.years(20), # Number of years to simulate
     dt        = 0.2,  # Timestep
     verbose   = 0,    # Don't print details of the run
     rand_seed = 2,    # Set a non-default seed
@@ -167,11 +167,11 @@ def perf_cases():
     het  = lambda: ss.Sim(diseases=ss.SIS(dt=ss.days(1)), networks=ss.RandomNet(dt=ss.weeks(1)),
                           demographics=ss.Births(dt=ss.days(10)), dt=ss.days(2),
                           start='2000-01-01', stop='2002-01-01', n_agents=200, verbose=0)
-    births = lambda: ss.Sim(n_agents=5000, stop=ss.years(20), dt=0.25, demographics=ss.Births(birth_rate=ss.peryear(0.03)),
+    births = lambda: ss.Sim(n_agents=5000, dur=ss.years(20), dt=0.25, demographics=ss.Births(birth_rate=ss.peryear(0.03)),
                             rand_seed=1, verbose=0)
     crnf = lambda: ss.Sim(diseases=ss.SIS(beta=0.1, init_prev=0.05), networks=ss.RandomNet(),
                           demographics=ss.Births(birth_rate=ss.peryear(0.02)),
-                          n_agents=2000, stop=ss.years(20), dt=0.2, rand_seed=1, verbose=0)
+                          n_agents=2000, dur=ss.years(20), dt=0.2, rand_seed=1, verbose=0)
     return {
         'bare_init':          (bare, 'init', True),
         'bare_run':           (bare, 'run', True),

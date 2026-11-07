@@ -27,7 +27,7 @@ print(ssl.Measles is ssl.diseases.Measles)
 Otherwise they behave like core modules, and can be mixed freely with them, here a library disease on a core network:
 
 ```{python}
-outbreak = dict(start='2000', stop=ss.years(1), n_agents=2000)
+outbreak = dict(start='2000', dur=ss.years(1), n_agents=2000)
 sim = ss.Sim(diseases=ssl.Measles(beta=ss.perday(0.3)), networks=ss.RandomNet(), **outbreak) # On a network, beta is the rate per contact
 sim.run()
 sim.plot('measles')
@@ -72,7 +72,7 @@ In these runs, burying every body safely cuts the infections over the year by ab
 `Cholera` adds environmental transmission to the usual transmission from person to person, with a state that is a count of bacteria rather than people (`W`, `ss.State(people=False)`): infectious people shed bacteria into it (at `shedding_rate`, asymptomatic people much less), the bacteria die off (at `decay_rate`), and susceptible people are infected by the water at a rate that rises with the concentration, reaching half of `beta_env` at `half_sat_rate`. This is the pattern to follow for any waterborne, vector-borne, or otherwise indirectly transmitted disease (see also [Cholera with a water reservoir](../gallery/cholera.qmd)). Turning off the environmental route (`beta_env=0`) shows how much of the epidemic it carries:
 
 ```{python}
-town = dict(start='2000', stop=ss.years(1), total_pop=10_000)
+town = dict(start='2000', dur=ss.years(1), total_pop=10_000)
 scenarios = {
     'Person to person and water': ss.Sim(diseases=ssl.Cholera(), **town),
     'Person to person only':      ss.Sim(diseases=ssl.Cholera(beta_env=ss.perday(0)), **town),
@@ -275,7 +275,7 @@ cold = dict( # A cold: a latent period of 3 days, infectious for a week, and an 
     init_prev = 0.01,
     name = 'cold',
 )
-pars = dict(start='2000', stop=ss.years(4), n_agents=5000, networks=ss.RandomNet())
+pars = dict(start='2000', dur=ss.years(4), n_agents=5000, networks=ss.RandomNet())
 scenarios = {
     'Lifelong immunity':              ss.Sim(diseases=WaningSEIR(dur_immune=ss.constant(ss.years(100)), **cold), **pars),
     'Immunity for a year on average': ss.Sim(diseases=WaningSEIR(**cold), **pars),

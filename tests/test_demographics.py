@@ -50,7 +50,7 @@ def test_nigeria(which='births', dt=1, start=1995, dur=ss.years(15), do_plot=Fal
         dt=dt,
         total_pop=nga_pop_1995,
         start=start,
-        stop=dur,
+        dur=dur,
         people=ppl,
         demographics=demographics,
     )
@@ -131,7 +131,7 @@ def test_nigeria(which='births', dt=1, start=1995, dur=ss.years(15), do_plot=Fal
 def test_constant_pop(do_plot=False):
     """ Test pars for constant pop size """
     sc.heading('Testing constant population size')
-    sim = ss.Sim(n_agents=10e3, demographics=[ss.birth(rate=ss.peryear(0.01)), ss.death(rate=ss.peryear(0.01/1.01))], stop=ss.years(200), rand_seed=1).run()
+    sim = ss.Sim(n_agents=10e3, demographics=[ss.birth(rate=ss.peryear(0.01)), ss.death(rate=ss.peryear(0.01/1.01))], dur=ss.years(200), rand_seed=1).run()
     print("Check final pop size within 5% of starting pop")
     assert np.isclose(sim.results.alive[0], sim.results.alive[-1], rtol=0.05)
     print(f'✓ (final pop / starting pop={sim.results.alive[-1] / sim.results.alive[0]:.2f})')
@@ -202,7 +202,7 @@ def test_pregnancy():
             ss.Pregnancy(fertility_rate=ss.peryear(0.02), burnin=True),
             ss.Deaths(death_rate=ss.peryear(0.009900990099)),
         ],
-        stop=ss.years(10),
+        dur=ss.years(10),
         rand_seed=1,
         dt=ss.years(1/12),
         networks=ss.PrenatalNet(),
@@ -274,7 +274,7 @@ def test_pregnancy_short_sim():
             ss.Pregnancy(fertility_rate=ss.peryear(0.01), burnin=False),
             ss.Deaths(death_rate=ss.peryear(0.009900990099)),
         ],
-        stop=ss.days(250),
+        dur=ss.days(250),
         rand_seed=1,
         dt=ss.days(10),
         networks=ss.PrenatalNet(),
@@ -284,7 +284,7 @@ def test_pregnancy_short_sim():
     # Check that a number or a non-choice distribution works for dur_pregnancy, including with fertility data
     asfr = pd.read_csv(datadir/'nigeria_asfr.csv')
     for dur_preg in [39, ss.normal(ss.weeks(39), ss.weeks(1))]:
-        preg = ss.Sim(n_agents=500, demographics=ss.Pregnancy(fertility_rate=asfr, dur_pregnancy=dur_preg), stop=ss.years(1), dt=ss.months(1), verbose=0).run().demographics.pregnancy
+        preg = ss.Sim(n_agents=500, demographics=ss.Pregnancy(fertility_rate=asfr, dur_pregnancy=dur_preg), dur=ss.years(1), dt=ss.months(1), verbose=0).run().demographics.pregnancy
         assert 0.7 < preg.mean_dur_pregnancy < 0.8, 'Mean pregnancy should be roughly 39 weeks' # 39 weeks = 0.75 years
 
     sc.printgreen('✓ Short sim pregnancy finalize test passed')
@@ -306,7 +306,7 @@ def test_nnd():
             ss.Deaths(death_rate=ss.peryear(0.009900990099)),
         ],
         diseases=ssl.mnch.NeonatalSepsis(),
-        stop=ss.years(3),
+        dur=ss.years(3),
         dt=ss.days(7), # Weekly, since a sepsis death (about a week after birth) is only seen at a step, and at monthly steps a newborn is a month old by then
         rand_seed=1,
         networks=ss.PrenatalNet(),
@@ -335,7 +335,7 @@ def test_count_based_births():
 
     def cum_births(crn, seed):
         ss.options.crn = crn
-        sim = ss.Sim(n_agents=3000, stop=ss.years(15), dt=0.25, demographics=ss.Births(birth_rate=ss.peryear(0.03)),
+        sim = ss.Sim(n_agents=3000, dur=ss.years(15), dt=0.25, demographics=ss.Births(birth_rate=ss.peryear(0.03)),
                      rand_seed=seed, verbose=0).run()
         return float(sim.results.births.birth.cum[-1])
 
@@ -358,14 +358,12 @@ def test_count_based_births():
 
     print(f'  Per-agent mean: {per_agent.mean():.0f}, count-based mean: {count_based.mean():.0f} ({rel_diff*100:.2f}% difference)')
 
-    # A typed rate is per person, and a bare number per 1,000 people unless rate_per says, whatever its size (before, 0.5 was per person and 30 per 1,000)
-    births = [ss.Births(birth_rate=rate, rate_per=units).pars.rate_per for rate,units in [(30, None), (0.5, None), (0.5, 1), (ss.peryear(0.03), None)]]
-    assert births == [1000, 1000, 1, 1]
-    with pytest.raises(ValueError, match='typed rate'): # rate_per is for bare numbers and tables
-        ss.Births(birth_rate=ss.peryear(0.03), rate_per=1000)
-    per_1000 = ss.peryear(20) # 20 per 1,000, given as 20 per person
-    with pytest.warns(RuntimeWarning, match='per person'):
-        ss.Deaths(death_rate=per_1000)
+    # A rate above 1 per year is per 1,000 people, and one of 1 or below per person, whether a bare number or typed, unless rate_per says
+    births = [ss.Births(birth_rate=rate, rate_per=units).pars.rate_per for rate,units in [(30, None), (0.5, None), (0.5, 1000), (ss.peryear(0.03), None), (ss.peryear(30), None), (ss.peryear(0.03), 1000)]]
+    assert births == [1000, 1, 1000, 1, 1000, 1000]
+    assert ss.Deaths(death_rate=ss.peryear(20)).pars.rate_per == ss.Deaths(death_rate=20).pars.rate_per == 1000 # 20 per 1,000, typed or not
+    with pytest.raises(ValueError, match='rate_per'):
+        ss.Births(rate_per=0.001) # Starsim 3's rate_units
     return per_agent, count_based
 
 
@@ -489,14 +487,13 @@ def test_lifetable_deaths():
 
 @sc.timer()
 def test_declared_demographics_alone():
-    """ Births and deaths declared with no disease: as agents by default, as compartments with a compartmental solver named, and a per-person rate that looks per 1,000 warns """
+    """ Births and deaths declared with no disease: as agents by default, as compartments with a compartmental solver named, and a rate above 1 per year is per 1,000 """
     sc.heading('Testing ss.birth() and ss.death() with no disease...')
     flows = lambda: [ss.birth(rate=ss.peryear(0.03)), ss.death(rate=ss.peryear(0.01))]
-    ode = ss.Sim(demographics=flows(), start=2000, stop=ss.years(10), solver='ode', verbose=0).run()
+    ode = ss.Sim(demographics=flows(), start=2000, dur=ss.years(10), solver='ode', verbose=0).run()
     assert np.isclose(ode.results.alive[-1], 10_000*np.exp(0.02*10), rtol=1e-3)
-    assert isinstance(ss.Sim(demographics=flows(), n_agents=500, start=2000, stop=ss.years(2), verbose=0).run().solver, ss.solvers.abm)
-    with pytest.warns(RuntimeWarning, match='per person'): # 30 per 1,000, given as 30 per person
-        ss.birth(rate=ss.peryear(30))
+    assert isinstance(ss.Sim(demographics=flows(), n_agents=500, start=2000, dur=ss.years(2), verbose=0).run().solver, ss.solvers.abm)
+    assert ss.birth(rate=ss.peryear(30)).rate.raw == ss.birth(rate=30).rate.raw == ss.peryear(0.03) # 30 per 1,000, typed or not
     return ode
 
 

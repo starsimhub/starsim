@@ -129,7 +129,7 @@ def test_syntax():
     assert d + ss.years(1) == ss.date('2021-03-05')
     assert d - ss.years(1) == ss.date('2019-03-05')
     assert ss.date('2020-01-31') + ss.months(1) == ss.date('2020-02-29')
-    assert len(ss.Timeline(start=d, stop=ss.days(301), dt=ss.days(1)).init()) == 302 # Ends on 2020-12-31, not 2021-01-01
+    assert len(ss.Timeline(start=d, dur=ss.days(301), dt=ss.days(1)).init()) == 302 # Ends on 2020-12-31, not 2021-01-01
 
     # Operations on date vectors
     ss.date.arange(2020,2030)+ss.years(1) # add years to date array
@@ -576,7 +576,7 @@ def test_time_text():
 
     # The step count warning says where the unit came from (it said "from None" with unit='day')
     with pytest.warns(RuntimeWarning, match="unit='day'"):
-        ss.Sim(make(), total_pop=1e5, stop=ss.years(30), unit='day', verbose=0).init()
+        ss.Sim(make(), total_pop=1e5, dur=ss.years(30), unit='day', verbose=0).init()
     return
 
 

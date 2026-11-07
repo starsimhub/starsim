@@ -13,7 +13,7 @@ This page covers births and deaths declared for a population, which work however
 
 ## Births and deaths
 
-Births and deaths for the whole population go in `demographics=`. `ss.birth(rate=r)` adds people at a crude birth rate `r` (a typed rate is per person, e.g. `ss.peryear(0.03)`; a bare number is per 1,000 people per year, as `ss.Births` reads it, so `30` is the same), into the first state of each disease (here `S`); `ss.death(rate=r)` removes people from every state at rate `r`, read the same way. Here is the measles model of the tutorials over 30 years, with 30 births and 10 deaths per 1,000 people a year:
+Births and deaths for the whole population go in `demographics=`. `ss.birth(rate=r)` adds people at a crude birth rate `r` (per year, and per 1,000 people if above 1, else per person, as `ss.Births` reads it: `ss.peryear(0.03)`, `ss.peryear(30)`, and the bare number `30` are the same), into the first state of each disease (here `S`); `ss.death(rate=r)` removes people from every state at rate `r`, read the same way. Here is the measles model of the tutorials over 30 years, with 30 births and 10 deaths per 1,000 people a year:
 
 ```{python}
 import starsim as ss
@@ -110,15 +110,15 @@ The model follows the UN's estimates to within 2%. The UN's rates that come with
 
 Rates of your own are given as a table. Crude birth rates have a column for the year and one for the rate (`ss.Births(birth_rate=df)`, with columns `Year` and `CBR`); death rates have columns for the year, sex, age group, and rate (`ss.Deaths(death_rate=df)`, with columns `Time`, `Sex`, `AgeGrpStart`, and `mx`, and `Sex` being `Male` or `Female`). `Time` and `Year` can be used for each other; for other names, give `columns=`, e.g. `columns=dict(value='rate')`. Each rate holds from its year until the next year given.
 
-A typed rate (`ss.peryear(0.035)`) is always per person, as every rate in Starsim is. Crude birth and death rates are usually given per 1,000 people, so a bare number is read that way: `ss.Births(birth_rate=35)` is 35 per 1,000 people a year. A table is read as the UN's are: crude birth rates and fertility rates per 1,000, and death rates by age per person. `rate_per=1` says that a bare number or a table is per person (and `rate_per=1000` that a table of death rates by age is per 1,000); a typed rate takes no `rate_per`. The crude birth and death rates in the results (`births.cbr`, `deaths.cmr`) are per 1,000 people a year:
+Rates of births, deaths, and conceptions are well below 1 per person a year, and well above 1 per 1,000, so their size says which they are: a rate above 1 a year is per 1,000 people, and one of 1 or below is per person. This is the same for a bare number, a typed rate, and a table (read from its median, so that a few large rates, such as deaths at the oldest ages, don't sway it): `ss.Births(birth_rate=35)`, `ss.peryear(35)`, and `ss.peryear(0.035)` are all 35 per 1,000 people a year, and the UN's death rates by age (`mx`, per person) are read the same as those rates times 1,000. `rate_per=1000` or `rate_per=1` says which, for rates whose size could mislead. The crude birth and death rates in the results (`births.cbr`, `deaths.cmr`) are per 1,000 people a year:
 
 ```python
 births = ss.Births(birth_rate=35)                 # 35 per 1,000 people per year
 births = ss.Births(birth_rate=ss.peryear(0.035))  # The same, per person
-deaths = ss.Deaths(death_rate=df)                 # Death rates by age, per person, as the UN's
+deaths = ss.Deaths(death_rate=df)                 # Death rates by age, per person (as the UN's) or per 1,000
 ```
 
-The same holds for the births and deaths declared for the population, `ss.birth(rate=)` and `ss.death(rate=)`: a typed rate is per person, and a bare number per 1,000 people a year (a bare number in the rates of a disease's own states is in the model's unit, as any other).
+The same holds for the births and deaths declared for the population, `ss.birth(rate=)` and `ss.death(rate=)`: a rate above 1 a year, bare or typed, is per 1,000 people, and one of 1 or below per person (a bare number in the rates of a disease's own states is in the model's unit, as any other).
 
 ### Life tables
 
@@ -247,17 +247,17 @@ Starsim has two kinds of demographics: declared transitions (lower case), which 
 | `ss.emigration(rate=)` | Departures: a rate per person | No | Every solver | Each disease's `emigration`, and `emigrated` |
 | `ss.Births` | Births at crude birth rates by year, each with a mother | `birth_rate='Kenya'` | Agents | `births.birth`, `births.cbr` |
 | `ss.Deaths` | Deaths at rates by year, age, and sex, or from life tables (as `ss.death(lifetable=)`, by year and sex as well) | `death_rate='Kenya'` | Agents | `deaths.death`, `deaths.cmr` |
-
-In each, a typed rate (`ss.peryear(0.02)`) is per person, and a bare number of births, deaths, or migrants is per 1,000 people a year.
 | `ss.Pregnancy` | Pregnancies at age-specific fertility rates, each ending in a delivery or a loss | `fertility_rate='Kenya'` | Agents; a compartmental solver, if named, runs an approximate form (with no links between mother and child) | See below |
+
+In each, a rate of births, deaths, or conceptions (bare, typed, or a table) is per 1,000 people a year if above 1, and per person otherwise (`rate_per=` says which); a rate of migration is per person if typed, and a bare number is per 1,000 people a year.
 
 The columns of the data of your own that each module takes (see [Data of your own](#data-of-your-own)):
 
 | Module | Columns | Units |
 |---|---|---|
-| `ss.Births(birth_rate=df)` | `Year` (or `Time`), `CBR` | Births per 1,000 people a year (or per person, with `rate_per=1`) |
-| `ss.Deaths(death_rate=df)` | `Time` (or `Year`), `Sex` (`'Male'` or `'Female'`), `AgeGrpStart`, `mx` | Deaths per person a year (or per 1,000, with `rate_per=1000`) |
-| `ss.Pregnancy(fertility_rate=df)` | `Time`, `AgeGrp` or `AgeGrpStart`, `ASFR` | Births per 1,000 women a year (or per woman, with `rate_per=1`) |
+| `ss.Births(birth_rate=df)` | `Year` (or `Time`), `CBR` | Births a year, per 1,000 people or per person, from their size (or `rate_per=`) |
+| `ss.Deaths(death_rate=df)` | `Time` (or `Year`), `Sex` (`'Male'` or `'Female'`), `AgeGrpStart`, `mx` | Deaths a year, per person (as the UN's) or per 1,000, from their size (or `rate_per=`) |
+| `ss.Pregnancy(fertility_rate=df)` | `Time`, `AgeGrp` or `AgeGrpStart`, `ASFR` | Births a year, per 1,000 women (as the UN's) or per woman, from their size (or `rate_per=`) |
 
 ## Appendix: pregnancy
 
@@ -265,8 +265,8 @@ The parameters of `ss.Pregnancy` (`ss.Pregnancy().pars` gives them with their de
 
 | Parameter | What it is | Default |
 |---|---|---|
-| `fertility_rate` | Age-specific fertility rates: a table (per 1,000 women), a place by name, or one rate (a typed rate per woman, e.g. `ss.peryear(0.1)`, or a bare number per 1,000 women a year); or the hazard of conception itself, as a function of `(sim, uids)` | `ss.peryear(0.1)`: 100 per 1,000 women a year |
-| `rate_per` | How many women a bare number or a table of `fertility_rate` is per: 1000 (per 1,000 women) or 1 (per woman) | 1000 |
+| `fertility_rate` | Age-specific fertility rates: a table, a place by name, or one rate (bare or typed, per 1,000 women a year if above 1, else per woman: `ss.peryear(0.1)` and `100` are the same); or the hazard of conception itself, as a function of `(sim, uids)` | `ss.peryear(0.1)`: 100 per 1,000 women a year |
+| `rate_per` | How many women the rates of `fertility_rate` are per: 1000 (per 1,000 women) or 1 (per woman) | None: per 1,000 if above 1, else per woman |
 | `rel_fertility` | A multiplier on the fertility rates | 1 |
 | `min_age`, `max_age` | The ages at which women can conceive | 15 and 50 |
 | `p_infertile` | The share of women with primary infertility | 0 |

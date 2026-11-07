@@ -144,7 +144,7 @@ df.head()
 
 If a model has values in more than one unit, such as a duration in years as well as durations in days ([Tutorial 3](t3_disease.qmd)), Starsim can't tell which unit the bare numbers (such as β = 1.9) are in, and says so. Then either give them units, or say which unit the model is in, e.g. `ss.Sim(..., unit='day')`.
 
-**Start and stop.** `stop=ss.days(50)` runs the model for 50 days from day 0. A run can also start and stop on dates, so that results are dated:
+**Start and stop.** `stop=ss.days(50)` runs the model from day 0 to day 50 (as does `dur=ss.days(50)`, the length of the run). A run can also start and stop on dates, so that results are dated:
 
 ```{python}
 sim = ss.Sim(measles, total_pop=100_000, start='2025-01-01', stop='2025-02-20')

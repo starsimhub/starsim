@@ -32,7 +32,7 @@ def test_export():
     rs2 = sim.results.sis2
 
     # A name that is not a result says so, with the closest, also in a sim given a module that was given to another sim before; the module given holds none, and says where they are
-    sim2 = ss.Sim(n_agents=small, diseases=d1, networks='random', stop=ss.years(1), verbose=0).run()
+    sim2 = ss.Sim(n_agents=small, diseases=d1, networks='random', dur=ss.years(1), verbose=0).run()
     for res in [rs1, sim2.results.sis1]:
         with pytest.raises(AttributeError, match='did you mean infection'):
             res.infectionz
@@ -315,7 +315,7 @@ def test_time_points():
     S, I, R = ss.states(3)
     infection = S >> I @ ss.perday(0.4)*I
     cases = ss.outcome(0.6*infection)
-    sim = ss.Sim(ss.Disease(infection, I >> R @ ss.perday(0.15), cases, init_n=dict(I=10), name='sir'), total_pop=10_000, unit='day', stop=ss.weeks(12), verbose=0).run()
+    sim = ss.Sim(ss.Disease(infection, I >> R @ ss.perday(0.15), cases, init_n=dict(I=10), name='sir'), total_pop=10_000, unit='day', dur=ss.weeks(12), verbose=0).run()
     res = sim.results.sir
     weeks = np.arange(0, 84, 7) # Each dated by its first day, as data is
     weekly = lambda flow: np.add.reduceat(flow.values[:84], np.arange(0, 84, 7)) # Days 0 to 6, 7 to 13, ...

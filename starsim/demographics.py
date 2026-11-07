@@ -16,52 +16,67 @@ _ = None
 
 
 
-def rate_per_of(per, rates, name, default=1000):
+def rate_size(rates):
     """
-    How many people the rates of `ss.Births`, `ss.Deaths`, or `ss.Pregnancy` are per: 1 for a typed rate, which is always per person (e.g. `ss.peryear(0.02)`); otherwise `rate_per` as given, or else the demographic convention, `default`
-
-    A bare number is a crude rate, per 1,000 people per year (e.g. `ss.Births(birth_rate=20)`), as is a table of birth
-    or fertility rates; a table of death rates by age is per person, as the UN's are. `rate_per=1` says that a bare
-    number or a table is per person. It is never worked out from the size of the rates.
+    The typical size of rates of births, deaths, or fertility, per year: the value of one rate (a typed rate per year, e.g. 30
+    for `ss.peryear(30)`), or the median of several (a time series or a table), which a few large rates (e.g. deaths at the
+    oldest ages) don't sway; None if there are none to read (e.g. a function)
 
     Args:
-        per (float): `rate_per` as given: None for the default, 1000 for per 1,000, 1 for per person
-        rates (number/rate/dataframe): the rates, or rate data
-        name (str): what the rates are, for the error (e.g. "birth_rate")
-        default (float): how many people a bare number or a table is per, by default
+        rates (number/rate/timeseries/series/dataframe): the rates
     """
-    typed = isinstance(rates, ss.TimePar) or (isinstance(rates, ss.timeseries) and any(isinstance(v, ss.TimePar) for v in rates.values))
-    if typed:
-        if per is not None:
-            errormsg = f'rate_per= is for a bare number or a table; {name}={rates} is a typed rate, which is always per person. Give the rate per person (e.g. ss.peryear(0.02) for 20 per 1,000), or the bare number (20), which is per 1,000'
-            raise ValueError(errormsg)
-        return 1
+    if isinstance(rates, ss.timeseries):
+        sizes = [rate_size(v) for v in rates.values]
+        sizes = [v for v in sizes if v is not None]
+        return float(np.median(sizes)) if sizes else None
+    raw = getattr(rates, 'raw', rates)
+    if isinstance(raw, ss.Rate):
+        vals = raw.to('year').value if raw.unit is not None else raw.value
+    elif isinstance(rates, (pd.Series, pd.DataFrame)):
+        vals = rates.select_dtypes('number').to_numpy(dtype=float) if isinstance(rates, pd.DataFrame) else rates.to_numpy(dtype=float)
+    elif sc.isnumber(rates) or isinstance(rates, (list, np.ndarray)):
+        vals = rates
+    else:
+        return None
+    vals = np.abs(np.asarray(vals, dtype=float))
+    vals = vals[np.isfinite(vals)]
+    return float(np.median(vals)) if vals.size else None
+
+
+def rate_per_of(per, rates, name):
+    """
+    How many people the rates of `ss.Births`, `ss.Deaths`, or `ss.Pregnancy` are per: `rate_per` as given, or else read
+    from their size. Rates of births, deaths, and conceptions are well below 1 per person per year, and well above 1 per
+    1,000, so rates above 1 per year (the median, for a table) are per 1,000 people, as data usually are (e.g.
+    `ss.Births(birth_rate=20)`, or `ss.peryear(20)`), and rates of 1 or below are per person (e.g. `ss.peryear(0.02)`, or
+    the UN's death rates by age, `mx`). This is the same for a bare number, a typed rate, and a table. `rate_per=1000`
+    or `rate_per=1` says which.
+
+    Args:
+        per (float): `rate_per` as given: None to read it from the rates, 1000 for per 1,000, 1 for per person
+        rates (number/rate/timeseries/dataframe): the rates, or rate data
+        name (str): what the rates are, for the error (e.g. "birth_rate")
+    """
     if per is None:
-        return default
+        size = rate_size(rates)
+        return 1000 if size is not None and size > 1 else 1
     if not sc.isnumber(per) or per < 1:
-        errormsg = f'rate_per is the number of people the rates are per, e.g. 1000 for per 1,000 or 1 for per person, not {per!r}'
+        errormsg = f'rate_per is the number of people the rates of {name} are per, e.g. 1000 for per 1,000 or 1 for per person, not {per!r}'
         raise ValueError(errormsg)
     return per
 
 
-def check_typed(rate, name, what='person'):
-    """ Warn for a typed rate above 5 per person per year (no population is born or dies that fast): most likely a rate per 1,000 people, which would grow or empty the population at once """
-    raw = getattr(rate, 'raw', rate)
-    if isinstance(raw, ss.Rate) and raw.unit is not None and np.ndim(raw.value) == 0:
-        per_year = raw.to('year').value
-        if per_year > 5:
-            ss.warn(f'{name} is {per_year:n} per {what} per year; a typed rate is per {what}, so {per_year:n} per 1,000 is ss.peryear({per_year/1000:n}), or the bare number {per_year:n}')
-    return
-
-
 def bare_rate(rate, name):
     """
-    A crude rate of births or deaths of everyone given as a bare number, read as `ss.Births` and `ss.Deaths` read theirs: per 1,000 people per year; anything else is returned as it is
+    A crude rate of births or deaths of everyone (`ss.birth()`, `ss.death()`), read as `ss.Births` and `ss.Deaths` read theirs: a rate
+    above 1 per year, given as a bare number or typed, is per 1,000 people (e.g. 30, or `ss.peryear(30)`), and one of 1 or below is per
+    person (e.g. 0.03, or `ss.peryear(0.03)`; see `rate_per_of()`). A bare number is a rate per year. Anything else (e.g. a function) is
+    returned as it is.
 
-    Returns the rate, and a note saying how a bare number was read (None for anything else), which is said with `say_bare()`
-    once the module is in a sim: a bare number is the usual way to give these rates, so it is not a warning
+    Returns the rate, per person, and a note saying how it was read (None for a typed rate per person), which is said with `say_bare()`
+    once the module is in a sim: these are the usual ways to give these rates, so it is not a warning
 
-    A time series of bare numbers is read the same way.
+    A time series is read the same way, from the median of its values.
 
     Args:
         rate (any): the rate as given
@@ -70,16 +85,30 @@ def bare_rate(rate, name):
     Examples:
         ```python
         rate, note = ss.demographics.bare_rate(30, 'rate') # ss.peryear(0.03): 30 per 1,000 people per year
+        rate, note = ss.demographics.bare_rate(ss.peryear(30), 'rate') # The same
         rate, note = ss.demographics.bare_rate(ss.timeseries({2000: 40, 2030: 20}), 'rate') # ss.peryear(0.04) falling to ss.peryear(0.02)
         ```
     """
-    series = isinstance(rate, ss.timeseries) and len(rate.values) and all(sc.isnumber(v) for v in rate.values)
-    if not (sc.isnumber(rate) or series):
+    series = isinstance(rate, ss.timeseries) and len(rate.values)
+    if series and not all(sc.isnumber(v) or isinstance(v, ss.Rate) for v in rate.values):
         return rate, None
+    if not (series or sc.isnumber(rate) or isinstance(rate, ss.Rate)):
+        return rate, None
+    per = rate_per_of(None, rate, name)
+    def per_person(v):
+        return ss.peryear(v/per) if sc.isnumber(v) else v/per if per != 1 else v
+    bare = sc.isnumber(rate) or (series and all(sc.isnumber(v) for v in rate.values))
     if series:
-        out = ss.timeseries(rate.times, [ss.peryear(v/1000) for v in rate.values], interpolation=rate.interpolation, period=rate.period)
-        return out, f'the values of {name}= are bare numbers, so they are taken as per 1,000 people per year'
-    return ss.peryear(rate/1000), f'{name}={rate:n} is a bare number, so it is taken as {rate:n} per 1,000 people per year'
+        out = ss.timeseries(rate.times, [per_person(v) for v in rate.values], interpolation=rate.interpolation, period=rate.period)
+        what = f'the values of {name}= are'
+    else:
+        out = per_person(rate)
+        what = f'{name}={rate:n} is' if sc.isnumber(rate) else f'{name}={rate} is'
+    if per == 1000:
+        return out, f'{what} above 1 per year, so taken as per 1,000 people per year'
+    elif bare:
+        return out, f'{what} 1 or below, so taken as per person per year'
+    return out, None
 
 
 def say_bare(note, sim):
@@ -238,11 +267,11 @@ class Births(Demographics):
     Note: CRN safe.
 
     Args:
-        birth_rate (float/rate/dataframe/str): the crude birth rate: a typed rate, per person (e.g. `ss.peryear(0.02)`, the default); a bare number, per 1,000 people per year (e.g. `20`); birth rate data (per 1,000, as the UN's); or a place by name, for its UN rates (e.g. 'Kenya')
+        birth_rate (float/rate/dataframe/str): the crude birth rate: a bare number (per year) or a typed rate, per 1,000 people if above 1 per year (e.g. `20`, or `ss.peryear(20)`) and else per person (e.g. `ss.peryear(0.02)`, the default); birth rate data (per 1,000 or per person, read in the same way); or a place by name, for its UN rates (e.g. 'Kenya')
         rel_birth (float): constant used to scale all birth rates
         min_age (float): the youngest age of a mother (default 15)
         max_age (float): the age that mothers are younger than (default 50)
-        rate_per (float): how many people a bare number or a table of rates is per: 1000 (the default) or 1 for per person; a typed rate is always per person, so takes no `rate_per` (see `ss.demographics.rate_per_of()`). The crude birth rate result (`cbr`) is per 1,000 people per year.
+        rate_per (float): how many people the rates are per: 1000 or 1 (per person); by default, read from their size (see `ss.demographics.rate_per_of()`). The crude birth rate result (`cbr`) is per 1,000 people per year.
         columns (dict): if `birth_rate` is a table, its column for each standard key, where they differ from the defaults (`year='Year'`, which may also be `Time`, and `value='CBR'`), e.g. `columns=dict(value='rate')`
         pars (dict): the same parameters, as a dict
 
@@ -250,7 +279,7 @@ class Births(Demographics):
         ```python
         ss.Births(birth_rate=35) # 35 per 1,000 people per year
         ss.Births(birth_rate=ss.peryear(0.035)) # The same, per person
-        ss.Births(birth_rate=0.5) # 0.5 per 1,000 people per year
+        ss.Births(birth_rate=ss.peryear(35)) # The same: above 1 per year, so per 1,000
         ```
     """
     def __init__(self, pars=None, birth_rate=_, rel_birth=_, min_age=_, max_age=_, rate_per=_, columns=None, **kwargs):
@@ -263,10 +292,10 @@ class Births(Demographics):
             rel_birth = 1,
             min_age = 15, # The ages of the women who are the newborns' parents
             max_age = 50,
-            rate_per = None,  # For a bare number or a table: per 1,000 unless given; see ss.demographics.rate_per_of()
+            rate_per = None,  # Per 1,000 (1000) or per person (1); by default, from the size of the rates (see ss.demographics.rate_per_of())
         )
         self.update_pars(pars, **kwargs)
-        self.pars.forget_bare(['birth_rate']) # A bare number here has its own meaning, per 1,000 people per year (see rate_per_of()), so no warning that it has no unit
+        self.pars.forget_bare(['birth_rate']) # A bare number here has its own meaning, per year (see rate_per_of()), so no warning that it has no unit
 
         # The columns of a table of rates. The year column may equivalently be labeled "Time" (as in UN data); see ss.utils.col_synonyms
         self.metadata = data_columns(dict(year='Year', value='CBR'), columns)
@@ -278,8 +307,7 @@ class Births(Demographics):
         if self.named_data: # Estimates for single years, every ten years: interpolated between them
             self.birth_rows = yearly_rows(self.birth_rows)
         given = birth_rate if birth_rate is not _ else sc.mergedicts(pars).get('birth_rate', self.pars.birth_rate) # As given: a bare number becomes a typed rate in the parameters
-        check_typed(given, 'birth_rate')
-        self.pars.rate_per = rate_per_of(self.pars.rate_per, given, 'birth_rate')
+        self.pars.rate_per = rate_per_of(self.pars.rate_per, given if self.birth_rows is None else self.pars.birth_rate, 'birth_rate')
         self.n_births_this_step = 0 # For results tracking
         self.dist = ss.bernoulli(p=0) # Per-agent birth draw (CRN path); set to the birth rate each step
         # Count-based birth draw, used only on the non-CRN fast path (ss.options.crn=False):
@@ -446,9 +474,9 @@ class Deaths(Demographics):
 
     Args:
         rel_death (float): constant used to scale all death rates
-        death_rate (float/rate/dict/dataframe/series/str): the death rate: a typed rate, per person (e.g. `ss.peryear(0.01)`, the default); a bare number, the crude death rate per 1,000 people per year (e.g. `10`); mortality data by year, sex, and age (per person, as the UN's `mx`); or a place by name, for its UN rates (e.g. 'Kenya')
+        death_rate (float/rate/dict/dataframe/series/str): the death rate: a bare number (per year) or a typed rate, per 1,000 people if above 1 per year (e.g. `10`, or `ss.peryear(10)`) and else per person (e.g. `ss.peryear(0.01)`, the default); mortality data by year, sex, and age (per 1,000 or per person, as the UN's `mx` are, read in the same way, from the median rate); or a place by name, for its UN rates (e.g. 'Kenya')
         lifetable (`ss.lifetable`/dict): instead of `death_rate`, life tables (`ss.lifetable`): one, one for each sex (`dict(female=..., male=...)`), or one (or one for each sex) for each year from which it holds (`{2000: ..., 2010: ...}`); each is the death rate of each of its age bands, per person, so deaths follow the table of the year and each person's sex and age as time goes on (`ss.death(lifetable=)` instead draws each person's age at death once, from one table)
-        rate_per (float): how many people a bare number or a table of rates is per: by default 1,000 for a bare number (or a table with one rate for all ages), and 1 (per person) for a table by age, as the UN's are; a typed rate is always per person, so takes no `rate_per` (see `ss.demographics.rate_per_of()`). The crude mortality rate result (`cmr`) is per 1,000 people per year.
+        rate_per (float): how many people the rates are per: 1000 or 1 (per person); by default, read from their size (see `ss.demographics.rate_per_of()`). The crude mortality rate result (`cmr`) is per 1,000 people per year.
         columns (dict): if `death_rate` is a table, its column for each standard key, where they differ from the defaults, those of UN data (`year='Time'`, `sex='Sex'`, `age='AgeGrpStart'`, `value='mx'`), e.g. `columns=dict(value='rate')`; and `sex_keys`, the data's label for each sex, if not `Female` and `Male` (e.g. `sex_keys=dict(F='f', M='m')`)
         pars (dict): the same parameters, as a dict
     """
@@ -470,10 +498,10 @@ class Deaths(Demographics):
         self.define_pars(
             rel_death = 1,
             death_rate = ss.peryear(0.01),  # Default = a fixed rate of 1%/year (10 per 1000), overwritten if data provided
-            rate_per = None,  # For a bare number, per 1,000; for a table by age, per person; unless given: see ss.demographics.rate_per_of()
+            rate_per = None,  # Per 1,000 (1000) or per person (1); by default, from the size of the rates (see ss.demographics.rate_per_of())
         )
         self.update_pars(pars, **kwargs)
-        self.pars.forget_bare(['death_rate']) # A bare number here has its own meaning, per 1,000 people per year (see rate_per_of()), so no warning that it has no unit
+        self.pars.forget_bare(['death_rate']) # A bare number here has its own meaning, per year (see rate_per_of()), so no warning that it has no unit
         self.metadata = data_columns(defaults, columns, sex_keys) # The columns of a table of rates
 
         # Process data, which may be provided as a number, dict, dataframe, or series, or a named place (its UN rates)
@@ -482,10 +510,8 @@ class Deaths(Demographics):
         self.death_rows = rate_rows(self.death_rate_data)
         if self.named_data: # Estimates for single years, every ten years: interpolated between them
             self.death_rows = yearly_rows(self.death_rows)
-        by_age = isinstance(self.death_rate_data, pd.DataFrame) and self.death_rate_data.shape[1] > 1
         given = death_rate if death_rate is not _ else sc.mergedicts(pars).get('death_rate', self.pars.death_rate) # As given: a bare number becomes a typed rate in the parameters
-        check_typed(given, 'death_rate')
-        self.pars.rate_per = rate_per_of(self.pars.rate_per, given, 'death_rate', default=1 if by_age else 1000) # A crude death rate per 1,000, and rates by age per person (mx, as the UN's)
+        self.pars.rate_per = rate_per_of(self.pars.rate_per, given if self.death_rows is None else self.death_rate_data, 'death_rate') # Per 1,000 or per person, from their size (the UN's rates by age, mx, are per person)
         self._p_death = ss.bernoulli(p=0)  # Placeholder, populated by make_p_death
         self.n_deaths = 0 # For results tracking
         return
@@ -669,8 +695,8 @@ class Pregnancy(Demographics, ss.Disease):
     Note: CRN safe as agents.
 
     Args:
-        fertility_rate (rate/dataframe/str/func): one rate, typed and per woman (e.g. `ss.peryear(0.1)`, the default), or a bare number per 1,000 women per year (e.g. `100`); age-specific fertility rates (a table, per 1,000 women, as the UN's); or a country by name, for its UN rates (e.g. 'Nigeria'), turned into the hazard of conception by `conception_rate()`; or a function of `(sim)` or `(sim, uids)` giving the hazard of conception itself (as `conception_rate()` does)
-        rate_per (float): how many women a bare number or a table of `fertility_rate` is per: 1000 (the default) or 1 for per woman; a typed rate is always per woman (see `ss.demographics.rate_per_of()`)
+        fertility_rate (rate/dataframe/str/func): one rate, a bare number (per year) or typed, per 1,000 women if above 1 per year (e.g. `100`, or `ss.peryear(100)`) and else per woman (e.g. `ss.peryear(0.1)`, the default); age-specific fertility rates (a table, per 1,000 women as the UN's are, or per woman, read in the same way); or a country by name, for its UN rates (e.g. 'Nigeria'), turned into the hazard of conception by `conception_rate()`; or a function of `(sim)` or `(sim, uids)` giving the hazard of conception itself (as `conception_rate()` does)
+        rate_per (float): how many women the rates of `fertility_rate` are per: 1000 or 1 (per woman); by default, read from their size (see `ss.demographics.rate_per_of()`)
         rel_fertility (float): multiplier on the fertility rate
         p_infertile (bernoulli): primary infertility
         min_age (float): minimum age of conception
@@ -735,7 +761,7 @@ class Pregnancy(Demographics, ss.Disease):
             p_infertile = ss.bernoulli(p=0), # Primary infertility
             min_age = 15, # Minimum age of conception
             max_age = 50, # Maximum age of conception
-            rate_per = None, # For a bare number or a table: per 1,000 unless given; see ss.demographics.rate_per_of()
+            rate_per = None, # Per 1,000 (1000) or per woman (1); by default, from the size of the rates (see ss.demographics.rate_per_of())
             dur_breastfeed = ss.lognormal(mean=ss.years(0.75), std=ss.years(0.5)),
             p_breastfeed = ss.bernoulli(p=1),
             children = ss.choice(a=np.array([1, 2]), p=np.array([1.0, 0.0])), # The number of children of each delivery
@@ -755,7 +781,6 @@ class Pregnancy(Demographics, ss.Disease):
         if unknown:
             raise sc.KeyNotFoundError(f'"{self.name}" has no parameter named {sc.strjoin(unknown)}. Its parameters are {sc.strjoin(self.pars.keys())}{ss.expressions.did_you_mean(unknown[0], self.pars.keys())}{ss.errors.starsim3(keys=unknown, call=f"ss.{type(self).__name__}")}')
         fertility = given.pop('fertility_rate', ss.peryear(0.1)) # 100 per 1,000 women per year. Rates (a number, a table, or a place) for conception_rate(), or the hazard of conception as a function
-        check_typed(fertility, 'fertility_rate', 'woman')
         defaults = dict(year='Time', age='AgeGrp', value='ASFR')
         if isinstance(fertility, str): # A named place: its UN age-specific fertility rates, per 1,000 women, by year and 5-year age group
             fertility = ss.data.rates(fertility, 'fertility')
@@ -868,8 +893,8 @@ class Pregnancy(Demographics, ss.Disease):
             ss.warn(f'{self.name} makes births, and so does the sim\'s ss.Births or ss.birth(): the two add up. Keep only one, unless both are meant.')
         pars = self.pars
         if self.fertility_data is not None:
-            self.pars.rate_per = rate_per_of(pars.rate_per, self.fertility_data, 'fertility_rate')
             self.fertility_rate_data = standardize_fertility_data(self)
+            self.pars.rate_per = rate_per_of(pars.rate_per, self.fertility_rate_data, 'fertility_rate')
             self.fertility_rows = rate_rows(self.fertility_rate_data)
         self._gate_infant()
         if 'parity' in [strat.name for strat in sim.groups.strats] and self.graph.transitions.delivery.increment is None: # Parity as a counter: up one at each delivery

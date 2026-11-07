@@ -230,10 +230,12 @@ class Counter(ss.Module):
     old = "new = ss.uids.cat(a, b); bf = preg.breastfeeding\nnet = ss.RandomNet(n_contacts=10, uniform_targets=True)"
     assert migrate_text(old)[0] == "new = ss.uids.concatenate(a, b); bf = preg.lactating\nnet = ss.RandomNet(n_contacts=10, method='uniform')"
 
-    # dur= of the sim (here in a dict of its settings) and of ss.RandomNet, and the spellings of Starsim 4 before its release
+    # dur= of the sim (here in a dict of its settings) is kept, and that of ss.RandomNet dropped; and the spellings of Starsim 4 before its release
     text, _, todo = migrate_text("pars = dict(n_agents=100, start=2000, dur=20)\nnet = ss.RandomNet(n_contacts=ss.poisson(lam=5), dur=0)\nt = ss.Transition(R, I, on=infection, dur=ss.months(6), where=ss.person.female)\nm = ss.modify(beta, multiply=0.5, start=2001, stop=2002)\nsim.run(n_runs=3)")
-    assert 'dict(n_agents=100, start=2000, stop=ss.years(20))' in text and 'ss.RandomNet(n_contacts=ss.poisson(mean=5))' in text
+    assert 'dict(n_agents=100, start=2000, dur=20)' in text and 'ss.RandomNet(n_contacts=ss.poisson(mean=5))' in text
     assert 'ss.Transition(R, I, when=ss.on(infection, delay=ss.months(6)), who=ss.person.female)' in text and 'ss.modify(beta, multiply=0.5, when=ss.schedule(start=2001, stop=2002))' in text and [line for line,_ in todo] == [5]
+
+    assert migrate_text('births = ss.Births(birth_rate=ss.peryear(20))')[0] == 'births = ss.Births(birth_rate=ss.peryear(20))' # Starsim 3's typed rate per 1,000 reads the same: above 1, so per 1,000
 
     return new
 

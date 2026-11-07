@@ -277,7 +277,7 @@ def test_arr_2d():
             self.sus_imm[self.I.uids, 1] += 0.1
             return out
 
-    sim = ss.Sim(n_agents=medium, diseases=VarSIS(), networks='random', demographics=True, stop=ss.years(10)).run()
+    sim = ss.Sim(n_agents=medium, diseases=VarSIS(), networks='random', demographics=True, dur=ss.years(10)).run()
     imm = sim.diseases.varsis.sus_imm
     assert imm.raw.shape == (sim.people.uid.len_tot, nv) # Grows along the first axis
     assert imm.values.shape == (len(sim.people), nv) # Values are active agents only

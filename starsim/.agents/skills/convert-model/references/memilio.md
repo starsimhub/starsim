@@ -47,7 +47,7 @@ It lists (`ImportIncomplete`): a parameter that differs by age group where it be
 | Populations by age and state | `init_n=dict(E=100, INS=50, ...)` (split evenly over groups by default) and `total_pop=` | Exact |
 | `...Confirmed` states that nothing flows into | Leave out | Exact |
 | `ICUCapacity` (unlimited by default) | Leave out unless set; otherwise a condition on `ICr.n` | Exact when unlimited |
-| `simulate(t0, tmax, dt)` | `ss.Sim(..., stop=ss.days(tmax))` (solver `ode`, RK4 with substeps) | Exact to the reference's interpolation error |
+| `simulate(t0, tmax, dt)` | `ss.Sim(..., dur=ss.days(tmax))` (solver `ode`, RK4 with substeps) | Exact to the reference's interpolation error |
 | `MobilityGraph` with `add_node(id, model)` and `add_edge(i, j, MobilityParameters(c))`, run by `MobilitySimulation` | `dis.stratify(patch=ss.levels(ids, fractions=ss.by(pop/pop.sum(), dims=['age', 'patch']), mobility=ss.geo.Mobility(matrix=0.5*M, kind='commute')))` | Close: a share of time rather than an exchange, and symptomatic commuters not reduced (see below) |
 | `UncertainValue.set_distribution(ParameterDistributionUniform(lo, hi))`, `GraphParameterStudy(graph, t0, tmax, dt, n)` | `ss.par(value, prior=ss.uniform(lo, hi))`, then `ss.parallel(sim, n_runs=n, priors=True)` | Exact in distribution (MEmilio's draws given by `pars=` agree run by run to 2%) |
 
@@ -86,7 +86,7 @@ secir = ss.Disease(
     init_n    = dict(E=100, INS=50, ISy=50, ISev=20, ICr=10, R=10),
 )
 secir.stratify(age=['0', '1', '2'])
-sim = ss.Sim(secir, networks=ss.contacts(np.full((3, 3), 10/3)), total_pop=10_000, stop=ss.days(50))
+sim = ss.Sim(secir, networks=ss.contacts(np.full((3, 3), 10/3)), total_pop=10_000, dur=ss.days(50))
 ```
 
 ## Running the original

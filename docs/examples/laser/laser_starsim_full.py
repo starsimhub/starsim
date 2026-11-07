@@ -114,7 +114,7 @@ def run_sim(run=True, plot=False):
     """ Create and run the simulation """
     pars = dict(
         n_agents = 100_000*2,
-        stop = 100*10,
+        dur = 100*10,
         verbose = 0,
     )
     infection_rate = 0.3

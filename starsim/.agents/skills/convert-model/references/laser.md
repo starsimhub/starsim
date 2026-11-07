@@ -57,7 +57,7 @@ seir = ss.Disease(
     init_n    = dict(I=ss.by(patch=[0, 100] + [0]*14)), # 100 infectious people in Town 1
 )
 seir.stratify(patch=ss.levels(places, mobility=ss.geo.gravity(distance_power=2.5, kind='force', away=3/32)))
-sim = ss.Sim(seir, total_pop=sum(pop), n_agents=175_000, stop=ss.days(365))
+sim = ss.Sim(seir, total_pop=sum(pop), n_agents=175_000, dur=ss.days(365))
 ```
 
 ## Running the original

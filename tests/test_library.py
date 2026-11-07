@@ -16,9 +16,9 @@ import starsim.library as ssl
 n_agents = 2_000
 
 # Outbreak diseases specify their natural history in days, so they need a sub-year timestep
-outbreak_pars = dict(start=2000, stop=ss.years(1), dt=ss.days(1), n_agents=n_agents, rand_seed=1, verbose=0)
+outbreak_pars = dict(start=2000, dur=ss.years(1), dt=ss.days(1), n_agents=n_agents, rand_seed=1, verbose=0)
 endemic_pars  = dict(start=2000, stop=2030, n_agents=n_agents, rand_seed=1, verbose=0)
-mnch_pars     = dict(start=2000, stop=ss.years(3), dt=ss.weeks(1), n_agents=n_agents, rand_seed=1, verbose=0)
+mnch_pars     = dict(start=2000, dur=ss.years(3), dt=ss.weeks(1), n_agents=n_agents, rand_seed=1, verbose=0)
 
 
 @sc.timer()
@@ -92,7 +92,7 @@ def test_networks():
     sc.heading('Testing library networks')
     n = 400
     nets = dict(geo=ssl.GeoNet('Kenya', n_contacts=6), grid=ssl.GridNet(periodic=True), small=ssl.SmallWorldNet(n_contacts=4), free=ssl.ScaleFreeNet(n_contacts=4))
-    sims = {k:ss.Sim(n_agents=n, diseases='sis', networks=net, stop=ss.years(2), verbose=0).run() for k,net in nets.items()}
+    sims = {k:ss.Sim(n_agents=n, diseases='sis', networks=net, dur=ss.years(2), verbose=0).run() for k,net in nets.items()}
     degree = {k:np.bincount(np.r_[sim.networks[0].p1, sim.networks[0].p2], minlength=n) for k,sim in sims.items()}
     assert (degree['grid'] == 4).all() and (degree['small'].mean() == 4)
     assert np.isclose(degree['free'].mean(), 4, rtol=0.05) and degree['free'].max() > 3*degree['free'].mean() # A few have many contacts
@@ -101,7 +101,7 @@ def test_networks():
 
     # Contacts across real places with a geography: as ssl.GeoNet makes them, a random network in a model stratified by place, with most contacts at home
     sis = ss.SIS().stratify(patch=ss.levels(ss.geo.geography('Kenya'), mobility=ss.geo.gravity(away=0.1)))
-    sim = ss.Sim(n_agents=n, diseases=sis, networks=ss.RandomNet(n_contacts=6), stop=ss.years(2), verbose=0).run()
+    sim = ss.Sim(n_agents=n, diseases=sis, networks=ss.RandomNet(n_contacts=6), dur=ss.years(2), verbose=0).run()
     net, place = sim.networks[0], sim.groups.level_raw(sim.mixing.space)
     assert (place[net.p1] == place[net.p2]).mean() > 0.5 # Mostly within a place
     geo = sims['geo'].networks[0]
@@ -154,7 +154,7 @@ def test_econ():
     assert icer.df.extended['C'] and np.isnan(icer.df.ICER['C']) and icer.best(wtp=1000) == 'D'
 
     # Years of life lost: from ages with agents, or given; and compared while a sim runs
-    pars = dict(diseases=ss.SIR(p_death=0.2, beta=ss.perday(0.3), dur_inf=ss.days(10)), networks='random', n_agents=1000, start=2000, stop=ss.years(1), dt=ss.days(7), verbose=0)
+    pars = dict(diseases=ss.SIR(p_death=0.2, beta=ss.perday(0.3), dur_inf=ss.days(10)), networks='random', n_agents=1000, start=2000, dur=ss.years(1), dt=ss.days(7), verbose=0)
     make = lambda *extra: [ssl.Costs(unit_costs={'sir.infection': 1}), ssl.DALYs(weights={'sir.I': 0.1})] + list(extra)
     ref = ss.Sim(**pars, analyzers=make()).run()
     dalys = ref.results.dalys
@@ -176,7 +176,7 @@ def malaria(): # The square root of the classical Ross-Macdonald value, m·a²·
 
 
 def malaria_immunity(): # Malaria dies out below the critical vectorial capacity, (alpha1 + delta)/g = 0.022 per day
-    prev = lambda C: ss.Sim(ssl.MalariaImmunity(C=C), total_pop=10_000, unit='day', dt=ss.days(10), stop=ss.days(365*20), verbose=0).run().results.malariaimmunity
+    prev = lambda C: ss.Sim(ssl.MalariaImmunity(C=C), total_pop=10_000, unit='day', dt=ss.days(10), dur=ss.days(365*20), verbose=0).run().results.malariaimmunity
     assert prev(0.011).prevalence[-1] < 0.001, 'Expected malaria to die out below the critical vectorial capacity'
     above = prev(0.044)
     assert above.prevalence[-1] > 0.1, 'Expected malaria to be endemic above the critical vectorial capacity'

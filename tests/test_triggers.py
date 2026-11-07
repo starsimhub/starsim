@@ -287,7 +287,7 @@ def test_paths_and_memory():
     def sir():
         S, I, R = ss.states(3)
         return ss.Disease(infection=S >> I @ ss.perday(0.1)*I, recovery=ss.Transition(I, R, dur=ss.days(10)), waning=R >> S @ ss.perday(0.05), init_prev=0.05, name='sir')
-    pars = dict(n_agents=1000, stop=ss.days(60), unit='day', solver='abm', **kw)
+    pars = dict(n_agents=1000, dur=ss.days(60), unit='day', solver='abm', **kw)
 
     # A path as a string is ss.ref() of it, and a path to a transition is its event
     a, b = [ss.Sim(sir(), interventions=ss.Event(when=when, name='ev'), **pars).run().results.ev.delivered for when in ['sir.infection', ss.ref('sir.infection')]]

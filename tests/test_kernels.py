@@ -76,7 +76,7 @@ def make_biting(w=(0.5, 2.0)):
 
 
 models = sc.obj(
-    sir     = (make_sir,     dict(total_pop=10_000, unit='day', stop=ss.weeks(12))),
+    sir     = (make_sir,     dict(total_pop=10_000, unit='day', dur=ss.weeks(12))),
     seir    = (make_seir,    dict(unit='day', stop=200)),
     ages    = (make_ages,    dict(unit='day', stop=100, networks=ss.contacts(np.array([[8, 3, 1], [3, 6, 2], [1, 2, 3]])))),
     towns   = (make_towns,   dict(unit='day', stop=150, total_pop=100_000)),
@@ -186,7 +186,7 @@ def test_seasonal_steps():
     def make(solver, dt, seed=0, pop=5000):
         S, I = ss.states('S I')
         sis = ss.Disease(infection=ss.Transition(S, I, rate=ss.seasonal(mean=ss.perday(0.15), amplitude=0.5, peak=0.25) * I), recovery=ss.Transition(I, S, dur=ss.days(10)), init_prev=0.05, name='sis')
-        sim = ss.Sim(sis, solver=solver, dt=dt, stop=ss.years(2), total_pop=pop, rand_seed=seed, **kw).run()
+        sim = ss.Sim(sis, solver=solver, dt=dt, dur=ss.years(2), total_pop=pop, rand_seed=seed, **kw).run()
         steps = int(round(728/dt.days)) # The first 728 days, eight whole quarters, as the steps from the last time point go past two years
         return sim.results.sis.infection[:steps].sum()/pop, sim.solver
     ode = make('ode', ss.days(1))[0]
@@ -260,7 +260,7 @@ def test_plain_estimate():
     sc.heading('Testing that the estimate of a plain run counts the substeps of a stiff ODE')
     S, I, R = ss.states(3)
     sis = ss.Disease(S >> I @ ss.perday(2.0)*I.frac, I >> R @ ss.days(1), R >> S @ ss.years(1), init=dict(I=0.01), name='sis')
-    sim = ss.Sim(sis, total_pop=1e5, dt=ss.months(1), stop=ss.years(30), solver='ode', **kw).init()
+    sim = ss.Sim(sis, total_pop=1e5, dt=ss.months(1), dur=ss.years(30), solver='ode', **kw).init()
     engine = sim.diseases[0].engine
     engine.init_program()
     seconds = []
@@ -278,7 +278,7 @@ def test_engine_choice():
     for compiled in [True, False]:
         clock = itertools.count(0.0, 100.0*(1 - compiled)) # Each call 100 s after the last, as if the machine were busy
         with mock.patch.object(ss.kernels, 'is_compiled', lambda: compiled), mock.patch.object(time, 'perf_counter', lambda: next(clock)): # And a cold cache
-            sim = ss.Sim(make_commute(), total_pop=1e5, unit='day', stop=ss.days(3650), solver='ode', **kw).init() # A long run, once taken by JAX
+            sim = ss.Sim(make_commute(), total_pop=1e5, unit='day', dur=ss.days(3650), solver='ode', **kw).init() # A long run, once taken by JAX
             choices.append(ss.solvers.choose_engine(sim))
     assert choices[0] == choices[1] == (False, 'kernels'), f'The engine was not the kernels, or changed with the cache or the clock: {choices}'
     return choices

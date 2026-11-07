@@ -41,7 +41,7 @@ def test_sir():
         plt.title('SIR')
 
     # The textbook SIR: a duration is the mean of an exponential, and nobody dies (Starsim 3's lognormal and deaths are ssl.AgentSIR's)
-    kw = dict(total_pop=1e6, stop=ss.days(365), solver='ode', verbose=0)
+    kw = dict(total_pop=1e6, dur=ss.days(365), solver='ode', verbose=0)
     def closed(sir):
         cl = ss.modify(sir.pars.beta, multiply=0.6, when=ss.schedule(start=ss.days(30), stop=ss.days(90)))
         return ss.Sim(sir, interventions=cl, **kw).run().results.sir
@@ -91,7 +91,7 @@ def test_seir():
     sims = []
     for dur_exp in [ss.days(1), ss.days(20)]:
         seir = ss.SEIR(dur_exp=ss.lognormal(mean=dur_exp), dur_inf=ss.lognormal(mean=ss.days(10)), beta=ss.perday(0.05))
-        sim = ss.Sim(n_agents=n_agents, diseases=seir, networks='random', stop=ss.years(1), dt=ss.days(1), verbose=0)
+        sim = ss.Sim(n_agents=n_agents, diseases=seir, networks='random', dur=ss.years(1), dt=ss.days(1), verbose=0)
         sim.run()
         sims.append(sim)
     short, long = sims
@@ -109,7 +109,7 @@ def test_seir():
 
     # Latent agents should not transmit: with no infectious period, there should be no epidemic
     latent = ss.SEIR(dur_exp=ss.lognormal(mean=ss.days(1000)), init_prev=0.1, beta=ss.perday(0.5))
-    nosim = ss.Sim(n_agents=n_agents, diseases=latent, networks='random', stop=ss.days(100), dt=ss.days(1), verbose=0).run()
+    nosim = ss.Sim(n_agents=n_agents, diseases=latent, networks='random', dur=ss.days(100), dt=ss.days(1), verbose=0).run()
     assert nosim.results.seir.infection.cum[-1] == 0, 'Exposed agents should not transmit'
 
     return sims
@@ -139,7 +139,7 @@ def test_aliases():
     assert sir.infectious is sir.infected, 'By default, infectious should be an alias of infected'
 
     sim = ss.Sim(n_agents=n_agents, diseases=IsolationSIR(init_prev=0.1, beta=ss.perday(0.5)), networks='random',
-                 stop=ss.days(50), dt=ss.days(1), verbose=0).run()
+                 dur=ss.days(50), dt=ss.days(1), verbose=0).run()
     dis = sim.diseases.isolationsir
     res = sim.results.isolationsir
     assert (dis.infectious == (dis.infected & ~dis.isolated)).all(), 'The derived alias should combine the two states'
@@ -148,7 +148,7 @@ def test_aliases():
     assert res.infectious.max() == 0, 'Nobody is infectious, since everyone is isolated'
 
     # Its new infections are recorded at the step they happen in, which takes them out of S by the next time point
-    sim = ss.Sim(n_agents=1000, diseases=ssl.AgentSIR(beta=ss.perday(0.1), dur_inf=ss.days(10), p_death=0), networks='random', stop=ss.days(30), dt=ss.days(1), verbose=0).run()
+    sim = ss.Sim(n_agents=1000, diseases=ssl.AgentSIR(beta=ss.perday(0.1), dur_inf=ss.days(10), p_death=0), networks='random', dur=ss.days(30), dt=ss.days(1), verbose=0).run()
     res = sim.results.agentsir
     assert np.array_equal(res.infection[:-1], -np.diff(res.susceptible)) # The infections of each step leave S by the next time point
     assert np.count_nonzero(sim.diseases.agentsir.ti_infected == 10) == res.infection[10] # And are dated there too, as a declared disease dates ti_I
@@ -341,7 +341,7 @@ def test_congenital():
             ss.Deaths(death_rate=ss.peryear(0.009900990099)),
         ],
         diseases=ssl.mnch.CongenitalDisease(beta=0.2, init_prev=0.2),
-        stop=ss.years(5),
+        dur=ss.years(5),
         dt=ss.years(1/12),
         rand_seed=1,
         networks=[ss.PrenatalNet(), ss.RandomNet()],
@@ -593,7 +593,7 @@ def test_coded_defaults():
             self.define_results(ss.Result('extra', kind='ratio'))
             return
     def infected(dt):
-        sim = ss.Sim(SI(), networks=ss.RandomNet(n_contacts=4), n_agents=1000, stop=ss.days(28), dt=dt, verbose=0, rand_seed=1).run()
+        sim = ss.Sim(SI(), networks=ss.RandomNet(n_contacts=4), n_agents=1000, dur=ss.days(28), dt=dt, verbose=0, rand_seed=1).run()
         assert 'extra' in sim.results.si
         return sim.results.si.infected[-1]
     daily, weekly = infected(ss.days(1)), infected(ss.days(7))
