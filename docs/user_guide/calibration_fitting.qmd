@@ -22,33 +22,29 @@ This page covers the options. The [calibration tutorial](../tutorials/t7_calibra
 
 ## The smallest example
 
-The model is a measles outbreak in a town of 100,000 people, 90% of whom are already immune by vaccination. People are infected (S to E), become infectious about 10 days later (E to I), when the rash appears, and recover after about 8 days (I to R). The reported cases are a share of the people whose rash appears, `report`. Three things are unknown: the transmission rate `beta`, the share reported, `report`, and how many people were infectious at the start, `I0`, as a share of the town. The last is nearly always unknown for a real outbreak, since the first cases are rarely reported, and it sets when the outbreak takes off:
+The model is a measles outbreak in a town of 100,000 people, 90% of whom are already immune by vaccination. It is the library's measles model, `ssl.Measles`: people are infected (S to E), become infectious about 8 days later (E to I), and recover after about 11 days (I to R), or die. The reported cases are a share of the people who become infectious, `report`, which the library's model does not have, so it is added to it as an outcome: a declared disease takes extra states, transitions, and outcomes beside its own, by keyword or positionally (a member of the class, such as `ssl.Measles.onset`, stands for the copy in each instance). Three things are unknown: the transmission rate `beta`, the share reported, `report`, and how many people were infectious at the start, `I0`, as a share of the town. The last is nearly always unknown for a real outbreak, since the first cases are rarely reported, and it sets when the outbreak takes off:
 
 ```{python}
 import numpy as np
 import starsim as ss
+import starsim.library as ssl
 
-S, R = ss.states('S R')
-E, I = ss.states('E I', infected=True) # Infected: counted in the results infected and prevalence
-beta   = ss.par(1.5, bounds=[0.5, 4])       # Transmission rate per day: unknown
-report = ss.par(0.3, bounds=[0.05, 1])      # Share of cases reported: unknown
+beta   = ss.par(1.0, bounds=[0.3, 3])        # Transmission rate per day: unknown
+report = ss.par(0.3, bounds=[0.05, 1])       # Share of cases reported: unknown
 I0     = ss.par(0.0001, bounds=[1e-5, 1e-3]) # Share infectious at the start (10 people): unknown
 
-infection = S >> E @ beta*I
-onset     = E >> I @ ss.days(10)  # The rash appears about 10 days after infection
-recovery  = I >> R @ ss.days(8)   # Infectious for 8 days on average
-cases     = ss.outcome(report*onset) # Reported cases: a share of the onsets
-measles = ss.Disease(infection, onset, recovery, cases, init=dict(I=I0, R=0.9))
+cases = ss.outcome(report*ssl.Measles.onset) # Reported cases: a share of the onsets, added to the library's model
+measles = ssl.Measles(beta=beta, cases=cases, init=dict(I=I0, R=0.9))
 
 pars = dict(total_pop=100_000, start='2025-01-01', stop='2026-01-01')
 ```
 
 The value given to each parameter is where the search starts, and the bounds are the range it searches. A parameter is named by its variable (`I0` here), or by `name=`.
 
-The data are weekly reported cases. On this page they are illustrative: made once from an agent-based run of the same disease, in which each infection is a chance event (so its outbreak is not the smooth curve of the ODE fitted below), with `beta = 1.9`, half of cases reported, and 30 people infectious on 1 January, and with weekly counts that vary more than Poisson counts would, as reported counts usually do. With real data, the data would be read from a file instead (see [below](#the-data)):
+The data are weekly reported cases. On this page they are illustrative: made once from an agent-based run of the same disease, in which each infection is a chance event (so its outbreak is not the smooth curve of the ODE fitted below), with `beta = 1.4` (the library's default, an R0 of about 15), half of cases reported, and 30 people infectious on 1 January, and with weekly counts that vary more than Poisson counts would, as reported counts usually do. With real data, the data would be read from a file instead (see [below](#the-data)):
 
 ```{python}
-truth = ss.Sim(measles, pars=dict(beta=1.9, report=0.5, I0=0.0003), n_agents=100_000, rand_seed=3, verbose=0, **pars)
+truth = ss.Sim(measles, pars=dict(beta=1.4, report=0.5, I0=0.0003), n_agents=100_000, rand_seed=3, verbose=0, **pars)
 truth.run()
 data = truth.to_synthetic_data('cases', resample='week', noise=None) # Weekly cases (whole weeks only, so not the last, partial one)
 rng = np.random.default_rng(3)
@@ -69,7 +65,7 @@ The fit prints which method it used and why, which parameters it searches on a l
 fit.summarize()
 ```
 
-β and the share reported are close to the values the data were made with (1.9 and 0.5). The initial infections are not: the fit finds about 13 people, not 30. In the agent-based run, the first chains of transmission are chance events, some of which die out, and its outbreak took off later than an ODE starting from 30 people would; the fit finds the start that gives an ODE the same timing. That is what a fitted initial condition means: not a count of who was infectious on 1 January, but where the model has to start to match the data. The fitted model against the data:
+β and the share reported are close to the values the data were made with (1.4 and 0.5). The initial infections are not: the fit finds about 1 person, the lowest its bounds allow (and it warns of that), not 30. In the agent-based run, the first chains of transmission are chance events, some of which die out, and its outbreak took off later than an ODE starting from 30 people would; the fit finds the start that gives an ODE the same timing, here as late as the bounds let it. That is what a fitted initial condition means: not a count of who was infectious on 1 January, but where the model has to start to match the data. The fitted model against the data:
 
 ```{python}
 fit.plot()
@@ -147,7 +143,7 @@ fit = sim.fit(loss=peak_error)
 A **likelihood** says how the data vary around the model's value: the model's value is the mean of the distribution, and the likelihood supplies the rest. It can be declared on the outcome, where it is used by every fit, or given to the fit by the name of the data series:
 
 ```python
-cases = ss.outcome(report*onset, likelihood=ss.poisson()) # On the outcome
+cases = ss.outcome(report*ssl.Measles.onset, likelihood=ss.poisson()) # On the outcome
 fit = sim.fit(likelihood=dict(cases=ss.nbinom(n=10)))     # Or for one fit, by series
 fit = sim.fit(likelihood=ss.nbinom(n=10))                  # Or the same for every series
 ```
@@ -162,7 +158,7 @@ fit_lik = sim.fit(likelihood=dict(cases=ss.nbinom(n=dispersion)), verbose=False)
 fit_lik.table
 ```
 
-The estimates are much like those of the normalized absolute error, as both fit the same curve; the likelihood weighs each week by how much it is expected to vary, and gives the methods that need one (posteriors, profiles) something to work with. The fitted dispersion is lower than the 10 that the counts were drawn with, since it also takes in the chance of the agent-based run, which the ODE doesn't have.
+The estimates differ somewhat from those of the normalized absolute error (a lower β, with more of the cases reported and more people infectious at the start, which give much the same curve); the likelihood weighs each week by how much it is expected to vary, and gives the methods that need one (posteriors, profiles) something to work with. The fitted dispersion is lower than the 10 that the counts were drawn with, since it also takes in the chance of the agent-based run, which the ODE doesn't have.
 
 To score a run against its data by hand, e.g. to compare scenarios, or to weigh runs for a posterior of your own, `ss.fit.mismatch(sim)` gives the normalized absolute error (or another `loss=`) and `ss.fit.loglik(sim, likelihood=...)` the log-likelihood (with `by_series=True`, for each data series):
 
@@ -183,7 +179,7 @@ def betabinomial(observed, model, n=5000, rho=0.001):
 
 survey = truth.to_synthetic_data('prevalence', noise=None)
 survey = survey[survey.date.isin(ss.date.arange('2025-03-01', '2025-11-01', ss.months(2)))].copy() # The first of every other month
-p = survey.prevalence.values
+p = np.clip(survey.prevalence.values, 1e-6, None) # Above 0, once the outbreak is over
 survey['prevalence'] = sps.betabinom.rvs(5000, p*999, (1 - p)*999, random_state=rng) # The number positive among 5,000, with rho = 0.001
 for label, run in {'Calibrated': fit_lik.sim, 'Starting values': fit_lik.before}.items():
     print(f'{label}: {ss.fit.loglik(run, data=survey, likelihood=dict(prevalence=betabinomial)):.1f}')

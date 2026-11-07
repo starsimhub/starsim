@@ -239,7 +239,7 @@ def test_hiv_art():
             init=dict(cd4_hi=0.04, cd4_mid=0.03, cd4_lo=0.02), name='hiv',
         )
         priority = [hiv.cd4_lo, hiv.post_art, hiv.cd4_mid, hiv.cd4_hi] if prioritize else None # Lowest CD4 first
-        art_prog = ss.treat(ss.Treatment(cure={hiv.start_art: 1.0}), capacity=ss.capacity(ss.peryear(1200), priority=priority))
+        art_prog = ss.treat(ss.Treatment(moves=hiv.start_art), capacity=ss.capacity(ss.peryear(1200), priority=priority))
         return ss.Sim(hiv, interventions=art_prog, start=2000, stop=2014, dt=ss.months(1), unit='year', **kwargs) # The bare numbers (the years) are years
     both = lambda prioritize: sc.obj(ode=make(prioritize, solver='ode', total_pop=100_000, verbose=0).run(), abm=make(prioritize, solver='abm', total_pop=100_000, n_agents=20_000, verbose=0).run())
     sims, base = both(True), both(False)

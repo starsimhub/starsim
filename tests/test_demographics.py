@@ -695,7 +695,8 @@ def test_rates_and_counts():
 
     # ss.Pregnancy: maternal_death= by type, preterm=ss.preterm(), children=, and the old keywords raise
     preg = ss.Pregnancy(maternal_death=0.01, preterm=ss.preterm(threshold=ss.weeks(36), by_age=[[18, 35, 1000], [2, 1, 2]]), children=2)
-    assert preg.pars.p_maternal_death.pars.p == 0.01 and preg.pars.preterm_threshold == ss.weeks(36) and preg.pars.rel_preterm_age[1, 0] == 2
+    assert preg.pars.maternal_death.raw == 0.01 and preg.pars.preterm.threshold == ss.weeks(36) and preg.pars.preterm.by_age[1, 0] == 2 # Under the keywords that set them
+    assert not {'p_maternal_death', 'rel_preterm', 'preterm_threshold'} & set(preg.pars)
     assert ss.Pregnancy(maternal_death=ss.peryear(0.01)).pars.maternal_death.raw == ss.peryear(0.01)
     for key in ['maternal_death_rate', 'rel_preterm', 'embryos_' + 'per_pregnancy']: # Spelled so the call-site rewrite leaves it
         with pytest.raises(TypeError, match='use'):

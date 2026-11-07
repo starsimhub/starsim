@@ -325,6 +325,8 @@ sim.results.measles.plot()
 
 The starting values can also go in the class body (`init = dict(I=0.001)`), as defaults that `init=` given to the disease replaces. A count can start from the number of people, e.g. `init = dict(W=10*N)`, with `N = (S + I + R).n`.
 
+Every expression in the class body is part of the model: `N` above is also one of its results and an attribute of the disease. To keep an intermediate out of both, start its name with an underscore: with `_h = g*(1 - np.exp(-C*I.frac))`, a transition can use `_h`, but it isn't a result. Only expressions can be private: a state, parameter, or transition with a leading underscore is an error, since each copy of the disease needs its own.
+
 A class can also have methods, for behavior that isn't a transition: override `step()`, and call `super().step()` to run the declared transitions ([Custom modules](building_modules.qmd)).
 
 ### Declaring in `__init__()`
@@ -379,7 +381,7 @@ sim.results.flu.I.by('strain').plot()
 
 Although it starts rare, the variant grows faster, and has the first epidemic nearly to itself: it infects more than four times as many people as the wild strain in the first year. The wild strain then barely circulates, held down by the immunity the variant leaves, while the variant comes back each year as immunity wanes, in epidemics that get smaller as they settle towards an endemic level.
 
-With `max_strains=2`, people can carry two strains at once, and `transmit=` says what a carrier of several passes on: one strain per transmission (`'one'`, the default) or each strain at its own rate (`'each'`). `fractions=` gives the share of each strain among the first infections (equal by default), and `name=` the name of the strain dimension, for results such as `res.I.by('strain')`. A transition with `per_strain=True` acts on each strain a person carries, e.g. a cure that clears some strains and not others. See [`ss.Strains`](../api/strains.qmd).
+With `max_strains=2`, people can carry two strains at once, and `transmit=` says what a carrier of several passes on: one strain per transmission (`'one'`, the default) or each strain at its own rate (`'each'`). `fractions=` gives the share of each strain among the first infections (equal by default), and `name=` the name of the strain dimension, for results such as `res.I.by('strain')`. A transition with `per_strain='each'` acts on each strain a person carries, e.g. a cure that clears some strains and not others. See [`ss.Strains`](../api/strains.qmd).
 
 The results by strain come in two forms, which differ when people carry several. `res.I.by('strain')` has a column for each strain, and someone who carries two is counted in both, so with `max_strains=2` the columns add up to more than `res.I`. `res.I.select(strain=...)` works on the sets of strains carried instead, each person once: with strains `A` and `B`, the levels are `'A'`, `'B'`, and `'A+B'`, so `select(strain='A+B')` is those who carry both, and `select(strain=['A', 'A+B'])` everyone who carries `A`. With more strains than can be carried at once (say three, two at a time), the sets are in the order the strains were acquired, so that the oldest is the one replaced, and both `'A+B'` and `'B+A'` are levels; list both (`res.I.axes()['strain'][0]` lists the levels). With one strain carried at a time, the two agree. The dimension is named `strain` unless `name=` gives another (e.g. `res.I.by('resistance')`). As agents, the [infection log](interventions_analyzers.qmd#the-infection-log) also has the strain passed on in each infection.
 
@@ -489,7 +491,7 @@ The parts of a module written as code (its parameters, states, results, and the 
 | `increment` | A counter that goes up each time the transition happens to someone (`increment='infections'`), or by another amount (`increment=dict(parity=2)`) | [Stratification](building_stratification.qmd#moving-between-groups) |
 | `min_stay` | A minimum stay: nobody takes the transition until they have been in the source state this long | |
 | `acquisition` | Whether it is an acquisition of the disease, which `rel_sus`, a product's efficacy against acquisition, and `ss.treat` act on (by default, every transmission, or the first transition out of the first state if there is none) | [Susceptibility and infectiousness](#susceptibility-and-infectiousness) |
-| `per_strain` | `True`: an event in a state the strains share with an outcome for each strain a person carries, e.g. a cure that clears some strains and not others | [Strains](#strains) |
+| `per_strain='each'` | An event in a state the strains share with an outcome for each strain a person carries, e.g. a cure that clears some strains and not others | [Strains](#strains) |
 | `per_strain='first'` | With a rate: each strain carried has its own rate, and the first to happen moves on as the only strain carried (the others are dropped), e.g. one of two strains progressing | [Strains](#strains) |
 | `name`, `label` | The name (by default, from the keyword or variable), and a human-readable name for plots | |
 

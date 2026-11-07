@@ -1,7 +1,7 @@
 """
 Example disease models: cholera, COVID, dengue, Ebola, gonorrhea, HIV, influenza, malaria, measles, pertussis,
 polio, RSV, syphilis, TB, typhoid, and a non-communicable disease (NCD), and Starsim 3's SIR, SEIR, and SIS
-written as code.
+written as agent-based code.
 
 These are illustrative, lightly-parameterized models intended as starting points
 for building your own disease modules, not as validated models for any specific
@@ -9,6 +9,8 @@ setting. Each one says in its docstring where its structure and its default
 parameters came from. Core disease base classes (`ss.Disease`, `ss.AgentDisease`,
 `ss.SIR`, etc.) live in `starsim.diseases`.
 """
+# Authorship: AI drafted, human reviewed and edited
+
 from .agents      import AgentSIR, AgentSEIR, AgentSIS
 from .cholera     import Cholera
 from .covid       import COVID

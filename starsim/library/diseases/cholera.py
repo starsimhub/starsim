@@ -4,6 +4,7 @@ Cholera, with direct and environmental (waterborne) transmission.
 Originally adapted from https://github.com/optimamodel/gavi-outbreaks/blob/main/stisim/gavi/cholera.py
 Original version by Dom Delport 2024
 """
+# Authorship: human drafted, AI refactored, human reviewed
 
 import starsim as ss
 
@@ -24,8 +25,8 @@ class Cholera(ss.Disease):
 
     Sources: Codeço CT, "Endemic and epidemic dynamics of cholera: the role of the aquatic reservoir", *BMC Infect Dis*
     2001;1:1 (https://doi.org/10.1186/1471-2334-1-1), for the structure; the latent period is from Azman et al.
-    (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3677557/); asymptomatic shedding of 1 to 10 days (mean 5.5) from the
-    WHO fact sheet; 5 days of symptoms from Fung (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3926264/); a rapid death
+    (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3677557/), a lognormal; asymptomatic shedding of 1 to 10 days (uniform) from the
+    WHO fact sheet; 5 days of symptoms (a lognormal fit to the range of 2.9 to 14 days) from Fung (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3926264/); a rapid death
     of severe cases (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5767916/); half of infections symptomatic, mid range
     of Jackson et al. and Nelson et al.; asymptomatic carriers shedding 100 times less; the dose-response, shedding,
     and decay from Mukandavire et al. (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3102413/). `beta` (from person to
@@ -42,10 +43,10 @@ class Cholera(ss.Disease):
         half_sat_rate (float): the amount of bacteria at which infection from the water is half its maximum
         shedding_rate (`ss.freq`): the bacteria each symptomatic person sheds into the water, per unit time
         decay_rate (`ss.per`): the rate at which bacteria in the water die off
-        dur_exp (`ss.Duration`): the mean time from infection to being infectious
-        dur_asymp2rec (`ss.Duration`): the mean time asymptomatic people are infectious
-        dur_symp2rec (`ss.Duration`): the mean time symptomatic people are ill, for those who recover
-        dur_symp2dead (`ss.Duration`): the mean time from symptoms to death, for those who die
+        dur_exp (`ss.Duration`/`ss.Dist`): the time from infection to being infectious (a duration is the mean of an exponential)
+        dur_asymp2rec (`ss.Duration`/`ss.Dist`): the time asymptomatic people are infectious
+        dur_symp2rec (`ss.Duration`/`ss.Dist`): the time symptomatic people are ill, for those who recover
+        dur_symp2dead (`ss.Duration`/`ss.Dist`): the time from symptoms to death, for those who die
         p_symp (float): the probability that an infection is symptomatic
         p_death (float): the probability that a symptomatic person dies
         kwargs (dict): passed to `ss.Disease`, e.g. `init_prev`, `init` or `name`
@@ -66,10 +67,10 @@ class Cholera(ss.Disease):
     half_sat_rate = ss.par(1_000_000, doc='Amount of bacteria at which infection from the water is half its maximum', source='Mukandavire et al.')
     shedding_rate = ss.par(ss.freqperday(10), doc='Bacteria shed into the water by each symptomatic person', source='Mukandavire et al.')
     decay_rate    = ss.par(ss.perday(0.033), doc='Rate at which bacteria in the water die off', source='Mukandavire et al.')
-    dur_exp       = ss.par(ss.days(2.772), doc='Mean time from infection to being infectious', source='Azman et al.')
-    dur_asymp2rec = ss.par(ss.days(5.5), doc='Mean time asymptomatic people shed', source='WHO cholera fact sheet (1-10 days)')
-    dur_symp2rec  = ss.par(ss.days(5), doc='Mean time ill, for those who recover', source='Fung')
-    dur_symp2dead = ss.par(ss.days(1), doc='Mean time from symptoms to death, for those who die', source='Illustrative')
+    dur_exp       = ss.par(ss.lognormal(mean=ss.days(2.772), std=ss.days(4.737)), doc='Time from infection to being infectious', source='Calculated from Azman et al.')
+    dur_asymp2rec = ss.par(ss.uniform(low=ss.days(1), high=ss.days(10)), doc='Time asymptomatic people shed', source='WHO cholera fact sheet (1-10 days)')
+    dur_symp2rec  = ss.par(ss.lognormal(mean=ss.days(5), std=ss.days(1.8)), doc='Time ill, for those who recover', source='Fung (5 days in most models; 2.9-14 days found)')
+    dur_symp2dead = ss.par(ss.lognormal(mean=ss.days(1), std=ss.days(0.5)), doc='Time from symptoms to death, for those who die', source='Death from severe disease is rapid')
     p_symp        = ss.par(0.5, doc='Probability that an infection is symptomatic', source='Jackson et al.; Nelson et al.')
     p_death       = ss.par(0.005, doc='Probability that a symptomatic person dies (with treatment)', source='Illustrative')
     init_prev     = 0.005

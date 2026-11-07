@@ -188,7 +188,7 @@ def people_counts(sim, get):
     gone = dict(died=0, emigrated=0)
     for mod in mods:
         for tr in mod.graph.transitions.values():
-            if tr._deaths is not None and tr._deaths in mod.results:
+            if tr._deaths is not None and tr._deaths in mod.results and tr.people: # People who die, not a count leaving (bacteria in water decaying)
                 gone['died'] += get(mod, tr._deaths)
             elif tr._outflow and tr.migration and tr.name in mod.results: # People leaving alive (ss.emigration())
                 gone['emigrated'] += get(mod, tr.name)

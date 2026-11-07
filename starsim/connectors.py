@@ -318,7 +318,7 @@ class modify(Connector):
             any of these as a string (`'sir.pars.beta'`); or the contacts of a network, as the network (`ss.contacts('Kenya', layer='school')`,
             matched by its name) or as a path (`'school.pars.n_contacts'`). For a transition with several destinations (e.g. `ss.Transition(Tx, {R: 0.8, I: None}, rate=...)`),
             the transition scales its rate (or its dwell time), and a destination (`'tb.treatment.R'`) scales the probability of that destination; with an outcome for each strain carried
-            (`per_strain=True`, with the probability of the first destination), that is the probability for the whole set of strains a person carries (e.g. that all are cured: Π c_k), not each strain's
+            (`per_strain='each'`, with the probability of the first destination), that is the probability for the whole set of strains a person carries (e.g. that all are cured: Π c_k), not each strain's
         multiply (float): multiply the quantity by this; like `add` and `set`, it can also be `ss.by(...)`, a function of the sim, or an `ss.timeseries`, for changes at given times
         add (float): add this to the quantity: a parameter, or an inflow (a transition from `ss.outside`, e.g. CFUs shed into a reservoir), to which it adds an amount per unit time from outside the model
         set (float): replace the quantity with this (a parameter only)

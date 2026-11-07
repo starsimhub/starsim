@@ -91,7 +91,7 @@ def test_networks():
     """ Library networks, as a sim would use them """
     sc.heading('Testing library networks')
     n = 400
-    nets = dict(grid=ssl.GridNet(periodic=True), small=ssl.SmallWorldNet(n_contacts=4), free=ssl.ScaleFreeNet(n_contacts=4))
+    nets = dict(geo=ssl.GeoNet('Kenya', n_contacts=6), grid=ssl.GridNet(periodic=True), small=ssl.SmallWorldNet(n_contacts=4), free=ssl.ScaleFreeNet(n_contacts=4))
     sims = {k:ss.Sim(n_agents=n, diseases='sis', networks=net, stop=ss.years(2), verbose=0).run() for k,net in nets.items()}
     degree = {k:np.bincount(np.r_[sim.networks[0].p1, sim.networks[0].p2], minlength=n) for k,sim in sims.items()}
     assert (degree['grid'] == 4).all() and (degree['small'].mean() == 4)
@@ -99,11 +99,13 @@ def test_networks():
     for net in [ssl.GridNet(), ssl.SmallWorldNet(), ssl.ScaleFreeNet()]: # Each has only its own parameters
         assert not {'seed', 'p'} & set(net.pars)
 
-    # Contacts across real places, as ssl.GeoNet once made them: a random network in a model stratified by place, with most contacts at home
+    # Contacts across real places with a geography: as ssl.GeoNet makes them, a random network in a model stratified by place, with most contacts at home
     sis = ss.SIS().stratify(patch=ss.levels(ss.geo.geography('Kenya'), mobility=ss.geo.gravity(away=0.1)))
     sim = ss.Sim(n_agents=n, diseases=sis, networks=ss.RandomNet(n_contacts=6), stop=ss.years(2), verbose=0).run()
     net, place = sim.networks[0], sim.groups.level_raw(sim.mixing.space)
     assert (place[net.p1] == place[net.p2]).mean() > 0.5 # Mostly within a place
+    geo = sims['geo'].networks[0]
+    assert (geo.place.raw[geo.p1] == geo.place.raw[geo.p2]).mean() > 0.5 # Mostly within a place, as local=0.9 says
     return degree
 
 
@@ -138,7 +140,7 @@ def test_econ():
     assert df.averted['None'] == 0 and df.averted['Vaccine'] > 0, 'Expected vaccination to avert infections'
     row = df.loc['Vaccine']
     assert np.isclose(row.ICER, (row.cost - df.cost['None'])/row.averted), 'Expected the ICER to be the incremental cost per infection averted'
-    disc = ssl.ICER(msim, outcome='sis.infection', discount=0.03, discount_from=2005).df
+    disc = ssl.ICER(msim, outcome='sis.infection', discount=0.03, discount_start=2005).df
     assert disc.cost['Vaccine'] < row.cost, 'Expected discounting to lower the cost'
     last = ssl.ICER(msim, outcome='sis.infection', window=ss.years(1))
     last._ti = len(last.t_years) - 1
@@ -256,6 +258,12 @@ def measles(): # R0 is beta times the infectious period; as agents and as compar
         out = res.recovery.sum() + res.death.sum()
         assert res.infection.sum() > 9000 and np.isclose(res.death.sum()/out, 0.005, rtol=0.4), solver
 
+    # An instance takes extra states, transitions, and outcomes beside the class's, which stand for the instance's copies
+    V = ss.State('Vaccinated')
+    m = ssl.Measles(V, vax=ss.Transition(ssl.Measles.S, V, rate=ss.perday(0.01)), cases=ss.outcome(0.5*ssl.Measles.onset))
+    res = ss.Sim(diseases=m, total_pop=10_000, start='2025-01-01', stop='2025-04-01', verbose=0).run().results.measles
+    assert res.vax.sum() > 0 and np.isclose(res.cases.sum(), 0.5*res.onset.sum()) and 'V' not in ssl.Measles().graph.states
+
 
 @sc.timer()
 def cholera(): # The water carries the epidemic: without it, transmission from person to person alone dies out
@@ -270,7 +278,7 @@ def ebola(): # Safe burials prevent infections from bodies; every death is burie
     pars = dict(total_pop=10_000, start='2025-01-01', stop='2026-01-01', verbose=0)
     some, every = [ss.Sim(diseases=ssl.Ebola(p_safe_bury=p), **pars).run().results.ebola for p in [0.25, 1.0]]
     assert every.infection.sum() < some.infection.sum() and every.D.max() < 1e-9 < some.D.max()
-    assert np.isclose(some.deaths.sum(), some.burials.sum() + some.D[-1], rtol=0.01) and some.Sev.max() > 0
+    assert np.isclose(some.deaths.sum(), some.burial.sum() + some.D[-1], rtol=0.01) and some.Sev.max() > 0
 
 
 declared = dict(measles=measles, cholera=cholera, ebola=ebola, malaria=malaria, malaria_immunity=malaria_immunity, tb=tb, covid=covid, influenza=influenza,

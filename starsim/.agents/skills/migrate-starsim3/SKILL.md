@@ -52,7 +52,7 @@ Starsim 4 keeps Starsim 3's module API: a disease written as code (`ss.Disease`,
 | `ss.RandomExactNet(n_contacts=n)` | `ss.RandomNet(n_contacts=n, method='exact')` | |
 | `ss.RandomNet(uniform_targets=True)` | `ss.RandomNet(method='uniform')` (the script does this) | |
 | `ss.RandomSafeNet` | `ss.RandomNet(method='safe')`, with `n_contacts` twice its `n_edges` | The script lists it |
-| `ss.RandomNet(dur=0)`; `ss.RandomNet(dur=d)` with `d` above 0 | `ss.RandomNet()` (the script drops `dur=0`); `ss.DegreeNet(n_contacts=..., dur=d)` | A random network's contacts last one step; partnerships that last are `ss.DegreeNet` (the script lists any other `dur=`) |
+| `ss.RandomNet(dur=0)`; `ss.RandomNet(dur=d)` with a bare `d` above 0 | `ss.RandomNet()` (the script drops `dur=0`); `ss.RandomNet(dur=ss.years(d))` | A bare number is in the sim's unit (the script lists any other bare `dur=`) |
 | `beta=` of a network or mixing pool (`ss.RandomNet(beta=)`, `ssl.ClusterNet(beta=)`, `ssl.HybridNet(beta=dict(h=3, s=0.6, w=0.6, c=0.3))`, `ss.MixingPool(beta=)`); `ss.MixingPool(diseases=)` | The disease's beta by route, e.g. `ss.SIS(beta=dict(h=0.048, s=0.0096, w=0.0096, c=0.0048))` (Covasim's weights times a beta per contact); a beta of 0 for a route a disease does not spread on | A route takes no `beta=` or `diseases=` (an error that says so); the script lists each |
 | The weight of each edge, `beta=` in `self.append(p1=, p2=, beta=...)` and `ss.Network(...)`, and `net.edges.beta` | `weight=`, `net.edges.weight` (the script does this) | |
 | `where=` of a network (Starsim 4 before its release), `age_range=[lo, hi]` | `who=(ss.person.age >= lo) & (ss.person.age < hi)` (the script does `age_range=` of `ss.RandomNet`) | Who takes part, as for events |

@@ -88,7 +88,7 @@ def make_resistance(beta=4, immunity=True, cure=(0.9, 0.3), **kwargs):
                          immunity=ss.immunity(due_to=L, protection=0.7) if immunity else None)
     DS, RIF = strains
     return ss.Disease(infection=S >> L @ ss.peryear(beta)*I, activation=L >> I @ ss.peryear(0.3), diagnosis=I >> Tx @ ss.peryear(2),
-                      treatment=ss.Transition(Tx, {R: 'cure', I: None}, rate=ss.peryear(2), per_strain=True),
+                      treatment=ss.Transition(Tx, {R: 'cure', I: None}, rate=ss.peryear(2), per_strain='each'),
                       failure=ss.Transition(Tx, I, rate=ss.peryear(0.2), move=DS >> (DS, RIF)), relapse=R >> S @ ss.years(2),
                       name='tb', strains=strains, **kwargs)
 
@@ -106,6 +106,8 @@ def test_strain_cure():
     cured = tb.R.raw[tx] | tb.S.raw[tx]
     assert cured[level == 0].mean() > 0.5 and not cured[level != 0].any() # DS alone is cured; RIF never is
     assert set(now[level == 2]) <= {1, 2} and (now[level == 2] == 1).sum() > 0.5*(level == 2).sum() # Of DS and RIF, RIF is left
+    with pytest.raises(TypeError, match="'each'"): # True is spelled 'each', beside 'first'
+        ss.Transition(*ss.states('Tx R'), rate=1, per_strain=True)
     return sim
 
 

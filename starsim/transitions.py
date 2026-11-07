@@ -481,8 +481,8 @@ class Transition(Nameable):
         min_stay (dur): a minimum stay: nobody leaves by this transition until they have been in its source state this long (a rate applies from then on, and a dwell time starts then)
         acquisition (bool): whether it is an acquisition of the disease, which `rel_sus`, a product's efficacy against acquisition, and `ss.treat` act on. If not given: a
             contact-mediated transition is, and so is any other transition out of the disease's first state if none out of it is contact-mediated (an infection by a bite rate or an EIR)
-        per_strain (bool/str): for an event of a disease with strains (`ss.Strains`) in a state they share, with an outcome for each strain
-            carried. `True`: with a split, each strain carried takes the first destination with its own probability (the first destination's probability times the strain's value for
+        per_strain (str): for an event of a disease with strains (`ss.Strains`) in a state they share, with an outcome for each strain
+            carried. `'each'`: with a split, each strain carried takes the first destination with its own probability (the first destination's probability times the strain's value for
             the transition, or `'<value>'`, the strains' values of that name, with their values for the transition then multiplying its rate), and anyone left with a strain takes the second (or stays),
             carrying those left, e.g. cure by treatment. `'first'`: with a rate, each strain carried has its own rate (the rate times its value), and the first to happen
             moves on as the only strain carried (the others are dropped), e.g. one of two strains progressing
@@ -570,8 +570,11 @@ class Transition(Nameable):
                     at = ss.conditions.Cond('dim', dim) == srcs[0] if len(srcs) == 1 else ss.conditions.Cond('dim', dim).isin(srcs) # Only people at a level they move from
                     self.where = at if self.where is None else ss.conditions.as_cond(self.where) & at
                 self.move[dim] = level
-        if per_strain not in [True, False, None, 'first']:
-            errormsg = f"per_strain= of a transition is True (an outcome for each strain carried) or 'first' (each strain its own rate, the first to happen moving on alone), not {per_strain!r}"
+        if per_strain is True:
+            errormsg = "per_strain=True of a transition is per_strain='each' (an outcome for each strain carried), or per_strain='first' (each strain its own rate, the first to happen moving on alone)"
+            raise TypeError(errormsg)
+        if per_strain not in [False, None, 'each', 'first']:
+            errormsg = f"per_strain= of a transition is 'each' (an outcome for each strain carried) or 'first' (each strain its own rate, the first to happen moving on alone), not {per_strain!r}"
             raise ValueError(errormsg)
         self.per_strain = bool(per_strain) # An outcome for each strain carried: see ss.strains.prepare()
         self.single_strain = per_strain == 'first'
@@ -1795,11 +1798,19 @@ def erlang_stages(mean, std, max_stages=50):
 
 
 def class_members(cls):
-    """ Collect the states, transitions, parameters, outcomes, results, and modifiers declared in a class body, in definition order """
+    """ Collect the states, transitions, parameters, outcomes, results, and modifiers declared in a class body, in definition order; an expression whose name starts with an underscore is a private intermediate, used by the others but not a member """
     members = dict()
     for base in reversed(cls.__mro__):
         for key,val in base.__dict__.items():
-            if isinstance(val, (Expr, Transition, outcome, FlowSum, ss.modify)): # Including results that are sums or ratios of states, attributes, and modifiers
+            declared = isinstance(val, (Expr, Transition, outcome, FlowSum, ss.modify)) # Including results that are sums or ratios of states, attributes, and modifiers
+            if declared and key.startswith('_'): # A private intermediate (e.g. _h = g*(1 - np.exp(-C*I.frac))), which its transitions use but which is not a result or an attribute
+                if isinstance(val, Expr) and not isinstance(val, (State, ss.expressions.par, ss.expressions.attr)):
+                    members.pop(key, None)
+                    continue
+                errormsg = (f'{cls.__name__} declares "{key}", a {type(val).__name__}, with a leading underscore, which marks a private intermediate expression; '
+                            f'a state, parameter, attribute, transition, outcome, or modifier is part of the model, and each instance needs its own: remove the underscore')
+                raise ValueError(errormsg)
+            if declared:
                 members[key] = val
             elif key in members: # Rebound to something else in a subclass
                 del members[key]

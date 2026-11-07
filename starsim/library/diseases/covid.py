@@ -1,6 +1,8 @@
 """
 COVID-19 as a SECIR model (`COVID`)
 """
+# Authorship: AI drafted, human reviewed and edited
+
 import starsim as ss
 
 __all__ = ['COVID']

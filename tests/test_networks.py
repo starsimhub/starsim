@@ -555,6 +555,12 @@ def test_bare_units():
         nets = [sim(net).init().networks[0] for net in [ss.SexualNet(dur=5), ss.SexualNet(dur=ss.days(5)), ss.DegreeNet(dur=5, acts=ss.perday(1))]]
     assert all(net.mean_dur == 5 for net in nets) # Each 5 days at daily steps, ending at a constant rate, as for ss.DegreeNet
     assert isinstance(ss.SexualNet().pars.dur, ss.lognormal) and ss.SexualNet(dur=ss.years(15)).pars.dur == ss.years(15) # The default, written out, is itself; one duration is a mean
+    for dur in [5, ss.days(5)]: # Random contacts that last, a bare number in the sim's unit too
+        s = ss.Sim(n_agents=200, diseases=ss.SIS(beta=ss.perday(0.05)), networks=ss.RandomNet(n_contacts=4, dur=dur), dt=ss.days(1), stop=ss.days(10), verbose=0).init()
+        net = s.networks[0]
+        before = set(zip(net.p1.tolist(), net.p2.tolist()))
+        s.run_one_step()
+        assert before == set(zip(net.p1.tolist(), net.p2.tolist())) and np.all(net.edges.dur == 4)
     return
 
 

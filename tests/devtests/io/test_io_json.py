@@ -56,7 +56,7 @@ def test_two_patch(tmp_path):
     return model
 
 
-@pytest.mark.parametrize('name', ['COVID', 'Gonorrhea', 'Influenza', 'Malaria', 'MalariaImmunity', 'Pertussis', 'Polio', 'RSV', 'TB', 'Typhoid', 'Measles', 'Cholera'])  # Not Ebola, whose outcomes (burials, deaths) the JSON form does not carry yet
+@pytest.mark.parametrize('name', ['COVID', 'Gonorrhea', 'Influenza', 'Malaria', 'MalariaImmunity', 'Pertussis', 'Polio', 'RSV', 'TB', 'Typhoid', 'Measles', 'Cholera'])  # Not Ebola, whose outcomes (burial, deaths) the JSON form does not carry yet
 def test_library(name):
     sc.heading(f'Testing the JSON form of ssl.{name}')
     cls = getattr(ssl, name)

@@ -54,6 +54,34 @@ def check_stratify(stratify, where):
     return stratify
 
 
+def rebind_member(obj, memo):
+    """ A member given to an instance of a declared class (e.g. `ssl.Measles(rash=ss.outcome(0.9*ssl.Measles.onset))`), reading the instance's copies of the class's states, transitions, and parameters (`memo`, see `ss.expressions.rebind()`); a transition is copied only if it reads any of them """
+    if isinstance(obj, (list, tuple)): # E.g. transitions=[...]
+        return type(obj)(rebind_member(x, memo) for x in obj)
+    if isinstance(obj, dict) and not isinstance(obj, ss.Pars): # E.g. outcomes=dict(...)
+        return {k:rebind_member(v, memo) for k,v in obj.items()}
+    if not isinstance(obj, ss.Transition) or isinstance(obj, ss.State):
+        reads = any(id(x) in memo for x in ss.expressions.nodes(obj)) or isinstance(obj, ss.outcome)
+        return ss.expressions.rebind(obj, memo) if reads else obj # Unchanged otherwise, so a positional member keeps the name of its variable
+    exprs = [obj.rate, obj.dur, obj.p_die, obj.p_stay] + list(obj.p or [])
+    conds = [c for c in [obj.where, getattr(obj.trigger, 'x', None)] if c is not None]
+    reads = any(id(x) in memo for x in list(obj.source or []) + list(obj.dest or []) + list(ss.expressions.nodes(exprs)))
+    reads = reads or any(id(ev.args[1]) in memo for c in conds for ev in ss.conditions.event_leaves(c) if len(ev.args) > 1)
+    if not reads:
+        return obj
+    new = sc.cp(obj)
+    new.source = None if obj.source is None else [memo.get(id(st), st) for st in obj.source]
+    new.dest = None if obj.dest is None else [memo.get(id(st), st) for st in obj.dest]
+    for key in ['rate', 'dur', 'p_die', 'p_stay']:
+        setattr(new, key, ss.expressions.rebind(getattr(obj, key), memo))
+    new.p = None if obj.p is None else [ss.expressions.rebind(v, memo) for v in obj.p]
+    new.where = ss.conditions.rebind(obj.where, memo)
+    if obj.trigger is not None:
+        new.trigger = ss.on(ss.conditions.rebind(obj.trigger.x, memo))
+        new.trigger.delay = obj.trigger.delay
+    return new
+
+
 class Disease(ss.Module, metaclass=BuiltAfterInit):
     """
     A disease: states people are in and the transitions between them (declared), code, or both
@@ -484,7 +512,8 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
             if tr.trigger is not None and (x := ss.conditions.rebind(tr.trigger.x, memo)) is not tr.trigger.x:
                 delay, tr.trigger = tr.trigger.delay, ss.on(x)
                 tr.trigger.delay = delay
-        kwargs = {k:ss.expressions.rebind(v, memo) for k,v in kwargs.items()} # A result given here that reads the class's states reads the copies
+        kwargs = {k:rebind_member(v, memo) for k,v in kwargs.items()} # A result, outcome, or transition given here that reads the class's states reads the copies, e.g. ssl.Measles(V=V, vax=ss.Transition(ssl.Measles.S, V, ...))
+        args = [rebind_member(v, memo) for v in args]
         init, init_n = [{k:ss.expressions.rebind(v, memo) for k,v in d.items()} if isinstance(d, dict) else d for d in [init, init_n]] # Likewise a starting value, e.g. init=dict(S=1 - (A - age)/(k*age + A)) with the class's parameters
         for key in [key for key,val in kwargs.items() if isinstance(val, ss.par) and isinstance(members.get(key), ss.par)]: # e.g. ss.SIS(beta=ss.par(0.1, bounds=[0.05, 1])): the class's parameter, which its transitions use, takes the value and bounds
             members[key].merge(kwargs.pop(key))

@@ -485,7 +485,7 @@ The ways to give something to people, or change something for them, and when to 
 |---|---|---|
 | [`ss.vaccinate()`](../api/interventions.qmd) | A vaccine (`ss.Vaccine`): protection against infection, infectiousness, death, or a transition, for as long as it is held | Vaccination, prophylaxis such as PrEP, bed nets: anything that protects those who hold it |
 | [`ss.screen()`](../api/interventions.qmd) | A test (`ss.Diagnostic`), whose outcomes (`positive`, `negative`, or those of `outcomes=`) trigger what follows | Screening, diagnosis, triage: anything that sorts people for the next step |
-| [`ss.treat()`](../api/interventions.qmd) | A treatment (`ss.Treatment`): a cure when it is given (`cure=`, by state or by transition), effects while it is held (`efficacy=`), or both | Cures, and treatment that suppresses infection, such as ART |
+| [`ss.treat()`](../api/interventions.qmd) | A treatment (`ss.Treatment`): a cure when it is given (`cure=`, by state or by transition), or a move along other transitions (`moves=`), effects while it is held (`efficacy=`), or both | Cures, and treatment that suppresses infection, such as ART |
 | [`ss.Delivery()`](../api/interventions.qmd) | Any product, including one written as code | A product of your own, with its own `administer()` |
 | [`ss.Event()`](../api/interventions.qmd) | No product: a move between states or levels, a counter (`increment=`), or a visit | Importations and seeding, protection as states of a disease, changes of risk group, visits that several deliveries follow |
 | [`ss.modify()`](../api/connectors.qmd) | Nothing: a change to a parameter, a transition, susceptibility, infectiousness, or contacts | Distancing, masks, school closures, faster diagnosis, condoms |

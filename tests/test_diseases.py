@@ -789,6 +789,37 @@ def test_init_in_class():
     return
 
 
+def test_private_class_members():
+    """ An expression in a class body whose name starts with an underscore is a private intermediate: used, but not a result or an attribute """
+    class Saturating(ss.Disease):
+        beta = ss.par(0.3)
+        S, I, R = ss.states(3)
+        _h = np.maximum(beta*I.frac, 1e-12)
+        infection = S >> I @ ss.perday(1)*_h
+        recovery  = I >> R @ ss.days(10)
+
+    dis = Saturating(name='sat', beta=0.6)
+    assert '_h' not in dis.graph.exprs and '_h' not in dis.__dict__, 'A private intermediate should not be a member'
+    sim = ss.Sim(dis, total_pop=1000, stop=30, unit='day', solver='ode', verbose=0).run()
+    assert '_h' not in sim.results.sat, 'A private intermediate should not be a result'
+    class Public(ss.Disease):
+        beta = ss.par(0.3)
+        S, I, R = ss.states(3)
+        h = np.maximum(beta*I.frac, 1e-12)
+        infection = S >> I @ ss.perday(1)*h
+        recovery  = I >> R @ ss.days(10)
+    pub = ss.Sim(Public(name='sat', beta=0.6), total_pop=1000, stop=30, unit='day', solver='ode', verbose=0).run()
+    assert 'h' in pub.results.sat and np.array_equal(sim.results.sat.I, pub.results.sat.I), 'A private intermediate should give the same model as a public one, with the instance\'s parameters'
+
+    with pytest.raises(ValueError): # A parameter (or state, transition, ...) can't be private: each instance needs its own
+        class PrivatePar(ss.Disease):
+            _beta = ss.par(0.3)
+            S, I = ss.states(2)
+            infection = S >> I @ _beta*I
+        PrivatePar()
+    return
+
+
 def test_rel_sus_per_act():
     """ On a network with acts, rel_sus scales each act's hazard for a disease written as code, as for a declared disease """
     class Sus(ss.Connector):

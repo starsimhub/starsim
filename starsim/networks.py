@@ -973,14 +973,16 @@ class RandomNet(DynamicNetwork):
     Note: not CRN safe when people are born or die, unless `dynamic=False`: with any of these
     methods but `'safe'`, one death rewires almost every edge.
 
-    Each contact lasts one step of the network: with `dynamic=True` (the default), the
-    contacts are drawn again on every step, and with `dynamic=False`, once. For partnerships
-    that last, see `ss.DegreeNet`.
+    By default (`dur=0`), each contact lasts one step of the network: with `dynamic=True` (the
+    default), the contacts are drawn again on every step, and with `dynamic=False`, once. With
+    `dur=` above 0, each contact lasts that long, and the ones that end are replaced by new
+    ones drawn at random. For partnerships formed toward a target number of partners, see `ss.DegreeNet`.
 
     Args:
         n_contacts (float/`ss.Dist`): the number of (bidirectional) contacts of each agent: a number is the same for everyone (rounded at random, if it is not whole, so it is the mean), and a distribution gives its spread (e.g. `ss.poisson(10)`)
+        dur (float/`ss.Duration`/`ss.Dist`): how long each contact lasts: a duration (the same for every contact), or a distribution; a bare number is in the sim's unit (default: 0, one step)
         who (Cond/str/func): if given, who takes part: a condition over people (e.g. `(ss.person.age >= 18) & (ss.person.age < 65)`), as for `ss.DegreeNet`; nobody else is in the network
-        dynamic (bool): if True (default), the contacts are drawn again on every step; if False, they are drawn once and never change
+        dynamic (bool): if True (default), contacts are replaced once they end (with `dur=0`, every step); if False, they are drawn once and never change
             (so agents who join later, e.g. newborns, are not added)
         memory (dur): how long it remembers contacts that have ended, for contact tracing (see `ss.DynamicNetwork`)
         method (str): how the other end of each contact is drawn: 'fast' (the default), 'exact', 'uniform', or 'safe' (see above)
@@ -1000,13 +1002,13 @@ class RandomNet(DynamicNetwork):
     """
     methods = ['fast', 'exact', 'uniform', 'safe']
 
-    def __init__(self, pars=None, n_contacts=_, who=_, dynamic=_, method=_, remove_self_loops=_, memory=_, **kwargs):
+    def __init__(self, pars=None, n_contacts=_, dur=_, who=_, dynamic=_, method=_, remove_self_loops=_, memory=_, **kwargs):
         """ Initialize """
-        check_replaced(self, pars, kwargs, dict(where=replaced_who, beta=replaced_beta,
-            dur="its contacts last one step: for partnerships that last, use ss.DegreeNet(n_contacts=..., dur=...)"))
+        check_replaced(self, pars, kwargs, dict(where=replaced_who, beta=replaced_beta))
         super().__init__()
         self.define_pars(
             n_contacts = ss.constant(10),
+            dur = 0, # One step
             who = None,
             dynamic = True,
             method = 'fast',
@@ -1138,9 +1140,9 @@ class RandomNet(DynamicNetwork):
 
     @property
     def one_step(self):
-        """ Stepping with the sim, every edge ends at the next step, before anything transmits over it, so the dead's edges need not be removed before then (see `ss.networks.Route.one_step`) """
+        """ With `dur=0` (the default), and stepping with the sim, every edge ends at the next step, before anything transmits over it, so the dead's edges need not be removed before then (see `ss.networks.Route.one_step`) """
         p = self.pars
-        return p.dynamic and p.get('memory') is None and self.on_sim_time
+        return p.dynamic and p.get('memory') is None and not isinstance(p.dur, ss.Dist) and p.dur == 0 and self.on_sim_time
 
     @property
     def on_sim_time(self):
@@ -1158,7 +1160,7 @@ class RandomNet(DynamicNetwork):
     def same_contacts(self, n, current):
         """
         The number of new contacts for each of `n` agents when it is the same whole number for everyone, so that nothing need be drawn: when
-        `n_contacts` is a whole number, and the edges needed (with `current` edges) give each a whole number (as every step does); else
+        `n_contacts` is a whole number, and the edges needed (with `current` edges) give each a whole number (as every step with `dur=0`); else
         None. Only with common random numbers, since without them a draw not made would change the draws after it.
         """
         nc = self.pars.n_contacts
@@ -1169,6 +1171,18 @@ class RandomNet(DynamicNetwork):
         needed = orig/2 - current
         scaled = v*needed/orig # The same arithmetic as add_pairs(), for one agent
         return int(scaled) if needed > 0 and float(scaled).is_integer() else None
+
+    def edge_steps(self, p1):
+        """ How many steps each new edge lasts after this one, from `dur=`: drawn for each if a distribution; a bare number is in the sim's unit """
+        dur = self.pars.dur
+        if isinstance(dur, ss.Dist):
+            return dur.rvs(p1)
+        n = len(p1)
+        if dur == 0:
+            return np.zeros(n, dtype=ss_float) # In its dtype (half the memory of float64), as validate() would make it
+        unit = self.sim.unit_base
+        dur = ss.solvers.convert(dur, unit) if isinstance(dur, ss.TimePar) else dur
+        return np.full(n, dur/self.t.dt.to(unit).value, dtype=ss_float)
 
     def add_pairs(self):
         """ Generate edges """
@@ -1199,7 +1213,7 @@ class RandomNet(DynamicNetwork):
             p1, p2 = p1[keep], p2[keep]
         n = len(p1)
         weight = np.ones(n, dtype=ss_float)
-        dur = np.zeros(n, dtype=ss_float) # Each lasts one step; in its dtype (half the memory of float64), as validate() would make it
+        dur = self.edge_steps(p1)
 
         # Use zero-copy view for UIDs and skip concatenation when network is empty
         p1 = p1.view(ss.uids)

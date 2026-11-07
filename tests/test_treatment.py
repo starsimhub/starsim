@@ -61,7 +61,7 @@ def test_undriven():
 
 
 def test_cure_forms():
-    sc.heading('Testing the forms of cure=: a number, by state, by transition, by name, and a move written with the states')
+    sc.heading('Testing the forms of cure= and moves=: a number, by state, by transition, by name, and a move written with the states')
     S, I = ss.states(2)
     forms = dict(
         number = lambda sis: 0.9,
@@ -69,16 +69,19 @@ def test_cure_forms():
         trans  = lambda sis: {sis.cure: 0.9},
         name   = lambda sis: dict(cure=0.9),
         move   = lambda sis: {sis.I >> sis.S: 0.9},
+        moves  = lambda sis: dict(moves=sis.cure, cure=0.9), # Not every move is a cure, so moves= names them too
+        movesdict = lambda sis: dict(moves={'cure': 0.9}),
     )
     cured = {}
     for key,form in forms.items():
         sis = make_sis(lambda S, I: I >> S @ 0)
-        tx = ss.treat(ss.Treatment(cure=form(sis)), when=[ss.days(20)], name='tx')
+        kwargs = form(sis) if key.startswith('moves') else dict(cure=form(sis))
+        tx = ss.treat(ss.Treatment(**kwargs), when=[ss.days(20)], name='tx')
         sim = ss.Sim(sis, interventions=tx, solver='ode', stop=40, **kw).run()
         cured[key] = sim.results.tx.cured.sum()
     assert np.allclose(list(cured.values()), cured['number'], rtol=1e-6), cured
-    with pytest.raises(TypeError, match='cure='): # The removed keyword names its replacement
-        ss.Treatment(**{'moves': I >> S})
+    with pytest.raises(ValueError, match='not both'): # One probability for moves=, or a dict in one of them
+        ss.Treatment(cure=dict(I=0.9), moves=I >> S)
     with pytest.raises(TypeError, match='as a key'): # A transition alone is not a probability
         ss.Treatment(cure=I >> S)
     return cured

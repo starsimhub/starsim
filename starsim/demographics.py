@@ -588,7 +588,7 @@ class Deaths(Demographics):
         return
 
 
-class preterm:
+class preterm(sc.objdict):
     """
     The risk of preterm birth in `ss.Pregnancy` (`preterm=ss.preterm(...)`), for the options that are rarely changed
 
@@ -608,14 +608,15 @@ class preterm:
         ```
     """
     def __init__(self, threshold=None, very_threshold=None, rel=None, by_age=None):
-        self.preterm_threshold = sc.ifelse(threshold, ss.weeks(37)) # Kept under the names of the parameters of ss.Pregnancy, which reads them
-        self.very_preterm_threshold = sc.ifelse(very_threshold, ss.weeks(32))
-        self.rel_preterm = ss.normal(mean=1, std=0.1) if rel is None else rel
-        self.rel_preterm_age = np.array([[18, 35, 1000], [1.2, 1, 1.2]]) if by_age is None else np.asarray(by_age, dtype=float)
+        super().__init__() # A dict, so that a parameter of ss.Pregnancy can hold it (preg.pars.preterm.threshold)
+        self.threshold = sc.ifelse(threshold, ss.weeks(37))
+        self.very_threshold = sc.ifelse(very_threshold, ss.weeks(32))
+        self.rel = ss.normal(mean=1, std=0.1) if rel is None else rel
+        self.by_age = np.array([[18, 35, 1000], [1.2, 1, 1.2]]) if by_age is None else np.asarray(by_age, dtype=float)
         return
 
     def __repr__(self):
-        return f'preterm(threshold={self.preterm_threshold}, very_threshold={self.very_preterm_threshold}, rel={self.rel_preterm}, by_age={self.rel_preterm_age.tolist()})'
+        return f'preterm(threshold={self.threshold}, very_threshold={self.very_threshold}, rel={self.rel}, by_age={self.by_age.tolist()})'
 
 
 replaced_pregnancy = dict( # Keywords of ss.Pregnancy that are given another way, with what to use instead
@@ -709,7 +710,7 @@ class Pregnancy(Demographics, ss.Disease):
     p_abortion     = ss.par(0.0, doc='Chance a pregnancy ends in an abortion, at conception')
     loss_rate      = ss.par(ss.peryear(0.0), doc='Hazard of a spontaneous loss')
     loss_threshold = ss.par(ss.weeks(20), doc='Gestational age below which a loss is a miscarriage, and above which a stillbirth')
-    maternal_death = ss.par(ss.peryear(0.0), doc='Hazard of a maternal death while pregnant (given as maternal_death=<a rate>; a probability is the chance at delivery, p_maternal_death)')
+    maternal_death = ss.par(ss.peryear(0.0), doc='Maternal death: a rate is the hazard of death while pregnant (antepartum); a probability is the chance of death at delivery')
     infant_death_rate    = ss.par(ss.peryear(0.0), doc='Hazard of death before the age of 1, for the children (infant mortality)')
     dur_pregnancy  = ss.par(ss.choice(a=ss.weeks(np.arange(32, 43)), p=np.array([0.001, 0.002, 0.005, 0.012, 0.026, 0.05, 0.087, 0.134, 0.188, 0.226, 0.269])), doc='Duration of pregnancy: the gestational age at birth, 32-42 weeks, with probabilities that approximate CDC/WHO preterm birth data')
 
@@ -738,24 +739,18 @@ class Pregnancy(Demographics, ss.Disease):
             dur_breastfeed = ss.lognormal(mean=ss.years(0.75), std=ss.years(0.5)),
             p_breastfeed = ss.bernoulli(p=1),
             children = ss.choice(a=np.array([1, 2]), p=np.array([1.0, 0.0])), # The number of children of each delivery
-            p_maternal_death = ss.bernoulli(0), # At delivery: given as maternal_death=<a probability>
             p_female = ss.bernoulli(0.5), # Share of babies born female
             burnin = True, # Whether women are pregnant at the start: see burnin_plan()
-            **vars(preterm()), # Preterm birth: given as preterm=ss.preterm(...), see ss.preterm
+            preterm = preterm(), # The risk of preterm birth: see ss.preterm
         )
         for key in [k for k in given if k in replaced_pregnancy]:
             errormsg = f'ss.Pregnancy() takes no {key}=; use {replaced_pregnancy[key]}'
             raise TypeError(errormsg)
-        if 'maternal_death' in given: # A rate is the hazard while pregnant; a probability, the chance at delivery
-            md = given['maternal_death']
-            if not (isinstance(md, ss.Rate) or isinstance(getattr(md, 'raw', None), ss.Rate) or callable(md) and not isinstance(md, ss.Dist)):
-                given['p_maternal_death'] = given.pop('maternal_death')
-        if 'preterm' in given:
-            pt = given.pop('preterm')
-            if not isinstance(pt, preterm):
-                errormsg = f'preterm= of ss.Pregnancy() is an ss.preterm(threshold=, very_threshold=, rel=, by_age=), not {type(pt).__name__}'
-                raise TypeError(errormsg)
-            given.update(vars(pt))
+        md = given.get('maternal_death')
+        at_delivery = md is not None and not (isinstance(md, ss.Rate) or isinstance(getattr(md, 'raw', None), ss.Rate) or callable(md) and not isinstance(md, ss.Dist)) # A probability: the chance at delivery, not a hazard while pregnant
+        if 'preterm' in given and not isinstance(given['preterm'], preterm):
+            errormsg = f'preterm= of ss.Pregnancy() is an ss.preterm(threshold=, very_threshold=, rel=, by_age=), not {type(given["preterm"]).__name__}'
+            raise TypeError(errormsg)
         unknown = [k for k in given if k not in self.pars]
         if unknown:
             raise sc.KeyNotFoundError(f'"{self.name}" has no parameter named {sc.strjoin(unknown)}. Its parameters are {sc.strjoin(self.pars.keys())}{ss.expressions.did_you_mean(unknown[0], self.pars.keys())}{ss.errors.starsim3(keys=unknown, call=f"ss.{type(self).__name__}")}')
@@ -779,6 +774,8 @@ class Pregnancy(Demographics, ss.Disease):
             elif isinstance(dp, ss.choice) and np.ndim(dp.pars.a) == 0:
                 dp = ss.constant(dp.pars.a)
             graph['dur_pregnancy'] = dp
+        if at_delivery: # Then no hazard while pregnant: the parameter holds the chance at delivery, which the code reads (see _deliver())
+            self.graph.transitions.antepartum.rate = ss.par.inline(ss.peryear(0.0))
         self.pars.update(**({'fertility_rate':fertility if is_function else self.conception_rate} | graph)) # Each of the three rates (fertility_rate, loss_rate, infant_death_rate) is a parameter, which can be a function of (sim, uids); conception_rate() makes the hazard of conception from the fertility rates given
         birth = self.graph.transitions.birth
         birth.n_born = self.pars.children
@@ -794,7 +791,7 @@ class Pregnancy(Demographics, ss.Disease):
             ss.FloatArr('gestation_at_birth', label='Gestational age at birth, in weeks (on the newborn)'),
             ss.BoolArr('preterm', label='Preterm birth (on the newborn)'),
             ss.BoolArr('very_preterm', label='Very preterm birth (on the newborn)'),
-            ss.FloatArr('rel_preterm_base', default=self.pars.rel_preterm, label='Baseline relative risk of preterm birth'),
+            ss.FloatArr('rel_preterm_base', default=self.pars.preterm.rel, label='Baseline relative risk of preterm birth'),
             ss.FloatArr('rel_preterm', default=1.0, label='Relative risk of preterm birth (set at conception: see preterm_risk())'),
             ss.FloatArr('n_pregnancies', default=0, label='Number of pregnancies'),
             ss.FloatArr('ti_delivered', label='The step of the last delivery'),
@@ -802,7 +799,7 @@ class Pregnancy(Demographics, ss.Disease):
             ss.BoolState('lactating', label='Breastfeeding'),
             ss.FloatArr('ti_weaned', label='The step breastfeeding ends'),
         )
-        self.rng_md = ss.random() # For a plain number as p_maternal_death
+        self.rng_md = ss.random() # For a plain number as maternal_death, the chance at delivery
         self.rng_dur = ss.random() # For the durations of pregnancies with a relative risk of preterm birth: see preterm_risk()
         self.fetal_agents = fetal_agents # Whether fetuses are agents, from conception: see _init_fetus()
         self._nnd = 0 # Neonatal deaths in the step
@@ -1061,7 +1058,7 @@ class Pregnancy(Demographics, ss.Disease):
     def preterm_risk(self, uids, rel=None):
         """
         At conception: each woman's relative risk of preterm birth (`rel_preterm`), her baseline (`rel_preterm`) times the risk at her
-        age (`rel_preterm_age`), multiplies her probability of a preterm duration (below `preterm_threshold`), capped at 1; the
+        age (`preterm.by_age`), multiplies her probability of a preterm duration (below `preterm.threshold`), capped at 1; the
         durations within the preterm and the term ones keep their shares. For `dur_pregnancy` as an `ss.choice` (the
         default), each duration is drawn so (one uniform number, by inverse transform), kept in weeks (`dur_gestation`, the
         gestational age at birth), and the delivery scheduled by it, as the engine schedules a dwell time (agents only)
@@ -1082,7 +1079,7 @@ class Pregnancy(Demographics, ss.Disease):
         uids = ss.uids(uids)
         if self.abm:
             self.engine.new_round() # It can be called from code (e.g. a callback), so its draws are its own (see ss.solvers.Agents.new_round())
-        bins, rr = self.pars.rel_preterm_age
+        bins, rr = self.pars.preterm.by_age
         age_ind = np.searchsorted(np.asarray(bins).astype(int), self.sim.people.age.raw[uids], side='left')
         rel = self.rel_preterm_base.raw[uids]*np.asarray(rr)[np.minimum(age_ind, len(rr) - 1)]*(1.0 if rel is None else np.asarray(rel, dtype=float))
         self.rel_preterm[uids] = rel
@@ -1093,7 +1090,7 @@ class Pregnancy(Demographics, ss.Disease):
         p = np.ones(len(a)) if dist.pars.p is None else np.asarray(dist.pars.p, dtype=float)
         p = p/p.sum()
         weeks = dist.unit(a).weeks if dist.unit is not None else a
-        p_pre = p[weeks < self.pars.preterm_threshold.weeks].sum() # The preterm probability as given
+        p_pre = p[weeks < self.pars.preterm.threshold.weeks].sum() # The preterm probability as given
         q = np.clip(rel*p_pre, 0, 1)
         u = self.rng_dur.rvs(uids)
         pre = u < q
@@ -1123,7 +1120,7 @@ class Pregnancy(Demographics, ss.Disease):
         drawn = self.dur_gestation.raw[moms]
         ga = np.where(np.isfinite(drawn), drawn, (ti - self.ti_P.raw[moms])*self.t.dt.weeks) # As drawn; otherwise the steps since conception
         self.gestation_at_birth[newborns] = ga
-        pre, very = ga < self.pars.preterm_threshold.weeks, ga < self.pars.very_preterm_threshold.weeks
+        pre, very = ga < self.pars.preterm.threshold.weeks, ga < self.pars.preterm.very_threshold.weeks
         self.preterm[newborns] = pre
         self.very_preterm[newborns] = very
         scale = self.sim.current_scale
@@ -1168,8 +1165,8 @@ class Pregnancy(Demographics, ss.Disease):
                 net.add_pairs(ppl.parent.raw[kids], kids)
         self._classify_births(new, ti)
         engine.record_event('live_birth', moms)
-        p_md = self.pars.p_maternal_death # At delivery (agents only)
-        if not isinstance(p_md, ss.bernoulli) or np.any(np.asarray(p_md.pars.p) > 0):
+        p_md = self.pars.maternal_death.raw # At delivery (agents only), if a probability
+        if isinstance(p_md, ss.bernoulli) and np.any(np.asarray(p_md.pars.p) > 0) or sc.isnumber(p_md) and p_md > 0:
             dead = p_md.filter(parents) if isinstance(p_md, ss.bernoulli) else parents[self.rng_md.rvs(parents) < p_md]
             ppl.request_death(dead)
             self.results.maternal_death[self.ti] += len(dead)*self.sim.current_scale

@@ -419,7 +419,7 @@ def test_treat_any_transition():
     for solver,pars in [('ode', {}), ('abm', dict(n_agents=10_000))]:
         S, I, R, P = ss.states(4)
         sir = ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(10), protect=ss.Transition(S, P, rate=ss.perday(0)), init=dict(I=0.01), name='sir')
-        shield = ss.treat(ss.Treatment(cure={sir.protect: 1.0}), who=sir.S, when=[ss.days(0)], coverage=0.5)
+        shield = ss.treat(ss.Treatment(moves=sir.protect), who=sir.S, when=[ss.days(0)], coverage=0.5)
         res = ss.Sim(sir, interventions=shield, stop=100, solver=solver, **kw, **pars).run().results
         print(f'{solver}: {res.sir.protect.sum():.0f} protected')
         assert np.isclose(res.sir.protect.sum(), 0.5*0.99*kw['total_pop'], rtol=0.05)
