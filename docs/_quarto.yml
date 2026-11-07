@@ -445,6 +445,7 @@ format:
 
 filters:
   - interlinks
+  - assets/github_alerts.lua # GitHub alerts (> [!NOTE]) as callouts, for the README on the home page
   - authorship # Each page's authorship front matter as a badge (quartopydoc's extension, in _extensions/sciris)
 
 interlinks:

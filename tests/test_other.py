@@ -207,6 +207,8 @@ class Counter(ss.Module):
     assert text == "a = sim.results.births.birth; b = res.deaths.death.cum[-1]; c = sim.results.pregnancy.preterm; d = preg.results.neonatal_death; msim.plot('births.birth')"
     mine = migrate_text("self.define_results(ss.Result('new_infections'))\nx = self.results.new_infections")
     assert 'res' in mine[0] and mine[1] == [] # One the package makes keeps its name
+    for made in ["super().__init__(infection=infection, new_infections=1*infection)", "self.define_results(ss.Result(f'new_infections{suffix}'))"]: # By keyword, or with an f-string that may add nothing
+        assert migrate_text(f"{made}\nx = res.new_infections")[1] == []
     text, changes, todo = migrate_text("a = ss.treat(cure=0.9, on=sir.infection, capacity=5)\nb = ss.Transition(I, R, on=a.failed, where=ss.person.female)\nc = ss.modify(sir.pars.beta, multiply=0.5, when=lambda sim: sim.ti > 5)\nd = ss.attr(1, on=infection)")
     assert 'ss.treat(cure=0.9, on=sir.infection, capacity=5)' in text and 'ss.Transition(I, R, on=a.failed, where=ss.person.female)' in text and 'ss.attr(1, on=infection)' in text and [line for line,_ in todo] == [3] # Keywords: on= stays, when= is time only
     text = migrate_text("x = ss.change(sir.pars.beta, at=[30, 60], by=[0.5, 1.0], name='m')\ny = ss.change('sir.pars.beta', at=2005, to=0.1)\nz = ss.change(beta, at=times, by=vals)")
