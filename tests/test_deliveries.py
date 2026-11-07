@@ -219,13 +219,13 @@ def test_transfer():
 def test_deliver():
     sc.heading('Testing delivery by a function, triggers, and scenarios')
 
-    # A function that says who is eligible: UIDs, as agents [prototype: the old form, a number per group in a compartmental run, has no spelling yet]
+    # A function that says who is eligible, as any condition in who= does: UIDs, as agents
     def give(sim):
         return sim.people.auids[:10_000]
     def by_function(**kwargs):
         sir = make_sir()
         vaccine = ss.Vaccine(efficacy=0.9)
-        chosen = ss.vaccinate(vaccine, who=give, when=[5], capacity=8000)
+        chosen = ss.vaccinate(vaccine, who=give, when=5, capacity=8000)
         return ss.Sim(sir, interventions=chosen, **kwargs)
     sim = by_function(solver='abm', stop=20, **kw).run()
     assert np.isclose(sim.results.chosen.delivered.sum(), 8000) # Capped by the capacity

@@ -226,6 +226,10 @@ class CountState:
     def __repr__(self):
         return f'CountState({self.name}, n={self.n:n})'
 
+    def __rshift__(self, other):
+        """ A move between two states, as for agents (`ss.move(sir.I >> sir.R, p=0.5)`); see `ss.move()` """
+        return ss.transitions.run_move(self, other)
+
     @property
     def n(self):
         """ The number in this state """

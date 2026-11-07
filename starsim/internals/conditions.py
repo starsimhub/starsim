@@ -908,6 +908,18 @@ def split_where(where):
     return (None, where) if trigger is None else (trigger, rest) # As given if it has no event, since a state may not have its name yet
 
 
+time_names = {'ti', 't', 'now', 'year', 'month', 'day', 'date', 'dt', 'dt_year', 'timevec', 'tvec', 'yearvec', 'datevec'} # What a function reads when it depends on time alone
+
+
+def check_not_time(who, what):
+    """ who= says who something applies to; a function that reads only the time (`lambda sim: sim.ti > 20`) says when, so it is an error pointing to when= """
+    names = getattr(getattr(who, '__code__', None), 'co_names', None)
+    if callable(who) and names and set(names) <= time_names:
+        errormsg = f'who= of {what} says who it applies to, but {getattr(who, "__name__", "the function")} reads only the time ({sc.strjoin(sorted(set(names)))}), which says when it applies: give it as when=, e.g. when=ss.schedule(start=...), or a function of the date, when=lambda now: now.month == 1'
+        raise TypeError(errormsg)
+    return who
+
+
 def split_delivery(on=None, who=None, where=None):
     """
     The trigger and the condition of a delivery, either of which may be None
@@ -917,6 +929,7 @@ def split_delivery(on=None, who=None, where=None):
     eligible). where (from who=) is anything else that decides it: a condition on the population, a function of the sim, or a
     condition on people too. who and where are joined with &, and neither takes an event.
     """
+    check_not_time(where, 'an event')
     for key,val in dict(on=on, who=who, where=where).items():
         if isinstance(val, (list, tuple)):
             errormsg = f'{"when" if key == "on" else "who"}= of an event takes one condition or event, not a list; join them with | (any of them) or & (all of them), e.g. when=a.positive | b.positive'
