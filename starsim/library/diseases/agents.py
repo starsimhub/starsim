@@ -34,7 +34,7 @@ class AgentSIR(ss.AgentDisease):
     infected/infectious, and recovered, as per-agent arrays updated in code (see
     `ss.AgentDisease`). It also includes deaths, and basic results. It is a teaching
     example, showing in code what the declared `ss.SIR` does as agents, and a starting
-    point for a disease written as code (e.g. `ssl.Ebola`); it has no advantage over
+    point for a disease written as code (e.g. `ssl.HIV`); it has no advantage over
     `ss.SIR`, which is shorter and runs with every solver, so for an SIR model, use that. A Starsim 3 subclass of `ss.SIR` that overrides its methods can
     subclass this class instead, unchanged.
 
@@ -315,7 +315,7 @@ class AgentSIS(ss.AgentDisease):
         """ Initialize results """
         super().init_results()
         self.define_results(
-            ss.Result('rel_sus', dtype=float, label='Relative susceptibility')
+            ss.Result('rel_sus', dtype=float, label='Relative susceptibility', kind='ratio')
         )
         return
 

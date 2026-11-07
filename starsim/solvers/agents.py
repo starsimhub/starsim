@@ -15,31 +15,21 @@ from .agents_moving import Moving, ROUNDS, ROUND_MAX, step_key
 from .agents_stepping import Stepping
 from .agents_branching import Branching
 
-__all__ = ['agent_solvers', 'agent_solver', 'Transmission', 'Agents']
-
-agent_solvers = ['abm-midstep', 'abm-wholestep', 'abm-events'] # The ways a declared module runs as agents, the first by default: those who arrive in a state during a step face its rates for the rest of the step; or from the next step only; or event by event in continuous time
-
+__all__ = ['agent_solver', 'Transmission', 'Agents']
 
 def agent_solver(module, sim, why=False):
     """
-    How a declared module runs as agents, one of `agent_solvers`: its own `solver=`, if it names one; else the sim's, if it names one;
-    else the module's `suggested_solver` (a class attribute, e.g. `suggested_solver = 'abm-wholestep'`); else `'abm-midstep'`.
-    So `solver='abm'` (or `'auto'`, when it chooses agents) takes each module's suggestion, and a sim's `solver='abm-midstep'` overrides it.
-    With `why=True`, also where it came from: `'own'`, `'sim'`, `'suggested'`, or `'default'`.
+    How a declared module's agents are stepped, one of the steps of `ss.abm()` ('midstep', 'wholestep', or 'events'): its own
+    (`ss.Disease(..., solver=ss.abm(step=...))`), if it has one; else the sim's (`ss.Sim(solver=ss.abm(step=...))`, 'midstep' by default).
+    With `why=True`, also where it came from: `'own'`, `'sim'`, or `'default'`.
     """
     own = getattr(module, 'solver', None)
-    suggested = getattr(module, 'suggested_solver', None)
-    if suggested is not None and suggested not in agent_solvers:
-        raise ValueError(f'"{module.name}" has suggested_solver={suggested!r}, but it must be one of {sc.strjoin(agent_solvers)}')
-    if own in agent_solvers:
-        solver, source = own, 'own'
-    elif own is None and sim.pars.solver in agent_solvers:
-        solver, source = sim.pars.solver, 'sim'
-    elif suggested is not None:
-        solver, source = suggested, 'suggested'
+    ran = sim.solver if sim.solver == 'abm' else ss.abm()
+    if own is not None:
+        step, source = own.step, 'own'
     else:
-        solver, source = agent_solvers[0], 'default'
-    return (solver, source) if why else solver
+        step, source = ran.step, 'sim' if ran.given() else 'default'
+    return (step, source) if why else step
 
 
 class Transmission(Effects):
@@ -323,7 +313,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         mod = self.mod
         graph = self.graph
         self.init_dims()
-        self.wholestep = agent_solver(mod, self.sim) == 'abm-wholestep' # Each rate acts only over whole steps, on those in the state at the start of the step (see draw_competing())
+        self.wholestep = agent_solver(mod, self.sim) == 'wholestep' # Each rate acts only over whole steps, on those in the state at the start of the step (see draw_competing())
         for obj in list(graph.states.values()) + list(graph.attrs.values()): # Remove the declarations, which are replaced by their run-time form
             if obj.name in mod.__dict__:
                 delattr(mod, obj.name)
@@ -339,7 +329,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         self.start_weighted = None # The same, with each agent counted by its weight, if agents' weights differ (people.scale)
         self._members = None # The agents in each state at the start of the step (those that step_state() needs), while its rates are worked out
         self.forced = dict() # The agents moved along a transition by an intervention (see force()), who are events from the next step
-        self._kept_exits = {} # For each split with ss.stay triggered by on=, the exits of those it moved, for those who stay (see stay())
+        self._kept_exits = {} # For each split with ss.stay triggered by when=, the exits of those it moved, for those who stay (see stay())
         self._step_pairs = [] # Who infected whom over the networks in this step's transmissions: see sources()
         self.held = None # As a branching process: the number in each state of the uninfected, by group, which are counts rather than agents (see init_branching())
         self._drawn_ti = -1 # The step whose competing rates have been drawn: see enter()
@@ -446,7 +436,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         for p in graph.spread_pars():
             self.spread[id(p)] = f'par_{p.name}'
             arrs.append(ss.FloatArr(f'par_{p.name}', default=ss.transitions.numeric_dist(p.raw, self.convert), label=f'Value of {p.name}'))
-        self.delays = {tr.name:tr.trigger.delay for tr in self.triggers if tr.trigger.delay is not None} # on= an event, with dur=: each person's time after it (see triggered())
+        self.delays = {tr.name:tr.trigger.delay for tr in self.triggers if tr.trigger.delay is not None} # when=ss.on(event, delay=): each person's time after it (see triggered())
         for name in self.delays:
             arrs.append(ss.TimeArr(f'ti_after_{name}', label=f'Scheduled time of {name}, after its event'))
         self.tf_dists = {name:dist for name,tf in graph.transfers.items() if (dist := self.transfer_dist(tf, per_agent=self.agent_values)) is not None} # A transfer whose dur= is a distribution: each person's time is drawn when they can first move, and they move when it is up (see step_transfers())
@@ -492,10 +482,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
             add(f'branch_{state.name}', ss.random())
             add(f'exit_{state.name}', ss.random())
         carriage = any(getattr(strat, 'carries', None) is not None for strat in self.sim.groups.strats)
-        self.lifetables = {name:None for name,tr in graph.transitions.items() if getattr(tr, 'lifetable', None) is not None} # Who dies in each step by each life table: see step_lifetables()
-        for name in self.lifetables:
-            add(f'life_{name}', ss.random())
-        self.competing = {state.name: [tr for tr in hazards[state.name] if tr.name not in self.lifetables] for state in graph.people_states} # The rates drawn each step: a life table's deaths are drawn once for each person instead, see step_lifetables()
+        self.competing = {state.name: list(hazards[state.name]) for state in graph.people_states} # The rates drawn each step
         for name,competing in self.competing.items():
             if competing:
                 add(f'entry_{name}', ss.random()) # The competing rates of the step people enter in: see finish_moves()
@@ -552,7 +539,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
                     self.attr_dists[id(p.value)] = key
         mod.setattribute('trans_rng', ss.multi_random('source', 'target'))
         for name,dw in self.dwells.items():
-            add(f'dwell_{name}', dw.dist if dw.dist is not None else ss.expon(scale=1.0) if dw.k == 1 else ss.gamma(a=dw.k, scale=1/dw.k)) # A unit-mean exponential (or Erlang), scaled by the mean when used
+            add(f'dwell_{name}', dw.dist if dw.dist is not None else ss.expon(mean=1.0) if dw.k == 1 else ss.gamma(shape=dw.k, scale=1/dw.k)) # A unit-mean exponential (or Erlang), scaled by the mean when used
         return
 
     def init_pre(self):
@@ -587,7 +574,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         return self.sim.groups.level_raw(self.strain)
 
     def adjusted(self, name, uids):
-        """ The multiplier on a transition for each agent, from the adjust= of the stratifications (1 if there is none), and their susceptibility if it is an acquisition that is not contact-mediated (see `transmit()` for those) """
+        """ The multiplier on a transition for each agent, from the multipliers by level of the stratifications (a strain's) (1 if there is none), and their susceptibility if it is an acquisition that is not contact-mediated (see `transmit()` for those) """
         adjust = self.adjust[name]
         if adjust is None and not self.sim.modifiers.get((self.mod.name, 'transition', name)) and not self.mult_raw_extra('transition') and not self.graph.transitions[name].acquisition: # The usual case
             return 1.0
@@ -625,11 +612,11 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         return self.cache[key]
 
     def mult_raw_extra(self, kind):
-        """ Whether mult_raw() has a multiplier on a kind of quantity other than its modifiers: the adjust= of the stratifications """
+        """ Whether mult_raw() has a multiplier on a kind of quantity other than its modifiers: the multipliers by level of the stratifications (a strain's) """
         return bool(getattr(self, 'rel_adjust', None) and self.rel_adjust.get(kind))
 
     def lifelong_mods(self, mods):
-        """ Whether modifiers only say who a quantity is for, by something that never changes (e.g. a transition with `where=ss.person.female`), so each person's multiplier stays the same for the whole run """
+        """ Whether modifiers only say who a quantity is for, by something that never changes (e.g. a transition with `who=ss.person.female`), so each person's multiplier stays the same for the whole run """
         return all(type(m) is ss.modify and m.op == 'multiply' and m.start is None and m.stop is None and m.when is None and not m.holding and m.share is None and sc.isnumber(m.amount) and m.where is not None and self.is_fixed(m.where) for m in mods)
 
     def mult(self, kind, name, uids):
@@ -746,7 +733,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
     @property
     def total_pop(self):
         """ The number of people the agents stand for now: with dynamic rescaling (rescale=True), each agent starts as one person, so a number of people to seed (init_n=) is a number of agents """
-        return self.sim.pars.total_pop*self.scale/self.sim.pars.pop_scale
+        return self.sim.pars.total_pop*self.scale/self.sim.pop_scale
 
     def init_post(self):
         """ Sample the agents into the states """
@@ -853,7 +840,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         elif callable(init_prev) and not isinstance(init_prev, (ss.Dist, ss.by)):
             return init_prev
         elif sc.isnumber(init_prev) and init_prev > 0 and len(self.seed_transmissions()) > 1: # Through several transmissions, each to those it can infect (see seed()): agent by agent
-            share = init_prev if init_prev <= 1 else init_prev/self.total_pop
+            share = init_prev/self.total_pop if self.graph.seed_n else init_prev
             return lambda sim: share
         return None
 
@@ -1331,8 +1318,8 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
             w = w*self.sim.people.scale.raw[uids]
         return w
 
-    def coverage(self, expr):
-        """ A product's coverage (`itn.coverage`): the share of the agents in the same place who hold it, each by the protection they have left (or a function of the time since delivery) """
+    def held_share(self, expr):
+        """ The share holding a product (`itn.held_share`): the share of the agents in the same place who hold it, each by the protection they have left (or a function of the time since delivery) """
         sim = self.sim
         people = sim.people
         mixing = sim.mixing
@@ -1536,7 +1523,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         return self.lifelong_table(key, lambda new: edges(new).T, uids)[uids].T
 
     def unmodified(self, kind, name):
-        """ Whether a branch (or one destination of a transition) has no modifiers and no adjust= of the stratifications """
+        """ Whether a branch (or one destination of a transition) has no modifiers and no multipliers by level of the stratifications """
         return not self.sim.modifiers.get((self.mod.name, kind, name)) and self.branch_adjust.get(name) is None
 
     def lifelong_table(self, key, values, uids=None):

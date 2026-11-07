@@ -12,7 +12,7 @@ sc.options(interactive=False) # Assume not running interactively
 def test_infection_log(do_plot=False):
     """ Test infection log """
     sc.heading('Testing infection log')
-    sim = ss.Sim(n_agents=1000, dt=0.2, dur=15, diseases='sir', networks='random', analyzers='infection_log')
+    sim = ss.Sim(n_agents=1000, dt=0.2, stop=ss.years(15), diseases='sir', networks='random', analyzers='infection_log')
     sim.run()
     log = sim.analyzers[0]
     df = log.to_df()
@@ -41,7 +41,7 @@ def test_shared_log():
 
     S, I, R = ss.states('S I R')
     dis = ss.Disease(infection=S >> I @ ss.peryear(1)*I, recovery=I >> R @ ss.years(2), init=dict(I=0.05), strains=ss.Strains(['A', 'B']), name='d')
-    sim = ss.Sim(dis, n_agents=500, dur=5, networks='random', analyzers=[ss.infection_log(name='a'), ss.infection_log(name='b'), steps()], verbose=0).run()
+    sim = ss.Sim(dis, n_agents=500, stop=ss.years(5), networks='random', analyzers=[ss.infection_log(name='a'), ss.infection_log(name='b'), steps()], verbose=0).run()
     a, b = sim.analyzers.a, sim.analyzers.b
     assert a.log is b.log is sim.diseases.d.infection_log # Shared, not taken by the first
     df = a.to_df()

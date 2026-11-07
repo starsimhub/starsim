@@ -61,8 +61,8 @@ def test_vaccine_diseases():
     def make(eff, **kwargs):
         g16, g18 = make_geno('hpv16'), make_geno('hpv18')
         vx = ss.Vaccine(efficacy=eff(g16, g18), name='vx')
-        prog = ss.vaccinate(vx, coverage=0.8, at=[2001])
-        cross = ss.modify(g18.clearance, multiply=2, where=vx.held, name='cross') # vx.held is a condition
+        prog = ss.vaccinate(vx, when=[2001], coverage=0.8)
+        cross = ss.modify(g18.clearance, multiply=2, who=vx.held, name='cross') # vx.held is a condition
         return ss.Sim([g16, g18], interventions=prog, connectors=cross, **kwargs)
     base = run_both(lambda **k: make(lambda a, b: {a: 0.0}, **k))
     sims = run_both(lambda **k: make(lambda a, b: {a: 0.95, 'hpv18': dict(acquisition=0.2)}, **k)) # A disease or its name; a number or a dict of effects
@@ -92,7 +92,7 @@ def test_any():
                 ca = d.hpv16.CA.raw[u] | d.hpv18.CA.raw[u]
                 seen.update(eligible=np.count_nonzero(~ca), found=0.9*np.count_nonzero((d.hpv16.CIN.raw[u] | d.hpv18.CIN.raw[u]) & ~ca))
             return True
-        prog = ss.screen(ss.Diagnostic(sensitivity=0.9, detects=any_cin), who=~any_ca, at=[2005], where=look) # No disease=
+        prog = ss.screen(ss.Diagnostic(sensitivity=0.9, detects=any_cin), who=~any_ca & look, when=[2005]) # No disease=
         return ss.Sim(genos, interventions=prog, **kwargs)
     sims = run_both(make)
     for solver,sim in sims.items():
@@ -123,7 +123,7 @@ def test_own_product():
         """ The number each step reached, read after it has run """
         def init_results(self):
             super().init_results()
-            self.define_results(ss.Result('swabbed', dtype=float), ss.Result('positive', dtype=float))
+            self.define_results(ss.Result('swabbed', dtype=float, kind='flow'), ss.Result('positive', dtype=float, kind='flow'))
 
         def step(self):
             screening = self.sim.interventions.screening
@@ -131,8 +131,8 @@ def test_own_product():
             self.results.positive[self.ti] = len(screening.reached('positive'))
 
     def make(**kwargs):
-        screening = ss.Delivery(Swab(), coverage=0.2, every=ss.months(3), name='screening')
-        treatment = ss.treat(ss.Treatment(cure=1.0), on=screening.positive, name='treatment')
+        screening = ss.Delivery(Swab(), when=ss.months(3), coverage=0.2, name='screening')
+        treatment = ss.treat(ss.Treatment(cure=1.0), when=screening.positive, name='treatment')
         return ss.Sim(make_geno('flu'), interventions=[screening, treatment], analyzers=Reached(), **kwargs)
     check_agents(make) # Its own code acts on agents
     sim = run_abm(make)
@@ -151,8 +151,8 @@ def test_hold_ends():
     def make(waning, skip=None):
         S, L = ss.states('S L')
         tpt = ss.Vaccine(efficacy=dict(acquisition=0.0), waning=waning, name='tpt')
-        tb = ss.Disease(S, L, infection=S >> L @ ss.peryear(0.5), cure=ss.Transition(L, S, rate=ss.peryear(20), where=tpt.held), init=dict(L=0.5), name='tb')
-        give = ss.vaccinate(tpt, every=ss.months(1), start=2001, stop=2002, coverage=0.2, skip_reached_within=skip, name='give')
+        tb = ss.Disease(S, L, infection=S >> L @ ss.peryear(0.5), cure=ss.Transition(L, S, rate=ss.peryear(20), who=tpt.held), init=dict(L=0.5), name='tb')
+        give = ss.vaccinate(tpt, when=ss.schedule(every=ss.months(1), start=2001, stop=2002), coverage=0.2, skip_reached_within=skip, name='give')
         return ss.Sim(tb, interventions=give, start=2000, stop=2004, dt=ss.months(1), n_agents=500, verbose=0).run()
     for waning in [ss.boxcar(ss.months(3)), lambda t: np.clip(1 - 4*t.years, 0, 1)]: # Both end after three months
         sim = make(waning)

@@ -42,7 +42,7 @@ Since this model has a network, Starsim runs it as agents. With 2,000 people, ea
 
 ```{python}
 sim = ss.Sim(sti, networks=ss.SexualNet(), n_agents=2_000, start=2000, stop=2010, dt=ss.months(1), verbose=0)
-msim = sim.run(n_runs=20)
+msim = ss.parallel(sim, n_runs=20)
 msim.plot('sti')
 ```
 

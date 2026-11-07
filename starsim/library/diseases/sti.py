@@ -84,8 +84,8 @@ class Syphilis(ss.Disease):
     tertiary  = Ll >> {T: p_tertiary, R: None} @ dur_late
     death     = ss.death(T, rate=death_rate)
 
-    fading_early = ss.modify('rel_trans', multiply=0.5**(El.time_in/latent_half_life), where=El) # Infectiousness falls with time in latency
-    fading_late  = ss.modify('rel_trans', multiply=0.5**(Ll.time_in/latent_half_life), where=Ll)
+    fading_early = ss.modify('rel_trans', multiply=0.5**(El.time_in/latent_half_life), who=El) # Infectiousness falls with time in latency
+    fading_late  = ss.modify('rel_trans', multiply=0.5**(Ll.time_in/latent_half_life), who=Ll)
 
 
 

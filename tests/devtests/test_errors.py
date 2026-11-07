@@ -70,7 +70,7 @@ def _():
     ss.Disease(a=ss.Transition(I, H, p=0.2, dur=3), b=ss.Transition(I, R, p=0.7, dur=3))
 
 @trigger('people are born and die once', ValueError)
-def _(): ode(ss.SIR(name='a', births=ss.birth(rate=0.02)), ss.SIS(name='b', births=ss.birth(rate=0.02))).init()
+def _(): ode(ss.SIR(name='a', births=ss.birth(rate=ss.peryear(0.02))), ss.SIS(name='b', births=ss.birth(rate=ss.peryear(0.02)))).init()
 
 @trigger('is not linear in its states', ValueError)
 def _():
@@ -87,11 +87,11 @@ def _():
     states = ss.states(2)
     ss.Disease(states[0] >> states[1] @ 0.1)
 
-@trigger('is an event (or has one), which triggers it, so give the event as on=', TypeError)
+@trigger('is an event (or has one), which triggers it, so give the event as when=', TypeError)
 def _():
     G, NG, M, I = ss.states('G NG M I')
-    newborns = ss.birth(M, on=ss.Transition(G, NG, dur=ss.days(240)))
-    ss.Transition(M, I, p=0.3, where=newborns & ss.mother(I, include_born=True)) # An event of a transition not yet in a module (before, its name crashed the message)
+    newborns = ss.birth(M, when=ss.Transition(G, NG, dur=ss.days(240)))
+    ss.Transition(M, I, p=0.3, who=newborns & ss.mother(I, include_born=True)) # An event of a transition not yet in a module (before, its name crashed the message)
 
 @trigger('a count carries no strain', ValueError)
 def _():
@@ -105,26 +105,20 @@ def _():
     W = ss.State(people=False)
     ss.Disease(infection=S >> I @ 0.5*W, shedding=ss.outside >> W @ 10*I.n)
 
-@trigger('adjust= names a transition "recovry"', KeyError)
-def _(): sir().stratify(age=[0, 15], adjust={'recovry': [1, 2]})
-
-@trigger('fractions= has 3 entries', ValueError)
-def _(): ode(sir().stratify(age=[0, 15], fractions=[0.2, 0.3, 0.5])).init()
+@trigger('adjust= is now a value by level', TypeError)
+def _(): sir().stratify(age=[0, 15], adjust={'recovery': [1, 2]})
 
 @trigger('is already stratified by "age", in another way', ValueError)
 def _(): sir().stratify(age=[0, 15]).stratify(age=[0, 20])
 
-@trigger('has a negative multiplier', ValueError)
-def _(): ode(sir().stratify(age=[0, 15], adjust={'recovery': [1, -1]})).init()
-
 @trigger('so there is no level of it for the people in I to mix as', ValueError)
-def _(): ode(sir().stratify(age=[0, 15], states=['S', 'R']), networks=ss.contacts([[3, 1], [1, 3]], ages=[0, 15])).init()
+def _(): ode(sir().stratify(age=ss.levels([0, 15], states=['S', 'R'])), networks=ss.contacts([[3, 1], [1, 3]], ages=[0, 15])).init()
 
 @trigger('A property of people has the same groups for every module', ValueError)
 def _(): ode([sir('a').stratify(age=[0, 15]), sir('b').stratify(age=[0, 20])]).init()
 
 @trigger('which has no geography', ValueError)
-def _(): ode(sir().stratify(patch=['a', 'b'], mobility=ss.geo.gravity())).init()
+def _(): ode(sir().stratify(patch=ss.levels(['a', 'b'], mobility=ss.geo.gravity()))).init()
 
 @trigger('has no acts, so there is no act to be per', ValueError)
 def _(): ss.Sim(sir(beta=ss.peract(0.01)), networks='random', n_agents=100, **kw).init()
@@ -139,13 +133,13 @@ def _(): ode(ss.Disease(recovery=ss.Transition(*ss.states('I R'), dur=10), init=
 def _(): ode(sir(), interventions=ss.vaccinate(ss.Vaccine(efficacy=dict(aquisition=0.5)))).init()
 
 @trigger('which is not a disease in the sim', KeyError)
-def _(): ode(sir(), interventions=ss.vaccinate(ss.Vaccine(efficacy=0.5), at=[5], disease='flu')).init()
+def _(): ode(sir(), interventions=ss.vaccinate(ss.Vaccine(efficacy=0.5), when=[5], disease='flu')).init()
 
 @trigger('it has no parameter called "gamma"', KeyError)
 def _(): sir(gamma=0.1)
 
 @trigger('has 3 values, but "age" has 2 levels', ValueError)
-def _(): ode(sir().stratify(age=[0, 15], adjust={'recovery': [1, 2, 3]})).init()
+def _(): ode(sir(beta=0.3*ss.by(age=[1, 2, 3])).stratify(age=[0, 15])).init()
 
 @trigger('the parameter "beta" of "sir" has no value', ValueError)
 def _(): ode(sir(beta=ss.par())).init()
@@ -176,7 +170,7 @@ def _(): ode(sir(beta=ss.par(0.3, bounds=[0.1, 0.5])), data=pd.DataFrame(dict(ti
 def _():
     S, I, R, D = ss.states('S I R D')
     d = ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=10), death=ss.Transition(I, D, dur=50), init_prev=0.01, name='sird')
-    ode(d, interventions=ss.treat(ss.Treatment(moves=[d.recovery, d.death]))).init()
+    ode(d, interventions=ss.treat(ss.Treatment(cure={d.recovery: 1.0, d.death: 1.0}))).init()
 
 @trigger('moves with no wait out of the states of "loop" form a loop', ValueError)
 def _():
@@ -197,12 +191,12 @@ def _():
 def _():
     S, X = ss.states('S X')
     X.people = False
-    ss.Disease(S, X, births=ss.Transition(ss.unborn, [S, X], rate=ss.peryear(100), p=[0.9, 0.1]))
+    ss.Disease(S, X, births=ss.Transition(ss.unborn, {S: 0.9, X: 0.1}, rate=ss.peryear(100)))
 
 @trigger('where the split puts nobody', ValueError)
 def _():
     A, B = ss.states('A B')
-    d = ss.Disease(A, B, ab=A >> B @ ss.peryear(0), init=dict(B=ss.by(np.array([[0, 0.5], [0, 0.5]]), dims=['age', 'ever'])), default_state='A', name='d').stratify(ever=[False, True], fractions=[1, 0])
+    d = ss.Disease(A, B, ab=A >> B @ ss.peryear(0), init=dict(B=ss.by(np.array([[0, 0.5], [0, 0.5]]), dims=['age', 'ever'])), default_state='A', name='d').stratify(ever={False: 1, True: 0})
     ode(d, stratify=dict(age=[0, 30]), stop=1).init()
 
 @trigger('which approximations="error" does not allow', ss.CapabilityError)
@@ -214,10 +208,10 @@ def _(): ss.Sim(sir(), n_agents=100, stop=5, **kw).run().diseases.sir.ti_R.notna
 @trigger('is outside the sim', ValueError)
 def _():
     d = sir()
-    ode(d, interventions=ss.modify(d.pars.beta, set=0.1, start=2030), start='2020-01-01', stop='2020-04-30').init()
+    ode(d, interventions=ss.modify(d.pars.beta, set=0.1, when=ss.schedule(start=2030)), start='2020-01-01', stop='2020-04-30').init()
 
 @trigger('but the model is not stratified by "sex"', KeyError)
-def _(): ode(sir().stratify(age=[0, 15], where=dict(sex='female'))).init()
+def _(): ode(sir().stratify(age=ss.levels([0, 15], who=ss.person.female))).init()
 
 @trigger('fit() found no parameter with bounds', ValueError)
 def _(): ode(sir(), data=pd.DataFrame(dict(time=[50], I=[10])), stop=100).fit()
@@ -225,7 +219,7 @@ def _(): ode(sir(), data=pd.DataFrame(dict(time=[50], I=[10])), stop=100).fit()
 @trigger('fit() needs data', ValueError)
 def _(): ode(sir(beta=ss.par(0.3, bounds=[0.1, 0.5]))).fit()
 
-@trigger('but not every data series has a likelihood', ValueError)
+@trigger('but the data series have no likelihood', ValueError)
 def _(): fittable().fit(method='nuts')
 
 @trigger('Simulation has already been finalized', ss.AlreadyRunError)
@@ -253,10 +247,10 @@ def _(): ss.Sim(sir(), networks=ss.DegreeNet(n_contacts=0.7, dur=1000), n_agents
 def _(): fittable(beta=ss.par(0.1, bounds=[0.05, 0.15])).fit()
 
 @trigger('so the stages after it were not run', RuntimeWarning)
-def _(): fittable().fit(method=[dict(method='nelder-mead', maxiter=2, scan=0), 'nelder-mead'])
+def _(): fittable().fit(method=[ss.fit.method('nelder-mead', maxiter=2, scan=0), 'nelder-mead'])
 
 @trigger('the chains disagree about beta', ss.errors.NotConverged)
-def _(): fittable(solver='binomial', total_pop=10_000).fit(method='pmcmc', likelihood=dict(I=ss.poisson()), draws=10, warmup=10, chains=2, particles=10, parallel=False, rand_seed=1).summarize() # Warned when the fit is summarized
+def _(): fittable(solver='binomial', total_pop=10_000).fit(method=ss.fit.method('pmcmc', draws=10, warmup=10, chains=2, particles=10, parallel=False), likelihood=dict(I=ss.poisson()), rand_seed=1).summarize() # Warned when the fit is summarized
 
 @trigger('not exported: network', ss.errors.LossyExport)
 def _(): ss.export_to(ss.Sim(sir(), networks='random', n_agents=100, **kw), 'odin')

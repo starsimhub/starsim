@@ -22,21 +22,21 @@ settings = dict(
 )
 
 drug = ss.Treatment(cure=0.95)
-care = ss.treat(drug, on=sti.infection, coverage=0.3, delay=ss.uniform(ss.weeks(1), ss.months(2)))
+care = ss.treat(drug, when=ss.on(sti.infection, delay=ss.uniform(ss.weeks(1), ss.months(2))), coverage=0.3)
 young = (ss.person.age >= 15) & (ss.person.age < 30)
-screening = ss.screen(sensitivity=0.9, specificity=0.98, where=young, coverage=0.5, every=ss.months(6), start='2010')
-treatment = ss.treat(drug, on=screening.positive)
-notification = ss.treat(drug, on=screening.positive, trace='sexualnet', coverage=0.5)
+screening = ss.screen(sensitivity=0.9, specificity=0.98, who=young, when=ss.schedule(every=ss.months(6), start='2010'), coverage=0.5)
+treatment = ss.treat(drug, when=screening.positive)
+notification = ss.treat(drug, when=screening.positive, coverage=0.5, trace='sexualnet')
 ```
 
 ### Question 1
 
-**Q: What happens if the partners of people who seek care are notified too (a second notification, with `on=care`)? Is the effect larger than notifying the partners of those found by screening?**
+**Q: What happens if the partners of people who seek care are notified too (a second notification, with `when=care`)? Is the effect larger than notifying the partners of those found by screening?**
 
-A: A delivery is an event too, so `on=care` is the people treated after seeking care. Notifying their partners starts in 2000, rather than 2010, and starts from far more people than screening finds, so it has a much larger effect: here it eliminates the infection within about five years, before screening begins.
+A: A delivery is an event too, so `when=care` is the people treated after seeking care. Notifying their partners starts in 2000, rather than 2010, and starts from far more people than screening finds, so it has a much larger effect: here it eliminates the infection within about five years, before screening begins.
 
 ```{python}
-care_notification = ss.treat(drug, on=care, trace='sexualnet', coverage=0.5)
+care_notification = ss.treat(drug, when=care, coverage=0.5, trace='sexualnet')
 
 scenarios = {
     'Screening and notification':  [care, screening, treatment, notification],
@@ -56,8 +56,8 @@ A: We compare each with treatment when seeking care alone (without partner notif
 
 ```{python}
 adults = (ss.person.age >= 15) & (ss.person.age < 50)
-screening_adults = ss.screen(sensitivity=0.9, specificity=0.98, where=adults, coverage=0.5, every=ss.months(6), start='2010', name='screening')
-treatment_adults = ss.treat(drug, on=screening_adults.positive, name='treatment')
+screening_adults = ss.screen(sensitivity=0.9, specificity=0.98, who=adults, when=ss.schedule(every=ss.months(6), start='2010'), coverage=0.5, name='screening')
+treatment_adults = ss.treat(drug, when=screening_adults.positive, name='treatment')
 
 sims = {
     'Treatment when seeking care': ss.Sim(sti, interventions=care, **settings),
@@ -85,8 +85,8 @@ A: The two deliveries share one vaccine, so that nobody is protected twice:
 
 ```{python}
 vaccine = ss.Vaccine(efficacy=0.35)
-vaccination = ss.vaccinate(vaccine, at_age=15, coverage=0.8, start='2010')
-catch_up = ss.vaccinate(vaccine, where=young, coverage=0.8, at=['2010'])
+vaccination = ss.vaccinate(vaccine, who=ss.at_age(15), when=ss.schedule(start='2010'), coverage=0.8)
+catch_up = ss.vaccinate(vaccine, who=young, when=['2010'], coverage=0.8)
 
 long = dict(settings, stop=2040) # As in the tutorial, to 2040
 sims = {

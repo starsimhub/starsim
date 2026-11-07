@@ -40,7 +40,7 @@ home, school, work, community = [ss.contacts('United Kingdom', layer=layer) for 
 R0 is about 1.5. The closure is a modifier of the school contacts: from day 200 to day 260 they are multiplied by zero, and when it ends, they are back as they were, since a modifier never changes the contacts themselves.
 
 ```{python}
-closure = ss.modify(school, multiply=0, start=ss.days(200), stop=ss.days(260))
+closure = ss.modify(school, multiply=0, when=ss.schedule(start=ss.days(200), stop=ss.days(260)))
 ```
 
 ## Result
@@ -67,7 +67,7 @@ By age, the number infectious falls in every group while schools are closed, and
 sims['Schools closed for 60 days'].results.flu.I.by('age').plot()
 ```
 
-The Epidemics package says a closure another way: as a share by which the contacts of each age group fall (e.g. by half for those under 20). That works in Starsim too, as a modifier of each group's susceptibility and transmissibility, e.g. `ss.modify(flu.rel_sus, multiply=0.5, where=flu.age < 20, start=..., stop=...)`. Removing the school contacts says more directly what a closure does, when the contacts by setting are known.
+The Epidemics package says a closure another way: as a share by which the contacts of each age group fall (e.g. by half for those under 20). That works in Starsim too, as a modifier of each group's susceptibility and transmissibility, e.g. `ss.modify(flu.rel_sus, multiply=0.5, who=flu.age < 20, when=ss.schedule(start=..., stop=...))`. Removing the school contacts says more directly what a closure does, when the contacts by setting are known.
 
 ## Going further
 

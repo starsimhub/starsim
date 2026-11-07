@@ -5,7 +5,7 @@ SimInf (https://github.com/stewid/SimInf) writes a model as transitions in `mpar
 ("S -> beta*S*I/(S+I+R) -> I"), or as one of its predefined models (`SIR()`, `SIS()`,
 `SEIR()`, `SISe()`, `SISe3()`), each run in many nodes (herds) linked by scheduled
 events. The transitions become a disease, the nodes a stratification of places, and
-the events a movement register (`ss.geo.Mobility(data=...)`); the continuous state of the
+the events a movement register (`ss.geo.register(...)`); the continuous state of the
 predefined SISe models (the environmental infectious pressure `phi`) becomes a state
 that is not people. The R is read, not run: what the script computes (e.g. `u0_SIR()`
 or a data file) can be passed in instead, e.g. `load_siminf('model.R', u0='u0.csv',
@@ -647,7 +647,7 @@ def load_siminf(source, u0=None, events=None, verbose=None, **kwargs):
         if v0:
             strat['states'] = compartments + list(v0)
         if register is not None:
-            strat['mobility'] = ss.geo.Mobility(data=register)
+            strat['mobility'] = ss.geo.register(register)
         src.stratify(**strat)
 
     # Time: SimInf reports at tspan, from the first time
@@ -664,7 +664,7 @@ def load_siminf(source, u0=None, events=None, verbose=None, **kwargs):
 
 
 def event_register(ev, compartments, E, N):
-    """ SimInf's scheduled events as a movement register for ss.geo.Mobility, and what could not be translated """
+    """ SimInf's scheduled events as a movement register for ss.geo.register(), and what could not be translated """
     notes = []
     ev = ev.copy()
     for col,default in [('dest', 0), ('proportion', 0), ('shift', 0)]:

@@ -57,10 +57,10 @@ class HumanSEIS(ss.AgentDisease):
         self.define_pars(
             b = 0.5, # The chance an infectious bite infects a human
             c = 0.5, # The chance a bite on an infectious human infects a mosquito
-            dur_exp = ss.normal(loc=ss.days(12), scale=ss.days(2)),
+            dur_exp = ss.normal(mean=ss.days(12), std=ss.days(2)),
             dur_inf = ss.lognormal(mean=ss.days(180), std=ss.days(60)),
             p_bite = ss.bernoulli(p=0), # Set each step
-            het = ss.gamma(a=2, scale=0.5), # Biting heterogeneity, mean 1
+            het = ss.gamma(shape=2, scale=0.5), # Biting heterogeneity, mean 1
         )
         self.update_pars(**kwargs)
         self.define_states(
@@ -190,7 +190,7 @@ def make_by_age(n_agents=20_000):
     )
     sus = ss.modify(covid.rel_sus, multiply=by_age('sus'), name='sus_by_age')
     return ss.Sim(diseases=covid, connectors=sus, demographics=[ss.death(rate=mortality)], networks=ss.RandomNet(n_contacts=20), n_agents=n_agents,
-                  start='2020-03-01', dur=ss.days(120), dt=ss.days(1), aging=False, rand_seed=0, verbose=0)
+                  start='2020-03-01', stop=ss.days(120), dt=ss.days(1), aging=False, rand_seed=0, verbose=0)
 
 
 #%% tb: tbsim's LSHTM spectrum of disease, as agents on a network
@@ -254,16 +254,16 @@ def make_contra(n_agents=10_000):
         return [1 - pu] + [pu*share for share in mix(src)]
     def dur(i):
         scale = ss.by(dict(age=age_bins, value=np.exp(2.0 + 0.2*i + 0.1*np.arange(len(age_bins)))))
-        return ss.weibull(c=1.5, scale=scale, unit='month') if i % 2 else ss.gamma(a=2.0, scale=scale/2, unit='month')
+        return ss.weibull(shape=1.5, scale=scale, unit='month') if i % 2 else ss.gamma(shape=2.0, scale=scale/2, unit='month')
     fecund = ppl.female & (ppl.age >= 15) & (ppl.age <= 50)
     tr = dict(
-        sexed      = ss.Transition(st['young'], st['male'], dur=0, where=~ppl.female),
-        debut      = ss.Transition(st['young'], never_kind, dur=0, p=branch('none', 0), where=fecund & (ppl.age >= 18)),
-        from_never = ss.Transition(st['never'], never_kind, dur=dur(0), p=branch('none', 0), where=fecund),
-        from_none  = ss.Transition(st['none'], dests, dur=dur(0), p=branch('none', 1), where=fecund),
+        sexed      = ss.Transition(st['young'], st['male'], dur=0, who=~ppl.female),
+        debut      = ss.Transition(st['young'], never_kind, dur=0, p=branch('none', 0), who=fecund & (ppl.age >= 18)),
+        from_never = ss.Transition(st['never'], never_kind, dur=dur(0), p=branch('none', 0), who=fecund),
+        from_none  = ss.Transition(st['none'], dests, dur=dur(0), p=branch('none', 1), who=fecund),
     )
     for i, m in enumerate(methods):
-        tr[f'from_{m}'] = ss.Transition(st[m], dests, dur=dur(i + 1), p=branch(m, 1), where=fecund)
+        tr[f'from_{m}'] = ss.Transition(st[m], dests, dur=dur(i + 1), p=branch(m, 1), who=fecund)
     women = sum([s for k, s in st.items() if k not in ['male', 'young']], st['young'])
     users = sum([st[m] for m in methods[1:]], st[methods[0]])
     contra = ss.Disease(*st.values(), **tr, cpr=users/women, default_state='young', name='contra')
@@ -284,8 +284,8 @@ def make_strains_ode(substeps=1):
                          immunity=ss.immunity(due_to=L, protection=0.7))
     DS, RIF, INH, MDR = strains
     tb = ss.Disease(infection=S >> L @ ss.peryear(4)*I, activation=L >> I @ ss.peryear(0.3), diagnosis=I >> Tx @ ss.peryear(2),
-                    treatment=ss.Transition(Tx, [R, I], p='cure', rate=ss.peryear(2), per_strain=True),
+                    treatment=ss.Transition(Tx, {R: 'cure', I: None}, rate=ss.peryear(2), per_strain=True),
                     fail_rif=ss.Transition(Tx, I, rate=ss.peryear(0.1), move=DS >> (DS, RIF)),
                     fail_inh=ss.Transition(Tx, I, rate=ss.peryear(0.1), move=DS >> (DS, INH)),
                     relapse=R >> S @ ss.years(2), init=dict(I=0.02), name='tb', strains=strains)
-    return ss.Sim(diseases=tb, solver='ode', substeps=substeps, total_pop=1e5, start=2000, stop=2020, dt=ss.years(0.1), verbose=0)
+    return ss.Sim(diseases=tb, solver=ss.ode(substeps=substeps), total_pop=1e5, start=2000, stop=2020, dt=ss.years(0.1), verbose=0)

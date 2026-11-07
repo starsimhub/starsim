@@ -275,7 +275,7 @@ def test_odin_discrete():
     assert not sim.imported.incomplete
     S, I, R = ss.states(3)
     sir = ss.Disease(infection=S >> I @ ss.seasonal(mean=ss.perday(0.02), amplitude=0.3) * I, recovery=I >> R @ ss.perday(0.1), init_n=dict(I=ss.by(age=[10, 0, 0])), name='sir')
-    sir.stratify(age=['1', '2', '3'], fractions=[0.3, 0.5, 0.2])
+    sir.stratify(age={'1': 0.3, '2': 0.5, '3': 0.2})
     hand = ss.Sim(sir, networks=ss.contacts(age_pars['m']), total_pop=1e5, unit='day', dt=0.25, stop=ss.days(200), solver='ode', verbose=0).run()
     imported = sim.new(solver='ode').run()
     final = imported.results[imported.diseases[0].name].R[-1]
@@ -306,8 +306,8 @@ def test_odin2(tmp_path):
     # Data with ~ are outcomes with their likelihoods: cases is the weekly count, and deaths a share rho of it with a negative binomial
     weekly = a.incidence.values[1:99].reshape(14, 7).sum(axis=1)
     data = pd.DataFrame(dict(cases=np.round(weekly), deaths=np.round(0.5*weekly)), index=a.timevec[7:99:7])
-    lik = ss.fit.loglik(two, df=data, by_series=True)
-    assert np.isclose(lik.cases, ss.fit.loglik(one, df=data[['cases']].rename(columns=dict(cases='incidence')), likelihood=dict(incidence=ss.poisson())))
+    lik = ss.fit.loglik(two, data=data, by_series=True)
+    assert np.isclose(lik.cases, ss.fit.loglik(one, data=data[['cases']].rename(columns=dict(cases='incidence')), likelihood=dict(incidence=ss.poisson())))
     assert np.isfinite(lik.deaths) and 1*two.diseases[0].pars.rho == 0.5
     return two
 

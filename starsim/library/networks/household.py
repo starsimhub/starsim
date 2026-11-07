@@ -41,17 +41,19 @@ class HouseholdNet(ss.Network):
             using DHS convention (1 = male, 2 = female) with the same number
             of entries as `ages`. Pass `'default'` to use synthetic data (see
             `make_default_data()`), e.g. for demos and testing.
-        dynamic (bool): If `True` (default), households evolve over time:
+        dynamic (bool): If `True`, households evolve over time:
             one female is assigned as head of each household, pregnant non-head
             females may move out to form new households, and births are added to
-            the mother's household. Requires the `Pregnancy` module. If
-            `False`, the network is static and `step()` is a no-op.
+            the mother's household, which needs `ss.Pregnancy`. If
+            `False`, the network is static and `step()` is a no-op. By default,
+            households evolve if the sim has `ss.Pregnancy`, and are static otherwise.
         prob_move_out (float): Probability a non-head female moves out to start
             her own household, evaluated once at the start of each pregnancy.
-            Default 0.7. Only used when `dynamic=True`.
-        update_freq (int): How often (in timesteps) to update the network.
-            Default 1. Only used when `dynamic=True`.
+            Default 0.7. Only used when households evolve.
         pars (dict): the same parameters, as a dict
+
+    To update the households less often than every step of the sim, give the network
+    its own step, e.g. `dt=ss.years(1)`.
 
     The expected dataframe format is::
 
@@ -93,11 +95,11 @@ class HouseholdNet(ss.Network):
         sim.run()
         sim.plot()
     """
-    def __init__(self, pars=None, dhs_data=None, dynamic=True, prob_move_out=_, update_freq=_, **kwargs):
+    def __init__(self, pars=None, dhs_data=None, dynamic=None, prob_move_out=_, **kwargs):
+        ss.networks.check_replaced(self, pars, kwargs, dict(update_freq='to update the households less often, give the network its own step, e.g. dt=ss.years(1)'))
         super().__init__()
         self.define_pars(
             prob_move_out = ss.bernoulli(p=0.7),
-            update_freq = 1,
         )
         self.update_pars(pars, **kwargs)
         if isinstance(dhs_data, str) and dhs_data == 'default':
@@ -105,15 +107,12 @@ class HouseholdNet(ss.Network):
         if dhs_data is None:
             raise ValueError("Please provide household data via the dhs_data argument, or use dhs_data='default' for synthetic data.")
         self.dhs_data = dhs_data
-        self.dynamic = dynamic
-
-        states = [ss.FloatArr('household_ids')]
-        if self.dynamic:
-            states += [
-                ss.BoolArr('fhoh', default=False),
-                ss.FloatArr('ti_move_out_check', default='-inf'),
-            ]
-        self.define_states(*states)
+        self.dynamic = dynamic # None until the sim is known: see init_pre()
+        self.define_states(
+            ss.FloatArr('household_ids'),
+            ss.BoolArr('fhoh', default=False), # Only used if households evolve
+            ss.FloatArr('ti_move_out_check', default='-inf'),
+        )
         self.rng_fractional_age = ss.uniform()
         self.rng_household = ss.randint()            # Which DHS household to draw when building the network (high set once data is parsed)
         self.rng_head = ss.random()                  # Per-agent score for selecting the female head of each household
@@ -123,14 +122,17 @@ class HouseholdNet(ss.Network):
         return
 
     def init_pre(self, sim):
-        """ Initialize the network, and check that a dynamic network has `ss.Pregnancy`
+        """ Initialize the network: households evolve if the sim has `ss.Pregnancy` (unless `dynamic` says otherwise), which they need
 
         Args:
             sim (Sim): the sim being initialized
         """
         super().init_pre(sim)
-        if self.dynamic and sim.get_module(ss.Pregnancy, die=False) is None: # By type, so a subclass with its own name is found
-            raise ValueError('A dynamic HouseholdNet requires a Pregnancy module. Add ss.Pregnancy() to demographics.')
+        pregnant = sim.get_module(ss.Pregnancy, die=False) is not None # By type, so a subclass with its own name is found
+        if self.dynamic is None:
+            self.dynamic = pregnant
+        elif self.dynamic and not pregnant:
+            raise ValueError('ssl.HouseholdNet(dynamic=True) has households that evolve with pregnancies and births, so it needs ss.Pregnancy(): add it to demographics, or leave out dynamic=True for households that do not change.')
         return
 
     def init_post(self, add_pairs=True):
@@ -226,8 +228,7 @@ class HouseholdNet(ss.Network):
             p2_list.append((starts[:, None] + jj[None, :]).ravel())
         p1 = np.concatenate(p1_list) if p1_list else np.empty(0, dtype=ss.dtypes.int)
         p2 = np.concatenate(p2_list) if p2_list else np.empty(0, dtype=ss.dtypes.int)
-        beta = np.ones(len(p1), dtype=ss.dtypes.float)
-        self.append(p1=all_uids[p1], p2=all_uids[p2], beta=beta)
+        self.append(p1=all_uids[p1], p2=all_uids[p2], weight=np.ones(len(p1), dtype=ss.dtypes.float))
 
         if self.dynamic:
             # Assign one random eligible female (age 15-50) as head of each household: give every
@@ -245,12 +246,7 @@ class HouseholdNet(ss.Network):
     def step(self):
         if not self.dynamic:
             return
-
         self.add_births()
-
-        if np.mod(self.ti, self.pars.update_freq): # Skip all but 0
-            return
-
         self.create_new_households()
         return
 
@@ -303,8 +299,7 @@ class HouseholdNet(ss.Network):
         p2 = p2[keep]
 
         if len(p1):
-            beta = np.ones(len(p1), dtype=ss.dtypes.float)
-            self.append(p1=ss.uids(p1), p2=ss.uids(p2), beta=beta)
+            self.append(p1=ss.uids(p1), p2=ss.uids(p2), weight=np.ones(len(p1), dtype=ss.dtypes.float))
 
         return len(birth_uids)
 
@@ -330,8 +325,7 @@ class HouseholdNet(ss.Network):
             partners = ss.uids(self.rng_partner.rvs(len(moving_out)))
             to_remove = ss.uids.concatenate([moving_out, partners])
             self.remove_uids(to_remove)
-            beta = np.ones(len(moving_out), dtype=ss.dtypes.float)
-            self.append(p1=moving_out, p2=partners, beta=beta)
+            self.append(p1=moving_out, p2=partners, weight=np.ones(len(moving_out), dtype=ss.dtypes.float))
 
             n_moving_out = len(moving_out)
             new_cids = self.n_households + np.arange(n_moving_out)

@@ -85,7 +85,7 @@ measles.equations()
 
 ### Runs that should match but don't
 
-When two sims that should agree don't, compare what each says about itself: `describe(output=True)` gives the text of each, and a diff of the two shows only the lines where their states, transitions, parameters, and settings differ. Here a second sim has a lower β and a shorter step:
+When two sims that should agree don't, compare what each says about itself: `describe()` gives the text of each (a string), and a diff of the two shows only the lines where their states, transitions, parameters, and settings differ. Here a second sim has a lower β and a shorter step:
 
 ```{python}
 import difflib
@@ -96,8 +96,8 @@ recovery  = I >> R @ ss.days(8)
 other = ss.Disease(infection, recovery, init_prev=0.001, name='measles')
 other_sim = ss.Sim(other, total_pop=100_000, stop=ss.days(50), dt=ss.days(0.5), verbose=0)
 
-before = sim.describe(output=True).splitlines()
-after = other_sim.describe(output=True).splitlines()
+before = sim.describe().splitlines()
+after = other_sim.describe().splitlines()
 print('\n'.join(difflib.unified_diff(before, after, 'sim', 'other_sim', lineterm='', n=0)))
 ```
 
@@ -127,7 +127,7 @@ With `total_pop=100_000` and `n_agents=20_000`, each agent stands for five peopl
 
 ### Checking the time step
 
-Agents, and the chain binomial with `substeps=1`, take whole time steps: each step, people move between states with a probability worked out from the rates over that step. When the rates are high compared with the step (for measles, β = 1.9 per day against a step of 1 day), a smaller step can change the answer. `sim.check_dt()` runs the model with the step it has and with a step half as long, and shows how much each result changes:
+Agents, and the chain binomial with `ss.binomial(substeps=1)`, take whole time steps: each step, people move between states with a probability worked out from the rates over that step. When the rates are high compared with the step (for measles, β = 1.9 per day against a step of 1 day), a smaller step can change the answer. `sim.check_dt()` runs the model with the step it has and with a step half as long, and shows how much each result changes:
 
 ```{python}
 agent_sim = ss.Sim(measles, n_agents=20_000, stop=ss.days(50), verbose=0)
@@ -141,7 +141,7 @@ Each line is the largest difference between the two runs at any time, as a share
 Interventions and connectors change parameters while the model runs. When a parameter doesn't seem to have the value you expect, `sim.what_modifies()` lists everything that changes it:
 
 ```{python}
-masks = ss.modify(measles.pars.beta, multiply=0.6, start=ss.days(10))
+masks = ss.modify(measles.pars.beta, multiply=0.6, when=ss.schedule(start=ss.days(10)))
 masked = ss.Sim(measles, total_pop=100_000, stop=ss.days(50), interventions=masks, verbose=0)
 masked.what_modifies(measles.pars.beta)
 ```
@@ -184,17 +184,17 @@ ss.Sim(make_measles(), total_pop=100_000, stop=2).run()
 
 Give times with their units (`stop=ss.years(2)`), or as dates (`start='2025-01-01', stop='2027-01-01'`). If nothing in a model has a unit, time is counted in steps, and the run says "steps" where it would say "days".
 
-**A number as a time is a year, or a time since the start.** A number from 1900 on is a calendar year, as in `start=2025`: `at=2026` is the start of 2026, and `at=2026.5` the middle of it. Any other number is a time in the sim's unit after the start, so `at=30` means 30 days after the start of a sim in days (for 2,000 days, write `ss.days(2000)`). Starsim stops with an error when a time falls outside the sim:
+**A number as a time is a year, or a time from 0.** Whether a sim has a calendar is decided once, from its start. If it has one (its start is a date, or a year such as `start=2025`), a bare number given as a time is a calendar year: `when=2026` is the start of 2026, and `when=2026.5` the middle of it, whatever the sim's unit. With no calendar (e.g. `start=0`), it is a time in the sim's unit from 0. A time after the start is a duration: `when=ss.days(30)` is 30 days after it. Starsim stops with an error when a time falls outside the sim, saying how it read it:
 
 ```{python}
-vaccination = ss.vaccinate(efficacy=0.9, coverage=0.5, at=2026)
+vaccination = ss.vaccinate(efficacy=0.9, when=2026, coverage=0.5)
 try:
     ss.Sim(make_measles(), interventions=vaccination, start='2025-01-01', stop='2025-07-01').run()
 except ValueError as error:
     print(error)
 ```
 
-A date within a year is written as a string: `at='2025-02-01'`.
+A date within a year is written as a string: `when='2025-02-01'`.
 
 **A rate times a duration is not a rate.** A rate of 0.1 per year times 3 days is the chance of an event over those 3 days, a plain number, not a rate. Starsim raises an error rather than guess what was meant:
 
@@ -238,7 +238,7 @@ To see how likely an outbreak is, run the model stochastically, many times (see 
 **The median of many runs can hide that some died out.** When some runs die out early and the rest have a large outbreak, the results are split in two, and a median or mean describes neither group. Here 20 runs of the model above, as agents, each start with two infected:
 
 ```{python}
-msim = ss.Sim(sir, n_agents=5_000, stop=ss.days(200), verbose=0).run(n_runs=20)
+msim = ss.parallel(ss.Sim(sir, n_agents=5_000, stop=ss.days(200), verbose=0), n_runs=20)
 msim.summarize()
 ```
 
@@ -252,7 +252,7 @@ When the question is whether there is an outbreak at all, count the runs with on
 
 **`n_agents=` runs the model as agents.** Giving a number of agents asks for agents, so a model that would run as an ODE is run as agents instead, with the chance and time steps that come with them. To set the size of the population in a compartmental model, use `total_pop=`. With both, each agent stands for several people (`total_pop=100_000, n_agents=10_000` makes each agent ten people), and the results are scaled to the whole population. `describe()` says which solver was chosen and why.
 
-**A time step can be too long for a fast disease.** Agents and the chain binomial take whole steps, and someone infected during a step can only infect others from the next one. For a disease that spreads as fast as measles, steps of a day slow the epidemic down by a few days. As agents, Starsim suggests a shorter step when transmission or leaving a state is fast compared with the step (and says which is fastest; the chain binomial with `substeps=1` is a model written in discrete time, so it is not told), and `sim.check_dt()` shows how much a smaller step changes the results; see [Checking the time step](#checking-the-time-step) above.
+**A time step can be too long for a fast disease.** Agents and the chain binomial take whole steps, and someone infected during a step can only infect others from the next one. For a disease that spreads as fast as measles, steps of a day slow the epidemic down by a few days. As agents, Starsim suggests a shorter step when transmission or leaving a state is fast compared with the step (and says which is fastest; the chain binomial with `ss.binomial(substeps=1)` is a model written in discrete time, so it is not told), and `sim.check_dt()` shows how much a smaller step changes the results; see [Checking the time step](#checking-the-time-step) above.
 
 ### Mixing and stratification
 
@@ -285,8 +285,8 @@ To try several stratifications, build the disease again each time, as `make_meas
 **Vaccines are leaky unless told otherwise.** A vaccine with `efficacy=0.9` reduces each vaccinated person's chance of infection by 90% (a leaky vaccine). A vaccine that fully protects 90% of those vaccinated and does nothing for the rest (all or nothing) is `leaky=False`. For a disease that spreads as fast as measles, the difference is large: a leaky vaccine only slows infection, and with an R0 of 15, many vaccinated people are infected in the end. Here 90% of people are vaccinated at the start with each kind:
 
 ```{python}
-leaky = ss.vaccinate(efficacy=0.9, coverage=0.9, at=ss.days(0))
-all_or_nothing = ss.vaccinate(efficacy=0.9, leaky=False, coverage=0.9, at=ss.days(0))
+leaky = ss.vaccinate(efficacy=0.9, when=ss.days(0), coverage=0.9)
+all_or_nothing = ss.vaccinate(efficacy=0.9, leaky=False, when=ss.days(0), coverage=0.9)
 sims = {}
 for label, vaccination in {'Leaky': leaky, 'All or nothing': all_or_nothing}.items():
     sims[label] = ss.Sim(make_measles(), interventions=vaccination, total_pop=100_000, stop=ss.days(100), verbose=0)
@@ -351,15 +351,14 @@ A function given as an analyzer (`analyzers=show_infectious`) does the same with
 
 ## Profiling
 
-Compartmental models run in well under a second, so profiling is mostly for models run as agents, especially with networks or modules written as code. Start with how long each part of each step takes: run with `profile=True`, and plot the time spent in each call of the loop:
+Compartmental models run in well under a second, so profiling is mostly for models run as agents, especially with networks or modules written as code. Start with how long each part of each step takes: `sim.profile(kind='loop')` runs the sim recording the time of each call of the loop, and plots the time spent in each (`sim.loop.plot_cpu()` plots it again):
 
 ```{python}
 big = ss.Sim(measles, n_agents=50_000, networks=ss.RandomNet(n_contacts=10), stop=ss.days(50), verbose=0)
-big.run(profile=True)
-big.loop.plot_cpu()
+big.profile(kind='loop');
 ```
 
-Here the network (`randomnet.step`, which pairs people up afresh each day) takes a large share of the time, as much as the disease. To see which lines of a function take the time, follow it with `sim.profile()`, which runs a copy of the sim with a line-by-line profiler on the functions given:
+Here the network (`randomnet.step`, which pairs people up afresh each day) takes a large share of the time, as much as the disease. To see which lines of a function take the time, follow it with `sim.profile()` (`kind='line'`, the default), which runs a copy of the sim with a line-by-line profiler on the functions given:
 
 ```{python}
 big = ss.Sim(measles, n_agents=50_000, networks=ss.RandomNet(n_contacts=10), stop=ss.days(50), verbose=0)
@@ -367,7 +366,7 @@ prof = big.profile(follow=ss.RandomNet.add_pairs, plot=False)
 prof.disp(maxentries=5)
 ```
 
-The function names are those of the code actually run, which for an inherited method is the class that defines it (a module that inherits its `step()` from `ss.AgentDisease` shows as `AgentDisease.step`). The same works for a method of a module you wrote, which is where the time usually goes in a slow model: a loop over people in Python, where an operation on the whole array would do. `sim.cprofile()` profiles every function the run calls, which is useful when you don't yet know where to look. Only functions called during the run can be followed this way; for anything else, such as the building of the sim, use `sc.profile()` from Sciris directly.
+The function names are those of the code actually run, which for an inherited method is the class that defines it (a module that inherits its `step()` from `ss.AgentDisease` shows as `AgentDisease.step`). The same works for a method of a module you wrote, which is where the time usually goes in a slow model: a loop over people in Python, where an operation on the whole array would do. `sim.profile(kind='function')` profiles every function the run calls, which is useful when you don't yet know where to look. Only functions called during the run can be followed this way; for anything else, such as the building of the sim, use `sc.profile()` from Sciris directly.
 
 When the time is in your own code, the usual remedies, roughly in order of how much they help:
 
@@ -385,7 +384,7 @@ If none of this finds the problem, cut it down to the smallest script that shows
 ## Further reading
 
 - [line_profiler](https://github.com/pyutils/line_profiler): the line-by-line profiler behind `sim.profile()`
-- [Python: The Python profilers](https://docs.python.org/3/library/profile.html): `cProfile`, behind `sim.cprofile()`
+- [Python: The Python profilers](https://docs.python.org/3/library/profile.html): `cProfile`, behind `sim.profile(kind='function')`
 - [Python: pdb](https://docs.python.org/3/library/pdb.html): the debugger, for stepping through a module written as code
 
 ## Appendix: every diagnostic tool
@@ -403,7 +402,7 @@ The tools on this page and elsewhere, by the question each answers. "Builds" mea
 | `ss.solvers.solver_table()` | Every rule that decides which engine runs a model (see [Solvers and backends](running_solvers.qmd#appendix-what-needs-agents)) | No |
 | `sim.check_dt()` | How much each result changes with a step half as long | Runs two copies |
 | `sim.what_modifies()` | Everything that changes a parameter during the run | Builds |
-| `describe(output=True)` with `difflib` | Where two models differ | Builds |
+| `describe()` with `difflib` | Where two models differ | Builds |
 | `ss.debugtools.diff_sims()`, `check_sims_match()` | Which results of two runs differ, and by how much | No (give it sims that have run) |
 | `sim.set_diagnostics()` | Every random draw and agent state at every step, to find where two runs diverge | Records during the next run |
 | `ss.options(warnings='error')` | Stops at the first warning | No |
@@ -411,9 +410,9 @@ The tools on this page and elsewhere, by the question each answers. "Builds" mea
 | `sim.run_one_step()` | One step at a time, for a debugger | Runs one step |
 | `sim.loop.to_df()`, `sim.loop.plot()` | Every call in every step, in order | Builds |
 | `sim.loop.insert()` | Runs a function of your own at any point in the step | No (it runs with the sim) |
-| `sim.run(profile=True)`, `sim.loop.plot_cpu()` | How long each call of the loop takes | Runs |
+| `sim.profile(kind='loop')`, `sim.loop.plot_cpu()` | How long each call of the loop takes | Runs |
 | `sim.profile(follow=...)` | How long each line of the functions given takes | Runs a copy |
-| `sim.cprofile()` | How long every function the run calls takes | Runs |
+| `sim.profile(kind='function')` | How long every function the run calls takes | Runs |
 | `sim.elapsed` | The seconds the last run took | No |
 | `STARSIM_CHECK_COUNTS=1` (environment variable) | Checks, at every step, the counts the agent engine keeps against a new count (for testing the engine) | Applies to every run as agents |
 

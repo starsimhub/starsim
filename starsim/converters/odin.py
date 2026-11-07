@@ -440,7 +440,7 @@ def load_odin(filename, unit='day', stop=None, pars=None, verbose=None, **kwargs
     if re.search(r'\[\s*i\s*-\s*1\s*\]', all_text): # Flows from each level to the next: aging (below)
         dim = 'age'
     if copies:
-        notes.append(f'the arrays ({sc.strjoin(arrayed)}) are {n_levels} alike, independent copies: imported as one model, to run {n_levels} times with sim.run(n_runs={n_levels})')
+        notes.append(f'the arrays ({sc.strjoin(arrayed)}) are {n_levels} alike, independent copies: imported as one model, to run {n_levels} times with ss.parallel(sim, n_runs={n_levels})')
 
     # Named expressions, without their indices
     def py(text):
@@ -530,8 +530,8 @@ def load_odin(filename, unit='day', stop=None, pars=None, verbose=None, **kwargs
     elif mixing is not None:
         levels = [str(lev) for lev in range(1, n_levels + 1)]
         src.stratify(**{dim:levels}, fractions=list(shares/shares.sum()))
-        src.config.networks = Code(f'ss.contacts({mixing[1].tolist()!r}' + (f', dims={dim!r}' if dim != 'age' else '') + ')')
-        notes.append(f'the arrays ({sc.strjoin(arrayed)}) over {n_levels} levels of {dim}, coupled by the contact matrix {mixing[0]}: stratified by {dim} ("1" to "{n_levels}"), with ss.contacts({mixing[0]}, dims={dim!r})')
+        src.config.networks = Code(f'ss.contacts({mixing[1].tolist()!r})' if dim == 'age' else f'ss.contacts({dim}={mixing[1].tolist()!r})')
+        notes.append(f'the arrays ({sc.strjoin(arrayed)}) over {n_levels} levels of {dim}, coupled by the contact matrix {mixing[0]}: stratified by {dim} ("1" to "{n_levels}"), with ss.contacts({dim}={mixing[0]})')
     elif arrayed and not copies:
         src.skip('arrays', f'{sc.strjoin(arrayed)} are arrays over {n_levels} levels with no flows between levels: they could be a stratification (stratify()) with values by level (ss.by()), written by hand')
 
@@ -627,9 +627,7 @@ def load_odin(filename, unit='day', stop=None, pars=None, verbose=None, **kwargs
             f.rate = re.sub(r'\b(\w+)__sum\b', r'\1', f.rate)
 
     # Run settings
-    cfg = dict(solver='binomial' if discrete else 'ode', unit=unit)
-    if discrete: # odin's discrete-time models take whole steps
-        cfg['substeps'] = 1
+    cfg = dict(solver=ss.binomial(substeps=1) if discrete else 'ode', unit=unit) # odin's discrete-time models take whole steps
     if discrete and dt != 1:
         cfg['dt'] = dt
     if stop is not None:
@@ -734,7 +732,7 @@ def likelihood(src, var, rhs, data, env, used):
         return f'{sc.strjoin(ast.unparse(v) for v in args.values())} is not a parameter or a number'
     if rest:
         used.add(rest[0].id)
-    lik = dict(Poisson=lambda ps: ss.poisson(), NegativeBinomial=lambda ps: ss.nbinom(n=other['size'](ps)), Normal=lambda ps: ss.normal(scale=other['sd'](ps)))[fn]
+    lik = dict(Poisson=lambda ps: ss.poisson(), NegativeBinomial=lambda ps: ss.nbinom(n=other['size'](ps)), Normal=lambda ps: ss.normal(std=other['sd'](ps)))[fn]
     src.add_outcome(var, known[0].id, p=rest[0].id if rest else None, likelihood=lik)
     return None
 

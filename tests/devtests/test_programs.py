@@ -51,14 +51,14 @@ def test_people():
             if sim.ti == 30:
                 seen[sim.solver] = sc.obj(I=sim.results.sir.I[sim.ti], delivered=sim.results.stock.delivered[sim.ti - 1]) # The state at the start of the step, and the deliveries of the last
             return True
-        stock = ss.vaccinate(ss.Vaccine(efficacy=0.9), capacity=ss.perday(500), start=10, where=look)
+        stock = ss.vaccinate(ss.Vaccine(efficacy=0.9), who=look, when=ss.schedule(start=10), capacity=ss.perday(500))
         return ss.Sim(sir, interventions=stock, **kwargs)
     sims = run_both(make, stop=60)
     for solver,sim in sims.items():
         res = sim.results
         assert np.allclose(res.stock.delivered[10:59], 500, rtol=0.02), f'{solver}: {res.stock.delivered[10:20]}' # From the step that starts at 10
         assert seen[solver].I == res.sir.I[30] and seen[solver].delivered == res.stock.delivered[29] # Not scaled again at the end
-    assert sims.abm.pars.pop_scale == 5
+    assert sims.abm.pop_scale == 5
     check_close(sims, lambda sim: seen[sim.solver].I, rtol=0.15)
     check_close(sims, lambda sim: sim.results.sir.infection.cum[-1], rtol=0.1)
     return sims
@@ -67,8 +67,8 @@ def test_people():
 def test_priority():
     sc.heading('Testing priority: tiers, a score highest first, and a score per agent')
     def make(priority=None, **kwargs):
-        sir = make_sir().stratify(risk=['low', 'high'], fractions=[0.8, 0.2]).stratify(age=[0, 15, 65])
-        stock = ss.vaccinate(ss.Vaccine(efficacy=0.9), capacity=ss.perday(500), priority=priority(sir) if priority else None)
+        sir = make_sir().stratify(risk={'low': 0.8, 'high': 0.2}).stratify(age=[0, 15, 65])
+        stock = ss.vaccinate(ss.Vaccine(efficacy=0.9), capacity=ss.capacity(ss.perday(500), priority=priority(sir) if priority else None))
         return ss.Sim(sir, interventions=stock, **kwargs)
     sims = run_both(make, stop=40, priority=lambda sir: [sir.risk == 'high']) # All of the high-risk first (10,000 people, 20 days)
     for solver,sim in sims.items():
@@ -105,7 +105,7 @@ def test_queue():
     sc.heading('Testing queues: dropped, waiting up to a limit (agents only), and leaving when no longer eligible')
     def make(queue=None, **kwargs):
         sis = make_sis()
-        clinic = ss.treat(ss.Treatment(moves=sis.cure), who=sis.I, on=sis.infection, capacity=ss.perday(20), queue=queue)
+        clinic = ss.treat(ss.Treatment(cure={sis.cure: 1.0}), who=sis.I, when=sis.infection, capacity=ss.capacity(ss.perday(20), queue=queue))
         return ss.Sim(sis, interventions=clinic, **kwargs)
     out = sc.obj()
     for label,queue in dict(none=None, days=ss.days(5), true=True).items():
@@ -140,7 +140,7 @@ def test_memory():
     # Routine delivery is once per spell of being eligible: each infection is offered treatment once; with ~drug.ever, once ever
     def spells(once=False, **kwargs):
         sis = make_sis(beta=0.15)
-        drug = ss.Treatment(moves=sis.cure)
+        drug = ss.Treatment(cure={sis.cure: 1.0})
         clinic = ss.treat(drug, who=sis.I & ~drug.ever if once else sis.I, coverage=0.3)
         return ss.Sim(sis, interventions=clinic, **kwargs)
     each = run_both(spells, stop=200)
@@ -156,7 +156,7 @@ def test_memory():
         sis = make_sir()
         test = ss.Diagnostic(sensitivity=0.9)
         screening = ss.screen(test, who=test.since >= ss.days(30), coverage=ss.peryear(4))
-        recent = ss.vaccinate(ss.Vaccine(efficacy=0.5), where=screening.since < ss.days(5), coverage=0.1)
+        recent = ss.vaccinate(ss.Vaccine(efficacy=0.5), who=screening.since < ss.days(5), coverage=0.1)
         return ss.Sim(sis, interventions=[screening, recent], **kwargs)
     check_agents(rescreen, stop=120)
     sim = run_abm(rescreen, stop=120).abm
@@ -183,9 +183,9 @@ def test_memory():
     def doses(since=True, **kwargs):
         sir = make_sir()
         vx = ss.Vaccine(efficacy=0.8, doses=[0.5, 1.0])
-        first = ss.vaccinate(vx, coverage=0.6, at=[5])
-        second = ss.vaccinate(vx, who=vx.ever & (vx.since >= ss.days(30)), coverage=0.5, every=1) if since else ss.vaccinate(vx, who=vx.ever, coverage=0.5, at=[35], name='second')
-        held = ss.vaccinate(ss.Vaccine(efficacy=0.1, name='other'), where=vx.held, at=[60])
+        first = ss.vaccinate(vx, when=[5], coverage=0.6)
+        second = ss.vaccinate(vx, who=vx.ever & (vx.since >= ss.days(30)), when=ss.schedule(every=1), coverage=0.5) if since else ss.vaccinate(vx, who=vx.ever, when=[35], coverage=0.5, name='second')
+        held = ss.vaccinate(ss.Vaccine(efficacy=0.1, name='other'), who=vx.held, when=[60])
         return ss.Sim(sir, interventions=[first, second, held], **kwargs)
     check_agents(doses, stop=80)
     for since,sims in [(True, run_abm(doses, stop=80)), (False, run_both(doses, stop=80, since=False))]:
@@ -205,10 +205,10 @@ def test_same_visit():
     sc.heading('Testing steps at the same visit: a second and a third product for the people a delivery reached')
     def make(**kwargs):
         sis = make_sis()
-        drug = ss.Treatment(moves={sis.cure: 0.9})
-        visit = ss.treat(drug, where=sis.I, coverage=0.3, every=ss.days(10))
-        visit_then1 = ss.vaccinate(ss.Vaccine(efficacy=0.5), on=visit)
-        visit_then2 = ss.screen(ss.Diagnostic(), on=visit, coverage=0.5)
+        drug = ss.Treatment(cure={sis.cure: 0.9})
+        visit = ss.treat(drug, who=sis.I, when=ss.days(10), coverage=0.3)
+        visit_then1 = ss.vaccinate(ss.Vaccine(efficacy=0.5), when=visit)
+        visit_then2 = ss.screen(ss.Diagnostic(), when=visit, coverage=0.5)
         return ss.Sim(sis, interventions=[visit, visit_then1, visit_then2], **kwargs)
     sims = run_both(make, stop=60, pop=200_000, n_agents=200_000)
     for solver,sim in sims.items():
@@ -239,7 +239,7 @@ def test_hiv_art():
             init=dict(cd4_hi=0.04, cd4_mid=0.03, cd4_lo=0.02), name='hiv',
         )
         priority = [hiv.cd4_lo, hiv.post_art, hiv.cd4_mid, hiv.cd4_hi] if prioritize else None # Lowest CD4 first
-        art_prog = ss.treat(ss.Treatment(moves=hiv.start_art), capacity=ss.peryear(1200), priority=priority)
+        art_prog = ss.treat(ss.Treatment(cure={hiv.start_art: 1.0}), capacity=ss.capacity(ss.peryear(1200), priority=priority))
         return ss.Sim(hiv, interventions=art_prog, start=2000, stop=2014, dt=ss.months(1), unit='year', **kwargs) # The bare numbers (the years) are years
     both = lambda prioritize: sc.obj(ode=make(prioritize, solver='ode', total_pop=100_000, verbose=0).run(), abm=make(prioritize, solver='abm', total_pop=100_000, n_agents=20_000, verbose=0).run())
     sims, base = both(True), both(False)
@@ -257,7 +257,7 @@ def make_sti(name='ng', beta=0.015, init_prev=0.1):
     S, E, A, P, Y, C = ss.states('S E A P Y C')
     return ss.Disease(
         infection = S >> E @ beta*(A + P + Y + C),
-        latency   = ss.Transition(E, [P, A], p=0.4, dur=ss.days(5)),
+        latency   = ss.Transition(E, {P: 0.4, A: None}, dur=ss.days(5)),
         onset     = P >> Y @ ss.days(10),
         seek      = Y >> C @ ss.days(20),
         clear_a   = A >> S @ ss.days(150),
@@ -271,11 +271,11 @@ def test_clinic():
     sc.heading('Testing one clinic for syndromic treatment and screening, symptomatic first, as agents')
     def make(**kwargs):
         ng, ct = make_sti('ng', beta=0.015), make_sti('ct', beta=0.012)
-        discharge = ss.Treatment(moves={ng.cure: 0.95, ct.cure: 0.95})
-        syndromic = ss.treat(discharge, where=ng.C | ct.C, capacity=ss.perweek(200), queue=ss.days(28))
+        discharge = ss.Treatment(cure={ng.cure: 0.95, ct.cure: 0.95})
+        syndromic = ss.treat(discharge, who=ng.C | ct.C, capacity=ss.capacity(ss.perweek(200), queue=ss.days(28)))
         left = lambda sim: 200 - sim.interventions.syndromic.results.delivered[sim.ti] # What symptomatic care leaves of the clinic's week (it runs first)
         screening = ss.screen(ss.Diagnostic(sensitivity=0.9), disease='ng', coverage=ss.probperyear(0.5), capacity=left)
-        treatment = ss.treat(discharge, on=screening.positive)
+        treatment = ss.treat(discharge, when=screening.positive)
         return ss.Sim([ng, ct], interventions=[syndromic, screening, treatment], dt=7, **kwargs)
     check_agents(make, stop=364, pop=20_000) # The queue
     sim = run_abm(make, stop=364, pop=20_000, n_agents=20_000).abm

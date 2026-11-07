@@ -35,7 +35,7 @@ def seird_sim():
         births    = ss.birth(S, rate=ss.peryear(0.02)),
         infection = ss.Transition(S, E, rate=ss.perday(0.4) * I),
         onset     = ss.Transition(E, I, dur=ss.days(4)),
-        outcome   = ss.Transition(I, [R, D], dur=ss.lognormal(ss.days(8), ss.days(3)), p=[None, 0.1]),
+        outcome   = ss.Transition(I, {R: None, D: 0.1}, dur=ss.lognormal(ss.days(8), ss.days(3))),
         deaths    = ss.death([S, E, I, R], rate=ss.peryear(0.01)),
         init_prev = 0.01, name='seird')
     return ss.Sim(dis, total_pop=1e5, unit='day', stop=120, verbose=0)
@@ -98,15 +98,14 @@ def test_summer2():
     S, E, I, R = ss.states('S E I R')
     seir = ss.Disease(
         infection       = ss.Transition(S, E, rate=2 * I),
-        incidence       = ss.Transition(E, I, rate=0.5),
+        incidence       = ss.Transition(E, I, rate=0.5*ss.by(age=[1, 1.1])),
         recovery        = ss.Transition(I, R, rate=0.3),
-        infection_death = ss.death(I, rate=0.05),
+        infection_death = ss.death(I, rate=0.05*ss.by(clinical=[0, 1, 1, 2])),
+        rel_trans_by_clinical = ss.modify('seir.rel_trans', multiply=ss.by(clinical=[0.5, 1, 0.2, 0.1])),
         init_n          = dict(I=ss.by([[5, 0, 0, 0], [5, 0, 0, 0]], dims=['age', 'clinical'])),
+        name            = 'seir',
     )
-    seir.stratify(age=['young', 'old'], adjust={'incidence': [1, 1.1]})
-    seir.stratify(clinical=['asymptomatic', 'symptomatic', 'isolated', 'hospital'], states=['I'],
-                  fractions=ss.by([[0.4, 0.3, 0.2, 0.1], [0.3, 0.3, 0.2, 0.3]], dims=['age', 'clinical']),
-                  adjust={'infection_death': [0, 1, 1, 2], 'rel_trans': [0.5, 1, 0.2, 0.1]})
+    seir.stratify(age=['young', 'old'], clinical=ss.levels(['asymptomatic', 'symptomatic', 'isolated', 'hospital'], fractions=ss.by([[0.4, 0.3, 0.2, 0.1], [0.3, 0.3, 0.2, 0.3]], dims=['age', 'clinical']), states=['I']))
     hand = ss.Sim(seir, total_pop=1000, dt=0.1, stop=20, verbose=0).run().results.seir
     for state in 'SEIR':
         assert np.allclose(res[state].values, hand[state].values, atol=1e-6), f'{state} should match the hand translation'
@@ -264,9 +263,9 @@ def test_atomica_junction():
 
 def sir_births():
     """ An SIR with births and deaths, and a gamma dwell time (as Erlang stages), to export; stepped as Atomica steps, by Euler's method """
-    sir = ss.SIR(beta=ss.perday(0.3), dur_inf=ss.gamma(a=2, scale=ss.days(5)), init_prev=0.01)
+    sir = ss.SIR(beta=ss.perday(0.3), dur_inf=ss.gamma(shape=2, scale=ss.days(5)), init_prev=0.01)
     return ss.Sim(diseases=sir, demographics=[ss.birth(rate=ss.peryear(0.5)), ss.death(rate=ss.peryear(0.5))], total_pop=10_000, start=2000, stop=2000.25, dt=ss.days(1),
-                  solver='ode', integrator='euler', substeps=1, verbose=0)
+                  solver=ss.ode(integrator='euler', substeps=1), verbose=0)
 
 
 def infected(res):

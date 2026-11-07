@@ -1,5 +1,5 @@
 """
-Not for the user: the compiled pass of agents taken event by event in continuous time (`solver='abm-events'`), one call a step: see `ss.solvers.Events`
+Not for the user: the compiled pass of agents taken event by event in continuous time (`solver=ss.abm(step='events')`), one call a step: see `ss.solvers.Events`
 
 Each agent has a state, the time and transition of its scheduled exit (a dwell time drawn on entry, kept across steps), and a
 version, raised at each move, so that what was queued for it before is skipped. Within the step, events come off one heap in

@@ -22,16 +22,16 @@ def test_sir():
     sc.heading('Testing SIR dynamics')
 
     networks = ss.RandomNet(n_contacts=ss.poisson(4)) # Contacts Poisson distributed with a mean of 4
-    sir = ss.SIR(dur_inf=ss.normal(loc=10)) # Override the default distribution
+    sir = ss.SIR(dur_inf=ss.normal(mean=10)) # Override the default distribution
 
     # Change pars after creating the SIR instance
-    sir.pars.beta = {'random': ss.time.freq(0.1, 'year')}
+    sir.pars.beta = {'random': ss.per(0.1, 'year')}
 
     # You can also change the parameters of the distribution directly
-    sir.pars.dur_inf.set(loc=5)
+    sir.pars.dur_inf.set(mean=5)
 
     # Or use a function, here a lambda that makes the mean for each agent equal to their age divided by 10
-    sir.pars.dur_inf.set(loc = lambda self, sim, uids: sim.people.age[uids] / 10)
+    sir.pars.dur_inf.set(mean = lambda self, sim, uids: sim.people.age[uids] / 10)
 
     sim = ss.Sim(n_agents=n_agents, diseases=sir, networks=networks)
     sim.run()
@@ -45,10 +45,10 @@ def test_sir():
     # The textbook SIR: a duration is the mean of an exponential, and nobody dies (Starsim 3's lognormal and deaths are ssl.AgentSIR's)
     kw = dict(total_pop=1e6, stop=ss.days(365), solver='ode', verbose=0)
     def closed(sir):
-        cl = ss.modify(sir.pars.beta, multiply=0.6, start=ss.days(30), stop=ss.days(90))
+        cl = ss.modify(sir.pars.beta, multiply=0.6, when=ss.schedule(start=ss.days(30), stop=ss.days(90)))
         return ss.Sim(sir, interventions=cl, **kw).run().results.sir
     a = closed(ss.SIR(beta=ss.par(ss.perday(2.5/7)), dur_inf=ss.days(7), init_n=dict(I=100)))
-    b = closed(ss.SIR(beta=ss.par(ss.perday(2.5/7)), dur_inf=ss.expon(scale=ss.days(7)), init_n=dict(I=100)))
+    b = closed(ss.SIR(beta=ss.par(ss.perday(2.5/7)), dur_inf=ss.expon(mean=ss.days(7)), init_n=dict(I=100)))
     assert abs(a.infection.sum() - b.infection.sum())/b.infection.sum() < 0.01 # 714,770 each; 785,847 with Starsim 3's lognormal
     assert a.death.sum() == 0
     agent = ssl.AgentSIR()
@@ -93,7 +93,7 @@ def test_seir():
     sims = []
     for dur_exp in [ss.days(1), ss.days(20)]:
         seir = ss.SEIR(dur_exp=ss.lognormal(mean=dur_exp), dur_inf=ss.lognormal(mean=ss.days(10)), beta=ss.perday(0.05))
-        sim = ss.Sim(n_agents=n_agents, diseases=seir, networks='random', dur=ss.years(1), dt=ss.days(1), verbose=0)
+        sim = ss.Sim(n_agents=n_agents, diseases=seir, networks='random', stop=ss.years(1), dt=ss.days(1), verbose=0)
         sim.run()
         sims.append(sim)
     short, long = sims
@@ -111,7 +111,7 @@ def test_seir():
 
     # Latent agents should not transmit: with no infectious period, there should be no epidemic
     latent = ss.SEIR(dur_exp=ss.lognormal(mean=ss.days(1000)), init_prev=0.1, beta=ss.perday(0.5))
-    nosim = ss.Sim(n_agents=n_agents, diseases=latent, networks='random', dur=ss.days(100), dt=ss.days(1), verbose=0).run()
+    nosim = ss.Sim(n_agents=n_agents, diseases=latent, networks='random', stop=ss.days(100), dt=ss.days(1), verbose=0).run()
     assert nosim.results.seir.infection.cum[-1] == 0, 'Exposed agents should not transmit'
 
     return sims
@@ -141,7 +141,7 @@ def test_aliases():
     assert sir.infectious is sir.infected, 'By default, infectious should be an alias of infected'
 
     sim = ss.Sim(n_agents=n_agents, diseases=IsolationSIR(init_prev=0.1, beta=ss.perday(0.5)), networks='random',
-                 dur=ss.days(50), dt=ss.days(1), verbose=0).run()
+                 stop=ss.days(50), dt=ss.days(1), verbose=0).run()
     dis = sim.diseases.isolationsir
     res = sim.results.isolationsir
     assert (dis.infectious == (dis.infected & ~dis.isolated)).all(), 'The derived alias should combine the two states'
@@ -150,7 +150,7 @@ def test_aliases():
     assert res.infectious.max() == 0, 'Nobody is infectious, since everyone is isolated'
 
     # Its new infections are recorded at the step they happen in, which takes them out of S by the next time point
-    sim = ss.Sim(n_agents=1000, diseases=ssl.AgentSIR(beta=ss.perday(0.1), dur_inf=ss.days(10), p_death=0), networks='random', dur=ss.days(30), dt=ss.days(1), verbose=0).run()
+    sim = ss.Sim(n_agents=1000, diseases=ssl.AgentSIR(beta=ss.perday(0.1), dur_inf=ss.days(10), p_death=0), networks='random', stop=ss.days(30), dt=ss.days(1), verbose=0).run()
     res = sim.results.agentsir
     assert np.array_equal(res.infection[:-1], -np.diff(res.susceptible)) # The infections of each step leave S by the next time point
     assert np.count_nonzero(sim.diseases.agentsir.ti_infected == 10) == res.infection[10] # And are dated there too, as a declared disease dates ti_I
@@ -225,7 +225,7 @@ def test_sis(do_plot=do_plot):
     # R over time is R0 × S/N in an SIR, and is lowered by a modifier while it acts
     S, I, R = ss.states(3)
     sir = ss.Disease(infection=S >> I @ ss.par(0.3, name='beta')*I, recovery=ss.Transition(I, R, dur=10), name='sir')
-    half = ss.modify(sir.pars.beta, multiply=0.5, start=60, stop=80)
+    half = ss.modify(sir.pars.beta, multiply=0.5, when=ss.schedule(start=60, stop=80))
     for solver in ['ode', 'abm']:
         run = ss.Sim(sir, interventions=half, total_pop=10_000, n_agents=2000, stop=100, solver=solver, verbose=0).run()
         rt, res = run.diseases.sir.Rt(), run.results.sir
@@ -274,7 +274,7 @@ def test_ncd():
     assert sim2.results.anemia.anemic[-1] > 400 # Anemia(p_onset=0.1) for 50 years
     assert sim2.results.background.infection.sum() == 0 # Not transmitted
     assert isinstance(anemia, ss.Disease) and not isinstance(anemia, ss.AgentDisease) and isinstance(sim2.diseases.background, ss.Disease)
-    assert not hasattr(anemia, 'susceptible') and 'infect' not in anemia.describe(output=True) # No states of an infection forced on it
+    assert not hasattr(anemia, 'susceptible') and 'infect' not in anemia.describe() # No states of an infection forced on it
 
     # An infection written as code with a beta but nothing to transmit it over is an error, not a run with no infections; with beta=0 it is not transmitted by design
     with pytest.raises(ValueError):
@@ -319,7 +319,7 @@ def test_mtct():
         )
     )
     networks = [ss.RandomNet(), ss.PrenatalNet(), ss.BreastfeedingNet()]
-    demographics = ss.Pregnancy(fertility_rate=ss.time.freq(20, 'year'))
+    demographics = ss.Pregnancy(fertility_rate=ss.peryear(0.02))
     sim = ss.Sim(dt=ss.months(1), n_agents=n_agents, diseases=sis, networks=networks, demographics=demographics)
     sim.run()
     if do_plot:
@@ -340,11 +340,11 @@ def test_congenital():
     sim = ss.Sim(
         n_agents=20_000, # Enough for a stable ratio of outcomes (about 30 of each)
         demographics=[
-            ss.Pregnancy(fertility_rate=ss.time.freq(30, 'year'), burnin=True),
-            ss.Deaths(death_rate=ss.time.freq(10/1010*1000, 'year')),
+            ss.Pregnancy(fertility_rate=ss.peryear(0.03), burnin=True),
+            ss.Deaths(death_rate=ss.peryear(0.009900990099)),
         ],
         diseases=ssl.mnch.CongenitalDisease(beta=0.2, init_prev=0.2),
-        dur=ss.years(5),
+        stop=ss.years(5),
         dt=ss.years(1/12),
         rand_seed=1,
         networks=[ss.PrenatalNet(), ss.RandomNet()],
@@ -415,7 +415,7 @@ def test_current_state():
     for kw in [dict(n_agents=1000), dict(solver='ode')]:
         d = ss.Sim(diseases=ss.SIR(), stratify=dict(age=[0, 15]), stop=2001, verbose=0, **kw).init().diseases.sir
         young = ((ss.person.age < 15) & d.S).n
-        assert np.isclose(d.move(d.S, d.R, where=ss.person.age < 15), young) and np.isclose(d.R.n, young)
+        assert np.isclose(d.move(d.S, d.R, who=ss.person.age < 15), young) and np.isclose(d.R.n, young)
     S, I, R = ss.states('S I R')
     ode = ss.Sim(diseases=ss.Disease(name='sir', infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=4)), stop=2001, verbose=0).init()
     with pytest.raises(ss.CapabilityError, match='agents'):
@@ -468,8 +468,8 @@ def test_same_transmission():
             self.ti_recovered[uids] = self.ti + 1 + self.pars.dur_inf # Infected at the end of the step (the seeds at the start, step 0), as ss.AgentDisease teaches
 
     kw = dict(n_agents=n_agents, stop=50, unit='day', verbose=0, analyzers=ss.infection_log(), networks=[ss.RandomNet(n_contacts=4), ss.RandomNet(n_contacts=2, name='other')],
-              connectors=[ss.modify('sir.rel_sus', multiply=0.5, where=lambda sim: sim.people.age > 40), ss.modify('other.pars.n_contacts', multiply=0.5)],
-              interventions=ss.vaccinate(ss.Vaccine(efficacy=0.7), coverage=0.3, at=10))
+              connectors=[ss.modify('sir.rel_sus', multiply=0.5, who=lambda sim: sim.people.age > 40), ss.modify('other.pars.n_contacts', multiply=0.5)],
+              interventions=ss.vaccinate(ss.Vaccine(efficacy=0.7), when=10, coverage=0.3))
     dec = ss.Sim(diseases=ss.SIR(name='sir', beta=ss.perday(0.1), dur_inf=ss.constant(ss.days(10)), init_prev=lambda sim, uids: seeds(None, sim, uids)), solver='abm', **kw).run()
     cod = ss.Sim(diseases=CodedSIR(name='sir'), **kw).run()
     d, c = dec.results.sir, cod.results.sir
@@ -645,8 +645,8 @@ def test_code_seams():
         p = ss.pars(dict(beta=ss.par(ss.peryear(2), bounds=[ss.peryear(0.5), ss.peryear(5)]), dur=ss.years(1), cure=None), beta=3) # As a class's parameters are made
         S, I, T, R = ss.states('S I T R')
         tb = ss.Disease(S, I, T, R, infection=S >> I @ p.beta*I, diagnosis=I >> T @ p.dur, cure=ss.Transition(T, R, rate=ss.peryear(4)),
-                        fast=ss.Transition(T, R, rate=ss.peryear(20), where=TPT.held), init=dict(I=0.05), name='tb', eff=ss.par(0.9)).stratify(age=[0, 15])
-        give = ss.vaccinate(TPT(efficacy=0.01, name='tpt'), who=tb.diagnosis.since <= ss.years(1), coverage=0.5, every=1)
+                        fast=ss.Transition(T, R, rate=ss.peryear(20), who=TPT.held), init=dict(I=0.05), name='tb', eff=ss.par(0.9)).stratify(age=[0, 15])
+        give = ss.vaccinate(TPT(efficacy=0.01, name='tpt'), who=tb.diagnosis.since <= ss.years(1), when=ss.schedule(every=1), coverage=0.5)
         return ss.Sim(tb, interventions=give, start=2000, stop=2004, dt=ss.months(1), verbose=0, **kwargs), p
     sim, p = make(n_agents=2000)
     assert p.beta.value == ss.peryear(3) and p.beta.bounds is not None and p.cure is None
@@ -673,7 +673,7 @@ def test_coded_defaults():
         def __init__(self):
             super().__init__()
             self.define_pars(beta=0.02, init_prev=ss.bernoulli(0.05))
-            self.define_results(ss.Result('extra'))
+            self.define_results(ss.Result('extra', kind='ratio'))
             return
         def set_prognoses(self, uids, sources=None):
             super().set_prognoses(uids, sources)
@@ -770,11 +770,11 @@ def test_init_in_class():
         recovery = I >> S @ ss.perday(0.1)
 
     for solver in ['abm', 'ode']:
-        sim = ss.Sim(Vectors(name='vec'), n_agents=1000, stop=2, unit='day', dt=1, solver=solver, verbose=0).run()
+        sim = ss.Sim(Vectors(name='vec'), n_agents=1000, total_pop=1000, stop=2, unit='day', dt=1, solver=solver, verbose=0).run()
         res = sim.results.vec
         assert res.I[0] == 200, f'Only {res.I[0]} of 1000 started infected, not 200, under {solver}'
         assert res.V[0] == 3000, f'The count started at {res.V[0]}, not 3 per person, under {solver}'
-    sim = ss.Sim(Vectors(name='vec', init=dict(I=0.1)), n_agents=1000, stop=2, unit='day', dt=1, solver='ode', verbose=0).run()
+    sim = ss.Sim(Vectors(name='vec', init=dict(I=0.1)), total_pop=1000, stop=2, unit='day', dt=1, solver='ode', verbose=0).run()
     assert sim.results.vec.I[0] == 100, 'init= given to the disease should replace that of the class'
 
     # A parameter of the class inside a distribution in a dwell time is the instance's, so setting it changes the dwell time (it kept the class's)
@@ -798,7 +798,7 @@ def test_rel_sus_per_act():
 
     def run(make, seed):
         disease = make()
-        sim = ss.Sim(diseases=disease, networks=ss.SexualNet(acts=ss.freqperweek(5)), connectors=Sus(), n_agents=20_000, start=2000, stop=2001, dt=ss.months(1), solver='abm', rand_seed=seed, verbose=0).run()
+        sim = ss.Sim(diseases=disease, networks=ss.SexualNet(acts=ss.perweek(5)), connectors=Sus(), n_agents=20_000, start=2000, stop=2001, dt=ss.months(1), solver='abm', rand_seed=seed, verbose=0).run()
         x = sim.diseases.x
         return 18_000 - (x.susceptible if x.graph is None else x.S).sum() # New infections: 10% are seeds
 
@@ -867,7 +867,7 @@ def test_derived_results():
 
 def test_declared_transmit():
     sc.heading('Testing a declared disease with its own transmit(), and functions of self, sim, and uids')
-    kw = dict(n_agents=1000, start=2000, stop=2003, unit='year', verbose=0)
+    kw = dict(n_agents=1000, total_pop=1000, start=2000, stop=2003, unit='year', verbose=0)
 
     class Same(ss.SIR):
         def transmit(self, transition):
@@ -901,6 +901,18 @@ def test_declared_transmit():
     return res
 
 
+@sc.timer()
+def test_init_kinds():
+    sc.heading('init= is a dict by state: a number is a share seeded, init_prev=; and init_n= named in its own clash')
+    for make in [lambda: ss.SIR(init=0.01), lambda: ssl.Dengue(init=0.001)]:
+        with pytest.raises(TypeError, match='init_prev='):
+            make()
+    S, I, R = ss.states(3)
+    with pytest.raises(ValueError, match='init_prev= and init_n= for I'):
+        ss.Sim(ss.Disease(infection=S >> I @ 0.3*I, recovery=ss.Transition(I, R, dur=10), init_prev=0.01, init_n=dict(I=5)), verbose=0).init()
+    return
+
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -924,3 +936,4 @@ if __name__ == '__main__':
     define = test_define_transitions()
     derived = test_derived_results()
     own = test_declared_transmit()
+    test_init_kinds()

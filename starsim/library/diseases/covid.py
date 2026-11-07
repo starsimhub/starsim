@@ -21,7 +21,7 @@ class COVID(ss.Disease):
     people without symptoms and with symptoms.
 
     This version is not age-structured. Since the severity of COVID-19 rises steeply with age, a real model would
-    be: `covid.stratify(age=[0, 20, 60], fractions=[0.25, 0.5, 0.25], adjust=dict(severe=[0.2, 1, 4]))`, with a
+    be: `covid.stratify(age={0: 0.25, 20: 0.5, 60: 0.25})`, with severity by age (`ss.modify(covid.severe, multiply=ss.by(age=[0.2, 1, 4]))`) and a
     contact matrix given to the sim (see the user guide on stratification).
 
     Note: CRN safe as agents.

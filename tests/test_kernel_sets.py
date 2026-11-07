@@ -45,7 +45,7 @@ def snapshot(sim):
 
 def how(solver):
     """ The sim's arguments for a solver: rk4 and euler are integrators of the ODE """
-    return dict(solver='ode', integrator=solver) if solver in ['rk4', 'euler'] else dict(solver=solver)
+    return dict(solver=ss.ode(integrator=solver)) if solver in ['rk4', 'euler'] else dict(solver=solver)
 
 
 def same(make, kernels, seeds=(0, 1)):
@@ -69,18 +69,18 @@ event_calls = [] # The arguments of the calls of the events' pass in two sims, o
 
 def events_inputs():
     """
-    The arguments of every call of the pass of solver='abm-events' in two small sims, kept the first time: one on a network with acts (by
+    The arguments of every call of the pass of solver=ss.abm(step='events') in two small sims, kept the first time: one on a network with acts (by
     direction) and a mixing pool, with an Erlang dwell, a dwell drawn for each agent, a split with deaths, and waning; and one by age, with a contact matrix
     """
     if not event_calls:
         S, E, I, R = ss.states('S E I R')
         d = ss.Disease(infection=S >> E @ dict(sexualnet=ss.peract(m2f=0.2, f2m=0.1), mixingpool=ss.perday(0.02))*I, latent=ss.Transition(E, I, dur=ss.erlang(k=3, mean=ss.days(5))),
-                       recovery=ss.Transition(I, [R, ss.dead], p=[0.9, 0.1], dur=ss.lognormal(mean=ss.days(8), std=ss.days(3))), waning=R >> S @ ss.perday(0.05), init_prev=0.05, name='d')
-        acts = ss.Sim(d, networks=[ss.SexualNet(acts=ss.constant(ss.freq(80, 'year'))), ss.MixingPool(n_contacts=3)], n_agents=1000, solver='abm-events', unit='day', stop=30, **kw)
+                       recovery=ss.Transition(I, {R: 0.9, ss.dead: 0.1}, dur=ss.lognormal(mean=ss.days(8), std=ss.days(3))), waning=R >> S @ ss.perday(0.05), init_prev=0.05, name='d')
+        acts = ss.Sim(d, networks=[ss.SexualNet(acts=ss.constant(ss.per(80, 'year'))), ss.MixingPool(n_contacts=3)], n_agents=1000, solver=ss.abm(step='events'), unit='day', stop=30, **kw)
         S, I, R = ss.states('S I R')
         m = ss.Disease(S >> I @ 0.14*I, I >> R @ ss.days(8), init_n=dict(I=10), name='m')
         m.stratify(age={0: 0.3, 15: 0.6, 65: 0.1})
-        ages = ss.Sim(m, networks=ss.contacts(ages=[0, 15, 65], matrix=[[10, 6, 1], [3, 8, 1], [3, 6, 3]]), n_agents=1000, solver='abm-events', unit='day', stop=30, **kw)
+        ages = ss.Sim(m, networks=ss.contacts(ages=[0, 15, 65], matrix=[[10, 6, 1], [3, 8, 1], [3, 6, 3]]), n_agents=1000, solver=ss.abm(step='events'), unit='day', stop=30, **kw)
         E = ss.solvers.backends.events
         step_events = E.step_events
         def keep(*args):
@@ -108,9 +108,9 @@ def moves_inputs():
     """
     if not move_calls:
         S, E, I, R = ss.states('S E I R')
-        onset = ss.Transition(E, [I, R], p=[0.7, None], dur=ss.lognormal(mean=ss.days(3), std=ss.days(1)))
-        d = ss.Disease(infection=S >> E @ 0.1*I, onset=onset, care=ss.Transition(I, [I, ss.stay], p=[0.5, None], on=onset, dur=ss.days(4)),
-                       recovery=ss.Transition(I, [R, ss.dead], p=[0.95, None], dur=ss.weibull(c=2, scale=ss.days(8))), waning=R >> S @ ss.perday(0.05), init_prev=0.05, name='d')
+        onset = ss.Transition(E, {I: 0.7, R: None}, dur=ss.lognormal(mean=ss.days(3), std=ss.days(1)))
+        d = ss.Disease(infection=S >> E @ 0.1*I, onset=onset, care=ss.Transition(I, {I: 0.5, ss.stay: None}, when=ss.on(onset, delay=ss.days(4))),
+                       recovery=ss.Transition(I, {R: 0.95, ss.dead: None}, dur=ss.weibull(shape=2, scale=ss.days(8))), waning=R >> S @ ss.perday(0.05), init_prev=0.05, name='d')
         sim = ss.Sim(d, networks=ss.RandomNet(n_contacts=4), n_agents=1000, unit='day', stop=30, **kw)
         M = ss.solvers.backends.moves
         kernels = {k: getattr(M, k) for k in ['due_agents', 'step_moves']}
@@ -123,8 +123,8 @@ def moves_inputs():
         X, Y, Z = ss.states('X Y Z')
         clock = ss.Disease(A, B, tick=A >> B @ ss.constant(ss.days(5)), default_state='A', name='clock')
         share = lambda sim, uids: np.full(len(uids), 0.3)
-        dec = ss.Disease(X, Y, Z, to_y=ss.Transition(X, Y, p=0.5, rate=ss.perday(2), where=clock.B), to_z=ss.Transition(X, Z, p=0.5, rate=ss.perday(2), where=clock.B),
-                         onward=ss.Transition(Y, [Z, ss.stay], p=[share, None], dur=ss.days(2)), back=ss.Transition(Z, X, dur=0, where=ss.person.female), default_state='X', name='dec')
+        dec = ss.Disease(X, Y, Z, to_y=ss.Transition(X, Y, p=0.5, rate=ss.perday(2), who=clock.B), to_z=ss.Transition(X, Z, p=0.5, rate=ss.perday(2), who=clock.B),
+                         onward=ss.Transition(Y, {Z: share, ss.stay: None}, dur=ss.days(2)), back=ss.Transition(Z, X, dur=0, who=ss.person.female), default_state='X', name='dec')
         sim2 = ss.Sim([clock, dec], n_agents=1000, unit='day', stop=20, **kw)
         with mock.patch.object(M, 'due_agents', keeper('due_agents')), mock.patch.object(M, 'step_moves', keeper('step_moves')):
             sim.run()
@@ -264,8 +264,8 @@ ss.options(kernels='rust')
 kw = dict(verbose=0)
 S, I, R = ss.states('S I R')
 sir = lambda: ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(10), init_prev=0.01, name='sir')
-sims = [ss.Sim(sir(), networks=net, n_agents=1000, unit='day', stop=30, solver=solver, **kw) for net,solver in [(ss.RandomNet(), 'abm'), (ssl.StaticNet(n_contacts=10), 'abm'), (ssl.StaticNet(n_contacts=10), 'abm-events'), (ss.MixingPool(n_contacts=ss.constant(5)), 'abm-events')]]
-sims += [ss.Sim(ss.SEIR(beta=dict(randomnet=ss.peryear(0.1), sexualnet=ss.peract(0.1))), networks=['random', 'sexual'], demographics=True, n_agents=1000, dur=5, **kw)]
+sims = [ss.Sim(sir(), networks=net, n_agents=1000, unit='day', stop=30, solver=solver, **kw) for net,solver in [(ss.RandomNet(), 'abm'), (ssl.StaticNet(n_contacts=10), 'abm'), (ssl.StaticNet(n_contacts=10), ss.abm(step='events')), (ss.MixingPool(n_contacts=ss.constant(5)), ss.abm(step='events'))]]
+sims += [ss.Sim(ss.SEIR(beta=dict(randomnet=ss.peryear(0.1), sexualnet=ss.peract(0.1))), networks=['random', 'sexual'], demographics=True, n_agents=1000, stop=ss.years(5), **kw)]
 sims += [ss.Sim(sir(), total_pop=10000, unit='day', stop=30, solver=solver, **kw) for solver in ['ode', 'binomial', 'gillespie', 'tau']]
 for sim in sims:
     sim.run()
@@ -300,12 +300,12 @@ def test_stale_numba(tmp_path):
 @needs_rust
 def test_agents():
     sc.heading('Testing sims with agents: the passes, networks, demographics and draws of ss.Dist, and agents by events')
-    same(lambda s: ss.Sim(n_agents=3000, diseases=ss.SIS(beta=0.1, dur_inf=ss.lognormal(ss.years(1), ss.years(0.5))), networks='random', demographics=True, dur=20, rand_seed=s, **kw), compiled)
-    same(lambda s: ss.Sim(n_agents=3000, diseases=ss.SEIR(beta=dict(randomnet=ss.peryear(0.1), sexualnet=ss.peract(0.1))), networks=['random', 'sexual'], dur=20, rand_seed=s, **kw), compiled)
-    same(lambda s: ss.Sim(n_agents=2000, demographics=[ss.Pregnancy(), ss.Deaths()], networks='prenatal', dur=10, rand_seed=s, **kw), compiled)
+    same(lambda s: ss.Sim(n_agents=3000, diseases=ss.SIS(beta=0.1, dur_inf=ss.lognormal(ss.years(1), ss.years(0.5))), networks='random', demographics=True, stop=ss.years(20), rand_seed=s, **kw), compiled)
+    same(lambda s: ss.Sim(n_agents=3000, diseases=ss.SEIR(beta=dict(randomnet=ss.peryear(0.1), sexualnet=ss.peract(0.1))), networks=['random', 'sexual'], stop=ss.years(20), rand_seed=s, **kw), compiled)
+    same(lambda s: ss.Sim(n_agents=2000, demographics=[ss.Pregnancy(), ss.Deaths()], networks='prenatal', stop=ss.years(10), rand_seed=s, **kw), compiled)
     S, I, R = ss.states('S I R') # Agents by events (the pass is also called directly in test_twins())
     sirs = lambda: ss.Disease(infection=S >> I @ 0.05*I, recovery=I >> R @ 1, waning=R >> S @ (1/14), init_prev=0.01, name='sirs')
-    same(lambda s: ss.Sim(sirs(), networks=[ss.RandomNet(n_contacts=10), ss.MixingPool(n_contacts=2)], n_agents=2000, solver='abm-events', unit='day', stop=30, rand_seed=s, **kw), compiled)
+    same(lambda s: ss.Sim(sirs(), networks=[ss.RandomNet(n_contacts=10), ss.MixingPool(n_contacts=2)], n_agents=2000, solver=ss.abm(step='events'), unit='day', stop=30, rand_seed=s, **kw), compiled)
     return
 
 
@@ -344,7 +344,7 @@ def test_full_share():
     def make(seed):
         S, I, R = ss.states('S I R')
         sir = ss.Disease(S >> I @ ss.perday(0.5) * I, I >> R @ ss.days(8), init_prev=0.01, name='sir')
-        sir.stratify(place=ss.geo.geography(names=[f'p{i}' for i in range(n)], populations=pop, lat=lat, lon=lon), mobility=ss.geo.Mobility(ss.geo.gravity(distance_power=1.5), kind='commute', away=0.05)).stratify(age=[0, 15], fractions=[0.3, 0.7])
+        sir.stratify(place=ss.levels(ss.geo.geography(names=[f'p{i}' for i in range(n)], populations=pop, lat=lat, lon=lon), mobility=ss.geo.gravity(distance_power=1.5, kind='commute', away=0.05))).stratify(age={0: 0.3, 15: 0.7})
         return ss.Sim(sir, solver='binomial', total_pop=pop.sum(), unit='day', stop=30, rand_seed=seed, verbose=0)
     same(make, compiled)
     pairs = np.array([np.repeat(np.arange(n), n), np.tile(np.arange(n), n)])
@@ -366,7 +366,7 @@ def test_met_counts():
         I.rel_trans = 0.5
         rate = 1e-6*(ss.by(age=[2, 1, 0.5])*I).n + 0.2*I.n_infectious/(S + I + R).n if weighted else 2e-6*I.n + 0.1*I.frac
         sir = ss.Disease(infection=S >> I @ rate, recovery=I >> R @ ss.days(8), init_n=dict(I=ss.by(patch=[50, 0, 0])), name='sir')
-        sir.stratify(patch=towns, mobility=ss.geo.gravity(scale=2e-4)).stratify(age=[0, 15, 65], fractions=[0.3, 0.5, 0.2])
+        sir.stratify(patch=ss.levels(towns, mobility=ss.geo.gravity(scale=2e-4))).stratify(age={0: 0.3, 15: 0.5, 65: 0.2})
         return ss.Sim(sir, networks=ss.contacts(np.array([[8, 3, 1], [3, 6, 2], [1, 2, 3]])), unit='day', stop=100, total_pop=100_000, rand_seed=seed, **kw, **kwargs)
     for weighted in [False, True]:
         for solver in ['rk4', 'binomial']:

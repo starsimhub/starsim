@@ -120,11 +120,11 @@ The population grows from 126 million to about 260 million, as the UN projects. 
 sim.people.plot_ages()
 ```
 
-If you want to use realistic demographics for a setting that isn't in the UN data, or with rates of your own, `ss.Births()` and `ss.Deaths()` also take your own data: one rate, rates by year (a table with a column for the year and one for the rate), or for deaths, rates by year, age, and sex. There are examples of these files in the `test_data` folder (e.g. `nigeria_deaths.csv`), and `ss.People(n_agents, age_data=...)` takes the ages of the population from a file. Crude birth and death rates are usually given per 1,000 people, and these modules read a rate above 1 as per 1,000 and a rate below 1 as per person; give `rate_per=1000` or `rate_per=1` to say which (they warn when a rate could be either). See [Demographics](../user_guide/populations_demographics.qmd) in the user guide.
+If you want to use realistic demographics for a setting that isn't in the UN data, or with rates of your own, `ss.Births()` and `ss.Deaths()` also take your own data: one rate, rates by year (a table with a column for the year and one for the rate), or for deaths, rates by year, age, and sex. There are examples of these files in the `test_data` folder (e.g. `nigeria_deaths.csv`), and `ss.People(n_agents, age_data=...)` takes the ages of the population from a file. Crude birth and death rates are usually given per 1,000 people, so these modules read a bare number that way (`ss.Births(birth_rate=20)`), while a typed rate is per person (`ss.peryear(0.02)`), as every rate in Starsim is; tables are read in the UN's units (death rates by age per person), and `rate_per=1` says that a bare number or a table is per person. See [Demographics](../user_guide/populations_demographics.qmd) in the user guide.
 
 ## Pregnancy
 
-`ss.Births()` adds babies to the population as a whole. `ss.Pregnancy()` instead gives women of reproductive age pregnancies, at age-specific fertility rates, which last about nine months and end in a birth (or a miscarriage, a stillbirth, or a maternal death, at rates that can be set). This is what a model needs when something depends on pregnancy itself: infection passed from mother to child (see [A2](a2_networks.qmd#mothers-and-children)), testing in antenatal care, or the effects of a disease on pregnancy. Pregnancy is itself declared as states (`NP`, not pregnant, and `P`, pregnant) and transitions (`conception`, `delivery`, and so on), so other modules can use them, e.g. `where=pregnancy.P`, and each transition is a result. As per standard definitions, `fertility_rate` is defined per *woman*, whereas a birth rate is defined per *person*.
+`ss.Births()` adds babies to the population as a whole. `ss.Pregnancy()` instead gives women of reproductive age pregnancies, at age-specific fertility rates, which last about nine months and end in a birth (or a miscarriage, a stillbirth, or a maternal death, at rates that can be set). This is what a model needs when something depends on pregnancy itself: infection passed from mother to child (see [A2](a2_networks.qmd#mothers-and-children)), testing in antenatal care, or the effects of a disease on pregnancy. Pregnancy is itself declared as states (`NP`, not pregnant, and `P`, pregnant) and transitions (`conception`, `delivery`, and so on), so other modules can use them, e.g. `who=pregnancy.P`, and each transition is a result. As per standard definitions, `fertility_rate` is defined per *woman*, whereas a birth rate is defined per *person*.
 
 As with births and deaths, `ss.Pregnancy(fertility_rate='Nigeria')` reads Nigeria's age-specific fertility rates from the UN: births per 1,000 women in each 5-year age group, by year. Pregnancy takes months, so the sim steps by a month:
 
@@ -139,7 +139,7 @@ sim.plot('alive')
 
 The population grows much as it did with crude birth rates, but now each birth comes from a pregnancy of a particular woman, so it can be linked to her: her age, her infections, and the care she receives. The pregnancy model supplies the births, so don't also add `ss.Births()` (or `ss.birth()`) unless it stands for a separate source of people: the same births would be counted twice.
 
-Rates of your own work too: `fertility_rate` takes a table with a column for the year, one for the age, and one for the rate, e.g. `pd.read_csv('test_data/nigeria_asfr.csv')` (columns `Time`, `AgeGrp`, and `ASFR`), or one rate, e.g. `ss.peryear(100)` (100 births a year per 1,000 women, since a rate above 1 is read as per 1,000, as for births).
+Rates of your own work too: `fertility_rate` takes a table with a column for the year, one for the age, and one for the rate, e.g. `pd.read_csv('test_data/nigeria_asfr.csv')` (columns `Time`, `AgeGrp`, and `ASFR`), or one rate, e.g. `ss.peryear(0.1)` per woman, or the bare number `100` (100 births a year per 1,000 women, as for births).
 
 ## Agents standing for many people
 
@@ -164,7 +164,7 @@ With 1,000 agents, about 40 are born each year, and the number varies by chance 
 1. In Niger, the crude birth rate is 45 and the crude death rate is 9. Assuming these rates stay constant, and starting with its population in 2020 (`ss.population('Niger', n_agents=5000)`), how many people will there be in 2040? (You do not need to include any diseases in your model.) Compare this with its UN birth and death rates.
 2. In the measles model with births, how does the time between epidemics in the ODE change if the birth rate (and the death rate) is 20 per 1,000 per year instead of 30? Does it agree with the theory above?
 3. In the town of 20,000 with importations, how often do epidemics come if the town has 50,000 people instead (and so more births each year)? Does measles ever persist between them?
-4. Contraception lowers the rate of conception: `ss.modify(pregnancy.conception, multiply=0.7, start=2010)` cuts it by 30% from 2010. Add it to the Nigeria model with pregnancy as an intervention. How many fewer people are there in 2030?
+4. Contraception lowers the rate of conception: `ss.modify(pregnancy.conception, multiply=0.7, when=ss.schedule(start=2010))` cuts it by 30% from 2010. Add it to the Nigeria model with pregnancy as an intervention. How many fewer people are there in 2030?
 
 ## Further reading
 

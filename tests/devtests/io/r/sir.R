@@ -14,7 +14,7 @@ invisible(sim$run())
 n_I <- py_to_r(sim$results$sir$I$values)
 cat("Peak infected:", max(n_I), "\n")
 
-msim <- sim$run(solver = "binomial", n_runs = 20) # Built again for the solver, with no sim$new()
+msim <- ss$parallel(sim$new(solver = "binomial"), n_runs = 20L, workers = 1L) # Many runs, built again for another solver
 
 # Checks
 stopifnot(max(n_I) > n_I[1]) # The epidemic grows

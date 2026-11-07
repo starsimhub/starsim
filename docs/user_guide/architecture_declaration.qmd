@@ -77,10 +77,10 @@ Age, sex, place, and risk group are all handled by one operation, `stratify()`, 
 
 ```python
 sim = ss.Sim(sir, stratify=dict(age=[0, 15, 65]))   # or sim.stratify(age=...), for every module
-sir.stratify(risk=['low', 'high'], adjust={'infection': [1, 3]})  # one disease's own dimension
+sir.stratify(risk={'low': 0.8, 'high': 0.2})                     # one disease's own dimension
 ```
 
-Stratifying doesn't copy the states: `sir` still has `S`, `I`, and `R`, and the dimension becomes an axis. In a compartmental run each state has one row per group; as agents the property is an array on the people, and the groups are used for adjustments, conditions, and results. The base model and the stratification don't refer to each other, which is what lets one disease be reused with different structures. A stratified result is still one result (`res.I.select(age='0-14')`, `res.I.by('age')`). Properties of people are normally stratified on the sim, because every disease has to agree on them. The code is in `starsim/internals/dimensions.py` (`ss.dimensions.Strat`), and the groups a sim ends up with are `sim.groups`. See [Stratification](building_stratification.qmd).
+Stratifying doesn't copy the states: `sir` still has `S`, `I`, and `R`, and the dimension becomes an axis. In a compartmental run each state has one row per group; as agents the property is an array on the people, and the groups are used for values by group, conditions, and results. The base model and the stratification don't refer to each other, which is what lets one disease be reused with different structures. A stratified result is still one result (`res.I.select(age='0-14')`, `res.I.by('age')`). Properties of people are normally stratified on the sim, because every disease has to agree on them. The code is in `starsim/internals/dimensions.py` (`ss.dimensions.Strat`), and the groups a sim ends up with are `sim.groups`. See [Stratification](building_stratification.qmd).
 
 ## The graph: resolve, complete, check
 
@@ -97,7 +97,7 @@ Picking names up from variables is convenient but implicit, so it happens in one
 
 ## Guessed defaults
 
-Short models leave a lot unsaid: how a dwell time is distributed, how people mix, how many there are. Starsim fills each gap with a default and records the rule that produced it: a **guessed default**. `describe()` prints the resolved model with every guess marked, so nothing is assumed silently:
+Short models leave a lot unsaid: how a dwell time is distributed, how people mix, how many there are. Starsim fills each gap with a default and records the rule that produced it: a **guessed default**. `describe()` gives the resolved model with every guess marked, so nothing is assumed silently:
 
 ```{python}
 import starsim as ss
@@ -118,7 +118,7 @@ Every `[guessed: ...]` is a choice you didn't make: 10,000 people, the ODE solve
 Because the model is data, its other views come for free. They are all in `starsim/internals/display.py`:
 
 ```{python}
-sir.equations()
+print(sir.equations())
 sir.transitions
 ```
 

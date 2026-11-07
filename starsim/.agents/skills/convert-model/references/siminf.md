@@ -16,9 +16,9 @@ The import reads the R script without running R: literal numbers, strings, `c()`
 | `pow()`, `fmin()`, `fmax()`, `(int)` | The same in the rate | yes |
 | Stoichiometry with net change one person moving (`S + I -> ... -> 2*I`) | `S -> I` | yes |
 | Other stoichiometry | Listed | no |
-| Rows of `u0` | A stratification `node` (`kind='space'`), split by node size; initial numbers by node as `ss.by(node=...)` | yes |
+| Rows of `u0` | A stratification `node=ss.levels({...}, kind='space')`, split by node size; initial numbers by node as `ss.by(node=...)` | yes |
 | `gdata`; `ldata` that differs by node | Parameters; `ss.par(ss.by(node=...))` | yes |
-| `enter`, `exit`, `intTrans`, `extTrans` events, with `E` and `N` | `ss.geo.Mobility(data=register)` (`to_states` for `intTrans`; entering animals go to the first compartment selected) | yes |
+| `enter`, `exit`, `intTrans`, `extTrans` events, with `E` and `N` | `ss.geo.register(register)` (`to_states` for `intTrans`; entering animals go to the first compartment selected) | yes |
 | `SISe`, `SISe3` (`phi` in the environment, by quarter) | `phi` as `ss.State(people=False)`, with a seasonal decay `phi >> ss.dead` and shedding `ss.outside >> phi` from `I` | yes |
 | `tspan` | `solver='gillespie'`, in days, from `tspan[0] - 1` to `tspan[-1]` | yes |
 | `u0`, `events` computed in R (`u0_SIR()`, `events_SIR()`, `read.csv()`, loops) | Listed as "computed in R"; pass them in: `ss.import_from('model.R', u0='u0.csv', events='events.csv.gz')` | no |

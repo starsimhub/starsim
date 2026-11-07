@@ -33,7 +33,7 @@ def make_seir():
     seir = ss.Disease(
         infection = ss.Transition(S, E, rate=ss.seasonal(0.4, amplitude=0.3, peak=1) * I),
         latency   = ss.Transition(E, I, dur=ss.erlang(mean=5, k=3)),
-        outcome   = ss.Transition(I, [R, D], dur=8, p=[None, 0.1]),
+        outcome   = ss.Transition(I, {R: None, D: 0.1}, dur=8),
         init      = dict(I=0.01),
         name      = 'seir',
     )
@@ -47,18 +47,18 @@ def make_plain(beta, **kwargs):
 
 def make_ages():
     """ Three age groups with a contact matrix, and susceptibility that differs by age """
-    return make_plain(0.05, init=dict(I=0.01)).stratify(age=[0, 15, 65], fractions=[0.3, 0.5, 0.2], adjust=dict(infection=[0.5, 1.0, 1.5]))
+    return make_plain(0.05*ss.by(age=[0.5, 1.0, 1.5]), init=dict(I=0.01)).stratify(age={0: 0.3, 15: 0.5, 65: 0.2})
 
 
 def make_towns():
     """ Three towns with commuting between them """
     towns = ss.geo.geography(names=['north', 'south', 'east'], populations=[50_000, 30_000, 20_000], x=[0, 0, 40], y=[0, 30, 0])
-    return make_plain(0.3, init_n=dict(I=ss.by(patch=[50, 0, 0]))).stratify(patch=towns, mobility=ss.geo.gravity(scale=2e-4))
+    return make_plain(0.3, init_n=dict(I=ss.by(patch=[50, 0, 0]))).stratify(patch=ss.levels(towns, mobility=ss.geo.gravity(scale=2e-4)))
 
 
 def make_commute():
     """ Three age groups with a contact matrix within each of three towns, with commuting between them, and aging """
-    return make_towns().stratify(age=[0, 15, 65], fractions=[0.3, 0.5, 0.2])
+    return make_towns().stratify(age={0: 0.3, 15: 0.5, 65: 0.2})
 
 
 def make_delay():
@@ -72,7 +72,7 @@ def make_biting(w=(0.5, 2.0)):
     """ A weighted count: each infectious person counted by how much they are bitten (or not weighted, w=None) """
     S, I, R = ss.states('S I R')
     sir = ss.Disease(infection=S >> I @ ss.perday(0.3)*(I.n if w is None else (ss.by(biting=list(w))*I).n)/(S + I + R).n, recovery=I >> R @ ss.days(8), init=dict(I=0.01), name='sir')
-    return sir.stratify(biting=['lo', 'hi'], fractions=[0.7, 0.3])
+    return sir.stratify(biting={'lo': 0.7, 'hi': 0.3})
 
 
 models = sc.obj(
@@ -94,7 +94,7 @@ def run(key, how, **kwargs):
     sim = ss.Sim(make(), **sc.mergedicts(pars, kw, kwargs)).init()
     if how == 'all' and key != 'tb':
         assert sim.kernel_only()
-    return sim.run(profile=(how == 'step')) # Recording the time of each step is one of the things that needs the loop
+    return sim.profile(kind='loop', plot=False).sim if how == 'step' else sim.run() # Recording the time of each step is one of the things that needs the loop
 
 
 def largest_diff(sim1, sim2):
@@ -264,9 +264,8 @@ def test_plain_estimate():
     engine = sim.diseases[0].engine
     engine.init_program()
     seconds = []
-    sim.pars.freeze(False) # To ask the engine of this sim, with each setting
     for n_sub in [1, None]: # As if no substeps were taken, then as the run takes them
-        sim.pars.substeps = n_sub
+        sim.solver = ss.ode(substeps=n_sub) # To ask the engine of this sim, with each setting
         seconds.append(engine.plain_seconds())
     assert seconds[1] > 20*seconds[0] # Recovery in a day under monthly steps: 122 substeps a step, so that no one turns over by more than a quarter in one
     return seconds
@@ -279,7 +278,7 @@ def test_engine_choice():
     for compiled in [True, False]:
         clock = itertools.count(0.0, 100.0*(1 - compiled)) # Each call 100 s after the last, as if the machine were busy
         with mock.patch.object(ss.kernels, 'is_compiled', lambda: compiled), mock.patch.object(time, 'perf_counter', lambda: next(clock)): # And a cold cache
-            sim = ss.Sim(make_commute(), total_pop=1e5, unit='day', stop=3650, solver='ode', **kw).init() # A long run, once taken by JAX
+            sim = ss.Sim(make_commute(), total_pop=1e5, unit='day', stop=ss.days(3650), solver='ode', **kw).init() # A long run, once taken by JAX
             choices.append(ss.solvers.choose_engine(sim))
     assert choices[0] == choices[1] == (False, 'kernels'), f'The engine was not the kernels, or changed with the cache or the clock: {choices}'
     return choices
@@ -289,7 +288,7 @@ def test_engine_choice():
 def test_jax_thread_limit():
     sc.heading('Testing that a limit on threads in the environment is kept for JAX, which takes as many CPU devices (see ss.gradients.jax())')
     code = 'import starsim as ss; print(ss.settings.thread_limit)'
-    env = {k:v for k,v in os.environ.items() if k not in ['OMP_NUM_THREADS', 'SCIRIS_NUM_THREADS', 'STARSIM_NUM_THREADS']}
+    env = {k:v for k,v in os.environ.items() if k not in ['OMP_NUM_THREADS', 'SCIRIS_NUM_THREADS', 'STARSIM_BLAS_THREADS']}
     run = lambda **kw: subprocess.run([sys.executable, '-c', code], env=env | kw, capture_output=True, text=True, check=True).stdout.split()[-1]
     assert run(OMP_NUM_THREADS='2') == '2' and run() == 'None' # Starsim's own default of one BLAS thread is not a limit
     return
@@ -326,14 +325,14 @@ def test_compile_status():
 
 def test_blas_threads():
     sc.heading('Testing the BLAS threads, even with Starsim imported last')
-    env = {k:v for k,v in os.environ.items() if k not in ['SCIRIS_NUM_THREADS', 'STARSIM_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'OMP_NUM_THREADS', 'MKL_NUM_THREADS']}
+    env = {k:v for k,v in os.environ.items() if k not in ['SCIRIS_NUM_THREADS', 'STARSIM_BLAS_THREADS', 'OPENBLAS_NUM_THREADS', 'OMP_NUM_THREADS', 'MKL_NUM_THREADS']}
     env['STARSIM_UNCOMPILED_WARNING'] = '0'
-    code = 'import numpy, scipy.linalg, sciris as sc, starsim as ss; print(ss.options.num_threads, *(getter() for setter,getter in sc.limit_threads.find_libs()))'
-    for extra,threads in [({}, 1), (dict(STARSIM_NUM_THREADS='3'), 3), (dict(SCIRIS_NUM_THREADS='2'), 2), (dict(STARSIM_NUM_THREADS='3', SCIRIS_NUM_THREADS='2'), 3)]:
+    code = 'import numpy, scipy.linalg, sciris as sc, starsim as ss; print(ss.options.blas_threads, *(getter() for setter,getter in sc.limit_threads.find_libs()))'
+    for extra,threads in [({}, 1), (dict(STARSIM_BLAS_THREADS='3'), 3), (dict(SCIRIS_NUM_THREADS='2'), 2), (dict(STARSIM_BLAS_THREADS='3', SCIRIS_NUM_THREADS='2'), 3)]:
         out = subprocess.run([sys.executable, '-c', code], env=env | extra, capture_output=True, text=True, check=True).stdout.strip().splitlines()[-1]
         assert set(map(int, out.split())) == {threads}, f'Expected {threads} BLAS threads with {extra}, not {out}' # Off Linux, Sciris finds no libraries, so only the option is checked
     current = lambda: {getter() for setter,getter in sc.limit_threads.find_libs()}
-    with ss.options.context(num_threads=2): # It can go up as well as down
+    with ss.options.context(blas_threads=2): # It can go up as well as down
         assert current() <= {2}
     assert current() <= {1}
     return

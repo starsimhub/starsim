@@ -30,7 +30,7 @@ def test_exit_split():
     def make():
         P, C, R = ss.states('P C R')
         p_cin = logf2(P.time_in/ss.years(1), k)
-        return ss.Disease(P, C, R, precin=ss.Transition(P, [C, R], p=[p_cin, None], dur=ss.lognormal(ss.years(3), ss.years(2))), default_state='P', name='hpv')
+        return ss.Disease(P, C, R, precin=ss.Transition(P, {C: p_cin, R: None}, dur=ss.lognormal(ss.years(3), ss.years(2))), default_state='P', name='hpv')
     kw2 = dict(start=2000, stop=2030, dt=0.25, unit='year', **kw)
     sigma2 = np.log(1 + (2/3)**2) # The lognormal of mean 3 and sd 2, in whole steps as agents leave at the one nearest their dwell
     dwell = np.random.default_rng(0).lognormal(np.log(3) - sigma2/2, np.sqrt(sigma2), 1_000_000)
@@ -55,7 +55,7 @@ def test_syphilis_clock():
             to_late   = EL >> LL @ ss.years(2),
             init_prev = 0.02, init=dict(EL=0.01, LL=0.01), name='syph')
         latent = (EL | LL).time_in
-        decay = ss.modify(syph.rel_trans, multiply=0.5**(latent/ss.years(1)), where=EL | LL, name='latent_decay')
+        decay = ss.modify(syph.rel_trans, multiply=0.5**(latent/ss.years(1)), who=EL | LL, name='latent_decay')
         return ss.Sim(syph, connectors=decay, start=2000, stop=2010, dt=ss.months(1), unit='year', **kw, **kwargs)
     with pytest.raises(ss.CapabilityError):
         make(solver='ode', total_pop=20_000).init()

@@ -10,8 +10,8 @@ Architecture:
       and applies fetal damage (preterm risk via timing shifts, low birth weight
       via growth restriction). Damage is applied both at conception (if already
       infected) and during pregnancy (if newly infected).
-    - `treat_pregnant` (Intervention): treats infected pregnant women within a
-      specified year range and partially reverses fetal damage.
+    - `treat_pregnant` (Delivery): treats infected pregnant women, as `ss.treat()`
+      delivers a treatment, and partially reverses fetal damage.
 
 Both modules require `ssl.mnch.FetalHealth()` in the sim's `modules` and
 `ss.Pregnancy()` in demographics. The connector also requires the target
@@ -24,9 +24,9 @@ Usage::
 
     sim = ss.Sim(
         diseases=ssl.AgentSIR(name='sir', beta=0.1), # Written as code, since treat_pregnant() sets its states directly
-        demographics=[ss.Pregnancy(fertility_rate=ss.time.freq(30, 'year')), ss.Deaths()],
+        demographics=[ss.Pregnancy(fertility_rate=ss.peryear(0.03)), ss.Deaths()],
         connectors=ssl.mnch.fetal_infection(),
-        interventions=ssl.mnch.treat_pregnant(disease='sir', start_year=2025),
+        interventions=ssl.mnch.treat_pregnant(disease='sir', when=ss.schedule(start=2025)),
         modules=ssl.mnch.FetalHealth(),
         networks=[ss.PrenatalNet(), ss.RandomNet()],
     )
@@ -34,8 +34,8 @@ Usage::
 
 To extend for a different disease, subclass `fetal_infection` and override
 `_apply_damage` with disease-specific logic (e.g. stage-dependent penalties).
-To extend `treat_pregnant`, subclass and override `step()` with custom
-eligibility criteria or reversal logic.
+To extend `treat_pregnant`, give `who=` for other eligibility criteria, or
+subclass `PregnancyTreatment` and override `administer()` for other reversal logic.
 
 Used with: agents; coded modules
 """
@@ -43,7 +43,7 @@ Used with: agents; coded modules
 import numpy as np
 import starsim as ss
 
-__all__ = ['FetalHealth', 'treat_pregnant', 'fetal_infection']
+__all__ = ['FetalHealth', 'treat_pregnant', 'PregnancyTreatment', 'fetal_infection']
 
 
 class FetalHealth(ss.Module):
@@ -126,7 +126,7 @@ class FetalHealth(ss.Module):
             lbw_threshold=2500,
             vlbw_threshold=1500,
             min_ga=ss.weeks(24),  # Earliest possible delivery GA; timing shifts cannot bring delivery before this
-            percentile_dist=ss.normal(loc=1.0, scale=0.1),
+            percentile_dist=ss.normal(mean=1.0, std=0.1),
         )
         self.update_pars(pars, **kwargs)
 
@@ -168,12 +168,12 @@ class FetalHealth(ss.Module):
             ss.Result('vlbw',            dtype=int, label='Very low birth weight', kind='flow'),
             ss.Result('sga',             dtype=int, label='Small for gestational age', kind='flow'),
             ss.Result('svn',             dtype=int, label='Small vulnerable newborns', kind='flow'),
-            ss.Result('mean_birth_weight', label='Mean birth weight (g)'),
-            ss.Result('mean_ga_at_birth',  label='Mean GA at birth (weeks)'),
-            ss.Result('mean_exposures',    label='Mean exposures per pregnancy'),
-            ss.Result('lbw_rate',          label='LBW rate'),
-            ss.Result('sga_rate',          label='SGA rate'),
-            ss.Result('svn_rate',          label='SVN rate'),
+            ss.Result('mean_birth_weight', kind='ratio', label='Mean birth weight (g)'),
+            ss.Result('mean_ga_at_birth',  label='Mean GA at birth (weeks)', kind='ratio'),
+            ss.Result('mean_exposures',    label='Mean exposures per pregnancy', kind='ratio'),
+            ss.Result('lbw_rate',          label='LBW rate', kind='ratio'),
+            ss.Result('sga_rate',          label='SGA rate', kind='ratio'),
+            ss.Result('svn_rate',          label='SVN rate', kind='ratio'),
         )
         for key in self.means:
             self.results[key][:] = np.nan # Undefined on a step with no births, so that it is left out of a mean over time
@@ -364,95 +364,94 @@ class FetalHealth(ss.Module):
         pass  # All logic is driven by Pregnancy callbacks
 
 
-class treat_pregnant(ss.Intervention):
+class treat_pregnant(ss.Delivery):
     """
     Treat infected pregnant women and partially reverse fetal damage.
 
-    Each timestep, identifies pregnant women infected with the target disease,
-    treats a fraction of them (curing infection), and reverses a portion of
-    the accumulated fetal damage (growth restriction and timing shift).
-
-    Treatment only applies between `start_year` and `end_year`. If not
-    specified, defaults to the full simulation period.
+    A delivery, as `ss.treat()` is: by default each pregnant woman infected with the
+    target disease is offered treatment once, with the probability `coverage`. Treatment
+    cures the infection, and reverses a share of the fetal damage accumulated so far
+    (growth restriction and timing shift). `who=` restricts who among them is offered it,
+    and `when=` when, as for any delivery (e.g. `when=ss.schedule(start=2025)`).
 
     Note: CRN safe.
 
     Args:
-        disease (str):              name of the target disease (default: 'sir')
-        start_year (float):         first year treatment is available (default: sim start)
-        end_year (float):           last year treatment is available (default: sim end)
-        p_treat (Dist):             par: probability of treating an eligible woman per timestep
-        tx_growth_reversal (float): par: fraction of growth restriction to reverse (0-1)
-        tx_timing_reversal (float): par: fraction of timing shift to reverse (0-1)
-        pars (dict): the same parameters, as a dict
+        disease (str):           name of the target disease (default: 'sir'), written as code (e.g. `ssl.AgentSIR`)
+        coverage (float):        the probability that each woman eligible is treated
+        who (Cond/func):         who among the infected pregnant women is offered it
+        when (various):          when it is offered, as for any delivery (default: on every step, once to each woman when she becomes eligible)
+        growth_reversal (float): the share of the growth restriction reversed (0-1)
+        timing_reversal (float): the share of the timing shift reversed (0-1)
+        kwargs (dict):           passed to `ss.Delivery` (e.g. `capacity=`, `name=`)
 
     Attributes:
         ti_treated (FloatArr):  timestep when each agent was treated
 
-    Example — treatment starting in 2025 with 50% coverage::
+    Example — treatment from 2025, of half the women eligible::
 
-        ssl.mnch.treat_pregnant(disease='sir', start_year=2025, p_treat=ss.bernoulli(p=0.5))
+        ssl.mnch.treat_pregnant(disease='sir', when=ss.schedule(start=2025), coverage=0.5)
     """
 
-    def __init__(self, disease='sir', start_year=None, end_year=None, pars=None, **kwargs):
-        super().__init__()
+    def __init__(self, disease='sir', coverage=0.9, who=None, when=None, growth_reversal=0.7, timing_reversal=0.7, name=None, **kwargs):
+        replaced = dict(start_year='when=ss.schedule(start=...)', end_year='when=ss.schedule(stop=...)', p_treat='coverage=',
+                        tx_growth_reversal='growth_reversal=', tx_timing_reversal='timing_reversal=', pars='its keywords')
+        for key in kwargs:
+            if key in replaced:
+                errormsg = f'ssl.mnch.treat_pregnant() takes no {key}=; use {replaced[key]}'
+                raise TypeError(errormsg)
         self.disease_name = disease
-        self.start_year = start_year
-        self.end_year   = end_year
-        self.define_pars(
-            p_treat            = ss.bernoulli(p=0.9),
-            tx_growth_reversal = 0.7,
-            tx_timing_reversal = 0.7,
-        )
-        self.update_pars(pars, **kwargs)
+        self.growth_reversal = growth_reversal
+        self.timing_reversal = timing_reversal
+        eligible = self.eligible if who is None else ss.conditions.Cond('&', who, self.eligible)
+        super().__init__(PregnancyTreatment(self, name=f'{name or "treat_pregnant"}_drug'), who=eligible, when=when, coverage=coverage, disease=disease, name=name, **kwargs)
         self.define_states(
             ss.FloatArr('ti_treated', label='Time of treatment'),
         )
         return
 
     def init_pre(self, sim):
-        """ Check that the sim has the disease and `ssl.mnch.FetalHealth`, and fill in the years
+        """ Check that the sim has the disease and `ssl.mnch.FetalHealth`
 
         Args:
             sim (Sim): the sim being initialized
         """
-        super().init_pre(sim)
-
-        # Validate that the required disease and FetalHealth modules exist
         if self.disease_name not in sim.diseases:
             raise ValueError(f'treat_pregnant requires disease "{self.disease_name}" but it was not found in the sim.')
         if 'fetal_health' not in sim.custom:
             raise ValueError('treat_pregnant requires a FetalHealth module. Add it with modules=ssl.mnch.FetalHealth().')
-
-        # Default year bounds to the full sim period
-        if self.start_year is None: self.start_year = sim.t.start
-        if self.end_year is None:   self.end_year = sim.t.stop
+        super().init_pre(sim)
         return
 
-    def step(self):
-        # Only apply treatment within the active year range
-        year = self.t.now('year')
-        if year < self.start_year or year > self.end_year:
-            return
+    def eligible(self, sim):
+        """ The pregnant women infected with the disease """
+        preg = sim.get_module(ss.Pregnancy)
+        return preg.P & sim.diseases[self.disease_name].infected
 
+
+class PregnancyTreatment(ss.Product):
+    """ What `treat_pregnant` delivers: a cure of the infection, and a partial reversal of the fetal damage """
+    def __init__(self, delivery, **kwargs):
+        super().__init__(**kwargs)
+        self.delivery = delivery
+        return
+
+    def administer(self, uids):
+        tx      = self.delivery
         sim     = self.sim
-        preg    = sim.get_module(ss.Pregnancy)
-        disease = sim.diseases[self.disease_name]
+        disease = sim.diseases[tx.disease_name]
         fh      = sim.custom['fetal_health']
+        uids    = uids[disease.infected[uids]]
 
-        # Find pregnant women infected with the target disease
-        eligible = preg.P & disease.infected
-        treated = self.pars.p_treat.filter(eligible)
-        if len(treated):
-            # Cure infection
-            disease.infected[treated]  = False
-            disease.recovered[treated] = True
-            disease.ti_dead[treated]   = np.nan # Cancel any scheduled death from the disease
-            self.ti_treated[treated]   = self.ti
+        # Cure infection
+        disease.infected[uids]  = False
+        disease.recovered[uids] = True
+        disease.ti_dead[uids]   = np.nan # Cancel any scheduled death from the disease
+        tx.ti_treated[uids]     = sim.ti
 
-            # Partially reverse fetal damage from the infection
-            fh.reverse_growth_restriction(treated, fh.growth_restriction[treated] * self.pars.tx_growth_reversal)
-            fh.reverse_timing_shift(treated, self.pars.tx_timing_reversal)
+        # Partially reverse fetal damage from the infection
+        fh.reverse_growth_restriction(uids, fh.growth_restriction[uids] * tx.growth_reversal)
+        fh.reverse_timing_shift(uids, tx.timing_reversal)
         return
 
 

@@ -42,7 +42,7 @@ folder = tempfile.mkdtemp()
 filename = os.path.join(folder, 'measles.R')
 sc.savetext(filename, odin_code)
 
-sim = ss.import_from(filename, start='2025-01-01', stop=365)
+sim = ss.import_from(filename, start='2025-01-01', stop=ss.days(365))
 ```
 
 Each `deriv()` is the rate of change of a compartment, written as the total flows in and out: β S I / N people a day are infected, σ E become infectious, and γ I recover. This is the form of most textbooks and frameworks. The format is told from the file (or given with `format='odin'`). odin has no time unit, so its numbers are taken to be per day (`unit=` says otherwise), and odin is told when to stop when it is run, so the sim needs `stop=`, here 365 days; `start=` gives it dates, which a forecast hub needs ([below](#forecast-hubs)). Other arguments change the model as it is read: `pars=dict(beta=1.5)` gives a parameter another value, and `dt=` a step.
@@ -152,7 +152,7 @@ mu <- user(0.00008)  # Birth and death rate, per day (about 3% a year)
 seasonal_file = os.path.join(folder, 'measles_seasonal.R')
 sc.savetext(seasonal_file, seasonal_code)
 
-seasonal = ss.import_from(seasonal_file, stop=20*365, dt=7) # A step of a week is plenty over 20 years
+seasonal = ss.import_from(seasonal_file, stop=ss.days(20*365), dt=7) # A step of a week is plenty over 20 years
 seasonal.imported.incomplete
 ```
 
@@ -183,7 +183,7 @@ For a longer model, with more that isn't translated, `sim.imported.prompt` is a 
 
 | Framework | Reads | Notes |
 |---|---|---|
-| [Atomica](atomica.qmd) | A framework and databook (`.xlsx`), and a program book | Programs become parameters of spending, for `ss.fit.optimize()` |
+| [Atomica](atomica.qmd) | A framework and databook (`.xlsx`), and a program book | Programs become parameters of spending, for `sim.optimize()` |
 | [camdl](camdl.qmd) | A `.camdl` file (compiled with `camdlc`), or its JSON form | Parameters keep their bounds and priors; observations become outcomes with their likelihoods |
 | [EMULSION](emulsion.qmd) | A model file (`.yaml`) | Each state machine becomes a disease |
 | [EpiModel](epimodel.qmd) | An R script, run first in R by `dump_epimodel.R` | A fitted network becomes `ss.DegreeNet` |
@@ -249,7 +249,7 @@ print(ss.export_to(sim, 'odin'))
 ```{python}
 sbml_file = os.path.join(folder, 'measles.xml')
 ss.export_to(sim, 'sbml', filename=sbml_file)
-again = ss.import_from(sbml_file, start='2025-01-01', stop=365, verbose=False)
+again = ss.import_from(sbml_file, start='2025-01-01', stop=ss.days(365), verbose=False)
 again.run()
 print('Infections, imported from odin:', round(sim.results.measles.S_to_E.values.sum()))
 print('Infections, after a round trip through SBML:', round(again.results.measles.S_to_E.values.sum()))
@@ -289,7 +289,7 @@ Reading a file runs no code from it: each expression is checked, and only the mo
 `ss.converters.to_hub()` writes the runs of a MultiSim as a submission to a forecast hub (in the [hubverse](https://hubverse.io/) format used by the US forecast and scenario modeling hubs): each target, by scenario, location, and period, as quantiles over the runs or as the runs themselves. Here, weekly infections from 20 stochastic runs of the imported model:
 
 ```{python}
-msim = sim.run(solver='binomial', n_runs=20)
+msim = ss.parallel(sim.new(solver='binomial'), n_runs=20)
 hub = ss.converters.to_hub(msim, targets=dict(S_to_E='inc inf'), every='week', location='town')
 hub.head()
 ```

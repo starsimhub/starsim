@@ -27,7 +27,7 @@ def make_seir():
     seir = ss.Disease(
         infection = ss.Transition(S, E, rate=ss.seasonal(0.4, amplitude=0.3, peak=1) * I),
         latency   = ss.Transition(E, I, dur=ss.erlang(mean=5, k=3)),
-        outcome   = ss.Transition(I, [R, D], dur=8, p=[None, 0.1]),
+        outcome   = ss.Transition(I, {R: None, D: 0.1}, dur=8),
         init      = dict(I=0.01),
         name      = 'seir',
     )
@@ -41,18 +41,18 @@ def make_plain(beta, **kwargs):
 
 def make_ages():
     """ Three age groups with a contact matrix, and susceptibility that differs by age """
-    return make_plain(0.05, init=dict(I=0.01)).stratify(age=[0, 15, 65], fractions=[0.3, 0.5, 0.2], adjust=dict(infection=[0.5, 1.0, 1.5]))
+    return make_plain(0.05*ss.by(age=[0.5, 1.0, 1.5]), init=dict(I=0.01)).stratify(age={0: 0.3, 15: 0.5, 65: 0.2})
 
 
 def make_towns():
     """ Three towns with commuting between them """
     towns = ss.geo.geography(names=['north', 'south', 'east'], populations=[50_000, 30_000, 20_000], x=[0, 0, 40], y=[0, 30, 0])
-    return make_plain(0.3, init_n=dict(I=ss.by(patch=[50, 0, 0]))).stratify(patch=towns, mobility=ss.geo.gravity(scale=2e-4))
+    return make_plain(0.3, init_n=dict(I=ss.by(patch=[50, 0, 0]))).stratify(patch=ss.levels(towns, mobility=ss.geo.gravity(scale=2e-4)))
 
 
 def make_commute():
     """ Three age groups with a contact matrix within each of three towns, with commuting between them, and aging """
-    return make_towns().stratify(age=[0, 15, 65], fractions=[0.3, 0.5, 0.2])
+    return make_towns().stratify(age={0: 0.3, 15: 0.5, 65: 0.2})
 
 
 def make_delay():
@@ -66,7 +66,7 @@ def make_met():
     """ Counts that a contact matrix acts on: the number in each age group (beta*I.n), weighted (by age, and by infectiousness), and that over everyone (beta*I.frac) """
     S, I, R = ss.states('S I R')
     I.rel_trans = 0.5
-    return ss.Disease(infection=S >> I @ (1e-6*I.n + 1e-6*(ss.by(age=[2, 1, 0.5])*I).n + 2e-6*I.n_infectious + 0.1*I.frac), recovery=I >> R @ ss.days(8), init=dict(I=0.001), name='sir').stratify(age=[0, 15, 65], fractions=[0.3, 0.5, 0.2])
+    return ss.Disease(infection=S >> I @ (1e-6*I.n + 1e-6*(ss.by(age=[2, 1, 0.5])*I).n + 2e-6*I.n_infectious + 0.1*I.frac), recovery=I >> R @ ss.days(8), init=dict(I=0.001), name='sir').stratify(age={0: 0.3, 15: 0.5, 65: 0.2})
 
 
 models = sc.obj(
@@ -88,7 +88,7 @@ def run(key, how, **kwargs):
     sim = ss.Sim(make(), **sc.mergedicts(pars, kw, kwargs)).init()
     if how == 'all' and key != 'tb':
         assert sim.kernel_only()
-    return sim.run(profile=(how == 'step')) # Recording the time of each step is one of the things that needs the loop
+    return sim.profile(kind='loop', plot=False).sim if how == 'step' else sim.run() # Recording the time of each step is one of the things that needs the loop
 
 
 def largest_diff(sim1, sim2):
@@ -117,9 +117,9 @@ def test_stochastic():
                 assert np.all(n_I == np.round(n_I)) # Whole people
 
     # Many places, most of which have no events (skipped until something changes them): the same run as step by step
-    herds = make_plain(0.3, init_n=dict(I=ss.by(herd=[2] + [0]*599))).stratify(herd=[str(i) for i in range(600)], kind='space')
+    herds = make_plain(0.3, init_n=dict(I=ss.by(herd=[2] + [0]*599))).stratify(herd=ss.levels([str(i) for i in range(600)], kind='space'))
     base = ss.Sim(herds, solver='gillespie', unit='day', stop=30, total_pop=600*50, **kw)
-    assert largest_diff(base.new().run(), base.new().run(profile=True)) == 0
+    assert largest_diff(base.new().run(), base.new().profile(kind='loop', plot=False).sim) == 0
 
     # Diseases tracked jointly (74 × 51 compartments, with births) are stepped by the compartments that hold anyone: the same events as stepping every flow, and many times faster
     lognormal = [ss.SIR(dur_inf=ss.lognormal(mean=ss.years(6)), p_death=0.01), ss.SIS(dur_inf=ss.lognormal(mean=ss.years(10)))] # Starsim 3's durations, as Erlang stages
@@ -145,8 +145,8 @@ def test_stochastic():
     def strata(K, **pars):
         sir = make_plain(ss.perday(0.3), init_n=dict(I=ss.by(risk=[2] + [0]*(K-1)))).stratify(risk=[f'g{i}' for i in range(K)])
         return ss.Sim(sir, solver='gillespie', unit='day', stop=100, total_pop=200*K, **pars, **kw)
-    one = ss.Sim(make_plain(ss.perday(0.3), init_n=dict(I=2)), solver='gillespie', unit='day', stop=100, total_pop=2000, **kw).run(n_runs=60).results.sir.R.values[:, -1]
-    ten = strata(10).run(n_runs=60).results.sir.R.values[:, -1]
+    one = ss.parallel(ss.Sim(make_plain(ss.perday(0.3), init_n=dict(I=2)), solver='gillespie', unit='day', stop=100, total_pop=2000, **kw), n_runs=60).results.sir.R.values[:, -1]
+    ten = ss.parallel(strata(10), n_runs=60).results.sir.R.values[:, -1]
     assert abs(one.mean() - ten.mean()) < 3*np.hypot(one.std(), ten.std())/np.sqrt(60) # The same final size
     return sims
 
@@ -159,19 +159,19 @@ def test_restart():
     # A restarted sim gives what a new one does, for another seed or another value
     sim = ss.Sim(make(), solver='binomial', rand_seed=1, **pars, **kw).init()
     sim.run()
-    sim.run(rand_seed=5)
+    sim.restart(rand_seed=5).run()
     new = ss.Sim(make(), solver='binomial', rand_seed=5, **pars, **kw).run()
     assert largest_diff(sim, new) == 0
 
     sim = ss.Sim(make_plain(0.3, init=dict(I=0.01)), unit='day', stop=100, **kw).init()
-    peaks = [sim.run(pars=dict(beta=beta)).results.sir.I.max() for beta in [0.2, 0.3, 0.4]]
+    peaks = [sim.restart(pars=dict(beta=beta)).run().results.sir.I.max() for beta in [0.2, 0.3, 0.4]]
     new = [sim.new(pars=dict(beta=beta)).run().results.sir.I.max() for beta in [0.2, 0.3, 0.4]]
     assert np.allclose(peaks, new) and peaks[0] < peaks[1] < peaks[2]
 
     # What a restart keeps from the last start is worked out again if a value it reads changes, and only then
     def splits():
         S, E, I, R, D = ss.states(5)
-        sir = ss.Disease(S >> E @ ss.par(0.3, name='beta')*I, E >> I @ ss.days(3), ss.Transition(I, [R, D], dur=ss.days(8), p=[ss.par(0.9, name='p_R'), None], name='end'),
+        sir = ss.Disease(S >> E @ ss.par(0.3, name='beta')*I, E >> I @ ss.days(3), ss.Transition(I, {R: ss.par(0.9, name='p_R'), D: None}, dur=ss.days(8), name='end'),
                          init=dict(I=ss.par(0.01, name='I0'), E=0.02), name='sir')
         return ss.Sim(sir, unit='day', stop=40, verbose=0)
     kept = splits().init()
@@ -180,16 +180,16 @@ def test_restart():
     values = dict()
     for change in [dict(beta=0.4), dict(p_R=0.5), dict(I0=0.05), dict(beta=0.3, p_R=0.9, I0=0.01)]:
         values = values | change # A restart keeps the values of those before it
-        kept.run(pars=change)
+        kept.restart(pars=change).run()
         assert np.array_equal(kept.results.sir.D, splits().new(pars=values).run().results.sir.D), f'A restart with {values} differs from a new sim'
     kept.restart()
     start = engine.start_y
-    assert kept.run(pars=dict(beta=0.2)) and engine.start_y is start, 'A value the start does not read should keep it'
-    assert kept.run(pars=dict(p_R=0.7)) and engine.start_y is not start, 'A value the branches read should not keep it'
+    assert kept.restart(pars=dict(beta=0.2)).run() and engine.start_y is start, 'A value the start does not read should keep it'
+    assert kept.restart(pars=dict(p_R=0.7)).run() and engine.start_y is not start, 'A value the branches read should not keep it'
 
     # Many runs are restarts of one sim
     base = ss.Sim(make(), solver='binomial', **pars, **kw)
-    msim = base.run(n_runs=20)
+    msim = ss.parallel(base, n_runs=20)
     res = msim.results.sir.I
     assert res.values.shape == (20, base.new().init().t.npts)
     assert len(msim.sims.runners) == 1 and len(msim.sims) == 20 and not base.initialized # One sim was built (the sim of each run is made when asked for), and the one that was given is untouched
@@ -198,7 +198,7 @@ def test_restart():
     for key,multi in msim.results.sir.items():
         assert np.allclose(multi.values[7], one.results.sir[key].values), key
     grouped = ss.Sim(models.ages[0](), solver='binomial', **models.ages[1], **kw) # By group too
-    many, alone = grouped.run(n_runs=3).results.sir, grouped.new(rand_seed=grouped.pars.rand_seed + 2).run().results.sir
+    many, alone = ss.parallel(grouped, n_runs=3).results.sir, grouped.new(rand_seed=grouped.pars.rand_seed + 2).run().results.sir
     assert all(np.allclose(many[key].strata[2], alone[key].strata) for key in ['I', 'infection']) and np.allclose(many.I.values[2], alone.I.values)
     assert set(msim.results.sir.keys()) == {key for key,res in one.results.sir.items() if isinstance(res, ss.Result)}
     assert abs(msim.results.sir.cases.values.sum(axis=1).mean()/msim.results.sir.infection.cum.values[:, -1].mean() - 0.6) < 0.05
@@ -209,15 +209,15 @@ def test_restart():
     # A sim that has been initialized gives the same distinct runs as one that has not, restarted or copied
     for solver,agents in dict(binomial={}, abm=dict(n_agents=2000)).items():
         fresh = ss.Sim(make(), solver=solver, **agents, **pars, **kw)
-        runs = [ss.parallel(sim, n_runs=4, parallel=False).results.sir.I.values for sim in [fresh, fresh.new().init()]]
+        runs = [ss.parallel(sim, n_runs=4, workers=1).results.sir.I.values for sim in [fresh, fresh.new().init()]]
         assert len(np.unique(runs[0], axis=0)) == 4 and np.array_equal(runs[0], runs[1]), solver # Compared over the whole run, since runs where the epidemic dies out have the same peak
-    assert len(ss.parallel(done=fresh.new().run(), fresh=fresh, parallel=False).sims) == 2 # A sim that has run is built again
+    assert len(ss.parallel({'done': fresh.new().run(), 'fresh': fresh}, workers=1).sims) == 2 # A sim that has run is built again
 
     # The exact solver runs place by place when places do not affect each other within a step, with the same results as event by event over all places
     def herds(local):
         S, I, R = ss.states('S I R')
         sir = ss.Disease(infection=ss.Transition(S, I, rate=ss.perday(0.3) * I), recovery=ss.Transition(I, R, dur=ss.days(10)), init_n=dict(I=ss.by(herd=[5]*20)), name='herds')
-        sir.stratify(herd=[str(i) for i in range(20)], kind='space')
+        sir.stratify(herd=ss.levels([str(i) for i in range(20)], kind='space'))
         out = []
         for seed in range(10):
             sim = ss.Sim(sir, total_pop=20*200, solver='gillespie', unit='day', stop=100, rand_seed=seed, **kw).init()
@@ -237,26 +237,26 @@ def test_restart():
     S, I, R = ss.states('S I R')
     sirs = ss.Disease(infection=ss.Transition(S, I, rate=ss.perday(0.3) * I), recovery=ss.Transition(I, R, dur=ss.days(10)), waning=ss.Transition(R, S, rate=wane),
                       init_n=dict(I=ss.by(herd=[5, 0]), R=ss.by(herd=[0, 50])), name='sirs')
-    sirs.stratify(herd=['a', 'b'], kind='space')
+    sirs.stratify(herd=ss.levels(['a', 'b'], kind='space'))
     S_b = ss.Sim(sirs, total_pop=200, solver='gillespie', unit='day', stop=60, **kw).run().results.sirs.S.select(herd='b').values
     assert S_b[60] > S_b[29] # Herd b's recovered wane once waning starts
 
     # How often a small outbreak dies out, from the runs' results
     S, I, R = ss.states('S I R')
     small = ss.Disease(infection=ss.Transition(S, I, rate=0.15 * I), recovery=ss.Transition(I, R, dur=10), init_n=dict(I=2), name='small')
-    msim_small = ss.Sim(small, total_pop=200, solver='gillespie', unit='day', stop=100, **kw).run(n_runs=50)
+    msim_small = ss.parallel(ss.Sim(small, total_pop=200, solver='gillespie', unit='day', stop=100, **kw), n_runs=50)
     died = (msim_small.results.small.I.values[:, -1] == 0).mean()
     assert 0.3 < died < 0.9
 
     # How often it is a major outbreak (more than 10% infected), which dying out does not say for an SIR, since every run dies out in the end
     S, I, R = ss.states('S I R')
     sir = ss.Disease(infection=ss.Transition(S, I, rate=2/7 * I), recovery=ss.Transition(I, R, dur=7), init_n=dict(I=1), name='sir')
-    msim = ss.Sim(sir, total_pop=1000, solver='gillespie', unit='day', stop=365, **kw).run(n_runs=40)
+    msim = ss.parallel(ss.Sim(sir, total_pop=1000, solver='gillespie', unit='day', stop=365, **kw), n_runs=40)
     major = (msim.results.sir.infection.values.sum(axis=1) > 100).mean()
     assert 0.25 < major < 0.75 and (msim.results.sir.I.values[:, -1] == 0).all()
 
     # A sim that needs the loop (here, a modifier with a function of the sim) cannot be restarted, and still runs the usual way
-    masks = ss.modify('sir.pars.beta', multiply=0.5, where=lambda sim: sim.ti >= 20)
+    masks = ss.modify('sir.pars.beta', multiply=0.5, who=lambda sim: sim.ti >= 20)
     sim = ss.Sim(make_plain(0.3, init=dict(I=0.01)), unit='day', stop=100, interventions=masks, **kw).init()
     assert not sim.kernel_only() and 'masks' in sim.kernel_reason()
     assert sim.run().results.sir.I.max() < new[1]
@@ -283,7 +283,7 @@ def test_numpy_ode():
                     sims = []
                     for ode.mode in ['always', 'never']:
                         with ss.options.context(kernels='numba'):
-                            sims.append(run(key, how, solver='ode', integrator=integrator))
+                            sims.append(run(key, how, solver=ss.ode(integrator=integrator)))
                     diff = largest_diff(*sims)
                     assert diff < 1e-10, f'{key} ({integrator}, {how}): the ODE in NumPy differs from the kernels by {diff:.3g}'
     finally:

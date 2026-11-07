@@ -1,5 +1,5 @@
 """
-Dates: `ss.date`, an array of them (`ss.DateArray`), and calendar durations (`ss.datedur`)
+Dates: `ss.date`, an array of them (`ss.DateArray`), and calendar durations (`datedur`)
 
 They give every module one way to work with calendar time, in calendar dates or in decimal years.
 
@@ -44,8 +44,10 @@ class DateArray(np.ndarray):
                     except: # Otherwise, assume years
                         unit = ss.years
             else:
+                if isinstance(unit, str): # e.g. 'month'
+                    unit = ss.date if unit == 'date' else ss.time.get_dur_class(unit)
                 if not isinstance(unit, type):
-                    raise TypeError('unit must be a type (e.g., `ss.months`), not an instance (e.g., `ss.months(1)` or `ss.month`.')
+                    raise TypeError(f'unit must be a string (e.g. "month") or a type (e.g. ss.months), not an instance ({unit})')
                 if not issubclass(unit, (ss.date, ss.Duration)):
                     raise TypeError(f'unit must be a subclass of ss.date or ss.Duration, {unit} is not derived from one of these parent classes.')
 
@@ -101,7 +103,7 @@ class DateArray(np.ndarray):
 
     @property
     def is_datedur(self):
-        return issubclass(self.unit, ss.datedur)
+        return issubclass(self.unit, datedur)
 
     @property
     def is_float(self):
@@ -219,6 +221,15 @@ class DateArray(np.ndarray):
         return np.asarray((pd.DatetimeIndex(self) - ss.date(start))/pd.Timedelta(days=1))
 
 
+def is_float(string):
+    """ Whether a string is a number, e.g. '2020.5' (a decimal year), rather than a date such as '2020-05-01' """
+    try:
+        float(string)
+        return True
+    except ValueError:
+        return False
+
+
 class date(pd.Timestamp):
     """
     Define a point in time, based on `pd.Timestamp`
@@ -234,6 +245,7 @@ class date(pd.Timestamp):
         ss.date(year=2020) # Returns <2020-01-01>
         ss.date(year=2024.75) # Returns <2024-10-01>
         ss.date('2024-04-04') # Returns <2024-04-04>
+        ss.date('2024.5') # Returns <2024-07-02>: a string that is a number is a decimal year, as ss.date(2024.5) is
         ss.date(year=2024, month=4, day=4) # Returns <2024-04-04>
         ```
     """
@@ -249,6 +261,9 @@ class date(pd.Timestamp):
             elif isinstance(arg, pd.Timestamp):
                 return cls._reset_class(sc.dcp(arg))
             elif sc.isnumber(arg): # e.g. 2020
+                single_year_arg = True
+            elif isinstance(arg, str) and is_float(arg): # e.g. '2020.5', a decimal year as ss.date(2020.5) is, not May 2020
+                arg = float(arg)
                 single_year_arg = True
             elif isinstance(arg, ss.Duration): # e.g. ss.years(2020)
                 arg = arg.years
@@ -436,7 +451,7 @@ class date(pd.Timestamp):
     def __add__(self, other):
         if isinstance(other, np.ndarray):
             return np.vectorize(self.__add__)(other)
-        elif isinstance(other, ss.datedur):
+        elif isinstance(other, datedur):
             return self._timestamp_add(other.value)
         elif isinstance(other, ss.Duration):
             if other.is_array:
@@ -464,7 +479,7 @@ class date(pd.Timestamp):
     def __sub__(self, other):
         if isinstance(other, np.ndarray):
             return np.vectorize(self.__sub__)(other)
-        elif isinstance(other, ss.datedur):
+        elif isinstance(other, datedur):
             return ss.date(self.to_pandas() - other.value)
         elif isinstance(other, ss.Duration):
             if other.is_array:
@@ -568,7 +583,7 @@ class date(pd.Timestamp):
             An array of date instances
         """
         # Handle the special (but common) case of start < 1, which is a time since 0 rather than a date
-        if (sc.isnumber(start) or isinstance(start, ss.datedur)) and start < 1.0:
+        if (sc.isnumber(start) or isinstance(start, datedur)) and start < 1.0:
             date_type = ss.years
             kw = {}
         else:
@@ -580,8 +595,8 @@ class date(pd.Timestamp):
             step = get_dur_class(step)(1) # e.g. ss.years(1)
         if isinstance(step, (ss.days, ss.weeks)):
             step = pd.Timedelta(days=step.days)
-        elif isinstance(step, ss.Duration) and not isinstance(step, ss.datedur):
-            step = ss.datedur(step) if float(step.value).is_integer() else step.years # Not e.g. ss.years(0.1) as a calendar duration
+        elif isinstance(step, ss.Duration) and not isinstance(step, datedur):
+            step = datedur(step) if float(step.value).is_integer() else step.years # Not e.g. ss.years(0.1) as a calendar duration
 
         # For handling floating point issues
         atol = 0.5 / factors.years.days # It's close if it's within half a day
@@ -589,13 +604,13 @@ class date(pd.Timestamp):
             return np.isclose(y1, y2, rtol=0, atol=atol)
 
         # We're creating dates from calendar steps or steps of fixed length, step exactly
-        if isinstance(step, (ss.datedur, pd.Timedelta)):
+        if isinstance(step, (datedur, pd.Timedelta)):
             if not isinstance(start, date):
                 start = date_type(start, **kw)
             if not isinstance(stop, date):
                 stop = date_type(stop, **kw)
 
-            if isinstance(step, ss.datedur) and not step.kwds.get('years') and not step.kwds.get('months'): # Calendar days and weeks have a fixed length
+            if isinstance(step, datedur) and not step.kwds.get('years') and not step.kwds.get('months'): # Calendar days and weeks have a fixed length
                 step = pd.Timedelta(days=step.days)
             step_years = step/pd.Timedelta(days=factors.years.days) if isinstance(step, pd.Timedelta) else step.years
             atol = min(atol, step_years/2) # For sub-daily steps, it's only close if it's within half a step
@@ -643,10 +658,13 @@ class date(pd.Timestamp):
 
 class datedur(Duration):
     """
-    A calendar duration, e.g. `ss.datedur(months=1)`: a thin wrapper of `pd.DateOffset`
+    A calendar duration, e.g. `datedur(months=1)`: a thin wrapper of `pd.DateOffset`, used inside Starsim (as `ss.dates.datedur`)
+
+    Users write `ss.months(1)` or `ss.years(1)`: a whole number of months or years added to a date is already a calendar
+    offset, so `dt=ss.months(1)` steps a sim by calendar months; a datedur is what the timeline steps by.
 
     Added to a date, it follows the calendar, so a month from 31 January is the end of February and
-    a year from 1 March 2020 is 1 March 2021; `dt=ss.datedur(months=1)` steps a sim by calendar months.
+    a year from 1 March 2020 is 1 March 2021.
     It takes whole numbers of years, months, weeks, and days (as keywords), or one of: a `pd.DateOffset`,
     a `dateutil.relativedelta`, a number of years, or a duration in one of these units (e.g. `ss.days(7)`).
     As a number (`.years`, `.days`, or divided by another duration) it is approximate, as other durations
@@ -655,8 +673,8 @@ class datedur(Duration):
 
     Examples:
         ```python
-        ss.date('2020-01-31') + ss.datedur(months=1) # 2020-02-29
-        ss.datedur(years=1)/ss.datedur(months=1) # 12
+        ss.date('2020-01-31') + datedur(months=1) # 2020-02-29
+        datedur(years=1)/datedur(months=1) # 12
         ```
     """
     base = 'years' # As a number, in years
@@ -672,7 +690,7 @@ class datedur(Duration):
         elif isinstance(value, drd.relativedelta):
             other = {k:v for k,v in vars(value).items() if k not in ['years', 'months', 'days', '_has_time'] and v not in (0, None)} # e.g. hours, or an absolute day
             if other:
-                errormsg = f'ss.datedur() takes whole numbers of {sc.strjoin(self.units)}, not {value}; for a duration that is not on the calendar, use e.g. ss.days(1.5)'
+                errormsg = f'datedur() takes whole numbers of {sc.strjoin(self.units)}, not {value}; for a duration that is not on the calendar, use e.g. ss.days(1.5)'
                 raise ValueError(errormsg)
             kwargs = dict(years=value.years, months=value.months, days=value.days)
         elif isinstance(value, Duration):
@@ -680,15 +698,15 @@ class datedur(Duration):
         elif sc.isnumber(value):
             kwargs = dict(years=value)
         elif value is not None and not isinstance(value, pd.DateOffset):
-            errormsg = f'ss.datedur() takes whole numbers of {sc.strjoin(self.units)} (e.g. ss.datedur(months=1)), a pd.DateOffset, a number of years, or a duration, not {type(value).__name__}'
+            errormsg = f'datedur() takes whole numbers of {sc.strjoin(self.units)} (e.g. datedur(months=1)), a pd.DateOffset, a number of years, or a duration, not {type(value).__name__}'
             raise TypeError(errormsg)
         if isinstance(value, pd.DateOffset) and (set(value.kwds) - set(self.units) or value.n != 1):
-            errormsg = f'ss.datedur() takes whole numbers of {sc.strjoin(self.units)}, not {value}'
+            errormsg = f'datedur() takes whole numbers of {sc.strjoin(self.units)}, not {value}'
             raise ValueError(errormsg)
         if not isinstance(value, pd.DateOffset):
             bad = {k:v for k,v in kwargs.items() if k not in self.units or not float(v).is_integer()}
             if bad:
-                errormsg = f'ss.datedur() takes whole numbers of {sc.strjoin(self.units)}, not {sc.strjoin([f"{k}={v}" for k,v in bad.items()])}; for a duration that is not on the calendar, use e.g. ss.years(0.5) or ss.days(1.5)'
+                errormsg = f'datedur() takes whole numbers of {sc.strjoin(self.units)}, not {sc.strjoin([f"{k}={v}" for k,v in bad.items()])}; for a duration that is not on the calendar, use e.g. ss.years(0.5) or ss.days(1.5)'
                 raise ValueError(errormsg)
             value = pd.DateOffset(**({k:int(v) for k,v in kwargs.items()} or dict(days=0))) # pd.DateOffset() with nothing is a day
         self.value = value
@@ -719,7 +737,7 @@ class datedur(Duration):
             return None, None, False
 
     def to_dur(self):
-        """ As a plain duration, in the finest unit it has, e.g. ss.datedur(years=1, days=10).to_dur() = ss.days(375) """
+        """ As a plain duration, in the finest unit it has, e.g. datedur(years=1, days=10).to_dur() = ss.days(375) """
         unit = next((k for k in reversed(self.units) if self.kwds.get(k)), None)
         return self.to(unit) if unit is not None else ss.years(0)
 
@@ -728,7 +746,7 @@ class datedur(Duration):
         Return an `ss.Duration` with the supplied value; see `TimePar.replace()`
 
         A `datedur` stores a date offset rather than a number, so the finest unit it was given in is
-        used, e.g. `ss.datedur(days=10).replace(20)` is `ss.days(20)`.
+        used, e.g. `datedur(days=10).replace(20)` is `ss.days(20)`.
 
         Args:
             value (float): the new value
@@ -741,7 +759,7 @@ class datedur(Duration):
 
     def to(self, unit):
         """
-        As a plain duration in a unit (e.g. 'year' or ss.years), approximately, as other durations are, e.g. ss.datedur(months=6).to('years') is ss.years(0.5)
+        As a plain duration in a unit (e.g. 'year' or ss.years), approximately, as other durations are, e.g. datedur(months=6).to('years') is ss.years(0.5)
 
         Args:
             unit (str/type): the unit, e.g. 'year' or `ss.years`
@@ -751,7 +769,7 @@ class datedur(Duration):
 
     @property
     def years(self):
-        """ The approximate number of years, e.g. ss.datedur(months=6).years is 0.5 """
+        """ The approximate number of years, e.g. datedur(months=6).years is 0.5 """
         return self._number('years')
 
     @property
@@ -782,9 +800,9 @@ class datedur(Duration):
         elif isinstance(other, Duration):
             wrong_dimension(self, '*', other)
         kwds = {k:v*other for k,v in self.kwds.items()}
-        if all(float(v).is_integer() for v in kwds.values()): # Still whole calendar units, e.g. 52*ss.datedur(weeks=1)
+        if all(float(v).is_integer() for v in kwds.values()): # Still whole calendar units, e.g. 52*datedur(weeks=1)
             return self._new(**kwds)
-        return self.to_dur()*other # Otherwise a plain duration, e.g. ss.datedur(months=1)*0.5 is ss.months(0.5)
+        return self.to_dur()*other # Otherwise a plain duration, e.g. datedur(months=1)*0.5 is ss.months(0.5)
 
     def __truediv__(self, other):
         if isinstance(other, datedur): # Exactly, in twelfths of a day, e.g. a week by a day is 7

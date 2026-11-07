@@ -20,7 +20,7 @@ def make_simple_setup():
     """A tiny run where setup costs dominate the total runtime."""
     return ss.Sim(
         n_agents=50_000,
-        dur=1,
+        stop=ss.years(1),
         dt=1,
         rand_seed=1,
         verbose=0,
@@ -37,7 +37,7 @@ def make_complex_30():
 
     return ss.Sim(
         n_agents=80_000,
-        dur=15,
+        stop=ss.years(15),
         dt=0.5,  # 30 timesteps
         rand_seed=1,
         verbose=0,
@@ -52,7 +52,7 @@ def make_moderate():
     """A moderately complex run pushed by many timesteps."""
     return ss.Sim(
         n_agents=45_000,
-        dur=30,
+        stop=ss.years(30),
         dt=0.1,  # 300 timesteps
         rand_seed=1,
         verbose=0,

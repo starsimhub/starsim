@@ -13,13 +13,14 @@ Starsim's handling of time is complex, because, well, time is complex. Although 
 
 ## The time span and the step
 
-A sim runs from `start` to `stop` (or for `dur`), in steps of `dt`. The span can be given in three ways:
+A sim runs from `start` to `stop`, in steps of `dt`. The stop is a time, or a duration, which is the length of the run. The span can be given in these ways:
 
 | Given as | Example | Time is |
 |---|---|---|
 | Dates | `start='2025-01-01', stop='2025-07-01'` | Calendar dates; results are dated |
+| A date and a length | `start='2025-01-01', stop=ss.days(180)` | The same |
 | Years | `start=2025, stop=2030` | Years, as numbers with dates behind them |
-| Durations | `stop=ss.days(50)` | Time since the start (day 0, day 1, ...) |
+| A length | `stop=ss.days(50)` | Time from 0 (day 0, day 1, ...) |
 
 Here is the measles model over the first two months of 2025:
 
@@ -38,13 +39,13 @@ sim.plot('measles')
 
 The step, `dt`, is one unit of the model by default (here a day). Results are recorded at every time point, from the start to the stop inclusive, and a step is taken from each, the last included, so this run has 60 time points and 60 daily steps, the last of them 1 March. Each time point is a period: a stock, such as the number infectious, at a time point is the state at its start, and a flow, such as infections, the number during the step that starts there. The state after the last step is not recorded, so after a run `sim.people` is one step past the last time point.
 
-Specifying the length with `dur` is exactly the same as specifying `stop`: internally, `stop = start + dur`, so `start=2000, dur=20` is the same as `start=2000, stop=2020`. Why are the endpoints inclusive? For a range like `start=2000, stop=2020`, there are three equally valid interpretations:
+A stop given as a duration is the length of the run, so `start=2000, stop=ss.years(20)` is the same as `start=2000, stop=2020`. A run shorter than one step is an error, since no step would run. With no stop, the run is 50 of the sim's unit (50 years for a model in years, 50 days for one in days), whatever the step. Why are the endpoints inclusive? For a range like `start=2000, stop=2020`, there are three equally valid interpretations:
 
 1. **Inclusive start, exclusive end** (2000-01-01 to 2019-12-31), by analogy to `np.arange(0, 20)` giving `0`–`19`.
 2. **Inclusive start, minimally inclusive end** (2000-01-01 to 2020-01-01), by analogy to `np.linspace(0, 20)` giving `0`–`20`, or `plt.xlim(left=2000, right=2020)`.
 3. **Inclusive start, maximally inclusive end** (2000-01-01 to 2020-12-31).
 
-Starsim uses the second (middle) interpretation. This is mostly for plotting (a sim run from 2000 to 2020 looks odd if the plot ends in 2019) and so that `stop` and `dur` are interchangeable: `start=2000, dur=20` intuitively runs *to* 2020, not 2019. The time points follow this interpretation, but since a step is taken from each, the last included, the flows of yearly steps cover every year in full, as in the third: the row for 2020 is the state at the start of 2020 and the infections during 2020. Just as with `np.arange`, the step determines which points fall within the range, and the final point is the last one *at or before* `stop`: `start='2017-01-01', stop='2024-12-31', dt=ss.datedur(months=1)` ends at 2024-12-01, because the next monthly point is past `stop`.
+Starsim uses the second (middle) interpretation. This is mostly for plotting (a sim run from 2000 to 2020 looks odd if the plot ends in 2019) and so that a stop and a length agree: `start=2000, stop=ss.years(20)` intuitively runs *to* 2020, not 2019. The time points follow this interpretation, but since a step is taken from each, the last included, the flows of yearly steps cover every year in full, as in the third: the row for 2020 is the state at the start of 2020 and the infections during 2020. Just as with `np.arange`, the step determines which points fall within the range, and the final point is the last one *at or before* `stop`: `start='2017-01-01', stop='2024-12-31', dt=ss.months(1)` ends at 2024-12-01, because the next monthly point is past `stop`.
 
 ### Choosing the step
 
@@ -93,36 +94,32 @@ Dates say *when* things happen, but disease modeling is mostly about durations a
 
 | Kind | Means | Constructors |
 |---|---|---|
-| Duration | A length of time | `ss.days(8)`, `ss.weeks`, `ss.months`, `ss.years`, and `ss.datedur` for calendar arithmetic |
-| Rate | A hazard: events per person per unit of time, happening continuously | `ss.perday(1.9)`, `ss.perweek`, `ss.permonth`, `ss.peryear` |
+| Duration | A length of time | `ss.days(8)`, `ss.weeks`, `ss.months`, `ss.years` |
+| Rate | Events per unit of time: a hazard per person, happening continuously, or a number of events, such as sex acts per year | `ss.perday(1.9)`, `ss.perweek`, `ss.permonth`, `ss.peryear` |
 | Probability | The chance of an event within a period | `ss.prob(0.1, 'day')`, and `'week'`, `'month'`, `'year'` |
-| Frequency | An expected number of events per unit of time, such as sex acts per year (used in modules written as code) | `ss.freq(80, 'year')` |
 
-Converting each to a step is Starsim's job. Over a step of length Δt, a rate *r* becomes the probability 1 − exp(−*r* Δt) of at least one event, a probability *p* per period *T* becomes 1 − (1 − *p*)^(Δt/*T*), a frequency *f* becomes *f* Δt events, and a duration *d* is used through its rate 1/*d*. The ODE, Gillespie, and tau-leaping use the rates themselves, with no conversion.
+Converting each to a step is Starsim's job. Over a step of length Δt, a rate *r* becomes the probability 1 − exp(−*r* Δt) of at least one event, or, where a number of events is wanted (such as the acts in a partnership, `acts=ss.peryear(80)`), *r* Δt events; a probability *p* per period *T* becomes 1 − (1 − *p*)^(Δt/*T*), and a duration *d* is used through its rate 1/*d*. The ODE, Gillespie, and tau-leaping use the rates themselves, with no conversion.
 
 The full family of time parameters is:
 
 ```
 TimePar         # All time parameters
 ├── dur         # Durations, in units of time
-│   ├── days, weeks, months, years
-│   └── datedur    # Calendar durations
+│   └── days, weeks, months, years
 └── Rate        # Everything "per" something
-    ├── per        # Rates (hazards) of an event that happens once, e.g. death
+    ├── per        # Rates: hazards (e.g. of death) and numbers of events (e.g. acts per year)
     │   └── perday, perweek, permonth, peryear
-    ├── prob       # Probabilities, with or without a period
-    │   └── probperday, probperweek, probpermonth, probperyear
-    └── freq       # Numbers of events, e.g. acts per year
-        └── freqperday, freqperweek, freqpermonth, freqperyear
+    └── prob       # Probabilities, with or without a period
+        └── probperday, probperweek, probpermonth, probperyear
 ```
 
-`ss.prob(0.1, 'day')` and `ss.probperday(0.1)` are the same, as are `ss.freq(80, 'year')` and `ss.freqperyear(80)`. Durations add with the left-hand unit taking precedence, and can be converted: `ss.years(2) + ss.days(3)` is `years(2.00822)`, and `ss.years(10).to('days')` is `days(3650)`.
+`ss.prob(0.1, 'day')` and `ss.probperday(0.1)` are the same, as are `ss.per(80, 'year')` and `ss.peryear(80)`. Durations add with the left-hand unit taking precedence, and can be converted: `ss.years(2) + ss.days(3)` is `years(2.00822)`, and `ss.years(10).to('days')` is `days(3650)`.
 
 The kinds differ in what multiplying by a duration means, which is how each is converted to a step:
 
 - **A rate** times a duration is a probability: `ss.peryear(0.8) * ss.years(1)` is 1 − exp(−0.8) ≈ 0.55, the chance of the event happening at least once in a year. A rate times a number is a scaled rate (`ss.peryear(0.8) * 2` is 1.6 per year), which is how relative risks are applied. A rate need not be below 1: `ss.perday(2)` is valid.
 - **A probability** times a duration is the probability over that duration, worked out through the rate behind it: `ss.prob(0.8, ss.years(1)) * ss.years(2)` is 0.96, not 1.6 (which is not a probability).
-- **A frequency** times a duration is an expected number of events: `ss.freqperyear(80) * ss.years(0.5)` is 40.
+- **A number of events** in a period is `.to_events()`: `ss.peryear(80).to_events(ss.years(0.5))` is 40, where `ss.peryear(80) * ss.years(0.5)` is the chance of at least one, almost 1.
 
 The kinds combine where the result has a meaning:
 
@@ -147,7 +144,7 @@ except Exception as e:
 - **A rate** (`ss.peryear(0.01)`) for anything that happens to a person once, at some rate: infection, recovery, death. This is what most models use, and what an ODE means by a rate.
 - **A duration** (`ss.days(8)`) for the average time spent in a state; it is the same as the rate 1/duration, and usually easier to read.
 - **A probability per period** (`ss.prob(0.01, 'year')`) when the data is a share of people in a period: for example, 10 deaths in a year among 1,000 people.
-- **A frequency** (`ss.freq(80, 'year')`) for a number of events that can each happen many times, such as contacts or acts.
+- **A rate** too (`ss.peryear(80)`) for a number of events that can each happen many times, such as contacts or acts; in code, `.to_events()` is the number in a step.
 
 ::: {.callout-tip}
 ## `ss.prob` vs `ss.bernoulli`
@@ -176,15 +173,15 @@ print(d.years)            # As a year
 print(d + ss.days(10))    # Ten days later
 ```
 
-Dates are interchangeable with years as numbers (`float(d)` is the same as `d.years`; unlike a duration, a date has an unambiguous number), although some rounding can occur. A duration added to a date counts time exactly, with a year as 365 days and a month as 1/12 of a year. `ss.datedur` counts in calendar units instead, which is what "six months later" usually means:
+Dates are interchangeable with years as numbers (`float(d)` is the same as `d.years`, and `ss.date('2025.5')` is the same as `ss.date(2025.5)`; unlike a duration, a date has an unambiguous number), although some rounding can occur. A whole number of months or years added to a date follows the calendar, which is what "six months later" usually means; any other duration counts time exactly, with a year as 365 days and a month as 1/12 of a year:
 
 ```{python}
+print(d + ss.months(6))             # Six calendar months later
 print(d + ss.years(0.5))            # Half of 365 days later
-print(d + ss.datedur(months=6))     # Six calendar months later
 print(ss.date('2025-07-01') - d)    # The time between two dates, in days
 ```
 
-The two differ because the first half of 2025 is shorter than the second: there are 181 days from 1 January to 1 July, and 184 from 1 July to 1 January. So even though 6/12 is certainly 0.5, date-based and number-based arithmetic give different answers. `ss.datedur` takes whole numbers of years, months, weeks, and days (it is a thin wrapper of `pd.DateOffset`, which a date also accepts), and `dt=ss.datedur(months=1)` steps a sim by calendar months. A sequence of dates is made with `ss.date.arange(start='2025-07-01', stop='2025-09-18', step=ss.week)`.
+The two differ because the first half of 2025 is shorter than the second: there are 181 days from 1 January to 1 July, and 184 from 1 July to 1 January. So even though `ss.months(6) == ss.years(0.5)` as durations, the date six calendar months later is not half a year of days later. Likewise a month from 31 January is the end of February, and `dt=ss.months(1)` steps a dated sim by calendar months. A sequence of dates is made with `ss.date.arange(start='2025-07-01', stop='2025-09-18', step='week')`.
 
 `sim.t` (an `ss.Timeline`) holds the sim's time points, in several forms: `datevec` (dates), `yearvec` (years as numbers), `relvec` (time since the start, in the unit of the step), and `tivec` (the number of each time point). `timevec` is the one that is most natural for the sim (dates for a dated sim, time since the start otherwise), and is what results use. You will rarely need the timeline directly, but it's what keeps modules with steps of their own in time with each other and with the sim:
 
@@ -276,7 +273,7 @@ Time has corners where reasonable choices differ. Some questions Starsim has had
 
 1. If you run a simulation from 2000 to 2020 with monthly steps, would you expect the same average number of infections in 2004 (a leap year) and 2005 (not a leap year)? What about February 2012 and March 2012?
 2. Is a year 365 days, 365.25 days, or either 365 or 366 days depending on the year?
-3. Usually years and dates are interchangeable, so `start=2000, stop=2020` is the same as `start='2000-01-01', stop='2020-01-01'`. But what if someone simply wants to run for a number of years, `start=0, stop=20`, given that there is no year 0?
+3. Usually years and dates are interchangeable, so `start=2000, stop=2020` is the same as `start='2000-01-01', stop='2020-01-01'`. But what if someone simply wants to run for a number of years, `start=0, stop=20`, given that there is no year 0? And in a sim with dates, is `when=30` the year 30, or 30 days after the start?
 4. If an event is scheduled at the fractional year 2025.7, is that the nearest day (2025-09-12), or that exact moment (2025-09-11 16:48)? Will users ever want hours and minutes?
 5. Should units be strict (`ss.days(5) != 5`) or permissive (`ss.days(5) == 5`)?
 6. If a mortality rate is "100 deaths per 1,000 people per year", should 100 of 1,000 people die in a year, or 95 (100 deaths per 1,000 *person*-years, since people stop accruing person-years once they die)?
@@ -286,7 +283,7 @@ These are Starsim's answers, although different answers would also be valid:
 
 1. **A month is exactly 1/12 of a year**, so a monthly rate gives the same number of events in February as in March, and in 2004 as in 2005.
 2. **A year is 365 days** (with some stretching where needed to make whole years and calendar dates line up).
-3. **A number given as `start` is a year if it looks like one** (`2025`), and a time since the start otherwise (`0`, or `stop=ss.days(50)`), in which case results are in time since the start rather than dated. The same goes for any number given as a time, such as `at=2030` or a time of an `ss.timeseries()`: from 1900 on it is a calendar year, even in a sim with dates, and below that a time in the sim's unit after the start (for 2,000 days, write `ss.days(2000)`). A duration given as `stop` or as a time is the same kind of time as the start: with a start in calendar years, `ss.years(2020)` is the year 2020 and `ss.years(5)` is 5 years after the start; with no start, or a start of 0, `stop=ss.years(2000)` is 2,000 years.
+3. **Whether a sim has a calendar is decided once, from its start.** A start that is a date (`'2025-01-01'`) or a year (a number from 1900 on, `2025`) gives it one; then every bare number given as a time (`stop=2030`, `when=2030`, the times of `ss.schedule()` and `ss.timeseries()`) is a calendar year, whatever `unit=` is. Any other start (`0`, or none, in a model that is not in years) means no calendar: a bare time is then a time in the sim's unit from 0, and results are not dated. A duration is always a time after the start (`when=ss.days(30)`), and as `stop=`, the length of the run (`stop=ss.years(20)`). With no start, a stop that is a year starts the sim in 2000. A bare number given as a time that falls outside the sim is an error that says how it was read.
 4. **Dates are whole days**, unless a smaller step is asked for explicitly (`dt=ss.days(0.25)`).
 5. **Units are loose when compared with plain numbers** (`ss.days(5) == 5` is true), **and compared by value between units** (`ss.years(1) == ss.days(365)` is true, and `ss.years(1) == 1` is true too).
 6. **A rate is per person-time**: of 1,000 people with a death rate of `ss.peryear(0.1)`, about 95 die in a year. If 100 is what the data means, it is a probability, `ss.prob(0.1, 'year')`.
@@ -298,7 +295,7 @@ A module written as code works with time a step at a time. Each time quantity in
 
 - `rate.to_prob()` is the probability of an event in one step;
 - `dur.to_dt()` is a duration as a number of steps, for comparing with the step numbers that states such as a time of infection hold;
-- `freq.to_events()` is the expected number of events in one step.
+- `rate.to_events()` is the expected number of events in one step, for a number of events per unit of time such as acts per year.
 
 Convert a rate to a probability as the *last* step of a calculation, after multiplying it by any relative risks, so that the result is a valid probability:
 
@@ -339,8 +336,8 @@ Declare such a state as an `ss.TimeArr`, and take the move when `self.ti_clearan
 
 - [Rates and probabilities in economic modelling](https://doi.org/10.2165/00019053-200725010-00002): converting between rates and probabilities, and why multiplying probabilities by time goes wrong
 - [Appropriate models for the management of infectious diseases](https://doi.org/10.1371/journal.pmed.0020174): how the distribution of time spent in a state, not just its mean, shapes an epidemic
-- [pandas: time series and date functionality](https://pandas.pydata.org/docs/user_guide/timeseries.html): dates, offsets, and resampling, on which `ss.date` and `ss.datedur` are built
-- [pandas.tseries.offsets.DateOffset](https://pandas.pydata.org/docs/reference/api/pandas.tseries.offsets.DateOffset.html): calendar arithmetic, as `ss.datedur` does it
+- [pandas: time series and date functionality](https://pandas.pydata.org/docs/user_guide/timeseries.html): dates, offsets, and resampling, on which `ss.date` and its calendar arithmetic are built
+- [pandas.tseries.offsets.DateOffset](https://pandas.pydata.org/docs/reference/api/pandas.tseries.offsets.DateOffset.html): calendar arithmetic, as whole `ss.months()` and `ss.years()` added to a date do it
 
 ## Appendix: every time parameter
 

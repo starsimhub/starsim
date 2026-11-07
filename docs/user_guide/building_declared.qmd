@@ -31,24 +31,24 @@ Each row is an idea from epidemiology, how it is declared, and an example of a r
 | **Counts that are not people** (mosquitoes, bacteria in water) | `ss.State(people=False)` | `W = ss.State(people=False)`, with `ss.outside >> W @ xi*I.n` for shedding into it | A hydrological model of the river the bacteria are carried in |
 | **Flows at a rate** | `>>` and `@`, and `ss.dead` for flows into or out of the model | `R >> S @ ss.peryear(0.1)`, `I >> ss.dead @ 0.01` | A rate worked out each step by another program |
 | **Time in a state** | A duration, or a distribution of durations | `I >> R @ ss.days(8)`, `E >> I @ ss.erlang(k=4, mean=ss.days(10))` | A recovery time from a model of each person's viral load within the host |
-| **Branching** (a share go one way, the rest another) | `p=` | `ss.Transition(I, [R, D], p=[0.98, None], dur=ss.days(8))` | |
+| **Branching** (a share go one way, the rest another) | `p=` | `ss.Transition(I, {R: 0.98, D: None}, dur=ss.days(8))` | |
 | **Transmission**, frequency- or density-dependent | A bare state (a share), or a count, `.n`; with a contact matrix, each says what the matrix acts on (see [What a matrix acts on](populations_data.qmd#what-a-matrix-acts-on)) | `S >> I @ 1.9*I`, `S >> I @ 1.9e-5*I.n` | |
 | **Several sources of infection** | A sum | `S >> E @ beta*(I + 0.5*A)` | |
 | **Rates that depend on how many are infected** | Arithmetic and NumPy functions of counts | `S >> I @ beta*I.n/(1 + a*I.n)` (a force of infection that saturates) | |
 | **Rates that vary in time** | `ss.timeseries()`, `ss.seasonal()` | `beta = ss.seasonal(mean=0.3, amplitude=0.2, peak='March')` | |
 | **Rates that differ by group** | `ss.by()`, with a stratification | `ss.by(age=[0.5, 0.2, 0.1])` | |
 | **Rates that depend on each person's traits** | `ss.person` | `I >> ss.dead @ 0.001*np.exp(0.05*ss.person.age)` | |
-| **Values that vary between people** (each person's infectiousness) | A distribution, or `ss.attr()` | `ss.attr(ss.normal(500, 50), on=infection)` | |
-| **An event in each person's history** (ever infected, how many times, how long ago) | `.ever`, `.n_times`, `.since` on a transition | `1 - 0.5**(recovery.since/ss.days(60))`: protection that halves every 60 days since recovery | An antibody level boosted by every infection and decaying in between (as in the [example below](#a-declared-disease-with-immunity-written-as-code)) |
-| **A move as soon as something holds, or happens** | A trigger, `on=` (or `@ ss.on()`) | `U >> A @ ss.on(ss.person.age >= 15)`, or `ss.Transition(PP, NP, on=preg.delivery, dur=ss.months(6))` | |
-| **Who something applies to** | Conditions (`where=`): see [below](#conditions) | `where=(sir.I.n >= 20_000)` | `where=` the highest weekly incidence so far |
+| **Values that vary between people** (each person's infectiousness) | A distribution, or `ss.attr()` | `ss.attr(ss.normal(500, 50), when=infection)` | |
+| **An event in each person's history** (ever infected, how many times, how long ago) | `.ever`, `.n_times`, `.since` on a transition or any other event (`sir.I.enter.ever`) | `1 - 0.5**(recovery.since/ss.days(60))`: protection that halves every 60 days since recovery | An antibody level boosted by every infection and decaying in between (as in the [example below](#a-declared-disease-with-immunity-written-as-code)) |
+| **A move as soon as something holds, or happens** | A trigger, `when=` (or `@ ss.on()`) | `U >> A @ ss.on(ss.person.age >= 15)`, or `ss.Transition(PP, NP, when=ss.on(preg.delivery, delay=ss.months(6)))` | |
+| **Who something applies to** | Conditions (`who=`): see [below](#conditions) | `who=(sir.I.n >= 20_000)` | `who=` the highest weekly incidence so far |
 | **Contacts** | Homogeneous mixing (the default), contact matrices, mixing pools, and networks | `ss.contacts('Kenya')`, `ss.RandomNet(n_contacts=10)`, `ss.SexualNet()` | A network rewired by a rule of your own, e.g. school classes reassigned each term |
 | **Groups and places** | Stratification, and movement between places | `sim.stratify(age=[0, 5, 15, 65])`, `ss.geo.Mobility()` | |
-| **Moving between groups** (risk groups, vaccinated) | `ss.transfer()` | `ss.transfer(risk=('low', 'high'), rate=ss.peryear(0.1))` | |
+| **Moving between groups** (risk groups, vaccinated) | `ss.transfer()` | `ss.transfer(dict(risk=('low', 'high')), rate=ss.peryear(0.1))` | |
 | **Births, deaths, migration, pregnancy** | `ss.birth()`, `ss.death()`, `ss.immigration()`, `ss.Pregnancy()` | `ss.death(I, rate=ss.perday(0.002))` | Migration driven by a model of household income |
-| **Vaccines, tests, and treatment** | Products (`ss.Vaccine()`, `ss.Diagnostic()`, `ss.Treatment()`) and deliveries (`ss.vaccinate()`, `ss.screen()`, `ss.treat()`), with coverage, ages, capacity, tracing, and waning | `ss.vaccinate(efficacy=0.97, who=measles.S, coverage=0.5, at='2025-04-01')` | Choosing whom to vaccinate by a score worked out each day from each person's contacts |
-| **Measures that change a rate** (masks, school closures, bednets) | `ss.modify()` | `ss.modify(sir.pars.beta, multiply=0.7, start='2025-03-01', stop='2025-06-01')` | |
-| **Diseases that interact** | `ss.modify()` between them | `ss.modify(sti.rel_sus, multiply=3, where=hiv.I)` | |
+| **Vaccines, tests, and treatment** | Products (`ss.Vaccine()`, `ss.Diagnostic()`, `ss.Treatment()`) and deliveries (`ss.vaccinate()`, `ss.screen()`, `ss.treat()`), with coverage, ages, capacity, tracing, and waning | `ss.vaccinate(efficacy=0.97, who=measles.S, when='2025-04-01', coverage=0.5)` | Choosing whom to vaccinate by a score worked out each day from each person's contacts |
+| **Measures that change a rate** (masks, school closures, bednets) | `ss.modify()` | `ss.modify(sir.pars.beta, multiply=0.7, when=ss.schedule(start='2025-03-01', stop='2025-06-01'))` | |
+| **Diseases that interact** | `ss.modify()` between them | `ss.modify(sti.rel_sus, multiply=3, who=hiv.I)` | |
 | **Strains, and immunity between them** | `ss.Strains()`, `ss.immunity()` | `ss.Strains(['DENV1', 'DENV2'])`, with `ss.immunity()` for the protection between them | Protection worked out from each person's antibody levels against each strain |
 | **Stocks, flows, and ratios** | Results of every state and transition, and expressions of them | `prevalence=(E + I)/N` on the disease, with `N = S + E + I + R` | The mean age at first infection of those who later died (an [analyzer](interventions_analyzers.qmd)) |
 | **What surveillance sees** (reported cases, admissions) | `ss.outcome()`, with shares, delays, and durations | `ss.outcome(0.5*onset, delay=ss.days(4))` | |
@@ -58,16 +58,16 @@ An empty cell is not a promise that everything nearby can be declared, only that
 
 ## Conditions
 
-A condition says who something applies to, or when: `where=` on `ss.modify()`, transitions, and the deliveries, and `on=` (or `ss.on()`). Conditions are built from:
+A condition says who something applies to: `who=` on `ss.modify()`, transitions, events, and deliveries; and an event, or a condition that moves people as soon as it holds, says when, in `when=` (or `ss.on()`). Conditions are built from:
 
 | A condition on | Example | Runs as compartments? |
 |---|---|---|
-| A state | `where=hiv.I` | Yes |
-| The number in a state, or the share | `where=sir.I.n >= 20_000`, `where=sir.I.frac >= 0.02` | Yes, in compiled code |
-| The incidence over a period | `where=infection.incidence(over=ss.days(7)) > 0.01` | Yes, a step at a time |
-| How incidence is changing | `where=weekly > infection.incidence(over=ss.days(14)) - weekly` (this week more than last) | Yes, a step at a time |
+| A state | `who=hiv.I` | Yes |
+| The number in a state, or the share | `who=sir.I.n >= 20_000`, `who=sir.I.frac >= 0.02` | Yes, in compiled code |
+| The incidence over a period | `who=infection.incidence(over=ss.days(7)) > 0.01` | Yes, a step at a time |
+| How incidence is changing | `who=weekly > infection.incidence(over=ss.days(14)) - weekly` (this week more than last) | Yes, a step at a time |
 | Dates | `start=`, `stop=`, `when=` | Yes, in compiled code |
-| A person's traits | `where=ss.person.age < 5`, `where=ss.person.female` | Only if the model is stratified by them; otherwise as agents |
+| A person's traits | `who=ss.person.age < 5`, `who=ss.person.female` | Only if the model is stratified by them; otherwise as agents |
 | Any of these combined | `&` (and), `\|` (or), `~` (not) | As the least of its parts |
 
 A condition can also be a function of the sim that returns true or false (for a whole compartmental population) or an array (one value for each person or group). That is for what the list above can't say, such as "while weekly incidence is above half its highest so far", which needs a memory of the highest so far.
@@ -88,9 +88,9 @@ weekly = infection.incidence(over=ss.days(7)) # The share of people infected in 
 last_week = infection.incidence(over=ss.days(14)) - weekly
 measures = {
     'No measures':                    None,
-    'While 20,000 are infectious':    ss.modify(flu.pars.beta, multiply=0.7, where=flu.I.n >= 20_000),
-    'While 1% are infected a week':   ss.modify(flu.pars.beta, multiply=0.7, where=weekly > 0.01),
-    'While infections are rising':    ss.modify(flu.pars.beta, multiply=0.7, where=weekly > last_week),
+    'While 20,000 are infectious':    ss.modify(flu.pars.beta, multiply=0.7, who=flu.I.n >= 20_000),
+    'While 1% are infected a week':   ss.modify(flu.pars.beta, multiply=0.7, who=weekly > 0.01),
+    'While infections are rising':    ss.modify(flu.pars.beta, multiply=0.7, who=weekly > last_week),
 }
 pars = dict(total_pop=1_000_000, start='2026-01-01', stop='2027-12-31', verbose=0)
 msim = ss.parallel({label: ss.Sim(flu, interventions=measure, **pars) for label, measure in measures.items()})
@@ -188,7 +188,7 @@ def many_infectious(sim):
     """ True while 20,000 or more are infectious """
     return sim.diseases.flu.I.n >= 20_000
 
-measure = ss.modify(flu.pars.beta, multiply=0.7, where=many_infectious)
+measure = ss.modify(flu.pars.beta, multiply=0.7, who=many_infectious)
 sim = ss.Sim(flu, interventions=measure, **pars).init()
 print(sim.kernel_reason())
 ```
@@ -215,9 +215,9 @@ def masks(sim):
     return
 
 versions = {
-    'Declared, on a count':      ss.modify(flu.pars.beta, multiply=0.7, where=flu.I.n >= 20_000),
-    'Declared, on incidence':    ss.modify(flu.pars.beta, multiply=0.7, where=weekly > 0.01),
-    'A function as the condition': ss.modify(flu.pars.beta, multiply=0.7, where=many_infectious),
+    'Declared, on a count':      ss.modify(flu.pars.beta, multiply=0.7, who=flu.I.n >= 20_000),
+    'Declared, on incidence':    ss.modify(flu.pars.beta, multiply=0.7, who=weekly > 0.01),
+    'A function as the condition': ss.modify(flu.pars.beta, multiply=0.7, who=many_infectious),
     'An intervention of code':   masks,
 }
 for label, measure in versions.items():

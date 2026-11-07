@@ -26,15 +26,15 @@ camdl is a compartmental modeling language (a compiler, `camdlc`, in OCaml; a ru
 | Dimensions, `stratify()`, families, tables, `sum(b in age, ...)`, aging along a dimension, movement | One state per combination of levels (`S_child_north`), with the IR's rates; exact, but not written as `stratify()` (listed in the notes) | yes, flat |
 | An initial number drawn from a distribution | Its mean (listed) | no |
 | A forcing function of time (`sinusoidal`, `periodic`, `piecewise`) | A parameter set to 1 (listed): write it as `ss.seasonal(...)` or `ss.timeseries(...)` | no |
-| Interventions (off unless enabled) and events (`transfer`, `add` at times) | Listed in `ImportIncomplete`, with the scenarios that enable each (a one-off move between states is `ss.Delivery(move=S >> R, ...)`, below) | no |
+| Interventions (off unless enabled) and events (`transfer`, `add` at times) | Listed in `ImportIncomplete`, with the scenarios that enable each (a one-off move between states is `ss.Event(S >> R, when=...)`, below) | no |
 | A compartment with an ODE (`ode`), a reaction such as `A + B --> C` | Listed | no |
 | An observation of a number in states (`prevalence`), a ratio of flows | A result, or listed; give the likelihood when calibrating | no |
 | Fitting (NUTS, IF2, PMMH) | `sim.fit(method='nuts')` for an ODE whose series all have a likelihood, `method='pmcmc'` or `'if2'` for a stochastic one (the default is a best fit) | by hand |
 
 ## What needs care
 
-- **Rewrite a stratified import as `stratify()`.** The IR has the dimensions spelled out, so the import is flat: right, but long. For a model like the stratified SEIR, the declared form is `seir.stratify(age=[0, 5, 50])`, `seir.stratify(patch=[...], kind='space', fractions=pop, mobility=ss.geo.Mobility(matrix=..., kind='migrate'))`, and `networks=ss.contacts(contacts, ages=[0, 5, 50])` (see the worked example). Check it against the flat import as `validate.md` says before replacing one with the other.
-- **A one-off move between states is a delivery that moves people.** camdl's `transfer(S --> R, fraction=0.6, at=20)` is listed; write it as `ss.Delivery(move=S >> R, coverage=0.6, at=[20])`, which moves that share of `S` at that time, under every solver.
+- **Rewrite a stratified import as `stratify()`.** The IR has the dimensions spelled out, so the import is flat: right, but long. For a model like the stratified SEIR, the declared form is `seir.stratify(age=[0, 5, 50])`, `seir.stratify(patch=ss.levels(dict(zip([...], pop)), kind='space', mobility=ss.geo.Mobility(matrix=..., kind='migrate')))`, and `networks=ss.contacts(contacts, ages=[0, 5, 50])` (see the worked example). Check it against the flat import as `validate.md` says before replacing one with the other.
+- **A one-off move between states is a delivery that moves people.** camdl's `transfer(S --> R, fraction=0.6, at=20)` is listed; write it as `ss.Event(S >> R, when=[20], p=0.6)`, which moves that share of `S` at that time, under every solver.
 - **Interventions are off unless enabled**, in camdl as in pycamdl (`--enable vaccinate`, `run(enable=[...])`); events always happen.
 - **Give the solver.** The import runs as an ODE (`solver='ode'`, camdl's `--backend ode`); camdl's default backend is chain-binomial (`solver='binomial'`). At a step of a day the binomial import's mean infectious curve is within 0.9% of camdl's 200 runs; at a quarter of a day it is 12% away, since the two schemes differ by order dt.
 - **An initial number below 1** (a fraction of a person) can't be a number of people in `init_n=`, so the import writes it in `init=` as the share of everyone it is.
@@ -56,7 +56,7 @@ seir = ss.Disease(
     init_n    = dict(I=ss.by(age=[10, 0, 0], patch=[1, 0])),
 )
 seir.stratify(age=[0, 5, 50]) # Children, adults, and elders, who age at 1/5 and 1/45 a year
-seir.stratify(patch=['north', 'south'], kind='space', fractions=pop, mobility=ss.geo.Mobility(matrix=[[0, 0.01], [0.01, 0]], kind='migrate'))
+seir.stratify(patch=ss.levels(dict(zip(['north', 'south'], pop)), kind='space', mobility=ss.geo.Mobility(matrix=[[0, 0.01], [0.01, 0]], kind='migrate')))
 sim = ss.Sim(seir, networks=ss.contacts(contacts, ages=[0, 5, 50]), total_pop=13_510, unit='day', stop=150, aging=True)
 ```
 

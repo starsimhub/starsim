@@ -30,11 +30,11 @@ def make_hiv(init_prev=0.05, init=None, art=ss.peryear(0.2)):
         start_art   = (acute + latent + falling + post_art) >> on_art @ art
         dropout     = ss.Transition(on_art, post_art, dur=ss.lognormal(ss.years(3), ss.years(1.5)))
 
-        cd4_start     = ss.attr(ss.normal(800, 50), on=infection)
-        cd4_latent    = ss.attr(ss.normal(500, 50), on=infection)
-        cd4_preart    = ss.attr('cd4', on=start_art) # CD4 just before starting
-        cd4_potential = ss.attr(cd4_preart*(1 + (cd4_max - cd4_preart)/cd4_healthy*np.log(cd4_max/cd4_preart)), on=start_art, combine='first') # Set at the first start only
-        cd4_stop      = ss.attr('cd4', on=dropout)
+        cd4_start     = ss.attr(ss.normal(800, 50), when=infection)
+        cd4_latent    = ss.attr(ss.normal(500, 50), when=infection)
+        cd4_preart    = ss.attr('cd4', when=start_art) # CD4 just before starting
+        cd4_potential = ss.attr(cd4_preart*(1 + (cd4_max - cd4_preart)/cd4_healthy*np.log(cd4_max/cd4_preart)), when=start_art, combine='first') # Set at the first start only
+        cd4_stop      = ss.attr('cd4', when=dropout)
         gain = cd4_potential - cd4_preart
         cd4 = ss.attr({
             acute:    cd4_start - (cd4_start - cd4_latent)*acute.progress,
@@ -47,11 +47,11 @@ def make_hiv(init_prev=0.05, init=None, art=ss.peryear(0.2)):
         cd4_death      = infected >> ss.dead @ ss.by(cd4=ss.peryear([0.30, 0.05, 0.01, 0.005, 0.003]))
 
     hiv = HIV(init_prev=init_prev, init=init, name='hiv')
-    hiv.stratify(cd4=[0, 50, 200, 350, 500], states=hiv.infected) # Derived: no groups
+    hiv.stratify(cd4=ss.levels([0, 50, 200, 350, 500], states=hiv.infected)) # Derived: no groups
     mods = [
-        ss.modify(hiv.cd4_death, multiply=rel_art_mort, where=hiv.on_art, name='art_mort'),
-        ss.modify(hiv.rel_trans, multiply=1 - eff_art*np.minimum(hiv.on_art.time_in/ss.years(time_to_eff), 1), where=hiv.on_art, name='art_trans'),
-        ss.modify(hiv.rel_trans, multiply=rel_trans_aids, where=(hiv.cd4 < 200) & (hiv.falling | hiv.post_art), name='aids_trans'),
+        ss.modify(hiv.cd4_death, multiply=rel_art_mort, who=hiv.on_art, name='art_mort'),
+        ss.modify(hiv.rel_trans, multiply=1 - eff_art*np.minimum(hiv.on_art.time_in/ss.years(time_to_eff), 1), who=hiv.on_art, name='art_trans'),
+        ss.modify(hiv.rel_trans, multiply=rel_trans_aids, who=(hiv.cd4 < 200) & (hiv.falling | hiv.post_art), name='aids_trans'),
     ]
     return hiv, mods
 
@@ -60,9 +60,9 @@ def make_hpv(name, beta=ss.peryear(0.4), m_sus=None):
     """ One genotype: infection, clearance or CIN, and antibodies that seroconversion at clearance gives, the highest kept """
     S, P, C = ss.states('S P C')
     infection = S >> P @ beta*(P + C)
-    precin = ss.Transition(P, [C, S], p=[0.2, None], dur=ss.lognormal(ss.years(1.5), ss.years(1)))
+    precin = ss.Transition(P, {C: 0.2, S: None}, dur=ss.lognormal(ss.years(1.5), ss.years(1)))
     cin = ss.Transition(C, S, dur=ss.years(2))
-    nab = ss.attr(ss.uniform(0.5, 0.95)*ss.bernoulli(0.6), on=precin.to('S') | cin, combine='max', init=0)
+    nab = ss.attr(ss.uniform(0.5, 0.95)*ss.bernoulli(0.6), when=precin.to('S') | cin, combine='max', init=0)
     return ss.Disease(S, P, C, infection=infection, precin=precin, cin=cin, nab=nab, init_prev=0.1, name=name)
 
 
@@ -135,7 +135,7 @@ def test_trait_ode():
     sc.heading('A trait (a distribution drawn once for each person) under a compartmental solver: run at its mean, with a note; auto runs agents')
     def make(trait=True, **opts):
         S, I, R = ss.states('S I R')
-        sus = ss.attr(ss.gamma(a=2, scale=0.5)) # Mean 1
+        sus = ss.attr(ss.gamma(shape=2, scale=0.5)) # Mean 1
         dis = ss.Disease(infection=S >> I @ ss.perday(0.3)*(sus if trait else 1)*I, recovery=I >> R @ ss.perday(0.1), init=dict(I=0.001), sus=sus, name='sir')
         return ss.Sim(dis, unit='day', stop=200, total_pop=10_000, **opts, **kw)
     sim = make(solver='ode').run()
@@ -170,7 +170,7 @@ def test_attr_crn():
     def run(rel=None):
         S, I, R = ss.states('S I R')
         recovery = I >> R @ ss.peryear(1)
-        nab = ss.attr(ss.uniform(0.5, 0.95), on=recovery, combine='max', init=0)
+        nab = ss.attr(ss.uniform(0.5, 0.95), when=recovery, combine='max', init=0)
         d = ss.Disease(S, I, R, infection=S >> I @ ss.peryear(2)*I, recovery=recovery, wane=R >> S @ ss.peryear(0.5), nab=nab, init_prev=0.05, name='d')
         mods = ss.modify(d.rel_sus, multiply=rel(d), name='m') if rel else []
         return ss.Sim(d, connectors=mods, analyzers=FirstNab(), n_agents=2000, start=2000, stop=2010, dt=ss.months(1), unit='year', rand_seed=1, **kw).run()
@@ -197,7 +197,7 @@ def test_attr_errors():
         ss.Disease(A, B, ab=A >> B @ 0.1, x=ss.attr({B: A.time_in}), default_state='A', name='d')
     S, I = ss.states('S I')
     infection = S >> I @ ss.perday(0.1)*I
-    rec = ss.attr(ss.normal(10, 1), on=infection)
+    rec = ss.attr(ss.normal(10, 1), when=infection)
     d = ss.Disease(S, I, infection=infection, back=S >> I @ ss.perday(0.01)*rec/10, rec=rec, init_prev=0.01, name='d')
     with pytest.raises(ValueError): # Read by a rate from S, where people who were never infected have none
         ss.Sim(d, n_agents=1000, stop=20, unit='day', **kw).run()
@@ -210,7 +210,7 @@ def make_nab(dist, combine='max', init=0, rate=ss.peryear(1)):
     """ A disease whose recovery sets an attribute, drawn from a distribution """
     S, I = ss.states('S I')
     rec = ss.Transition(I, S, dur=ss.years(1))
-    nab = ss.attr(dist, on=rec, combine=combine, init=init)
+    nab = ss.attr(dist, when=rec, combine=combine, init=init)
     return ss.Disease(S, I, infection=S >> I @ rate*I, rec=rec, nab=nab, init_prev=0.1, name='d')
 
 

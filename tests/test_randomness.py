@@ -175,8 +175,8 @@ def test_worlds(do_plot=False):
         ),
         networks = ss.RandomNet()  # Edges reform each step (< dur_inf), allowing SIR transmission
     )
-    s1 = ss.Sim(pars=pars, interventions=CountInf())
-    s2 = ss.Sim(pars=pars, interventions=[CountInf(), OneMore()])
+    s1 = ss.Sim(pars, interventions=CountInf())
+    s2 = ss.Sim(pars, interventions=[CountInf(), OneMore()])
 
     s1.run()
     s2.run()
@@ -264,7 +264,7 @@ def test_independence(do_plot=False, thresh=0.1):
     assert max_corr < thresh, f'The maximum correlation between variables was {max_corr}, above the threshold {thresh}'
 
     # A declared disease's random numbers do not depend on which other declared diseases are in the sim
-    kw = dict(n_agents=1000, networks='random', dur=10, verbose=0)
+    kw = dict(n_agents=1000, networks='random', stop=ss.years(10), verbose=0)
     alone = ss.Sim(diseases=ss.SIS(), **kw).run()
     both = ss.Sim(diseases=[ss.SIR(p_death=0), ss.SIS()], **kw).run()
     assert np.array_equal(alone.results.sis.I, both.results.sis.I) # The same people infected with SIS
@@ -309,7 +309,7 @@ def test_crn_option():
     def run(crn, seed=1):
         with ss.options.context(crn=crn):
             sim = ss.Sim(diseases=ssl.AgentSIS(name='sis', beta=0.1, init_prev=0.05), networks=ss.RandomNet(), # The transmission of ss.AgentDisease
-                         n_agents=2000, dur=30, rand_seed=seed, verbose=0)
+                         n_agents=2000, stop=ss.years(30), rand_seed=seed, verbose=0)
             sim.run()
         return sim.results['sis']['infected'].values
 
@@ -441,7 +441,7 @@ def test_crn_undriven():
         kw = dict(strains=ss.Strains(['DS', 'RIF'], fractions=[0.8, 0.2], rel_trans=[1, 0.6])) if strains else {}
         trs = dict(infection=S >> L @ ss.peryear(4)*I, activation=L >> I @ ss.peryear(0.5), recovery=I >> R @ ss.years(1), waning=R >> S @ ss.years(2))
         if extra == 'undriven':
-            trs['clear'] = ss.Transition(L, C) # Taken only by a product's moves=
+            trs['clear'] = ss.Transition(L, C) # Taken only by a product's cure=
         elif extra == 'zero':
             trs['death'] = I >> C @ ss.peryear(0) # A rate of 0, alongside a duration
         d = ss.Disease(S, L, I, R, C, **trs, name='d', init=dict(L=0.2, I=0.02), **kw)
@@ -461,13 +461,13 @@ def test_crn_one_agent():
         S, E, I, H, R = ss.states('S E I H R')
         d = ss.Disease(S, E, I, H, R,
             infection = S >> E @ ss.perday(0.1)*(I + H),
-            onset     = ss.Transition(E, [I, R], p=[0.8, None], dur=ss.lognormal(ss.days(3), ss.days(1))), # A split after a dwell time
-            severe    = ss.Transition(I, H, p=0.2, dur=ss.weibull(c=2, scale=ss.days(4))), # Branches chosen on entry
-            mild      = ss.Transition(I, [R, ss.stay], p=[0.9, None], dur=ss.uniform(ss.days(3), ss.days(9))),
+            onset     = ss.Transition(E, {I: 0.8, R: None}, dur=ss.lognormal(ss.days(3), ss.days(1))), # A split after a dwell time
+            severe    = ss.Transition(I, H, p=0.2, dur=ss.weibull(shape=2, scale=ss.days(4))), # Branches chosen on entry
+            mild      = ss.Transition(I, {R: 0.9, ss.stay: None}, dur=ss.uniform(ss.days(3), ss.days(9))),
             leave     = ss.Transition(H, R, dur=ss.normal(ss.by(sex=dict(female=ss.days(5), male=ss.days(8))), ss.days(1))),
             die       = H >> ss.dead @ ss.perday(0.03), # A competing rate beside a dwell time
             init_prev=0.02, name='d')
-        vx = ss.vaccinate(efficacy=1.0, coverage=1.0, at=[0], where=lambda sim: ss.uids([immune]), name='vx') if immune is not None else None
+        vx = ss.vaccinate(efficacy=1.0, who=lambda sim: ss.uids([immune]), when=[0], coverage=1.0, name='vx') if immune is not None else None
         with ss.options.context(crn=crn):
             sim = ss.Sim(d, networks=ss.RandomNet(n_contacts=4, method='safe'), interventions=vx, n_agents=1000, unit='day', stop=40, rand_seed=seed, verbose=0).run()
         return {k: v.raw.copy() for k, v in sim.diseases.d.__dict__.items() if isinstance(v, ss.Arr)}

@@ -11,7 +11,7 @@ Understanding the impact of interventions is one of the most common reasons to u
 
 ## Products and interventions
 
-Starsim contains _products_, which can be thought of as the actual test, diagnostic, treatment, or vaccine product being used, as well as _interventions_ (deliveries), which are responsible for delivering the products to the population. Starsim includes three basic types of product, `ss.Vaccine`, `ss.Diagnostic`, and `ss.Treatment`, and a delivery for each: `ss.vaccinate()`, `ss.screen()`, and `ss.treat()`. A delivery says who receives the product (`who=` for who is eligible, `on=` for something that has happened to them), when (`at=`, `every=`, `start=`, `at_age=`), and how many (`coverage=`, `capacity=`). These are general enough that they rarely need to be tailored to a particular disease, and you can just use them directly. That being said, you are always welcome to write your own, to capture particular features of the intervention you're modeling (see [A5](a5_modules.qmd)).
+Starsim contains _products_, which can be thought of as the actual test, diagnostic, treatment, or vaccine product being used, as well as _interventions_ (deliveries), which are responsible for delivering the products to the population. Starsim includes three basic types of product, `ss.Vaccine`, `ss.Diagnostic`, and `ss.Treatment`, and a delivery for each: `ss.vaccinate()`, `ss.screen()`, and `ss.treat()`. A delivery says who receives the product (`who=`, who is eligible, including people as they reach an age, `ss.at_age()`), when (`when=`: times, how often, an event that has happened to them, or `ss.schedule()`), and how many (`coverage=`, `capacity=`). These are general enough that they rarely need to be tailored to a particular disease, and you can just use them directly. That being said, you are always welcome to write your own, to capture particular features of the intervention you're modeling (see [A5](a5_modules.qmd)).
 
 ## Starting point
 
@@ -44,11 +44,11 @@ The infection is endemic, with about 6% of people infected at any time, nearly a
 
 ## Treating people who seek care
 
-Some people with the infection notice symptoms and seek care. Suppose 30% of people seek care within a month of infection, on average, and are treated with a drug that cures 95% of them. The drug is the product; `ss.treat()` delivers it. `on=sti.infection` delivers it to the people who were just infected, `coverage=0.3` to 30% of them, and `delay=` a time after their infection, drawn for each person:
+Some people with the infection notice symptoms and seek care. Suppose 30% of people seek care within a month of infection, on average, and are treated with a drug that cures 95% of them. The drug is the product; `ss.treat()` delivers it. `when=ss.on(sti.infection, delay=...)` delivers it to the people who were just infected, a time after their infection drawn for each person, and `coverage=0.3` to 30% of them:
 
 ```{python}
 drug = ss.Treatment(cure=0.95) # Cures 95% of the people it is given to
-care = ss.treat(drug, on=sti.infection, coverage=0.3, delay=ss.uniform(ss.weeks(1), ss.months(2)))
+care = ss.treat(drug, when=ss.on(sti.infection, delay=ss.uniform(ss.weeks(1), ss.months(2))), coverage=0.3)
 ```
 
 The treatment is given when it is due, whether or not the person is still infected by then; for someone who has recovered already, it does nothing.
@@ -59,18 +59,18 @@ People without symptoms don't seek care, so they can only be found by screening.
 
 ```{python}
 young = (ss.person.age >= 15) & (ss.person.age < 30) # Who is eligible: a condition on each person, worked out when it is needed
-screening = ss.screen(sensitivity=0.9, specificity=0.98, where=young, coverage=0.5, every=ss.months(6), start='2010')
-treatment = ss.treat(drug, on=screening.positive)
+screening = ss.screen(sensitivity=0.9, specificity=0.98, who=young, when=ss.schedule(every=ss.months(6), start='2010'), coverage=0.5)
+treatment = ss.treat(drug, when=screening.positive)
 ```
 
-`where=` takes any condition on people or on the states of a module, combined with `&` (and), `|` (or), and `~` (not): `young & ~sti.I` would screen only young people who aren't infected, for example (which would be pointless, but possible).
+`who=` takes any condition on people or on the states of a module, combined with `&` (and), `|` (or), and `~` (not): `young & ~sti.I` would screen only young people who aren't infected, for example (which would be pointless, but possible).
 
 ## Notifying partners
 
-A person who tests positive was infected by someone, and may have infected others. Partner notification reaches their partners, with `trace=`: it delivers the product to the contacts, on the named network, of the people the event in `on=` selects. Since the network remembers partnerships for a year, this reaches the partners of the past year, not only the current ones. Here half of the partners of those who test positive are reached, and treated without being tested (as in expedited partner therapy):
+A person who tests positive was infected by someone, and may have infected others. Partner notification reaches their partners, with `trace=`: it delivers the product to the contacts, on the named network, of the people the event in `when=` selects. Since the network remembers partnerships for a year, this reaches the partners of the past year, not only the current ones. Here half of the partners of those who test positive are reached, and treated without being tested (as in expedited partner therapy):
 
 ```{python}
-notification = ss.treat(drug, on=screening.positive, trace='sexualnet', coverage=0.5)
+notification = ss.treat(drug, when=screening.positive, coverage=0.5, trace='sexualnet')
 ```
 
 Now compare these, each scenario adding one more intervention to the last:
@@ -104,7 +104,7 @@ print('... of whom cured:', sim.results.treatment.cured.sum(), '- not cured:', s
 print('Partners treated:', sim.results.notification.delivered.sum())
 ```
 
-Everyone who tests positive is treated, including those whose positive result is false, who are about half of them here: with only a few percent of people infected, even a test that is 98% specific gives about as many false positives as true ones. A treatment that cures has the outcomes `cured`, `failed` (infected, and not cured), and `unneeded` (not infected), which are results and events, so `ss.treat(..., on=treatment.failed)` would give a second-line drug to those the first failed, and resistance can be a transition of the disease triggered by `treatment.failed` (see [Products](../user_guide/interventions_products.qmd#treatment-outcomes-and-resistance)). Partner notification treats about twice as many people as screening finds, since each person who tests positive has had several partners in the past year; many of them are infected, and it is those it cures that make the difference.
+Everyone who tests positive is treated, including those whose positive result is false, who are about half of them here: with only a few percent of people infected, even a test that is 98% specific gives about as many false positives as true ones. A treatment that cures has the outcomes `cured`, `failed` (infected, and not cured), and `unneeded` (not infected), which are results and events, so `ss.treat(..., when=treatment.failed)` would give a second-line drug to those the first failed, and resistance can be a transition of the disease triggered by `treatment.failed` (see [Products](../user_guide/interventions_products.qmd#treatment-outcomes-and-resistance)). Partner notification treats about twice as many people as screening finds, since each person who tests positive has had several partners in the past year; many of them are infected, and it is those it cures that make the difference.
 
 ## Individual histories
 
@@ -116,14 +116,14 @@ times_positive = screening.positive.n_times.values
 print('Number of people who tested positive 0, 1, 2, ... times:', np.bincount(times_positive.astype(int)))
 ```
 
-About a quarter of the people who tested positive did so more than once, since curing an infection doesn't protect against the next one; in practice this is a reason to retest people some months after treatment. A history can also decide who receives something: `where=screening.positive.since <= ss.months(6)` would make a delivery to people who tested positive in the past 6 months (e.g. a retest), and `where=~treatment.ever` to people never treated.
+About a quarter of the people who tested positive did so more than once, since curing an infection doesn't protect against the next one; in practice this is a reason to retest people some months after treatment. A history can also decide who receives something: `who=screening.positive.since <= ss.months(6)` would make a delivery to people who tested positive in the past 6 months (e.g. a retest), and `who=~treatment.ever` to people never treated.
 
 ## Vaccination as people reach an age
 
 There is no vaccine for gonorrhea in routine use, but a meningococcal vaccine appears to give some protection, perhaps 30–40%. Suppose one that is 35% effective is given to 80% of people as they turn 15, from 2010. `at_age=` is routine delivery as people reach an age: each person is offered it once, on the step on which they reach it, and not everyone older on the first day. Vaccination of each cohort as it reaches an age takes decades to reach everyone at risk, so these runs go on to 2040:
 
 ```{python}
-vaccination = ss.vaccinate(efficacy=0.35, at_age=15, coverage=0.8, start='2010')
+vaccination = ss.vaccinate(efficacy=0.35, who=ss.at_age(15), when=ss.schedule(start='2010'), coverage=0.8)
 
 long = dict(settings, stop=2040) # 40 years instead of 20
 sims = {
@@ -143,9 +143,9 @@ These deliveries cover most programs. When who receives something depends on a r
 
 ## Exercises
 
-1. In the scenario with partner notification, what happens if the partners of people who seek care are notified too (a second notification, with `on=care`)? Is the effect larger than notifying the partners of those found by screening?
+1. In the scenario with partner notification, what happens if the partners of people who seek care are notified too (a second notification, with `when=care`)? Is the effect larger than notifying the partners of those found by screening?
 2. Screening reaches people aged 15 to 29. How much does the effect change if it reaches everyone aged 15 to 49 instead, and how many more tests does it take? Which gives more infections prevented per test?
-3. Add a catch-up campaign to the vaccination at age 15: a single round in 2010 (`at=['2010']`) for everyone aged 15 to 29, with the same vaccine. How much sooner does vaccination make a difference, and how many more doses does it take?
+3. Add a catch-up campaign to the vaccination at age 15: a single round in 2010 (`when=['2010']`) for everyone aged 15 to 29, with the same vaccine. How much sooner does vaccination make a difference, and how many more doses does it take?
 
 ## Further reading
 

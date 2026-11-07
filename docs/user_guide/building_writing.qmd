@@ -180,7 +180,7 @@ Each value that Starsim fills in itself is marked as guessed in `describe()`, wi
 | What | The guess | The rule | To give it |
 |---|---|---|---|
 | The population | 10,000 people | No size given | `total_pop=`, or `n_agents=` as agents |
-| The length of the run | 50 units of time | No `stop=` or `dur=` | `stop=` or `dur=` |
+| The length of the run | 50 units of time | No `stop=` | `stop=`, a time or a duration (the length) |
 | The unit of time | From the model's typed values, then dates, a typed `dt`, or years, in that order | Bare numbers need a unit (see [Time](building_time.qmd#units)) | `unit=`, or type every value |
 | The solver | An ODE, or agents if anything in the model needs them | `solver='auto'` (see [Solvers](running_solvers.qmd)) | `solver=`, or `n_agents=` for agents |
 | Mixing | Homogeneous, one contact per unit of time | No network or contacts given | `networks=` |
@@ -193,7 +193,7 @@ Each value that Starsim fills in itself is marked as guessed in `describe()`, wi
 | Which transitions are acquisitions | Every transmission, or else the transitions out of the first state | `acquisition=` not given | `acquisition=True` or `False` |
 | The share of the last branch | 1 minus the others | One branch's `p=` is `None` or left out | `p=` on every branch |
 | A parameter given only bounds | The middle of its bounds | `ss.par(bounds=[...])` with no value | A value |
-| The shares of a dimension | From the population, the world's ages, everyone at the first level, or equal shares | No shares given to `stratify()` (see [Stratification](building_stratification.qmd#levels-and-shares)) | `fractions=`, or a dict of shares |
+| The shares of a dimension | From the population, the world's ages, everyone at the first level, or equal shares | No shares given to `stratify()` (see [Stratification](building_stratification.qmd#levels-and-shares)) | A dict of shares (or `ss.levels(fractions=ss.by(...))` for shares that depend on other dimensions) |
 | The kind of a dimension | Age for ages, a place for a geography, and otherwise plain groups | `kind=` not given | `kind=` on `stratify()` |
 | Aging | People age only if anyone is born or dies | `aging` not given | `aging=True` or `False` |
 | A named population's ages | The year the sim starts | No year given for `ss.population('Kenya')` | `ss.population('Kenya', year=...)` |

@@ -144,8 +144,8 @@ def test_particle_filter(key):
     sim = model.build(model.truth, data=data, solver='tau', **kw).init()
     filt = ss.fit.ParticleFilter(sim, likelihood=lik)
     with ss.options.context(threads=1):
-        one = filt(n_particles=20, seed=0)
-    assert filt(n_particles=20, seed=0) == one # Each particle has its own random numbers, so the estimate does not depend on the threads
+        one = filt(n_particles=20, rand_seed=0)
+    assert filt(n_particles=20, rand_seed=0) == one # Each particle has its own random numbers, so the estimate does not depend on the threads
     name = list(fitted_pars(sim))[0]
     values = [0.8*model.truth, model.truth, 1.2*model.truth]
     n_seeds = 3
@@ -153,7 +153,7 @@ def test_particle_filter(key):
     direct = {}
     for x in values:
         sim.restart(pars={name:x})
-        pf[x] = np.array([filt(n_particles=50, seed=seed) for seed in range(n_seeds)])
+        pf[x] = np.array([filt(n_particles=50, rand_seed=seed) for seed in range(n_seeds)])
         direct[x] = np.array([ss.fit.loglik(model.build(x, data=data, solver='tau', rand_seed=seed, **kw).run(), likelihood=lik) for seed in range(n_seeds)])
         print(f'{key} at {x:.3g}: filter {pf[x].mean():.2f} +- {pf[x].std(ddof=1)/np.sqrt(n_seeds):.2f}; direct runs {direct[x].mean():.2f} +- {direct[x].std(ddof=1)/np.sqrt(n_seeds):.2f}')
 
@@ -180,20 +180,20 @@ def sbc_fit(method, truth=0.35, seed=1, quick=True, verbose=False):
     if method == 'if2': # Maximum likelihood of a stochastic compartmental sim, as for particle MCMC below, with data on cases (an outcome, with a delay)
         kw = dict(solver='binomial', total_pop=1e4, dt=ss.days(2), rand_seed=seed + 1)
         sim = corpus.outcomes(beta=0.25, data=simulate(model, truth, seed=seed, **kw), **kw)
-        return sim.fit(method=method, likelihood=dict(cases=ss.poisson()), particles=200 if quick else 1000, iterations=30 if quick else 100, chains=2, rand_seed=seed, verbose=verbose)
+        return sim.fit(method=ss.fit.method(method, particles=200 if quick else 1000, iterations=30 if quick else 100, chains=2), likelihood=dict(cases=ss.poisson()), rand_seed=seed, verbose=verbose)
     elif method == 'pmcmc':
         # A stochastic compartmental sim, made quick: a small population, two-day steps taken whole, and data on infections
-        kw = dict(solver='binomial', substeps=1, total_pop=1e4, dt=ss.days(2), rand_seed=seed + 1)
+        kw = dict(solver=ss.binomial(substeps=1), total_pop=1e4, dt=ss.days(2), rand_seed=seed + 1)
         sim = corpus.outcomes(beta=0.25, data=simulate(model, truth, seed=seed, col='infection', **kw), **kw)
         n, particles = (100, 20) if quick else (300, 50)
-        return sim.fit(method=method, likelihood=dict(infection=ss.poisson()), draws=n, warmup=n, chains=2, particles=particles, parallel=False, rand_seed=seed, verbose=verbose) # Not in parallel, since forking after JAX is loaded can deadlock
+        return sim.fit(method=ss.fit.method(method, draws=n, warmup=n, chains=2, particles=particles, parallel=False), likelihood=dict(infection=ss.poisson()), rand_seed=seed, verbose=verbose) # Not in parallel, since forking after JAX is loaded can deadlock
     sim = corpus.outcomes(beta=0.25, likelihood=ss.poisson(), data=simulate(model, truth, seed=seed)) # Cases, with the likelihood declared on the outcome
     kwargs = dict(
         nuts   = dict(draws=100, warmup=100, chains=2) if quick else dict(draws=500, warmup=500, chains=4),
-        **{'abc-smc': dict(particles=60, generations=5) if quick else dict(particles=200, generations=8)},
+        **{'abc-smc': dict(samples=60, generations=5) if quick else dict(samples=200, generations=8)},
         optuna = dict(n_trials=40 if quick else 200),
     ).get(method, {})
-    return sim.fit(method=method, rand_seed=seed, verbose=verbose, **kwargs)
+    return sim.fit(method=ss.fit.method(method, **kwargs) if kwargs else method, rand_seed=seed, verbose=verbose)
 
 
 def check_fit(fit, truth, rtol=None, rhat_max=1.1):
@@ -254,7 +254,7 @@ def fit_detect(quick=True):
     model = models.detect
     kw = dict(solver='binomial', total_pop=1e5)
     particles, iterations, rtol = (100, 10, 0.1) if quick else (300, 30, rtols['if2']) # Quick, it was within 5% at 10 of 10 seeds, but by up to 4.8%
-    detect = model.build(0.7*model.truth, data=simulate(model, **kw), **kw).fit(method='if2', likelihood={model.col:ss.nbinom(n=20)}, particles=particles, iterations=iterations, chains=2, verbose=False)
+    detect = model.build(0.7*model.truth, data=simulate(model, **kw), **kw).fit(method=ss.fit.method('if2', particles=particles, iterations=iterations, chains=2), likelihood={model.col:ss.nbinom(n=20)}, verbose=False)
     assert np.isclose(detect.table.best[0], model.truth, rtol=rtol)
     return detect
 
@@ -273,16 +273,16 @@ def test_two_optima():
 
     # From simulation-based calibration: an optimizer started from the best point of a scan stopped at 58.86, and SciPy said it had converged
     fit = make([408, 16683, 30842, 4196, 170, 58, 18, 5, 0, 1, 1, 0, 0, 0, 0, 0, 0]).fit(method='l-bfgs-b', rand_seed=57)
-    assert fit.mismatch < 54.26 # The better optimum (b = 0.605, dur = 15.3)
+    assert fit.objective < 54.26 # The better optimum (b = 0.605, dur = 15.3)
     assert fit.converged is False # Only one of the searches from the scan's points found it
 
     # NUTS chains that all started at the initial values agreed on an epidemic that burns out early (b = 0.44), not on the truth (b = 0.116)
-    fit = make([12, 47, 35, 42, 24, 16, 17, 12, 15, 20, 16, 5, 10, 4, 5, 10, 5]).fit(method='nuts', draws=200, warmup=200, chains=2, rand_seed=23)
+    fit = make([12, 47, 35, 42, 24, 16, 17, 12, 15, 20, 16, 5, 10, 4, 5, 10, 5]).fit(method=ss.fit.method('nuts', draws=200, warmup=200, chains=2), rand_seed=23)
     table = fit.table.set_index('par')
     assert table.lower.b < 0.116 < table.upper.b # The chains start from points of the scan that are apart
 
     # Both chains started from the best two points of the scan, and agreed on a mode 13 log-likelihood units below the best (b = 0.96, dur = 2.9), with R-hat 1.03
-    fit = make([416, 18586, 25939, 2792, 40, 4, 5, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0]).fit(method='nuts', draws=200, warmup=200, chains=2, rand_seed=69)
+    fit = make([416, 18586, 25939, 2792, 40, 4, 5, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0]).fit(method=ss.fit.method('nuts', draws=200, warmup=200, chains=2), rand_seed=69)
     table = fit.table.set_index('par')
     assert table.lower.b < 0.656 < table.upper.b # The chains start from the optima found from the scan's points, so at the best (b = 0.646, dur = 18.5)
     return fit
@@ -292,7 +292,7 @@ def test_staged_and_sensitivity():
     sc.heading('Testing staged fitting, and which parameters matter')
     truth = 0.35
     sim = corpus.outcomes(beta=0.25, likelihood=ss.poisson(), data=simulate(models.outcomes, truth))
-    fit = sim.fit(method=['optuna', 'nelder-mead'], n_trials=20, rand_seed=1, verbose=False) # Each stage starts from the one before
+    fit = sim.fit(method=[ss.fit.method('optuna', n_trials=20), 'nelder-mead'], rand_seed=1, verbose=False) # Each stage starts from the one before
     assert fit.method == 'nelder-mead' and fit.converged and np.isclose(fit.pars.beta, truth, rtol=0.02)
 
     beta, dur, unused = ss.par(0.3, bounds=[0.1, 0.5]), ss.par(10, bounds=[5, 15]), ss.par(1.0, bounds=[0.5, 2])
@@ -324,10 +324,10 @@ def test_log_density():
     (_, from_jax, from_run), = jax_loglik(slow, [1.0]) # Built where a step needs 1 substep, evaluated where it needs several
     assert np.isclose(from_jax, from_run, rtol=1e-9) # The substeps are worked out over the bounds, not only at the initial values
     S, I, R = ss.states('S I R')
-    beta = ss.par(0.3, bounds=[0.1, 0.5], prior=ss.weibull(c=2, scale=0.3))
+    beta = ss.par(0.3, bounds=[0.1, 0.5], prior=ss.weibull(shape=2, scale=0.3))
     odd = ss.Sim(ss.Disease(S >> I @ beta*I, I >> R @ ss.days(10), init=dict(I=0.01), name='sir'), solver='ode', unit='day', stop=30, data=pd.DataFrame(dict(I=[0.02, 0.05]), index=[10, 20]), verbose=0)
     with pytest.raises(ss.CapabilityError, match='weibull'): # A prior that the log-density in JAX does not cover
-        odd.log_density(likelihood=dict(I=ss.normal(scale=0.01)))
+        odd.log_density(likelihood=dict(I=ss.normal(std=0.01)))
     with pytest.raises(ValueError): # It was an AttributeError
         odd.new(data=None).log_density()
     return ld
@@ -349,7 +349,7 @@ def test_value_per_level():
     assert np.allclose(fit.sim.diseases.sir.pars.beta.raw.values, [0.25, 0.4], rtol=1e-4) # And the fitted sim has them
     one = fit.sim.new(pars={'beta[b]': 0.1}) # One level by name
     assert np.allclose(one.init().diseases.sir.pars.beta.raw.values, [fit.pars.beta.values[0], 0.1])
-    proj = fit.project(dict(base=None), n=2)
+    proj = fit.project(dict(base=None), n_runs=2)
     assert np.shape(proj.results.sir.I.values)[0] == 2 # Two runs
     assert np.shape(fit.project(dict(base=None)).results.sir.I.values)[0] == 1 # By default, one: the runs of a deterministic best fit would all be the same
 
@@ -370,7 +370,7 @@ def test_fitted_where_used():
         beta = ss.par(0.3, name='beta')
         S, I, R = ss.states('S I R')
         sir = ss.Disease(infection=ss.Transition(S, I, rate=beta * I), recovery=ss.Transition(I, R, dur=dur), init_n=dict(I=10), name='sir')
-        masks = ss.modify(sir.pars.beta, multiply=effect, start=30) # A parameter used only by an intervention
+        masks = ss.modify(sir.pars.beta, multiply=effect, when=ss.schedule(start=30)) # A parameter used only by an intervention
         return ss.Sim(sir, interventions=masks, unit='day', stop=60, verbose=0)
     truth = make(0.4, ss.days(12)).run().results.sir.infection
     df = pd.DataFrame(dict(time=np.arange(0, 56, 5), infection=[np.asarray(truth)[t:t+5].sum() for t in range(0, 56, 5)])).set_index('time') # Each over the five days from its time
@@ -408,17 +408,17 @@ def test_optimize():
         beta = 0.3*(1 - 0.5*cov(a, 0.01) - 0.25*cov(b, 0.01))
         sir = ss.Disease(S >> I @ beta*I.frac, I >> R @ ss.days(10), init_n=dict(I=10), name='sir')
         return ss.Sim(sir, total_pop=10_000, unit='day', stop=100, verbose=0)
-    best = ss.fit.optimize(make(), spend=dict(a='spend_a', b='spend_b'), minimize='sir.R')
+    best = make().optimize(ss.minimize('sir.R'), spend=dict(a='spend_a', b='spend_b'))
     assert best.alloc['a'] > 95 and np.isclose(sum(best.alloc.values()), 100) # Almost all of it to the better program, keeping the total
     assert best.value < best.value_before
-    capped = ss.fit.optimize(make(), spend=dict(a='spend_a', b='spend_b'), minimize='sir.R', bounds=dict(a=(None, 60))) # A limit on one program
+    capped = make().optimize(ss.minimize('sir.R'), spend=dict(a='spend_a', b='spend_b'), bounds=dict(a=(None, 60))) # A limit on one program
     assert capped.alloc['a'] <= 60 + 1e-6 and np.isclose(sum(capped.alloc.values()), 100) and capped.value < best.value_before
-    least = ss.fit.optimize(make(), spend=dict(a='spend_a', b='spend_b'), minimize='sir.R', target=best.value_before) # The least money that does as well as the current allocation
+    least = make().optimize(ss.minimize('sir.R'), spend=dict(a='spend_a', b='spend_b'), target=best.value_before) # The least money that does as well as the current allocation
     assert least.total < 90 and least.value <= best.value_before and np.isclose(sum(least.alloc.values()), least.total)
-    smaller = ss.fit.optimize(make(), spend=dict(a='spend_a', b='spend_b'), minimize='sir.R', total=50) # Less than the current total
+    smaller = make().optimize(ss.minimize('sir.R'), spend=dict(a='spend_a', b='spend_b'), total=50) # Less than the current total
     assert np.isclose(smaller.total, 50) and np.isclose(sum(smaller.alloc.values()), 50) and smaller.alloc['a'] > 45
     dated = make().new(start='2025-01-01', stop='2025-04-11')
-    late = ss.fit.optimize(dated, spend=dict(a='spend_a', b='spend_b'), minimize='sir.R', start='2025-02-01') # In a sim with dates (a bare-number key of 2025.08 was read as days)
+    late = dated.optimize(ss.minimize('sir.R'), spend=dict(a='spend_a', b='spend_b'), start='2025-02-01') # In a sim with dates (a bare-number key of 2025.08 was read as days)
     assert late.alloc['a'] > 95 and best.value < late.value < best.value_before
     return best
 

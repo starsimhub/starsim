@@ -122,7 +122,7 @@ msim = ss.parallel({'Compartments': compartments, 'Individuals': individuals}, n
 msim.plot()
 ```
 
-Descriptions and sources can be kept with `doc=` and `source=` on an `ss.par`, and `sim.describe()` prints them with the model as Starsim has read it, with every default it filled in marked as a guess.
+Descriptions and sources can be kept with `doc=` and `source=` on an `ss.par`, and `sim.describe()` shows them with the model as Starsim has read it, with every default it filled in marked as a guess.
 
 ## How the results agree
 
@@ -155,10 +155,10 @@ These are from Starsim's switching demo for EMULSION users (`tests/switching/tes
 | A `proba` in the YAML, which EMULSION reads per time unit | **Works**: after one 7-day step with `proba: 0.1`, 47.8% are still infectious, as in EMULSION |
 | Import the quickstart | **Fails**: 13 parts are listed as not translated (the age machine's `J -> A`, conditions, `escape`, `on_cross` actions, `when`, `statevars`, the calendar), and the run, which warns and gives a prompt for an AI assistant to finish the import, ends with 15 animals against EMULSION's 66 |
 | A minimum stay in a state (`duration` as a guard, with `escape`) | **Works**: `min_stay=` on a transition, as agents, and as compartments by a conveyor of whole steps (the chain-binomial run agrees with agents step for step); an escape is a rate while the time in the state is short (`rate=ss.perday(0.5)*(E.time_in < ss.days(10))`), as agents |
-| A newborn at each farrowing | **Works as agents** for one state: `ss.birth(NB, on=farrowing, n=10)` in the same disease |
-| Newborns by prototype across several state machines, with probabilities from the mother's state (`produce_offspring`) | **Works as agents**: a split on the birth, `ss.Transition(M, [I, M], on=newborns, where=ss.mother(E \| I \| Q, include_born=True), p=[0.3, 0.7])`; the quickstart written by hand with it runs, but still ends with too few animals (66 against EMULSION's 77 after 53 steps) |
+| A newborn at each farrowing | **Works as agents** for one state: `ss.birth(NB, when=farrowing, children=10)` in the same disease |
+| Newborns by prototype across several state machines, with probabilities from the mother's state (`produce_offspring`) | **Works as agents**: a split on the birth, `ss.Transition(M, {I: 0.3, M: 0.7}, when=newborns, who=ss.mother(E \| I \| Q, include_born=True))`; the quickstart written by hand with it runs, but still ends with too few animals (66 against EMULSION's 77 after 53 steps) |
 | Births from one stratum into another (`productions: {from: A, to: J}`) as compartments | **Fails**: a birth rate by level gives births at the level of the people they come from, so a birth from one stratum into another cannot be declared yet; crossing the machines by hand into six states works and agrees (above) |
-| Herds linked by a trade register, with selective sales by state (`states='S,R'`) | **Works**: `ss.geo.Mobility(data=register)`; 2,000 herds with 26,486 sales in 1.15 s a run as compartments, and the same within noise as agents |
+| Herds linked by a trade register, with selective sales by state (`states='S,R'`) | **Works**: `ss.geo.register(register)`; 2,000 herds with 26,486 sales in 1.15 s a run as compartments, and the same within noise as agents |
 | The same file as compartments or individuals | **Works** for models without offspring or conditions across machines (above); hybrid groups are not needed at these speeds |
 | A posterior, from surveillance data | **Works**: `ss.par(..., bounds=)`, `data=`, and `sim.fit(method='pmcmc')` (or `'abc-smc'` for agents); EMULSION has no fitting |
 

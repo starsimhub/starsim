@@ -46,13 +46,13 @@ The settings of a sim are its keywords. The ones most models use:
 | `diseases` (or the first argument) | The disease or diseases; several are given as a list |
 | `total_pop` | The size of the population (default 10,000) |
 | `n_agents` | The number of agents, for a run as agents; giving it makes the sim run as agents (see [Branching and rescaling](running_branching.qmd)) |
-| `start`, `stop` (or `dur`) | The time span: dates (`'2025-01-01'`), years (`2025`), or durations from 0 (`ss.days(50)`) |
+| `start`, `stop` | The time span: dates (`'2025-01-01'`), years (`2025`), or, as `stop=`, a duration, the length of the run (`ss.days(50)`) |
 | `dt`, `unit` | The time step, and the unit of bare numbers (see [Time](building_time.qmd)) |
 | `networks` | How people mix: a contact matrix (`ss.contacts()`), a network, or a mixing pool (default: everyone mixes with everyone); see [Contact networks](populations_networks.qmd) |
 | `demographics` | Births, deaths, and migration (see [Demographics](populations_demographics.qmd)) |
 | `interventions`, `analyzers`, `connectors` | Interventions, analyzers, and connectors between modules (see [Interventions](interventions_interventions.qmd)) |
 | `data` | Data to compare the results with, by name (see [Results](building_results.qmd)) |
-| `solver` | How to run: `'auto'` (the default), `'ode'`, `'ide'`, `'binomial'`, `'gillespie'`, `'tau'`, or `'abm'` |
+| `solver` | How to run: `'auto'` (the default), `'ode'`, `'binomial'`, `'gillespie'`, `'tau'`, or `'abm'`; or with options, `ss.ode()`, `ss.binomial()`, or `ss.abm()` |
 | `rand_seed` | The random seed, for a stochastic run (default 1; see [Scenarios](running_scenarios.qmd)) |
 | `label` | A name for the sim, used in plots and comparisons |
 | `verbose` | How much to print (above) |
@@ -126,8 +126,8 @@ With β = 1.2, R0 is about 10 rather than 15, and the peak comes later and lower
 Three other ways of running again:
 
 - `sim.copy()` makes an exact copy, including the state of a sim part of the way through a run (below).
-- `sim.run(solver='abm')` runs the same sim as agents, building it again for the new solver, and `sim.run(n_runs=20)` runs it 20 times with different seeds, returning the runs together as an `ss.MultiSim` (see [Scenarios](running_scenarios.qmd)).
-- `sim.run(pars=dict(beta=1.2))` runs a sim again from its start with new parameter values (and `rand_seed=` another seed). For a model that is nothing but compartments it does so without building the sim again, which makes repeated runs many times faster; `sim.run(n_runs=...)` and `sim.fit()` do this too.
+- `sim.new(solver='abm').run()` runs the same sim as agents, built again for the new solver, and `ss.parallel(sim, n_runs=20)` runs it 20 times with different seeds, returning the runs together as an `ss.MultiSim` (see [Scenarios](running_scenarios.qmd)).
+- `sim.restart(pars=dict(beta=1.2)).run()` runs a sim again from its start with new parameter values (and `rand_seed=` another seed), which are kept for its later runs. `sim.run()` itself takes only `until=` and `verbose=`, and always returns the sim, so a variant is given first, to `sim.restart()` or `sim.new()`. For a model that is nothing but compartments it does so without building the sim again, which makes repeated runs many times faster; `ss.parallel(sim, n_runs=...)` and `sim.fit()` do this too.
 
 ## Running part of the way
 
@@ -225,7 +225,7 @@ def make_sim(seed=1, n_agents=10_000, start=1990, stop=2030, scenario='baseline'
     hiv = ssl.HIV(beta={'sexualnet': ss.peract(m2f=0.008, f2m=0.004), 'prenatalnet': 0.2})
     interventions = []
     if scenario == 'treat':
-        interventions.append(ssl.ART(year=[2004, 2020], coverage=[0.1, 0.8]))
+        interventions.append(ssl.ART(coverage=ss.timeseries({2004: 0.1, 2020: 0.8}, 'linear')))
 
     sim = ss.Sim(
         people = people,
@@ -279,29 +279,26 @@ Every keyword of `ss.Sim()`, by what it is for; `sim.pars` (an `ss.SimPars`) hol
 | `diseases`, `networks`, `demographics`, `interventions`, `analyzers`, `connectors` | none | Modules of each kind: a module, a name (`'sir'`), a dict with `type`, or a list; `demographics=True` gives births and deaths at 20 and 10 per 1,000 people per year |
 | `modules` | none | Modules of any kind together, sorted by kind; those of your own of no standard kind are in `sim.custom` |
 | `step_order` | 'type' | The order the modules step in: `'type'`, each kind at its place in the step, or `'given'`, in the order they were given (the model and `modules=` first) |
-| `pars` | none | Values of the model's parameters by name, e.g. `pars=dict(beta=0.1)` or `pars=fit.pars` |
+| `pars` | none | Values of the model's parameters by name, e.g. `pars=dict(beta=0.1)` or `pars=fit.pars`; only the model's parameters (the settings in this table are keywords of their own, and a parameter of the model given as a keyword says to put it in `pars=`) |
 | `data` | none | Data to plot with the results and to fit to, with a `time` column and columns named like `measles.infection` |
 | `people` | none | An `ss.People` to use, rather than making one (see [People and agents](populations_people.qmd)) |
 | **The population** | | |
 | `total_pop` | 10,000 | The size of the population modeled |
-| `n_agents` | as `total_pop`, up to 10,000 | The number of agents, for a run as agents; giving it makes the sim run as agents |
-| `pop_scale` | `total_pop/n_agents` | The number of people each agent stands for |
-| `rescale`, `rescale_threshold`, `rescale_factor` | False, 0.05, 1.2 | Dynamic rescaling: start at one person per agent, and grow by at least `rescale_factor` whenever more than `rescale_threshold` of agents are no longer naive (see [Branching and rescaling](running_branching.qmd#dynamic-rescaling)) |
+| `n_agents` | as `total_pop`, up to 10,000 | The number of agents, for a run as agents; giving it makes the sim run as agents (and without `total_pop`, it is an error for a compartmental run). Each agent then stands for `sim.pop_scale = total_pop/n_agents` people |
+| `rescale` | False | Dynamic rescaling, for agents: start at one person per agent, and grow by at least a factor whenever more than a share of agents are no longer naive; True, or `ss.rescale(threshold=0.05, factor=1.2)` with its options (see [Branching and rescaling](running_branching.qmd#dynamic-rescaling)) |
 | `aging` | with demographics | Whether agents age; by default, only if there are births or deaths |
 | `stratify` | none | Groups by a property of people for every module, e.g. `dict(age=[0, 15, 65])` (see [Stratification](building_stratification.qmd)) |
 | **Time** | | |
-| `start`, `stop`, `dur` | 50 steps, from 0 (or from 2000 for a model in years) | The time span: dates, years, or durations; `dur` is the length, if `stop` is not given |
+| `start`, `stop` | 50 of the sim's unit, from 0 (or from 2000 for a model in years) | The time span: dates, years, or, as `stop=`, a duration, the length of the run. A date or a year as the start gives the sim a calendar, and every bare number given as a time is then a year |
 | `dt` | 1 | The step, in the unit of time |
 | `unit` | the model's | The unit of time, and of bare numbers in declared transitions (`'day'`, `'week'`, `'year'`, ...) |
 | **How it is run** | | |
-| `solver` | `'auto'` | `'ode'`, `'ide'`, `'binomial'`, `'gillespie'`, `'tau'`, or `'abm'` (see [Solvers and backends](running_solvers.qmd)) |
+| `solver` | `'auto'` | `'ode'`, `'binomial'`, `'gillespie'`, `'tau'`, or `'abm'`; or with options: `ss.ode(integrator=, substeps=, dwells=)`, `ss.binomial(substeps=)`, or `ss.abm(step=)` (see [Solvers and backends](running_solvers.qmd)) |
 | `branching` | False | Run as a branching process: infection takes no one from the uninfected (see [Branching and rescaling](running_branching.qmd)) |
-| `integrator` | `'rk4'` | The ODE's scheme: `'rk4'` or `'euler'` |
-| `substeps` | enough for accuracy | Substeps per step, for the ODE's integrator and the `'binomial'` solver (1 takes each step whole, as a discrete-time chain-binomial model does) |
 | `approximations` | 'note' | What to do with each approximation a solver makes: 'note' notes it, 'allow' keeps the note in `sim.notes` without printing it, 'error' makes it an error |
 | `require_kernels` | False | Raise an error, rather than run in Python, if a compartmental run can't be taken whole in the kernels (see `sim.kernel_reason()`) |
 | `rand_seed` | 1 | The random seed, from which each module's seeds are made |
-| `even_draws` | False | Space each call's random numbers evenly for agents, which reduces the variance between runs, but makes outbreaks die out less often than they should |
+| `even_draws` | False | For agents (an error for a compartmental run): space each call's random numbers evenly, which reduces the variance between runs, but makes outbreaks die out less often than they should |
 | **Output** | | |
 | `group_results` | all | The results to keep by group (e.g. `['I', 'cases']`); the others keep only their totals, which saves memory in a model with many groups (by default all are kept, but only every few steps if every step would take more than about 100 MB) |
 | `record_people` | True | Whether to record the people's results (`alive`, `female`, `died`, `emigrated`) each step; False saves a little time in a light sim that doesn't need them, though demographics read `alive` |

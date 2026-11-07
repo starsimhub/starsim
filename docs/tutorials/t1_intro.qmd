@@ -46,7 +46,7 @@ measles = ss.Disease(infection, recovery, init_prev=0.001)
 
 Read `S >> I @ 1.9*I` as "from S to I, at a rate of 1.9 × I". A state in a rate, like `I` in `1.9*I`, is the share of people in that state. A duration, like `ss.days(8)`, is the average time spent in a state before leaving it. The rate 1.9 has no unit of its own, so it takes the unit of the duration: 1.9 per day. [`ss.Disease`](../api/diseases.qmd) puts the transitions together into a disease, and `init_prev=0.001` starts the outbreak with 0.1% of people infectious (100 people in a town of 100,000), and everyone else susceptible.
 
-The disease is named `measles`, after its variable. These are the standard equations of an SIR model, which `equations()` prints:
+The disease is named `measles`, after its variable. These are the standard equations of an SIR model, which `equations()` gives:
 
 ```{python}
 measles.equations()

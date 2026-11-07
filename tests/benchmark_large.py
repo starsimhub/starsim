@@ -21,7 +21,7 @@ filename = sc.thisdir(__file__, 'benchmark_large.yaml')
 default_repeats = 10
 pars = sc.obj(
     n_agents = 100_000,   # Number of agents
-    dur      = 100,       # Number of years to simulate
+    stop     = ss.years(100), # Number of years to simulate
     dt       = 1.0,       # Timestep
     verbose  = 0,         # Don't print details of the run
     networks = 'random',  # Default network
@@ -36,9 +36,9 @@ def run_benchmark(repeats=default_repeats):
 
     # Do the actual benchmarking, keeping every trial's time
     times = []
-    print(f'Benchmarking {repeats} runs of a {pars.n_agents:,}-agent, {pars.dur}-year sim ...')
+    print(f'Benchmarking {repeats} runs of a {pars.n_agents:,}-agent, {pars.stop.value:n}-year sim ...')
     for r in range(repeats):
-        sim = ss.Sim(pars=pars)
+        sim = ss.Sim(pars)
         t0 = sc.tic()
         sim.run()
         t = sc.toc(t0, output=True)

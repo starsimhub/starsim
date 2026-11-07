@@ -9,7 +9,7 @@ authorship:
 
 When a model runs as agents, each person's properties (age, sex, the state of each disease) are kept in arrays with one value per agent. Code that reads or changes them, in a [module written as code](building_modules.qmd) or in an analysis after a run, needs to pick out agents correctly, including when some of them have died. This page covers how agents are identified, how the arrays are laid out, and the rules for indexing them.
 
-A declared model needs none of this: conditions such as `where=ss.person.age < 5` or `where=measles.I` pick out people for you, and work under every solver. In a compartmental run there are no agents, and `sim.people` has one row for each group instead.
+A declared model needs none of this: conditions such as `who=ss.person.age < 5` or `who=measles.I` pick out people for you, and work under every solver. In a compartmental run there are no agents, and `sim.people` has one row for each group instead.
 
 ## Agents and their UIDs
 
@@ -117,7 +117,7 @@ class AgeOfInfectious(ss.Analyzer):
     """ Record the mean age of the people infectious with measles at each step """
     def init_results(self):
         super().init_results()
-        self.define_results(ss.Result('mean_age', label='Mean age of the infectious'))
+        self.define_results(ss.Result('mean_age', label='Mean age of the infectious', kind='ratio'))
         return
 
     def record_stocks(self): # At the start of each step, as the other stocks are
@@ -131,7 +131,7 @@ class AgeOfInfectious(ss.Analyzer):
 
 S, I, R = ss.states('S I R')
 measles = ss.Disease(S >> I @ 0.04*I, I >> R @ ss.days(8), init_prev=0.01, name='measles')
-school = ss.RandomNet(name='school', n_contacts=10, where=(ss.person.age >= 5) & (ss.person.age < 15))
+school = ss.RandomNet(name='school', n_contacts=10, who=(ss.person.age >= 5) & (ss.person.age < 15))
 community = ss.RandomNet(name='community', n_contacts=2)
 sim = ss.Sim(measles, networks=[school, community], analyzers=AgeOfInfectious(), n_agents=5000, stop=ss.days(100), verbose=0)
 sim.run()

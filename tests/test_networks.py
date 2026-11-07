@@ -32,7 +32,7 @@ def test_manual():
     p1 = np.random.randint(n_agents, size=n_edges)
     p2 = np.random.randint(n_agents, size=n_edges)
     beta = np.ones(n_edges)
-    nw1 = ss.Network(p1=p1, p2=p2, beta=beta, label='rand')
+    nw1 = ss.Network(p1=p1, p2=p2, weight=beta, label='rand')
 
     # Create a maternal network
     sim = ss.Sim(n_agents=n_agents, demographics='pregnancy')
@@ -128,8 +128,8 @@ def test_randomsafe():
         return similarity
 
     # Set up a sim with some small number of births and deaths
-    pars = sc.obj(n_agents=small, dur=5, verbose=False)
-    births = ss.Births(birth_rate=ss.time.freq(5, 'year'))
+    pars = sc.obj(n_agents=small, stop=ss.years(5), verbose=False)
+    births = ss.Births(birth_rate=ss.peryear(0.005))
     simil = sc.obj()
 
     # Confirm that non-safe networks diverge immediately
@@ -140,8 +140,8 @@ def test_randomsafe():
     n2 = s2.networks[0].to_edgelist()
     simil.uid = auid_similarity(s1, s2)
     simil.rand = sc.similarity(n1, n2)
-    print(f'Similarity in UIDs after {pars.dur} timesteps with/without births:\n{simil.uid:%}')
-    print(f'Similarity for random networks after {pars.dur} timesteps:\n{simil.rand:%}\n')
+    print(f'Similarity in UIDs after {pars.stop} with/without births:\n{simil.uid:%}')
+    print(f'Similarity for random networks after {pars.stop}:\n{simil.rand:%}\n')
     assert simil.rand < 0.5, 'Random networks were more similar than expected'
 
     # Confirm that safe networks don't
@@ -152,8 +152,8 @@ def test_randomsafe():
     n4 = s4.networks[0].to_edgelist()
     simil.uid2 = auid_similarity(s3, s4)
     simil.safe = sc.similarity(n3, n4)
-    print(f'Similarity in UIDs after {pars.dur} timesteps with/without births:\n{simil.uid2:%}')
-    print(f'Similarity for random-safe networks after {pars.dur} timesteps:\n{simil.safe:%}\n')
+    print(f'Similarity in UIDs after {pars.stop} with/without births:\n{simil.uid2:%}')
+    print(f'Similarity for random-safe networks after {pars.stop}:\n{simil.safe:%}\n')
     assert simil.safe > 0.5, 'RandomSafe networks were less similar than expected'
 
     # With many agents, some random numbers are tied; check that these edges don't all go to agent 0
@@ -230,7 +230,7 @@ def test_network_uids():
 
 @sc.timer()
 def test_erdosrenyi():
-    sc.heading('Testing Erdos-Renyi network')
+    sc.heading('Testing Erdos-Renyi network (ssl.StaticNet with p=)')
 
     def test_ER(n, p, nw, alpha=0.01):
         """
@@ -267,17 +267,17 @@ def test_erdosrenyi():
 
     # Manual creation
     p = 0.1
-    nw1 = ss.Sim(n_agents=small, networks=ssl.networks.ErdosRenyiNet(p=p)).init().networks[0] # The sim's copy, initialized
+    nw1 = ss.Sim(n_agents=small, networks=ssl.networks.StaticNet(p=p)).init().networks[0] # The sim's copy, initialized
     test_ER(small, p, nw1)
 
     # Automatic creation as part of sim
     ss.register_modules(ssl.networks)
-    s2 = ss.Sim(n_agents=small, networks='erdosrenyi').init()
+    s2 = ss.Sim(n_agents=small, networks=dict(type='static', p=p)).init()
     nw2 = s2.networks[0]
 
     # Larger example with higher p
     p=0.6
-    nwdict = dict(type='erdosrenyi', p=p)
+    nwdict = dict(type='static', p=p)
     s3 = ss.Sim(n_agents=medium, networks=nwdict).init()
     nw3 = s3.networks[0]
     test_ER(medium, p, nw3)
@@ -295,7 +295,7 @@ def test_disk():
     sc.heading('Testing Disk network')
 
     # Visualize the path of agents
-    s1 = ss.Sim(n_agents=5, dur=ss.days(50), networks=ssl.networks.DiskNet()).init()
+    s1 = ss.Sim(n_agents=5, stop=ss.days(50), networks=ssl.networks.DiskNet()).init()
     nw1 = s1.networks[0]
 
     if sc.options.interactive:
@@ -311,7 +311,7 @@ def test_disk():
             s1.run_one_step()
 
     # Simulate SIR on a DiskNet
-    nw2 = ssl.networks.DiskNet(r=0.15, v=ss.time.freq(0.05, unit=ss.years(1)))
+    nw2 = ssl.networks.DiskNet(r=0.15, v=ss.per(0.05, unit=ss.years(1)))
     s2 = ss.Sim(n_agents=1000, networks=nw2, diseases='sir').init() # This initializes the network; enough agents that the epidemic doesn't die out at the start
     s2.run()
     assert len(s2.networks[0]) > 0 and s2.results.sir.infection.cum[-1] > 0, 'Expected edges, and infections through them'
@@ -355,7 +355,7 @@ def test_null():
     sim = ss.Sim(diseases=sir, people=people, networks=network)
     sim.run()
     net = sim.networks.nullnet
-    assert len(net) == small and np.all(net.edges.beta == 0) and (net.edges.p1 == net.edges.p2).all(), 'Expected one zero-weight self-edge per agent'
+    assert len(net) == small and np.all(net.edges.weight == 0) and (net.edges.p1 == net.edges.p2).all(), 'Expected one zero-weight self-edge per agent'
     return sim
 
 
@@ -463,10 +463,12 @@ def test_edge_ops():
     net2 = ss.Network(p1=[1,2,3,4], p2=[2,3,1,4])
     assert np.array_equal(net2.find_contacts([1,3]), [1,2,3])
     assert ss.networks.find_contacts(net2.p1, net2.p2, [1,3]) == {1,2,3}
-    assert net.beta.sum() == 4 # Beta defaults to 1
+    assert net.weight.sum() == 4 # The weight defaults to 1
 
-    net.from_df(dict(p1=[0, 1], p2=[1, 2], beta=[1, 2])) # Replace the edges with a dict of arrays
-    assert net['beta'][1] == 2
+    net.from_df(dict(p1=[0, 1], p2=[1, 2], weight=[1, 2])) # Replace the edges with a dict of arrays
+    assert net['weight'][1] == 2
+    with pytest.raises(TypeError, match='weight='): # Starsim 3's name for the weight
+        ss.Network(p1=[0], p2=[1], beta=[1.0])
 
     net.remove_edges(net.p1 == 0) # Remove edges by mask
     assert len(net) == 1 and net.p1[0] == 1
@@ -481,7 +483,7 @@ def test_one_way():
     sc.heading('Testing a network that transmits one way (one_way=True)')
     reached = {}
     for one_way in [False, True]:
-        net = ss.Network(p1=np.arange(99), p2=np.arange(1, 100), beta=np.ones(99), one_way=one_way, name='chain') # A chain, each person linked to the next
+        net = ss.Network(p1=np.arange(99), p2=np.arange(1, 100), weight=np.ones(99), one_way=one_way, name='chain') # A chain, each person linked to the next
         sim = ss.Sim(n_agents=100, diseases=ss.SIR(beta=ss.perday(5), init_prev=0, dur_inf=ss.days(1000)), networks=net, dt=ss.days(1), stop=ss.days(20), verbose=0)
         sim.init()
         sim.diseases.sir.infect(ss.uids([50]))
@@ -509,7 +511,7 @@ def test_dynamic():
 @sc.timer()
 def test_cluster():
     sc.heading('Testing cluster networks')
-    net = ssl.ClusterNet(cluster_size=ss.poisson(5), where=(ss.person.age >= 18) & (ss.person.age < 65))
+    net = ssl.ClusterNet(cluster_size=ss.poisson(5), who=(ss.person.age >= 18) & (ss.person.age < 65))
     sim = ss.Sim(n_agents=medium, networks=net).init()
     net = sim.networks[0] # The sim's copy, initialized
     ages = sim.people.age
@@ -525,17 +527,17 @@ def test_cluster():
 def test_hybrid():
     sc.heading('Testing hybrid networks')
     sis = ss.SIS(beta=dict(h=0.1, s=0.05, w=0.05, c=0.02)) # Per-network beta
-    sim = ss.Sim(n_agents=medium, diseases=sis, networks=ssl.HybridNet(contacts=dict(c=10)), verbose=0)
+    sim = ss.Sim(n_agents=medium, diseases=sis, networks=ssl.HybridNet(n_contacts=dict(c=10)), verbose=0)
     sim.run()
     nets = sim.networks
     assert list(nets.keys()) == ['h', 's', 'w', 'c'] # Expanded into four networks
     assert np.all(sim.people.age[nets.s.members] < 22) # Schools are age-restricted
-    assert nets.h.edges.beta[0] == 3.0 # Default v3 per-network beta
-    assert nets.c.pars.n_contacts.pars.lam == 10 # Partial update of contacts
+    assert nets.h.edges.weight[0] == 1.0 # The beta of each network is the disease's
+    assert nets.c.pars.n_contacts.pars.value == 10 and nets.w.pars.cluster_size.pars.mean == 16 # Partial update of n_contacts: a number is the same for everyone, as in ss.RandomNet
     assert isinstance(nets.s, ssl.ClusterNet) and isinstance(nets.w, ssl.ClusterNet) # Clusters by default
-    constant = ss.Sim(n_agents=small, networks=ssl.HybridNet(contacts=dict(s=ss.constant(20))), verbose=0).init().networks.s
+    constant = ss.Sim(n_agents=small, networks=ssl.HybridNet(n_contacts=dict(s=ss.constant(20))), verbose=0).init().networks.s
     assert constant.pars.cluster_size.pars.value == 21 # A cluster of 21 gives 20 contacts each
-    closed = ss.Sim(n_agents=small, diseases='sis', networks=ssl.HybridNet(contacts=dict(s=0)), verbose=0).run()
+    closed = ss.Sim(n_agents=small, diseases='sis', networks=ssl.HybridNet(n_contacts=dict(s=0)), verbose=0).run()
     assert len(closed.networks.s) == 0 and len(closed.networks.w) > 0 # No contacts is an empty network
 
     # As in Covasim v3, use random schools and workplaces, and choose the targets of edges uniformly
@@ -546,16 +548,13 @@ def test_hybrid():
 
 @sc.timer()
 def test_bare_units():
-    sc.heading('Testing the warning for a bare number in another unit than the sim')
+    sc.heading("Testing that a bare number in a network's dur= is in the sim's unit, and a single duration a mean")
     sim = lambda net: ss.Sim(n_agents=200, diseases=ss.SIS(beta=ss.peract(0.05), dur_inf=ss.days(10)), networks=net, dt=ss.days(1), stop=ss.days(10), verbose=0)
-    with pytest.warns(RuntimeWarning, match='read in years'): # The default duration is in years, but the sim is in days
-        sim(ss.SexualNet(dur=5)).init()
     with warnings.catch_warnings():
-        warnings.simplefilter('error')
-        sim(ss.SexualNet(dur=ss.days(5))).init() # A unit says which is meant
-    with pytest.warns(RuntimeWarning, match='set only the mean') as record: # The same unit as the sim: only that the std of the default was kept (see Pars._update_dist())
-        ss.Sim(n_agents=200, diseases=ss.SIS(beta=ss.peract(0.01)), networks=ss.SexualNet(dur=5), verbose=0).init()
-    assert not any('read in' in str(w.message) for w in record)
+        warnings.simplefilter('error') # Nothing to warn of: one rule
+        nets = [sim(net).init().networks[0] for net in [ss.SexualNet(dur=5), ss.SexualNet(dur=ss.days(5)), ss.DegreeNet(dur=5, acts=ss.perday(1))]]
+    assert all(net.mean_dur == 5 for net in nets) # Each 5 days at daily steps, ending at a constant rate, as for ss.DegreeNet
+    assert isinstance(ss.SexualNet().pars.dur, ss.lognormal) and ss.SexualNet(dur=ss.years(15)).pars.dur == ss.years(15) # The default, written out, is itself; one duration is a mean
     return
 
 
@@ -572,7 +571,7 @@ def test_certain_transmission():
         at_risk = (k > 0) & ~before
         with warnings.catch_warnings():
             warnings.simplefilter('error') # It was a RuntimeWarning and no infections
-            sim.run(until=sim.t.tvec[0]) # The first step only
+            sim.run(until=sim.t.timevec[0]) # The first step only
         return sim.diseases.si.I.raw[at_risk].mean(), k[at_risk]
     assert infected(ss.probperweek(1))[0] == 1
     share, k = infected(0.3)
@@ -580,7 +579,7 @@ def test_certain_transmission():
     return
 
 
-def chance(beta, acts=ss.constant(ss.freqperyear(1)), dt=ss.years(1), steps=1, connectors=None, net=None, n=40_000, f2m=False, seed=1):
+def chance(beta, acts=ss.constant(ss.peryear(1)), dt=ss.years(1), steps=1, connectors=None, net=None, n=40_000, f2m=False, seed=1):
     """ The chance that a partnership with an infectious partner transmits over some steps, measured over many lasting partnerships (from men to women, or with f2m=True, women to men) """
     S, I = ss.states('S I')
     si = ss.Disease(infection=ss.Transition(S, I, rate=beta * I), init_prev=0.5, name='si')
@@ -606,7 +605,7 @@ class Couples(ss.SexualNet):
         self.participant[self.sim.people.auids] = True
         m, f = [self.available(self.sim.people, sex) for sex in ['male', 'female']]
         n = min(len(m), len(f))
-        self.append(p1=m[:n], p2=f[:n], beta=np.ones(n), dur=np.full(n, 10.0), acts=np.full(n, float(self.n_acts)))
+        self.append(p1=m[:n], p2=f[:n], weight=np.ones(n), dur=np.full(n, 10.0), acts=np.full(n, float(self.n_acts)))
         return
 
 
@@ -637,13 +636,15 @@ def test_beta_readings():
     with pytest.raises(ValueError, match='m2f and f2m'): # ... and one it does not have raises, listing those it has
         ss.Sim(sis(ss.peract(m2f=0.01, f2m=0.01, m2m=0.02)), networks=ss.SexualNet(), **kw).init()
     with pytest.raises(ValueError):
-        ss.Sim(sis(ss.peract(m2f=0.01, f2m=0.01)), networks=ss.DegreeNet(name='needles', dur=ss.years(1), acts=ss.freqpermonth(20)), **kw).init()
+        ss.Sim(sis(ss.peract(m2f=0.01, f2m=0.01)), networks=ss.DegreeNet(name='needles', dur=ss.years(1), acts=ss.probpermonth(0.5)), **kw).init() # A probability per unit time is not a number of acts
     with pytest.raises(ValueError, match='A probability per act must be between 0 and 1'):
         ss.peract(1.5)
     with pytest.raises(ValueError, match='step'): # A whole number of acts per step, drawn once, depends on the step
-        ss.Sim(sis(0.01), networks=ss.SexualNet(acts=ss.poisson(lam=ss.freqperyear(80))), **kw).init()
-    with pytest.raises(ValueError, match='frequency'): # A hazard is not a number of acts (as agents, it would be the chance of an act in a step)
-        ss.Sim(sis(0.01), networks=ss.SexualNet(acts=ss.peryear(80)), **kw).init()
+        ss.Sim(sis(0.01), networks=ss.SexualNet(acts=ss.poisson(mean=ss.peryear(80))), **kw).init()
+    with pytest.raises(ValueError, match='probability'): # A probability is not a number of acts
+        ss.Sim(sis(0.01), networks=ss.SexualNet(acts=ss.probperyear(0.8)), **kw).init()
+    net = ss.Sim(sis(ss.peract(0.01)), networks=ss.DegreeNet(dur=ss.years(1), acts=ss.peryear(80)), **kw).init().networks[0] # A rate is a number of acts per unit time
+    assert np.isclose(net.acts_per_step, 80*net.t.dt.years)
 
     # Mother-to-child networks transmit one way, so one value is enough (a pair was [b, 0])
     S, I = ss.states('S I')
@@ -663,7 +664,7 @@ def test_peract_describe():
         condoms = ss.modify(syph.infection, efficacy=0.5, share=ss.timeseries({2000: 0.05, 2020: 0.3}), network='sexualnet', name='condoms')
         return ss.Sim(syph, networks=ss.SexualNet(), interventions=condoms, n_agents=500, start=2000, stop=2002, verbose=0)
     sim = make(ss.peract(m2f=0.3, f2m=0.15)).init()
-    text = sim.diseases.syph.describe(output=True)
+    text = sim.diseases.syph.describe()
     for line in ['from P + 0.55 EL', 'beta on sexualnet: per act, m2f 0.3, f2m 0.15', "sexualnet's sides m and f", '"condoms"']:
         assert line in text, line
     return
@@ -682,7 +683,7 @@ def test_beta_default():
     sim = ss.Sim(make(sexualnet=ss.peract(m2f=m2f, f2m=0.5*m2f), msm=ss.peract(0.1), default=0), networks=[ss.SexualNet(), ss.PrenatalNet()], demographics='pregnancy', **kw).run()
     assert sim.results.d.I[-1] > 0
     assert any('msm' in note and 'default' in note for note in sim.notes), sim.notes
-    assert 'beta on prenatalnet' in sim.diseases.d.describe(output=True)
+    assert 'beta on prenatalnet' in sim.diseases.d.describe()
 
     # Without a default, a name that is not a route, or a route with no value, still raises, since it is likely a typo
     with pytest.raises(ValueError):
@@ -723,7 +724,7 @@ def test_per_act_beta():
     def run(dt, unit='year', beta=0.003):
         S, I = ss.states('S I')
         si = ss.Disease(infection=ss.Transition(S, I, rate=beta * I), init_prev=0.05, name='si')
-        mf = ss.SexualNet(acts=ss.constant(ss.freqperyear(96)))
+        mf = ss.SexualNet(acts=ss.constant(ss.peryear(96)))
         sim = ss.Sim(si, networks=mf, n_agents=3000, start='2000-01-01', stop='2005-01-01', unit=unit, dt=dt, verbose=0, rand_seed=1).run()
         return sim.results.si.infection.sum()
     weekly, monthly, quarterly = [run(dt) for dt in [ss.weeks(1), ss.months(1), ss.months(3)]]
@@ -743,7 +744,7 @@ def test_condoms():
     def make(share=0.0, eff=0.8, seed=1):
         S, I = ss.states('S I')
         si = ss.Disease(infection=ss.Transition(S, I, rate=0.02 * I), init_prev=0.05, name='si')
-        net = CondomNet(name='mf', acts=ss.constant(ss.freqperyear(50)))
+        net = CondomNet(name='mf', acts=ss.constant(ss.peryear(50)))
         net.define_pars(share=share)
         condoms = ss.modify(si.infection, efficacy=eff, share=lambda net: net.edges.condoms, network='mf', name='condoms')
         return ss.Sim(si, networks=net, interventions=condoms, n_agents=2000, start=2000, stop=2005, verbose=0, rand_seed=seed)
@@ -848,7 +849,7 @@ def test_infection_sources():
         found.append((len(new), np.count_nonzero(~np.isnan(sources))))
     S, I = ss.states('S I')
     d = ss.Disease(infection=S >> I @ dict(sexualnet=ss.peract(0.2), default=0) * I, mtct=S >> I @ dict(prenatalnet=ss.peryear(2), default=0) * I, recovery=I >> S @ ss.years(1), init_prev=0.2, name='d')
-    sim = ss.Sim(d, networks=[ss.SexualNet(), ss.PrenatalNet()], demographics=ss.Pregnancy(fertility_rate=ss.freqperyear(100)), n_agents=2000, stop=3, analyzers=check, rand_seed=1, verbose=0).run()
+    sim = ss.Sim(d, networks=[ss.SexualNet(), ss.PrenatalNet()], demographics=ss.Pregnancy(fertility_rate=ss.peryear(0.1)), n_agents=2000, stop=3, analyzers=check, rand_seed=1, verbose=0).run()
     n_new, n_found = np.sum(found, axis=0)
     assert n_new > 0 and n_found == n_new # Each infection over a network has its source, whichever transmission it was by
     return sim
@@ -881,7 +882,7 @@ def test_edge_index():
     assert np.array_equal(np.column_stack([p1, p2]), edges), 'Expected the same random graph as NetworkX makes from the same random numbers'
     S, I, X = ss.states('S I X')
     sis = ss.Disease(infection=S >> I @ 0.1*I, recovery=I >> S @ 0.2, quarantine=I >> X @ 0.05, init_n=dict(I=20), name='sis')
-    tracing = ss.Delivery(move=I >> X, on=sis.quarantine, trace='net', coverage=0.5)
+    tracing = ss.Delivery(I >> X, when=sis.quarantine, coverage=0.5, trace='net')
     sim = ss.Sim(sis, networks=ssl.StaticNet(n_contacts=8, name='net'), interventions=tracing, n_agents=2000, unit='day', stop=30, verbose=0)
     runs = []
     for share in [0, 1]: # By a pass over the edges, then by the edges of each agent wherever it can
@@ -922,7 +923,7 @@ def test_network_saturation():
     K, b, dur, dt = 2, 3.0, 0.25, 1/12 # Few contacts, each with a large chance of transmitting in a month
     def make(solver, net, beta=b, n=5_000):
         sis = ss.SIS(beta=ss.peryear(beta), dur_inf=ss.years(dur), init_prev=0.1)
-        sim = ss.Sim(diseases=sis, networks=net, n_agents=n, start=2000, stop=2020, dt=ss.month, solver=solver, verbose=0)
+        sim = ss.Sim(diseases=sis, networks=net, n_agents=n, total_pop=n, start=2000, stop=2020, dt=ss.months(1), solver=solver, verbose=0)
         sim.run()
         return sim.results.sis.prevalence[-120:].mean() # The last 10 years
 
@@ -936,6 +937,17 @@ def test_network_saturation():
     dense = make('abm', ss.RandomNet(n_contacts=60), beta=b*K/60)/make('ode', ss.RandomNet(n_contacts=60), beta=b*K/60)
     assert abs(sparse - dense) < 0.08, f'agents ÷ ODE is {sparse:.3f} on the sparse network but {dense:.3f} on the dense one' # About 0.25 apart without the correction
     return ode, sparse, dense
+
+@sc.timer()
+def test_who_compartmental():
+    sc.heading('A network among some people (who=) has no compartmental form, and a network prints before it has edges')
+    with pytest.raises(ss.CapabilityError, match='who='):
+        ss.Sim(diseases=ss.SIR(beta=0.1), networks=ss.RandomNet(who=ss.person.age < 30), solver='ode', verbose=0).init()
+    sim = ss.Sim(diseases=ss.SIR(beta=0.1), networks=ss.RandomNet(who=ss.person.age < 30), n_agents=200, stop=2002, verbose=0).init()
+    assert sim.solver == 'abm'
+    assert 'no edges yet' in str(ss.SexualNet()) and 'p1' in str(sim.networks.randomnet)
+    return sim
+
 
 if __name__ == '__main__':
     do_plot = True
@@ -976,5 +988,6 @@ if __name__ == '__main__':
     shared = test_shared_pass()
     certain = test_certain_transmission()
     sat = test_network_saturation()
+    test_who_compartmental()
 
     T.toc()

@@ -52,9 +52,9 @@ sirs = ss.Disease(
     name      = 'sirs',
 )
 away = [[0, 0.009995, 0.004021], [0.009295, 0, 0.006078], [0.004379, 0.007259, 0]]
-sirs.stratify(patch=['a', 'b', 'c'], fractions=[4/7, 2/7, 1/7], mobility=ss.geo.Mobility(matrix=away, kind='commute'))
+sirs.stratify(patch=ss.levels({'a': 4/7, 'b': 2/7, 'c': 1/7}, mobility=ss.geo.Mobility(matrix=away, kind='commute')))
 sim = ss.Sim(sirs, total_pop=350_000, unit='day', start='2020-01-01', stop='2020-04-30', solver='tau', aging=False, verbose=0)
-msim = sim.run(n_runs=10)
+msim = ss.parallel(sim, n_runs=10)
 for place, ref in dict(a='16,980 on day 48', b='9,099 on day 54', c='4,488 on day 56').items():
     infectious = msim.results.sirs.I.select(patch=place).mean() # The mean of the 10 runs, at each time
     print(f'Peak infectious in {place}: {infectious.max():,.0f} on day {infectious.values.argmax()} (epymorph, the mean of 20 runs: {ref})')

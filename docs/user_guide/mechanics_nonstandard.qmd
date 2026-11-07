@@ -37,7 +37,7 @@ class Wealth(ss.Module):
     def init_results(self):
         super().init_results()
         self.define_results(
-            ss.Result('gini', label='Gini coefficient'),
+            ss.Result('gini', label='Gini coefficient', kind='ratio'),
         )
         return
 
@@ -104,7 +104,7 @@ class Boids(ss.Module):
 
     def init_results(self):
         super().init_results()
-        self.define_results(ss.Result('aligned', label='Alignment with neighbors'))
+        self.define_results(ss.Result('aligned', label='Alignment with neighbors', kind='ratio'))
         return
 
     def offsets(self):
@@ -158,7 +158,7 @@ scenarios = {
     'Flocking': ss.Sim(Boids(), n_agents=200, stop=200),
     'No alignment': ss.Sim(Boids(alignment=0), n_agents=200, stop=200),
 }
-msim = ss.parallel(scenarios, parallel=False)
+msim = ss.parallel(scenarios, workers=1)
 msim.plot('boids.aligned')
 ```
 

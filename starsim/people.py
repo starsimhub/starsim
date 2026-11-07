@@ -19,7 +19,7 @@ class LazyPeople:
     """
     The people's properties, before there are any people: `ss.person.<name>` is a lazy reference to the property `<name>` of each person (e.g. `ss.person.age`, `ss.person.urban`), checked when the sim is built
 
-    It can be used in a condition (`ss.person.age < 15`, for `where=`) and, as the person's value,
+    It can be used in a condition (`ss.person.age < 15`, for `who=`) and, as the person's value,
     in a rate, a branch probability, or a result (`expit(b0 + b1*ss.person.urban)`); a condition in a
     rate is 1 for the people it holds for and 0 for the others (`0.3*(ss.person.age > 65)`).
 
@@ -91,16 +91,18 @@ class People:
     """
     A class to perform all the operations on the people
 
-    This class is usually created automatically by the sim; the only required input
-    argument is the population size. In a compartmental run, each row is a group of
-    people rather than an agent.
+    This class is usually created automatically by the sim, from `n_agents=` (and
+    `total_pop=`, the people they stand for). Give one yourself for agents' ages from data
+    of your own (`ss.People(n_agents, age_data=...)`, where a string is a CSV file) or extra
+    states; for the population of a place, use `ss.population('Kenya')`, where a string is the
+    place. In a compartmental run, each row is a group of people rather than an agent.
 
     Note that this class handles the mechanics of updating the actual people,
     as well as the additional housekeeping methods (exporting, plotting, etc.).
 
     Args:
         n_agents (int): the initial number of agents in the model
-        age_data (dataframe/series/array/str/`ss.Dist`): the age distribution: a dataframe with columns `age` (the lower edge of each age bin) and `value` (the number or share of people in it), a series of values indexed by age, a two-column array, a CSV file with the dataframe's columns, or a distribution of ages. This gives agents ages; for age groups in a compartmental model, use `disease.stratify(age=[0, 15, 65], fractions=[0.3, 0.6, 0.1])` instead
+        age_data (dataframe/series/array/str/`ss.Dist`): the age distribution: a dataframe with columns `age` (the lower edge of each age bin) and `value` (the number or share of people in it), a series of values indexed by age, a two-column array, a CSV file with the dataframe's columns, or a distribution of ages. This gives agents ages; for age groups in a compartmental model, use `disease.stratify(age={0: 0.3, 15: 0.6, 65: 0.1})` instead
         extra_states (list): non-default states to initialize
         p_female (float): the share of agents who are female
         mock (bool): if True, initialize the People object with a mock Sim object (for debugging only)
@@ -253,10 +255,10 @@ class People:
     def __getitem__(self, key):
         """
         Allow people['attr'] instead of getattr(people, 'attr')
-        If the key is an integer, alias `people.person()` to return a `Person` instance
+        If the key is an integer, alias `people.get_person()` to return a `Person` instance
         """
         if isinstance(key, (int, np.integer)):
-            return self.person(key)
+            return self.get_person(key)
         elif isinstance(key, str):
             return getattr(self, key)
         else:
@@ -270,7 +272,7 @@ class People:
     def __iter__(self):
         """ Iterate over (alive) people """
         for uid in self.auids:
-            yield self.person(uid)
+            yield self.get_person(uid)
 
     def __contains__(self, key):
         """ Whether people have a property by this name, e.g. `'patch' in sim.people` (which would otherwise go through every person) """
@@ -1133,7 +1135,7 @@ class People:
         plt.tight_layout()
         return ss.return_fig(fig)
 
-    def person(self, ind):
+    def get_person(self, ind):
         """
         Get all the properties for a single person.
 
@@ -1143,7 +1145,7 @@ class People:
         Examples:
             ```python
             sim = ss.Sim(diseases='sir', networks='random', n_agents=100).run()
-            print(sim.people.person(5)) # The agent with UID 5
+            print(sim.people.get_person(5)) # The agent with UID 5
             ```
         """
         person = Person()
@@ -1194,7 +1196,7 @@ class Person(sc.obj):
     Examples:
         ```python
         sim = ss.Sim(diseases='sir', networks='random', n_agents=100).run()
-        print(sim.people.person(5)) # The agent with UID 5
+        print(sim.people.get_person(5)) # The agent with UID 5
         ```
     """
     def to_df(self):

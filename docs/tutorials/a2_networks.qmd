@@ -138,7 +138,7 @@ prevention = ss.modify(hiv.infection, efficacy=0.9, network='prenatalnet')
 
 pars = dict(
     networks     = [ss.SexualNet(), ss.PrenatalNet()],
-    demographics = [ss.Pregnancy(fertility_rate=ss.peryear(150)), ss.Deaths(death_rate=ss.peryear(10))], # Per 1,000 women, and per 1,000 people, a year
+    demographics = [ss.Pregnancy(fertility_rate=ss.peryear(0.15)), ss.Deaths(death_rate=ss.peryear(0.01))], # Per woman, and per person, a year: 150 and 10 per 1,000
     n_agents     = 5000,
     start        = 2000,
     stop         = 2020,

@@ -126,7 +126,7 @@ def test_posterior():
     truth = make_sir(beta=0.5, dur=6).run().results.sir
     weekly = np.add.reduceat(truth.cases.values, np.arange(0, len(truth.cases), 7))[:-1] # A flow is compared with its total over the steps from its data point to the next (the last, partial week left out)
     data = pd.DataFrame(dict(cases=np.random.default_rng(1).poisson(weekly)), index=truth.timevec[::7][:len(weekly)])
-    fit = make_sir(dur=6, data=data).fit(pars=['beta'], likelihood=dict(cases=ss.poisson()), method='nuts', draws=100, warmup=100, chains=2, rand_seed=1, verbose=True)
+    fit = make_sir(dur=6, data=data).fit(pars=['beta'], likelihood=dict(cases=ss.poisson()), method=ss.fit.method('nuts', draws=100, warmup=100, chains=2), rand_seed=1, verbose=True)
     fit.summarize()
     table = fit.table.set_index('par')
     assert fit.method == 'nuts'
@@ -151,13 +151,13 @@ def make_coinfection(beta=0.15, data=None, dt=0.25, **kwargs):
     """ Two diseases that modify each other, so whose states are tracked jointly (see ss.solvers.Crossing), one with a transfer at a constant rate """
     beta = ss.par(beta, bounds=[0.05, 0.5], name='beta')
     S, I = ss.states('S I')
-    hiv = ss.Disease(infection=ss.Transition(S, I, rate=beta * I), death=ss.death(I, rate=0.05), init_prev=0.05, name='hiv')
-    hiv.stratify(art=[False, True], states=['I'], adjust=dict(death=[1.0, 0.2]), switch=ss.transfer(art=True, rate=ss.peryear(0.1)))
+    hiv = ss.Disease(infection=ss.Transition(S, I, rate=beta * I), death=ss.death(I, rate=0.05*ss.by(art=[1.0, 0.2])), init_prev=0.05, name='hiv')
+    hiv.stratify(art=ss.levels([False, True], states=['I']), switch=ss.transfer(dict(art=True), rate=ss.peryear(0.1)))
     S, I = ss.states('S I')
     syph = ss.Disease(infection=ss.Transition(S, I, rate=1.0 * I), cure=ss.Transition(I, S, dur=ss.years(1)), init_prev=0.05, name='syph')
     coinfection = [
-        ss.modify(hiv.rel_trans, multiply=3.0, where=syph.I, name='hiv_trans'),
-        ss.modify(syph.rel_sus, multiply=2.0, where=hiv.I, name='syph_sus'),
+        ss.modify(hiv.rel_trans, multiply=3.0, who=syph.I, name='hiv_trans'),
+        ss.modify(syph.rel_sus, multiply=2.0, who=hiv.I, name='syph_sus'),
     ]
     return ss.Sim(diseases=[hiv, syph], connectors=coinfection, start=2000, stop=2030, dt=ss.years(dt), data=data, **(dict(solver='ode', total_pop=20_000) | kw | kwargs))
 
@@ -179,7 +179,7 @@ def test_crossing():
     # Each flow of three diseases tracked jointly takes the exposure summed over the others' compartments as one number, worked out once (adding it up in each flow took 513 operations here, and three HPV genotypes 383 s instead of 9 s)
     S, I, R = ss.states('S I R')
     ds = [ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=5), waning=ss.Transition(R, S, dur=20), init_prev=0.01, name=f'd{i}') for i in range(3)]
-    mods = [ss.modify(ds[i].rel_sus, multiply=0.5, where=ds[(i+1) % 3].R, name=f'm{i}') for i in range(3)]
+    mods = [ss.modify(ds[i].rel_sus, multiply=0.5, who=ds[(i+1) % 3].R, name=f'm{i}') for i in range(3)]
     three = ss.Sim(diseases=ds, connectors=mods, unit='day', stop=100, total_pop=10_000, solver='ode', **kw).run()
     assert len(three.crossings[0].program.ops) == 81 and np.isclose(three.results.d0.I[50], 656.392, rtol=1e-6) # One operation for each of the 81 flows; the same run
 
@@ -188,11 +188,11 @@ def test_crossing():
     assert np.allclose(fine.results.syph.I[::10], sim.results.syph.I, rtol=1e-5)
 
     # Many runs at once take the diseases together too (each was run on its own before, with 23% fewer HIV infections at the end)
-    msim = make_coinfection().run(n_runs=2)
+    msim = ss.parallel(make_coinfection(), n_runs=2)
     assert np.allclose(msim.results.hiv.I.values[1], sim.results.hiv.I, rtol=1e-12)
 
     # Restarted with other values, as a fresh sim
-    restarted = make_coinfection().init().run(pars={'hiv.beta':0.2})
+    restarted = make_coinfection().init().restart(pars={'hiv.beta':0.2}).run()
     fresh = make_coinfection(beta=0.2).run().results
     assert np.allclose(restarted.results.hiv.I, fresh.hiv.I, rtol=1e-12)
 
@@ -208,14 +208,14 @@ def test_crossing():
     large = make_coinfection(beta=0.2, total_pop=1e7).run().results # Large, so that runs differ little
     data = pd.DataFrame({'hiv.I':large.hiv.I.values, 'syph.I':large.syph.I.values}, index=large.hiv.timevec)[::8]
     lik = {'hiv.I':ss.nbinom(n=20), 'syph.I':ss.nbinom(n=20)}
-    pf = np.mean([ss.fit.ParticleFilter(make_coinfection(beta=0.2, data=data, solver='binomial', total_pop=1e7).init(), likelihood=lik)(n_particles=20, seed=seed) for seed in range(3)])
+    pf = np.mean([ss.fit.ParticleFilter(make_coinfection(beta=0.2, data=data, solver='binomial', total_pop=1e7).init(), likelihood=lik)(n_particles=20, rand_seed=seed) for seed in range(3)])
     direct = np.mean([ss.fit.loglik(make_coinfection(beta=0.2, data=data, solver='binomial', total_pop=1e7, rand_seed=seed).run(), likelihood=lik) for seed in range(3)])
     print(f'Particle filter {pf:.2f}, direct runs {direct:.2f}')
     assert abs(pf - direct) < 1 # The filter estimates the likelihood of runs of the sim
 
     # NUTS, with the log-density in JAX
     data = pd.DataFrame({'hiv.I':fresh.hiv.I.values, 'syph.I':fresh.syph.I.values}, index=fresh.hiv.timevec)[::8]
-    fit = make_coinfection(data=data).fit(likelihood={'hiv.I':ss.normal(scale=50), 'syph.I':ss.normal(scale=50)}, method='nuts', draws=50, warmup=50, chains=2, rand_seed=1, verbose=True)
+    fit = make_coinfection(data=data).fit(likelihood={'hiv.I':ss.normal(std=50), 'syph.I':ss.normal(std=50)}, method=ss.fit.method('nuts', draws=50, warmup=50, chains=2), rand_seed=1, verbose=True)
     table = fit.table.set_index('par')
     assert fit.method == 'nuts'
     assert table.lower['hiv.beta'] < 0.2 < table.upper['hiv.beta']
@@ -229,7 +229,7 @@ def test_posterior_data():
         beta = ss.par(beta, bounds=[0.1, 1], name='beta')
         S, I, R = ss.states(3)
         infection = S >> I @ beta * I
-        hosp = ss.outcome(0.05 * infection, delay=ss.days(3), stay=ss.lognormal(mean=ss.days(10), std=ss.days(3)))
+        hosp = ss.outcome(0.05 * infection, delay=ss.days(3), dur=ss.lognormal(mean=ss.days(10), std=ss.days(3)))
         sir = ss.Disease(infection, I >> R @ ss.days(8), hosp, init=dict(I=0.01), name='sir')
         sir.stratify(age=[0, 15, 65])
         return ss.Sim(sir, unit='day', stop=100, total_pop=1e5, data=data, **kw)
@@ -245,7 +245,7 @@ def test_posterior_data():
     # Fitted with the log-density in JAX: it is checked against runs of the sim, and sampled again with Python in the loop if they differ
     with sc.capture() as txt, warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter('always')
-        fit = make(data=pd.DataFrame(rows)).fit(likelihood=dict(I=ss.normal(scale=50), n_hosp=ss.normal(scale=5)), method='nuts', draws=50, warmup=50, chains=2, rand_seed=1, verbose=True)
+        fit = make(data=pd.DataFrame(rows)).fit(likelihood=dict(I=ss.normal(std=50), n_hosp=ss.normal(std=5)), method=ss.fit.method('nuts', draws=50, warmup=50, chains=2), rand_seed=1, verbose=True)
     assert 'Python in the loop' not in txt and not any('differs' in str(w.message) for w in caught)
     table = fit.table.set_index('par')
     assert table.lower.beta < 0.5 < table.upper.beta

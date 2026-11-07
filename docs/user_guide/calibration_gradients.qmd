@@ -130,7 +130,7 @@ Every data series here has a likelihood, so this is the maximum likelihood estim
 A best fit is one set of values. A posterior is the whole distribution of values that are consistent with the data, which says how certain each value is, and how the parameters depend on each other. `method='nuts'` draws from it, given a likelihood for every data series. The priors are each parameter's `prior=`, or uniform over its bounds:
 
 ```{python}
-post = sim.fit(method='nuts', draws=250, warmup=250)
+post = sim.fit(method=ss.fit.method('nuts', draws=250, warmup=250))
 post.summarize();
 ```
 
@@ -180,8 +180,8 @@ The interval agrees with the posterior's above. A profile needs a deterministic 
 `fit.project()` runs the fitted model under each scenario, once for each of `n` draws from the posterior, with the same draws (and seeds) in every scenario. Each draw has a seed of its own, so the spread of the runs is the uncertainty in the fitted values, carried into the projection, together with chance. Here, a catch-up campaign on 1 April, before the peak, that vaccinates half of those still susceptible, compared with none:
 
 ```{python}
-vaccination = ss.vaccinate(efficacy=0.97, who=measles.S, coverage=0.5, at='2025-04-01')
-proj = post.project({'No campaign': None, 'Campaign': vaccination}, n=50)
+vaccination = ss.vaccinate(efficacy=0.97, who=measles.S, when='2025-04-01', coverage=0.5)
+proj = post.project({'No campaign': None, 'Campaign': vaccination}, n_runs=50)
 proj.plot('measles.cases')
 ```
 

@@ -97,8 +97,8 @@ Every state and transition has a result of the same name (`S`, `I`, `R`, `infect
 An intervention changes the course of the epidemic from some point on. Here are two, both starting on 1 February, as the epidemic grows towards its peak: vaccinating 80% of children under 15, who have the most contacts and so carry the most transmission, with a vaccine that cuts their chance of infection by 90%; and masks, which cut transmission by 40%:
 
 ```{python}
-vaccination = ss.vaccinate(efficacy=0.9, where=sir.age < 15, coverage=0.8, at='2025-02-01')
-masks = ss.modify(sir.pars.beta, multiply=0.6, start='2025-02-01')
+vaccination = ss.vaccinate(efficacy=0.9, who=sir.age < 15, when='2025-02-01', coverage=0.8)
+masks = ss.modify(sir.pars.beta, multiply=0.6, when=ss.schedule(start='2025-02-01'))
 ```
 
 To compare them, make a sim for each scenario, and run them together with `ss.parallel()`:
@@ -164,7 +164,7 @@ The ODE gives one answer: the epidemic as expected on average. A real epidemic v
 
 ```{python}
 town = ss.Sim(sir, pars=fit.pars, **(pars | dict(total_pop=20_000)))
-msim = town.run(solver='binomial', n_runs=20)
+msim = ss.parallel(town.new(solver='binomial'), n_runs=20)
 msim.plot(['sir.I', 'sir.cases'])
 ```
 

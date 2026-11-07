@@ -23,11 +23,11 @@ pars = dict(total_pop=1_000_000, start='2026-01-01', stop='2026-12-31', dt=ss.da
 A compartmental run is fastest when the compiled kernels can take every step in one call, with nothing in Python between the steps. Anything that needs Python at each step takes the run a step at a time, which is typically 30 to 100 times slower. `sim.kernel_reason()` says why a run is taken a step at a time, or gives `None` if it is not:
 
 ```{python}
-masks = ss.modify(sir.pars.beta, multiply=0.75, where=sir.I.n >= 20_000) # Fewer contacts while prevalence is high
+masks = ss.modify(sir.pars.beta, multiply=0.75, who=sir.I.n >= 20_000) # Fewer contacts while prevalence is high
 sim = ss.Sim(sir, interventions=masks, **pars).init()
 print(sim.kernel_reason())
 
-late = ss.modify(sir.pars.beta, multiply=0.75, where=sir.I.n >= 20_000, until=sir.I.n <= 10_000) # As above, ending at a lower level
+late = ss.modify(sir.pars.beta, multiply=0.75, who=sir.I.n >= 20_000, until=sir.I.n <= 10_000) # As above, ending at a lower level
 print(ss.Sim(sir, interventions=late, **pars).init().kernel_reason())
 ```
 
@@ -42,27 +42,27 @@ What stays in the kernels, and what does not:
 | In the kernels | A step at a time |
 |---|---|
 | Parameters that vary in time (`ss.timeseries`, `ss.seasonal`) | A parameter that is a function of the sim (`lambda sim: ...`), called at each step |
-| `ss.modify()` with dates (`start=`, `stop=`), `when=` (a condition on time alone), `where=` on a stratum (or on a state, for a transition), or `where=` comparing the module's counts (`I.n >= 1000`) | `ss.modify()` with `until=` or `hold=`, a function as its amount, `where=` as a function of the sim, or `where=` on incidence over a period (`infection.incidence(over=ss.days(7))`) |
-| Deliveries such as `ss.vaccinate()` at fixed times or on a schedule, including coverage given as a rate (`ss.peryear(0.5)`) | Deliveries with `where=` on a count, and `ss.treat()` |
+| `ss.modify()` with `when=` (a window, `ss.schedule(start=, stop=)`, other times, or a function of the date), `who=` on a stratum (or on a state, for a transition), or `who=` comparing the module's counts (`I.n >= 1000`) | `ss.modify()` with `until=`, a function as its amount, `who=` as a function of the sim, or `who=` on incidence over a period (`infection.incidence(over=ss.days(7))`) |
+| Deliveries such as `ss.vaccinate()` at fixed times or on a schedule, including coverage given as a rate (`ss.peryear(0.5)`) | Deliveries with `who=` on a count, and `ss.treat()` |
 | Outcomes, including those with a delay | Triggers (`ss.on(...)`) |
 | Births and deaths declared with `ss.birth()` and `ss.death()` | Interventions, analyzers, or connectors written as code with a `step()` of their own |
-| `verbose=0` or `1` | `verbose=2`, `until=` and `profile=True` in `sim.run()`, and diagnostics |
+| `verbose=0` or `1` | `verbose=2`, `until=` in `sim.run()`, `sim.profile(kind='loop')`, and diagnostics |
 
 A module written as code is always taken a step at a time, since its `step()` is Python. If it only needs to act at a few times, or on a condition that one of the declared forms above can say, writing it that way keeps the run in the kernels.
 
 ## Many runs
 
-Running the same model many times is fastest with `ss.parallel()` (or `sim.run(n_runs=...)`): with `n_runs=`, `pars=`, or `priors=`, a sim that runs in one call is built once, and all its runs are taken together by the kernels. A loop that builds each sim again, such as `[sim.new(rand_seed=i).run() for i in range(100)]`, rebuilds the model each time, which takes about 10 milliseconds, many times the run itself.
+Running the same model many times is fastest with `ss.parallel()`: with `n_runs=`, `pars=`, or `priors=`, a sim that runs in one call is built once, and all its runs are taken together by the kernels. A loop that builds each sim again, such as `[sim.new(rand_seed=i).run() for i in range(100)]`, rebuilds the model each time, which takes about 10 milliseconds, many times the run itself.
 
 ```{python}
-msim = ss.parallel(ss.Sim(sir, **pars), pars=dict(beta=[0.2, 0.3, 0.4]), n_runs=10, parallel=False) # 30 runs, taken together
+msim = ss.parallel(ss.Sim(sir, **pars), pars=dict(beta=[0.2, 0.3, 0.4]), n_runs=10, workers=1) # 30 runs, taken together
 ```
 
-For the same reason, rerun a sim with `sim.run()` again (or `sim.run(pars=...)` for new values) rather than `sim.new()`, unless the model itself has changed. Fitting does this already.
+For the same reason, rerun a sim with `sim.run()` again (or `sim.restart(pars=...).run()` for new values) rather than `sim.new()`, unless the model itself has changed. Fitting does this already.
 
 ## Substeps
 
-The ODE and the chain binomial take as many substeps in each time step as they need, by default: enough that no compartment turns over by more than a quarter in one. Working out how many costs about as much as a substep itself. `substeps=1` takes each step whole: it changes the results by an amount that grows with the step (of order the rates times `dt`), so it suits models whose rates are slow compared with the step, and models that are written in discrete time. It makes little difference to the kernels, but a run in JAX takes about half the time.
+The ODE and the chain binomial take as many substeps in each time step as they need, by default: enough that no compartment turns over by more than a quarter in one. Working out how many costs about as much as a substep itself. `ss.ode(substeps=1)` or `ss.binomial(substeps=1)` takes each step whole: it changes the results by an amount that grows with the step (of order the rates times `dt`), so it suits models whose rates are slow compared with the step, and models that are written in discrete time. It makes little difference to the kernels, but a run in JAX takes about half the time.
 
 ## JAX and gradients
 
@@ -74,7 +74,7 @@ An agent-based run takes time in proportion to the number of agents and the numb
 
 - **Use fewer agents than people.** `total_pop=` with a smaller `n_agents=` lets each agent stand for several people (see [Branching and rescaling](running_branching.qmd)).
 - **Use compartments if nothing needs individuals.** If a model needs no network, no per-person values, and no histories, `solver='ode'` or a stochastic compartmental solver is far faster at any population size.
-- **Threads.** The passes over the agents of a large sim (more than about 200,000 agents) use several threads; `ss.options.threads` sets how many, and `ss.options.num_threads` the threads of NumPy's linear algebra. When running many sims at once on one machine, one thread each (`SCIRIS_NUM_THREADS=1`) avoids them competing for the cores.
+- **Threads.** The passes over the agents of a large sim (more than about 200,000 agents) use several threads; `ss.options.threads` sets how many, and `ss.options.blas_threads` the threads of NumPy's linear algebra. When running many sims at once on one machine, one thread each (`SCIRIS_NUM_THREADS=1`) avoids them competing for the cores.
 - **Common random numbers.** `ss.options.crn = False` gives faster draws, at the cost of runs no longer matching across scenarios agent for agent (see [Random numbers](mechanics_random.qmd)).
 
 ## Code of your own
@@ -100,7 +100,7 @@ The compiled loop costs about a tenth of the rest of the run, close to what Star
 
 ## Finding where the time goes
 
-`sim.run(profile=True)` records how long each part of each step takes, and `sim.profile()` how long each line of a function takes; [Profiling and debugging](running_debugging.qmd#profiling) shows how to use them. Profiling takes the run a step at a time, so use it to find the slow part, not to time the run; `sim.elapsed` gives the seconds of the last run.
+`sim.profile(kind='loop')` records how long each part of each step takes, and `sim.profile()` how long each line of a function takes; [Profiling and debugging](running_debugging.qmd#profiling) shows how to use them. Profiling takes the run a step at a time, so use it to find the slow part, not to time the run; `sim.elapsed` gives the seconds of the last run.
 
 ## Compiling first
 
@@ -118,6 +118,6 @@ rows = {key: dict(variable=f'STARSIM_{key.upper()}', description=ss.options.optd
 pd.DataFrame.from_dict(rows, orient='index')
 ```
 
-Those that affect speed or memory are `threads` and `num_threads` (threads for the agents and for linear algebra), `kernels` and `jax` (which code runs the solvers; see [Solvers and backends](running_solvers.qmd#appendix-every-set-of-kernels)), `crn` (faster draws for agents, without common random numbers), `keep_times` and `max_joint` (memory), `precision` (32, the default, keeps agents' values as 32-bit floats, and 64 as 64-bit, which doubles their memory), and `max_steps` (when to warn that a run has many steps); `max_years` (1,000 by default) says when to warn that a run is so long it is probably a mistake. Starsim also reads `SCIRIS_NUM_THREADS`, as it reads `STARSIM_NUM_THREADS`, for the threads of linear algebra (see [Deployment](running_deploy.qmd#threads-for-linear-algebra)), and `STARSIM_CHECK_COUNTS` and `STARSIM_CHECK_DRAWS`, which turn on checks of the agent engine for testing it, at a cost in speed.
+Those that affect speed or memory are `threads` and `blas_threads` (threads for the agents and for linear algebra), `kernels` and `jax` (which code runs the solvers; see [Solvers and backends](running_solvers.qmd#appendix-every-set-of-kernels)), `crn` (faster draws for agents, without common random numbers), `keep_times` and `max_joint` (memory), `precision` (32, the default, keeps agents' values as 32-bit floats, and 64 as 64-bit, which doubles their memory), and `max_steps` (when to warn that a run has many steps); `max_years` (1,000 by default) says when to warn that a run is so long it is probably a mistake. Starsim also reads `SCIRIS_NUM_THREADS`, as it reads `STARSIM_BLAS_THREADS`, for the threads of linear algebra (see [Deployment](running_deploy.qmd#threads-for-linear-algebra)), and `STARSIM_CHECK_COUNTS` and `STARSIM_CHECK_DRAWS`, which turn on checks of the agent engine for testing it, at a cost in speed.
 
-The settings of a sim that affect speed or memory are `n_agents` and `pop_scale`, `dt` and `substeps`, `solver`, `require_kernels`, `group_results` (which results are kept by group), and `record_people` (whether the people's results are recorded at each step); they are all in [Running sims](running_sim.qmd#appendix-every-sim-setting). The rules that decide whether a compartmental run is taken in one call are in [Solvers and backends](running_solvers.qmd#appendix-what-needs-agents), as `ss.solvers.solver_table()`.
+The settings of a sim that affect speed or memory are `n_agents` and `total_pop` (whose ratio is the people each agent stands for), `dt`, `solver` (and its `substeps=`), `require_kernels`, `group_results` (which results are kept by group), and `record_people` (whether the people's results are recorded at each step); they are all in [Running sims](running_sim.qmd#appendix-every-sim-setting). The rules that decide whether a compartmental run is taken in one call are in [Solvers and backends](running_solvers.qmd#appendix-what-needs-agents), as `ss.solvers.solver_table()`.

@@ -65,7 +65,7 @@ def branching(**kwargs):
     S, I, R, H, D = ss.states('S I R H D')
     dis = ss.Disease(
         infection = ss.Transition(S, I, rate=0.3 * I),
-        course    = ss.Transition(I, [R, H], dur=8, p=[None, 0.1]),
+        course    = ss.Transition(I, {R: None, H: 0.1}, dur=8),
         discharge = ss.Transition(H, R, dur=10),
         death     = ss.Transition(H, D, rate=ss.perday(0.02)),
         init_prev = 0.01,
@@ -78,7 +78,7 @@ contact_matrix = np.array([[8, 3, 1], [3, 6, 2], [1, 2, 3]]) # Contacts per day 
 
 def ages(**kwargs):
     """ 6. An age-stratified SIR with a contact matrix """
-    sir = make_sir(beta=0.05).stratify(age=[0, 15, 65], fractions=[0.3, 0.5, 0.2])
+    sir = make_sir(beta=0.05).stratify(age={0: 0.3, 15: 0.5, 65: 0.2})
     return make_sim(sir, kwargs, unit='day', stop=100, total_pop=100_000, networks=ss.contacts(contact_matrix))
 
 
@@ -87,15 +87,15 @@ def patches(mobility=True, **kwargs):
     towns = ss.geo.geography(names=['north', 'south', 'east'], populations=[50_000, 30_000, 20_000], x=[0, 0, 40], y=[0, 30, 0])
     S, I, R = ss.states('S I R')
     sir = ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=10), init_n=dict(I=ss.by(patch=[50, 0, 0])), name='sir')
-    sir.stratify(patch=towns, mobility=ss.geo.gravity(scale=2e-4) if mobility else None)
+    sir.stratify(patch=ss.levels(towns, mobility=ss.geo.gravity(scale=2e-4) if mobility else None))
     return make_sim(sir, kwargs, unit='day', stop=150, total_pop=100_000)
 
 
 def vaccination(**kwargs):
     """ 8. Vaccination as a stratification plus a transfer, which the disease never mentions """
-    sir = make_sir().stratify(vaccinated=[False, True], fractions=[1, 0], adjust={'infection': [1.0, 0.1]})
-    campaign = ss.Delivery(move=dict(vaccinated=True), coverage=0.5, at=[10], name='campaign')
-    return make_sim(sir, kwargs, unit='day', stop=100, total_pop=10_000, interventions=campaign)
+    sir = make_sir().stratify(vaccinated={False: 1, True: 0})
+    campaign = ss.Event(dict(vaccinated=True), when=[10], p=0.5, name='campaign')
+    return make_sim(sir, kwargs, unit='day', stop=100, total_pop=10_000, interventions=campaign, connectors=ss.modify(sir.infection, multiply=ss.by(vaccinated=[1.0, 0.1])))
 
 
 def coinfection(**kwargs):
@@ -105,8 +105,8 @@ def coinfection(**kwargs):
     S, I = ss.states('S I')
     syph = ss.Disease(infection=ss.Transition(S, I, rate=0.01 * I), cure=ss.Transition(I, S, dur=ss.years(3)), init_prev=0.05, name='syph')
     connectors = [
-        ss.modify(hiv.rel_trans, multiply=20.0, where=syph.I, name='hiv_trans'),
-        ss.modify(syph.rel_sus, multiply=5.0, where=hiv.I, name='syph_sus'),
+        ss.modify(hiv.rel_trans, multiply=20.0, who=syph.I, name='hiv_trans'),
+        ss.modify(syph.rel_sus, multiply=5.0, who=hiv.I, name='syph_sus'),
     ]
     return make_sim([hiv, syph], kwargs, networks=ss.SexualNet(), connectors=connectors, n_agents=2_000, start=2000, stop=2010)
 
@@ -161,8 +161,8 @@ def screening(**kwargs):
     sis = ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, S, dur=10), init_prev=0.01, name='sis')
     test = ss.Diagnostic(sensitivity=0.9, specificity=0.95)
     drug = ss.Treatment(cure=0.95)
-    screen = ss.screen(test, coverage=0.4, every=7, start=30, name='screen')
-    treatment = ss.treat(drug, on=screen.positive, coverage=0.8, name='treatment')
+    screen = ss.screen(test, when=ss.schedule(every=7, start=30), coverage=0.4, name='screen')
+    treatment = ss.treat(drug, when=screen.positive, coverage=0.8, name='treatment')
     return make_sim(sis, kwargs, unit='day', stop=150, total_pop=10_000, interventions=[screen, treatment])
 
 
@@ -173,7 +173,7 @@ def custom(**kwargs):
     S, I, H, R = ss.states('S I H R')
     dis = ss.Disease(
         infection = ss.Transition(S, I, rate=0.3 * I),
-        course    = ss.Transition(I, [H, R], p=severity, dur=7),
+        course    = ss.Transition(I, {H: severity, R: None}, dur=7),
         discharge = ss.Transition(H, R, rate=0.1),
         init_prev = 0.01,
         name = 'custom',
@@ -187,7 +187,7 @@ def make_outcomes(beta=0.3, likelihood=None):
     infection = S >> I @ beta * I
     recovery  = I >> R @ ss.days(10)
     cases     = ss.outcome(0.5 * infection, delay=ss.days(5), likelihood=likelihood)
-    hosp      = ss.outcome(0.05 * infection, delay=ss.days(7), stay=ss.days(10))
+    hosp      = ss.outcome(0.05 * infection, delay=ss.days(7), dur=ss.days(10))
     deaths    = ss.outcome(0.2 * hosp, delay=ss.lognormal(mean=14, std=5, unit='days'))
     return ss.Disease(infection, recovery, cases, hosp, deaths, init_prev=0.01, name='sir')
 
@@ -200,7 +200,7 @@ def threshold(**kwargs):
     """ 16. Distancing while more than 1,000 are infected, as a function of the sim """
     S, I, R = ss.states('S I R')
     sir = ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=10), init_prev=0.001, name='sir')
-    distancing = ss.modify(sir.pars.beta, multiply=0.3, where=lambda sim: sim.results.sir.I[sim.ti] > 1000, name='distancing')
+    distancing = ss.modify(sir.pars.beta, multiply=0.3, who=lambda sim: sim.results.sir.I[sim.ti] > 1000, name='distancing')
     return make_sim(sir, kwargs, unit='day', stop=200, total_pop=50_000, interventions=distancing)
 
 
@@ -217,7 +217,7 @@ def tb(**kwargs):
         name       = 'tb',
         strains    = ss.Strains(['DS', 'MDR'], name='resistance', fractions=[1.0, 0.0], infection=[1.0, 0.7], cure=[1.0, 0.3]),
     )
-    tb.stratify(acquired=ss.transfer(resistance=('DS', 'MDR'), rate=ss.peryear(0.02), states=['on_treatment']))
+    tb.stratify(acquired=ss.transfer(dict(resistance=('DS', 'MDR')), rate=ss.peryear(0.02), states=['on_treatment']))
     return make_sim(tb, kwargs, stop=30, total_pop=100_000)
 
 
@@ -248,8 +248,8 @@ def seasonal(b=0.5, data=None, **kwargs):
 
 def age_vaccine(**kwargs):
     """ The epydemix pattern: an age-stratified model with a vaccine for the under-fives """
-    sir = make_sir(beta=0.05).stratify(age=[0, 5, 20, 65], fractions=[0.15, 0.3, 0.45, 0.1])
-    vaccine = ss.vaccinate(ss.Vaccine(efficacy=0.9), where=ss.person.age < 5, coverage=0.8, at=[10], name='vaccinate')
+    sir = make_sir(beta=0.05).stratify(age={0: 0.15, 5: 0.3, 20: 0.45, 65: 0.1})
+    vaccine = ss.vaccinate(ss.Vaccine(efficacy=0.9), who=ss.person.age < 5, when=[10], coverage=0.8, name='vaccinate')
     contacts = np.array([[6, 3, 2, 1], [3, 8, 3, 1], [2, 3, 6, 2], [1, 1, 2, 3]])
     return make_sim(sir, kwargs, unit='day', stop=100, total_pop=100_000, networks=ss.contacts(contacts), interventions=vaccine)
 
@@ -258,8 +258,8 @@ def patch_matrix(dim='patch', **kwargs):
     """ The camdl and flepiMoP pattern: two places with an explicit contact matrix over the places, by a dimension called `patch` """
     S, I, R = ss.states('S I R')
     sir = ss.Disease(infection=ss.Transition(S, I, rate=0.1 * I), recovery=ss.Transition(I, R, dur=10), init_n=dict(I=ss.by(**{dim:[10, 0]})), name='sir')
-    sir.stratify(**{dim:['a', 'b']}, fractions=[0.5, 0.5])
-    contacts = ss.contacts([[4.0, 1.0], [1.0, 4.0]], dims=dim)
+    sir.stratify(**{dim:{'a': 0.5, 'b': 0.5}})
+    contacts = ss.contacts(**{dim:[[4.0, 1.0], [1.0, 4.0]]})
     return make_sim(sir, kwargs, unit='day', stop=150, total_pop=20_000, networks=contacts)
 
 

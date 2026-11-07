@@ -9,13 +9,13 @@ import pytest
 import starsim as ss
 
 kw = dict(start=2000, stop=2010, dt=ss.months(1), verbose=0)
-strat = [dict(sex=['female', 'male']), dict(age=[0, 15, 50], fractions=[0.3, 0.4, 0.3])]
+strat = dict(sex=['female', 'male'], age={0: 0.3, 15: 0.4, 50: 0.3})
 
 
 def test_burnin_ode():
     sc.heading('Testing burnin= in the small compartmental form: women pregnant at the start, as many as agents have, with a note')
     pars = dict(start=2000, stop=2003, dt=ss.months(1), verbose=0, stratify=strat, aging=False)
-    make = lambda: ss.Pregnancy(fertility_rate=ss.freqperyear(100), p_abortion=0.1)
+    make = lambda: ss.Pregnancy(fertility_rate=ss.peryear(0.1), p_abortion=0.1)
     ode = ss.Sim(demographics=make(), solver='ode', total_pop=20_000, **pars).run()
     abm = ss.Sim(demographics=make(), n_agents=20_000, **pars).run()
     assert np.isclose(ode.results.pregnancy.P[0], abm.results.pregnancy.P[0], rtol=0.1) and any('burnin=True' in str(note) for note in ode.notes)
@@ -39,13 +39,13 @@ def test_burnin_pregnancies():
             np.add.at(seen.lost, uids, 1)
 
     # Women pregnant at the start count that pregnancy
-    snapshot(ss.Sim(demographics=ss.Pregnancy(fertility_rate=ss.freqperyear(100)), analyzers=check, n_agents=2000, verbose=0).init())
+    snapshot(ss.Sim(demographics=ss.Pregnancy(fertility_rate=ss.peryear(0.1)), analyzers=check, n_agents=2000, verbose=0).init())
     n, npreg, parity = seen.start
     assert n > 10 and np.all(npreg == 1 + parity), f'Women pregnant at the start have {np.unique(npreg)} pregnancies'
 
     # With deliveries before the start (short pregnancies), counted in parity, and losses in the run
-    preg = ss.Pregnancy(fertility_rate=ss.freqperyear(600), dur_pregnancy=ss.uniform(ss.weeks(10), ss.weeks(70)), p_abortion=0.1, loss_rate=ss.probperweek(0.01))
-    preg.stratify(parity=['0', '1', '2', '3+'], fractions=[1, 0, 0, 0])
+    preg = ss.Pregnancy(fertility_rate=ss.peryear(0.6), dur_pregnancy=ss.uniform(ss.weeks(10), ss.weeks(70)), p_abortion=0.1, loss_rate=ss.probperweek(0.01))
+    preg.stratify(parity={'0': 1, '1': 0, '2': 0, '3+': 0})
     sim = snapshot(ss.Sim(demographics=preg, analyzers=check, n_agents=10_000, start=2000, stop=2004, dt=ss.months(1), verbose=0).init()).run()
     n, npreg, parity = seen.start
     assert np.all(npreg == 1 + parity) and np.sum(parity > 0) > 10, 'A delivery before the start counts as a pregnancy too'
@@ -60,7 +60,7 @@ def test_burnin_pregnancies():
 @sc.timer()
 def test_mmr():
     sc.heading('Testing the maternal mortality ratio, and infant mortality')
-    preg = ss.Pregnancy(fertility_rate=ss.freqperyear(100), p_maternal_death=ss.bernoulli(0.05), p_infertile=ss.bernoulli(0.2), infant_death_rate=ss.peryear(0.05))
+    preg = ss.Pregnancy(fertility_rate=ss.peryear(0.1), maternal_death=ss.bernoulli(0.05), p_infertile=ss.bernoulli(0.2), infant_death_rate=ss.peryear(0.05))
     sim = ss.Sim(demographics=preg, n_agents=5000, start=2000, stop=2010, dt=ss.months(1), verbose=0).run()
     r = sim.results.pregnancy
     births, md = r.birth.values, r.maternal_death.values
@@ -73,17 +73,17 @@ def test_mmr():
     assert 0.02 < imr < 0.06, f'{imr:.3f} of children died before the age of 1 at a rate of 0.05 per year (less for the last year)'
 
     # The reproduction: no KeyError
-    sim = ss.Sim(demographics=ss.Pregnancy(fertility_rate=ss.freqperyear(100)), n_agents=500, start=2000, stop=2002).run()
+    sim = ss.Sim(demographics=ss.Pregnancy(fertility_rate=ss.peryear(0.1)), n_agents=500, start=2000, stop=2002).run()
     assert len(sim.results.pregnancy.mmr) == len(sim.timevec)
     return sim
 
 
 def make_fetal():
-    preg = ss.Pregnancy(fertility_rate=ss.freqperyear(100), maternal_death_rate=ss.peryear(0.05))
+    preg = ss.Pregnancy(fertility_rate=ss.peryear(0.1), maternal_death=ss.peryear(0.05))
     S, I, C, Cs = ss.states('S I C Cs')
     d = ss.Disease(S, I, C, Cs,
         infection = S >> I @ ss.peryear(0.1),
-        mtct      = ss.Transition(S, [C, Cs], rate=ss.peryear(3)*ss.mother(I), p=[0.6, None]), # In utero, from the mother's state
+        mtct      = ss.Transition(S, {C: 0.6, Cs: None}, rate=ss.peryear(3)*ss.mother(I)), # In utero, from the mother's state
         fetal     = C >> ss.dead @ ss.peryear(4), # A fetal death before delivery: a loss for the mother, by gestational age
         still     = Cs >> ss.dead @ ss.on(preg.delivery), # At delivery, before birth: a stillbirth
         born      = Cs >> S @ ss.on(preg.birth),
@@ -109,7 +109,7 @@ def test_fetus_ode():
 
 
 def make_hiv_vertical(bf=True):
-    preg = ss.Pregnancy(fertility_rate=ss.freqperyear(120), p_breastfeed=0.8)
+    preg = ss.Pregnancy(fertility_rate=ss.peryear(0.12), p_breastfeed=0.8)
     S, I = ss.states('S I')
     beta = dict(prenatalnet=ss.peryear(0.2), breastfeedingnet=ss.peryear(0.3 if bf else 0))
     hiv = ss.Disease(S, I, infection=ss.Transition(S, I, rate=beta * I), death=ss.Transition(I, ss.dead, rate=ss.peryear(0.05)), init=dict(I=0.2), name='hiv')
@@ -124,9 +124,9 @@ def test_hiv_vertical_ode():
 def test_delivery_shift():
     """ set_delivery() reschedules deliveries, as ssl.mnch.FetalHealth does """
     sc.heading('Testing rescheduled deliveries')
-    sim = ss.Sim(demographics=ss.Pregnancy(fertility_rate=ss.freqperyear(100), burnin=False), n_agents=3000, **kw)
+    sim = ss.Sim(demographics=ss.Pregnancy(fertility_rate=ss.peryear(0.1), burnin=False), n_agents=3000, **kw)
     sim.init()
-    sim.run(until=sim.t.tvec[24]) # Through the step from time point 24 (a date: a bare number here is a year)
+    sim.run(until=sim.t.timevec[24]) # Through the step from time point 24 (a bare number here is a year)
     p = sim.demographics.pregnancy
     uids = p.P.uids
     due = np.ceil(p.ti_exit_P[uids])
@@ -134,13 +134,13 @@ def test_delivery_shift():
     p.set_delivery(later, p.ti + 1) # Due at the next step
     assert np.all(np.ceil(p.ti_exit_P[later]) == p.ti + 1)
     step = p.ti + 1
-    sim.run(until=sim.t.tvec[sim.ti + 2])
+    sim.run(until=sim.t.timevec[sim.ti + 2])
     assert len(later) and np.all(p.ti_delivered[later] == step), 'Every rescheduled delivery happened, at the step it was rescheduled to' # (Some conceive again in it)
     return sim
 
 
 def make_syphilis():
-    preg = ss.Pregnancy(fertility_rate=ss.freqperyear(120))
+    preg = ss.Pregnancy(fertility_rate=ss.peryear(0.12))
     S, E, S2, EL, LL, Cnnd, Cstill, Ccs, Cnorm, CS = ss.states('S E S2 EL LL Cnnd Cstill Ccs Cnorm CS')
     active, late = E | S2, LL
     def by_stage(a, e, l): # v3 birth_outcomes, by the mother's stage at infection
@@ -150,8 +150,7 @@ def make_syphilis():
         secondary  = E >> S2 @ ss.months(2),
         latent     = S2 >> EL @ ss.months(4),
         to_late    = EL >> LL @ ss.years(2),
-        mtct       = ss.Transition(S, [Cnnd, Cstill, Ccs, Cnorm], rate=ss.peryear(0.9)*ss.mother(S2 | EL | LL),
-                                   p=[by_stage(.25, .05, 0), by_stage(.25, .10, .10), by_stage(.45, .40, .10), None]),
+        mtct       = ss.Transition(S, {Cnnd: by_stage(.25, .05, 0), Cstill: by_stage(.25, .10, .10), Ccs: by_stage(.45, .40, .10), Cnorm: None}, rate=ss.peryear(0.9)*ss.mother(S2 | EL | LL)),
         stillbirth = Cstill >> ss.dead @ ss.on(preg.delivery), # Fetal removal at delivery: a stillbirth for the mother
         nnd        = Cnnd >> ss.dead @ ss.on(preg.birth), # Born, then dies: a neonatal death
         born_cs    = Ccs >> CS @ ss.on(preg.birth),
@@ -170,11 +169,11 @@ def test_syphilis_ode():
 
 
 def test_two_sims():
-    """ Each sim's pregnancy drives its births by its own delivery: ss.birth(on=) kept the class's transition, so a second sim reached into the first sim's objects """
+    """ Each sim's pregnancy drives its births by its own delivery: ss.birth(when=) kept the class's transition, so a second sim reached into the first sim's objects """
     sc.heading('Testing two pregnancy sims in a row')
     sims = []
     for i in range(2):
-        sim = ss.Sim(demographics=ss.Pregnancy(fertility_rate=ss.freqperyear(100)), n_agents=300, start=2000, stop=2002, verbose=0).run()
+        sim = ss.Sim(demographics=ss.Pregnancy(fertility_rate=ss.peryear(0.1)), n_agents=300, start=2000, stop=2002, verbose=0).run()
         trs = sim.demographics.pregnancy.graph.transitions
         assert trs.birth.birth_on.tr is trs.delivery and trs.delivery is not ss.Pregnancy.delivery
         assert trs.delivery.dur.raw.sim is sim
@@ -187,11 +186,11 @@ def test_path_triggers():
     """ A trigger on another module's transition by path (ss.ref('pregnancy.delivery')) is its event, as ss.on(preg.delivery) is, so it reaches fetuses at their mother's delivery (it was a condition that never held for them) """
     sc.heading('Testing triggers on a transition by path')
     def make(by_path):
-        preg = ss.Pregnancy(fertility_rate=ss.freqperyear(100))
+        preg = ss.Pregnancy(fertility_rate=ss.peryear(0.1))
         S, I, Cs = ss.states('S I Cs')
         delivery = ss.ref('pregnancy.delivery') if by_path else preg.delivery
         d = ss.Disease(S, I, Cs, infection=S >> I @ ss.peryear(0.1), mtct=ss.Transition(S, Cs, rate=ss.peryear(3)*ss.mother(I)),
-                       still=ss.Transition(Cs, ss.dead, on=delivery), name='d')
+                       still=ss.Transition(Cs, ss.dead, when=delivery), name='d')
         return ss.Sim(demographics=preg, diseases=d, networks=ss.PrenatalNet(), n_agents=5000, start=2000, stop=2005, verbose=0).run()
     direct, path = make(False), make(True)
     assert path.results.d.still.sum() > 0, 'A fetus is removed at its mother\'s delivery'

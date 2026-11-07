@@ -85,7 +85,7 @@ def make_seird():
         births    = ss.birth(S, rate=ss.peryear(0.02)),
         infection = ss.Transition(S, E, rate=ss.perday(0.4) * I),
         onset     = ss.Transition(E, I, dur=ss.days(4)),
-        outcome   = ss.Transition(I, [R, D], dur=ss.lognormal(ss.days(8), ss.days(3)), p=[None, 0.1]),
+        outcome   = ss.Transition(I, {R: None, D: 0.1}, dur=ss.lognormal(ss.days(8), ss.days(3))),
         deaths    = ss.death([S, E, I, R], rate=ss.peryear(0.01)),
         init_prev = 0.01, name='seird')
     return ss.Sim(seird, total_pop=1e4, unit='day', stop=100, verbose=0)
@@ -104,7 +104,7 @@ def test_epimodel_netsim():
     prev = res.I[-200:].mean() # EpiModel: 227.5, against 234 over 200 runs (its recovery in the step of infection makes it lower)
     assert 180 < prev < 290, f'the equilibrium should be near EpiModel\'s, not {prev}'
     code = sim.imported.code
-    assert "ss.DegreeNet(n_contacts=0.7, concurrency=0.22, max_contacts=3, dur=50, acts=ss.freqperday(2), name='net')" in code
+    assert "ss.DegreeNet(n_contacts=0.7, concurrency=0.22, max_contacts=3, dur=50, acts=ss.perday(2), name='net')" in code
     return sim
 
 

@@ -66,7 +66,7 @@ model.run()
 model.get_outputs_df().plot()
 ```
 
-In Starsim, a stratification is one call, with its split and its adjustments, and the two mixing matrices are one `ss.contacts()`:
+In Starsim, a stratification is one call, with its split; an adjustment is a value by group in the rate (`ss.by()`), and the two mixing matrices are one `ss.contacts()`:
 
 ```{python}
 import starsim as ss
@@ -75,13 +75,12 @@ S, I, R = ss.states('S I R')
 sir = ss.Disease(
     infection       = ss.Transition(S, I, rate=2 * I),
     recovery        = ss.Transition(I, R, rate=1/3),
-    infection_death = ss.death(I, rate=0.05),
+    infection_death = ss.death(I, rate=0.05*ss.by(location=[1, 3])), # Rural people have worse health care
     init_n          = dict(I=10),
 )
-sir.stratify(age=['young', 'old'])
-sir.stratify(location=['urban', 'rural'], fractions=[0.7, 0.3], adjust={'infection_death': [1, 3]}) # Rural people have worse health care
+sir.stratify(age=['young', 'old'], location={'urban': 0.7, 'rural': 0.3})
 
-mixing = ss.contacts(dict(age=[[0.2, 0.3], [0.5, 0.7]], location=[[0.8, 0.2], [0.2, 0.8]]))
+mixing = ss.contacts(age=[[0.2, 0.3], [0.5, 0.7]], location=[[0.8, 0.2], [0.2, 0.8]])
 sim = ss.Sim(sir, networks=mixing, total_pop=1000, dt=0.1, stop=20, verbose=0)
 sim.run()
 sim.plot()
@@ -123,7 +122,7 @@ These are from Starsim's switching demo for summer2 users (`tests/switching/test
 | summer2's sigmoidal scale-up | **Not yet**: `ss.timeseries` has constant, linear, and cosine interpolation, so the sigmoid is sampled into a time series |
 | A plain number times a time series (`1.5 * ss.timeseries(...)`) | **Works**. A parameter with no name inline (`ss.par(1.5) * ss.timeseries(...)`) raises a `ValueError` asking for one: give it as `ss.par(1.5, name='k')`, or assign it to a variable first |
 | The same model as a stochastic model or as agents | **Works**: `solver='binomial'`, `'gillespie'`, or `'abm'`; at a yearly step the stochastic solvers can differ a lot from the ODE, and `sim.check_dt()` shows how much a smaller step changes the results |
-| Interventions with costs (active case finding) | **Works**: `ss.treat(cure=0.7, moves='detection', cost=5, where=I, coverage=0.5, at=[2026, 2027])` |
+| Interventions with costs (active case finding) | **Works**: `ss.treat(cure={'detection': 0.7}, cost=5, who=I, when=[2026, 2027], coverage=0.5)` |
 | Contact matrices and populations by country | **Works**: `ss.contacts('Philippines')` and `ss.population('Philippines', year=2021)` are bundled |
 
 ## Bringing your model in

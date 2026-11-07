@@ -1,7 +1,7 @@
 """
 Theoretical networks, useful for comparison against analytic results and for debugging.
 
-A compartmental run can use `StaticNet` only by its mean number of contacts; the others run as agents only.
+A compartmental run can use `StaticNet` only by its mean number of contacts; the others run as agents only. For a random graph that changes every step, use `ss.RandomNet`; for a fixed one, `ssl.StaticNet(n_contacts=...)` (an Erdős–Rényi graph).
 
 Used with: agents and compartments; declared and coded modules
 """
@@ -10,86 +10,10 @@ import numpy as np
 import sciris as sc
 import starsim as ss
 
-__all__ = ['ErdosRenyiNet', 'NullNet', 'StaticNet', 'SmallWorldNet', 'ScaleFreeNet']
+__all__ = ['NullNet', 'StaticNet', 'SmallWorldNet', 'ScaleFreeNet']
 
 ss_float = ss.dtypes.float
 _ = None # Sentinel for "not provided" default arguments
-
-class ErdosRenyiNet(ss.DynamicNetwork):
-    """
-    In the Erdos-Renyi network, every possible edge has a probability, p, of
-    being created on each time step.
-
-    The degree of each node will have a binomial distribution, considering each
-    of the N-1 possible edges connecting this node to the others will be created
-    with probability p.
-
-    Please be careful with the `dur` parameter. When set to 0, new edges will be
-    created on each time step. If positive, edges will persist for `dur` years.
-    Note that the existence of edges from previous time steps will not prevent
-    or otherwise alter the creation of new edges on each time step, edges will
-    accumulate over time.
-
-    Warning: this network is quite slow compared to `ss.RandomNet`.
-
-    Note: CRN safe.
-
-    Args:
-        p (float):      probability that each possible edge is created per timestep
-        dur (dur/Dist): how long edges persist; 0 means new edges each timestep
-        pars (dict): the same parameters, as a dict
-
-    Examples:
-        ```python
-        import starsim as ss
-        import starsim.library as ssl
-
-        sim = ss.Sim(diseases='sis', networks=ssl.ErdosRenyiNet(p=0.01))
-        sim.run()
-        ```
-    """
-    def __init__(self, pars=None, **kwargs):
-        """ Initialize """
-        super().__init__()
-        self.define_pars(
-            p = 0.1, # Probability of each edge
-            dur = 0, # Duration of zero ensures that new random edges are formed on each time step
-        )
-        self.update_pars(pars, **kwargs)
-        if sc.isnumber(self.pars.dur): self.pars.dur = ss.years(self.pars.dur) # Interpret numbers as years (the default isn't ss.years(0) so a Dist is allowed)
-        self.rng_ints = ss.randint(low=0, high=np.iinfo('uint64').max, dtype=np.uint64) # Used to draw a random number for each agent as part of creating edges; must be uint64 for ss.distributions.combine_rands()
-        return
-
-    def add_pairs(self):
-        """ Generate contacts """
-        people = self.sim.people
-        born_uids = (people.age > 0).uids
-
-        # Sample integers
-        ints = self.rng_ints.rvs(born_uids)
-
-        # All possible edges are upper triangle of complete matrix
-        idx1, idx2 = np.triu_indices(n=len(born_uids), k=1)
-
-        # Use integers to create random numbers per edge: combining one integer per agent is
-        # far cheaper than drawing a random number for each of the O(N^2) possible edges
-        i1 = ints[idx1]
-        i2 = ints[idx2]
-        r = ss.distributions.combine_rands(i1, i2) # Uniform on [0, 1]
-        edge = r <= self.pars.p
-
-        p1 = born_uids[idx1[edge]]
-        p2 = born_uids[idx2[edge]]
-        beta = np.ones(len(p1), dtype=ss.dtypes.float)
-
-        if isinstance(self.pars.dur, ss.Dist):
-            dur = self.pars.dur.rvs(p1)
-        else:
-            dur = np.ones(len(p1))*(self.pars.dur/self.t.dt)
-
-        self.append(p1=p1, p2=p2, beta=beta, dur=dur)
-        return
-
 
 class NullNet(ss.Network):
     """
@@ -132,7 +56,7 @@ class NullNet(ss.Network):
 
     def get_edges(self):
         indices = np.arange(self.n)
-        self.append(dict(p1=indices, p2=indices, beta=np.zeros_like(indices)))
+        self.append(dict(p1=indices, p2=indices, weight=np.zeros_like(indices)))
         return
 
     def step(self):
@@ -152,6 +76,13 @@ class StaticNet(ss.Network):
 
     Note: CRN safe.
 
+    Args:
+        graph (nx.Graph/func): a NetworkX graph, or a function that makes one from the number of agents `n` (and `p` and `seed`, if it takes them); with none, a random (Erdős–Rényi) graph
+        n_contacts (float): for a random graph, the mean number of contacts of each agent (used unless `p` is given)
+        p (float): for a random graph, the probability that each pair of agents is in contact
+        seed (bool/int): the seed of a graph function; True for the network's own random numbers
+        kwargs (dict): other arguments, passed to the graph function
+
     Examples:
         ```python
         # Generate a networkx graph and pass to Starsim
@@ -166,14 +97,21 @@ class StaticNet(ss.Network):
         ```
     """
 
+    own_graph = False # Whether a subclass makes its own graph from its own parameters (e.g. ssl.SmallWorldNet), so takes no others
+
     def __init__(self, graph=None, pars=None, **kwargs):
         super().__init__()
         self.nx_graph = graph # Not self.graph, which is the graph of states and transitions of a declared model
-        self.define_pars(seed=True, p=None, n_contacts=10)
-        self.graph_kwargs = {k:kwargs.pop(k) for k in list(kwargs) if k not in self.pars and k not in ss.modules.module_args} # Other arguments are passed to the graph generator
+        self.define_pars(**self.graph_pars())
+        self.graph_kwargs = {} if self.own_graph else {k:kwargs.pop(k) for k in list(kwargs) if k not in self.pars and k not in ss.modules.module_args} # Other arguments are passed to the graph generator
         self.update_pars(pars, **kwargs)
         self.dist = ss.Dist(name='StaticNet')
         return
+
+    @staticmethod
+    def graph_pars():
+        """ Its parameters, and their defaults: a subclass that makes its own graph has its own """
+        return dict(seed=True, p=None, n_contacts=10)
 
     def init_pre(self, sim):
         """ Initialize the network, with a random (Erdős–Rényi) graph if none is given
@@ -183,9 +121,10 @@ class StaticNet(ss.Network):
         """
         super().init_pre(sim)
         self.n_agents = sim.pars.n_agents
-        n_contacts = self.pars.pop('n_contacts') # Remove from pars dict, but use only if p is not supplied
-        if self.pars.p is None: # Convert from n_contacts to probability
-            self.pars.p = n_contacts/self.n_agents
+        if not self.own_graph:
+            n_contacts = self.pars.pop('n_contacts') # Remove from pars dict, but use only if p is not supplied
+            if self.pars.p is None: # Convert from n_contacts to probability
+                self.pars.p = n_contacts/self.n_agents
         return
 
     def mean_contacts(self, sim):
@@ -195,7 +134,9 @@ class StaticNet(ss.Network):
             sim (Sim): the sim being initialized
         """
         graph = self.nx_graph
-        if graph is not None and not callable(graph):
+        if self.own_graph:
+            return super().mean_contacts(sim)
+        elif graph is not None and not callable(graph):
             return 2*graph.number_of_edges()/max(graph.number_of_nodes(), 1), 'the mean degree of its graph'
         elif graph is None or getattr(graph, '__name__', None) in ['fast_gnp_random_graph', 'gnp_random_graph', 'erdos_renyi_graph']: # A random graph: a number of contacts, or a chance of each pair
             p = self.pars.get('p')
@@ -206,18 +147,19 @@ class StaticNet(ss.Network):
         super().init_post()
         if 'seed' in self.pars and self.pars.seed is True:
             self.pars.seed = self.dist.rng
+        seed = self.pars.seed if 'seed' in self.pars else self.dist.rng # A subclass's graph uses the network's own random numbers
         if self.nx_graph is None: # A random (Erdős–Rényi) graph
             if isinstance(self.pars.seed, np.random.Generator) and 0 < self.pars.p < 1 and not self.graph_kwargs:
                 p1, p2 = random_graph(self.n_agents, self.pars.p, self.pars.seed)
                 if not len(p1):
                     raise ValueError(f'The random graph of {self.n_agents} agents with p={self.pars.p} has no edges')
-                self.append(p1=p1, p2=p2, beta=np.ones(len(p1)))
+                self.append(p1=p1, p2=p2, weight=np.ones(len(p1)))
                 return
             import networkx as nx # Lazy import since slow
             self.nx_graph = nx.fast_gnp_random_graph
         if callable(self.nx_graph):
             args = inspect.signature(self.nx_graph).parameters
-            kw = {k:v for k,v in self.pars.items() if k in args} # Only pass p and seed if the generator accepts them
+            kw = {k:v for k,v in dict(self.pars, seed=seed).items() if k in args} # Only pass p and seed if the generator accepts them
             try:
                 self.nx_graph = self.nx_graph(n=self.n_agents, **kw, **self.graph_kwargs)
             except TypeError as e:
@@ -250,7 +192,7 @@ class StaticNet(ss.Network):
             p1, p2 = edge
             p1s.append(p1)
             p2s.append(p2)
-        edges = dict(p1=p1s, p2=p2s, beta=np.ones_like(p1s))
+        edges = dict(p1=p1s, p2=p2s, weight=np.ones_like(p1s))
         self.append(edges)
         return
 
@@ -283,46 +225,61 @@ def random_graph(n, p, rng):
     return w[order], v[order]
 
 
-def small_world(n, k, p, seed):
+def small_world(n, n_contacts, rewire, seed):
     """ A Watts-Strogatz graph (see `ssl.SmallWorldNet`) """
     import networkx as nx # Lazy import since slow
-    return nx.watts_strogatz_graph(n=n, k=k, p=p, seed=seed)
+    return nx.watts_strogatz_graph(n=n, k=n_contacts, p=rewire, seed=seed)
 
 
-def scale_free(n, m, seed):
-    """ A Barabási-Albert graph (see `ssl.ScaleFreeNet`) """
+def scale_free(n, n_contacts, seed):
+    """ A Barabási-Albert graph (see `ssl.ScaleFreeNet`), in which each new node joins half as many as the mean number of contacts """
     import networkx as nx # Lazy import since slow
-    return nx.barabasi_albert_graph(n=n, m=m, seed=seed)
+    if n_contacts % 2 or n_contacts < 2:
+        errormsg = f'ssl.ScaleFreeNet(n_contacts={n_contacts}): each agent in turn joins half that many others, so it is a whole even number, at least 2'
+        raise ValueError(errormsg)
+    return nx.barabasi_albert_graph(n=n, m=int(n_contacts)//2, seed=seed)
 
 
 class SmallWorldNet(StaticNet):
     """
     A small-world (Watts-Strogatz) network: mostly local contacts, with a few long-range ones
 
-    Agents are on a ring, in contact with their `k` nearest neighbors, and each contact is
-    rewired to a random agent with probability `p`. The network is fixed. Note: CRN safe.
+    Agents are on a ring, in contact with their `n_contacts` nearest neighbors, and each contact is
+    rewired to a random agent with probability `rewire`. The network is fixed. Note: CRN safe.
 
     Args:
-        k (int): the number of neighbors of each agent
-        p (float): the probability of rewiring each contact
+        n_contacts (int): the number of neighbors of each agent (even; an odd number is rounded down)
+        rewire (float): the probability of rewiring each contact
         pars (dict): the same parameters, as a dict
     """
-    def __init__(self, k=4, p=0.1, pars=None, **kwargs):
-        super().__init__(graph=small_world, pars=pars, p=p, k=k, **kwargs)
+    own_graph = True
+
+    def __init__(self, n_contacts=4, rewire=0.1, pars=None, **kwargs):
+        super().__init__(graph=small_world, pars=pars, n_contacts=n_contacts, rewire=rewire, **kwargs)
         return
+
+    @staticmethod
+    def graph_pars():
+        return dict(n_contacts=4, rewire=0.1)
 
 
 class ScaleFreeNet(StaticNet):
     """
     A scale-free (Barabási-Albert) network: a few agents have many contacts, and most have few
 
-    Each agent in turn joins `m` agents, with those who already have many contacts being
-    more likely to be chosen. The network is fixed. Note: CRN safe.
+    Each agent in turn joins half of `n_contacts` agents, with those who already have many contacts being
+    more likely to be chosen, so the mean number of contacts is `n_contacts`. The network is fixed. Note: CRN safe.
 
     Args:
-        m (int): the number of contacts each new agent makes
+        n_contacts (int): the mean number of contacts of each agent (a whole even number)
         pars (dict): the same parameters, as a dict
     """
-    def __init__(self, m=2, pars=None, **kwargs):
-        super().__init__(graph=scale_free, pars=pars, m=m, **kwargs)
+    own_graph = True
+
+    def __init__(self, n_contacts=4, pars=None, **kwargs):
+        super().__init__(graph=scale_free, pars=pars, n_contacts=n_contacts, **kwargs)
         return
+
+    @staticmethod
+    def graph_pars():
+        return dict(n_contacts=4)

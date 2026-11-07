@@ -16,7 +16,7 @@ Reusable example modules for Maternal, Newborn, and Child Health (MNCH) modeling
 
 - **`FetalHealth`**: Module that tracks fetal growth and birth weight outcomes (LBW, VLBW, SGA) during pregnancy; other modules change them through its methods.
 - **`fetal_infection`**: Connector that links a disease (default: an SIR written as code, `ssl.AgentSIR(name='sir')`) to fetal health outcomes. Applies timing shifts (preterm birth) and growth restriction to pregnancies where the mother is infected.
-- **`treat_pregnant`**: Intervention that treats infected pregnant women each timestep, curing infection and partially reversing the fetal damage.
+- **`treat_pregnant`**: A delivery (as `ss.treat()` is, with `coverage=`, `who=`, `when=`) that treats infected pregnant women, curing infection and partially reversing the fetal damage.
 
 ## Usage
 

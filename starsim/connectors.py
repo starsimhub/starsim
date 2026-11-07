@@ -73,29 +73,12 @@ def to_time(sim, val):
     """
     Convert a time (a date, a duration since the start, or a number) to the same kind of time as the sim's timeline
 
-    A number from 1900 on (see `ss.time.assume_cal_year()`) is a calendar year, as `start=2000` is: in a
-    sim with dates, `2005` is the start of 2005, and `2005.5` the middle of it. Any other number is a time
-    in the sim's unit: in a sim with dates, that long after the start; otherwise, a time on the sim's own
-    axis (which, for a sim whose start and stop are years, is the year). So a number means the same in a
-    sim with dates as in one whose start and stop are years; for, e.g., 2000 days after the start, give `ss.days(2000)`.
+    How a bare number is read is decided once, from the sim's start (see `ss.timeline.calendar_of()`): if the sim has a
+    calendar (its start is a date or a year), a number is a calendar year (`2005` is the start of 2005, `2005.5` the
+    middle of it); otherwise, it is a time in the sim's unit from 0. A duration is always a time after the start:
+    `ss.years(5)` is 5 years after it, and for 30 days after a dated start, give `ss.days(30)`.
     """
-    t = sim.t
-    if val is None:
-        return None
-    elif isinstance(val, (str, ss.date)):
-        date = ss.date(val)
-        if not t.is_absolute and isinstance(t.tvec[0], ss.years) and ss.time.assume_cal_year(t.tvec[0]): # A timeline in calendar years (start=2000): the date's year, as the timeline holds it
-            return ss.years(date.to_year())
-        return date
-    elif t.is_absolute and sc.isnumber(val):
-        if ss.time.assume_cal_year(val): # A calendar year
-            return ss.date(val)
-        return t.tvec[0] + ss.time.get_dur_class(sim.unit_base)(val)
-    elif sc.isnumber(val):
-        return type(t.tvec[0])(val)
-    elif not t.is_absolute and ss.time.assume_cal_year(t.tvec[0]) and ss.time.assume_cal_year(val): # A calendar year in a timeline of them, as the sim's own start=ss.years(2000) is (see ss.timeline.stop_is_length())
-        return val
-    return t.tvec[0] + val # Any other duration is a time since the start: ss.years(5) is 5 years after it
+    return sim.t.to_time(val)
 
 
 def reached(now, time):
@@ -118,13 +101,11 @@ def to_ti(sim, val, name='time', after=False):
         name (str): what the time is, for the error message (e.g. 'the start of "masks"')
         after (bool): whether a time after the end is allowed (e.g. for a stop, meaning it never stops)
     """
-    time = to_time(sim, val)
+    time = sim.t.to_time(val, name=name)
     tvec = sim.t.tvec
     if time < tvec[0] or (time > tvec[-1] and not after):
-        hint = ''
-        if sc.isnumber(val) and sim.t.is_absolute:
-            hint = f"; a number from {ss.time.cal_year_threshold} on is a calendar year, and any other number a time in the sim's unit ({sim.unit_base}s) since the start"
-        when = f'{val}, which is {time}' if sc.isnumber(val) and not (sim.t.is_absolute and ss.time.assume_cal_year(val)) else f'{val}'
+        hint = f'; {ss.timeline.how_bare(sim.t)}' if sc.isnumber(val) else ''
+        when = f'{val}, which is {time}' if sc.isnumber(val) else f'{val}'
         raise ValueError(f'{name} ({when}) is outside the sim ({tvec[0]} to {tvec[-1]}){hint}.')
     ti = next((ti for ti,now in enumerate(tvec) if reached(now, time)), len(tvec)) # len(tvec) if after the end
     return ti # The step from that time point
@@ -193,7 +174,7 @@ def route_mult(engine, name, route, inds, trg):
     """
     The multiplier on a transmission over one route to the people who would be infected (`trg`), 1 if there are none: from the modifiers
     of the route's contacts (`n_contacts`), and from those given the network (`ss.modify(..., network=)`), each `1 − share·(1 − multiply)` for the
-    people it applies to (`where=`, of the people who would be infected)
+    people it applies to (`who=`, of the people who would be infected)
 
     Args:
         engine (`ss.solvers.Transmission`): the engine of the disease, as agents
@@ -279,11 +260,43 @@ def unapplied(graph, modname, kind, name, mods):
         if tr is None: # A transfer, or one destination of a transition with several
             return None
         if (not tr.source or not tr.people) and any(not isinstance(m, modify) or m.where is not None for m in mods): # A product's efficacy is for the people who hold it
-            return f'"{name}" ({tr._arrow}) is {"an inflow" if not tr.source else "a transition of counts"}, which has no people for a condition on people (where=, or holding a product) to select. Give the modifier no where=, or a condition on time.'
+            return f'"{name}" ({tr._arrow}) is {"an inflow" if not tr.source else "a transition of counts"}, which has no people for a condition on people (who=, or holding a product) to select. Give the modifier no who=, or a when= on time.'
         if kind == 'transition' and tr._split and any(isinstance(m, ss.products.Effect) or getattr(m, 'efficacy', None) is not None for m in mods):
             dsts = sc.strjoin(f"'{name}.{dst.name}'" for dst in tr.dest)
             return f'"{name}" has several destinations, so an efficacy on it would slow everyone\'s exit from {sc.strjoin(s.name for s in tr.source)}, not lower the chance of one destination. Name the destination it protects against: {dsts}.'
     return None
+
+
+def parse_when(when):
+    """
+    The `when=` of a modifier, as (start, stop, schedule): a window, and an `ss.schedule()` of the steps within it it applies on, if not all;
+    a function of the date is the schedule of the steps it is true on
+    """
+    if when is None:
+        return None, None, None
+    if isinstance(when, ss.schedule):
+        steps = None if (when.every is None and when.at is None and when.when is None) else when
+        return when.start, when.stop, steps
+    if callable(when) and not isinstance(when, (ss.conditions.Cond, ss.expressions.Expr, ss.State, ss.Arr, ss.Module, ss.Transition, ss.on, ss.TimePar)):
+        return None, None, ss.schedule(when)
+    if isinstance(when, (ss.conditions.Cond, ss.expressions.Expr, ss.State, ss.Arr, ss.Transition, ss.on)):
+        errormsg = f'when= of ss.modify() is when it applies, on time alone: ss.schedule(start=..., stop=...), or a function of the date; {when!r} is a condition on people or the population, which goes in who='
+        raise TypeError(errormsg)
+    first = when[0] if isinstance(when, (list, tuple)) and len(when) else when
+    errormsg = f'when= of ss.modify() is a window, ss.schedule(start=..., stop=...), or a function of the date (e.g. lambda now: now.month in [6, 7, 8]), not a time; for {when!r}, use when=ss.schedule(start={first!r}) to start then, or when=ss.schedule({when!r}) for those steps only'
+    raise TypeError(errormsg)
+
+
+class Due:
+    """ A modifier's `when=` as a function of the timeline: true on the steps its schedule is due (see `parse_when()`), as `ss.schedule()` itself works them out, once for the sim """
+    def __init__(self, schedule, sim):
+        self.schedule = schedule
+        self.__name__ = getattr(schedule.when, '__name__', None) or repr(schedule)
+        self.mask = sc.cp(schedule).init(sim).counts > 0 # A shallow copy, so the modifier's own schedule is not tied to this sim
+        return
+
+    def __call__(self, t):
+        return bool(self.mask[min(t.ti, len(self.mask) - 1)])
 
 
 class modify(Connector):
@@ -302,9 +315,9 @@ class modify(Connector):
         target (par/str): the quantity to change (for a modifier that is a member of a disease, its own, e.g. `beta`, `recovery`, or `'rel_trans'`): a parameter (`sir.pars.beta`), a transition (`sir.recovery`, which
             scales its rate, or its probability if it is a branch with `p=`), `sir.rel_sus` or `sir.rel_trans`, a parameter of any module written as code, or the path of
             any of these as a string (`'sir.pars.beta'`); or the contacts of a network, as the network (`ss.contacts('Kenya', layer='school')`,
-            matched by its name) or as a path (`'school.pars.n_contacts'`). For a transition with several destinations (e.g. `ss.Transition(Tx, [R, I], p=[0.8, None], rate=...)`),
+            matched by its name) or as a path (`'school.pars.n_contacts'`). For a transition with several destinations (e.g. `ss.Transition(Tx, {R: 0.8, I: None}, rate=...)`),
             the transition scales its rate (or its dwell time), and a destination (`'tb.treatment.R'`) scales the probability of that destination; with an outcome for each strain carried
-            (`per_strain=True`, `p=`), that is the probability for the whole set of strains a person carries (e.g. that all are cured: Π c_k), not each strain's
+            (`per_strain=True`, with the probability of the first destination), that is the probability for the whole set of strains a person carries (e.g. that all are cured: Π c_k), not each strain's
         multiply (float): multiply the quantity by this; like `add` and `set`, it can also be `ss.by(...)`, a function of the sim, or an `ss.timeseries`, for changes at given times
         add (float): add this to the quantity: a parameter, or an inflow (a transition from `ss.outside`, e.g. CFUs shed into a reservoir), to which it adds an amount per unit time from outside the model
         set (float): replace the quantity with this (a parameter only)
@@ -313,29 +326,26 @@ class modify(Connector):
             `1 − share·(1 − multiply)`, exactly, since hazards add; a number, an `ss.timeseries`, an `ss.by`, or (with `network=`, as agents) a function of
             the network returning one value per edge (e.g. `lambda net: net.edges.condoms`)
         network (str/list): for a modifier of a transmission, the network or networks (by name, as in the sim's `networks=`, including mixing pools) it applies on; by default, every one. On a parameter (e.g. `tb.pars.beta`), it acts on every transmission the parameter scales (e.g. an infection and its reinfections). A disease written as code has no transmission to name, so on a network the target is its `rel_sus` (of the people who would be infected over it)
-        where (Cond/str/func): who it applies to: a condition (e.g. `sir.vaccinated`, or a state by its path, `where='sir.I'`, as `ss.ref('sir.I')`), a condition on a count (e.g. `sir.I.n > 1000`, worked out at each step; in compartments, as part of the rates where it can be, so the run stays in the kernels), or a function of the sim (default: everyone); with `network=`, the people who would be infected
-        start (date/float): when the modifier starts to apply, within the sim (default: the start of the sim); a number is a calendar year from 1900 on, and otherwise a time in the sim's unit
-        stop (date/float): when it stops applying (default: never); a stop after the end of the sim never stops it
-        when (func): a condition on time alone: a function of the timeline returning True on the steps it applies (e.g. `lambda t: t.ti % 7 == 0`), which can be read before the run; a condition on anything else goes in `where=`
-        until (Cond/func): once `where=` selects someone, the modifier stays on for them until this holds, as for a lockdown that starts at one level of cases and ends at a lower one (with `where=`, not with `hold=`); while both hold, `where=` wins
-        hold (dur): once `where=` (or `when=`) selects someone, the modifier stays on for them for at least this long, as a rule that is lifted only after a while; a bare number is in the sim's unit
+        who (Cond/str/func): who it applies to: a condition (e.g. `sir.vaccinated`, or a state by its path, `who='sir.I'`, as `ss.ref('sir.I')`), a condition on a count (e.g. `sir.I.n > 1000`, worked out at each step; in compartments, as part of the rates where it can be, so the run stays in the kernels), or a function of the sim (default: everyone); with `network=`, the people who would be infected
+        when (schedule/func): when it applies, on time alone, which can be read before the run: `ss.schedule(start=..., stop=...)` for a window (a stop after the end of the sim never stops it; a bare number is a calendar year if the sim has a calendar, else a time in its unit from 0), `ss.schedule()` with times or how often for those steps only, or a function of the date of each step, true on the steps it applies (e.g. `lambda now: now.month in [6, 7, 8]`, in a sim with a calendar); a condition on anything else goes in `who=`
+        until (Cond/func/dur): how long it stays on once `who=` (or `when=`) selects someone: until a condition holds, as for a lockdown that starts at one level of cases and ends at a lower one (with `who=`; while both hold, `who=` wins); or a duration, at least this long, as a rule that is lifted only after a while (a bare number is in the sim's unit)
         name (str): the name of the modifier
 
     Examples:
         ```python
         S, I, R = ss.states(3)
         sir = ss.Disease(infection=S >> I @ 0.3*I, recovery=ss.Transition(I, R, dur=10), init_prev=0.01)
-        masks = ss.modify(sir.pars.beta, multiply=0.6, start=30)
+        masks = ss.modify(sir.pars.beta, multiply=0.6, when=ss.schedule(start=30))
         sim = ss.Sim(sir, interventions=masks, stop=100).run()
 
         # Changes at given times, each holding until the next; before the first, the quantity has its own value
-        lockdown = ss.modify(sir.pars.beta, multiply=ss.timeseries({30: 0.5, 60: 1.0}), start=30)
+        lockdown = ss.modify(sir.pars.beta, multiply=ss.timeseries({30: 0.5, 60: 1.0}), when=ss.schedule(start=30))
 
         # Each place on its own: contacts cut by 40% for at least 14 days once a week's cases pass 200 per 100,000
-        npi = ss.modify(sir.pars.beta, multiply=0.6, where=sir.infection.incidence(over=ss.days(7), by='patch') > 200e-5, hold=ss.days(14))
+        npi = ss.modify(sir.pars.beta, multiply=0.6, who=sir.infection.incidence(over=ss.days(7), by='patch') > 200e-5, until=ss.days(14))
 
         # A lockdown that starts when 2% of people are infectious and ends when 1% are
-        lockdown = ss.modify(sir.pars.beta, multiply=0.5, where=sir.I.frac >= 0.02, until=sir.I.frac <= 0.01)
+        lockdown = ss.modify(sir.pars.beta, multiply=0.5, who=sir.I.frac >= 0.02, until=sir.I.frac <= 0.01)
 
         # Condoms, 90% effective against gonorrhea, used in a share of acts that grows over time, on one network
         use = ss.timeseries({2000: 0.05, 2020: 0.3})
@@ -346,14 +356,22 @@ class modify(Connector):
             S, I, R = ss.states('S I R')
             infection = S >> I @ 0.5*I
             recovery = I >> R @ ss.days(10)
-            fading = ss.modify('rel_trans', multiply=0.5**(I.time_in/ss.days(3)), where=I)
+            fading = ss.modify('rel_trans', multiply=0.5**(I.time_in/ss.days(3)), who=I)
+
+        # Summer only, every year
+        summer = ss.modify(sir.pars.beta, multiply=1.2, when=lambda now: now.month in [6, 7, 8])
         ```
     """
     compartmental = True # It works on groups as well as on agents
 
-    timepar_skip = ['where', 'until', 'when', 'target_module', 'hold'] # These refer to other modules, which hold their own time parameters (see Module.link_timepars()); hold is converted to steps at init
+    timepar_skip = ['where', 'until', 'when', 'schedule', 'target_module', 'hold'] # These refer to other modules, which hold their own time parameters (see Module.link_timepars()); hold is converted to steps at init
 
-    def __init__(self, target, multiply=None, add=None, set=None, efficacy=None, share=None, network=None, where=None, start=None, stop=None, when=None, hold=None, until=None, name=None, **kwargs):
+    def __init__(self, target, multiply=None, add=None, set=None, efficacy=None, share=None, network=None, who=None, when=None, until=None, name=None, **kwargs):
+        window = 'when=ss.schedule(start=..., stop=...)'
+        renamed = dict(where='who=, a condition on who it applies to', start=window, stop=window, hold='until=<a duration>, e.g. until=ss.days(14)')
+        for key in kwargs:
+            if key in renamed:
+                raise TypeError(f'ss.modify() takes no {key}=; use {renamed[key]}')
         super().__init__(name=name, **kwargs)
         given = [key for key,val in dict(multiply=multiply, add=add, set=set, efficacy=efficacy).items() if val is not None]
         if len(given) != 1:
@@ -380,21 +398,22 @@ class modify(Connector):
             named = self.amount.name
             self.define_pars(**{'efficacy' if efficacy is not None else self.op:self.amount})
             self.amount.name = named # Named by its target when the sim is built, if it is not named (see ss.solvers.choose)
-        where = ss.ref(where) if isinstance(where, str) else where # A state by its path, e.g. where='sir.I'
+        where = ss.ref(who) if isinstance(who, str) else who # A state by its path, e.g. who='sir.I'
         self.where = None if where is None else where if isinstance(where, ss.State) and where.name is None else ss.conditions.as_cond(where) # A state of a class body has no name until its disease is built (see own())
-        self.start = start
-        self.stop = stop
-        self.when = ss.conditions.check_when(when)
-        if hold is not None and where is None and when is None:
-            errormsg = f'hold= of ss.modify() keeps the modifier on for a while after its condition holds, so it needs where= or when='
+        self.start, self.stop, self.schedule = parse_when(when) # A window, and any steps within it (as an ss.schedule())
+        self.when = None # A function of the timeline, true on the steps it applies, from the schedule once the sim is initialized (see init_pre())
+        hold = until if isinstance(until, ss.Duration) or sc.isnumber(until) else None # A duration: held for at least this long
+        until = None if hold is not None else until
+        if hold is not None and where is None and self.schedule is None:
+            errormsg = f'until= of ss.modify() as a duration keeps the modifier on for a while after it applies to someone, so it needs who= or when= (with times, or a function of the date)'
             raise ValueError(errormsg)
-        if until is not None and (where is None or hold is not None):
-            errormsg = f'until= of ss.modify() keeps the modifier on after where= selects someone, until the condition holds, so it needs where=, and not hold= as well'
+        if until is not None and where is None:
+            errormsg = f'until= of ss.modify() as a condition keeps the modifier on after who= selects someone, until the condition holds, so it needs who='
             raise ValueError(errormsg)
         self.hold = hold
-        self.until = None if until is None else ss.conditions.as_cond(until)
-        self.held = {} # With hold=: for each engine, the step until which each agent or group is held, and the value it was held at
-        self.when_until = -1 # With hold= and when=: the step until which it is held
+        self.until = None if until is None else ss.conditions.as_cond(ss.ref(until) if isinstance(until, str) else until)
+        self.held = {} # With until=: for each engine, the step until which each agent or group is held, and the value it was held at
+        self.when_until = -1 # With until=<a duration> and when=: the step until which it is held
         self.writer = None # For a parameter of a module written as code that is not a disease: see init_post()
         self.inlined = False # Whether it became part of the rates: see ss.solvers.Compartmental.inline_modifiers()
         return
@@ -453,7 +472,7 @@ class modify(Connector):
         if not found:
             raise sc.KeyNotFoundError(f'the target of the modifier "{self.name}", {self.target}, was not found. Quantities that can be modified: {sc.strjoin(options)}{ss.expressions.did_you_mean(self.target, options)}')
         if kind == 'transition' and getattr(graph.transitions.get(name), 'trigger', None) is not None:
-            raise sc.KeyNotFoundError(f'the modifier "{self.name}" targets {self.target}, which is triggered by {graph.transitions[name].trigger} and has no rate to scale; use where= on the transition, or a p= branch.')
+            raise sc.KeyNotFoundError(f'the modifier "{self.name}" targets {self.target}, which is triggered by {graph.transitions[name].trigger} and has no rate to scale; use who= on the transition, or a p= branch.')
         if kind == 'transition' and name in graph.transitions:
             ss.strains.refuse_by_strain(next((s for s in graph.strats if s.kind == 'strain'), None), graph.transitions[name], self.amount, f'the modifier "{self.name}" of {self.target}')
         if kind == 'transition' and not getattr(self, 'on_rate', False):
@@ -490,6 +509,7 @@ class modify(Connector):
         if self.stop is not None:
             to_ti(sim, self.stop, name=f'the stop of "{self.name}"', after=True) # A stop after the end never stops it
         self.hold_steps = None if self.hold is None else to_steps(sim, self.hold)
+        self.when = None if self.schedule is None else Due(self.schedule, sim) # The steps it applies on
         self.held = {}
         self.when_until = -1
         return
@@ -520,11 +540,11 @@ class modify(Connector):
     @property
     def timed(self):
         """ Whether the modifier depends only on time (not on who, or on a function of the sim), so can be worked out for every step before a run """
-        return self.where is None and self.when is None and self.fixed_amount
+        return self.where is None and self.schedule is None and self.fixed_amount
 
     @property
     def holding(self):
-        """ Whether it stays on for people after `where=` selects them: for a while (`hold=`), or until a condition holds (`until=`) """
+        """ Whether it stays on for people after `who=` selects them: for a while, or until a condition holds (`until=`) """
         return self.hold is not None or self.until is not None
 
     @property
@@ -548,8 +568,8 @@ class modify(Connector):
         return all(plain(val) for val in values)
 
     def marks(self):
-        """ When the modifier acts, for marking on plots (see `sim.plot()`): its start and stop on the results' time axis, if it has either and no condition (`when=`); else none """
-        if self.when is not None or (self.start is None and self.stop is None):
+        """ When the modifier acts, for marking on plots (see `sim.plot()`): its start and stop on the results' time axis, if it has either and no steps within them (`when=`); else none """
+        if self.schedule is not None or (self.start is None and self.stop is None):
             return []
         sim = self.sim
         timevec = sim.results.timevec
@@ -576,7 +596,7 @@ class modify(Connector):
         return on
 
     def held_mask(self, mask, engine):
-        """ With hold= or until=: who the modifier applies to, including those it still holds for """
+        """ With until=: who the modifier applies to, including those it still holds for """
         ti = self.sim.ti
         until, value = self.held.get(id(engine), (None, None))
         if until is None or until.shape != mask.shape: # As agents, people born since grow the arrays
@@ -645,14 +665,14 @@ class modify(Connector):
         attrs = [leaf for leaf in (exprs[0].leaves if exprs else []) if isinstance(leaf, ss.expressions.attr) and (leaf.kind == 'derived' or np.isnan(leaf.default))]
         out = []
         if clocks:
-            out.append(f'it reads {sc.strjoin(str(c) for c in clocks)}, which has a value only in the states it is kept for; give it a where= inside them')
+            out.append(f'it reads {sc.strjoin(str(c) for c in clocks)}, which has a value only in the states it is kept for; give it a who= inside them')
         for a in attrs:
             if a.kind == 'derived':
-                out.append(f'it reads the attribute "{a.name}", which is NaN in the states it gives no value for; give it a where= inside them')
+                out.append(f'it reads the attribute "{a.name}", which is NaN in the states it gives no value for; give it a who= inside them')
             else:
-                out.append(f'it reads the attribute "{a.name}", which is NaN for people it has not been set for; give it an init=, e.g. ss.attr(..., init=0), or a where= for the people it has been set for')
+                out.append(f'it reads the attribute "{a.name}", which is NaN for people it has not been set for; give it an init=, e.g. ss.attr(..., init=0), or a who= for the people it has been set for')
         if not out:
-            out.append('the value it is given is NaN for them; check what it reads, or give it a where= for the people it has a value for')
+            out.append('the value it is given is NaN for them; check what it reads, or give it a who= for the people it has a value for')
         return '; '.join(out) + '.'
 
     def describe(self):
@@ -664,14 +684,16 @@ class modify(Connector):
         if self.networks is not None:
             out += f'   network={sc.strjoin(self.networks)}'
         if self.where is not None:
-            out += f'   where={getattr(self.where, "__name__", self.where)}'
-        for key in ['start', 'stop']:
-            if getattr(self, key) is not None:
-                out += f'   {key}={getattr(self, key)}'
-        if self.when is not None:
-            out += f'   when={getattr(self.when, "__name__", "function")}'
+            out += f'   who={getattr(self.where, "__name__", self.where)}'
+        window = ', '.join(f'{key}={getattr(self, key)!r}' for key in ['start', 'stop'] if getattr(self, key) is not None)
+        if self.schedule is not None and self.schedule.when is None: # Its own repr has the window
+            out += f'   when={self.schedule}'
+        elif self.schedule is not None: # A function of the date
+            out += f'   when={getattr(self.schedule.when, "__name__", "a function of the date")}' + (f' ({window})' if window else '')
+        elif window:
+            out += f'   when=ss.schedule({window})'
         if self.hold is not None:
-            out += f'   hold={self.hold}'
+            out += f'   until={self.hold}'
         if self.until is not None:
             out += f'   until={getattr(self.until, "__name__", self.until)}'
         return out

@@ -25,9 +25,9 @@ class SIRModel(ss.Module):
     def init_results(self):
         super().init_results()
         self.define_results(
-            ss.Result('S', dtype=np.float32),
-            ss.Result('I', dtype=np.float32),
-            ss.Result('R', dtype=np.float32),
+            ss.Result('S', dtype=np.float32, kind='stock'),
+            ss.Result('I', dtype=np.float32, kind='stock'),
+            ss.Result('R', dtype=np.float32, kind='stock'),
         )
 
     def step(self):

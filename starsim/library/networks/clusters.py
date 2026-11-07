@@ -30,9 +30,8 @@ class ClusterNet(ss.Network):
     Note: CRN safe, unless `dynamic=True` and people are born or die.
 
     Args:
-        cluster_size (int/`ss.Dist`): the size of each cluster; a number is the mean of a Poisson distribution
-        where (Cond/str/func): if given, who takes part: a condition over people (e.g. `(ss.person.age >= 6) & (ss.person.age < 22)`), as for `ss.RandomNet`
-        beta (float): the beta value for each edge
+        cluster_size (int/`ss.Dist`): the size of each cluster; a number is the mean of a Poisson distribution (a size, like a target number of partners in `ss.DegreeNet`; for clusters all of one size, give `ss.constant(n)`)
+        who (Cond/str/func): if given, who takes part: a condition over people (e.g. `(ss.person.age >= 6) & (ss.person.age < 22)`), as for `ss.RandomNet`
         dynamic (bool): if True, the clusters are recreated on each timestep; if False (default), they are created once and never change
         pars (dict): the same parameters, as a dict
 
@@ -43,12 +42,12 @@ class ClusterNet(ss.Network):
         sim.run()
         ```
     """
-    def __init__(self, pars=None, cluster_size=_, where=_, beta=_, dynamic=_, **kwargs):
+    def __init__(self, pars=None, cluster_size=_, who=_, dynamic=_, **kwargs):
+        ss.networks.check_replaced(self, pars, kwargs, dict(where=ss.networks.replaced_who, beta=ss.networks.replaced_beta))
         super().__init__()
         self.define_pars(
-            cluster_size = ss.poisson(lam=4),
-            where = None,
-            beta = 1.0,
+            cluster_size = ss.poisson(mean=4),
+            who = None,
             dynamic = False,
         )
         self.update_pars(pars, **kwargs)
@@ -71,7 +70,7 @@ class ClusterNet(ss.Network):
 
     def add_pairs(self):
         """ Assign agents to clusters, and connect every pair of agents within each cluster """
-        uids = self.eligible(self.pars.where).uids
+        uids = self.eligible(self.pars.who).uids
         uids = uids[np.argsort(self.rng_order.rvs(uids), kind='stable')] # Shuffle; use a stable sort since the default order of ties depends on the CPU
         n = len(uids)
         if not n:
@@ -101,8 +100,7 @@ class ClusterNet(ss.Network):
             p2.append((these + j).ravel())
         p1 = uids[np.concatenate(p1)]
         p2 = uids[np.concatenate(p2)]
-        beta = np.full(len(p1), self.pars.beta, dtype=ss_float)
-        self.append(p1=p1, p2=p2, beta=beta)
+        self.append(p1=p1, p2=p2, weight=np.ones(len(p1), dtype=ss_float))
         return
 
 
@@ -119,21 +117,21 @@ class HybridNet(ss.Network):
     sizes, clusters give the same mean number of contacts as a random network.
     Each network can then be modified separately, e.g. `sim.networks.s`.
 
-    The default `beta` values are Covasim v3's per-layer relative transmissibility,
-    and are applied to the edges of each network; for per-network transmissibility
-    on the disease instead, set them to 1 and use e.g. `ss.SIS(beta=dict(h=0.3, s=0.06, w=0.06, c=0.03))`.
+    Transmissibility on each network is the disease's, by network: Covasim v3's relative
+    transmissibility of the layers was 3 for households, 0.6 for schools and workplaces, and
+    0.3 for the community, so with a beta of 0.016 a contact (Covasim's default), e.g.
+    `ss.SIS(beta=dict(h=0.048, s=0.0096, w=0.0096, c=0.0048))`.
 
     Note: CRN safe, unless `dynamic=True` and people are born or die.
 
     Args:
-        household_size (int/`ss.Dist`): the size of each household; a number is the mean of a Poisson distribution
-        contacts (dict): the mean number of contacts per agent in schools, workplaces, and community (numbers or `ss.Dist`s)
-        beta (dict): the beta value for each edge in each network
+        household_size (int/`ss.Dist`): the size of each household; a number is the mean of a Poisson distribution, as for `ssl.ClusterNet`
+        n_contacts (dict): the number of contacts per agent in schools, workplaces, and community: a number, as for `ss.RandomNet`, is the same for everyone (rounded at random; with `clustered=True`, a cluster of one more than that), and a distribution gives its spread (default: Covasim's, `ss.poisson(20)`, `ss.poisson(16)`, and `ss.poisson(20)`)
         school_ages (list): the age range of agents in schools
         work_ages (list): the age range of agents in workplaces
         dynamic (bool): whether the networks are recreated on each timestep
         method (str): how the targets of edges in random networks are chosen (see `ss.RandomNet`); 'uniform' as in Covasim v3
-        clustered (bool): if True (default), schools and workplaces are `ssl.ClusterNet`s, sized to give `contacts` for Poisson and constant distributions (other distributions are used directly as cluster sizes, which gives a different mean); if False, they are `ss.RandomNet`s, as in Covasim v3
+        clustered (bool): if True (default), schools and workplaces are `ssl.ClusterNet`s, sized to give `n_contacts` for numbers and Poisson and constant distributions (other distributions are used directly as cluster sizes, which gives a different mean); if False, they are `ss.RandomNet`s, as in Covasim v3
         pars (dict): the same parameters, as a dict
 
     Examples:
@@ -142,32 +140,32 @@ class HybridNet(ss.Network):
         sim.run()
         print(sim.networks.keys()) # ['h', 's', 'w', 'c']
 
-        # Larger households and smaller schools; contacts and beta can be partial
-        hybrid = ssl.HybridNet(household_size=ss.poisson(3), contacts=dict(s=10))
+        # Larger households and smaller schools; n_contacts can be partial
+        hybrid = ssl.HybridNet(household_size=ss.poisson(3), n_contacts=dict(s=ss.poisson(10)))
         ```
     """
-    def __init__(self, pars=None, household_size=_, contacts=_, beta=_, school_ages=_, work_ages=_, dynamic=_, method=_, clustered=_, **kwargs):
+    def __init__(self, pars=None, household_size=_, n_contacts=_, school_ages=_, work_ages=_, dynamic=_, method=_, clustered=_, **kwargs):
+        ss.networks.check_replaced(self, pars, kwargs, dict(contacts='the number of contacts in each network is n_contacts=, e.g. n_contacts=dict(s=10)',
+            beta=ss.networks.replaced_beta + "; Covasim v3's relative transmissibility of the layers was dict(h=3, s=0.6, w=0.6, c=0.3)"))
         super().__init__()
         self.define_pars(
-            household_size = ss.poisson(lam=2.0), # Covasim v3 default (contacts['h'])
-            contacts = dict(s=20, w=16, c=20),
-            beta = dict(h=3.0, s=0.6, w=0.6, c=0.3),
+            household_size = ss.poisson(mean=2.0), # Covasim v3 default (contacts['h'])
+            n_contacts = dict(s=ss.poisson(20), w=ss.poisson(16), c=ss.poisson(20)), # Covasim v3's
             school_ages = [6, 22],
             work_ages = [22, 65],
             dynamic = False,
             method = 'fast',
             clustered = True,
         )
-        defaults = sc.dcp(sc.obj(contacts=self.pars.contacts, beta=self.pars.beta))
+        default = sc.dcp(self.pars.n_contacts)
         self.update_pars(pars, **kwargs)
-        for key,default in defaults.items(): # Allow partial dicts, e.g. contacts=dict(s=10)
-            self.pars[key] = sc.mergedicts(default, self.pars[key])
+        self.pars.n_contacts = sc.mergedicts(default, self.pars.n_contacts) # Allow a partial dict, e.g. n_contacts=dict(s=10)
         return
 
     def expand(self):
         """ Create the four networks; called automatically when added to a sim """
         p = self.pars
-        n = {k: ss.poisson(lam=v) if sc.isnumber(v) else v for k,v in p.contacts.items()}
+        n = {k: ss.constant(v) if sc.isnumber(v) else v for k,v in p.n_contacts.items()} # A number is the same for everyone, as for ss.RandomNet
         kw = dict(dynamic=p.dynamic, dt=self.t.dt, start=self.t.start, stop=self.t.stop) # Pass the timeline to each network
         rkw = dict(method=p.method, **kw)
 
@@ -178,14 +176,14 @@ class HybridNet(ss.Network):
                 size = n[name]
                 if isinstance(size, ss.constant): # A cluster of N people gives each N-1 contacts (Poisson sizes already give the right mean)
                     size = ss.constant(size.pars.value + 1)
-                return ClusterNet(name=name, label=label, cluster_size=size, where=ages, beta=p.beta[name], **kw)
-            return ss.RandomNet(name=name, label=label, n_contacts=n[name], where=ages, beta=p.beta[name], **rkw)
+                return ClusterNet(name=name, label=label, cluster_size=size, who=ages, **kw)
+            return ss.RandomNet(name=name, label=label, n_contacts=n[name], who=ages, **rkw)
 
         networks = [
-            ClusterNet(name='h', label='Households', cluster_size=p.household_size, beta=p.beta['h'], **kw),
+            ClusterNet(name='h', label='Households', cluster_size=p.household_size, **kw),
             group('s', 'Schools', p.school_ages),
             group('w', 'Workplaces', p.work_ages),
-            ss.RandomNet(name='c', label='Community', n_contacts=n['c'], beta=p.beta['c'], **rkw),
+            ss.RandomNet(name='c', label='Community', n_contacts=n['c'], **rkw),
         ]
         return networks
 

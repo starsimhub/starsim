@@ -12,24 +12,23 @@ TimePar  # All time parameters
 │   ├── weeks
 │   ├── months
 │   ├── years
-│   └── datedur  # Calendar durations (in dates.py, with ss.date and ss.DateArray)
+│   └── datedur  # Calendar durations, used inside Starsim (ss.dates.datedur); whole ss.months() and ss.years() added to a date follow the calendar
 └── Rate  # All rates, units of *per* (e.g. per time or per event)
     ├── per  # Probability rates over time (e.g., death rate per year)
     │   ├── perday
     │   ├── perweek
     │   ├── permonth
     │   └── peryear
-    ├── prob  # Unitless probability (e.g., probability of death per infection)
-    │   ├── probperday
-    │   ├── probperweek
-    │   ├── probpermonth
-    │   └── probperyear
-    └── freq  # Number of events (e.g., number of acts per year)
-        ├── freqperday
-        ├── freqperweek
-        ├── freqpermonth
-        └── freqperyear
+    └── prob  # Unitless probability (e.g., probability of death per infection)
+        ├── probperday
+        ├── probperweek
+        ├── probpermonth
+        └── probperyear
 ```
+
+A count per unit time (e.g. acts per year) is also a `per` (e.g. `ss.peryear(80)`): times a duration, a rate is a probability
+(`rate*dt`); for the number of events, use `rate.to_events(dt)`. In a distribution (e.g. `ss.poisson(ss.peryear(3))`), a rate is
+the number per step, except as a probability (the `p` of `ss.bernoulli()`).
 
 Used with: agents and compartments; declared and coded modules
 """
@@ -107,8 +106,6 @@ def type_str(obj):
         return f'a duration (ss.{name})'
     elif isinstance(obj, prob):
         return 'a probability per time (ss.prob)' if obj.unit is not None else 'a probability (ss.prob)'
-    elif isinstance(obj, freq):
-        return 'a frequency (ss.freq)'
     elif isinstance(obj, Rate):
         return f'a rate (ss.{name})'
     elif isinstance(obj, (ss.date, ss.DateArray)):
@@ -444,7 +441,7 @@ class Duration(TimePar):
             return by
         elif cls is Duration: # The Duration class itself, not a subclass: return the correct subclass and initialize it
             if kwargs:
-                errormsg = f'Invalid arguments {kwargs} for ss.Duration; valid arguments are "value" and "base". If you are trying to construct a datedur, call it directly.'
+                errormsg = f'Invalid arguments {kwargs} for ss.Duration; valid arguments are "value" and "base". For a calendar duration, use e.g. ss.months(1), which follows the calendar when added to a date.'
                 raise ValueError(errormsg)
             if base is not None: # e.g. ss.Duration(3, 'years')
                 new_cls = get_dur_class(base)
@@ -696,7 +693,7 @@ class Duration(TimePar):
 
 class Rate(TimePar):
     """
-    A value per unit of time, e.g. 2 per day: the base class of rates, probabilities, and frequencies
+    A value per unit of time, e.g. 2 per day: the base class of rates and probabilities
 
     - self.value - the numerator (e.g., 2) - a scalar float
     - self.unit - the denominator (e.g., 1 day) - a dur object
@@ -709,8 +706,8 @@ class Rate(TimePar):
     timepar_subtype = 'rate'
 
     def __new__(cls, value=None, unit=None, *args, **kwargs):
-        """ ss.prob(0.1, 'day') (or ss.freq(...), ss.per(...)) is a probability per day: the class for that unit """
-        prefix = {'prob':'probper', 'freq':'freqper', 'per':'per'}.get(cls.__name__) if cls.__module__ == __name__ else None
+        """ ss.prob(0.1, 'day') (or ss.per(...)) is a probability per day: the class for that unit """
+        prefix = {'prob':'probper', 'per':'per'}.get(cls.__name__) if cls.__module__ == __name__ else None
         if prefix is not None and (isinstance(unit, str) or (isinstance(unit, Duration) and np.ndim(unit.value) == 0 and unit.value == 1 and unit.base is not None)):
             cls = get_rate_class(prefix + normalize_unit(unit if isinstance(unit, str) else unit.base).removesuffix('s'))
         return super().__new__(cls, value, *args, unit=unit, **kwargs)
@@ -834,7 +831,7 @@ class Rate(TimePar):
                 errormsg = f'Cannot convert {self!r} to "{unit}", since it does not correspond to a time unit; use e.g. ss.months or "month"'
                 raise TypeError(errormsg)
             base = dur_cls.base.removesuffix('s') # e.g. 'months' -> 'month'
-            prefix = dict(per='per', prob='probper', freq='freqper').get(self.timepar_subtype)
+            prefix = dict(per='per', prob='probper').get(self.timepar_subtype)
             if prefix is None: # e.g. a bare Rate, which has no per-unit subclasses
                 return self.__class__(self, unit=dur_cls(1))
             unit_cls = get_rate_class(prefix+base) # e.g. 'per'+'month' -> ss.permonth
@@ -842,11 +839,11 @@ class Rate(TimePar):
 
     def __repr__(self):
         name = self.__class__.__name__
-        if name in ['Rate', 'prob', 'per', 'freq']: # If it's a base class, show the unit, e.g. Rate(3/years())
+        if name in ['Rate', 'prob', 'per']: # If it's a base class, show the unit, e.g. Rate(3/years())
             valstr = f'{self.value:g}' if self.is_scalar else f'{self.value}' # Can't use g format with arrays
             unitstr = f'/{self.unit}' if self.unit is not None else '' # For unitless probabilities
             out = f'{name}({valstr}{unitstr})'
-        else: # Otherwise, it's in the class name, e.g. peryear(3), probperyear(0.1), or freqperyear(80)
+        else: # Otherwise, it's in the class name, e.g. peryear(3) or probperyear(0.1)
             if self.is_scalar:
                 valstr = f'{self.value:g}'  # e.g. 2031.35
             else:
@@ -860,8 +857,8 @@ class Rate(TimePar):
 
     def __mul__(self, other):
         errormsg = 'Rate() does not implement multiplication; this is implemented differently by its subclasses: '
-        errormsg += 'ss.per() (the rate at which an event happens, e.g. a mortality rate), ss.prob() (a probability, e.g. of symptomatic infection), '
-        errormsg += 'and ss.time.freq() (a number of events per time, e.g. acts per year).'
+        errormsg += 'ss.per() (the rate at which an event happens, e.g. a mortality rate or acts per year) '
+        errormsg += 'and ss.prob() (a probability, e.g. of symptomatic infection).'
         raise NotImplementedError(errormsg)
 
     def __rmul__(self, other):
@@ -874,7 +871,7 @@ class Rate(TimePar):
     def _mul(self, other, func):
         """
         Multiplication, shared by the subclasses: times a number, a rate is a rate; times a duration,
-        it is a number (a probability for `ss.per` and `ss.prob`, a count for `ss.time.freq`), which
+        it is a number (a probability, for `ss.per` and `ss.prob`; for a count, use `rate.to_events(dur)`), which
         remembers where it came from (see `ss.time.dimless`)
         """
         if isinstance(other, Rate):
@@ -957,9 +954,12 @@ class Rate(TimePar):
         Examples:
             ```python
             p_month = ss.probpermonth(0.05)
-            p_year = p_month.to_prob(ss.year) # Slightly less than 0.05*12
+            p_year = p_month.to_prob(ss.years(1)) # Slightly less than 0.05*12
             ```
         """
+        if sc.isnumber(self.rate) and self.rate < 0:
+            errormsg = f'A rate must be >= 0 to give a probability, not {self!r}; a negative rate is only net migration, ss.migration(rate=ss.{self!r})'
+            raise ValueError(errormsg)
         if dur is None and self.unit is not None:
             dur = self.default_dur # May also be None; unitless probabilities are not converted
 
@@ -987,7 +987,7 @@ class Rate(TimePar):
         elif sc.isnumber(dur) or isinstance(dur, np.ndarray):
             rate = self.rate*dur*scale # Scale the rate rather than the value
             rate_kw = dict(rate=rate) if isinstance(self, ss.prob) else dict(value=rate)
-            out = self._new(unit=self.unit, **rate_kw) # e.g. ss.prob(unit=ss.year, rate=0.1) or ss.per(unit=ss.year, value=0.1)
+            out = self._new(unit=self.unit, **rate_kw) # e.g. ss.prob(unit='year', rate=0.1) or ss.per(unit='year', value=0.1)
             return out
         else:
             errormsg = f'Cannot multiply {type(self)} by {type(dur)}: expecting ss.Duration or scalar'
@@ -1090,7 +1090,7 @@ class prob(Rate):
             if (v < 0) if scalar else np.any(v < 0):
                 raise ValueError(f'Negative values are not permitted for rates or probabilities, not {v}')
             elif (v > 1) if scalar else np.any(v > 1):
-                raise ValueError(f'Values greater than 1 are not permitted for probabilities, please use ss.per() or ss.freq() instead, not {v}')
+                raise ValueError(f'Values greater than 1 are not permitted for probabilities, please use ss.per() instead, not {v}')
             elif scalar and v == 1: # Don't handle arrays, just raise the warning in the next step if it comes to it
                 self._rate = np.inf
             else:
@@ -1120,7 +1120,7 @@ class prob(Rate):
         """
         Convert another rate to a probability over this rate's unit, e.g. `ss.probperyear(ss.probpermonth(0.05))`
 
-        Unlike `ss.per` and `ss.freq`, a probability is not linear in time, so it cannot
+        Unlike `ss.per`, a probability is not linear in time, so it cannot
         simply be rescaled: a 50% annual probability corresponds to a 5.6% monthly
         probability, not 50%/12 = 4.2%. The conversion is therefore done via the underlying
         rate, exactly as `to_prob()` does.
@@ -1206,36 +1206,18 @@ class per(Rate):
 
     The behavior of both classes depends on the data type of the object being multiplied.
 
-    `ss.per` is identical to `ss.freq`, except by default multiplication returns
-    a probability rather than a number of events. Use `ss.per` for probabilities
-    (e.g., probability of death per year), and `ss.freq` for events (e.g., number of acts per year).
+    A `per` is also a number of events per unit time (e.g. acts per year, `ss.peryear(80)`):
+    for the number of events in a period, use `rate.to_events(dur)` rather than multiplication.
     """
     base = None # Can inherit, but clearer to specify
     timepar_type = 'rate'
     timepar_subtype = 'per'
 
-    def __init__(self, value, unit=None):
-        if sc.isnumber(value) and value < 0:
-            raise ValueError(f'A rate must be >= 0, not {value}')
+    def __init__(self, value, unit=None): # A negative rate is allowed only for net migration (ss.migration(rate=ss.peryear(-0.005))); as the rate of a transition or a probability, it is an error (see to_prob())
         super().__init__(value, unit)
 
     def __mul__(self, other):
         return self._mul(other, self.to_prob)
-
-
-class freq(Rate):
-    """ Class for the number of events (rather than probability) in a specified period
-
-    Identical to `ss.per`, except by default multiplication returns a number of events
-    rather than a probability. Use `ss.freq` for events (e.g., number of acts per year)
-    and `ss.per` for probabilities (e.g., probability of death per year).
-    """
-    base = None
-    timepar_type = 'rate'
-    timepar_subtype = 'freq'
-
-    def __mul__(self, other):
-        return self._mul(other, self.to_events)
 
 
 #%% Probabilities per act
@@ -1379,15 +1361,13 @@ def assume_cal_year(val):
 
 # Durations
 class years(Duration):
-    """ A duration in years, e.g. `ss.years(5)`; the default unit, which also reads a date as a decimal year """
+    """ A duration in years, e.g. `ss.years(5)`; the default unit """
     base = 'years'
     def __init__(self, value=1, base=None):
-        # Convert date or date-string input(s) to decimal years, since dates only map cleanly onto years
-        to_convert = (str, pd.Timestamp)
-        if isinstance(value, to_convert): # A single date or date string
-            value = sc.datetoyear(value)
-        elif np.iterable(value) and not isinstance(value, Duration) and getattr(value, 'dtype', np.dtype(object)).kind in 'OUS' and any(isinstance(val, to_convert) for val in value): # Create a new array rather than modifying the input; an array of numbers is not scanned
-            value = np.array([sc.datetoyear(val) if isinstance(val, to_convert) else val for val in value])
+        is_date = lambda v: isinstance(v, (str, pd.Timestamp))
+        if is_date(value) or (np.iterable(value) and not isinstance(value, Duration) and getattr(value, 'dtype', np.dtype(object)).kind in 'OUS' and any(is_date(v) for v in value)): # An array of numbers is not scanned
+            errormsg = f'ss.years() takes a number of years, not a date ({value!r}); a time on the calendar is a date, e.g. ss.date({value!r}) (or its year as a number, ss.date(...).years), and a time after the start is a duration, e.g. ss.years(5)'
+            raise TypeError(errormsg)
         super().__init__(value=value, base=base)
         return
 
@@ -1407,12 +1387,6 @@ class weeks(Duration):
 class days(Duration):
     """ A duration in days, e.g. `ss.days(6)` """
     base = 'days'
-
-# Duration shortcuts
-year = years(1)
-month = months(1)
-week = weeks(1)
-day = days(1)
 
 # per
 class perday(per):
@@ -1442,24 +1416,10 @@ class probperyear(prob):
     """ A probability per year, e.g. `ss.probperyear(0.1)` """
     base = 'years'
 
-# freq
-class freqperday(freq):
-    """ A number of events per day, e.g. `ss.freqperday(2)` """
-    base = 'days'
-class freqperweek(freq):
-    """ A number of events per week, e.g. `ss.freqperweek(2)` """
-    base = 'weeks'
-class freqpermonth(freq):
-    """ A number of events per month, e.g. `ss.freqpermonth(2)` """
-    base = 'months'
-class freqperyear(freq):
-    """ A number of events per year, e.g. `ss.freqperyear(2)` """
-    base = 'years'
-
 #%% Class mappings
 
 dur_classes = {cls.base:cls for cls in [days, weeks, months, years]} # By normalized unit, e.g. 'days'
-rate_classes = {cls.__name__:cls for cls in [perday, perweek, permonth, peryear, probperday, probperweek, probpermonth, probperyear, freqperday, freqperweek, freqpermonth, freqperyear]}
+rate_classes = {cls.__name__:cls for cls in [perday, perweek, permonth, peryear, probperday, probperweek, probpermonth, probperyear]}
 
 def get_unit_class(which, unit):
     """

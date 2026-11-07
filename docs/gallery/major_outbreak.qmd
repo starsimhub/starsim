@@ -38,7 +38,7 @@ R0s = [1.25, 1.5, 2, 3, 4]
 major = []
 for R0 in R0s:
     sim = ss.Sim(make_sir(R0), total_pop=1000, stop=ss.days(365), solver='gillespie', verbose=0)
-    msim = sim.run(n_runs=300, verbose=0)
+    msim = ss.parallel(sim, n_runs=300, verbose=0)
     infections = msim.results.sir.infection.summarize() # One total for each run
     major.append(np.mean(infections > 100))
 

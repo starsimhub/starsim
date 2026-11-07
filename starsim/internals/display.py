@@ -186,6 +186,29 @@ class Share:
         return
 
 
+class Text(str):
+    """
+    Text that shows itself: what `describe()`, `equations()`, `what_modifies()`, and `check_dt()` return
+
+    It is a string (`print()` gives the plain text, and `text.splitlines()` or `'beta' in text` work as for any string),
+    shown in color at an interactive prompt in a terminal, and as tables in a notebook if it was made from a
+    `Description`. Other values can be kept with it as attributes, e.g. `sim.check_dt().table`.
+    """
+    def __new__(cls, text, color=None, html=None, **attrs):
+        out = super().__new__(cls, text)
+        out._color = color # The same text, in color, for a terminal
+        out._html = html # The same, as HTML, for a notebook
+        for key,val in attrs.items():
+            setattr(out, key, val)
+        return out
+
+    def __repr__(self):
+        return self._color if self._color is not None and in_color() else str(self)
+
+    def _repr_html_(self):
+        return self._html # None for text with no HTML, which a notebook then shows as plain text
+
+
 class Description:
     """
     The description of a model (see `sim.describe()`): sections, each with a title and rows of a key, its text, and what was guessed
@@ -271,17 +294,12 @@ class Description:
     def _repr_html_(self):
         return self.html()
 
-    def show(self):
-        """ Print it: as tables in a notebook, in color in a terminal, and as plain text otherwise """
-        if sc.isjupyter():
-            from IPython.display import display, HTML
-            display(HTML(self.html()))
-        else:
-            print('\n'.join(self.text(color=in_color())))
-        return
+    def as_text(self):
+        """ As `ss.display.Text`: plain text that shows itself in color in a terminal and as tables in a notebook """
+        return Text('\n'.join(self.text()), color='\n'.join(self.text(color=True)), html=self.html())
 
 
-class Diagram(str):
+class Diagram(Text):
     """
     A diagram as the text of a Mermaid flowchart (https://mermaid.js.org), which a notebook draws
 
@@ -289,9 +307,6 @@ class Diagram(str):
     Mermaid (GitHub, Quarto, most Markdown viewers). In JupyterLab (4.1 or later) and in a
     page built by Quarto, it is drawn as a Markdown block.
     """
-    def __repr__(self):
-        return str(self)
-
     def _repr_markdown_(self):
         fence = '{mermaid}' if 'QUARTO_DOCUMENT_PATH' in os.environ else 'mermaid' # Quarto draws only its own form of the block, which JupyterLab doesn't
         return f'```{fence}\n{self.rstrip()}\n```'
@@ -340,7 +355,7 @@ def describe_graph(graph, sim=None, out=None):
     init_str = lambda v: f'{value_str(v)}(sim)' if callable(v) and not isinstance(v, (ss.Dist, Expr, ss.by, ss.parameters.TimeValue)) else v # A function by its name, e.g. Sv = mosquito_start(sim)
     inits = {s.name:init_str(s.init) for s in graph.states.values() if s.init is not None} | {s.name:f'{s.init_n} {"person" if s.init_n == 1 else "people"}' if s.people else s.init_n for s in graph.states.values() if s.init_n is not None} # A state that is not people, as a plain number
     if graph.init_prev is not None and not (sc.isnumber(graph.init_prev) and graph.init_prev == 0):
-        inits['init_prev'] = value_str(graph.init_prev.raw) if isinstance(graph.init_prev, par) else graph.init_prev
+        inits['init_n' if graph.seed_n else 'init_prev'] = value_str(graph.init_prev.raw) if isinstance(graph.init_prev, par) else graph.init_prev
     rest_in = graph.rest if not getattr(engine, 'rest_empty', False) else None # Not said when the initial values account for everyone
     guesses = [graph.guessed[key] for key in ['init', 'init_prev', 'default_state', 'rest'] if key in graph.guessed and (key != 'rest' or rest_in is not None)]
     if inits:
@@ -443,8 +458,8 @@ def describe_graph(graph, sim=None, out=None):
     for name,oc in graph.outcomes.items(): # Each outcome as it is defined, e.g. "0.5 × onset, after 4 days (exponential)"
         source = oc.source_str().replace(' * ', ' × ')
         text = f'outcome: {source}' + (f', after {delay_str(oc.delay, unit)}' if oc.delay is not None else '')
-        if oc.stay is not None:
-            text += f'; n_{name} for {delay_str(oc.stay, unit)}'
+        if oc.dur is not None:
+            text += f'; n_{name} for {delay_str(oc.dur, unit)}'
         if oc.likelihood is not None:
             text += f'; likelihood {getattr(oc.likelihood, "__name__", type(oc.likelihood).__name__)}'
         add(name, text)
@@ -573,7 +588,7 @@ def flow_terms(graph, engine=None, contacts=None):
     """
     mod = graph.module
     if engine is None or not engine.compartmental: # Not in a compartmental sim, so lay the model out with a stand-in
-        mock = sc.obj(unit_base='day', solver='ode', groups=sc.obj(n_groups=1), pars=sc.obj(rand_seed=0, total_pop=1, approximations='allow', solver='ode', branching=False), unit=None, _unit_name='day', crossings=[])
+        mock = sc.obj(unit_base='day', solver=ss.ode(), groups=sc.obj(n_groups=1), pars=sc.obj(rand_seed=0, total_pop=1, approximations='allow', solver='ode', branching=False), unit=None, _unit_name='day', crossings=[])
         engine = ss.solvers.Compartmental(mod, mock)
         engine.init_dwells()
         engine.build_layout()
@@ -647,7 +662,7 @@ def flow_terms(graph, engine=None, contacts=None):
 
 #%% A sim: describe(), what_modifies(), and check_dt()
 
-def check_dt(sim, factor=2, output=False):
+def check_dt(sim, factor=2):
     """ Rerun the sim with a smaller timestep, and report how much each result changes: see `ss.Sim.check_dt()` """
     coarse = sim if sim.results_ready else sim.new(verbose=0).run()
     fine = sim.new(dt=coarse.t.dt/factor, verbose=0)
@@ -672,21 +687,19 @@ def check_dt(sim, factor=2, output=False):
             change = np.abs(b - a).max()/scale if scale else 0.0
             rows.append(dict(module=mod.name, result=key, peak=a.max(), peak_fine=b.max(), change=change))
     df = sc.dataframe(rows).sort_values('change', ascending=False).reset_index(drop=True)
-    if output:
-        return df
     dt, unit = coarse.t.dt.to(coarse.unit_base).value, coarse._unit_name
     inner = lambda sim: [mod.engine.dt/max(mod.engine.substeps(), 1) for mod in sim.declared if mod.engine.compartmental]
-    if coarse.solver == 'binomial' and coarse.pars.substeps is None and len(inner(coarse)) and np.allclose(inner(coarse), inner(fine)): # It takes substeps of the same size whatever the step
-        print(f'The chain-binomial solver takes enough substeps by default (here of {inner(coarse)[0]:n} {unit}s) that the step does not change its results: '
-              f'a step of {dt:n} or {dt/factor:n} {unit}s gives the same run. Give substeps=1 to take whole steps, as most chain-binomial models do, and see how much they matter')
-        return
-    print(f'Change in each result when the timestep goes from {dt:n} to {dt/factor:n} {unit}s (largest difference, as a share of the largest value):')
+    if coarse.solver == 'binomial' and coarse.solver.substeps is None and len(inner(coarse)) and np.allclose(inner(coarse), inner(fine)): # It takes substeps of the same size whatever the step
+        text = (f'The chain-binomial solver takes enough substeps by default (here of {inner(coarse)[0]:n} {unit}s) that the step does not change its results: '
+                f'a step of {dt:n} or {dt/factor:n} {unit}s gives the same run. Give solver=ss.binomial(substeps=1) to take whole steps, as most chain-binomial models do, and see how much they matter')
+        return Text(text, table=df)
+    lines = [f'Change in each result when the timestep goes from {dt:n} to {dt/factor:n} {unit}s (largest difference, as a share of the largest value):']
     for row in df.itertuples():
-        print(f'  {row.module}.{row.result:<20s} {row.change:6.1%}   (peak {row.peak:n} → {row.peak_fine:n})')
-    return
+        lines.append(f'  {row.module}.{row.result:<20s} {row.change:6.1%}   (peak {row.peak:n} → {row.peak_fine:n})')
+    return Text('\n'.join(lines), table=df)
 
 
-def what_modifies(sim, target, output=False):
+def what_modifies(sim, target):
     """ Everything that modifies a quantity: see `ss.Sim.what_modifies()` """
     if not sim.initialized:
         sim.init()
@@ -699,7 +712,7 @@ def what_modifies(sim, target, output=False):
         if kind not in ['rel_sus', 'rel_trans']:
             kind = 'par'
             text = f'{modname}.pars.{name}\n  modifiers: none; "{modname}" is written as code, so its own code reads its parameters, and only its rel_sus and rel_trans can be modified'
-            return text if output else print(text)
+            return Text(text)
     else:
         graph = sim._declared_module(modname).graph
         if kind is None:
@@ -712,14 +725,10 @@ def what_modifies(sim, target, output=False):
     lines += [f'    {mod.describe()}' for mod in mods]
     if path in sim.clipped:
         lines.append('  clipped: the modifiers made it negative during the run, so it was set to 0 where it was')
-    text = '\n'.join(lines)
-    if output:
-        return text
-    print(text)
-    return
+    return Text('\n'.join(lines))
 
 
-def describe_sim(sim, output=False, verbose=False):
+def describe_sim(sim, verbose=False):
     """ The resolved sim, with each guess marked: see `ss.Sim.describe()` """
     if not sim.initialized: # Quietly: the run says its start line when it is run
         sim._quiet = True
@@ -738,7 +747,7 @@ def describe_sim(sim, output=False, verbose=False):
     desc.section('Sim', f'{len(mods)} module{"s" if len(mods) != 1 else ""}, {pop}{popguess}, {when}{stopguess}')
     if sim.declared:
         guessed = pars.solver == 'auto'
-        add('solver', sim.solver, f'guessed: {sim.solver_reason}' if guessed else 'requested')
+        add('solver', repr(sim.solver) if isinstance(sim.solver, ss.sim.Solver) and sim.solver.given() else str(sim.solver), f'guessed: {sim.solver_reason}' if guessed else 'requested')
         for cap in sim.capabilities: # What matters to which solvers can run it: see ss.solvers.init_capabilities()
             add('', f'{cap.ingredient}: {cap.reason}')
         if not guessed: # What auto would have done
@@ -749,13 +758,13 @@ def describe_sim(sim, output=False, verbose=False):
             else:
                 add('', 'auto would choose: ' + (f'abm ({reasons[0]})' if reasons else 'ode (every part of the model has a compartmental form)'))
         if sim.solver == 'abm':
-            scale = f', each standing for {pars.pop_scale:n} people' if pars.pop_scale != 1 else ''
+            scale = f', each standing for {sim.pop_scale:n} people' if sim.pop_scale != 1 else ''
             add('', f'{pars.n_agents:,} agents{scale}', None if 'n_agents' in sim.given else 'guessed')
             ways = {} # How each declared module runs as agents, and where that came from (see ss.solvers.agent_solver())
             for mod in sim.declared:
                 ways.setdefault(ss.solvers.agent_solver(mod, sim, why=True), []).append(mod.name)
             for (solver, source),names in ways.items():
-                add('', f'{solver}: {sc.strjoin(names)}', dict(own='its own solver=', sim=None, suggested='suggested by the module', default='the default for agents')[source])
+                add('', f'step={solver!r}: {sc.strjoin(names)}', dict(own='its own solver=', sim=None, default='the default for agents')[source])
         if named is not None: # Where a named population came from
             ref = named.ref
             guess = None if named.year is not None else 'guessed: the year the sim starts' if sim.t.is_absolute else 'guessed: the year of the revision'
@@ -769,7 +778,7 @@ def describe_sim(sim, output=False, verbose=False):
             add('unit', sim.unit, f'from {sim.unit_source}' if sim.unit_source else None)
         for strat in sim.groups.strats: # Each dimension: its levels, the states it applies to, and what it generates
             text = f'{strat.name} ({strat.kind}): {sc.strjoin(strat.labels)}'
-            text += f'; where {", ".join(f"{k}={sc.strjoin(sc.tolist(v))}" for k,v in strat.where.items())}' if getattr(strat, 'where', None) else ''
+            text += f'; for {strat.who_given or ", ".join(f"{k}={sc.strjoin(sc.tolist(v))}" for k,v in strat.who.items())}' if getattr(strat, 'who', None) else ''
             text += f'; applies to {sc.strjoin(strat.states)}' if strat.states is not None else '; applies to every state' if strat.kind == 'space' else f'; applies to the people of {sc.strjoin(strat.holders)}' if strat.kind == 'disease' else ''
             if strat.kind == 'space':
                 text += f'; mobility: {strat.mobility if strat.mobility is not None else "none"}'
@@ -810,7 +819,7 @@ def describe_sim(sim, output=False, verbose=False):
         for mod in list(sim.connectors()) + list(sim.interventions()):
             if isinstance(mod, ss.modify):
                 add('modifier', f'{mod.target}: {" ".join(mod.describe().split())}')
-            elif isinstance(mod, ss.Delivery):
+            elif isinstance(mod, ss.Event):
                 add('delivery', mod.describe())
         if not desc.sections[-1].rows:
             desc.sections.pop()
@@ -856,7 +865,7 @@ def describe_sim(sim, output=False, verbose=False):
             add('note', note)
     if verbose and sim.declared:
         describe_steps(sim, desc)
-    return str(desc) if output else desc.show()
+    return desc.as_text()
 
 
 def describe_steps(sim, desc):
@@ -898,7 +907,7 @@ def describe_steps(sim, desc):
 #%% Helpers for the text
 
 def strat_rows(strat, most=6):
-    """ For describe(): the share of people in each level of a dimension (up to `most` levels), and the multipliers it adjusts by """
+    """ For describe(): the share of people in each level of a dimension (up to `most` levels) """
     def short(items):
         return ', '.join(items) if len(items) <= most else ', '.join(items[:most-1]) + f', and {len(items) - most + 1} more'
     rows = []
@@ -906,8 +915,6 @@ def strat_rows(strat, most=6):
         rows.append(f'fractions: by {sc.strjoin([d for d in strat.joint.dims if d != strat.name] or strat.joint.dims)}, as given')
     elif strat.fractions is not None:
         rows.append('fractions: ' + short([f'{label} {share:.3g}' for label,share in zip(strat.labels, strat.fractions)]))
-    if strat.adjust and strat.kind != 'strain': # A strain's are shown with its strains
-        rows.append('adjust: ' + '; '.join(f'{key} × {short([f"{v:n}" for v in vals])}' for key,vals in strat.adjust.items()))
     return rows
 
 
@@ -985,9 +992,9 @@ def dist_str(dist, unit):
     """ A distribution as a modeler writes it, with its units, e.g. "erlang(k=4, mean=8 days)" or "lognormal(mean=10 days, std=4 days)", rather than its internal parameters """
     pars = dist.pars
     q = lambda v: quantity_str(dist_unit(dist, v), 'dur', unit)
-    if isinstance(dist, ss.gamma) and sc.isnumber(pars.a) and sc.isnumber(pars.loc) and pars.loc == 0: # As ss.erlang() or ss.gamma(mean=, std=) take it
-        mean = pars.a*pars.scale
-        return f'erlang(k={int(pars.a)}, mean={q(mean)})' if pars.a == int(pars.a) else f'gamma(mean={q(mean)}, std={q(mean/float(np.sqrt(pars.a)))})'
+    if isinstance(dist, ss.gamma) and sc.isnumber(pars.shape) and sc.isnumber(pars.loc) and pars.loc == 0: # As ss.erlang() or ss.gamma(mean=, std=) take it
+        mean = pars.shape*pars.scale
+        return f'erlang(k={int(pars.shape)}, mean={q(mean)})' if pars.shape == int(pars.shape) else f'gamma(mean={q(mean)}, std={q(mean/float(np.sqrt(pars.shape)))})'
     name = dict(expon='exponential').get(type(dist).__name__, type(dist).__name__)
     unitless = dist.unitless_pars or []
     vals = {k:value_str(v) if k in unitless else q(v) for k,v in pars.items() if not (k == 'loc' and sc.isnumber(v) and v == 0)} # Leaving out the default location
@@ -1110,7 +1117,7 @@ def quantity_json(raw, kind, unit):
     if isinstance(raw, ss.Duration):
         return dict(type='dur', value=float(raw.value), unit=type(raw).base.removesuffix('s'))
     elif isinstance(raw, ss.Rate):
-        types = {ss.per:'per', ss.prob:'prob', ss.time.freq:'freq'}
+        types = {ss.per:'per', ss.prob:'prob'}
         key = [v for k,v in types.items() if isinstance(raw, k)][0]
         return dict(type=key, value=float(raw.value), unit=None if raw.unit is None else type(raw.unit).base.removesuffix('s'))
     elif isinstance(raw, ss.Dist):

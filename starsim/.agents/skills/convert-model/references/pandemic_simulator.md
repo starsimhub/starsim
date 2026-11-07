@@ -17,8 +17,8 @@ The World Health Organization's [Pandemic Simulator](https://github.com/WHO-Coll
 | `self._apply_flow(derivs, 'I', 'H', rate*I)` | `I >> H @ rate` |
 | A value worked out in `equation()` from parameters | An expression of `ss.par`s, which follows any change to them |
 | `FieldConfigs` with `has_variance` | `ss.par(value, bounds=[low, high])`, run with `ss.parallel(sim, priors=True)` |
-| An intervention with dates | `ss.modify(target, multiply=1 - adherence*reduction, start=date, stop=date)` |
-| An intervention with `start_threshold` | `ss.modify(target, multiply=..., where=I.n >= a)` |
+| An intervention with dates | `ss.modify(target, multiply=1 - adherence*reduction, when=ss.schedule(start=date, stop=date))` |
+| An intervention with `start_threshold` | `ss.modify(target, multiply=..., who=I.n >= a)` |
 | `end_threshold`, on a stochastic model | `until=I.n <= b` as well |
 | `run_simulation()`'s run without interventions | `sim.new(interventions=None)` |
 | Age mixing from the ISO3 code | `ss.contacts('Kenya')` |

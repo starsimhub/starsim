@@ -70,11 +70,11 @@ ages = [0, 5, 18, 65]
 S, E, I, R = ss.states(4)
 infection = S >> E @ ss.seasonal(mean=ss.perday(0.012), amplitude=0.3, peak=0) * I
 seir = ss.Disease(infection, E >> I @ ss.perday(0.2), I >> R @ ss.perday(0.1), init_n=dict(I=ss.by(age=[10, 0, 0, 0])))
-seir.stratify(age=ages, fractions=pop/pop.sum())
+seir.stratify(age=dict(zip(ages, pop/pop.sum())))
 sim = ss.Sim(seir, networks=ss.contacts(ages=ages, matrix=m), total_pop=pop.sum(), unit='day', dt=0.25, stop=365,
              solver='binomial', aging=False, verbose=0)
 
-msim = sim.run(n_runs=20)
+msim = ss.parallel(sim, n_runs=20)
 msim.plot()
 ```
 
@@ -90,7 +90,7 @@ The same file can also be imported. `ss.import_from()` reads odin's language dir
 #| eval: false
 #| label: starsim-import
 sim = ss.import_from('age_seir.R', format='odin', pars=dict(S0=pop - [10, 0, 0, 0], I0=[10, 0, 0, 0], m=m), stop=365)
-msim = sim.run(n_runs=20)
+msim = ss.parallel(sim, n_runs=20)
 ```
 
 ## How the results agree

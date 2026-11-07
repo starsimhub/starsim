@@ -50,7 +50,7 @@ sim = ss.Sim(
     make_sir(),
     networks      = ss.RandomNet(n_contacts=4),
     demographics  = [ss.Births(), ss.Deaths()],
-    interventions = ss.vaccinate(efficacy=0.9, coverage=0.5, at=[ss.days(20)]),
+    interventions = ss.vaccinate(efficacy=0.9, when=[ss.days(20)], coverage=0.5),
     analyzers     = ss.infection_log(),
     n_agents = 2000,
     unit     = 'day',
@@ -190,7 +190,7 @@ sim = ss.Sim(
     make_sir(),
     networks      = ss.RandomNet(n_contacts=4),
     demographics  = [ss.Births(), ss.Deaths()],
-    interventions = ss.vaccinate(efficacy=0.9, coverage=0.5, at=[ss.days(20)]),
+    interventions = ss.vaccinate(efficacy=0.9, when=[ss.days(20)], coverage=0.5),
     analyzers     = ss.infection_log(),
     n_agents = 2000,
     unit     = 'day',
@@ -207,7 +207,7 @@ Each row is one call. The rows that are missing are the ones left out because th
 Three more tools work on the same plan:
 
 - `sim.loop.insert(fn, label='sir.step')` adds a function of the sim after a given call (or `before=True`), at every time or only those that `match_fn=` picks; given a module of the sim instead of a function, it moves that module's `step()` there. It is the way to put code at a point that no kind of module runs at.
-- `sim.run(profile=True)` times every call, and `sim.loop.plot_cpu()` shows where the time went, by module and method; `sim.loop.plot()` draws the plan itself.
+- `sim.profile(kind='loop')` runs the sim timing every call, and shows where the time went, by module and method (as `sim.loop.plot_cpu()` does afterwards); `sim.loop.plot()` draws the plan itself.
 - `sim.check_dt()` reruns the sim at half the step, which shows how much the order (and every other effect of the step's length) moves the results.
 
 A compartmental run that is taken by the kernels in one call doesn't use the plan at all, which is why it is made only when it is first needed.

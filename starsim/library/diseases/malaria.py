@@ -116,7 +116,7 @@ class MalariaImmunity(ss.Disease):
         import starsim as ss
         import starsim.library as ssl
 
-        sim = ss.Sim(diseases=ssl.MalariaImmunity(C=0.1), total_pop=10_000, unit='day', stop=365*20)
+        sim = ss.Sim(diseases=ssl.MalariaImmunity(C=0.1), total_pop=10_000, unit='day', stop=ss.days(365*20))
         sim.run()
         sim.plot('malariaimmunity')
         ```

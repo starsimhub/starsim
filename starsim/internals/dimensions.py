@@ -13,7 +13,7 @@ from .parameters import by
 from ..geo import geography, gravity, radiation, Mobility
 from ..transitions import level_pair, parse_increment
 
-__all__ = ['Strat', 'Transfer', 'transfer', 'Groups']
+__all__ = ['Strat', 'Transfer', 'transfer', 'levels', 'Groups']
 
 
 def level_dtype(n):
@@ -44,24 +44,22 @@ class Strat:
         kind (str): 'age', 'space', or 'plain'; if not given, 'space' for an `ss.geo.geography` or with `mobility=`, 'age' for a dimension called age, and otherwise 'plain'
             (a strain dimension, kind 'strain', is made by `ss.Strains`: see `strains`)
         states (list): the names of the states it applies to (default: every state that is people)
-        where (dict): the groups it applies to, as a dimension and a level (or list of levels), e.g. `dict(sex='female')`; people in other groups have no level of it (default: every group)
-        mobility (gravity/radiation/Mobility/array): for a spatial stratification, the movement between its levels
+        who (Cond/dict): the groups it applies to: a condition on other dimensions, e.g. `ss.person.female` or `ss.person.age >= 15` (see `ss.levels()`), or a dict of a dimension and the positions or labels of its levels; people in other groups have no level of it (default: every group)
+        mobility (gravity/radiation/Mobility/register/array): for a spatial stratification, the movement between its levels
     """
     strains = None # For a strain dimension: the ss.Strains it is made from
 
-    def __init__(self, name, levels, fractions=None, adjust=None, kind=None, states=None, where=None, mobility=None):
+    def __init__(self, name, levels, fractions=None, adjust=None, kind=None, states=None, who=None, mobility=None):
         self.name = name
         self.geo = levels if isinstance(levels, geography) else None
         self.kind = kind or ('space' if (self.geo is not None or mobility is not None) else 'age' if name == 'age' else 'plain')
         self.guessed = sc.obj()
         self.states = states
-        if where is not None and not isinstance(where, dict):
-            errormsg = f'where= takes a dict of a dimension and its level (or levels), e.g. dict(sex="female"), not {type(where).__name__}'
-            raise TypeError(errormsg)
-        if where and self.kind in ['space', 'strain']:
-            errormsg = f'where= is for a property of people such as age or risk, but "{name}" is of kind "{self.kind}"; a {"place" if self.kind == "space" else "strain"} is one that everyone (or every infection) has'
+        if who is not None and self.kind in ['space', 'strain']:
+            errormsg = f'who= is for a property of people such as age or risk, but "{name}" is of kind "{self.kind}"; a {"place" if self.kind == "space" else "strain"} is one that everyone (or every infection) has'
             raise ValueError(errormsg)
-        self.where = dict(where) if where else None
+        self.who_given = None if who is None or isinstance(who, dict) else repr(who) # As given, for what the sim says
+        self.who = who_dims(who, name) if who is not None else None
         if self.geo is not None:
             levels = self.geo.names
             if fractions is None and self.geo.populations is not None:
@@ -74,11 +72,13 @@ class Strat:
             if all(isinstance(v, str) and is_number(v) for v in levels): # Keys that are numbers as strings, as from R, JSON, or YAML, e.g. {'0': 0.3, '15': 0.6, '65': 0.1}
                 levels = [float(v) for v in levels]
         if isinstance(mobility, (list, tuple)) and any(isinstance(m, (Mobility, gravity, radiation)) for m in mobility):
-            errormsg = f'mobility= takes one movement for "{name}", not {len(mobility)}; movements of one kind can be combined by adding their matrices (ss.geo.Mobility(matrix=M1 + M2)), but several kinds at once (e.g. a register and commuting) are not supported'
+            errormsg = f'mobility= takes one movement for "{name}", not {len(mobility)}; movements of one kind can be combined by adding their matrices (ss.geo.Mobility(M1 + M2)), but several kinds at once (e.g. a register and commuting) are not supported'
             raise TypeError(errormsg)
-        if mobility is not None and not isinstance(mobility, Mobility): # A movement model or a matrix on its own is commuting
-            mobility = Mobility(mobility) if isinstance(mobility, (gravity, radiation)) else Mobility(matrix=mobility)
-            self.guessed['mobility'] = 'commuting, since kind= was not given'
+        if mobility is not None and not isinstance(mobility, Mobility): # A movement model, or a matrix on its own, which is commuting
+            given = getattr(mobility, 'kind', None)
+            mobility = Mobility.from_model(mobility) if isinstance(mobility, (gravity, radiation)) else Mobility(matrix=mobility)
+            if given is None:
+                self.guessed['mobility'] = 'commuting, since kind= was not given'
         if mobility is not None and mobility.guessed:
             self.guessed['mobility'] = sc.strjoin([self.guessed['mobility'], mobility.guessed]) if 'mobility' in self.guessed else mobility.guessed
         if mobility is not None and self.kind != 'space':
@@ -127,7 +127,7 @@ class Strat:
         if fractions is not None:
             fractions = np.array(fractions, dtype=float)
             if len(fractions) != self.n:
-                raise ValueError(f'fractions= has {len(fractions)} entries, but "{name}" has {self.n} levels ({sc.strjoin(self.labels)}).')
+                raise ValueError(f'the shares of "{name}" have {len(fractions)} entries, but it has {self.n} levels ({sc.strjoin(self.labels)}).')
             if not np.isclose(fractions.sum(), 1):
                 self.guessed['fractions'] = f'normalized, since it summed to {fractions.sum():n}'
                 fractions = fractions/fractions.sum()
@@ -271,7 +271,7 @@ class Strat:
 
     def same_as(self, other):
         """ Whether another stratification is this one given again: the same levels, kind, split, adjustments, and states """
-        same = self.same_levels(other) and self.kind == other.kind and self.states == other.states and self.where == other.where
+        same = self.same_levels(other) and self.kind == other.kind and self.states == other.states and repr(self.who) == repr(other.who)
         same = same and np.allclose(self.fractions, other.fractions) and list(self.adjust.keys()) == list(other.adjust.keys())
         return same and all(np.allclose(self.adjust[key], other.adjust[key]) for key in self.adjust)
 
@@ -282,10 +282,11 @@ class Transfer:
 
     It exists so that movement such as aging or moving between risk groups is declared beside the disease, not as one transition per state.
     """
-    def __init__(self, rate=None, dur=None, p=None, states=None, name=None, label=None, increment=None, **kwargs):
+    def __init__(self, move=None, rate=None, dur=None, p=None, states=None, name=None, label=None, increment=None):
         increment = parse_increment(increment, 'ss.transfer()')
-        if len(kwargs) + len(increment or {}) != 1:
-            errormsg = f'ss.transfer() takes one dimension, e.g. ss.transfer(risk=("low", "high"), rate=0.1) or ss.transfer(increment="doses", rate=0.1), not {list(kwargs.keys()) + list(increment or {})}'
+        move = dict(move or {})
+        if len(move) + len(increment or {}) != 1:
+            errormsg = f'ss.transfer() takes one dimension, e.g. ss.transfer(dict(risk=("low", "high")), rate=0.1) or ss.transfer(increment="doses", rate=0.1), not {list(move.keys()) + list(increment or {})}'
             raise ValueError(errormsg)
         if (rate is None) == (dur is None):
             errormsg = 'ss.transfer() takes exactly one of rate= or dur='
@@ -295,7 +296,7 @@ class Transfer:
             self.dim, self.increment = list(increment.items())[0]
             target = None
         else:
-            self.dim, target = list(kwargs.items())[0]
+            self.dim, target = list(move.items())[0]
         src, self.dst = level_pair(target, 'ss.transfer()') # From a level, or from every other level
         if src is not None and len(src) != 1:
             errormsg = f'ss.transfer() moves people from one level (or from every other level, if only the level they move to is given), not from {src}; give one transfer for each'
@@ -303,7 +304,7 @@ class Transfer:
         self.src = None if src is None else src[0]
         self.dsts = self.dst if isinstance(self.dst, list) else [self.dst] # The levels it moves people to
         if len(self.dsts) > 1 and self.src is None:
-            errormsg = f'A transfer to one of several levels names the level people move from, as a pair, e.g. ss.transfer({self.dim}=("a", ["b", "c"]), p=[0.6, 0.4], dur=...), not {self.dim}={target!r}'
+            errormsg = f'A transfer to one of several levels names the level people move from, as a pair, e.g. ss.transfer(dict({self.dim}=("a", ["b", "c"])), p=[0.6, 0.4], dur=...), not {self.dim}={target!r}'
             raise ValueError(errormsg)
         self.p = None # With several, the probability of each, as people move
         if len(self.dsts) > 1 or p is not None:
@@ -311,8 +312,8 @@ class Transfer:
             p = p + [None] if len(p) == len(self.dsts) - 1 else p # With two levels, one value is the first one's probability
             if len(self.dsts) == 1 or len(p) != len(self.dsts) or sum(v is None for v in p) > 1:
                 what = f'{len(self.dsts)} levels to move to' if len(self.dsts) > 1 else 'one level to move to'
-                errormsg = (f'p= of ss.transfer() gives the probability of each level it moves people to, one each (or None for the rest), as people move, e.g. ss.transfer(method=("none", ["pill", "iud"]), p=[0.6, 0.4], dur=...); '
-                            f'it has {what} and p={p}. For only some people to move, give a rate (rate=), or where= on the stratification')
+                errormsg = (f'p= of ss.transfer() gives the probability of each level it moves people to, one each (or None for the rest), as people move, e.g. ss.transfer(dict(method=("none", ["pill", "iud"])), p=[0.6, 0.4], dur=...); '
+                            f'it has {what} and p={p}. For only some people to move, give a rate (rate=), or who= on the stratification (ss.levels([...], who=...))')
                 raise ValueError(errormsg)
             self.p = [None if v is None else as_expr(v) for v in p]
         self.rate = None if rate is None else as_expr(rate)
@@ -333,39 +334,43 @@ class Transfer:
     def __rand__(self, other): return other & ss.conditions.as_cond(self)
 
 
-def transfer(rate=None, dur=None, p=None, states=None, name=None, label=None, increment=None, **kwargs):
+def transfer(move=None, rate=None, dur=None, p=None, states=None, name=None, label=None, increment=None, **kwargs):
     """
     Movement between the levels of a stratification, without a change of disease state
 
     People move all the time, at a rate or after a duration, and the transfer is part of the
     model: pass it to `ss.Disease()` or `stratify()`. A move delivered to some people, at some
-    times, is a delivery: `ss.Delivery(move=dict(vaccinated=True), coverage=0.7, at=[2021])`.
+    times, is a delivery: `ss.Delivery(dict(vaccinated=True), coverage=0.7, when=2021)`.
 
     Args:
+        move (dict): the dimension, and a pair of its levels, from and to (e.g. `dict(risk=('low', 'high'))`), or the level people
+            move to, from every other level (e.g. `dict(vaccinated=True)`), as for `ss.Event(dict(...))` and `ss.Transition(move=...)`
         rate (any): the per-person hazard
         dur (any): the time before moving (instead of `rate`): a scalar is the mean of an exponential, and a distribution is drawn for each person when they reach a level it moves them from
-        p (list): with several levels to move to (`method=('none', ['pill', 'iud'])`), the probability of each, decided as people move; one may be None, for the rest
+        p (list): with several levels to move to (`dict(method=('none', ['pill', 'iud']))`), the probability of each, decided as people move; one may be None, for the rest
         states (list): the disease states it applies to (default: every state)
         name (str): the name; if not given, taken from the keyword or variable it is assigned to
         increment (str/dict): instead of a level, a counter that goes up by one (its name), or by an amount (`dict(schooling=1)`, `dict(immunity=-1)`)
-        kwargs (dict): the dimension, and a pair of its levels, from and to (e.g. `risk=('low', 'high')`),
-            or the level people move to, from every other level (e.g. `vaccinated=True`)
 
     Examples:
         ```python
-        ss.transfer(risk=('low', 'high'), rate=ss.peryear(0.1))
-        ss.transfer(vaccinated=True, rate=ss.peryear(0.2))
+        ss.transfer(dict(risk=('low', 'high')), rate=ss.peryear(0.1))
+        ss.transfer(dict(vaccinated=True), rate=ss.peryear(0.2))
         ss.transfer(increment=dict(immunity=-1), rate=ss.peryear(0.5)) # A counter, down a level at a time
-        ss.transfer(method=('none', ['pill', 'iud']), p=[0.6, 0.4], dur=ss.lognormal(ss.years(2), ss.years(1))) # To one of two levels, after a time drawn for each person
+        ss.transfer(dict(method=('none', ['pill', 'iud'])), p=[0.6, 0.4], dur=ss.lognormal(ss.years(2), ss.years(1))) # To one of two levels, after a time drawn for each person
         ```
     """
     opts = [key for key in kwargs if key in ss.interventions.delivery_keys + ['disease']]
     if opts:
         dim = next((key for key in kwargs if key not in opts), 'vaccinated')
         errormsg = (f'ss.transfer() is movement that happens all the time, at a rate (rate= or dur=); {sc.strjoin(f"{key}=" for key in opts)} {"is" if len(opts) == 1 else "are"} for a delivery. '
-                    f'A move delivered to some people is ss.Delivery(move=dict({dim}=...), ...), e.g. ss.Delivery(move=dict(vaccinated=True), coverage=0.7, at=[2021])')
+                    f'A move delivered to some people is ss.Event(dict({dim}=...), ...), e.g. ss.Delivery(dict(vaccinated=True), coverage=0.7, when=2021)')
         raise TypeError(errormsg)
-    return Transfer(rate=rate, dur=dur, p=p, states=states, name=name, label=label, increment=increment, **kwargs)
+    if kwargs: # A dimension as a keyword
+        dims = ', '.join(f'{k}={v!r}' for k,v in kwargs.items())
+        errormsg = f'ss.transfer() takes the dimension and its levels as a dict, as ss.Event() does: ss.transfer(dict({dims}), ...), not as keywords'
+        raise TypeError(errormsg)
+    return Transfer(move=move, rate=rate, dur=dur, p=p, states=states, name=name, label=label, increment=increment)
 
 
 def transfer_stages(sim, mod, tf, strat):
@@ -387,20 +392,173 @@ def transfer_stages(sim, mod, tf, strat):
         levels = [i for i,j in enumerate(strat.shifted(tf.increment)) if i != j]
     else:
         levels = [strat.index(tf.src)] if tf.src is not None else [i for i in range(strat.n) if i != strat.index(tf.dst)]
-    out = Strat(f'{tf.name}_stage', [f'stage {i+1}' for i in range(k)], fractions=[1.0] + [0.0]*(k - 1), states=tf.states, where={tf.dim:levels})
+    out = Strat(f'{tf.name}_stage', [f'stage {i+1}' for i in range(k)], fractions=[1.0] + [0.0]*(k - 1), states=tf.states, who={tf.dim:levels})
     out.owner = mod.name
     out.stages_of = (mod.name, tf.name)
     out.dwell = sc.obj(mean=mean, std=std, k=k, family=type(raw).__name__, exact=trans.exact_stages(raw) is not None) # For the note on how close the stages are: see ss.solvers.Engine.note_stages()
     return out
 
 
-strat_options = ['fractions', 'adjust', 'kind', 'states', 'where', 'mobility']
+class levels(sc.prettyobj):
+    """
+    The levels of a stratification, with the options that are needed less often; for `stratify()`
+
+    A dimension is usually given by its levels alone, e.g. `sir.stratify(age={0: 0.3, 15: 0.6, 65: 0.1}, risk=['low', 'high'])`
+    (a dict gives the share of the population in each level; a list, levels whose shares are guessed). `ss.levels()` adds the rest.
+
+    Args:
+        levels (list/dict/geography): bin edges (for a continuous property such as age) or labels, a dict of the share of the population in each, or an `ss.geo.geography`
+        states (list): the states the dimension applies to (default: every state that is people)
+        who (Cond): the groups the dimension applies to, as a condition on other dimensions, e.g. `ss.person.female`, `ss.person.age >= 15`, `ss.person.risk == 'high'`, `ss.person.region.isin(['north', 'east'])`, or several joined with `&`; people in other groups have no level of it, so selecting a level of it leaves them out (default: every group)
+        kind (str): 'age', 'space', or 'plain'; if not given, from the levels: 'space' for an `ss.geo.geography` or with `mobility=`, 'age' for `age=`, and otherwise 'plain' (whatever the name); strains are `strains=ss.Strains(...)` on the disease
+        mobility (gravity/radiation/Mobility/array): for a place (e.g. `patch=`), the movement between its levels: `ss.geo.gravity()`, `ss.geo.radiation()`, `ss.geo.Mobility()`, or a matrix
+        fractions (`ss.by`): for shares that depend on other dimensions, the share of people at each combination of their levels and this dimension's, as a table over all of them, e.g. `risk=ss.levels(['low', 'high'], fractions=ss.by(np.array([[0.45, 0.05], [0.2, 0.3]]), dims=['age', 'risk']))`, a row for each level of age and a column for each level of risk (the shares in each level, if they do not depend on anything else, are the levels as a dict)
+
+    Examples:
+        ```python
+        sir.stratify(severity=ss.levels({'mild': 0.9, 'severe': 0.1}, states=[I]))
+        sir.stratify(sex=['female', 'male'], parity=ss.levels(['0', '1-2', '3+'], who=ss.person.female)) # Only women have a parity
+        sir.stratify(patch=ss.levels(geo, mobility=ss.geo.gravity(away=0.1)))
+        ```
+    """
+    def __init__(self, levels, states=None, who=None, kind=None, mobility=None, fractions=None):
+        if isinstance(levels, globals()['levels']):
+            errormsg = 'ss.levels() takes the levels themselves (a list, a dict of shares, or a geography), not another ss.levels()'
+            raise TypeError(errormsg)
+        if fractions is not None and not isinstance(fractions, by):
+            errormsg = f'ss.levels(fractions=) is for shares that depend on other dimensions, as an ss.by(); shares of their own are the levels as a dict, e.g. ss.levels({{"low": 0.8, "high": 0.2}}), not fractions={fractions!r}'
+            raise TypeError(errormsg)
+        check_kind(kind)
+        if isinstance(who, dict):
+            dim, level = next(iter(who.items()), ('sex', 'female'))
+            errormsg = f'who= is a condition on other dimensions, e.g. who=ss.person.{dim} == {level!r}, not a dict'
+            raise TypeError(errormsg)
+        self.levels = levels
+        self.options = dict(states=states, who=who, kind=kind, mobility=mobility, fractions=fractions)
+        return
+
+    def __repr__(self):
+        return f'ss.levels({self.levels!r}' + ''.join(f', {key}={val!r}' for key,val in self.options.items() if val is not None) + ')'
+
+
+def who_dims(who, name=None):
+    """
+    The groups a dimension applies to (`ss.levels(who=)`), as a dict of each dimension it reads and what of it: a list of
+    comparisons `(op, value)` on its levels, for a condition (see `who_levels()`), or the positions or labels of its levels, for a dict
+
+    Args:
+        who (Cond/dict): a condition on other dimensions, joined with `&` (e.g. `ss.person.female & (ss.person.age >= 15)`), or a dict
+        name (str): the dimension it is for, for messages
+    """
+    if isinstance(who, dict): # Positions or labels by dimension, as made inside Starsim (e.g. for the stages of a transfer)
+        return dict(who)
+    Cond = ss.conditions.Cond
+    out = {}
+    example = 'e.g. ss.person.female, ss.person.age >= 15, ss.person.risk == "high", or ss.person.region.isin(["north", "east"]), joined with &'
+    def prop(x):
+        """ The dimension a leaf names (ss.person.<name>, or a disease's own dimension), or None """
+        return x.args[0] if isinstance(x, Cond) and x.op in ['people', 'dim'] else None
+    def walk(cond, negate=False):
+        if isinstance(cond, Cond) and cond.op == '&' and not negate:
+            walk(cond.args[0])
+            walk(cond.args[1])
+            return
+        if isinstance(cond, Cond) and cond.op == '~':
+            return walk(cond.args[0], negate=not negate)
+        dim = prop(cond)
+        if dim is not None: # On its own: true for every level but the first (for people.female, the level of women)
+            out.setdefault(dim, []).append(('==', not negate))
+            return
+        if isinstance(cond, Cond) and cond.op == 'isin' and prop(cond.args[0]) is not None and not negate:
+            out.setdefault(prop(cond.args[0]), []).append(('isin', tuple(cond.args[1])))
+            return
+        if isinstance(cond, Cond) and cond.op in ss.conditions.comparisons and not negate:
+            a, b = cond.args
+            flip = {'<':'>', '>':'<', '<=':'>=', '>=':'<=', '==':'==', '!=':'!='}
+            if prop(a) is not None and not isinstance(b, Cond):
+                out.setdefault(prop(a), []).append((cond.op, b))
+                return
+            elif prop(b) is not None and not isinstance(a, Cond):
+                out.setdefault(prop(b), []).append((flip[cond.op], a))
+                return
+        errormsg = f'who= of "{name}" is a condition on the levels of other dimensions, {example}; {cond!r} is not one'
+        raise TypeError(errormsg)
+    walk(who)
+    if name in out:
+        errormsg = f'The who= of "{name}" refers to "{name}" itself'
+        raise ValueError(errormsg)
+    return out
+
+
+def who_levels(strat, spec, owner):
+    """
+    The positions of the levels of a dimension that a `who=` selects
+
+    Args:
+        strat (`Strat`): the dimension the condition reads
+        spec (list): what `who_dims()` gives for it: comparisons `(op, value)`, all of which hold; or the positions or labels of its levels
+        owner (str): the dimension with the `who=`, for messages
+    """
+    if not (isinstance(spec, list) and all(isinstance(c, tuple) and len(c) == 2 and (c[0] in ss.conditions.comparisons or c[0] == 'isin') for c in spec)):
+        return [strat.index(level) for level in sc.tolist(spec)]
+    mask = np.ones(strat.n, dtype=bool)
+    for op,value in spec:
+        if op == 'isin':
+            mask &= np.isin(np.arange(strat.n), [strat.index(v) for v in value])
+        elif isinstance(value, (bool, np.bool_)) and strat.female is not None: # people.female, of a dimension called sex
+            mask &= (np.arange(strat.n) == strat.female) == value
+        elif isinstance(value, (bool, np.bool_)) and value not in strat.labels: # A dimension on its own: every level but the first
+            mask &= (np.arange(strat.n) > 0) == value
+        elif strat.edges is not None and sc.isnumber(value) and not isinstance(value, (bool, np.bool_)): # A binned dimension, compared with one of its edges
+            edge = ss.conditions.on_edge(strat, value)
+            if edge is None or op in ['==', '!=']:
+                errormsg = f'The who= of "{owner}" compares "{strat.name}" with {value:n}, which {"is not an edge of its bins" if edge is None else "is a number, not a bin"} ({sc.strjoin(strat.labels)}); use an edge (e.g. ss.person.{strat.name} >= {strat.edges[-1]:n}) or a bin by its label'
+                raise ValueError(errormsg)
+            k = int(np.flatnonzero(strat.edges == edge)[0])
+            mask &= (np.arange(strat.n) < k) if op in ['<', '<='] else (np.arange(strat.n) >= k)
+        else: # A level by its label (or position)
+            k = strat.index(value)
+            if op not in ['==', '!=']:
+                errormsg = f'The who= of "{owner}" compares the levels of "{strat.name}" ({sc.strjoin(strat.labels)}) with {op}; give levels by label, e.g. ss.person.{strat.name} == {strat.labels[0]!r}, or several with .isin([...])'
+                raise ValueError(errormsg)
+            mask &= (np.arange(strat.n) == k) == (op == '==')
+    return list(np.flatnonzero(mask))
+
+
+replaced_options = dict( # The options that stratify() took beside the dimensions, now in ss.levels() (or replaced), and how to tell the old use from a dimension of that name
+    fractions = lambda v, n: isinstance(v, by) or (n > 0 and isinstance(v, (list, tuple, np.ndarray)) and all(sc.isnumber(x) for x in v) and np.isclose(np.sum(v), 1)),
+    adjust = lambda v, n: isinstance(v, dict) and any(isinstance(x, (list, tuple, np.ndarray)) for x in v.values()),
+    kind = lambda v, n: isinstance(v, str),
+    where = lambda v, n: isinstance(v, dict) and not all(sc.isnumber(x) for x in v.values()),
+    states = lambda v, n: n > 0 and any(isinstance(x, ss.State) for x in sc.tolist(v)),
+    mobility = lambda v, n: isinstance(v, (Mobility, gravity, radiation, np.ndarray)),
+)
+
+
+def check_replaced(kwargs):
+    """ An error for an option that stratify() took beside the dimensions, now in `ss.levels()`; a dimension can have the name of one, so only a value of the old kind is an error """
+    for key,old in replaced_options.items():
+        if key in kwargs and old(kwargs[key], len(kwargs) - 1):
+            dim = next((k for k in kwargs if k not in replaced_options), 'risk')
+            if key == 'adjust':
+                fix = f'a value by level, ss.by({dim}=[...]), in the rate (S >> I @ beta*ss.by({dim}=[1, 3])*I), or ss.modify(sir.infection, multiply=ss.by({dim}=[1, 3])) for a disease already written'
+            elif key == 'fractions':
+                fix = f'the levels as a dict of their shares, e.g. {dim}={{"low": 0.8, "high": 0.2}}' + (f', or ss.levels([...], fractions=ss.by(table, dims=[..., {dim!r}])) for shares that depend on other dimensions (the share of people at each combination of their levels)' if isinstance(kwargs[key], by) else '')
+            elif key == 'where':
+                fix = f'{dim}=ss.levels([...], who=<a condition on other dimensions>), e.g. who=ss.person.female'
+            else:
+                fix = f'{dim}=ss.levels([...], {key}=...)'
+            errormsg = f'stratify() takes only dimensions; {key}= is now {fix}'
+            raise TypeError(errormsg)
+    return
+
+
 place_names = ['patch', 'region', 'district', 'county', 'province', 'place', 'location'] # Names that suggest places, which a list of names alone does not make (see Strat)
 strat_kinds = ['age', 'space', 'plain'] # The kinds stratify() takes (a strain dimension is made by ss.Strains, and a disease one by the solvers)
 
 
 def check_kind(kind):
-    """ Check the kind= given to stratify() """
+    """ Check the kind= given to ss.levels() """
     if kind is not None and kind not in strat_kinds:
         errormsg = f'kind="{kind}" is not a kind of stratification; the kinds are {sc.strjoin([repr(k) for k in strat_kinds], sep=", ")} (or leave it out to have it guessed)'
         raise ValueError(errormsg)
@@ -408,7 +566,7 @@ def check_kind(kind):
 
 
 def adjusts(graph, key):
-    """ What `adjust=` names in a module's graph, without its module's name: `rel_trans` or `rel_sus`, a transition (`'infection'`), or one destination of a transition with several (`'outcome.dead'`); the name may begin with the module's (`'flu.infection'`); None if neither """
+    """ What an adjustment by level names in a module's graph, without its module's name: `rel_trans` or `rel_sus`, a transition (`'infection'`), or one destination of a transition with several (`'outcome.dead'`); the name may begin with the module's (`'flu.infection'`); None if neither """
     found = lambda name: name in ['rel_trans', 'rel_sus'] or name in graph.transitions or graph.destination(name) is not None
     if found(key):
         return key
@@ -421,9 +579,8 @@ def parse_stratify(kwargs, graphs, sim=False):
     The one parser of the arguments of `stratify()`, for a module, a sim, or `ss.Sim(stratify=...)`: returns the new
     stratifications and (for a module) the transfers
 
-    Every keyword that is not an option is a dimension, with its levels. A sim's stratification applies to the graphs of all
-    its declared modules, which `states=` and `adjust=` are checked against: `adjust=` names a transition by its name, if only
-    one module has it, or as e.g. 'flu.infection'.
+    Every keyword is a dimension, with its levels (or an `ss.levels()` with its options), or for a module a transfer. A sim's
+    stratification applies to the graphs of all its declared modules, which `states=` is checked against.
 
     Args:
         kwargs (dict): the arguments
@@ -431,48 +588,35 @@ def parse_stratify(kwargs, graphs, sim=False):
         sim (bool): whether it is the sim's stratification
     """
     kwargs = dict(kwargs)
-    opts = {key:kwargs.pop(key, None) for key in strat_options}
-    if opts['kind'] == 'strain':
-        errormsg = 'strains are part of the disease, not a stratification: ss.Disease(..., strains=ss.Strains(["A", "B"], ...)), which takes the split, the values of each strain, and the protection between them (immunity=)'
-        raise ValueError(errormsg)
-    check_kind(opts['kind'])
+    check_replaced(kwargs)
     misplaced = [key for key in kwargs if key in ['inplace', 'frame']]
     if misplaced:
         errormsg = f'{sc.strjoin(misplaced)} is not an option of {"sim.stratify() or ss.Sim(stratify=...)" if sim else "stratify() here"}, and cannot be the name of a dimension'
         raise ValueError(errormsg)
     dims = {k:v for k,v in kwargs.items() if not isinstance(v, Transfer)}
     transfers = {k:v for k,v in kwargs.items() if isinstance(v, Transfer)}
-    given = [key for key,val in opts.items() if val is not None]
     if not dims and not transfers:
-        errormsg = f'stratify() needs a dimension and its levels, e.g. stratify(age=[0, 15, 65]); it was given only {sc.strjoin(given) or "nothing"}'
+        errormsg = 'stratify() needs a dimension and its levels, e.g. stratify(age=[0, 15, 65])'
         raise ValueError(errormsg)
     if transfers and sim:
         errormsg = f'A transfer ({sc.strjoin(transfers)}) belongs to a disease: pass it to that disease\'s stratify()'
         raise ValueError(errormsg)
-    if len(dims) > 1 and given:
-        errormsg = f'When using {sc.strjoin(f"{key}=" for key in given)}, give one dimension per call to stratify(), so it is clear which one they belong to'
-        raise ValueError(errormsg)
     names = lambda key: {name for g in graphs for name in getattr(g, key)}
-    states = opts['states']
-    if states is not None:
-        states = opts['states'] = [s if isinstance(s, str) else s.name for s in sc.tolist(states)]
-        for name in states:
-            if graphs and name not in names('states'):
-                where = f'"{graphs[0].module.name}" does not have. Its states are' if not sim else 'no module in the sim has. The states are'
-                raise sc.KeyNotFoundError(f'states= names a state "{name}" that {where} {sc.strjoin(names("states"))}{did_you_mean(name, names("states"))}')
-    adjust = opts['adjust'] or {}
-    for key in adjust:
-        if key in ['rel_trans', 'rel_sus'] or not graphs:
-            continue
-        having = [g for g in graphs if adjusts(g, key) is not None]
-        if len(having) != 1:
-            options = [f'{g.module.name}.{t}' if sim else t for g in graphs for t in list(g.transitions) + g.destinations()]
-            what = 'names a transition' if not having else 'names a transition of more than one module,'
-            whose = f'"{graphs[0].module.name}" does not have. Its transitions are' if not sim else 'no single module has. The transitions are'
-            raise sc.KeyNotFoundError(f'adjust= {what} "{key}" that {whose} {sc.strjoin(options)} (and it can also adjust rel_trans and rel_sus).')
     strats = []
-    for name,levels in dims.items():
-        strat = Strat(name, levels, **opts)
+    for name,given in dims.items():
+        opts = dict(given.options) if isinstance(given, levels) else {}
+        values = given.levels if isinstance(given, levels) else given
+        if opts.get('kind') == 'strain':
+            errormsg = 'strains are part of the disease, not a stratification: ss.Disease(..., strains=ss.Strains(["A", "B"], ...)), which takes the split, the values of each strain, and the protection between them (immunity=)'
+            raise ValueError(errormsg)
+        check_kind(opts.get('kind'))
+        if opts.get('states') is not None:
+            opts['states'] = [st if isinstance(st, str) else st.name for st in sc.tolist(opts['states'])]
+            for state in opts['states']:
+                if graphs and state not in names('states'):
+                    where = f'"{graphs[0].module.name}" does not have. Its states are' if not sim else 'no module in the sim has. The states are'
+                    raise sc.KeyNotFoundError(f'states= of "{name}" names a state "{state}" that {where} {sc.strjoin(names("states"))}{did_you_mean(state, names("states"))}')
+        strat = Strat(name, values, **{k:v for k,v in opts.items() if v is not None})
         sets = [str(label).split('+') for label in strat.labels]
         if any(len(parts) > 1 and all(part.strip() in strat.labels for part in parts) for parts in sets): # A level that is other levels carried together
             errormsg = f'"{name}" has a level that joins others with "+" ({sc.strjoin(strat.labels)}): sets of strains carried together are made by ss.Strains, e.g. ss.Disease(..., strains=ss.Strains({[label for label,parts in zip(strat.labels, sets) if len(parts) == 1]}, max_strains=2))'
@@ -509,10 +653,8 @@ class Groups(sc.prettyobj):
         self.version += 1
         strats = sc.obj()
         self.sim_strats = [] # The ones given to the sim, which apply to every module
-        for call in sc.tolist(sim.pars.stratify):
-            for strat in parse_stratify(call, graphs=[mod.graph for mod in sim.declared], sim=True)[0]:
-                if strat.name in strats:
-                    raise ValueError(f'the sim is already stratified by "{strat.name}".')
+        if sim.pars.stratify:
+            for strat in parse_stratify(ss.diseases.check_stratify(sim.pars.stratify, 'ss.Sim'), graphs=[mod.graph for mod in sim.declared], sim=True)[0]:
                 strats[strat.name] = strat
                 self.sim_strats.append(strat)
         for strat in strats.values(): # An age group nobody is in: the edges are lower edges, so [0, 15, 120] has a group 120+
@@ -583,7 +725,6 @@ class Groups(sc.prettyobj):
         pops = [strat for strat in self.strats if strat.geo is not None and strat.geo.populations is not None]
         if len(pops) == 1 and 'total_pop' not in sim.given and sim.pop_from is None: # Places with populations, and no other population size: their total
             sim.pars.total_pop = float(pops[0].geo.populations.sum())
-            sim.pars.pop_scale = sim.pars.total_pop/sim.pars.n_agents
             sim.pop_from = f'the places of "{pops[0].name}"'
         self.group_shape = tuple(strat.n for strat in self.strats)
         self.group_mults = np.cumprod((self.group_shape + (1,))[::-1])[::-1][1:] # How far apart adjacent levels of each dimension are, in groups
@@ -595,7 +736,7 @@ class Groups(sc.prettyobj):
             strat.dim = d
         joints = [strat for strat in self.strats if strat.joint is not None and strat.states is None] # A split over several dimensions of some states only is the share entering each level: see below
         if len(joints) > 1:
-            errormsg = 'Only one fractions= can cover several dimensions at once'
+            errormsg = 'Only one ss.levels(fractions=) can cover several dimensions at once'
             raise ValueError(errormsg)
         self.joint = None # For a split over several dimensions at once: their positions, and the share of people at each combination of their levels
         for strat in [strat for strat in self.strats if strat.joint is not None and strat.name not in strat.joint.dims]: # E.g. fractions=ss.by(sex=dict(female=[...], male=[...]))
@@ -710,35 +851,40 @@ class Groups(sc.prettyobj):
 
     def init_ragged(self):
         """
-        For a dimension with `where=` (e.g. age groups for women only): which groups have a level of it
+        For a dimension with `who=` (e.g. age groups for women only): which groups have a level of it
 
         The groups stay a grid, with a level of every dimension. People in a group outside a
-        dimension's `where=` have no level of it, so they are all counted at its first level
+        dimension's `who=` have no level of it, so they are all counted at its first level
         (the "fold" of their group), as people in a state that a dimension does not apply to are;
         the groups at its other levels stay empty.
         """
         coords = self.group_coords.copy()
         inside = np.ones(coords.shape, dtype=bool) # Whether each group (rows) has a level of each dimension (columns)
-        pending = [d for d,strat in enumerate(self.strats) if getattr(strat, 'where', None)]
+        pending = [d for d,strat in enumerate(self.strats) if getattr(strat, 'who', None)]
         names = [strat.name for strat in self.strats]
+        sexes = [strat.name for strat in self.strats if strat.female is not None] # people.female is the level of women of a dimension called sex
         for d in pending:
-            for dim in self.strats[d].where:
+            strat = self.strats[d]
+            if 'female' in strat.who and 'female' not in names and sexes: # Read from the dimension called sex
+                strat.who = {(sexes[0] if dim == 'female' else dim):spec for dim,spec in strat.who.items()}
+            for dim in strat.who:
                 if dim not in names:
-                    raise sc.KeyNotFoundError(f'"{self.strats[d].name}" is stratified where {dim} is given, but the model is not stratified by "{dim}". Add e.g. sim.stratify({dim}=[...]).')
-                if dim == self.strats[d].name:
-                    errormsg = f'The where= of "{dim}" refers to "{dim}" itself'
+                    example = "sex=['female', 'male']" if dim == 'female' else f'{dim}=[...]'
+                    raise sc.KeyNotFoundError(f'"{strat.name}" is stratified for the people where {strat.who_given or dim} holds, but the model is not stratified by "{"sex" if dim == "female" else dim}". Add e.g. sim.stratify({example}).')
+                if dim == strat.name:
+                    errormsg = f'The who= of "{dim}" refers to "{dim}" itself'
                     raise ValueError(errormsg)
-        while pending: # A dimension whose where= refers to another with a where= is worked out after it
-            ready = [d for d in pending if not any(names.index(dim) in pending for dim in self.strats[d].where)]
+        while pending: # A dimension whose who= refers to another with a who= is worked out after it
+            ready = [d for d in pending if not any(names.index(dim) in pending for dim in self.strats[d].who)]
             if not ready:
-                errormsg = f'The where= of {sc.strjoin(names[d] for d in pending)} refer to each other'
+                errormsg = f'The who= of {sc.strjoin(names[d] for d in pending)} refer to each other'
                 raise ValueError(errormsg)
             for d in ready:
                 strat = self.strats[d]
                 mask = np.ones(self.n_groups, dtype=bool)
-                for dim,levels in strat.where.items():
+                for dim,spec in strat.who.items():
                     dd = names.index(dim)
-                    inds = [self.strats[dd].index(level) for level in sc.tolist(levels)]
+                    inds = who_levels(self.strats[dd], spec, strat.name)
                     mask &= np.isin(coords[:, dd], inds) & inside[:, dd]
                 inside[:, d] = mask
                 coords[~mask, d] = 0
@@ -774,7 +920,7 @@ class Groups(sc.prettyobj):
         """
         Index a grid of values over some dimensions (by position) by group: returns the grid and the index, so `grid[index]` is the value for each group
 
-        A group with no level of a dimension (outside its `where=`) takes the mean over its
+        A group with no level of a dimension (outside its `who=`) takes the mean over its
         levels, weighted by the split; or, for a number of people at each level, none.
         """
         index = []
@@ -981,13 +1127,13 @@ class Groups(sc.prettyobj):
         return groups if self.group_fold is None else self.group_fold[groups]
 
     def level_raw(self, d):
-        """ In an agent-based run: the level of every agent in one dimension (by its position), as an array indexed by UID; people outside the dimension's `where=` have a level too, which counts nothing (see `level()`) """
+        """ In an agent-based run: the level of every agent in one dimension (by its position), as an array indexed by UID; people outside the dimension's `who=` have a level too, which counts nothing (see `level()`) """
         self.group_raw()
         return self._group_cache[2][d]
 
     def level(self, dim):
         """
-        In an agent-based run: the level of every agent in one dimension, as an array indexed by UID, with -1 for people outside its `where=`, or outside the states it applies to (e.g. for a strain, people who are not infected)
+        In an agent-based run: the level of every agent in one dimension, as an array indexed by UID, with -1 for people outside its `who=`, or outside the states it applies to (e.g. for a strain, people who are not infected)
 
         Args:
             dim (str/int): the dimension, by name or position

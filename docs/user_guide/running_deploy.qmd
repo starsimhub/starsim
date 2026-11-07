@@ -25,7 +25,7 @@ def make_sim(coverage=0.5, seed=1):
     infection = S >> I @ beta*I
     recovery  = I >> R @ ss.days(8)
     measles = ss.Disease(infection, recovery, init=dict(R=0.9), init_n=dict(I=5))
-    campaign = ss.vaccinate(efficacy=0.95, coverage=coverage, at=ss.days(30))
+    campaign = ss.vaccinate(efficacy=0.95, when=ss.days(30), coverage=coverage)
     return ss.Sim(measles, interventions=campaign, total_pop=20_000, stop=ss.days(180),
                   solver='binomial', rand_seed=seed, label=f'Coverage {coverage}', verbose=0)
 
@@ -61,13 +61,13 @@ msim = ss.parallel(sim, pars=dict(beta=np.linspace(1.5, 2.3, 10)), n_runs=10)
 msim.summarize().loc['measles_infection']
 ```
 
-`workers=` limits the number of cores used (for a shared computer), and `parallel=False` runs the sims one after another, which is useful for debugging, since an error then comes with its full traceback.
+`workers=` limits the number of cores used (for a shared computer), and `workers=1` runs the sims one after another in this process, which is useful for debugging, since an error then comes with its full traceback.
 
 When the sims differ in more than parameter values, make them in a loop, or with a function (see [Running sims](running_sim.qmd#larger-projects-make_sim)), and give the list to `ss.parallel()`. If making each sim is itself slow (reading large data files, or building a large population), make them in parallel too, with `sc.parallelize()` from Sciris:
 
 ```{python}
 def make_sim(seed, coverage):
-    campaign = ss.vaccinate(efficacy=0.95, coverage=coverage, at=ss.days(30))
+    campaign = ss.vaccinate(efficacy=0.95, when=ss.days(30), coverage=coverage)
     return ss.Sim(measles, interventions=campaign, total_pop=20_000, stop=ss.days(180), solver='binomial', rand_seed=seed, label='Campaign', verbose=0)
 
 sims = sc.parallelize(make_sim, iterarg=range(1, 9), coverage=0.5) # One sim for each seed, 1 to 8
@@ -86,13 +86,13 @@ A remote computer can be used through SSH and a terminal, or from an editor on y
 NumPy and SciPy do their linear algebra with a library called BLAS, which can use many threads. Starsim sets it to one thread when it is imported: on the machines we tested, more threads didn't make Starsim faster, and they slow down starting up and starting workers. More threads can speed up large matrix calculations of your own, so you can change this:
 
 ```python
-ss.options.num_threads = 4 # For the rest of the session; use 0 to leave BLAS as it is
+ss.options.blas_threads = 4 # For the rest of the session; use 0 to leave BLAS as it is
 
-with ss.options.context(num_threads=4): # Or just for this block
+with ss.options.context(blas_threads=4): # Or just for this block
     results = my_matrix_calculation()
 ```
 
-Or set it from the shell, with `STARSIM_NUM_THREADS=4 python my_script.py`. This is separate from `ss.options.threads`, which sets the threads for Starsim's own loops over agents.
+Or set it from the shell, with `STARSIM_BLAS_THREADS=4 python my_script.py`. This is separate from `ss.options.threads`, which sets the threads for Starsim's own loops over agents.
 
 On Linux, this works at any time. On Windows and macOS, it can't change BLAS once NumPy has been imported, though workers of `ss.parallel()` still get it. This rarely matters, but if it does, import Starsim before NumPy, or set `OPENBLAS_NUM_THREADS` (`VECLIB_MAXIMUM_THREADS` on a Mac) before starting Python.
 
@@ -172,7 +172,7 @@ msim.summarize()
 
 Three things matter more on a cluster than on a laptop:
 
-- **One level of parallelism.** When the scheduler already runs many tasks at once, don't have each task start a pool of its own: use `ss.parallel(..., parallel=False)` within a task, or limit it with `workers=`. Within one sim, Starsim uses several threads only for passes over very large populations (200,000 agents or more), and never in the workers of `ss.parallel()`; `ss.options.threads = 1` (or the environment variable `STARSIM_THREADS=1`) turns them off. NumPy's linear algebra (OpenBLAS or MKL) has threads of its own, which the workers of `ss.parallel()` divide among themselves; to keep them to one, set `SCIRIS_NUM_THREADS=1` in the task's environment (e.g. in the job script), or call `sc.limit_threads(1)`. None of these limits the Numba threads that Starsim's passes use; `STARSIM_THREADS=1` does.
+- **One level of parallelism.** When the scheduler already runs many tasks at once, don't have each task start a pool of its own: use `ss.parallel(..., workers=1)` within a task, or limit it with `workers=`. Within one sim, Starsim uses several threads only for passes over very large populations (200,000 agents or more), and never in the workers of `ss.parallel()`; `ss.options.threads = 1` (or the environment variable `STARSIM_THREADS=1`) turns them off. NumPy's linear algebra (OpenBLAS or MKL) has threads of its own, which the workers of `ss.parallel()` divide among themselves; to keep them to one, set `SCIRIS_NUM_THREADS=1` in the task's environment (e.g. in the job script), or call `sc.limit_threads(1)`. None of these limits the Numba threads that Starsim's passes use; `STARSIM_THREADS=1` does.
 - **Compile once, before the runs.** Starsim's compiled code (see [Solvers and backends](running_solvers.qmd#backends)) is compiled on first use and kept on disk. Run `starsim init compile` (or `ss.compile()`) once after installing, in the shared environment or when building a container image, so that hundreds of tasks don't each compile it, or wait for each other to; `starsim init compile --check` says whether it has been done. `starsim init` compiles too, and also installs the skills for AI coding agents (see the [appendix](#appendix-the-starsim-command)).
 - **Settings from the environment.** Every option in `ss.options` can be set by an environment variable, `STARSIM_` and its name in capitals (`STARSIM_THREADS=1`, `STARSIM_VERBOSE=0`, `STARSIM_WARNINGS=error`), which is the easiest way to set it for every task of a job; the full list, with each variable, is in [Getting the most speed](running_performance.qmd#appendix-every-option).
 - **The same code everywhere.** Install the same versions of Starsim and of your own modules on every node (a container image, or a shared environment), since a saved sim needs them to load.
@@ -190,7 +190,7 @@ def run_sim(immune, coverage):
     infection = S >> I @ 1.9*I
     recovery  = I >> R @ ss.days(8)
     measles = ss.Disease(infection, recovery, init=dict(R=immune), init_n=dict(I=5))
-    campaign = ss.vaccinate(efficacy=0.95, coverage=coverage, at=ss.days(30))
+    campaign = ss.vaccinate(efficacy=0.95, when=ss.days(30), coverage=coverage)
     sim = ss.Sim(measles, interventions=campaign, total_pop=20_000, stop=ss.days(180), verbose=0)
     sim.run()
     return sim

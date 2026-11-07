@@ -38,7 +38,7 @@ control <- control.net(type = "SIS", nsims = 5, nsteps = 500, verbose = FALSE)
 sim <- netsim(est, param, init, control)
 ```
 
-In Starsim, `ss.DegreeNet` takes the same targets: a mean of 0.7 partners each (175 partnerships among 500 people), 22% with two or more, at most three, lasting 50 steps on average. With `acts=ss.freqperday(2)` (two acts a step, a day here), the disease's `beta` is per act, as EpiModel's `inf.prob`:
+In Starsim, `ss.DegreeNet` takes the same targets: a mean of 0.7 partners each (175 partnerships among 500 people), 22% with two or more, at most three, lasting 50 steps on average. With `acts=ss.perday(2)` (two acts a step, a day here), the disease's `beta` is per act, as EpiModel's `inf.prob`:
 
 ```{python}
 import starsim as ss
@@ -49,10 +49,10 @@ sis = ss.Disease(
     recovery  = ss.Transition(I, S, rate=ss.prob(0.05)),
     init_n    = dict(I=10),
 )
-partners = ss.DegreeNet(n_contacts=0.7, concurrency=0.22, max_contacts=3, dur=50, acts=ss.freqperday(2))
+partners = ss.DegreeNet(n_contacts=0.7, concurrency=0.22, max_contacts=3, dur=50, acts=ss.perday(2))
 sim = ss.Sim(sis, networks=partners, n_agents=500, stop=500, verbose=0)
 
-msim = sim.run(n_runs=10)
+msim = ss.parallel(sim, n_runs=10)
 mean_I = msim.results.sis.I.mean() # The mean of the runs, at each step
 print('Infected over the last 200 steps, on average:', round(mean_I[-200:].mean()), 'of 500')
 msim.plot()
@@ -109,7 +109,7 @@ sis = ss.Disease(
     init_n    = dict(I=10),
 )
 sim = ss.Sim(sis, networks=net, n_agents=1000, stop=300, verbose=0)
-sim.stratify(risk=['low', 'high'], fractions=[0.8, 0.2])
+sim.stratify(risk={'low': 0.8, 'high': 0.2})
 sim.run()
 
 res = sim.results.sis

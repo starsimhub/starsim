@@ -91,8 +91,8 @@ class Result(ss.arrays.BaseArr):
         timevec (array): an array of time points
         low (array): values for the lower bound
         high (array): values for the upper bound
-        kind (str): what the result is, which decides how it behaves: 'flow' (a number of events in each step, e.g. new infections; it has a cumulative total, and is summed over each period of data it is compared with), 'stock' (a quantity at each time point, e.g. the number infected), 'ratio' (one quantity divided by another, e.g. prevalence; one that keeps its numerator and denominator sums each over a period, then divides), or None for a result with no meaning over time. The kind also sets the default `scale`. By default ('auto') it is guessed from `summarize_by` if only that is given, or else from the name (`new_...` is a flow; `n_...`, `cum_...`, and `cumulative` are stocks), or else from the dtype: an integer is a count, guessed to be a flow (a count over each step, e.g. doses given), and anything else is a ratio. Give `kind='stock'` for a count of people at each time point with no such name (e.g. `ss.Result('vaccinated', dtype=int, kind='stock')`), and `kind=` for anything else the guess gets wrong
-        summarize_by (str): how the result is summarized over time (and resampled): by default ('auto'), by its kind: 'sum' for a flow, 'last' for a stock, 'mean' for a ratio, and None for none; or another way, e.g. 'mean' to average a flow over time, or any other key of `ss.Result.summarizers`
+        kind (str): what the result is, which decides how it behaves: 'flow' (a number of events in each step, e.g. new infections; it has a cumulative total, and is summed over each period of data it is compared with), 'stock' (a quantity at each time point, e.g. the number infected), 'ratio' (one quantity divided by another, e.g. prevalence or a mean; one that keeps its numerator and denominator sums each over a period, then divides), or None for a result with no meaning over time. The kind also sets the default `scale` and `summarize_by`. Required, unless the name says it: `new_...` is a flow; `n_...`, `cum_...`, and `cumulative` are stocks; and `prevalence` is a ratio (and a dtype that is not numbers, e.g. `list`, has none). The results of a declared module are made with their kind
+        summarize_by (str): how the result is summarized over time (and resampled), if not as its kind is: by default ('auto'), 'sum' for a flow, 'last' for a stock, 'mean' for a ratio, and None for none; or another way, e.g. 'mean' to average a flow over time, or any other key of `ss.Result.summarizers`
         columns (list): if provided, make a 2D result of shape `(npts, len(columns))`, with these names for the columns, e.g. `['wild', 'alpha']`
         runs (dataframe): for a result across the runs of a MultiSim: one row per run, with its `scenario` (and the values of any parameters swept); the values then have a run axis first, of shape `(n_runs, npts)`
         groups (bool): for a module written as code in a stratified sim: keep the values by group too, so they can be selected (`res.select(sex='female')`, `res.by('age')`) as a declared module's are; set them with `set_groups()`
@@ -107,7 +107,7 @@ class Result(ss.arrays.BaseArr):
 
     Examples:
         ```python
-        res = ss.Result('infection', columns=['wild', 'alpha'], shape=10)
+        res = ss.Result('infection', kind='flow', columns=['wild', 'alpha'], shape=10)
         res[3] = [20, 5] # Set the values for timestep 3
         res['alpha'][4] = 8 # Set one value for timestep 4
         res['alpha'].label # Returns 'infection (alpha)'
@@ -119,7 +119,7 @@ class Result(ss.arrays.BaseArr):
     `plot()` draws the median and a 95% interval of each scenario (`lines=True` draws every run).
 
         ```python
-        msim = sim.run(n_runs=10)
+        msim = ss.parallel(sim, n_runs=10)
         I = msim.results.sir.I # Runs by time points
         I.select(run=3) # One run, as a result of one sim
         low, mid, high = I.quantiles([0.025, 0.5, 0.975])
@@ -169,7 +169,7 @@ class Result(ss.arrays.BaseArr):
     @staticmethod
     def reserved():
         """ The attributes of every result, which a destination's flow (`res.cin.X`) cannot be named like """
-        return set(dir(Result)) | set(Result('x').__dict__)
+        return set(dir(Result)) | set(Result('x', kind=None).__dict__)
 
     def __repr__(self):
         """ Show all data """
@@ -803,25 +803,25 @@ class Result(ss.arrays.BaseArr):
     @classmethod
     def _get_kind(cls, name, kind='auto', summarize_by='auto', dtype=None):
         """
-        The kind of a result: as given (None for one with no meaning over time), or else ('auto') from how it is summarized, if that is given,
-        or else its name (`new_...` is a flow; `n_...`, `cum_...`, and `cumulative` are stocks), or else its dtype: an integer
-        is a count, so a flow (a count over each step, e.g. doses), a dtype that is not numbers (e.g. `list`) has none, and anything else is a ratio
+        The kind of a result: as given (None for one with no meaning over time), or else ('auto', not given) from its name: `new_...` is a
+        flow; `n_...`, `cum_...`, and `cumulative` are stocks; `prevalence` is a ratio; and a dtype that is not numbers (e.g. `list`) has
+        none. Any other result needs `kind=`, since a guess that is wrong (e.g. a count taken for a ratio) is not scaled by the people each agent stands for
         """
         if kind == 'auto':
-            by_summary = {v:k for k,v in cls.kinds.items()}
-            if summarize_by != 'auto' and (summarize_by is None or summarize_by in by_summary):
-                return by_summary.get(summarize_by)
             name = str(name)
             if 'new_' in name: # Not using startswith because msim results are prefixed with the module name
                 kind = 'flow'
             elif name.startswith('n_') or '_n_' in name or 'cum_' in name or 'cumulative' in name:
                 kind = 'stock'
-            elif dtype is not None and np.issubdtype(dtype, np.integer): # A count with no name to go on is likelier a count of events than of people (which is written kind='stock')
-                kind = 'flow'
+            elif name.endswith('prevalence'):
+                kind = 'ratio'
             elif dtype is not None and not np.issubdtype(dtype, np.number) and not np.issubdtype(dtype, np.bool_): # Not numbers (e.g. dtype=list or object), so nothing to summarize
                 kind = None
             else:
-                kind = 'ratio'
+                errormsg = (f'ss.Result("{name}") needs kind=, which says how it is scaled and summarized: "flow" (a number of events in each step, e.g. infections or doses), '
+                            f'"stock" (a quantity at each time point, e.g. the number infected), "ratio" (one quantity divided by another, e.g. prevalence or a mean), '
+                            f'or None (no meaning over time). Only a name that starts with new_ (a flow), n_ or cum_ (a stock), or is prevalence (a ratio) says its kind')
+                raise TypeError(errormsg)
         if kind is not None and kind not in cls.kinds:
             errormsg = f'The kind of the result "{name}" must be "flow", "stock", "ratio", or None, not "{kind}"'
             raise ValueError(errormsg)
@@ -1109,11 +1109,6 @@ class Result(ss.arrays.BaseArr):
                 data |= {f'{prefix}{key}':part[key] for key in ['low', 'high'] if part[key] is not None}
         return sc.dataframe(data, index=timevec) if set_date_index else sc.dataframe(data)
 
-    @property
-    def df(self):
-        """ The result as a dataframe: a shortcut for `to_df()` """
-        return self.to_df()
-
     def plot(self, fig=None, ax=None, label=None, lines=False, log=False, **kwargs):
         """
         Plot the result, with one line per column for a 2D result
@@ -1179,7 +1174,7 @@ class Result(ss.arrays.BaseArr):
             towns = ss.geo.geography(names=['a', 'b', 'c'], populations=[50_000, 30_000, 20_000], x=[0, 0, 40], y=[0, 30, 0])
             S, I, R = ss.states(3)
             sir = ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(10), init_n=dict(I=ss.by(patch=[10, 0, 0])))
-            sir.stratify(patch=towns, mobility=ss.geo.gravity(away=0.01))
+            sir.stratify(patch=ss.levels(towns, mobility=ss.geo.gravity(away=0.01)))
             sim = ss.Sim(sir, start='2025-01-01', stop='2025-07-01').run()
             sim.results.sir.prevalence.map() # The mean prevalence in each town over the run
             sim.results.sir.prevalence.map(n=6) # Six maps, from the start of the outbreak to its end
@@ -1532,11 +1527,6 @@ class Results(ss.ndict):
         data = {key:res.values for key,res in flat.items()}
         return sc.dataframe(data, index=timevec) if set_date_index else sc.dataframe(dict(time=timevec) | data)
 
-    @property
-    def df(self):
-        """ The results as a dataframe: a shortcut for `to_df()` """
-        return self.to_df()
-
     def walk(self):
         """ Each result, as (module name, key, result), with the module None for the sim's own results """
         for key,val in self.items():
@@ -1638,7 +1628,7 @@ class Results(ss.ndict):
 
 
 def intervention_marks(sim):
-    """ When the interventions and modifiers of a sim act, for marking on plots: those with fixed times (see `ss.Delivery.marks()` and `ss.modify.marks()`; an intervention written as code can define its own `marks()`) """
+    """ When the interventions and modifiers of a sim act, for marking on plots: those with fixed times (see `ss.Event.marks()` and `ss.modify.marks()`; an intervention written as code can define its own `marks()`) """
     mods = list(sim.interventions.values()) + [m for mods in sim.modifiers.values() for m in mods if isinstance(m, ss.modify)]
     out = []
     for mod in {id(m):m for m in mods}.values():
@@ -1961,7 +1951,7 @@ def data_times(sim, df, res=None):
     if res is not None and res.timevec is not None and len(res.timevec) != len(sim_t): # A module with a timestep of its own
         own = res.timevec
         sim_t = np.asarray(own.years if hasattr(own, 'years') else own, dtype=float)
-    if years and not dated and sim.t.is_absolute: # Numbers in a sim with dates, read as any time is: a year from 1900 on, else a time after the start (see ss.connectors.to_time())
+    if years and not dated and sim.t.is_absolute: # Numbers in a sim with dates, read as any time is: a calendar year, since the sim has a calendar (see ss.connectors.to_time())
         data_t = np.array([ss.connectors.to_time(sim, float(v)).years for v in index], dtype=float)
     else:
         data_t = date_years(tuple(index)).copy() if years else np.asarray(index, dtype=float)

@@ -105,7 +105,8 @@ class WithImports(ss.SIR):
         return new + 5
 
 for solver in ['abm', 'ode']:
-    sim = ss.Sim(WithImports(beta=ss.peryear(0.5), init_prev=0), solver=solver, n_agents=2000, dt=ss.days(7), start=2000, stop=2002, verbose=0)
+    n = dict(n_agents=2000) if solver == 'abm' else dict(total_pop=2000) # Agents, or a population of the same size as compartments
+    sim = ss.Sim(WithImports(beta=ss.peryear(0.5), init_prev=0), solver=solver, **n, dt=ss.days(7), start=2000, stop=2002, verbose=0)
     sim.run()
     print(solver, "- infections:", round(sim.results.withimports.infection.sum()))
 ```
@@ -123,7 +124,7 @@ Anything that is not transmission is a rate per person, or a duration:
 | an expression with a bare state | transmission | `S >> I @ beta*I` |
 | an expression of counts | a rate that depends on how many people are in each state | `S >> I @ beta*W.n/(W.n + K)` |
 | a function of the sim | a rate worked out at each step | `S >> I @ my_rate` |
-| a trigger, `on=` or `@ ss.on()` | a move as soon as a condition holds, or when an event happens to the person (as agents) | `U >> A @ ss.on(ss.person.age >= 15)` |
+| a trigger, `when=` or `@ ss.on()` | a move as soon as a condition holds, or when an event happens to the person (as agents) | `U >> A @ ss.on(ss.person.age >= 15)` |
 
 A trigger has no rate: anyone in the source state for whom the condition holds moves in the step it first holds, and an event (a transition, `tr.to(B)`, `X.enter`, `X.exit`) moves the people it happened to, in the same step. A condition on a state of another disease that may not exist yet is written by its path, `ss.ref('hpv18.X')`. See [`ss.on`](../api/transitions.qmd).
 
@@ -170,7 +171,7 @@ The distributions most used for durations are:
 | Fixed | Everyone stays exactly this long, e.g. a reporting delay | `ss.constant(ss.days(10))` |
 | Lognormal | A duration given by its mean and standard deviation, e.g. from a study | `ss.lognormal(mean=ss.days(10), std=ss.days(2))` |
 
-Any other distribution of durations works too; see [Distributions](mechanics_distributions.qmd). As agents, each person draws their own time in the state. As compartments, an Erlang distribution is run exactly, as `k` stages in a row; a fixed duration is run exactly too (as one compartment for each step people have been in the state), and so is a choice of whole numbers of steps (`ss.choice(a=ss.days([3, 4, 5]), p=[0.2, 0.5, 0.3])` with daily steps, leaving each of those compartments at its own chance; as Erlang stages instead, with a note, if it has a minimum stay of its own, `after=`, or is one of several dwell times out of the state kept apart with `where=`); and any other distribution is run as Erlang stages with the same mean and standard deviation, with a note that says so. `stages=k` on a transition (`ss.Transition(E, I, dur=ss.days(10), stages=4)`) says how many stages to use, under every solver.
+Any other distribution of durations works too; see [Distributions](mechanics_distributions.qmd). As agents, each person draws their own time in the state. As compartments, an Erlang distribution is run exactly, as `k` stages in a row; a fixed duration is run exactly too (as one compartment for each step people have been in the state), and so is a choice of whole numbers of steps (`ss.choice(a=ss.days([3, 4, 5]), p=[0.2, 0.5, 0.3])` with daily steps, leaving each of those compartments at its own chance; as Erlang stages instead, with a note, if it has a minimum stay of its own, `min_stay=`, or is one of several dwell times out of the state kept apart with `who=`); and any other distribution is run as Erlang stages with the same mean and standard deviation, with a note that says so. `stages=k` on a transition (`ss.Transition(E, I, dur=ss.days(10), stages=4)`) says how many stages to use, under every solver.
 
 ## Branching
 
@@ -204,7 +205,7 @@ res = sim.results.measles
 print('Deaths:', round(res['outcome.dead'].sum()))
 ```
 
-The long form is `ss.Transition(I, {ss.dead: 0.002, R: None}, dur=ss.days(8))`. The destinations and their shares can also be two lists, `ss.Transition(I, [ss.dead, R], p=[0.002, None], dur=ss.days(8))`, which is the same and suits destinations built by code. After `@`, the duration (or rate) must be a Starsim value (`ss.days(8)`, `ss.par(...)`), not a bare number, for Python to apply it to the dict.
+The long form is `ss.Transition(I, {ss.dead: 0.002, R: None}, dur=ss.days(8))`. Destinations built by code are a dict too, e.g. `dict(zip(dests, shares))`. After `@`, the duration (or rate) must be a Starsim value (`ss.days(8)`, `ss.par(...)`), not a bare number, for Python to apply it to the dict.
 
 **Outside the model** are where people come from and go to: `ss.unborn` for births (`ss.unborn >> S`), `ss.dead` for deaths (`I >> ss.dead`), and `ss.outside` for people who arrive or leave alive (`ss.outside >> S`, `S >> ss.outside`), who are counted as arrivals and emigrants rather than births and deaths. Someone who dies leaves the people, so is not kept in a state; the deaths so far are the cumulative flow, `res.death.cum`.
 
@@ -214,15 +215,15 @@ The shares out of one state must add up to 1; one of them can be left as `None`,
 
 Three options say who is in which state at the start, and everyone not placed elsewhere starts in the first state (`S`):
 
-- `init_prev=` is the share of people who start infected (the initial prevalence). They start in the state that an infection leads to: `I` in an SIR model, but `E` in an SEIR model, where nobody is then infectious at the start (a note says so). A number above 1 is a number of people.
+- `init_prev=` is the share of people who start infected (the initial prevalence). They start in the state that an infection leads to: `I` in an SIR model, but `E` in an SEIR model, where nobody is then infectious at the start (a note says so). It is always a share: more than 1 is an error.
 - `init=` is the share of people who start in each state, e.g. `init=dict(I=0.001, R=0.9)` for an outbreak in a population that is 90% immune.
-- `init_n=` is the number of people who start in each state, e.g. `init_n=dict(I=10)`.
+- `init_n=` is a number of people: `init_n=10` seeds 10 people as `init_prev=` does, and `init_n=dict(I=10)` is the number who start in each state.
 
 If nothing is given, a disease with transmission starts with 1% of people infected (`init_prev=0.01`), which `describe()` marks as a guess. The first state is the first one made: `ss.states('S I R')` makes them in that order. People who start in a state with a dwell time start at the beginning of their stay, as if they had just arrived: as agents each draws a whole dwell time, and as compartments they start in the first of its Erlang stages, or the first step of a fixed delay. Values can also be given by group, with `ss.by()`; see [Stratification](building_stratification.qmd#values-by-group).
 
 ## Births and deaths in a disease
 
-Births and deaths of everyone are usually given to the sim, as `demographics=`, so that the same people are born into and die from every disease ([Demographics](populations_demographics.qmd)). With one disease, they can also be declared in it: `ss.birth(S, rate=...)` is a crude birth rate into `S` (a typed rate is per person; a bare number is per year, and above 1 per 1,000 people), and `ss.death(rate=...)` with no state is a death rate in every state, read the same way. A death from one state, `ss.death(I, rate=...)`, is a rate like any other: a bare number is in the model's unit.
+Births and deaths of everyone are usually given to the sim, as `demographics=`, so that the same people are born into and die from every disease ([Demographics](populations_demographics.qmd)). With one disease, they can also be declared in it: `ss.birth(rate=...)` with no state is a crude birth rate into the first state (a typed rate is per person; a bare number is per 1,000 people per year), and `ss.death(rate=...)` with no state is a death rate in every state, read the same way. A birth into a given state, `ss.birth(S, rate=...)`, or a death from one, `ss.death(I, rate=...)`, is a rate like any other: a typed rate is per person, and a bare number is in the model's unit.
 
 New births are the supply of susceptible people that keeps measles endemic. Here is measles in a city of a million, starting from a population in which it has circulated before, so that only 7% of people are still susceptible. Since this model has values in both days and years, the unit of a bare number can't be known, so β is given as `ss.perday()`:
 
@@ -398,8 +399,8 @@ for label in ['No cross-protection', 'Cross-protection for 2 years']:
     cross = []
     if label != 'No cross-protection':
         cross = [
-            ss.modify(den1.rel_sus, multiply=0, where=den2.R & (den2.R.time_in < ss.years(2))), # Recovered from DENV-2 within 2 years
-            ss.modify(den2.rel_sus, multiply=0, where=den1.R & (den1.R.time_in < ss.years(2))),
+            ss.modify(den1.rel_sus, multiply=0, who=den2.R & (den2.R.time_in < ss.years(2))), # Recovered from DENV-2 within 2 years
+            ss.modify(den2.rel_sus, multiply=0, who=den1.R & (den1.R.time_in < ss.years(2))),
         ]
     sim = ss.Sim([den1, den2], connectors=cross, n_agents=5_000, unit='day', stop=365, verbose=0).run()
     print(label)
@@ -477,18 +478,19 @@ The parts of a module written as code (its parameters, states, results, and the 
 | Argument | What it gives | See |
 |---|---|---|
 | `source` | The source state; several states, as a list or a sum (`S + V`); or `ss.unborn` (births) or `ss.outside` (arrivals), for an inflow from outside the model | [Ways to write a transition](#ways-to-write-a-transition) |
-| `dest` | The destination state; several, for a branch decided on leaving, as a dict of each and its probability (`{D: p_death, R: None}`) or a list with `p=`; or `ss.dead` (deaths) or `ss.outside` (leaving), for an outflow | [Branching](#branching) |
+| `dest` | The destination state; several, for a branch decided on leaving, as a dict of each and its probability (`{D: p_death, R: None}`); or `ss.dead` (deaths) or `ss.outside` (leaving), for an outflow | [Branching](#branching) |
 | `rate` | A hazard: a number, a typed rate, a probability per period, an expression of states and parameters, or a function of the sim; with a bare state in it, a transmission | [Transmission](#transmission), [Other rates](#other-rates) |
 | `dur` | A dwell time instead of a rate: a duration, or a distribution of durations | [Durations](#durations) |
 | `p` | The share of people who take this transition (separate transitions out of one state), or a list of shares, one for each destination | [Branching](#branching) |
 | `stages` | The number of stages used to run the dwell time, under every solver | [Durations](#durations) |
-| `where` | Who it applies to: a condition (e.g. `ss.person.age > 30`), with a rate of 0 for everyone else; with no `rate` or `dur`, a trigger; or an event, which moves the people it happens to (or `dur` after it), as agents | [Other rates](#other-rates), [Demographics](populations_demographics.qmd) |
+| `who` | Who it applies to: a condition (e.g. `ss.person.age > 30`, or a state by its path, `'sir.I'`), with a rate of 0 for everyone else | [Other rates](#other-rates) |
+| `when` | What triggers it, instead of a rate: an event, which moves the people it happens to, or `ss.on(event, delay=...)` for a time after it (as agents); or a condition, which moves people as soon as it holds | [Other rates](#other-rates), [Demographics](populations_demographics.qmd) |
 | `move` | A change of level in a dimension as well as of state (`move=dict(risk=('low', 'high'))`), or a change of strains (`move=DS >> (DS, RIF)`) | [Stratification](building_stratification.qmd#moving-between-groups) |
 | `increment` | A counter that goes up each time the transition happens to someone (`increment='infections'`), or by another amount (`increment=dict(parity=2)`) | [Stratification](building_stratification.qmd#moving-between-groups) |
 | `min_stay` | A minimum stay: nobody takes the transition until they have been in the source state this long | |
 | `acquisition` | Whether it is an acquisition of the disease, which `rel_sus`, a product's efficacy against acquisition, and `ss.treat` act on (by default, every transmission, or the first transition out of the first state if there is none) | [Susceptibility and infectiousness](#susceptibility-and-infectiousness) |
 | `per_strain` | `True`: an event in a state the strains share with an outcome for each strain a person carries, e.g. a cure that clears some strains and not others | [Strains](#strains) |
-| `single_strain` | With a rate: each strain carried has its own rate, and the first to happen moves on as the only strain carried (the others are dropped), e.g. one of two strains progressing | [Strains](#strains) |
+| `per_strain='first'` | With a rate: each strain carried has its own rate, and the first to happen moves on as the only strain carried (the others are dropped), e.g. one of two strains progressing | [Strains](#strains) |
 | `name`, `label` | The name (by default, from the keyword or variable), and a human-readable name for plots | |
 
 ## Appendix: every argument of a state
@@ -506,4 +508,4 @@ The parts of a module written as code (its parameters, states, results, and the 
 | `keep_time` | As agents, keep the time each person entered the state (`ti_<name>`) for code to read; by default, kept only if the model reads it |
 | `label` | A human-readable name, for plots |
 
-In rates and conditions, a state also gives: `.n` (the number in it, in the same place, in a model with places), `.total` (in the whole population), `.frac` (the share of everyone in the model), `.n_infectious` (the number weighted by infectiousness), `.time_in` (the time since each person entered it), `.progress` (the share of each person's scheduled stay that has passed), and the events `.enter` and `.exit`, for `where=` and `ss.on()`.
+In rates and conditions, a state also gives: `.n` (the number in it, in the same place, in a model with places), `.total` (in the whole population), `.frac` (the share of everyone in the model), `.n_infectious` (the number weighted by infectiousness), `.time_in` (the time since each person entered it), `.progress` (the share of each person's scheduled stay that has passed), and the events `.enter` and `.exit`, for `when=` and `ss.on()`, which remember for each person, as any event does, whether (`sir.I.enter.ever`), how often (`.n_times`), and how long ago (`.since`) they happened (agents only).

@@ -13,9 +13,9 @@ def serotype(name, pars, others=(), **kwargs):
         had = ss.ref(f'{others[0]}.R')
         for other in others[1:]:
             had = had | ss.ref(f'{other}.R')
-        kwargs['cross_protection'] = ss.modify('rel_sus', multiply=1 - p['cross'], where=had)
+        kwargs['cross_protection'] = ss.modify('rel_sus', multiply=1 - p['cross'], who=had)
     S, R = ss.states('S R')
-    I = ss.State(init=p['init'], label='Infectious')
+    I = ss.State(label='Infectious')
     Sv = ss.State(people=False, label='Susceptible mosquitoes')
     Ev = ss.State(people=False, label='Infected mosquitoes, incubating')
     Iv = ss.State(people=False, label='Infectious mosquitoes')
@@ -27,13 +27,14 @@ def serotype(name, pars, others=(), **kwargs):
         incubation = Ev >> Iv @ p['eip'],
         emergence  = ss.unborn >> Sv @ p['m']*p['mu_v']*N,
         mortality  = Sv + Ev + Iv >> ss.dead @ p['mu_v'],
+        init_prev = p['init_prev'],
         name = name,
         **kwargs,
     )
 
 
 def Dengue(n_serotypes=4, cross=0.3, a=ss.perday(0.5), b=0.5, c=0.5, m=2.0,
-           dur_inf=ss.days(6), eip=ss.days(10), mu_v=ss.perday(0.1), init=0.001, **kwargs):
+           dur_inf=ss.days(6), eip=ss.days(10), mu_v=ss.perday(0.1), init_prev=0.001, **kwargs):
     """
     Dengue: several serotypes, each passed on by mosquitoes, with partial cross-protection between them
 
@@ -64,7 +65,7 @@ def Dengue(n_serotypes=4, cross=0.3, a=ss.perday(0.5), b=0.5, c=0.5, m=2.0,
         dur_inf (`ss.Duration`): the mean time a person is infectious (viremic)
         eip (`ss.Duration`): the extrinsic incubation period: the mean time from a mosquito being infected to being infectious
         mu_v (`ss.per`): the death rate of mosquitoes, which emerge at the same rate
-        init (float): the share of people who start infectious with each serotype
+        init_prev (float): the share of people who start infected (infectious) with each serotype
         kwargs (dict): passed to `ss.Disease` for each serotype
 
     Examples:
@@ -81,5 +82,5 @@ def Dengue(n_serotypes=4, cross=0.3, a=ss.perday(0.5), b=0.5, c=0.5, m=2.0,
     the sim births and deaths, which keep the serotypes returning.
     """
     names = [f'den{i + 1}' for i in range(n_serotypes)]
-    pars = dict(a=a, b=b, c=c, m=m, dur_inf=dur_inf, eip=eip, mu_v=mu_v, init=init, cross=cross)
+    pars = dict(a=a, b=b, c=c, m=m, dur_inf=dur_inf, eip=eip, mu_v=mu_v, init_prev=init_prev, cross=cross)
     return [serotype(name, pars, [other for other in names if other != name], **kwargs) for name in names]

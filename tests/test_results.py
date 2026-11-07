@@ -32,7 +32,7 @@ def test_export():
     rs2 = sim.results.sis2
 
     # A name that is not a result says so, with the closest, also in a sim given a module that was given to another sim before; the module given holds none, and says where they are
-    sim2 = ss.Sim(n_agents=small, diseases=d1, networks='random', dur=1, verbose=0).run()
+    sim2 = ss.Sim(n_agents=small, diseases=d1, networks='random', stop=ss.years(1), verbose=0).run()
     for res in [rs1, sim2.results.sis1]:
         with pytest.raises(AttributeError, match='did you mean infection'):
             res.infectionz
@@ -60,7 +60,7 @@ def test_export():
 
     # Export results of a whole module to a dataframe
     dfs = rs1.to_df()
-    assert res_df.value.sum() == rs1.infection.cum.values[-1] == sim.summary.value.sis1_infection
+    assert res_df.value.sum() == rs1.infection.cum.values[-1] == sim.summarize().value.sis1_infection
 
     # Export resampled summary of results to dataframe
     dfy1 = rs1.to_df(resample='year')
@@ -116,7 +116,7 @@ def test_2d_results():
         def record_stocks(self):
             self.results.nested.infected[self.ti] = np.count_nonzero(self.sim.diseases.sis.I)
 
-    sim = ss.Sim(n_agents=small, pop_scale=10, diseases='sis', networks='random', analyzers=[BySex(), Nested()], start=2000) # Calendar years, resampled by year below
+    sim = ss.Sim(n_agents=small, total_pop=10*small, diseases='sis', networks='random', analyzers=[BySex(), Nested()], start=2000) # Calendar years, resampled by year below
     sim.run()
     res = sim.results.bysex.infected
     assert res.shape == (sim.t.npts, 2) # One column per sex
@@ -126,11 +126,11 @@ def test_2d_results():
     assert res.to_df().columns.tolist() == ['time', 'female', 'male']
     assert 'by female, male' in repr(res) # Each column labeled (it was an unlabeled array)
     assert 'bysex_infected_male' in sim.to_df().columns # Dataframe columns for each result column
-    assert sim.summary.value.bysex_infected_male == res['male'][-1] # Summarized by column, a stock by its last value
+    assert sim.summarize().value.bysex_infected_male == res['male'][-1] # Summarized by column, a stock by its last value
     res.plot()
     sim.plot()
     with pytest.raises(ValueError):
-        ss.Result('infected', columns=['low', 'high']) # Column names can't clash with attributes
+        ss.Result('infected', kind='stock', columns=['low', 'high']) # Column names can't clash with attributes
     assert np.array_equal(sim.results.nested.nested.infected, sim.results.sis.I) # Nested results are scaled too
     return sim
 
@@ -179,25 +179,26 @@ def test_flow_ratios():
 
 @sc.timer()
 def test_summarize_by():
-    sc.heading('Testing kind and summarize_by: guessed from the name, given, None, and added')
+    sc.heading('Testing kind and summarize_by: from the name, given, required otherwise, None, and added')
     res = ss.Result('new_infections', values=np.arange(5.0))
     assert res.kind == 'flow' and res.summarize_by == 'sum' and res.summarize() == 10 and ss.Result('n_infected').kind == 'stock' and ss.Result('prevalence').summarize_by == 'mean'
     assert ss.Result('x', values=np.arange(5.0), kind='stock').summarize() == 4
-    assert ss.Result('doses', dtype=int).kind == 'flow' and ss.Result('doses').kind == 'ratio' # A count with no name to go on is a flow
+    for kw in [dict(), dict(dtype=int), dict(summarize_by='last'), dict(scale=True)]: # With no name to go on, the kind is not guessed
+        with pytest.raises(TypeError, match='needs kind='):
+            ss.Result('doses', **kw)
     assert ss.Result('new_x').scale and ss.Result('n_x').scale and not ss.Result('prevalence').scale and ss.Result('prevalence', scale=True).scale # Scaled by kind, unless told
     mean = ss.Result('x', values=np.arange(5.0), kind='flow', summarize_by='mean') # A flow summarized another way is still a flow
     assert mean.summarize() == 2 and mean.cum[-1] == 10
-    assert ss.Result('x', summarize_by='last').kind == 'stock' # The kind follows the summary if only that is given
     with pytest.raises(ValueError):
         ss.Result('x', kind='count')
-    none = ss.Result('timer', values=np.arange(5.0), summarize_by=None)
+    none = ss.Result('timer', values=np.arange(5.0), kind='ratio', summarize_by=None)
     with pytest.raises(ValueError):
         none.summarize()
     with pytest.raises(ValueError):
-        ss.Result('x', summarize_by='median')
+        ss.Result('x', kind='ratio', summarize_by='median')
     ss.Result.summarizers['max'] = lambda arr, starts, ends: np.maximum.reduceat(arr, starts, axis=0)
     try:
-        assert ss.Result('x', values=np.array([1.0, 5, 2]), summarize_by='max').summarize() == 5
+        assert ss.Result('x', values=np.array([1.0, 5, 2]), kind='stock', summarize_by='max').summarize() == 5
     finally:
         del ss.Result.summarizers['max']
 
@@ -218,10 +219,10 @@ def test_summarize_by():
     class Odd(ss.Analyzer):
         def init_results(self):
             super().init_results()
-            self.define_results(ss.Result('by_age', dtype=int, shape=(self.t.npts, 3)), ss.Result('times', dtype=list, scale=False))
+            self.define_results(ss.Result('by_age', dtype=int, kind='flow', shape=(self.t.npts, 3)), ss.Result('times', dtype=list, scale=False))
             self.results['log'] = dict(net=[[0, None]])
     sim = ss.Sim(ss.SIS(), analyzers=Odd(name='odd'), n_agents=small, stop=5, verbose=0).run()
-    assert 'sis_I' in sim.summary.index and not any(k.startswith('odd') for k in sim.summary.index)
+    assert 'sis_I' in sim.summarize().index and not any(k.startswith('odd') for k in sim.summarize().index)
     assert len(sim.summarize('odd.by_age')) == 3 # Asked for by key, it is one number per column
     return res
 
@@ -253,8 +254,8 @@ def test_standard_prevalence():
     sc.heading('Testing the standard prevalence by group, as a ratio')
     for solver in ['ode', 'binomial', 'abm']:
         sis = ss.SIS(beta=ss.peryear(0.3), init_prev=0.05)
-        sis.stratify(risk=['low', 'high'], fractions=[0.8, 0.2], adjust=dict(infection=[0.5, 3]))
-        res = ss.Sim(sis, solver=solver, total_pop=10_000, n_agents=10_000, start=2000, stop=2010, verbose=0).run().results.sis
+        sis.stratify(risk={'low': 0.8, 'high': 0.2})
+        res = ss.Sim(sis, connectors=ss.modify(sis.infection, multiply=ss.by(risk=[0.5, 3])), solver=solver, total_pop=10_000, n_agents=10_000, start=2000, stop=2010, verbose=0).run().results.sis
         high, low = res.prevalence.select(risk='high'), res.prevalence.select(risk='low')
         assert high[-1] > 2*low[-1] > 0, f'{solver}: {high[-1]:.3f} against {low[-1]:.3f}'
         assert np.allclose(res.I.select(risk='high')/(res.S.select(risk='high') + res.I.select(risk='high')), high)
@@ -326,10 +327,10 @@ def test_time_points():
 def cohort(solver, p=0.3, data=None):
     """ 10,000 people who leave P after 5 days on average: a share p to C, and the rest to R """
     P, C, R = ss.states('P C R')
-    course = ss.Transition(P, [C, R], dur=ss.days(5), p=[p, None])
+    course = ss.Transition(P, {C: p, R: None}, dur=ss.days(5))
     dis = ss.Disease(P, C, R, course=course, cases=ss.outcome(0.5*course.C), default_state='P', name='dis')
     dis.stratify(age=ss.years([0, 40]))
-    return ss.Sim(dis, n_agents=10_000, solver=solver, unit='day', stop=60, data=data, verbose=0)
+    return ss.Sim(dis, n_agents=10_000, total_pop=10_000, solver=solver, unit='day', stop=60, data=data, verbose=0)
 
 
 @sc.timer()
@@ -406,7 +407,7 @@ def test_plot():
     assert res.S.plot(fig=fig, label='S', log=True, is_jupyter=True, filename=filename) is fig
     assert len(fig.axes) == 1 and fig.axes[0].get_yscale() == 'log' and len(fig.axes[0].get_legend().get_texts()) == 2
     sc.rmpath(filename)
-    assert res.I.df.equals(res.I.to_df()) and res.df.shape == res.to_df().shape
+    assert not hasattr(res, 'df') # One way to make the table: to_df()
 
     # A flow with weekly data over part of a daily run: its weekly totals over the whole run, not only the weeks with data
     S, I, R = ss.states('S I R')
@@ -414,7 +415,7 @@ def test_plot():
     truth = make().run()
     data = truth.to_synthetic_data('sir.infection', resample='week').iloc[:6] # The first six weeks
     exact = truth.to_synthetic_data('sir.infection', resample='week', noise=None)['sir.infection'].to_numpy()
-    over = np.array([truth.to_synthetic_data('sir.infection', resample='week', noise=ss.nbinom(n=2), seed=s)['sir.infection'].to_numpy() for s in range(200)]) # Negative-binomial noise, as the likelihood of a fit takes it
+    over = np.array([truth.to_synthetic_data('sir.infection', resample='week', noise=ss.nbinom(n=2), rand_seed=s)['sir.infection'].to_numpy() for s in range(200)]) # Negative-binomial noise, as the likelihood of a fit takes it
     assert np.allclose(over.mean(axis=0), exact, rtol=0.25) and np.allclose(over.var(axis=0)[3:9], (exact + exact**2/2)[3:9], rtol=0.4)
     with pytest.raises(ValueError, match='as a probability'): # A count is not a probability (it drew n every time)
         truth.to_synthetic_data('sir.infection', noise=ss.binom(n=100))
@@ -450,9 +451,9 @@ def test_axes():
     S, I = ss.states(2)
     sis = ss.Disease(S, I, infection=S >> I @ ss.perday(0.1)*I, recovery=I >> S @ ss.perday(0.05), init_prev=0.1, name='sis')
     sis.stratify(sex=['female', 'male'])
-    msim = ss.Sim(sis, unit='day', stop=40, total_pop=1000, solver='binomial', verbose=0).run(n_runs=3)
+    msim = ss.parallel(ss.Sim(sis, unit='day', stop=40, total_pop=1000, solver='binomial', verbose=0), n_runs=3)
     res = msim.results.sis.I
-    serial = ss.Sim(sis, unit='day', stop=40, total_pop=1000, solver='binomial', verbose=0).run(n_runs=3, parallel=False) # It was a TypeError
+    serial = ss.parallel(ss.Sim(sis, unit='day', stop=40, total_pop=1000, solver='binomial', verbose=0), n_runs=3, workers=1) # It was a TypeError
     assert np.array_equal(serial.results.sis.I.values, res.values)
     by = res.by('sex')
     assert by.shape == (3, 41, 2) and np.array_equal(by.values.sum(axis=-1), res.values) and np.array_equal(by.male.values, res.select(sex='male').values) # Across runs, a column for each level
@@ -469,9 +470,9 @@ def test_axes():
 def test_parts_across_runs():
     sc.heading('Testing that the destinations and parts of a result, and a flow\'s total by name, hold across runs')
     S, I, X, R = ss.states('S I X R')
-    dis = ss.Disease(infection=S >> I @ ss.perday(0.1)*I, progress=ss.Transition(I, [X, R], dur=ss.days(5), p=[0.3, 0.7]), init_prev=0.1, name='dis')
+    dis = ss.Disease(infection=S >> I @ ss.perday(0.1)*I, progress=ss.Transition(I, {X: 0.3, R: 0.7}, dur=ss.days(5)), init_prev=0.1, name='dis')
     base = ss.Sim(dis, unit='day', stop=20, total_pop=1000, solver='binomial', verbose=0, stratify=dict(age=[0, 15]))
-    msim = ss.parallel(a=base, b=base.copy(), n_runs=2, parallel=False, verbose=0)
+    msim = ss.parallel({'a': base, 'b': base.copy()}, n_runs=2, workers=1, verbose=0)
     res = msim.results.dis.progress
     assert res.median().select(to='X').shape == (2, 21) and res.select(scenario='a').select(to='X').shape == (2, 21)
     assert np.array_equal(res.take(0).select(to='X').values, res.X.values[0]) and res.quantiles().select(to='X').shape == (6, 21)
@@ -480,7 +481,7 @@ def test_parts_across_runs():
 
     # A rate swept can be selected
     sis = ss.Sim(diseases=ss.SIS(beta=ss.peryear(2), init_prev=0.1), total_pop=500, start=2000, stop=2004, verbose=0, solver='binomial', stratify=dict(age=[0, 15]))
-    sweep = ss.parallel(sis, pars={'sis.beta': [ss.peryear(1), ss.peryear(2)]}, parallel=False, verbose=0).results.sis.I
+    sweep = ss.parallel(sis, pars={'sis.beta': [ss.peryear(1), ss.peryear(2)]}, workers=1, verbose=0).results.sis.I
     assert sweep.select(age='0-14').shape == (2, 5) and sweep.by('age').shape == (2, 5, 2) and sweep.select(beta=ss.peryear(1)).shape == (1, 5)
 
     # A flow's total, by name

@@ -90,18 +90,17 @@ After the run, the **results** are in `sim.results`, by module: for each disease
 
 ## How the solver is chosen
 
-The **solver** is the method that turns the model into numbers over time. There are six:
+The **solver** is the method that turns the model into numbers over time. There are five, some with options:
 
 | Solver | People are | Randomness |
 |---|---|---|
 | `'ode'` | Compartments, holding fractions of people | None: the expected course of the epidemic |
-| `'ide'` | Compartments, holding fractions of people | None: as `'ode'`, with each dwell time as it is rather than as stages |
 | `'binomial'` | Compartments, holding whole people | Each step, the number moving is a random draw (a chain binomial) |
 | `'gillespie'` | Compartments, holding whole people | Each event happens at a random time (exact) |
 | `'tau'` | Compartments, holding whole people | Many events at once (tau-leaping, close to exact) |
 | `'abm'` | Agents | Each person's events are random |
 
-By default (`solver='auto'`), a model runs as an ODE if every part of it can be written as compartments, and as agents if anything needs individuals: a network of individual contacts, `n_agents=`, or a module written as code that keeps a value for each person. The sim says which it chose and why, and `solver=` overrides it. Here is the same measles model run as an ODE and as agents, with two lengths of step:
+By default (`solver='auto'`), a model runs as an ODE if every part of it can be written as compartments, and as agents if anything needs individuals: a network of individual contacts, `n_agents=`, or a module written as code that keeps a value for each person. The sim says which it chose and why, and `solver=` overrides it; the options of a solver are given with its helper, e.g. `solver=ss.ode(integrator='euler')` (see [Solvers and backends](running_solvers.qmd)). Here is the same measles model run as an ODE and as agents, with two lengths of step:
 
 ```{python}
 pars = dict(total_pop=100_000, stop=ss.days(50), verbose=0)

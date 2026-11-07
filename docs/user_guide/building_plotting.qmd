@@ -89,7 +89,7 @@ msim.plot('measles.I')
 With more people susceptible (R = 2.3 at the start, instead of 1.5), the outbreak is much faster and larger. The many runs of a stochastic model are plotted as their median at each time point, with a band holding 95% of the runs; `lines=True` plots every run instead:
 
 ```{python}
-runs = sim.run(solver='binomial', n_runs=10)
+runs = ss.parallel(sim.new(solver='binomial'), n_runs=10)
 runs.plot('measles.I')                # The median and the range of 95% of the runs
 runs.plot('measles.I', lines=True)    # Every run
 ```
@@ -100,7 +100,7 @@ Plots mark when interventions act: a dashed line at each round of a delivery, an
 
 ```{python}
 def campaign(date=None):
-    vaccination = ss.vaccinate(efficacy=0.93, coverage=0.5, at=date) if date else None
+    vaccination = ss.vaccinate(efficacy=0.93, when=date, coverage=0.5) if date else None
     return ss.Sim(make_measles(0.85), interventions=vaccination, total_pop=100_000, start='2025-01-01', stop='2025-07-01', verbose=0)
 
 msim = ss.parallel({'No campaign': campaign(), '15 January': campaign('2025-01-15'), '1 February': campaign('2025-02-01')})

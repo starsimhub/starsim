@@ -35,7 +35,7 @@ It lists (`ImportIncomplete`): a parameter that differs by age group where it be
 | MEmilio | Starsim v4 | Fit |
 |---|---|---|
 | `TimeExposed` | `onset = E >> INS @ ss.days(3.2)` | Exact |
-| `TimeInfectedNoSymptoms` with `RecoveredPerInfectedNoSymptoms` | `ss.Transition(INS, [ISy, R], dur=ss.days(2), p=[0.91, 0.09])` | Exact |
+| `TimeInfectedNoSymptoms` with `RecoveredPerInfectedNoSymptoms` | `ss.Transition(INS, {ISy: 0.91, R: 0.09}, dur=ss.days(2))` | Exact |
 | `SeverePerInfectedSymptoms`, `CriticalPerSevere` | The same, one branching transition each | Exact |
 | `DeathsPerCritical` | Two transitions from `ICr` with the same `dur` and `p=0.7`, `p=0.3` (one to `R`, one to `ss.dead`) | Exact |
 | `Dead` | An outflow: the dead leave the model, and are counted from the flow (`death.cum`) | Exact |
@@ -48,7 +48,7 @@ It lists (`ImportIncomplete`): a parameter that differs by age group where it be
 | `...Confirmed` states that nothing flows into | Leave out | Exact |
 | `ICUCapacity` (unlimited by default) | Leave out unless set; otherwise a condition on `ICr.n` | Exact when unlimited |
 | `simulate(t0, tmax, dt)` | `ss.Sim(..., stop=ss.days(tmax))` (solver `ode`, RK4 with substeps) | Exact to the reference's interpolation error |
-| `MobilityGraph` with `add_node(id, model)` and `add_edge(i, j, MobilityParameters(c))`, run by `MobilitySimulation` | `dis.stratify(patch=ids, fractions=ss.by(pop/pop.sum(), dims=['age', 'patch']), mobility=ss.geo.Mobility(matrix=0.5*M, kind='commute'))` | Close: a share of time rather than an exchange, and symptomatic commuters not reduced (see below) |
+| `MobilityGraph` with `add_node(id, model)` and `add_edge(i, j, MobilityParameters(c))`, run by `MobilitySimulation` | `dis.stratify(patch=ss.levels(ids, fractions=ss.by(pop/pop.sum(), dims=['age', 'patch']), mobility=ss.geo.Mobility(matrix=0.5*M, kind='commute')))` | Close: a share of time rather than an exchange, and symptomatic commuters not reduced (see below) |
 | `UncertainValue.set_distribution(ParameterDistributionUniform(lo, hi))`, `GraphParameterStudy(graph, t0, tmax, dt, n)` | `ss.par(value, prior=ss.uniform(lo, hi))`, then `ss.parallel(sim, n_runs=n, priors=True)` | Exact in distribution (MEmilio's draws given by `pars=` agree run by run to 2%) |
 
 ## What needs care
@@ -59,7 +59,7 @@ It lists (`ImportIncomplete`): a parameter that differs by age group where it be
 - **Dampings are smoothed.** MEmilio smooths every damping along half a cosine over the day before its time: `interpolation='cosine'` matches.
 - **Seasonality's day 0.** MEmilio's day 0 is `StartDay` of a 365-day year; with no dates, `ss.seasonal` starts at the beginning of a year, so the peak is `(-StartDay/365) % 1` (the peak is a fraction of the year from 0 to 1, or a time of year such as `ss.days(305)`).
 - **Age groups are labels.** Name them as MEmilio numbers them (`'0'`, `'1'`, `'2'`); Starsim treats strings as labels and does not age anyone.
-- **A damping within a step.** The import runs in steps of a day; a value that varies in time is taken at the start, middle, and end of each step, so MEmilio's one-day smoothing of a damping is approximated within the step, and `substeps=` does not help. With `dt=0.1`, the import agrees with a tightly integrated MEmilio run to 1e-7 of the population; with steps of a day, to about 2e-4.
+- **A damping within a step.** The import runs in steps of a day; a value that varies in time is taken at the start, middle, and end of each step, so MEmilio's one-day smoothing of a damping is approximated within the step, and `ss.ode(substeps=)` does not help. With `dt=0.1`, the import agrees with a tightly integrated MEmilio run to 1e-7 of the population; with steps of a day, to about 2e-4.
 - **Commuting is a share of time, not an exchange.** MEmilio moves commuters into the other node and integrates them there for half of each day; Starsim weights each place's exposure by the time spent there. MEmilio also lets those with symptoms commute less (by `RiskOfInfectionFromSymptomatic`, its `get_mobility_factors()`), which Starsim's `ss.geo.Mobility` cannot say, and which is most of the difference: in a test of three places with that risk at 0.25, the total with symptoms agrees to 1.2% of the peak and each place to 5 to 19%; with the risk at 1, each place agrees to 1 to 3%. On the review's 50 synthetic counties, the total agrees to 0.1% and the counties by a median of 11% (worst 25%) of their peaks.
 - **A study's draws are MEmilio's.** In a `GraphParameterStudy`, every node takes the first node's drawn parameters (only `ICUCapacity` and `TestAndTraceCapacity` stay by node), which is what one set of parameters for the whole sim gives. With MEmilio's own draws given to the import (`pars=`), each run's peak agrees to 2%; over 200 runs at 50 counties, the median peak with symptoms is 10,948 against MEmilio's 10,571, in 38 s against 71 s.
 - **The reference is interpolated.** MEmilio's adaptive solver returns uneven time points; `interpolate_simulation_result()` gives whole days, with an error of about a person in 10,000. That is the floor for agreement.
@@ -78,9 +78,9 @@ risk = 0.35 - 0.1*np.cos(np.pi*excess) # From 0.25 to 0.45, along half a cosine
 secir = ss.Disease(
     infection = S >> E @ beta * contacts * (0.7 * INS + risk * ISy),
     onset     = E >> INS @ ss.days(3.2),
-    symptoms  = ss.Transition(INS, [ISy, R], dur=ss.days(2), p=[0.91, 0.09]),
-    severe    = ss.Transition(ISy, [ISev, R], dur=ss.days(5.8), p=[0.2, 0.8]),
-    critical  = ss.Transition(ISev, [ICr, R], dur=ss.days(9.5), p=[0.25, 0.75]),
+    symptoms  = ss.Transition(INS, {ISy: 0.91, R: 0.09}, dur=ss.days(2)),
+    severe    = ss.Transition(ISy, {ISev: 0.2, R: 0.8}, dur=ss.days(5.8)),
+    critical  = ss.Transition(ISev, {ICr: 0.25, R: 0.75}, dur=ss.days(9.5)),
     recovery  = ss.Transition(ICr, R, dur=ss.days(7.1), p=0.7),
     death     = ss.Transition(ICr, ss.dead, dur=ss.days(7.1), p=0.3),
     init_n    = dict(E=100, INS=50, ISy=50, ISev=20, ICr=10, R=10),

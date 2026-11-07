@@ -27,14 +27,14 @@ def test_fetal_health(do_plot=do_plot):
 
     sim_kw = dict(
         n_agents=5_000,
-        dur=ss.years(5),
+        stop=ss.years(5),
         dt=ss.years(1/12),
         rand_seed=1,
     )
     def demog():
         return [
-            ss.Pregnancy(fertility_rate=ss.time.freq(30, 'year'), burnin=True),
-            ss.Deaths(death_rate=ss.time.freq(10/1010*1000, 'year')),
+            ss.Pregnancy(fertility_rate=ss.peryear(0.03), burnin=True),
+            ss.Deaths(death_rate=ss.peryear(0.009900990099)),
         ]
     sir_kw = dict(dur_inf=ss.lognormal(mean=ss.years(6), std=ss.years(1)), beta=0.1, init_prev=0.1)
 
@@ -143,7 +143,7 @@ def test_branch_flows():
     sc.heading('Testing the flow to one destination of a split, and as an outcome, as agents and compartments')
     def make(name, beta):
         S, P, CIN, CA = ss.states('S P CIN CA')
-        cin = ss.Transition(CIN, [CA, S], p=[0.3, 0.7], dur=ss.years(2)) # A split, as HPVsim's CIN that clears or becomes cancer
+        cin = ss.Transition(CIN, {CA: 0.3, S: 0.7}, dur=ss.years(2)) # A split, as HPVsim's CIN that clears or becomes cancer
         return ss.Disease(infection=S >> P @ ss.peryear(beta)*P, progression=P >> CIN @ ss.years(1), cin=cin,
                           cancers=ss.outcome(cin.to(CA)), init_prev=0.1, name=name)
     pars = dict(start=2000, stop=2015, dt=0.25, total_pop=10_000, verbose=0)
@@ -213,7 +213,7 @@ def test_coded_par_modifiers():
     make = lambda **kwargs: ss.modify(kwargs.pop('target', 'coded.pars.rate'), **kwargs)
 
     # For everyone, code reading self.pars sees the modified value while it applies, and the base value is back after the run
-    mods = [make(target='coded.pars.level', multiply=0.5, start=2002), make(multiply=2), make(target='coded.pars.risk', set=ss.probperyear(0.6))]
+    mods = [make(target='coded.pars.level', multiply=0.5, when=ss.schedule(start=2002)), make(multiply=2), make(target='coded.pars.risk', set=ss.probperyear(0.6))]
     dis = ss.Sim(diseases=Coded(), connectors=mods, **pars).run().diseases.coded
     level, rate, risk = np.array(dis.seen).T
     assert np.allclose(level, [0.4, 0.4, 0.2, 0.2, 0.2]) # A step from each year, 2000 to 2004; the modifier applies from the one at 2002
@@ -224,12 +224,12 @@ def test_coded_par_modifiers():
 
     # For some people, code reads a value for each of them, and says so; otherwise it is refused
     where = lambda sim: sim.people.female
-    dis = ss.Sim(diseases=PerPerson(), connectors=make(target='perperson.pars.rate', set=ss.peryear(1.0), where=where), **pars).run().diseases.perperson
+    dis = ss.Sim(diseases=PerPerson(), connectors=make(target='perperson.pars.rate', set=ss.peryear(1.0), who=where), **pars).run().diseases.perperson
     ppl = dis.sim.people
     rates = dis.rates.to('year').value
     assert np.allclose(rates, np.where(ppl.female[ppl.auids], 1.0, 0.2))
     with pytest.raises(ss.CapabilityError, match='allow_modifiers'): # Only a run shows that a function differs between people
-        ss.Sim(diseases=Coded(), connectors=make(multiply=0.5, where=where), **pars).run()
+        ss.Sim(diseases=Coded(), connectors=make(multiply=0.5, who=where), **pars).run()
     with pytest.raises(ss.CapabilityError, match='allow_modifiers'):
         ss.Sim(diseases=Coded(), connectors=make(multiply=lambda sim: np.linspace(0.1, 1, len(sim.people))), **pars).run()
     with pytest.raises(ValueError, match='normal'):
@@ -239,7 +239,7 @@ def test_coded_par_modifiers():
     for solver in ['abm', 'ode']:
         sir = ss.SIR()
         kw = dict(networks='random') if solver == 'abm' else dict()
-        sim = ss.Sim(diseases=sir, connectors=ss.modify(sir.pars.beta, multiply=0.5), solver=solver, n_agents=200, start=2000, stop=2004, dt=ss.years(1), verbose=0, **kw).run()
+        sim = ss.Sim(diseases=sir, connectors=ss.modify(sir.pars.beta, multiply=0.5), solver=solver, n_agents=200, total_pop=200, start=2000, stop=2004, dt=ss.years(1), verbose=0, **kw).run()
         beta = sim.diseases.sir
         assert np.isclose(beta.current_value('beta').to('year').value, beta.pars.beta.value.to('year').value*0.5)
     return dis
@@ -268,7 +268,7 @@ def test_coded_modifiers():
             return
 
     cond = Condition(name='cond')
-    sim = ss.Sim(diseases=cond, interventions=ss.modify(cond.rel_sus, multiply=0.0, where=ss.person.female), n_agents=2000, start=2000, stop=2005, verbose=0).run()
+    sim = ss.Sim(diseases=cond, interventions=ss.modify(cond.rel_sus, multiply=0.0, who=ss.person.female), n_agents=2000, start=2000, stop=2005, verbose=0).run()
     ppl, d = sim.people, sim.diseases.cond
     assert np.all(d.affected[ppl.female.uids] == ppl.housing[ppl.female.uids]) # Only those housed: the onset of women is modified away
     assert (d.affected & ppl.male & ~ppl.housing).sum() > 100
@@ -299,7 +299,7 @@ def test_coded_modifiers():
     assert np.isclose(share, 0.9, atol=0.02), share
     S, I = ss.states('S I')
     dis = ss.Disease(S, I, infection=S >> I @ ss.peryear(1), death=I >> ss.dead @ ss.peryear(0.3), name='d')
-    sim = ss.Sim(diseases=dis, interventions=ss.modify(dis.death, multiply=0.5, where=ss.person.female), n_agents=500, start=2000, stop=2001, verbose=0).run()
+    sim = ss.Sim(diseases=dis, interventions=ss.modify(dis.death, multiply=0.5, who=ss.person.female), n_agents=500, start=2000, stop=2001, verbose=0).run()
     uids = sim.people.auids
     assert np.allclose(sim.diseases.d.death.hazard(uids), np.where(sim.people.female[uids], 0.15, 0.3))
     return sim

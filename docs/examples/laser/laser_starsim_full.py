@@ -20,9 +20,9 @@ class SIRModel(ss.Module):
     def init_results(self):
         super().init_results()
         self.define_results(
-            ss.Result('S'),
-            ss.Result('I'),
-            ss.Result('R'),
+            ss.Result('S', kind='stock'),
+            ss.Result('I', kind='stock'),
+            ss.Result('R', kind='stock'),
         )
 
     def step(self):
@@ -114,7 +114,7 @@ def run_sim(run=True, plot=False):
     """ Create and run the simulation """
     pars = dict(
         n_agents = 100_000*2,
-        dur = 100*10,
+        stop = 100*10,
         verbose = 0,
     )
     infection_rate = 0.3

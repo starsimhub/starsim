@@ -28,8 +28,8 @@ class NCD(ss.Disease):
         super().__init__()
         self.define_pars(
             initial_risk = ss.bernoulli(p=0.3), # Initial prevalence of risk factors
-            dur_risk = ss.expon(scale=ss.years(10)),
-            prognosis = ss.weibull(c=2, scale=ss.years(5)), # Time between first becoming affected and death; c is the (dimensionless) shape parameter
+            dur_risk = ss.expon(mean=ss.years(10)),
+            prognosis = ss.weibull(shape=2, scale=ss.years(5)), # Time between first becoming affected and death; c is the (dimensionless) shape parameter
         )
         self.update_pars(pars, **kwargs)
 

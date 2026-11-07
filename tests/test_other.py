@@ -49,13 +49,13 @@ def test_microsim(do_plot=False):
 @sc.timer()
 def test_deepcopy():
     sc.heading('Testing deepcopy')
-    s1 = ss.Sim(pars=dict(diseases='sir', networks=ss.RandomNet()), n_agents=small)
+    s1 = ss.Sim(dict(diseases='sir', networks=ss.RandomNet()), n_agents=small)
     s1.init()
     s2 = sc.dcp(s1)
     s1.run()
     s2.run()
     ss.debugtools.diff_sims(s1, s2, full=True)
-    assert np.allclose(s1.summary.value, s2.summary.value, rtol=0, atol=0, equal_nan=True)
+    assert np.allclose(s1.summarize().value, s2.summarize().value, rtol=0, atol=0, equal_nan=True)
 
     return s1, s2
 
@@ -70,7 +70,7 @@ def test_deepcopy_until():
     s1.run()
     s2.run()
     s1.plot() # Plotting a sim that was copied part way through
-    assert np.allclose(s1.summary.value, s2.summary.value, rtol=0, atol=0, equal_nan=True)
+    assert np.allclose(s1.summarize().value, s2.summarize().value, rtol=0, atol=0, equal_nan=True)
 
     return s1, s2
 
@@ -163,8 +163,9 @@ class Counter(ss.Module):
 '''
     new, changes, todo = migrate_text(old)
     assert new == old and any('record_stocks()' in msg and 'record_flows()' in msg for line,msg in todo) # update_results() is split in two, which needs a person
+    assert any(line == 7 and 'needs kind=' in msg for line,msg in todo) # ss.Result('seen') says nothing of its kind, which Starsim 3 guessed from the dtype
     scope = {}
-    exec(new.replace('update_results', 'record_flows'), scope) # A flow seen at the end of the step, as a person would split it
+    exec(new.replace('update_results', 'record_flows').replace("'seen', dtype=int,", "'seen', dtype=int, kind='flow',"), scope) # A flow seen at the end of the step, as a person would split it and give its kind
     sim = ss.Sim(n_agents=100, modules=scope['Counter'](), start=0, stop=10, verbose=0).run()
     assert sim.results.counter.seen.sum() == 55 and sim.results.counter.new_events[0] == 5 # Every step's events seen, the first step's at the first time point
 
@@ -173,6 +174,8 @@ class Counter(ss.Module):
     assert text == "p = ss.probperyear(0.1); pars = dict(verbose=0)\nclass MySIS(ssl.AgentSIS): pass\nclass MyNCD(ss.Disease): pass\nclass MyHIV(ss.AgentDisease): pass" # ss.Disease keeps its meaning, and ss.Infection is ss.AgentDisease
     assert migrate_text('pars = dict(verbose=0.1)')[0] == 'pars = dict(verbose=0.1)' # A fraction is progress every that share of the run
     assert migrate_text('ss.link_dists(obj, sim)')[0] == 'ss.dists.link_dists(obj, sim)' # Internal helpers are in their submodules
+    text, changes, todo = migrate_text("sim = ss.Sim(pars=dict(n_agents=100, pop_scale=10)); print(sim.pars.pop_scale)")
+    assert text == "sim = ss.Sim(dict(n_agents=100, pop_scale=10)); print(sim.pop_scale)" and any('total_pop' in note for _,note in todo) # Settings are not pars=, and pop_scale= is total_pop=
     assert 'ssl.AgentSIR' in migrate_text('sir = ss.SIR(beta=0.1)')[2][0][1] # A use of ss.SIR is flagged, not rewritten
     assert any('bare number' in note for _,note in migrate_text("x = dict(beta=dict(randomnet=0.05))")[2]) # A probability per step in Starsim 3
 
@@ -197,8 +200,8 @@ class Counter(ss.Module):
     assert text == "a = sim.results.alive; b = res['sir.infected']; c = df['n_alive']" and len(todo) == 1 # A column of a dataframe could be anything's: listed
     own = "class Mosquito(ss.Module):\n    def init_results(self):\n        self.define_results(ss.Result('n_infected'))\n    def step(self):\n        self.results.n_infected[self.ti] = 5\nx = res['n_infected']"
     assert migrate_text(own)[1:] == ([], []) # A result the package makes keeps its name
-    text = migrate_text("a = sim.results.sis.new_infections; b = res.cum_infections[-1]; c = res['new_infections']; d = res['cum_infections']; e = sim.summary.value.sis_cum_infections; data = {'hiv.new_infections': x}")[0] # The results of ss.AgentDisease
-    assert text == "a = sim.results.sis.infection; b = res.infection.cum[-1]; c = res['infection']; d = res['infection'].cum; e = sim.summary.value.sis_infection; data = {'hiv.infection': x}"
+    text = migrate_text("a = sim.results.sis.new_infections; b = res.cum_infections[-1]; c = res['new_infections']; d = res['cum_infections']; e = sim.summarize().value.sis_cum_infections; data = {'hiv.new_infections': x}")[0] # The results of ss.AgentDisease
+    assert text == "a = sim.results.sis.infection; b = res.infection.cum[-1]; c = res['infection']; d = res['infection'].cum; e = sim.summarize().value.sis_infection; data = {'hiv.infection': x}"
     text, changes, todo = migrate_text("df['obs_new_infections']; total_cum_infections = 3")
     assert 'obs_new_infections' in text and 'total_cum_infections' in text and len(todo) == 1 # Not the name of a disease of the file: listed
     text = migrate_text("a = sim.results.new_deaths; b = res.cum_deaths[-1]; c = res['new_deaths']; d = res['cum_deaths']; e = sim.results.hiv.new_deaths; f = results.new_emigrants; g = 'hiv.new_deaths'; h = sim.results.hiv.cum_deaths")[0]
@@ -209,22 +212,27 @@ class Counter(ss.Module):
     assert 'res' in mine[0] and mine[1] == [] # One the package makes keeps its name
     for made in ["super().__init__(infection=infection, new_infections=1*infection)", "self.define_results(ss.Result(f'new_infections{suffix}'))"]: # By keyword, or with an f-string that may add nothing
         assert migrate_text(f"{made}\nx = res.new_infections")[1] == []
-    text, changes, todo = migrate_text("a = ss.treat(cure=0.9, on=sir.infection, capacity=5)\nb = ss.Transition(I, R, on=a.failed, where=ss.person.female)\nc = ss.modify(sir.pars.beta, multiply=0.5, when=lambda sim: sim.ti > 5)\nd = ss.attr(1, on=infection)")
-    assert 'ss.treat(cure=0.9, on=sir.infection, capacity=5)' in text and 'ss.Transition(I, R, on=a.failed, where=ss.person.female)' in text and 'ss.attr(1, on=infection)' in text and [line for line,_ in todo] == [3] # Keywords: on= stays, when= is time only
+    text, changes, todo = migrate_text("a = ss.treat(cure=0.9, on=sir.infection, capacity=5)\nb = ss.Transition(I, R, when=a.failed, who=ss.person.female)\nc = ss.modify(sir.pars.beta, multiply=0.5, when=lambda sim: sim.ti > 5)\nd = ss.attr(1, when=infection)")
+    assert 'ss.treat(cure=0.9, on=sir.infection, capacity=5)' in text and 'ss.Transition(I, R, when=a.failed, who=ss.person.female)' in text and 'ss.attr(1, when=infection)' in text and [line for line,_ in todo] == [3] # Keywords: on= stays, when= is time only
     text = migrate_text("x = ss.change(sir.pars.beta, at=[30, 60], by=[0.5, 1.0], name='m')\ny = ss.change('sir.pars.beta', at=2005, to=0.1)\nz = ss.change(beta, at=times, by=vals)")
-    assert "ss.modify(sir.pars.beta, multiply=ss.timeseries({30: 0.5, 60: 1.0}), start=30, name='m')" in text[0] and "ss.modify('sir.pars.beta', set=0.1, start=2005)" in text[0] and text[2][0][0] == 3
+    assert "ss.modify(sir.pars.beta, multiply=ss.timeseries({30: 0.5, 60: 1.0}), when=ss.schedule(start=30), name='m')" in text[0] and "ss.modify('sir.pars.beta', set=0.1, when=ss.schedule(start=2005))" in text[0] and text[2][0][0] == 3
     assert 'ss.treat(' in migrate_text('from starsim.interventions import treat_num, Intervention')[2][0][1] # An import of a removed name
 
     # More of Starsim 3
     # What ss.SIR and ss.Pregnancy read themselves in Starsim 3
     new, _, todo = migrate_text("a = ss.SIR(init_prev=ss.bernoulli(p=0.1), p_death=ss.bernoulli(0.2), dur_inf=10, beta=0.1)\nb = ss.SEIR(init_prev=ss.choose_n(20), beta=0.1)\nc = ss.Pregnancy(p_loss=ss.bernoulli(0.01))\nd = ss.Pregnancy(p_loss=ss.bernoulli(ss.probpermonth(0.02)))")
-    assert 'ss.SIR(init_prev=0.1, p_death=0.2, dur_inf=ss.years(10), beta=0.1)' in new and 'ss.SEIR(init_prev=20, beta=0.1)' in new
+    assert 'ss.SIR(init_prev=0.1, p_death=0.2, dur_inf=ss.years(10), beta=0.1)' in new and 'ss.SEIR(init_n=20, beta=0.1)' in new
     assert 'ss.Pregnancy(loss_rate=ss.probperweek(0.01))' in new and 'ss.Pregnancy(loss_rate=ss.probpermonth(0.02))' in new
     _, _, todo = migrate_text("f = lambda self, sim, uids: 0.1\na = ss.SIS(init_prev=ss.bernoulli(p=f), dur_inf=[10, 2])\nnet = ss.MFNet()\nclass Net(ss.SexualNet):\n    def net_beta(self, disease_beta=None, uids=None, disease=None):\n        pass")
     assert all(any(word in message for _,message in todo) for word in ['drop self', 'lognormal', 'needs a beta', 'inds='])
 
     old = "new = ss.uids.cat(a, b); bf = preg.breastfeeding\nnet = ss.RandomNet(n_contacts=10, uniform_targets=True)"
     assert migrate_text(old)[0] == "new = ss.uids.concatenate(a, b); bf = preg.lactating\nnet = ss.RandomNet(n_contacts=10, method='uniform')"
+
+    # dur= of the sim (here in a dict of its settings) and of ss.RandomNet, and the spellings of Starsim 4 before its release
+    text, _, todo = migrate_text("pars = dict(n_agents=100, start=2000, dur=20)\nnet = ss.RandomNet(n_contacts=ss.poisson(lam=5), dur=0)\nt = ss.Transition(R, I, on=infection, dur=ss.months(6), where=ss.person.female)\nm = ss.modify(beta, multiply=0.5, start=2001, stop=2002)\nsim.run(n_runs=3)")
+    assert 'dict(n_agents=100, start=2000, stop=ss.years(20))' in text and 'ss.RandomNet(n_contacts=ss.poisson(mean=5))' in text
+    assert 'ss.Transition(R, I, when=ss.on(infection, delay=ss.months(6)), who=ss.person.female)' in text and 'ss.modify(beta, multiply=0.5, when=ss.schedule(start=2001, stop=2002))' in text and [line for line,_ in todo] == [5]
 
     # An override of set_prognoses() that skips counting the infections, as before Starsim 3.6
     class Quiet(ssl.AgentSIS):

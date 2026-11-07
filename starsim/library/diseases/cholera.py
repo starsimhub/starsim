@@ -1,205 +1,92 @@
 """
 Cholera, with direct and environmental (waterborne) transmission.
 
-Adapted from https://github.com/optimamodel/gavi-outbreaks/blob/main/stisim/gavi/cholera.py
+Originally adapted from https://github.com/optimamodel/gavi-outbreaks/blob/main/stisim/gavi/cholera.py
 Original version by Dom Delport 2024
 """
 
-import numpy as np
 import starsim as ss
-from .agents import AgentSEIR
 
 __all__ = ['Cholera']
 
 
-class Cholera(AgentSEIR):
+class Cholera(ss.Disease):
     """
-    Cholera, with both direct and environmental (waterborne) transmission.
+    Cholera, with both direct and environmental (waterborne) transmission
 
-    An SEIR-type model in which exposed agents become infected, a fraction of
-    whom become symptomatic; symptomatic agents may die, and everyone else
-    recovers. Asymptomatic agents are infectious but shed far less bacteria
-    (`asymp_trans`). In addition to person-to-person transmission via the
-    network, infectious agents shed into a single well-mixed environmental
-    reservoir, which decays exponentially and drives indirect transmission
-    with a dose-response governed by `half_sat_rate`.
+    People infected are latent (`E`) for `dur_exp`, then a share `p_symp` become symptomatic (`Is`), and the rest are
+    asymptomatic (`Ia`), shedding far less (`asymp_trans`). Asymptomatic people recover; symptomatic people recover,
+    or die (with probability `p_death`, sooner). Besides transmission from person to person (`beta`), infectious
+    people shed bacteria into a well-mixed reservoir of water (`W`, a count of bacteria, not people) at
+    `shedding_rate`, the bacteria die off at `decay_rate`, and susceptible people are infected from the water at a
+    rate that rises with the concentration, `beta_env` times `env_conc` = W/(W + `half_sat_rate`), as in the model of
+    Codeço (2001). It is declared, so it runs under any solver.
 
-    Parameter values are drawn from the literature; see the source for citations.
+    Sources: Codeço CT, "Endemic and epidemic dynamics of cholera: the role of the aquatic reservoir", *BMC Infect Dis*
+    2001;1:1 (https://doi.org/10.1186/1471-2334-1-1), for the structure; the latent period is from Azman et al.
+    (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3677557/); asymptomatic shedding of 1 to 10 days (mean 5.5) from the
+    WHO fact sheet; 5 days of symptoms from Fung (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3926264/); a rapid death
+    of severe cases (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5767916/); half of infections symptomatic, mid range
+    of Jackson et al. and Nelson et al.; asymptomatic carriers shedding 100 times less; the dose-response, shedding,
+    and decay from Mukandavire et al. (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3102413/). `beta` (from person to
+    person) and `beta_env` are illustrative. Since the bacteria are a count, shed by everyone infectious into one
+    reservoir, the water carries more of the epidemic in a larger population: with these values, it sustains an
+    outbreak in a town of 10,000, and transmission from person to person alone does not.
 
-    Note: CRN safe.
+    Note: CRN safe as agents.
 
     Args:
-        beta (prob):            per-contact transmission probability
-        init_prev (Dist):       initial prevalence
-        dur_exp (Dist):         duration from exposure to infectiousness
-        dur_asymp2rec (Dist):   duration from infection to recovery, asymptomatic agents
-        dur_symp2rec (Dist):    duration from symptoms to recovery
-        dur_symp2dead (Dist):   duration from symptoms to death
-        p_death (Dist):         probability of death among symptomatic agents
-        p_symp (Dist):          probability an infection is symptomatic
-        asymp_trans (float):    relative transmissibility of asymptomatic agents
-        beta_env (prob):        scale factor for environmental transmission
-        half_sat_rate (float):  environmental dose infecting 50% of those exposed
-        shedding_rate (freq):   rate at which infectious agents shed to the environment
-        decay_rate (rate):      rate at which environmental bacteria die off
-        p_env_transmit (Dist):  environmental transmission probability (set each step)
-
-    Attributes:
-        exposed (BoolState):        infected but not yet infectious
-        asymptomatic (alias):       infectious but not symptomatic
-        symptomatic (BoolState):    currently symptomatic
-        recovered (BoolState):      recovered and immune
-        ti_exposed (FloatArr):      timestep of exposure
-        ti_symptomatic (TimeArr):   timestep symptoms began
-        ti_recovered (TimeArr):     timestep of recovery
-        ti_dead (TimeArr):          timestep of death
+        beta (`ss.per`): the rate of transmission from person to person (per contact, if there are networks), for a symptomatic person
+        asymp_trans (float): the relative transmissibility and shedding of asymptomatic people
+        beta_env (`ss.per`): the rate of infection from the water, when it is saturated with bacteria
+        half_sat_rate (float): the amount of bacteria at which infection from the water is half its maximum
+        shedding_rate (`ss.per`): the bacteria each symptomatic person sheds into the water, per unit time
+        decay_rate (`ss.per`): the rate at which bacteria in the water die off
+        dur_exp (`ss.Duration`): the mean time from infection to being infectious
+        dur_asymp2rec (`ss.Duration`): the mean time asymptomatic people are infectious
+        dur_symp2rec (`ss.Duration`): the mean time symptomatic people are ill, for those who recover
+        dur_symp2dead (`ss.Duration`): the mean time from symptoms to death, for those who die
+        p_symp (float): the probability that an infection is symptomatic
+        p_death (float): the probability that a symptomatic person dies
+        kwargs (dict): passed to `ss.Disease`, e.g. `init_prev`, `init` or `name`
 
     Examples:
         ```python
         import starsim as ss
         import starsim.library as ssl
 
-        sim = ss.Sim(diseases=ssl.Cholera(), networks='random')
+        sim = ss.Sim(diseases=ssl.Cholera(), total_pop=10_000, start='2025-01-01', stop='2026-01-01')
         sim.run()
-        sim.plot()
+        sim.plot('cholera')
         ```
     """
-    def __init__(self, pars=None, **kwargs):
-        """ Initialize with parameters """
-        super().__init__()
-        self.pars.pop('dur_inf') # Cholera schedules its own outcomes, so it doesn't use SIR's single infectious duration
-        self.define_pars(
-            # Initial conditions and beta
-            beta = ss.prob(1.0, ss.days(1)), # Placeholder value
-            init_prev = ss.bernoulli(0.005),
+    beta          = ss.par(ss.perday(0.05), doc='Transmission rate from person to person, for a symptomatic person', source='Illustrative')
+    asymp_trans   = ss.par(0.01, doc='Relative transmissibility and shedding of asymptomatic people', source='Asymptomatic carriers shed 100-1000 times less (Nelson et al.)')
+    beta_env      = ss.par(ss.perday(0.5), doc='Rate of infection from water saturated with bacteria', source='Illustrative, as in Codeço (2001)')
+    half_sat_rate = ss.par(1_000_000, doc='Amount of bacteria at which infection from the water is half its maximum', source='Mukandavire et al.')
+    shedding_rate = ss.par(ss.perday(10), doc='Bacteria shed into the water by each symptomatic person', source='Mukandavire et al.')
+    decay_rate    = ss.par(ss.perday(0.033), doc='Rate at which bacteria in the water die off', source='Mukandavire et al.')
+    dur_exp       = ss.par(ss.days(2.772), doc='Mean time from infection to being infectious', source='Azman et al.')
+    dur_asymp2rec = ss.par(ss.days(5.5), doc='Mean time asymptomatic people shed', source='WHO cholera fact sheet (1-10 days)')
+    dur_symp2rec  = ss.par(ss.days(5), doc='Mean time ill, for those who recover', source='Fung')
+    dur_symp2dead = ss.par(ss.days(1), doc='Mean time from symptoms to death, for those who die', source='Illustrative')
+    p_symp        = ss.par(0.5, doc='Probability that an infection is symptomatic', source='Jackson et al.; Nelson et al.')
+    p_death       = ss.par(0.005, doc='Probability that a symptomatic person dies (with treatment)', source='Illustrative')
+    init_prev     = 0.005
 
-            # Natural history parameters, all specified in days
-            dur_exp       = ss.lognormal(mean=ss.days(2.772), std=ss.days(4.737)), # Calculated from Azman et al. estimates https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3677557/
-            dur_asymp2rec = ss.uniform(low=ss.days(1), high=ss.days(10)), # From WHO cholera fact sheet, asymptomatic individuals shed bacteria for 1-10 days (https://www.who.int/news-room/fact-sheets/detail/cholera)
-            dur_symp2rec  = ss.lognormal(mean=ss.days(5), std=ss.days(1.8)), # According to Fung most modeling studies assume 5 days of symptoms (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3926264/), but found a range of 2.9-14 days. Distribution approximately fit to these values
-            dur_symp2dead = ss.lognormal(mean=ss.days(1), std=ss.days(0.5)), # There does not appear to be differences in timing/duration of mild vs severe disease, but death from severe disease happens rapidly https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5767916/
-            p_death       = ss.bernoulli(p=0.005), # Probability of death is typically less than 1% when treated
-            p_symp        = ss.bernoulli(p=0.5), # Proportion of infected which are symptomatic, mid range of ~25% and 57% estimates from Jackson et al (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3795095/) and Nelson et al (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3842031/), respectively
-            asymp_trans   = 0.01, # Reduction in transmission probability for asymptomatic infection, asymptomatic carriers shed 100-1000 times less bacteria than symptomatic carriers (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3084143/ and https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3842031/). Previous models assume a 10% relative transmissibility (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4238032/)
+    S  = ss.State()
+    E  = ss.State('Exposed', infected=True)
+    Ia = ss.State('Asymptomatic', infected=True)
+    Is = ss.State('Symptomatic', infected=True)
+    R  = ss.State()
+    W  = ss.State('Bacteria in the water', people=False) # A count, not people
 
-            # Environmental parameters
-            beta_env = ss.prob(0.5 / 3), # Scaling factor for transmission from environment,
-            half_sat_rate = 1_000_000, # Infectious dose in water sufficient to produce infection in 50% of exposed, from Mukandavire et al. (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3102413/)
-            shedding_rate = ss.time.freq(10, 'day'), # Rate at which infectious people shed bacteria to the environment (per day), from Mukandavire et al. (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3102413/)
-            decay_rate = ss.perday(0.033), # Rate at which bacteria in the environment dies (per day), from Chao et al. and Mukandavire et al. citing https://pubmed.ncbi.nlm.nih.gov/8882180/
-            p_env_transmit = ss.bernoulli(p=0), # Probability of environmental transmission - filled out later
-        )
-        self.update_pars(pars, **kwargs)
+    env_conc = W.n/(W.n + half_sat_rate) # The concentration of bacteria, as the share of the maximum rate of infection from the water
 
-        # Boolean states
-        self.define_states(
-            # SEIR states are added automatically, here we add symptoms
-            ss.BoolState('symptomatic', label='Symptomatic'),
-
-            # Timepoint states
-            ss.TimeArr('ti_symptomatic', label='Time of symptoms'),
-
-            # Aliases
-            asymptomatic = lambda self: self.infectious & ~self.symptomatic, # Infectious, but shedding much less
-        )
-        return
-
-    def init_results(self):
-        """ Initialize results """
-        super().init_results()
-        self.define_results(
-            ss.Result('death',    dtype=int,   label='Deaths', kind='flow'),
-            ss.Result('env_prev',   dtype=float, label='Environmental prevalence'),
-            ss.Result('env_conc',   dtype=float, label='Environmental concentration'),
-        )
-        return
-
-    def step_state(self):
-        """
-        Adapted from https://github.com/optimamodel/gavi-outbreaks/blob/main/stisim/gavi/cholera.py
-        Original version by Dom Delport
-        """
-        super().step_state()
-
-        # Progress infectious -> symptomatic
-        symptomatic = (self.infectious & self.ti_symptomatic.due()).uids
-        self.symptomatic[symptomatic] = True
-
-        # Recovery ends symptoms too
-        self.symptomatic[~self.infectious] = False
-
-        # Update today's environmental prevalence
-        self.calc_environmental_prev()
-
-        return
-
-    def calc_environmental_prev(self):
-        """
-        Calculate environmental prevalence
-        """
-        p = self.pars
-        r = self.results
-        ti = self.ti
-
-        n_symptomatic = self.symptomatic.sum()
-        n_asymptomatic = self.asymptomatic.sum()
-        old_prev = self.results.env_prev[ti-1]
-
-        new_bacteria = (p.shedding_rate * (n_symptomatic + p.asymp_trans * n_asymptomatic)).to_events()
-        old_bacteria = old_prev * (1 - p.decay_rate.to_prob())
-
-        r.env_prev[ti] = new_bacteria + old_bacteria
-        r.env_conc[ti] = r.env_prev[ti] / (r.env_prev[ti] + p.half_sat_rate)
-        return
-
-    def set_progression(self, uids):
-        """ Schedule symptoms, recovery, and death """
-        p = self.pars
-
-        # Determine who becomes symptomatic and when
-        symp_uids = p.p_symp.filter(uids)
-        self.ti_symptomatic[symp_uids] = self.ti_infectious[symp_uids]
-
-        # Determine who dies and when
-        dead_uids = p.p_death.filter(symp_uids)
-        self.ti_dead[dead_uids] = self.ti_symptomatic[dead_uids] + p.dur_symp2dead.rvs(dead_uids)
-        symp_rev_uids = np.setdiff1d(symp_uids, dead_uids)
-        asymp_uids = np.setdiff1d(uids, symp_uids)
-
-        # Determine when agents recover
-        self.ti_recovered[symp_rev_uids] = self.ti_infectious[symp_rev_uids] + p.dur_symp2rec.rvs(symp_rev_uids)
-        self.ti_recovered[asymp_uids] = self.ti_infectious[asymp_uids] + p.dur_asymp2rec.rvs(asymp_uids)
-
-        return
-
-    def transmit(self):
-        """ Add indirect transmission """
-        # Make new cases via direct transmission
-        new_cases, sources, networks = super().transmit()
-
-        # Make new cases via indirect transmission
-        pars = self.pars
-        res = self.results
-        p_transmit = (res.env_conc[self.ti] * pars.beta_env).to_prob()
-        pars.p_env_transmit.set(p=p_transmit)
-        new_cases_env = pars.p_env_transmit.filter(self.susceptible).remove(new_cases) # Don't infect agents who were just infected directly
-
-        if len(new_cases_env):
-            new_cases = new_cases + new_cases_env
-            sources = np.concatenate([sources, np.full_like(new_cases_env, fill_value=ss.dtypes.int_nan)]) # No source agent or network for environmental transmission
-            networks = np.concatenate([networks, np.full_like(new_cases_env, fill_value=ss.dtypes.int_nan)])
-
-        return new_cases, sources, networks
-
-    def on_death(self, uids):
-        """ Reset infected/recovered flags for dead agents """
-        super().on_death(uids)
-        self.symptomatic[uids] = False
-        return
-
-    def record_flows(self):
-        super().record_flows()
-        res = self.results
-        ti = self.ti
-        res.death[ti] = np.count_nonzero(self.ti_dead.isclose(ti)) # Deaths requested in this step, as due() rounds ti_dead
-        return
+    infection     = S >> E @ beta*(Is + asymp_trans*Ia) + beta_env*env_conc
+    onset         = E >> {Is: p_symp, Ia: None} @ dur_exp
+    recovery_asymp = Ia >> R @ dur_asymp2rec
+    recovery      = ss.Transition(Is, R, dur=dur_symp2rec, p=1 - p_death)
+    death         = ss.Transition(Is, ss.dead, dur=dur_symp2dead, p=p_death)
+    shedding      = ss.outside >> W @ shedding_rate*(Is.n + asymp_trans*Ia.n)
+    decay         = W >> ss.dead @ decay_rate

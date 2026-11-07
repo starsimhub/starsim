@@ -17,16 +17,16 @@ An odin model is R code in odin's DSL (one `.R` file, or the body of `odin::odin
 | `sum(I)` | `I.n` (the total over every group) | yes |
 | `delay(new_inf * surv, tau)` into a state | A fixed dwell time (`ss.constant`), with its factor checked against the survival through the other outflows | yes |
 | The history of a `delay()` | An inflow for the first `tau` (below) | no |
-| A chained draw (`n_ID <- rbinom(n_I, p_death)`) | A branch: `ss.Transition(I, [R, D], rate=gamma, p=[None, p_death])` | no |
+| A chained draw (`n_ID <- rbinom(n_I, p_death)`) | A branch: `ss.Transition(I, {R: None, D: p_death}, rate=gamma)` | no |
 | `rmultinom` | Branches with `p=` | no |
 | A contact matrix: `s_ij[, ] <- m[i, j] * I[j] / N[j]` and `lambda[] <- beta * sum(s_ij[i, ])` | A stratification by the arrays' dimension (named from `dim(S) <- n_age`, levels `"1"` to `"n"`, initial numbers by level) and `networks=ss.contacts(m)`; the force is `beta * I` | yes |
 | `1 + A * cos(2 * pi * step * dt / 365)` (or `t`, `time`; or `sin`) | `ss.seasonal(mean=1, amplitude=A, peak=...)` as a parameter | yes |
 | `update(time) <- (step + 1) * dt` | Nothing: the sim keeps the time | yes |
 | `update(cases) <- if (step %% k == 0) sum(n_SE) else cases + sum(n_SE)` | `ss.outcome(n_SE)` (a flow: data are compared with its total since the last data point, so the period needs no translation) | yes |
 | Names Python reserves (`lambda`, `is`, ...) | Renamed with a trailing underscore (`lambda_`) | yes |
-| Another `if (c) a else b` in a rate | `ss.timeseries` (a condition on the time), `where=`, or a comparison of counts (`(Q.n < K)`) | no |
+| Another `if (c) a else b` in a rate | `ss.timeseries` (a condition on the time), `who=`, or a comparison of counts (`(Q.n < K)`) | no |
 | A state at its own level in a stratified model with no matrix (`beta * S[i] * I[i] / N[i]`) | A contact matrix by the dimension, `networks=ss.contacts(np.eye(n))` | no |
-| Arrays over levels with no flows between them (patches) | `stratify(patch=[...], kind='space')`, with `ss.by(patch=[...])` for parameters that differ | no |
+| Arrays over levels with no flows between them (patches) | `stratify(patch=ss.levels([...], kind='space'))`, with `ss.by(patch=[...])` for parameters that differ | no |
 | `interpolate()`, `t`/`time`/`step` | `ss.timeseries({t0: v0, ...}, interpolation='linear')` as a parameter's value | no |
 | `output(x)` | A result on the disease, e.g. `prev = I / (S + I + R)` | no |
 

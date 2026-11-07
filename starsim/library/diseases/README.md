@@ -10,7 +10,7 @@ Example disease models, as `ssl.diseases.X` (and also as `ssl.X`); see the libra
 - `enteric.py`: typhoid, with chronic carriers, and polio, with a paralytic fraction
 - `hiv.py`: HIV, with CD4 counts, plus an ART intervention and a CD4 analyzer
 - `malaria.py`: malaria, as the Ross-Macdonald model and as the Garki model of immunity
-- `measles.py`: measles, as an SEIR model
+- `measles.py`: measles, as an SEIR model with deaths
 - `ncd.py`: an example non-communicable disease, written as code
 - `respiratory.py`: influenza, RSV, and pertussis
 - `sti.py`: syphilis and gonorrhea

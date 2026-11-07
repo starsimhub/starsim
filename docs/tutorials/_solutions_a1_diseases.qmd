@@ -16,7 +16,7 @@ def make_cold(dur_imm=ss.days(180), dur_latent=None):
         transitions = dict(infection=S >> E @ ss.perday(0.4)*I, progression=E >> I @ dur_latent)
     transitions['recovery'] = I >> R @ ss.days(7)
     transitions['waning'] = R >> S @ dur_imm
-    infections = ss.attr(1, on=transitions['infection'], combine='sum', init=0)
+    infections = ss.attr(1, when=transitions['infection'], combine='sum', init=0)
     states = [S, I, R] if dur_latent is None else [S, E, I, R]
     return ss.Disease(*states, **transitions, infections=infections, init_prev=0.01, name='cold')
 
@@ -74,7 +74,7 @@ def make_sim(k=None, immune=0.8):
     if k is None:
         measles = ss.Disease(infection, progression, recovery, **init)
         return ss.Sim(measles, **sim_pars)
-    infectiousness = ss.attr(ss.gamma(a=k, scale=1/k))
+    infectiousness = ss.attr(ss.gamma(shape=k, scale=1/k))
     measles = ss.Disease(infection, progression, recovery, infectiousness=infectiousness, **init)
     superspreading = ss.modify(measles.rel_trans, multiply=infectiousness)
     return ss.Sim(measles, connectors=superspreading, **sim_pars)

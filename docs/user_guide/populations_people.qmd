@@ -72,7 +72,7 @@ A sim copies the people it is given when it is built, so look at `sim.people` af
 A model refers to a property of people with `ss.person`: `ss.person.age`, `ss.person.female`, or a property of your own. `ss.person.age < 5` is a condition, which picks out people, for example to say who an intervention reaches:
 
 ```python
-ss.vaccinate(efficacy=0.9, coverage=0.8, where=ss.person.age < 5, at=ss.days(10)) # Vaccinates children under 5
+ss.vaccinate(efficacy=0.9, who=ss.person.age < 5, when=ss.days(10), coverage=0.8) # Vaccinates children under 5
 ```
 
 A property of your own is given to `ss.People` as a state, with a value for each agent; it can be drawn from a distribution. A property can be in a rate as well as in a condition. Here 30% of people live in towns, where crowding doubles the rate at which a susceptible person is infected, and 92% of people are immune (as from routine vaccination), so that measles can still spread. Two campaigns give the same number of doses, to 27% of people: one to anyone, and one to 90% of the people in towns:
@@ -84,8 +84,8 @@ ppl = ss.People(10_000, extra_states=urban)
 infection = S >> I @ 1.9*(1 + ss.person.urban)*I # Twice the rate in towns
 measles_towns = ss.Disease(infection, recovery, init=dict(R=0.92), init_prev=0.001, name='measles')
 
-anyone = ss.vaccinate(efficacy=0.9, coverage=0.27, at=ss.days(1), name='campaign')
-towns = ss.vaccinate(efficacy=0.9, coverage=0.9, where=ss.person.urban, at=ss.days(1), name='campaign')
+anyone = ss.vaccinate(efficacy=0.9, when=ss.days(1), coverage=0.27, name='campaign')
+towns = ss.vaccinate(efficacy=0.9, who=ss.person.urban, when=ss.days(1), coverage=0.9, name='campaign')
 base = ss.Sim(measles_towns, people=ppl, stop=ss.days(150), verbose=0)
 msim = ss.parallel({
     'No campaign': base,
@@ -237,10 +237,10 @@ This makes it easy to summarize people in your own way, e.g. the mean age of wom
 df.groupby('female').age.mean()
 ```
 
-`sim.people.person(10)` gives everything about one agent, here the one with UID 10:
+`sim.people.get_person(10)` gives everything about one agent, here the one with UID 10:
 
 ```{python}
-sim.people.person(10)
+sim.people.get_person(10)
 ```
 
 `sim.people.plot()` draws a histogram of each state of the people (`key=` for some of them), and `sim.people.plot_ages()` the age pyramid, as above.
@@ -251,7 +251,7 @@ Each agent who dies has one cause, the module whose death it was: its name is in
 
 ```{python}
 measles_deaths = ss.Disease(S >> I @ 1.9*I, I >> R @ ss.days(8), ss.death(I, rate=ss.perday(0.002)), init_prev=0.001, name='measles')
-deaths = ss.Deaths(death_rate=ss.peryear(10), name='other') # Deaths from other causes, 10 per 1,000 people a year
+deaths = ss.Deaths(death_rate=ss.peryear(0.01), name='other') # Deaths from other causes, 10 per 1,000 people a year
 sim = ss.Sim(measles_deaths, demographics=deaths, n_agents=10_000, stop=ss.days(50), verbose=0)
 sim.run()
 
@@ -265,7 +265,7 @@ If two modules would kill the same person in the same step, one of them is chose
 
 ## In a compartmental run
 
-In a compartmental run there are no agents. `sim.people` then has one row for each group the model is split into, and asking for a property of each person, such as `sim.people.age` in a model not split by age, raises an error saying to stratify by it or to run as agents. Results, `describe()`, and conditions such as `where=ss.person.age < 5` (for a model stratified by age) work the same either way.
+In a compartmental run there are no agents. `sim.people` then has one row for each group the model is split into, and asking for a property of each person, such as `sim.people.age` in a model not split by age, raises an error saying to stratify by it or to run as agents. Results, `describe()`, and conditions such as `who=ss.person.age < 5` (for a model stratified by age) work the same either way.
 
 The API reference for this page: [People](../api/people.qmd), [Arrays](../api/internals.arrays.qmd).
 
@@ -290,7 +290,7 @@ The properties and methods of `sim.people` for looking at the agents (see [Peopl
 | `people.died_of(module)` | The agents who died of a module in the step just finished, for code in a module |
 | `people.keys()` | The names of the states of the people |
 | `people.to_df()` | A table with a row for each agent and a column for each state |
-| `people.person(uid)` | Everything about one agent |
+| `people.get_person(uid)` | Everything about one agent |
 | `people.brief()` | A one-line summary |
 | `people.plot()` | A histogram of each state |
 | `people.plot_ages()` | The age pyramid (`absolute=True` for numbers rather than shares) |

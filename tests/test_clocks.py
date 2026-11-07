@@ -52,15 +52,15 @@ def test_clocks():
     assert sim.results.d.late[:10].sum() == 0 and sim.results.d.late.sum() > 100
     S, B, C, D = ss.states('S B C D') # A split when taken reads the dwell just completed (HPV: CIN from the time in P)
     long = 1.0*(B.time_in >= ss.days(5))
-    d = ss.Disease(S, B, C, D, sb=S >> B @ ss.perday(0.05), split=ss.Transition(B, [C, D], p=[long, None], dur=ss.days(5)), name='d')
+    d = ss.Disease(S, B, C, D, sb=S >> B @ ss.perday(0.05), split=ss.Transition(B, {C: long, D: None}, dur=ss.days(5)), name='d')
     with ss.options.context(keep_times=True): # The times of entering C and D are read below
         s = ss.Sim(d, n_agents=2000, unit='day', stop=60, **kw).run().diseases.d
     c, dd = s.C.uids, s.D.uids
     assert len(c) > 100 and len(dd) > 100
     assert np.all(s.ti_C[c] - s.ti_B[c] >= 5) and np.all(s.ti_D[dd] - s.ti_B[dd] < 5)
     d, ab = make()
-    vx = ss.vaccinate(ss.Vaccine(efficacy=0), where=d.B & (d.B.time_in >= ss.days(2)), name='vx')
-    halve = ss.modify(d.bc, multiply=0.5**(ab.time_in/ss.days(4)), where=ab, name='halve')
+    vx = ss.vaccinate(ss.Vaccine(efficacy=0), who=d.B & (d.B.time_in >= ss.days(2)), name='vx')
+    halve = ss.modify(d.bc, multiply=0.5**(ab.time_in/ss.days(4)), who=ab, name='halve')
     sim = ss.Sim(d, interventions=vx, connectors=halve, n_agents=2000, unit='day', stop=40, **kw).run()
     assert sim.results.vx.delivered.sum() > 0 and sim.solver == 'abm'
 
@@ -76,9 +76,9 @@ def test_clocks():
         ss.Disease(S, A, B, C, ab=A >> B @ ss.perday(0.2), bc=ss.Transition(A, C, rate=ss.perday(1)*A.progress))
     d, ab = make()
     with pytest.raises(ss.CapabilityError):
-        ss.Sim(d, connectors=ss.modify(d.bc, multiply=ab.time_in/ss.days(1), where=ab), solver='ode', **kw).init()
+        ss.Sim(d, connectors=ss.modify(d.bc, multiply=ab.time_in/ss.days(1), who=ab), solver='ode', **kw).init()
     d, ab = make()
-    vx = ss.vaccinate(ss.Vaccine(efficacy=0), where=d.B & (d.B.time_in >= ss.days(2)), name='vx')
+    vx = ss.vaccinate(ss.Vaccine(efficacy=0), who=d.B & (d.B.time_in >= ss.days(2)), name='vx')
     assert ss.Sim(d, interventions=vx, **kw).init().solver == 'abm' # A delivery reading a clock: the reason is printed
     return sim
 
@@ -131,7 +131,7 @@ def test_modifier_clock():
     for key in ['connectors', 'interventions']:
         S, I, R = ss.states(3)
         d = ss.Disease(infection=S >> I @ 0.3*I, recovery=ss.Transition(I, R, dur=10), init_prev=0.01, name='d')
-        protect = ss.modify(d.rel_sus, multiply=0.5, where=R.time_in > 5) # R has no exit, so nothing else keeps its times
+        protect = ss.modify(d.rel_sus, multiply=0.5, who=R.time_in > 5) # R has no exit, so nothing else keeps its times
         sim = ss.Sim(d, n_agents=500, stop=30, **{key:protect}, **kw).run()
         assert sim.solver == 'abm'
     return
