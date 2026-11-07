@@ -249,14 +249,14 @@ class Moving:
         rvs = self.draw(f'dst_{tr.name}', uids)
         masks = [(rvs >= edges[i]) & (rvs < edges[i+1]) for i in range(len(edges) - 1)]
         dsts = [(dst, uids[mask], frm[mask]) for dst,mask in zip(tr.dest, masks)]
-        if tr.dies: # Those who took ss.dead die, as by an outflow
+        if tr.may_die: # Those who took ss.dead die, as by an outflow
             self.split_deaths(tr, srcs, uidlist, uids[masks[-1]], frm[masks[-1]])
         if tr.stays: # What the others leave over stays: the move is canceled
             stayed = rvs >= edges[-1]
             self.stay(tr, uids[stayed], frm[stayed])
         if tr._ends: # The flow to each destination
             left = np.concatenate([self.groups(u, src) for u,src in zip(uidlist, srcs)]) if self.sim.groups.n_groups > 1 and not entering else None # The groups they left, where the total is recorded (see move()), before any change of level
-            for (dst,inds,_),mask in zip(dsts + [(ss.dead, uids[masks[-1]], None)]*tr.dies, masks):
+            for (dst,inds,_),mask in zip(dsts + [(ss.dead, uids[masks[-1]], None)]*tr.may_die, masks):
                 key = f'{tr.name}.{"dead" if dst is ss.dead else dst.name}'
                 self.flowcounts[key] += self.n_of(inds)
                 if left is not None:
@@ -268,7 +268,7 @@ class Moving:
         key = ('dest', tr.name)
         fixed = self.__dict__.setdefault('_fixed', {}).get(key)
         if fixed is None:
-            dies = not tr.dies or (self.is_fixed(getattr(tr, 'p_die', None)) and self.is_fixed(getattr(tr, 'p_stay', None)) and self.unmodified('branch', f'{tr.name}.null')) # The share of ss.dead, from those of the others, and of ss.stay (see die_share())
+            dies = not tr.may_die or (self.is_fixed(getattr(tr, 'p_die', None)) and self.is_fixed(getattr(tr, 'p_stay', None)) and self.unmodified('branch', f'{tr.name}.dead') and self.unmodified('branch', f'{tr.name}.stay')) # The share of ss.dead, from those of the others, and of ss.stay (see die_share())
             fixed = self._fixed[key] = dies and all(self.is_fixed(p) for p in tr.p) and all(self.unmodified('branch', f'{tr.name}.{dst.name}') for dst in tr.dest)
         return self.fixed_edges(key, fixed, lambda u: self.dest_edges_for(tr, u, frm if u is uids else np.full(len(u), -1)), uids)
 
@@ -277,8 +277,8 @@ class Moving:
         self._uids = uids
         with self.evaluating(leaving=(uids, frm)): # Decided as they leave: the time in a clock is the time they spent there (see clock_values())
             ps = [np.broadcast_to(p, len(uids)) for p in self.branch_probs_for(tr, uids)]
-            if tr.dies:
-                ps.append(np.broadcast_to(self.die_share(tr, ps, lambda p: self.eval_for(p, uids)), len(uids)))
+            if tr.may_die:
+                ps.append(np.broadcast_to(self.die_share(tr, ps, lambda p: self.eval_for(p, uids), uids), len(uids)))
         return np.cumsum([np.zeros(len(uids))] + ps, axis=0)
 
     def arrive(self, arrived, ti):
@@ -693,7 +693,7 @@ class Moving:
             raise ss.CapabilityError(f'p= of "{tr.name}" gave a row of probabilities for each person, but each entry of p= is one destination\'s probability (one value per person); '
                                      f'give one per destination, e.g. p=[f_{tr.dest[0].name}, None], where each function returns one value per person')
 
-        return self.dest_shares(tr, ps, uids, stay=self.ends_given(tr, lambda p: self.eval_for(p, uids))) # With ss.stay or ss.dead, what the states leave over stays or dies
+        return self.dest_shares(tr, ps, uids, ev=lambda p: self.eval_for(p, uids)) # With ss.stay or ss.dead, what the states leave over stays or dies
 
     def whole_steps(self, uids, dur, dt=None):
         """

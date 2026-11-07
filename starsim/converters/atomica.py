@@ -33,7 +33,6 @@ import re
 import datetime
 import numpy as np
 import pandas as pd
-import scipy.optimize as spo
 import sciris as sc
 import starsim as ss
 from .core import Source, Code, build

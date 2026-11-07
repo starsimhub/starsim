@@ -648,6 +648,9 @@ class Sim(ss.modules.Base):
             mods = self._named_modules(attr)
             if len(mods) == 1:
                 return mods[0]
+        if not self.__dict__.get('initialized') and attr in ss.modules.module_types() + ['people']: # Made by init(), from what was given
+            given = f'; until then, what was given is sim.pars.{attr}' if attr != 'people' else ''
+            raise AttributeError(f'sim.{attr} is made when the sim is initialized, by sim.init() (or sim.run()){given}')
         raise AttributeError(f"'{type(self).__name__}' object has no attribute '{attr}'")
 
     def __getitem__(self, key):
@@ -1388,6 +1391,7 @@ class Sim(ss.modules.Base):
         """
         # Let People handle its own result initialization
         self.people.init_results()
+        ss.solvers.init_people(self) # In a compartmental run, the same results, from the declared modules
 
         # With dynamic rescaling, store the scale factor for each timestep, and the people no agent stands for yet (see rescale())
         if self.pars.rescale:
@@ -1582,6 +1586,16 @@ class Sim(ss.modules.Base):
             self.diagnostics.store_states()
         return
 
+    @property
+    def started(self):
+        """
+        Whether the run has begun, i.e. at least part of its first step has been taken (False before the first step, and again after `sim.restart()`)
+
+        `sim.ti` is the step being taken, or the last one taken, so it is 0 both before the first step and after it;
+        the number of steps taken is `sim.ti + sim.started`.
+        """
+        return bool(self.initialized and self.loop.index)
+
     def run_one_step(self, verbose=None):
         """
         Run a single sim step; only used for debugging purposes.
@@ -1597,7 +1611,7 @@ class Sim(ss.modules.Base):
         """
         if not self.initialized: self.init() # Automatically initialize if not initialized
         t = self.t
-        nxt = t.ti + 1 if self.loop.index else 0 # The next step, which starts at its time point
+        nxt = t.ti + self.started # The next step, which starts at its time point
         self.loop.run(t.tvec[min(nxt, t.npts - 1)], verbose)
         return self
 
@@ -1648,9 +1662,9 @@ class Sim(ss.modules.Base):
         elif solver is not None and not self.initialized:
             self.pars.solver = solver
         if pars is not None or rand_seed is not None: # With other values or another seed, from the start
-            self._restart(pars=pars, rand_seed=rand_seed) # Which builds it again if it needs to
+            self.restart(pars=pars, rand_seed=rand_seed) # Which builds it again if it needs to
         elif self.complete and until is None: # Run again from the start
-            self._restart()
+            self.restart()
 
         # Initialization steps
         if verbose is not None and not self.initialized: # So that initializing says as much
@@ -1845,9 +1859,13 @@ class Sim(ss.modules.Base):
         """
         return ss.gradients.LogDensity(self.new(verbose=0).init(), pars=pars, likelihood=likelihood)
 
-    def _restart(self, pars=None, rand_seed=None):
+    def restart(self, pars=None, rand_seed=None):
         """
-        Take a sim back to its start so that it can be run again, without building it again, as `sim.run()` does for a finished sim
+        Take a sim back to its start, optionally with new values of its parameters or a new seed, without running it
+
+        `sim.run()` does this itself for a finished sim (and with `pars=` or `rand_seed=`); `restart()`
+        is for stepping it yourself from the start (e.g. `sim.restart(pars=dict(beta=0.1)).run(until=2010)`),
+        or for a function that sets the values to try (as for `ss.gradients.Density`).
 
         For a sim that is nothing but compartments (see `sim.kernel_only()`), this makes
         repeated runs many times faster; any other sim (or a change the compartments were
@@ -1857,6 +1875,9 @@ class Sim(ss.modules.Base):
         Args:
             pars (dict): values of model parameters by name, e.g. `dict(beta=0.1)`
             rand_seed (int): the seed for the next run
+
+        Returns:
+            The sim (itself, or itself built again)
         """
         if not self.initialized:
             self.init()

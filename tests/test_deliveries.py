@@ -660,6 +660,37 @@ def test_modify_until():
         ss.modify('sir.pars.beta', multiply=0.5, until=lambda sim: True)
 
 
+
+@sc.timer()
+def test_paths():
+    sc.heading('Testing states by their paths in who=, where=, and move=, the same as the states, and the note on seeding beside the default')
+    def run(make, solver='ode', key='interventions', **kw):
+        S, E, I, R = ss.states('S E I R')
+        d = ss.Disease(infection=S >> E @ ss.perday(0.4)*I, onset=E >> I @ ss.days(3), recovery=I >> R @ ss.days(7), name='seir', **kw)
+        return ss.Sim(d, **{key: make(d)}, total_pop=5000, stop=ss.days(60), verbose=0, solver=solver).run()
+    R = lambda sim: sim.results.seir.R[-1]
+    for solver in ['ode', 'abm']:
+        kw = dict(solver=solver, init_n=dict(I=10))
+        assert R(run(lambda d: ss.treat(cure=1.0, who=d.I, coverage=ss.perday(0.1)), **kw)) == R(run(lambda d: ss.treat(cure=1.0, who='seir.I', coverage=ss.perday(0.1)), **kw))
+        moves = [R(run(lambda d: ss.Delivery(move=move(d), coverage=0.3, at=[ss.days(10)]), **kw)) for move in [lambda d: d.S >> d.R, lambda d: 'seir.S >> seir.R', lambda d: 'S >> R']]
+        assert moves[0] == moves[1] == moves[2]
+        mods = [R(run(lambda d: ss.modify('seir.infection', multiply=0.5, where=where(d)), key='connectors', **kw)) for where in [lambda d: d.I, lambda d: 'seir.I']]
+        assert mods[0] == mods[1]
+    with pytest.raises(ValueError):
+        ss.Delivery(move='seir.S >> sir.R', at=[1]) # The states of two modules
+    with pytest.raises(ValueError):
+        ss.treat(cure=1.0, who='I') # A path needs its module
+    seeding = lambda d: ss.Delivery(move=d.S >> d.I, at=[ss.days(10)], coverage=0.001)
+    note = lambda sim: any('give the disease init=dict(I=0)' in note for note in sim.notes)
+    sim = run(seeding)
+    assert note(sim) and sim.results.seir.E[0] > 0 # The default seeding (into E, where infection puts people), with a note
+    sim = run(seeding, init=dict(I=0))
+    assert not note(sim) and sim.results.seir.E[0] == sim.results.seir.I[0] == 0
+    S, E, I, R = ss.states('S E I R') # A network of agents runs as agents
+    d = ss.Disease(infection=S >> E @ ss.peryear(10)*I, onset=E >> I @ ss.days(3), recovery=I >> R @ ss.days(7), init_n=dict(I=10), name='seir')
+    assert ss.Sim(d, networks=ssl.HybridNet(household_size=ss.poisson(lam=3)), total_pop=2000, stop=ss.days(5), verbose=0).init().solver == 'abm'
+    return
+
 if __name__ == '__main__':
     sc.options(interactive=False)
     change = test_change()
@@ -681,3 +712,4 @@ if __name__ == '__main__':
     saved  = test_save_load()
     copied = test_copied_steps()
     aged   = test_age_and_birth()
+    paths  = test_paths()

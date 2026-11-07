@@ -13,7 +13,7 @@ import sciris as sc
 import starsim as ss
 from types import SimpleNamespace as Bunch # A plain object with attributes; much faster to read than an objdict, which matters inside the ODE's right-hand side
 
-__all__ = ['Effects', 'Engine', 'CountState', 'StockCtx', 'convert', 'add_rows', 'at_starts', 'by_level', 'no_tables', 'kept_by_group', 'group_rows', 'record_people', 'people_counts']
+__all__ = ['Effects', 'Engine', 'CountState', 'StockCtx', 'convert', 'add_rows', 'at_starts', 'by_level', 'no_tables', 'kept_by_group', 'group_rows', 'init_people', 'record_people', 'people_counts']
 
 
 from .backends.kernels import no_tables # For a step whose program holds for the whole step: see ss.kernels.step()
@@ -145,19 +145,36 @@ def group_rows(sim, npts, row_bytes, budget, name=None):
     return rows, starts
 
 
-def record_people(sim):
-    """ In a compartmental run, the results that agents give the sim (alive, died, emigrated), from the declared states and flows """
-    if sim.solver in [None, 'abm'] or 'alive' in sim.results:
+def init_people(sim):
+    """ In a compartmental run, the results that agents give the sim (alive, died, emigrated), made with the other results, so they can be read during the run, as with agents; filled in as the declared modules record theirs (see `record_people()`) """
+    mods = [mod for mod in sim.declared if mod.graph.people_states]
+    if sim.solver in [None, 'abm'] or 'alive' in sim.results or not mods:
         return
-    counts = people_counts(sim, lambda mod, key: np.asarray(mod.results[key].values, dtype=float))
-    if counts is None:
-        return
-    kw = dict(module='People', timevec=sim.t.timevec, scale=False)
+    t = mods[0].t # On the timeline of the first disease, whose states hold everyone (see people_counts())
+    kw = dict(module='People', timevec=t.timevec, scale=False)
     sim.results += [
-        ss.Result('alive', label='Number alive', values=counts.alive, kind='stock', **kw),
-        ss.Result('died', label='Deaths', values=counts.died, kind='flow', **kw),
-        ss.Result('emigrated', label='Emigrants', values=counts.emigrated, kind='flow', **kw),
+        ss.Result('alive', label='Number alive', values=np.zeros(t.npts), kind='stock', **kw),
+        ss.Result('died', label='Deaths', values=np.zeros(t.npts), kind='flow', **kw),
+        ss.Result('emigrated', label='Emigrants', values=np.zeros(t.npts), kind='flow', **kw),
     ]
+    return
+
+
+def record_people(sim, ti=None, keys=None):
+    """ In a compartmental run, the results that agents give the sim (alive, died, emigrated), from the declared states and flows: at every time point, or at `ti` (only `keys`, if given) """
+    if sim.solver in [None, 'abm'] or 'alive' not in sim.results:
+        return
+    if ti is None:
+        counts = people_counts(sim, lambda mod, key: np.asarray(mod.results[key].values, dtype=float))
+    elif len({mod.t.npts for mod in sim.declared}) > 1: # Modules on different timelines: worked out once the run is done
+        return
+    else:
+        counts = people_counts(sim, lambda mod, key: np.asarray(mod.results[key].values[ti], dtype=float))
+    for key in keys or ['alive', 'died', 'emigrated']:
+        if ti is None:
+            sim.results[key][:] = counts[key]
+        else:
+            sim.results[key][ti] = counts[key]
     return
 
 
@@ -172,7 +189,9 @@ def people_counts(sim, get):
     for mod in mods:
         for tr in mod.graph.transitions.values():
             if tr._deaths is not None and tr._deaths in mod.results:
-                gone['emigrated' if getattr(tr, 'migration', False) else 'died'] += get(mod, tr._deaths)
+                gone['died'] += get(mod, tr._deaths)
+            elif tr._outflow and tr.migration and tr.name in mod.results: # People leaving alive (ss.emigration())
+                gone['emigrated'] += get(mod, tr.name)
     return sc.obj(alive=alive, **{key:np.broadcast_to(val, alive.shape).copy() for key,val in gone.items()})
 
 
@@ -1022,12 +1041,31 @@ class Engine(Telling, Effects):
             out = out*(adjust if uids is None else adjust[self.sim.groups.group_raw()[uids]])
         return out
 
-    def dest_shares(self, tr, ps, uids=None, stay=0.0):
-        """ The probability of each destination of a transition with several, with the modifiers of each (`'progression.C'`), as `branch_shares()` does for branches; `stay` is the probability of `ss.stay`, if given """
-        mults = [self.branch_mult_of(f'{tr.name}.{dst.name}', uids) for dst in tr.dest]
-        return self.branch_shares([f'{tr.name}.{dst.name}' for dst in tr.dest], ps, mults, stay=stay)
+    def dest_shares(self, tr, ps, uids=None, ev=None, ends=False):
+        """
+        The probability of each destination of a transition with several, with the modifiers of each (`'progression.C'`, `'outcome.dead'`), as `branch_shares()` does for branches
 
-    def branch_shares(self, trs, ps, mults, stay=0.0):
+        ss.dead and ss.stay are branches like the states: given a probability, they keep it (scaled with the others if a modifier makes them come to more than 1), and a modifier on one of them scales it.
+        With no destination left to take the rest, it goes to ss.stay if it is one, and otherwise to ss.dead.
+
+        Args:
+            tr (Transition): the transition
+            ps (list): the probability of each of its states, evaluated, or None for the one that takes the rest
+            uids (array): the agents, for an agent engine
+            ev (func): how to evaluate the probabilities of ss.dead and ss.stay (default: `self.eval`)
+            ends (bool): whether to return the shares of ss.dead and ss.stay too, after those of the states (in that order, those that are destinations)
+        """
+        ev = ev or self.eval
+        names = [f'{tr.name}.{dst.name}' for dst in tr.dest] + [f'{tr.name}.dead']*tr.may_die + [f'{tr.name}.stay']*tr.stays
+        given = [tr.p_die]*tr.may_die + [tr.p_stay]*tr.stays
+        ps = list(ps) + [None if p is None else ev(p) for p in given]
+        if all(p is not None for p in ps) and len(ps) > len(tr.dest): # Every destination given a value: what is left stays, or else dies
+            ps[-1] = None
+        mults = [self.branch_mult_of(name, uids) for name in names]
+        shares = self.branch_shares(names, ps, mults)
+        return shares if ends else shares[:len(tr.dest)]
+
+    def branch_shares(self, trs, ps, mults):
         """
         The probability of each branch out of a state, with their modifiers
 
@@ -1039,11 +1077,10 @@ class Engine(Telling, Effects):
             trs (list): the transitions (or their names)
             ps (list): the probability of each, or None for the one that takes the rest
             mults (list): the multiplier of each, or None for those with no modifiers
-            stay (float): the probability of `ss.stay` among the destinations, if given, which the one that takes the rest does not get
         """
-        if len(ps) == 1 and ps[0] is None and mults[0] is None and not stay: # One way out, as for most states: everyone takes it
+        if len(ps) == 1 and ps[0] is None and mults[0] is None: # One way out, as for most states: everyone takes it
             return [1.0]
-        given = sum(p if m is None else np.where(np.asarray(m) == 0, 0.0, p) for p,m in zip(ps, mults) if p is not None) + stay # A branch its modifiers rule out (e.g. one for another level of a move= arrow) does not count
+        given = sum(p if m is None else np.where(np.asarray(m) == 0, 0.0, p) for p,m in zip(ps, mults) if p is not None) # A branch its modifiers rule out (e.g. one for another level of a move= arrow) does not count
         if np.any(np.asarray(given) > 1 + 1e-9) or any(np.any(np.asarray(p) < 0) for p in ps if p is not None): # Refused, rather than used as 1 (or as a negative remainder)
             names = sc.strjoin([getattr(tr, 'name', tr) for tr,p in zip(trs, ps) if p is not None])
             raise ValueError(f'the branch probabilities of {self.mod.name}.{names} come to as much as {np.max(given):n}, more than 1 (or one is negative); each must be between 0 and 1, and together at most 1')
@@ -1141,8 +1178,8 @@ class Engine(Telling, Effects):
         for strat in self.graph.strats + [s for s in sim.groups.sim_strats if s not in self.graph.strats]:
             d = sim.groups.dim_index(strat.name)
             for key,vals in strat.adjust.items():
-                modname, _, name = key.rpartition('.') # A sim's stratification can name a transition with its module, e.g. 'flu.infection'
-                if modname not in ['', self.mod.name]:
+                name = ss.dimensions.adjusts(self.graph, key) # A sim's stratification can name a transition with its module, e.g. 'flu.infection'
+                if name is None: # Another module's
                     continue
                 if name in self.rel_adjust:
                     if name == 'rel_trans': # Those who infect others, and those counted by their infectiousness (A.n_infectious)
@@ -1155,7 +1192,12 @@ class Engine(Telling, Effects):
                     if not any(self.applies[state.name][d] for state in states):
                         raise ValueError(f'the adjustment of {name} by "{strat.name}" cannot apply, since the people it is for ({sc.strjoin(s.name for s in states)}) have no level of "{strat.name}".')
                     self.rel_adjust[name].append((d, vals))
-                elif name in self.adjust:
+                elif name not in self.graph.transitions: # One destination of a transition with several, e.g. 'outcome.dead': a multiplier on its probability
+                    tr = self.graph.destination(name)
+                    if tr.source and not any(self.applies[src.name][d] for src in tr.source):
+                        raise ValueError(f'the adjustment of "{name}" by "{strat.name}" cannot apply, since the people it moves ({sc.strjoin(src.name for src in tr.source)}) have no level of "{strat.name}".')
+                    self.branch_adjust[name] = self.branch_adjust.get(name, 1.0)*sim.groups.group_vals(d, vals)
+                else:
                     tr = self.graph.transitions[name]
                     if tr.trigger is not None:
                         raise sc.KeyNotFoundError(f'the adjustment of "{name}" by "{strat.name}" cannot apply, since "{name}" is triggered by {tr.trigger} and has no rate to scale; use where= on the transition, or a p= branch.')
@@ -1824,24 +1866,17 @@ class Engine(Telling, Effects):
         if not tr._split:
             return [1.0]*len(tr.dest)
         ps = [None if p is None else self.eval(p) for p in (tr.p if ps is None else ps)]
-        return self.dest_shares(tr, ps, stay=self.ends_given(tr, self.eval)) # With ss.stay or ss.dead, what the states leave over stays or dies
+        return self.dest_shares(tr, ps) # With ss.stay or ss.dead, what the states leave over stays or dies
 
-    @staticmethod
-    def ends_given(tr, ev):
-        """ The probabilities given to ss.stay and ss.dead in a split, together: the destination that takes the rest does not get them """
-        return sum((ev(p) for p in [tr.p_stay, tr.p_die] if p is not None), 0.0)
-
-    def die_share(self, tr, shares, ev=None):
-        """ The probability of ss.dead in a split (0 if it is not one of the destinations): what the shares of the states leave over, less what ss.stay takes """
-        if not tr.dies:
+    def die_share(self, tr, shares, ev=None, uids=None):
+        """ The probability of ss.dead in a split (0 if it is not one of the destinations), given the shares of its states: what they leave over, less what ss.stay takes """
+        if not tr.may_die:
             return 0.0
-        ev = ev or self.eval
-        left = 1.0 - sum(shares, 0.0)
         if not tr.stays:
-            return left
-        elif tr.p_die is not None:
-            return np.minimum(ev(tr.p_die), left)
-        return np.maximum(left - ev(tr.p_stay), 0.0)
+            return 1.0 - sum(shares, 0.0)
+        ev = ev or self.eval
+        ps = [None if p is None else ev(p) for p in tr.p or [None]*len(tr.dest)]
+        return self.dest_shares(tr, ps, uids, ev=ev, ends=True)[len(tr.dest)]
 
     def eval(self, expr):
         return ss.expressions.evaluate(expr, self)
@@ -2241,6 +2276,8 @@ class Engine(Telling, Effects):
                 r[ti] = r[ti]*scale
         if self.coded: # The module's own `ss.BoolState`s (and derived states), counted as for a module written as code
             ss.Module.record_stocks(mod, names=self.coded)
+        if mod is self.sim.declared[-1]: # Once every declared module has its states for the step: the number alive, as agents record it at the start of the step
+            record_people(self.sim, ti, keys=['alive'])
         return
 
     def record_flows(self):
@@ -2284,6 +2321,8 @@ class Engine(Telling, Effects):
         if scale != 1:
             for r in self.flow_people: # The values written this step
                 r[ti] = r[ti]*scale
+        if mod is self.sim.declared[-1]: # Once every declared module has its flows for the step
+            record_people(self.sim, ti, keys=['died', 'emigrated'])
         return
 
     def row_stocks(self, stock_groups, ti):

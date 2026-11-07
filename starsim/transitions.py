@@ -544,7 +544,7 @@ class Transition(Nameable):
         self.undriven = False # No rate, duration, or p=: only products, deliveries, or code move people along it (see Graph.resolve_exits())
         self.stays = False # Whether ss.stay is one of the destinations, kept out of dest: what the other branches leave over stays (see split)
         self.p_stay = None # Its probability, if given (otherwise the rest)
-        self.dies = False # Whether ss.dead is one of several destinations, kept out of dest: those who take it die, as by an outflow
+        self.may_die = False # Whether ss.dead is one of several destinations (some who take it die), kept out of dest: those who take that branch die, as by an outflow; for whether anyone dies by it, use tr.dies or tr.may_die
         self.p_die = None # Its probability, if given (otherwise the rest)
         self._ends_at = {} # Where ss.stay and ss.dead were among the destinations given, so their entries of p= can be taken out
         self.guessed = sc.obj() # Which fields were guessed, and why
@@ -558,7 +558,7 @@ class Transition(Nameable):
             self._set_dest(dest)
         if p is not None:
             self.p = sc.tolist(p)
-            if self.dies and len(self.p) == 1 and len(self.dest) + len(self._ends_at) == 2: # With two destinations, a single value is the first one's probability
+            if self.may_die and len(self.p) == 1 and len(self.dest) + len(self._ends_at) == 2: # With two destinations, a single value is the first one's probability
                 self.p = [self.p[0], None]
             if self._ends_at and len(self.p) == len(self.dest) + len(self._ends_at):
                 popped = {key:self.p.pop(i) for key,i in sorted(self._ends_at.items(), key=lambda item: -item[1])} # From the last, so the earlier positions still hold
@@ -640,20 +640,25 @@ class Transition(Nameable):
     @property
     def _split(self):
         """ Whether it splits between several destinations when it is taken (ss.stay and ss.dead count as one each) """
-        return self.dest is not None and (len(self.dest) > 1 or self.stays or self.dies)
+        return self.dest is not None and (len(self.dest) > 1 or self.stays or self.may_die)
 
     @property
     def _ends(self):
         """ The names of the destinations whose flows are recorded apart, as res.<transition>.<name>: its states, and 'dead' for ss.dead, if there are two or more """
-        names = [d.name for d in self.dest or []] + ['dead']*self.dies
+        names = [d.name for d in self.dest or []] + ['dead']*self.may_die
         return names if len(names) > 1 else []
+
+    @property
+    def dies(self):
+        """ Whether everyone who takes it dies (`ss.death()`, `I >> ss.dead`); False for a split with `ss.dead` (see `tr.may_die`) and for people leaving alive (`ss.emigration()`) """
+        return bool(self._outflow and not self.migration)
 
     @property
     def _deaths(self):
         """ The name of the flow that counts the people who die by this transition: the transition's own, or its flow to ss.dead in a split with a state; None if nobody dies by it """
-        if (self._outflow and not self.migration) or (self.dies and not self.dest):
-            return self.name
-        return f'{self.name}.dead' if self.dies else None
+        if not (self.dies or self.may_die):
+            return None
+        return f'{self.name}.dead' if self.dest else self.name
 
     @property
     def _immediate(self):
@@ -689,9 +694,9 @@ class Transition(Nameable):
             if len(self.dest) > 1: # ss.stay and ss.dead are kept out of the destinations, so they are all states
                 self._ends_at = {key:i for i,d in enumerate(self.dest) for key,end in [('stay', stay), ('die', dead)] if d is end}
                 self.stays = 'stay' in self._ends_at
-                self.dies = 'die' in self._ends_at
+                self.may_die = 'die' in self._ends_at
                 self.dest = [d for d in self.dest if d is not stay and not isinstance(d, Outside)]
-                if self.dies and any(getattr(d, 'name', None) == 'dead' for d in self.dest):
+                if self.may_die and any(getattr(d, 'name', None) == 'dead' for d in self.dest):
                     raise ValueError('a transition splits between ss.dead and a state called "dead", whose flows would have the same name (res.<transition>.dead); rename the state, e.g. "D"')
             elif self.dest and self.dest[0] is stay: # Alone, an error once the module is built (see Graph.check())
                 self.dest, self.stays = [], True
@@ -865,7 +870,7 @@ class Transition(Nameable):
         def names(items, null):
             return ' | '.join([getattr(s, 'label_name', repr(s)) for s in items or []] + [null]*(not items)) # Not yet checked, for messages about one being made
         src = '(everyone)' if getattr(self, 'every_state', False) and not self.source else names(self.source, '(added)')
-        dst = names(self.dest, '(removed)') + ' | (removed)'*bool(self.dest and self.dies)
+        dst = names(self.dest, '(removed)') + ' | (removed)'*bool(self.dest and self.may_die)
         return f'{src} -> {dst}'
 
     @property

@@ -13,7 +13,7 @@ import sciris as sc
 import numpy as np
 import numba as nb
 import starsim as ss
-import matplotlib.pyplot as plt
+plt = sc.lazyimport('matplotlib.pyplot') # Imported when first used, since most runs never plot
 from ..solvers.backends import draws, cache as _cache
 sps = sc.lazyimport('scipy.stats') # A third of the time `import starsim` would take, which most runs never use: see scipy_dist
 ss_int = ss.dtypes.int

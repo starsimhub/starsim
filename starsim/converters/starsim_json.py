@@ -123,7 +123,7 @@ class Writer:
         ends = lambda names, empty: empty if not names else names[0] if len(names) == 1 else '[' + ', '.join(names) + ']'
         name = lambda x: 'stay' if x is ss.stay else x.name
         src = ends([name(x) for x in tr.source], 'outside' if tr.migration else 'unborn') # An inflow: births, or arrivals
-        dst = [name(x) for x in tr.dest or []] + ['stay']*bool(tr.stays) + ['dead']*bool(tr.dies) # ss.stay and ss.dead are kept out of dst, each with its own p
+        dst = [name(x) for x in tr.dest or []] + ['stay']*bool(tr.stays) + ['dead']*bool(tr.may_die) # ss.stay and ss.dead are kept out of dst, each with its own p
         out = sc.objdict(source=src, dest=('outside' if tr.migration else 'dead') if not dst else dst[0] if len(dst) == 1 else dst)
         dur = tr.dur
         if tr.rate is not None:
@@ -132,7 +132,7 @@ class Writer:
             out.dur = self.expr(dur, pars)
         p = tr.p
         if p is not None: # A split, or a share of the people leaving by a transition with one destination (e.g. recovery with p=1 - p_death beside death with p=p_death)
-            p = sc.tolist(p) + [tr.p_stay]*bool(tr.stays) + [tr.p_die]*bool(tr.dies)
+            p = sc.tolist(p) + [tr.p_stay]*bool(tr.stays) + [tr.p_die]*bool(tr.may_die)
             out.p = [None if x is None else self.expr(x, pars) for x in p]
         for key in ['min_stay', 'label', 'stages']:
             val = getattr(tr, key, None)

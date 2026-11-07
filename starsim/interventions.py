@@ -211,6 +211,19 @@ def trigger_moves(owner, outcome, sel, eng=None, before=None):
     return
 
 
+def move_paths(move, name):
+    """ For move= as a string, e.g. 'sir.S >> sir.V' or 'U + B >> B': the names of the states people move from (a list) and to, and the name of their module (None if not given) """
+    srcs, arrow, dst = move.partition('>>')
+    paths = [p.strip() for p in srcs.split('+')] + [dst.strip()]
+    split = [p.split('.') for p in paths]
+    mods = {parts[0] for parts in split if len(parts) == 2}
+    if not arrow or not all(paths) or any(len(parts) > 2 or not all(parts) for parts in split) or len(mods) > 1 or (mods and any(len(parts) == 1 for parts in split)):
+        errormsg = f'move= of "{name}" as a string is a move between the states of one disease, by their paths, e.g. move="sir.S >> sir.V" (or "sir.U + sir.B >> sir.B" from either), or by their names alone; not {move!r}'
+        raise ValueError(errormsg)
+    names = [parts[-1] for parts in split]
+    return (names[:-1], names[-1]), (mods.pop() if mods else None)
+
+
 def order_steps(mods):
     """
     The interventions in the order they run: each delivery after the deliveries whose events trigger it, so a step acts on
@@ -322,13 +335,13 @@ class Delivery(ss.products.EventSource, Intervention):
 
     Args:
         product (`ss.Product`): what is delivered: an `ss.Vaccine`, `ss.Diagnostic`, or `ss.Treatment`, or a product written as code (an `ss.Product` with an `administer()`), which any of them can give (also the first argument); `ss.vaccinate()`, `ss.screen()`, and `ss.treat()` instead take the product's own keywords and make it, e.g. `ss.vaccinate(efficacy=0.9, ...)`
-        who (Cond/func): who is eligible, which must choose people or compartments: a condition on them (e.g. `ss.person.age < 5`); a condition on the
+        who (Cond/str/func): who is eligible, which must choose people or compartments: a condition on them (e.g. `ss.person.age < 5`, or a state by its path, `who='sir.I'`, as `ss.ref('sir.I')`); a condition on the
             population goes in `where=`. Or a function of the sim returning who receives it this step (UIDs, or a number per group in a compartmental
             run), which replaces `where`, `coverage`, and the rounds
         on (event/str): what triggers it: an event (e.g. `sir.infection`, acted on in the next step, `screening.positive`, or a delivery), events joined with `|` (any of them) or `&`
             (all of them), or a transition by its path (`on='sir.infection'`, found when the sim is initialized); it reaches the people the event happened to
             on this step who meet `who=` and `where=`
-        move (Transition/dict/StrainMove): instead of a product, a move between two states for the people reached, written with the states, e.g. `move=S >> V` (a one-off campaign), or from any of several (`move=U + P + W >> P`: a re-dose, which restarts the time in `P` of those already there); or the level of a stratification they move to, e.g. `move=dict(vaccinated=True)`, or from one level to another, `move=dict(risk=('low', 'high'))`; or a change of strains, e.g. `move=DS >> RIF`
+        move (Transition/dict/StrainMove): instead of a product, a move between two states for the people reached, written with the states, e.g. `move=S >> V` (a one-off campaign), or from any of several (`move=U + P + W >> P`: a re-dose, which restarts the time in `P` of those already there), or with their paths (`move='sir.S >> sir.V'`, or `'S >> V'` for the one disease that has them); or the level of a stratification they move to, e.g. `move=dict(vaccinated=True)`, or from one level to another, `move=dict(risk=('low', 'high'))`; or a change of strains, e.g. `move=DS >> RIF`
         strain (str/Strain): with `move=` into a state where people carry a strain (e.g. `move=S >> E`), the strain they arrive with: the import of a strain on a date, e.g. `ss.Delivery(move=S >> E, strain='alpha', at=['2021-01-01'], capacity=20)`
         increment (str/dict): instead of a product, a counter that goes up for the people reached: its name, which adds 1 (`increment='doses'`), or a dict of the amount for each (`dict(doses=2)`)
         at_age (dur/float): routine delivery to people as they reach this age (a bare number is in years), e.g. `at_age=ss.months(9)`; not to people
@@ -409,9 +422,9 @@ class Delivery(ss.products.EventSource, Intervention):
         self.move_module = None # And the module of those states (as an object until named), which the delivery acts on
         if isinstance(move, ss.strains.StrainMove): # A change of the strains people carry, e.g. move=DS >> RIF
             move = {move.strains.name: move}
-        if isinstance(move, str):
-            errormsg = f'move= of "{name or type(self).__name__}" is a move between states written with the states, e.g. move=S >> V (or U + B >> B from either), not a string ({move!r})'
-            raise ValueError(errormsg)
+        if isinstance(move, str): # By the paths of the states, e.g. move='sir.S >> sir.V' (or 'S >> V', from the one disease that has them), checked when the sim is initialized
+            self.move_states, self.move_module = move_paths(move, name or type(self).__name__)
+            move = None
         if isinstance(move, ss.Transition):
             src, dst = move.source or [], move.dest or []
             if product is not None or len(dst) != 1 or not src or not all(isinstance(st, ss.State) for st in src + dst) or move.rate is not None or move.dur is not None or move.p is not None:
@@ -820,6 +833,10 @@ class Delivery(ss.products.EventSource, Intervention):
             for name in self.move_names:
                 if name not in states or not states[name].people:
                     raise sc.KeyNotFoundError(f'move= of "{self.name}" names "{name}", which is not a state of people of "{self.dis.name}"; its states are {sc.strjoin(k for k,v in states.items() if v.people)}')
+            dst = self.move_states[1]
+            if 'init_prev' in self.dis.graph.guessed and dst in [s.name for s in self.dis.graph.infected]: # Seeding by a delivery, beside the default seeding at the start
+                ss.note(f'"{self.dis.name}" was given no starting values, so it seeds {self.dis.graph.guessed["init_prev"]} of people at the start, and "{self.name}" moves people into {dst} as well; '
+                        f'if "{self.name}" is the seeding, give the disease init=dict({dst}=0)', sim=sim)
         self.strain_move = None # With strain=: the level of the disease's strain dimension that people arrive at, as (dimension index, level)
         if self.strain is not None:
             dst = self.move_states[1]

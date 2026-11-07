@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 import sciris as sc
 import starsim as ss
-import matplotlib.pyplot as plt
+plt = sc.lazyimport('matplotlib.pyplot') # Imported when first used, since most runs never plot
 
 ss_int = ss.dtypes.int
 

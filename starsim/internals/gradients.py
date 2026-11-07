@@ -836,7 +836,7 @@ def run_sets(sim, par_sets):
     """
     Run a sim with many sets of parameter values, taking the runs in one call to JAX
 
-    Each set is a dict of values by name, as for `sim._restart(pars=...)`. Only for a
+    Each set is a dict of values by name, as for `sim.restart(pars=...)`. Only for a
     sim that `ss.solvers.why_not(sim, 'jax')` allows: an ODE that the kernels run from start to finish.
 
     Args:
@@ -848,7 +848,7 @@ def run_sets(sim, par_sets):
     mods = sim.declared
     captured = [[] for mod in mods]
     for pars in par_sets:
-        sim._restart(pars=pars)
+        sim.restart(pars=pars)
         for j,mod in enumerate(mods):
             captured[j].append(capture(mod.engine))
     outs = outputs(sim, captured, kind='many')
@@ -889,7 +889,7 @@ def gradient(sim, set_pars, x0, read, rel_step=1e-5):
 
     Args:
         sim (`ss.Sim`): an initialized sim that `ss.solvers.why_not(sim, 'jax')` allows, which is left as its run at x0
-        set_pars (func): called with an array of values; restarts the sim with them (e.g. `lambda x: sim._restart(pars=dict(beta=x[0]))`)
+        set_pars (func): called with an array of values; restarts the sim with them (e.g. `lambda x: sim.restart(pars=dict(beta=x[0]))`)
         x0 (array): the values to work out the derivative at
         read (func): called with the sim after its run; returns a number or an array (or an `sc.obj` of arrays)
         rel_step (float): the step for the central differences, relative to each value (or absolute, for a value of 0)
@@ -996,7 +996,7 @@ def entries(sim, names=None):
     pars = sim.par_values
 
     def set_pars(x):
-        sim._restart(pars=sc.mergedicts(pars, ss.fit.to_pars(keys, found, x, types, elements)))
+        sim.restart(pars=sc.mergedicts(pars, ss.fit.to_pars(keys, found, x, types, elements)))
 
     return found, set_pars, x0, bounds
 

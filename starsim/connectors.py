@@ -313,7 +313,7 @@ class modify(Connector):
             `1 − share·(1 − multiply)`, exactly, since hazards add; a number, an `ss.timeseries`, an `ss.by`, or (with `network=`, as agents) a function of
             the network returning one value per edge (e.g. `lambda net: net.edges.condoms`)
         network (str/list): for a modifier of a transmission, the network or networks (by name, as in the sim's `networks=`, including mixing pools) it applies on; by default, every one. On a parameter (e.g. `tb.pars.beta`), it acts on every transmission the parameter scales (e.g. an infection and its reinfections). A disease written as code has no transmission to name, so on a network the target is its `rel_sus` (of the people who would be infected over it)
-        where (Cond/func): who it applies to: a condition (e.g. `sir.vaccinated`), a condition on a count (e.g. `sir.I.n > 1000`, worked out at each step; in compartments, as part of the rates where it can be, so the run stays in the kernels), or a function of the sim (default: everyone); with `network=`, the people who would be infected
+        where (Cond/str/func): who it applies to: a condition (e.g. `sir.vaccinated`, or a state by its path, `where='sir.I'`, as `ss.ref('sir.I')`), a condition on a count (e.g. `sir.I.n > 1000`, worked out at each step; in compartments, as part of the rates where it can be, so the run stays in the kernels), or a function of the sim (default: everyone); with `network=`, the people who would be infected
         start (date/float): when the modifier starts to apply, within the sim (default: the start of the sim); a number is a calendar year from 1900 on, and otherwise a time in the sim's unit
         stop (date/float): when it stops applying (default: never); a stop after the end of the sim never stops it
         when (func): a condition on time alone: a function of the timeline returning True on the steps it applies (e.g. `lambda t: t.ti % 7 == 0`), which can be read before the run; a condition on anything else goes in `where=`
@@ -380,6 +380,7 @@ class modify(Connector):
             named = self.amount.name
             self.define_pars(**{'efficacy' if efficacy is not None else self.op:self.amount})
             self.amount.name = named # Named by its target when the sim is built, if it is not named (see ss.solvers.choose)
+        where = ss.ref(where) if isinstance(where, str) else where # A state by its path, e.g. where='sir.I'
         self.where = None if where is None else where if isinstance(where, ss.State) and where.name is None else ss.conditions.as_cond(where) # A state of a class body has no name until its disease is built (see own())
         self.start = start
         self.stop = stop

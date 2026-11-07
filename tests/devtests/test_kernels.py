@@ -182,7 +182,7 @@ def test_restart():
         values = values | change # A restart keeps the values of those before it
         kept.run(pars=change)
         assert np.array_equal(kept.results.sir.D, splits().new(pars=values).run().results.sir.D), f'A restart with {values} differs from a new sim'
-    kept._restart()
+    kept.restart()
     start = engine.start_y
     assert kept.run(pars=dict(beta=0.2)) and engine.start_y is start, 'A value the start does not read should keep it'
     assert kept.run(pars=dict(p_R=0.7)) and engine.start_y is not start, 'A value the branches read should not keep it'

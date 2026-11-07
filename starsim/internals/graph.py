@@ -149,11 +149,12 @@ class Graph:
     def resolve_derived(self):
         """
         The results of the states marked infected (`ss.State(infected=True)`): `infected`, the number in them, and `prevalence`, their share
-        of the people in every state, unless the module defines its own of that name. Nothing is guessed: with no state marked, there are none
+        of the people in every state, unless the module defines its own of that name. Nothing is guessed: with no state marked, there are none;
+        with some marked, the sources of infection count too (see `infected`)
         """
-        marked = [state for state in self.people_states if state.infected]
-        if not marked:
+        if not any(state.infected for state in self.people_states):
             return
+        marked = [state for state in self.infected if state.people]
         own = self.states.get('infected')
         if own is not None and (len(marked) > 1 or own is not marked[0]):
             errormsg = (f'"{self.module.name if self.module is not None else "The disease"}" marks {"more than one state" if len(marked) > 1 else "a state"} as infected ({sc.strjoin(s.name for s in marked)}), but also has a state called "infected", '
@@ -400,6 +401,12 @@ class Graph:
         for state in self.states.values():
             state.init, state.init_n = [ss.parameters.starting(v) for v in [state.init, state.init_n]]
         self.init_prev = ss.parameters.starting(self.init_prev)
+        raw = self.init_prev.raw if isinstance(self.init_prev, par) else self.init_prev
+        if isinstance(raw, ss.bernoulli): # The same as its p, e.g. from a coded disease: each person starts infected with that chance anyway
+            if isinstance(self.init_prev, par):
+                self.init_prev.value = raw.pars.p
+            else:
+                self.init_prev = raw.pars.p
         return
 
     def unset_default_init_prev(self):
@@ -786,18 +793,18 @@ class Graph:
                 if len(tr.dest or []) <= 1 and any(c is clock for c in ss.expressions.clocks_in(sc.tolist(tr.p))):
                     raise ss.CapabilityError(f'"{name}" has p= with {clock}, but a branch with p= is decided when people enter {sc.strjoin(clock.names)}, when no time has passed. '
                                              f'Write one transition with several destinations, decided when they leave, e.g. ss.Transition({tr.source[0].name}, [{tr.dest[0].name}, ...], dur=..., p=[f({clock}), None])')
-            if tr.stays and not tr.dest and not tr.dies:
+            if tr.stays and not tr.dest and not tr.may_die:
                 raise ValueError(f'"{name}" has ss.stay as its only destination; give it with another, e.g. [B, ss.stay] with p=[0.3, None].')
             if tr.p is not None and tr._split:
                 ps = tr.p
                 if len(ps) == 1 and len(tr.dest) == 2 and not tr.stays: # With two destinations, a single value is the first one's probability
                     ps = tr.p = [ps[0], None]
-                ends = ps + [tr.p_stay]*tr.stays + [tr.p_die]*tr.dies # One entry for each destination, with ss.stay and ss.dead
+                ends = ps + [tr.p_stay]*tr.stays + [tr.p_die]*tr.may_die # One entry for each destination, with ss.stay and ss.dead
                 if len(ps) != len(tr.dest):
-                    raise ValueError(f'"{name}" has {len(tr.dest) + tr.stays + tr.dies} destinations but {len(ps) + (tr.p_stay is not None) + (tr.p_die is not None)} branch probabilities; give one for each (or None for the one that takes the rest).')
+                    raise ValueError(f'"{name}" has {len(tr.dest) + tr.stays + tr.may_die} destinations but {len(ps) + (tr.p_stay is not None) + (tr.p_die is not None)} branch probabilities; give one for each (or None for the one that takes the rest).')
                 given = [p for p in ends if p is not None]
                 if len(given) < len(ends) - 1:
-                    which = [label for label,p in zip([d.name for d in tr.dest] + ['ss.stay']*tr.stays + ['ss.dead']*tr.dies, ends) if p is None]
+                    which = [label for label,p in zip([d.name for d in tr.dest] + ['ss.stay']*tr.stays + ['ss.dead']*tr.may_die, ends) if p is None]
                     raise ValueError(f'"{name}" leaves the rest to {sc.strjoin(which)}; only one destination can take the rest, so give the others a p=.')
                 if all(isinstance(p, par) and sc.isnumber(p.raw) for p in given):
                     total = sum(p.raw for p in given)
@@ -1016,7 +1023,7 @@ class Graph:
     @property
     def infected(self):
         """
-        The infected states: those marked `infected=True`, if any are. Otherwise, as worked out from the transitions (for what needs
+        The infected states: those marked `infected=True`, if any are, with the sources of infection (a state that infects others is infected, marked or not). Otherwise, as worked out from the transitions (for what needs
         them, e.g. the states strains are carried in, or the number infected at the start; never for a result, see `resolve_derived()`):
         the states people are infected into, and the sources of infection (of people by contact, as `I` in `beta*I`, or density-dependent,
         in `beta*I.n`; or of a count, as `Ih` in a bite rate `Ih.n / N` of mosquitoes)
@@ -1024,13 +1031,13 @@ class Graph:
         In a model where nobody is a source of infection (a staged condition such as a cancer), also every state that
         people reach from those without passing through a state they can be in without having been infected
         """
-        marked = [s for s in self.states.values() if getattr(s, 'infected', False)]
-        if marked:
-            return sorted(marked, key=lambda s: s.order)
         sources = {id(s):s for s in self.infectious + self.count_sources}
         for tr in self.transitions.values():
             if not tr.people and tr.rate is not None:
                 sources.update({id(leaf.states[0]):leaf.states[0] for leaf in tr.rate.leaves if isinstance(leaf, Count) and len(leaf.states) == 1 and leaf.states[0].people})
+        marked = [s for s in self.states.values() if getattr(s, 'infected', False)]
+        if marked:
+            return sorted({**{id(s):s for s in marked}, **sources}.values(), key=lambda s: s.order)
         out = {id(s):s for tr in self.acquisitions for s in tr.dest}
         if not sources:
             stop = set(self.uninfected)
@@ -1069,10 +1076,10 @@ class Graph:
         return f'{how} on "{name}" changes how long people take to leave {sc.strjoin(s.name for s in tr.source)}, not which destination they go to; to change the probability of one destination, name it instead: {dsts}'
 
     def destination(self, name):
-        """ For the name of one destination of a transition with several, `'<transition>.<state>'` (e.g. `'progression.C'`): the transition; otherwise None """
+        """ For the name of one destination of a transition with several, `'<transition>.<state>'` (e.g. `'progression.C'`, or `'outcome.dead'` and `'outcome.stay'` for ss.dead and ss.stay): the transition; otherwise None """
         trname, _, dst = name.rpartition('.')
         tr = self.transitions.get(trname)
-        if tr is None or tr.dest is None or len(tr.dest) < 2 or dst not in [d.name for d in tr.dest]:
+        if tr is None or not tr._split or dst not in [d.name for d in tr.dest] + ['dead']*tr.may_die + ['stay']*tr.stays:
             return None
         return tr
 

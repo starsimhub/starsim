@@ -11,7 +11,7 @@ import functools as ft
 import numpy as np
 import pandas as pd
 import sciris as sc
-import matplotlib.pyplot as plt
+plt = sc.lazyimport('matplotlib.pyplot') # Imported when first used, since most runs never plot
 import starsim as ss
 
 
@@ -1303,7 +1303,7 @@ class RestartedSims(ByScenario, cabc.Sequence):
             sim = sc.dcp(runner)
             if getattr(self, 'scenarios', None): # Labeled by its scenario, e.g. with the values swept
                 sim.label = self.scenarios[ind] or sim.label
-            self.made[ind] = sim._restart(pars=p, rand_seed=self.seeds[ind]).run()
+            self.made[ind] = sim.restart(pars=p, rand_seed=self.seeds[ind]).run()
         return self.made[ind]
 
     def __add__(self, other):
@@ -1331,7 +1331,7 @@ def restart_runs(sims, n_runs, pars=None, draws=False):
     """
     Run each sim a number of times, each with its own seed, by building it once and restarting it
 
-    Only for sims that are nothing but compartments (see `ss.Sim._restart()`), where this
+    Only for sims that are nothing but compartments (see `ss.Sim.restart()`), where this
     is many times faster than running copies. Returns None if any of the sims is not.
     Otherwise returns the sim of each run (`RestartedSims`, which makes each one when it is
     asked for), the results of every run (`ss.run.MultiResults`), and a dataframe of the runs.
@@ -1375,7 +1375,7 @@ def restart_runs(sims, n_runs, pars=None, draws=False):
             outs = []
             for j,p in enumerate(sets[r]): # All the runs of each module with each set of values are one call to the kernels
                 if p is not None:
-                    sim._restart(pars=p)
+                    sim.restart(pars=p)
                 run_seeds = np.array(seeds[first + j*n_runs:first + (j+1)*n_runs])
                 for mod in sim.declared:
                     cross = mod.engine.cross
@@ -1393,7 +1393,7 @@ def restart_runs(sims, n_runs, pars=None, draws=False):
                 groups[modname, key].append(vals)
             for key,vals in out.items():
                 values[modname, key].append(vals)
-        sim._restart(pars=sets[r][-1], rand_seed=seeds[first + len(sets[r])*n_runs - 1]).run() # The sim itself is left as its last run
+        sim.restart(pars=sets[r][-1], rand_seed=seeds[first + len(sets[r])*n_runs - 1]).run() # The sim itself is left as its last run
     arrays = {}
     join = lambda arrs: arrs[0] if len(arrs) == 1 else np.concatenate(arrs) if len({np.shape(a)[1:] for a in arrs}) == 1 else None # Without a copy for one sim, since by group they can be large; None if the sims have different groups (e.g. a delivery that adds a group), as in MultiResults.from_sims()
     for (modname,key),vals in values.items():

@@ -407,6 +407,15 @@ def check_kind(kind):
     return
 
 
+def adjusts(graph, key):
+    """ What `adjust=` names in a module's graph, without its module's name: `rel_trans` or `rel_sus`, a transition (`'infection'`), or one destination of a transition with several (`'outcome.dead'`); the name may begin with the module's (`'flu.infection'`); None if neither """
+    found = lambda name: name in ['rel_trans', 'rel_sus'] or name in graph.transitions or graph.destination(name) is not None
+    if found(key):
+        return key
+    modname, _, rest = key.partition('.')
+    return rest if modname == graph.module.name and found(rest) else None
+
+
 def parse_stratify(kwargs, graphs, sim=False):
     """
     The one parser of the arguments of `stratify()`, for a module, a sim, or `ss.Sim(stratify=...)`: returns the new
@@ -455,10 +464,9 @@ def parse_stratify(kwargs, graphs, sim=False):
     for key in adjust:
         if key in ['rel_trans', 'rel_sus'] or not graphs:
             continue
-        modname, _, bare = key.rpartition('.')
-        having = [g for g in graphs if bare in g.transitions and modname in ['', g.module.name]]
+        having = [g for g in graphs if adjusts(g, key) is not None]
         if len(having) != 1:
-            options = [f'{g.module.name}.{t}' if sim else t for g in graphs for t in g.transitions]
+            options = [f'{g.module.name}.{t}' if sim else t for g in graphs for t in list(g.transitions) + g.destinations()]
             what = 'names a transition' if not having else 'names a transition of more than one module,'
             whose = f'"{graphs[0].module.name}" does not have. Its transitions are' if not sim else 'no single module has. The transitions are'
             raise sc.KeyNotFoundError(f'adjust= {what} "{key}" that {whose} {sc.strjoin(options)} (and it can also adjust rel_trans and rel_sus).')

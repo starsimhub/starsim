@@ -11,10 +11,9 @@ import functools
 import numpy as np
 import numba as nb
 import scipy.sparse as spsp
-import scipy.optimize as spo
 import sciris as sc
 import starsim as ss
-import matplotlib.pyplot as plt
+plt = sc.lazyimport('matplotlib.pyplot') # Imported when first used, since most runs never plot
 import pandas as pd
 
 # This has a significant impact on runtime, surprisingly
@@ -1405,6 +1404,7 @@ class DegreeNet(DynamicNetwork):
         if concurrency is None and max_contacts is None:
             return base/base.sum()
 
+        import scipy.optimize as spo # Imported here, since only this needs it
         def tilt(x): # Reweight the distribution exponentially in the number of partners and in having two or more
             w = base*np.exp(x[0]*k + (x[1] if len(x) > 1 else 0)*(k >= 2))
             return w/w.sum()
