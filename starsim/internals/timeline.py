@@ -75,7 +75,7 @@ class Timeline:
     Args:
         start (str/int/float/`ss.date`/`ss.Duration`): when the simulation/module starts. For the sim: a date (e.g. '2000-01-01') or a year (a bare number from 1800 on, e.g. 2000) gives it a calendar; any other number, or a duration, is a time in its unit from 0 (default: 2000 for a model in years, else 0). For a module: a time on the sim's timeline (a bare number as for the sim's stop, a duration as a time from 0 in a sim with no calendar)
         stop (str/int/float/`ss.date`/`ss.Duration`): when the simulation/module ends, read as the start is: a date, a bare number (a year if the sim has a calendar, else a time in its unit from 0), or a duration (a time from 0, for a sim with no calendar; `ss.years(2030)` in a sim of calendar years is the year 2030) (default: a run of 100 days in days, else 50 of the sim's unit)
-        dur (int/float/`ss.Duration`): instead of `stop`, the length of the run, from its start (a bare number is in the sim's unit): `start=2000, dur=10` is the same as `start=2000, stop=2010`
+        dur (int/float/`ss.Duration`): instead of `stop`, the length of the run, from its start (a bare number is in years in a sim of calendar years, as a bare stop is, else in the sim's unit): `start=2000, dur=10` is the same as `start=2000, stop=2010`
         dt (int/float/`ss.Duration`): the step (a bare number is in the sim's unit)
         name (str): if provided, name the `Timeline` object
         init (bool): whether or not to immediately initialize the `Timeline` object (by default, yes if start and stop are provided; otherwise no)
@@ -516,7 +516,8 @@ class Timeline:
             raise TypeError(errormsg)
 
         # The stop: a time on the calendar (or from 0), as the start is; or the start plus the length
-        length = default if stop is None and dur is None else unit(dur) if sc.isnumber(dur) else dur
+        bare_unit = ss.years if calendar == 'years' else unit # A bare length is read as a bare stop would be: in years in a sim of calendar years (start=2000, dur=10), else in the sim's unit
+        length = default if stop is None and dur is None else bare_unit(dur) if sc.isnumber(dur) else dur
         self.calendar, self.unit, self.start, self.dt = calendar, unit, start, dt # For dur_time()
         if length is not None:
             stop = start + length

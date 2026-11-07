@@ -123,12 +123,12 @@ def test_keep_time():
             inf = S >> I @ ss.perday(0.05)
             duration = I.time_in # Not a result
         return C(init_prev=0)
-    sim = ss.Sim(diseases=make(True), n_agents=200, stop=ss.days(20), dt=ss.days(1), **kw).run()
+    sim = ss.Sim(diseases=make(True), n_agents=200, dur=ss.days(20), dt=ss.days(1), **kw).run()
     c = sim.diseases.c
     assert 'duration' not in sim.results.c
     u = c.I.uids
     assert len(u) and np.all(c.ti - c.ti_I[u] >= 0)
-    sim = ss.Sim(diseases=make(False), n_agents=200, stop=ss.days(20), dt=ss.days(1), **kw).run()
+    sim = ss.Sim(diseases=make(False), n_agents=200, dur=ss.days(20), dt=ss.days(1), **kw).run()
     with pytest.raises(AttributeError, match='keep_time'):
         sim.diseases.c.ti_I.values
     return

@@ -27,7 +27,7 @@ def test_fetal_health(do_plot=do_plot):
 
     sim_kw = dict(
         n_agents=5_000,
-        stop=ss.years(5),
+        dur=ss.years(5),
         dt=ss.years(1/12),
         rand_seed=1,
     )

@@ -1019,7 +1019,7 @@ def test_contacts_ages():
             m.stratify(age={0: 0.3, 15: 0.6, 65: 0.1})
             m.stratify(area={'urban': 0.7, 'rural': 0.3})
         return m
-    pars = dict(total_pop=100_000, n_agents=10_000, stop=ss.days(30), rand_seed=1, **kw)
+    pars = dict(total_pop=100_000, n_agents=10_000, dur=ss.days(30), rand_seed=1, **kw)
     for solver in ['abm', 'ode']: # ages= combines with another dimension's matrix as age= does (it was "unrecognized argument area")
         sims = [ss.Sim(make(), networks=net, solver=solver, **pars).run() for net in [ss.contacts(age=C, area=area), ss.contacts(age=C, area=area, ages=[0, 15, 65])]]
         assert np.allclose(*[sim.results.measles.infection.values for sim in sims])
@@ -1084,7 +1084,7 @@ def test_by_function():
             m = ss.Disease(S >> I @ ss.by(patch=eir), I >> S @ ss.days(20), name='m')
             m.stratify(patch=ss.geo.geography(names=['a', 'b', 'c'], populations=[1, 1, 1]))
             intv = [ss.vaccinate(ss.Vaccine(efficacy=dict(acquisition=0.0)), when=2000.1, coverage=0.5)] if vaccine else []
-            sim = ss.Sim(diseases=m, interventions=intv, n_agents=15_000, start=2000, stop=ss.days(200), dt=ss.days(1), verbose=0, solver=solver, rand_seed=1).run()
+            sim = ss.Sim(diseases=m, interventions=intv, n_agents=15_000, start=2000, dur=ss.days(200), dt=ss.days(1), verbose=0, solver=solver, rand_seed=1).run()
             I = sim.results.m.I.by('patch').values[-2]
             N = I + sim.results.m.S.by('patch').values[-2]
             assert np.allclose(I/N, expected, atol=0.03), (solver, vaccine, I/N)
@@ -1092,7 +1092,7 @@ def test_by_function():
     m = ss.Disease(S >> I @ ss.by(patch=lambda sim: ss.perday(np.ones(2))), name='m')
     m.stratify(patch=ss.geo.geography(names=['a', 'b', 'c']))
     with pytest.raises(ValueError, match='3 levels'):
-        ss.Sim(diseases=m, n_agents=300, stop=ss.days(3), dt=ss.days(1), verbose=0).run()
+        ss.Sim(diseases=m, n_agents=300, dur=ss.days(3), dt=ss.days(1), verbose=0).run()
     inflow = lambda rate, S=ss.State('S'): ss.Sim(diseases=ss.Disease(S, arrive=ss.unborn >> S @ rate, name='m').stratify(pop={'a': 0.2, 'b': 0.8}), solver='ode', total_pop=100, stop=2002, verbose=0).run().results.m.arrive.by('pop')[1]
     assert np.allclose(inflow(ss.by(pop=lambda sim: np.array([10., 5.]))), inflow(ss.by(pop=[10., 5.]))) # An inflow by level is the inflow at each level, not shared out again
     return sim

@@ -31,7 +31,7 @@ def test_background_loss():
                 ss.Pregnancy(fertility_rate=ss.peryear(0.03), loss_rate=ss.probperweek(p_loss), burnin=True),
                 ss.Deaths(death_rate=ss.peryear(0.009900990099)),
             ],
-            stop=ss.years(5),
+            dur=ss.years(5),
             dt=ss.years(1/12),
             rand_seed=1,
             networks=ss.PrenatalNet(),

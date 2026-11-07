@@ -163,7 +163,7 @@ def test_new_subclass_init():
             if not self.pars.diseases:
                 self.pars.diseases = [ss.SIS()] # Built by init(), as STIsim builds its diseases from their names
             return super().init(**kwargs)
-    sim = MySim(n_agents=200, stop=ss.years(10), verbose=0)
+    sim = MySim(n_agents=200, dur=ss.years(10), verbose=0)
     sim.pars.analyzers = [ss.infection_log()] # Added after the sim was made, so kept
     sim.init()
     new = sim.new().init()

@@ -348,6 +348,8 @@ def test_bare_times():
         ss.Sim(stop=2035, dur=10, **kw).init()
     sim = ss.Sim(start=2020, dur=10, **kw).init() # A bare length is in the sim's unit
     assert sim.t.stop == ss.years(2030) and sim.t.dur == ss.years(10)
+    assert ss.Sim(start=2020, dur=10, unit='day', **kw).init().t.stop == ss.years(2030) # In years in a sim of calendar years, whatever the unit
+    assert ss.Sim(dur=10, unit='day', **kw).init().t.stop == ss.days(10) # Else in the sim's unit
     assert sim.new(stop=2025).init().t.stop == ss.years(2025) # A new stop replaces the length,
     assert ss.Sim(start=2020, stop=2025, **kw).new(dur=3).init().t.stop == ss.years(2023) # and a new length the stop
     sim = ss.Sim(stop=2030, **kw).init() # A calendar stop alone starts in 2000

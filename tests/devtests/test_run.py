@@ -18,7 +18,7 @@ def make_sim_pars(beta=0.1, **kwargs):
     pars = sc.obj(
         n_agents = n_agents,
         start = 2000,
-        stop = ss.years(10),
+        dur = ss.years(10),
         demographics = True,
         networks = 'random',
         diseases = sc.obj(type='sis', beta=beta), # To allow for modification later

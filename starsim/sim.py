@@ -44,7 +44,7 @@ class SimPars(ss.Pars):
         # Simulation parameters
         self.start     = None  # Start of the simulation: a date or a year gives it a calendar (default 2000 for a model in years, else 0)
         self.stop      = None  # End of the simulation, read as the start is: a date, a year (or a time in the unit from 0, with no calendar), or a duration from 0 (default: a run of 100 days in days, else 50 of the sim's unit)
-        self.dur       = None  # Instead of the stop, the length of the run, e.g. ss.years(10) or a bare number in the sim's unit (the stop is the start plus it)
+        self.dur       = None  # Instead of the stop, the length of the run, e.g. ss.years(10) or a bare number (in years with a calendar of years, else in the sim's unit; the stop is the start plus it)
         self.dt        = None  # Timestep
         self.rand_seed = 1     # Random seed; if None, don't reset
         self.even_draws = False # Whether to space each call's random numbers evenly for agents (see ss.Sim)
@@ -498,7 +498,7 @@ class Sim(ss.modules.Base):
         rescale (bool/dict): for agents, start with each agent standing for one person, and increase it to `sim.pop_scale` as the agents stop being naive, making some of them naive again each time (dynamic rescaling, as in Covasim; default False); True, or a dict of its options, `dict(threshold=0.05, factor=1.2)` (the defaults): the share of agents who are not naive that triggers rescaling, and the least factor by which the scale grows each time
         start (float/str/date): when the sim starts: a date (e.g. '2020-01-01') or a year (a number from 1800 on, e.g. 2000), which give it a calendar; any other number (or a duration) is a time in the sim's unit from 0 (default: 2000 for a model in years, else 0). With a calendar, every bare number given as a time (stop=, when=, the times of ss.schedule and ss.timeseries) is a year; without one, a time in the sim's unit from 0, as a duration given as a time is (when=ss.days(10) is day 10)
         stop (float/str/date/dur): when the sim ends, read as the start is: a date, a bare number (a year, or with no calendar a time in the sim's unit from 0), or a duration from 0 (e.g. stop=ss.days(100), with no start; ss.years(2030) in a sim of calendar years is the year 2030); with no start, a year starts the sim in 2000, unless unit= is other than years (unit='day', stop=3650 is 3,650 days from 0; default: a run of 100 days in days, else 50 of the sim's unit)
-        dur (float/dur): instead of `stop`, the length of the run from its start, e.g. `start=2000, dur=10` (a bare number is in the sim's unit) or `start='2020-01-01', dur=ss.days(90)`
+        dur (float/dur): instead of `stop`, the length of the run from its start, e.g. `start=2000, dur=10` (a bare number is in years in a sim of calendar years, as a bare stop is, else in the sim's unit) or `start='2020-01-01', dur=ss.days(90)`
         dt (float/dur): The timestep, in units of "unit" (default 1.0)
         rand_seed (int): The overall random seed for the simulation (used to set module-specific random seeds)
         even_draws (bool): Whether to space each call's random numbers evenly for agents, so that about the expected number of them move each time (default False). This reduces the variance between runs (about 3 to 10 times in final size for a simple SIR), but outbreaks die out less often than they should, and the mean of a result can shift (e.g. the peak of an SIR on a network, by about 10%). For agents only (an error for a compartmental run), and needs `ss.options.crn`
