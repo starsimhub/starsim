@@ -463,7 +463,7 @@ def describe_graph(graph, sim=None, out=None):
         if oc.likelihood is not None:
             text += f'; likelihood {getattr(oc.likelihood, "__name__", type(oc.likelihood).__name__)}'
         add(name, text)
-    if graph.transmissions and getattr(sim, 'solver', 'abm') in ['abm', 'binomial']: # How infections are dated and states counted, for the solvers that take whole steps
+    if graph.transmissions and isinstance(getattr(sim, 'solver', None) or ss.solvers.abm(), (ss.solvers.abm, ss.solvers.binomial)): # How infections are dated and states counted, for the solvers that take whole steps
         add('timing', 'an infection is dated at the end of its step, so what follows it starts then')
         add('', 'a state\'s count (the result X) includes the step people enter it; they stay for the whole time drawn for them')
     fitted = [p for p in graph.all_pars() if p.bounds is not None and id(p) not in shown] # The other parameters that can be fitted, e.g. a share of an outcome
@@ -588,7 +588,7 @@ def flow_terms(graph, engine=None, contacts=None):
     """
     mod = graph.module
     if engine is None or not engine.compartmental: # Not in a compartmental sim, so lay the model out with a stand-in
-        mock = sc.obj(unit_base='day', solver=ss.ode(), groups=sc.obj(n_groups=1), pars=sc.obj(rand_seed=0, total_pop=1, approximations='allow', solver='ode', branching=False), unit=None, _unit_name='day', crossings=[])
+        mock = sc.obj(unit_base='day', solver=ss.solvers.ode(), groups=sc.obj(n_groups=1), pars=sc.obj(rand_seed=0, total_pop=1, approximations='allow', solver='ode', branching=False), unit=None, _unit_name='day', crossings=[])
         engine = ss.solvers.Compartmental(mod, mock)
         engine.init_dwells()
         engine.build_layout()
@@ -689,9 +689,9 @@ def check_dt(sim, factor=2):
     df = sc.dataframe(rows).sort_values('change', ascending=False).reset_index(drop=True)
     dt, unit = coarse.t.dt.to(coarse.unit_base).value, coarse._unit_name
     inner = lambda sim: [mod.engine.dt/max(mod.engine.substeps(), 1) for mod in sim.declared if mod.engine.compartmental]
-    if coarse.solver == 'binomial' and coarse.solver.substeps is None and len(inner(coarse)) and np.allclose(inner(coarse), inner(fine)): # It takes substeps of the same size whatever the step
+    if isinstance(coarse.solver, ss.solvers.binomial) and coarse.solver.substeps is None and len(inner(coarse)) and np.allclose(inner(coarse), inner(fine)): # It takes substeps of the same size whatever the step
         text = (f'The chain-binomial solver takes enough substeps by default (here of {inner(coarse)[0]:n} {unit}s) that the step does not change its results: '
-                f'a step of {dt:n} or {dt/factor:n} {unit}s gives the same run. Give solver=ss.binomial(substeps=1) to take whole steps, as most chain-binomial models do, and see how much they matter')
+                f'a step of {dt:n} or {dt/factor:n} {unit}s gives the same run. Give solver=ss.solvers.binomial(substeps=1) to take whole steps, as most chain-binomial models do, and see how much they matter')
         return Text(text, table=df)
     lines = [f'Change in each result when the timestep goes from {dt:n} to {dt/factor:n} {unit}s (largest difference, as a share of the largest value):']
     for row in df.itertuples():
@@ -747,7 +747,7 @@ def describe_sim(sim, verbose=False):
     desc.section('Sim', f'{len(mods)} module{"s" if len(mods) != 1 else ""}, {pop}{popguess}, {when}{stopguess}')
     if sim.declared:
         guessed = pars.solver == 'auto'
-        add('solver', repr(sim.solver) if isinstance(sim.solver, ss.sim.Solver) and sim.solver.given() else str(sim.solver), f'guessed: {sim.solver_reason}' if guessed else 'requested')
+        add('solver', repr(sim.solver) if sim.solver.given() else str(sim.solver), f'guessed: {sim.solver_reason}' if guessed else 'requested')
         for cap in sim.capabilities: # What matters to which solvers can run it: see ss.solvers.init_capabilities()
             add('', f'{cap.ingredient}: {cap.reason}')
         if not guessed: # What auto would have done
@@ -757,7 +757,7 @@ def describe_sim(sim, verbose=False):
                 add('', f'auto would stop: {stops[0]}')
             else:
                 add('', 'auto would choose: ' + (f'abm ({reasons[0]})' if reasons else 'ode (every part of the model has a compartmental form)'))
-        if sim.solver == 'abm':
+        if isinstance(sim.solver, ss.solvers.abm):
             scale = f', each standing for {sim.pop_scale:n} people' if sim.pop_scale != 1 else ''
             add('', f'{pars.n_agents:,} agents{scale}', None if 'n_agents' in sim.given else 'guessed')
             ways = {} # How each declared module runs as agents, and where that came from (see ss.solvers.agent_solver())
@@ -811,7 +811,7 @@ def describe_sim(sim, verbose=False):
         nets = list(sim.networks.values()) + getattr(sim, 'mixed', [])
         if nets:
             for net in nets:
-                term = [term for term in sim.mixing.terms if term.name == net.name] if sim.solver != 'abm' else []
+                term = [term for term in sim.mixing.terms if term.name == net.name] if not isinstance(sim.solver, ss.solvers.abm) else []
                 how = '' if not term else f': {term[0].contacts:n} contacts per {unit}' if term[0].kind == 'homogeneous' else f': the partner-change model (approx), partnerships formed at {term[0].partnership.formed:.2g} a {unit}' if 'partnership' in term[0] else f': contact matrix by {sc.strjoin([sim.groups.strats[d].name for d in term[0].get("dims", [term[0].dim])], sep=" and ")}' # Every dimension it is over, e.g. age and area
                 add('mixing', f'{net.name} ({type(net).__name__}){how}')
         elif any(mod.graph.transmissions for mod in sim.declared): # How a state in a rate is read is shown with each rate
@@ -835,13 +835,13 @@ def describe_sim(sim, verbose=False):
         if verbose: # What runs where, which is about the solver and not the model: the declared modules in the kernels or as agents, and the rest in Python (see sim.kernel_reason())
             stepped = {func['module'] for func in sim.loop.funcs} - {'sim', 'people'}
             declared = [mod.name for mod in sim.declared]
-            if sim.solver == 'abm':
+            if isinstance(sim.solver, ss.solvers.abm):
                 add('plan', f'{sc.strjoin(declared)}: as agents, each step in Python')
             else:
                 whole = sim.kernel_reason()
                 joint = ''.join(f'; {" × ".join(c.names)} as one program' for c in sim.crossings)
                 add('plan', f'{sc.strjoin(declared)}: as compiled code, ' + ('the whole run in one call' if whole is None else f'one step at a time, since {whole}') + joint)
-            tabulated = [mod.name for mod in sim.modules if mod.name in stepped and getattr(mod, 'tabulated', False) and sim.solver != 'abm']
+            tabulated = [mod.name for mod in sim.modules if mod.name in stepped and getattr(mod, 'tabulated', False) and not isinstance(sim.solver, ss.solvers.abm)]
             python = [mod.name for mod in sim.modules if mod.name in stepped and mod.name not in declared + tabulated]
             if tabulated:
                 add('', f'{sc.strjoin(tabulated)}: as tables in the compiled code, as {"it depends" if len(tabulated) == 1 else "they depend"} only on time and states')
@@ -1117,7 +1117,7 @@ def quantity_json(raw, kind, unit):
     if isinstance(raw, ss.Duration):
         return dict(type='dur', value=float(raw.value), unit=type(raw).base.removesuffix('s'))
     elif isinstance(raw, ss.Rate):
-        types = {ss.per:'per', ss.prob:'prob'}
+        types = {ss.per:'per', ss.prob:'prob', ss.freq:'freq'}
         key = [v for k,v in types.items() if isinstance(raw, k)][0]
         return dict(type=key, value=float(raw.value), unit=None if raw.unit is None else type(raw.unit).base.removesuffix('s'))
     elif isinstance(raw, ss.Dist):

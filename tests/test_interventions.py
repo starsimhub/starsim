@@ -133,7 +133,7 @@ def test_routine_delivery():
 
     # A coverage that changes by year (Starsim 3's years= with an array of prob=)
     coverage = ss.timeseries(np.arange(2005, 2016), np.linspace(0.05, 0.95, 11), interpolation='linear')
-    sim = ss.Sim(pars, interventions=ss.screen(make_dx(), when=ss.years(1), coverage=coverage, name='screening')).run()
+    sim = ss.Sim(pars, interventions=ss.screen(make_dx(), when=ss.schedule(every=ss.years(1)), coverage=coverage, name='screening')).run()
     n_screened = sim.results.screening.delivered
     years = sim.t.yearvec
     early = n_screened[(years >= 2005) & (years <= 2007)].mean()

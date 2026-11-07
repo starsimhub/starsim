@@ -54,7 +54,7 @@ def make_cascade(**kwargs):
     """ A rapid test every week for those not tested in four weeks, a PCR to confirm (with a delay), and treatment with limited capacity """
     rapid = ss.Diagnostic(sensitivity=0.8, specificity=0.95)
     pcr = ss.Diagnostic(sensitivity=0.95, specificity=0.99, result_delay=ss.days(2))
-    screening = ss.screen(rapid, who=rapid.since >= ss.days(28), when=ss.days(7), coverage=0.1, name='screening') # Named, since a subclass of ss.Sim may make them
+    screening = ss.screen(rapid, who=rapid.since >= ss.days(28), when=ss.schedule(every=ss.days(7)), coverage=0.1, name='screening') # Named, since a subclass of ss.Sim may make them
     confirm = ss.screen(pcr, when=screening.positive, coverage=0.9, name='confirm')
     treatment = ss.treat(ss.Treatment(cure=0.95), when=confirm.positive, capacity=ss.perday(50), name='treatment')
     return [screening, confirm, treatment]
@@ -64,7 +64,7 @@ def check_agents(make, **kwargs):
     """ Check that a model is agents only: an explicit ODE refuses it before the run, and solver='auto' runs it as agents """
     with pytest.raises(ss.CapabilityError):
         make(solver='ode', **kwargs).init()
-    assert make(**kwargs).init().solver == 'abm'
+    assert isinstance(make(**kwargs).init().solver, ss.solvers.abm)
     return
 
 
@@ -217,7 +217,7 @@ def test_vaccinate():
     # A capacity per unit time, in rounds: what accrues over the interval between them
     def rounds_cap(**kwargs):
         vaccine = ss.Vaccine(efficacy=0.9)
-        rounds = ss.vaccinate(vaccine, when=ss.days(10), coverage=1.0, capacity=ss.perday(100))
+        rounds = ss.vaccinate(vaccine, when=ss.schedule(every=ss.days(10)), coverage=1.0, capacity=ss.perday(100))
         return ss.Sim(make_sir(), interventions=rounds, **kwargs)
     sims = run_each(rounds_cap, stop=30)
     for sim in sims.values():
@@ -226,7 +226,7 @@ def test_vaccinate():
 
     # A typed probability as coverage: over the interval between rounds
     def typed_cov(**kwargs):
-        rounds = ss.vaccinate(ss.Vaccine(efficacy=0.9), when=ss.days(91), coverage=ss.probperyear(0.5))
+        rounds = ss.vaccinate(ss.Vaccine(efficacy=0.9), when=ss.schedule(every=ss.days(91)), coverage=ss.probperyear(0.5))
         return ss.Sim(make_sir(), interventions=rounds, **kwargs)
     sims = run_each(typed_cov, stop=100)
     for sim in sims.values():
@@ -484,7 +484,7 @@ def test_memory():
         S, I = ss.states('S I')
         sis = ss.Disease(infection=ss.Transition(S, I, rate=ss.peryear(2) * I), recovery=ss.Transition(I, S, dur=ss.years(1)), init_prev=0.05, name='sis')
         cytology = ss.Diagnostic(sensitivity=0.8, specificity=0.95)
-        screening = ss.screen(cytology, who=cytology.since >= ss.years(5), when=ss.years(1), coverage=0.3)
+        screening = ss.screen(cytology, who=cytology.since >= ss.years(5), when=ss.schedule(every=ss.years(1)), coverage=0.3)
         retest = ss.screen(ss.Diagnostic(sensitivity=0.9, name='pcr'), who=screening.positive.n_times == 1, when=screening.positive, coverage=0.5)
         return ss.Sim(sis, interventions=[screening, retest], start=2000, stop=2030, dt=0.5, total_pop=20_000, verbose=0, **kwargs) # A step of half the dwell, so agents and the ODE differ little by whole steps
     check_agents(make)
@@ -505,7 +505,7 @@ def test_memory():
     newborn = ss.treat(ss.Treatment(cure=1.0, name='tx'), who=anc_a.positive.ever, when=preg.delivery)
     sim = ss.Sim(sis, demographics=preg, interventions=[anc_visit, anc_a, anc_b, newborn], n_agents=5000, start=2000, stop=2010, dt=1/12, verbose=0).run()
     res = sim.results
-    assert sim.solver == 'abm' and res.anc_visit.delivered.sum() > 0 and res.newborn.delivered.sum() > 0
+    assert isinstance(sim.solver, ss.solvers.abm) and res.anc_visit.delivered.sum() > 0 and res.newborn.delivered.sum() > 0
     assert np.array_equal(res.anc_a.delivered.values, res.anc_visit.delivered.values) and np.array_equal(res.anc_b.delivered.values, res.anc_visit.delivered.values)
 
     # A transfer triggers a delivery, as agents; a state that only a delivery moves people into is not where they start
@@ -513,10 +513,10 @@ def test_memory():
     d = ss.Disease(name='d', infection=S >> I @ 0.1)
     d.stratify(sym=[False, True], onset=ss.transfer(dict(sym=True), rate=0.2, states=['I']))
     sim = ss.Sim(diseases=d, interventions=ss.screen(ss.Diagnostic(), when=d.onset, coverage=0.8, name='scr'), n_agents=2000, start=2000, stop=2005, dt=0.25, verbose=0).run()
-    assert sim.solver == 'abm' and sim.results.scr.delivered.sum() > 0
+    assert isinstance(sim.solver, ss.solvers.abm) and sim.results.scr.delivered.sum() > 0
     S, M, H = ss.states(3)
     dis = ss.Disease(S >> M @ ss.peryear(0.5), M >> S @ ss.days(10), H >> S @ ss.days(5), name='dis')
-    sim = ss.Sim(dis, interventions=ss.Event(M >> H, who=M, when=ss.days(1)), n_agents=1000, stop=ss.days(30), dt=ss.days(1), verbose=0).init()
+    sim = ss.Sim(dis, interventions=ss.Event(M >> H, who=M, when=ss.schedule(every=ss.days(1))), n_agents=1000, stop=ss.days(30), dt=ss.days(1), verbose=0).init()
     assert sim.diseases.dis.graph.default_state.name == 'S' # Was H, so everyone started in hospital
     return sims
 
@@ -1013,7 +1013,7 @@ def test_waning_functions():
     prev = {solver:make(solver, box).results.mal.I[t]/10_000 for solver in ['abm', 'ode']}
     assert np.allclose(prev['abm'], prev['ode'], atol=0.03), prev
     sim = make('ode', box)
-    assert sim.solver == 'ode' and len(sim.groups.strats[sim.groups.dim_index('has_vx')].labels) == 12 # False, 10 stages of the plateau, decaying
+    assert isinstance(sim.solver, ss.solvers.ode) and len(sim.groups.strats[sim.groups.dim_index('has_vx')].labels) == 12 # False, 10 stages of the plateau, decaying
     assert np.allclose(box(ss.days(np.array([0, 179, 380]))), [1, 1, np.exp(-1)])
 
     # A waning function is given the time as a duration (in any sim's unit) and the people who hold it
@@ -1026,7 +1026,7 @@ def test_waning_functions():
         S, I = ss.states('S I')
         mal = ss.Disease(infection=S >> I @ ss.peryear(2.0), recovery=I >> S @ ss.days(20), name='mal')
         vax = ss.Vaccine(efficacy=dict(infection=1.0), waning=fn, name='vax')
-        sim = ss.Sim(mal, interventions=ss.vaccinate(vax, when=[ss.days(10)], coverage=1.0, name='once'), n_agents=1000, unit=unit, dt=dt, stop=ss.days(200), verbose=0).run()
+        sim = ss.Sim(mal, interventions=ss.vaccinate(vax, when=[ss.days(10)], coverage=1.0, name='once'), n_agents=1000, unit=unit, dt=dt, start=0, stop=ss.days(200), verbose=0).run()
         inf = sim.results.mal.infection
         assert isinstance(seen['t'], ss.Duration) and len(seen['uids']) == 1000
         assert inf[12:108].sum() == 0 and inf[115:].sum() > 0, unit # Protected for 100 days, in either unit
@@ -1040,7 +1040,7 @@ def test_waning_functions():
     sim = two(dict(acquisition=ss.boxcar(plateau=ss.days(50)), transmission=None))
     inf = sim.results.mal.infection
     assert inf[12:55].sum() < inf[65:108].sum() # Acquisition protected for 50 days only (transmission for good)
-    assert two(dict(acquisition=box, transmission=box), solver='ode').solver == 'ode'
+    assert isinstance(two(dict(acquisition=box, transmission=box), solver='ode').solver, ss.solvers.ode)
     assert two(lambda t, uids: np.ones(len(uids))).results.mal.infection.sum() > 0 # A function of any of t, self, sim, and uids, by name
     with pytest.raises(TypeError):
         two(lambda a, b: 1.0) # By position, a function of t, or of (t, sim, uids)

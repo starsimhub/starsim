@@ -640,11 +640,12 @@ def test_beta_readings():
     with pytest.raises(ValueError, match='A probability per act must be between 0 and 1'):
         ss.peract(1.5)
     with pytest.raises(ValueError, match='step'): # A whole number of acts per step, drawn once, depends on the step
-        ss.Sim(sis(0.01), networks=ss.SexualNet(acts=ss.poisson(mean=ss.peryear(80))), **kw).init()
+        ss.Sim(sis(0.01), networks=ss.SexualNet(acts=ss.poisson(mean=ss.freqperyear(80))), **kw).init()
     with pytest.raises(ValueError, match='probability'): # A probability is not a number of acts
         ss.Sim(sis(0.01), networks=ss.SexualNet(acts=ss.probperyear(0.8)), **kw).init()
-    net = ss.Sim(sis(ss.peract(0.01)), networks=ss.DegreeNet(dur=ss.years(1), acts=ss.peryear(80)), **kw).init().networks[0] # A rate is a number of acts per unit time
-    assert np.isclose(net.acts_per_step, 80*net.t.dt.years)
+    for acts in [ss.freqperyear(80), ss.peryear(80)]: # A frequency is a number of acts per unit time, and a rate is taken as one
+        net = ss.Sim(sis(ss.peract(0.01)), networks=ss.DegreeNet(dur=ss.years(1), acts=acts), **kw).init().networks[0]
+        assert np.isclose(net.acts_per_step, 80*net.t.dt.years)
 
     # Mother-to-child networks transmit one way, so one value is enough (a pair was [b, 0])
     S, I = ss.states('S I')
@@ -944,7 +945,7 @@ def test_who_compartmental():
     with pytest.raises(ss.CapabilityError, match='who='):
         ss.Sim(diseases=ss.SIR(beta=0.1), networks=ss.RandomNet(who=ss.person.age < 30), solver='ode', verbose=0).init()
     sim = ss.Sim(diseases=ss.SIR(beta=0.1), networks=ss.RandomNet(who=ss.person.age < 30), n_agents=200, stop=2002, verbose=0).init()
-    assert sim.solver == 'abm'
+    assert isinstance(sim.solver, ss.solvers.abm)
     assert 'no edges yet' in str(ss.SexualNet()) and 'p1' in str(sim.networks.randomnet)
     return sim
 

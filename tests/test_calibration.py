@@ -62,6 +62,13 @@ def test_fit_keywords():
         sim.fit(likelihood=dict(cases=ss.poisson()))
     with pytest.raises(ValueError, match='loss= is the measure of a fit without likelihoods'):
         sim.fit(likelihood=ss.poisson(), loss='rmse')
+    declared = ss.Disease(infection, I >> R @ ss.days(8), ss.outcome(0.5*infection, name='cases', likelihood=ss.poisson()), init=dict(I=0.01), name='sir')
+    dsim = ss.Sim(declared, data=data.drop(columns='I'), **pars)
+    quick = ss.fit.method('nelder-mead', scan=2, maxiter=20)
+    assert dsim.fit(method=quick).measure == 'negative log-likelihood' # The declared likelihood
+    assert dsim.fit(loss='rmse', method=quick).measure == 'loss' == dsim.fit(likelihood=False, method=quick).measure # loss= in its place (with a note), or none
+    with pytest.raises(ValueError, match='likelihood=False'): # Some series with a likelihood and some without
+        ss.Sim(declared, data=data, **pars).fit(method=quick)
     with pytest.raises(TypeError, match='ss.fit.method'): # A setting of a method is not a keyword of sim.fit()
         sim.fit(**dict(method='optuna', n_trials=5)) # As a dict, so the rewrite script leaves the old spelling
     with pytest.raises(TypeError, match='takes draws=, warmup=, chains=, scan=, require_jax=, not particles='):
@@ -73,9 +80,9 @@ def test_fit_keywords():
     cov = lambda spend: np.minimum(spend/0.01/(S + I + R).total, 1)
     sir = ss.Disease(S >> I @ 0.3*(1 - 0.5*cov(a) - 0.25*cov(b))*I.frac, I >> R @ ss.days(10), init_n=dict(I=10), name='sir')
     sim = ss.Sim(sir, total_pop=10_000, unit='day', stop=100, verbose=0)
-    best = sim.optimize(ss.minimize('sir.R'), spend=['spend_a', 'spend_b'])
+    best = sim.optimize(ss.fit.minimize('sir.R'), spend=['spend_a', 'spend_b'])
     assert best.value < best.value_before and best.alloc['spend_a'] > best.alloc['spend_b'] # The program that does more gets more
-    with pytest.raises(TypeError, match='goal=ss.minimize'):
+    with pytest.raises(TypeError, match='goal=ss.fit.minimize'):
         sim.optimize(minimize='sir.R', spend=['spend_a', 'spend_b'])
     return fit
 

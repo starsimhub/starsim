@@ -7,7 +7,7 @@ authorship:
   note: Written by AI from the Claude draft of the architecture page on solvers, checked against the current code
 ---
 
-The same declared model can be run five ways, some with options: as a deterministic ODE (`'ode'`, or with each dwell time as it is, `ss.ode(dwells='exact')`), as three kinds of stochastic compartmental model (`'binomial'`, `'gillespie'`, `'tau'`), or as agents (`'abm'`, by steps or by events: `ss.abm(step=)`). This page explains how Starsim chooses between them, the engines that do the work, the backends and kernel sets that make them fast, how approximations are announced, and which tests keep each path honest. For how to choose a solver as a modeler, and how the solvers' results differ, see [Solvers and backends](running_solvers.qmd) in Running models.
+The same declared model can be run five ways, some with options: as a deterministic ODE (`'ode'`, or with each dwell time as it is, `ss.solvers.ode(dwells='exact')`), as three kinds of stochastic compartmental model (`'binomial'`, `'gillespie'`, `'tau'`), or as agents (`'abm'`, by steps or by events: `ss.solvers.abm(step=)`). This page explains how Starsim chooses between them, the engines that do the work, the backends and kernel sets that make them fast, how approximations are announced, and which tests keep each path honest. For how to choose a solver as a modeler, and how the solvers' results differ, see [Solvers and backends](running_solvers.qmd) in Running models.
 
 ## How `solver='auto'` chooses
 
@@ -50,15 +50,15 @@ The one thing `'auto'` approximates unasked is a dwell time that isn't exponenti
 | Solver | Time | State | Good for | Loses accuracy when |
 |---|---|---|---|---|
 | `ode` | continuous | real numbers | large populations, fast fitting, gradients | counts are small or extinction matters |
-| `ss.ode(dwells='exact')` | continuous, dwell times by whole steps | real numbers | dwell times far from exponential, renewal-equation models | the step is long against a dwell time |
+| `ss.solvers.ode(dwells='exact')` | continuous, dwell times by whole steps | real numbers | dwell times far from exponential, renewal-equation models | the step is long against a dwell time |
 | `binomial` | discrete | whole people | simple stochastic models on a fixed step | `rate × dt` is large |
 | `gillespie` | continuous | whole people | exact stochastic dynamics | values vary quickly within a step |
 | `tau` | continuous | whole people | large stochastic runs, close to exact | rates change quickly within a leap |
 | `abm` | discrete | individuals | networks, heterogeneity, histories | `rate × dt` is large; cost grows with `n_agents` |
-| `ss.abm(step='wholestep')` | discrete, rates over whole steps | individuals | speed; matching code written with `ss.bernoulli()` | `rate × dt` is large, more so than by midsteps (the default) |
-| `ss.abm(step='events')` | continuous | individuals | networks where events are fast against a step | what is stepped changes quickly within a step; cost grows with the number of events |
+| `ss.solvers.abm(step='wholestep')` | discrete, rates over whole steps | individuals | speed; matching code written with `ss.bernoulli()` | `rate × dt` is large, more so than by midsteps (the default) |
+| `ss.solvers.abm(step='events')` | continuous | individuals | networks where events are fast against a step | what is stepped changes quickly within a step; cost grows with the number of events |
 
-`'auto'` only ever chooses `ode` or `abm`; a stochastic compartmental solver, or exact dwell times, is used only when it is asked for. `ss.ode(dwells='exact')` runs as the ODE, with each dwell time that is not exponential as a conveyor of whole steps, leaving each slot at the distribution's own chance rather than through Erlang stages. Any solver can also run the model as a branching process (`branching=True`): infection takes no one from the uninfected and gives no one back, and as agents, agents are made only for the infected (see [Branching and rescaling](running_branching.qmd)). A sim is one run whatever the solver, and many runs are an `ss.MultiSim` (`ss.parallel(sim, n_runs=100)`).
+`'auto'` only ever chooses `ode` or `abm`; a stochastic compartmental solver, or exact dwell times, is used only when it is asked for. `ss.solvers.ode(dwells='exact')` runs as the ODE, with each dwell time that is not exponential as a conveyor of whole steps, leaving each slot at the distribution's own chance rather than through Erlang stages. Any solver can also run the model as a branching process (`branching=True`): infection takes no one from the uninfected and gives no one back, and as agents, agents are made only for the infected (see [Branching and rescaling](running_branching.qmd)). A sim is one run whatever the solver, and many runs are an `ss.MultiSim` (`ss.parallel(sim, n_runs=100)`).
 
 Some of the conditions in the last column are reported as notes, and `sim.check_dt()` measures how much a smaller step would change the results.
 
@@ -142,7 +142,7 @@ The [developer guide](../contributing/developer.qmd#testing) explains the suites
 
 ## Limits
 
-- Solvers that take whole steps differ from the ODE by an amount of order `dt`, which is why the agreement tests use a quarter-day step. With whole weekly steps (`ss.binomial(substeps=1)`) on an SIR with daily rates, the chain binomial's peak is about a third higher than the ODE's; by default it takes enough substeps to stay within a few percent. A compartment holds about x/2 too many people, for x its total rate out times the substep, so `Compartmental.binomial_substeps()` keeps x to 5%, and near the epidemic threshold (where a small bias in R moves prevalence a lot) to a tenth of |R0 − 1|.
+- Solvers that take whole steps differ from the ODE by an amount of order `dt`, which is why the agreement tests use a quarter-day step. With whole weekly steps (`ss.solvers.binomial(substeps=1)`) on an SIR with daily rates, the chain binomial's peak is about a third higher than the ODE's; by default it takes enough substeps to stay within a few percent. A compartment holds about x/2 too many people, for x its total rate out times the substep, so `Compartmental.binomial_substeps()` keeps x to 5%, and near the epidemic threshold (where a small bias in R moves prevalence a lot) to a tenth of |R0 − 1|.
 - Agreement is tested on simple models. For complex ones (a sexual network as an ODE), solvers are expected to differ; the guarantee is that Starsim says what it approximated.
 - Gillespie is exact but takes events one at a time; for millions of events in groups that mix, `'tau'` is the practical choice.
 - Gradients exist only for `solver='ode'` and for rates written as expressions. One model can't yet mix solvers (an ODE with rare importations as discrete events).

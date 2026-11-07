@@ -90,7 +90,7 @@ def test_hiv_cd4_ode():
     sc.heading('HIV CD4 under a compartmental solver: attributes are kept per agent, so it refuses, and auto runs agents (see test_hiv_cd4)')
     kw2 = dict(start=1990, stop=2000, dt=ss.months(1), unit='year', **kw)
     hiv, mods = make_hiv()
-    assert ss.Sim(hiv, connectors=mods, total_pop=20_000, **kw2).init().solver == 'abm'
+    assert isinstance(ss.Sim(hiv, connectors=mods, total_pop=20_000, **kw2).init().solver, ss.solvers.abm)
     hiv, mods = make_hiv()
     with pytest.raises(ss.CapabilityError, match='attributes'):
         ss.Sim(hiv, connectors=mods, solver='ode', total_pop=20_000, **kw2).init()
@@ -106,7 +106,7 @@ def test_hpv_nab():
         mods = [ss.modify(h.rel_sus, multiply=1 - np.clip(sum(m[i, j]*hpvs[j].nab for j in range(2)), 0, 1), name=f'nab_{h.name}') for i,h in enumerate(hpvs)] if cross else []
         return ss.Sim(hpvs, connectors=mods, analyzers=TrackNab(), n_agents=10_000, start=2000, stop=2020, dt=ss.months(3), unit='year', **kw).run()
     sim = run()
-    assert sim.solver == 'abm'
+    assert isinstance(sim.solver, ss.solvers.abm)
     h = sim.diseases.hpv16
     vals = h.nab.values
     seropos = (vals > 0).mean()
@@ -127,7 +127,7 @@ def test_hpv_nab_ode():
     with pytest.raises(ss.CapabilityError, match='attributes'):
         make(solver='ode', total_pop=20_000).init()
     sim = make(total_pop=20_000).run()
-    assert sim.solver == 'abm' and sim.results.hpv.infection.sum() > 0
+    assert isinstance(sim.solver, ss.solvers.abm) and sim.results.hpv.infection.sum() > 0
 
 
 @sc.timer()
@@ -140,7 +140,7 @@ def test_trait_ode():
         return ss.Sim(dis, unit='day', stop=200, total_pop=10_000, **opts, **kw)
     sim = make(solver='ode').run()
     assert np.allclose(sim.results.sir.I, make(trait=False, solver='ode').run().results.sir.I) and any('uses its mean' in note for note in sim.notes)
-    assert make().init().solver == 'abm'
+    assert isinstance(make().init().solver, ss.solvers.abm)
     with pytest.raises(ss.CapabilityError, match='approximations="error"'):
         make(solver='ode', approximations='error').init()
     return

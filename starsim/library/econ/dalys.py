@@ -53,7 +53,7 @@ class DALYs(ss.Analyzer):
 
     def init_results(self):
         super().init_results()
-        if self.life_lost is None and self.sim.solver != 'abm':
+        if self.life_lost is None and not isinstance(self.sim.solver, ss.solvers.abm):
             errormsg = f'ssl.DALYs() has no ages at death to work from with the "{self.sim.solver}" solver: give the years of life lost for each death, with life_lost='
             raise ValueError(errormsg)
         self.define_results(*[ss.Result(name, kind='flow') for name in ['yld', 'yll', 'dalys']])

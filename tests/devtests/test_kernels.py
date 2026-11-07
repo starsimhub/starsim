@@ -283,7 +283,7 @@ def test_numpy_ode():
                     sims = []
                     for ode.mode in ['always', 'never']:
                         with ss.options.context(kernels='numba'):
-                            sims.append(run(key, how, solver=ss.ode(integrator=integrator)))
+                            sims.append(run(key, how, solver=ss.solvers.ode(integrator=integrator)))
                     diff = largest_diff(*sims)
                     assert diff < 1e-10, f'{key} ({integrator}, {how}): the ODE in NumPy differs from the kernels by {diff:.3g}'
     finally:

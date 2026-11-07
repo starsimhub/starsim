@@ -17,7 +17,7 @@ compartments, each flow a transition with its rate for each person (a flow out o
 model goes to a state that is removed, and a flow into it is the births, `productions`,
 of the people in every state), the parameters and named expressions as EMULSION's
 parameters, and the initial numbers. EMULSION's compartments are stochastic, in whole
-steps, so the export runs as the sim would with `solver=ss.binomial(substeps=1)`.
+steps, so the export runs as the sim would with `solver=ss.solvers.binomial(substeps=1)`.
 
 Used with: agents and compartments; declared modules
 """
@@ -358,7 +358,7 @@ def load_emulsion(filename, verbose=None):
     # Build: one disease for each state machine
     cfg = dict(solver=solver, dt=dt)
     if solver == 'binomial': # EMULSION's compartments take whole steps
-        cfg['solver'] = ss.binomial(substeps=1)
+        cfg['solver'] = ss.solvers.binomial(substeps=1)
     if unit:
         cfg['unit'] = unit
     if stop is not None:
@@ -407,7 +407,7 @@ def to_emulsion(sim):
     it (EMULSION's rates are per individual), a flow out of the model a transition to a
     state that is removed (`autoremove`), and a flow into it the births (`productions`)
     of the people in every state. EMULSION's compartments are stochastic, taking whole
-    steps of `delta_t`, as the sim would with `solver=ss.binomial(substeps=1)`.
+    steps of `delta_t`, as the sim would with `solver=ss.solvers.binomial(substeps=1)`.
 
     Args:
         sim (`ss.Sim`): the sim
@@ -420,8 +420,8 @@ def to_emulsion(sim):
     scale = float(ss.Duration(1, base=flat.unit).to('day').value) if flat.unit not in emulsion_units else 1.0 # Days in the sim's unit, for a unit EMULSION does not have
     if scale != 1:
         lost.append(f'changed: the time in {flat.unit}s is written in days, with the rates divided by {scale:n}')
-    if sim.solver != 'binomial':
-        lost.append('changed: EMULSION\'s compartments are stochastic, taking whole steps (as solver=ss.binomial(substeps=1))')
+    if not isinstance(sim.solver, ss.solvers.binomial):
+        lost.append('changed: EMULSION\'s compartments are stochastic, taking whole steps (as solver=ss.solvers.binomial(substeps=1))')
     comps = list(flat.comps)
     time = 'time' if scale == 1 else f'(time / {scale!r})'
     text = lambda node: emulsion_text(node, comps, time)

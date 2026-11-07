@@ -99,7 +99,7 @@ class WithImports(ss.SIR):
     """ An SIR with 5 imported cases each step, as agents or as compartments """
     def transmit(self):
         new = super().transmit()
-        if self.sim.solver == 'abm':
+        if isinstance(self.sim.solver, ss.solvers.abm):
             people = self.sim.people.auids
             return new | people[self.S.raw[people]][:5] # Five susceptible people (the first five, for simplicity)
         return new + 5

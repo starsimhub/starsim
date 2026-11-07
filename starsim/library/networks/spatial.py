@@ -28,7 +28,7 @@ class DiskNet(ss.Network):
 
     Args:
         r (float):  radius within which edges are formed
-        v (rate):   speed at which agents move, a distance per unit time (e.g. `ss.perday(0.05)`)
+        v (rate):   speed at which agents move, a distance per unit time (e.g. `ss.freqperday(0.05)`)
         pars (dict): the same parameters, as a dict
 
     Attributes:
@@ -50,7 +50,7 @@ class DiskNet(ss.Network):
         super().__init__()
         self.define_pars(
             r = 0.1, # Radius
-            v = ss.perday(0.05), # Velocity
+            v = ss.freqperday(0.05), # Velocity
         )
         self.update_pars(pars, **kwargs)
         self.define_states(

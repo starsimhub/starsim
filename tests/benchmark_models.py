@@ -288,4 +288,4 @@ def make_strains_ode(substeps=1):
                     fail_rif=ss.Transition(Tx, I, rate=ss.peryear(0.1), move=DS >> (DS, RIF)),
                     fail_inh=ss.Transition(Tx, I, rate=ss.peryear(0.1), move=DS >> (DS, INH)),
                     relapse=R >> S @ ss.years(2), init=dict(I=0.02), name='tb', strains=strains)
-    return ss.Sim(diseases=tb, solver=ss.ode(substeps=substeps), total_pop=1e5, start=2000, stop=2020, dt=ss.years(0.1), verbose=0)
+    return ss.Sim(diseases=tb, solver=ss.solvers.ode(substeps=substeps), total_pop=1e5, start=2000, stop=2020, dt=ss.years(0.1), verbose=0)

@@ -493,7 +493,7 @@ class Transition(Nameable):
         ```python
         S, I, R = ss.states(3)
         infection = ss.Transition(S, I, rate=0.05 * I)
-        cure      = ss.Transition(I, S) # No driver: only by treatment
+        cure      = ss.Transition(I, S, rate=0) # A rate of 0: only treatment moves people along it
         recovery  = ss.Transition(I, R, dur=ss.days(10))
         maturing  = ss.Transition(J, A, rate=ss.perday(1), who=ss.person.age > 1) # Only adults
         failure   = ss.Transition(Tx, I, rate=ss.peryear(0.1), move=DS >> (DS, RIF)) # Treatment fails, and the strain acquires resistance (DS, RIF = strains)
@@ -587,7 +587,7 @@ class Transition(Nameable):
         self.every_state = False # For ss.death() with no state: applies to every state that is people
         self.migration = False # For ss.immigration() and ss.emigration(): people arrive at any age, or leave without dying
         self.state_given = True # For ss.birth() and ss.immigration(): whether the state people arrive in was given (if not, the first state)
-        self.undriven = False # No rate, duration, or p=: only products, deliveries, or code move people along it (see Graph.resolve_exits())
+        self.undriven = False # A rate of 0 as written (@ 0), and no duration or p=: only products, deliveries, or code move people along it (see Graph.resolve_transitions())
         self.stays = False # Whether ss.stay is one of the destinations, kept out of dest: what the other branches leave over stays (see split)
         self.p_stay = None # Its probability, if given (otherwise the rest)
         self.may_die = False # Whether ss.dead is one of several destinations (some who take it die), kept out of dest: those who take that branch die, as by an outflow; for whether anyone dies by it, use tr.dies or tr.may_die
@@ -1043,7 +1043,7 @@ def move(*args, p=None, n=None, uids=None, who=None, **kwargs):
         raise ValueError(f'ss.move() from outside the model adds a number: give n=')
     if where is not None and not people:
         raise ValueError(f'ss.move() with who= picks people, but it moves a count of "{mod.name}" (declared with people=False), which has none to pick')
-    if uids is not None and (mod.sim.solver != 'abm' or not people):
+    if uids is not None and (not isinstance(mod.sim.solver, ss.solvers.abm) or not people):
         raise ss.CapabilityError(f'ss.move() of particular agents (uids) needs agents, but ' + (f'"{mod.name}" is run with solver="{mod.sim.solver}", which has none.\n     Move a share (p=) or a number (n=) of the people in a state instead, or run with solver="abm"' if people else 'a count has none'))
     if n is None and p is None:
         p = 1.0
@@ -1596,7 +1596,7 @@ def scaled_dist(expr):
 def dwell_cdf(dist, convert):
     """
     The cumulative distribution function of a distribution of durations, in the sim's unit, as a function of an array of times;
-    None for a distribution it is not known for (whose dwell time `ss.ode(dwells='exact')` then takes as Erlang stages)
+    None for a distribution it is not known for (whose dwell time `ss.solvers.ode(dwells='exact')` then takes as Erlang stages)
 
     Args:
         dist (`ss.Dist`): the distribution

@@ -164,7 +164,7 @@ Both lower prevalence by about half. A cure does it by shortening infections, an
 
 A treatment that cures has three outcomes on each step, which are results of its delivery and events that can trigger what follows, as a test's results are: `cured`, `failed` (infected, and not cured), and `unneeded` (given to someone not infected, e.g. after a false positive). `ss.treat(..., when=treatment.failed)` gives a second-line drug to those the first failed.
 
-A cure keyed by transitions names what a treatment moves people along, instead of a cure by the disease's recovery. These are usually transitions with no rate (`cure = I >> S`, with no `@`), which only treatment drives, each with its own probability: `ss.Treatment(cure={syph.cure_early: 0.98, syph.cure_late: 0.95})` cures each stage of syphilis with its own chance, and `ss.Treatment(cure={ng.cure: 0.95, ct.cure: 0.95})` is one kit that cures two diseases. A person in no source of the transitions is `unneeded`. A transition with no rate that no product or delivery names never happens, so `sim.init()` says so in a note.
+A cure keyed by transitions names what a treatment moves people along, instead of a cure by the disease's recovery. These are usually transitions with a rate of 0 (`cure = I >> S @ 0`), which only treatment drives, each with its own probability: `ss.Treatment(cure={syph.cure_early: 0.98, syph.cure_late: 0.95})` cures each stage of syphilis with its own chance, and `ss.Treatment(cure={ng.cure: 0.95, ct.cure: 0.95})` is one kit that cures two diseases. A person in no source of the transitions is `unneeded`. A transition of the disease needs a rate, so one with none (`I >> S`, with no `@`) is an error; `describe()` says what moves people along one with a rate of 0, or that nothing does.
 
 Resistance to a drug is then a transition of the disease, triggered by the drug's failures. Here a gonorrhea-like infection has a strain that is resistant to the drug (`Ir`), which arises in 20% of the people the drug fails, and which the drug doesn't cure. Half of the people with a sensitive infection are treated each year from 2005, with a drug that cures 95% of them:
 
@@ -174,7 +174,7 @@ infection     = S >> I  @ ss.peryear(2)*I   # Sensitive infections
 infection_res = S >> Ir @ ss.peryear(2)*Ir  # Resistant infections, as transmissible
 recovery      = I  >> S @ ss.years(1)
 recovery_res  = Ir >> S @ ss.years(1)
-cure          = I  >> S                     # No rate: only treatment moves people along it
+cure          = I  >> S @ 0                 # A rate of 0: only treatment moves people along it
 drug = ss.Treatment(cure={cure: 0.95})
 resistance = ss.Transition(I, Ir, when=drug.failed, p=0.2) # Resistance arises in 20% of failures
 ng = ss.Disease(infection, infection_res, recovery, recovery_res, cure, resistance, init_n=dict(I=500), name='ng') # 500 sensitive infections at the start

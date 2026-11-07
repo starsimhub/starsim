@@ -26,7 +26,7 @@ def make_hpv(name, beta=1.5):
         dysplasia = I >> CIN @ ss.years(2),
         regress   = CIN >> S @ ss.years(3),
         invasion  = CIN >> CA @ ss.years(5),
-        excised   = CIN >> I,
+        excised   = CIN >> I @ 0,
         init_prev=0.1, name=name,
     )
 
@@ -46,7 +46,7 @@ def check_agents(make, pop=10_000, **kwargs):
     """ Check that a model is agents only: an explicit ODE refuses it before the run, and solver='auto' runs it as agents """
     with pytest.raises(ss.CapabilityError):
         make(solver='ode', total_pop=pop, **kw, **kwargs).init()
-    assert make(total_pop=pop, **kw, **kwargs).init().solver == 'abm'
+    assert isinstance(make(total_pop=pop, **kw, **kwargs).init().solver, ss.solvers.abm)
     return
 
 
@@ -87,7 +87,7 @@ def test_any():
         genos = [make_hpv('hpv16'), make_hpv('hpv18', beta=1.2)]
         any_cin, any_ca = genos[0].CIN | genos[1].CIN, genos[0].CA | genos[1].CA
         def look(sim):
-            if sim.solver == 'abm':
+            if isinstance(sim.solver, ss.solvers.abm):
                 d, u = sim.diseases, sim.people.auids
                 ca = d.hpv16.CA.raw[u] | d.hpv18.CA.raw[u]
                 seen.update(eligible=np.count_nonzero(~ca), found=0.9*np.count_nonzero((d.hpv16.CIN.raw[u] | d.hpv18.CIN.raw[u]) & ~ca))
@@ -131,7 +131,7 @@ def test_own_product():
             self.results.positive[self.ti] = len(screening.reached('positive'))
 
     def make(**kwargs):
-        screening = ss.Delivery(Swab(), when=ss.months(3), coverage=0.2, name='screening')
+        screening = ss.Delivery(Swab(), when=ss.schedule(every=ss.months(3)), coverage=0.2, name='screening')
         treatment = ss.treat(ss.Treatment(cure=1.0), when=screening.positive, name='treatment')
         return ss.Sim(make_geno('flu'), interventions=[screening, treatment], analyzers=Reached(), **kwargs)
     check_agents(make) # Its own code acts on agents

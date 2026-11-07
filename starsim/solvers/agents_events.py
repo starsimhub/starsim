@@ -1,5 +1,5 @@
 """
-Not for the user: agents taken event by event in continuous time within each step (`solver=ss.abm(step='events')`; see `ss.solvers.Events`)
+Not for the user: agents taken event by event in continuous time within each step (`solver=ss.solvers.abm(step='events')`; see `ss.solvers.Events`)
 
 Used with: agents; declared modules
 """
@@ -15,7 +15,7 @@ __all__ = ['Events']
 
 class Events(Agents):
     """
-    Runs a graph as agents, event by event in continuous time within each step (`solver=ss.abm(step='events')`)
+    Runs a graph as agents, event by event in continuous time within each step (`solver=ss.solvers.abm(step='events')`)
 
     It exists so that a model whose events are fast against a step (an epidemic on a network) needs neither small steps nor a pass over
     every edge in each of them. The engine is called once a step, as the agent engine is, and takes its agents through the step in one
@@ -39,7 +39,7 @@ class Events(Agents):
         graph = self.graph
         sim = self.sim
         def no(what, why='which the events do not take yet'):
-            raise ss.CapabilityError(f'"{mod.name}" cannot run with solver=ss.abm(step="events"): {what}, {why}. Run it with solver="abm" (a module can have its own, e.g. ss.Disease(..., solver=ss.abm())).')
+            raise ss.CapabilityError(f'"{mod.name}" cannot run with solver=ss.solvers.abm(step="events"): {what}, {why}. Run it with solver="abm" (a module can have its own, e.g. ss.Disease(..., solver=ss.solvers.abm())).')
         if sim.pars.branching:
             no('the sim is a branching process (branching=True)')
         if self.strain is not None:
@@ -109,7 +109,7 @@ class Events(Agents):
             """ Shares that are the same for everyone, as the events take them yet: the cumulative shares (one row per branch, and its end) of the first agent """
             edges = np.asarray(edges, dtype=float).reshape(len(edges), -1)
             if edges.shape[1] > 1 and np.ptp(edges, axis=1).max() > 1e-12:
-                raise ss.CapabilityError(f'"{self.mod.name}" cannot run with solver=ss.abm(step="events"): the shares of {what} differ between people, which the events do not take yet. Run it with solver="abm".')
+                raise ss.CapabilityError(f'"{self.mod.name}" cannot run with solver=ss.solvers.abm(step="events"): the shares of {what} differ between people, which the events do not take yet. Run it with solver="abm".')
             return edges[:, 0]
         brs, cums = [], []
         for state in graph.people_states:
@@ -186,14 +186,14 @@ class Events(Agents):
         """
         hazards = {state: np.asarray(h, dtype=float) for state,h in hazards.items()} # By direction
         if any(h.ndim > 1 for h in hazards.values()):
-            raise ss.CapabilityError(f'"{self.mod.name}" cannot run with solver=ss.abm(step="events"): its chance per act of "{tr.name}" on "{nkey}" differs between people, which the events do not take yet. Run it with solver="abm".')
+            raise ss.CapabilityError(f'"{self.mod.name}" cannot run with solver=ss.solvers.abm(step="events"): its chance per act of "{tr.name}" on "{nkey}" differs between people, which the events do not take yet. Run it with solver="abm".')
         top = np.max(list(hazards.values()), axis=0)
         on = top > 0
         shares = {}
         for state,h in hazards.items():
             ratio = h[on]/top[on]
             if len(ratio) and np.ptp(ratio) > 1e-12:
-                raise ss.CapabilityError(f'"{self.mod.name}" cannot run with solver=ss.abm(step="events"): the chances per act of the source states of "{tr.name}" on "{nkey}" are not in proportion in every direction, which the events do not take yet. Run it with solver="abm".')
+                raise ss.CapabilityError(f'"{self.mod.name}" cannot run with solver=ss.solvers.abm(step="events"): the chances per act of the source states of "{tr.name}" on "{nkey}" are not in proportion in every direction, which the events do not take yet. Run it with solver="abm".')
             shares[state] = float(ratio[0]) if len(ratio) else 0.0
         edges = route.edges
         p1, p2 = np.asarray(edges.p1), np.asarray(edges.p2)
@@ -253,12 +253,12 @@ class Events(Agents):
                 if acts:
                     coefs, w1, w2 = self.act_weights(tr, nkey, route, coefs)
                 if any(np.ndim(c) for c in coefs.values()):
-                    raise ss.CapabilityError(f'"{mod.name}" cannot run with solver=ss.abm(step="events"): the coefficient of "{tr.name}" on "{nkey}" differs between people, which the events do not take yet. Run it with solver="abm".')
+                    raise ss.CapabilityError(f'"{mod.name}" cannot run with solver=ss.solvers.abm(step="events"): the coefficient of "{tr.name}" on "{nkey}" differs between people, which the events do not take yet. Run it with solver="abm".')
                 ref = max([float(c) for c in coefs.values()] + [0.0])
                 if ref <= 0:
                     continue
                 elif not np.isfinite(ref):
-                    raise ss.CapabilityError(f'"{mod.name}" cannot run with solver=ss.abm(step="events"): the coefficient of "{tr.name}" on "{nkey}" is a probability of 1, an infinite rate, which has no time to the next event. Run it with solver="abm", where it is a certain transmission.')
+                    raise ss.CapabilityError(f'"{mod.name}" cannot run with solver=ss.solvers.abm(step="events"): the coefficient of "{tr.name}" on "{nkey}" is a probability of 1, an infinite rate, which has no time to the next event. Run it with solver="abm", where it is a certain transmission.')
                 share = np.zeros(ns)
                 for state,c in coefs.items():
                     share[self.state_index[state.name]] = float(c)/ref*float(state.rel_trans)

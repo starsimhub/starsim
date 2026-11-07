@@ -72,10 +72,10 @@ class EventSource:
         self._live = {} # Outcome (None for the event itself): the selections fired on the last step it was fired, as (time index, selection, people in each state and group then, engine)
         self._pending = [] # Fired, not yet in the memory: (outcome, entry)
         needs = ss.interventions.memory_needs(sim)
-        every = sim.solver == 'abm' and isinstance(self, ss.Event) # As agents, every event of a delivery, for reading after a run; a product's (any of its deliveries) only if read
+        every = isinstance(sim.solver, ss.solvers.abm) and isinstance(self, ss.Event) # As agents, every event of a delivery, for reading after a run; a product's (any of its deliveries) only if read
         self._needs = {o:needs.get((self.name, o), set()) for o in [None] + self.outcome_names() if every or (self.name, o) in needs}
         self._mem = {}
-        if sim.solver == 'abm':
+        if isinstance(sim.solver, ss.solvers.abm):
             for o in self._needs:
                 key = 'event' if o is None else o
                 last, count = ss.FloatArr(f'last_{key}', label=f'Time index of the last {key}'), ss.FloatArr(f'count_{key}', default=0, label=f'Number of times: {key}')
@@ -89,7 +89,7 @@ class EventSource:
         """ Record that an event happened to some people now: a boolean per agent, or the share of each state and group (as they were in `before`, if given) """
         sim = self.sim
         ti = sim.ti
-        if sim.solver == 'abm':
+        if isinstance(sim.solver, ss.solvers.abm):
             entry = [ti, ss.uids(np.flatnonzero(sel)) if not isinstance(sel, ss.uids) else sel, None, None]
         else:
             entry = [ti, np.array(sel, dtype=float), eng.state_counts() if before is None else before, eng] # Carried along later moves: see ss.solvers.CompartmentalDelivery.carry_events()
@@ -134,7 +134,7 @@ class EventSource:
         Args:
             outcome (str): the outcome (default: everyone reached)
         """
-        if self.sim.solver != 'abm':
+        if not isinstance(self.sim.solver, ss.solvers.abm):
             raise ss.CapabilityError(f'"{self.name}".reached() is the UIDs of the people it reached, which exist only per agent; with solver="{self.sim.solver}", read its results')
         if outcome is not None and outcome not in self.outcome_names():
             raise self.no_outcome(outcome)
@@ -149,7 +149,7 @@ class EventSource:
             t, sel, before, eng = entry
             if t > ti:
                 keep.append((outcome, entry))
-            elif self.sim.solver == 'abm':
+            elif isinstance(self.sim.solver, ss.solvers.abm):
                 last, count = self._mem[outcome]
                 last[sel] = t
                 count[sel] = count[sel] + 1
@@ -484,7 +484,7 @@ class Held(Product):
     @property
     def tabulated(self):
         """ In a compartmental run, a product has no step of its own (its deliveries move people between levels of holding it), so it does not stop a whole run in the kernels """
-        return self.sim.solver != 'abm'
+        return not isinstance(self.sim.solver, ss.solvers.abm)
 
     @property
     def loses(self):
@@ -620,14 +620,14 @@ class Held(Product):
         if not self.holds or getattr(self, '_ti_waned', None) == sim.ti:
             return
         self._ti_waned = sim.ti
-        if self.during is not None and sim.solver != 'abm': # Held only while in some states: in a compartmental run, the share of each group not in them stops holding it
+        if self.during is not None and not isinstance(sim.solver, ss.solvers.abm): # Held only while in some states: in a compartmental run, the share of each group not in them stops holding it
             delivery = next(d for d in sim.interventions() if isinstance(d, ss.Event) and d.product is self)
             selector = delivery.selector
             gone = (selector.dim(self.dim) > 0)*selector.everyone()*(1 - selector.select(self.during))
             if np.any(gone):
                 delivery.shift(gone, {sim.groups.dim_index(self.dim):0})
             return
-        if sim.solver != 'abm':
+        if not isinstance(sim.solver, ss.solvers.abm):
             return
         if self.during is not None: # Held only while in some states
             arr = sim.people[self.dim]
@@ -756,12 +756,12 @@ class Treatment(Held):
 
     - By state (`cure=dict(I=0.9)`, or `cure={hpv.CIN: 0.9}`): the people in those states are cured, to the state the
       recovery leads to, and people in other states are not.
-    - By what cured people move along: transitions of the disease, usually undriven ones (`cure = A + C >> S`, with no
-      `@`), whose flows count the people moved (`cure={syph.cure_early: 0.98, syph.cure_late: 0.95}`); or a move
+    - By what cured people move along: transitions of the disease, usually ones with a rate of 0 (`cure = A + C >> S @ 0`),
+      whose flows count the people moved (`cure={syph.cure_early: 0.98, syph.cure_late: 0.95}`); or a move
       written with the states (`cure={I + CIN >> S: 0.9}`), which no flow counts, e.g. for a cure to one of several
       states that recoveries lead to. Each person treated who is in a source of one of them moves along it with its
       probability (cured), or does not (failed); one in no source is unneeded. The transitions can be of several
-      diseases (`cure={ng.cure: 0.95, ct.cure: 0.95}`); a modifier of an undriven transition
+      diseases (`cure={ng.cure: 0.95, ct.cure: 0.95}`); a modifier of such a transition
       (`ss.modify(ng.cure, multiply=0.5, who=...)`) multiplies the probability for the people it applies to.
       It is then given to the people in their sources.
 
@@ -1139,7 +1139,7 @@ class Diagnostic(Product):
     @property
     def tabulated(self):
         """ A test has no step of its own (its deliveries give it), so it does not stop a whole run in the kernels """
-        return self.sim.solver != 'abm'
+        return not isinstance(self.sim.solver, ss.solvers.abm)
 
     def agent_reasons(self, sim):
         out = super().agent_reasons(sim)

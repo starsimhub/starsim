@@ -199,7 +199,7 @@ class lognormal(Dist):
         ss.lognormal(mean=ss.days(10), std=ss.days(3)) # A duration
         ```
     """
-    renamed = dict(loc='mean', scale='std', s='log_std', sigma='log_std')
+    renamed = dict(scale='std', s='log_std', sigma='log_std') # Not loc, which in SciPy is a shift, not the mean
     scaling = ['predraw', 'postdraw'] # Given by its log moments, only 'postdraw'
     unit_pars = ('mean', 'std')
 
@@ -567,7 +567,7 @@ class weibull(Dist):
     Args:
         shape (float): the shape parameter, sometimes called k (default 1.0)
         scale (float): the scale parameter, sometimes called λ (default 1.0)
-        loc (float): a shift of the whole distribution, e.g. a shortest duration (default 0.0); by keyword only, so `ss.weibull(2, 5)` is a shape and a scale
+        loc (float): a shift of the whole distribution, e.g. a shortest duration (default 0.0), as SciPy's `loc`; by keyword only, so `ss.weibull(2, 5)` is a shape and a scale
 
     Examples:
         ```python
@@ -613,8 +613,8 @@ class gamma(Dist):
     Args:
         shape (float): the shape parameter, sometimes called k or α (default 1.0)
         scale (float): the scale parameter, sometimes called θ (default 1.0)
-        loc (float): a shift of the whole distribution, e.g. a shortest duration (default 0.0); by keyword only, so `ss.gamma(2, 5)` is a shape and a scale
-        mean (float): the mean, instead of `shape` and `scale` (with `std`)
+        loc (float): a shift of the whole distribution, e.g. a shortest duration (default 0.0), as SciPy's `loc`; by keyword only, so `ss.gamma(2, 5)` is a shape and a scale
+        mean (float): the mean, instead of `shape` and `scale` (with `std`); with `loc`, the mean of the whole distribution, shift included
         std (float): the standard deviation, with `mean`
 
     Examples:
@@ -634,8 +634,9 @@ class gamma(Dist):
                 errormsg = f'ss.gamma() is given by shape and scale, or by mean and std, not by {sc.strjoin([k for k,v in dict(shape=shape, scale=scale, mean=mean, std=std).items() if v is not None])}'
                 raise ValueError(errormsg)
             given = dict(mean=mean, std=std) | (dict(loc=loc) if loc else {})
-            shape = float((mean/std)**2) # A mean of shape×scale and a variance of shape×scale²
-            scale = mean/shape
+            span = mean - loc if loc else mean # The mean of the unshifted distribution, as SciPy's mean is loc + shape×scale
+            shape = float((span/std)**2) # A mean of shape×scale and a variance of shape×scale²
+            scale = span/shape
         shape = sc.ifelse(shape, 1.0)
         scale = sc.ifelse(scale, 1.0)
         super().__init__(distname='gamma', dist='gamma', shape=shape, scale=scale, loc=loc, **kwargs)
@@ -665,7 +666,7 @@ def erlang(k=1, mean=1.0, **kwargs):
 
     Args:
         k (int): the number of stages (the shape parameter)
-        mean (float): the mean of the distribution (not of each stage)
+        mean (float): the mean of the distribution (not of each stage; with `loc=`, a shift, the mean of the whole distribution)
         kwargs (dict): passed to `ss.gamma()`
 
     Examples:
@@ -676,7 +677,8 @@ def erlang(k=1, mean=1.0, **kwargs):
     if k != int(k) or k < 1:
         errormsg = f'The number of stages of an Erlang distribution must be a positive whole number, not {k}; for other shapes, use ss.gamma()'
         raise ValueError(errormsg)
-    dist = gamma(shape=int(k), scale=mean/k, **kwargs)
+    loc = kwargs.get('loc')
+    dist = gamma(shape=int(k), scale=(mean - loc if loc else mean)/k, **kwargs)
     dist.given = ('erlang', dict(k=int(k), mean=mean) | ({'loc':kwargs['loc']} if kwargs.get('loc') else {}))
     return dist
 

@@ -913,26 +913,26 @@ class DynamicNetwork(Network):
 
 def check_acts(net, acts):
     """
-    `acts=` of lasting partnerships is acts per unit time: a rate (e.g. `ss.perweek(2)`; a probability per unit time is an error), or a distribution of them drawn once for each
+    `acts=` of lasting partnerships is acts per unit time: a frequency (e.g. `ss.freqperweek(2)`, or a rate, `ss.perweek(2)`; a probability per unit time is an error), or a distribution of them drawn once for each
     partnership; a bare number, or a count per step drawn once, would depend on the step, so is an error
     """
     name = net.name or type(net).__name__.lower()
-    example = 'e.g. ss.perweek(2), or ss.lognormal(ss.peryear(80), ss.peryear(30)) for a rate that varies between partnerships'
+    example = 'e.g. ss.freqperweek(2), or ss.lognormal(ss.freqperyear(80), ss.freqperyear(30)) for a frequency that varies between partnerships'
     if acts is None or isinstance(acts, ss.Rate) and not isinstance(acts, ss.prob):
         return
     probs = [acts] if isinstance(acts, ss.prob) else []
     if isinstance(acts, ss.Dist):
         probs = [v for v in acts.pars.values() if isinstance(v, ss.prob)]
     if probs: # E.g. ss.probperyear(0.8), a chance, not a number of acts
-        raise ValueError(f'acts= of "{name}" is a number of acts per unit time, not a probability per unit time (ss.{probs[0]!r}): give a rate, {example}')
+        raise ValueError(f'acts= of "{name}" is a number of acts per unit time, not a probability per unit time (ss.{probs[0]!r}): give a frequency, {example}')
     elif sc.isnumber(acts):
-        raise ValueError(f'acts= of "{name}" is a number of acts per unit time in each partnership; a bare number ({acts}) would be acts in a step, which depends on the step. Give a rate, {example}')
+        raise ValueError(f'acts= of "{name}" is a number of acts per unit time in each partnership; a bare number ({acts}) would be acts in a step, which depends on the step. Give a frequency, {example}')
     elif isinstance(acts, ss.Dist):
         timed = acts.unit is not None or any(isinstance(v, ss.TimePar) for v in acts.pars.values())
         if not timed:
-            raise ValueError(f'acts= of "{name}" is a number of acts per unit time in each partnership, so a distribution of them needs its parameters as rates ({acts} has none), {example}')
+            raise ValueError(f'acts= of "{name}" is a number of acts per unit time in each partnership, so a distribution of them needs its parameters as frequencies ({acts} has none), {example}')
         if isinstance(acts, (ss.poisson, ss.nbinom, ss.binom, ss.randint, ss.bernoulli)):
-            raise ValueError(f'acts= of "{name}" is {acts}, a whole number of acts in a step, drawn once for each partnership, which depends on the step (at weekly steps, a fifth of partnerships would never have sex). Give a rate, {example}')
+            raise ValueError(f'acts= of "{name}" is {acts}, a whole number of acts in a step, drawn once for each partnership, which depends on the step (at weekly steps, a fifth of partnerships would never have sex). Give a frequency, {example}')
         return
     raise TypeError(f'acts= of "{name}" is {acts} ({type(acts).__name__}); give a rate, {example}')
 
@@ -1248,7 +1248,7 @@ class DegreeNet(DynamicNetwork):
     Args:
         n_contacts (float/`ss.Dist`/`ss.by`/dict): if given, a target for the number of partners a person has at a time: a number, which is the mean of a Poisson (whose shape `concurrency` and `max_contacts` can change), or a distribution over whole numbers (e.g. `ss.constant(1)`, for exactly one); or a number for each level of a property of people (`ss.by(risk=[0.4, 1.6])`), as EpiModel's nodefactor; or one for each group of `between`, e.g. `dict(fsw=3, client=0.5)` (each partnership has one of each, so these should give the two groups about as many partners in all). By default, no target: at most one partner, pairing people who have none on every step
         dur (float/`ss.Duration`/`ss.Dist`): how long partnerships last: a mean (they end at a constant rate), or a distribution; a bare number is in the sim's unit (default: 10)
-        acts (rate/`ss.Dist`): if given, the number of acts per unit time in each partnership: a rate such as `ss.perweek(2)`, or a distribution of rates drawn once for each partnership; a disease's beta is then per act (see `ss.peract`)
+        acts (rate/`ss.Dist`): if given, the number of acts per unit time in each partnership: a frequency such as `ss.freqperweek(2)` (or a rate, `ss.perweek(2)`), or a distribution of them drawn once for each partnership; a disease's beta is then per act (see `ss.peract`)
         who (Cond/str/func): if given, who takes part: a condition over people (e.g. `ss.person.pwid`), as for `ss.Event()`; nobody else is in the network
         between (str/tuple): if given, who partnerships are between: `'mf'`, a man and a woman, so its directions are `m2f` and `f2m` and a disease's beta on it is `ss.peract(m2f=..., f2m=...)`, or one value for both; `'mm'`, two men, with one beta; or a pair of groups, each the name of a boolean property of people or of a level of a stratification, e.g. `('fsw', 'client')`, whose directions are `fsw2client` and `client2fsw` (nobody can be in both)
         concurrency (float): if given, the share of people with two or more partners at once; the distribution of `n_contacts` is adjusted to give it, keeping its mean
@@ -1272,10 +1272,10 @@ class DegreeNet(DynamicNetwork):
         net = ss.DegreeNet(n_contacts=ss.by(risk=[0.4, 1.6]), dur=50, match=dict(risk=0.8))
 
         # Needle sharing among people who inject drugs (a boolean property of people), with 20 injections a month in each partnership
-        needles = ss.DegreeNet(name='needles', who=ss.person.pwid, n_contacts=2, dur=ss.months(6), acts=ss.permonth(20))
+        needles = ss.DegreeNet(name='needles', who=ss.person.pwid, n_contacts=2, dur=ss.months(6), acts=ss.freqpermonth(20))
 
         # Sex work, between female sex workers and their clients (boolean properties of people)
-        sw = ss.DegreeNet(name='sw', between=('fsw', 'client'), n_contacts=dict(fsw=5, client=0.5), dur=ss.months(1), acts=ss.perweek(1))
+        sw = ss.DegreeNet(name='sw', between=('fsw', 'client'), n_contacts=dict(fsw=5, client=0.5), dur=ss.months(1), acts=ss.freqperweek(1))
         ```
     """
     def __init__(self, pars=None, n_contacts=_, dur=_, concurrency=_, max_contacts=_, match=_, acts=_, who=_, between=_, memory=_, **kwargs):
@@ -1802,7 +1802,7 @@ class SexualNet(DegreeNet):
         between (str/tuple): who partnerships are between: `'mf'` (the default), a man and a woman, so its directions are `m2f` and `f2m` and a disease's beta on it is `ss.peract(m2f=..., f2m=...)`, or one value for both; `'mm'`, two men (men who have sex with men), with one beta; or a pair of groups, each the name of a boolean property of people or of a level of a stratification, e.g. `('fsw', 'client')`, whose directions are `fsw2client` and `client2fsw` (nobody can be in both)
         dur (`ss.Dist`/`ss.Duration`/float): how long partnerships last, as for `ss.DegreeNet`: a single duration, e.g. `ss.months(6)`, is a mean, and partnerships end at a constant rate (an exponential); a bare number is in the sim's unit; give a distribution for any other spread, e.g. `ss.lognormal(mean=ss.months(6), std=ss.months(3))`, which can vary by age, year, and individual pair (default: `ss.lognormal(mean=ss.years(15), std=ss.years(1))`)
         debut (`ss.Dist`): the age of debut; can vary by using callable parameter values
-        acts (`ss.per`/`ss.Dist`): the number of acts per unit time in each partnership: a rate (e.g. `ss.perweek(2)`, or `ss.peryear(80)`), or a distribution of them drawn once for each partnership (default: lognormal, mean 80 a year, standard deviation 30)
+        acts (`ss.freq`/`ss.Dist`): the number of acts per unit time in each partnership: a frequency (e.g. `ss.freqperweek(2)`, or `ss.freqperyear(80)`; a rate, `ss.peryear(80)`, is the same), or a distribution of them drawn once for each partnership (default: lognormal, mean 80 a year, standard deviation 30)
         participation (`ss.Dist`): whether each person takes part, drawn at their debut; can vary by individual properties (age, sex, ...) using callable parameter values
         n_contacts (float/`ss.Dist`/dict): if given, a target for the number of partners people have at a time: a number, which is the mean of a Poisson, or a distribution over whole numbers; or one for each group of `between`, e.g. `dict(fsw=3, client=0.5)` (each partnership has one of each, so these should give the two groups about as many partners in all)
         concurrency (float): with `n_contacts`, the share of people with two or more partners at once
@@ -1827,7 +1827,7 @@ class SexualNet(DegreeNet):
             self.define_pars(
                 n_contacts = None,
                 dur = ss.lognormal(mean=ss.years(15), std=ss.years(1)),  # Can vary by age, year, and individual pair
-                acts = ss.lognormal(ss.peryear(80), ss.peryear(30)), # Acts per unit time, drawn once for each partnership
+                acts = ss.lognormal(ss.freqperyear(80), ss.freqperyear(30)), # Acts per unit time, drawn once for each partnership
                 debut = ss.normal(mean=16),  # Age of debut can vary by using callable parameter values
                 participation = ss.bernoulli(p=0.9),  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
             )

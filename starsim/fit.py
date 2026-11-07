@@ -22,7 +22,7 @@ import starsim as ss
 from .results import compare, lineup, match_column, match_name, parse_column, column_levels, flow_at_data
 
 __all__ = ['method', 'mismatch', 'loglik', 'prior_draws', 'sensitivity', 'profile', 'compare_models', 'split_data', 'diagnose', 'fit_stages',
-           'abc_smc', 'pmmh', 'nuts', 'Fit', 'Optimization', 'ModelComparison', 'ParticleFilter', 'Swarm']
+           'abc_smc', 'pmmh', 'nuts', 'Fit', 'maximize', 'minimize', 'Optimization', 'ModelComparison', 'ParticleFilter', 'Swarm']
 
 
 #%% Data and fitting for models with declared parameters
@@ -64,9 +64,11 @@ def series_weight(weights, col):
 
 
 def likelihoods(sim, data=None, likelihood=None):
-    """ The likelihood of each data series: given at calibration time (one for every series, or by column or result name), else declared on the outcome, else None """
+    """ The likelihood of each data series: given at calibration time (one for every series, or by column or result name), else declared on the outcome, else None; all None with `likelihood=False` """
     data = sim.data if data is None else data
     out = sc.obj()
+    if likelihood is False: # The declared likelihoods are switched off
+        return sc.obj({col:None for col in ([] if data is None else data.columns) if match_name(sim, parse_column(col)[0]) is not None})
     for col in ([] if data is None else data.columns): # No data, with a loss that is a function of the sim
         name = parse_column(col)[0] # A stratum of a result has the likelihood of the result
         res = match_name(sim, name)
@@ -270,7 +272,7 @@ class ParticleFilter(sc.prettyobj):
     (rather than drawn, as a run of the sim draws it), as the likelihood would compare it.
 
     Each particle has random numbers of its own, so the particles are shared between threads
-    (see `ss.options.threads`; one in the workers of `ss.parallel()` and of a calibration), and the
+    (see `ss.options.num_threads`; one in the workers of `ss.parallel()` and of a calibration), and the
     estimate does not depend on how many there are.
 
     Args:
@@ -312,7 +314,7 @@ class ParticleFilter(sc.prettyobj):
     @staticmethod
     def reason(sim):
         """ Why the particle filter cannot run a sim (apart from any data series without a likelihood), if it cannot """
-        if sim.solver not in ['binomial', 'gillespie', 'tau']:
+        if not isinstance(sim.solver, (ss.solvers.binomial, ss.solvers.gillespie, ss.solvers.tau)):
             return f'it has solver="{sim.solver}", not a stochastic compartmental one'
         elif not sim.kernel_only():
             return f'it is not run in one call to the kernels ({sim.kernel_reason()})'
@@ -984,7 +986,7 @@ class Fit(sc.prettyobj):
                 change = dict(interventions=change)
             sims.append(self.sim.new(label=label, **sc.mergedicts(dict(pars=dict(self.pars)), kwargs, change)))
         if self.samples is None:
-            n_runs = sc.ifelse(n_runs, 1 if self.sim.solver == 'ode' else 100) # With no posterior, the runs differ only by their seeds
+            n_runs = sc.ifelse(n_runs, 1 if isinstance(self.sim.solver, ss.solvers.ode) else 100) # With no posterior, the runs differ only by their seeds
             return ss.parallel(*sims, n_runs=n_runs)
         n_runs = sc.ifelse(n_runs, 100)
         draws = self.samples.sample(n=n_runs, replace=len(self.samples) < n_runs, random_state=rand_seed)[names]
@@ -1156,6 +1158,46 @@ max_scan = 100 # The most points a scan before a search tries by default: 10 per
 scipy_methods = ['nelder-mead', 'powell', 'l-bfgs-b', 'slsqp'] # With and without gradients, all keeping to the bounds
 
 
+class maximize(sc.prettyobj):
+    """
+    The goal of `sim.optimize()`: a result to make as large as possible
+
+    Args:
+        result (str/func): a result of a module (e.g. `'all_vs'`, or `'hiv.n_vs'`), or a function of the run sim that returns a number
+        at (float/date): the time of the result (default: the end), read as any time is (see `ss.connectors.to_time()`: a bare number is a year if the sim has a calendar); without it, a function of the sim decides
+
+    Example:
+        ```python
+        best = sim.optimize(ss.fit.maximize('all_vs', at=2030), spend=['testing', 'art'])
+        ```
+    """
+    sign = -1.0 # What the search minimizes is the sign times the result
+
+    def __init__(self, result, at=None):
+        self.result = result
+        self.at = at
+        return
+
+    def __repr__(self):
+        return f'ss.fit.{type(self).__name__}({getattr(self.result, "__name__", repr(self.result))}' + (f', at={self.at!r}' if self.at is not None else '') + ')'
+
+
+class minimize(maximize):
+    """
+    The goal of `sim.optimize()`: a result to make as small as possible
+
+    Args:
+        result (str/func): a result of a module (e.g. `'sir.R'`), or a function of the run sim that returns a number
+        at (float/date): the time of the result (default: the end); without it, a function of the sim decides
+
+    Example:
+        ```python
+        best = sim.optimize(ss.fit.minimize('sir.R'), spend=['tests', 'masks'])
+        ```
+    """
+    sign = 1.0
+
+
 class Optimization(sc.prettyobj):
     """
     The result of allocating spending to maximize (or minimize) a result; see `sim.optimize()`
@@ -1190,8 +1232,8 @@ def optimize(sim, goal, total=None, start=None, spend=None, bounds=None, target=
     """
     import scipy.optimize as spo
     verbose = sc.ifelse(verbose, ss.options.verbose)
-    if not isinstance(goal, ss.maximize): # ss.minimize is a subclass
-        errormsg = f'sim.optimize() takes goal=ss.maximize(...) or goal=ss.minimize(...): a result (e.g. goal=ss.maximize("all_vs", at=2030)) or a function of the sim, not {type(goal).__name__}'
+    if not isinstance(goal, maximize): # minimize is a subclass
+        errormsg = f'sim.optimize() takes goal=ss.fit.maximize(...) or goal=ss.fit.minimize(...): a result (e.g. goal=ss.fit.maximize("all_vs", at=2030)) or a function of the sim, not {type(goal).__name__}'
         raise TypeError(errormsg)
     at = goal.at
     if spend is None:
@@ -1350,7 +1392,7 @@ def bounded_pars(probe, pars=None, unused=()):
                 same = [m.graph.pars[name] for m in probe.declared if name in m.graph.pars]
                 key = name if all(q is same[0] for q in same) else f'{mod.name}.{name}'
                 fitted[key] = p
-    mixed = getattr(probe, 'mixed', []) if probe.solver != 'abm' else [] # Networks that a compartmental run turns into contact rates
+    mixed = getattr(probe, 'mixed', []) if not isinstance(probe.solver, ss.solvers.abm) else [] # Networks that a compartmental run turns into contact rates
     contacts = [] # Their parameters that are fitted, which set the contact rates when the sim is built
     coded = [(mod, name, p) for mod in list(probe.modules) + mixed if isinstance(mod.pars, ss.Pars) for name,p in mod.pars.bounded().items()] # A parameter that a module's code reads (written as code, or the coded part of a declared one), given as ss.par with bounds, e.g. ssl.HIV(beta=ss.par(0.01, bounds=[0.001, 0.1])); see ss.Pars.bounded()
     for mod,name,p in coded:
@@ -1704,20 +1746,26 @@ def check_loss(loss):
     return
 
 
-def check_likelihoods(liks, loss=None, given=False):
-    """ A fit uses likelihoods for every data series or for none: raise an error for some with and some without, or for likelihoods with a loss """
+def check_likelihoods(liks, likelihood=None, loss=None, sim=None, verbose=None):
+    """
+    The likelihoods a fit uses, for every data series or for none: those found (see `likelihoods()`), or none if `loss=` is given
+    over likelihoods declared on the outcomes, which is noted. Raises an error for some series with a likelihood and some without,
+    or for likelihoods given with `likelihood=` together with `loss=`
+    """
     having = [col for col,lik in liks.items() if lik is not None]
     missing = [col for col,lik in liks.items() if lik is None]
     if having and loss is not None:
-        where = 'given with likelihood=' if given else 'declared on the outcome'
-        errormsg = (f'loss= is the measure of a fit without likelihoods, but the data series {sc.strjoin(having)} {"has" if len(having) == 1 else "have"} a likelihood ({where}); '
-                    f'the fit uses one or the other: leave out loss=, or fit to results without one')
-        raise ValueError(errormsg)
+        if likelihood is not None:
+            errormsg = (f'loss= is the measure of a fit without likelihoods, but likelihood= gives the data series {sc.strjoin(having)} {"one" if len(having) == 1 else "likelihoods"}; '
+                        f'the fit uses one or the other: leave out loss= or likelihood=')
+            raise ValueError(errormsg)
+        ss.note(f'the fit minimizes loss={loss if isinstance(loss, str) else getattr(loss, "__name__", "the function")!r}, in place of the likelihood{"s" if len(having) > 1 else ""} declared for {sc.strjoin(having)} (likelihood=False says so with no note)', sim=sim, verbose=verbose)
+        return sc.obj({col:None for col in liks})
     if having and missing:
         errormsg = (f'The data series {sc.strjoin(having)} {"has" if len(having) == 1 else "have"} a likelihood but {sc.strjoin(missing)} {"does" if len(missing) == 1 else "do"} not, and a fit uses likelihoods for every series or for none; '
-                    f'give the others one, e.g. likelihood=dict({missing[0]}=ss.poisson()), or one for every series, likelihood=ss.poisson()')
+                    f'give the others one, e.g. likelihood=dict({missing[0]}=ss.poisson()), or one for every series, likelihood=ss.poisson(); or fit without likelihoods, with loss= or likelihood=False')
         raise ValueError(errormsg)
-    return
+    return liks
 
 
 def default_method(sim, use_lik, no_grad=None, n_pars=None):
@@ -1731,7 +1779,7 @@ def default_method(sim, use_lik, no_grad=None, n_pars=None):
         n_pars (int): the number of fitted parameters; a point estimate of one or two uses Nelder-Mead even with gradients, since it is faster there
     """
     no_grad = no_grad or ss.solvers.why_not(sim, 'jax')
-    if sim.solver != 'ode':
+    if not isinstance(sim.solver, ss.solvers.ode):
         method, why = 'optuna', 'a stochastic sim'
         posterior = 'pmcmc' if use_lik and ParticleFilter.reason(sim) is None else 'abc-smc'
     elif no_grad:
@@ -1777,8 +1825,7 @@ class Problem(sc.prettyobj):
         self.base, self.likelihood, self.weights, self.loss = base, likelihood, weights, loss
 
         # The parameters
-        liks = likelihoods(probe, likelihood=likelihood)
-        check_likelihoods(liks, loss, given=likelihood is not None)
+        liks = check_likelihoods(likelihoods(probe, likelihood=likelihood), likelihood=likelihood, loss=loss, verbose=verbose)
         self.use_lik = use_lik = any(lik is not None for lik in liks.values())
         used = [id(val) for lik in liks.values() if use_lik and lik is not None for val in lik_pars(lik).values()]
         unused = [id(val) for mod in probe.declared for oc in mod.graph.outcomes.values() if oc.likelihood is not None for val in lik_pars(oc.likelihood).values() if id(val) not in used]
@@ -1813,8 +1860,8 @@ class Problem(sc.prettyobj):
         self.span = np.where(logs, np.log(np.where(logs, self.highs, 1.0)), self.highs) - self.base_lows
 
         # How it is run and scored
-        self.stochastic = probe.solver not in ['ode']
-        self.n_runs = sc.ifelse(n_runs, 4 if self.stochastic and probe.solver != 'abm' else 1) # A stochastic compartmental sim is scored over several runs, so the fit is not to one draw of chance; agents, whose runs are slow, by one run a point, as Optuna's search averages over nearby points
+        self.stochastic = not isinstance(probe.solver, ss.solvers.ode)
+        self.n_runs = sc.ifelse(n_runs, 4 if self.stochastic and not isinstance(probe.solver, ss.solvers.abm) else 1) # A stochastic compartmental sim is scored over several runs, so the fit is not to one draw of chance; agents, whose runs are slow, by one run a point, as Optuna's search averages over nearby points
         self.seeds = [sc.ifelse(base.pars.rand_seed, 1) + i for i in range(self.n_runs)] # The same seeds at every point (common random numbers), so the score changes only with the values
         self.reseed = reseed
         self.fresh = False # Whether each evaluation takes seeds of its own; see choose()
@@ -2713,7 +2760,7 @@ def as_method(obj):
     return method(obj)
 
 
-def split_data(df, holdout=0.25, folds=None):
+def split_data(data, holdout=0.25, folds=None):
     """
     Split data into the part to fit to and the part to predict, for each fold
 
@@ -2725,10 +2772,11 @@ def split_data(df, holdout=0.25, folds=None):
     Returns a list of (fitting data, held-out data) pairs, one per fold.
 
     Args:
-        df (dataframe): the data
+        data (dataframe): the data
         holdout (float/date): the share of each series to hold out, or the date or time from which to hold out everything
         folds (int): the number of folds
     """
+    df = data
     k = folds or 1
     out = []
     for j in range(k):
@@ -2878,13 +2926,11 @@ def compare_models(sims, data=None, holdout=0.25, folds=None, **kwargs):
     desc = f'{what}{f", in {folds} folds" if folds else ""} ({"; ".join(spans)})'
 
     # Fit and predict
-    liks = [likelihoods(probe, likelihood=kwargs.get('likelihood')) for probe in probes]
-    for lk in liks:
-        check_likelihoods(lk, kwargs.get('loss'), given=kwargs.get('likelihood') is not None)
+    liks = [check_likelihoods(likelihoods(probe, likelihood=kwargs.get('likelihood')), likelihood=kwargs.get('likelihood'), loss=kwargs.get('loss'), verbose=kwargs.get('verbose', False)) for probe in probes] # With loss=, none (as for one fit)
     has = [any(lik is not None for lik in lk.values()) for lk in liks]
     if any(has) and not all(has): # One measure for every model
         errormsg = (f'compare_models() scores every model by the same measure, but {sc.strjoin([l for l,h in zip(labels, has) if h])} {"has" if sum(has) == 1 else "have"} likelihoods and {sc.strjoin([l for l,h in zip(labels, has) if not h])} not; '
-                    f'give every model a likelihood (e.g. likelihood=ss.poisson(), for every series of every model), or none')
+                    f'give every model a likelihood (e.g. likelihood=ss.poisson(), for every series of every model), or score them all by a loss, with loss= (e.g. loss="nae") or likelihood=False')
         raise ValueError(errormsg)
     use_lik = all(has)
     if not use_lik:

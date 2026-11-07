@@ -275,7 +275,7 @@ class Cond:
             raise ValueError(errormsg)
         if sim_only:
             return sim
-        if sim.solver != 'abm':
+        if not isinstance(sim.solver, ss.solvers.abm):
             raise ss.CapabilityError(f'{self!r}[uids] is a value for each agent, which exist only with solver="abm"; with solver="{sim.solver}", read the counts in its results')
         selector = Selector(sim, mod if getattr(mod, 'graph', None) is not None else None)
         try:
@@ -987,7 +987,7 @@ class Selector(sc.prettyobj):
     """
     def __init__(self, sim, mod=None):
         self.sim = sim
-        self.abm = sim.solver == 'abm'
+        self.abm = isinstance(sim.solver, ss.solvers.abm)
         self.mod = mod if mod is not None else (sim.declared[0] if len(sim.declared) else None)
         graph = getattr(self.mod, 'graph', None) # A module written as code has no declared states
         self.states = [s.name for s in graph.people_states] if graph is not None else []

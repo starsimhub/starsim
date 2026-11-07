@@ -122,7 +122,7 @@ def test_streams(solver):
         def seasonal(solver):
             S, I, R, V = ss.states('S I R V')
             sir = ss.Disease(infection=S >> I @ ss.seasonal(mean=0.421, amplitude=0.46, peak=0.92) * I, recovery=I >> R @ ss.perday(0.0909), vax=S >> V @ ss.perday(0.011), init_n=dict(I=25), name='sir')
-            return ss.Sim(sir, total_pop=100_000, stop=60, unit='day', solver=ss.binomial(substeps=1) if solver == 'binomial' else solver, rand_seed=587, verbose=0) # With 2 substeps, a whole binomial run and a stepped one differ
+            return ss.Sim(sir, total_pop=100_000, stop=60, unit='day', solver=ss.solvers.binomial(substeps=1) if solver == 'binomial' else solver, rand_seed=587, verbose=0) # With 2 substeps, a whole binomial run and a stepped one differ
         for s in [solver, 'ode']:
             whole, stepped = [seasonal(s).run().results.sir.vax.values, seasonal(s).profile(kind='loop', plot=False).sim.results.sir.vax.values]
             if s == 'ode': # With more than one substep, the kernel compiled into a whole run and the one called from Python round differently, by about 1e-16
@@ -239,7 +239,7 @@ def test_exit_order(solver):
         dis = ss.Disease(I, *dests.values(), **exits, default_state='I', name='exits')
         agents = dict(n_agents=20_000) if solver == 'abm' else {}
         sim = ss.Sim(dis, unit='day', stop=5, solver=solver, total_pop=100_000, verbose=0, **agents).run()
-        assert sim.solver == solver
+        assert str(sim.solver) == solver
         res = sim.results.exits
         left = np.array([res[f'{k.upper()}'][-1] for k in 'abc'])
         shares.append(left/left.sum())
@@ -279,8 +279,8 @@ def test_wide_dwell():
         A, B = ss.states('A B')
         dis = ss.Disease(A, B, go=A >> B @ ss.peryear(1), back=ss.Transition(B, A, dur=ss.weibull(shape=c, scale=ss.years(1))), default_state='A', name='m')
         return ss.Sim(dis, total_pop=1000, stop=2010, solver=solver, verbose=0).init()
-    assert make(0.5).solver == 'ode' # A coefficient of variation of 2.2
-    assert make(0.3).solver == 'abm' # Of 5.4: one exponential stage at its mean of 9.3 years kept nearly everyone in B
+    assert isinstance(make(0.5).solver, ss.solvers.ode) # A coefficient of variation of 2.2
+    assert isinstance(make(0.3).solver, ss.solvers.abm) # Of 5.4: one exponential stage at its mean of 9.3 years kept nearly everyone in B
     with pytest.warns(RuntimeWarning, match='coefficient of variation'):
         make(0.3, 'ode')
     return
@@ -458,7 +458,7 @@ def test_behavior_solvers():
     sc.heading('Testing that a module of behavior (a regression, a counter, and a switching row by age) has the same shares by method and age under every solver')
     ode = behavior_shares(behavior('ode').run())
     sim = behavior('binomial', n=1_000_000)
-    sim.pars.solver = ss.binomial(substeps=10) # Whole steps of the chain binomial would lengthen the 9 months pregnant by half a step (6% more pregnant)
+    sim.pars.solver = ss.solvers.binomial(substeps=10) # Whole steps of the chain binomial would lengthen the 9 months pregnant by half a step (6% more pregnant)
     binomial = behavior_shares(sim.run())
     assert np.allclose(binomial, ode, rtol=0.01), f'Expected the binomial solver to match the ODE: {binomial} against {ode}'
     for solver in ['gillespie', 'abm']: # 20 runs each, within 3 standard errors
@@ -505,16 +505,16 @@ class Tagger(ss.Intervention):
 def test_coded_beside():
     sc.heading('Testing that code beside a declared model does not change its solver unless it needs agents')
     alone = corpus.sir(unit='day').run()
-    assert alone.solver == 'ode'
+    assert isinstance(alone.solver, ss.solvers.ode)
 
     # An analyzer that reads counts, or a NumPy ODE of its own, runs beside the compartments, and the declared model's results are unchanged
     watched = corpus.sir(unit='day', analyzers=Watch()).run()
-    assert watched.solver == 'ode', f'An analyzer changed the solver to {watched.solver}'
+    assert isinstance(watched.solver, ss.solvers.ode), f'An analyzer changed the solver to {watched.solver}'
     assert np.array_equal(watched.results.sir.I.values, alone.results.sir.I.values)
     seen = watched.analyzers.watch.seen # An analyzer runs at the end of a step, so it sees the next time point's count
     assert len(seen) == len(alone.results.sir.I) and np.allclose(seen[:-1], alone.results.sir.I.values[1:])
     numpy = corpus.sir(unit='day', connectors=NumpySIS()).run()
-    assert numpy.solver == 'ode' and np.array_equal(numpy.results.sir.I.values, alone.results.sir.I.values)
+    assert isinstance(numpy.solver, ss.solvers.ode) and np.array_equal(numpy.results.sir.I.values, alone.results.sir.I.values)
     assert numpy.connectors.numpysis.y[1] > 0.5 # Its own model ran (to near 1 - 0.1/0.3)
 
     # Code that says it needs agents makes the model run as agents; an intervention written as code does not, and if it reads agents, the run stops and says so
@@ -524,8 +524,8 @@ def test_coded_beside():
         compartmental = False
     for mod in [Agentish(), AgentTagger()]:
         sim = corpus.sir(unit='day', **{'analyzers' if isinstance(mod, ss.Analyzer) else 'interventions':mod}).init()
-        assert sim.solver == 'abm', f'{type(mod).__name__} should need agents'
-    assert corpus.sir(unit='day', interventions=Tagger()).init().solver == 'ode' # Written as code is not a reason for agents
+        assert isinstance(sim.solver, ss.solvers.abm), f'{type(mod).__name__} should need agents'
+    assert isinstance(corpus.sir(unit='day', interventions=Tagger()).init().solver, ss.solvers.ode) # Written as code is not a reason for agents
     with pytest.raises(ss.CapabilityError, match='compartmental = False'):
         corpus.sir(unit='day', interventions=Tagger()).run()
     with pytest.raises(ss.CapabilityError):
@@ -534,7 +534,7 @@ def test_coded_beside():
         def __init__(self):
             super().__init__()
             self.define_states(ss.FloatArr('level', default=0.0))
-    assert corpus.sir(unit='day', connectors=Level()).init().solver == 'abm'
+    assert isinstance(corpus.sir(unit='day', connectors=Level()).init().solver, ss.solvers.abm)
     return numpy
 
 
@@ -566,12 +566,12 @@ def test_joint_population():
     # Above the budget, auto runs agents, and a compartmental solver that was asked for stops before anything is made
     with ss.options.context(max_joint=3):
         sim = pair().init()
-        assert sim.solver == 'abm' and 'max_joint' in sim.solver_reason
+        assert isinstance(sim.solver, ss.solvers.abm) and 'max_joint' in sim.solver_reason
         with pytest.raises(ss.CapabilityError, match='max_joint=4'):
             pair('ode').init()
     S, A, B, I = ss.states('S A B I') # A first state that splits on entry has no joint form yet: auto runs agents rather than stopping
     split = ss.Disease(S, A, B, I, split=ss.Transition(S, {A: 0.5, B: None}, dur=0), inf=A >> I @ ss.peryear(0.5)*I, init=dict(I=0.1), name='a')
-    assert ss.Sim([split, ss.SIS(name='b')], demographics=ss.death(rate=ss.peryear(0.01)), total_pop=1000, stop=2010, verbose=0).init().solver == 'abm'
+    assert isinstance(ss.Sim([split, ss.SIS(name='b')], demographics=ss.death(rate=ss.peryear(0.01)), total_pop=1000, stop=2010, verbose=0).init().solver, ss.solvers.abm)
     text = pair().init().describe()
     assert 'a × b: 2 × 2 = 4 joint states of people' in text and 'people die of a' in text and 'start independent' in text
     assert 'plan         a, b: as compiled code, the whole run in one call; a × b as one program' in pair().init().describe(verbose=True) # How it is run, only when asked

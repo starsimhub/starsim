@@ -104,7 +104,7 @@ def test_epimodel_netsim():
     prev = res.I[-200:].mean() # EpiModel: 227.5, against 234 over 200 runs (its recovery in the step of infection makes it lower)
     assert 180 < prev < 290, f'the equilibrium should be near EpiModel\'s, not {prev}'
     code = sim.imported.code
-    assert "ss.DegreeNet(n_contacts=0.7, concurrency=0.22, max_contacts=3, dur=50, acts=ss.perday(2), name='net')" in code
+    assert "ss.DegreeNet(n_contacts=0.7, concurrency=0.22, max_contacts=3, dur=50, acts=ss.freqperday(2), name='net')" in code
     return sim
 
 

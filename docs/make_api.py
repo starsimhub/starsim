@@ -69,6 +69,7 @@ guide_sections = ['tutorials', 'user_guide'] # The parts of the site to list, by
 # The order the modules are listed in, from most to least commonly used; anything else is appended alphabetically
 module_titles = sc.obj(
     sim           = 'Simulations',
+    solvers       = 'Solvers',
     people        = 'People',
     modules       = 'Modules',
     diseases      = 'Diseases',
@@ -103,7 +104,7 @@ module_order = list(module_titles.keys())
 # at the top level that is in neither list is an error here, as is a listed name that no longer exists: add each new export
 # to one list (or move it to its submodule), so that what the index presents as Starsim is chosen, not whatever dir(ss) has
 modeling = '''
-    Sim MultiSim parallel demo ode binomial abm rescale maximize minimize
+    Sim MultiSim parallel demo
     People population
     Disease SIR SIS SEIR State states pars par Transition move birth death lifetable immigration emigration migration outcome lifelong
     on attr mother ref transfer levels by timeseries seasonal Strains immunity
@@ -111,8 +112,8 @@ modeling = '''
     Births Deaths Pregnancy preterm
     Event Delivery at_age capacity vaccinate screen treat Vaccine Diagnostic Treatment boxcar modify infection_log
     Result Results SimData
-    years months weeks days Duration per prob peract perday perweek permonth peryear
-    probperday probperweek probpermonth probperyear date schedule
+    years months weeks days Duration per prob freq peract perday perweek permonth peryear
+    probperday probperweek probpermonth probperyear freqperday freqperweek freqpermonth freqperyear date schedule
     uniform normal truncnorm lognormal expon poisson nbinom binom beta_dist weibull gamma erlang constant randint
     bernoulli choose_n choice histogram random
     options style show save load import_from export_to
@@ -258,6 +259,8 @@ def _isdeprecated(doc):
 
 def _modulekey(module, prefix):
     """ Key for grouping entries by module, e.g. 'diseases' or 'library.diseases' """
+    if prefix == 'ss.solvers': # The solvers to choose from, whichever file they are in
+        return 'solvers'
     if prefix == 'ssl':
         parts = module.split('.') # e.g. starsim.library.diseases.cholera
         sub = parts[2] if len(parts) > 2 else 'other'
@@ -282,6 +285,8 @@ def _getnames(prefix):
         return modeling + extension
     elif prefix == 'ssl':
         return [name for name in ssl.__all__ if name not in libraries]
+    elif prefix == 'ss.solvers': # Only the solvers to choose from; the engines are internal
+        return [name for name in ss.solvers.solver_names if name != 'auto']
     return getattr(ss, prefix.removeprefix('ss.')).__all__ # e.g. ss.fit
 
 
@@ -305,7 +310,7 @@ def make_index():
     entries = []
     aliasmap = {}
     public = _docnames()
-    for prefix, namespace in [('ss', ss), ('ss.fit', ss.fit), ('ss.geo', ss.geo), ('ss.data', ss.data), ('ssl', ssl)]:
+    for prefix, namespace in [('ss', ss), ('ss.solvers', ss.solvers), ('ss.fit', ss.fit), ('ss.geo', ss.geo), ('ss.data', ss.data), ('ssl', ssl)]:
 
         # Group names by object, so aliases collapse into one entry
         groups = {} # Map id(obj) to the list of names pointing at it

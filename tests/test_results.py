@@ -179,13 +179,14 @@ def test_flow_ratios():
 
 @sc.timer()
 def test_summarize_by():
-    sc.heading('Testing kind and summarize_by: from the name, given, required otherwise, None, and added')
+    sc.heading('Testing kind and summarize_by: from the name, given, guessed with a warning otherwise, None, and added')
     res = ss.Result('new_infections', values=np.arange(5.0))
     assert res.kind == 'flow' and res.summarize_by == 'sum' and res.summarize() == 10 and ss.Result('n_infected').kind == 'stock' and ss.Result('prevalence').summarize_by == 'mean'
     assert ss.Result('x', values=np.arange(5.0), kind='stock').summarize() == 4
-    for kw in [dict(), dict(dtype=int), dict(summarize_by='last'), dict(scale=True)]: # With no name to go on, the kind is not guessed
-        with pytest.raises(TypeError, match='needs kind='):
-            ss.Result('doses', **kw)
+    for kw,kind in [(dict(), 'ratio'), (dict(dtype=int), 'flow'), (dict(scale=True), 'ratio')]: # With no name to go on, the kind is guessed from the dtype, with a warning
+        with pytest.warns(RuntimeWarning, match='kind='):
+            assert ss.Result('doses', **kw).kind == kind
+    assert ss.Result('doses', summarize_by='last').kind == 'stock' # From how it is summarized, with no warning
     assert ss.Result('new_x').scale and ss.Result('n_x').scale and not ss.Result('prevalence').scale and ss.Result('prevalence', scale=True).scale # Scaled by kind, unless told
     mean = ss.Result('x', values=np.arange(5.0), kind='flow', summarize_by='mean') # A flow summarized another way is still a flow
     assert mean.summarize() == 2 and mean.cum[-1] == 10

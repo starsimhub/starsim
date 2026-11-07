@@ -62,7 +62,7 @@ def test_clocks():
     vx = ss.vaccinate(ss.Vaccine(efficacy=0), who=d.B & (d.B.time_in >= ss.days(2)), name='vx')
     halve = ss.modify(d.bc, multiply=0.5**(ab.time_in/ss.days(4)), who=ab, name='halve')
     sim = ss.Sim(d, interventions=vx, connectors=halve, n_agents=2000, unit='day', stop=40, **kw).run()
-    assert sim.results.vx.delivered.sum() > 0 and sim.solver == 'abm'
+    assert sim.results.vx.delivered.sum() > 0 and isinstance(sim.solver, ss.solvers.abm)
 
     # Errors: outside the domain, and no scheduled dwell; as compartments, see test_conveyor.py
     S, A, B, C = ss.states('S A B C')
@@ -79,7 +79,7 @@ def test_clocks():
         ss.Sim(d, connectors=ss.modify(d.bc, multiply=ab.time_in/ss.days(1), who=ab), solver='ode', **kw).init()
     d, ab = make()
     vx = ss.vaccinate(ss.Vaccine(efficacy=0), who=d.B & (d.B.time_in >= ss.days(2)), name='vx')
-    assert ss.Sim(d, interventions=vx, **kw).init().solver == 'abm' # A delivery reading a clock: the reason is printed
+    assert isinstance(ss.Sim(d, interventions=vx, **kw).init().solver, ss.solvers.abm) # A delivery reading a clock: the reason is printed
     return sim
 
 
@@ -133,7 +133,7 @@ def test_modifier_clock():
         d = ss.Disease(infection=S >> I @ 0.3*I, recovery=ss.Transition(I, R, dur=10), init_prev=0.01, name='d')
         protect = ss.modify(d.rel_sus, multiply=0.5, who=R.time_in > 5) # R has no exit, so nothing else keeps its times
         sim = ss.Sim(d, n_agents=500, stop=30, **{key:protect}, **kw).run()
-        assert sim.solver == 'abm'
+        assert isinstance(sim.solver, ss.solvers.abm)
     return
 
 

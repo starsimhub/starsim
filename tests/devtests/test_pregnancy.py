@@ -95,7 +95,7 @@ def test_births():
 def test_compartmental():
     sc.heading('Testing the small compartmental form against agents at three step sizes, and its conservation of people')
     make = lambda: ss.Pregnancy(fertility_rate=ss.peryear(0.1), p_abortion=0.1, loss_rate=ss.probpermonth(0.02), burnin=False)
-    assert ss.Sim(demographics=make(), total_pop=20_000, **kw).init().solver == 'abm' # Only when a compartmental solver is named
+    assert isinstance(ss.Sim(demographics=make(), total_pop=20_000, **kw).init().solver, ss.solvers.abm) # Only when a compartmental solver is named
     for dt in [ss.weeks(1), ss.months(1), ss.months(3)]:
         pars = dict(start=2000, stop=2005, dt=dt, verbose=0, stratify=strat, aging=False)
         ras = [ss.Sim(demographics=make(), n_agents=20_000, rand_seed=seed, **pars).run().results.pregnancy for seed in range(2)]
@@ -195,7 +195,7 @@ def test_mother_cond():
         return ss.Sim(diseases=d, interventions=nb, solver=solver, total_pop=1000, **kw)
     with pytest.raises(ss.CapabilityError, match='mother'): # Agents only: compartments do not know anyone's mother
         make('ode').run()
-    assert make('auto').init().solver == 'abm'
+    assert isinstance(make('auto').init().solver, ss.solvers.abm)
     return seen
 
 

@@ -369,7 +369,7 @@ def load_epimodel(source, unit='day', verbose=None, **kwargs):
         codes = []
         for i,net in enumerate(r['networks']):
             name = 'net' if len(r['networks']) == 1 else f'net{i+1}'
-            codes.append(network(net, src, name, acts=getattr(ss, f'per{unit}')(act_rate) if builtin else None))
+            codes.append(network(net, src, name, acts=getattr(ss, f'freqper{unit}')(act_rate) if builtin else None))
             if net['d_rate']:
                 src.notes.append(f'{name}: d.rate = {net["d_rate"]} needs nothing: ss.DegreeNet allows for partnerships ended by departures')
         if len(codes) == 1:
@@ -380,7 +380,7 @@ def load_epimodel(source, unit='day', verbose=None, **kwargs):
         cfg.n_agents = r['networks'][0]['n']
         cfg.solver = 'abm'
     elif kind == 'icm':
-        cfg.solver = ss.binomial(substeps=1) # EpiModel's stochastic models take whole steps
+        cfg.solver = ss.solvers.binomial(substeps=1) # EpiModel's stochastic models take whole steps
     else:
         cfg.solver = 'ode'
         if control.get('dt') not in (None, 1):

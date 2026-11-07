@@ -59,7 +59,7 @@ def test_counts():
     graph = cholera.graph
     assert [s.name for s in graph.count_states] == ['W'] # Declared people=False
     sim = ss.Sim(cholera, total_pop=100_000, unit='day', stop=200, **kw).run()
-    assert sim.solver == 'ode' # A count never makes a model agent-based
+    assert isinstance(sim.solver, ss.solvers.ode) # A count never makes a model agent-based
     res = sim.results.cholera
     assert np.allclose(res.S + res.I + res.R, 100_000) # W is not part of the population
     assert res.W.max() > 1e6
@@ -67,7 +67,7 @@ def test_counts():
     # With agents, the people are agents and the water stays a count
     sim2 = ss.Sim(cholera, total_pop=100_000, n_agents=5_000, unit='day', stop=200, **kw).run()
     res2 = sim2.results.cholera
-    assert sim2.solver == 'abm'
+    assert isinstance(sim2.solver, ss.solvers.abm)
     assert np.isclose(res2.W.max(), res.W.max(), rtol=0.2)
 
     # A state that no transition touches is people, as every state not declared a count is: it is where people are put, e.g. by init=
@@ -238,9 +238,9 @@ def test_births():
         n_sis = sum(sim.results.sis[s][-1] for s in 'SI')
         assert np.isclose(n_flu, n_sis), f'{solver}: {n_flu:n} people in flu but {n_sis:n} in sis' # Before, births only in one disease, or twice
         assert np.isclose(n_flu, 2000*np.exp(0.03*20), rtol=0.06) # 3,644
-    assert ss.Sim(flu(), demographics=demog, **kw).init().solver == 'ode' # Not agents, as birth_rate= gave
+    assert isinstance(ss.Sim(flu(), demographics=demog, **kw).init().solver, ss.solvers.ode) # Not agents, as birth_rate= gave
     alone = ss.Sim(demographics=True, **kw).run() # With no declared disease, a declared module of everyone alive, chosen for as any declared model (it was ss.Births and ss.Deaths, as agents)
-    assert alone.solver == 'ode' and alone.results.population.births.sum() > 0
+    assert isinstance(alone.solver, ss.solvers.ode) and alone.results.population.births.sum() > 0
     with pytest.raises(ValueError): # Births in two diseases would count people twice
         ss.Sim(ss.SIR(name='a', births=ss.birth(rate=ss.peryear(0.02))), ss.SIS(name='b', births=ss.birth(rate=ss.peryear(0.02))), **kw).init()
 
@@ -270,7 +270,7 @@ def test_births():
 
     # An Euler step whose outflows would take more than everyone takes everyone, and no more
     S, I = ss.states(2)
-    sim = ss.Sim(ss.Disease(fast=S >> I @ 5, init_n=dict(S=100), name='fast'), total_pop=100, start=2000, stop=2002, solver=ss.ode(integrator='euler', substeps=1), **kw)
+    sim = ss.Sim(ss.Disease(fast=S >> I @ 5, init_n=dict(S=100), name='fast'), total_pop=100, start=2000, stop=2002, solver=ss.solvers.ode(integrator='euler', substeps=1), **kw)
     assert np.allclose(sim.run().results.fast.I, [0, 100, 100]) # Everyone is infected in the first step
     return sims
 
@@ -747,7 +747,7 @@ def test_functions():
 
     def seed_cluster(sim): # Custom per-step behavior
         d = sim.diseases.d
-        if sim.ti == 30 and sim.solver == 'abm':
+        if sim.ti == 30 and isinstance(sim.solver, ss.solvers.abm):
             uids = d.S.uids[:50]
             d.S[uids] = False
             d.I[uids] = True
@@ -773,7 +773,7 @@ def test_functions():
     sim.run()
     assert sim.results.d.I[-1] == count # The counts kept through the run, which the function's changes to the states are counted in, are those of the agents
     by_age = ss.Sim(make(), stop=100, unit='day', stratify=dict(age=[0, 50]), **kw).run()
-    assert by_age.solver == 'ode'
+    assert isinstance(by_age.solver, ss.solvers.ode)
     res = by_age.results.d
     assert res.H.select(age='50+').max() > res.H.select(age='0-49').max() # Older people are more likely to be hospitalized
     with pytest.raises(ss.CapabilityError): # 50 is inside a group, which it says before the run (it ran as an ODE, giving each group the age of its middle)
@@ -795,7 +795,7 @@ def test_functions():
         S, I, R = ss.states('S I R')
         return ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=10), init_prev=0.01, name='sir')
     knocked = ss.Sim(sir(), interventions=knock, stop=60, unit='day', **kw).run()
-    assert knocked.solver == 'ode' # Not 10,000 agents
+    assert isinstance(knocked.solver, ss.solvers.ode) # Not 10,000 agents
     assert knocked.results.sir.infection.cum[-1] < 0.7*ss.Sim(sir(), stop=60, unit='day', **kw).run().results.sir.infection.cum[-1] # It still acts
     def stop_in_place(sim):
         if sim.ti == 20:
@@ -813,7 +813,7 @@ def test_functions():
         S, I, R = ss.states('S I R')
         return ss.Disease(infection=ss.Transition(S, I, rate=0 * I), recovery=ss.Transition(I, R, dur=1000), init=dict(I=0), seeding=fn, name='sir')
     sim = ss.Sim(seeded(seed), stop=6, unit='day', **kw).run()
-    assert sim.solver == 'ode' and sim.results.sir.I[-1] > 4.9 # Called each step, not skipped by a whole run (was 0)
+    assert isinstance(sim.solver, ss.solvers.ode) and sim.results.sir.I[-1] > 4.9 # Called each step, not skipped by a whole run (was 0)
     assert ss.Sim(seeded(seed), stop=6, unit='day', solver='abm', **kw).run().results.sir.I[-1] == 5 # The same code, as agents
     def cure(sim): # People are moved, never made or lost: the number of people stays the same in every disease
         sir = sim.diseases.sir
@@ -842,17 +842,17 @@ def test_functions():
     def mine(cls):
         S, I, R = ss.states('S I R')
         return cls(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=10), init_prev=0.01, name='mine')
-    assert ss.Sim(mine(Mine), unit='day', **kw).init().solver == 'ode'
-    assert ss.Sim(mine(Agentish), unit='day', **kw).init().solver == 'abm'
+    assert isinstance(ss.Sim(mine(Mine), unit='day', **kw).init().solver, ss.solvers.ode)
+    assert isinstance(ss.Sim(mine(Agentish), unit='day', **kw).init().solver, ss.solvers.abm)
     births = ss.Sim(sir(), demographics=ss.Births(), unit='day', **kw).init()
-    assert births.solver == 'abm' and 'ss.birth()' in births.solver_reason
+    assert isinstance(births.solver, ss.solvers.abm) and 'ss.birth()' in births.solver_reason
     assert births.solver_reason in births.describe() # describe() says what auto did
 
     # A function that takes uids only works on agents
     S, I, R = ss.states('S I R')
     d2 = ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, rate=clearance), init_prev=0.01, name='d2')
     sim2 = ss.Sim(d2, stop=100, unit='day', **kw).run()
-    assert sim2.solver == 'abm' and 'clearance' in sim2.solver_reason
+    assert isinstance(sim2.solver, ss.solvers.abm) and 'clearance' in sim2.solver_reason
     assert 'takes uids' in sim2.describe()
 
     # A rate given as a function of the sim with one value per person alive, once people have died (it raised IndexError)
@@ -874,7 +874,7 @@ def test_functions():
     S, I, R = ss.states('S I R')
     d3 = ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, rate=recover), init_prev=0.01, name='d3')
     sim4 = ss.Sim(d3, stop=100, unit='day', **kw).run()
-    assert sim4.solver == 'ode'
+    assert isinstance(sim4.solver, ss.solvers.ode)
     eligible = lambda sim, years=5: sim.diseases.d3.I # Likewise for a condition
     sim5 = ss.Sim(d3.copy(), interventions=ss.treat(ss.Treatment(cure=1.0), who=eligible, coverage=0.5, name='tx'), stop=20, unit='day', n_agents=1000, **kw).run()
     assert sim5.results.tx.delivered.sum() > 0
@@ -883,7 +883,7 @@ def test_functions():
     S, I = ss.states('S I')
     hiv = ss.Disease(infection=ss.Transition(S, I, rate=dict(sexual=ss.peract(m2f=0.008, f2m=0.004)) * I), init_prev=0.05, name='hiv')
     sim3 = ss.Sim(hiv, networks=ss.SexualNet(), start=2000, stop=2020, **kw).run()
-    assert sim3.solver == 'abm' and 'SexualNet' in sim3.solver_reason
+    assert isinstance(sim3.solver, ss.solvers.abm) and 'SexualNet' in sim3.solver_reason
     assert sim3.unit == 'year'
     n_I = sim3.results.hiv.I
     assert n_I[-1] > 1.5*n_I[0]
@@ -927,7 +927,7 @@ def test_time_values():
     series = ss.Sim(make(ss.timeseries({'2020-01-01': 0.3, '2020-02-01': 0.1, '2020-04-01': 0.3})), **dates).run()
     sis = make(0.3)
     changed = ss.Sim(sis, interventions=ss.modify(sis.pars.beta, set=ss.timeseries({'2020-02-01': 0.1, '2020-04-01': 0.3}), when=ss.schedule(start='2020-02-01')), **dates).run()
-    assert series.solver == 'ode' # A value that varies in time does not make a model agent-based
+    assert isinstance(series.solver, ss.solvers.ode) # A value that varies in time does not make a model agent-based
     assert np.allclose(series.results.sis.I, changed.results.sis.I)
     assert series.diseases.sis.pars.beta.raw.interpolation == 'step'
 
@@ -1015,10 +1015,10 @@ def test_time_values():
     # A fast transition is noted when Euler takes whole steps, but not for the chain binomial asked for them (substeps=1, a model written in discrete time); check_dt() says how much the step matters
     S, I, R = ss.states('S I R')
     fast = ss.Disease(infection=ss.Transition(S, I, rate=0.6 * I), recovery=ss.Transition(I, R, dur=4), init_prev=0.01, name='fast')
-    stepped = ss.Sim(fast, solver=ss.binomial(substeps=1), unit='day', stop=60, total_pop=1e6, **kw) # Whole steps (by default, the chain binomial takes enough substeps)
+    stepped = ss.Sim(fast, solver=ss.solvers.binomial(substeps=1), unit='day', stop=60, total_pop=1e6, **kw) # Whole steps (by default, the chain binomial takes enough substeps)
     df = stepped.check_dt().table
     assert not any('consider a shorter step' in note for note in stepped.new().init().notes)
-    euler = stepped.new(solver=ss.ode(integrator='euler', substeps=1)).init()
+    euler = stepped.new(solver=ss.solvers.ode(integrator='euler', substeps=1)).init()
     assert any('consider a shorter step' in note and 'infection transmits at up to 0.6' in note and 'I is fast too' in note for note in euler.notes) # The transmission is the fastest (0.6 a day), then leaving I (1/4)
     assert 0.05 < df.change[df.result == 'I'].iloc[0] < 0.2
     S, E, I, R = ss.states('S E I R') # With its default substeps, the chain binomial takes substeps of the same size whatever the step, so says so (it printed a table of zeros)
@@ -1026,7 +1026,7 @@ def test_time_values():
     assert 'does not change its results' in ss.Sim(measles, solver='binomial', stop=ss.days(60), total_pop=1e5, **kw).check_dt()
     S, I, R = ss.states('S I R')
     slow = ss.Disease(infection=ss.Transition(S, I, rate=0.6 * I), recovery=ss.Transition(I, R, dur=4), init_prev=0.01, name='slow', dt=ss.days(2))
-    own = ss.Sim(slow, solver=ss.binomial(substeps=1), unit='day', dt=1, stop=60, total_pop=1e6, **kw).check_dt().table
+    own = ss.Sim(slow, solver=ss.solvers.binomial(substeps=1), unit='day', dt=1, stop=60, total_pop=1e6, **kw).check_dt().table
     assert own.change[own.result == 'I'].iloc[0] > 0.05 # A module with its own timestep takes a smaller one too
     smooth = ss.Sim(fast, solver='ode', unit='day', stop=60, total_pop=1e6, **kw)
     assert smooth.check_dt().table.change.max() < 1e-3 # An ODE does not depend on the timestep
@@ -1063,10 +1063,10 @@ def test_stays_and_offspring():
     growth = ss.Disease(weaning=ss.Transition(NB, W, rate=ss.perday(0.5), min_stay=ss.days(21)), default_state='NB', name='growth')
     sim = ss.Sim(growth, unit='day', stop=40, n_agents=5000, verbose=0).run()
     n_W = sim.results.growth.W.values
-    assert sim.solver == 'abm' and n_W[21] == 0 and n_W[22] > 0.25*5000 # Nobody leaves for 21 days, then at the rate
+    assert isinstance(sim.solver, ss.solvers.abm) and n_W[21] == 0 and n_W[22] > 0.25*5000 # Nobody leaves for 21 days, then at the rate
     binomial = ss.parallel(ss.Sim(growth, unit='day', stop=40, total_pop=5000, solver='binomial', verbose=0), n_runs=20).results.growth.W.values # As compartments, by a conveyor of whole steps
     ode = ss.Sim(growth, unit='day', stop=40, total_pop=5000, verbose=0).run()
-    assert ode.solver == 'ode' and ode.results.growth.W[21] == 0 < ode.results.growth.W[22]
+    assert isinstance(ode.solver, ss.solvers.ode) and ode.results.growth.W[21] == 0 < ode.results.growth.W[22]
     assert np.max(binomial[:, 21]) == 0 < np.min(binomial[:, 22]) and np.isclose(np.mean(binomial[:, 30]), n_W[30], rtol=0.05) # As agents, though released at mid-step (see convey()), so half a step later for people who all arrived at the start
     E, D, I = ss.states(3) # An escape during a minimum stay, as EMULSION's: a rate only while the time in the state is short (agents)
     x = ss.Disease(onset=ss.Transition(E, I, rate=ss.perday(0.3), min_stay=ss.days(10)), death=ss.Transition(E, D, rate=ss.perday(0.5)*(E.time_in < ss.days(10))), default_state='E', name='x')
@@ -1155,7 +1155,7 @@ def test_branches():
     with pytest.raises(ValueError, match='the branch probabilities out of state "E" sum to 0.3, not 1'): # Only one can take the remainder
         E, P, A, R = ss.states('E P A R')
         ss.Disease(sev=ss.Transition(E, P, p=0.3), a=ss.Transition(E, A, dur=2), b=ss.Transition(E, R, dur=2))
-    with pytest.raises(ValueError): # With no p= at all, a transition is undriven
+    with pytest.raises(ValueError, match='@ 0'): # With no p= at all, and no rate, a transition is an error
         E, P, A = ss.states('E P A')
         ss.Disease(sev=ss.Transition(E, P, p=0.3), mild=ss.Transition(E, A))
     agents = dict(n_agents=1000, start=2000, stop=2003, dt=ss.years(0.25), **kw)

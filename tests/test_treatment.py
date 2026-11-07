@@ -1,5 +1,5 @@
 """
-Test undriven transitions and treatments that move people along them
+Test transitions with a rate of 0, and treatments that move people along them
 """
 
 # %% Imports and settings
@@ -22,28 +22,28 @@ def make_sis(cure=None):
 # %% Define the tests
 
 def test_undriven():
-    sc.heading('Testing undriven transitions')
+    sc.heading('Testing transitions with a rate of 0, moved only by products, and with no rate, which is an error')
     forms = dict(
-        op  = lambda S, I: I >> S,
-        tr  = lambda S, I: ss.Transition(I, S),
+        op  = lambda S, I: I >> S @ 0,
+        tr  = lambda S, I: ss.Transition(I, S, rate=0),
     )
     for key,form in forms.items():
         sis = make_sis(form)
         assert sis.cure.undriven
         assert 'undriven: moved by products, deliveries, or code' in sis.describe()
         with warnings.catch_warnings():
-            warnings.simplefilter('error') # Nothing names it, which is a note, not a warning: it exists for products to drive (e.g. in only some scenarios)
+            warnings.simplefilter('error') # Nothing names it, which is neither a warning nor a note: it exists for products to drive (e.g. in only some scenarios)
             sim = ss.Sim(sis, stop=10, **kw).init()
         assert 'undriven: moved by nothing' in sim.diseases.sis.describe()
-        assert any('"cure" of "sis"' in note and 'no rate or duration' in note for note in sim.notes) # Said at init
+    for form in [lambda S, I: I >> S, lambda S, I: ss.Transition(I, S)]: # What would it mean? An error, which says to give a rate, or @ 0
+        with pytest.raises(ValueError, match='@ 0'):
+            make_sis(form)
+    assert not make_sis(lambda S, I: I >> S @ ss.par(0, name='cure_rate')).cure.undriven # A parameter of 0 (e.g. fitted) is a rate
 
-    # Named by a product; a rate of 0 is not undriven
+    # Named by a product
     sis = make_sis(forms['op'])
     sim = ss.Sim(sis, interventions=ss.treat(ss.Treatment(cure={'cure': 1.0}), when=ss.schedule(every=5), coverage=0.2, name='tx'), stop=10, **kw).init()
     assert 'undriven: moved by treatment' in sim.diseases.sis.describe()
-    assert not any('no rate or duration' in note for note in sim.notes) # Not when a product moves people along it
-    sis = make_sis(lambda S, I: I >> S @ 0)
-    assert not sis.cure.undriven
 
     # Moved by a treatment, as agents and compartments
     for solver,pars in [('ode', dict(total_pop=10_000)), ('abm', dict(n_agents=10_000))]:
@@ -72,7 +72,7 @@ def test_cure_forms():
     )
     cured = {}
     for key,form in forms.items():
-        sis = make_sis(lambda S, I: I >> S)
+        sis = make_sis(lambda S, I: I >> S @ 0)
         tx = ss.treat(ss.Treatment(cure=form(sis)), when=[ss.days(20)], name='tx')
         sim = ss.Sim(sis, interventions=tx, solver='ode', stop=40, **kw).run()
         cured[key] = sim.results.tx.cured.sum()

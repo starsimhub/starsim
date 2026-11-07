@@ -265,7 +265,7 @@ def sir_births():
     """ An SIR with births and deaths, and a gamma dwell time (as Erlang stages), to export; stepped as Atomica steps, by Euler's method """
     sir = ss.SIR(beta=ss.perday(0.3), dur_inf=ss.gamma(shape=2, scale=ss.days(5)), init_prev=0.01)
     return ss.Sim(diseases=sir, demographics=[ss.birth(rate=ss.peryear(0.5)), ss.death(rate=ss.peryear(0.5))], total_pop=10_000, start=2000, stop=2000.25, dt=ss.days(1),
-                  solver=ss.ode(integrator='euler', substeps=1), verbose=0)
+                  solver=ss.solvers.ode(integrator='euler', substeps=1), verbose=0)
 
 
 def infected(res):

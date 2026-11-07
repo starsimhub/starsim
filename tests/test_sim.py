@@ -71,7 +71,7 @@ def test_one_layout():
     cls.build_layout = tracked
     try:
         sim = ss.Sim(ss.SIR(), stop=2, verbose=0).init()
-        assert sim.solver == 'ode' and calls == ['sir'] # Was ['sir', 'sir']: once to choose the solver, and again for the run
+        assert isinstance(sim.solver, ss.solvers.ode) and calls == ['sir'] # Was ['sir', 'sir']: once to choose the solver, and again for the run
         calls.clear()
         dur = ss.gamma(shape=2.5, scale=ss.days(3)) # Approximated by Erlang stages in a compartmental run, which is noted
         sims = [ss.Sim(ss.SIR(dur_inf=dur), solver=solver, unit='day', stop=10, verbose=0).init() for solver in ['auto', 'abm']]
@@ -109,7 +109,7 @@ def test_default(do_plot=do_plot):
         sim.plot()
     with pytest.raises(ValueError): # It was a ZeroDivisionError
         ss.Sim(n_agents=0, total_pop=1, diseases='sir').init()
-    assert ss.Sim(diseases='sir', n_agents=None).run().solver != 'abm' # Not given, as if left out
+    assert not isinstance(ss.Sim(diseases='sir', n_agents=None).run().solver, ss.solvers.abm) # Not given, as if left out
     return sim
 
 
@@ -503,7 +503,7 @@ def test_shrink_declared():
     """ Test that shrinking a sim with a declared disease and a treatment that cures by transition leaves its modules small, and its results readable and plottable """
     sc.heading('Testing shrinking a declared disease and a treatment')
     S, L, I, R, C = ss.states('S L I R C')
-    tb = ss.Disease(S, L, I, R, C, infection=S >> L @ ss.peryear(2)*I, activation=L >> I @ ss.peryear(0.3), recovery=I >> R @ ss.years(1), clear=ss.Transition(L, C), name='tb', init=dict(L=0.2, I=0.02))
+    tb = ss.Disease(S, L, I, R, C, infection=S >> L @ ss.peryear(2)*I, activation=L >> I @ ss.peryear(0.3), recovery=I >> R @ ss.years(1), clear=ss.Transition(L, C, rate=0), name='tb', init=dict(L=0.2, I=0.02))
     tx = ss.treat(ss.Treatment(cure={tb.clear: 0.7}), who=tb.L, when=ss.schedule(start=2005), coverage=ss.peryear(0.5), name='tpt')
     sim = ss.Sim(tb, interventions=tx, n_agents=2000, start=2000, stop=2020, dt=ss.months(1), verbose=0).run()
     sim.shrink(size_limit=0.3) # Raises if a module is still big; the delivery reaches the disease (through its moves), whose results and arrays are not its own
@@ -549,8 +549,10 @@ def test_rescale():
     rescaled = make_sim(init_inf=50, rescale=True).run()
     scale = rescaled.results.pop_scale
     assert scale[0] == 1 and scale[-1] == 10 == rescaled.pop_scale # Scale starts at 1 and ends at pop_scale
-    assert np.array_equal(make_sim(init_inf=50, rescale=ss.rescale(threshold=0.05, factor=1.2)).run().results.pop_scale, scale) # The defaults, given
-    assert not np.array_equal(make_sim(init_inf=50, rescale=ss.rescale(threshold=0.2)).run().results.pop_scale, scale)
+    assert np.array_equal(make_sim(init_inf=50, rescale=dict(threshold=0.05, factor=1.2)).run().results.pop_scale, scale) # The defaults, given
+    assert not np.array_equal(make_sim(init_inf=50, rescale=dict(threshold=0.2)).run().results.pop_scale, scale)
+    with pytest.raises(TypeError, match='threshold'): # An option it does not have
+        make_sim(init_inf=50, rescale=dict(thresh=0.2)).init()
     assert make_sim(init_inf=20, rescale=True).current_scale == 1 # Available before the sim is initialized
     cum_fixed = fixed.results.sir.infection.cum[-1]
     cum_rescaled = rescaled.results.sir.infection.cum[-1]
@@ -592,7 +594,7 @@ def test_copied_modules():
     toy = ss.Disease(S, I, inf=S >> I @ ss.peryear(2.0), rec=I >> S @ ss.days(90), name='toy')
     hs = HS(name='hs')
     deliver = lambda sim: sim.interventions.hs.served_now # The sim's copy, which runs
-    sims = [ss.Sim(toy, interventions=[hs, ss.treat(ss.Treatment(cure=1.0), who=deliver, when=ss.days(1), name='tx')], n_agents=2000, stop=ss.days(100), dt=ss.days(1), verbose=0).run() for _ in range(2)]
+    sims = [ss.Sim(toy, interventions=[hs, ss.treat(ss.Treatment(cure=1.0), who=deliver, when=ss.schedule(every=ss.days(1)), name='tx')], n_agents=2000, stop=ss.days(100), dt=ss.days(1), verbose=0).run() for _ in range(2)]
     assert sims[0].results.tx.delivered.values.sum() > 400
     assert sims[0].results.tx.delivered.values.sum() == sims[1].results.tx.delivered.values.sum() # The same modules, given to two sims
     assert not toy.initialized and sims[0].diseases.toy is not toy # Neither ran the module itself
@@ -669,11 +671,11 @@ def test_engine_rules():
             return [ss.modules.Preference('the survey samples people')]
     kw = dict(diseases=ss.SIR(), stop=2002, verbose=0)
     sim = ss.Sim(interventions=Clinic(), **kw).init()
-    assert sim.solver == 'abm' and sim.solver_reason == 'the clinic keeps a list of names'
+    assert isinstance(sim.solver, ss.solvers.abm) and sim.solver_reason == 'the clinic keeps a list of names'
     with pytest.raises(ss.CapabilityError, match='keeps a list'):
         ss.Sim(interventions=Clinic(), solver='ode', **sc.dcp(kw)).init()
-    assert ss.Sim(analyzers=Survey(), **sc.dcp(kw)).init().solver == 'abm'
-    assert ss.Sim(analyzers=Survey(), solver='ode', **sc.dcp(kw)).init().solver == 'ode'
+    assert isinstance(ss.Sim(analyzers=Survey(), **sc.dcp(kw)).init().solver, ss.solvers.abm)
+    assert isinstance(ss.Sim(analyzers=Survey(), solver='ode', **sc.dcp(kw)).init().solver, ss.solvers.ode)
 
     assert ss.solvers.why_not(ss.Sim(**sc.dcp(kw)).init(), 'kernels') is None
     table = ss.solvers.solver_table()
@@ -750,7 +752,7 @@ def test_printed_output():
 
     # No notes on models written as the docs write them: density dependence, a chain binomial in whole steps, and typed rates
     sims = [ss.Sim(ss.Disease(S >> I @ ss.perday(0.1)*I.n, I >> R @ ss.perday(1), init_n=dict(I=1)), total_pop=20, solver='gillespie', **kw),
-            ss.Sim(ss.Disease(S >> I @ ss.perday(0.2)*I, I >> R @ ss.perday(0.1), init_n=dict(S=1000, I=10)), total_pop=1010, solver=ss.binomial(substeps=1), **kw),
+            ss.Sim(ss.Disease(S >> I @ ss.perday(0.2)*I, I >> R @ ss.perday(0.1), init_n=dict(S=1000, I=10)), total_pop=1010, solver=ss.solvers.binomial(substeps=1), **kw),
             ss.Sim(ss.Disease(ss.birth(S, rate=ss.peryear(1.4)), ss.death(rate=ss.peryear(1.05)), init_n=dict(S=100)), total_pop=100, unit='year', stop=1, verbose=0)]
     for sim in sims:
         with warnings.catch_warnings():
@@ -821,27 +823,28 @@ def test_small_fixes():
 
 @sc.timer()
 def test_solver_options():
-    """ A solver's options in its helper (ss.ode(), ss.binomial(), ss.abm()), the old spellings refused, settings for agents refused by compartments, and pars= holding only the model's parameters """
+    """ A solver's options in its helper (ss.solvers.ode(), ss.solvers.binomial(), ss.solvers.abm()), the old spellings refused, settings for agents refused by compartments, and pars= holding only the model's parameters """
     sc.heading('Testing solver options, and settings given to the wrong solver')
     S, I, R = ss.states(3)
     make = lambda: ss.Disease(S >> I @ ss.par(0.3, name='beta')*I, I >> R @ ss.days(10), init_prev=0.01, name='sir')
     kw = dict(total_pop=1000, unit='day', stop=30, verbose=0)
-    euler = ss.Sim(make(), solver=ss.ode(integrator='euler', substeps=2), **kw).run()
-    assert euler.solver == 'ode' and euler.solver.integrator == 'euler' and euler.solver.substeps == 2 and euler.solver == euler.pars.solver # What ran, with its options
-    assert ss.Sim(make(), solver='ode', **kw).init().solver == ss.ode() != euler.solver
-    assert repr(euler.solver) == "ss.ode(integrator='euler', substeps=2)" and repr(ss.ode()) == "'ode'"
+    euler = ss.Sim(make(), solver=ss.solvers.ode(integrator='euler', substeps=2), **kw).run()
+    assert isinstance(euler.solver, ss.solvers.ode) and euler.solver.integrator == 'euler' and euler.solver.substeps == 2 and euler.solver == euler.pars.solver # What ran, with its options
+    assert ss.Sim(make(), solver='ode', **kw).init().solver == ss.solvers.ode() != euler.solver
+    assert ss.Sim(make(), solver='gillespie', **kw).init().solver == ss.solvers.gillespie() and ss.solvers.ode() != 'ode' # A solver is always a solver after init, not its name
+    assert repr(euler.solver) == "ss.solvers.ode(integrator='euler', substeps=2)" and repr(ss.solvers.ode()) == 'ss.solvers.ode()' and str(euler.solver) == 'ode'
     assert sc.loadobj(sc.saveobj(None, euler.solver)) == euler.solver # Pickled with its options
-    assert ss.Sim(make(), solver=ss.binomial(substeps=1), **kw).init().solver.substeps == 1
-    for old, new in [({'integrator': 'euler'}, 'ss.ode'), ({'substeps': 1}, 'ss.binomial'), ({'rescale_threshold': 0.1}, 'ss.rescale'), ({'pop_scale': 10}, 'total_pop')]: # The old keywords
+    assert ss.Sim(make(), solver=ss.solvers.binomial(substeps=1), **kw).init().solver.substeps == 1
+    for old, new in [({'integrator': 'euler'}, 'ss.solvers.ode'), ({'substeps': 1}, 'ss.solvers.binomial'), ({'rescale_threshold': 0.1}, 'rescale=dict'), ({'pop_scale': 10}, 'total_pop')]: # The old keywords
         with pytest.raises(TypeError, match=new.replace('.', r'\.')):
             ss.Sim(make(), **old, **kw)
     for old in ['ide', 'abm-events', 'abm-wholestep', 'abm-midstep']:
         with pytest.raises(ValueError, match='replaced'):
             ss.Sim(make(), solver=old, **kw).init()
     with pytest.raises(TypeError): # An option of another solver
-        ss.binomial(integrator='euler')
+        ss.solvers.binomial(integrator='euler')
     with pytest.raises(ValueError):
-        ss.abm(step='event')
+        ss.solvers.abm(step='event')
     for key, val in [('rescale', True), ('even_draws', True)]: # For agents only
         with pytest.raises(ValueError, match='for agents'):
             ss.Sim(make(), solver='ode', **{key:val}, **kw).init()
@@ -865,9 +868,9 @@ def test_agent_settings():
         sim = ss.Sim(diseases=ss.SIR(beta=0.1), networks='random', n_agents=500, total_pop=1e4, stop=10, verbose=0, **kw).run()
         assert sim.diseases.sir.R0() > 0 and len(sim.diseases.sir.Rt())
     S, I, R = ss.states(3)
-    sir = ss.Disease(infection=S >> I @ 0.3*I, recovery=ss.Transition(I, R, dur=10), init_prev=0.01, solver=ss.abm(step='wholestep'), name='sir')
+    sir = ss.Disease(infection=S >> I @ 0.3*I, recovery=ss.Transition(I, R, dur=10), init_prev=0.01, solver=ss.solvers.abm(step='wholestep'), name='sir')
     sim = ss.Sim(sir, unit='day', stop=5, verbose=0).init()
-    assert sim.solver == 'abm' and 'solver of its own' in sim.solver_reason
+    assert isinstance(sim.solver, ss.solvers.abm) and 'solver of its own' in sim.solver_reason
     return sim
 
 

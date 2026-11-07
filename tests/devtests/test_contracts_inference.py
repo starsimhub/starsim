@@ -143,7 +143,7 @@ def test_particle_filter(key):
     data = simulate(model, **kw)
     sim = model.build(model.truth, data=data, solver='tau', **kw).init()
     filt = ss.fit.ParticleFilter(sim, likelihood=lik)
-    with ss.options.context(threads=1):
+    with ss.options.context(num_threads=1):
         one = filt(n_particles=20, rand_seed=0)
     assert filt(n_particles=20, rand_seed=0) == one # Each particle has its own random numbers, so the estimate does not depend on the threads
     name = list(fitted_pars(sim))[0]
@@ -183,7 +183,7 @@ def sbc_fit(method, truth=0.35, seed=1, quick=True, verbose=False):
         return sim.fit(method=ss.fit.method(method, particles=200 if quick else 1000, iterations=30 if quick else 100, chains=2), likelihood=dict(cases=ss.poisson()), rand_seed=seed, verbose=verbose)
     elif method == 'pmcmc':
         # A stochastic compartmental sim, made quick: a small population, two-day steps taken whole, and data on infections
-        kw = dict(solver=ss.binomial(substeps=1), total_pop=1e4, dt=ss.days(2), rand_seed=seed + 1)
+        kw = dict(solver=ss.solvers.binomial(substeps=1), total_pop=1e4, dt=ss.days(2), rand_seed=seed + 1)
         sim = corpus.outcomes(beta=0.25, data=simulate(model, truth, seed=seed, col='infection', **kw), **kw)
         n, particles = (100, 20) if quick else (300, 50)
         return sim.fit(method=ss.fit.method(method, draws=n, warmup=n, chains=2, particles=particles, parallel=False), likelihood=dict(infection=ss.poisson()), rand_seed=seed, verbose=verbose) # Not in parallel, since forking after JAX is loaded can deadlock
@@ -408,17 +408,17 @@ def test_optimize():
         beta = 0.3*(1 - 0.5*cov(a, 0.01) - 0.25*cov(b, 0.01))
         sir = ss.Disease(S >> I @ beta*I.frac, I >> R @ ss.days(10), init_n=dict(I=10), name='sir')
         return ss.Sim(sir, total_pop=10_000, unit='day', stop=100, verbose=0)
-    best = make().optimize(ss.minimize('sir.R'), spend=dict(a='spend_a', b='spend_b'))
+    best = make().optimize(ss.fit.minimize('sir.R'), spend=dict(a='spend_a', b='spend_b'))
     assert best.alloc['a'] > 95 and np.isclose(sum(best.alloc.values()), 100) # Almost all of it to the better program, keeping the total
     assert best.value < best.value_before
-    capped = make().optimize(ss.minimize('sir.R'), spend=dict(a='spend_a', b='spend_b'), bounds=dict(a=(None, 60))) # A limit on one program
+    capped = make().optimize(ss.fit.minimize('sir.R'), spend=dict(a='spend_a', b='spend_b'), bounds=dict(a=(None, 60))) # A limit on one program
     assert capped.alloc['a'] <= 60 + 1e-6 and np.isclose(sum(capped.alloc.values()), 100) and capped.value < best.value_before
-    least = make().optimize(ss.minimize('sir.R'), spend=dict(a='spend_a', b='spend_b'), target=best.value_before) # The least money that does as well as the current allocation
+    least = make().optimize(ss.fit.minimize('sir.R'), spend=dict(a='spend_a', b='spend_b'), target=best.value_before) # The least money that does as well as the current allocation
     assert least.total < 90 and least.value <= best.value_before and np.isclose(sum(least.alloc.values()), least.total)
-    smaller = make().optimize(ss.minimize('sir.R'), spend=dict(a='spend_a', b='spend_b'), total=50) # Less than the current total
+    smaller = make().optimize(ss.fit.minimize('sir.R'), spend=dict(a='spend_a', b='spend_b'), total=50) # Less than the current total
     assert np.isclose(smaller.total, 50) and np.isclose(sum(smaller.alloc.values()), 50) and smaller.alloc['a'] > 45
     dated = make().new(start='2025-01-01', stop='2025-04-11')
-    late = dated.optimize(ss.minimize('sir.R'), spend=dict(a='spend_a', b='spend_b'), start='2025-02-01') # In a sim with dates (a bare-number key of 2025.08 was read as days)
+    late = dated.optimize(ss.fit.minimize('sir.R'), spend=dict(a='spend_a', b='spend_b'), start='2025-02-01') # In a sim with dates (a bare-number key of 2025.08 was read as days)
     assert late.alloc['a'] > 95 and best.value < late.value < best.value_before
     return best
 

@@ -397,7 +397,7 @@ class Rates(sc.prettyobj):
 
 # What a rate can use besides the model's states and parameters: typed quantities from Starsim (perday(0.5)), and functions from NumPy (and SciPy's expit)
 time_names = ['days', 'weeks', 'months', 'years', 'perday', 'perweek', 'permonth', 'peryear',
-              'probperday', 'probperweek', 'probpermonth', 'probperyear']
+              'probperday', 'probperweek', 'probpermonth', 'probperyear', 'freqperday', 'freqperweek', 'freqpermonth', 'freqperyear']
 func_names = ['exp', 'log', 'sqrt', 'absolute', 'sin', 'cos', 'expit', 'minimum', 'maximum']
 reserved = {'ss', 'ssl', 'np', 'pd', 'expit', 'sim'} # Names the code uses for itself
 
@@ -479,8 +479,8 @@ def code_value(val, pars=None):
     elif isinstance(val, ss.dates.datedur): # Internal: one unit is that duration (a whole one follows the calendar), else the calendar duration itself
         kw = val.kwds
         return f'ss.{next(iter(kw))}({cv(next(iter(kw.values())))})' if len(kw) == 1 else f'ss.dates.datedur({kwargs(kw)})'
-    elif isinstance(val, ss.rescale):
-        return repr(val)
+    elif isinstance(val, ss.solvers.Solver): # A solver with its options, e.g. ss.solvers.binomial(substeps=1); with none, its name
+        return repr(val) if val.given() else repr(str(val))
     elif type(val) is ss.Rate: # A rate with no class of its own keeps its unit, e.g. ss.Rate(0.3, ss.weeks(2))
         return f'ss.Rate({cv(val.value)}, {cv(val.unit)})'
     elif isinstance(val, (ss.Duration, ss.Rate)):

@@ -1220,7 +1220,7 @@ class timeseries(TimeValue):
     Args:
         data (dict/str/dataframe/list): the value at each time, as a dict, a dataframe (the first column is
             the time, the second the value), or the name of a file holding one; or the times, with the values
-            as the second argument (`ss.timeseries(times, values)`). A time is a date, a duration after the start, or a bare number:
+            as the second argument (`ss.timeseries(times, values)`). A time is a date, a bare number, or (with no calendar) a duration from 0:
             a calendar year in a sim with a calendar (e.g. `2030`), and otherwise a time in the sim's unit from 0
         values (list): the values, if `data` is the times
         interpolation (str): how to interpolate: 'step' (each value holds until the next), 'linear', or 'cosine' (a smooth S-shaped change between each value and the next, as MEmilio's dampings)
@@ -1276,7 +1276,7 @@ class timeseries(TimeValue):
 
     def years(self, sim):
         """
-        The times as years on the sim's timeline (a bare time is a year if the sim has a calendar, else a time in its unit from 0; a duration is a time after the start)
+        The times as years on the sim's timeline (a bare time is a year if the sim has a calendar, else a time in its unit from 0; a duration is a time from 0, for a sim with no calendar)
 
         Args:
             sim (`ss.Sim`): the sim
@@ -1292,8 +1292,8 @@ class timeseries(TimeValue):
                     errormsg += f', which are read as {sc.strjoin([f"{y:.6g}" for y in out])} years ({ss.timeline.how_bare(sim.t)})'
                 raise ValueError(errormsg)
             start, stop = sim.t.yearvec[0], sim.t.yearvec[-1]
-            early = [time for time in self.times if sc.isnumber(time) and time < 1900] if sim.t.calendar is not None else []
-            if early and start >= 1900: # e.g. days of the year (0 to 365) in a sim with a calendar, which are read as the years 0 to 365
+            early = [time for time in self.times if sc.isnumber(time) and time < ss.time.cal_year_threshold] if sim.t.calendar is not None else []
+            if early and start >= ss.time.cal_year_threshold: # e.g. days of the year (0 to 365) in a sim with a calendar, which are read as the years 0 to 365
                 ss.warn(f'ss.timeseries() has the bare time{"s" if len(early) > 1 else ""} {sc.strjoin(early)}, read as {"years" if len(early) > 1 else "the year"} {sc.strjoin(early)}, long before the sim starts ({sim.t.start}): {ss.timeline.how_bare(sim.t)}')
             elif len(out) > 1 and (out[-1] < start or out[0] > stop) and any(sc.isnumber(time) for time in self.times): # Bare times all outside the run: the value is flat over it
                 ss.note(f'every time of an ss.timeseries ({self.times[0]} to {self.times[-1]}) is outside the run, so its value is the same throughout: {ss.timeline.how_bare(sim.t)}', sim=sim)

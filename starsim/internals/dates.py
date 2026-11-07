@@ -222,7 +222,7 @@ class DateArray(np.ndarray):
 
 
 def is_float(string):
-    """ Whether a string is a number, e.g. '2020.5' (a decimal year), rather than a date such as '2020-05-01' """
+    """ Whether a string is a number, e.g. '2020', rather than a date such as '2020-05-01' """
     try:
         float(string)
         return True
@@ -245,7 +245,7 @@ class date(pd.Timestamp):
         ss.date(year=2020) # Returns <2020-01-01>
         ss.date(year=2024.75) # Returns <2024-10-01>
         ss.date('2024-04-04') # Returns <2024-04-04>
-        ss.date('2024.5') # Returns <2024-07-02>: a string that is a number is a decimal year, as ss.date(2024.5) is
+        ss.date('2024-05') # Returns <2024-05-01>; ss.date('2024.5') is an error (May, or the middle of the year?), and ss.date(2024.5) is <2024-07-02>
         ss.date(year=2024, month=4, day=4) # Returns <2024-04-04>
         ```
     """
@@ -262,7 +262,10 @@ class date(pd.Timestamp):
                 return cls._reset_class(sc.dcp(arg))
             elif sc.isnumber(arg): # e.g. 2020
                 single_year_arg = True
-            elif isinstance(arg, str) and is_float(arg): # e.g. '2020.5', a decimal year as ss.date(2020.5) is, not May 2020
+            elif isinstance(arg, str) and is_float(arg): # e.g. '2020', a year; '2020.5' could be May 2020 or a decimal year, so is an error
+                if not float(arg).is_integer() or '.' in arg:
+                    errormsg = f'ss.date({arg!r}) is ambiguous: a string with a decimal point could be a decimal year or a year and month (e.g. "2020.5" as May 2020); give a float for the decimal year, ss.date({float(arg)}), or a date for the month, e.g. "{arg.split(".")[0]}-05"'
+                    raise ValueError(errormsg)
                 arg = float(arg)
                 single_year_arg = True
             elif isinstance(arg, ss.Duration): # e.g. ss.years(2020)

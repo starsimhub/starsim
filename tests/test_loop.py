@@ -195,7 +195,7 @@ def test_coded_alone():
         def step(self):
             self.y *= np.exp(-0.1)
     sim = ss.Sim(modules=Decay(), stop=10, verbose=0).run()
-    assert sim.solver != 'abm' and len(sim.people.uid) == 1, 'Code with nothing per person should not make agents'
+    assert not isinstance(sim.solver, ss.solvers.abm) and len(sim.people.uid) == 1, 'Code with nothing per person should not make agents'
     assert sim.people.n_alive == sim.pars.total_pop == 10_000 # What describe() says it runs with
     assert np.isclose(sim.custom.decay.y, np.exp(-1.1)) # A step from each of the 11 time points, so the state after the run is that of the step from 10
     assert set(sim.loop.to_df().label) == {'sim.advance', 'sim.start_step', 'decay.step', 'sim.finish_step'} # Nothing else does anything here

@@ -47,7 +47,7 @@ class Costs(ss.Analyzer):
         import starsim as ss
         import starsim.library as ssl
 
-        vx = ss.vaccinate(efficacy=0.9, who=ss.person.age < 5, when=ss.years(1), coverage=0.5, cost=5)
+        vx = ss.vaccinate(efficacy=0.9, who=ss.person.age < 5, when=ss.schedule(every=ss.years(1)), coverage=0.5, cost=5)
         costs = ssl.Costs(unit_costs={'sir.infection': 50}, fixed=ss.peryear(1000))
         sim = ss.Sim(diseases='sir', networks='random', interventions=vx, analyzers=costs)
         sim.run()

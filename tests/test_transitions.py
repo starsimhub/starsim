@@ -152,12 +152,13 @@ def test_names():
     inline = ss.Disease(infection=ss.Transition(S, I, rate=ss.par(0.3, bounds=[0.1, 1]) * I), recovery=ss.Transition(I, R, dur=10))
     assert inline.pars.beta.bounds == [0.1, 1]
 
-    # Transitions positionally (transitions= is removed), and a sum of flows as a keyword, which is an outcome
+    # Transitions as a list, positionally or as transitions=, and a sum of flows as a keyword, which is an outcome
     S, I, R = ss.states('S I R')
-    listed = ss.Disease(*[ss.Transition(S, I, rate=0.3 * I, name='infection'), ss.Transition(I, R, dur=10, name='recovery')], init=dict(I=0.01))
+    listed = ss.Disease(transitions=[ss.Transition(S, I, rate=0.3 * I, name='infection'), ss.Transition(I, R, dur=10, name='recovery')], init=dict(I=0.01))
     assert list(listed.transitions.keys()) == ['infection', 'recovery']
-    with pytest.raises(TypeError, match='positionally'):
-        ss.Disease(transitions=[S >> I @ 0.3*I], init=dict(I=0.01))
+    S, I, R = ss.states('S I R')
+    positional = ss.Disease([ss.Transition(S, I, rate=0.3 * I, name='infection'), ss.Transition(I, R, dur=10, name='recovery')], init=dict(I=0.01))
+    assert list(positional.transitions.keys()) == ['infection', 'recovery']
     S, I, R = ss.states(3)
     recovery, death = I >> R @ ss.days(10), I >> ss.dead @ ss.days(100)
     dis = ss.Disease(infection=S >> I @ 0.3 * I, recovery=recovery, death=death, leaving=recovery + death, init=dict(I=0.01), name='dis')
@@ -433,15 +434,15 @@ def test_solvers(do_plot=False):
     sc.heading('Testing the stochastic solvers by name, and the ODE against known answers')
     # The exact stochastic solver, at a smaller size, stays exact however many events a run takes; tau-leaping is asked for by name
     sim = ss.Sim(make_sir(), total_pop=2000, stop=100, solver='gillespie', **kw).run()
-    assert sim.results.sir.R[-1] > 1000 and sim.solver == 'gillespie'
-    assert ss.Sim(make_sir(), total_pop=1e8, solver='gillespie', **kw).init().solver == 'gillespie'
+    assert sim.results.sir.R[-1] > 1000 and isinstance(sim.solver, ss.solvers.gillespie)
+    assert isinstance(ss.Sim(make_sir(), total_pop=1e8, solver='gillespie', **kw).init().solver, ss.solvers.gillespie)
     tau = ss.Sim(make_sir(), total_pop=1e8, stop=100, solver='tau', **kw).run()
-    assert tau.solver == 'tau' and tau.results.sir.R[-1] > 5e7
+    assert isinstance(tau.solver, ss.solvers.tau) and tau.results.sir.R[-1] > 5e7
     for old in ['sde', 'stochastic', 'ctmc']: # Not solvers
         with pytest.raises(ValueError, match='gillespie'):
             ss.Sim(make_sir(), solver=old, **kw).init()
     with pytest.raises(ValueError):
-        ss.Sim(make_sir(), solver=ss.ode(integrator='LSODA'), **kw).init()
+        ss.Sim(make_sir(), solver=ss.solvers.ode(integrator='LSODA'), **kw).init()
 
     # Compare with the known final size of an SIR epidemic
     sim = ss.Sim(make_sir(), total_pop=100_000, dt=0.25, stop=100, solver='ode', **kw).run()
@@ -466,14 +467,14 @@ def test_solvers(do_plot=False):
 def test_auto():
     sc.heading('Testing how the solver is chosen')
     sim = ss.Sim(make_sir(), stop=10, **kw).init()
-    assert sim.solver == 'ode'
+    assert isinstance(sim.solver, ss.solvers.ode)
     agents = ss.Sim(make_sir(), stop=10, n_agents=1000, **kw)
-    assert agents.init().solver == 'abm'
-    assert agents.new(n_agents=None).init().solver == 'ode' # None goes back to the default
+    assert isinstance(agents.init().solver, ss.solvers.abm)
+    assert isinstance(agents.new(n_agents=None).init().solver, ss.solvers.ode) # None goes back to the default
     msim = ss.parallel(ss.Sim(make_sir(), stop=10, solver='binomial', **kw), n_runs=2)
     assert 'sir' in msim.results.keys() and msim.results['sir'] is msim.results.sir
-    assert ss.Sim(make_sir(), networks='random', stop=10, **kw).init().solver == 'abm'
-    assert ss.Sim(make_sir(), demographics=ss.Births(), start=2000, stop=2010, **kw).init().solver == 'abm'
+    assert isinstance(ss.Sim(make_sir(), networks='random', stop=10, **kw).init().solver, ss.solvers.abm)
+    assert isinstance(ss.Sim(make_sir(), demographics=ss.Births(), start=2000, stop=2010, **kw).init().solver, ss.solvers.abm)
 
     # A dwell time that is not exponential is run as Erlang stages, unless approximations='error'
     S, I, R = ss.states('S I R')
@@ -483,10 +484,10 @@ def test_auto():
         init_prev = 0.01,
     )
     sim = ss.Sim(sir, stop=100, **kw).run()
-    assert sim.solver == 'ode'
+    assert isinstance(sim.solver, ss.solvers.ode)
     assert len(sim.diseases[0].engine.state_comps['I']) == 4 # (10/5)² stages
     assert any('Erlang' in note for note in sim.notes)
-    assert ss.Sim(sir, stop=100, approximations='error', **kw).init().solver == 'abm'
+    assert isinstance(ss.Sim(sir, stop=100, approximations='error', **kw).init().solver, ss.solvers.abm)
     with pytest.raises(ss.CapabilityError):
         ss.Sim(sir, stop=100, approximations='error', solver='ode', **kw).init()
 
@@ -494,7 +495,7 @@ def test_auto():
     S, I, R = ss.states('S I R')
     spread = ss.Disease(infection=ss.Transition(S, I, rate=ss.lognormal(0.3, 0.3) * I), recovery=ss.Transition(I, R, dur=10), init_prev=0.01, name='sir')
     auto = ss.Sim(spread, stop=100, **kw).run()
-    assert auto.solver == 'abm' and 'distribution' in auto.solver_reason
+    assert isinstance(auto.solver, ss.solvers.abm) and 'distribution' in auto.solver_reason
     fixed = ss.Sim(make_sir(), stop=100, solver='abm', **kw).run()
     assert auto.results.sir.infection.sum() < 0.9*fixed.results.sir.infection.sum() # Varied susceptibility gives fewer infections
     ode = ss.Sim(spread, stop=100, solver='ode', **kw).run()
@@ -507,7 +508,7 @@ def test_auto():
 
     # A mixing pool of some people needs agents
     pool = ss.MixingPool(source=ss.person.age < 15, target=ss.person.age >= 15)
-    assert ss.Sim(make_sir(), networks=pool, stop=10, **kw).init().solver == 'abm'
+    assert isinstance(ss.Sim(make_sir(), networks=pool, stop=10, **kw).init().solver, ss.solvers.abm)
     with pytest.raises(ss.CapabilityError, match='source= or target='):
         ss.Sim(make_sir(), networks=pool, solver='ode', stop=10, **kw).init()
 
@@ -748,7 +749,7 @@ def test_lifetable_and_seeding():
     # As agents, the death rate of each person's age band of the table, as ss.Deaths(lifetable=) takes it (before, each person's age at death was drawn once)
     ppl = ss.People(20_000, age_data=np.array([np.arange(100), np.exp(-0.02*np.arange(100))]).T)
     sim = ss.Sim(make(), people=ppl, unit='year', dt=1, stop=3, verbose=0).init()
-    assert sim.solver == 'abm' # Without a stratification by age, a life table needs agents
+    assert isinstance(sim.solver, ss.solvers.abm) # Without a stratification by age, a life table needs agents
     age = np.asarray(sim.people.age.raw[sim.people.auids])
     expected = np.sum(-np.expm1(-table.hazards(ages)[np.minimum(age.astype(int), len(ages) - 1)])) # The band's rate, over the year
     res = sim.run().results.sir
@@ -1036,14 +1037,14 @@ def test_infection_step():
 
 @sc.timer()
 def test_wholestep():
-    """ With solver=ss.abm(step='wholestep'), rates act over whole steps only, on those in the state at the start of the step: those who arrive during a step face them from the next; and a module's own way of running as agents """
+    """ With solver=ss.solvers.abm(step='wholestep'), rates act over whole steps only, on those in the state at the start of the step: those who arrive during a step face them from the next; and a module's own way of running as agents """
     sc.heading('Testing rates over whole steps, and a module\'s own step')
     def make(cls=ss.Disease, **kwargs):
         A, B, C = ss.states('A B C')
         return cls(A, B, C, tick=A >> B @ ss.constant(ss.days(3)), leave=B >> C @ ss.perday(0.5), default_state='A', name='d', **kwargs) # Everyone reaches B in step 3
     res = {}
     for step in ['midstep', 'wholestep']:
-        sim = ss.Sim(make(), solver=ss.abm(step=step), n_agents=10_000, unit='day', stop=10, verbose=0).run()
+        sim = ss.Sim(make(), solver=ss.solvers.abm(step=step), n_agents=10_000, unit='day', stop=10, verbose=0).run()
         eng = sim.diseases.d.engine
         assert isinstance(eng, ss.solvers.Compiled) and not eng.uncompiled
         assert eng.wholestep == (step == 'wholestep') and sim.solver.step == step
@@ -1055,19 +1056,19 @@ def test_wholestep():
     assert np.isclose(res['wholestep'].B[6]/10_000, (1 - p)**2, atol=0.02)
 
     # A module's own way of running as agents, which the sim's does not override
-    sim = ss.Sim(make(solver=ss.abm(step='wholestep')), n_agents=2000, unit='day', stop=10, verbose=0).run()
+    sim = ss.Sim(make(solver=ss.solvers.abm(step='wholestep')), n_agents=2000, unit='day', stop=10, verbose=0).run()
     assert sim.diseases.d.engine.wholestep and sim.results.d.leave[3] == 0
     with pytest.raises(ValueError):
         ss.Disease(solver='ode') # A module's own solver is a way of running as agents
     wholestep = lambda sim_solver, **kw: ss.Sim(make(**kw), solver=sim_solver, n_agents=500, unit='day', stop=5, verbose=0).init().diseases.d.engine.wholestep
-    assert not wholestep('abm') and wholestep(ss.abm(step='wholestep'))
-    assert wholestep('abm', solver=ss.abm(step='wholestep')) and not wholestep(ss.abm(step='wholestep'), solver='abm') # Its own overrides the sim's
-    assert ss.solvers.agent_solver(ss.Sim(make(solver=ss.abm(step='wholestep')), n_agents=500, verbose=0).init().diseases.d, ss.Sim(n_agents=10), why=True) == ('wholestep', 'own')
+    assert not wholestep('abm') and wholestep(ss.solvers.abm(step='wholestep'))
+    assert wholestep('abm', solver=ss.solvers.abm(step='wholestep')) and not wholestep(ss.solvers.abm(step='wholestep'), solver='abm') # Its own overrides the sim's
+    assert ss.solvers.agent_solver(ss.Sim(make(solver=ss.solvers.abm(step='wholestep')), n_agents=500, verbose=0).init().diseases.d, ss.Sim(n_agents=10), why=True) == ('wholestep', 'own')
 
     # The coarse-step SIR of test_infection_step(): the newly infected have a whole step of recovery at their first draw, as written as code with ss.bernoulli()
     S, I, R = ss.states(3)
     sir = ss.Disease(S, I, R, infection=S >> I @ ss.perday(0.25)*I, recovery=I >> R @ ss.perday(1/8), init_prev=0.001, name='sir')
-    r = ss.Sim(sir, solver=ss.abm(step='wholestep'), n_agents=20_000, unit='day', stop=250, dt=ss.days(4), rand_seed=1, verbose=0).run().results.sir
+    r = ss.Sim(sir, solver=ss.solvers.abm(step='wholestep'), n_agents=20_000, unit='day', stop=250, dt=ss.days(4), rand_seed=1, verbose=0).run().results.sir
     attack = 1 - r.S[-1]/20_000
     assert 0.5 < attack < 0.75, f'The attack rate is {attack:n}, not about 0.6' # 0.797 by midsteps, with half a step at the first draw
     return res
@@ -1343,7 +1344,7 @@ def test_given_dwell():
     for solver in ['ode', 'binomial']: # A compartmental solver refuses, and auto runs agents
         with pytest.raises(ss.CapabilityError, match='P.time_in'):
             make(solver, p=lambda P: 1 - np.exp(-P.time_in)).init()
-    assert make('auto', p=lambda P: 1 - np.exp(-P.time_in)).init().solver == 'abm'
+    assert isinstance(make('auto', p=lambda P: 1 - np.exp(-P.time_in)).init().solver, ss.solvers.abm)
 
     # As agents, the same as a function of the sim reading the time in the state
     func = lambda sim, uids: 1 - np.exp(-sim.diseases.d.P.time_in[uids])
@@ -1375,7 +1376,7 @@ def test_init_prev_forms():
         uids = sim.people.auids
         old = sim.people.age.raw[uids] >= 20
         seeded = sim.diseases.d.Ic.raw[uids] | sim.diseases.d.In.raw[uids]
-        assert sim.solver == 'abm' and seeded[~old].sum() == 0 and np.isclose(seeded[old].mean(), 0.2, atol=0.01)
+        assert isinstance(sim.solver, ss.solvers.abm) and seeded[~old].sum() == 0 and np.isclose(seeded[old].mean(), 0.2, atol=0.01)
         if 'init_prev' in kwargs: # Through the transmission, in its shares
             assert np.isclose(sim.diseases.d.Ic.raw[uids].sum()/seeded.sum(), 0.3, atol=0.03)
         with pytest.raises(ss.CapabilityError): # A property of each person that is not a dimension, or the agents, have no compartmental form

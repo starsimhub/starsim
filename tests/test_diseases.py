@@ -218,7 +218,7 @@ def test_sis(do_plot=do_plot):
     sis = ss.SIS(beta=ss.peryear(0.5), dur_inf=ss.years(5))
     assert np.isclose(sis.R0(), 2.5) # beta × the mean duration
     ode = ss.Sim(sis, stop=100).run()
-    assert ode.solver == 'ode' and np.isclose(ode.results.sis.prevalence[-1], 0.6, atol=0.01) # Endemic at 1 - 1/R0
+    assert isinstance(ode.solver, ss.solvers.ode) and np.isclose(ode.results.sis.prevalence[-1], 0.6, atol=0.01) # Endemic at 1 - 1/R0
     rt = ode.diseases.sis.Rt()
     assert np.isclose(rt[0], 2.5, rtol=0.01) and np.isclose(rt[-1], 1, atol=0.01) # R0 at the start, 1 at the endemic state
 
@@ -603,7 +603,7 @@ def test_mixed_disease():
 
     sim = ss.Sim(diseases=Mixed(), n_agents=500, dt=ss.days(7), stop=2003, verbose=0).run()
     mixed = sim.diseases.mixed
-    assert sim.solver == 'abm' # The coded array needs agents
+    assert isinstance(sim.solver, ss.solvers.abm) # The coded array needs agents
     assert mixed.results.infection.sum() > 0 and mixed.years_infected.sum() > 0 # Both parts ran
     assert np.isclose(mixed.years_infected.sum(), (mixed.results.I[1:].sum() + mixed.I.n)*sim.t.dt_year) # One step for each step spent infected, the last step's included
     fitted, _ = ss.fit.bounded_pars(ss.Sim(diseases=Mixed(rate=ss.par(1.0, bounds=[0.5, 2])), n_agents=100, verbose=0).init())
@@ -876,7 +876,7 @@ def test_declared_transmit():
     class Half(ss.SIR):
         def transmit(self): # One transmission: the argument can be left out
             new = super().transmit()
-            return new[::2] if self.sim.solver == 'abm' else new/2
+            return new[::2] if isinstance(self.sim.solver, ss.solvers.abm) else new/2
 
     # As agents, the solver's own transmission is the same run; as an ODE, it is taken once a step, so is first order in dt
     res = {cls.__name__: ss.Sim(cls(beta=ss.peryear(2), name='sir'), networks='random', solver='abm', **kw).run().results.sir.infection.sum() for cls in [ss.SIR, Same, Half]}

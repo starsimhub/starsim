@@ -475,7 +475,7 @@ def typical_sims():
         ss.Sim(diseases=ssl.AgentSIR(), networks='random', interventions=ss.vaccinate(ss.Vaccine(efficacy=0.9), coverage=0.5), **small),
         ss.Sim(demographics=[ss.Pregnancy(), ss.Deaths()], networks='prenatal', **small),
     ]
-    if ss.options.threads != 1 and nb.get_num_threads() > 1: # The threaded passes, for a sim large enough to share among threads
+    if ss.options.num_threads != 1 and nb.get_num_threads() > 1: # The threaded passes, for a sim large enough to share among threads
         sims.append(ss.Sim(diseases='sir', networks='random', n_agents=ss.solvers.backends.passes.min_threaded, start=2000, stop=2001, verbose=0))
     return sims
 
@@ -2493,12 +2493,12 @@ def apply_events(rng, y, r, ti, whole):
 solvers = dict(rk4=0, euler=1, binomial=2, tau=3, gillespie=4, whole=5) # whole: the chain binomial in whole steps (substeps=1), with 1 - exp(-r*dt) for every exit, as discrete-time chain-binomial models are written (see draw())
 
 def solver_code(sim):
-    """ The kernels' number for the sim's solver (see `solvers`): for the ODE, its integrator; the chain binomial in whole steps (`ss.binomial(substeps=1)`) is the discrete-time model as written, for which `draw()` keeps the exponential for every exit """
-    if sim.solver == 'ode':
+    """ The kernels' number for the sim's solver (see `solvers`): for the ODE, its integrator; the chain binomial in whole steps (`ss.solvers.binomial(substeps=1)`) is the discrete-time model as written, for which `draw()` keeps the exponential for every exit """
+    if isinstance(sim.solver, ss.solvers.ode):
         return solvers[sim.solver.integrator]
-    if sim.solver == 'binomial' and sim.solver.substeps == 1:
+    if isinstance(sim.solver, ss.solvers.binomial) and sim.solver.substeps == 1:
         return solvers['whole']
-    return solvers[sim.solver]
+    return solvers[str(sim.solver)]
 
 @jit
 def apply_shifts(rng, y, sh, ti, whole, tally):
@@ -2830,14 +2830,14 @@ def one_step(rng, y, p, dt, solver, n_sub, tables, row):
 
 def one_thread(func, *args, main_modules=None, kernels=None, **kwargs):
     """
-    Run a function with one thread for the kernels (the passes over the agents, see `ss.options.threads`, and the runs of a particle filter): for the workers of `ss.parallel()` and of a calibration, which share the cores already
+    Run a function with one thread for the kernels (the passes over the agents, see `ss.options.num_threads`, and the runs of a particle filter): for the workers of `ss.parallel()` and of a calibration, which share the cores already
 
     With `kernels`, the main process's `ss.options.kernels`, which a worker started afresh would not otherwise have
 
     With `main_modules` (see `worker()`), the modules imported in the main process's `__main__` are imported in this one's
     first, for a worker started afresh (by forkserver, see `start_method()`)
     """
-    ss.options.threads = 1 # Every threaded pass asks this first (see `ss.solvers.backends.passes.n_chunks()`), so Numba's threads are never started (as nb.set_num_threads(1) would start them)
+    ss.options.num_threads = 1 # Every threaded pass asks this first (see `ss.solvers.backends.passes.n_chunks()`), so Numba's threads are never started (as nb.set_num_threads(1) would start them)
     if kernels is not None and kernels != ss.options.kernels:
         ss.options.kernels = kernels
     if main_modules: # A function defined in a notebook or script looks up its names (e.g. cv of import covasim as cv) in __main__, which in a worker started afresh lacks them

@@ -382,7 +382,7 @@ def load_camdl(filename, pars=None, scenario=None, solver='ode', camdlc=None, ve
     tdur = getattr(ss, f'{unit}s')
     cfg = dict(unit=unit, solver=solver)
     if solver in ['ode', 'binomial']: # camdl's ODE backend takes one RK4 step a step, and its chain binomial whole steps, so the numbers are its own
-        cfg['solver'] = getattr(ss, solver)(substeps=1)
+        cfg['solver'] = getattr(ss.solvers, solver)(substeps=1)
     if simulation.get('t_end') is not None:
         cfg['stop'] = tdur(simulation['t_end'])
     if simulation.get('t_start'):

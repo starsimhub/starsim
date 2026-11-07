@@ -29,7 +29,7 @@ def wanted(solver, p=None, y=None):
     `ss.kernels.work()` (an SIR in one group: 0.55 s against 0.22 s; in 20 places: 0.60 s against 2.8 s)
     """
     import starsim as ss
-    if solver != 'ode' or mode == 'never':
+    if not isinstance(solver, ss.solvers.ode) or mode == 'never':
         return False
     if mode == 'always':
         return True

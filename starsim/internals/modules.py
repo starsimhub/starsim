@@ -825,7 +825,7 @@ class Module(Base):
         Args:
             sim (`ss.Sim`): the sim, with its groups and unit worked out, but no solver yet
         """
-        own = [f'"{self.name}" has a solver of its own, solver={self.solver!r}, which is for agents only'] if isinstance(self, ss.Disease) and getattr(self, 'solver', None) is not None else [] # e.g. ss.Disease(..., solver=ss.abm(step='wholestep'))
+        own = [f'"{self.name}" has a solver of its own, solver={self.solver!r}, which is for agents only'] if isinstance(self, ss.Disease) and getattr(self, 'solver', None) is not None else [] # e.g. ss.Disease(..., solver=ss.solvers.abm(step='wholestep'))
         flag = getattr(self, 'compartmental', None)
         if flag or getattr(self, 'graph', None) is not None:
             return own
@@ -1106,7 +1106,7 @@ class Module(Base):
     def _count_states(self, names):
         """ Record the number of active agents in each of some boolean states, as `record_stocks()` does one by one, in one pass by UID (as `people.record_stocks()` does); False if they can't be counted so """
         ppl = self.sim.people
-        if getattr(self.sim, 'solver', None) != 'abm' or not isinstance(getattr(ppl, 'alive', None), ss.BoolArr): # Not with compartments, or in a mock sim
+        if not isinstance(getattr(self.sim, 'solver', None), ss.solvers.abm) or not isinstance(getattr(ppl, 'alive', None), ss.BoolArr): # Not with compartments, or in a mock sim
             return False
         states = [self.__dict__.get(name) for name in names]
         if not all(isinstance(state, ss.BoolArr) and state.raw.ndim == 1 and state.raw.flags.c_contiguous for state in states):

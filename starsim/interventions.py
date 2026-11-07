@@ -179,7 +179,7 @@ def trigger_moves(owner, outcome, sel, eng=None, before=None):
                 cond = ss.conditions.join('&', [c for c in [cond, tr.where] if c is not None])
             if not any(leaf.op == 'event' and ss.conditions.modname(leaf.args[0]) == owner.name and leaf.args[1] == outcome for leaf in ss.conditions.event_leaves(event)):
                 continue
-            if sim.solver != 'abm': # As shares of each state and group
+            if not isinstance(sim.solver, ss.solvers.abm): # As shares of each state and group
                 ss.solvers.trigger_groups(owner, outcome, mod, tr, event, cond, sel, eng, before)
                 continue
             tgt = mod.engine
@@ -283,21 +283,6 @@ def movers(sim, modname, name):
     return list(dict.fromkeys(out))
 
 
-def check_undriven(sim):
-    """ A note for each transition with no driver (no rate, duration, or trigger) that no product or delivery moves people along, since it never happens by itself """
-    for mod in sim.modules:
-        graph = getattr(mod, 'graph', None)
-        if not isinstance(graph, ss.graph.Graph):
-            continue
-        idle = [name for name,tr in graph.transitions.items() if tr.undriven and not movers(sim, mod.name, name)]
-        for name in idle:
-            tr = graph.transitions[name]
-            arrow = f'{" + ".join(st.name for st in tr.source) or "ss.unborn"} >> {" + ".join(st.name for st in tr.dest) or "ss.dead"}'
-            ss.note(f'"{name}" of "{mod.name}" ({arrow}) has no rate or duration, and no product or delivery moves people along it, so only code can (e.g. {mod.name}.move()); '
-                    f'for it to happen by itself, give it one, e.g. {arrow} @ ss.days(10)', sim=sim)
-    return
-
-
 def product_keys(kind):
     """ The keywords of a kind of product (e.g. `efficacy` and `waning` for `ss.Vaccine`), which its delivery takes to make one """
     if kind is None:
@@ -378,7 +363,7 @@ class capacity:
 
 replaced = dict( # The keywords an event or delivery took before, and what says it now
     at = 'when=[...] (times), or ss.schedule([...], start=..., stop=...)',
-    every = 'when=<a duration>, e.g. when=ss.days(30), or ss.schedule(every=..., start=..., stop=...)',
+    every = 'when=ss.schedule(every=...), e.g. when=ss.schedule(every=ss.days(30)), with start= and stop= if needed',
     start = 'when=ss.schedule(start=..., stop=...), with how often or the times if it happens in rounds',
     stop = 'when=ss.schedule(start=..., stop=...), with how often or the times if it happens in rounds',
     on = 'when=<an event>, e.g. when=screening.positive',
@@ -410,8 +395,8 @@ def check_replaced(kwargs, cls):
 
 def parse_when(when, name):
     """
-    The `when=` of an event, as the keywords of `Event._init()`: nothing (routine), an event that triggers it, a duration (how often),
-    times (a list, a date, or a year), a function of the date, or an `ss.schedule()` with all of these and a start and stop
+    The `when=` of an event, as the keywords of `Event._init()`: nothing (routine), an event that triggers it, times (a date, a year,
+    a duration from 0 in a sim with no calendar, or a list of them), a function of the date, or an `ss.schedule()` with these, how often, and a start and stop
     """
     out = dict(at=None, every=None, start=None, stop=None, on=None, delay=None, when=None)
     if when is None:
@@ -425,9 +410,6 @@ def parse_when(when, name):
     if isinstance(when, ss.on):
         out.update(on=when.x, delay=when.delay)
         return out
-    if isinstance(when, ss.Duration):
-        out['every'] = when
-        return out
     if isinstance(when, (ss.conditions.Cond, ss.expressions.Expr, ss.Transition, ss.dimensions.Transfer, ss.products.EventSource)):
         out['on'] = when
         return out
@@ -439,9 +421,9 @@ def parse_when(when, name):
         out['when'] = lambda t: ss.timeline.of_date(fn, t) # A function of the date (e.g. lambda now: now.month == 1), as for ss.schedule()
         return out
     if isinstance(when, (ss.State, ss.Arr)):
-        errormsg = f'when= of "{name}" is when it happens: times, how often, an event, or ss.schedule(); {when!r} is a condition on people, which goes in who='
+        errormsg = f'when= of "{name}" is when it happens: times, an event, or ss.schedule() (for how often, every=); {when!r} is a condition on people, which goes in who='
         raise TypeError(errormsg)
-    out['at'] = when # A time, or a list of them: dates, years, or durations after the start
+    out['at'] = when # A time, or a list of them: dates, years, or durations from 0 (ss.days(10) is day 10, the same as [ss.days(10)]; how often is ss.schedule(every=...))
     return out
 
 
@@ -466,7 +448,7 @@ class Event(ss.products.EventSource, Intervention):
     levels of a stratification (`dict(risk=('low', 'high'))`), or strains (`DS >> RIF`), or an increment of a counter; with none,
     it is only an event, which others trigger on (e.g. a clinic visit). **Who** it reaches: a condition on people, or on the
     population (`sir.I.n > 1000`, which decides for everyone at once), or people as they reach an age (`ss.at_age()`). And
-    **when**: at times (`when=[2025, 2030]`, `when='2024-03-01'`), repeatedly (`when=ss.days(30)`), on a schedule
+    **when**: at times (`when=[2025, 2030]`, `when='2024-03-01'`, or with no calendar `when=ss.days(30)`, day 30), on a schedule
     (`when=ss.schedule(every=ss.months(1), start='2024-01-01', stop='2025-01-01')`), when another event happens
     (`when=sir.infection`, or `when=ss.on(sir.infection, delay=ss.days(5))`), or, with no `when=`, routinely: each person once,
     at the first step they are eligible.
@@ -486,10 +468,10 @@ class Event(ss.products.EventSource, Intervention):
         who (Cond/func/at_age): who it can reach: a condition on people (`ss.person.age < 5`, or a state by its path, `'sir.I'`), on the population
             (`sir.I.n > 1000`), or both joined with `&`; people as they reach an age (`ss.at_age(ss.months(9))`); or a function of the sim returning
             who is eligible (UIDs, a mask, or True or False for everyone); to reach exactly those it returns at each step, also give `when=` every step
-        when (date/list/dur/event/func/schedule): when it happens: a time or list of them (dates, years, or durations after the start); a duration,
-            how often (from the start); an event that triggers it (`sir.infection`, `screening.positive`, or a transition by its path), or
+        when (date/list/dur/event/func/schedule): when it happens: a time or list of them (dates, years, or in a sim with no calendar durations
+            from 0: `ss.days(10)` is day 10); an event that triggers it (`sir.infection`, `screening.positive`, or a transition by its path), or
             `ss.on(event, delay=...)` for a time after it; a function of the date of each step, true when it happens; or `ss.schedule()`,
-            for any of these with a `start=` and `stop=` (with only those, routinely between them)
+            for how often (`every=`), or any of these with a `start=` and `stop=` (with only those, routinely between them)
         n (float/rate): the most it reaches each time: a number, or a rate (e.g. `ss.peryear(20)`), which routine events need
         p (float/rate/func): the probability that each person eligible is reached; also `ss.by(...)`, a typed rate or probability
             (e.g. `ss.perday(0.1)`), or a function of the sim returning one, or (as agents) one per person
@@ -789,7 +771,7 @@ class Event(ss.products.EventSource, Intervention):
 
     def boxed(self, sim):
         """ Whether holding the product has the levels of a boxcar in this sim: in a compartmental run, for a product that wanes as an `ss.boxcar` (see `ss.products.Held.boxcar_form`) """
-        return self.holds and sim is not None and sim.solver not in [None, 'abm'] and self.product.boxcar_form is not None
+        return self.holds and sim is not None and (sim.solver is not None and not isinstance(sim.solver, ss.solvers.abm)) and self.product.boxcar_form is not None
 
     def dim_moves(self, sim=None):
         """ Movement along those properties that happens by itself: losing the protection of a product (at a rate, or through the levels of a boxcar) """
@@ -996,7 +978,7 @@ class Event(ss.products.EventSource, Intervention):
         if self.queue is not None and self.capacity is None:
             errormsg = f'The queue of "{self.name}" is how long people wait when there is not enough capacity, so it needs a capacity: capacity=ss.capacity(n, queue=...)'
             raise ValueError(errormsg)
-        self.in_compartments = ss.solvers.CompartmentalDelivery(self) if sim.solver != 'abm' else None
+        self.in_compartments = ss.solvers.CompartmentalDelivery(self) if not isinstance(sim.solver, ss.solvers.abm) else None
         if self.boxed(sim) and next(d for d in sim.interventions() if isinstance(d, Event) and d.product is self.product) is self: # Once for the product
             b = self.product.boxcar_form
             ss.note(f'the plateau of "{self.product.name}" ({b.plateau!r}) is {b.stages} levels of holding it, each left at a rate, so its end is spread over about {b.plateau/np.sqrt(b.stages)!r} either way (as agents, it is exact); give ss.boxcar(..., stages=) more for less', sim=sim)
@@ -1005,7 +987,7 @@ class Event(ss.products.EventSource, Intervention):
     def check_coded(self, sim):
         """ For a disease written as code: agents only, and it has the parts the product uses, or this raises naming the missing one """
         dis = coded_disease(sim, self.disease)
-        if sim.solver != 'abm':
+        if not isinstance(sim.solver, ss.solvers.abm):
             raise ss.CapabilityError(f'"{self.name}" is for "{dis.name}", which is written as code, so it cannot run with solver="{sim.solver}". Run with solver="abm".')
         product = self.product
         needs = []
@@ -1043,7 +1025,7 @@ class Event(ss.products.EventSource, Intervention):
 
     def init_results(self):
         super().init_results()
-        abm = self.sim.solver == 'abm'
+        abm = isinstance(self.sim.solver, ss.solvers.abm)
         results = [
             ss.Result('delivered', dtype=float, scale=abm, label='Number delivered', kind='flow'),
             ss.Result('eligible', dtype=float, scale=abm, label='Number eligible', kind='flow', auto_plot=False), # Those offered it in each step, so over the run the offers made, of which coverage is the share delivered
@@ -1762,7 +1744,7 @@ class Event(ss.products.EventSource, Intervention):
 
     def finalize(self):
         super().finalize()
-        if self.sim.solver == 'abm': # The events of the last step, so that the memory after the run has them all
+        if isinstance(self.sim.solver, ss.solvers.abm): # The events of the last step, so that the memory after the run has them all
             for owner in [self] + ([self.product] if self.product is not None else []):
                 if owner.__dict__.get('_needs'):
                     owner.flush(np.inf)
@@ -1793,6 +1775,9 @@ class Event(ss.products.EventSource, Intervention):
             how += f' every {ss.display.quantity_str(self.every, "dur", unit)}'
             if self.start is not None:
                 how += f' from {unit or "step"} {self.start:n}' if sc.isnumber(self.start) else f' from {self.start}'
+        elif self.rounds: # At times: a duration is a time from 0, e.g. "at day 10"
+            at = lambda t: f'{type(t).__name__.removesuffix("s")} {t.value:n}' if isinstance(t, ss.Duration) and t.is_scalar else f'{t:n}' if sc.isnumber(t) else str(t)
+            how += f' at {sc.strjoin([at(t) for t in self.rounds[:4]])}' + (f' (and {len(self.rounds) - 4} more)' if len(self.rounds) > 4 else '')
         if self.delay is not None:
             how += f', after {ss.display.quantity_str(self.delay, "dur", unit) if isinstance(self.delay, ss.TimePar) else self.delay}'
         if self.coverage is not None and not callable(self.coverage):
@@ -1833,7 +1818,7 @@ class Delivery(Event):
         what (Product/Transition/dict): what is delivered: a product, or a move as for `ss.Event`; `ss.vaccinate()`, `ss.screen()`, and `ss.treat()`
             instead take the product's own keywords and make it, e.g. `ss.vaccinate(efficacy=0.9, ...)`
         who (Cond/func/at_age): who is eligible, as for `ss.Event`
-        when (date/list/dur/event/func/schedule): when it is delivered, as for `ss.Event`: in rounds (times, a duration, or `ss.schedule()`),
+        when (date/list/dur/event/func/schedule): when it is delivered, as for `ss.Event`: in rounds (times, or `ss.schedule()`, e.g. with `every=`),
             on an event (with `ss.on(event, delay=...)` for a time after it, which is the time from the trigger to delivery, drawn per person
             if a distribution, agents only), or with none, routinely: each person is offered it once, at the first step they are eligible
         coverage (float/rate/func): the fraction of those eligible who are reached; also `ss.by(...)`, a typed rate or probability (e.g. `ss.perday(0.1)`,
@@ -1859,7 +1844,7 @@ class Delivery(Event):
         rollout = ss.Delivery(dict(vaccinated=True), coverage=0.7, when=[5, 30], who=~sir.vaccinated)
 
         # A test, and a treatment of those who test positive, as two deliveries
-        screening = ss.screen(sensitivity=0.9, specificity=0.95, who=ss.person.age > 30, coverage=0.4, when=ss.days(7))
+        screening = ss.screen(sensitivity=0.9, specificity=0.95, who=ss.person.age > 30, coverage=0.4, when=ss.schedule(every=ss.days(7)))
         treatment = ss.treat(cure=0.95, when=screening.positive, coverage=0.8)
 
         # Routine vaccination at nine months, from 2025
@@ -1910,7 +1895,7 @@ class treat(Delivery):
         ```python
         S, I, R = ss.states(3)
         sir = ss.Disease(infection=S >> I @ 0.3*I, recovery=ss.Transition(I, R, dur=10), init_prev=0.01)
-        treatment = ss.treat(cure=0.95, coverage=0.5, when=ss.days(7)) # Makes the drug, ss.Treatment(cure=0.95)
+        treatment = ss.treat(cure=0.95, coverage=0.5, when=ss.schedule(every=ss.days(7))) # Makes the drug, ss.Treatment(cure=0.95)
         sim = ss.Sim(sir, interventions=treatment, stop=100).run()
         ```
     """
@@ -1932,7 +1917,7 @@ class screen(Delivery):
         ```python
         S, I, R = ss.states(3)
         sir = ss.Disease(infection=S >> I @ 0.3*I, recovery=ss.Transition(I, R, dur=10), init_prev=0.01)
-        screening = ss.screen(sensitivity=0.9, specificity=0.98, coverage=0.4, when=ss.days(7))
+        screening = ss.screen(sensitivity=0.9, specificity=0.98, coverage=0.4, when=ss.schedule(every=ss.days(7)))
         treatment = ss.treat(cure=0.95, when=screening.positive, coverage=0.8)
         sim = ss.Sim(sir, interventions=[screening, treatment], stop=100).run()
         ```

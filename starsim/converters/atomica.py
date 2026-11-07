@@ -710,7 +710,7 @@ def load_atomica(framework, databook=None, progbook=None, calibration=None, star
     else:
         for j,s in enumerate(states[1:], start=1):
             src.states[s].init = init[0, j]
-    src.config.update(start=float(start), stop=float(stop), dt=float(dt), unit='year', solver=ss.ode(integrator='euler', substeps=1), total_pop=float(init.sum()))
+    src.config.update(start=float(start), stop=float(stop), dt=float(dt), unit='year', solver=ss.solvers.ode(integrator='euler', substeps=1), total_pop=float(init.sum()))
     sim = build(src, verbose=verbose)
     if programs:
         sim.imported.programs = programs # For sim.optimize()

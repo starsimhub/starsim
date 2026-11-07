@@ -40,7 +40,7 @@ class Cholera(ss.Disease):
         asymp_trans (float): the relative transmissibility and shedding of asymptomatic people
         beta_env (`ss.per`): the rate of infection from the water, when it is saturated with bacteria
         half_sat_rate (float): the amount of bacteria at which infection from the water is half its maximum
-        shedding_rate (`ss.per`): the bacteria each symptomatic person sheds into the water, per unit time
+        shedding_rate (`ss.freq`): the bacteria each symptomatic person sheds into the water, per unit time
         decay_rate (`ss.per`): the rate at which bacteria in the water die off
         dur_exp (`ss.Duration`): the mean time from infection to being infectious
         dur_asymp2rec (`ss.Duration`): the mean time asymptomatic people are infectious
@@ -64,7 +64,7 @@ class Cholera(ss.Disease):
     asymp_trans   = ss.par(0.01, doc='Relative transmissibility and shedding of asymptomatic people', source='Asymptomatic carriers shed 100-1000 times less (Nelson et al.)')
     beta_env      = ss.par(ss.perday(0.5), doc='Rate of infection from water saturated with bacteria', source='Illustrative, as in Codeço (2001)')
     half_sat_rate = ss.par(1_000_000, doc='Amount of bacteria at which infection from the water is half its maximum', source='Mukandavire et al.')
-    shedding_rate = ss.par(ss.perday(10), doc='Bacteria shed into the water by each symptomatic person', source='Mukandavire et al.')
+    shedding_rate = ss.par(ss.freqperday(10), doc='Bacteria shed into the water by each symptomatic person', source='Mukandavire et al.')
     decay_rate    = ss.par(ss.perday(0.033), doc='Rate at which bacteria in the water die off', source='Mukandavire et al.')
     dur_exp       = ss.par(ss.days(2.772), doc='Mean time from infection to being infectious', source='Azman et al.')
     dur_asymp2rec = ss.par(ss.days(5.5), doc='Mean time asymptomatic people shed', source='WHO cholera fact sheet (1-10 days)')

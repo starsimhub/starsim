@@ -109,7 +109,7 @@ sim = ss.Sim(networks=ssl.HouseholdNet(dhs_data=dhs_data))
 ```{python}
 sir = lambda: ss.SIR(beta=ss.perday(0.1), dur_inf=ss.days(10), init_n=3)
 kw = dict(n_agents=2000, start='2000-01-01', stop=ss.days(150), dt=ss.days(1))
-disk = ss.Sim(diseases=sir(), networks=ssl.DiskNet(r=0.04, v=ss.perday(0.001)), **kw)
+disk = ss.Sim(diseases=sir(), networks=ssl.DiskNet(r=0.04, v=ss.freqperday(0.001)), **kw)
 
 states = dict(S=('Susceptible', 'lightgray'), I=('Infected', 'tab:red'), R=('Recovered', 'tab:blue'))
 fig, axes = plt.subplots(1, 3, figsize=(12, 4))

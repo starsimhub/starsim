@@ -131,7 +131,7 @@ These are from Starsim's switching demo for LASER users (`tests/switching/test_l
 | Speed per agent-step | **Works** on 4 or more threads, **fails** on one: on the demo's 149 places, from 1 to 3.3 million agents, 3.7 ns per agent-step on one thread, 1.8 to 1.9 on 4, 1.6 on 8, and 1.4 on 16 (25 October 2026, on a machine with a load of 2.5 to 5 from other jobs), against the demo's target of 3.3 ns (three times LASER's 1.1 ns on 20 threads). At the same thread counts, LASER's own SEIR on the same places (without births) takes 1.7, 0.4, 0.4, and 0.23 ns, so it is 2.2 to 6 times faster; on the hub and spoke at LASER's size (1.75 million agents, a year), LASER takes 3.9 to 4.1, 1.6, 1.2, and 0.71 s on 1, 4, 8, and 16 threads, and Starsim 4.8, 2.6 to 2.7, 2.4, and 2.2 s. The passes over the agents are threaded for a population of 200,000 or more; the rest of Starsim's step is not, which is why it gains less from more threads |
 | Memory per agent | **Works**: about 51 to 53 bytes per agent at the peak, against LASER's 30 (the demo's target is 55). A run of LASER's full England and Wales (30 million agents) would need about 1.5 GB, against LASER's 1.2 GB |
 | Life-table deaths | **Works**: `ss.death(lifetable=ss.lifetable(ages, deaths))`, below, as a death rate for each age band of the table (LASER draws each person's age at death once, which gives the same deaths by age, to within the step): as agents by each person's age, and in a compartmental run stratified by age for each age group |
-| Seeding a fixed number of people on a schedule | **Works**: `ss.Event(S >> I, when=ss.days(30), n=3)`, below |
+| Seeding a fixed number of people on a schedule | **Works**: `ss.Event(S >> I, when=ss.schedule(every=ss.days(30)), n=3)`, below |
 | Radiation mobility, as well as gravity | **Works**: `ss.geo.radiation(kind='force', away=...)`, with the same interface as `ss.geo.gravity()` and no parameters to choose |
 | Gravity scaled to a mean share away, with a cap, as LASER scales it | **Works**: the matrix scaled in NumPy, as `ss.geo.Mobility(matrix=..., kind='force')`, below |
 | Life tables and seeding, as agents and as compartments | **Works**: the same text (with an age stratification, for the life table as compartments) gives the same number of infections within 20% in one run of each |
@@ -168,7 +168,7 @@ np.fill_diagonal(M, 0)
 M *= 0.045/M.sum(axis=1).mean()
 M *= np.minimum(1, 0.2/M.sum(axis=1))[:, None]
 measles.stratify(patch=ss.levels(places, mobility=ss.geo.Mobility(matrix=M, kind='force')))
-seeding = ss.Event(S >> I, when=ss.days(30), n=3, name='seeding') # 3 people every 30 days
+seeding = ss.Event(S >> I, when=ss.schedule(every=ss.days(30)), n=3, name='seeding') # 3 people every 30 days
 people = ss.People(int(pop.sum()), age_data=np.array([ages, pyramid]).T)
 sim = ss.Sim(measles, people=people, interventions=seeding, unit='day', stop=365, verbose=0)
 sim.run()

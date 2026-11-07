@@ -88,7 +88,7 @@ def test_flepimop_export(tmp_path):
     assert '- - - [I_1, I_2' in text and 'destination: [removed]' in text # Exposure to the sum of the stages; deaths into a compartment
     assert any('"births" into the model' in line for line in lost) and any('"removed"' in line for line in lost)
     back = ss.import_from(write(files, tmp_path), format='flepimop', **kw).run()
-    ref = sim.new(solver=ss.ode(substeps=1)).run().results.seir # One RK4 step a day, as flepiMoP takes
+    ref = sim.new(solver=ss.solvers.ode(substeps=1)).run().results.seir # One RK4 step a day, as flepiMoP takes
     res = back.results.seir
     I = sum(res[c].values for c in res.keys() if c.startswith('I_') and c[2:].isdigit())
     assert np.abs(ref.I.values - I).max() < 0.02*ref.I.values.max(), 'Read back, the epidemic should be the same but for the births and deaths, which change the population'

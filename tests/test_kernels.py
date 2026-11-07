@@ -194,7 +194,7 @@ def test_seasonal_steps():
     for solver,pop in dict(gillespie=5000, tau=500_000).items(): # Steps of a quarter of a year, held at their middle: about 3% too many infections, against 5-6% held at the start
         runs = [make(solver, ss.days(91), seed, pop) for seed in range(3)]
         out[solver] = np.mean([run[0] for run in runs])
-        assert runs[0][1] == solver
+        assert str(runs[0][1]) == solver
         assert np.isclose(out[solver], ode, rtol=0.04), f'{solver}: {out[solver]:n} infections per person, against {ode:n} for the ODE'
     with pytest.raises(ss.CapabilityError): # Exact only for rates that are constant within a step
         S, I = ss.states('S I')
@@ -265,7 +265,7 @@ def test_plain_estimate():
     engine.init_program()
     seconds = []
     for n_sub in [1, None]: # As if no substeps were taken, then as the run takes them
-        sim.solver = ss.ode(substeps=n_sub) # To ask the engine of this sim, with each setting
+        sim.solver = ss.solvers.ode(substeps=n_sub) # To ask the engine of this sim, with each setting
         seconds.append(engine.plain_seconds())
     assert seconds[1] > 20*seconds[0] # Recovery in a day under monthly steps: 122 substeps a step, so that no one turns over by more than a quarter in one
     return seconds

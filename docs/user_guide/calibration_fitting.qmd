@@ -171,7 +171,7 @@ print('Normalized absolute error:', ss.fit.mismatch(fit_lik.sim))
 print('Log-likelihood:', ss.fit.loglik(fit_lik.sim, likelihood=dict(cases=ss.nbinom(n=fit_lik.pars.dispersion))))
 ```
 
-Any sim that has run can be scored this way, whether or not it came from a fit, and against data it wasn't given, with `df=`. A likelihood that isn't built in is a function, `fn(observed, model)`. Here a survey tested 5,000 people for measles every two months from March, counting the number infectious. People were sampled in clusters (households, schools), so the counts vary more than binomial counts would, which a beta-binomial allows for, with SciPy's `betabinom`: the model's prevalence is the mean share positive, and `rho` sets how much more they vary (the variance is that of a binomial times 1 + (n − 1)·rho, here about 6). Both the calibrated sim and the one with the starting values are scored against it:
+Any sim that has run can be scored this way, whether or not it came from a fit, and against data it wasn't given, with `data=`. A likelihood that isn't built in is a function, `fn(observed, model)`. Here a survey tested 5,000 people for measles every two months from March, counting the number infectious. People were sampled in clusters (households, schools), so the counts vary more than binomial counts would, which a beta-binomial allows for, with SciPy's `betabinom`: the model's prevalence is the mean share positive, and `rho` sets how much more they vary (the variance is that of a binomial times 1 + (n − 1)·rho, here about 6). Both the calibrated sim and the one with the starting values are scored against it:
 
 ```{python}
 import scipy.stats as sps

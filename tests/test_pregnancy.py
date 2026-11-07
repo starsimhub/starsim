@@ -19,7 +19,7 @@ def test_burnin_ode():
     ode = ss.Sim(demographics=make(), solver='ode', total_pop=20_000, **pars).run()
     abm = ss.Sim(demographics=make(), n_agents=20_000, **pars).run()
     assert np.isclose(ode.results.pregnancy.P[0], abm.results.pregnancy.P[0], rtol=0.1) and any('burnin=True' in str(note) for note in ode.notes)
-    assert ss.Sim(demographics=make(), total_pop=20_000, **pars).init().solver == 'abm'
+    assert isinstance(ss.Sim(demographics=make(), total_pop=20_000, **pars).init().solver, ss.solvers.abm)
 
 
 @sc.timer()
@@ -93,7 +93,7 @@ def make_fetal():
 
 def agents_only(make, match):
     """ A model that only agents run: solver='auto' chooses them, and a compartmental solver named explicitly stops before the run, saying why """
-    assert ss.Sim(**make(), total_pop=1000, **kw).init().solver == 'abm'
+    assert isinstance(ss.Sim(**make(), total_pop=1000, **kw).init().solver, ss.solvers.abm)
     with pytest.raises(ss.CapabilityError, match=match):
         ss.Sim(**make(), solver='ode', total_pop=1000, **kw).init()
     return
