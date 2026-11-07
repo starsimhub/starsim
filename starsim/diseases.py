@@ -476,9 +476,10 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         for key in ['init_prev', 'init', 'init_n']: # The initial conditions can also be given in pars=, as the parameters are
             if key in pars:
                 kwargs[key] = pars.pop(key)
+        instance = any(key in kwargs for key in ['init_prev', 'init', 'init_n']) # Starting values given to the instance replace the class's, as they do the default 1%
         for key in ['init_prev', 'init', 'init_n']: # Or in the class body, e.g. init = dict(I=0.01), as for default_state below
             given = getattr(type(self), key, None)
-            if key not in kwargs and (isinstance(given, dict) or sc.isnumber(given)):
+            if not instance and (isinstance(given, dict) or sc.isnumber(given)):
                 kwargs[key] = dict(given) if isinstance(given, dict) else given
         init_prev = kwargs.pop('init_prev', None)
         init = kwargs.pop('init', None)
