@@ -912,7 +912,10 @@ time_names = {'ti', 't', 'now', 'year', 'month', 'day', 'date', 'dt', 'dt_year',
 
 
 def check_not_time(who, what):
-    """ who= says who something applies to; a function that reads only the time (`lambda sim: sim.ti > 20`) says when, so it is an error pointing to when= """
+    """ who= says who something applies to: a bare True, False, or number says nobody in particular, and a function that reads only the time (`lambda sim: sim.ti > 20`) says when, so each is an error """
+    if isinstance(who, (bool, int, float, np.bool_, np.number)):
+        errormsg = f'who= of {what} says who it applies to (a condition, a state, agents, or a function of the sim), not {who!r}; leave it out for everyone'
+        raise TypeError(errormsg)
     names = getattr(getattr(who, '__code__', None), 'co_names', None)
     if callable(who) and names and set(names) <= time_names:
         errormsg = f'who= of {what} says who it applies to, but {getattr(who, "__name__", "the function")} reads only the time ({sc.strjoin(sorted(set(names)))}), which says when it applies: give it as when=, e.g. when=ss.schedule(start=...), or a function of the date, when=lambda now: now.month == 1'
@@ -929,7 +932,8 @@ def split_delivery(on=None, who=None, where=None):
     eligible). where (from who=) is anything else that decides it: a condition on the population, a function of the sim, or a
     condition on people too. who and where are joined with &, and neither takes an event.
     """
-    check_not_time(where, 'an event')
+    for val in [who, where]:
+        check_not_time(val, 'an event')
     for key,val in dict(on=on, who=who, where=where).items():
         if isinstance(val, (list, tuple)):
             errormsg = f'{"when" if key == "on" else "who"}= of an event takes one condition or event, not a list; join them with | (any of them) or & (all of them), e.g. when=a.positive | b.positive'

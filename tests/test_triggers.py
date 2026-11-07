@@ -319,7 +319,8 @@ def test_paths_and_memory():
                         (lambda: ss.modify('a.pars.b', multiply=2, start=2020), 'ss.schedule'), (lambda: ss.modify('a.pars.b', multiply=2, when=[2025]), 'ss.schedule'), # Old keywords
                         (lambda: ss.modify('a.pars.b', multiply=2, hold=3), 'until='), (lambda: ss.attr(1, on=X), 'use when='), (lambda: ss.birth(on=X), 'use when='), # Old keywords
                         (lambda: ss.move(X, Y, where=X), 'use who='), (lambda: ss.schedule(when=lambda now: True), 'as at='), # Old keywords
-                        (lambda: ss.modify('a.pars.b', multiply=2, who=lambda sim: sim.ti > 20), 'give it as when=')]: # who= of the time alone says when
+                        (lambda: ss.modify('a.pars.b', multiply=2, who=lambda sim: sim.ti > 20), 'give it as when='), # who= of the time alone says when
+                        (lambda: ss.vaccinate(efficacy=0.9, who=True), 'leave it out'), (lambda: ss.Transition(X, Y, rate=0.1, who=1.0), 'leave it out')]: # who= says who, not everyone or nobody
         with pytest.raises((TypeError, ValueError), match=match):
             make()
     return
