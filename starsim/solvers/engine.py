@@ -1835,7 +1835,7 @@ class Engine(Telling, Effects):
 
     def die_share(self, tr, shares, ev=None):
         """ The probability of ss.dead in a split (0 if it is not one of the destinations): what the shares of the states leave over, less what ss.stay takes """
-        if not tr._to_dead:
+        if not tr.may_die:
             return 0.0
         ev = ev or self.eval
         left = 1.0 - sum(shares, 0.0)

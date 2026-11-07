@@ -152,7 +152,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
 
     def init_pre(self):
         for name,tr in self.graph.transitions.items():
-            if tr._to_dead and tr.stays and self.integer:
+            if tr.may_die and tr.stays and self.integer:
                 ss.note(f'"{name}" of "{self.mod.name}" splits between ss.dead and ss.stay: with solver="{self.solver}", the count of its deaths is drawn apart from the move, so agrees with the number who died on average, not in each run; run with solver="abm" or "ode" for counts that agree in each run', sim=self.sim)
         if self.laid_out is None:
             self.build()
@@ -1458,7 +1458,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                             credits.append((self.tr_index[f'{track.tr.name}.{dst.name}'], weight*p*dp, me))
                             sub = len(credits) - 1
                         enter(dst.name, weight*p*dp, comps, credits, path + (name,), sub)
-                    if track.tr._to_dead and track.tr._ends and track.tr.stays: # Otherwise, the flow less the flows to its states (see count_deaths())
+                    if track.tr.may_die and track.tr._ends and track.tr.stays: # Otherwise, the flow less the flows to its states (see count_deaths())
                         credits.append((self.tr_index[f'{track.tr.name}.dead'], weight*p*die, me))
                     if track.tr.stays: # Those who took ss.stay
                         comps.append((self.stay_comp(name), weight*p*(1 - sum(dps) - die)))
@@ -1501,7 +1501,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                     flow.credits += [(ind, w*p, par + off if par >= 0 else -1) for ind,w,par in credits]
                     flow.credits += [(sy.row, p*sy.mask, -2) for sy in syn] # Moved in another module too
                 die = self.die_share(flow.tr, ps) # Those who took ss.dead go to no compartment: they leave the model, as by an outflow
-                if flow.tr._to_dead and flow.tr._ends and flow.tr.stays: # Otherwise, the flow less the flows to its states (see count_deaths())
+                if flow.tr.may_die and flow.tr._ends and flow.tr.stays: # Otherwise, the flow less the flows to its states (see count_deaths())
                     flow.credits.append((self.tr_index[f'{flow.tr.name}.dead'], die, -2))
                 if flow.tr.stays and src is not None: # Those who took ss.stay go to the state's compartment with no exit of its own, and are not in the flow
                     flow.targets.append((self.stay_comp(src), 1 - sum(ps) - die, None))
@@ -3362,7 +3362,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
     def count_deaths(self, flows):
         """ For a split between states and ss.dead (with no ss.stay): those who died are its flow less those who went to a state, so the two agree in each run; flows are by flow along the axis before the last (the groups) """
         if self.splits is None:
-            self.splits = [tr for tr in self.graph.transitions.values() if tr._to_dead and tr._ends and not tr.stays]
+            self.splits = [tr for tr in self.graph.transitions.values() if tr.may_die and tr._ends and not tr.stays]
         splits = self.splits
         if splits:
             flows = np.array(flows) # A copy, which can be written to

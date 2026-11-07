@@ -156,7 +156,7 @@ class Compiled(Agents):
         k.loops = np.concatenate([self.loops_of[s.name] for s in states] + [np.zeros(0, bool)]).astype(bool)
 
         # Destinations
-        dsts = [[index[d.name] for d in (tr.dest or [])] + [-1]*bool(tr._outflow or tr._to_dead) for tr in trs] # -1 for a death
+        dsts = [[index[d.name] for d in (tr.dest or [])] + [-1]*bool(tr._outflow or tr.may_die) for tr in trs] # -1 for a death
         k.dst_ptr, k.dst_state = ptr(dsts), ints([d for x in dsts for d in x])
         k.src_mask = np.zeros((nt, ns), dtype=bool)
         for i, tr in enumerate(trs):
@@ -245,7 +245,7 @@ class Compiled(Agents):
         k.nt, k.ns, k.ntrig = nt, ns, len(trigs)
         k.one = np.ones(1)
         k.dt = float(self.dt)
-        k.dst_keys = [[f'{tr.name}.{d.name}' for d in (tr.dest or [])] + [f'{tr.name}.dead']*bool(tr._to_dead) for tr in trs]
+        k.dst_keys = [[f'{tr.name}.{d.name}' for d in (tr.dest or [])] + [f'{tr.name}.dead']*bool(tr.may_die) for tr in trs]
         k.scan_sched = k.sched_k & ~k.comp_state # Exits of a state with competing rates too are taken by leave()
         k.stat1 = (k.sched_k, k.ex_ptr, k.ex_tr, k.nbr, k.br_col, k.loops, k.pos, k.kind, k.split, k.dst_ptr, k.dst_state, k.dst_col, k.dw, k.adj, k.aft, k.has_dw, k.src_mask, k.ae_ptr, k.ae_trig, k.tr_trig)
         k.stat2 = (k.trig_dist, k.trig_fixed, np.zeros(1), k.fam) # (trig_mean is not used: a delay given as a number is an exponential distribution, see kadd_mean())

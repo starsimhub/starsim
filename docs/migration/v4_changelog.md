@@ -166,7 +166,7 @@ Names were renamed where they meant different things in different places, or whe
 - `ss.Pregnancy` and `ss.Lactation` no longer set the unit of a model's bare numbers from their own typed defaults (weeks and years), which made a model with a bare `beta` and a pregnancy raise `IncompatibleTypes`.
 
 ## New features
-- `tr.dies` says whether people die by a transition (`ss.death()`, `I >> ss.dead`, or a split with `ss.dead`), and not for people leaving alive (`ss.emigration()`); `sim.started` says whether a run has begun (`sim.ti` is 0 both before the first step and during it, so the number of steps taken is `sim.ti + sim.started`).
+- `tr.dies` says whether everyone who takes a transition dies (`ss.death()`, `I >> ss.dead`, but not people leaving alive, `ss.emigration()`), and `tr.may_die` whether some do, by a branch to `ss.dead` in a split (so `tr.dies or tr.may_die` is whether anyone dies by it); `sim.started` says whether a run has begun (`sim.ti` is 0 both before the first step and during it, so the number of steps taken is `sim.ti + sim.started`).
 - Deliveries take `skip_reached_within=`, e.g. `ss.screen(..., interval=ss.months(1), skip_reached_within=ss.years(1))`, which skips the people the delivery reached less than that long ago (a re-screening interval, or no re-dosing within a year); agents only.
 - `ss.Sim(keep_times=True)` keeps the times of entering every state for one sim (the default is `ss.options.keep_times`).
 - `ss.peryear(ts)` (and every other rate and duration) takes an `ss.timeseries`, giving each value the type, as `ss.peryear(1.0)*ts` does.

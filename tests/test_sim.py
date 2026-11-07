@@ -806,7 +806,7 @@ def test_small_fixes():
     assert I0(ss.bernoulli(p=lambda sim: 0.1)) == I0(lambda sim: 0.1) and I0(ss.bernoulli(0.1)) == I0(0.1) # A declared disease raised a TypeError
     S, I, R = ss.states('S I R')
     trs = dict(death=ss.death(rate=0.01), die=I >> ss.dead @ 0.1, split=ss.Transition(I, [R, ss.dead], dur=5, p=0.9), leave=ss.emigration(rate=0.1), recover=I >> R @ 0.1)
-    assert [tr.dies for tr in trs.values()] == [True, True, True, False, False]
+    assert [(tr.dies, tr.may_die) for tr in trs.values()] == [(True, False), (True, False), (False, True), (False, False), (False, False)]
     res = ss.Sim(demographics=[ss.emigration(rate=ss.peryear(0.1))], diseases='sir', total_pop=1000, stop=2005, solver='ode', verbose=0).run().results
     assert np.isclose(res.emigrated[:-1].sum(), 1000 - res.alive[-1]) # Up to the last stock, at the start of the last step; a compartmental run counted no one as having left
     rerun = ss.Sim(diseases='sir', networks='random', n_agents=500, stop=2005, verbose=0).run()
