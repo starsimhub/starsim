@@ -6,10 +6,10 @@ Each solution starts from the model of the tutorial, in four towns:
 import starsim as ss
 
 towns = ss.geo.geography(
-    names = ['Riverton', 'Hillside', 'Lakeview', 'Fairfield'],
-    pop   = [100_000, 40_000, 20_000, 10_000],
-    x     = [0, 20, 35, 60],
-    y     = [0, 10, -15, 5],
+    names       = ['Riverton', 'Hillside', 'Lakeview', 'Fairfield'],
+    populations = [100_000, 40_000, 20_000, 10_000],
+    x           = [0, 20, 35, 60],
+    y           = [0, 10, -15, 5],
 )
 
 def make_towns(immune=ss.by(age=[0.8, 0.92, 0.98]), mobility=ss.geo.gravity(away=0.01)):

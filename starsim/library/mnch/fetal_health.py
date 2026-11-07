@@ -13,7 +13,7 @@ Architecture:
     - `treat_pregnant` (Intervention): treats infected pregnant women within a
       specified year range and partially reverses fetal damage.
 
-Both modules require `ssl.mnch.FetalHealth()` in the sim's `custom` modules and
+Both modules require `ssl.mnch.FetalHealth()` in the sim's `modules` and
 `ss.Pregnancy()` in demographics. The connector also requires the target
 disease (default: an `ssl.AgentSIR` named "sir") to be present.
 
@@ -422,7 +422,7 @@ class treat_pregnant(ss.Intervention):
         if self.disease_name not in sim.diseases:
             raise ValueError(f'treat_pregnant requires disease "{self.disease_name}" but it was not found in the sim.')
         if 'fetal_health' not in sim.custom:
-            raise ValueError('treat_pregnant requires a FetalHealth module. Add ssl.mnch.FetalHealth() to custom.')
+            raise ValueError('treat_pregnant requires a FetalHealth module. Add it with modules=ssl.mnch.FetalHealth().')
 
         # Default year bounds to the full sim period
         if self.start_year is None: self.start_year = sim.t.start
@@ -471,7 +471,7 @@ class fetal_infection(ss.Connector):
     2. During pregnancy, when a new infection occurs (detected in `step()`
        by checking `ti_infected == self.ti - 1`, since transmission happens after connectors).
 
-    Requires `ssl.mnch.FetalHealth()` in `custom` and an SIR disease written as code (`ssl.AgentSIR(name="sir")`) in `diseases`.
+    Requires `ssl.mnch.FetalHealth()` in `modules` and an SIR disease written as code (`ssl.AgentSIR(name="sir")`) in `diseases`.
 
     Note: CRN safe.
 
@@ -523,7 +523,7 @@ class fetal_infection(ss.Connector):
 
         # Validate that the required modules exist
         if 'fetal_health' not in sim.custom:
-            raise ValueError('fetal_infection requires a FetalHealth module. Add ssl.mnch.FetalHealth() to custom.')
+            raise ValueError('fetal_infection requires a FetalHealth module. Add it with modules=ssl.mnch.FetalHealth().')
         if 'sir' not in sim.diseases:
             raise ValueError('fetal_infection requires an SIR disease module.')
         return

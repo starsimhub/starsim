@@ -23,7 +23,8 @@ This is the model from [T5 – Interventions and scenarios](t5_interventions.qmd
 ```{python}
 import starsim as ss
 
-S, E, I, R = ss.states('S E I R')
+S, R = ss.states('S R')
+E, I = ss.states('E I', infected=True) # Infected: counted in the results infected and prevalence
 beta = ss.par(0.14, bounds=[0.05, 0.5]) # The rate of infection per contact with an infectious person, per day
 infection   = S >> E @ beta*I
 progression = E >> I @ ss.days(10) # Latent for 10 days on average
@@ -51,10 +52,10 @@ The town, Riverton, has three smaller neighbors. A **geography** ([`ss.geo.geogr
 
 ```{python}
 towns = ss.geo.geography(
-    names = ['Riverton', 'Hillside', 'Lakeview', 'Fairfield'],
-    pop   = [100_000, 40_000, 20_000, 10_000],
-    x     = [0, 20, 35, 60], # Kilometers east of Riverton
-    y     = [0, 10, -15, 5], # Kilometers north of Riverton
+    names       = ['Riverton', 'Hillside', 'Lakeview', 'Fairfield'],
+    populations = [100_000, 40_000, 20_000, 10_000],
+    x           = [0, 20, 35, 60], # Kilometers east of Riverton
+    y           = [0, 10, -15, 5], # Kilometers north of Riverton
 )
 towns.plot()
 ```
@@ -101,7 +102,7 @@ When the movement between places is known, from a survey or from mobile phone da
 
 ## On a map
 
-A line for each place shows when each outbreak happens, but not where. `map()` draws a result on a map of the places. By default, it maps the result's summary over the run, as `summarize()` gives it: here the share of each town's people who are infectious (the prevalence), on average over the year:
+A line for each place shows when each outbreak happens, but not where. `map()` draws a result on a map of the places. By default, it maps the result's summary over the run, as `summarize()` gives it: here the share of each town's people who are infected (the prevalence), on average over the year:
 
 ```{python}
 sim.results.measles.prevalence.map()

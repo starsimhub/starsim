@@ -28,7 +28,8 @@ The model is a measles outbreak in a town of 100,000 people, 90% of whom are alr
 import numpy as np
 import starsim as ss
 
-S, E, I, R = ss.states('S E I R')
+S, R = ss.states('S R')
+E, I = ss.states('E I', infected=True) # Infected: counted in the results infected and prevalence
 beta   = ss.par(1.5, bounds=[0.5, 4])       # Transmission rate per day: unknown
 report = ss.par(0.3, bounds=[0.05, 1])      # Share of cases reported: unknown
 I0     = ss.par(0.0001, bounds=[1e-5, 1e-3]) # Share infectious at the start (10 people): unknown

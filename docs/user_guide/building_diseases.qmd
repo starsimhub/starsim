@@ -362,7 +362,7 @@ S, I, R = ss.states('S I R')
 strains = ss.Strains(
     ['wild', 'variant'],
     rel_trans = [1, 1.5],     # The variant is 1.5 times as transmissible
-    split     = [0.99, 0.01], # The share of each among the first infections
+    fractions = [0.99, 0.01], # The share of each among the first infections
     immunity  = ss.immunity(due_to=R, protection=[[1, 0.5], [0.5, 1]]), # Full protection against the same strain, half against the other
 )
 flu = ss.Disease(
