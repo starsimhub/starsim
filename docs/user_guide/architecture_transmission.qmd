@@ -70,7 +70,7 @@ Because modifiers are declared, Starsim can list them all, before anything runs.
 
 ```{python}
 masks       = ss.modify(sir.rel_sus, multiply=0.6, who=ss.person.age > 65, when=ss.schedule(start=ss.days(20)))
-vaccination = ss.vaccinate(efficacy=0.85, who=ss.person.age < 15, when=[ss.days(30)], coverage=0.7)
+vaccination = ss.vaccinate(efficacy=0.85, who=ss.person.age < 15, when=ss.days(30), coverage=0.7)
 sim = ss.Sim(sir, interventions=[masks, vaccination], pars=dict(beta=0.5), stratify=dict(age=[0, 15, 65]), unit='day', stop=ss.days(100), verbose=0)
 sim.what_modifies(sir.rel_sus)
 ```

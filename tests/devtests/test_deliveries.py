@@ -1026,7 +1026,7 @@ def test_waning_functions():
         S, I = ss.states('S I')
         mal = ss.Disease(infection=S >> I @ ss.peryear(2.0), recovery=I >> S @ ss.days(20), name='mal')
         vax = ss.Vaccine(efficacy=dict(infection=1.0), waning=fn, name='vax')
-        sim = ss.Sim(mal, interventions=ss.vaccinate(vax, when=[ss.days(10)], coverage=1.0, name='once'), n_agents=1000, unit=unit, dt=dt, start=0, stop=ss.days(200), verbose=0).run()
+        sim = ss.Sim(mal, interventions=ss.vaccinate(vax, when=ss.days(10), coverage=1.0, name='once'), n_agents=1000, unit=unit, dt=dt, start=0, stop=ss.days(200), verbose=0).run()
         inf = sim.results.mal.infection
         assert isinstance(seen['t'], ss.Duration) and len(seen['uids']) == 1000
         assert inf[12:108].sum() == 0 and inf[115:].sum() > 0, unit # Protected for 100 days, in either unit
@@ -1036,7 +1036,7 @@ def test_waning_functions():
     def two(waning, solver='abm'):
         mal = ss.Disease(infection=S >> I @ ss.perday(0.1)*I, recovery=I >> S @ ss.days(20), init_prev=0.05, name='mal')
         vax = ss.Vaccine(efficacy=dict(acquisition=0.9, transmission=0.5), waning=waning, name='vax')
-        return ss.Sim(mal, interventions=ss.vaccinate(vax, when=[ss.days(10)], coverage=1.0, name='once'), n_agents=1000, total_pop=1000, unit='day', stop=200, solver=solver, verbose=0).run()
+        return ss.Sim(mal, interventions=ss.vaccinate(vax, when=ss.days(10), coverage=1.0, name='once'), n_agents=1000, total_pop=1000, unit='day', stop=200, solver=solver, verbose=0).run()
     sim = two(dict(acquisition=ss.boxcar(plateau=ss.days(50)), transmission=None))
     inf = sim.results.mal.infection
     assert inf[12:55].sum() < inf[65:108].sum() # Acquisition protected for 50 days only (transmission for good)
@@ -1075,7 +1075,7 @@ def test_weighted_counts():
                        init=dict(I=0.05, Sv=1.0), name='mal')
         d.stratify(biting=dict(zip(['lo', 'mid', 'hi'], [1/3]*3)))
         size = dict(n_agents=10_000) if solver == 'abm' else dict(total_pop=10_000)
-        intv = ss.vaccinate(itn, when=[ss.days(50)], coverage=cov, name='nets') if cov is not None else None
+        intv = ss.vaccinate(itn, when=ss.days(50), coverage=cov, name='nets') if cov is not None else None
         return ss.Sim(d, interventions=intv, unit='day', stop=200, solver=solver, verbose=0, **size).run()
     prev = {(s,wt):mosquitoes(s, wt).results.mal.I[[50, 150]]/10_000 for s in ['abm', 'ode'] for wt in [True, False]}
     assert np.allclose(prev['abm', True], prev['ode', True], atol=0.02) and np.all(prev['ode', True] > prev['ode', False] + 0.01), prev
@@ -1092,7 +1092,7 @@ def test_weighted_counts():
         d = ss.Disease(infection=S >> A @ ss.perday(0.001)*E.n/(S + A).n, recovery=A >> S @ ss.days(20), shed=ss.outside >> E @ ss.perday(1.0)*A.n_infectious, decay=E >> ss.dead @ ss.days(1), init_prev=0.1, name='ty')
         drug = ss.Treatment(efficacy=dict(transmission=eff), during=d.A, name='drug')
         size = dict(n_agents=10_000) if solver == 'abm' else dict(total_pop=10_000)
-        return ss.Sim(d, interventions=ss.treat(drug, who=d.A, when=[ss.days(1)], coverage=0.5, name='tx'), unit='day', stop=5, solver=solver, verbose=0, **size).run().results.ty.E[3]
+        return ss.Sim(d, interventions=ss.treat(drug, who=d.A, when=ss.days(1), coverage=0.5, name='tx'), unit='day', stop=5, solver=solver, verbose=0, **size).run().results.ty.E[3]
     for solver in ['abm', 'ode']:
         ratio = shed(solver, 0.5)/shed(solver, 0.0)
         assert 0.7 < ratio < 0.85, (solver, ratio) # Half of them at half: 3/4

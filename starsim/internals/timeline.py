@@ -698,7 +698,7 @@ class schedule:
     up to the next step's `now`): usually 0 or 1, so `if sched.due():` works. A module can have as many as it needs.
 
     Args:
-        times (date/dur/list/func): optionally, by position: the times (a time or a list of them, e.g. `['2021-06-01', '2023-06-01']`, or years, or with no calendar durations from 0, as `ss.days(10)`, which is day 10, not every 10 days), or a function of the date of the start of each step (its `now`), true when it is due (e.g. `lambda now: now.month == 1`); told apart by type
+        at (date/dur/list/func): optionally (by position or keyword): the times (a time or a list of them, e.g. `['2021-06-01', '2023-06-01']`, or years, or with no calendar durations from 0, as `ss.days(10)`, which is day 10, not every 10 days), or a function of the date of the start of each step (its `now`), true when it is due (e.g. `lambda now: now.month == 1`); told apart by type
         every (dur): how often; whole months and years are calendar offsets, so every month is the same day of the month
         start (date/dur): the first time, as a date, a year, or with no calendar a duration from 0 (default: the start of the timeline), for `every`
         stop (date/dur): no times after this, likewise (default: the end of the timeline)
@@ -721,16 +721,14 @@ class schedule:
                     ...
         ```
     """
-    def __init__(self, times=None, /, every=None, start=None, stop=None, **kwargs):
+    def __init__(self, at=None, every=None, start=None, stop=None, **kwargs):
         for key in kwargs:
-            if key in ['at', 'when']:
-                raise TypeError(f'ss.schedule() takes no {key}=; give {"the times" if key == "at" else "the function"} as its first argument, e.g. ss.schedule({"[2025, 2030]" if key == "at" else "lambda now: now.month == 1"}, start=..., stop=...)')
+            if key == 'when':
+                raise TypeError('ss.schedule() takes no when=; give the function as at= (or first), e.g. ss.schedule(lambda now: now.month == 1)')
             raise TypeError(f'ss.schedule() got an unexpected keyword argument {key!r}')
-        at, when = None, None
-        if callable(times) and not isinstance(times, ss.TimePar): # A duration is a time (day 10 for ss.days(10)), as in when=; how often is every=
-            when = times
-        elif times is not None:
-            at = times
+        when = None
+        if callable(at) and not isinstance(at, ss.TimePar): # A duration is a time (day 10 for ss.days(10)), as in when=; how often is every=
+            at, when = None, at
         n_given = sum(x is not None for x in [every, at, when])
         if n_given > 1 or (n_given == 0 and start is None and stop is None):
             raise ValueError('A schedule needs how often (every=, e.g. ss.schedule(every=ss.months(3))), the times (ss.schedule([2025, 2030])), or a function of the date (ss.schedule(lambda now: now.month == 1)), or else a start= and/or stop= (every step between them)')

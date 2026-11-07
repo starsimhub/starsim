@@ -419,7 +419,7 @@ def test_treat_any_transition():
     for solver,pars in [('ode', {}), ('abm', dict(n_agents=10_000))]:
         S, I, R, P = ss.states(4)
         sir = ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(10), protect=ss.Transition(S, P, rate=ss.perday(0)), init=dict(I=0.01), name='sir')
-        shield = ss.treat(ss.Treatment(moves=sir.protect), who=sir.S, when=[ss.days(0)], coverage=0.5)
+        shield = ss.treat(ss.Treatment(moves=sir.protect), who=sir.S, when=ss.days(0), coverage=0.5)
         res = ss.Sim(sir, interventions=shield, stop=100, solver=solver, **kw, **pars).run().results
         print(f'{solver}: {res.sir.protect.sum():.0f} protected')
         assert np.isclose(res.sir.protect.sum(), 0.5*0.99*kw['total_pop'], rtol=0.05)
@@ -670,7 +670,7 @@ def test_paths():
     for solver in ['ode', 'abm']:
         kw = dict(solver=solver, init_n=dict(I=10))
         assert R(run(lambda d: ss.treat(cure=1.0, who=d.I, coverage=ss.perday(0.1)), **kw)) == R(run(lambda d: ss.treat(cure=1.0, who='seir.I', coverage=ss.perday(0.1)), **kw))
-        moves = [R(run(lambda d: ss.Event(move(d), when=[ss.days(10)], p=0.3), **kw)) for move in [lambda d: d.S >> d.R, lambda d: 'seir.S >> seir.R', lambda d: 'S >> R']]
+        moves = [R(run(lambda d: ss.Event(move(d), when=ss.days(10), p=0.3), **kw)) for move in [lambda d: d.S >> d.R, lambda d: 'seir.S >> seir.R', lambda d: 'S >> R']]
         assert moves[0] == moves[1] == moves[2]
         mods = [R(run(lambda d: ss.modify('seir.infection', multiply=0.5, who=where(d)), key='connectors', **kw)) for where in [lambda d: d.I, lambda d: 'seir.I']]
         assert mods[0] == mods[1]
@@ -678,7 +678,7 @@ def test_paths():
         ss.Event('seir.S >> sir.R', when=[1]) # The states of two modules
     with pytest.raises(ValueError):
         ss.treat(cure=1.0, who='I') # A path needs its module
-    seeding = lambda d: ss.Event(d.S >> d.I, when=[ss.days(10)], p=0.001)
+    seeding = lambda d: ss.Event(d.S >> d.I, when=ss.days(10), p=0.001)
     note = lambda sim: any('give the disease init=dict(I=0)' in note for note in sim.notes)
     sim = run(seeding)
     assert note(sim) and sim.results.seir.E[0] > 0 # The default seeding (into E, where infection puts people), with a note

@@ -48,7 +48,7 @@ def test_undriven():
     # Moved by a treatment, as agents and compartments
     for solver,pars in [('ode', dict(total_pop=10_000)), ('abm', dict(n_agents=10_000))]:
         sis = make_sis(forms['op'])
-        tx = ss.treat(ss.Treatment(cure={'cure': 0.9}), when=[ss.days(20)], coverage=0.3)
+        tx = ss.treat(ss.Treatment(cure={'cure': 0.9}), when=ss.days(20), coverage=0.3)
         sim = ss.Sim(sis, interventions=tx, solver=solver, stop=40, **kw, **pars).run()
         res = sim.results
         assert np.isclose(res.sis.cure.sum(), 0.9*res.tx.delivered.sum(), rtol=0.05)
@@ -76,7 +76,7 @@ def test_cure_forms():
     for key,form in forms.items():
         sis = make_sis(lambda S, I: I >> S @ 0)
         kwargs = form(sis) if key.startswith('moves') else dict(cure=form(sis))
-        tx = ss.treat(ss.Treatment(**kwargs), when=[ss.days(20)], name='tx')
+        tx = ss.treat(ss.Treatment(**kwargs), when=ss.days(20), name='tx')
         sim = ss.Sim(sis, interventions=tx, solver='ode', stop=40, **kw).run()
         cured[key] = sim.results.tx.cured.sum()
     assert np.allclose(list(cured.values()), cured['number'], rtol=1e-6), cured

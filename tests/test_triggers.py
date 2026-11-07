@@ -308,7 +308,7 @@ def test_paths_and_memory():
     # Every event remembers: entering or leaving a state, and a branch of a transition, as a transition does
     def delivered(who):
         d = sir()
-        return ss.Sim(d, interventions=ss.Event(d.R >> d.S, who=who(d), when=[ss.days(40)], name='ev'), **pars).run().results.ev.delivered.sum()
+        return ss.Sim(d, interventions=ss.Event(d.R >> d.S, who=who(d), when=ss.days(40), name='ev'), **pars).run().results.ev.delivered.sum()
     assert delivered(lambda d: d.infection.n_times >= 2) == delivered(lambda d: d.I.enter.n_times >= 2) == delivered(lambda d: d.infection.to(d.I).n_times >= 2)
     assert delivered(lambda d: d.recovery.since < 3) == delivered(lambda d: d.I.exit.since < 3) > 0
     assert delivered(lambda d: ~d.I.enter.ever) == delivered(lambda d: ~d.infection.ever)
@@ -318,7 +318,7 @@ def test_paths_and_memory():
     for make, match in [(lambda: ss.Transition(X, Y, on=X), 'use when='), (lambda: ss.Transition(X, Y, where=X), 'use who='), (lambda: ss.Transition(X, Y, when=ss.ref('a.b'), dur=3), 'delay='), # Old keywords
                         (lambda: ss.modify('a.pars.b', multiply=2, start=2020), 'ss.schedule'), (lambda: ss.modify('a.pars.b', multiply=2, when=[2025]), 'ss.schedule'), # Old keywords
                         (lambda: ss.modify('a.pars.b', multiply=2, hold=3), 'until='), (lambda: ss.attr(1, on=X), 'use when='), (lambda: ss.birth(on=X), 'use when='), # Old keywords
-                        (lambda: ss.move(X, Y, where=X), 'use who='), (lambda: ss.schedule(at=[2020]), 'first argument'), (lambda: ss.schedule(when=lambda now: True), 'first argument')]: # Old keywords
+                        (lambda: ss.move(X, Y, where=X), 'use who='), (lambda: ss.schedule(when=lambda now: True), 'as at=')]: # Old keywords
         with pytest.raises((TypeError, ValueError), match=match):
             make()
     return
