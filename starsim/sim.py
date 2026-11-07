@@ -648,6 +648,9 @@ class Sim(ss.modules.Base):
             mods = self._named_modules(attr)
             if len(mods) == 1:
                 return mods[0]
+        if not self.__dict__.get('initialized') and attr in ss.modules.module_types() + ['people']: # Made by init(), from what was given
+            given = f'; until then, what was given is sim.pars.{attr}' if attr != 'people' else ''
+            raise AttributeError(f'sim.{attr} is made when the sim is initialized, by sim.init() (or sim.run()){given}')
         raise AttributeError(f"'{type(self).__name__}' object has no attribute '{attr}'")
 
     def __getitem__(self, key):
@@ -1388,6 +1391,7 @@ class Sim(ss.modules.Base):
         """
         # Let People handle its own result initialization
         self.people.init_results()
+        ss.solvers.init_people(self) # In a compartmental run, the same results, from the declared modules
 
         # With dynamic rescaling, store the scale factor for each timestep, and the people no agent stands for yet (see rescale())
         if self.pars.rescale:

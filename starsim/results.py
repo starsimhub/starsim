@@ -13,7 +13,7 @@ import pandas as pd
 import sciris as sc
 import starsim as ss
 import matplotlib as mpl
-import matplotlib.pyplot as plt
+plt = sc.lazyimport('matplotlib.pyplot') # Imported when first used, since most runs never plot
 
 
 def get_ax(fig, ax, kw):

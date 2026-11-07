@@ -169,6 +169,7 @@ class Product(EventSource, ss.Module):
     A product whose effect is code of your own defines `administer()`.
     """
     holds = False # Whether people hold it (see ss.products.Held)
+    take = None # For an all-or-nothing vaccine, the share fully protected (see ss.Vaccine)
     cost = None
     disease = None # Set by its delivery
 

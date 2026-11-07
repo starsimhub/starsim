@@ -1515,6 +1515,46 @@ def test_state_as_result():
     assert np.array_equal(r.n_infected.select(sex='female'), r.I.select(sex='female'))
     return
 
+
+@sc.timer()
+def test_branch_ends():
+    sc.heading('Testing ss.dead as a branch: by group, adjusted, and modified, with the other branches sharing what is left')
+    def make(dead=0.02, **kw):
+        S, I, R, H = ss.states('S I R H')
+        dis = ss.Disease(infection=S >> I @ ss.perday(0.3)*I, outcome=I >> {H: 0.1, ss.dead: dead, R: None} @ ss.days(8), init_n=dict(I=10), name='sir')
+        if kw:
+            dis.stratify(age={0: 0.25, 18: 0.6, 65: 0.15}, **kw)
+        return dis
+    run = lambda dis, **kw: ss.Sim(dis, total_pop=10_000, stop=ss.days(200), verbose=0, solver='ode', **kw).run().results
+    share = lambda r: r.died.sum()/(r.died.sum() + r.sir.H[-1] + r.sir.R[-1])
+    base = run(make())
+    assert np.isclose(share(base), 0.02)
+    byage = run(make(dead=ss.by(age=[0.001, 0.01, 0.1]), adjust=None)) # A branch probability by group (once a crash)
+    assert np.isclose(share(byage), 0.25*0.001 + 0.6*0.01 + 0.15*0.1)
+    adj = run(make(adjust={'outcome.dead': [0.1, 1, 5]})) # One destination adjusted by group
+    assert np.isclose(share(adj), 0.02*(0.25*0.1 + 0.6 + 0.15*5))
+    dead = run(make(), connectors=ss.modify('sir.outcome.dead', multiply=3))
+    assert np.isclose(share(dead), 0.06)
+    hosp = run(make(), connectors=ss.modify('sir.outcome.H', multiply=3)) # The others (R and ss.dead) share what is left, so deaths do not vanish
+    assert np.isclose(share(hosp), 0.02*0.7/0.9)
+    return
+
+
+@sc.timer()
+def test_infected_sources():
+    sc.heading('Testing that a source of infection counts as infected when only some states are marked, and that alive exists during a compartmental run')
+    S, I, R = ss.states('S I R')
+    E = ss.State(name='E', infected=True) # I, the source of infection, is not marked
+    d = ss.Disease(S, E, I, R, infection=S >> E @ ss.perday(0.5)*I, onset=E >> I @ ss.days(3), recovery=I >> ss.dead @ ss.days(7), init_n=dict(I=10), name='seir')
+    seen = {} # The number alive read during each step
+    sim = ss.Sim(d, connectors=ss.modify('seir.infection', multiply=lambda sim: seen.update({sim.ti: sim.results.alive[sim.ti]}) or 1.0), total_pop=10_000, stop=ss.days(60), verbose=0, solver='ode').run()
+    tis = sorted(seen)
+    assert np.allclose([seen[ti] for ti in tis], sim.results.alive[tis]) and seen[tis[-1]] < seen[0] # During the run, as after it
+    assert np.isclose(sim.diseases.seir.R0(), 3.5)
+    r = sim.results.seir
+    assert np.allclose(r.infected, r.E + r.I)
+    return
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -1549,3 +1589,5 @@ if __name__ == '__main__':
     casc  = test_cascade()
     cascb = test_cascade_binomial()
     state = test_state_as_result()
+    ends  = test_branch_ends()
+    infs  = test_infected_sources()

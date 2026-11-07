@@ -9,7 +9,7 @@ Used with: agents and compartments; declared and coded modules
 import numpy as np
 import sciris as sc
 import starsim as ss
-import matplotlib.pyplot as plt
+plt = sc.lazyimport('matplotlib.pyplot') # Imported when first used, since most runs never plot
 
 
 class Analyzer(ss.Module):

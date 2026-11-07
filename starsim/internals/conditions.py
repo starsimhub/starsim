@@ -898,7 +898,12 @@ def split_delivery(on=None, who=None, where=None):
             errormsg = f'on= of a delivery is the event that triggers it (e.g. on=screening.positive); {on!r} has {what}, which says who is eligible, so give it as who= (a condition on people) or where= (on the population)'
             raise TypeError(errormsg)
     for key,val in [('who', who), ('where', where)]:
-        if val is not None and (isinstance(val, str) or has_event(as_cond(val))):
+        if isinstance(val, str) and (len(val.split('.')) != 2 or not all(val.split('.'))):
+            errormsg = f'{key}= of a delivery as a string is a state by its path, "module.state", e.g. {key}="sir.I" (as ss.ref("sir.I")), or the state itself ({key}=sir.I); not {val!r}'
+            raise ValueError(errormsg)
+    who, where = [ref(val) if isinstance(val, str) else val for val in [who, where]] # A state by its path, e.g. who='sir.I', as ss.ref('sir.I')
+    for key,val in [('who', who), ('where', where)]:
+        if val is not None and has_event(as_cond(val)):
             errormsg = f'{key}= of a delivery is a condition, who is eligible; {val} is an event (or has one), which triggers delivery, so give the event as on=, and any condition in who= (e.g. on=screening.positive, who=ss.person.age > 15)'
             raise TypeError(errormsg)
     if who is not None and not on_people(as_cond(who)):

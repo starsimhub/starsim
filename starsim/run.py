@@ -11,7 +11,7 @@ import functools as ft
 import numpy as np
 import pandas as pd
 import sciris as sc
-import matplotlib.pyplot as plt
+plt = sc.lazyimport('matplotlib.pyplot') # Imported when first used, since most runs never plot
 import starsim as ss
 
 

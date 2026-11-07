@@ -990,7 +990,15 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
 
     def state_counts(self):
         """ The number of people in each state (rows) and group (columns) """
-        return np.array([self.y[self.state_comps[name]].sum(axis=0) for name in self.selector.states]).reshape(self.selector.shape)
+        if not isinstance(self.y, np.ndarray): # A view of the compartments of diseases tracked jointly (see ss.solvers.Joint)
+            return np.array([self.y[self.state_comps[name]].sum(axis=0) for name in self.selector.states]).reshape(self.selector.shape)
+        key = (id(self.state_comps), len(self.y))
+        if self.__dict__.get('_counts_key') != key: # Which compartments each state sums, as a matrix, made again if the layout changes
+            mat = np.zeros((len(self.selector.states), len(self.y)))
+            for i,name in enumerate(self.selector.states):
+                mat[i, self.state_comps[name]] = 1
+            self._counts_key, self._counts_mat = key, mat
+        return np.tensordot(self._counts_mat, self.y, axes=1).reshape(self.selector.shape)
 
     def take(self, y, frac):
         """ Some of the people in a compartment: a fraction, or a draw where the solver keeps whole numbers """
