@@ -6,7 +6,7 @@ Reusable example modules for Maternal, Newborn, and Child Health (MNCH) modeling
 
 ### Maternal infections (`maternal_infections.py`)
 
-- **`CongenitalDisease`**: Simple SIR with congenital outcomes, scheduled by its own `set_congenital()` and `step_congenital()` (`ss.AgentDisease` calls `set_congenital()` for each person infected before birth, which by default does nothing). Infected mothers transmit to unborn via `PrenatalNet`; at transmission, outcomes (stillborn, congenital infection, normal) are sampled and scheduled around delivery — stillbirths a timestep early so they occur in utero, the rest at delivery.
+- **`CongenitalDisease`**: Simple SIR with congenital outcomes, scheduled by its own `set_congenital()` (which its `set_prognoses()` calls for each person infected before birth) and `step_congenital()`. Infected mothers transmit to unborn via `PrenatalNet`; at transmission, outcomes (stillborn, congenital infection, normal) are sampled and scheduled around delivery — stillbirths a timestep early so they occur in utero, the rest at delivery.
 
 ### Neonatal sepsis (`neonatal_sepsis.py`)
 

@@ -2454,7 +2454,7 @@ class MixingPool(Route):
         """
         Calculate transmission
 
-        This is called from AgentDisease.transmit() together with network transmission.
+        This is called by transmission (`ss.Disease.transmit()`, declared, or as code from `ss.AgentDisease`) together with network transmission.
 
         Args:
             rel_sus (float): Relative susceptibility

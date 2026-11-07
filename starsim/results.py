@@ -59,6 +59,16 @@ def agent_weights(sim):
     return scale.raw if getattr(scale, 'weighted', False) else None
 
 
+def add_count(res, ti, uids, sim):
+    """ Add the number of agents `uids` to result `res` at time index `ti`, each by their weight if agents' weights differ (see `agent_weights()`), as a module written as code counts e.g. its new infections """
+    weights = agent_weights(sim)
+    if weights is None:
+        res[ti] += len(uids)
+    else:
+        as_float(res)[ti] += weights[uids].sum()
+    return
+
+
 def as_float(res):
     """ Make a count result hold floats (a sum of agents' weights need not be whole), keeping its values; returns it """
     if res.values.dtype.kind in 'iu':

@@ -18,7 +18,10 @@ class HIV(ss.AgentDisease):
     `cd4_rate`. The per-timestep probability of death scales with how far the
     CD4 count has fallen, so agents with low CD4 counts die soonest. Agents on
     ART have their transmissibility reduced by `art_efficacy`. Vertical
-    transmission is supported: `set_congenital()` infects the newborn.
+    transmission is supported: a fetus infected over `ss.PrenatalNet` is infected as anyone else is.
+
+    It is written as code, as agents (see `ss.AgentDisease`), which gives it its seeding, transmission, and the
+    `infection` and `prevalence` results; it adds the CD4 count, ART, and death.
 
     Use with `ART` to scale up treatment over time, and `CD4_analyzer` to record
     CD4 counts. Since `beta` defaults to 0, it must be set for transmission to
@@ -118,15 +121,6 @@ class HIV(ss.AgentDisease):
         ti = self.ti
         self.results.death[ti] = np.count_nonzero(self.ti_dead == ti) # Died in this step
         return
-
-    def set_prognoses(self, uids, sources=None):
-        super().set_prognoses(uids, sources) # Also makes the agents non-susceptible
-        self.infected[uids] = True
-        self.ti_infected[uids] = self.ti
-        return
-
-    def set_congenital(self, uids, sources):
-        return self.set_prognoses(uids, sources)
 
 
 # %% HIV-related interventions

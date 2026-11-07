@@ -4,6 +4,7 @@ Not for the user: the agent engine, continued: the steps of a declared model run
 Used with: agents; declared modules
 """
 import operator
+import itertools
 import numpy as np
 import sciris as sc
 import starsim as ss
@@ -175,11 +176,14 @@ class Stepping:
         state = parts[0][0]
         uids = parts[0][1] if len(parts) == 1 else ss.uids.concatenate([u for _,u in parts])
         with self.evaluating(memo={} if len(self.competing[state.name]) > 1 else None): # A part that several rates share (e.g. the EIR, indoors and outdoors) is worked out once
-            rates = [(tr, self.eval_for(tr.rate, uids)*self.adjusted(tr.name, uids)) for tr in self.competing[state.name]]
+            rates = [(tr, self.rate_for(tr, uids)*self.adjusted(tr.name, uids)) for tr in self.competing[state.name]]
         rates = [(tr, rate) for tr,rate in rates if np.ndim(rate) or rate > 0] # A rate of 0 for everyone (e.g. ss.Pregnancy's infant_death_rate by default) moves nobody, so it is left out of the draw
         competing = [tr for tr,rate in rates]
         stays = []
         for tr,rate in rates: # Each state's own (see stayed())
+            if not self.after_of(tr): # No minimum stay, the usual case
+                stays.append(1.0)
+                continue
             each = [self.stayed(tr, st, u) for st,u in parts]
             stays.append(each[0] if all(np.ndim(x) == 0 and x == each[0] for x in each) else np.concatenate([np.broadcast_to(x, len(u)) for x,(st,u) in zip(each, parts)]))
         same = key is None and len(uids) and np.ndim(dt) == 0 and all(np.ndim(rate) == 0 for tr,rate in rates) and all(np.ndim(s) == 0 for s in stays) # The same chances for everyone: worked out once
@@ -191,7 +195,7 @@ class Stepping:
                 total, p_exit = sum(hazards), 1.0
             else:
                 p_exit = -np.expm1(-total*dt)
-            edges = np.cumsum([0.0] + hazards)*(p_exit/total if total > 0 else 0.0)
+            edges = np.array(list(itertools.accumulate([0.0] + hazards)))*(p_exit/total if total > 0 else 0.0) # As np.cumsum(), which costs more for a few numbers
         else:
             n = len(uids)
             hazards = np.empty((len(rates), n)) # One row for each exit
@@ -242,6 +246,18 @@ class Stepping:
                 self.move(tr, state, u[leaving & (rvs >= part_edges[i]) & (rvs < part_edges[i+1])])
             out.append(leaving)
         return out
+
+    def rate_for(self, tr, uids):
+        """ A competing rate for some agents: kept for the run if it is one number for everyone throughout (a parameter of numbers with no modifiers: see `is_route_fixed()`), as `route_beta()` keeps a transmission's """
+        kept = self._route_kept
+        key = ('rate', tr.name)
+        val = kept.get(key)
+        if val is not None:
+            return val
+        val = self.eval_for(tr.rate, uids)
+        if np.ndim(val) == 0 and self.is_route_fixed(tr.rate):
+            kept[key] = val
+        return val
 
     def draw_pending(self, pending):
         """ The competing rates left by `leave()` to draw, as `draw_competing_in()` for each set of states with the same rates: for an engine that collects the moves of the states and takes them together (see Compiled.step_state()), so that the order they are drawn in does not matter """
@@ -307,6 +323,8 @@ class Stepping:
         d = sim.mixing.space
         for tr in self.graph.inflows:
             if not tr.people or getattr(tr, 'birth_on', None) is not None: # Driven by a flow: see step_per()
+                continue
+            if self.never(tr): # A rate of 0 for the run (e.g. ss.peryear(0)): nobody is born, and nothing is drawn
                 continue
             with self.evaluating(by_group=True):
                 adjust = 1.0 if self.adjust[tr.name] is None else self.adjust[tr.name]

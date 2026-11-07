@@ -95,7 +95,7 @@ class HumanSEIS(ss.AgentDisease):
         mos = self.sim.connectors.mosquitoode
         uids = self.susceptible.uids
         self.pars.p_bite.set(p=np.clip(mos.eir*self.pars.b*self.rel_bite[uids], 0, 1))
-        self.set_prognoses(self.pars.p_bite.filter(uids))
+        self.infect(self.pars.p_bite.filter(uids))
         alive = self.sim.people.alive.uids
         mos.p_inf = self.pars.c*np.mean(self.rel_bite[alive]*self.infectiousness[alive])
         return

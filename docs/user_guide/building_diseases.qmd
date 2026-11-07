@@ -419,17 +419,17 @@ Each strain then has its own results (`sim.results.den1`), and a delivery can ac
 A disease that needs something states and transitions can't say, such as a quantity that each person carries and that changes continuously (a CD4 count, a viral load, or an immunity level that wanes), is written as a Python class, with arrays for each person and methods that update them. It runs as agents, and can sit in the same sim as declared diseases. There are two base classes:
 
 - **`ss.Disease`**, for a disease with no transmission between people, such as a non-communicable disease.
-- **`ss.AgentDisease`**, for a transmitted disease. It adds the states `susceptible` and `infected`, each agent's relative susceptibility and infectiousness (`rel_sus` and `rel_trans`), and transmission over the sim's networks with a `beta` for each, which is rarely worth writing again. The transmission is done by the solver, by the same code as for a declared disease run as agents, and each piece of it can be overridden on its own: who can transmit and be infected (`transmissibility()`, `susceptibility()`), the betas (`route_betas()`), one route (`transmit_route()`), how the routes' infections are combined (`finalize_infections()`), or the whole step (`transmit()`, e.g. calling `super().transmit()` and adding a route of its own, as `ssl.Cholera` adds the environment). `ssl.AgentSIR` and `ssl.AgentSEIR` (`import starsim.library as ssl`) are complete examples, and good bases for a disease of your own.
+- **`ss.AgentDisease`**, for a transmitted disease. It adds the states `susceptible` and `infected`, each agent's relative susceptibility and infectiousness (`rel_sus` and `rel_trans`), seeding (`init_prev`), the results `prevalence` and `infection`, and a step that transmits over the sim's networks with a `beta` for each and gives the new cases their prognoses. Each piece is a short method on plain arrays, to override on its own: who can transmit and be infected (`transmissibility()`, `susceptibility()`), who is infected (`transmit()`, e.g. calling `super().transmit(rel_trans=..., rel_sus=...)` once for each strain), and what happens to them (`set_prognoses()`). The transmission itself, `transmit(rel_trans=..., rel_sus=...)`, is the same array operation that a declared disease's transmission runs as agents. `infect(uids)` infects people from code (e.g. imported cases), counted and logged as transmission's are. `ssl.AgentSIR` and `ssl.AgentSEIR` (`import starsim.library as ssl`) are complete examples, and good bases for a disease of your own.
 
 A disease written as code fills in some of these methods:
 
 | Method | What it does | When to override it |
 |--------|---------|------------------|
 | `__init__()` | Gives the parameters (`define_pars()`) and states (`define_states()`) | Always |
-| `set_prognoses(uids, sources)` | Sets what happens to the people just infected: when they recover, whether they die | Always, for an `ss.AgentDisease`; call `super().set_prognoses()` first |
+| `set_prognoses(uids, sources)` | Sets what happens to the people just infected: when they recover, whether they die | Almost always, for an `ss.AgentDisease`; `super().set_prognoses()` marks them infected and no longer susceptible |
 | `step_state()` | Moves people between states each step, before transmission (e.g. those whose recovery is due) | When the disease has states of its own |
 | `on_death(uids)` | Clears the states of people who died | When the disease has states of its own |
-| `transmit()` | Transmission over the networks | Rarely: the built-in version handles the networks, `beta`, `rel_sus`, and `rel_trans` |
+| `transmit()` | Who is infected in the step, over the networks | Rarely: the built-in version handles the networks, `beta`, `rel_sus`, and `rel_trans`; override it to transmit otherwise, e.g. once for each strain |
 
 In transmission, the chance that infection passes along a contact from an infectious person to a susceptible one is, in essence, β × `rel_trans` of the source × `rel_sus` of the target, where β is the transmission rate of that network. `rel_sus` and `rel_trans` are 1 by default, and are the levers that the rest of a model pulls: a vaccine lowers `rel_sus`, a treatment lowers `rel_trans`, and a connector between two diseases can raise one disease's `rel_sus` in people infected with the other. Because they are ordinary arrays, they can also be set directly. Here everyone under 20 is fully protected (`rel_sus = 0`), and compared with no protection:
 
@@ -463,7 +463,7 @@ The parts of a module written as code (its parameters, states, results, and the 
 - **A bare number after `@` is a rate.** `I >> R @ 8` is a rate of 8 per day, not 8 days; write `ss.days(8)`.
 - **A rate with no state in it is not transmission.** `S >> I @ 0.2` infects everyone in `S` at 0.2 per day whether or not anyone is infectious. Transmission names its source: `S >> I @ beta*I`.
 - **`init_prev` in an SEIR model starts people in `E`.** To start some people infectious, give `init=dict(I=...)`.
-- **`set_prognoses()` without `super()`.** In a disease written as code, people are still infected, but the result `infection` stays at 0, with no error. Call `super().set_prognoses(uids, sources)`.
+- **Infecting people by calling `set_prognoses()`.** In an `ss.AgentDisease`, it only sets what happens to them: they are not counted in the result `infection`, nor logged. Call `self.infect(uids)`, which does both and then calls `set_prognoses()`.
 
 ## Further reading
 

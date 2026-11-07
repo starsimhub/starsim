@@ -264,8 +264,7 @@ class WaningSEIR(ssl.AgentSEIR):
         waned = (self.recovered & self.ti_susceptible.due()).uids
         self.recovered[waned] = False
         self.susceptible[waned] = True
-        imported = self.pars.p_import.filter(self.susceptible.uids) # Infections from outside
-        self.set_prognoses(imported)
+        self.infect(self.pars.p_import.filter(self.susceptible.uids)) # Infections from outside, counted in the result infection
         return
 
 cold = dict( # A cold: a latent period of 3 days, infectious for a week, and an R0 of about 2

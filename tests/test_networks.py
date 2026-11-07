@@ -721,7 +721,7 @@ def test_beta_default():
     # A disease written as code reads the default too
     sim = ss.Sim(diseases=ssl.AgentSIS(beta=dict(random=0.05, msm=0.1, default=0)), networks=['random', ss.SexualNet()], **kw).run()
     assert sim.results.agentsis.prevalence[-1] > 0 and any('msm' in note for note in sim.notes)
-    assert sim.diseases.agentsis.route_betas()['sexual'] == [0, 0]
+    assert sim.diseases.agentsis.engine.code_betas()['sexual'] == [0, 0]
     return
 
 
