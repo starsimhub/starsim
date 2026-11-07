@@ -152,7 +152,7 @@ class Undeclared(Transmission):
     """
     The engine of a disease that declares no states or transitions (see `ss.Disease`): there is nothing for it to run, so the disease's own
     code is all of it. It gives that code what a declared disease's engine gives its own, as agents: the modifiers and products on its
-    `rel_sus`, `rel_trans`, and parameters (`dis.current_value()`, and `self.pars` while it runs), transmission over the networks (`ss.AgentDisease.transmit_route()`; see `Transmission`),
+    `rel_sus`, `rel_trans`, and parameters (`dis.current_value()`, and `self.pars` while it runs), transmission over the networks (`ss.Disease.transmit(rel_trans=..., rel_sus=...)`; see `Transmission`),
     and, for a delivery, the people its conditions select and a cure (`force()`)
 
     It exists so that code written for a disease can act on any disease in the same way.
@@ -166,12 +166,8 @@ class Undeclared(Transmission):
     finalize_results = Transmission.reset_pars
 
     def define(self):
-        """ With strains, the distributions of who infects whom and of protection (see `Transmission.pick_sources()`), by the names a declared disease's transmission called `infection` (e.g. `ss.SIR`'s) gives them, so the same model draws the same numbers both ways """
+        """ Nothing declared, so no distributions of its own: the disease's code makes its own """
         self.dists = sc.obj()
-        if getattr(self.mod, 'strains', None) is not None:
-            for key in ['pick_infection', 'protect_infection']:
-                self.dists[key] = ss.random(name=f'rng_{key}')
-                self.mod.setattribute(f'rng_{key}', self.dists[key])
         return
 
     def start_step(self):
@@ -213,15 +209,15 @@ class Undeclared(Transmission):
         return len(uids)
 
     def unapplied(self, kind, name=None, mods=()):
-        """ Why the disease would not apply the modifiers (`mods`) on a parameter (`name`) or on its `rel_sus` or `rel_trans` (`kind`), or None if it would: a transmitted `ss.AgentDisease` reads those in `transmit_route()` (see `ss.connectors.check_applied()`) """
+        """ Why the disease would not apply the modifiers (`mods`) on a parameter (`name`) or on its `rel_sus` or `rel_trans` (`kind`), or None if it would: its class says its own code reads them (`allow_modifiers`; see `ss.connectors.check_applied()`) """
         mod = self.mod
         if kind == 'par':
             return self.unapplied_par(name, mods)
-        if (isinstance(mod, ss.AgentDisease) and 'beta' in mod.pars) or kind in getattr(mod, 'allow_modifiers', ()): # Or its own code reads them, with mod.current_value()
+        kind = 'rel_sus' if kind == 'route' else kind # A modifier of rel_sus on some networks (network=), which transmit(rel_trans=..., rel_sus=...) applies on them
+        if kind in getattr(mod, 'allow_modifiers', ()): # Its own code reads them, with transmit(rel_trans=..., rel_sus=...) or mod.current_value()
             return None
-        why = 'it is not an ss.AgentDisease' if not isinstance(mod, ss.AgentDisease) else 'it has no beta'
-        return (f'"{mod.name}" is written as code and is not transmitted ({why}), so nothing reads its rel_sus or rel_trans; a product or modifier acts on it only through its transmission. '
-                f'If its own code reads {kind} with {mod.name}.current_value(\'{kind}\', uids), say so in its class: allow_modifiers = (\'{kind}\',).')
+        return (f'"{mod.name}" is written as code and does not say that it reads its {kind}, so a product or modifier of it would be ignored. '
+                f'If its own code reads {kind} (with {mod.name}.transmit(rel_trans=..., rel_sus=...), or {mod.name}.current_value(\'{kind}\', uids)), say so in its class: allow_modifiers = (\'{kind}\',).')
 
 
 def make_engine(module, sim):

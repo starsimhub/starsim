@@ -84,7 +84,7 @@ def test_mock_objects():
     o.mod = ssl.AgentSIS().init_mock() # Written as code, so it can be stepped on its own
     for i in range(5):
         o.mod.step()
-        o.mod.set_outcomes(ss.uids([i])) # Manually "infect" people
+        o.mod.infect(ss.uids([i])) # Manually "infect" people
         o.mod.record_stocks()
         o.mod.record_flows()
 

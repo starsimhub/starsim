@@ -5,9 +5,9 @@ Example maternal infection with congenital outcomes.
 congenital infection, normal) to unborn agents infected via `PrenatalNet`.
 
 How it works:
-    1. Mother-to-child transmission happens via `PrenatalNet`: `ss.AgentDisease`
-       calls `set_congenital()` when the target is an unborn agent (age <= 0),
-       which by default does nothing.
+    1. Mother-to-child transmission happens via `PrenatalNet`: its
+       `set_prognoses()` calls `set_congenital()` for each target that is an
+       unborn agent (age <= 0), and gives the rest the prognoses of `ssl.AgentSIR`.
     2. `CongenitalDisease.set_congenital()` samples an outcome from
        `birth_outcomes` and schedules it by setting `ti_<outcome>`. Most
        outcomes are scheduled for the delivery timestep, but fetal losses
@@ -107,6 +107,13 @@ class CongenitalDisease(AgentSIR):
         self.step_congenital()  # Process any outcomes scheduled for this timestep
         return
 
+    def set_prognoses(self, uids, sources=None):
+        """ Those infected before birth (over `ss.PrenatalNet`) get a birth outcome (`set_congenital()`), the rest the prognoses of `ssl.AgentSIR` """
+        unborn = self.sim.people.age[uids] <= 0
+        self.set_congenital(uids[unborn])
+        super().set_prognoses(uids[~unborn], sources)
+        return
+
     # Birth outcomes that trigger request_death rather than setting a bool state.
     # Prenatal outcomes are fetal losses and must fire while the agent is still unborn;
     # postnatal outcomes happen to a live newborn. See set_congenital() for why this matters.
@@ -114,7 +121,7 @@ class CongenitalDisease(AgentSIR):
     postnatal_death_keys = {'neonatal_death'}
     congenital_death_keys = prenatal_death_keys | postnatal_death_keys
 
-    def set_congenital(self, target_uids, source_uids=None):
+    def set_congenital(self, target_uids):
         """
         Assign congenital outcomes during in-utero infection (called when
         transmission occurs via PrenatalNet).
@@ -149,11 +156,11 @@ class CongenitalDisease(AgentSIR):
         execute the scheduled events each timestep.
 
         Args:
-            target_uids (array): the unborn agents infected
-            source_uids (array): the agents who infected them
+            target_uids (array): the unborn agents infected, by their mothers (`people.parent`), over `ss.PrenatalNet`
         """
         if 'birth_outcomes' not in self.pars or self.pars.birth_outcomes is None:
             return
+        source_uids = self.sim.people.parent[target_uids] # Their mothers
 
         # Prevent repeated MTC transmission each timestep of pregnancy
         self.susceptible[target_uids] = False

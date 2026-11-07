@@ -234,15 +234,6 @@ class Counter(ss.Module):
     assert 'dict(n_agents=100, start=2000, stop=ss.years(20))' in text and 'ss.RandomNet(n_contacts=ss.poisson(mean=5))' in text
     assert 'ss.Transition(R, I, when=ss.on(infection, delay=ss.months(6)), who=ss.person.female)' in text and 'ss.modify(beta, multiply=0.5, when=ss.schedule(start=2001, stop=2002))' in text and [line for line,_ in todo] == [5]
 
-    # An override of set_prognoses() that skips counting the infections, as before Starsim 3.6
-    class Quiet(ssl.AgentSIS):
-        def set_prognoses(self, uids, sources=None):
-            self.susceptible[uids] = False
-            self.infected[uids] = True
-            self.ti_infected[uids] = self.ti
-            self.ti_recovered[uids] = self.ti + 5
-    with pytest.warns(RuntimeWarning, match='infection'):
-        ss.Sim(n_agents=200, diseases=Quiet(beta=ss.peryear(5)), networks='random', verbose=0).run()
     return new
 
 

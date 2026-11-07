@@ -135,12 +135,10 @@ def test_applied():
     with pytest.raises(ValueError, match="'precin.C'"):
         ss.Sim(hpv, interventions=ss.vaccinate(ss.Vaccine(efficacy=dict(precin=0.5)), when=0), **kw).init()
 
-    # Applied: modifiers of a disease written as code that overrides transmit(), and a change to an inflow under the ODE
+    # Applied: modifiers of a disease written as code with its own transmit(), and a change to an inflow under the ODE
     class OwnTransmit(ssl.AgentSIS):
-        def transmit(self): # Its own loop over the routes, as Covasim's is
-            betamap, rel_trans, rel_sus = self.route_betas(), self.transmissibility(), self.susceptibility()
-            out = [self.transmit_route(i, route, betamap[ss.networks.standardize_netkey(key)], rel_trans, rel_sus) for i,(key,route) in enumerate(self.sim.networks.items())]
-            return self.finalize_infections(*zip(*out))
+        def transmit(self): # One pass for each of two strains, each with half the infectiousness, as Covasim's is by variant
+            return super().transmit(rel_trans=0.5*self.transmissibility()) | super().transmit(rel_trans=0.5*self.transmissibility())
     sim = ss.Sim(diseases=OwnTransmit(name='sis'), networks='random', connectors=ss.modify('sis.rel_sus', multiply=0), n_agents=1000, verbose=0).run()
     assert sim.results.sis.infection.sum() == 0
     for solver in ['ode', 'abm']:

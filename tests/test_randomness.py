@@ -119,7 +119,7 @@ class OneMore(ss.Intervention):
 
             # Infect that agent and immediately recover
             sir = sim.diseases.sir
-            sir.set_prognoses(new_uids)
+            sir.infect(new_uids)
             sir.ti_recovered[new_uids] = sim.ti + 1 # Reset recovery time to next timestep
 
             # Reset the random states

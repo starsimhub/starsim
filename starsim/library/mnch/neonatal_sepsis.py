@@ -93,9 +93,7 @@ class NeonatalSepsis(AgentSIR):
         newborns = (~self.screened & (self.sim.people.age >= 0)).uids
         if len(newborns):
             self.screened[newborns] = True
-            new_cases = self.pars.p_at_birth.filter(newborns)
-            if len(new_cases):
-                self.set_prognoses(new_cases, sources=-1)  # -1 = no source agent
+            self.infect(self.pars.p_at_birth.filter(newborns)) # With no source (-1)
         return out
 
     def set_prognoses(self, uids, sources=None):

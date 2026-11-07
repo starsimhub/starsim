@@ -14,7 +14,7 @@ and `ss.library.X` to `ssl.X`), `verbose=-1` (now `verbose=0`), `res.annualize()
 Starsim 3's SIR, SIS, and SEIR written as code (e.g. `ss.SIS` to `ssl.AgentSIS`; Starsim 3's `ss.Disease` keeps
 its meaning, and `ss.Infection` is now `ss.AgentDisease`), a `beta` pair on `ss.MFNet` (`beta={'mf': [0.08, 0.04]}`, which was [men to women, women to men]: now
 `ss.peract(m2f=0.08, f2m=0.04)`) or on a mother-to-child network (`[b, 0]`, which is now `b`, since those networks transmit one
-way), `copy_inputs=` (removed: a sim always copies its inputs), `ss.uids.cat()` (now `ss.uids.concatenate()`), an override of `ss.Infection`'s `infect()` (now `transmit()`), of `step_die(uids)` (now `on_death(uids)`), `preg.breastfeeding`
+way), `copy_inputs=` (removed: a sim always copies its inputs), `ss.uids.cat()` (now `ss.uids.concatenate()`), an override of `step_die(uids)` (now `on_death(uids)`), `preg.breastfeeding`
 (now `preg.lactating`), `ss.RandomNet(uniform_targets=True)` (now `method='uniform'`), the keywords of `ss.SIR`, `ss.SIS`, and `ss.SEIR` that Starsim 3 read itself
 (`init_prev=ss.bernoulli(0.1)` and `p_death=ss.bernoulli(0.1)` are numbers, `init_prev=ss.choose_n(20)` is `init_n=20`, and `dur_inf=10` is
 `ss.years(10)`, since a bare number is in the model's unit), `p_loss=` of `ss.Pregnancy` (now `loss_rate=ss.probperweek(...)`), `rate_units=` (now `rate_per=`, 1000 for Starsim 3's 1e-3) , `rr_ptb=` (now `preterm=ss.preterm(rel=...)`, listed), `embryos_per_pregnancy=` (now `children=`), a typed rate of `ss.Births`, `ss.Deaths`, or `ss.Pregnancy` (per 1,000 in Starsim 3, now the bare number), `people.person()` (now `people.get_person()`), `ss.MaternalNet` (now `ss.PrenatalNet`, so `maternalnet` keys are `prenatalnet`), `ss.MixingPools` (now `ss.networks.MixingPools`), `ss.AgeGroup(lo, hi)` (now a condition on age), `src=` and `dst=` of mixing pools (now `source=` and `target=`), `age_range=[lo, hi]` of `ss.RandomNet` (now `who=`, a condition on age), and the counts of the states of Starsim's own
@@ -53,7 +53,6 @@ renames = [
     (r'\.annualize\(\)',           ".resample('year')",              "res.annualize() is res.resample('year') (a flow is summed, a stock taken at the year's end, a ratio averaged)"),
     (r'''(\bverbose['"]?\s*[=:]\s*)(-1|['"]brief['"])(?![\w.])''', r'\g<1>0', 'verbose=-1 ("brief") is verbose=0'),
     (r'\bss\.Infection\b', 'ss.AgentDisease',                      "Starsim 3's ss.Infection, a disease written as code with transmission over the networks, is ss.AgentDisease (it runs only as agents; a declared disease is an ss.Disease)"),
-    (r'\b(super\(\)|self)\.validate_beta\(\s*\)', r'\1.route_betas()', "ss.Infection's validate_beta() is ss.AgentDisease's route_betas(): the pair of betas for each of the sim's networks"),
     (r'\bss\.demographics\.Pregnancy\b', 'ss.Pregnancy', "Starsim 3's pregnancy written as code is now ss.Pregnancy, the declared pregnancy (with Starsim 3's arguments; its states and results have v4's names)"),
     (r'\b(\w*preg\w*)\.pregnant\b',  r'\1.P',                        "ss.Pregnancy's pregnant is its state P"),
     (r'\b(\w*preg\w*)\.ti_pregnant\b', r'\1.ti_P',                   "ss.Pregnancy's ti_pregnant is ti_P, the step P was entered"),
@@ -66,8 +65,6 @@ renames = [
     (r'\bdeaths\.cumulative\b', 'deaths.death.cum', "ss.Births and ss.Deaths have no stored total: births.birth.cum, deaths.death.cum"),
     (r'\b(\w*preg\w*)\.pregnancies\b', r'\1.conception',            "ss.Pregnancy's pregnancies result is its flow conception"),
     (r'\b(\w*preg\w*)\.breastfeeding\b', r'\1.lactating',            "ss.Pregnancy's breastfeeding is preg.lactating"),
-    (r'\bdef infect\(\s*self\s*\)', 'def transmit(self)',         "ss.Infection's transmission pass is transmit() (infect(uids) now infects those agents at once, for every disease)"),
-    (r'\b(super\(\)|self)\.infect\(\s*\)', r'\1.transmit()',        "ss.Infection's transmission pass is transmit() (infect(uids) now infects those agents at once, for every disease)"),
     (r'\bdef step_die\(\s*self\s*,', 'def on_death(self,',            "A module's hook for the agents who die in a step is on_death(uids), for every kind of module (people.step_die() is the step that resolves the deaths)"),
     (r'\b(super\(\)|self)\.step_die\((?!\s*\))', r'\1.on_death(',  "A module's hook for the agents who die in a step is on_death(uids), for every kind of module (people.step_die() is the step that resolves the deaths)"),
     (r'\buids\.cat\(',             'uids.concatenate(',              'ss.uids.cat() is ss.uids.concatenate()'),
@@ -140,6 +137,8 @@ dist_keywords = {f'ss.{name}':mapping for name,mapping in dict(
 
 # What needs a person: a regular expression, and what to write instead
 flags = [
+    (r'\bdef infect\(\s*self\s*\)|\b(super\(\)|self)\.infect\(\s*\)', "ss.Infection's transmission pass, infect(self), is ss.AgentDisease's transmit(), which returns the UIDs of the new cases (and records their sources and routes in an ss.infection_log); an override of it calls super().transmit(rel_trans=..., rel_sus=...) for its own arrays, e.g. once for each strain (infect(uids) now infects those agents at once)"),
+    (r'\bvalidate_beta\(|\broute_betas\(|\btransmit_route\(|\bfinalize_infections\(', "These steps of ss.Infection's transmission were removed: ss.AgentDisease's transmit(rel_trans=..., rel_sus=..., beta=...) is the whole of it, over every network and route, with the modifiers on rel_trans and rel_sus applied (by default, from transmissibility() and susceptibility(), and beta from self.pars.beta)"),
     (r'\bss\.datedur\b', 'ss.datedur was removed: whole ss.months(n) and ss.years(n) added to a date follow the calendar (ss.datedur(months=1) is ss.months(1))'),
     (r'\bss\.beta_mean\b', "ss.beta_mean(mean=m, var=v) is ss.beta_dist(mean=m, std=s), with the standard deviation s = sqrt(v)"),
     (r'\bss\.lognorm_im\b|\blognorm_im\b', "ss.lognorm_im(m, s) is ss.lognormal(log_mean=m, log_std=s) (by keyword, since ss.lognormal(m, s) is its own mean and standard deviation)"),
@@ -186,8 +185,8 @@ flags = [
     (r'\bss\.single_run\(', 'ss.single_run() was removed: sim.run() runs one sim (sim.copy().run() keeps the original as it was), and ss.parallel() runs many; a subclass of ss.MultiSim changes the sim of each run in its make_run()'),
     (r'\bss\.Debugger\b', 'ss.Debugger was removed: run the sims a part at a time with sim.run(until=...), and compare them with ss.debugtools.check_sims_match()'),
     (r'\bss\.check_version\(', "ss.check_version() was removed: compare ss.__version__ yourself, e.g. sc.compareversions(ss.__version__, '>=4.0')"),
-    (r'\b(prenatal|postnatal|congenital)_death_keys\b', "Starsim 3's congenital outcomes on ss.Infection (prenatal_death_keys and the like) were removed: set_congenital(uids, sources) is called for those infected before birth, and ssl.CongenitalDisease (import starsim.library as ssl) schedules the outcomes at birth (birth_outcome_keys=, each with a ti_<key> state)"),
-    (r'\.compute_transmission\(', "Starsim 3's route.compute_transmission() was removed: a disease written as code transmits over every route in transmit() (ss.Infection's, by default), or over one route with self.transmit_route(i, route, betas, rel_trans, rel_sus), which returns the targets, sources, and network IDs of the new infections"),
+    (r'\b(prenatal|postnatal|congenital)_death_keys\b', "Starsim 3's congenital outcomes on ss.Infection (prenatal_death_keys and the like) were removed: ssl.CongenitalDisease's set_prognoses() calls set_congenital(uids) for those infected before birth (their mothers are people.parent[uids]), and ssl.CongenitalDisease (import starsim.library as ssl) schedules the outcomes at birth (birth_outcome_keys=, each with a ti_<key> state)"),
+    (r'\.compute_transmission\(', "Starsim 3's route.compute_transmission() was removed: a disease written as code transmits over every route with self.transmit(rel_trans=..., rel_sus=...), which gives the new infections (and records their sources and routes in an ss.infection_log)"),
     (r'\b(?!(?:np|pd|jnp|torch)\b)\w+\.concat\(', "if this is the concat() of ss.uids, it is concatenate() (x.concatenate(y), or ss.uids.concatenate(x, y))"),
     (r'\bss\.(calibration\.)?(Calibration|CalibComponent|BetaBinomial|Binomial|DirichletMultinomial|GammaPoisson|Normal)\b|\bss\.calibration\b|\b(linear_interp|linear_accum|step_containing)\b', "Starsim 3's calibration was removed: bounds on the parameters (ss.par(v, bounds=[lo, hi])), the data on the sim (ss.Sim(..., data=df)), and sim.fit(); a likelihood by series (likelihood=dict(prevalence=ss.normal(scale=s)), or ss.binom, ss.nbinom, ss.poisson), or loss=fn(sim) for a measure of your own"),
     (r'\bss\.MultiSim\((?![^)]*\bn_runs\s*=)', 'ss.MultiSim(sim) of one sim runs it once (Starsim 3 ran it 4 times): give n_runs=4, or use ss.parallel(sim, n_runs=4)'),

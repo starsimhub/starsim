@@ -33,7 +33,8 @@ class AgentSIR(ss.AgentDisease):
 
     This class implements a basic SIR model with states for susceptible,
     infected/infectious, and recovered, as per-agent arrays updated in code (see
-    `ss.AgentDisease`). It also includes deaths, and basic results. It is a teaching
+    `ss.AgentDisease`). It also
+    includes deaths, and basic results. It is a teaching
     example, showing in code what the declared `ss.SIR` does as agents, and a starting
     point for a disease written as code (e.g. `ssl.HIV`).
 
@@ -63,18 +64,10 @@ class AgentSIR(ss.AgentDisease):
         )
         self.update_pars(pars, **kwargs)
 
-        # Example of defining all states, redefining those from ss.AgentDisease, using reset=True
         self.define_states(
-            ss.BoolState('susceptible', default=True, label='Susceptible'),
-            ss.BoolState('infected', label='Infected'),
             ss.BoolState('recovered', label='Recovered'),
-            ss.FloatArr('ti_infected', label='Time of infection'),
             ss.TimeArr('ti_recovered', label='Time of recovery'),
             ss.TimeArr('ti_dead', label='Time of death'),
-            ss.FloatArr('rel_sus', default=1.0, label='Relative susceptibility'),
-            ss.FloatArr('rel_trans', default=1.0, label='Relative transmission'),
-            reset = True, # Remove any existing states and aliases (from super().define_states())
-            infectious = 'infected', # Everyone infected is infectious; AgentSEIR replaces this with a state of its own
         )
         return
 
@@ -93,8 +86,8 @@ class AgentSIR(ss.AgentDisease):
         return
 
     def set_prognoses(self, uids, sources=None):
-        """ Set prognoses: infect the agents, then schedule what happens to them """
-        super().set_prognoses(uids, sources)
+        """ Infect the agents, then schedule what happens to them """
+        self.susceptible[uids] = False
         self.set_infection(uids)
         self.set_progression(uids)
         return
@@ -218,6 +211,10 @@ class AgentSEIR(AgentSIR):
         self.ti_recovered[rec_uids] = self.ti_infectious[rec_uids] + dur_inf[~will_die]
         return
 
+    def not_naive(self):
+        """ The agents who have ever been infected, for dynamic rescaling """
+        return self.ti_exposed.notnan.uids
+
     def clear_infection(self, uids):
         """ `infected` is derived, so clear the states it is derived from """
         self.exposed[uids] = False
@@ -269,6 +266,12 @@ class AgentSIS(ss.AgentDisease):
         )
         return
 
+    def init_results(self):
+        """ As for `ss.AgentDisease`, and the mean susceptibility """
+        super().init_results()
+        self.define_results(ss.Result('rel_sus', dtype=float, label='Relative susceptibility', kind='ratio'))
+        return
+
     def step_state(self):
         """ Progress infectious -> recovered """
         recovered = (self.infected & self.ti_recovered.due()).uids
@@ -282,11 +285,12 @@ class AgentSIS(ss.AgentDisease):
         self.susceptible[uids] = True
         return
 
-    def make_naive(self, uids, skip_states=None):
-        """ As `ss.Disease.make_naive()`, but also resets `rel_sus` by default, since SIS sets it from its own immunity """
-        if skip_states is None:
-            skip_states = ['rel_trans']
-        return super().make_naive(uids, skip_states=skip_states)
+    def make_naive(self, uids):
+        """ Reset agents to never having had the disease, for dynamic rescaling: every state to its default (`rel_sus` too, since SIS sets it from its own immunity), except `rel_trans` """
+        for state in self.state_list:
+            if state.name != 'rel_trans':
+                state.set(uids)
+        return
 
     def update_immunity(self):
         """ Apply exponential waning to immunity and update relative susceptibility. """
@@ -297,10 +301,8 @@ class AgentSIS(ss.AgentDisease):
         return
 
     def set_prognoses(self, uids, sources=None):
-        """ Set prognoses """
-        super().set_prognoses(uids, sources) # Also makes the agents non-susceptible
-        self.infected[uids] = True
-        self.ti_infected[uids] = self.ti
+        """ Infect the agents, at the end of this step, and schedule their recovery """
+        super().set_prognoses(uids, sources)
         self.immunity[uids] += self.pars.imm_boost
 
         # Sample duration of infection
@@ -310,19 +312,11 @@ class AgentSIS(ss.AgentDisease):
         self.ti_recovered[uids] = self.ti_infected[uids] + 1 + dur_inf
         return
 
-    def init_results(self):
-        """ Initialize results """
-        super().init_results()
-        self.define_results(
-            ss.Result('rel_sus', dtype=float, label='Relative susceptibility', kind='ratio')
-        )
-        return
-
-    @ss.required()
     def record_stocks(self):
-        """ Store the population immunity (susceptibility) """
+        """ As for `ss.AgentDisease`, and the population immunity (susceptibility), at the start of the step """
         super().record_stocks()
-        self.results['rel_sus'][self.ti] = self.rel_sus.mean()
+        res = self.results
+        res.rel_sus[self.ti] = self.rel_sus.mean()
         return
 
     def plot(self, **kwargs):
