@@ -183,6 +183,10 @@ fstring_pattern = r"""\bf(['"])([^'"]*\bn_\{[^'"]*)\1"""
 make_results = r'(\w*Result)$' # A call that makes a result, e.g. ss.Result('n_ill', ...)
 
 
+result_keywords = {'new_infections', 'cum_infections', 'new_deaths', 'cum_deaths', 'new_emigrants'} # The results renamed below, which a model may make itself by keyword
+skip_folders = {'build', 'dist', '__pycache__', 'site-packages', 'node_modules'} # Built or installed copies, not the code
+
+
 def find_names(texts):
     """
     What the code given defines, which says what its names of results mean: the names of the results it makes itself (e.g.
@@ -209,9 +213,12 @@ def find_names(texts):
                 if isinstance(name, ast.Constant) and isinstance(name.value, str):
                     own.add(name.value)
                 elif isinstance(name, ast.JoinedStr):
-                    templates.add(re.sub(r'\{[^}]*\}', '{}', ast.unparse(name)[2:-1]))
+                    template = ast.unparse(name)[2:-1]
+                    templates.add(re.sub(r'\{[^}]*\}', '{}', template))
+                    own.add(re.sub(r'\{[^}]*\}', '', template)) # Its name when the parts filled in are empty, e.g. f'new_infections{suffix}'
             elif func in ['ss.State', 'ss.BoolState'] and isinstance(name, ast.Constant) and isinstance(name.value, str):
                 states.add(name.value)
+            own.update(kw.arg for kw in call.keywords if kw.arg in result_keywords) # A result given by keyword, e.g. super().__init__(..., new_infections=1*infection)
     return sc.obj(own=own, templates=templates, states=states)
 
 
@@ -691,7 +698,7 @@ def migrate(*paths, check=False, verbose=True):
     Rewrite the Starsim 3 code in files or folders for Starsim 4, in place
 
     Args:
-        paths (str): files, or folders whose `.py`, `.ipynb`, `.qmd`, and `.md` files are migrated (the code cells only, in all but `.py`), except in hidden folders (e.g. `.jupyter_cache`)
+        paths (str): files, or folders whose `.py`, `.ipynb`, `.qmd`, and `.md` files are migrated (the code cells only, in all but `.py`), except in hidden folders (e.g. `.jupyter_cache`) and built copies (`build/`, `dist/`, `*.egg-info`, ...)
         check (bool): only report what would change, without writing
         verbose (bool): print each change and what needs a person
 
@@ -707,8 +714,8 @@ def migrate(*paths, check=False, verbose=True):
     files = []
     for path in paths:
         path = sc.path(path)
-        hidden = lambda f: any(part.startswith('.') for part in f.relative_to(path).parts[:-1]) # In a hidden folder, e.g. .jupyter_cache or .ipynb_checkpoints
-        files += sorted(f for ext in ['py', 'ipynb', 'qmd', 'md'] for f in path.rglob(f'*.{ext}') if not hidden(f)) if path.is_dir() else [path]
+        skip = lambda f: any(part.startswith('.') or part in skip_folders or part.endswith('.egg-info') for part in f.relative_to(path).parts[:-1]) # In a hidden folder (e.g. .jupyter_cache) or a built copy (e.g. build/lib)
+        files += sorted(f for ext in ['py', 'ipynb', 'qmd', 'md'] for f in path.rglob(f'*.{ext}') if not skip(f) and f.is_file()) if path.is_dir() else [path] # is_file() leaves out broken links, e.g. those of an old editable install
     texts = {f:f.read_text() for f in files}
     blocks = {f:code_blocks(f, text) for f,text in texts.items()}
     codes = [code for b in blocks.values() for _,code in b]
