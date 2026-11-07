@@ -2,6 +2,7 @@
 Test different time units and timesteps
 """
 import operator
+import warnings
 import numpy as np
 import pandas as pd
 import sciris as sc
@@ -531,6 +532,9 @@ def test_bare_units():
         ss.connectors.to_ti(sim, ss.weeks(2))
     with pytest.warns(RuntimeWarning, match='ambiguous'): # Neither clearly a year nor clearly not
         ss.Sim(sir, start=1500, stop=1520, n_agents=100, verbose=0).init()
+    with warnings.catch_warnings(): # With no start and a unit other than years, a bare stop is never a year, so it isn't ambiguous
+        warnings.simplefilter('error', RuntimeWarning)
+        assert ss.Sim(sir, unit='day', stop=1095, n_agents=100, verbose=0).init().t.stop == ss.days(1095)
 
     # A time series of bare numbers as a crude birth rate is per year, as a bare number is (it was per day, and the population exploded)
     alive = [ss.Sim(demographics=ss.birth(rate=rate), total_pop=1000, start='2000-01-01', stop='2001-01-01', verbose=0).run().results.alive[-1] for rate in [0.04, ss.timeseries({2000: 0.04, 2030: 0.02})]]

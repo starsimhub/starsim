@@ -97,7 +97,7 @@ sims = {
 msim = ss.parallel(sims)
 for sim in msim.sims:
     res = sim.results
-    print(sim.label, '(' + sim.solver + ') - infections:', round(res.measles.infection.sum()), '- doses:', round(res.vaccinedemand.doses.sum()))
+    print(sim.label, f'({sim.solver}) - infections:', round(res.measles.infection.sum()), '- doses:', round(res.vaccinedemand.doses.sum()))
 ```
 
 The module runs unchanged as agents, and the two agree to within a few percent; the agents are one run of a random process, so they differ a little from run to run. The module needs no change because it uses only what works under every solver: a result of the sim (`cases`), the number of people in a state (`measles.S.n`), and `ss.move()` with a number of people, which as agents moves that many agents (chosen at random) from `S` to `R`. A module that picked out particular people, e.g. with `measles.S.uids`, would run only as agents ([A5](a5_modules.qmd)).

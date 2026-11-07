@@ -1583,6 +1583,8 @@ class DegreeNet(DynamicNetwork):
         if self.mean_dur is not None: # Geometric, so partnerships end at a constant rate (and what is left of one under way is the same)
             u = self.rng_end.rvs(p1)
             p_end = max(1/self.mean_dur - self.departures, 0.1/self.mean_dur) # Partnerships also end when a partner leaves, so they are dissolved less often, to last as long as given on average (as EpiModel's d.rate correction does)
+            if p_end >= 1: # A mean of a step or less: each lasts one step (and log1p(-1) would divide by zero)
+                return np.ones_like(u)
             return np.maximum(np.ceil(np.log1p(-u)/np.log1p(-p_end)), 1)
         n = len(p1)
         if start: # One picked in proportion to how long it lasts, and a uniform share of it
