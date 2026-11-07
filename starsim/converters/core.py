@@ -856,11 +856,6 @@ def write(sources, **kwargs):
     cfg = sc.obj()
     for source in sources:
         cfg.update(source.config)
-    solver, given = cfg.get('solver'), kwargs.get('solver')
-    if isinstance(solver, ss.sim.Solver) and type(given) is str: # Another solver by name keeps the import's options that it also takes (e.g. epydemix's whole daily steps, substeps=1)
-        helper = getattr(ss, given, None)
-        if isinstance(helper, type) and issubclass(helper, ss.sim.Solver):
-            kwargs = kwargs | dict(solver=helper(**{k:v for k,v in vars(solver).items() if k in helper.options}))
     cfg.update(kwargs)
     if 'total_pop' not in cfg:
         cfg.total_pop = max(sum(total_init(s.init) for s in src.states.values() if s.people) for src in sources) or cfg.get('n_agents')

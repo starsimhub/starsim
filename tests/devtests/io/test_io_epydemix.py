@@ -68,7 +68,7 @@ def test_epydemix():
     )
     seird.stratify(age={0: 0.6, 20: 0.4})
     ref = ss.Sim(seird, networks=ss.contacts([[5.0, 1.0], [1.5, 2.0]]), total_pop=10_000, unit='day', start='2020-01-01', stop='2020-03-02',
-                 solver=ss.ode(substeps=1), aging=False, verbose=0).run()
+                 solver='ode', aging=False, verbose=0).run() # A solver by name is that solver's defaults, as load_epydemix(solver='ode') gives
     for c in 'SEIRD':
         ours, theirs = res[c].values, ref.results.epydemix[c].values
         assert np.allclose(ours, theirs, rtol=1e-9), f'{c} should match the model written by hand'
