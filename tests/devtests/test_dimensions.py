@@ -959,8 +959,8 @@ def test_rows():
     sc.heading('Testing p= with one entry per destination, by age, and a function for each destination')
     methods = ['pill', 'iud', 'inj']
     def make(solver, fn=False, **kw):
-        none = ss.State()
-        on = {m: ss.State(m) for m in methods}
+        none = ss.State(name='none') # Named up front: the transitions below are named after their sources before the disease is built
+        on = {m: ss.State(name=m) for m in methods}
         b0 = ss.par(-0.5)
         p_use = expit(b0 + 1.0*ss.person.urban)
         mix = [ss.par(ss.by(age=v), name=f'mix_{m}') for m,v in zip(methods, [[0.6/1.3, 0.2/1.5], [0.6/1.3, 1.0/1.5], [0.1/1.3, 0.3/1.5]])] # The switching row by age, one entry per method
