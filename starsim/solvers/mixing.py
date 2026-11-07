@@ -138,8 +138,8 @@ class Mixing(Telling):
         As agents, an edge transmits at most once to its susceptible end over a step D, with probability 1 − e^(−b·D) for a
         rate b, so the force of infection over K contacts per unit time is K·(1 − e^(−b·D))/D, not the K·b of mass action. The
         two agree as K → ∞ with K·b held fixed, but on a sparse network with long steps the difference matters, most of all
-        near the epidemic threshold. Edges that last (`ss.DegreeNet`) are the partner-change model's concern instead: within a
-        lasting edge, the partners' states change (recovery, reinfection).
+        near the epidemic threshold. Edges that last several steps (`ss.RandomNet(dur=)`) are taken a step at a time: within a lasting
+        edge, the partners' states change (recovery, reinfection), which is the partner-change model's concern (`ss.DegreeNet`).
         """
         if not net.pars.get('dynamic', True):
             return None

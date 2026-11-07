@@ -70,7 +70,7 @@ Because modifiers are declared, Starsim can list them all, before anything runs.
 
 ```{python}
 masks       = ss.modify(sir.rel_sus, multiply=0.6, who=ss.person.age > 65, when=ss.schedule(start=ss.days(20)))
-vaccination = ss.vaccinate(efficacy=0.85, who=ss.person.age < 15, when=[ss.days(30)], coverage=0.7)
+vaccination = ss.vaccinate(efficacy=0.85, who=ss.person.age < 15, when=ss.days(30), coverage=0.7)
 sim = ss.Sim(sir, interventions=[masks, vaccination], pars=dict(beta=0.5), stratify=dict(age=[0, 15, 65]), unit='day', stop=ss.days(100), verbose=0)
 sim.what_modifies(sir.rel_sus)
 ```
@@ -84,7 +84,7 @@ An intervention has two parts. *What* is a product (`ss.Vaccine`, `ss.Diagnostic
 A cascade of care is a list of ordinary deliveries, each triggered by the outcome of another:
 
 ```python
-screening = ss.screen(sensitivity=0.8, specificity=0.95, when=ss.days(7), coverage=0.1)  # a rapid test
+screening = ss.screen(sensitivity=0.8, specificity=0.95, when=ss.schedule(every=ss.days(7)), coverage=0.1)  # a rapid test
 confirm   = ss.screen(sensitivity=0.95, specificity=0.99, when=screening.positive, coverage=0.9) # a follow-up is a step of its own
 treatment = ss.treat(cure=0.95, when=confirm.positive, capacity=ss.perday(50))                # while stocks last
 ```

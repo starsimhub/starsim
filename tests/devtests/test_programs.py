@@ -32,7 +32,7 @@ def check_agents(make, stop=100, pop=50_000, **kwargs):
     """ Check that a model is agents only: an explicit ODE refuses it before the run, and solver='auto' runs it as agents """
     with pytest.raises(ss.CapabilityError):
         make(solver='ode', total_pop=pop, stop=stop, **kw, **kwargs).init()
-    assert make(total_pop=pop, stop=stop, **kw, **kwargs).init().solver == 'abm'
+    assert isinstance(make(total_pop=pop, stop=stop, **kw, **kwargs).init().solver, ss.solvers.abm)
     return
 
 
@@ -89,7 +89,7 @@ def test_priority():
     assert any('priority ignored' in note for note in keyed.notes)
     with pytest.raises(ss.CapabilityError):
         make(priority=uids, solver='ode', approximations='error', total_pop=50_000, stop=10, **kw).run()
-    assert make(priority=uids, total_pop=50_000, stop=10, **kw).init().solver == 'abm'
+    assert isinstance(make(priority=uids, total_pop=50_000, stop=10, **kw).init().solver, ss.solvers.abm)
     lowest = make(priority=uids, solver='abm', total_pop=50_000, n_agents=10_000, stop=3, **kw).run()
     got = lowest.people.has_vaccine.raw[:10_000].astype(bool)
     assert got[:400].all() and not got[400:].any() # 100 agents a day for the 4 steps (days 0 to 3), lowest UID first
@@ -206,7 +206,7 @@ def test_same_visit():
     def make(**kwargs):
         sis = make_sis()
         drug = ss.Treatment(cure={sis.cure: 0.9})
-        visit = ss.treat(drug, who=sis.I, when=ss.days(10), coverage=0.3)
+        visit = ss.treat(drug, who=sis.I, when=ss.schedule(every=ss.days(10)), coverage=0.3)
         visit_then1 = ss.vaccinate(ss.Vaccine(efficacy=0.5), when=visit)
         visit_then2 = ss.screen(ss.Diagnostic(), when=visit, coverage=0.5)
         return ss.Sim(sis, interventions=[visit, visit_then1, visit_then2], **kwargs)
@@ -233,13 +233,13 @@ def test_hiv_art():
             decline    = cd4_hi >> cd4_mid @ ss.years(4),
             falling    = cd4_mid >> cd4_lo @ ss.years(3),
             aids_death = cd4_lo >> ss.dead @ ss.years(2),
-            start_art  = (acute + cd4_hi + cd4_mid + cd4_lo + post_art) >> on_art, # Undriven: only the delivery moves people along it
+            start_art  = (acute + cd4_hi + cd4_mid + cd4_lo + post_art) >> on_art @ 0, # Only the delivery moves people along it
             dropout    = on_art >> post_art @ ss.years(5),
             relapse    = post_art >> cd4_lo @ ss.years(1),
             init=dict(cd4_hi=0.04, cd4_mid=0.03, cd4_lo=0.02), name='hiv',
         )
         priority = [hiv.cd4_lo, hiv.post_art, hiv.cd4_mid, hiv.cd4_hi] if prioritize else None # Lowest CD4 first
-        art_prog = ss.treat(ss.Treatment(cure={hiv.start_art: 1.0}), capacity=ss.capacity(ss.peryear(1200), priority=priority))
+        art_prog = ss.treat(ss.Treatment(moves=hiv.start_art), capacity=ss.capacity(ss.peryear(1200), priority=priority))
         return ss.Sim(hiv, interventions=art_prog, start=2000, stop=2014, dt=ss.months(1), unit='year', **kwargs) # The bare numbers (the years) are years
     both = lambda prioritize: sc.obj(ode=make(prioritize, solver='ode', total_pop=100_000, verbose=0).run(), abm=make(prioritize, solver='abm', total_pop=100_000, n_agents=20_000, verbose=0).run())
     sims, base = both(True), both(False)
@@ -262,7 +262,7 @@ def make_sti(name='ng', beta=0.015, init_prev=0.1):
         seek      = Y >> C @ ss.days(20),
         clear_a   = A >> S @ ss.days(150),
         clear_y   = (Y + C) >> S @ ss.days(200),
-        cure      = (E + A + P + Y + C) >> S,
+        cure      = (E + A + P + Y + C) >> S @ 0,
         init_prev=init_prev, name=name,
     )
 

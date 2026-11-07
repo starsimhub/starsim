@@ -122,7 +122,7 @@ These are from Starsim's switching demo for summer2 users (`tests/switching/test
 | summer2's sigmoidal scale-up | **Not yet**: `ss.timeseries` has constant, linear, and cosine interpolation, so the sigmoid is sampled into a time series |
 | A plain number times a time series (`1.5 * ss.timeseries(...)`) | **Works**. A parameter with no name inline (`ss.par(1.5) * ss.timeseries(...)`) raises a `ValueError` asking for one: give it as `ss.par(1.5, name='k')`, or assign it to a variable first |
 | The same model as a stochastic model or as agents | **Works**: `solver='binomial'`, `'gillespie'`, or `'abm'`; at a yearly step the stochastic solvers can differ a lot from the ODE, and `sim.check_dt()` shows how much a smaller step changes the results |
-| Interventions with costs (active case finding) | **Works**: `ss.treat(cure={'detection': 0.7}, cost=5, who=I, when=[2026, 2027], coverage=0.5)` |
+| Interventions with costs (active case finding) | **Works**: `ss.treat(cure=0.7, moves='detection', cost=5, who=I, when=[2026, 2027], coverage=0.5)` |
 | Contact matrices and populations by country | **Works**: `ss.contacts('Philippines')` and `ss.population('Philippines', year=2021)` are bundled |
 
 ## Bringing your model in

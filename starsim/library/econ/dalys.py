@@ -53,7 +53,7 @@ class DALYs(ss.Analyzer):
 
     def init_results(self):
         super().init_results()
-        if self.life_lost is None and self.sim.solver != 'abm':
+        if self.life_lost is None and not isinstance(self.sim.solver, ss.solvers.abm):
             errormsg = f'ssl.DALYs() has no ages at death to work from with the "{self.sim.solver}" solver: give the years of life lost for each death, with life_lost='
             raise ValueError(errormsg)
         self.define_results(*[ss.Result(name, kind='flow') for name in ['yld', 'yll', 'dalys']])
@@ -117,7 +117,7 @@ class ICER(ss.Analyzer):
         cost (str): the path of the cost result (default: the total of `ssl.Costs`)
         baseline (str): the label of the scenario to compare with (default: the first)
         discount (float): the discount rate per year for both costs and outcomes (see `ssl.discount()`)
-        discount_from (float/str): when discounting starts (default: the first time point)
+        discount_start (float/str): when discounting starts (default: the first time point)
         window (dur): in a sim, how long a time to compare, ending with the latest step (default: all of it so far); one step long compares the last step alone, e.g. `window=ss.years(1)` with yearly steps
 
     Attributes:
@@ -127,7 +127,7 @@ class ICER(ss.Analyzer):
         ```python
         # After the runs
         msim = ss.parallel({'Nothing': base, 'Vaccine': base.new(interventions=vx)}, n_runs=20)
-        icer = ssl.ICER(msim, discount=0.03, discount_from=2010)
+        icer = ssl.ICER(msim, discount=0.03, discount_start=2010)
         icer.df
         icer.plot()
         icer.plot_ceac()
@@ -138,8 +138,8 @@ class ICER(ss.Analyzer):
         sim = ss.Sim(..., analyzers=[ssl.Costs(), ssl.DALYs(weights=...), icer])
         ```
     """
-    def __init__(self, sims=None, outcome='dalys.dalys', cost='costs.total', baseline=None, discount=0, discount_from=None, window=None, **kwargs):
-        for old, new in dict(rate='discount', start='discount_from').items():
+    def __init__(self, sims=None, outcome='dalys.dalys', cost='costs.total', baseline=None, discount=0, discount_start=None, window=None, **kwargs):
+        for old, new in dict(rate='discount', start='discount_start').items():
             if old in kwargs:
                 errormsg = f'ssl.ICER() takes no {old}=; use {new}='
                 raise TypeError(errormsg)
@@ -151,7 +151,7 @@ class ICER(ss.Analyzer):
         self.cost = cost
         self.baseline = baseline
         self.discount = discount
-        self.discount_from = discount_from
+        self.discount_start = discount_start
         self.window = window
         self.t_years = None
         self.scenarios = sc.obj() if sims is None else self.collect(sims) # By label, the cost and outcome of each run at each time point, so the sims themselves aren't kept
@@ -194,7 +194,7 @@ class ICER(ss.Analyzer):
     def totals(self):
         """ The discounted total cost and outcome of each scenario, as arrays with one value per run, by label """
         t = self.t_years
-        start = t[0] if self.discount_from is None else in_years(ss.date(self.discount_from))
+        start = t[0] if self.discount_start is None else in_years(ss.date(self.discount_start))
         weights = (1 + self.discount) ** -np.maximum(t - start, 0)
         stop = getattr(self, '_ti', len(t) - 1) + 1
         first = 0 if self.window is None else int(np.searchsorted(t[:stop], t[stop-1] - in_years(self.window), side='right')) # The time points within the window, ending with the latest

@@ -691,7 +691,7 @@ class Groups(sc.prettyobj):
                 for dim in list(mod.move or {}) + list(getattr(mod, 'increment', None) or {}):
                     if dim not in strats:
                         raise sc.KeyNotFoundError(f'the transfer "{mod.name}" moves people along "{dim}", but the model is not stratified by it. Add e.g. sim.stratify({dim}=[...]).')
-        if sim.solver not in [None, 'abm']: # In a compartmental run, a transfer whose dur= is a distribution passes people through Erlang stages: a dimension of the people at the levels it moves from (see ss.solvers.Compartmental.init_movers())
+        if (sim.solver is not None and not isinstance(sim.solver, ss.solvers.abm)): # In a compartmental run, a transfer whose dur= is a distribution passes people through Erlang stages: a dimension of the people at the levels it moves from (see ss.solvers.Compartmental.init_movers())
             for mod in sim.declared:
                 for tf in mod.graph.transfers.values():
                     strat = transfer_stages(sim, mod, tf, strats[tf.dim])

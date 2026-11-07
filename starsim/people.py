@@ -332,7 +332,7 @@ class People:
     def grouped(self):
         """ Whether these are the groups of a compartmental run (one row per group), not agents """
         sim = getattr(self, 'sim', None)
-        return sim is not None and getattr(sim, 'solver', 'abm') != 'abm' and bool(getattr(sim, 'declared', None))
+        return sim is not None and getattr(sim, 'solver', None) is not None and not isinstance(sim.solver, ss.solvers.abm) and bool(getattr(sim, 'declared', None))
 
     @property
     def n(self):
@@ -670,7 +670,7 @@ class People:
         # Finally, update the alive indices
         self.add_active(new_uids)
         sim = getattr(self, 'sim', None)
-        if getattr(sim, 'solver', None) == 'abm': # A dimension called sex is people.female
+        if isinstance(getattr(sim, 'solver', None), ss.solvers.abm): # A dimension called sex is people.female
             sim.groups.set_sex(new_uids)
             if not placed and getattr(sim.groups, 'vals_set', False) and sim.groups.strats: # E.g. newborns from ss.Births (or ss.Pregnancy's before the start), who would otherwise all be at the first level
                 sim.groups.place_new(new_uids)
@@ -711,7 +711,7 @@ class People:
     def update_post(self):
         """ Final updates at the very end of the timestep """
         sim = self.sim
-        if sim.pars.aging and sim.solver == 'abm': # In a compartmental run, each row is a group, whose age stays the middle of the group (people move between groups as they age)
+        if sim.pars.aging and isinstance(sim.solver, ss.solvers.abm): # In a compartmental run, each row is a group, whose age stays the middle of the group (people move between groups as they age)
             self.age[self.alive.uids] += sim.t.dt_year
         return
 
@@ -986,7 +986,7 @@ class People:
         """ Remove dead agents and run post-step updates (in one pass over the agents, unless update_post() is changed) """
         sim = self.sim
         if type(self).update_post is People.update_post:
-            self.remove_dead(aging=bool(sim.pars.aging and sim.solver == 'abm'))
+            self.remove_dead(aging=bool(sim.pars.aging and isinstance(sim.solver, ss.solvers.abm)))
         else:
             self.remove_dead()
             self.update_post()

@@ -478,7 +478,7 @@ def test_lifetable_deaths():
         return sim
     with pytest.raises(ss.CapabilityError, match='split'):
         make(mx, 'ode', True, total_pop=50_000).init()
-    assert make(mx, 'auto', True, total_pop=50_000).init().solver == 'abm'
+    assert isinstance(make(mx, 'auto', True, total_pop=50_000).init().solver, ss.solvers.abm)
     coarse = ss.by(dict(age=np.arange(0, 100, 5), value=[ss.peryear(np.mean([0.001*np.exp(0.07*a) for a in range(lo, lo + 5)])) for lo in range(0, 100, 5)])) # The same, given by the groups
     for rate,fine,stratify in [(coarse, mx, True), (ss.peryear(flat), ss.peryear(flat), False)]:
         n = [make(r, solver, stratify, **pop).run().results.d.death.sum() for r,solver,pop in [(fine, 'abm', dict(n_agents=50_000)), (rate, 'ode', dict(total_pop=50_000))]]
@@ -494,7 +494,7 @@ def test_declared_demographics_alone():
     flows = lambda: [ss.birth(rate=ss.peryear(0.03)), ss.death(rate=ss.peryear(0.01))]
     ode = ss.Sim(demographics=flows(), start=2000, stop=ss.years(10), solver='ode', verbose=0).run()
     assert np.isclose(ode.results.alive[-1], 10_000*np.exp(0.02*10), rtol=1e-3)
-    assert ss.Sim(demographics=flows(), n_agents=500, start=2000, stop=ss.years(2), verbose=0).run().solver == 'abm'
+    assert isinstance(ss.Sim(demographics=flows(), n_agents=500, start=2000, stop=ss.years(2), verbose=0).run().solver, ss.solvers.abm)
     with pytest.warns(RuntimeWarning, match='per person'): # 30 per 1,000, given as 30 per person
         ss.birth(rate=ss.peryear(30))
     return ode
@@ -622,7 +622,7 @@ def test_declared_newborns():
     S, I, R = ss.states('S I R')
     sir = ss.Disease(S >> I @ ss.perday(0.3)*I, I >> R @ ss.days(8), name='sir')
     sim = ss.Sim(sir, demographics=[ss.birth(rate=ss.peryear(0.05)), ss.death(rate=ss.peryear(0.02))], start='2000', stop='2001', verbose=0).init()
-    assert sim.solver == 'ode' and sim.kernel_reason() is None
+    assert isinstance(sim.solver, ss.solvers.ode) and sim.kernel_reason() is None
     print('✓ (newborns in declared states)')
     return
 
@@ -695,7 +695,8 @@ def test_rates_and_counts():
 
     # ss.Pregnancy: maternal_death= by type, preterm=ss.preterm(), children=, and the old keywords raise
     preg = ss.Pregnancy(maternal_death=0.01, preterm=ss.preterm(threshold=ss.weeks(36), by_age=[[18, 35, 1000], [2, 1, 2]]), children=2)
-    assert preg.pars.p_maternal_death.pars.p == 0.01 and preg.pars.preterm_threshold == ss.weeks(36) and preg.pars.rel_preterm_age[1, 0] == 2
+    assert preg.pars.maternal_death.raw == 0.01 and preg.pars.preterm.threshold == ss.weeks(36) and preg.pars.preterm.by_age[1, 0] == 2 # Under the keywords that set them
+    assert not {'p_maternal_death', 'rel_preterm', 'preterm_threshold'} & set(preg.pars)
     assert ss.Pregnancy(maternal_death=ss.peryear(0.01)).pars.maternal_death.raw == ss.peryear(0.01)
     for key in ['maternal_death_rate', 'rel_preterm', 'embryos_' + 'per_pregnancy']: # Spelled so the call-site rewrite leaves it
         with pytest.raises(TypeError, match='use'):

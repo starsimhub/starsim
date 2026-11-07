@@ -71,12 +71,13 @@ def parse_target(target):
 
 def to_time(sim, val):
     """
-    Convert a time (a date, a duration since the start, or a number) to the same kind of time as the sim's timeline
+    Convert a time (a date, a number, or a duration) to the same kind of time as the sim's timeline
 
     How a bare number is read is decided once, from the sim's start (see `ss.timeline.calendar_of()`): if the sim has a
     calendar (its start is a date or a year), a number is a calendar year (`2005` is the start of 2005, `2005.5` the
-    middle of it); otherwise, it is a time in the sim's unit from 0. A duration is always a time after the start:
-    `ss.years(5)` is 5 years after it, and for 30 days after a dated start, give `ss.days(30)`.
+    middle of it); otherwise, it is a time in the sim's unit from 0. A duration is a point on the sim's own axis, counted
+    from 0 as `sim.t.tvec` is (`ss.days(30)` is day 30), so it is for a sim with no calendar; with one, it is an error, and
+    30 days after a dated start is `sim.pars.start + ss.days(30)` (see `ss.Timeline.to_time()`).
     """
     return sim.t.to_time(val)
 
@@ -317,7 +318,7 @@ class modify(Connector):
             any of these as a string (`'sir.pars.beta'`); or the contacts of a network, as the network (`ss.contacts('Kenya', layer='school')`,
             matched by its name) or as a path (`'school.pars.n_contacts'`). For a transition with several destinations (e.g. `ss.Transition(Tx, {R: 0.8, I: None}, rate=...)`),
             the transition scales its rate (or its dwell time), and a destination (`'tb.treatment.R'`) scales the probability of that destination; with an outcome for each strain carried
-            (`per_strain=True`, with the probability of the first destination), that is the probability for the whole set of strains a person carries (e.g. that all are cured: Π c_k), not each strain's
+            (`per_strain='each'`, with the probability of the first destination), that is the probability for the whole set of strains a person carries (e.g. that all are cured: Π c_k), not each strain's
         multiply (float): multiply the quantity by this; like `add` and `set`, it can also be `ss.by(...)`, a function of the sim, or an `ss.timeseries`, for changes at given times
         add (float): add this to the quantity: a parameter, or an inflow (a transition from `ss.outside`, e.g. CFUs shed into a reservoir), to which it adds an amount per unit time from outside the model
         set (float): replace the quantity with this (a parameter only)

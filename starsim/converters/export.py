@@ -71,7 +71,7 @@ def initialized(sim):
 def compartmental(sim):
     """ An initialized sim whose diseases run as compartments, and what was changed to get it """
     sim = initialized(sim)
-    if sim.solver != 'abm':
+    if not isinstance(sim.solver, ss.solvers.abm):
         return sim, None
     return ss.sim.as_ode(sim, verbose=0).init(), 'changed: the agent-based sim was written as its compartmental form (an ODE)'
 
@@ -304,7 +304,7 @@ def flatten(sim):
             lost.append(f'not exported: {what} "{mod.name}"{extra}')
     if getattr(sim, 'crossings', None):
         lost.append('not exported: the coupling between diseases (each is written on its own)')
-    if sim.solver not in ['ode', 'auto'] and how is None:
+    if not isinstance(sim.solver, ss.solvers.ode) and how is None:
         lost.append(f'changed: solver="{sim.solver}" is not carried; the model is written as an ODE')
     return out
 

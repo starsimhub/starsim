@@ -44,15 +44,15 @@ def test_classes():
     assert d3 / 2 == 2/0.1/2
 
     # Test rate dt
-    r1 = ss.per(2, 'year')
-    r2 = ss.per(3, 'year')
-    r3 = ss.per(2/0.1, 'year')
-    r4 = ss.per(3/0.2, 'year')
+    r1 = ss.freq(2, 'year')
+    r2 = ss.freq(3, 'year')
+    r3 = ss.freq(2/0.1, 'year')
+    r4 = ss.freq(3/0.2, 'year')
 
-    assert r1 + r2 == ss.per(5, 'year')
-    assert r3 + r4 == ss.per(20+15, 'year')
-    assert r3 * 2 == ss.per(4/0.1, 'year')
-    assert r4 / 2 == ss.per(1.5/0.2, 'year')
+    assert r1 + r2 == ss.freq(5, 'year')
+    assert r3 + r4 == ss.freq(20+15, 'year')
+    assert r3 * 2 == ss.freq(4/0.1, 'year')
+    assert r4 / 2 == ss.freq(1.5/0.2, 'year')
 
     # Test duration units
     d5 = ss.dates.datedur(years=2)
@@ -62,11 +62,12 @@ def test_classes():
 
     # Test rate units
     rval = 0.7
-    r5 = ss.per(rval, ss.weeks(1))
-    assert np.isclose(r5.to_events(ss.days(1)), rval/7) # These should be close, but not match exactly
-    assert np.isclose(r5.to_events(ss.weeks(0.1)), rval/10)
-    assert r5.to_events(ss.days(1)) == rval * ss.days(1) / ss.weeks(1) # These should match exactly
-    assert r5.to_events(ss.weeks(0.1)) == rval * ss.weeks(0.1) / ss.weeks(1)
+    r5 = ss.freq(rval, ss.weeks(1))
+    assert np.isclose(r5*ss.days(1), rval/7) # These should be close, but not match exactly
+    assert np.isclose(r5*ss.weeks(0.1), rval/10)
+    assert r5*ss.days(1) == rval * ss.days(1) / ss.weeks(1) # These should match exactly
+    assert r5*ss.weeks(0.1) == rval * ss.weeks(0.1) / ss.weeks(1)
+    assert r5*ss.days(1) == ss.per(rval, ss.weeks(1)).to_events(ss.days(1)) # A frequency times a duration is the count, as to_events() is for a rate
 
     # Test prob
     tpval = 0.1
@@ -108,7 +109,7 @@ def test_syntax():
     assert ss.dates.datedur(weeks=1)/ss.dates.datedur(days=1) == 7
     assert np.isclose((ss.dates.datedur(weeks=1) - ss.dates.datedur(days=1)).years, 6/365)
     assert np.isclose((ss.date(2050)-ss.date(2020)).years, ss.years(30).years, rtol=1/365) # Not exact due to leap years
-    assert np.isclose((ss.per(1, 'week')+ss.per(1, 'day')).value, ss.per(8, 'week').value) # Not exact
+    assert np.isclose((ss.freq(1, 'week')+ss.freq(1, 'day')).value, ss.freq(8, 'week').value) # Not exact
     assert np.isclose((ss.peryear(1)+ss.permonth(1)).value, 13) # Rates add directly, not via probabilities
 
     assert ss.date('2020-01-01') + ss.dates.datedur(weeks=52) == ss.date('2020-12-30') # Should give us 30th December 2020
@@ -147,10 +148,10 @@ def test_syntax():
     assert (2/ss.years(1)) == ss.peryear(2)
     assert (4/ss.years(1)) == ss.peryear(4)
     assert (4/ss.dates.datedur(1)) == ss.peryear(4)
-    assert ss.per(5, 'day').to_events(ss.dates.datedur(days=1)) == 5
-    assert 2/ss.per(0.25, 'year') == ss.years(8)
-    assert 1/(2*ss.per(0.25, 'year')) == ss.years(2)
-    assert ss.per(0.5, 'year')/ss.per(1, 'year') == 0.5
+    assert (ss.freq(5, 'day')*ss.dates.datedur(days=1)) == 5
+    assert 2/ss.freq(0.25, 'year') == ss.years(8)
+    assert 1/(2*ss.freq(0.25, 'year')) == ss.years(2)
+    assert ss.freq(0.5, 'year')/ss.freq(1, 'year') == 0.5
 
     # Probabilities
     p = ss.prob(0.1, ss.dates.datedur(years=1))
@@ -250,7 +251,7 @@ def test_timepar_float():
 
     # float() would return the numerator alone, so peryear(1), permonth(1) and perday(1)
     # would all be 1.0 despite differing by a factor of 365
-    for rate in [ss.peryear(1), ss.permonth(1), ss.perday(1), ss.prob(0.5, 'year'), ss.per(80, 'year')]:
+    for rate in [ss.peryear(1), ss.permonth(1), ss.perday(1), ss.prob(0.5, 'year'), ss.freq(80, 'year')]:
         with pytest.raises(TypeError):
             float(rate)
         assert sc.isnumber(rate.value) # The escape hatch still works
@@ -274,7 +275,7 @@ def test_timepar_float():
 
     # Unit-independent ufuncs are still allowed
     assert np.isfinite(ss.peryear(1))
-    assert np.isnan(ss.per(np.nan, 'year'))
+    assert np.isnan(ss.freq(np.nan, 'year'))
     assert np.sign(ss.peryear(2)) == 1
 
     # Dates are unaffected, since a date has an unambiguous float representation
@@ -332,7 +333,7 @@ def test_to_dt():
 
     # Rates resolve to their per-timestep value
     assert np.isclose(ss.peryear(0.1).to_dt(ss.months(1)), ss.peryear(0.1).to_prob(ss.months(1)))
-    assert np.isclose(ss.per(120, 'year').to_events(ss.months(1)), 10) # A count: the number in a step
+    assert np.isclose(ss.freq(120, 'year').to_dt(ss.months(1)), 10)
 
     # Unlinked timepars raise rather than guessing
     with pytest.raises(ValueError):
@@ -346,7 +347,7 @@ def test_to_dt():
     # Rates can convert to a duration unit as well as a rate class
     assert ss.peryear(1).to('month') == ss.peryear(1).to(ss.permonth)
     assert isinstance(ss.prob(0.5, 'year').to('month'), ss.time.probpermonth)
-    assert isinstance(ss.per(80, 'year').to(ss.months), ss.permonth)
+    assert isinstance(ss.freq(80, 'year').to(ss.months), ss.freqpermonth)
 
     return
 
@@ -369,13 +370,13 @@ def test_link_timepars():
     assert sis.pars.dur_test.to_dt() == 100*12
 
     # Timepars derived by arithmetic stay linked
-    shed = ss.per(12, 'year').set_default_dur(sis.t.dt)
+    shed = ss.freq(12, 'year').set_default_dur(sis.t.dt)
     assert (shed*10).to_events() == 10
     assert np.isclose((sis.pars.beta*0.5).to_prob(), sis.pars.beta.to_prob(scale=0.5))
     assert (ss.peryear(1) + sis.pars.waning).default_dur == sis.t.dt # Linked from either side
     assert (2*sis.pars.dur_test).to_dt() == 200*12
     with pytest.raises(ValueError): # An unlinked rate gives an informative error
-        ss.per(12, 'year').to_events()
+        ss.freq(12, 'year').to_events()
 
     return
 
@@ -409,9 +410,9 @@ def test_prob_conversion():
     assert np.isclose(ss.prob(ss.peryear(0.5), 'month').value, 1 - np.exp(-0.5/12))
     assert np.isclose(ss.peryear(ss.prob(0.05, 'month')).value, -np.log(1-0.05)*12)
 
-    # ss.per is genuinely linear, so it is unchanged
+    # ss.per and ss.freq are genuinely linear, so they are unchanged
     assert np.isclose(ss.peryear(0.5).to(ss.permonth).value, 0.5/12)
-    assert np.isclose(ss.per(12, 'year').to(ss.permonth).value, 1.0)
+    assert np.isclose(ss.freq(12, 'year').to(ss.freqpermonth).value, 1.0)
     assert np.isclose(ss.permonth(1).to(ss.peryear).value, 12)
 
     # A unitless prob has no time unit to convert against, so it raises rather than guessing
@@ -426,7 +427,7 @@ def test_arithmetic():
     """ The arithmetic of typed values, and the check of the slot a typed value lands in """
     sc.heading('Testing the arithmetic of typed values')
     ops = {'+':operator.add, '-':operator.sub, '*':operator.mul, '/':operator.truediv, 'to_events':lambda a, b: a.to_events(b)}
-    d, r, p = ss.days, ss.perday, ss.time.probperday
+    d, r, f, p = ss.days, ss.perday, ss.freqperday, ss.time.probperday
     assert sum([d(1), d(2)]) == d(3) # sum() starts from 0
     assert ss.days(14).weeks == 2 # Exactly
     rows = [ # Left, op, right, and the result: a value, or the code of the error
@@ -436,12 +437,12 @@ def test_arithmetic():
         (r(0.1), '+', ss.peryear(36.5), r(0.2)),  (r(0.2), '-', ss.peryear(36.5), r(0.1)), # Competing hazards add
         (r(0.1), '*', 2, r(0.2)),  (r(0.2), '/', 2, r(0.1)),
         (r(0.1), '*', d(3), 1 - np.exp(-0.3)), # A probability, not the expected count
-        (r(0.1), 'to_events', d(3), 0.3), # The expected count
+        (f(0.1), '*', d(3), 0.3), (r(0.1), 'to_events', d(3), 0.3), # An expected count
         (p(0.1), '+', p(0.1), p(0.19)),  (2, '*', p(0.1), p(0.19)),  (p(0.19), '-', p(0.1), p(0.1)), # Through the rates, consistently
         (p(0.1), '*', d(2), 0.19),
         (r(0.2), '/', r(0.1), 2),
-        (1, '/', d(10), r(0.1)),  (2, '/', r(0.1), d(20)),
-        (r(0.1), '+', p(0.1), TypeError),  (r(0.1), '+', 1, TypeError),  (1, '-', r(0.1), TypeError),  (d(3), '+', 1, TypeError),  (d(3), '-', 1, TypeError),  (1, '-', d(3), TypeError),  (d(3), '+', r(0.1), TypeError),  (1, '/', p(0.1), TypeError),
+        (1, '/', d(10), r(0.1)),  (2, '/', r(0.1), d(20)),  (2, '/', f(0.1), d(20)),
+        (r(0.1), '+', p(0.1), TypeError),  (r(0.1), '-', f(0.1), TypeError),  (r(0.1), '+', 1, TypeError),  (1, '-', r(0.1), TypeError),  (d(3), '+', 1, TypeError),  (d(3), '-', 1, TypeError),  (1, '-', d(3), TypeError),  (d(3), '+', r(0.1), TypeError),  (1, '/', p(0.1), TypeError),
         (r(0.1), '*', r(0.1), TypeError),  (r(0.1), '/', d(3), TypeError),  (d(3), '*', d(3), TypeError),  (d(3), '/', r(0.1), TypeError),
     ]
     for a, op, b, expected in rows:
@@ -513,13 +514,23 @@ def test_bare_units():
     sis = ss.Disease(S >> I @ rains*I, I >> S @ ss.days(10), init_prev=0.1, name='sis')
     ss.Sim(sis, start='2000', stop='2002', verbose=0).run()
 
-    # A bare number is a year in a sim with a calendar, dates or numeric years alike (2000 was read as 2000 days); a time after the start is a duration
+    # A bare number is a year in a sim with a calendar, dates or numeric years alike (2000 was read as 2000 days); a time after the start is the start plus a duration
     for start in [2020, '2020-01-01']:
         sim = ss.Sim(sir, start=start, stop=2021, n_agents=100, verbose=0).init()
         assert np.allclose(ss.timeseries({2000: 1, 2030.5: 2, '2040-01-01': 3}).years(sim), [2000, 2030.5, 2040])
         with pytest.raises(ValueError, match='calendar year'): # The year 30, not 30 days after the start
             ss.connectors.to_ti(sim, 30)
-    assert ss.connectors.to_time(sim, ss.days(30)) == ss.date('2020-01-31')
+        with pytest.raises(ValueError, match='sim.pars.start'): # A duration as a time is counted from 0, so needs a sim with no calendar
+            ss.connectors.to_time(sim, ss.days(30))
+        assert ss.connectors.to_time(sim, sim.pars.start + ss.days(30)) == (ss.date('2020-01-31') if sim.t.calendar == 'dates' else ss.years(ss.date('2020-01-31').years))
+
+    # With no calendar, a duration as a time is a point counted from 0, as tvec is; in another unit, a warning
+    sim = ss.Sim(sir, start=0, stop=ss.days(60), n_agents=100, verbose=0).init()
+    assert ss.connectors.to_ti(sim, ss.days(30)) == ss.connectors.to_ti(sim, 30) == 30 and ss.connectors.to_time(sim, sim.t.tvec[5]) == sim.t.tvec[5]
+    with pytest.warns(RuntimeWarning, match='counts in days'):
+        ss.connectors.to_ti(sim, ss.weeks(2))
+    with pytest.warns(RuntimeWarning, match='ambiguous'): # Neither clearly a year nor clearly not
+        ss.Sim(sir, start=1500, stop=1520, n_agents=100, verbose=0).init()
 
     # A time series of bare numbers as a crude birth rate is per year, as a bare number is (it was per day, and the population exploded)
     alive = [ss.Sim(demographics=ss.birth(rate=rate), total_pop=1000, start='2000-01-01', stop='2001-01-01', verbose=0).run().results.alive[-1] for rate in [0.04, ss.timeseries({2000: 0.04, 2030: 0.02})]]
@@ -588,11 +599,14 @@ def test_calendar_months():
         with pytest.raises(ValueError):
             ss.dates.datedur(bad)
 
-    # Removed: ss.datedur (whole months and years are calendar offsets), the ss.freq family (a count per unit time is a rate), and the unit instances ss.year etc. (a unit is a string)
-    for name in ['datedur', 'freq', 'freqperyear', 'year', 'month', 'week', 'day']:
-        assert not hasattr(ss, name)
+    # Removed: ss.datedur (whole months and years are calendar offsets); the ss.freq family and the unit instances ss.year etc. stay
+    assert not hasattr(ss, 'datedur')
+    assert ss.year == ss.years(1) and ss.day == ss.days(1) and ss.prob(0.1, ss.year) == ss.probperyear(0.1)
+    assert ss.freqperyear(80)*ss.years(0.5) == 40 and np.isclose(ss.freqperyear(80).to(ss.months).value, 80/12)
     assert ss.date('2020-01-31') + ss.months(1) == ss.date('2020-02-29') and ss.date('2020-03-01') + ss.years(1) == ss.date('2021-03-01')
-    assert ss.date('2020.5') == ss.date(2020.5) # A string that is a number is a decimal year (it was May 2020)
+    assert ss.date('2020-05') == ss.date('2020-5') == ss.date('2020-05-01') and ss.date('2020') == ss.date(2020)
+    with pytest.raises(ValueError, match='ambiguous'): # A decimal year or May 2020? ss.date(2020.5), a float, is the decimal year
+        ss.date('2020.5')
     assert ss.DateArray([1, 2], unit='month').unit is ss.months
     assert ss.peryear(80).to_events(ss.years(0.5)) == 40
     with pytest.raises(TypeError): # ss.years() takes a number, not a date

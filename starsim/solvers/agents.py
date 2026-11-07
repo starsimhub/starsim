@@ -19,12 +19,12 @@ __all__ = ['agent_solver', 'Transmission', 'Agents']
 
 def agent_solver(module, sim, why=False):
     """
-    How a declared module's agents are stepped, one of the steps of `ss.abm()` ('midstep', 'wholestep', or 'events'): its own
-    (`ss.Disease(..., solver=ss.abm(step=...))`), if it has one; else the sim's (`ss.Sim(solver=ss.abm(step=...))`, 'midstep' by default).
+    How a declared module's agents are stepped, one of the steps of `ss.solvers.abm()` ('midstep', 'wholestep', or 'events'): its own
+    (`ss.Disease(..., solver=ss.solvers.abm(step=...))`), if it has one; else the sim's (`ss.Sim(solver=ss.solvers.abm(step=...))`, 'midstep' by default).
     With `why=True`, also where it came from: `'own'`, `'sim'`, or `'default'`.
     """
     own = getattr(module, 'solver', None)
-    ran = sim.solver if sim.solver == 'abm' else ss.abm()
+    ran = sim.solver if isinstance(sim.solver, ss.solvers.abm) else ss.solvers.abm()
     if own is not None:
         step, source = own.step, 'own'
     else:

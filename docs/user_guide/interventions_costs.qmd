@@ -163,7 +163,7 @@ msim = ss.parallel({
     'No vaccination': ss.Sim(measles, analyzers=ssl.Costs(unit_costs=care), **pars),
     'Routine':        ss.Sim(measles, interventions=routine, analyzers=ssl.Costs(unit_costs=care, fixed=ss.peryear(20_000), start=2010), **pars),
 })
-df = ssl.ICER(msim, outcome='measles.infection', discount=0.03, discount_from=2010).df # Discounted, as above
+df = ssl.ICER(msim, outcome='measles.infection', discount=0.03, discount_start=2010).df # Discounted, as above
 print(df[['cost', 'averted']].round())
 net = df.cost['Routine'] - df.cost['No vaccination']
 print('Net cost per infection averted ($):', round(net/df.averted['Routine'], 2))

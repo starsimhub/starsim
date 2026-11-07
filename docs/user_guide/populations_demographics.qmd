@@ -75,7 +75,7 @@ msim = ss.parallel({
 msim.plot(['alive', 'measles.I'])
 ```
 
-The population grows more slowly with the falling birth rate, and with fewer susceptible children born each year, the endemic level of measles is lower. The times of a series can also be years (`{2000: ..., 2030: ...}`): a bare number from 1900 on is a calendar year, and a smaller one a time in the sim's unit after the start. See [Parameters](building_parameters.qmd) for `ss.timeseries()` and other parameters that vary over time.
+The population grows more slowly with the falling birth rate, and with fewer susceptible children born each year, the endemic level of measles is lower. The times of a series can also be years (`{2000: ..., 2030: ...}`): a bare number from 1800 on is a calendar year (in a sim with a calendar, any bare number is one), and in a sim with no calendar, a bare number is a time in the sim's unit from 0. See [Parameters](building_parameters.qmd) for `ss.timeseries()` and other parameters that vary over time.
 
 ## Rates from data
 

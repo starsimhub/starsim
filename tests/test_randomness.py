@@ -441,7 +441,7 @@ def test_crn_undriven():
         kw = dict(strains=ss.Strains(['DS', 'RIF'], fractions=[0.8, 0.2], rel_trans=[1, 0.6])) if strains else {}
         trs = dict(infection=S >> L @ ss.peryear(4)*I, activation=L >> I @ ss.peryear(0.5), recovery=I >> R @ ss.years(1), waning=R >> S @ ss.years(2))
         if extra == 'undriven':
-            trs['clear'] = ss.Transition(L, C) # Taken only by a product's cure=
+            trs['clear'] = ss.Transition(L, C, rate=0) # Taken only by a product's cure=
         elif extra == 'zero':
             trs['death'] = I >> C @ ss.peryear(0) # A rate of 0, alongside a duration
         d = ss.Disease(S, L, I, R, C, **trs, name='d', init=dict(L=0.2, I=0.02), **kw)

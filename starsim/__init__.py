@@ -41,10 +41,11 @@ from .distributions import (
 
 from .internals import time, dates, timeline, parameters
 from .internals.time import (
-    TimePar, Duration, Rate, prob, per, peract,
-    years, months, weeks, days,
+    TimePar, Duration, Rate, prob, per, freq, peract,
+    years, months, weeks, days, year, month, week, day,
     perday, perweek, permonth, peryear,
     probperday, probperweek, probpermonth, probperyear,
+    freqperday, freqperweek, freqpermonth, freqperyear,
 )
 from .internals.dates import DateArray, date
 from .internals.timeline import Timeline, schedule
@@ -93,7 +94,7 @@ from . import data # starsim_data is imported only when this is used
 from .internals import gradients # JAX is imported only when this is used
 from .solvers.backends import jit, draws # Draws, for ss.draws.next_u() in compiled code (see ss.Dist.streams())
 from . import sim
-from .sim import Sim, SimPars, demo, ode, binomial, abm, rescale, maximize, minimize
+from .sim import Sim, SimPars, demo
 from .run import MultiSim, parallel
 
 #%% Importing from and exporting to other frameworks

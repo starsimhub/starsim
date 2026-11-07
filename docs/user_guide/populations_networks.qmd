@@ -62,7 +62,7 @@ The approximations are rough where the network matters most: homogeneous mixing 
 
 ## Random networks
 
-`ss.RandomNet` pairs people at random, with `n_contacts` contacts per person (a number, or a distribution such as `ss.poisson(mean=5)`). The other end of each contact is drawn at random, so by default some people have a few more or fewer, and `method='exact'` gives each person exactly that number (if it is even; an odd number is 1 more or fewer, at random), a little more slowly. With `method='safe'`, adding one person changes only the contacts next to theirs, which suits comparisons between scenarios, but it is slower. The contacts last one step: they are redrawn every step, or, with `dynamic=False`, made once at the start and kept (people born or added later get none); partnerships that last are `ss.DegreeNet`. `who=(ss.person.age >= 20) & (ss.person.age < 65)` restricts the network to people of those ages. Several networks can be given together, each with its own name, as a layered population: here contacts at home (fully connected households of about three people, `ssl.ClusterNet`) and contacts at work among adults:
+`ss.RandomNet` pairs people at random, with `n_contacts` contacts per person (a number, or a distribution such as `ss.poisson(mean=5)`). The other end of each contact is drawn at random, so by default some people have a few more or fewer, and `method='exact'` gives each person exactly that number (if it is even; an odd number is 1 more or fewer, at random), a little more slowly. With `method='safe'`, adding one person changes only the contacts next to theirs, which suits comparisons between scenarios, but it is slower. By default the contacts last one step: they are redrawn every step, or, with `dynamic=False`, made once at the start and kept (people born or added later get none). With `dur=` (e.g. `dur=ss.days(5)`, or a distribution), each lasts that long and is then replaced by a new one drawn at random; partnerships formed toward a target number of partners are `ss.DegreeNet`. `who=(ss.person.age >= 20) & (ss.person.age < 65)` restricts the network to people of those ages. Several networks can be given together, each with its own name, as a layered population: here contacts at home (fully connected households of about three people, `ssl.ClusterNet`) and contacts at work among adults:
 
 ```{python}
 households = ssl.ClusterNet(name='households', cluster_size=ss.poisson(3))
@@ -267,7 +267,7 @@ The networks and mixing pools in Starsim, with their main parameters (see [Netwo
 
 | Network | What it is | Main parameters |
 |---|---|---|
-| `ss.RandomNet` | Contacts at random, redrawn each step or made once | `n_contacts`, `dynamic`, `who`, `memory` |
+| `ss.RandomNet` | Contacts at random, redrawn each step, lasting, or made once | `n_contacts`, `dur`, `dynamic`, `who`, `memory` |
 | `ss.DegreeNet` | Partnerships among anyone, or between two groups, with targets for the number of partners | `between`, `who`, `dur`, `acts`, `n_contacts`, `concurrency`, `max_contacts`, `match`, `memory` |
 | `ss.SexualNet` | Partnerships between two groups (men and women by default): `ss.DegreeNet` with sexual debut and participation | `between`, `dur`, `acts`, `debut`, `participation`, `n_contacts`, `concurrency`, `max_contacts`, `match`, `memory` |
 | `ss.PrenatalNet` | Mother and unborn child, from `ss.Pregnancy` | none |
@@ -286,6 +286,7 @@ The library (`import starsim.library as ssl`) has more:
 | `ssl.HouseholdNet` | Households from survey data (such as the DHS), which also sets each person's age and sex to match; with `ss.Pregnancy`, newborns join their mother's household | `dhs_data`, `dynamic` |
 | `ssl.HybridNet` | Households, schools, workplaces, and community, as in Covasim | `household_size`, `n_contacts`, `school_ages`, `work_ages`, `clustered` |
 | `ssl.StaticNet` | A fixed network from a NetworkX graph, by default an Erdős–Rényi graph (each pair of people connected with a probability) | `graph`, `p`, `n_contacts` |
+| `ssl.GeoNet` | People in real places, with contacts falling off with distance | `places`, `local`, `c`, `n_contacts` |
 | `ssl.GridNet` | People on a square grid | `diagonal`, `periodic` |
 | `ssl.SmallWorldNet`, `ssl.ScaleFreeNet` | The classic small-world and scale-free graphs | `n_contacts`, `rewire`; `n_contacts` |
 | `ssl.DiskNet` | People who move in a plane, in contact within a radius | `r`, `v` |

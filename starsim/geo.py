@@ -1,7 +1,7 @@
 """
 Places and the movement between them: a geography (`ss.geo.geography`), and movement between its places: a movement model (`ss.geo.gravity`, `ss.geo.radiation`), a matrix (`ss.geo.Mobility`), or a register of moves on given dates (`ss.geo.register`)
 
-These exist so that a model of more than one place can be built from named places and a standard movement model. Movement applies to a model stratified by place (`sir.stratify(patch=...)`), whose networks then pair people within each place.
+These exist so that a model of more than one place can be built from named places and a standard movement model. Movement applies to a model stratified by place (`sir.stratify(patch=...)`), whose networks then pair people within each place; a geography can also be used by a network (`ssl.GeoNet`), for a disease of either kind.
 
 Used with: agents and compartments; declared and coded modules
 """

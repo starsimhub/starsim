@@ -393,7 +393,7 @@ class MultiSim:
 
     def _identical_runs(self):
         """ Whether runs of the same sim with different seeds came out the same, as those of an ODE do """
-        if self.runs is None or not isinstance(self.results, MultiResults) or not all(sim.solver == 'ode' for sim in getattr(self.sims, 'runners', self.sims)):
+        if self.runs is None or not isinstance(self.results, MultiResults) or not all(isinstance(sim.solver, ss.solvers.ode) for sim in getattr(self.sims, 'runners', self.sims)):
             return False
         repeats = np.flatnonzero(self.runs.drop(columns='rand_seed', errors='ignore').astype(str).duplicated(keep=False))
         if len(repeats) < 2:

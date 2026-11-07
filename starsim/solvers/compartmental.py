@@ -106,7 +106,7 @@ def run_many_parts(owner, rngs, ys, args, n_cols, outputs, state_of, rows, grp_s
 
 
 def exact_dwells(sim):
-    """ Whether each dwell time is run as it is, rather than as Erlang stages: `solver=ss.ode(dwells='exact')` """
+    """ Whether each dwell time is run as it is, rather than as Erlang stages: `solver=ss.solvers.ode(dwells='exact')` """
     return getattr(sim.solver if sim.solver is not None else sim.pars.solver, 'dwells', None) == 'exact'
 
 class Compartmental(Engine): # Never searched for distributions (see ss.dists.no_dists()): it draws from its own generator, and the distributions in the model are found through its graph
@@ -492,7 +492,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
 
         for tr in graph.inflows:
             add_flow(tr, None, 'inflow')
-        if self.solver != 'ode': # The stochastic solvers draw in the order of the flows: by the names of their states and transitions, so the draws do not depend on the order these are declared in (the ODE keeps the order given)
+        if not isinstance(self.solver, ss.solvers.ode): # The stochastic solvers draw in the order of the flows: by the names of their states and transitions, so the draws do not depend on the order these are declared in (the ODE keeps the order given)
             rank = lambda c: (1, '', 0) if c is None else (0, self.comps[c].state.name, self.state_comps[self.comps[c].state.name].index(c))
             self.flows.sort(key=lambda flow: (*rank(flow.src), flow.tr.name, -1 if flow.strain is None else flow.strain))
 
@@ -593,7 +593,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                                      f'     Run with solver="abm", give stages= on the transition, or allow the approximation.')
         else:
             fixed = ' (nearly fixed, not exponential)' if dw.std < dw.mean/2 else '' # e.g. ss.SIR(dur_inf=ss.days(7)), whose std is 1 day
-            ide = ', since solver=ss.ode(dwells="exact") has no distribution function for it' if exact_dwells(sim) else ''
+            ide = ', since solver=ss.solvers.ode(dwells="exact") has no distribution function for it' if exact_dwells(sim) else ''
             self.tell(ss.note, f'{name} has a {dw.family} dwell time{fixed}, approximated by {what}{ide}', sim=sim, verbose=0 if approximations == 'allow' else None)
             if dw.std > ss.solvers.choose.max_cv*dw.mean: # solver='auto' runs it as agents
                 self.tell(ss.warn, f'{name} has a {dw.family} dwell time whose coefficient of variation is {dw.std/dw.mean:.3g}, so one exponential stage keeps only its mean, and its long tail is lost; run with solver="abm" to keep it')
@@ -811,7 +811,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
 
     @property
     def integer(self):
-        return self.solver in ['gillespie', 'tau', 'binomial']
+        return isinstance(self.solver, (ss.solvers.gillespie, ss.solvers.tau, ss.solvers.binomial))
 
     @property
     def owner(self):
@@ -1533,7 +1533,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
     def as_is(self, dwell):
         """
         Whether a dwell time runs as it is, as a conveyor of whole steps (see slot_rates()), rather than as Erlang stages: under
-        solver=ss.ode(dwells='exact'), any whose distribution function is known; under every compartmental solver, one that takes only whole
+        solver=ss.solvers.ode(dwells='exact'), any whose distribution function is known; under every compartmental solver, one that takes only whole
         numbers of steps (an `ss.choice` of them, e.g. days with daily steps), which is then exact, as it is for agents
         """
         if getattr(dwell, 'dist', None) is None or getattr(dwell, 'scale', None) is not None or getattr(dwell, 'varying', False) or self.step_known() is None: # e.g. a transfer's stages (see ss.dimensions.transfer_stages()), which have no distribution here
@@ -1566,7 +1566,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             q = (G[j] - before)/left
             rates.append(-np.log1p(-min(q, 1 - 1e-15))/dt)
             before = G[j]
-        raise ss.CapabilityError(f'the dwell time of "{self.mod.name}.{tr.name}" lasts more than {most} steps, too many slots for exact dwell times (solver=ss.ode(dwells="exact")); take a longer step, or run with solver="ode" (Erlang stages)')
+        raise ss.CapabilityError(f'the dwell time of "{self.mod.name}.{tr.name}" lasts more than {most} steps, too many slots for exact dwell times (solver=ss.solvers.ode(dwells="exact")); take a longer step, or run with solver="ode" (Erlang stages)')
 
     def gives_back(self, src, dst):
         """ In a branching process, whether a move from one state to another is from the infected side back into the uninfected side, which it takes people out of the model by instead """
@@ -1795,13 +1795,13 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
     def step_transmit(self):
         """ Move those a declared disease's own `transmit()` gives for each of its transmissions, at the start of the step (see `ss.Disease.transmit()`): from its source states in proportion, in each group, counted in its flow """
         mod = self.mod
-        if self.sim.solver == 'ode' and not getattr(self, '_noted_transmit', False):
+        if isinstance(self.sim.solver, ss.solvers.ode) and not getattr(self, '_noted_transmit', False):
             self._noted_transmit = True
             ss.note(f'"{mod.name}" has a transmit() of its own, which is taken once a step, at its start, so the ODE does not integrate its transmissions within the step (first order in dt); give a rate instead, e.g. S >> I @ (lambda self, sim: ...), to keep it exact', sim=self.sim)
         for tr in self.graph.transmissions:
             out = mod.call_transmit(tr)
             if isinstance(out, (ss.uids, ss.BoolArr)):
-                raise ss.CapabilityError(f'transmit() of "{mod.name}" gave agents (UIDs) for "{tr.name}", but it is run with solver="{self.sim.solver}", which has no agents: give the number infected in each group (or one number), e.g. with if self.sim.solver == "abm": ... else: ...')
+                raise ss.CapabilityError(f'transmit() of "{mod.name}" gave agents (UIDs) for "{tr.name}", but it is run with solver="{self.sim.solver}", which has no agents: give the number infected in each group (or one number), e.g. with if isinstance(self.sim.solver, ss.solvers.abm): ... else: ...')
             count = np.broadcast_to(np.asarray(out, dtype=float), self.n_groups)
             if self.strain is not None or len(tr.dest) > 1:
                 raise ss.CapabilityError(f'transmit() of "{mod.name}" for "{tr.name}" ({"with strains" if self.strain is not None else "with several destinations"}) cannot run with solver="{self.sim.solver}" yet; run with solver="abm"')
@@ -1871,7 +1871,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                 else:
                     change = lambda e: e*factor
                     flows = [flow for flow in self.flows if flow.tr is graph.transitions.get(key[2]) and flow.expr is not None]
-                if key[1] not in ['par', 'transition'] or not flows or any(flow.strain or (self.solver == 'binomial' and not flow.dynamic) for flow in flows): # The substeps of the chain binomial are chosen from the rates known at the start
+                if key[1] not in ['par', 'transition'] or not flows or any(flow.strain or (isinstance(self.solver, ss.solvers.binomial) and not flow.dynamic) for flow in flows): # The substeps of the chain binomial are chosen from the rates known at the start
                     continue
                 for flow in flows:
                     flow.expr, flow.dynamic = change(flow.expr), True
@@ -2085,7 +2085,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         for flow,uses in zip(self.flows, flow_uses):
             if flow.dynamic:
                 count_uses(flow.expr, uses, reps)
-        if self.solver != 'gillespie' and self.cross is None: # The parts several rates share, worked out first; not for the exact solver (whose places work out a few rates at a time) or for diseases tracked jointly (whose program is joined rate by rate)
+        if not isinstance(self.solver, ss.solvers.gillespie) and self.cross is None: # The parts several rates share, worked out first; not for the exact solver (whose places work out a few rates at a time) or for diseases tracked jointly (whose program is joined rate by rate)
             n_flows = {}
             for uses in flow_uses:
                 for k in uses:
@@ -2377,7 +2377,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             maps       = np.array(list(maps.values()), dtype=float).reshape(len(maps), ng, ng),
         )
         local = self._local_mixing and not maps and self.program.contacts.shape[0] == self.program.contacts.shape[2] == 1 and all(flow.record is None for flow in self.flows) # Places do not affect each other within a step: see ss.kernels.gillespie_places()
-        self.program = self.program._replace(local=local and (self.solver != 'gillespie' or self.certain() is None)) # The exact solver place by place works out its own rates, so does not take an infinite one (and only it reads this)
+        self.program = self.program._replace(local=local and (not isinstance(self.solver, ss.solvers.gillespie) or self.certain() is None)) # The exact solver place by place works out its own rates, so does not take an infinite one (and only it reads this)
         return
 
     def refresh_program(self):
@@ -2413,7 +2413,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
 
     @property
     def euler(self):
-        return self.sim.solver == 'ode' and self.sim.solver.integrator == 'euler'
+        return isinstance(self.sim.solver, ss.solvers.ode) and self.sim.solver.integrator == 'euler'
 
     def at_middle(self):
         """ Take values that vary smoothly in time at the middle of the step, which runs from time point `ti` to the next, as `tables()` does, so that a stepped run takes the same values as a whole one """
@@ -3271,12 +3271,12 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         Each substep is off the ODE by an amount of order rate × dt (an acute stage of 1.7
         months at monthly steps can take everyone infected from 9% to 51%). It moves people through as many stages of a dwell time as
         they pass in a substep (see `ss.kernels.draw_chain()`), so it is the dwell's mean
-        that counts, not its stages; a fixed delay is a conveyor of whole steps, so its length doesn't count. `ss.binomial(substeps=1)`
+        that counts, not its stages; a fixed delay is a conveyor of whole steps, so its length doesn't count. `ss.solvers.binomial(substeps=1)`
         takes whole steps, as most chain-binomial models (and frameworks' discrete-time
         models) do.
         """
         n_sub = getattr(self.sim.solver, 'substeps', None)
-        if n_sub is None and self.solver == 'binomial':
+        if n_sub is None and isinstance(self.solver, ss.solvers.binomial):
             if self._n_sub is None:
                 self._n_sub = self.binomial_substeps()
             n_sub = self._n_sub
@@ -3293,7 +3293,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         0.1 × |R0 - 1|, for a bias of about 5% (a model of TB resistance, +12% at 3 substeps a month, is +3% at
         12; an SIS with R0 = 1.05 gave 0.083 for 0.048 at whole steps). A fixed delay doesn't count, since its people
         don't leave at a rate: a model whose only exits are fixed delays takes whole steps, which keeps its final size
-        but lowers its peak (by about 15% for an SIR at a fifth of the delay a step); `ss.binomial(substeps=3)` gives about 5%, for
+        but lowers its peak (by about 15% for an SIR at a fifth of the delay a step); `ss.solvers.binomial(substeps=3)` gives about 5%, for
         about twice the time.
         """
         totals = {} # The rates out of each compartment, summed: e.g. recovery and death from I
@@ -3343,12 +3343,11 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             return
         first = owner.engines[0] # Whose step and substeps the program takes (the diseases of a crossing have the same step)
         sim, dt, kn, rng = self.sim, first.dt, owner.kernels(), owner.kernel_rng
-        solver = sim.solver.integrator if sim.solver == 'ode' else sim.solver
         tables, row = owner.step_tables()
         y, flows = kn.one_step(rng, owner.y, owner.program, dt, ss.kernels.solver_code(sim), first.substeps(), tables, row)
         if sim.mixing.register is not None: # The events dated at the end of the step, the next time point
             owner.check_short(kn.apply_events(rng, y, owner.register, first.mod.ti + 1, first.integer))
-        if solver == 'gillespie' and owner.program.local and owner.program.has_det: # By place, the counts are settled after the events, as in SimInf
+        if isinstance(sim.solver, ss.solvers.gillespie) and owner.program.local and owner.program.has_det: # By place, the counts are settled after the events, as in SimInf
             kn.settle_places(y, owner.program, dt, flows)
         owner.y = y
         parts = owner.flows_of(flows)

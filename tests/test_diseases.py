@@ -218,7 +218,7 @@ def test_sis(do_plot=do_plot):
     sis = ss.SIS(beta=ss.peryear(0.5), dur_inf=ss.years(5))
     assert np.isclose(sis.R0(), 2.5) # beta × the mean duration
     ode = ss.Sim(sis, stop=100).run()
-    assert ode.solver == 'ode' and np.isclose(ode.results.sis.prevalence[-1], 0.6, atol=0.01) # Endemic at 1 - 1/R0
+    assert isinstance(ode.solver, ss.solvers.ode) and np.isclose(ode.results.sis.prevalence[-1], 0.6, atol=0.01) # Endemic at 1 - 1/R0
     rt = ode.diseases.sis.Rt()
     assert np.isclose(rt[0], 2.5, rtol=0.01) and np.isclose(rt[-1], 1, atol=0.01) # R0 at the start, 1 at the endemic state
 
@@ -603,7 +603,7 @@ def test_mixed_disease():
 
     sim = ss.Sim(diseases=Mixed(), n_agents=500, dt=ss.days(7), stop=2003, verbose=0).run()
     mixed = sim.diseases.mixed
-    assert sim.solver == 'abm' # The coded array needs agents
+    assert isinstance(sim.solver, ss.solvers.abm) # The coded array needs agents
     assert mixed.results.infection.sum() > 0 and mixed.years_infected.sum() > 0 # Both parts ran
     assert np.isclose(mixed.years_infected.sum(), (mixed.results.I[1:].sum() + mixed.I.n)*sim.t.dt_year) # One step for each step spent infected, the last step's included
     fitted, _ = ss.fit.bounded_pars(ss.Sim(diseases=Mixed(rate=ss.par(1.0, bounds=[0.5, 2])), n_agents=100, verbose=0).init())
@@ -789,6 +789,37 @@ def test_init_in_class():
     return
 
 
+def test_private_class_members():
+    """ An expression in a class body whose name starts with an underscore is a private intermediate: used, but not a result or an attribute """
+    class Saturating(ss.Disease):
+        beta = ss.par(0.3)
+        S, I, R = ss.states(3)
+        _h = np.maximum(beta*I.frac, 1e-12)
+        infection = S >> I @ ss.perday(1)*_h
+        recovery  = I >> R @ ss.days(10)
+
+    dis = Saturating(name='sat', beta=0.6)
+    assert '_h' not in dis.graph.exprs and '_h' not in dis.__dict__, 'A private intermediate should not be a member'
+    sim = ss.Sim(dis, total_pop=1000, stop=30, unit='day', solver='ode', verbose=0).run()
+    assert '_h' not in sim.results.sat, 'A private intermediate should not be a result'
+    class Public(ss.Disease):
+        beta = ss.par(0.3)
+        S, I, R = ss.states(3)
+        h = np.maximum(beta*I.frac, 1e-12)
+        infection = S >> I @ ss.perday(1)*h
+        recovery  = I >> R @ ss.days(10)
+    pub = ss.Sim(Public(name='sat', beta=0.6), total_pop=1000, stop=30, unit='day', solver='ode', verbose=0).run()
+    assert 'h' in pub.results.sat and np.array_equal(sim.results.sat.I, pub.results.sat.I), 'A private intermediate should give the same model as a public one, with the instance\'s parameters'
+
+    with pytest.raises(ValueError): # A parameter (or state, transition, ...) can't be private: each instance needs its own
+        class PrivatePar(ss.Disease):
+            _beta = ss.par(0.3)
+            S, I = ss.states(2)
+            infection = S >> I @ _beta*I
+        PrivatePar()
+    return
+
+
 def test_rel_sus_per_act():
     """ On a network with acts, rel_sus scales each act's hazard for a disease written as code, as for a declared disease """
     class Sus(ss.Connector):
@@ -876,7 +907,7 @@ def test_declared_transmit():
     class Half(ss.SIR):
         def transmit(self): # One transmission: the argument can be left out
             new = super().transmit()
-            return new[::2] if self.sim.solver == 'abm' else new/2
+            return new[::2] if isinstance(self.sim.solver, ss.solvers.abm) else new/2
 
     # As agents, the solver's own transmission is the same run; as an ODE, it is taken once a step, so is first order in dt
     res = {cls.__name__: ss.Sim(cls(beta=ss.peryear(2), name='sir'), networks='random', solver='abm', **kw).run().results.sir.infection.sum() for cls in [ss.SIR, Same, Half]}

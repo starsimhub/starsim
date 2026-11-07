@@ -163,7 +163,7 @@ class Counter(ss.Module):
 '''
     new, changes, todo = migrate_text(old)
     assert new == old and any('record_stocks()' in msg and 'record_flows()' in msg for line,msg in todo) # update_results() is split in two, which needs a person
-    assert any(line == 7 and 'needs kind=' in msg for line,msg in todo) # ss.Result('seen') says nothing of its kind, which Starsim 3 guessed from the dtype
+    assert any(line == 7 and 'should give kind=' in msg for line,msg in todo) # ss.Result('seen') says nothing of its kind, which is guessed from the dtype, with a warning
     scope = {}
     exec(new.replace('update_results', 'record_flows').replace("'seen', dtype=int,", "'seen', dtype=int, kind='flow',"), scope) # A flow seen at the end of the step, as a person would split it and give its kind
     sim = ss.Sim(n_agents=100, modules=scope['Counter'](), start=0, stop=10, verbose=0).run()

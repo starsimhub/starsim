@@ -913,26 +913,26 @@ class DynamicNetwork(Network):
 
 def check_acts(net, acts):
     """
-    `acts=` of lasting partnerships is acts per unit time: a rate (e.g. `ss.perweek(2)`; a probability per unit time is an error), or a distribution of them drawn once for each
+    `acts=` of lasting partnerships is acts per unit time: a frequency (e.g. `ss.freqperweek(2)`, or a rate, `ss.perweek(2)`; a probability per unit time is an error), or a distribution of them drawn once for each
     partnership; a bare number, or a count per step drawn once, would depend on the step, so is an error
     """
     name = net.name or type(net).__name__.lower()
-    example = 'e.g. ss.perweek(2), or ss.lognormal(ss.peryear(80), ss.peryear(30)) for a rate that varies between partnerships'
+    example = 'e.g. ss.freqperweek(2), or ss.lognormal(ss.freqperyear(80), ss.freqperyear(30)) for a frequency that varies between partnerships'
     if acts is None or isinstance(acts, ss.Rate) and not isinstance(acts, ss.prob):
         return
     probs = [acts] if isinstance(acts, ss.prob) else []
     if isinstance(acts, ss.Dist):
         probs = [v for v in acts.pars.values() if isinstance(v, ss.prob)]
     if probs: # E.g. ss.probperyear(0.8), a chance, not a number of acts
-        raise ValueError(f'acts= of "{name}" is a number of acts per unit time, not a probability per unit time (ss.{probs[0]!r}): give a rate, {example}')
+        raise ValueError(f'acts= of "{name}" is a number of acts per unit time, not a probability per unit time (ss.{probs[0]!r}): give a frequency, {example}')
     elif sc.isnumber(acts):
-        raise ValueError(f'acts= of "{name}" is a number of acts per unit time in each partnership; a bare number ({acts}) would be acts in a step, which depends on the step. Give a rate, {example}')
+        raise ValueError(f'acts= of "{name}" is a number of acts per unit time in each partnership; a bare number ({acts}) would be acts in a step, which depends on the step. Give a frequency, {example}')
     elif isinstance(acts, ss.Dist):
         timed = acts.unit is not None or any(isinstance(v, ss.TimePar) for v in acts.pars.values())
         if not timed:
-            raise ValueError(f'acts= of "{name}" is a number of acts per unit time in each partnership, so a distribution of them needs its parameters as rates ({acts} has none), {example}')
+            raise ValueError(f'acts= of "{name}" is a number of acts per unit time in each partnership, so a distribution of them needs its parameters as frequencies ({acts} has none), {example}')
         if isinstance(acts, (ss.poisson, ss.nbinom, ss.binom, ss.randint, ss.bernoulli)):
-            raise ValueError(f'acts= of "{name}" is {acts}, a whole number of acts in a step, drawn once for each partnership, which depends on the step (at weekly steps, a fifth of partnerships would never have sex). Give a rate, {example}')
+            raise ValueError(f'acts= of "{name}" is {acts}, a whole number of acts in a step, drawn once for each partnership, which depends on the step (at weekly steps, a fifth of partnerships would never have sex). Give a frequency, {example}')
         return
     raise TypeError(f'acts= of "{name}" is {acts} ({type(acts).__name__}); give a rate, {example}')
 
@@ -973,14 +973,16 @@ class RandomNet(DynamicNetwork):
     Note: not CRN safe when people are born or die, unless `dynamic=False`: with any of these
     methods but `'safe'`, one death rewires almost every edge.
 
-    Each contact lasts one step of the network: with `dynamic=True` (the default), the
-    contacts are drawn again on every step, and with `dynamic=False`, once. For partnerships
-    that last, see `ss.DegreeNet`.
+    By default (`dur=0`), each contact lasts one step of the network: with `dynamic=True` (the
+    default), the contacts are drawn again on every step, and with `dynamic=False`, once. With
+    `dur=` above 0, each contact lasts that long, and the ones that end are replaced by new
+    ones drawn at random. For partnerships formed toward a target number of partners, see `ss.DegreeNet`.
 
     Args:
         n_contacts (float/`ss.Dist`): the number of (bidirectional) contacts of each agent: a number is the same for everyone (rounded at random, if it is not whole, so it is the mean), and a distribution gives its spread (e.g. `ss.poisson(10)`)
+        dur (float/`ss.Duration`/`ss.Dist`): how long each contact lasts: a duration (the same for every contact), or a distribution; a bare number is in the sim's unit (default: 0, one step)
         who (Cond/str/func): if given, who takes part: a condition over people (e.g. `(ss.person.age >= 18) & (ss.person.age < 65)`), as for `ss.DegreeNet`; nobody else is in the network
-        dynamic (bool): if True (default), the contacts are drawn again on every step; if False, they are drawn once and never change
+        dynamic (bool): if True (default), contacts are replaced once they end (with `dur=0`, every step); if False, they are drawn once and never change
             (so agents who join later, e.g. newborns, are not added)
         memory (dur): how long it remembers contacts that have ended, for contact tracing (see `ss.DynamicNetwork`)
         method (str): how the other end of each contact is drawn: 'fast' (the default), 'exact', 'uniform', or 'safe' (see above)
@@ -1000,13 +1002,13 @@ class RandomNet(DynamicNetwork):
     """
     methods = ['fast', 'exact', 'uniform', 'safe']
 
-    def __init__(self, pars=None, n_contacts=_, who=_, dynamic=_, method=_, remove_self_loops=_, memory=_, **kwargs):
+    def __init__(self, pars=None, n_contacts=_, dur=_, who=_, dynamic=_, method=_, remove_self_loops=_, memory=_, **kwargs):
         """ Initialize """
-        check_replaced(self, pars, kwargs, dict(where=replaced_who, beta=replaced_beta,
-            dur="its contacts last one step: for partnerships that last, use ss.DegreeNet(n_contacts=..., dur=...)"))
+        check_replaced(self, pars, kwargs, dict(where=replaced_who, beta=replaced_beta))
         super().__init__()
         self.define_pars(
             n_contacts = ss.constant(10),
+            dur = 0, # One step
             who = None,
             dynamic = True,
             method = 'fast',
@@ -1138,9 +1140,9 @@ class RandomNet(DynamicNetwork):
 
     @property
     def one_step(self):
-        """ Stepping with the sim, every edge ends at the next step, before anything transmits over it, so the dead's edges need not be removed before then (see `ss.networks.Route.one_step`) """
+        """ With `dur=0` (the default), and stepping with the sim, every edge ends at the next step, before anything transmits over it, so the dead's edges need not be removed before then (see `ss.networks.Route.one_step`) """
         p = self.pars
-        return p.dynamic and p.get('memory') is None and self.on_sim_time
+        return p.dynamic and p.get('memory') is None and not isinstance(p.dur, ss.Dist) and p.dur == 0 and self.on_sim_time
 
     @property
     def on_sim_time(self):
@@ -1158,7 +1160,7 @@ class RandomNet(DynamicNetwork):
     def same_contacts(self, n, current):
         """
         The number of new contacts for each of `n` agents when it is the same whole number for everyone, so that nothing need be drawn: when
-        `n_contacts` is a whole number, and the edges needed (with `current` edges) give each a whole number (as every step does); else
+        `n_contacts` is a whole number, and the edges needed (with `current` edges) give each a whole number (as every step with `dur=0`); else
         None. Only with common random numbers, since without them a draw not made would change the draws after it.
         """
         nc = self.pars.n_contacts
@@ -1169,6 +1171,18 @@ class RandomNet(DynamicNetwork):
         needed = orig/2 - current
         scaled = v*needed/orig # The same arithmetic as add_pairs(), for one agent
         return int(scaled) if needed > 0 and float(scaled).is_integer() else None
+
+    def edge_steps(self, p1):
+        """ How many steps each new edge lasts after this one, from `dur=`: drawn for each if a distribution; a bare number is in the sim's unit """
+        dur = self.pars.dur
+        if isinstance(dur, ss.Dist):
+            return dur.rvs(p1)
+        n = len(p1)
+        if dur == 0:
+            return np.zeros(n, dtype=ss_float) # In its dtype (half the memory of float64), as validate() would make it
+        unit = self.sim.unit_base
+        dur = ss.solvers.convert(dur, unit) if isinstance(dur, ss.TimePar) else dur
+        return np.full(n, dur/self.t.dt.to(unit).value, dtype=ss_float)
 
     def add_pairs(self):
         """ Generate edges """
@@ -1199,7 +1213,7 @@ class RandomNet(DynamicNetwork):
             p1, p2 = p1[keep], p2[keep]
         n = len(p1)
         weight = np.ones(n, dtype=ss_float)
-        dur = np.zeros(n, dtype=ss_float) # Each lasts one step; in its dtype (half the memory of float64), as validate() would make it
+        dur = self.edge_steps(p1)
 
         # Use zero-copy view for UIDs and skip concatenation when network is empty
         p1 = p1.view(ss.uids)
@@ -1248,7 +1262,7 @@ class DegreeNet(DynamicNetwork):
     Args:
         n_contacts (float/`ss.Dist`/`ss.by`/dict): if given, a target for the number of partners a person has at a time: a number, which is the mean of a Poisson (whose shape `concurrency` and `max_contacts` can change), or a distribution over whole numbers (e.g. `ss.constant(1)`, for exactly one); or a number for each level of a property of people (`ss.by(risk=[0.4, 1.6])`), as EpiModel's nodefactor; or one for each group of `between`, e.g. `dict(fsw=3, client=0.5)` (each partnership has one of each, so these should give the two groups about as many partners in all). By default, no target: at most one partner, pairing people who have none on every step
         dur (float/`ss.Duration`/`ss.Dist`): how long partnerships last: a mean (they end at a constant rate), or a distribution; a bare number is in the sim's unit (default: 10)
-        acts (rate/`ss.Dist`): if given, the number of acts per unit time in each partnership: a rate such as `ss.perweek(2)`, or a distribution of rates drawn once for each partnership; a disease's beta is then per act (see `ss.peract`)
+        acts (rate/`ss.Dist`): if given, the number of acts per unit time in each partnership: a frequency such as `ss.freqperweek(2)` (or a rate, `ss.perweek(2)`), or a distribution of them drawn once for each partnership; a disease's beta is then per act (see `ss.peract`)
         who (Cond/str/func): if given, who takes part: a condition over people (e.g. `ss.person.pwid`), as for `ss.Event()`; nobody else is in the network
         between (str/tuple): if given, who partnerships are between: `'mf'`, a man and a woman, so its directions are `m2f` and `f2m` and a disease's beta on it is `ss.peract(m2f=..., f2m=...)`, or one value for both; `'mm'`, two men, with one beta; or a pair of groups, each the name of a boolean property of people or of a level of a stratification, e.g. `('fsw', 'client')`, whose directions are `fsw2client` and `client2fsw` (nobody can be in both)
         concurrency (float): if given, the share of people with two or more partners at once; the distribution of `n_contacts` is adjusted to give it, keeping its mean
@@ -1272,10 +1286,10 @@ class DegreeNet(DynamicNetwork):
         net = ss.DegreeNet(n_contacts=ss.by(risk=[0.4, 1.6]), dur=50, match=dict(risk=0.8))
 
         # Needle sharing among people who inject drugs (a boolean property of people), with 20 injections a month in each partnership
-        needles = ss.DegreeNet(name='needles', who=ss.person.pwid, n_contacts=2, dur=ss.months(6), acts=ss.permonth(20))
+        needles = ss.DegreeNet(name='needles', who=ss.person.pwid, n_contacts=2, dur=ss.months(6), acts=ss.freqpermonth(20))
 
         # Sex work, between female sex workers and their clients (boolean properties of people)
-        sw = ss.DegreeNet(name='sw', between=('fsw', 'client'), n_contacts=dict(fsw=5, client=0.5), dur=ss.months(1), acts=ss.perweek(1))
+        sw = ss.DegreeNet(name='sw', between=('fsw', 'client'), n_contacts=dict(fsw=5, client=0.5), dur=ss.months(1), acts=ss.freqperweek(1))
         ```
     """
     def __init__(self, pars=None, n_contacts=_, dur=_, concurrency=_, max_contacts=_, match=_, acts=_, who=_, between=_, memory=_, **kwargs):
@@ -1802,7 +1816,7 @@ class SexualNet(DegreeNet):
         between (str/tuple): who partnerships are between: `'mf'` (the default), a man and a woman, so its directions are `m2f` and `f2m` and a disease's beta on it is `ss.peract(m2f=..., f2m=...)`, or one value for both; `'mm'`, two men (men who have sex with men), with one beta; or a pair of groups, each the name of a boolean property of people or of a level of a stratification, e.g. `('fsw', 'client')`, whose directions are `fsw2client` and `client2fsw` (nobody can be in both)
         dur (`ss.Dist`/`ss.Duration`/float): how long partnerships last, as for `ss.DegreeNet`: a single duration, e.g. `ss.months(6)`, is a mean, and partnerships end at a constant rate (an exponential); a bare number is in the sim's unit; give a distribution for any other spread, e.g. `ss.lognormal(mean=ss.months(6), std=ss.months(3))`, which can vary by age, year, and individual pair (default: `ss.lognormal(mean=ss.years(15), std=ss.years(1))`)
         debut (`ss.Dist`): the age of debut; can vary by using callable parameter values
-        acts (`ss.per`/`ss.Dist`): the number of acts per unit time in each partnership: a rate (e.g. `ss.perweek(2)`, or `ss.peryear(80)`), or a distribution of them drawn once for each partnership (default: lognormal, mean 80 a year, standard deviation 30)
+        acts (`ss.freq`/`ss.Dist`): the number of acts per unit time in each partnership: a frequency (e.g. `ss.freqperweek(2)`, or `ss.freqperyear(80)`; a rate, `ss.peryear(80)`, is the same), or a distribution of them drawn once for each partnership (default: lognormal, mean 80 a year, standard deviation 30)
         participation (`ss.Dist`): whether each person takes part, drawn at their debut; can vary by individual properties (age, sex, ...) using callable parameter values
         n_contacts (float/`ss.Dist`/dict): if given, a target for the number of partners people have at a time: a number, which is the mean of a Poisson, or a distribution over whole numbers; or one for each group of `between`, e.g. `dict(fsw=3, client=0.5)` (each partnership has one of each, so these should give the two groups about as many partners in all)
         concurrency (float): with `n_contacts`, the share of people with two or more partners at once
@@ -1827,7 +1841,7 @@ class SexualNet(DegreeNet):
             self.define_pars(
                 n_contacts = None,
                 dur = ss.lognormal(mean=ss.years(15), std=ss.years(1)),  # Can vary by age, year, and individual pair
-                acts = ss.lognormal(ss.peryear(80), ss.peryear(30)), # Acts per unit time, drawn once for each partnership
+                acts = ss.lognormal(ss.freqperyear(80), ss.freqperyear(30)), # Acts per unit time, drawn once for each partnership
                 debut = ss.normal(mean=16),  # Age of debut can vary by using callable parameter values
                 participation = ss.bernoulli(p=0.9),  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
             )

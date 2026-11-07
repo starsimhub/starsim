@@ -54,6 +54,34 @@ def check_stratify(stratify, where):
     return stratify
 
 
+def rebind_member(obj, memo):
+    """ A member given to an instance of a declared class (e.g. `ssl.Measles(rash=ss.outcome(0.9*ssl.Measles.onset))`), reading the instance's copies of the class's states, transitions, and parameters (`memo`, see `ss.expressions.rebind()`); a transition is copied only if it reads any of them """
+    if isinstance(obj, (list, tuple)): # E.g. transitions=[...]
+        return type(obj)(rebind_member(x, memo) for x in obj)
+    if isinstance(obj, dict) and not isinstance(obj, ss.Pars): # E.g. outcomes=dict(...)
+        return {k:rebind_member(v, memo) for k,v in obj.items()}
+    if not isinstance(obj, ss.Transition) or isinstance(obj, ss.State):
+        reads = any(id(x) in memo for x in ss.expressions.nodes(obj)) or isinstance(obj, ss.outcome)
+        return ss.expressions.rebind(obj, memo) if reads else obj # Unchanged otherwise, so a positional member keeps the name of its variable
+    exprs = [obj.rate, obj.dur, obj.p_die, obj.p_stay] + list(obj.p or [])
+    conds = [c for c in [obj.where, getattr(obj.trigger, 'x', None)] if c is not None]
+    reads = any(id(x) in memo for x in list(obj.source or []) + list(obj.dest or []) + list(ss.expressions.nodes(exprs)))
+    reads = reads or any(id(ev.args[1]) in memo for c in conds for ev in ss.conditions.event_leaves(c) if len(ev.args) > 1)
+    if not reads:
+        return obj
+    new = sc.cp(obj)
+    new.source = None if obj.source is None else [memo.get(id(st), st) for st in obj.source]
+    new.dest = None if obj.dest is None else [memo.get(id(st), st) for st in obj.dest]
+    for key in ['rate', 'dur', 'p_die', 'p_stay']:
+        setattr(new, key, ss.expressions.rebind(getattr(obj, key), memo))
+    new.p = None if obj.p is None else [ss.expressions.rebind(v, memo) for v in obj.p]
+    new.where = ss.conditions.rebind(obj.where, memo)
+    if obj.trigger is not None:
+        new.trigger = ss.on(ss.conditions.rebind(obj.trigger.x, memo))
+        new.trigger.delay = obj.trigger.delay
+    return new
+
+
 class Disease(ss.Module, metaclass=BuiltAfterInit):
     """
     A disease: states people are in and the transitions between them (declared), code, or both
@@ -95,7 +123,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         default_state (str): the state that everyone not put elsewhere starts in, and is born into; by default, the one named `S` or `susceptible`, else the first state of people made (in the class form, `default_state = 'N'` in the class body)
         strains (Strains): its strains (`ss.Strains`), which share its states; then `dis.strains`
         stratify (dict): the dimensions, as `stratify()` takes them, e.g. `dict(age={0: 0.3, 15: 0.6, 65: 0.1}, risk=ss.levels(['low', 'high'], states=[I]))`
-        solver (abm): its own way of running as agents, which the sim's does not override, e.g. `ss.abm(step='wholestep')` (by steps, with rates over whole steps only, for those in the state at the start of the step, as code with `ss.bernoulli()` takes them: faster, and a little less exact at a coarse step) or `ss.abm(step='events')` (event by event, in continuous time); by default, the sim's (see `ss.abm()` and `ss.solvers.agent_solver()`). An error for a compartmental run
+        solver (abm): its own way of running as agents, which the sim's does not override, e.g. `ss.solvers.abm(step='wholestep')` (by steps, with rates over whole steps only, for those in the state at the start of the step, as code with `ss.bernoulli()` takes them: faster, and a little less exact at a coarse step) or `ss.solvers.abm(step='events')` (event by event, in continuous time); by default, the sim's (see `ss.solvers.abm()` and `ss.solvers.agent_solver()`). An error for a compartmental run
         kwargs (dict): one keyword per state, transition, parameter, result, function, or modifier (`ss.modify()`, of its own quantities, e.g. `fading=ss.modify('rel_trans', multiply=0.5, who=I)`); also `name`, `label`, and `dt`
 
     The results are the number in each state (`I`), the flow along each transition by its
@@ -169,11 +197,11 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         self.strains = strains # Its ss.Strains, if it has strains: set now, so a subclass's __init__() can read it before the disease is built (see ss.strains.attach())
         if solver is not None:
             try:
-                solver = ss.sim.as_solver(solver)
+                solver = ss.solvers.as_solver(solver)
             except ValueError as e:
-                raise ValueError(f'{e} (a module\'s own solver is a way of running as agents, e.g. ss.abm(step="wholestep"))') from None
-            if solver != 'abm':
-                raise ValueError(f'A module\'s own solver is a way of running as agents, ss.abm(step=...), not {solver!r}: the sim\'s solver= says how the whole model runs')
+                raise ValueError(f'{e} (a module\'s own solver is a way of running as agents, e.g. ss.solvers.abm(step="wholestep"))') from None
+            if not isinstance(solver, ss.solvers.abm):
+                raise ValueError(f'A module\'s own solver is a way of running as agents, ss.solvers.abm(step=...), not {solver!r}: the sim\'s solver= says how the whole model runs')
         self.solver = solver # Its own way of running as agents (see ss.solvers.agent_solver()); None follows the sim's
         self.callbacks = [] # Functions called with the agents an event happened to: see add_callback()
         if len(args) and (args[0] is None or isinstance(args[0], dict)): # Parameters can also be the first argument
@@ -210,7 +238,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
     def has_structure(kwargs):
         """ Whether these keywords declare part of a model, not just a parameter's value """
         declared = (ss.State, ss.Transition, ss.outcome, ss.expressions.Expr, ss.transitions.FlowSum, ss.modify)
-        return any((isinstance(v, declared) and not isinstance(v, ss.par)) or key in ss.graph.Graph.removed for key,v in kwargs.items())
+        return any((isinstance(v, declared) and not isinstance(v, ss.par)) or key in ss.graph.Graph.grouped for key,v in kwargs.items())
 
     def build_graph(self):
         """ Build the graph from what was declared: when the disease is made, or for one declared in its __init__(), after that (see `BuiltAfterInit`) """
@@ -414,8 +442,9 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         if not owners:
             return args, members
         members = dict(members)
+        grouped = [obj for key in ss.graph.Graph.grouped for obj in sc.tolist(members.pop(key, None))]
         positional = []
-        for obj in list(args): # Named first, as keywords, since a copy is not bound to the variable
+        for obj in list(args) + grouped: # Named first, as keywords, since a copy is not bound to the variable
             name = getattr(obj, 'name', None) or (None if isinstance(obj, ss.State) else (names or {}).get(id(obj)))
             if name is None or isinstance(obj, ss.State):
                 positional.append(obj)
@@ -447,9 +476,10 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         for key in ['init_prev', 'init', 'init_n']: # The initial conditions can also be given in pars=, as the parameters are
             if key in pars:
                 kwargs[key] = pars.pop(key)
+        instance = any(key in kwargs for key in ['init_prev', 'init', 'init_n']) # Starting values given to the instance replace the class's, as they do the default 1%
         for key in ['init_prev', 'init', 'init_n']: # Or in the class body, e.g. init = dict(I=0.01), as for default_state below
             given = getattr(type(self), key, None)
-            if key not in kwargs and (isinstance(given, dict) or sc.isnumber(given)):
+            if not instance and (isinstance(given, dict) or sc.isnumber(given)):
                 kwargs[key] = dict(given) if isinstance(given, dict) else given
         init_prev = kwargs.pop('init_prev', None)
         init = kwargs.pop('init', None)
@@ -483,7 +513,8 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
             if tr.trigger is not None and (x := ss.conditions.rebind(tr.trigger.x, memo)) is not tr.trigger.x:
                 delay, tr.trigger = tr.trigger.delay, ss.on(x)
                 tr.trigger.delay = delay
-        kwargs = {k:ss.expressions.rebind(v, memo) for k,v in kwargs.items()} # A result given here that reads the class's states reads the copies
+        kwargs = {k:rebind_member(v, memo) for k,v in kwargs.items()} # A result, outcome, or transition given here that reads the class's states reads the copies, e.g. ssl.Measles(V=V, vax=ss.Transition(ssl.Measles.S, V, ...))
+        args = [rebind_member(v, memo) for v in args]
         init, init_n = [{k:ss.expressions.rebind(v, memo) for k,v in d.items()} if isinstance(d, dict) else d for d in [init, init_n]] # Likewise a starting value, e.g. init=dict(S=1 - (A - age)/(k*age + A)) with the class's parameters
         for key in [key for key,val in kwargs.items() if isinstance(val, ss.par) and isinstance(members.get(key), ss.par)]: # e.g. ss.SIS(beta=ss.par(0.1, bounds=[0.05, 1])): the class's parameter, which its transitions use, takes the value and bounds
             members[key].merge(kwargs.pop(key))
@@ -968,7 +999,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         """
         if self.engine is None:
             raise RuntimeError(f'"{self.name}" infects people once the sim is initialized (sim.init())')
-        if self.sim.solver != 'abm':
+        if not isinstance(self.sim.solver, ss.solvers.abm):
             raise ss.CapabilityError(f'disease.infect() infects agents, but "{self.name}" is run with solver="{self.sim.solver}"; use ss.Event(S >> I) for a compartmental run')
         return self.engine.infect_now(ss.uids(uids), strain)
 
@@ -985,7 +1016,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         number infected in each group (or one number), taken from the source states in proportion. Under the ODE, it is taken once a step,
         at the start, as a move of that many (as `ss.move()` from code is), so the ODE no longer integrates that transition within the
         step: give a rate (e.g. `S >> I @ (lambda self, sim: ...)`) to keep it exact. Anything that needs individuals (UIDs) raises an
-        error in a compartmental run; `if self.sim.solver == 'ode':` can give each its own.
+        error in a compartmental run; `if isinstance(self.sim.solver, ss.solvers.ode):` can give each its own.
 
         Args:
             transition (`ss.Transition`): the transmission; may be left out for a disease with only one
@@ -998,7 +1029,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
             class Imported(ss.SIR):
                 def transmit(self, transition):
                     new = super().transmit(transition)
-                    if self.sim.solver == 'abm': # And 2 imported cases a step, as agents
+                    if isinstance(self.sim.solver, ss.solvers.abm): # And 2 imported cases a step, as agents
                         return new | self.sim.people.auids[self.S.raw[self.sim.people.auids]][:2]
                     return new + 2/self.sim.groups.n_groups
             ```
@@ -1052,7 +1083,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
             raise RuntimeError(f'"{self.name}" has the state of each agent once the sim is initialized (sim.init())')
         if isinstance(self.sim, ss.utils.Shrunk):
             raise RuntimeError(f'the state of each agent of "{self.name}" was dropped when the sim was shrunk; run it with shrink=False to keep it')
-        if self.sim.solver != 'abm':
+        if not isinstance(self.sim.solver, ss.solvers.abm):
             raise ss.CapabilityError(f'disease.current_state() is the state of each of the agents, but "{self.name}" is run with solver="{self.sim.solver}"; use the counts of its states (e.g. sim.results.{self.name}.S) instead')
         names = [s if isinstance(s, str) else s.name for s in sc.tolist(states)] if states is not None else [s.name for s in graph.people_states]
         unknown = [name for name in names if name not in graph.states]

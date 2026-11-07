@@ -138,10 +138,10 @@ class Options(sc.obj):
         optdesc.precision = 'The precision of the floating-point arrays of agents and kernels: 32 (the default, float32) or 64 (float64)'
         options.precision = sc.parse_env('STARSIM_PRECISION', 32, int)
 
-        optdesc.threads = 'The number of threads that the passes over the agents of a large sim, and the particles of a particle filter, take: 0 (default) for as many as Numba has (by default, one per core), 1 for none. Each worker of ss.parallel() and of a calibration takes one, since the workers share the cores already'
-        options.threads = sc.parse_env('STARSIM_THREADS', 0, int)
+        optdesc.num_threads = 'The number of threads that the passes over the agents of a large sim, and the particles of a particle filter, take: 0 (default) for as many as Numba has (by default, one per core), 1 for none. Each worker of ss.parallel() and of a calibration takes one, since the workers share the cores already'
+        options.num_threads = sc.parse_env('STARSIM_NUM_THREADS', 0, int)
 
-        optdesc.blas_threads = 'The number of threads for BLAS, the linear algebra in NumPy and SciPy (for the threads of Starsim itself, see "threads"): 1 (default), or 0 to leave BLAS as it is. See the "Deployment" page of the user guide.'
+        optdesc.blas_threads = 'The number of threads for BLAS, the linear algebra in NumPy and SciPy (for the threads of Starsim itself, see "num_threads"): 0 (default) to leave BLAS as it is, or a number of threads. See the "Deployment" page of the user guide.'
         options.blas_threads = sc.parse_env('STARSIM_BLAS_THREADS', int(os.getenv('SCIRIS_NUM_THREADS') or 0), int)
 
         optdesc.kernels = 'Which kernels run the solvers (all give the same results): "auto" (default) for Rust if it is there (in the wheels, or built: see starsim/solvers/rust/README.md), and otherwise Numba, with compartmental runs taken as plain Python until Numba has compiled (if a run, or the runs of a session, would take longer as plain Python than compiling takes, about two minutes once per install, Numba compiles first; a note says which); "rust" for Rust, compiled ahead of time, so a first run takes no compiling; "numba" to always compile with Numba first (see ss.compile()); "python" for the compartmental kernels as plain Python (the passes over agents are Numba). JAX is chosen by the run (see sim.jax), and ss.jit is always Numba'

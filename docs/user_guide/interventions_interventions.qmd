@@ -45,7 +45,7 @@ A delivery says who can receive the product, when, and how many. There is one de
 | Keyword | Meaning |
 |---|---|
 | `who=` | Who can receive it: a condition on people (`ss.person.age < 15`), on the population (`sis.I.n > 1000`), or both joined with `&`; people as they reach an age (`ss.at_age(ss.months(9))`); or a function of the sim returning who is eligible |
-| `when=` | When it is delivered: at times (`'2025-05-01'`, `[2005, 2010]`), this far apart (`ss.years(1)`), on an event (`screening.positive`, or `ss.on(screening.positive, delay=ss.months(3))`), or on a schedule with a start and stop (`ss.schedule(every=ss.years(1), start=2005)`); with none, routinely |
+| `when=` | When it is delivered: at times (`'2025-05-01'`, `[2005, 2010]`, or with no calendar `ss.days(30)`, day 30), this far apart (`ss.schedule(every=ss.years(1))`), on an event (`screening.positive`, or `ss.on(screening.positive, delay=ss.months(3))`), or on a schedule with a start and stop (`ss.schedule(every=ss.years(1), start=2005)`); with none, routinely |
 | `coverage=` | The share of eligible people reached |
 | `capacity=` | The number that can be delivered (per round, per step, or as a rate), or `ss.capacity(n, priority=..., queue=...)` to say who is served first and whether the rest wait |
 | `skip_reached_within=` | Skip those this delivery reached less than this long ago, e.g. `ss.years(1)` (agents only) |
@@ -67,7 +67,7 @@ kw = dict(n_agents=5000, start=2000, stop=2020, dt=ss.months(1), verbose=0)
 
 ### Rounds and routine delivery
 
-With times or a duration as `when=`, delivery is in **rounds**: in each round, every eligible person is offered the product once. With no `when=` (or `ss.schedule()` with only a start and stop), delivery is **routine**: each person is offered it once, at the first step on which they are eligible. `who=ss.at_age()` is routine delivery as people reach an age: `who=ss.at_age(ss.months(9))` vaccinates children as they turn 9 months old, and not everyone older on the first day. Routine delivery needs people to become eligible over time, by being born, aging, or something happening to them: in a population with no births, routine delivery to everyone is a single round on its first step. So these examples add births and deaths, of 3% a year, and compare routine vaccination of children as they turn one, yearly rounds that reach 20% of everyone, and two campaigns:
+With times or how often (`ss.schedule(every=...)`) as `when=`, delivery is in **rounds**: in each round, every eligible person is offered the product once. With no `when=` (or `ss.schedule()` with only a start and stop), delivery is **routine**: each person is offered it once, at the first step on which they are eligible. `who=ss.at_age()` is routine delivery as people reach an age: `who=ss.at_age(ss.months(9))` vaccinates children as they turn 9 months old, and not everyone older on the first day. Routine delivery needs people to become eligible over time, by being born, aging, or something happening to them: in a population with no births, routine delivery to everyone is a single round on its first step. So these examples add births and deaths, of 3% a year, and compare routine vaccination of children as they turn one, yearly rounds that reach 20% of everyone, and two campaigns:
 
 ```{python}
 kw_births = dict(kw, demographics=[ss.birth(rate=ss.peryear(0.03)), ss.death(rate=ss.peryear(0.03))])
@@ -152,8 +152,8 @@ Each of these deliveries makes its own vaccine. The first is named `vaccine`; si
 `skip_reached_within=` leaves out the people the delivery itself reached less than that long ago: a re-screening interval, one test per person per campaign, or a rule against giving a drug again within a year. Someone reached in a round of 2005 is skipped by the rounds within the year, and can be reached again from the round of 2006 on. Here a test is offered every month, to a tenth of people each time, but to nobody tested in the past year:
 
 ```{python}
-monthly = ss.screen(sensitivity=0.9, specificity=0.98, when=ss.months(1), coverage=0.1, name='monthly')
-yearly = ss.screen(sensitivity=0.9, specificity=0.98, when=ss.months(1), coverage=0.1, skip_reached_within=ss.years(1), name='yearly')
+monthly = ss.screen(sensitivity=0.9, specificity=0.98, when=ss.schedule(every=ss.months(1)), coverage=0.1, name='monthly')
+yearly = ss.screen(sensitivity=0.9, specificity=0.98, when=ss.schedule(every=ss.months(1)), coverage=0.1, skip_reached_within=ss.years(1), name='yearly')
 for screening in [monthly, yearly]:
     sim = ss.Sim(sis, interventions=screening, **kw)
     sim.run()
@@ -228,7 +228,7 @@ progression = E >> I @ ss.days(10)
 recovery    = I >> R @ ss.days(8)
 measles = ss.Disease(infection, progression, recovery, init=dict(R=0.9), name='measles') # Nobody infected at the start
 
-imports  = ss.Event(S >> E, when=ss.days(30), n=2)       # Two susceptible people infected each month
+imports  = ss.Event(S >> E, when=ss.schedule(every=ss.days(30)), n=2)       # Two susceptible people infected each month
 campaign = ss.Event(S >> R, when='2025-05-01', p=0.8*0.93)     # Protection as a move between states
 
 kw_town = dict(total_pop=100_000, start='2025-01-01', stop='2026-07-01', verbose=0)
@@ -281,7 +281,7 @@ msim.summarize().loc['flu_infection']
 
 ### Changes at given times: `ss.timeseries()`
 
-`ss.modify(target, multiply=ss.timeseries({t1: x1, t2: x2}), when=ss.schedule(start=t1))` multiplies a quantity by each value from its time until the next; before the first, the quantity has its own value. Each multiplier is relative to the quantity's own value, not to the one before. `set=` gives values instead of multipliers, and one change needs no series: `ss.modify(flu.pars.beta, set=0.25, when=ss.schedule(start=ss.days(20)))`. The times are dates in a sim with dates (`'2025-03-01'`), durations since the start (`ss.days(20)`), or numbers in the sim's unit.
+`ss.modify(target, multiply=ss.timeseries({t1: x1, t2: x2}), when=ss.schedule(start=t1))` multiplies a quantity by each value from its time until the next; before the first, the quantity has its own value. Each multiplier is relative to the quantity's own value, not to the one before. `set=` gives values instead of multipliers, and one change needs no series: `ss.modify(flu.pars.beta, set=0.25, when=ss.schedule(start=ss.days(20)))`. The times are dates or years in a sim with a calendar (`'2025-03-01'`, or `sim.pars.start + ss.days(20)` for 20 days after the start), and in a sim with no calendar, durations or numbers in the sim's unit, counted from 0 (`ss.days(20)` is day 20).
 
 ### Changes while a condition holds: `ss.modify()`
 
@@ -459,7 +459,7 @@ An intervention's effect is the difference between a run with it and a run witho
 
 ## Pitfalls
 
-- **Routine is once per person.** Routine delivery offers each person the product once, when they are first eligible; a share of people reached every year is delivery in yearly rounds (`when=ss.years(1)`), or routine delivery with a typed coverage (`coverage=ss.probperyear(0.5)`), a chance at every step for as long as people are eligible.
+- **Routine is once per person.** Routine delivery offers each person the product once, when they are first eligible; a share of people reached every year is delivery in yearly rounds (`when=ss.schedule(every=ss.years(1))`), or routine delivery with a typed coverage (`coverage=ss.probperyear(0.5)`), a chance at every step for as long as people are eligible.
 - **Coverage is of the eligible.** `coverage=0.8` with `who=ss.person.age < 5` reaches 80% of children under 5, not 80% of everyone.
 - **Routine delivery needs a rate of capacity.** A bare number as `capacity=` is per round or per step; routine delivery has neither, so it needs a rate, e.g. `ss.peryear(500)`.
 - **`and`, `or`, and `not` don't combine conditions.** Use `&`, `|`, and `~`, with brackets: `(ss.person.age > 15) & ~sis.I`.
@@ -485,7 +485,7 @@ The ways to give something to people, or change something for them, and when to 
 |---|---|---|
 | [`ss.vaccinate()`](../api/interventions.qmd) | A vaccine (`ss.Vaccine`): protection against infection, infectiousness, death, or a transition, for as long as it is held | Vaccination, prophylaxis such as PrEP, bed nets: anything that protects those who hold it |
 | [`ss.screen()`](../api/interventions.qmd) | A test (`ss.Diagnostic`), whose outcomes (`positive`, `negative`, or those of `outcomes=`) trigger what follows | Screening, diagnosis, triage: anything that sorts people for the next step |
-| [`ss.treat()`](../api/interventions.qmd) | A treatment (`ss.Treatment`): a cure when it is given (`cure=`, by state or by transition), effects while it is held (`efficacy=`), or both | Cures, and treatment that suppresses infection, such as ART |
+| [`ss.treat()`](../api/interventions.qmd) | A treatment (`ss.Treatment`): a cure when it is given (`cure=`, by state or by transition), or a move along other transitions (`moves=`), effects while it is held (`efficacy=`), or both | Cures, and treatment that suppresses infection, such as ART |
 | [`ss.Delivery()`](../api/interventions.qmd) | Any product, including one written as code | A product of your own, with its own `administer()` |
 | [`ss.Event()`](../api/interventions.qmd) | No product: a move between states or levels, a counter (`increment=`), or a visit | Importations and seeding, protection as states of a disease, changes of risk group, visits that several deliveries follow |
 | [`ss.modify()`](../api/connectors.qmd) | Nothing: a change to a parameter, a transition, susceptibility, infectiousness, or contacts | Distancing, masks, school closures, faster diagnosis, condoms |
@@ -551,7 +551,8 @@ And the ways to time an event or a delivery, all as `when=`:
 |---|---|
 | None | Routinely: each person once, at the first step they are eligible |
 | `'2025-05-01'`, `2025`, `[5, 30]` | In rounds, at these times |
-| `ss.years(1)` | In rounds, this far apart, from the start |
+| `ss.days(30)`, `[ss.days(30)]` | In a sim with no calendar, in a round at day 30 (a time counted from 0, the same with or without the list) |
+| `ss.schedule(every=ss.years(1))` | In rounds, this far apart, from the start |
 | `sis.infection`, `screening.positive` | When the event happens, to the people it happened to |
 | `ss.on(screening.positive, delay=ss.months(3))` | That long after the event (agents only) |
 | `lambda now: now.month == 1` | On the steps whose date it is true for |

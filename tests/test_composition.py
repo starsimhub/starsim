@@ -87,12 +87,12 @@ def test_numpy_ode_beside():
     kw = dict(unit='day', stop=100, n_agents=5000, verbose=0, rand_seed=2)
     alone = ss.Sim(declared_sir(), **kw).run()
     coupled = ss.Sim(declared_sir(), connectors=Reservoir(), **kw).run()
-    assert coupled.solver == alone.solver == 'abm'
+    assert coupled.solver == alone.solver == ss.solvers.abm()
     assert coupled.connectors.reservoir.W > 0
     assert coupled.results.sir.infection.sum() > 1.2*alone.results.sir.infection.sum() # The environment adds to transmission
     ode_kw = dict(unit='day', stop=100, total_pop=5000, verbose=0) # The same, with the declared disease as an ODE
     ode = ss.Sim(declared_sir(), connectors=Reservoir(), **ode_kw).run()
-    assert ode.solver == 'ode' and ode.connectors.reservoir.W > 0
+    assert isinstance(ode.solver, ss.solvers.ode) and ode.connectors.reservoir.W > 0
     assert ode.results.sir.infection.sum() > 1.2*ss.Sim(declared_sir(), **ode_kw).run().results.sir.infection.sum()
     return coupled
 

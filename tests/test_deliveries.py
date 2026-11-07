@@ -55,7 +55,7 @@ def make_cascade(**kwargs):
     """ A rapid test every week for those not tested in four weeks, a PCR to confirm (with a delay), and treatment with limited capacity """
     rapid = ss.Diagnostic(sensitivity=0.8, specificity=0.95)
     pcr = ss.Diagnostic(sensitivity=0.95, specificity=0.99, result_delay=ss.days(2))
-    screening = ss.screen(rapid, who=rapid.since >= ss.days(28), when=ss.days(7), coverage=0.1, name='screening') # Named, since a subclass of ss.Sim may make them
+    screening = ss.screen(rapid, who=rapid.since >= ss.days(28), when=ss.schedule(every=ss.days(7)), coverage=0.1, name='screening') # Named, since a subclass of ss.Sim may make them
     confirm = ss.screen(pcr, when=screening.positive, coverage=0.9, name='confirm')
     treatment = ss.treat(ss.Treatment(cure=0.95), when=confirm.positive, capacity=ss.perday(50), name='treatment')
     return [screening, confirm, treatment]
@@ -65,7 +65,7 @@ def check_agents(make, **kwargs):
     """ Check that a model is agents only: an explicit ODE refuses it before the run, and solver='auto' runs it as agents """
     with pytest.raises(ss.CapabilityError):
         make(solver='ode', **kwargs).init()
-    assert make(**kwargs).init().solver == 'abm'
+    assert isinstance(make(**kwargs).init().solver, ss.solvers.abm)
     return
 
 
@@ -91,8 +91,11 @@ def test_change():
     dated = ss.Sim(sir, interventions=to, start='2020-01-01', stop='2020-04-30', total_pop=50_000, verbose=0).run()
     assert np.allclose(dated.results.sir.S, res.S)
     sir = make_sir()
-    after = ss.Sim(sir, interventions=ss.modify(sir.pars.beta, set=ss.timeseries({ss.days(20): 0.09, ss.days(60): 0.3}), when=ss.schedule(start=ss.days(20))), start='2020-01-01', stop='2020-04-30', total_pop=50_000, verbose=0).run()
-    assert np.allclose(after.results.sir.S, res.S) # A duration is a time after the start
+    start = ss.date('2020-01-01')
+    after = ss.Sim(sir, interventions=ss.modify(sir.pars.beta, set=ss.timeseries({start + ss.days(20): 0.09, start + ss.days(60): 0.3}), when=ss.schedule(start=start + ss.days(20))), start=start, stop='2020-04-30', total_pop=50_000, verbose=0).run()
+    assert np.allclose(after.results.sir.S, res.S) # A time after the start is the start plus a duration
+    with pytest.raises(ValueError, match='sim.pars.start'): # A duration alone is a time from 0, for a sim with no calendar
+        ss.Sim(sir, interventions=ss.modify(sir.pars.beta, set=0.09, when=ss.schedule(start=ss.days(20))), start='2020-01-01', stop='2020-04-30', verbose=0).init()
     with pytest.raises(ValueError, match='calendar year'): # In a sim with dates, a bare number is a year: 20 is the year 20, outside the sim
         ss.Sim(sir, interventions=ss.modify(sir.pars.beta, set=0.09, when=ss.schedule(start=20)), start='2020-01-01', stop='2020-04-30', verbose=0).init()
     with pytest.raises(ValueError): # A time outside the sim
@@ -181,7 +184,7 @@ def test_conditions():
 
     # An age that is not the edge of a group cannot be used on groups, so the model runs as agents unless told otherwise
     auto = make(eligible=ppl.age < 10, stop=20, **kw).init()
-    assert auto.solver == 'abm' and 'falls inside a bin' in auto.solver_reason
+    assert isinstance(auto.solver, ss.solvers.abm) and 'falls inside a bin' in auto.solver_reason
     with pytest.raises(ss.CapabilityError):
         make(eligible=ppl.age < 10, solver='ode', stop=20, **kw).run()
 
@@ -243,7 +246,7 @@ def test_deliver():
         assert len(given) and np.all(res.sir.I[given] > 2000)
 
     # Rounds a year apart on weekly steps fall a year apart, each on the first step of the year (they were 52 weeks apart, so 2005 had two)
-    yearly = ss.vaccinate(ss.Vaccine(efficacy=0.9), when=ss.years(1), coverage=0.2, name='yearly')
+    yearly = ss.vaccinate(ss.Vaccine(efficacy=0.9), when=ss.schedule(every=ss.years(1)), coverage=0.2, name='yearly')
     sim = ss.Sim(make_sir(), interventions=yearly, start='2000-01-01', stop='2010-01-01', dt=ss.weeks(1), solver='ode', verbose=0).init()
     starts = [sim.t.tvec[ti] for ti in sorted(sim.interventions.yearly.round_tis)]
     assert [d.year for d in starts] == list(range(2000, 2010)) and all(d.month == 1 and d.day <= 7 for d in starts)
@@ -323,7 +326,7 @@ def test_triggers():
     distancing = ss.modify(sir.pars.beta, multiply=0.3, who=lambda sim: sim.results.sir.I[sim.ti] > 1000)
     bare = ss.Sim(sir, interventions=distancing, **pars).run()
     base = ss.Sim(make(), **pars).run()
-    assert bare.solver == 'ode'
+    assert isinstance(bare.solver, ss.solvers.ode)
     assert bare.results.sir.I.max() < 0.2*base.results.sir.I.max()
 
     # A policy with memory is a module that decides, and a modifier that applies the effect
@@ -353,7 +356,7 @@ def test_triggers():
     sir = make()
     effect = ss.modify(sir.pars.beta, multiply=0.3, who=lambda sim: sim.interventions.closure.closed)
     held = ss.Sim(sir, interventions=[Closure(name='closure'), effect], **pars).run()
-    assert held.solver == 'ode'
+    assert isinstance(held.solver, ss.solvers.ode)
     assert held.interventions.closure.days_closed % 28 == 0 or held.interventions.closure.closed # Closed for four weeks at a time
     assert held.results.sir.I.max() < base.results.sir.I.max()
     assert np.isclose(sir.pars.beta.value, 0.3) # The base value is never overwritten
@@ -416,7 +419,7 @@ def test_treat_any_transition():
     for solver,pars in [('ode', {}), ('abm', dict(n_agents=10_000))]:
         S, I, R, P = ss.states(4)
         sir = ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(10), protect=ss.Transition(S, P, rate=ss.perday(0)), init=dict(I=0.01), name='sir')
-        shield = ss.treat(ss.Treatment(cure={sir.protect: 1.0}), who=sir.S, when=[ss.days(0)], coverage=0.5)
+        shield = ss.treat(ss.Treatment(moves=sir.protect), who=sir.S, when=ss.days(0), coverage=0.5)
         res = ss.Sim(sir, interventions=shield, stop=100, solver=solver, **kw, **pars).run().results
         print(f'{solver}: {res.sir.protect.sum():.0f} protected')
         assert np.isclose(res.sir.protect.sum(), 0.5*0.99*kw['total_pop'], rtol=0.05)
@@ -447,8 +450,8 @@ def test_delay():
     sc.heading('Testing delay= on a triggered step: a treatment three months after the test, as agents')
     def make(delay=ss.months(3), **kwargs):
         S, I = ss.states(2)
-        sis = ss.Disease(infection=S >> I @ ss.peryear(2)*I, recovery=I >> S @ ss.years(1), cure=I >> S, init_prev=0.1, name='sis')
-        screening = ss.screen(ss.Diagnostic(sensitivity=0.9, specificity=0.95), when=ss.months(3), coverage=0.3)
+        sis = ss.Disease(infection=S >> I @ ss.peryear(2)*I, recovery=I >> S @ ss.years(1), cure=I >> S @ 0, init_prev=0.1, name='sis')
+        screening = ss.screen(ss.Diagnostic(sensitivity=0.9, specificity=0.95), when=ss.schedule(every=ss.months(3)), coverage=0.3)
         treatment = ss.treat(ss.Treatment(cure={sis.cure: 0.9}), when=ss.on(screening.positive, delay=delay))
         return ss.Sim(sis, interventions=[screening, treatment], start=2000, stop=2005, dt=ss.months(1), total_pop=20_000, verbose=0, **kwargs)
     check_agents(make) # Who is waiting is each person's own, so agents only, fixed or drawn
@@ -499,7 +502,7 @@ def test_coded_disease():
         sir = ssl.AgentSIR(beta=ss.peryear(0.5), init_prev=0.1, dur_inf=ss.years(5), p_death=0.0, **kwargs)
         return ss.Sim(n_agents=5000, diseases=sir, networks='random', interventions=interventions, start=2000, stop=2010, verbose=0).run()
     base = make([]).results.agentsir.infected
-    screening = ss.screen(ss.Diagnostic(sensitivity=0.9, specificity=0.95), when=ss.years(1), coverage=0.2, name='screening')
+    screening = ss.screen(ss.Diagnostic(sensitivity=0.9, specificity=0.95), when=ss.schedule(every=ss.years(1)), coverage=0.2, name='screening')
     treatment = ss.treat(ss.Treatment(cure=0.8), when=screening.positive, name='treatment')
     res = make([screening, treatment]).results
     t = res.treatment
@@ -577,8 +580,8 @@ def test_agents_only():
     for form in ['queue', 'delay', 'result_delay', 'since', 'count', 'union', 'product', 'waning', 'diseases']:
         with pytest.raises(ss.CapabilityError, match='Run with solver="abm"'):
             make(form, solver='ode').init()
-        assert make(form).init().solver == 'abm', form
-    assert make('ever').run().solver == 'ode'
+        assert isinstance(make(form).init().solver, ss.solvers.abm), form
+    assert isinstance(make('ever').run().solver, ss.solvers.ode)
 
     # A follow-up of a cure finds everyone it reached, the cured and the rest (each a part of its event), under every solver
     def follow(**kwargs):
@@ -615,7 +618,7 @@ def test_age_and_birth():
         make('auto', strata=None).init()
     with pytest.raises(ss.CapabilityError):
         make('auto', strata=[0, 1, 5]).init()
-    assert make('abm', strata=None, n_agents=1000).init().solver == 'abm'
+    assert isinstance(make('abm', strata=None, n_agents=1000).init().solver, ss.solvers.abm)
 
     # With two diseases, a condition on one's own age groups says which disease a delivery is for
     def sir(name):
@@ -667,7 +670,7 @@ def test_paths():
     for solver in ['ode', 'abm']:
         kw = dict(solver=solver, init_n=dict(I=10))
         assert R(run(lambda d: ss.treat(cure=1.0, who=d.I, coverage=ss.perday(0.1)), **kw)) == R(run(lambda d: ss.treat(cure=1.0, who='seir.I', coverage=ss.perday(0.1)), **kw))
-        moves = [R(run(lambda d: ss.Event(move(d), when=[ss.days(10)], p=0.3), **kw)) for move in [lambda d: d.S >> d.R, lambda d: 'seir.S >> seir.R', lambda d: 'S >> R']]
+        moves = [R(run(lambda d: ss.Event(move(d), when=ss.days(10), p=0.3), **kw)) for move in [lambda d: d.S >> d.R, lambda d: 'seir.S >> seir.R', lambda d: 'S >> R']]
         assert moves[0] == moves[1] == moves[2]
         mods = [R(run(lambda d: ss.modify('seir.infection', multiply=0.5, who=where(d)), key='connectors', **kw)) for where in [lambda d: d.I, lambda d: 'seir.I']]
         assert mods[0] == mods[1]
@@ -675,7 +678,7 @@ def test_paths():
         ss.Event('seir.S >> sir.R', when=[1]) # The states of two modules
     with pytest.raises(ValueError):
         ss.treat(cure=1.0, who='I') # A path needs its module
-    seeding = lambda d: ss.Event(d.S >> d.I, when=[ss.days(10)], p=0.001)
+    seeding = lambda d: ss.Event(d.S >> d.I, when=ss.days(10), p=0.001)
     note = lambda sim: any('give the disease init=dict(I=0)' in note for note in sim.notes)
     sim = run(seeding)
     assert note(sim) and sim.results.seir.E[0] > 0 # The default seeding (into E, where infection puts people), with a note
@@ -683,7 +686,7 @@ def test_paths():
     assert not note(sim) and sim.results.seir.E[0] == sim.results.seir.I[0] == 0
     S, E, I, R = ss.states('S E I R') # A network of agents runs as agents
     d = ss.Disease(infection=S >> E @ ss.peryear(10)*I, onset=E >> I @ ss.days(3), recovery=I >> R @ ss.days(7), init_n=dict(I=10), name='seir')
-    assert ss.Sim(d, networks=ssl.HybridNet(household_size=ss.poisson(mean=3)), total_pop=2000, stop=ss.days(5), verbose=0).init().solver == 'abm'
+    assert isinstance(ss.Sim(d, networks=ssl.HybridNet(household_size=ss.poisson(mean=3)), total_pop=2000, stop=ss.days(5), verbose=0).init().solver, ss.solvers.abm)
     return
 
 if __name__ == '__main__':

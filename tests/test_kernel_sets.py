@@ -45,7 +45,7 @@ def snapshot(sim):
 
 def how(solver):
     """ The sim's arguments for a solver: rk4 and euler are integrators of the ODE """
-    return dict(solver=ss.ode(integrator=solver)) if solver in ['rk4', 'euler'] else dict(solver=solver)
+    return dict(solver=ss.solvers.ode(integrator=solver)) if solver in ['rk4', 'euler'] else dict(solver=solver)
 
 
 def same(make, kernels, seeds=(0, 1)):
@@ -69,18 +69,18 @@ event_calls = [] # The arguments of the calls of the events' pass in two sims, o
 
 def events_inputs():
     """
-    The arguments of every call of the pass of solver=ss.abm(step='events') in two small sims, kept the first time: one on a network with acts (by
+    The arguments of every call of the pass of solver=ss.solvers.abm(step='events') in two small sims, kept the first time: one on a network with acts (by
     direction) and a mixing pool, with an Erlang dwell, a dwell drawn for each agent, a split with deaths, and waning; and one by age, with a contact matrix
     """
     if not event_calls:
         S, E, I, R = ss.states('S E I R')
         d = ss.Disease(infection=S >> E @ dict(sexualnet=ss.peract(m2f=0.2, f2m=0.1), mixingpool=ss.perday(0.02))*I, latent=ss.Transition(E, I, dur=ss.erlang(k=3, mean=ss.days(5))),
                        recovery=ss.Transition(I, {R: 0.9, ss.dead: 0.1}, dur=ss.lognormal(mean=ss.days(8), std=ss.days(3))), waning=R >> S @ ss.perday(0.05), init_prev=0.05, name='d')
-        acts = ss.Sim(d, networks=[ss.SexualNet(acts=ss.constant(ss.per(80, 'year'))), ss.MixingPool(n_contacts=3)], n_agents=1000, solver=ss.abm(step='events'), unit='day', stop=30, **kw)
+        acts = ss.Sim(d, networks=[ss.SexualNet(acts=ss.constant(ss.per(80, 'year'))), ss.MixingPool(n_contacts=3)], n_agents=1000, solver=ss.solvers.abm(step='events'), unit='day', stop=30, **kw)
         S, I, R = ss.states('S I R')
         m = ss.Disease(S >> I @ 0.14*I, I >> R @ ss.days(8), init_n=dict(I=10), name='m')
         m.stratify(age={0: 0.3, 15: 0.6, 65: 0.1})
-        ages = ss.Sim(m, networks=ss.contacts(ages=[0, 15, 65], matrix=[[10, 6, 1], [3, 8, 1], [3, 6, 3]]), n_agents=1000, solver=ss.abm(step='events'), unit='day', stop=30, **kw)
+        ages = ss.Sim(m, networks=ss.contacts(ages=[0, 15, 65], matrix=[[10, 6, 1], [3, 8, 1], [3, 6, 3]]), n_agents=1000, solver=ss.solvers.abm(step='events'), unit='day', stop=30, **kw)
         E = ss.solvers.backends.events
         step_events = E.step_events
         def keep(*args):
@@ -264,7 +264,7 @@ ss.options(kernels='rust')
 kw = dict(verbose=0)
 S, I, R = ss.states('S I R')
 sir = lambda: ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(10), init_prev=0.01, name='sir')
-sims = [ss.Sim(sir(), networks=net, n_agents=1000, unit='day', stop=30, solver=solver, **kw) for net,solver in [(ss.RandomNet(), 'abm'), (ssl.StaticNet(n_contacts=10), 'abm'), (ssl.StaticNet(n_contacts=10), ss.abm(step='events')), (ss.MixingPool(n_contacts=ss.constant(5)), ss.abm(step='events'))]]
+sims = [ss.Sim(sir(), networks=net, n_agents=1000, unit='day', stop=30, solver=solver, **kw) for net,solver in [(ss.RandomNet(), 'abm'), (ssl.StaticNet(n_contacts=10), 'abm'), (ssl.StaticNet(n_contacts=10), ss.solvers.abm(step='events')), (ss.MixingPool(n_contacts=ss.constant(5)), ss.solvers.abm(step='events'))]]
 sims += [ss.Sim(ss.SEIR(beta=dict(randomnet=ss.peryear(0.1), sexualnet=ss.peract(0.1))), networks=['random', 'sexual'], demographics=True, n_agents=1000, stop=ss.years(5), **kw)]
 sims += [ss.Sim(sir(), total_pop=10000, unit='day', stop=30, solver=solver, **kw) for solver in ['ode', 'binomial', 'gillespie', 'tau']]
 for sim in sims:
@@ -305,7 +305,7 @@ def test_agents():
     same(lambda s: ss.Sim(n_agents=2000, demographics=[ss.Pregnancy(), ss.Deaths()], networks='prenatal', stop=ss.years(10), rand_seed=s, **kw), compiled)
     S, I, R = ss.states('S I R') # Agents by events (the pass is also called directly in test_twins())
     sirs = lambda: ss.Disease(infection=S >> I @ 0.05*I, recovery=I >> R @ 1, waning=R >> S @ (1/14), init_prev=0.01, name='sirs')
-    same(lambda s: ss.Sim(sirs(), networks=[ss.RandomNet(n_contacts=10), ss.MixingPool(n_contacts=2)], n_agents=2000, solver=ss.abm(step='events'), unit='day', stop=30, rand_seed=s, **kw), compiled)
+    same(lambda s: ss.Sim(sirs(), networks=[ss.RandomNet(n_contacts=10), ss.MixingPool(n_contacts=2)], n_agents=2000, solver=ss.solvers.abm(step='events'), unit='day', stop=30, rand_seed=s, **kw), compiled)
     return
 
 

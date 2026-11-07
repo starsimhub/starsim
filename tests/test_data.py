@@ -125,7 +125,7 @@ def test_people():
     stratify = dict(age=[0, 5, 18, 65])
     ode = ss.Sim(make_sir(), people=ss.population('Kenya', year=2024), stratify=stratify, unit='day', stop=60, **kw).run()
     total = ss.population('Kenya', year=2024).named.total
-    assert ode.solver == 'ode' and ode.pars.total_pop == total
+    assert isinstance(ode.solver, ss.solvers.ode) and ode.pars.total_pop == total
     n = ode.results.sir
     initial = n.S.strata[:, 0] + n.I.strata[:, 0] + n.R.strata[:, 0]
     pop = ss.data.population('Kenya', year=2024)
@@ -134,7 +134,7 @@ def test_people():
 
     # As agents, the same ages and the share who are female
     abm = ss.Sim(make_sir(), people=ss.population('Kenya', year=2024, n_agents=20_000), stratify=stratify, unit='day', stop=60, **kw).run()
-    assert abm.solver == 'abm' and abm.pop_scale == total/20_000
+    assert isinstance(abm.solver, ss.solvers.abm) and abm.pop_scale == total/20_000
     share = np.histogram(abm.people.age.values, [0, 5, 18, 65, 200])[0]/20_000
     assert np.allclose(share, abm.groups.strats[0].fractions, atol=0.01)
     assert abs(abm.people.female.mean() - female.sum()/(female + male).sum()) < 0.01

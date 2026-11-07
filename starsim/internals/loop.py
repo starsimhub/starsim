@@ -328,7 +328,7 @@ class Loop:
         elif obj is sim.people and name in ['step_die', 'finish_step']:
             people = type(obj)
             same = people.step_die is ss.People.step_die and people.finish_step is ss.People.finish_step and people.update_post is ss.People.update_post and people.remove_dead is ss.People.remove_dead
-            return same and sim.solver != 'abm' # One row per group, which never die or leave
+            return same and not isinstance(sim.solver, ss.solvers.abm) # One row per group, which never die or leave
         return False
 
     @staticmethod
@@ -520,7 +520,7 @@ class Loop:
         if profile is not None:
             self.profile = profile
 
-        # Convert e.g. '2020-01-01' or 2020 to a time on the timeline, as interventions read them (see ss.connectors.to_time()); a duration is a time on the timeline already (e.g. sim.t.tvec[5]: sim.run() converts one given as a time after the start)
+        # Convert e.g. '2020-01-01' or 2020 to a time on the timeline, as interventions read them (see ss.connectors.to_time()); a duration is a time on the timeline already (e.g. sim.t.tvec[5]: sim.run() checks one, as ss.Timeline.to_time() does)
         cond = None
         if isinstance(until, (str, ss.date)) or sc.isnumber(until):
             until = ss.connectors.to_time(self.sim, until)

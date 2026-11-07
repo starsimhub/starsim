@@ -148,7 +148,7 @@ def group_rows(sim, npts, row_bytes, budget, name=None):
 def init_people(sim):
     """ In a compartmental run, the results that agents give the sim (alive, died, emigrated), made with the other results, so they can be read during the run, as with agents; filled in as the declared modules record theirs (see `record_people()`) """
     mods = [mod for mod in sim.declared if mod.graph.people_states]
-    if sim.solver in [None, 'abm'] or 'alive' in sim.results or not mods:
+    if (sim.solver is None or isinstance(sim.solver, ss.solvers.abm)) or 'alive' in sim.results or not mods:
         return
     t = mods[0].t # On the timeline of the first disease, whose states hold everyone (see people_counts())
     kw = dict(module='People', timevec=t.timevec, scale=False)
@@ -162,7 +162,7 @@ def init_people(sim):
 
 def record_people(sim, ti=None, keys=None):
     """ In a compartmental run, the results that agents give the sim (alive, died, emigrated), from the declared states and flows: at every time point, or at `ti` (only `keys`, if given) """
-    if sim.solver in [None, 'abm'] or 'alive' not in sim.results:
+    if (sim.solver is None or isinstance(sim.solver, ss.solvers.abm)) or 'alive' not in sim.results:
         return
     if ti is None:
         counts = people_counts(sim, lambda mod, key: np.asarray(mod.results[key].values, dtype=float))
@@ -188,7 +188,7 @@ def people_counts(sim, get):
     gone = dict(died=0, emigrated=0)
     for mod in mods:
         for tr in mod.graph.transitions.values():
-            if tr._deaths is not None and tr._deaths in mod.results:
+            if tr._deaths is not None and tr._deaths in mod.results and tr.people: # People who die, not a count leaving (bacteria in water decaying)
                 gone['died'] += get(mod, tr._deaths)
             elif tr._outflow and tr.migration and tr.name in mod.results: # People leaving alive (ss.emigration())
                 gone['emigrated'] += get(mod, tr.name)
@@ -765,7 +765,7 @@ class Engine(Telling, Effects):
             out = None
             if strain is not None or moved or not np.array_equal(a, b):
                 ng = self.sim.groups.n_groups
-                if self.solver != 'abm' and 8*ng**2 > self.max_map_bytes: # A dense matrix of groups by groups
+                if not isinstance(self.solver, ss.solvers.abm) and 8*ng**2 > self.max_map_bytes: # A dense matrix of groups by groups
                     raise ss.CapabilityError(f'"{self.mod.name}" cannot run with solver="{self.solver}": people moving from {src or "outside"} to {dst} change group, and the map between its {ng:,} groups would take {8*ng**2/1e9:.3g} GB (a dense matrix of groups by groups).\n'
                                              f'     Run with solver="abm", or with fewer groups (fewer dimensions, or fewer diseases tracked jointly).')
                 out = np.ones((1, 1))
@@ -841,7 +841,7 @@ class Engine(Telling, Effects):
             return
         graph = self.graph
         reason = strains.needs_agents(graph)
-        if reason and self.solver != 'abm':
+        if reason and not isinstance(self.solver, ss.solvers.abm):
             raise ss.CapabilityError(f'the strains of "{self.mod.name}" need agents: {reason}. Run with solver="abm" (or "auto").')
         sources = {id(src) for tr in graph.transmissions for src in tr.source}
         infected = {id(s) for s in graph.people_states if s.name in (strat.carried or [])} # Carrying strains as an infection (see ss.Strains._carriers())
@@ -1492,7 +1492,7 @@ class Engine(Telling, Effects):
                 dw.mean, dw.std = mean, std
                 dw.dist = trans.numeric_dist(raw, to_unit)
                 if np.isnan(mean): # A parameter is a function of the agents
-                    if self.solver != 'abm':
+                    if not isinstance(self.solver, ss.solvers.abm):
                         raise ss.CapabilityError(f'"{name}" cannot run with solver="{self.solver}": its dwell time {raw} has a parameter that is a function of the agents. Run with solver="abm".')
                     typed_factor = scaled is not None and any(isinstance(getattr(leaf, 'raw', None), ss.TimePar) for leaf in trans.as_expr(scaled[1]).leaves) # e.g. dur=d*ss.days(1), whose numbers are days
                     if getattr(raw, 'unit', None) is None and not typed_factor and not any(isinstance(v, ss.TimePar) for v in raw.pars.values()): # What the function returns has no unit to say otherwise
@@ -1542,7 +1542,7 @@ class Engine(Telling, Effects):
                     raise ValueError(f'the modifier "{m.name}" sets {path} to a distribution ({m.amount}), but {path} is a duration, the mean of an exponential dwell time for "{name}", so it can only be set to another duration.\n'
                                      f'     Give a duration (e.g. set=ss.years(5)), or make the parameter a distribution (e.g. ss.expon(ss.years(1))) so it can be set to another.')
             return
-        if self.solver != 'abm':
+        if not isinstance(self.solver, ss.solvers.abm):
             raise ss.CapabilityError(f'the modifier "{mods[0].name}" changes {path}, the dwell time of "{name}", which is a distribution ({raw}); with solver="{self.solver}" it is laid out in compartments once, at the start, so it cannot change during the run.\n'
                                      f'     Run with solver="abm", or modify the transition instead (e.g. ss.modify("{self.mod.name}.{name}", multiply=0.5)), which scales its rate.')
         funcs = [key for key,val in ss.transitions.varying_pars(raw).items() if not isinstance(val, ss.by)] if isinstance(raw, ss.Dist) else []
@@ -1583,23 +1583,23 @@ class Engine(Telling, Effects):
         for tr in self.graph.acquisitions: # An infection at a rate per person that grows with a count of people, which is often a count written for a share
             if tr.people and not tr._inflow and tr.rate is not None and tr.flow_given is None and ss.expressions.count_power(tr.rate) > 0 and not self.plausible_density(tr): # Not for the whole flow written without a total (beta*S*I), which says so
                 ss.note(f'{tr.name} has a rate per person of {ss.expressions.format_expr(tr.rate)}, which grows with the number of people (density-dependent), and is fast for that: one infectious person would infect {self.density_rate(tr):,.3g} people a day, if everyone were susceptible. For a share of the population, write .frac (e.g. I.frac), or write the transmission with the bare state (e.g. beta * I)', sim=sim)
-        if sim.solver in ['gillespie', 'tau'] and self.smooth: # Exact only for rates that are constant within a step
-            what = 'solver="gillespie"' if sim.solver == 'gillespie' else 'Tau-leaping'
+        if isinstance(sim.solver, (ss.solvers.gillespie, ss.solvers.tau)) and self.smooth: # Exact only for rates that are constant within a step
+            what = 'solver="gillespie"' if isinstance(sim.solver, ss.solvers.gillespie) else 'Tau-leaping'
             msg = f'{what} holds values that vary in time for each step, at its middle'
             if sim.pars.approximations == 'error':
                 raise ss.CapabilityError(f'{msg}, which approximations="error" does not allow.\n     Run with solver="ode", or allow the approximation; a shorter step follows the values more closely.')
             ss.note(f'{msg}; a shorter step follows them more closely', sim=sim, verbose=0 if sim.pars.approximations == 'allow' else None)
-        euler = sim.solver == 'ode' and sim.solver.integrator == 'euler' and sim.solver.substeps is not None # Euler with steps of a given size; otherwise the ODE takes enough substeps
+        euler = isinstance(sim.solver, ss.solvers.ode) and sim.solver.integrator == 'euler' and sim.solver.substeps is not None # Euler with steps of a given size; otherwise the ODE takes enough substeps
         unit = sim._unit_name
         inflows = [tr.name for tr in self.graph.inflows] # Their rate is a number of people per unit time, so nobody leaves
-        if sim.solver not in ['abm', 'binomial'] and not euler: # The solver is right whatever the step, but a bare number for a rate with a mean dwell shorter than a step is usually meant as a duration (rate=10)
+        if not isinstance(sim.solver, (ss.solvers.abm, ss.solvers.binomial)) and not euler: # The solver is right whatever the step, but a bare number for a rate with a mean dwell shorter than a step is usually meant as a duration (rate=10)
             for name,dw in self.dwells.items():
                 if name not in inflows and dw.is_rate and sc.isnumber(dw.par.raw):
                     mean = self.dwell_mean(name)
                     if np.ndim(mean) == 0 and 0 < mean < self.dt:
                         ss.note(f'{name} has a mean dwell of {mean:.2g} {unit}{"s" if mean != 1 else ""}, shorter than the step; a duration is written dur=, or ss.days(10)', sim=sim)
             return
-        if sim.solver == 'binomial': # It takes enough substeps (see ss.solvers.Compartmental.substeps()), or those it was given (ss.binomial(substeps=1) for a model written in discrete time)
+        if isinstance(sim.solver, ss.solvers.binomial): # It takes enough substeps (see ss.solvers.Compartmental.substeps()), or those it was given (ss.solvers.binomial(substeps=1) for a model written in discrete time)
             return
         dt = self.dt/(sim.solver.substeps if euler else 1)
         step = 'step' if dt == self.dt else 'substep'
@@ -1623,7 +1623,7 @@ class Engine(Telling, Effects):
             if dw.dist is None and (callable(dw.par.raw) or isinstance(dw.par.raw, (ss.by, ss.expressions.Expr))): # Not known until the sim runs, or not one number
                 continue
             mean = dw.mean if dw.dist is not None else self.dwell_mean(name)
-            if sim.solver == 'abm' and dw.dist is not None and dw.family != 'exponential' and mean is not None and getattr(dw, 'std', None) is not None and np.all(np.asarray(mean, dtype=float) - 2*np.asarray(dw.std, dtype=float) >= dt): # As agents, a dwell drawn from a distribution that seldom reaches below a step (e.g. a pregnancy of 32 to 42 weeks, at a monthly step) loses nobody to whole steps
+            if isinstance(sim.solver, ss.solvers.abm) and dw.dist is not None and dw.family != 'exponential' and mean is not None and getattr(dw, 'std', None) is not None and np.all(np.asarray(mean, dtype=float) - 2*np.asarray(dw.std, dtype=float) >= dt): # As agents, a dwell drawn from a distribution that seldom reaches below a step (e.g. a pregnancy of 32 to 42 weeks, at a monthly step) loses nobody to whole steps
                 continue
             if mean is not None and np.ndim(mean) == 0 and mean > 0: # The chain-binomial solver moves people through the stages exactly (see ss.kernels.draw_chain()), and agents draw the whole dwell time, so it is the mean that matters
                 x = dt/mean
@@ -1639,7 +1639,7 @@ class Engine(Telling, Effects):
         if fast:
             x, _, what = fast[0]
             others = f' (and {sc.strjoin(f[1] for f in fast[1:])} {"is" if len(fast) == 2 else "are"} fast too)' if len(fast) > 1 else ''
-            fixes = 'a shorter step (dt=) or more substeps (ss.ode(substeps=))' if euler else f'a shorter step (e.g. dt=ss.{unit}s({dt/4:.2g}))'
+            fixes = 'a shorter step (dt=) or more substeps (ss.solvers.ode(substeps=))' if euler else f'a shorter step (e.g. dt=ss.{unit}s({dt/4:.2g}))'
             msg = f'consider {fixes}: each {step} is {plural(dt)}, and {what}{others}'
             if euler:
                 msg += ' (Euler scales outflows that would take more than everyone down together)' if x > 1 else ''
@@ -1715,7 +1715,7 @@ class Engine(Telling, Effects):
                 by_count[state.name] = init
                 continue
             if isinstance(init, ss.expressions.Expr) and ss.expressions.per_person_in(init): # An expression of people's properties and parameters, e.g. 1 - (A - age)/(k*age + A)
-                if state.people and not is_n and self.solver == 'abm': # Read for each person, as agents: see Agents.init_post()
+                if state.people and not is_n and isinstance(self.solver, ss.solvers.abm): # Read for each person, as agents: see Agents.init_post()
                     continue
                 init = np.asarray(self.eval(init), dtype=float)[()] # For each group
             elif isinstance(init, ss.expressions.Expr): # An expression of parameters, e.g. I0/2
@@ -1726,7 +1726,7 @@ class Engine(Telling, Effects):
                 strat = self.sim.groups.strats[self.strain]
                 errormsg = f'init= of "{state.name}" in "{self.mod.name}" is given by "{strat.name}", the strains people carry; give how many start infected in init= (e.g. init=dict({state.name}=0.1)), and the share of each strain, or set of strains carried together, in ss.Strains(fractions=...), e.g. fractions={{"{strat.labels[0]}": 0.5, "{strat.labels[-1]}": 0.5}}'
                 raise ValueError(errormsg)
-            if isinstance(init, ss.by) and state.people and not is_n and self.solver == 'abm' and init.on_people(self.sim): # Read from each person's own properties, as agents: see Agents.init_post()
+            if isinstance(init, ss.by) and state.people and not is_n and isinstance(self.solver, ss.solvers.abm) and init.on_people(self.sim): # Read from each person's own properties, as agents: see Agents.init_post()
                 continue
             if isinstance(init, ss.by): # A value for each level of one or more dimensions: a number of people, or a fraction of the people at that level
                 sim = self.sim
@@ -1922,7 +1922,7 @@ class Engine(Telling, Effects):
         """ One count per state, one flow per transition (`res.infection.cum` is its cumulative total), and a result for each expression, outcome, and transfer """
         mod = self.mod
         graph = self.graph
-        abm = self.solver == 'abm'
+        abm = isinstance(self.solver, ss.solvers.abm)
         results = sc.autolist()
         for state in graph.states.values():
             key = state.name
@@ -2050,7 +2050,7 @@ class Engine(Telling, Effects):
         """ Work out the sources and delay of each outcome, and the order to compute them in """
         graph = self.graph
         trans = ss.transitions
-        abm = self.solver == 'abm'
+        abm = isinstance(self.solver, ss.solvers.abm)
         dt = self.dt
         self.outcomes = sc.obj()
         todo = dict(graph.outcomes)
@@ -2117,7 +2117,7 @@ class Engine(Telling, Effects):
         res = self.mod.results
         ti = self.mod.ti
         ng = self.sim.groups.n_groups
-        integer = self.solver in ['abm', 'gillespie', 'tau', 'binomial']
+        integer = isinstance(self.solver, (ss.solvers.abm, ss.solvers.gillespie, ss.solvers.tau, ss.solvers.binomial))
 
         def flow_of(key):
             if key in self.outcomes:
@@ -2228,7 +2228,7 @@ class Engine(Telling, Effects):
         module (e.g. `ss.Pregnancy`), each state has its share. The engine's own stocks (used in the dynamics) are untouched.
         """
         sim = self.sim
-        if sim.solver != 'abm' or not sim.pars.rescale or 'unrepresented' not in sim.results:
+        if not isinstance(sim.solver, ss.solvers.abm) or not sim.pars.rescale or 'unrepresented' not in sim.results:
             return self.stocks, self.stock_groups
         n_alive = sim.people.n_alive
         extra = sim.results.unrepresented[sim.ti]/self.scale/n_alive if n_alive else 0.0 # For each agent alive, in agents
@@ -2405,7 +2405,7 @@ class Engine(Telling, Effects):
         """ For a run with real numbers (ode): say where chance would matter, as a stochastic run would show """
         sim = self.sim
         infected = [s for s in self.graph.infected if s.people]
-        if sim.solver != 'ode' or not infected or not self.graph.transmissions or ss.sim.in_proportions(sim): # In proportions, there is no chance to speak of
+        if not isinstance(sim.solver, ss.solvers.ode) or not infected or not self.graph.transmissions or ss.sim.in_proportions(sim): # In proportions, there is no chance to speak of
             return
         res = self.mod.results
         n = sum(np.asarray(res[s.name].values, dtype=float) for s in infected)

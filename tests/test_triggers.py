@@ -77,7 +77,7 @@ def test_syphilis_stay():
             tertiary = ss.Transition(LL, T, p=0.35, dur=dur)
         else:
             tertiary = ss.Transition(LL, {T: 0.35, ss.stay: None}, dur=dur)
-        return ss.Disease(LL, T, Sp, tertiary=tertiary, cure=(LL + T) >> Sp, default_state='LL', name='syph') # Everyone starts in LL; cure is undriven, so not the remainder
+        return ss.Disease(LL, T, Sp, tertiary=tertiary, cure=(LL + T) >> Sp @ 0, default_state='LL', name='syph') # Everyone starts in LL; cure has a rate of 0, moved only by a treatment, so is not the remainder
     out = sc.obj()
     with pytest.raises(ValueError, match='ss.stay'): # The rest stay only if asked to, with ss.stay
         make('implicit')
@@ -169,7 +169,7 @@ def test_with_conveyor():
     size = lambda solver: dict(n_agents=10_000) if solver == 'abm' else dict(total_pop=10_000)
     for solver in ['abm', 'ode']: # Those who stay at the end of a fixed dwell are not in the flow
         LL, T, Sp = ss.states('LL T Sp')
-        d = ss.Disease(LL, T, Sp, tertiary=ss.Transition(LL, {T: 0.35, ss.stay: None}, dur=ss.constant(ss.years(2))), cure=(LL + T) >> Sp, default_state='LL', name='syph') # Everyone (1 or more is people)
+        d = ss.Disease(LL, T, Sp, tertiary=ss.Transition(LL, {T: 0.35, ss.stay: None}, dur=ss.constant(ss.years(2))), cure=(LL + T) >> Sp @ 0, default_state='LL', name='syph') # Everyone (1 or more is people)
         res = ss.Sim(d, solver=solver, start=2000, stop=2004, unit='year', **size(solver), **kw).run().results.syph
         assert res.T[1] == 0 and np.isclose(res.T[-1]/1e4, 0.35, atol=0.02), f'{solver}: {res.T}'
         assert np.isclose(res.tertiary.sum(), res.T[-1], rtol=1e-6), f'{solver}: {res.tertiary.sum()} in the flow, {res.T[-1]} in T'
@@ -233,7 +233,7 @@ def test_stay_keeps_course():
 
 def treated_event(solver):
     S, I = ss.states('S I')
-    a = ss.Disease(inf=ss.Transition(S, I, rate=ss.peryear(0.5)), cure=ss.Transition(I, S), name='a')
+    a = ss.Disease(inf=ss.Transition(S, I, rate=ss.peryear(0.5)), cure=ss.Transition(I, S, rate=0), name='a')
     S, F = ss.states('S F')
     b = ss.Disease(S, F, flag=S >> F @ ss.on(a.cure), unflag=F >> S @ ss.years(0.5), name='b')
     tx = ss.treat(ss.Treatment(cure={a.cure: 1.0}), who=a.I, coverage=ss.peryear(1.0), name="tx")
@@ -308,7 +308,7 @@ def test_paths_and_memory():
     # Every event remembers: entering or leaving a state, and a branch of a transition, as a transition does
     def delivered(who):
         d = sir()
-        return ss.Sim(d, interventions=ss.Event(d.R >> d.S, who=who(d), when=[ss.days(40)], name='ev'), **pars).run().results.ev.delivered.sum()
+        return ss.Sim(d, interventions=ss.Event(d.R >> d.S, who=who(d), when=ss.days(40), name='ev'), **pars).run().results.ev.delivered.sum()
     assert delivered(lambda d: d.infection.n_times >= 2) == delivered(lambda d: d.I.enter.n_times >= 2) == delivered(lambda d: d.infection.to(d.I).n_times >= 2)
     assert delivered(lambda d: d.recovery.since < 3) == delivered(lambda d: d.I.exit.since < 3) > 0
     assert delivered(lambda d: ~d.I.enter.ever) == delivered(lambda d: ~d.infection.ever)
@@ -318,7 +318,7 @@ def test_paths_and_memory():
     for make, match in [(lambda: ss.Transition(X, Y, on=X), 'use when='), (lambda: ss.Transition(X, Y, where=X), 'use who='), (lambda: ss.Transition(X, Y, when=ss.ref('a.b'), dur=3), 'delay='), # Old keywords
                         (lambda: ss.modify('a.pars.b', multiply=2, start=2020), 'ss.schedule'), (lambda: ss.modify('a.pars.b', multiply=2, when=[2025]), 'ss.schedule'), # Old keywords
                         (lambda: ss.modify('a.pars.b', multiply=2, hold=3), 'until='), (lambda: ss.attr(1, on=X), 'use when='), (lambda: ss.birth(on=X), 'use when='), # Old keywords
-                        (lambda: ss.move(X, Y, where=X), 'use who='), (lambda: ss.schedule(at=[2020]), 'first argument'), (lambda: ss.schedule(when=lambda now: True), 'first argument')]: # Old keywords
+                        (lambda: ss.move(X, Y, where=X), 'use who='), (lambda: ss.schedule(when=lambda now: True), 'as at=')]: # Old keywords
         with pytest.raises((TypeError, ValueError), match=match):
             make()
     return

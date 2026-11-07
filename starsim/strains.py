@@ -512,7 +512,7 @@ def attach(dis, strains):
 
 def prepare(strains, trs):
     """
-    Before a disease with strains is built: its transitions with an outcome for each strain carried (`per_strain=True`), as a branch
+    Before a disease with strains is built: its transitions with an outcome for each strain carried (`per_strain='each'`), as a branch
     probability and a change of strains for each level of the strain dimension (see `ss.Transition`)
 
     With `p=`, each strain k carried takes the first destination with probability c_k (cured, say), independently: everyone takes it with
@@ -537,7 +537,7 @@ def prepare(strains, trs):
             tr.per_given = dict(single_strain=True)
         else:
             if tr.p is None or len(tr.dest or []) != 2:
-                errormsg = f'"{name}" has per_strain=True, so each strain carried has its own outcome: give two destinations, the first for those with none left, with the chance of each strain taking it (e.g. cured), and the second for the rest, e.g. ss.Transition(Tx, {{R: 0.9, I: None}}, per_strain=True)'
+                errormsg = f'"{name}" has per_strain="each", so each strain carried has its own outcome: give two destinations, the first for those with none left, with the chance of each strain taking it (e.g. cured), and the second for the rest, e.g. ss.Transition(Tx, {{R: 0.9, I: None}}, per_strain="each")'
                 raise ValueError(errormsg)
             given = tr.p[0] if len(tr.p) == 1 or (len(tr.p) == 2 and tr.p[1] is None) else tr.p # The first destination's: the rest take the second
             given = getattr(given, 'raw', given)
@@ -549,7 +549,7 @@ def prepare(strains, trs):
             elif sc.isnumber(given):
                 c = float(given)*vals
             else:
-                errormsg = f'p= of "{name}" with per_strain=True is the chance of each strain taking the first destination: a number, or the name of values of the strains; not {given!r}'
+                errormsg = f'p= of "{name}" with per_strain="each" is the chance of each strain taking the first destination: a number, or the name of values of the strains; not {given!r}'
                 raise TypeError(errormsg)
             if np.any(c < 0) or np.any(c > 1):
                 raise ValueError(f'the chance of each strain taking the first destination of "{name}" is {np.round(c, 4).tolist()}; each is between 0 and 1')

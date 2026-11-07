@@ -627,7 +627,7 @@ def load_odin(filename, unit='day', stop=None, pars=None, verbose=None, **kwargs
             f.rate = re.sub(r'\b(\w+)__sum\b', r'\1', f.rate)
 
     # Run settings
-    cfg = dict(solver=ss.binomial(substeps=1) if discrete else 'ode', unit=unit) # odin's discrete-time models take whole steps
+    cfg = dict(solver=ss.solvers.binomial(substeps=1) if discrete else 'ode', unit=unit) # odin's discrete-time models take whole steps
     if discrete and dt != 1:
         cfg['dt'] = dt
     if stop is not None:

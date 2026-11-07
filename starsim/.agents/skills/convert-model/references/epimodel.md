@@ -18,7 +18,7 @@ Then, in Starsim, `sim = ss.import_from('model.json')`, or `ss.import_from('intr
 
 | EpiModel | Starsim | Mechanical |
 |---|---|---|
-| `netsim()` with `type = "SI"`, `"SIS"`, `"SIR"` | States `S`, `I` (and `R`); `infection = S >> I @ beta * I` with `beta = ss.peract(inf.prob)`, and `act.rate` as `acts=` of the network (e.g. `ss.perday(2)`), so the chance per partnership per step is `1 - (1 - inf.prob)^act.rate`; `rec.rate` to `S` or `R` | yes |
+| `netsim()` with `type = "SI"`, `"SIS"`, `"SIR"` | States `S`, `I` (and `R`); `infection = S >> I @ beta * I` with `beta = ss.peract(inf.prob)`, and `act.rate` as `acts=` of the network (e.g. `ss.freqperday(2)`), so the chance per partnership per step is `1 - (1 - inf.prob)^act.rate`; `rec.rate` to `S` or `R` | yes |
 | Probabilities per step | `ss.prob(..., 'day')` (or the `unit=` given: a step is only a name, so `unit='week'` gives the same numbers) | yes |
 | `a.rate`, `ds.rate`, `di.rate`, `dr.rate` | An inflow `a_rate * (S + I + R).n` and an outflow from each state | yes |
 | `i.num`, `r.num`; the network's size | `init_n=dict(S=..., I=..., R=...)` (numbers of people), `n_agents=n`, `solver='abm'` | yes |

@@ -131,7 +131,7 @@ def test_emulsion(tmp_path):
     sim.init()
     dis = sim.diseases.seirq
     assert set(dis.states.keys()) == {'S', 'E', 'I', 'Q', 'R'} # D is removed: an outflow
-    assert sim.pars.solver == 'binomial'
+    assert isinstance(sim.pars.solver, ss.solvers.binomial)
     assert 'force_of_infection' in dis.graph.transitions # A rate given by a named expression names its transition
     assert dis.graph.transitions.force_of_infection.contact
     sim.run()
@@ -177,7 +177,7 @@ def test_emulsion_export(tmp_path):
     assert 'I: {desc: the expression I, value: total_I_1 + total_I_2' in text and 'aggregation_type: compartment' in text
     sc.savetext(tmp_path/'seir.yaml', text)
     back = ss.import_from(tmp_path/'seir.yaml', format='emulsion', **kw)
-    assert back.pars.solver == ss.binomial(substeps=1) # As EMULSION runs it
+    assert back.pars.solver == ss.solvers.binomial(substeps=1) # As EMULSION runs it
     ref = sims['seir'].new(solver='ode').run().results.seir
     res = back.new(solver='ode').run().results.seir
     for k in ['S', 'E', 'R']:
@@ -198,7 +198,7 @@ def test_emulsion_export_run(tmp_path):
         rows = list(csv.DictReader(open(tmp_path/name/'counts.csv')))
         steps = sorted({int(r['step']) for r in rows})
         I = np.array([np.mean([sum(float(v) for c,v in r.items() if c == 'I' or c.startswith('I_')) for r in rows if int(r['step']) == s]) for s in steps])
-        ref = np.mean([sim.new(solver=ss.binomial(substeps=1), rand_seed=i).run().results[name].I.values for i in range(n_runs)], axis=0) # As EMULSION runs it: in whole steps
+        ref = np.mean([sim.new(solver=ss.solvers.binomial(substeps=1), rand_seed=i).run().results[name].I.values for i in range(n_runs)], axis=0) # As EMULSION runs it: in whole steps
         if name == 'seir': # The Erlang stages in whole steps are not the lognormal dwell time in whole steps: compare with the import, whose stages are states
             back = ss.import_from(file, format='emulsion', **kw)
             ref = np.mean([sum(r[c].values for c in r.keys() if c.startswith('I_') and c[2:].isdigit()) for r in [back.new(rand_seed=i).run().results.seir for i in range(n_runs)]], axis=0)
@@ -305,7 +305,7 @@ def test_hand(tmp_path):
             init_n     = dict(I=10),
             name       = 'seirq',
         )
-        return ss.Sim(seirq, total_pop=1000, stop=ss.days(100), solver=ss.binomial(substeps=1), **kw)
+        return ss.Sim(seirq, total_pop=1000, stop=ss.days(100), solver=ss.solvers.binomial(substeps=1), **kw)
     a, b = [s.new(solver='ode').run().results.seirq for s in [sim, hand()]] # As an ODE, since the import's random numbers are drawn for its other parts too
     for state in 'SEIQR':
         assert np.allclose(a[state], b[state]), state

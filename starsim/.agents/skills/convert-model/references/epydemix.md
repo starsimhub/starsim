@@ -33,7 +33,7 @@ Then, in Starsim, `sim = ss.import_from('model.json')`. The dump records the las
 | Groups that are not ages | `stratify(group=[...])` | yes |
 | Contact matrices by setting | `networks=ss.contacts(sum of the settings)` | yes |
 | Initial numbers by group (recorded run) | `init_n=dict(I=ss.by([...], dims=['age']))`, the state with most people taking the rest (it is made the first state, `default_state=`) | yes |
-| Daily steps of a chain binomial | `solver=ss.binomial(substeps=1)`, `unit='day'`, stop a day after `end_date` | yes |
+| Daily steps of a chain binomial | `solver=ss.solvers.binomial(substeps=1)`, `unit='day'`, stop a day after `end_date` | yes |
 | `add_intervention()` on one setting | Listed; by hand (`ss.modify(dis.S_to_E, multiply=..., when=ss.schedule(start=..., stop=...))` if every setting is reduced alike, or the contacts as two networks) | no |
 | A custom transition kind (`register_transition_kind`) | Listed; by hand | no |
 | A chain of compartments `D0..D3` at `4/Delta` | Kept as compartments (exact); by hand, `ss.Transition(D, Dead, dur=Delta, stages=4)` reads better | no |
@@ -45,7 +45,7 @@ Then, in Starsim, `sim = ss.import_from('model.json')`. The dump records the las
 
 ## What needs care
 
-- **One step a day, with no substeps.** epydemix is a discrete-time model in its own right: in a day, `1 - exp(-rate)` of the people leave a state. Starsim's binomial solver takes substeps for an Erlang dwell time (`stages=`), for every transition, which changes the model (deaths by 2 August 6,039 against 10,525 in the COVID example). The import passes `solver=ss.binomial(substeps=1)`; keep it if you rewrite the death chain with `stages=`.
+- **One step a day, with no substeps.** epydemix is a discrete-time model in its own right: in a day, `1 - exp(-rate)` of the people leave a state. Starsim's binomial solver takes substeps for an Erlang dwell time (`stages=`), for every transition, which changes the model (deaths by 2 August 6,039 against 10,525 in the COVID example). The import passes `solver=ss.solvers.binomial(substeps=1)`; keep it if you rewrite the death chain with `stages=`.
 - **Initial numbers are rounded down by age.** `percentage_in_agents` spreads the infections over the age groups and rounds each down (10 became 8 in Kenya); the dump records the actual numbers. The COVID tutorial's own initial conditions lose the odd person in each group (`(infected/2).astype(int)` twice), so they add up to 4 fewer than the population; the import makes the sim's population the initial numbers (epydemix still divides by `Nk` in the force of infection, a difference of 6e-7).
 - **A branch has one result.** `I_to_D_or_R` counts everyone leaving `I`; the number dying is the flow into `D` (`D0_to_D1` and `D0`), or write the two exits as separate transitions to keep both.
 - **Weeks end a day apart.** A Starsim flow summed weekly to a data date covers the week to the end of the day before (the date is the start of that day); epydemix's weeks end on Sunday. Sum the original's daily transitions to the same weeks before comparing.

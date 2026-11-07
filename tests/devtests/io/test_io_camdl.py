@@ -63,7 +63,7 @@ def test_camdl_ir():
     infection = S >> I @ beta * I
     cases = ss.outcome(rho * infection)
     sir = ss.Disease(infection, I >> R @ gamma, cases, init_n=dict(I=10), name='sir')
-    ref = ss.Sim(sir, total_pop=10_000, unit='day', stop=ss.weeks(12), solver=ss.ode(substeps=1), verbose=0).run() # One RK4 step a day, as camdl takes
+    ref = ss.Sim(sir, total_pop=10_000, unit='day', stop=ss.weeks(12), solver=ss.solvers.ode(substeps=1), verbose=0).run() # One RK4 step a day, as camdl takes
     for key in ['I', 'R', 'infection', 'cases']:
         assert np.allclose(sim.results.sir[key].values, ref.results.sir[key].values, rtol=1e-10), f'{key} should match the model written by hand'
 
@@ -143,7 +143,7 @@ def test_camdl_export_run(tmp_path, monkeypatch):
     for name,sim in export_sims().items():
         file = tmp_path/f'{name}.camdl'
         sc.savetext(file, to_camdl(sim)[0])
-        ref = sim.new(solver=ss.ode(substeps=1)).run().results[name]
+        ref = sim.new(solver=ss.solvers.ode(substeps=1)).run().results[name]
         back = ss.import_from(file, format='camdl', **kw).run()
         res = back.results[name]
         stages = lambda r, k: sum(r[c].values for c in r.keys() if c == k or (c.startswith(f'{k}_') and c[len(k)+1:].isdigit()))

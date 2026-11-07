@@ -52,7 +52,7 @@ The settings of a sim are its keywords. The ones most models use:
 | `demographics` | Births, deaths, and migration (see [Demographics](populations_demographics.qmd)) |
 | `interventions`, `analyzers`, `connectors` | Interventions, analyzers, and connectors between modules (see [Interventions](interventions_interventions.qmd)) |
 | `data` | Data to compare the results with, by name (see [Results](building_results.qmd)) |
-| `solver` | How to run: `'auto'` (the default), `'ode'`, `'binomial'`, `'gillespie'`, `'tau'`, or `'abm'`; or with options, `ss.ode()`, `ss.binomial()`, or `ss.abm()` |
+| `solver` | How to run: `'auto'` (the default), `'ode'`, `'binomial'`, `'gillespie'`, `'tau'`, or `'abm'`; or with options, `ss.solvers.ode()`, `ss.solvers.binomial()`, or `ss.solvers.abm()` |
 | `rand_seed` | The random seed, for a stochastic run (default 1; see [Scenarios](running_scenarios.qmd)) |
 | `label` | A name for the sim, used in plots and comparisons |
 | `verbose` | How much to print (above) |
@@ -285,7 +285,7 @@ Every keyword of `ss.Sim()`, by what it is for; `sim.pars` (an `ss.SimPars`) hol
 | **The population** | | |
 | `total_pop` | 10,000 | The size of the population modeled |
 | `n_agents` | as `total_pop`, up to 10,000 | The number of agents, for a run as agents; giving it makes the sim run as agents (and without `total_pop`, it is an error for a compartmental run). Each agent then stands for `sim.pop_scale = total_pop/n_agents` people |
-| `rescale` | False | Dynamic rescaling, for agents: start at one person per agent, and grow by at least a factor whenever more than a share of agents are no longer naive; True, or `ss.rescale(threshold=0.05, factor=1.2)` with its options (see [Branching and rescaling](running_branching.qmd#dynamic-rescaling)) |
+| `rescale` | False | Dynamic rescaling, for agents: start at one person per agent, and grow by at least a factor whenever more than a share of agents are no longer naive; True, or a dict of its options, e.g. `dict(threshold=0.05, factor=1.2)` (the defaults) (see [Branching and rescaling](running_branching.qmd#dynamic-rescaling)) |
 | `aging` | with demographics | Whether agents age; by default, only if there are births or deaths |
 | `stratify` | none | Groups by a property of people for every module, e.g. `dict(age=[0, 15, 65])` (see [Stratification](building_stratification.qmd)) |
 | **Time** | | |
@@ -293,7 +293,7 @@ Every keyword of `ss.Sim()`, by what it is for; `sim.pars` (an `ss.SimPars`) hol
 | `dt` | 1 | The step, in the unit of time |
 | `unit` | the model's | The unit of time, and of bare numbers in declared transitions (`'day'`, `'week'`, `'year'`, ...) |
 | **How it is run** | | |
-| `solver` | `'auto'` | `'ode'`, `'binomial'`, `'gillespie'`, `'tau'`, or `'abm'`; or with options: `ss.ode(integrator=, substeps=, dwells=)`, `ss.binomial(substeps=)`, or `ss.abm(step=)` (see [Solvers and backends](running_solvers.qmd)) |
+| `solver` | `'auto'` | `'ode'`, `'binomial'`, `'gillespie'`, `'tau'`, or `'abm'`; or with options: `ss.solvers.ode(integrator=, substeps=, dwells=)`, `ss.solvers.binomial(substeps=)`, or `ss.solvers.abm(step=)` (see [Solvers and backends](running_solvers.qmd)) |
 | `branching` | False | Run as a branching process: infection takes no one from the uninfected (see [Branching and rescaling](running_branching.qmd)) |
 | `approximations` | 'note' | What to do with each approximation a solver makes: 'note' notes it, 'allow' keeps the note in `sim.notes` without printing it, 'error' makes it an error |
 | `require_kernels` | False | Raise an error, rather than run in Python, if a compartmental run can't be taken whole in the kernels (see `sim.kernel_reason()`) |

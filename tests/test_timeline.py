@@ -121,7 +121,7 @@ def test_timeline():
     assert len(s4.t) == 11
 
     print('Testing numeric 1')
-    s5 = sim(start=None, stop=30, dt=None) # A bare stop before 1900, alone, is a time from 0
+    s5 = sim(start=None, stop=30, dt=None) # A bare stop before 1800, alone, is a time from 0
     assert s5.t.datevec[0] == ss.years(0)
     assert s5.t.datevec[-1] == ss.years(30)
     assert len(s5.t) == 31
@@ -160,7 +160,7 @@ def test_timeline_syntax():
     dd20 = ss.date(2010) - ss.date(1990) # The time between two dates, in days: ss.days(7305)
     dd30 = ss.date(2030) - ss.date(2000)
 
-    # Test start: a date or a bare year (from 1900 on) gives the timeline a calendar; any other number, or a duration, is a time from 0
+    # Test start: a date or a bare year (from 1800 on) gives the timeline a calendar; any other number, or a duration, is a time from 0
     kw.a1 = [dict(start=None, stop=None, dt=None)           , dict(start=ss.years(2000), stop=ss.years(2050), dur=ss.years(50), dt=ss.years(1))]
     kw.a2 = [dict(start=1990, stop=None, dt=None)           , dict(start=ss.years(1990), stop=ss.years(2040), dur=ss.years(50), dt=ss.years(1))]
     kw.a3 = [dict(start=ss.years(1990), stop=None, dt=None) , dict(start=ss.years(1990), stop=ss.years(2040), dur=ss.years(50), dt=ss.years(1))] # 1,990 years from 0: no calendar
@@ -203,7 +203,7 @@ def test_timeline_syntax():
 
     # Test stop with no start
     kw.g1 = [dict(start=None, stop=2030, dt=None)                , dict(start=ss.years(2000), stop=ss.years(2030), dur=ss.years(30), dt=ss.years(1))]
-    kw.g2 = [dict(start=None, stop=30, dt=None)                  , dict(start=ss.years(0), stop=ss.years(30), dur=ss.years(30), dt=ss.years(1))] # A bare stop before 1900 alone is a time from 0
+    kw.g2 = [dict(start=None, stop=30, dt=None)                  , dict(start=ss.years(0), stop=ss.years(30), dur=ss.years(30), dt=ss.years(1))] # A bare stop before 1800 alone is a time from 0
 
     # Test multiple
     kw.h1 = [dict(start=ss.years(1990), stop=ss.date(2010), dt='month') , 'exception'] # A date with no calendar
@@ -335,7 +335,7 @@ def test_coded_unit():
 
 
 def test_bare_times():
-    """ How a bare number is read as a time is decided once, from the start: a year with a calendar, else a time in the sim's unit from 0, whatever unit= is; a duration is a time after the start, and as stop=, the length """
+    """ How a bare number is read as a time is decided once, from the start (or with none, the stop, if the unit is years): a year with a calendar, else a time in the sim's unit from 0; a duration is a time from 0, and as stop=, the length """
     sc.heading('Bare numbers as times')
     kw = dict(diseases='sis', networks='random', n_agents=small, verbose=0)
     with pytest.raises(TypeError, match='dur= has been removed'):
@@ -344,6 +344,8 @@ def test_bare_times():
     assert sim.t.start == ss.years(2000) and sim.t.calendar == 'years'
     sim = ss.Sim(start=2020, stop=2021, unit='day', **kw).init() # A year whatever the unit
     assert sim.t.calendar == 'years' and len(sim.t) == 366
+    sim = ss.Sim(stop=3650, unit='day', **kw).init() # With no start, the explicit unit wins: 3,650 days from 0 (it ran from 2000 to the year 3650)
+    assert sim.t.calendar is None and sim.t.start == ss.days(0) and sim.t.stop == ss.days(3650)
     with pytest.raises(ValueError, match=r'stop=ss.days\(50\)'): # The year 50 after a dated start
         ss.Sim(start='2025-01-01', stop=50, unit='day', **kw).init()
     with pytest.raises(ValueError, match='shorter than one step'):
@@ -362,11 +364,14 @@ def test_bare_times():
     years = ss.Sim(start=2000, stop=2040, **kw).init()
     for sim in [dated, years]:
         assert ss.connectors.to_ti(sim, 2030) == 30 # A bare number is a year with either calendar
-        assert ss.connectors.to_ti(sim, ss.years(30)) == 30 # A duration is a time after the start
+        assert ss.connectors.to_ti(sim, sim.pars.start + ss.years(30)) == 30 # A time after the start
+        with pytest.raises(ValueError, match='sim.pars.start'): # A duration is a time from 0, which needs a sim with no calendar
+            ss.connectors.to_ti(sim, ss.years(30))
         with pytest.raises(ValueError, match='calendar year'):
             ss.connectors.to_ti(sim, 30)
+    assert ss.connectors.to_ti(years, years.t.tvec[30]) == 30 # A time of the timeline itself, in calendar years
     nocal = ss.Sim(start=0, stop=40, **kw).init()
-    assert nocal.t.calendar is None and ss.connectors.to_ti(nocal, 30) == 30
+    assert nocal.t.calendar is None and ss.connectors.to_ti(nocal, 30) == ss.connectors.to_ti(nocal, ss.years(30)) == 30
     with pytest.raises(ValueError, match='no calendar'):
         ss.connectors.to_ti(nocal, '2020-01-01')
     return sim
@@ -389,7 +394,7 @@ def test_schedule():
     class Clinic(ss.Module):
         def __init__(self):
             super().__init__(name='clinic')
-            self.poll = ss.schedule(ss.months(3), start=ss.months(3))
+            self.poll = ss.schedule(every=ss.months(3), start='2010-04-01')
             self.campaigns = ss.schedule(['2010-01-01', '2011-06-15', '2030-01-01'])
             self.new_year = ss.schedule(lambda now: now.month == 1 and now.day == 1)
             self.weekly = ss.schedule(every=ss.weeks(1))
@@ -409,6 +414,13 @@ def test_schedule():
 
     sim = ss.Sim(modules=Clinic(), n_agents=10, dt=ss.months(1), start='2010-01-01', stop='2011-01-01', verbose=0).run() # Several due in one step are counted
     assert sim.clinic.log.weekly == 53
+
+    # A duration is a time, counted from 0, whether or not it is in a list (how often is every=); with a calendar, it is an error
+    t = ss.Timeline(start=0, stop=ss.days(30), dt=ss.days(1))
+    assert list(ss.schedule(ss.days(10)).init(t).steps) == list(ss.schedule([ss.days(10)]).init(t).steps) == [10]
+    assert len(ss.schedule(every=ss.days(10)).init(t).steps) == 4
+    with pytest.raises(ValueError, match='sim.pars.start'):
+        ss.schedule(ss.days(10)).init(ss.Timeline(start='2020-01-01', stop='2020-02-01', dt=ss.days(1)))
     return sim
 
 

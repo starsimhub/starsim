@@ -54,7 +54,7 @@ class infection_log(Analyzer):
     of -1, and infections by a mixing pool (`ss.MixingPool`), a contact matrix, or
     mixing with everyone (no network) have a source and network of NaN, since they
     come from the share infectious in a group rather than from a particular person
-    (by events, `solver=ss.abm(step='events')`, each contact is with a particular person, so
+    (by events, `solver=ss.solvers.abm(step='events')`, each contact is with a particular person, so
     these have a source and route too). For a disease with strains (`ss.Strains`),
     each entry also has the strain transmitted (`strain`; for seeds, the strains
     they start with). As agents only.

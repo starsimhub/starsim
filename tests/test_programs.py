@@ -29,7 +29,7 @@ def test_hpv_algorithm():
             dysplasia = I >> CIN @ ss.years(5),
             regress   = CIN >> I @ ss.years(4),
             invasion  = CIN >> CA @ ss.years(15),
-            excised   = CIN >> I, # Undriven: clears the lesion, not the infection
+            excised   = CIN >> I @ 0, # Moved only by the treatment: clears the lesion, not the infection
             init=dict(I=0.1, CIN=0.03), name='hpv',
         ).stratify(age=[0, 30, 50])
         women = (ss.person.age >= 30) & (ss.person.age < 50)

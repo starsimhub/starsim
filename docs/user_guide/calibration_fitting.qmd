@@ -22,33 +22,29 @@ This page covers the options. The [calibration tutorial](../tutorials/t7_calibra
 
 ## The smallest example
 
-The model is a measles outbreak in a town of 100,000 people, 90% of whom are already immune by vaccination. People are infected (S to E), become infectious about 10 days later (E to I), when the rash appears, and recover after about 8 days (I to R). The reported cases are a share of the people whose rash appears, `report`. Three things are unknown: the transmission rate `beta`, the share reported, `report`, and how many people were infectious at the start, `I0`, as a share of the town. The last is nearly always unknown for a real outbreak, since the first cases are rarely reported, and it sets when the outbreak takes off:
+The model is a measles outbreak in a town of 100,000 people, 90% of whom are already immune by vaccination. It is the library's measles model, `ssl.Measles`: people are infected (S to E), become infectious about 8 days later (E to I), and recover after about 11 days (I to R), or die. Here the two periods are exponential, with those means, rather than the library's normal distributions (with a spread of a day or two): run as an ODE, an exponential period is one compartment, while a period with a small spread is a chain of many, which makes each run, and so each fit, many times slower. The reported cases are a share of the people who become infectious, `report`, which the library's model does not have, so it is added to it as an outcome: a declared disease takes extra states, transitions, and outcomes beside its own, by keyword or positionally (a member of the class, such as `ssl.Measles.onset`, stands for the copy in each instance). Three things are unknown: the transmission rate `beta`, the share reported, `report`, and how many people were infectious at the start, `I0`, as a share of the town. The last is nearly always unknown for a real outbreak, since the first cases are rarely reported, and it sets when the outbreak takes off:
 
 ```{python}
 import numpy as np
 import starsim as ss
+import starsim.library as ssl
 
-S, R = ss.states('S R')
-E, I = ss.states('E I', infected=True) # Infected: counted in the results infected and prevalence
-beta   = ss.par(1.5, bounds=[0.5, 4])       # Transmission rate per day: unknown
-report = ss.par(0.3, bounds=[0.05, 1])      # Share of cases reported: unknown
+beta   = ss.par(1.0, bounds=[0.3, 3])        # Transmission rate per day: unknown
+report = ss.par(0.3, bounds=[0.05, 1])       # Share of cases reported: unknown
 I0     = ss.par(0.0001, bounds=[1e-5, 1e-3]) # Share infectious at the start (10 people): unknown
 
-infection = S >> E @ beta*I
-onset     = E >> I @ ss.days(10)  # The rash appears about 10 days after infection
-recovery  = I >> R @ ss.days(8)   # Infectious for 8 days on average
-cases     = ss.outcome(report*onset) # Reported cases: a share of the onsets
-measles = ss.Disease(infection, onset, recovery, cases, init=dict(I=I0, R=0.9))
+cases = ss.outcome(report*ssl.Measles.onset) # Reported cases: a share of the onsets, added to the library's model
+measles = ssl.Measles(beta=beta, dur_exp=ss.expon(ss.days(8)), dur_inf=ss.expon(ss.days(11)), cases=cases, init=dict(I=I0, R=0.9))
 
 pars = dict(total_pop=100_000, start='2025-01-01', stop='2026-01-01')
 ```
 
 The value given to each parameter is where the search starts, and the bounds are the range it searches. A parameter is named by its variable (`I0` here), or by `name=`.
 
-The data are weekly reported cases. On this page they are illustrative: made once from an agent-based run of the same disease, in which each infection is a chance event (so its outbreak is not the smooth curve of the ODE fitted below), with `beta = 1.9`, half of cases reported, and 30 people infectious on 1 January, and with weekly counts that vary more than Poisson counts would, as reported counts usually do. With real data, the data would be read from a file instead (see [below](#the-data)):
+The data are weekly reported cases. On this page they are illustrative: made once from an agent-based run of the same disease, in which each infection is a chance event (so its outbreak is not the smooth curve of the ODE fitted below), with `beta = 1.4` (the library's default, an R0 of about 15), half of cases reported, and 30 people infectious on 1 January, and with weekly counts that vary more than Poisson counts would, as reported counts usually do. With real data, the data would be read from a file instead (see [below](#the-data)):
 
 ```{python}
-truth = ss.Sim(measles, pars=dict(beta=1.9, report=0.5, I0=0.0003), n_agents=100_000, rand_seed=3, verbose=0, **pars)
+truth = ss.Sim(measles, pars=dict(beta=1.4, report=0.5, I0=0.0003), n_agents=100_000, rand_seed=3, verbose=0, **pars)
 truth.run()
 data = truth.to_synthetic_data('cases', resample='week', noise=None) # Weekly cases (whole weeks only, so not the last, partial one)
 rng = np.random.default_rng(3)
@@ -60,16 +56,16 @@ Now attach the data to a sim of the model, and fit:
 
 ```{python}
 sim = ss.Sim(measles, data=data, **pars)
-fit = sim.fit()
+fit = sim.fit(method='nelder-mead')
 ```
 
-The fit prints which method it used and why, which parameters it searches on a log scale (those whose bounds span a factor of 10 or more), and whether it converged. `fit.summarize()` shows the values found, with the loss before and after:
+By default, an ODE with three parameters is fitted by gradients (`'l-bfgs-b'`, see [below](#how-the-fit-is-found)), which first compiles the model in JAX, taking a few seconds; Nelder-Mead, which needs no gradients, is quicker for a model as small as this one. The fit prints which parameters it searches on a log scale (those whose bounds span a factor of 10 or more), and whether it converged (and, if not given a method, which one it chose and why). `fit.summarize()` shows the values found, with the loss before and after:
 
 ```{python}
 fit.summarize()
 ```
 
-β and the share reported are close to the values the data were made with (1.9 and 0.5). The initial infections are not: the fit finds about 13 people, not 30. In the agent-based run, the first chains of transmission are chance events, some of which die out, and its outbreak took off later than an ODE starting from 30 people would; the fit finds the start that gives an ODE the same timing. That is what a fitted initial condition means: not a count of who was infectious on 1 January, but where the model has to start to match the data. The fitted model against the data:
+β and the share reported are close to the values the data were made with (1.4 and 0.5). The initial infections are not: the fit finds about 7 people, not 30. In the agent-based run, the first chains of transmission are chance events, some of which die out, and its outbreak took off later than an ODE starting from 30 people would; the fit finds the start that gives an ODE the same timing. That is what a fitted initial condition means: not a count of who was infectious on 1 January, but where the model has to start to match the data. The fitted model against the data:
 
 ```{python}
 fit.plot()
@@ -147,7 +143,7 @@ fit = sim.fit(loss=peak_error)
 A **likelihood** says how the data vary around the model's value: the model's value is the mean of the distribution, and the likelihood supplies the rest. It can be declared on the outcome, where it is used by every fit, or given to the fit by the name of the data series:
 
 ```python
-cases = ss.outcome(report*onset, likelihood=ss.poisson()) # On the outcome
+cases = ss.outcome(report*ssl.Measles.onset, likelihood=ss.poisson()) # On the outcome
 fit = sim.fit(likelihood=dict(cases=ss.nbinom(n=10)))     # Or for one fit, by series
 fit = sim.fit(likelihood=ss.nbinom(n=10))                  # Or the same for every series
 ```
@@ -158,11 +154,11 @@ When every data series has a likelihood, the fit maximizes the sum of their logs
 
 ```{python}
 dispersion = ss.par(5, bounds=[1, 100], name='dispersion')
-fit_lik = sim.fit(likelihood=dict(cases=ss.nbinom(n=dispersion)), verbose=False)
+fit_lik = sim.fit(method='nelder-mead', likelihood=dict(cases=ss.nbinom(n=dispersion)), verbose=False)
 fit_lik.table
 ```
 
-The estimates are much like those of the normalized absolute error, as both fit the same curve; the likelihood weighs each week by how much it is expected to vary, and gives the methods that need one (posteriors, profiles) something to work with. The fitted dispersion is lower than the 10 that the counts were drawn with, since it also takes in the chance of the agent-based run, which the ODE doesn't have.
+The estimates differ somewhat from those of the normalized absolute error (a lower β, with more of the cases reported and more people infectious at the start, which give much the same curve); the likelihood weighs each week by how much it is expected to vary, and gives the methods that need one (posteriors, profiles) something to work with. The fitted dispersion is a little lower than the 10 that the counts were drawn with, since it also takes in the chance of the agent-based run, which the ODE doesn't have.
 
 To score a run against its data by hand, e.g. to compare scenarios, or to weigh runs for a posterior of your own, `ss.fit.mismatch(sim)` gives the normalized absolute error (or another `loss=`) and `ss.fit.loglik(sim, likelihood=...)` the log-likelihood (with `by_series=True`, for each data series):
 
@@ -171,7 +167,7 @@ print('Normalized absolute error:', ss.fit.mismatch(fit_lik.sim))
 print('Log-likelihood:', ss.fit.loglik(fit_lik.sim, likelihood=dict(cases=ss.nbinom(n=fit_lik.pars.dispersion))))
 ```
 
-Any sim that has run can be scored this way, whether or not it came from a fit, and against data it wasn't given, with `df=`. A likelihood that isn't built in is a function, `fn(observed, model)`. Here a survey tested 5,000 people for measles every two months from March, counting the number infectious. People were sampled in clusters (households, schools), so the counts vary more than binomial counts would, which a beta-binomial allows for, with SciPy's `betabinom`: the model's prevalence is the mean share positive, and `rho` sets how much more they vary (the variance is that of a binomial times 1 + (n − 1)·rho, here about 6). Both the calibrated sim and the one with the starting values are scored against it:
+Any sim that has run can be scored this way, whether or not it came from a fit, and against data it wasn't given, with `data=`. A likelihood that isn't built in is a function, `fn(observed, model)`. Here a survey tested 5,000 people for measles every two months from March, counting the number infectious. People were sampled in clusters (households, schools), so the counts vary more than binomial counts would, which a beta-binomial allows for, with SciPy's `betabinom`: the model's prevalence is the mean share positive, and `rho` sets how much more they vary (the variance is that of a binomial times 1 + (n − 1)·rho, here about 6). Both the calibrated sim and the one with the starting values are scored against it:
 
 ```{python}
 import scipy.stats as sps
@@ -183,7 +179,7 @@ def betabinomial(observed, model, n=5000, rho=0.001):
 
 survey = truth.to_synthetic_data('prevalence', noise=None)
 survey = survey[survey.date.isin(ss.date.arange('2025-03-01', '2025-11-01', ss.months(2)))].copy() # The first of every other month
-p = survey.prevalence.values
+p = np.clip(survey.prevalence.values, 1e-6, None) # Above 0, once the outbreak is over
 survey['prevalence'] = sps.betabinom.rvs(5000, p*999, (1 - p)*999, random_state=rng) # The number positive among 5,000, with rho = 0.001
 for label, run in {'Calibrated': fit_lik.sim, 'Starting values': fit_lik.before}.items():
     print(f'{label}: {ss.fit.loglik(run, data=survey, likelihood=dict(prevalence=betabinomial)):.1f}')
@@ -211,11 +207,11 @@ A stochastic model gives a different result on each run, so each set of values g
 
 ```{python}
 sim = ss.Sim(measles, data=data, solver='binomial', **pars)
-fit = sim.fit(method=ss.fit.method('optuna', n_trials=300), rand_seed=5) # More trials than the default 100, for three parameters
+fit = sim.fit(method='optuna', rand_seed=5)
 fit.summarize()
 ```
 
-The estimates are less precise than those of the ODE: each score is noisy, so the search can settle anywhere in a region of similar scores (the spread of the best tenth of the trials, `spread_lower` to `spread_upper`, is wide), and a fit with another `rand_seed` gives somewhat different values. With three parameters, the default 100 trials are not enough for the search to settle, and the fit says it has not converged; here it is given 300. [Fit diagnostics](calibration_diagnostics.qmd) shows how to check how much this matters.
+The estimates are less precise than those of the ODE: each score is noisy, so the search can settle anywhere in a region of similar scores (the spread of the best tenth of the trials, `spread_lower` to `spread_upper`, is wide), and a fit with another `rand_seed` gives somewhat different values. Here the default 100 trials, each scored by 4 runs, are enough for the search to settle by the fit's own rule (its best score stopped improving); a real fit usually needs more, especially with more parameters, and a fit that stops too soon says it has not converged. [Fit diagnostics](calibration_diagnostics.qmd) shows how to check how much this matters.
 
 The options that matter for a stochastic fit are settings of the method (`ss.fit.method('optuna', ...)`), except `rand_seed=`:
 

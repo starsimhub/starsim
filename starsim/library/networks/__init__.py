@@ -3,7 +3,7 @@ Additional network types: household, cluster, spatial, and theoretical.
 
 `HouseholdNet` builds households from DHS-style survey data; `ClusterNet` divides
 agents into fully connected clusters, and `HybridNet` is Covasim's population of
-households, schools, workplaces, and community; `DiskNet` connects agents that are spatially close, and `GridNet` puts them on a lattice; `NullNet` is
+households, schools, workplaces, and community; `DiskNet` connects agents that are spatially close, `GeoNet` connects them across real places, and `GridNet` puts them on a lattice; `NullNet` is
 useful for debugging, `SmallWorldNet` and `ScaleFreeNet` are the classic graphs,
 and `StaticNet` turns a NetworkX graph into a network (by default, an Erdős–Rényi graph). Core
 network classes (`ss.RandomNet`, `ss.DegreeNet`, `ss.SexualNet`, etc.) live in
@@ -16,4 +16,4 @@ Used with: agents and compartments; declared and coded modules
 from .household   import HouseholdNet
 from .clusters    import ClusterNet, HybridNet
 from .theoretical import NullNet, StaticNet, SmallWorldNet, ScaleFreeNet
-from .spatial     import DiskNet, GridNet
+from .spatial     import DiskNet, GeoNet, GridNet

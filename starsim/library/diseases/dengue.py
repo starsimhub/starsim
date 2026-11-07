@@ -1,6 +1,8 @@
 """
 Dengue, with several serotypes and a mosquito vector (`Dengue`)
 """
+# Authorship: AI written, human reviewed
+
 import starsim as ss
 
 __all__ = ['Dengue']

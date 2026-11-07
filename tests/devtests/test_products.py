@@ -26,7 +26,7 @@ def make_hpv(name, beta=1.5):
         dysplasia = I >> CIN @ ss.years(2),
         regress   = CIN >> S @ ss.years(3),
         invasion  = CIN >> CA @ ss.years(5),
-        excised   = CIN >> I,
+        excised   = CIN >> I @ 0,
         init_prev=0.1, name=name,
     )
 
@@ -46,7 +46,7 @@ def check_agents(make, pop=10_000, **kwargs):
     """ Check that a model is agents only: an explicit ODE refuses it before the run, and solver='auto' runs it as agents """
     with pytest.raises(ss.CapabilityError):
         make(solver='ode', total_pop=pop, **kw, **kwargs).init()
-    assert make(total_pop=pop, **kw, **kwargs).init().solver == 'abm'
+    assert isinstance(make(total_pop=pop, **kw, **kwargs).init().solver, ss.solvers.abm)
     return
 
 
@@ -65,7 +65,7 @@ def test_test_diseases():
         g16, g18 = make_hpv('hpv16'), make_hpv('hpv18')
         dna = ss.Diagnostic(sensitivity={g16.I: 0.6, g16.CIN: 0.9, 'hpv18.I': 0.5, g18.CIN: 0.8}, specificity=0.95)
         def look(sim): # As agents: the expected positives, from each agent's states when tested
-            if sim.solver == 'abm':
+            if isinstance(sim.solver, ss.solvers.abm):
                 d, u = sim.diseases, sim.people.auids
                 p16, p18 = [np.select([d[g].I.raw[u], d[g].CIN.raw[u]], s[1:3], 0) for g,s in [('hpv16', s16), ('hpv18', s18)]]
                 pos = 1 - (1 - p16)*(1 - p18)
@@ -75,7 +75,7 @@ def test_test_diseases():
         return ss.Sim([g16, g18], interventions=prog, **kwargs)
     def expected(sim):
         """ As an ODE: the diseases do not interact, so each person's states are independent, and the expected positives come from the marginals """
-        if sim.solver == 'abm':
+        if isinstance(sim.solver, ss.solvers.abm):
             return seen.pos
         r = sim.results
         k = int(np.flatnonzero(r.prog.delivered)[0])
@@ -110,7 +110,7 @@ def test_outcomes():
         colpo = ss.Diagnostic(outcomes=results, result_delay=delay)
         excise = ss.Treatment(cure={g.excised: 0.9 for g in genos}) # Across genotypes, with no fan-out
         def look(sim): # As agents: each result expected, from each agent's states when tested
-            if sim.solver == 'abm':
+            if isinstance(sim.solver, ss.solvers.abm):
                 u = sim.people.auids
                 tails = 1.0
                 for g in genos:
@@ -127,7 +127,7 @@ def test_outcomes():
         return ss.Sim(genos, interventions=[prog, prog_hsil, prog_cancer], **kwargs)
     def expected(sim):
         """ As an ODE: from the marginals of independent genotypes, P(worst ≥ k) = 1 − ∏(1 − P_g(≥ k)) """
-        if sim.solver == 'abm':
+        if isinstance(sim.solver, ss.solvers.abm):
             return seen.expected
         r = sim.results
         k = int(np.flatnonzero(r.prog.delivered)[0])

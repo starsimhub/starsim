@@ -25,7 +25,7 @@ About twenty diseases: declared models of measles, Ebola, cholera, malaria, TB, 
 
 ### Networks (`networks/`)
 
-Households (`HouseholdNet`, `ClusterNet`, and Covasim's `HybridNet`), space (`DiskNet` and `GridNet`), and theoretical networks (`StaticNet` from any NetworkX graph, by default an Erdős–Rényi graph, `SmallWorldNet`, `ScaleFreeNet`, and `NullNet`). See [Library: networks](https://starsim.org/v4/user_guide/library_networks.html), whose appendix lists every one with its parameters and whether it keeps common random numbers.
+Households (`HouseholdNet`, `ClusterNet`, and Covasim's `HybridNet`), space (`DiskNet`, `GridNet`, and `GeoNet` for real places), and theoretical networks (`StaticNet` from any NetworkX graph, by default an Erdős–Rényi graph, `SmallWorldNet`, `ScaleFreeNet`, and `NullNet`). See [Library: networks](https://starsim.org/v4/user_guide/library_networks.html), whose appendix lists every one with its parameters and whether it keeps common random numbers.
 
 ### MNCH (`mnch/`)
 

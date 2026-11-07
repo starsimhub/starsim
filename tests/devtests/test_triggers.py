@@ -32,7 +32,7 @@ def test_bv_debut():
     assert checked.n >= len(res.timevec) - 1 and res.debut[1:].sum() > 100
     assert res.U[0] < 0.7*5000 # Those 15+ at the start debuted before it
     assert 'as soon as it holds' in sim.diseases.bv.describe()
-    assert ss.Sim(make(), stratify=dict(sex=['female', 'male']), n_agents=100, start=2000, stop=2001, unit='year', **kw).init().solver == 'abm' # As agents for now
+    assert isinstance(ss.Sim(make(), stratify=dict(sex=['female', 'male']), n_agents=100, start=2000, stop=2001, unit='year', **kw).init().solver, ss.solvers.abm) # As agents for now
 
     # A trigger has no rate to modify
     bv = make()

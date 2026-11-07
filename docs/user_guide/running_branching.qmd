@@ -22,7 +22,7 @@ In Starsim, a branching process is not a different model, but the same model run
 | Solver | What it gives |
 |---|---|
 | `'ode'` | The expected course: exponential growth at the rate that goes with R0 |
-| `ss.ode(dwells='exact')` | The same, with each dwell time as it is, which is the renewal equation (below) |
+| `ss.solvers.ode(dwells='exact')` | The same, with each dwell time as it is, which is the renewal equation (below) |
 | `'gillespie'`, `'binomial'`, `'tau'` | A branching process of counts: the chance of extinction, and the distribution of chain sizes |
 | `'abm'` | A branching process of individuals: who infected whom, and differences between people |
 
@@ -96,13 +96,13 @@ With the same infectiousness and a fixed infectious period, the offspring are Po
 
 ### The renewal equation
 
-`solver=ss.ode(dwells='exact')` is the deterministic solver that takes each dwell time as it is, rather than as the Erlang stages that `'ode'` uses: an integro-differential model. As a branching process, it is the renewal equation that EpiEstim, EpiNow2, and epidemia are built on, with the generation interval that the model's latent and infectious periods give:
+`solver=ss.solvers.ode(dwells='exact')` is the deterministic solver that takes each dwell time as it is, rather than as the Erlang stages that `'ode'` uses: an integro-differential model. As a branching process, it is the renewal equation that EpiEstim, EpiNow2, and epidemia are built on, with the generation interval that the model's latent and infectious periods give:
 
 ```{python}
 S, E, I, R = ss.states('S E I R')
 latent = ss.lognormal(mean=ss.days(5), std=ss.days(10)) # Most become infectious within a few days, a few only after weeks
 seir = ss.Disease(S >> E @ 0.4*I, E >> I @ latent, I >> R @ ss.days(5), init_n=dict(I=10), name='seir')
-solvers = {'Renewal equation (exact dwells)': ss.ode(dwells='exact'), 'Erlang stages (ode)': 'ode'}
+solvers = {'Renewal equation (exact dwells)': ss.solvers.ode(dwells='exact'), 'Erlang stages (ode)': 'ode'}
 sims = {label: ss.Sim(seir, total_pop=1e6, branching=True, solver=solver, stop=ss.days(60), verbose=0) for label, solver in solvers.items()}
 ss.parallel(sims).plot('seir.I')
 ```
@@ -172,7 +172,7 @@ dynamic.run()
 dynamic.results.pop_scale.plot()
 ```
 
-The threshold and the factor are options: `rescale=ss.rescale(threshold=0.05, factor=1.2)` is the same as `rescale=True`. Rescaling is for agents only; a compartmental run, which has no agents, raises an error if given it.
+The threshold and the factor are options: `rescale=dict(threshold=0.05, factor=1.2)` is the same as `rescale=True`, and a key other than these is an error. Rescaling is for agents only; a compartmental run, which has no agents, raises an error if given it.
 
 The number of people per agent (`sim.results.pop_scale`) starts at 1, and grows as the epidemic does, to 200. Here are the three runs:
 

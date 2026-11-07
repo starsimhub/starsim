@@ -1,5 +1,5 @@
 """
-Test branching processes (ss.Sim(branching=True)) under every solver, stopping a run with until=, and exact dwell times (ss.ode(dwells='exact'))
+Test branching processes (ss.Sim(branching=True)) under every solver, stopping a run with until=, and exact dwell times (ss.solvers.ode(dwells='exact'))
 """
 
 # %% Imports and settings
@@ -101,11 +101,11 @@ def test_offspring():
 
 @sc.timer()
 def test_ide():
-    sc.heading('Exact dwell times (ss.ode(dwells="exact")): a dwell time as it is, and under branching, the renewal equation')
+    sc.heading('Exact dwell times (ss.solvers.ode(dwells="exact")): a dwell time as it is, and under branching, the renewal equation')
     def make(dur, solver, dt=1.0, branching=False, stop=150):
         S, E, I, R = ss.states(4)
         dis = ss.Disease(S >> E @ ss.perday(0.4)*I, E >> I @ dur, I >> R @ ss.perday(0.2), init_n=dict(I=10), name='seir')
-        solver = ss.ode(dwells='exact') if solver == 'ide' else solver
+        solver = ss.solvers.ode(dwells='exact') if solver == 'ide' else solver
         return ss.Sim(dis, total_pop=1e6, solver=solver, unit='day', dt=dt, stop=stop, branching=branching, **kw).run().results.seir
     gamma = ss.gamma(shape=4, scale=ss.days(2)) # Exact as four Erlang stages
     ode, ide = make(gamma, 'ode', 0.25), make(gamma, 'ide', 0.25)

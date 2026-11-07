@@ -40,7 +40,7 @@ def test_exit_split():
     for solver in ['ode', 'binomial']:
         with pytest.raises(ss.CapabilityError, match='P.time_in is a clock'):
             ss.Sim(make(), solver=solver, total_pop=50_000, **kw2).init()
-    assert ss.Sim(make(), total_pop=50_000, **kw2).init().solver == 'abm'
+    assert isinstance(ss.Sim(make(), total_pop=50_000, **kw2).init().solver, ss.solvers.abm)
     return abm
 
 
@@ -60,7 +60,7 @@ def test_syphilis_clock():
     with pytest.raises(ss.CapabilityError):
         make(solver='ode', total_pop=20_000).init()
     sim = make(total_pop=20_000).init()
-    assert sim.solver == 'abm'
+    assert isinstance(sim.solver, ss.solvers.abm)
     return sim
 
 
@@ -78,7 +78,7 @@ def test_bv_clock():
     for solver in ['ode', 'gillespie']:
         with pytest.raises(ss.CapabilityError, match='P.time_in is a clock'):
             ss.Sim(cohort(), solver=solver, total_pop=10_000, **kw2).init()
-    assert ss.Sim(cohort(), total_pop=10_000, **kw2).init().solver == 'abm'
+    assert isinstance(ss.Sim(cohort(), total_pop=10_000, **kw2).init().solver, ss.solvers.abm)
     return abm
 
 
@@ -90,7 +90,7 @@ def test_conveyor_limits():
         return ss.Disease(S, A, B, sa=S >> A @ ss.perday(0.05), ab=ss.Transition(A, B, dur=ss.days(4)), ax=ss.Transition(A, S, rate=ss.perday(0.1)*A.progress), name='d')
     with pytest.raises(ss.CapabilityError, match='A.progress is a clock'): # .progress of a dwell time
         ss.Sim(make(), solver='ode', **kw).init()
-    assert ss.Sim(make(), **kw).init().solver == 'abm'
+    assert isinstance(ss.Sim(make(), **kw).init().solver, ss.solvers.abm)
     d = make_seir(init_prev=0.01)
     vx = ss.vaccinate(ss.Vaccine(efficacy=0), who=d.E & (d.E.time_in >= ss.days(2)), name='vx')
     with pytest.raises(ss.CapabilityError, match='E.time_in is a clock'): # A delivery reading a clock

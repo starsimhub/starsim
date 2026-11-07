@@ -51,7 +51,7 @@ __all__ = ['to_json', 'load_json']
 # The settings of a sim that the file carries, as they were given
 settings = ['label', 'n_agents', 'total_pop', 'start', 'stop', 'dt', 'unit', 'solver', 'rand_seed', 'branching', 'approximations', 'aging']
 module_keys = ['networks', 'demographics', 'interventions', 'analyzers', 'connectors']
-values = ['par', 'seasonal', 'peract', 'timeseries', 'by', 'Rate', 'date', 'dur', 'ode', 'binomial', 'abm', 'rescale', 'levels'] # Starsim's values that can be written as calls, besides typed quantities and distributions
+values = ['par', 'seasonal', 'peract', 'timeseries', 'by', 'Rate', 'date', 'dur', 'ode', 'binomial', 'abm', 'levels'] # Starsim's values that can be written as calls, besides typed quantities and distributions (a solver with options, e.g. ode(integrator='euler'), is ss.solvers')
 dist_names = sorted(name for name in dir(ss) if isinstance(getattr(ss, name), type) and issubclass(getattr(ss, name), ss.Dist) and name != 'Dist')
 constants = dict(pi='np.pi', inf='np.inf', nan='np.nan', unborn='ss.unborn', dead='ss.dead', outside='ss.outside', stay='ss.stay')
 
@@ -81,8 +81,8 @@ class Writer:
         """ A value as JSON: numbers, text, lists, and dicts as they are, `ss.by` as `{"by": {...}}`, a parameter as its name, and anything else as its code without the `ss.` """
         pars = pars or {}
         v = lambda x: self.value(x, pars)
-        if isinstance(val, ss.sim.Solver): # A solver with options as its call, e.g. ode(integrator='euler'); with none, its name
-            return drop_prefixes(repr(val)) if val.given() else str(val)
+        if isinstance(val, ss.solvers.Solver): # A solver with options as its call, e.g. ode(integrator='euler'); with none, its name
+            return repr(val).removeprefix('ss.solvers.') if val.given() else str(val)
         elif isinstance(val, ss.par):
             name = next((k for k,p in pars.items() if p is val), None)
             return name if name is not None else v(val.raw)
@@ -142,7 +142,7 @@ class Writer:
                 out[key] = self.expr(val, pars) if key == 'min_stay' else val
         for key in ['where', 'move', 'increment']:
             if getattr(tr, key, None) is not None:
-                self.lost.append(f'not exported: the {key}= of transition "{g.module.name}.{tr.name}"')
+                self.lost.append(f'not exported: the {"who" if key == "where" else key}= of transition "{g.module.name}.{tr.name}"') # who= is stored as where
         typed = isinstance(getattr(dur, 'raw', dur), (ss.Duration, ss.Dist)) # A dwell time written with @ needs a unit, so that it is not read as a rate
         if set(out.keys()) <= {'source', 'dest', 'rate', 'dur'} and not isinstance(out.dest, list) and ('rate' in out or typed):
             rate = out.get('rate', out.get('dur'))
@@ -364,6 +364,8 @@ class Reader:
                     func = ast.Attribute(ast.Name('ss'), 'mean')
                 elif name == 'dur': # The class of a duration, ss.Duration
                     func = ast.Attribute(ast.Name('ss'), 'Duration')
+                elif name in ss.solvers.solver_names: # A solver with options, e.g. ss.solvers.ode()
+                    func = ast.Attribute(ast.Attribute(ast.Name('ss'), 'solvers'), name)
                 return ast.Call(func, [visit(a) for a in n.args], [ast.keyword(k.arg, visit(k.value)) for k in n.keywords if k.arg is not None])
             self.error(where, f'"{ast.unparse(n)}" is not something a model can say, in "{text}"')
         try:

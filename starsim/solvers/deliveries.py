@@ -19,7 +19,7 @@ __all__ = ['CompartmentalDelivery', 'memory_strats', 'memory_layout', 'remember_
 
 def memory_strats(delivery, sim=None):
     """ In a compartmental run: the properties of people that keep whether the events of a delivery, and of its product (by its first delivery), happened, if something reads it """
-    if sim is None or sim.solver in [None, 'abm']:
+    if sim is None or (sim.solver is None or isinstance(sim.solver, ss.solvers.abm)):
         return []
     product = delivery.product
     owners = [delivery.name] + ([product.name] if product is not None and next((d for d in ss.interventions.modules_of(sim, 'interventions') if isinstance(d, ss.Event) and d.product is product), None) is delivery else [])

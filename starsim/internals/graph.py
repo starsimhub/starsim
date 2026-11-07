@@ -81,6 +81,11 @@ class TransitionTable(sc.obj):
         return out
 
 
+def is_zero(rate):
+    """ Whether a transition's rate is a 0 written as a number (`I >> R @ 0`), not a parameter, which marks it as moved only by products, deliveries, or code """
+    return isinstance(rate, ss.expressions.par) and rate.literal and sc.isnumber(rate.value) and rate.value == 0
+
+
 class Graph:
     """
     The states and transitions of one module
@@ -102,7 +107,7 @@ class Graph:
         default_state (str): the state people are in unless they are put elsewhere (by default, the one named `S` or `susceptible`, else the first made; see `resolve_people()`)
         names (dict): the names of the variables of the code that made the module, by the id of what they hold (see `ss.utils.caller_names()`), which name the states, transitions, and parameters given without one
     """
-    removed = ['transitions', 'outcomes', 'results'] # Keywords that were lists of members, which are now given positionally (e.g. ss.Disease(infection, recovery, prevalence))
+    grouped = ['transitions', 'outcomes', 'results'] # The keywords that each take several members, the keyword form of giving them positionally: ss.Disease(transitions=[infection, recovery]) is ss.Disease(infection, recovery)
 
     def __init__(self, module, args=None, members=None, init_prev=None, init=None, init_n=None, default_state=None, names=None, seed_n=False):
         self.module = module
@@ -192,10 +197,8 @@ class Graph:
         """ Sort the members by what they are, and name them """
         module = self.module
         named = [] # (name, obj) pairs
-        for key in self.removed:
-            if key in members and isinstance(members[key], (list, tuple)):
-                errormsg = f'ss.Disease() takes no {key}=; give the {key} positionally, e.g. ss.Disease(infection, recovery, prevalence, ...), or as keywords by name, e.g. ss.Disease(infection=S >> I @ beta*I, ...)'
-                raise TypeError(errormsg)
+        for key in self.grouped:
+            args = args + sc.tolist(members.pop(key, None))
         for arg in args:
             named.append((None, arg))
         named += list(members.items())
@@ -274,7 +277,7 @@ class Graph:
 
     def add(self, container, name, obj):
         """ Add a named member, checking the name """
-        reserved = set(self.removed) | set(dir(ss.Module)) | {'sim', 'pars', 't', 'dists', 'name', 'label', 'graph', 'engine'} # The attributes of every module
+        reserved = set(self.grouped) | set(dir(ss.Module)) | {'sim', 'pars', 't', 'dists', 'name', 'label', 'graph', 'engine'} # The attributes of every module
         if container is not self.pars: # And this module's methods, e.g. a transition named "describe" would replace the method (parameters are kept in pars, so may be named "R0")
             reserved |= {key for cls in type(self.module).__mro__ for key,val in vars(cls).items() if isinstance(val, (types.FunctionType, property, classmethod, staticmethod))}
         if name in reserved:
@@ -367,11 +370,15 @@ class Graph:
                 errormsg = f'The transition "{name}" has no destination'
                 raise ValueError(errormsg)
 
-            if tr.undriven: # Built before (the same transition in another module): its rate of 0 is set again in resolve_exits()
-                tr.rate = None
-            if tr.rate is None and tr.dur is None and tr.p is None and tr.trigger is None and getattr(tr, 'birth_on', None) is None and not tr.every_state:
+            undriven = tr.dur is None and tr.p is None and tr.trigger is None and getattr(tr, 'birth_on', None) is None and not tr.every_state
+            if undriven and tr.rate is None and not tr.undriven: # What would it mean? A transition that nothing moves people along is written @ 0
+                arrow = tr._arrow.replace(' -> ', ' >> ')
                 if not tr.source:
-                    raise ValueError(f'the inflow "{name}" ({tr._arrow}) has no rate. Give it one, e.g. {tr._arrow.replace(" -> ", " >> ")} @ 0.1')
+                    raise ValueError(f'the inflow "{name}" ({tr._arrow}) has no rate. Give it one, e.g. {arrow} @ 0.1')
+                raise ValueError(f'the transition "{name}" ({arrow}) has no rate, duration, p=, or trigger. Give it one, e.g. {arrow} @ ss.days(10); '
+                                 f'or, if only a product (e.g. a treatment\'s cure), a delivery, or code moves people along it, a rate of 0: {arrow} @ 0')
+            if tr.undriven or (undriven and is_zero(tr.rate)): # A rate of 0 as written (or built before, in another module): moved only by products, deliveries, or code, at the rate of 0 set again in resolve_exits()
+                tr.rate = None
                 tr.undriven = True
 
             # Derive the kind from the rate, written per person (a rate written as the whole flow, e.g. beta*S*I/N, is divided by its source)
@@ -761,7 +768,7 @@ class Graph:
                         group, total = bad[0]
                         undriven = [tr.name for tr in exits.hazards if tr.undriven]
                         driven = [tr for tr in exits.hazards if not tr.undriven]
-                        why = f' {sc.strjoin(undriven)} {"has" if len(undriven) == 1 else "have"} no rate, duration, or p=, so {"is" if len(undriven) == 1 else "are"} undriven, not the remainder; for an immediate split, give the destinations together, e.g. ss.Transition({name}, {{A: {total:n}, B: None}}, dur=0).' if undriven else ''
+                        why = f' {sc.strjoin(undriven)} {"has" if len(undriven) == 1 else "have"} a rate of 0 (@ 0) and no p=, so {"is" if len(undriven) == 1 else "are"} moved only by products or code, not the remainder; for an immediate split, give the destinations together, e.g. ss.Transition({name}, {{A: {total:n}, B: None}}, dur=0).' if undriven else ''
                         why += f' {sc.strjoin(tr.name for tr in driven)} {"has" if len(driven) == 1 else "have"} a rate and no p=, so {"it competes" if len(driven) == 1 else "they compete"} with the branches rather than taking the rest: give it p={1 - total:n}, or a duration (dur=), which takes the rest.' if total < 1 and driven and not exits.timed else ''
                         why += f' For the rest to stay in {name}, give the destinations as one split with ss.stay, e.g. [A, ss.stay] with p=[{total:n}, None].' if total < 1 else ''
                         raise ValueError(f'the branch probabilities out of state "{name}" sum to {total:n}, not 1 '

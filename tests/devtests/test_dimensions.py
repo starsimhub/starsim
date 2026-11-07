@@ -95,7 +95,7 @@ def seed_north(sim):
     """ Infect 50 people in the first town, on the first step """
     if sim.ti == 0:
         sir = sim.diseases.sir
-        if sim.solver == 'abm':
+        if isinstance(sim.solver, ss.solvers.abm):
             uids = (sim.people.patch == 0).uids[:5] # Each agent stands for 10 people
             sir.S[uids] = False
             sir.I[uids] = True
@@ -307,7 +307,7 @@ def make_resistance(beta=4, immunity=True, cure=(0.9, 0.3), **kwargs):
                          immunity=ss.immunity(due_to=L, protection=0.7) if immunity else None)
     DS, RIF = strains
     return ss.Disease(infection=S >> L @ ss.peryear(beta)*I, activation=L >> I @ ss.peryear(0.3), diagnosis=I >> Tx @ ss.peryear(2),
-                      treatment=ss.Transition(Tx, {R: 'cure', I: None}, rate=ss.peryear(2), per_strain=True),
+                      treatment=ss.Transition(Tx, {R: 'cure', I: None}, rate=ss.peryear(2), per_strain='each'),
                       failure=ss.Transition(Tx, I, rate=ss.peryear(0.2), move=DS >> (DS, RIF)), relapse=R >> S @ ss.years(2),
                       name='tb', strains=strains, **kwargs)
 
@@ -492,7 +492,7 @@ def test_space():
     try:
         sims = []
         for threads in [1, 0]: # One thread, then as many as Numba has
-            with ss.options.context(threads=threads):
+            with ss.options.context(num_threads=threads):
                 sim = ss.Sim(make_towns(mobility=ss.geo.gravity(scale=2e-4)), stop=60, unit='day', n_agents=20_000, total_pop=100_000, **kw).init()
                 sim.loop.insert(seed_north, label='sim.start_step')
                 sims.append(sim.run())
@@ -831,7 +831,7 @@ def test_by_properties():
     # Death rates by sex with no sex dimension: read from people.female as agents; an explicit ODE says to stratify
     mu = ss.by(sex=dict(female=ss.peryear(0.02), male=ss.peryear(0.05)))
     sim = make(mu, n_agents=20_000).run()
-    assert sim.solver == 'abm'
+    assert isinstance(sim.solver, ss.solvers.abm)
     female, dead = sim.people.female.raw[sim.people.auids], sim.diseases.d.D.raw[sim.people.auids]
     for sel,rate in [(female, 0.02), (~female, 0.05)]:
         p = 1 - np.exp(-11*rate) # The people after the run: 11 steps of a year, one from each time point
@@ -852,7 +852,7 @@ def test_by_properties():
     assert np.isclose(abm.results.d.D[-1], ode.results.d.D[-1], rtol=0.03)
     with pytest.raises(ss.CapabilityError, match='split'):
         make(table, total_pop=50_000, solver='ode', dims=dict(age=[0, 30, 60])).init()
-    assert make(table, total_pop=50_000, dims=dict(age=[0, 30, 60])).init().solver == 'abm'
+    assert isinstance(make(table, total_pop=50_000, dims=dict(age=[0, 30, 60])).init().solver, ss.solvers.abm)
 
     # A row for people with no value (None), and a product of values by different dimensions
     ppl = ss.People(10_000, extra_states=[ss.FloatArr('since_birth', default=ss.choice([np.nan, 1.0, 10.0], p=[0.5, 0.25, 0.25]))])
@@ -885,7 +885,7 @@ def test_by_properties():
     erlang = [stats.gamma.sf(8, 16, scale=8/16), stats.gamma.sf(8, 4, scale=6/4)] # 16 and 4 stages
     assert np.allclose(left.ode, erlang, atol=1e-3) and np.allclose(left.binomial, erlang, atol=0.03) and np.allclose(left.abm, [0.476, 0.208], atol=0.02) # Lognormal as agents (those who leave at 7.875 months or later, at the step nearest)
     sim = ss.Sim(clearance(where_m=ss.person.female), stop=10, verbose=0).init() # Both for women: none as compartments, so agents
-    assert sim.solver == 'abm'
+    assert isinstance(sim.solver, ss.solvers.abm)
     with pytest.raises(ss.CapabilityError):
         ss.Sim(clearance(where_m=ss.person.female), stop=10, solver='ode', verbose=0).init()
 

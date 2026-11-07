@@ -208,7 +208,7 @@ def test_per_act():
 
     # A partnership with 80 acts a year transmits with 1 - 0.99**80 = 0.552 a year at per-act 0.01, whatever the step (before, 0.531 monthly and 0.465 weekly with whole acts per step, which a rate no longer gives)
     for dt in [ss.years(1/12), ss.weeks(1)]:
-        p = chance(ss.peract(m2f=0.01, f2m=0), acts=ss.constant(ss.peryear(80)), dt=dt, steps=round(1/dt.years))
+        p = chance(ss.peract(m2f=0.01, f2m=0), acts=ss.constant(ss.freqperyear(80)), dt=dt, steps=round(1/dt.years))
         assert np.isclose(p, 1 - 0.99**80, atol=0.025), f'{dt}: {p:.3f}'
 
     # And an epidemic over 10 years is the same at monthly and weekly steps (it was 38% against 12% with ss.probpermonth(0.01), and 37% against 29% with -log(1 - p) as a rate per month)
@@ -296,7 +296,7 @@ def test_route_modifiers():
 def test_needles():
     sc.heading('Testing a needle-sharing network beside a sexual one (injecting drug use)')
     def run(mf_beta, needles_beta=ss.peract(0.006), nsp=False):
-        needles = ss.DegreeNet(name='needles', who=ss.person.pwid, n_contacts=2, dur=ss.months(6), acts=ss.permonth(20)) # Among people who inject only; no sides, so one value
+        needles = ss.DegreeNet(name='needles', who=ss.person.pwid, n_contacts=2, dur=ss.months(6), acts=ss.freqpermonth(20)) # Among people who inject only; no sides, so one value
         S, I = ss.states('S I')
         hiv = ss.Disease(infection=ss.Transition(S, I, rate=dict(sexualnet=mf_beta, needles=needles_beta) * I), init_prev=0.05, name='hiv')
         intv = ss.modify(hiv.infection, multiply=0.2, share=0.5, network='needles', when=ss.schedule(start=2005)) if nsp else None # Needle and syringe programs: half of injections with a clean needle, 80% less risk
@@ -356,7 +356,7 @@ def test_partnership_approx():
         run('ode', approximations='error', **sc.dcp(hiv)).init()
     with pytest.raises(ss.CapabilityError, match=r'stratify\(sex='):
         ss.Sim(sis(0.01), networks=ss.SexualNet(), solver='ode', verbose=0).init()
-    assert run('auto', **sc.dcp(hiv)).init().solver == 'abm'
+    assert isinstance(run('auto', **sc.dcp(hiv)).init().solver, ss.solvers.abm)
     return
 
 

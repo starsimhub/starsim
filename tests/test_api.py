@@ -24,7 +24,7 @@ def test_make_index():
     assert len(names) == len(set(names)), 'Entries should be unique'
 
     print('Checking entries')
-    namespaces = {'ss':ss, 'ssl':ssl, 'ss.fit':ss.fit, 'ss.geo':ss.geo, 'ss.data':ss.data}
+    namespaces = {'ss':ss, 'ssl':ssl, 'ss.solvers':ss.solvers, 'ss.fit':ss.fit, 'ss.geo':ss.geo, 'ss.data':ss.data}
     for entry in entries:
         name = entry['name']
         prefix, attr = name.rsplit('.', 1)

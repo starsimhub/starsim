@@ -111,7 +111,7 @@ Starsim 4 adds a way to write a model as declared states and transitions, which 
 - Mixing between many places is up to 5× faster in the kernels, by BLAS when every pair of places has a time share (measles metapop, 260 districts: 4.8 s to 1.6 s a run; 600 places: 22.6 s to 4.4 s).
 - `pip install starsim` is set up to include the compiled Rust kernels, as one wheel per platform for Python 3.12 and later (Linux and Windows, x86-64 and Arm, and macOS on Arm); the sdist includes the crate, and Numba's kernels remain the fallback.
 - `ss.compile()` works under Numba.
-- `import starsim` limits BLAS to one thread, whatever was imported first, since more never made Starsim faster on any platform tested, and slowed its start and its workers. Use `STARSIM_NUM_THREADS` or `ss.options.num_threads` to change it.
+- `import starsim` limits BLAS to one thread, whatever was imported first, since more never made Starsim faster on any platform tested, and slowed its start and its workers. Use `STARSIM_BLAS_THREADS` or `ss.options.blas_threads` to change it (`ss.options.num_threads` is the threads of Starsim itself).
 - JAX is optional, and recommended: `pip install "starsim[jax]"`. Without it, gradients aren't available, and the R-hat and effective sample size of a fit are NaN. It has no builds for Windows on Arm, on which Starsim could not be installed.
 - A rate or duration that reads another disease's count is no longer frozen in a whole run.
 - A change in code to a modifier's amount or a product's efficacy takes effect in a stepped run.

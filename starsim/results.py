@@ -50,7 +50,7 @@ def people_scale(sim):
     As agents, the results of declared modules and deliveries are scaled when written, so they are
     people when read during a run, and capacities and counts given to deliveries are people.
     """
-    return sim.current_scale if sim.solver == 'abm' else 1.0
+    return sim.current_scale if isinstance(sim.solver, ss.solvers.abm) else 1.0
 
 
 def agent_weights(sim):
@@ -91,7 +91,7 @@ class Result(ss.arrays.BaseArr):
         timevec (array): an array of time points
         low (array): values for the lower bound
         high (array): values for the upper bound
-        kind (str): what the result is, which decides how it behaves: 'flow' (a number of events in each step, e.g. new infections; it has a cumulative total, and is summed over each period of data it is compared with), 'stock' (a quantity at each time point, e.g. the number infected), 'ratio' (one quantity divided by another, e.g. prevalence or a mean; one that keeps its numerator and denominator sums each over a period, then divides), or None for a result with no meaning over time. The kind also sets the default `scale` and `summarize_by`. Required, unless the name says it: `new_...` is a flow; `n_...`, `cum_...`, and `cumulative` are stocks; and `prevalence` is a ratio (and a dtype that is not numbers, e.g. `list`, has none). The results of a declared module are made with their kind
+        kind (str): what the result is, which decides how it behaves: 'flow' (a number of events in each step, e.g. new infections; it has a cumulative total, and is summed over each period of data it is compared with), 'stock' (a quantity at each time point, e.g. the number infected), 'ratio' (one quantity divided by another, e.g. prevalence or a mean; one that keeps its numerator and denominator sums each over a period, then divides), or None for a result with no meaning over time. The kind also sets the default `scale` and `summarize_by`. By default ('auto') it is guessed from `summarize_by` if only that is given, or else from the name (`new_...` is a flow; `n_...`, `cum_...`, and `cumulative` are stocks; and `...prevalence` is a ratio), or else from the dtype: an integer is a count, guessed to be a flow, a dtype that is not numbers (e.g. `list`) has none, and anything else is a ratio; a guess from the dtype is warned about, so give `kind=` for any other name (e.g. `ss.Result('vaccinated', dtype=int, kind='stock')`). The results of a declared module are made with their kind
         summarize_by (str): how the result is summarized over time (and resampled), if not as its kind is: by default ('auto'), 'sum' for a flow, 'last' for a stock, 'mean' for a ratio, and None for none; or another way, e.g. 'mean' to average a flow over time, or any other key of `ss.Result.summarizers`
         columns (list): if provided, make a 2D result of shape `(npts, len(columns))`, with these names for the columns, e.g. `['wild', 'alpha']`
         runs (dataframe): for a result across the runs of a MultiSim: one row per run, with its `scenario` (and the values of any parameters swept); the values then have a run axis first, of shape `(n_runs, npts)`
@@ -803,11 +803,15 @@ class Result(ss.arrays.BaseArr):
     @classmethod
     def _get_kind(cls, name, kind='auto', summarize_by='auto', dtype=None):
         """
-        The kind of a result: as given (None for one with no meaning over time), or else ('auto', not given) from its name: `new_...` is a
-        flow; `n_...`, `cum_...`, and `cumulative` are stocks; `prevalence` is a ratio; and a dtype that is not numbers (e.g. `list`) has
-        none. Any other result needs `kind=`, since a guess that is wrong (e.g. a count taken for a ratio) is not scaled by the people each agent stands for
+        The kind of a result: as given (None for one with no meaning over time), or else ('auto') from how it is summarized, if that is given,
+        or else its name (`new_...` is a flow; `n_...`, `cum_...`, and `cumulative` are stocks; `prevalence` is a ratio), or else its dtype: an integer
+        is a count, so a flow (a count over each step, e.g. doses), a dtype that is not numbers (e.g. `list`) has none, and anything else is a ratio.
+        A kind guessed from the dtype alone is warned about, since a wrong guess (e.g. a count taken for a ratio) is not scaled by the people each agent stands for
         """
         if kind == 'auto':
+            by_summary = {v:k for k,v in cls.kinds.items()}
+            if summarize_by != 'auto' and (summarize_by is None or summarize_by in by_summary):
+                return by_summary.get(summarize_by)
             name = str(name)
             if 'new_' in name: # Not using startswith because msim results are prefixed with the module name
                 kind = 'flow'
@@ -818,10 +822,11 @@ class Result(ss.arrays.BaseArr):
             elif dtype is not None and not np.issubdtype(dtype, np.number) and not np.issubdtype(dtype, np.bool_): # Not numbers (e.g. dtype=list or object), so nothing to summarize
                 kind = None
             else:
-                errormsg = (f'ss.Result("{name}") needs kind=, which says how it is scaled and summarized: "flow" (a number of events in each step, e.g. infections or doses), '
-                            f'"stock" (a quantity at each time point, e.g. the number infected), "ratio" (one quantity divided by another, e.g. prevalence or a mean), '
-                            f'or None (no meaning over time). Only a name that starts with new_ (a flow), n_ or cum_ (a stock), or is prevalence (a ratio) says its kind')
-                raise TypeError(errormsg)
+                integer = dtype is not None and np.issubdtype(dtype, np.integer) # A count with no name to go on is likelier a count of events than of people (which is written kind='stock')
+                kind = 'flow' if integer else 'ratio'
+                what = 'a flow (a number of events in each step), since its dtype is an integer' if integer else 'a ratio (averaged over time, and not scaled by the people each agent stands for)'
+                ss.warn(f'ss.Result("{name}") has no kind=, and its name does not say it, so it is taken as {what}; give kind="flow", "stock" (a quantity at each time point, e.g. the number infected), "ratio", or None. '
+                        'A name that starts with new_ (a flow), n_ or cum_ (a stock), or ends in prevalence (a ratio) says its kind')
         if kind is not None and kind not in cls.kinds:
             errormsg = f'The kind of the result "{name}" must be "flow", "stock", "ratio", or None, not "{kind}"'
             raise ValueError(errormsg)
@@ -1991,10 +1996,11 @@ def time_weights(sim_t, data_t, flow, annual=False):
     return W, inside
 
 
-def given_data(sim, df=None):
+def given_data(sim, data=None):
     """ The sim's data, or data given to compare with it, with its time column (e.g. `year`) as the index, as the sim's own data has """
-    if df is None:
+    if data is None:
         return sim.data
+    df = data
     if not any(col in ss.SimData.time_cols for col in df.columns):
         return df
     df = validate_sim_data(df)
@@ -2003,7 +2009,7 @@ def given_data(sim, df=None):
     return df
 
 
-def compare(sim, df=None):
+def compare(sim, data=None):
     """
     Line up a sim's results with its data
 
@@ -2016,9 +2022,9 @@ def compare(sim, df=None):
 
     Args:
         sim (Sim): the sim
-        df (dataframe): the data (default: the sim's)
+        data (dataframe): the data (default: the sim's)
     """
-    df = given_data(sim, df)
+    df = given_data(sim, data)
     kept = sim.__dict__.get('_lined') # The data cannot change between the runs of a sim, so they are lined up with its time points once
     if kept is None or kept[0] is not df or kept[1] is not sim.t:
         sim_t, data_t = data_times(sim, df)
@@ -2106,7 +2112,7 @@ def plot_data(sim):
     return data
 
 
-def lineup(sim, df=None):
+def lineup(sim, data=None):
     """
     The matrix that lines up each result that has data with its data, which `compare()` uses
 
@@ -2118,7 +2124,7 @@ def lineup(sim, df=None):
     (those that are inside the simulated period and not missing, which are at these rows of the
     data) are W @ the result. A column that matches no result is left out.
     """
-    df = given_data(sim, df)
+    df = given_data(sim, data)
     annual = by_year(df)
     weights = {} # By timeline and whether summed, since most results share them
     out = sc.obj()

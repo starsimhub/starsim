@@ -33,7 +33,7 @@ import starsim as ss
 S, I, R = ss.states('S I R')
 measles = ss.Disease(S >> I @ 1.9*I, I >> R @ ss.days(8), init_prev=0.001, name='measles')
 base = ss.Sim(measles, total_pop=20_000, stop=ss.days(120), verbose=0)
-vaccination = ss.vaccinate(efficacy=0.9, when=[ss.days(5)], coverage=0.7)
+vaccination = ss.vaccinate(efficacy=0.9, when=ss.days(5), coverage=0.7)
 msim = ss.parallel({'No vaccine': base, 'Vaccine': base.new(interventions=vaccination)})
 msim.summarize()
 ```

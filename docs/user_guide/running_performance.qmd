@@ -62,7 +62,7 @@ For the same reason, rerun a sim with `sim.run()` again (or `sim.restart(pars=..
 
 ## Substeps
 
-The ODE and the chain binomial take as many substeps in each time step as they need, by default: enough that no compartment turns over by more than a quarter in one. Working out how many costs about as much as a substep itself. `ss.ode(substeps=1)` or `ss.binomial(substeps=1)` takes each step whole: it changes the results by an amount that grows with the step (of order the rates times `dt`), so it suits models whose rates are slow compared with the step, and models that are written in discrete time. It makes little difference to the kernels, but a run in JAX takes about half the time.
+The ODE and the chain binomial take as many substeps in each time step as they need, by default: enough that no compartment turns over by more than a quarter in one. Working out how many costs about as much as a substep itself. `ss.solvers.ode(substeps=1)` or `ss.solvers.binomial(substeps=1)` takes each step whole: it changes the results by an amount that grows with the step (of order the rates times `dt`), so it suits models whose rates are slow compared with the step, and models that are written in discrete time. It makes little difference to the kernels, but a run in JAX takes about half the time.
 
 ## JAX and gradients
 
@@ -74,7 +74,7 @@ An agent-based run takes time in proportion to the number of agents and the numb
 
 - **Use fewer agents than people.** `total_pop=` with a smaller `n_agents=` lets each agent stand for several people (see [Branching and rescaling](running_branching.qmd)).
 - **Use compartments if nothing needs individuals.** If a model needs no network, no per-person values, and no histories, `solver='ode'` or a stochastic compartmental solver is far faster at any population size.
-- **Threads.** The passes over the agents of a large sim (more than about 200,000 agents) use several threads; `ss.options.threads` sets how many, and `ss.options.blas_threads` the threads of NumPy's linear algebra. When running many sims at once on one machine, one thread each (`SCIRIS_NUM_THREADS=1`) avoids them competing for the cores.
+- **Threads.** The passes over the agents of a large sim (more than about 200,000 agents) use several threads; `ss.options.num_threads` sets how many, and `ss.options.blas_threads` the threads of NumPy's linear algebra. When running many sims at once on one machine, one thread each (`SCIRIS_NUM_THREADS=1`) avoids them competing for the cores.
 - **Common random numbers.** `ss.options.crn = False` gives faster draws, at the cost of runs no longer matching across scenarios agent for agent (see [Random numbers](mechanics_random.qmd)).
 
 ## Code of your own
@@ -108,7 +108,7 @@ If a first run after installing is slow, the Numba kernels are being compiled; `
 
 ## Appendix: every option
 
-Starsim's global options are in `ss.options`: set one for the session with `ss.options(threads=1)`, for a block with `with ss.options.context(threads=1):`, or before Python starts with the environment variable `STARSIM_` and the option's name in capitals (`STARSIM_THREADS=1`), which is the way to set it for every worker or every task of a cluster job. `ss.options.disp()` shows the current values, and `ss.options.help(detailed=True)` each option's value, default, and variable. Here is each option with its description:
+Starsim's global options are in `ss.options`: set one for the session with `ss.options(num_threads=1)`, for a block with `with ss.options.context(num_threads=1):`, or before Python starts with the environment variable `STARSIM_` and the option's name in capitals (`STARSIM_NUM_THREADS=1`), which is the way to set it for every worker or every task of a cluster job. `ss.options.disp()` shows the current values, and `ss.options.help(detailed=True)` each option's value, default, and variable. Here is each option with its description:
 
 ```{python}
 import pandas as pd

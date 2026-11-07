@@ -1,5 +1,5 @@
 """
-Not for the user: choosing the solver: which engine runs a declared model, and why (`choose_solver()`), and the steps that build a declared model before it is run (parameters by name, births and deaths of the population, a named population, the unit, life tables)
+The solvers to choose from (`ss.solvers.ode()`, `binomial()`, `gillespie()`, `tau()`, and `abm()`, each with its options), and, not for the user, choosing the solver: which engine runs a declared model, and why (`choose_solver()`), and the steps that build a declared model before it is run (parameters by name, births and deaths of the population, a named population, the unit, life tables)
 
 It exists so that a model need not say how it runs: the choice is made from what it holds, and the reason is kept. Modules written as code are taken into account, and get an engine too.
 
@@ -19,7 +19,132 @@ from .agents_events import Events
 from .agents_compiled import Compiled
 from .engine import convert
 
-__all__ = ['Undeclared', 'make_engine', 'choose_solver', 'choose_engine', 'init_crossings', 'init_capabilities', 'auto_reasons', 'why_not', 'solver_table', 'rules', 'set_par_values', 'flows_of', 'init_group_values', 'settle_start', 'group_people']
+__all__ = ['Solver', 'ode', 'binomial', 'gillespie', 'tau', 'abm', 'solver_names', 'as_solver', 'Undeclared', 'make_engine', 'choose_solver', 'choose_engine', 'init_crossings', 'init_capabilities', 'auto_reasons', 'why_not', 'solver_table', 'rules', 'set_par_values', 'flows_of', 'init_group_values', 'settle_start', 'group_people']
+
+
+
+solver_names = ['auto', 'ode', 'binomial', 'gillespie', 'tau', 'abm'] # The solvers that can be asked for by name: see ss.Sim(solver=)
+
+
+class Solver:
+    """
+    A solver, for `ss.Sim(solver=...)`, with only the options of its own: `ss.solvers.ode()`, `binomial()`, `gillespie()`, `tau()`, or `abm()`
+
+    The common case is its name, `solver='ode'`, which is the same as `solver=ss.solvers.ode()`. Once the sim is initialized,
+    `sim.solver` is the one that runs (its defaults, if it was asked for by name or chosen by `'auto'`), so which one it is can be
+    tested as a class, e.g. `isinstance(sim.solver, ss.solvers.abm)`; `str(sim.solver)` is its name.
+
+    Args:
+        kwargs (dict): the solver's options
+    """
+    name = None # e.g. 'ode'
+    options = {} # Each option's default, and the values it can take (None for any)
+    example = None # e.g. "ss.solvers.ode(integrator='euler')"
+
+    def __init__(self, **kwargs):
+        for key,(default, choices) in self.options.items():
+            val = kwargs.get(key, default)
+            if choices is not None and val not in choices:
+                errormsg = f'ss.solvers.{self.name}({key}={val!r}) is not one of {sc.strjoin([repr(c) for c in choices])}'
+                raise ValueError(errormsg)
+            if key == 'substeps' and val is not None:
+                if not (sc.isnumber(val) and val == int(val) and val >= 1):
+                    errormsg = f'ss.solvers.{self.name}(substeps={val!r}) is a number of substeps in each timestep, a whole number of at least 1 (or None, for enough)'
+                    raise ValueError(errormsg)
+                val = int(val)
+            setattr(self, key, val)
+        return
+
+    def given(self):
+        """ The options given, other than the defaults """
+        return {key:getattr(self, key) for key,(default, _) in self.options.items() if getattr(self, key) != default}
+
+    def __repr__(self):
+        return f'ss.solvers.{self.name}({", ".join(f"{k}={v!r}" for k,v in self.given().items())})'
+
+    def __str__(self):
+        return self.name
+
+    def __eq__(self, other):
+        return type(self) is type(other) and self.given() == other.given()
+
+    def __hash__(self):
+        return hash((self.name, tuple(self.given().items())))
+
+
+class ode(Solver):
+    """
+    The ODE solver, with its options: `ss.Sim(solver=ss.solvers.ode(integrator='euler', substeps=1))`; `solver='ode'` is the same with the defaults
+
+    Args:
+        integrator (str): the scheme: 'rk4' (fourth-order Runge–Kutta, the default) or 'euler'
+        substeps (int): the number of substeps per timestep (default: enough that no compartment turns over, or grows through its inflows, by more than a quarter in one); with `integrator='euler'`, `substeps=1` takes each step whole, as a model written in discrete time does
+        dwells (str): how dwell times are taken: 'stages' (the default: as Erlang stages, or exponential) or 'exact' (each as it is, as a conveyor of whole steps at its distribution's own chance of leaving: an integro-differential model, which under `branching=True` is the renewal equation; see the user guide on branching processes)
+    """
+    name = 'ode'
+    options = dict(integrator=('rk4', ['rk4', 'euler']), substeps=(None, None), dwells=('stages', ['stages', 'exact']))
+    example = "ss.solvers.ode(integrator='euler', substeps=4)"
+
+    def __init__(self, *, integrator='rk4', substeps=None, dwells='stages'):
+        super().__init__(integrator=integrator, substeps=substeps, dwells=dwells)
+
+
+class binomial(Solver):
+    """
+    The chain-binomial solver (stochastic compartments), with its options: `ss.Sim(solver=ss.solvers.binomial(substeps=1))`; `solver='binomial'` is the same with the defaults
+
+    Args:
+        substeps (int): the number of substeps per timestep (default: enough that no more than about a tenth of the people in a compartment leave it in one); 1 takes each step whole, as discrete-time chain-binomial models (and most other frameworks') do
+    """
+    name = 'binomial'
+    options = dict(substeps=(None, None))
+    example = 'ss.solvers.binomial(substeps=1)'
+
+    def __init__(self, *, substeps=None):
+        super().__init__(substeps=substeps)
+
+
+class gillespie(Solver):
+    """ The exact stochastic solver for compartments (Gillespie's algorithm), which has no options: `ss.Sim(solver='gillespie')` """
+    name = 'gillespie'
+
+
+class tau(Solver):
+    """ Tau-leaping (stochastic compartments, in leaps short enough that the rates change little over each), which has no options: `ss.Sim(solver='tau')` """
+    name = 'tau'
+
+
+class abm(Solver):
+    """
+    Agents, with their options: `ss.Sim(solver=ss.solvers.abm(step='events'))`; `solver='abm'` is the same with the defaults
+
+    Also a declared module's own way of running as agents, which the sim's does not override: `ss.Disease(..., solver=ss.solvers.abm(step='wholestep'))`.
+
+    Args:
+        step (str): how the agents of a declared module are stepped: 'midstep' (the default: by steps, with those who arrive in a state during a step facing its rates for the rest of it), 'wholestep' (by steps, with rates over whole steps only, for those in the state at the start of the step, as code with `ss.bernoulli()` takes them: faster, and a little less exact at a coarse step), or 'events' (event by event in continuous time within each step, a prototype)
+    """
+    name = 'abm'
+    options = dict(step=('midstep', ['midstep', 'wholestep', 'events']))
+    example = "ss.solvers.abm(step='events')"
+
+    def __init__(self, *, step='midstep'):
+        super().__init__(step=step)
+
+
+def as_solver(solver):
+    """ The solver asked for, as a `Solver` (e.g. 'ode' as `ss.solvers.ode()`), checked; `'auto'` stays as it is, since it is chosen when the sim is initialized. Not for the user """
+    if isinstance(solver, Solver) or solver == 'auto':
+        return solver
+    if isinstance(solver, type) and issubclass(solver, Solver): # ss.solvers.ode, not ss.solvers.ode()
+        return solver()
+    old = dict(ide="ss.solvers.ode(dwells='exact')", **{f'abm-{k}':(f"ss.solvers.abm(step='{k}')" if k != 'midstep' else "'abm'") for k in ['midstep', 'wholestep', 'events']})
+    if isinstance(solver, str) and solver in old:
+        errormsg = f'solver="{solver}" has been replaced: use solver={old[solver]}'
+        raise ValueError(errormsg)
+    if not isinstance(solver, str) or solver not in solver_names:
+        errormsg = f'Unknown solver {solver!r}; the choices are {sc.strjoin(solver_names)}, or with options, ss.solvers.ode(), ss.solvers.binomial(), or ss.solvers.abm()'
+        raise ValueError(errormsg)
+    return globals()[solver]()
 
 
 
@@ -103,7 +228,7 @@ def make_engine(module, sim):
     """ Create the engine that runs a module's graph under the sim's solver: in a compartmental run, the one laid out to choose the solver (see `lay_out()`), unless the groups changed since; for a disease that declares nothing, one that runs nothing """
     if module.graph is None:
         return Undeclared(module, sim)
-    if sim.solver == 'abm':
+    if isinstance(sim.solver, ss.solvers.abm):
         if agent_solver(module, sim) == 'events':
             return Events(module, sim)
         return Compiled(module, sim)
@@ -163,7 +288,7 @@ def choose_solver(sim):
     """
     gather_modules(sim)
     init_model(sim)
-    if sim.pars.solver not in ['auto', 'abm']: # A module's own compartmental form, used only when a compartmental solver is named (e.g. ss.Pregnancy's)
+    if (sim.pars.solver != 'auto' and not isinstance(sim.pars.solver, ss.solvers.abm)): # A module's own compartmental form, used only when a compartmental solver is named (e.g. ss.Pregnancy's)
         for mod in sim.declared:
             note = mod.compartmental_form(sim)
             if note is not None:
@@ -172,7 +297,7 @@ def choose_solver(sim):
     joints, mixing = init_layouts(sim)
 
     # The choice: the solver that runs, with its options (see ss.Solver)
-    solver = ss.sim.as_solver(sim.pars.solver)
+    solver = as_solver(sim.pars.solver)
     if solver == 'auto':
         reasons = auto_reasons(sim)
         if reasons:
@@ -182,10 +307,10 @@ def choose_solver(sim):
                     ss.note(f'running as agents: {cap.reason}', sim=sim)
         else:
             solver, reason = 'ode', 'every part of the model has a compartmental form' if sim.declared else 'nothing in the model needs agents'
-        solver = ss.sim.as_solver(solver)
+        solver = as_solver(solver)
     elif getattr(solver, 'dwells', None) == 'exact': # The ODE, with each dwell time as it is rather than as Erlang stages
         reason = 'requested (as an integro-differential model)'
-    elif solver == 'abm' and solver.given(): # Agents in a particular way, for every declared module without its own (see agent_solver())
+    elif isinstance(solver, abm) and solver.given(): # Agents in a particular way, for every declared module without its own (see agent_solver())
         how = dict(midstep='those who arrive during a step face its rates for the rest of it', wholestep='rates over whole steps only', events='by events, in continuous time')[solver.step]
         reason = f'requested ({how})'
     else:
@@ -196,11 +321,11 @@ def choose_solver(sim):
 
     # The population, for the solver
     init_lifetables(sim)
-    if solver == 'abm':
+    if isinstance(solver, abm):
         init_agents(sim, reason)
     else:
         init_compartments(sim, joints, mixing)
-    sim.layouts = {name:engine for name,engine in sim.layouts.items() if solver != 'abm' and engine.current()} # Those the run uses (see make_engine())
+    sim.layouts = {name:engine for name,engine in sim.layouts.items() if not isinstance(solver, abm) and engine.current()} # Those the run uses (see make_engine())
     check_model(sim)
     return
 
@@ -211,7 +336,7 @@ def check_solver_options(sim):
     and n_agents= with no other population size (total_pop=, or a named population's), which would otherwise be taken as the number of people; with one, n_agents= is noted as unused
     (see `init_compartments()`), so one sim can be run both ways
     """
-    if sim.solver == 'abm':
+    if isinstance(sim.solver, ss.solvers.abm):
         return
     how = f'solver={sim.pars.solver!r}' if sim.pars.solver != 'auto' else f'solver="auto" chose "{sim.solver}", since {sim.solver_reason}'
     pars = sim.pars
@@ -236,7 +361,7 @@ def init_model(sim):
     resolve_path_triggers(sim) # A trigger on another module's transition by path is its event
     init_flows(sim)
     init_where(sim)
-    ss.sim.as_solver(pars.solver) # Checked
+    pars.solver = as_solver(pars.solver) # Checked
     sim.unit = None # e.g. 'day'; None means time is counted in timesteps
     sim.unitless = False # Whether time is counted in timesteps, with no unit: set in init_unit()
     sim.unit_base = 'year' # The unit that bare numbers are in; with no unit, this is whatever the timestep is
@@ -270,7 +395,7 @@ def init_layouts(sim):
     Returns the layouts of the diseases to track jointly, and the mixing, if they were made.
     """
     sim.laid = sc.obj(joints=None, mixing=None)
-    if sim.pars.solver in ['auto', 'abm'] and not auto_reasons(sim):
+    if (sim.pars.solver == 'auto' or isinstance(sim.pars.solver, ss.solvers.abm)) and not auto_reasons(sim):
         add_records(sim, layouts)
     laid = sim.__dict__.pop('laid') # As for sim.gathered
     return laid.joints, laid.mixing
@@ -384,7 +509,7 @@ def choose_engine(sim):
     use, why = False, None
     if not sim.jax:
         why = 'kernels' + (', as asked (sim.jax = False)' if sim.jax is False else '')
-    elif sim.solver != 'ode':
+    elif not isinstance(sim.solver, ss.solvers.ode):
         why = f'kernels: JAX does not run solver="{sim.solver}"'
         ss.note(f'JAX does not run solver="{sim.solver}", so it is run by the kernels', sim=sim)
     else:
@@ -567,7 +692,7 @@ def init_named_people(sim):
     named = getattr(pars.people, 'named', None)
     sim.given_pyramid = None # People given to a compartmental solver: the ages their age groups are split by
     sim.pop_from = None # Where the population size came from, if it was not given: the people given, named people, or the populations of places
-    if isinstance(pars.people, ss.People) and named is None and sim.declared and pars.solver not in ['auto', 'abm']: # Their ages and number, not their agents
+    if isinstance(pars.people, ss.People) and named is None and sim.declared and (pars.solver != 'auto' and not isinstance(pars.solver, ss.solvers.abm)): # Their ages and number, not their agents
         dist = sc.dcp(pars.people.age.default)
         dist.init(force=True)
         edges = ss.data.world.ages
@@ -616,7 +741,7 @@ def init_unit(sim):
 
     The unit belongs to the model, so how the run is written (its step, or a stop given as weeks) does
     not change what the bare numbers mean. Whether the sim has a calendar is decided from its start (a date, or a
-    bare year from 1900 on), whatever the unit (see `ss.timeline.calendar_of()`).
+    bare year from 1800 on), whatever the unit; with no start, a bare stop from 1800 on is a year only if unit= is years or not given (see `ss.timeline.calendar_of()`).
     """
     pars = sim.pars
     time = ss.time
@@ -625,7 +750,7 @@ def init_unit(sim):
         return type(obj).base.removesuffix('s')
     def is_dur(obj):
         return isinstance(obj, ss.Duration) and not isinstance(obj, ss.dates.datedur)
-    calendar = ss.timeline.calendar_of(pars.start, pars.stop)
+    calendar = ss.timeline.calendar_of(pars.start, pars.stop, pars.unit)
     dates = [v for v in [pars.start, pars.stop] if isinstance(v, (str, ss.date))]
     years = calendar == 'years' # A bare year as the start (or, with no start, as the stop)
     durs = [v for v in [pars.start, pars.stop] if is_dur(v)]
@@ -701,7 +826,7 @@ def init_lifetables(sim):
             if table is None:
                 continue
             p = tr.rate.leaves[0]
-            if sim.solver == 'abm':
+            if isinstance(sim.solver, ss.solvers.abm):
                 ages = table.edges[:-1]
                 p.value = ss.by(dict(age=ages, value=[ss.peryear(h) for h in table.hazards(ages)]))
                 continue
@@ -717,7 +842,7 @@ def init_group_values(sim):
     """ The values of the dimensions in the people: as agents, each person's level of each; in a compartmental run, with one row per group, the age of each group (the middle of its age group) and its sex """
     if not sim.groups.strats:
         return
-    if sim.solver == 'abm':
+    if isinstance(sim.solver, ss.solvers.abm):
         sim.groups.init_vals()
         return
     for d,strat in enumerate(sim.groups.strats):
@@ -732,7 +857,7 @@ def init_group_values(sim):
 
 def settle_start(sim):
     """ Once every module has its people: as agents, those placed in a state nobody waits in move on at once; and the diseases tracked jointly take their initial conditions """
-    if sim.solver == 'abm':
+    if isinstance(sim.solver, ss.solvers.abm):
         for mod in sim.declared:
             mod.engine.settle_start()
     for crossing in sim.crossings: # Once every disease in it has its initial conditions
@@ -744,7 +869,7 @@ def settle_start(sim):
 
 def group_people(sim):
     """ In a compartmental run, one row per group: the properties that are not dimensions have no values to give, so are removed, as are the active agents (`auids`), and counting who is alive counts the people, not the groups """
-    if sim.solver == 'abm':
+    if isinstance(sim.solver, ss.solvers.abm):
         return
     dims = [strat.name for strat in sim.groups.strats]
     missing = [key for key in ['age', 'female'] if key not in dims and not (key == 'female' and 'sex' in dims)]
@@ -816,7 +941,7 @@ def init_where(sim):
 
 def check_routes(sim):
     """ A beta for each route names every route and nothing else, unless it gives a default for the routes it does not name; a route has no beta of its own; checked when the sim is built """
-    nets = list(sim.mixed if sim.solver != 'abm' else sim.pars.networks.values())
+    nets = list(sim.mixed if not isinstance(sim.solver, ss.solvers.abm) else sim.pars.networks.values())
     routes = [net.name for net in nets]
     for mod in sim.declared:
         for tr in mod.graph.transmissions:
@@ -1419,7 +1544,7 @@ capabilities = [ # What decides between agents and compartments (see init_capabi
 def refused_layout(sim, mod):
     """ What the layout of a declared module refuses (see `lay_out()`): e.g. a minimum stay it has no form for, or a race with a fixed delay """
     try:
-        lay_out(sim, mod, 'ode')
+        lay_out(sim, mod, ode())
     except ss.CapabilityError as e:
         return dict(reason=said_of(e))
     return None
@@ -1430,7 +1555,7 @@ def refused_mixing(sim):
     try:
         mixing = ss.solvers.Mixing(sim)
         mixing.unsaid = [] # Said if it is used (see init_compartments())
-        mixing.init(approximations=sim.pars.approximations, solver='ode')
+        mixing.init(approximations=sim.pars.approximations, solver=ode())
         sim.laid.mixing = mixing
     except ss.CapabilityError as e:
         return dict(reason=said_of(e))
@@ -1444,7 +1569,7 @@ def refused_joints(sim):
     sim.laid.joints = []
     for group in crossing_groups(sim):
         try:
-            sim.laid.joints.append(joint_layout(sim, group, 'ode'))
+            sim.laid.joints.append(joint_layout(sim, group, ode()))
             reason = over_budget(sim.laid.joints[-1])
         except ss.CapabilityError as e:
             reason = said_of(e)
@@ -1537,7 +1662,7 @@ def fixed_reason(sim, mod):
 
 
 kernels = [ # What stops the kernels taking a whole run in one call: something in Python needs to see the model between one step and the next (see why_not())
-    Rule('sim', lambda sim: sim.solver == 'abm', STEPPED, 'it runs as agents'),
+    Rule('sim', lambda sim: isinstance(sim.solver, ss.solvers.abm), STEPPED, 'it runs as agents'),
     Rule('sim', lambda sim: not getattr(sim, 'declared', None), STEPPED, 'it has no declared model'),
     Rule('sim', lambda sim: sim.diagnostics, STEPPED, 'it records diagnostics'),
     Rule('sim', lambda sim: sim.verbose >= 2, STEPPED, 'it prints each step (verbose=2)'),
@@ -1612,7 +1737,7 @@ def certain_rate(sim, mod):
 
 jax = [ # What stops JAX taking a whole run of the ODE
     Rule('sim', lambda sim: not getattr(sim, 'declared', None), KERNELS, 'the model is written as code, with no declared states and transitions, so it has no gradient'), # A fit of it uses the runs alone
-    Rule('sim', lambda sim: sim.solver != 'ode', KERNELS, 'solver="{sim.solver}" is stochastic (gradients are for solver="ode" only)'),
+    Rule('sim', lambda sim: not isinstance(sim.solver, ss.solvers.ode), KERNELS, 'solver="{sim.solver}" is stochastic (gradients are for solver="ode" only)'),
     Rule('sim', not_whole, KERNELS, '{reason}'),
     Rule('declared', lambda sim, mod: mod.engine.register is not None and len(mod.engine.register.src), KERNELS, '"{mod.name}" has a movement register'),
     Rule('declared', certain_rate, KERNELS, '"{mod.name}" has a probability of 1 over a period ({name}), an infinite rate, which the kernels take as everyone moving at once'),

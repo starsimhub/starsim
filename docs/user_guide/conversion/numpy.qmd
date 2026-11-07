@@ -33,14 +33,14 @@ runs = np.array([run_numpy(seed) for seed in range(200)])
 print('NumPy, 200 runs: mean peak of I', round(runs[:,:,2].max(axis=1).mean()), 'and mean final R', round(runs[:,-1,3].mean()))
 ```
 
-In Starsim, each flow is one line, with its rate; the conversion of rates to probabilities, the bookkeeping of who leaves and enters each state, and the results are done for you. `solver=ss.binomial(substeps=1)` runs it as a chain binomial that takes each day whole, as the loop above does (by default, the chain binomial splits a step when more than about 5% of a compartment would leave in it, or fewer near the epidemic threshold):
+In Starsim, each flow is one line, with its rate; the conversion of rates to probabilities, the bookkeeping of who leaves and enters each state, and the results are done for you. `solver=ss.solvers.binomial(substeps=1)` runs it as a chain binomial that takes each day whole, as the loop above does (by default, the chain binomial splits a step when more than about 5% of a compartment would leave in it, or fewer near the epidemic threshold):
 
 ```{python}
 import starsim as ss
 
 S, E, I, R = ss.states(4)
 seir = ss.Disease(S >> E @ ss.perday(0.3)*I, E >> I @ ss.perday(0.2), I >> R @ ss.perday(0.1), init_n=dict(I=10))
-sim = ss.Sim(seir, total_pop=1_000_000, unit='day', stop=365, solver=ss.binomial(substeps=1), verbose=0)
+sim = ss.Sim(seir, total_pop=1_000_000, unit='day', stop=365, solver=ss.solvers.binomial(substeps=1), verbose=0)
 
 msim = ss.parallel(sim, n_runs=200)
 msim.plot()

@@ -15,171 +15,7 @@ import starsim as ss
 
 
 approximations = ['note', 'allow', 'error'] # What a sim does with each approximation a solver makes: see ss.Sim(approximations=)
-solver_names = ['auto', 'ode', 'binomial', 'gillespie', 'tau', 'abm'] # The solvers that can be asked for by name: see ss.Sim(solver=)
-
-
-class Solver(str):
-    """
-    A solver with options, for `ss.Sim(solver=...)`: `ss.ode()`, `ss.abm()`, or `ss.binomial()`; the common case is its name (e.g. `solver='ode'`)
-
-    Each has only the options of its own solver, so an option that a solver would ignore can't be given to it. It is
-    the solver's name as a string (`ss.ode(integrator='euler') == 'ode'`), so `sim.solver`, which is the one that ran (its
-    defaults, if it was asked for by name or chosen by `'auto'`), reads the same as the name and holds the options too.
-
-    Args:
-        kwargs (dict): the solver's options
-    """
-    name = None # e.g. 'ode'
-    options = {} # Each option's default, and the values it can take (None for any)
-
-    def __new__(cls, *args, **kwargs):
-        if args:
-            errormsg = f'ss.{cls.__name__}() takes its options by keyword, e.g. {cls.example}'
-            raise TypeError(errormsg)
-        return super().__new__(cls, cls.name)
-
-    def __init__(self, **kwargs):
-        for key,val in kwargs.items():
-            default, choices = self.options[key]
-            if choices is not None and val not in choices:
-                errormsg = f'ss.{self.name}({key}={val!r}) is not one of {sc.strjoin([repr(c) for c in choices])}'
-                raise ValueError(errormsg)
-            if key == 'substeps' and val is not None and not (sc.isnumber(val) and val == int(val) and val >= 1):
-                errormsg = f'ss.{self.name}(substeps={val!r}) is a number of substeps in each timestep, a whole number of at least 1 (or None, for enough)'
-                raise ValueError(errormsg)
-            self.__dict__[key] = int(val) if key == 'substeps' and val is not None else val
-        return
-
-    def __getattr__(self, attr):
-        if attr in self.options:
-            return self.options[attr][0]
-        raise AttributeError(f'ss.{self.name}() has no option "{attr}"; its options are {sc.strjoin(self.options)}')
-
-    def __setattr__(self, attr, value):
-        raise AttributeError(f'A solver\'s options are set when it is made, e.g. {self.example}')
-
-    def given(self):
-        """ The options given, other than the defaults """
-        return {key:val for key,val in self.__dict__.items() if val != self.options[key][0]}
-
-    def __repr__(self):
-        given = self.given()
-        if not given: # As its name, which is the same solver
-            return repr(str(self))
-        return f'ss.{self.name}({", ".join(f"{k}={v!r}" for k,v in given.items())})'
-
-    def __eq__(self, other):
-        if isinstance(other, Solver):
-            return str(self) == str(other) and self.given() == other.given()
-        return str.__eq__(self, other)
-
-    def __ne__(self, other):
-        return not self == other
-
-    __hash__ = str.__hash__
-
-    def __reduce__(self):
-        return (rebuild_solver, (type(self), dict(self.__dict__)))
-
-    def __deepcopy__(self, memo):
-        return self
-
-
-def rebuild_solver(cls, options):
-    """ A solver with options, unpickled """
-    return cls(**options)
-
-
-class ode(Solver):
-    """
-    The ODE solver, with its options: `ss.Sim(solver=ss.ode(integrator='euler', substeps=1))`; `solver='ode'` is the same with the defaults
-
-    Args:
-        integrator (str): the scheme: 'rk4' (fourth-order Runge–Kutta, the default) or 'euler'
-        substeps (int): the number of substeps per timestep (default: enough that no compartment turns over, or grows through its inflows, by more than a quarter in one); with `integrator='euler'`, `substeps=1` takes each step whole, as a model written in discrete time does
-        dwells (str): how dwell times are taken: 'stages' (the default: as Erlang stages, or exponential) or 'exact' (each as it is, as a conveyor of whole steps at its distribution's own chance of leaving: an integro-differential model, which under `branching=True` is the renewal equation; see the user guide on branching processes)
-    """
-    name = 'ode'
-    options = dict(integrator=('rk4', ['rk4', 'euler']), substeps=(None, None), dwells=('stages', ['stages', 'exact']))
-    example = "ss.ode(integrator='euler', substeps=4)"
-
-    def __init__(self, integrator='rk4', substeps=None, dwells='stages'):
-        super().__init__(integrator=integrator, substeps=substeps, dwells=dwells)
-
-
-class binomial(Solver):
-    """
-    The chain-binomial solver (stochastic compartments), with its options: `ss.Sim(solver=ss.binomial(substeps=1))`; `solver='binomial'` is the same with the defaults
-
-    Args:
-        substeps (int): the number of substeps per timestep (default: enough that no more than about a tenth of the people in a compartment leave it in one); 1 takes each step whole, as discrete-time chain-binomial models (and most other frameworks') do
-    """
-    name = 'binomial'
-    options = dict(substeps=(None, None))
-    example = 'ss.binomial(substeps=1)'
-
-    def __init__(self, substeps=None):
-        super().__init__(substeps=substeps)
-
-
-class abm(Solver):
-    """
-    Agents, with their options: `ss.Sim(solver=ss.abm(step='events'))`; `solver='abm'` is the same with the defaults
-
-    Also a declared module's own way of running as agents, which the sim's does not override: `ss.Disease(..., solver=ss.abm(step='wholestep'))`.
-
-    Args:
-        step (str): how the agents of a declared module are stepped: 'midstep' (the default: by steps, with those who arrive in a state during a step facing its rates for the rest of it), 'wholestep' (by steps, with rates over whole steps only, for those in the state at the start of the step, as code with `ss.bernoulli()` takes them: faster, and a little less exact at a coarse step), or 'events' (event by event in continuous time within each step, a prototype)
-    """
-    name = 'abm'
-    options = dict(step=('midstep', ['midstep', 'wholestep', 'events']))
-    example = "ss.abm(step='events')"
-
-    def __init__(self, step='midstep'):
-        super().__init__(step=step)
-
-
-solver_helpers = dict(ode=ode, binomial=binomial, abm=abm) # The solvers with options
-
-
-def as_solver(solver):
-    """ The solver asked for, as a `Solver` if it has options (e.g. 'ode' as `ss.ode()`), checked; not for the user """
-    if isinstance(solver, Solver):
-        return solver
-    if isinstance(solver, type) and issubclass(solver, Solver): # ss.ode, not ss.ode()
-        return solver()
-    old = dict(ide="ss.ode(dwells='exact')", **{f'abm-{k}':(f"ss.abm(step='{k}')" if k != 'midstep' else "'abm'") for k in ['midstep', 'wholestep', 'events']})
-    if solver in old:
-        errormsg = f'solver="{solver}" has been replaced: use solver={old[solver]}'
-        raise ValueError(errormsg)
-    if solver not in solver_names:
-        errormsg = f'Unknown solver {solver!r}; the choices are {sc.strjoin(solver_names)}, or with options, ss.ode(), ss.binomial(), or ss.abm()'
-        raise ValueError(errormsg)
-    return solver_helpers[solver]() if solver in solver_helpers else solver
-
-
-class rescale(sc.prettyobj):
-    """
-    Dynamic rescaling of agents, with its options: `ss.Sim(rescale=ss.rescale(threshold=0.1))`; `rescale=True` is the same with the defaults
-
-    Each agent starts as one person, and the number of people each stands for grows to `sim.pop_scale` (`total_pop/n_agents`) as the
-    agents stop being naive, some of them being made naive again each time (as in Covasim): see `ss.Sim.rescale()`. For agents only.
-
-    Args:
-        threshold (float): the share of agents who are not naive that triggers rescaling (default 0.05)
-        factor (float): the least factor by which the scale grows each time (default 1.2)
-    """
-    def __init__(self, threshold=0.05, factor=1.2):
-        if not (0 < threshold < 1):
-            raise ValueError(f'ss.rescale(threshold={threshold}) is a share of the agents, between 0 and 1')
-        if not factor > 1:
-            raise ValueError(f'ss.rescale(factor={factor}) is the least factor the scale grows by, more than 1')
-        self.threshold = threshold
-        self.factor = factor
-        return
-
-    def __repr__(self):
-        return f'ss.rescale(threshold={self.threshold!r}, factor={self.factor!r})'
+rescale_options = dict(threshold=0.05, factor=1.2) # The options of dynamic rescaling, and their defaults: see ss.Sim(rescale=)
 
 
 class SimPars(ss.Pars):
@@ -202,7 +38,7 @@ class SimPars(ss.Pars):
         # Population parameters
         self.n_agents  = 10e3 # The number of agents, if the model runs as agents
         self.total_pop = None # The number of people (default: one per agent); each agent stands for total_pop/n_agents of them (sim.pop_scale)
-        self.rescale   = False # Whether to rescale the agents dynamically: True, or ss.rescale() with options (see ss.Sim)
+        self.rescale   = False # Whether to rescale the agents dynamically: True, or a dict of its options, e.g. dict(threshold=0.05, factor=1.2) (see ss.Sim)
         self.record_people = True # Whether to collect automatic People-level results every timestep (see docstring)
 
         # Simulation parameters
@@ -215,7 +51,7 @@ class SimPars(ss.Pars):
 
         # How the model is run; these only apply to modules with declared states and transitions (see ss.Disease)
         self.unit       = None   # The unit for bare numbers, e.g. 'day'; if nothing in the model has a unit, time is in timesteps
-        self.solver     = 'auto' # 'auto', 'ode', 'binomial', 'gillespie' (exact), 'tau' (tau-leaping), or 'abm' (agents); or with options, ss.ode(), ss.binomial(), or ss.abm() (see ss.Sim)
+        self.solver     = 'auto' # 'auto', 'ode', 'binomial', 'gillespie' (exact), 'tau' (tau-leaping), or 'abm' (agents); or with options, ss.solvers.ode(), ss.solvers.binomial(), or ss.solvers.abm() (see ss.Sim)
         self.branching  = False  # Whether to run as a branching process: infection takes no one from the uninfected, nor gives anyone back (see ss.Sim)
         self.approximations = 'note' # 'note' prints a note for each approximation; 'allow' keeps the note in sim.notes without printing it; 'error' makes it an error
         self.require_kernels = False # Whether to raise an error, rather than fall back to Python, if the run cannot be taken whole in the kernels
@@ -258,10 +94,10 @@ class SimPars(ss.Pars):
         track_writes = 'track_writes= has been removed: sim.what_modifies() lists the modifiers on a quantity, which are declared; code that assigns rel_sus or rel_trans directly is not tracked',
         birth_rate = 'birth_rate= (births per 1,000 people per year) has been removed: declare births for the population, per person, e.g. ss.Sim(..., demographics=[ss.birth(rate=ss.peryear(0.02))]) for 20 per 1,000, which runs under every solver; or use ss.Births(birth_rate=...) for data by year',
         death_rate = 'death_rate= (deaths per 1,000 people per year) has been removed: declare deaths for the population, per person, e.g. ss.Sim(..., demographics=[ss.death(rate=ss.peryear(0.01))]) for 10 per 1,000, which runs under every solver; or use ss.Deaths(death_rate=...) for data by year, age, and sex',
-        integrator = "integrator= has been replaced: give it to the ODE solver, e.g. solver=ss.ode(integrator='euler')",
-        substeps = 'substeps= has been replaced: give it to the solver that takes it, e.g. solver=ss.ode(substeps=4) or solver=ss.binomial(substeps=1)',
-        rescale_threshold = 'rescale_threshold= has been replaced: give it to dynamic rescaling, e.g. rescale=ss.rescale(threshold=0.05)',
-        rescale_factor = 'rescale_factor= has been replaced: give it to dynamic rescaling, e.g. rescale=ss.rescale(factor=1.2)',
+        integrator = "integrator= has been replaced: give it to the ODE solver, e.g. solver=ss.solvers.ode(integrator='euler')",
+        substeps = 'substeps= has been replaced: give it to the solver that takes it, e.g. solver=ss.solvers.ode(substeps=4) or solver=ss.solvers.binomial(substeps=1)',
+        rescale_threshold = 'rescale_threshold= has been replaced: give it to dynamic rescaling, e.g. rescale=dict(threshold=0.05)',
+        rescale_factor = 'rescale_factor= has been replaced: give it to dynamic rescaling, e.g. rescale=dict(factor=1.2)',
         pop_scale = 'pop_scale= has been removed: give the number of people (total_pop=) and of agents (n_agents=); sim.pop_scale is then the people each agent stands for, total_pop/n_agents',
         age_dist = 'age_dist= is not a sim parameter: for age groups with given shares, stratify the disease, e.g. sir.stratify(age={0: 0.3, 15: 0.6, 65: 0.1}), which runs under every solver; for the ages of agents, use ss.Sim(..., people=ss.People(n_agents, age_data=df)), with columns age and value',
     )
@@ -326,10 +162,26 @@ class SimPars(ss.Pars):
             raise ValueError('even_draws=True needs common random numbers, but ss.options.crn is False')
         if self.keep_times is None:
             self.keep_times = ss.options.keep_times
-        as_solver(self.solver) # Checked now; the one that runs is chosen when the sim is initialized (see ss.solvers.choose_solver())
-        if self.rescale not in [True, False] and not isinstance(self.rescale, rescale):
-            raise TypeError(f'rescale= is True, False, or ss.rescale() with options, not {self.rescale!r}')
+        self.solver = ss.solvers.as_solver(self.solver) # A solver by name is the solver itself, e.g. 'ode' is ss.solvers.ode(); the one that runs, if 'auto', is chosen when the sim is initialized (see ss.solvers.choose_solver())
+        self.validate_rescale()
         self.validate_total_pop()
+        return
+
+    def validate_rescale(self):
+        """ Dynamic rescaling is True, False, or a dict of its options (see `rescale_options`) """
+        val = self.rescale
+        if isinstance(val, (bool, np.bool_)):
+            return
+        if not isinstance(val, dict):
+            raise TypeError(f'rescale= is True, False, or a dict of its options, e.g. dict(threshold=0.05, factor=1.2), not {val!r}')
+        unknown = [key for key in val if key not in rescale_options]
+        if unknown:
+            raise TypeError(f'rescale= has no option {sc.strjoin(unknown)}; its options are {sc.strjoin(rescale_options)}')
+        threshold, factor = val.get('threshold', rescale_options['threshold']), val.get('factor', rescale_options['factor'])
+        if not (0 < threshold < 1):
+            raise ValueError(f'rescale=dict(threshold={threshold}) is a share of the agents, between 0 and 1')
+        if not factor > 1:
+            raise ValueError(f'rescale=dict(factor={factor}) is the least factor the scale grows by, more than 1')
         return
 
     def validate_verbose(self):
@@ -631,7 +483,7 @@ class Sim(ss.modules.Base):
         diseases (str/Disease/list): as above, for diseases
         analyzers (str/Analyzer/list): as above, for analyzers
         modules (Module/list): modules of any type, divided among demographics, diseases, etc. by type; a module of your own that is none of these (an `ss.Module`, or a function of the sim, which becomes its `step()`) is kept in `sim.custom`
-        solver (str/Solver): how a declared model is run: 'auto' (the default: chosen from the model; see `sim.solver_reason`), 'ode', 'binomial' (chain binomial), 'gillespie' (exact), 'tau' (tau-leaping), or 'abm' (agents); or a solver with options, `ss.ode(integrator=, substeps=, dwells=)` (e.g. `dwells='exact'` for each dwell time as it is, not as stages), `ss.binomial(substeps=)`, or `ss.abm(step=)` (e.g. `step='events'`, event by event in continuous time). A declared module can also have its own way of running as agents, `ss.Disease(..., solver=ss.abm(step='wholestep'))`, which the sim's does not override. `sim.solver` is the one that ran
+        solver (str/Solver): how a declared model is run: 'auto' (the default: chosen from the model; see `sim.solver_reason`), 'ode', 'binomial' (chain binomial), 'gillespie' (exact), 'tau' (tau-leaping), or 'abm' (agents); or a solver with options, `ss.solvers.ode(integrator=, substeps=, dwells=)` (e.g. `dwells='exact'` for each dwell time as it is, not as stages), `ss.solvers.binomial(substeps=)`, or `ss.solvers.abm(step=)` (e.g. `step='events'`, event by event in continuous time). A declared module can also have its own way of running as agents, `ss.Disease(..., solver=ss.solvers.abm(step='wholestep'))`, which the sim's does not override. `sim.solver` is the one that runs, as a solver (e.g. `ss.solvers.ode()`), so it can be tested with `isinstance(sim.solver, ss.solvers.abm)`
         branching (bool): run the declared model as a branching process, under any solver: infection takes no one from the states of
             the uninfected and gives no one back, so the susceptible side stays as it would be with no infection (agents are made
             only for the infected); see `sim.branching` for the size and outcome of each run, and `sim.run(until=)` to stop one
@@ -642,9 +494,9 @@ class Sim(ss.modules.Base):
         copy_modules (bool): by default, the sim runs a copy of each module it is given, so they can be given to other sims (read the ones that ran from the sim, e.g. `sim.sir`); if False, it runs the modules themselves, so they can be read after the run as they are, but the sim can't be run again or copied with `sim.new()`, and the modules can't be given to another sim
         n_agents (int/float): the number of agents, if the model runs as agents (default 10,000); an error for a compartmental run, which has no agents (give total_pop=)
         total_pop (int/float): the number of people (default: one per agent); as agents, each stands for `total_pop/n_agents` of them (`sim.pop_scale`), and the results that count people are scaled by it
-        rescale (bool/rescale): for agents, start with each agent standing for one person, and increase it to `sim.pop_scale` as the agents stop being naive, making some of them naive again each time (dynamic rescaling, as in Covasim; default False); True, or `ss.rescale(threshold=0.05, factor=1.2)` with its options
-        start (float/str/date): when the sim starts: a date (e.g. '2020-01-01') or a year (a number from 1900 on, e.g. 2000), which give it a calendar; any other number (or a duration) is a time in the sim's unit from 0 (default: 2000 for a model in years, else 0). With a calendar, every bare number given as a time (stop=, when=, the times of ss.schedule and ss.timeseries) is a year; without one, a time in the sim's unit from 0
-        stop (float/str/date/dur): when the sim ends: a date, a bare number (a year, or with no calendar a time in the sim's unit), or a duration, which is the length of the run from the start (e.g. stop=ss.days(100)); with no start, a year starts the sim in 2000 (default: a run of 50 of the sim's unit)
+        rescale (bool/dict): for agents, start with each agent standing for one person, and increase it to `sim.pop_scale` as the agents stop being naive, making some of them naive again each time (dynamic rescaling, as in Covasim; default False); True, or a dict of its options, `dict(threshold=0.05, factor=1.2)` (the defaults): the share of agents who are not naive that triggers rescaling, and the least factor by which the scale grows each time
+        start (float/str/date): when the sim starts: a date (e.g. '2020-01-01') or a year (a number from 1800 on, e.g. 2000), which give it a calendar; any other number (or a duration) is a time in the sim's unit from 0 (default: 2000 for a model in years, else 0). With a calendar, every bare number given as a time (stop=, when=, the times of ss.schedule and ss.timeseries) is a year; without one, a time in the sim's unit from 0, as a duration given as a time is (when=ss.days(10) is day 10)
+        stop (float/str/date/dur): when the sim ends: a date, a bare number (a year, or with no calendar a time in the sim's unit), or a duration, which is the length of the run from the start (e.g. stop=ss.days(100)); with no start, a year starts the sim in 2000, unless unit= is other than years (unit='day', stop=3650 is 3,650 days from 0; default: a run of 50 of the sim's unit)
         dt (float/dur): The timestep, in units of "unit" (default 1.0)
         rand_seed (int): The overall random seed for the simulation (used to set module-specific random seeds)
         even_draws (bool): Whether to space each call's random numbers evenly for agents, so that about the expected number of them move each time (default False). This reduces the variance between runs (about 3 to 10 times in final size for a simple SIR), but outbreaks die out less often than they should, and the mean of a result can shift (e.g. the peak of an SIR on a network, by about 10%). For agents only (an error for a compartmental run), and needs `ss.options.crn`
@@ -840,7 +692,7 @@ class Sim(ss.modules.Base):
             pars = self.pars
             n = int(sc.ifelse(pars.total_pop, pars.n_agents)) # The number of people modeled, not the default number of agents (or the number of groups of a compartmental run)
             agentstr = ''
-            if self.initialized and getattr(self, 'solver', None) == 'abm':
+            if self.initialized and isinstance(getattr(self, 'solver', None), ss.solvers.abm):
                 agents = int(pars.n_agents)
                 agentstr = f' ({agents:n} agents)' if agents != n else ''
             if self.initialized:
@@ -957,7 +809,6 @@ class Sim(ss.modules.Base):
         ss.solvers.init_group_values(self) # The people's levels of each dimension, or each group's age and sex
         self._valued = True # From here, arithmetic on a parameter is on its value (see ss.expressions.has_values())
         self._init_modules_post() # Initialize the module values
-        ss.interventions.check_undriven(self) # A transition that nothing drives never happens
         ss.solvers.settle_start(self) # The declared modules' people, once every module has its own
         self.init_results() # Initialize the results
         self._init_data() # Initialize the data
@@ -989,7 +840,7 @@ class Sim(ss.modules.Base):
         if stop is not None and stop - t.yearvec[-1] > 1e-6: # The stop is not a whole number of steps from the start, so the run ends at the last step before it
             given = ss.utils.time_str(t.stop, None) if t.is_absolute else ss.utils.num_str(type(t.tvec[-1])(t.stop) if isinstance(t.tvec[-1], ss.Duration) else t.stop)
             when += f' (the last whole step before {given})'
-        if self.solver == 'abm':
+        if isinstance(self.solver, ss.solvers.abm):
             rounded = float(f'{self.pop_scale:.3g}') # To 3 significant figures, without an exponent (e.g. 25,300)
             scale = '' if rounded == 1 else f', each {rounded:,.0f} people' if rounded >= 10 else f', each {rounded:g} people'
             how = f'as {len(self.people):,} agents{scale}' if not self.pars.branching else f'{self.pars.total_pop:,.0f} people, as a branching process of agents (starting with {len(self.people):,})'
@@ -1003,7 +854,7 @@ class Sim(ss.modules.Base):
         label = f' "{self.label}"' if self.label else ''
         what = f'{sc.strjoin(mods)}, ' if mods else ''
         lines = [ss.display.style(f'Sim{label}: {what}{how}, {when}', 'bold', color=ss.display.in_color())]
-        if self.solver != 'abm':
+        if not isinstance(self.solver, ss.solvers.abm):
             for dis in self.declared:
                 sources = dis.graph.infectious or dis.graph.count_sources
                 if dis.graph.transmissions or sources:
@@ -1026,7 +877,7 @@ class Sim(ss.modules.Base):
                         timed = [name for name,p in dis.graph.pars.items() if isinstance(p.raw, ss.parameters.TimeValue)] # So R0 is at the start time
                         when = f' at the start ({sc.strjoin(timed)} {"varies" if len(timed) == 1 else "vary"} in time)' if timed else ''
                         lines.append(f'  {dis.name}: R0 = {R0:.3g}{when}{at_start}, with {shown} infectious at the start')
-        if self.pars.solver == 'auto' and self.solver == 'abm' and self.declared and not any(self.solver_reason in note for note in notes):
+        if self.pars.solver == 'auto' and isinstance(self.solver, ss.solvers.abm) and self.declared and not any(self.solver_reason in note for note in notes):
             lines.append(f'  Running as agents: {self.solver_reason}')
         lines += [f'  Note: {note}' for note in notes]
         return lines
@@ -1117,14 +968,15 @@ class Sim(ss.modules.Base):
 
         The fit uses either likelihoods or a loss: every data series has a likelihood (declared on its
         outcome, or given here), and the fit maximizes their sum; or none has, and it minimizes the loss.
-        Some series with a likelihood and some without, or likelihoods with `loss=`, is an error.
+        `loss=` is used in place of likelihoods declared on the outcomes (with a note), and `likelihood=False`
+        switches them off. Some series with a likelihood and some without is an error, as is `loss=` with `likelihood=`.
 
         Args:
             pars (list): the names of the parameters to fit (default: all that have bounds)
             data (df): the data to fit to (default: the sim's data)
             weights (dict): the relative weight of each data series (default: equal)
-            likelihood (`ss.Dist`/dict): the likelihood of every data series (e.g. `ss.poisson()`), or of each by its name (e.g. `dict(prevalence=ss.normal(std=0.02))`), in place of any declared on its outcome. The fit then maximizes their sum (plus the log of the priors of the parameters that have one, for the methods that find a best fit: the most probable values)
-            loss (str/func): with no likelihoods, the measure of the mismatch to minimize: 'nae' (normalized absolute error, the default), 'rmse', or a function of the sim; any other name is an error
+            likelihood (`ss.Dist`/dict/bool): the likelihood of every data series (e.g. `ss.poisson()`), or of each by its name (e.g. `dict(prevalence=ss.normal(std=0.02))`), in place of any declared on its outcome; or False, for none (the declared ones are not used, and the fit minimizes the loss). The fit then maximizes their sum (plus the log of the priors of the parameters that have one, for the methods that find a best fit: the most probable values)
+            loss (str/func): the measure of the mismatch to minimize, with no likelihoods (or in place of those declared on the outcomes): 'nae' (normalized absolute error, the default), 'rmse', or a function of the sim; any other name is an error
             penalty (func): a function of the parameter values (a dict by name, an array whole) returning a number added to what a best fit minimizes, e.g. a smoothness penalty, `lambda pars: 10*np.sum(np.diff(pars['knots'], 2)**2)`
             method (str/`ss.fit.method`/list): by default, a best fit (a point estimate), by the method that suits the sim, which is printed with the reason: 'l-bfgs-b' for a deterministic sim with gradients (from JAX; see `ss.gradients`), 'nelder-mead' for one without them (including one whose likelihood or priors JAX does not cover, e.g. a likelihood given as a function), or with one or two fitted parameters (where it is faster than gradients), and 'optuna' for a stochastic sim, including an agent-based one. A posterior is asked for by name: 'nuts' (the No-U-Turn sampler, for a deterministic sim with gradients whose data series all have a likelihood, with each chain started from one of the best points of a scan over the bounds that are apart), 'pmcmc' (particle MCMC, for a stochastic compartmental sim whose data series all have a likelihood: a random-walk Metropolis sampler on the likelihood estimated by a particle filter; see `ss.fit.ParticleFilter`), or 'abc-smc' (approximate Bayesian computation by sequential Monte Carlo, for any sim, with no likelihood needed); the priors are the parameters' `prior=`, or uniform over their bounds. Also: 'if2' (iterated filtering, for the sims that 'pmcmc' fits: the maximum-likelihood values, from passes of a particle filter in which each particle's values are perturbed by a shrinking random walk; see `ss.fit.Swarm`), 'powell' (no gradients) or 'slsqp' (with gradients, like 'l-bfgs-b'). A method with settings is `ss.fit.method()`, e.g. `ss.fit.method('optuna', n_trials=200)` (the settings of each method, such as the number of runs per point for a stochastic sim, are listed there); a list of methods runs each from the best fit of the one before (a stage that does not converge stops the list; see `ss.fit.fit_stages()`)
             rand_seed (int): the random seed for the fitting method (default: the sim's, so a fit gives the same answer each time)
@@ -1173,12 +1025,12 @@ class Sim(ss.modules.Base):
         The sim itself is not changed. The search is in `ss.fit`, which is imported when it is first used.
 
         Args:
-            goal (`ss.maximize`/`ss.minimize`): what to make as large or as small as possible: a result (e.g. `ss.maximize('all_vs', at=2030)`, or `ss.minimize('hiv.new_infections')`), or a function of the run sim
+            goal (`ss.fit.maximize`/`ss.fit.minimize`): what to make as large or as small as possible: a result (e.g. `ss.fit.maximize('all_vs', at=2030)`, or `ss.fit.minimize('hiv.new_infections')`), or a function of the run sim
             total (float): the total to allocate (default: the current total); with `target=`, the total the search starts from
             start (float/date): when the new allocation takes effect (default: the start of the sim), read as any time is (see `ss.connectors.to_time()`: a bare number is a year if the sim has a calendar)
             spend (dict/list): the spending parameters: names, or {program: name} (default: the imported programs)
             bounds (tuple/dict): the least and most a program can have, as amounts (default: 0 and the total); a dict gives them by program, e.g. `dict(testing=(1e5, None))` (None for no limit), and a program not in it has the default
-            target (float): the value of the result to reach (at least this with `ss.maximize()`, at most with `ss.minimize()`) with the least total
+            target (float): the value of the result to reach (at least this with `ss.fit.maximize()`, at most with `ss.fit.minimize()`) with the least total
             maxiter (int): the most iterations of the search (of each total's, with `target=`)
             verbose (bool): whether to print progress
 
@@ -1187,15 +1039,15 @@ class Sim(ss.modules.Base):
         Examples:
             ```python
             sim = ss.import_from('hiv_framework.xlsx', format='atomica', databook='hiv_databook.xlsx', progbook='hiv_progbook.xlsx', programs_start=2020)
-            best = sim.optimize(ss.maximize('all_vs', at=2030), start=2020)
+            best = sim.optimize(ss.fit.maximize('all_vs', at=2030), start=2020)
             best.summarize()
-            least = sim.optimize(ss.maximize('all_vs', at=2030), start=2020, target=1.1*best.value) # The least money that reaches it
+            least = sim.optimize(ss.fit.maximize('all_vs', at=2030), start=2020, target=1.1*best.value) # The least money that reaches it
             ```
         """
         from . import fit
         for key in ['maximize', 'minimize', 'at']:
             if key in kwargs:
-                errormsg = f'sim.optimize() takes the goal as goal=ss.{"maximize" if key == "at" else key}(...){", with at= in it" if key == "at" else ""}, e.g. goal=ss.{"maximize" if key == "at" else key}("all_vs", at=2030), not {key}='
+                errormsg = f'sim.optimize() takes the goal as goal=ss.fit.{"maximize" if key == "at" else key}(...){", with at= in it" if key == "at" else ""}, e.g. goal=ss.fit.{"maximize" if key == "at" else key}("all_vs", at=2030), not {key}='
                 raise TypeError(errormsg)
         if kwargs:
             raise TypeError(f'sim.optimize() got an unexpected keyword argument "{list(kwargs)[0]}"')
@@ -1476,13 +1328,13 @@ class Sim(ss.modules.Base):
         """
         # Handle inputs
         people = self.pars.pop('people')
-        if (self.named_people is not None or self.given_pyramid is not None) and self.solver != 'abm': # A compartmental run takes the size and age split of a population, not its agents
+        if (self.named_people is not None or self.given_pyramid is not None) and not isinstance(self.solver, ss.solvers.abm): # A compartmental run takes the size and age split of a population, not its agents
             people = None
         n_agents = self.pars.n_agents
 
         # If people have not been supplied, make them -- typical use case
         if people is None:
-            if self.solver == 'abm' and self.groups.strats: # Properties that people are stratified by, other than age
+            if isinstance(self.solver, ss.solvers.abm) and self.groups.strats: # Properties that people are stratified by, other than age
                 extra = [strat.people_arr() for strat in self.groups.strats if strat.kind != 'age']
                 kwargs['extra_states'] = sc.mergelists(kwargs.get('extra_states'), extra)
                 for strat in self.groups.strats: # Ages follow the split of the age groups, so every solver starts from the same population
@@ -1494,7 +1346,7 @@ class Sim(ss.modules.Base):
             if 'age_data' not in kwargs: # Otherwise the ages are a named population's, or the world's, as a guess (as is the split of age groups that are not given one)
                 kwargs['age_data'] = ss.data.to_age_data(*ss.data.age_pyramid(self))
             people = ss.People(n_agents=n_agents, **kwargs)  # This just assigns UIDs and length
-        elif self.solver == 'abm':
+        elif isinstance(self.solver, ss.solvers.abm):
             self.groups.kept = {strat.name for strat in self.groups.strats if strat.kind != 'age' and strat.female is None and strat.attr in people.states} # People who come with a property keep it: it is binned into the levels, not drawn from the split
             for strat in self.groups.strats:
                 if strat.name in self.groups.kept and strat.fractions_given:
@@ -1637,7 +1489,7 @@ class Sim(ss.modules.Base):
     def pop_scale(self):
         """ The number of people each agent stands for (with dynamic rescaling, at the end of the run): `total_pop/n_agents` as agents, and 1 in a compartmental run, which has no agents; set by `total_pop=` and `n_agents=` """
         pars = self.pars
-        if (self.solver is not None and self.solver != 'abm') or not pars.n_agents or pars.total_pop is None:
+        if (self.solver is not None and not isinstance(self.solver, ss.solvers.abm)) or not pars.n_agents or pars.total_pop is None:
             return 1.0
         return pars.total_pop/pars.n_agents
 
@@ -1679,8 +1531,8 @@ class Sim(ss.modules.Base):
         Dynamically rescale the population; only used if `pars.rescale=True`
 
         The scale factor starts at 1. Once the fraction of agents who are not naive (i.e. have
-        ever been infected with any disease) exceeds the threshold (`ss.rescale(threshold=)`), the scale factor
-        is increased by at least `ss.rescale(factor=)` (up to `sim.pop_scale`), and the same
+        ever been infected with any disease) exceeds the threshold (`rescale=dict(threshold=)`), the scale factor
+        is increased by at least `rescale=dict(factor=)` (up to `sim.pop_scale`), and the same
         fraction of non-naive agents are made naive again (via `disease.make_naive()`), so that
         each agent now represents more people. Based on Covasim's dynamic rescaling.
 
@@ -1689,7 +1541,7 @@ class Sim(ss.modules.Base):
         at each rescaling (from scale `s` to `s'`, `s' - s` for each); the deaths and births of
         agents do not change it. So `alive` is `scale` people for each agent alive, plus these.
         """
-        opts = self.pars.rescale if isinstance(self.pars.rescale, rescale) else rescale() # Its options, or the defaults for rescale=True
+        opts = sc.objdict(rescale_options | (self.pars.rescale if isinstance(self.pars.rescale, dict) else {})) # Its options, or the defaults for rescale=True
         full = self.pop_scale
         ti = self.ti
         self.rng_rescale.jump_dt(ti=ti) # Like other distributions, advance the random numbers for this timestep
@@ -1924,7 +1776,7 @@ class Sim(ss.modules.Base):
             restarted = self.__dict__.pop('_restarted', None)
             reason = self.kernel_reason() if until is None and not profile and restarted is None else None
             kernels = until is None and not profile and reason is None
-            if reason is not None and self.solver != 'abm' and getattr(self, 'declared', None): # Say once why a compartmental run is taken a step at a time (describe() says it too)
+            if reason is not None and not isinstance(self.solver, ss.solvers.abm) and getattr(self, 'declared', None): # Say once why a compartmental run is taken a step at a time (describe() says it too)
                 ss.note(f'run a step at a time, which is much slower than all at once, since {reason}', sim=self, verbose=self.verbose)
             if self.pars.require_kernels and not kernels:
                 raise ss.CapabilityError(f'require_kernels=True, but this sim would be run a step at a time in Python, since {reason or "until= was given, or it is being profiled"}')
@@ -1941,7 +1793,7 @@ class Sim(ss.modules.Base):
                     mod.engine.run_all(use_jax=use_jax)
                 self.complete = True # Without making the loop's plan, which is not needed
             else:
-                if isinstance(until, ss.Duration): # A time after the start, as the loop takes a time on the timeline (see ss.Timeline.to_time())
+                if isinstance(until, ss.Duration): # A time on the sim's axis from 0, e.g. sim.t.tvec[5], checked as any duration given as a time is (see ss.Timeline.to_time())
                     until = self.t.to_time(until, name='until=')
                 self.loop.run(until, profile=profile)
                 self.stopped = self.loop.stopped
@@ -2013,7 +1865,7 @@ class Sim(ss.modules.Base):
             now = sum(float(res[name][last]) for name in active)
             b = sc.obj(size=start + new, outcome='stopped' if self.stopped is not None else 'extinct' if now < 0.5 else 'ongoing')
             engine = mod.engine
-            if self.solver == 'abm':
+            if isinstance(self.solver, ss.solvers.abm):
                 n = self.people.uid.len_used
                 infector = engine.infector[:n].copy()
                 b.length = int(engine.generation[:n].max()) if n else 0
@@ -2600,49 +2452,9 @@ def as_ode(sim, **kwargs):
     return sim.new(solver='ode', **(agents_only | kwargs))
 
 
-class maximize(sc.prettyobj):
-    """
-    The goal of `sim.optimize()`: a result to make as large as possible
-
-    Args:
-        result (str/func): a result of a module (e.g. `'all_vs'`, or `'hiv.n_vs'`), or a function of the run sim that returns a number
-        at (float/date): the time of the result (default: the end), read as any time is (see `ss.connectors.to_time()`: a bare number is a year if the sim has a calendar); without it, a function of the sim decides
-
-    Example:
-        ```python
-        best = sim.optimize(ss.maximize('all_vs', at=2030), spend=['testing', 'art'])
-        ```
-    """
-    sign = -1.0 # What the search minimizes is the sign times the result
-
-    def __init__(self, result, at=None):
-        self.result = result
-        self.at = at
-        return
-
-    def __repr__(self):
-        return f'ss.{type(self).__name__}({getattr(self.result, "__name__", repr(self.result))}' + (f', at={self.at!r}' if self.at is not None else '') + ')'
-
-
-class minimize(maximize):
-    """
-    The goal of `sim.optimize()`: a result to make as small as possible
-
-    Args:
-        result (str/func): a result of a module (e.g. `'sir.R'`), or a function of the run sim that returns a number
-        at (float/date): the time of the result (default: the end); without it, a function of the sim decides
-
-    Example:
-        ```python
-        best = sim.optimize(ss.minimize('sir.R'), spend=['tests', 'masks'])
-        ```
-    """
-    sign = 1.0
-
-
 def in_proportions(sim):
     """ Whether a sim's numbers are shares of a population of 1 (`total_pop=1`): as an ODE, or as agents each a share of it, but not as a stochastic compartmental model, which then has one person """
-    return sim.pars.total_pop <= 1 and (sim.solver or sim.pars.solver) not in ['binomial', 'gillespie', 'tau']
+    return sim.pars.total_pop <= 1 and not isinstance(sim.solver or sim.pars.solver, (ss.solvers.binomial, ss.solvers.gillespie, ss.solvers.tau))
 
 
 def demo(run=True, plot=True, summary=True, show=None, **kwargs):

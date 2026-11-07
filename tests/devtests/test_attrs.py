@@ -71,7 +71,7 @@ def test_hiv_cd4():
     kw2 = dict(start=1990, stop=2010, dt=ss.months(1), unit='year', **kw)
     hiv, mods = make_hiv()
     sim = ss.Sim(hiv, connectors=mods, analyzers=CheckCD4(), n_agents=5000, **kw2).run()
-    assert sim.solver == 'abm'
+    assert isinstance(sim.solver, ss.solvers.abm)
     r = sim.results.hiv
     by = r.cd4_death.by('cd4')
     assert by.columns == ['0-49', '50-199', '200-349', '350-499', '500+']

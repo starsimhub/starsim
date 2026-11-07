@@ -232,7 +232,7 @@ def test_odin_ode():
     # A scalar SIR: the same model as one written by hand
     sim = load_odin(write(odin_sir, '.R'), stop=100, **kw)
     names = list(sim.pars.diseases[0].transitions.keys())
-    assert sim.pars.solver == 'ode' and len(names) == 2
+    assert isinstance(sim.pars.solver, ss.solvers.ode) and len(names) == 2
     assert not sim.imported.incomplete
     res = sim.run().results[sim.diseases[0].name]
     ref = hand_sir(total_pop=1000)
@@ -264,7 +264,7 @@ def test_odin_discrete():
 
     # rbinom(S, 1 - exp(-X)) is a rate X under the binomial solver; a draw from a draw is a branch, which is listed
     sim = load_odin(write(odin_chained, '.R'), stop=100, **kw)
-    assert sim.pars.solver == 'binomial'
+    assert isinstance(sim.pars.solver, ss.solvers.binomial)
     missing = sc.strjoin(name for name,why in sim.imported.incomplete)
     assert 'n_ID' in missing and 'p_death' in missing
     rates = sc.strjoin(sim.imported.choices)
@@ -294,7 +294,7 @@ def test_odin2(tmp_path):
         sims[key] = load_odin(path, stop=100, **kw)
     one, two = sims['odin1'], sims['odin2']
     assert not two.imported.incomplete, two.imported.incomplete
-    assert two.pars.solver == 'binomial'
+    assert isinstance(two.pars.solver, ss.solvers.binomial)
 
     # The same run: Binomial() is rbinom(), dt is built in, and zero_every is a count over a period
     a, b = one.run().results.sir, two.run().results.sir

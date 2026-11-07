@@ -618,9 +618,14 @@ def test_shape_scale():
     assert np.array_equal(ss.normal(mean=5, std=1, strict=False, seed=1).rvs(10), ss.normal(5, 1, strict=False, seed=1).rvs(10))
     assert np.isclose(ss.truncnorm(mean=5, std=1, low=0, strict=False).rvs(n).mean(), 5, rtol=0.02) # It drew N(0, 1) truncated at 0, silently
     for make, hint in [(lambda: ss.normal(loc=5), 'mean='), (lambda: ss.expon(scale=5), 'mean='), (lambda: ss.poisson(lam=3), 'mean='), (lambda: ss.gamma(a=2), 'shape='),
-                       (lambda: ss.weibull(c=2), 'shape='), (lambda: ss.lognormal(loc=5, scale=2), 'mean='), (lambda: ss.truncnorm(5, 2, a=0, b=10), 'low, high')]:
+                       (lambda: ss.weibull(c=2), 'shape='), (lambda: ss.lognormal(loc=5, scale=2), 'std= for scale=. It takes mean'), (lambda: ss.truncnorm(5, 2, a=0, b=10), 'low, high')]:
         with pytest.raises(TypeError, match=hint):
             make()
+
+    # loc= is a shift, as SciPy's loc: with mean=, the mean of the whole distribution
+    g = ss.gamma(mean=10, std=3, loc=2, strict=False, seed=1).rvs(n)
+    assert np.isclose(g.mean(), 10, rtol=0.02) and np.isclose(g.std(), 3, rtol=0.05) and g.min() >= 2
+    assert np.isclose(ss.erlang(k=3, mean=10, loc=4, strict=False, seed=1).rvs(n).mean(), 10, rtol=0.02)
     return vals
 
 
