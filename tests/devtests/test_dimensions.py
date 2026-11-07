@@ -703,7 +703,7 @@ def test_mixing():
 
     # A split over two dimensions is the share in each level given the other, whose own split, if given, is kept (it was replaced by the table's totals)
     for solver in ['ode', 'abm']:
-        A = ss.State('A')
+        A = ss.State()
         d = ss.Disease(A, stay=ss.Transition(A, A, rate=0), default_state='A', name='d')
         d.stratify(k=['x', 'y'], fractions=ss.by([[0.8, 0.2], [0.4, 0.6]], dims=['age', 'k']))
         size = dict(n_agents=10_000) if solver == 'abm' else dict(total_pop=10_000)
@@ -959,7 +959,7 @@ def test_rows():
     sc.heading('Testing p= with one entry per destination, by age, and a function for each destination')
     methods = ['pill', 'iud', 'inj']
     def make(solver, fn=False, **kw):
-        none = ss.State('none')
+        none = ss.State()
         on = {m: ss.State(m) for m in methods}
         b0 = ss.par(-0.5)
         p_use = expit(b0 + 1.0*ss.person.urban)

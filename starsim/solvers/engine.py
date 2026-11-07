@@ -1903,7 +1903,7 @@ class Engine(Telling, Effects):
             for end in tr._ends: # A flow for each destination, e.g. res.cin.X, whose sum is the total
                 dst = graph.states.get(end)
                 results += ss.Result(f'{name}.{end}', dtype=float, scale=scale, label=f'{tr.label or name} to {"death" if dst is None else dst.label or dst.name}', kind='flow', auto_plot=False)
-        for name in [name for name in graph.marked_results if name in mod.results]: # Its own takes the place of one worked out from the states marked infected
+        for name in [name for name in graph.marked_results if name in mod.results]: # Its own takes the place of one worked out from the infected states
             graph.marked_results.discard(name)
             del graph.exprs[name]
         for name,expr in graph.exprs.items(): # A ratio, a sum of flows, or otherwise a stock

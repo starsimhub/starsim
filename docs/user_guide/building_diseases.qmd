@@ -76,11 +76,10 @@ measles_density.equations()
 
 A rate can also be written as the whole flow, as in the equations of other frameworks: `S >> I @ beta*S*I/N` (with `N = S + I + R`) is the same frequency-dependent model as `beta*I`, and `beta*S*I` the same density-dependent model as `beta*I.n`.
 
-**Infected states and prevalence.** Mark the states whose people are infected, and the disease has two more results, `infected` (the number in them) and `prevalence` (their share of everyone in its states). Nothing is guessed: a disease with no state marked has neither, and one that defines its own `infected` or `prevalence` keeps it. `ss.SIR`, `ss.SEIR`, and `ss.SIS` mark theirs.
+**Infected states and prevalence.** A disease with transmission has two more results, `infected` (the number in its infected states) and `prevalence` (their share of everyone in its states). The infected states are those of the force of infection: the states people are infected into and those that infect them, `E` and `I` in `S >> E @ beta*I`, and each state's `infected` says so (`seir.E.infected`). Where the transitions don't show it, say which states are infected: for a stage that is infected but doesn't transmit (say, `H`, in hospital), `infected = E + I + H` given to the disease, or `ss.states('S E I H R', infected='E I H')`, or `ss.State('Hospitalized', infected=True)` for each. What the model says is used as it is: with `infected = I`, `E` is not counted. A disease without transmission, such as a staged condition, has neither result unless it says which states are infected; one that defines its own `infected` or `prevalence` keeps it; and one with a state called `infected` has that state's count under the name, and no `prevalence` unless it defines one.
 
 ```{python}
-S, R = ss.states('S R')
-E, I = ss.states('E I', infected=True) # Or E = ss.State(label='Exposed', infected=True)
+S, E, I, R = ss.states('S E I R') # E and I are infected: S >> E @ beta*I shows it
 seir = ss.Disease(S >> E @ ss.perday(0.3)*I, E >> I @ ss.days(5), I >> R @ ss.days(8), init_prev=0.01, name='seir')
 res = ss.Sim(seir, stop=ss.days(120), verbose=0).run().results.seir
 print('Peak prevalence:', round(res.prevalence.max(), 3))

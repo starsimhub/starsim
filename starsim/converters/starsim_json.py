@@ -173,11 +173,11 @@ class Writer:
             out.pars = {name:self.par(p, pars) for name,p in pars.items() if p is not g.init_prev}
         out.states = []
         for name,s in g.states.items():
-            kw = {k:self.value(v, pars) for k,v in dict(people=s.people if not s.people else None, label=s.label, rel_sus=s.rel_sus, rel_trans=s.rel_trans, infected=s.infected or None, keep_time=s.keep_time or None).items()
+            kw = {k:self.value(v, pars) for k,v in dict(people=s.people if not s.people else None, label=s.label, rel_sus=s.rel_sus, rel_trans=s.rel_trans, infected=s.infected_given or None, keep_time=s.keep_time or None).items()
                   if v is not None and not (k.startswith('rel_') and sc.isnumber(v) and v == 1)}
             out.states.append(dict(name=name, **kw) if kw else name)
         out.transitions = {name:self.transition(tr, g) for name,tr in g.transitions.items()}
-        results = {name:self.expr(e, pars) for name,e in g.exprs.items() if name not in g.marked_results} # Not those worked out from the states marked infected, which the model did not write
+        results = {name:self.expr(e, pars) for name,e in g.exprs.items() if name not in g.marked_results} # Not those worked out from the infected states, which the model did not write
         if results: # A result used in a rate (or in another result) is written there by its name, as the code would
             fold = Folder(results)
             out.transitions = {name:fold.transition(tr) for name,tr in out.transitions.items()}
@@ -455,7 +455,7 @@ class Reader:
             if len(plain) > 1:
                 lines.append(f"{', '.join(plain)} = ss.states({' '.join(plain)!r})")
             elif plain:
-                lines.append(f'{plain[0]} = ss.State({plain[0]!r})')
+                lines.append(f'{plain[0]} = ss.State()')
             plain.clear()
         for s in d.get('states', []):
             if isinstance(s, str):
@@ -467,8 +467,8 @@ class Reader:
                 unknown = set(s) - {'name', 'people', 'label', 'rel_sus', 'rel_trans', 'infected', 'keep_time'}
                 if unknown:
                     self.error(where, f'{sc.strjoin(sorted(unknown))} is not a property of a state; they are people, label, rel_sus, rel_trans, infected, and keep_time')
-                kw = ''.join(f', {k}={repr(s[k]) if k == "label" else self.value(s[k], set(pars), where)}' for k in ['people', 'label', 'rel_sus', 'rel_trans', 'infected', 'keep_time'] if k in s)
-                lines.append(f'{s["name"]} = ss.State({s["name"]!r}{kw})')
+                kw = ', '.join(([repr(s['label'])] if 'label' in s else []) + [f'{k}={self.value(s[k], set(pars), where)}' for k in ['people', 'rel_sus', 'rel_trans', 'infected', 'keep_time'] if k in s]) # The label first: the name is the variable's
+                lines.append(f'{s["name"]} = ss.State({kw})')
         flush()
 
         # Results, which rates may use, and transitions; a result of flows (e.g. incidence = infection / S) comes after them

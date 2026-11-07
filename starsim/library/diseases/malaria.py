@@ -150,5 +150,5 @@ class MalariaImmunity(ss.Disease):
     births        = ss.birth(x1, rate=delta)
     deaths        = ss.death(rate=delta)
 
-    prevalence = (y1 + y2 + y3)/(x1 + x2 + x3 + x4 + y1 + y2 + y3) # Explicit form: the true parasite rate, a measure of its own, so not from states marked infected (ss.State(infected=True))
+    prevalence = (y1 + y2 + y3)/(x1 + x2 + x3 + x4 + y1 + y2 + y3) # Explicit form: the true parasite rate, a measure of its own, so not from the infected states
     detected   = (y1 + y2 + q3*y3)/(x1 + x2 + x3 + x4 + y1 + y2 + y3) # What a blood examination finds

@@ -636,15 +636,13 @@ def disease_code(source, var, total=None):
         if len(plain) > 1:
             add(f"{', '.join(plain)} = ss.states({' '.join(plain)!r})")
         elif plain:
-            add(f'{plain[0]} = ss.State({plain[0]!r})')
+            add(f'{plain[0]} = ss.State()')
         plain.clear()
     for name,s in source.states.items():
         kw = dict(people=False) if not (s.people and name in people) else dict(people=True) if name not in linked else {} # People not joined to the first state by a flow, e.g. those born into another place, are said to be
-        if s.label is not None:
-            kw['label'] = s.label
-        if kw:
+        if kw or s.label is not None:
             flush()
-            add(f'{name} = ss.State({name!r}, {", ".join(f"{k}={v!r}" for k,v in kw.items())})')
+            add(f'{name} = ss.State({", ".join([repr(s.label)]*(s.label is not None) + [f"{k}={v!r}" for k,v in kw.items()])})') # The label first: the name is the variable's
         else:
             plain.append(name)
     flush()

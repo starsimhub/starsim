@@ -124,7 +124,7 @@ class Graph:
         self.guessed = sc.obj()
         self.strats = [] # Stratifications, filled by stratify()
         self.transfers = sc.obj() # Movement between the levels of a stratification
-        self.marked_results = set() # The results in exprs worked out from the states marked infected (infected, prevalence): see resolve_derived()
+        self.marked_results = set() # The results in exprs worked out from the infected states (infected, prevalence): see resolve_derived()
 
         self.collect(list(args or []), dict(members or {}))
         if isinstance(init_prev, par):
@@ -148,20 +148,27 @@ class Graph:
 
     def resolve_derived(self):
         """
-        The results of the states marked infected (`ss.State(infected=True)`): `infected`, the number in them, and `prevalence`, their share
-        of the people in every state, unless the module defines its own of that name. Nothing is guessed: with no state marked, there are none;
-        with some marked, the sources of infection count too (see `infected`)
+        Which states are infected, and their results. The infected states are those the model says are infected (marked
+        `ss.State(infected=True)`, or in its own result `infected = E + I`), exactly; or, if it says none are, those of a
+        force of infection: the states people are infected into, and the sources (`E` and `I` in `S >> E @ beta*I`). With
+        neither, as in a staged condition such as a cancer, no state is infected. Each state's `infected` is set to match,
+        and the infected states give the results `infected`, the number in them, and `prevalence`, their share of the
+        people in every state, unless the module defines its own of that name, or has a state called `infected` (whose
+        count has the name: it can define its own prevalence)
         """
-        if not any(state.infected for state in self.people_states):
+        if self.marked:
+            found = {id(s) for s in self.marked if s.people} # As the model says, and nothing else
+        elif self.infection_sources:
+            found = {id(s) for s in self.infected if s.people} # The states people are infected into and the sources (see infected)
+        else:
+            found = set() # Not the states a staged condition reaches (see infected): it is not an infection unless the model says so
+        for state in self.states.values():
+            state.infected = id(state) in found
+        marked = [state for state in self.people_states if state.infected]
+        if not marked or 'infected' in self.states:
             return
-        marked = [state for state in self.infected if state.people]
-        own = self.states.get('infected')
-        if own is not None and (len(marked) > 1 or own is not marked[0]):
-            errormsg = (f'"{self.module.name if self.module is not None else "The disease"}" marks {"more than one state" if len(marked) > 1 else "a state"} as infected ({sc.strjoin(s.name for s in marked)}), but also has a state called "infected", '
-                        f'which is the name of the result counting them. Either rename the state (e.g. "infectious"), or do not set infected=True and define the infected states and prevalence yourself (e.g. prevalence=(E + I)/(S + E + I + R))')
-            raise ValueError(errormsg)
         cls = type(self.module)
-        if own is None and not self.taken('infected') and not hasattr(cls, 'infected'):
+        if not self.taken('infected') and not hasattr(cls, 'infected'):
             self.add(self.exprs, 'infected', ss.expressions.as_stocks(sum(marked[1:], marked[0])))
             self.marked_results.add('infected')
         if not self.taken('prevalence') and not hasattr(cls, 'prevalence'):
@@ -202,7 +209,8 @@ class Graph:
                     raise ValueError(errormsg)
                 self.add(self.attrs, obj.name, obj)
                 continue
-            if isinstance(obj, ss.conditions.Cond) and name is not None and obj.op == '|' and ss.conditions.state_objects(obj) is not None: # A named set of states, e.g. infected = E | I, is a result: the number in them, as for E + I
+            if isinstance(obj, ss.conditions.Cond) and obj.op == '|' and (name or self.names.get(id(obj))) is not None and ss.conditions.state_objects(obj) is not None: # A named set of states, e.g. infected = E | I, is a result: the number in them, as for E + I
+                name = name or self.names.get(id(obj))
                 states = ss.conditions.state_objects(obj)
                 self.add(self.exprs, name, ss.expressions.as_stocks(sum(states[1:], states[0])))
                 continue
@@ -314,11 +322,11 @@ class Graph:
         # Name the states
         for i,state in enumerate(statelist):
             if state.name is None:
-                state.name = self.names.get(id(state))
+                state.name = self.names.get(id(state)) or (state.label if isinstance(state.label, str) and state.label.isidentifier() else None) # Its variable, else its label if no variable holds it (ss.Disease(ss.State('S'), ...))
             if state.name is None:
                 used = [tr.name or tr._arrow for tr in trs if any(end is state for end in (tr.source or []) + (tr.dest or []))]
                 raise ValueError(f'state number {i+1} of the module has no name. It is used in {used}, and no variable or keyword holding it was found.\n'
-                                      f"     Give the names up front: S, I, R = ss.states('S I R').")
+                                      f"     Hold it in a variable, or give the names up front: S, I, R = ss.states('S I R').")
         for state in statelist:
             if state.module is not None and state.module is not self.module:
                 raise ValueError(f'state "{state.name}" is used by transitions in two modules, "{state.module.name}" and "{self.module.name}"; a state belongs to one module.')
@@ -1021,21 +1029,35 @@ class Graph:
         return seen
 
     @property
-    def infected(self):
-        """
-        The infected states: those marked `infected=True`, if any are, with the sources of infection (a state that infects others is infected, marked or not). Otherwise, as worked out from the transitions (for what needs
-        them, e.g. the states strains are carried in, or the number infected at the start; never for a result, see `resolve_derived()`):
-        the states people are infected into, and the sources of infection (of people by contact, as `I` in `beta*I`, or density-dependent,
-        in `beta*I.n`; or of a count, as `Ih` in a bite rate `Ih.n / N` of mosquitoes)
-
-        In a model where nobody is a source of infection (a staged condition such as a cancer), also every state that
-        people reach from those without passing through a state they can be in without having been infected
-        """
+    def infection_sources(self):
+        """ The sources of infection: of people by contact (`I` in `beta*I`), density-dependent (`beta*I.n`), or of a count (`Ih` in a bite rate `Ih.n / N` of mosquitoes) """
         sources = {id(s):s for s in self.infectious + self.count_sources}
         for tr in self.transitions.values():
             if not tr.people and tr.rate is not None:
                 sources.update({id(leaf.states[0]):leaf.states[0] for leaf in tr.rate.leaves if isinstance(leaf, Count) and len(leaf.states) == 1 and leaf.states[0].people})
-        marked = [s for s in self.states.values() if getattr(s, 'infected', False)]
+        return list(sources.values())
+
+    @property
+    def marked(self):
+        """ The states the model says are infected: marked (`ss.State(infected=True)`), or in its own result `infected` if that is a sum or set of its states (`infected = E + I`, or `E | I`) """
+        out = {id(s):s for s in self.states.values() if s.infected_given}
+        out.update({id(s):s for s in summed_states(self.exprs.get('infected')) or []})
+        return list(out.values())
+
+    @property
+    def infected(self):
+        """
+        The states people carry an infection in, for what needs them (e.g. the states strains are carried in, or the number infected at the start): those
+        the model says are infected (see `marked`), if any, with the sources of infection (a state that infects others carries it, said or not).
+        Otherwise, as worked out from the transitions: the states people are infected into, and the sources of infection (see `infection_sources`).
+        The results `infected` and `prevalence`, and each state's `infected`, are these without a source the model left out (see `resolve_derived()`)
+
+        In a model where nobody is a source of infection (a staged condition such as a cancer), also every state that people reach
+        from those without passing through a state they can be in without having been infected; these are not infected for the results,
+        which such a model does not have unless it says which states are infected
+        """
+        sources = {id(s):s for s in self.infection_sources}
+        marked = self.marked
         if marked:
             return sorted({**{id(s):s for s in marked}, **sources}.values(), key=lambda s: s.order)
         out = {id(s):s for tr in self.acquisitions for s in tr.dest}
@@ -1107,6 +1129,16 @@ class Graph:
         dwells = [tr.dur for tr in self.transitions.values()]
         dwells += [scaled[0] for tr in self.transitions.values() if tr.dur is not None and isinstance(tr.dur.raw, Expr) and (scaled := ss.transitions.scaled_dist(tr.dur.raw)) is not None] # A distribution times a factor, e.g. dur=d*ss.weeks(1), is drawn on entry too
         return [p for p in self.all_pars() if isinstance(p.raw, ss.Dist) and not any(p is dur for dur in dwells)]
+
+
+def summed_states(expr):
+    """ The states a result is the number in (`E + I`, or `E | I`, as a result), or None if it is anything else """
+    if isinstance(expr, ss.expressions.Stock):
+        return [expr.state]
+    if isinstance(expr, BinOp) and expr.op == '+':
+        a, b = summed_states(expr.a), summed_states(expr.b)
+        return None if a is None or b is None else a + b
+    return None
 
 
 def count_weights(expr):

@@ -71,9 +71,10 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
 
     The results are the number in each state (`I`), the flow along each transition by its
     name (`infection`, with its cumulative total as `res.infection.cum`), and the results and
-    outcomes declared (e.g. `active=(E + I).frac`). States marked infected (`ss.State(infected=True)`,
-    or `ss.states(2, infected=True)`) also give the results `infected`, the number in them, and
-    `prevalence`, their share of everyone in the disease's states, unless it defines its own.
+    outcomes declared (e.g. `active=(E + I).frac`). Its infected states also give the results `infected`,
+    the number in them, and `prevalence`, their share of everyone in the disease's states, unless it
+    defines its own: those of its force of infection (`E` and `I` in `S >> E @ beta*I`), or those it says
+    are infected (`infected = E + I + H`, `ss.State(infected=True)`, or `ss.states('S E I H R', infected='E I H')`).
 
     Examples:
         ```python
@@ -234,7 +235,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         Declared states are given in its `__init__()`, as for `define_transitions()`, and each is an attribute at once (`self.S`).
 
         Args:
-            args (list): the states (`ss.State('S')`, named), or lists of them; or arrays (`ss.BoolState`, ...)
+            args (list): the states (`ss.states('S I R')`, or held in variables), or lists of them; or arrays (`ss.BoolState`, ...)
             overwrite (bool): replace a state of the same name, rather than raising
             kwargs (dict): states by name (`S=ss.State(label='Susceptible')`); or for arrays, aliases
         """
@@ -246,9 +247,12 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         if len(states) + len(named) < len(flat) + len(kwargs):
             errormsg = f'define_states() of "{self.name}" takes declared states (ss.State) or arrays (ss.BoolState, ...), not both in one call'
             raise TypeError(errormsg)
+        names = ss.utils.caller_names(1) # A state held in a variable takes its name, e.g. V = ss.State('Vaccinated'); self.define_states(V)
+        for st in states:
+            st.name = st.name or names.get(id(st)) or (st.label if isinstance(st.label, str) and st.label.isidentifier() else None) # Its variable, else its label if no variable holds it (ss.State('V'))
         unnamed = [st for st in states if st.name is None]
         if unnamed:
-            raise ValueError(f'a state given to define_states() of "{self.name}" has no name: give it one, e.g. ss.State("S"), or give it by keyword, e.g. define_states(S=ss.State())')
+            raise ValueError(f'a state given to define_states() of "{self.name}" has no name: hold it in a variable, give it by keyword (define_states(V=ss.State())), or name it (ss.State(\'V\'), or ss.states(\'V W\'))')
         self.declare(states, named, overwrite=overwrite)
         return
 
@@ -1747,9 +1751,9 @@ class SIR(Disease):
     beta      = ss.par(ss.peryear(0.1))
     dur_inf   = ss.par(ss.years(6))
     p_death   = ss.par(0.0)
-    S         = ss.State('S')
-    I         = ss.State('I', infected=True) # Counted in the results infected and prevalence
-    R         = ss.State('R')
+    S         = ss.State()
+    I         = ss.State(infected=True) # Counted in the results infected and prevalence
+    R         = ss.State()
     infection = ss.Transition(S, I, rate=beta * I)
     recovery  = ss.Transition(I, R, dur=dur_inf, p=1 - p_death)
     death     = ss.Transition(I, ss.dead, dur=dur_inf, p=p_death)
@@ -1780,9 +1784,9 @@ class SEIR(Disease):
     dur_exp   = ss.par(ss.years(0.5))
     dur_inf   = ss.par(ss.years(6))
     p_death   = ss.par(0.0)
-    S         = ss.State('S')
+    S         = ss.State()
     E, I      = ss.states('E I', infected=True) # Counted in the results infected and prevalence
-    R         = ss.State('R')
+    R         = ss.State()
     infection = ss.Transition(S, E, rate=beta * I)
     latency   = ss.Transition(E, I, dur=dur_exp)
     recovery  = ss.Transition(I, R, dur=dur_inf, p=1 - p_death)
@@ -1810,7 +1814,7 @@ class SIS(Disease):
     """
     beta      = ss.par(ss.peryear(0.05))
     dur_inf   = ss.par(ss.years(10))
-    S         = ss.State('S')
-    I         = ss.State('I', infected=True) # Counted in the results infected and prevalence
+    S         = ss.State()
+    I         = ss.State(infected=True) # Counted in the results infected and prevalence
     infection = ss.Transition(S, I, rate=beta * I)
     recovery  = ss.Transition(I, S, dur=dur_inf)

@@ -70,11 +70,11 @@ class Syphilis(ss.Disease):
     death_rate       = ss.par(ss.peryear(0.05), doc='Rate of dying of tertiary syphilis',          source='STIsim')
     latent_half_life = ss.par(ss.years(1), doc='Half-life of infectiousness during latent syphilis', source='STIsim')
 
-    S = ss.State('S')
-    E = ss.State('E', infected=True) # Counted in the results infected and prevalence
+    S = ss.State()
+    E = ss.State(infected=True) # Counted in the results infected and prevalence
     P = ss.State(init=0.01, label='Primary syphilis', infected=True)
     Se, El, Ll, T = ss.states('Se El Ll T', infected=True)
-    R = ss.State('R')
+    R = ss.State()
 
     infection = S >> E @ beta*(P + Se + El + Ll)
     onset     = E >> P @ dur_exp

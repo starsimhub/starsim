@@ -290,7 +290,7 @@ def flatten(sim):
             continue
         for text in strata(sim, mod):
             lost.append(f'changed: "{mod.name}" is stratified ({text}), written as one group, the sum of its groups, with the base values of its parameters')
-        results = [(name, 'result') for name in mod.graph.exprs if name not in mod.graph.marked_results] + [(name, 'outcome') for name in mod.graph.outcomes] # Not those worked out from the states marked infected, which the model did not write
+        results = [(name, 'result') for name in mod.graph.exprs if name not in mod.graph.marked_results] + [(name, 'outcome') for name in mod.graph.outcomes] # Not those worked out from the infected states, which the model did not write
         for name,kind in sorted(results):
             lost.append(f'not exported: {kind} "{name}"')
         for name in sorted(mod.graph.funcs):
