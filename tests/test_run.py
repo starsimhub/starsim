@@ -21,7 +21,7 @@ def make_sim_pars(beta=0.1, **kwargs):
         stop = ss.years(10),
         demographics = True,
         networks = 'random',
-        diseases = sc.obj(type='sis', beta=beta), # To allow for modification later
+        diseases = sc.obj(type='sis', beta=ss.peryear(beta), dur_inf=ss.years(10)), # To allow for modification later; in years, as the sim is
     )
     return sc.obj(pars, **kwargs)
 

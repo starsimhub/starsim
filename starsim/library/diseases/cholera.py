@@ -58,7 +58,7 @@ class Cholera(ss.Disease):
 
         sim = ss.Sim(diseases=ssl.Cholera(), total_pop=10_000, start='2025-01-01', stop='2026-01-01')
         sim.run()
-        sim.plot('cholera')
+        sim.cholera.plot()
         ```
     """
     beta          = ss.par(ss.perday(0.05), doc='Transmission rate from person to person, for a symptomatic person', source='Illustrative')

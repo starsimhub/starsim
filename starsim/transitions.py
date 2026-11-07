@@ -156,7 +156,7 @@ class State(Nameable, Expr):
         return Count([self], kind='total')
 
 
-def states(arg, infected=False, **kwargs):
+def states(arg=None, infected=False, **kwargs):
     """
     Create several states at once
 
@@ -165,17 +165,32 @@ def states(arg, infected=False, **kwargs):
             are assigned to; or a string of names (e.g. `'S I R'`), which are used directly
         infected (bool/str/list): which of them are infected (see `ss.State`): all of them (`True`); some, by name, with names given
             up front (`'E I'`); or some, by position, with a number of states (`[1, 2]`, or `range(1, 6)`)
-        kwargs (dict): passed to each `ss.State`, e.g. `people=False`
+        kwargs (dict): instead of `arg`, the states by name, with the share of people who start in each (`S=0.9, I=0.1, R=0`); and
+            any of the arguments of `ss.State`, passed to each, e.g. `people=False`
 
     Examples:
         ```python
         S, I, R = ss.states(3)
         S, I, R = ss.states('S I R') # The same, with the names given up front
+        S, I, R = ss.states(S=0.99, I=0.01, R=0) # With the share of people who start in each
         Sv, Ev, Iv = ss.states(3, people=False) # Mosquitoes: counts, not people
         S, E, I, H, R = ss.states('S E I H R', infected='E I H') # H does not transmit, so is not infected unless said
         S, E, I, H, R = ss.states(5, infected=range(1, 4)) # The same, by position
         ```
     """
+    inits = {k:kwargs.pop(k) for k in list(kwargs) if k not in state_args} # The states by name, with their starting shares
+    if inits:
+        if arg is not None:
+            errormsg = f'ss.states() takes the states as a number or names ({arg!r}), or by name with the share of people who start in each ({sc.strjoin(inits)}), not both'
+            raise TypeError(errormsg)
+        bad = {k:v for k,v in inits.items() if not (isinstance(v, par) or (sc.isnumber(v) and 0 <= v <= 1))}
+        if bad:
+            errormsg = f'ss.states() takes each state given by name with the share of people who start in it, from 0 to 1 (e.g. ss.states(S=0.99, I=0.01, R=0)); not {sc.strjoin(f"{k}={v!r}" for k,v in bad.items())}.\n     The arguments of ss.State are {sc.strjoin(state_args)}'
+            raise ValueError(errormsg)
+        arg = ' '.join(inits)
+    elif arg is None:
+        errormsg = 'ss.states() takes the states: their number (ss.states(3)), their names (ss.states(\'S I R\')), or their names with the share of people who start in each (ss.states(S=0.99, I=0.01, R=0))'
+        raise TypeError(errormsg)
     if isinstance(arg, str):
         names = arg.replace(',', ' ').split()
         n = len(names)
@@ -200,7 +215,9 @@ def states(arg, infected=False, **kwargs):
         if bad:
             raise ValueError(f'infected= gives the positions {bad} of states, but there are {n} (positions 0 to {n-1})')
         flags = [i in chosen for i in range(n)]
-    return [State(name=name, infected=flag, **kwargs) for name,flag in zip(names, flags)]
+    return [State(name=name, infected=flag, **(kwargs | ({'init':inits[name]} if name in inits else {}))) for name,flag in zip(names, flags)]
+
+state_args = [k for k in inspect.signature(State.__init__).parameters if k not in ['self', 'kwargs']] # What ss.states() passes to each state, rather than taking as a state's name
 
 
 def pars(defaults, **kwargs):

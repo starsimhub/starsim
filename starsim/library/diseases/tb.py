@@ -49,7 +49,7 @@ class TB(ss.Disease):
 
         sim = ss.Sim(diseases=ssl.TB(), total_pop=100_000, start=1900, stop=2000)
         sim.run()
-        sim.plot('tb')
+        sim.tb.plot()
         ```
     """
     beta        = ss.par(ss.peryear(9.0), doc='Contacts per person per year', source='TBsim lshtm_ode.R')

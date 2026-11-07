@@ -161,14 +161,14 @@ Over 40 years, nearly everyone affected dies of the condition either way, so the
 
 ## SIR, SIS, and SEIR written as code
 
-The core `ss.SIR`, `ss.SIS`, and `ss.SEIR` are declared, as states and transitions, so they run under any solver; they are the textbook models, with exponential durations and no deaths unless `p_death` is given. `ssl.AgentSIR`, `ssl.AgentSIS`, and `ssl.AgentSEIR` are Starsim 3's versions of the same models, written as code: durations are lognormal (`dur_inf=ss.lognormal(mean=ss.years(6))` by default), and `AgentSIR` and `AgentSEIR` have `p_death=0.01`. They schedule each course in whole steps as the agent engine does a declared disease's, so each case, seeds included, is infectious for `dur_inf` on average. `AgentSIS` also has a level of immunity for each agent, boosted by each infection (`imm_boost`) and waning exponentially (`waning`), which lowers that agent's susceptibility. They are the classes to build on for a disease that changes how infection, progression, or recovery happens for each agent, as the outbreak diseases above do; a Starsim 3 subclass of `ss.SIR` that replaces its methods can build on `ssl.AgentSIR` instead, unchanged (see [Starsim v3](conversion/starsim3.qmd)).
+The core `ss.SIR`, `ss.SIS`, and `ss.SEIR` are declared, as states and transitions, so they run under any solver; they are the textbook models, with exponential durations and no deaths unless `p_death` is given. `ssl.AgentSIR`, `ssl.AgentSIS`, and `ssl.AgentSEIR` are Starsim 3's versions of the same models, written as code, with Starsim 3's defaults (in years, where those of `ss.SIR` are of a respiratory infection, in days): durations are lognormal (`dur_inf=ss.lognormal(mean=ss.years(6))` by default), and `AgentSIR` and `AgentSEIR` have `p_death=0.01`. They schedule each course in whole steps as the agent engine does a declared disease's, so each case, seeds included, is infectious for `dur_inf` on average. `AgentSIS` also has a level of immunity for each agent, boosted by each infection (`imm_boost`) and waning exponentially (`waning`), which lowers that agent's susceptibility. They are the classes to build on for a disease that changes how infection, progression, or recovery happens for each agent, as the outbreak diseases above do; a Starsim 3 subclass of `ss.SIR` that replaces its methods can build on `ssl.AgentSIR` instead, unchanged (see [Starsim v3](conversion/starsim3.qmd)).
 
 With the same mean duration and no deaths, the two SIRs differ only in the shape of the duration: the lognormal of `AgentSIR` (with a standard deviation of one year) makes almost every infection last about 6 years, while the exponential of `ss.SIR` has many short infections and a few very long ones. Fewer people recover early on, so the epidemic of `AgentSIR` peaks higher and ends more sharply:
 
 ```{python}
 pars = dict(beta=ss.peryear(0.1), init_prev=0.01, p_death=0)
 sir_pars = dict(start='2000', stop='2040', dt=ss.months(1), n_agents=2000, networks=ss.RandomNet())
-declared = ss.Sim(diseases=ss.SIR(**pars), **sir_pars).run()
+declared = ss.Sim(diseases=ss.SIR(dur_inf=ss.years(6), **pars), **sir_pars).run() # The mean duration of AgentSIR
 as_code = ss.Sim(diseases=ssl.AgentSIR(**pars), **sir_pars).run()
 
 fig = plt.figure()
@@ -191,7 +191,7 @@ The rest of the library's diseases are declared, as states and transitions ([Dis
 | `ssl.Malaria` | A vector: people and mosquitoes in one model, the mosquitoes as counts rather than people | The Ross-Macdonald model, in the form of Keeling MJ, Rohani P, *Modeling Infectious Diseases in Humans and Animals*, Princeton University Press, 2008, Program 4.4, which gives every parameter |
 | `ssl.MalariaImmunity` | Immunity that builds with exposure: inoculation that saturates, superinfection, and a faster recovery once immune | The Garki model of Dietz K, Molineaux L, Thomas A, *Bull World Health Organ* 1974;50:347-357, as given in Molineaux L, Gramiccia G, *The Garki Project*, WHO, 1980, ch. 10, Table 31 |
 | `ssl.TB` | A spectrum of disease, with movement back and forth between states and reinfection | The LSHTM model of Schwalb A et al., *PLOS Glob Public Health* 2025;5(1):e0005050, in the form of TBsim's reference ODE (`lshtm_ode.R`), which gives every parameter |
-| `ssl.COVID` | A chain of increasingly severe states, each of which some people leave by recovering | The simple SECIR example of MEmilio (Kühn MJ et al., *Mathematical Biosciences* 2021), which gives every parameter |
+| `ssl.COVID` | A chain of increasingly severe states, each of which some people leave by recovering, by age | MEmilio's values for Germany by age (Kühn MJ et al., *Mathematical Biosciences* 2021), which give every parameter; `ages=False` gives MEmilio's simple example, in one group |
 | `ssl.Influenza` | A yearly cycle in transmission (`ss.seasonal`) with waning immunity | Natural history from Carrat F et al., *Am J Epidemiol* 2008;167:775-785; R0 of 1.3 from Biggerstaff M et al., *BMC Infect Dis* 2014;14:480; the cycle is illustrative |
 | `ssl.RSV` | Maternal immunity: babies born protected, in a seasonal MSEIRS model | Weber A, Weber M, Milligan P, *Math Biosci* 2001;172:95-113, for the infectious period, the seasonal form, and R0 |
 | `ssl.Pertussis` | Immunity that wanes over decades, giving epidemics that return every few years | Wearing HJ, Rohani P, *PLoS Pathogens* 2009;5(10):e1000647, for the natural history, R0, and duration of immunity |
@@ -227,7 +227,7 @@ for C in [0.5*critical, 2*critical, 0.2]:
 
 The same declaration runs as agents (`n_agents=` instead of `total_pop=`), where the prevalence is the same but each run differs by chance.
 
-Since these are declared, `describe()`, `diagram()`, and `equations()` work on any of them, which is the quickest way to see what a model does (`ssl.Dengue` is a list of serotypes, so each is shown in its own right, e.g. `sim.diseases.den1.diagram()`):
+Since these are declared, `describe()`, `diagram()`, and `equations()` work on any of them, which is the quickest way to see what a model does (`ssl.Dengue` is a set of serotypes, each an `ssl.DengueSerotype`, so each is shown in its own right, e.g. `sim.diseases.den1.diagram()`):
 
 ```{python}
 ssl.Typhoid().equations()
@@ -306,7 +306,7 @@ New library modules are welcome, particularly ones that show a modeling pattern 
 
 ## Appendix: every library disease
 
-Every disease in `ssl.diseases`, generated from the classes themselves: whether it is declared (so it runs under any solver, except as noted [above](#declared-diseases)) or written as code (so it runs as agents), its first line of documentation, its default parameters (those its source marks as placeholders, to be set for the network, are flagged), and its results. `ssl.Dengue` makes one disease per serotype (`den1` to `den4`); the first is shown.
+Every disease in `ssl.diseases`, generated from the classes themselves: whether it is declared (so it runs under any solver, except as noted [above](#declared-diseases)) or written as code (so it runs as agents), its first line of documentation, its default parameters (those its source marks as placeholders, to be set for the network, are flagged), and its results. `ssl.Dengue` is a set of `ssl.DengueSerotype` diseases, one per serotype (`den1` to `den4`), so it is listed as `ssl.DengueSerotype`.
 
 ```{python}
 #| warning: false
@@ -330,8 +330,6 @@ for name, obj in vars(ssl.diseases).items():
     if name.startswith('_') or inspect.ismodule(obj) or (inspect.isclass(obj) and not issubclass(obj, ss.Disease)):
         continue # Not a disease: ssl.ART is an intervention and ssl.CD4_analyzer an analyzer
     disease = obj()
-    if isinstance(disease, list): # ssl.Dengue: one disease per serotype
-        disease = disease[0]
     marked = placeholders(obj)
     pars = [f'{k}={getattr(v, "raw", v)}' + (' (placeholder)' if k in marked else '') for k,v in disease.pars.items()]
     sim = ss.Sim(diseases=disease, networks=network_for(disease), n_agents=100, verbose=0).init()

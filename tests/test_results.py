@@ -254,7 +254,7 @@ def test_result_exprs():
 def test_standard_prevalence():
     sc.heading('Testing the standard prevalence by group, as a ratio')
     for solver in ['ode', 'binomial', 'abm']:
-        sis = ss.SIS(beta=ss.peryear(0.3), init_prev=0.05)
+        sis = ss.SIS(beta=ss.peryear(0.3), dur_inf=ss.years(10), init_prev=0.05)
         sis.stratify(risk={'low': 0.8, 'high': 0.2})
         res = ss.Sim(sis, connectors=ss.modify(sis.infection, multiply=ss.by(risk=[0.5, 3])), solver=solver, total_pop=10_000, n_agents=10_000, start=2000, stop=2010, verbose=0).run().results.sis
         high, low = res.prevalence.select(risk='high'), res.prevalence.select(risk='low')
@@ -366,7 +366,8 @@ def test_destinations():
 @sc.timer()
 def test_compare_data():
     sc.heading('Testing lining up results with data')
-    sim = ss.Sim(diseases='sis', networks='random', n_agents=small, start=2000, stop=2010, verbose=0).run()
+    sis = lambda: ss.SIS(beta=ss.peryear(0.05), dur_inf=ss.years(10)) # In years, for yearly steps
+    sim = ss.Sim(diseases=sis(), networks='random', n_agents=small, start=2000, stop=2010, verbose=0).run()
     res = sim.results.sis
     dates = [ss.date(f'{y}-07-01') for y in range(2001, 2010)] # Between steps, so a stock is interpolated
     df = pd.DataFrame({'sis.prevalence': 0.1, 'sis.infection': 5.0}, index=pd.Index(dates, dtype=object))
@@ -377,9 +378,9 @@ def test_compare_data():
     assert np.allclose(compared['sis.infection'][1][1:], [res.infection.values[(sim.t.yearvec > y-1) & (sim.t.yearvec <= y)].sum() for y in years[1:]]) # A flow, summed over the year to each
     for col,(W,expected,rows) in lined.items(): # The same matrix as calibration uses
         assert np.allclose(W @ ss.results.match_column(sim, col).values, compared[col][1])
-    typo = ss.Sim(diseases='sis', networks='random', n_agents=small, start=2000, stop=2010, data=df.rename(columns={'sis.infection': 'infectoin'}), verbose=0).init()
+    typo = ss.Sim(diseases=sis(), networks='random', n_agents=small, start=2000, stop=2010, data=df.rename(columns={'sis.infection': 'infectoin'}), verbose=0).init()
     assert any("aliases=dict(infection='infectoin')" in note for note in typo.notes) # The code to rename it, with the closest result filled in, to paste as it is
-    two = ss.Sim(diseases=['sir', 'sis'], networks='random', n_agents=small, start=2000, stop=2010, verbose=0).init()
+    two = ss.Sim(diseases=['sir', sis()], networks='random', n_agents=small, start=2000, stop=2010, verbose=0).init()
     with pytest.raises(KeyError, match=r"aliases=\{'sir.infection': 'infectoin'\}"): # A result named by module is not a keyword, so the code is a dict literal
         ss.results.check_data(two, df.rename(columns={'sis.infection': 'infectoin'}), die=True)
     with pytest.raises(KeyError, match=r"(?s)No result is close; the results are .*aliases=dict\(result='zzzzqqq'\)"): # Nothing close is not a guess
@@ -481,7 +482,7 @@ def test_parts_across_runs():
     assert np.array_equal(res.cum.select(to='X').values, res.X.cum.values)
 
     # A rate swept can be selected
-    sis = ss.Sim(diseases=ss.SIS(beta=ss.peryear(2), init_prev=0.1), total_pop=500, start=2000, stop=2004, verbose=0, solver='binomial', stratify=dict(age=[0, 15]))
+    sis = ss.Sim(diseases=ss.SIS(beta=ss.peryear(2), dur_inf=ss.years(1), init_prev=0.1), total_pop=500, start=2000, stop=2004, verbose=0, solver='binomial', stratify=dict(age=[0, 15]))
     sweep = ss.parallel(sis, pars={'sis.beta': [ss.peryear(1), ss.peryear(2)]}, workers=1, verbose=0).results.sis.I
     assert sweep.select(age='0-14').shape == (2, 5) and sweep.by('age').shape == (2, 5, 2) and sweep.select(beta=ss.peryear(1)).shape == (1, 5)
 

@@ -193,8 +193,12 @@ def tb(): # The LSHTM reference, in which TB declines slowly over centuries; the
 def covid():
     sim = ss.Sim(ssl.COVID(), total_pop=83_000, unit='day', stop=120, verbose=0).run()
     res = sim.results.covid
-    assert 2 < sim.diseases.covid.R0() < 3.5, 'Expected an R0 of about 2.7 for the MEmilio example'
-    assert res.ICr.max() > 0 and res.outcome.sum() > 0, 'Expected critical cases and deaths'
+    assert 2.5 < sim.diseases.covid.R0() < 4, 'Expected an R0 of about 3.2 with MEmilio\'s values by age'
+    deaths = res.outcome.select(to='dead').by('age').values.sum(0)
+    assert np.argmax(deaths) == 4 and deaths[4] > 10*deaths[2], 'Expected most deaths at 60-79, far more than among young adults'
+    simple = ss.Sim(ssl.COVID(ages=False), total_pop=83_000, unit='day', stop=120, verbose=0).run()
+    assert 2 < simple.diseases.covid.R0() < 3.5, 'Expected an R0 of about 2.7 for the simple MEmilio example'
+    assert simple.results.covid.ICr.max() > 0 and simple.results.covid.outcome.sum() > 0, 'Expected critical cases and deaths'
 
 
 def influenza(): # Transmission peaks each January, so epidemics return each winter

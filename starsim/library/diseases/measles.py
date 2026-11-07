@@ -42,7 +42,7 @@ class Measles(ss.Disease):
 
         sim = ss.Sim(diseases=ssl.Measles(init=dict(R=0.9)), total_pop=100_000, start='2025-01-01', stop='2026-01-01')
         sim.run()
-        sim.plot('measles')
+        sim.measles.plot()
         ```
     """
     beta      = ss.par(ss.perday(1.4), doc='Transmission rate, giving R0 of about 15', source='Guerra et al. (2017)')

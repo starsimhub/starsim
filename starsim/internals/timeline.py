@@ -19,7 +19,7 @@ import starsim as ss
 
 
 default_start = 2000 # The year a sim with a calendar starts in, if its start is not given
-default_length = 50 # The length of a run with no stop, in the sim's unit
+default_length = dict(days=100) # The length of a run with no stop, in the sim's unit: 100 days (an epidemic of a respiratory infection), else 50 of the unit (e.g. 50 years, or 50 steps for a sim with no unit)
 
 
 def calendar_of(start, stop=None, unit=None):
@@ -75,7 +75,7 @@ class Timeline:
 
     Args:
         start (str/int/float/`ss.date`/`ss.Duration`): when the simulation/module starts. For the sim: a date (e.g. '2000-01-01') or a year (a bare number from 1800 on, e.g. 2000) gives it a calendar; any other number, or a duration, is a time in its unit from 0 (default: 2000 for a model in years, else 0). For a module: a time on the sim's timeline (a bare number as for the sim's stop, a duration as a time from 0 in a sim with no calendar)
-        stop (str/int/float/`ss.date`/`ss.Duration`): when the simulation/module ends: a date, a bare number (a year if the sim has a calendar, else a time in its unit), or a duration, which is the length of the run from its start (default: a length of 50 of the sim's unit)
+        stop (str/int/float/`ss.date`/`ss.Duration`): when the simulation/module ends: a date, a bare number (a year if the sim has a calendar, else a time in its unit), or a duration, which is the length of the run from its start (default: a run of 100 days in days, else 50 of the sim's unit)
         dt (int/float/`ss.Duration`): the step (a bare number is in the sim's unit)
         name (str): if provided, name the `Timeline` object
         init (bool): whether or not to immediately initialize the `Timeline` object (by default, yes if start and stop are provided; otherwise no)
@@ -474,7 +474,7 @@ class Timeline:
             unit = next((type(v) for v in [start, stop] if is_dur(v)), ss.years if calendar or not is_dur(dt) else type(dt))
         self.unit = unit
         dt = unit(dt) if sc.isnumber(dt) else sc.ifelse(dt, unit(1))
-        default = unit(default_length)
+        default = unit(50 if getattr(sim, 'unitless', False) else default_length.get(unit.__name__, 50)) # 50 steps for a sim whose time is counted in steps
         calendar = calendar_of(start, stop, given_unit)
         if calendar is None and start is None and (stop is None or isinstance(stop, ss.Duration)) and unit is ss.years: # A model in years with no start starts in the year 2000
             calendar = 'years'

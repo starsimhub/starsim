@@ -176,7 +176,8 @@ class Counter(ss.Module):
     assert migrate_text('ss.link_dists(obj, sim)')[0] == 'ss.dists.link_dists(obj, sim)' # Internal helpers are in their submodules
     text, changes, todo = migrate_text("sim = ss.Sim(pars=dict(n_agents=100, pop_scale=10)); print(sim.pars.pop_scale)")
     assert text == "sim = ss.Sim(dict(n_agents=100, pop_scale=10)); print(sim.pop_scale)" and any('total_pop' in note for _,note in todo) # Settings are not pars=, and pop_scale= is total_pop=
-    assert 'ssl.AgentSIR' in migrate_text('sir = ss.SIR(beta=0.1)')[2][0][1] # A use of ss.SIR is flagged, not rewritten
+    todo = migrate_text('sir = ss.SIR(beta=0.1)')[2]
+    assert any('ssl.AgentSIR' in note for _,note in todo) and any('probability per step' in note for _,note in todo) # A use of ss.SIR is flagged, not rewritten, and so is its bare beta, now per day
     assert any('bare number' in note for _,note in migrate_text("x = dict(beta=dict(randomnet=0.05))")[2]) # A probability per step in Starsim 3
 
     # The code cells of Quarto, Markdown, and notebooks, and nothing else in them
@@ -324,7 +325,7 @@ def test_cli_convert(tmp_path, monkeypatch, capsys):
     code = 'import sys, starsim_cli; starsim_cli.main(["ai", "status"]); assert "starsim" not in sys.modules'
     assert subprocess.run([sys.executable, '-c', code], capture_output=True).returncode == 0 # Quick to start
     monkeypatch.chdir(tmp_path)
-    sc.savetext('sir.py', 'import starsim as ss\nsim = ss.Sim(diseases=ss.SIR(beta=0.3), total_pop=1000, unit="day", stop=50, solver="ode")\n')
+    sc.savetext('sir.py', 'import starsim as ss\nsim = ss.Sim(diseases=ss.SIR(beta=0.3), total_pop=1000, unit="day", stop=100, solver="ode")\n') # The default stop, since SBML has no run length
     assert ss.converters.sniff('sir.py') == 'starsim' # Told by what it imports
     cli.main(['export', 'sir.py', 'sbml'])
     cli.main(['convert', 'sir.xml', '--out=back.py']) # The format told from the file, and back to Starsim

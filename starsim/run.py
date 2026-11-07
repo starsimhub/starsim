@@ -569,7 +569,7 @@ class MultiSim:
                 stats = dict(median=np.median(vals), low=np.quantile(vals, low), high=np.quantile(vals, high), mean=vals.mean(), std=vals.std()) if len(vals) > 1 else dict(value=vals[0])
                 rows[name if n_scenarios == 1 else (name, scenario)] = {k:float(v) for k,v in stats.items()}
         if each:
-            summary = sc.dataframe(columns, index=self._run_labels()).T
+            summary = ss.results.Summary(columns, index=self._run_labels()).T
             summary.index.name = 'result'
             if one:
                 if not len(summary):
@@ -579,7 +579,7 @@ class MultiSim:
             return summary
         several = any(isinstance(row, tuple) for row in rows)
         index = pd.MultiIndex.from_tuples(list(rows), names=['result', 'scenario']) if several else pd.Index(list(rows), name='result')
-        summary = sc.dataframe(list(rows.values()), index=index)
+        summary = ss.results.Summary(list(rows.values()), index=index)
         if one:
             names = list(dict.fromkeys(summary.index.get_level_values(0))) if len(summary) else []
             if not names:

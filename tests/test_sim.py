@@ -26,8 +26,8 @@ def make_sim_pars():
         ),
         diseases = sc.obj(
             type = 'sir',
-            dur_inf = 10,
-            beta = 0.1,
+            dur_inf = ss.years(10), # In years, as the rest of the sim
+            beta = ss.peryear(0.1),
         )
     )
     return pars
@@ -89,11 +89,11 @@ def test_demo(do_plot=do_plot):
     sc.heading('Testing demo...')
     s1 = ss.demo(plot=do_plot)
 
-    # Test explicit demo
-    s2 = ss.Sim(diseases='sir', networks='random').run()
+    # Test explicit demo: its SIR has beta per contact, for an R0 of 3 on the network
+    s2 = ss.Sim(diseases=dict(type='sir', beta=0.03), networks='random').run()
 
     # Test explicit
-    sir = ss.SIR()
+    sir = ss.SIR(beta=ss.perday(0.03))
     net = ss.RandomNet()
     s3 = ss.Sim(diseases=sir, networks=net).run()
     assert ss.debugtools.check_sims_match(s1, s2, s3), 'Sims should match'
@@ -132,7 +132,7 @@ def test_simple(do_plot=do_plot):
     class MySim(ss.Sim):
         def __init__(self, beta=0.1, **kwargs):
             super().__init__(**kwargs)
-            self.pars.diseases = ss.SIS(beta=beta, name='sis')
+            self.pars.diseases = ss.SIS(beta=ss.peryear(beta), dur_inf=ss.years(10), name='sis')
             self.pars.networks = 'random'
     mysim = MySim(beta=0.2, n_agents=n_agents, start=2000, stop=2010, verbose=0)
     mysim.pars.stop = 2005
@@ -170,9 +170,9 @@ def test_api():
     # Check different ways of setting a distribution
     kw = dict(n_agents=n_agents, networks='random')
 
-    # Check specifying a duration with a scalar, which is in the model's unit, years here
+    # Check specifying a duration with a scalar, which is in the model's unit, days here
     s4 = ss.Sim(diseases=dict(type='sir', dur_inf=10), **kw).run() # Supply values as a scalar
-    s5 = ss.Sim(diseases=dict(type='sir', dur_inf=ss.years(10)), **kw).run() # Supply as a duration
+    s5 = ss.Sim(diseases=dict(type='sir', dur_inf=ss.days(10)), **kw).run() # Supply as a duration
     assert ss.debugtools.check_sims_match(s4, s5), 'Sims should match'
 
     # Check that Bernoulli distributions can't be changed
@@ -367,10 +367,10 @@ def test_creation_syntax():
 def test_add_module():
     """ Test adding a module to a sim that has been partly run """
     sc.heading('Testing sim.add_module()...')
-    kw = dict(n_agents=n_agents, diseases='sis', networks='random', start=2000)
+    kw = dict(n_agents=n_agents, diseases='sis', networks='random', start='2000-01-01') # The default run of 100 days
     base = ss.Sim(**kw).run()
     sim = ss.Sim(**kw)
-    sim.run(until='2010-01-01')
+    sim.run(until='2000-02-01')
     ti = sim.ti
     vx = sim.add_module(ss.modify('sis.pars.beta', multiply=0.2, name='masks'))
     with pytest.raises(ss.CapabilityError):
@@ -378,9 +378,9 @@ def test_add_module():
     sim.run()
 
     vaccine = ss.Vaccine(efficacy=0.9) # A product the sim already has can be delivered again
-    vsim = ss.Sim(**kw, interventions=ss.vaccinate(vaccine, when=[2005], coverage=0.2))
-    vsim.run(until='2010-01-01')
-    vsim.add_module(ss.vaccinate(vaccine, when=[2012], coverage=0.5, name='second'))
+    vsim = ss.Sim(**kw, interventions=ss.vaccinate(vaccine, when=['2000-01-15'], coverage=0.2))
+    vsim.run(until='2000-02-01')
+    vsim.add_module(ss.vaccinate(vaccine, when=['2000-02-15'], coverage=0.5, name='second'))
     vsim.run()
     assert vsim.interventions.second.product is vsim.products()[0]
 

@@ -166,7 +166,7 @@ def test_timeline_syntax():
     kw.a3 = [dict(start=ss.years(1990), stop=None, dt=None) , dict(start=ss.years(1990), stop=ss.years(2040), dur=ss.years(50), dt=ss.years(1))] # 1,990 years from 0: no calendar
     kw.a4 = [dict(start='1990.1.1', stop=None, dt=None)     , dict(start=ss.date(1990), stop=ss.date(2040), dur=ss.years(50), dt=ss.years(1))]
     kw.a5 = [dict(start=ss.date(1990), stop=None, dt=None)  , dict(start=ss.date(1990), stop=ss.date(2040), dur=ss.years(50), dt=ss.years(1))]
-    kw.a6 = [dict(start=ss.days(5), stop=None, dt=None)     , dict(start=ss.days(5), stop=ss.days(55), dur=ss.days(50), dt=ss.days(1))]
+    kw.a6 = [dict(start=ss.days(5), stop=None, dt=None)     , dict(start=ss.days(5), stop=ss.days(105), dur=ss.days(100), dt=ss.days(1))]
 
     # Test stop
     kw.b1 = [dict(start=None, stop=2010, dt=None)           , dict(start=ss.years(2000), stop=ss.years(2010), dur=ss.years(10), dt=ss.years(1))] # A calendar stop starts at the default start, 2000
@@ -183,7 +183,7 @@ def test_timeline_syntax():
     # Test dt: with no stop, the length is 50 of the unit, whatever the type of the step
     kw.d1 = [dict(start=None, stop=None, dt=1)                 , dict(start=ss.years(2000), stop=ss.years(2050), dur=ss.years(50), dt=ss.years(1))]
     kw.d2 = [dict(start=None, stop=None, dt=ss.years(1))       , dict(start=ss.years(2000), stop=ss.years(2050), dur=ss.years(50), dt=ss.years(1))]
-    kw.d3 = [dict(start=None, stop=None, dt=ss.days(1))        , dict(start=ss.days(0), stop=ss.days(50), dur=ss.days(50), dt=ss.days(1))] # Alone, the unit is that of the first duration given
+    kw.d3 = [dict(start=None, stop=None, dt=ss.days(1))        , dict(start=ss.days(0), stop=ss.days(100), dur=ss.days(100), dt=ss.days(1))] # Alone, the unit is that of the first duration given
     kw.d4 = [dict(start=None, stop=None, dt='month')           , dict(start=ss.months(0), stop=ss.months(50), dur=ss.months(50), dt=ss.months(1))]
     kw.d5 = [dict(start=2000, stop=None, dt=ss.months(1))      , dict(start=ss.years(2000), stop=ss.years(2050), dur=ss.years(50), dt=ss.months(1))]
 
@@ -324,7 +324,7 @@ def test_coded_unit():
     assert sim.unit is None and sim.t.start == 0 and len(sim.t) == 51
 
     # Typed values in days and years: a step of a day is said, unless the run is written in days
-    sis = lambda: ss.SIS(beta=ss.perday(0.002)) # Its dur_inf is in years
+    sis = lambda: ss.SIS(beta=ss.perday(0.002), dur_inf=ss.years(10))
     with pytest.warns(RuntimeWarning, match='different units'):
         ss.Sim(diseases=sis(), n_agents=small, stop=100, verbose=0).init()
     with warnings.catch_warnings():
@@ -337,7 +337,7 @@ def test_coded_unit():
 def test_bare_times():
     """ How a bare number is read as a time is decided once, from the start (or with none, the stop, if the unit is years): a year with a calendar, else a time in the sim's unit from 0; a duration is a time from 0, and as stop=, the length """
     sc.heading('Bare numbers as times')
-    kw = dict(diseases='sis', networks='random', n_agents=small, verbose=0)
+    kw = dict(diseases=ss.SIS(beta=ss.peryear(0.05), dur_inf=ss.years(10)), networks='random', n_agents=small, verbose=0) # A model in years
     with pytest.raises(TypeError, match='dur= has been removed'):
         ss.Sim(stop=2035, dur=10, **kw)
     sim = ss.Sim(stop=2030, **kw).init() # A calendar stop alone starts in 2000
@@ -349,7 +349,7 @@ def test_bare_times():
     with pytest.raises(ValueError, match=r'stop=ss.days\(50\)'): # The year 50 after a dated start
         ss.Sim(start='2025-01-01', stop=50, unit='day', **kw).init()
     with pytest.raises(ValueError, match='shorter than one step'):
-        ss.Sim(start='2020-01-01', stop='2020-03-01', **kw).init() # The default yearly step
+        ss.Sim(start='2020-01-01', stop='2020-03-01', **kw).init() # The yearly step of a model in years
     for stop in [1899, 2000]: # A typed stop is the length of the run, however large: never a calendar year
         sim = ss.Sim(start=0, stop=ss.years(stop), **kw).init()
         assert sim.t.start == ss.years(0) and sim.t.stop == ss.years(stop)

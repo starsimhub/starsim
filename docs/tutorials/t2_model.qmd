@@ -54,7 +54,7 @@ By default, everyone starts in the first state, `S`, except those who start infe
 | `init=dict(I=0.001, R=0.9)` | The share of people who start in each state, for any states |
 | `init_n=dict(I=10)` | The number of people who start in each state |
 
-Use whichever says what you mean; naming the state (`init` or `init_n`) makes it clear whether the people introduced are already infectious.
+Use whichever says what you mean; naming the state (`init` or `init_n`) makes it clear whether the people introduced are already infectious. The shares can also be given where the states are made, as `S, I, R = ss.states(S=0.099, I=0.001, R=0.9)`, which is the same as `init=dict(I=0.001, R=0.9)`.
 
 Measles is a disease that most people are immune to, by vaccination or from an earlier infection. Suppose 90% of the town is immune, and 0.1% are infectious. To compare this with the town where nobody is immune, run both for a year with `ss.parallel()`, as in Tutorial 1:
 

@@ -51,7 +51,7 @@ class Ebola(ss.Disease):
 
         sim = ss.Sim(diseases=ssl.Ebola(), total_pop=10_000, start='2025-01-01', stop='2026-01-01')
         sim.run()
-        sim.plot('ebola')
+        sim.ebola.plot()
         ```
     """
     beta            = ss.par(ss.perday(0.1), doc='Transmission rate from a symptomatic person, giving R0 of about 1.7', source='WHO Ebola Response Team (2014)')

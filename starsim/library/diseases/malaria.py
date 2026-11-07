@@ -118,7 +118,7 @@ class MalariaImmunity(ss.Disease):
 
         sim = ss.Sim(diseases=ssl.MalariaImmunity(C=0.1), total_pop=10_000, unit='day', stop=ss.days(365*20))
         sim.run()
-        sim.plot('malariaimmunity')
+        sim.malariaimmunity.plot()
         ```
     """
     C       = ss.par(0.1,                doc='Vectorial capacity: potentially infective contacts per person per day', source='Illustrative; the Garki villages ranged from below 0.01 to above 2')

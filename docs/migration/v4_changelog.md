@@ -186,6 +186,10 @@ Names were renamed where they meant different things in different places, or whe
 - `ss.Pregnancy` and `ss.Lactation` no longer set the unit of a model's bare numbers from their own typed defaults (weeks and years), which made a model with a bare `beta` and a pregnancy raise `IncompatibleTypes`.
 
 ## New features
+- `ss.states(S=0.99, I=0.01, R=0)` makes states with the share of people who start in each, as `init=` gives.
+- `sim.summarize()` and `msim.summarize()` show their numbers in sensible units (`19,536`, `0.136`), without rounding the values.
+- While Numba compiles something that takes long, a bar shows the time so far against the estimate, ending with how long it took.
+- `ssl.Dengue` is a class (an `ss.ndict` of `ssl.DengueSerotype`), not a function; a set of modules like it can be given among others (`diseases=[ssl.Dengue(), 'sir']`).
 - `tr.dies` says whether everyone who takes a transition dies (`ss.death()`, `I >> ss.dead`, but not people leaving alive, `ss.emigration()`), and `tr.may_die` whether some do, by a branch to `ss.dead` in a split (so `tr.dies or tr.may_die` is whether anyone dies by it); `sim.started` says whether a run has begun (`sim.ti` is 0 both before the first step and during it, so the number of steps taken is `sim.ti + sim.started`).
 - Deliveries take `skip_reached_within=`, e.g. `ss.screen(..., interval=ss.months(1), skip_reached_within=ss.years(1))`, which skips the people the delivery reached less than that long ago (a re-screening interval, or no re-dosing within a year); agents only.
 - In a class body, an expression whose name starts with an underscore (`_h = g*(1 - np.exp(-C*I.frac))`) is a private intermediate: the transitions can use it, but it isn't a result or an attribute. A state, parameter, transition, outcome or modifier with a leading underscore is an error.
@@ -303,6 +307,8 @@ Names were renamed where they meant different things in different places, or whe
 - The note for a data column that matches no result gives the code to rename it, with the closest result filled in (`aliases=dict(cases='reported')`).
 
 ## Changes that may affect results
+- *Regression*: the defaults of `ss.SIR`, `ss.SIS` and `ss.SEIR` are a respiratory infection's, in days: `ss.SIR` has `beta=ss.perday(0.3)` and `dur_inf=ss.days(10)` (R0 = 3 without a network; with one, `beta` is per contact), `ss.SEIR` adds `dur_exp=ss.days(3)`, and `ss.SIS` has `beta=ss.perday(0.2)` and `dur_inf=ss.days(10)` (R0 = 2). Starsim 3's were in years (0.1 a year and 6 years for `ss.SIR`). A bare number given to them is in the unit of the model's typed values, so `ss.SIR(beta=0.1)` is now per day. A run in days with no stop lasts 100 days (50 in other units). `ss.demo()` gives its SIR `beta=ss.perday(0.03)`, per contact on its random network, for an R0 of 3.
+- *Regression*: `ssl.COVID` is stratified by age, into MEmilio's six groups, with MEmilio's values for Germany by age (the middle of each range; R0 of about 3.2 with the world's ages); `ssl.COVID(ages=False)` is the one-group model as before.
 - *Regression*: as agents, with `ss.options.crn=False` or `even_draws=True`, a declared model's moves are the agent engine's own (which draw from each distribution in turn, or space the draws evenly), not the compiled moves (which drew common random numbers anyway), so results differ from before; without CRN this is about 20% faster (an SIR of 100,000 agents for a year).
 - *Regression*: as agents, the draws of the same-step cascade are keyed by transition name, so every agent result changes slightly (the baseline is refreshed).
 - *Regression*: as agents, the engine's draws are keyed by stream, step, and round of moves (not by how many times a stream has been called), so a run doesn't depend on how a round's work is batched; results with a seed differ from before, and agree statistically. `STARSIM_CHECK_DRAWS=1` checks that no agent is drawn twice from a stream in a round.

@@ -39,7 +39,7 @@ class Typhoid(ss.Disease):
 
         sim = ss.Sim(diseases=ssl.Typhoid(), total_pop=100_000, start=1980, stop=2020, dt=ss.weeks(2))
         sim.run()
-        sim.plot('typhoid')
+        sim.typhoid.plot()
         ```
     """
     beta        = ss.par(ss.perday(0.072), doc='Transmission rate (R0 of 2.8)',                source='Pitzer et al. (2014)')

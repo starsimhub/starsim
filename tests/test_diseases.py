@@ -823,9 +823,9 @@ def test_declared_transmit():
             return new[::2] if isinstance(self.sim.solver, ss.solvers.abm) else new/2
 
     # As agents, the solver's own transmission is the same run; as an ODE, it is taken once a step, so is first order in dt
-    res = {cls.__name__: ss.Sim(cls(beta=ss.peryear(2), name='sir'), networks='random', solver='abm', **kw).run().results.sir.infection.sum() for cls in [ss.SIR, Same, Half]}
+    res = {cls.__name__: ss.Sim(cls(beta=ss.peryear(2), dur_inf=ss.years(6), name='sir'), networks='random', solver='abm', **kw).run().results.sir.infection.sum() for cls in [ss.SIR, Same, Half]}
     assert res['SIR'] == res['Same'] > res['Half']
-    ode = [ss.Sim(cls(beta=ss.peryear(2), name='sir'), solver='ode', dt=ss.days(7), **kw).run().results.sir.infection.sum() for cls in [ss.SIR, Same, Half]]
+    ode = [ss.Sim(cls(beta=ss.peryear(2), dur_inf=ss.years(6), name='sir'), solver='ode', dt=ss.days(7), **kw).run().results.sir.infection.sum() for cls in [ss.SIR, Same, Half]]
     assert np.isclose(ode[0], ode[1], rtol=0.05) and ode[2] < ode[1]
 
     # Several transmissions: transmit() is told which

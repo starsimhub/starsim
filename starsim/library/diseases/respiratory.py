@@ -44,7 +44,7 @@ class Influenza(ss.Disease):
 
         sim = ss.Sim(diseases=ssl.Influenza(), total_pop=100_000, start='2000-01-01', stop='2010-01-01', dt=ss.days(1))
         sim.run()
-        sim.plot('influenza')
+        sim.influenza.plot()
         ```
     """
     beta       = ss.par(ss.seasonal(mean=ss.perday(0.26), amplitude=0.3, peak='January'),
@@ -101,7 +101,7 @@ class RSV(ss.Disease):
 
         sim = ss.Sim(diseases=ssl.RSV(), total_pop=100_000, start='2000-01-01', stop='2006-01-01', dt=ss.days(1))
         sim.run()
-        sim.plot('rsv')
+        sim.rsv.plot()
         ```
     """
     beta       = ss.par(ss.seasonal(mean=ss.perday(0.2), amplitude=0.35, peak='January'),
@@ -159,7 +159,7 @@ class Pertussis(ss.Disease):
 
         sim = ss.Sim(diseases=ssl.Pertussis(), total_pop=500_000, start='1920-01-01', stop='1960-01-01', dt=ss.days(2))
         sim.run()
-        sim.plot('pertussis')
+        sim.pertussis.plot()
         ```
     """
     beta       = ss.par(ss.perday(13/15), doc='Transmission rate (R0 of 13)', source='Wearing and Rohani (2009): R0 of 11 to 15')

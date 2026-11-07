@@ -36,7 +36,7 @@ def test_make_index():
 
     print('Checking known entries')
     entrydict = {entry['name']:entry for entry in entries}
-    assert entrydict['ss.SIR']['pars']['beta'] == 'ss.peryear(0.1)', 'Expecting ss.SIR to list its default pars'
+    assert entrydict['ss.SIR']['pars']['beta'] == 'ss.perday(0.3)', 'Expecting ss.SIR to list its default pars'
     assert entrydict['ss.Sim']['example'], 'Expecting ss.Sim to have an example'
     assert entrydict['ssl.Cholera']['module'] == 'library.diseases'
     assert entrydict['ss.fit.compare_models']['module'] == 'fit' and 'ss.geo.gravity' in entrydict and 'ss.data.population' in entrydict
