@@ -524,7 +524,7 @@ def to_memilio(sim):
     for name in timed:
         lost.append(f'changed: "{name}" varies in time, which MEmilio\'s parameters do not (its dampings, which change the contacts, are not written); its value at the start is used')
     contacts = float(flat.pars.get('mixing_contacts', flat.pars.get('contacts', 1.0))) # The mixing's contacts, as flatten() names them
-    prob = m.beta/contacts
+    prob = float(f'{m.beta/contacts:.12g}') # Without the rounding of having multiplied by the contacts to divide by them again (0.0499999999999631 for 0.05)
     if prob > 1: # MEmilio's probability is at most 1
         contacts, prob = m.beta, 1.0
         lost.append(f'changed: the transmission, {m.beta:n} a day, is written as {contacts:n} contacts a day with a probability of 1, as MEmilio\'s probability is at most 1')

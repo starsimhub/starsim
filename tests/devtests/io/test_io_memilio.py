@@ -145,7 +145,7 @@ def test_memilio_export():
 
     # Contacts from a network; births and deaths are not in MEmilio's SIR; an SIS is none of its models
     text, summary, lost = to_memilio(seir_sim(diseases=ss.SEIR(beta=ss.perday(0.05), dur_exp=ss.days(4), dur_inf=ss.days(8)), networks=ss.RandomNet(n_contacts=8)))
-    assert 'np.full((1, 1), 8.0)' in text and 'TransmissionProbabilityOnContact[A0] = 0.05' in text
+    assert 'np.full((1, 1), 7.803' in text and 'TransmissionProbabilityOnContact[A0] = 0.05' in text # 8 contacts, each transmitting at most once a day at a beta of 0.05: 8*(1 - exp(-0.05))/0.05
     sir = seir_sim(diseases=ss.SIR(beta=ss.perday(0.3), dur_inf=ss.days(10)), demographics=[ss.birth(rate=ss.peryear(0.5)), ss.death(rate=ss.peryear(0.5))])
     text, summary, lost = to_memilio(sir)
     assert 'memilio.simulation.osir' in text

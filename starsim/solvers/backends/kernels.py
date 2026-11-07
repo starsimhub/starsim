@@ -491,8 +491,8 @@ def workspace(y, p):
     stack     = np.empty((p.depth, ng))         # For working out a rate
     groups    = np.empty((7, ng))               # Scratch, by group
     cells     = np.zeros((6, size))             # Scratch, by cell of a mixing term or by place; the last row is, for the exact solver by place, whether each place can have no event until something changes it (see gillespie_places()), kept here since another array to pass would slow every step
-    dy        = np.empty((4, nc, ng))           # The stages of the integrator
-    df        = np.empty((4, nflows, ng))
+    dy        = np.empty((7, nc, ng))           # The stages of the integrator (RK4's 4, or Dormand-Prince's 7)
+    df        = np.empty((7, nflows, ng))
     yt        = np.empty((nc, ng))
     chain     = np.empty((p.src_chain.max() if len(p.src_chain) else 0) + 2) # Where people at a stage of a dwell time end up: see chain_probs()
     credits   = np.empty((2, (np.diff(p.crd_starts).max() if len(p.crd_starts) > 1 else 0) + 1, ng)) # For credit(): the count of each credit of a flow not yet shared among those nested in it, and their weight left
@@ -1968,6 +1968,72 @@ def step_end(rng, y, p, w, flows):
     return
 
 
+# A step of the ODE fast enough that the quarter rule's substeps would each turn some compartment over (or grow it) by more than FAST is taken
+# instead by Dormand and Prince's pair of 5th and 4th order (as in RK45 and ode45), with substeps of its own length that keep the error of each
+# compartment in each within TOL of it (and 1e-9 of everyone), since RK4's is large there (about 1% over an epidemic's peak); slower steps,
+# most of most runs, are taken by RK4 as before. DP_A[s] is where stage s is worked out (from the stages before it), DP_B the weights of
+# the stages in the 5th-order step, and DP_E these less those of the 4th order, the error; the last stage is at the end of the substep, so
+# it is the first of the next ("first same as last")
+FAST = 0.15
+TOL = 1e-6
+DP_A = np.array([[0, 0, 0, 0, 0, 0, 0],
+                 [1/5, 0, 0, 0, 0, 0, 0],
+                 [3/40, 9/40, 0, 0, 0, 0, 0],
+                 [44/45, -56/15, 32/9, 0, 0, 0, 0],
+                 [19372/6561, -25360/2187, 64448/6561, -212/729, 0, 0, 0],
+                 [9017/3168, -355/33, 46732/5247, 49/176, -5103/18656, 0, 0],
+                 [35/384, 0, 500/1113, 125/192, -2187/6784, 11/84, 0]])
+DP_B = DP_A[6].copy() # The weights are where the last stage is worked out
+DP_E = DP_B - np.array([5179/57600, 0, 7571/16695, 393/640, -92097/339200, 187/2100, 1/40])
+
+
+@jit
+def dp_stage(y, yt, dy, h, s):
+    """ Where stage s of Dormand-Prince is worked out: from y, by the stages before it (see DP_A) """
+    nc, ng = y.shape
+    for c in range(nc):
+        for g in range(ng):
+            v = 0.0
+            for j in range(s):
+                v += DP_A[s, j]*dy[j, c, g]
+            yt[c, g] = y[c, g] + h*v
+
+
+@jit
+def dp_substep(y, yt, dy, df, flows, h, dt, least, elapsed):
+    """ The end of a substep of Dormand-Prince: kept if its error is within the tolerance (y, flows and the first stage of the next changed), and the length of the next, whose first stage is worked out; returns it and how much of the step has been taken """
+    nc, ng = y.shape
+    nflows = flows.shape[0]
+    worst = 0.0
+    for c in range(nc):
+        for g in range(ng):
+            err = 0.0
+            for j in range(7):
+                err += DP_E[j]*dy[j, c, g]
+            err = abs(h*err)/(least + TOL*max(abs(y[c, g]), abs(yt[c, g])))
+            if err > worst: # (Not a NaN, from a compartment that is one: it is carried on, as RK4 would)
+                worst = err
+    if worst <= 1 or h < 1e-6*dt:
+        for c in range(nc):
+            for g in range(ng):
+                y[c, g] = yt[c, g]
+                dy[0, c, g] = dy[6, c, g]
+        for f in range(nflows):
+            for g in range(ng):
+                v = 0.0
+                for j in range(7):
+                    v += DP_B[j]*df[j, f, g]
+                flows[f, g] += h*v
+                df[0, f, g] = df[6, f, g]
+        elapsed += h
+    h *= 5.0 if worst == 0 else min(5.0, max(0.2, 0.9*worst**-0.2))
+    left = dt - elapsed
+    if h > left or left - h < 1e-9*dt: # The last substep ends at the end of the step
+        h = left
+    dp_stage(y, yt, dy, h, 1)
+    return h, elapsed
+
+
 def into_many(expr, caller, callee):
     """ Whether Numba compiles step() into its caller rather than calling it: into advance() and run_many(), which take many small runs, since a call that is passed the program costs about as much as a small step (0.2 to 0.5 µs, even borrowed: see `borrow()`); not into run(), where it would save about a millisecond a run (of a few thousand steps), for about 10 s more compiling """
     return caller.func_id.func_name in ['advance', 'run_many']
@@ -1978,7 +2044,7 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, varying):
     """
     Take one timestep
 
-    The ODE is stepped by Euler's method or fourth-order Runge-Kutta; the stochastic
+    The ODE is stepped by Euler's method or fourth-order Runge-Kutta (or on a fast step, Dormand-Prince: see FAST); the stochastic
     solvers work out the rates here and hand them to `draw()` or `event()`. Everything is in
     this one function, and written as loops over single numbers, because that is many
     times faster for a small model: a call that is passed the program costs more than
@@ -2005,7 +2071,10 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, varying):
     timed = solver == 3 or solver == 4 # Tau-leaping and the exact solver take steps of their own length
     by_place = solver == 4 and p.local # The exact solver by place, where each place works out its own rates (see gillespie_places())
     auto = solver < 2 and n_sub <= 0 # The ODE, with as many substeps as the step needs
-    elapsed = 0.0 # For these: how much of the timestep has been taken
+    dp = False # Whether the step is taken by Dormand-Prince (see FAST)
+    first = 0 # The stage a substep starts at (Dormand-Prince's first stage is the last one's of the substep before)
+    least = 0.0 # A number of people too small to count: 1e-9 of everyone
+    elapsed = 0.0 # For these, and Dormand-Prince: how much of the timestep has been taken
     fastest = 0.0
     sub = 0
     extra = len(p.starts) - nf - 1 # Conveyors, whose operations follow the flows'
@@ -2016,7 +2085,7 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, varying):
             flows[f, g] = 0
     moved_in = np.zeros((nc, ng) if auto and p.n_movers else (0, 0)) # The people moving into each compartment and group from other groups, at the start of the step: left out of the growth that sets the substeps
     while True:
-        for stage in range(stages):
+        for stage in range(first, stages):
             ys = y if stage == 0 else yt # Where the rates are worked out
 
             # The rate of every flow, by group: per member of its source compartment, or in total for an inflow
@@ -2290,13 +2359,24 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, varying):
                 if more > n_sub:
                     n_sub = more
                     h = dt/n_sub
+                if solver == 0 and not sure and max(fastest, growing)*dt/n_sub > FAST: # Too fast for RK4: by Dormand-Prince, from a substep of the quarter rule's length, whose first stage is this one
+                    dp = True
+                    stages = 7
+                    first = 1
+                    dp_stage(y, yt, dy, h, 1)
+                    break
 
             if stage < stages - 1: # Where the next stage is worked out
-                ahead = h if stage == 2 else h/2
-                for c in range(nc):
-                    for g in range(ng):
-                        yt[c, g] = y[c, g] + ahead*dy[stage, c, g]
+                if dp:
+                    dp_stage(y, yt, dy, h, stage + 1)
+                else:
+                    ahead = h if stage == 2 else h/2
+                    for c in range(nc):
+                        for g in range(ng):
+                            yt[c, g] = y[c, g] + ahead*dy[stage, c, g]
 
+        if dp and stage == 0: # Only the first stage was taken, before Dormand-Prince was chosen: its substeps start now
+            continue
         if solver >= 2:
             pass
         elif stages == 1:
@@ -2306,6 +2386,9 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, varying):
             for f in range(nflows):
                 for g in range(ng):
                     flows[f, g] += h*df[0, f, g]
+        elif dp: # The substep is kept if its error is within the tolerance, and the next is as long as that allows
+            h, elapsed = dp_substep(y, yt, dy, df, flows, h, dt, least, elapsed)
+            first = 1
         else:
             for c in range(nc):
                 for g in range(ng):
@@ -2314,7 +2397,7 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, varying):
                 for g in range(ng):
                     flows[f, g] += h/6*(df[0, f, g] + 2*df[1, f, g] + 2*df[2, f, g] + df[3, f, g])
         sub += 1
-        if (timed and elapsed >= dt - 1e-12) or (not timed and sub >= n_sub):
+        if (timed and elapsed >= dt - 1e-12) or (dp and elapsed >= dt*(1 - 1e-12)) or (not timed and not dp and sub >= n_sub):
             break
     if solver == 4: # The exact solver moves people between groups once, over the whole step
         move(rng, y, p.mov_starts, p.mov_comps, p.mov_pair, p.mov_rate, p.n_trans, dt, flows)

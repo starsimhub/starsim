@@ -43,6 +43,7 @@ Starsim 4 adds a way to write a model as declared states and transitions, which 
 - *Regression*: a bare `beta` in a disease written as code is a rate in the sim's unit, alone or in a dict by network, unless on a network with acts.
 - *Regression*: a daily timeline started from a numeric year has whole-day dates.
 - *Regression*: values that vary smoothly in time are taken once a step, at its middle (at its start by Euler's method), for every solver.
+- *Regression*: the ODE takes steps too fast for RK4 (e.g. an epidemic's peak at a weekly step) by Dormand–Prince, with error control; other steps are unchanged.
 
 ### Changes that may require migration
 - *Migration*: removed Starsim 3 names have no aliases; the migration script and guide cover them. The main ones:

@@ -30,9 +30,21 @@ impl<T: Copy> A1<T> {
     #[allow(clippy::mut_from_ref)]
     #[inline(always)] pub fn sl_mut(&self) -> &mut [T] { if self.n == 0 { &mut [] } else { unsafe { std::slice::from_raw_parts_mut(self.p, self.n) } } }
     pub fn ptr(&self) -> *mut T { self.p }
-    pub fn fill(&self, v: T) { for i in 0..self.n { self.set(i, v) } }
+    /// Every entry set to v: a short array (as most in a step are) by plain stores, since the loop LLVM would make a call to memset of, which costs far more for a few values
+    #[inline(always)] pub fn fill(&self, v: T) {
+        if self.n <= SHORT {
+            for i in 0..self.n { unsafe { std::ptr::write_volatile(self.p.add(i), v) } }
+        } else {
+            for i in 0..self.n { self.set(i, v) }
+        }
+    }
     pub fn copy_from(&self, o: A1<T>) { for i in 0..self.n { self.set(i, o.at(i)) } }
+    /// The first n entries
+    #[inline(always)] pub fn head(&self, n: usize) -> A1<T> { debug_assert!(n <= self.n); A1 { p: self.p, n } }
 }
+
+/// The longest array that `fill()` sets by plain stores rather than a call to memset
+pub const SHORT: usize = 32;
 
 impl A1<f64> {
     #[inline(always)] pub fn add(&self, i: usize, v: f64) { self.set(i, self.at(i) + v) }

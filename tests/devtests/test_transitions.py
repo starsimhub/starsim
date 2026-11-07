@@ -185,7 +185,7 @@ def test_counts():
     assert np.allclose(sim.connectors.track.peaks, np.maximum.accumulate(frac)) # Set from the start of each step, one from each time point
     assert frac.max() < 0.15 # Without the slowing, 30% are infectious at the peak
     ode = ss.Sim(behavior, connectors=Track(name='track'), unit='day', stop=200, total_pop=10_000, solver='ode', **kw).run() # The same code, as compartments: the number alive is the number of people, not of groups
-    assert ode.people.alive.sum() == 10_000 and np.isclose(ode.connectors.track.peak, frac.max(), rtol=0.2)
+    assert np.isclose(ode.people.alive.sum(), 10_000) and np.isclose(ode.connectors.track.peak, frac.max(), rtol=0.2)
 
     # A comparison is 1 or 0, so a rate can stop at a capacity
     S, I, Q, R = ss.states(4)

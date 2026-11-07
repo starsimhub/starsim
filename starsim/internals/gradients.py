@@ -400,6 +400,7 @@ class Run(sc.prettyobj):
         jx = jax()
         jnp = jx.numpy
         lax = jx.lax
+        K = ss.solvers.backends.kernels
         dt, n_max = self.dt, self.n_max
         rk4 = self.solver == 0
         rows = {}
@@ -442,7 +443,10 @@ class Run(sc.prettyobj):
                     tot, grow = y[comps].sum(axis=0), dy0[comps].sum(axis=0)
                     rising = (grow > 0) & (tot > least)
                     growing = jnp.maximum(growing, jnp.max(jnp.where(rising, grow/jnp.where(rising, tot, 1.0), 0.0)))
-                n = need = jnp.maximum(jnp.ceil(lax.stop_gradient(jnp.maximum(fastest, growing))*dt/0.25), 1)
+                speed = lax.stop_gradient(jnp.maximum(fastest, growing))
+                n = need = jnp.maximum(jnp.ceil(speed*dt/0.25), 1)
+                fast = speed*dt/n > K.FAST # Too fast for RK4: by Dormand-Prince, from a substep of the quarter rule's length (see ss.kernels.FAST)
+                h_fast = dt/n
                 if clamp:
                     n = jnp.minimum(n, n_max)
             if self.n_sub:
@@ -467,21 +471,73 @@ class Run(sc.prettyobj):
                 active = s < n
                 return jnp.where(active, new_y, y), jnp.where(active, new_f, flows)
 
-            flows = jnp.zeros((self.nflows, self.ng))
-            if self.n_sub: # A given number of substeps: written out, which XLA runs faster than a loop inside the loop over steps
-                carry = (y, flows)
-                for s in range(self.n_sub):
-                    carry = sub(s, carry)
-                y_end, flows = carry
-            elif clamp and self.fixed: # A loop with a fixed count, which reverse mode needs; the substeps past those the step needs are skipped (except under vmap, where both branches are taken)
-                y_end, flows = lax.fori_loop(0, n_max, sub, (y, flows))
-            else: # As many substeps as the step needs (a loop with a fixed count would take n_max every time); the first outside the loop, since most steps need only one, and a loop costs more than a substep
-                def body(carry):
-                    s, y, flows = carry
-                    y, flows = sub(s, (y, flows))
-                    return s + 1, y, flows
-                y, flows = sub(0, (y, flows))
-                _, y_end, flows = lax.while_loop(lambda carry: carry[0] < n, body, (1, y, flows))
+            def substeps(y):
+                flows = jnp.zeros((self.nflows, self.ng))
+                if self.n_sub: # A given number of substeps: written out, which XLA runs faster than a loop inside the loop over steps
+                    carry = (y, flows)
+                    for s in range(self.n_sub):
+                        carry = sub(s, carry)
+                    y_end, flows = carry
+                elif clamp and self.fixed: # A loop with a fixed count, which reverse mode needs; the substeps past those the step needs are skipped (except under vmap, where both branches are taken)
+                    y_end, flows = lax.fori_loop(0, n_max, sub, (y, flows))
+                else: # As many substeps as the step needs (a loop with a fixed count would take n_max every time); the first outside the loop, since most steps need only one, and a loop costs more than a substep
+                    def body(carry):
+                        s, y, flows = carry
+                        y, flows = sub(s, (y, flows))
+                        return s + 1, y, flows
+                    y, flows = sub(0, (y, flows))
+                    _, y_end, flows = lax.while_loop(lambda carry: carry[0] < n, body, (1, y, flows))
+                return y_end, flows, need
+
+            def dormand_prince(y):
+                """ The step by Dormand-Prince, as ss.kernels.step() takes it: substeps of its own length, each kept if its error is within the tolerance (the attempts count as the substeps the step needs; clamped, the last it may take ends the step) """
+                A, B, E = K.DP_A, K.DP_B, K.DP_E
+                least = 1e-9*y.sum()
+
+                def at(ys, h):
+                    return self.derivs(ys, self.rates(ys, vals(ti)), Xs, h)
+
+                def attempt(carry):
+                    k, t, h, y, flows, dy0, df0, forced = carry
+                    last = (k >= n_max - 1) if clamp else False # Clamped, the last attempt it may take ends the step, and the step counts as needing more
+                    ends = h == dt - t
+                    h = jnp.where(last, dt - t, h)
+                    dys, dfs = [dy0], [df0]
+                    for stage in range(1, 7):
+                        ys = y + h*sum(A[stage, j]*dys[j] for j in range(stage))
+                        dy, df = at(ys, h)
+                        dys.append(dy)
+                        dfs.append(df)
+                    err = jnp.abs(h*sum(E[j]*dys[j] for j in range(7)))/(least + K.TOL*jnp.maximum(jnp.abs(y), jnp.abs(ys)))
+                    worst = lax.stop_gradient(jnp.max(jnp.where(err > 0, err, 0.0))) # (Not a NaN: see ss.kernels.step())
+                    ok = (worst <= 1) | (h < 1e-6*dt)
+                    forced = forced | (last & ~(ok & ends))
+                    keep = ok | last
+                    y = jnp.where(keep, ys, y)
+                    flows = jnp.where(keep, flows + h*sum(B[j]*dfs[j] for j in range(7)), flows)
+                    dy0, df0 = jnp.where(keep, dys[6], dy0), jnp.where(keep, dfs[6], df0)
+                    t = jnp.where(keep, t + h, t)
+                    h = h*jnp.where(worst == 0, 5.0, jnp.clip(0.9*jnp.where(worst == 0, 1.0, worst)**-0.2, 0.2, 5.0))
+                    left = dt - t
+                    h = jnp.where((h > left) | (left - h < 1e-9*dt), left, h)
+                    return k + 1, t, h, y, flows, dy0, df0, forced
+
+                def going(carry):
+                    return ~(carry[1] >= dt*(1 - 1e-12))
+
+                dy0, df0 = at(y, h_fast)
+                carry = (jnp.asarray(0), jnp.asarray(0.0), jnp.asarray(h_fast, dtype=y.dtype), y, jnp.zeros((self.nflows, self.ng)), dy0, df0, jnp.asarray(False))
+                if clamp and self.fixed: # A loop with a fixed count, for reverse mode, the attempts after the last skipped
+                    carry = lax.fori_loop(0, n_max, lambda s, c: lax.cond(going(c), attempt, lambda c: c, c), carry)
+                else:
+                    carry = lax.while_loop(going, attempt, carry)
+                k, _, _, y_end, flows = carry[:5]
+                return y_end, flows, (k + carry[7]).astype(jnp.result_type(need))
+
+            if self.n_sub or not rk4:
+                y_end, flows, need = substeps(y)
+            else:
+                y_end, flows, need = lax.cond(fast, dormand_prince, substeps, y)
             if len(self.cv_flow): # Everyone in a conveyor moves along one slot
                 y_end = y_end.at[self.cv_next].set(y_end[self.cv_prev]).at[self.cv_last].add(y_end[self.cv_last]).at[self.cv_first].set(0.0) # What is left in the last slot stays, to leave with the next (see ss.kernels.convey())
             return jnp.maximum(y_end, 0.0), flows, need # The compartments after the step, as the kernels record them, and the substeps it needed (more than it took, if clamped)
