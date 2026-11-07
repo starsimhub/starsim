@@ -1,5 +1,5 @@
 """
-Not for the user: the ODE in NumPy: the RK4 and Euler step of `ss.kernels.step()`, vectorized over groups (and over the flows whose
+Not for the user: the ODE in NumPy: the RK4 and Euler step of `ss.kernels.step()` (and Dormand-Prince, on a fast step), vectorized over groups (and over the flows whose
 rates have the same operations), so that a deterministic run needs no compiling
 
 It takes the same program, and gives the same results to rounding. Anything else (the stochastic solvers, the
@@ -318,6 +318,7 @@ def _step(rng, y, p, dt, n_sub, solver, flows):
         p.inflow[f_out, big] *= x[big]/np.expm1(x[big])
     flows[:] = 0
     sub = 0
+    dp = False
     while True:
         dys, dfs = [], []
         ys = y
@@ -340,8 +341,14 @@ def _step(rng, y, p, dt, n_sub, solver, flows):
                 if more > n_sub:
                     n_sub = more
                     h = dt/n_sub
+                if not euler and max(fastest, growing)*dt/n_sub > K.FAST: # Too fast for RK4 (see ss.kernels.FAST)
+                    dp = True
+                    break
             if stage < stages - 1:
                 ys = y + (h if stage == 2 else h/2)*dy
+        if dp:
+            dormand_prince(y, p, L, dt, h, dys[0], dfs[0], flows, 1e-9*y.sum())
+            break
         if euler:
             y += h*dys[0]
             flows += h*dfs[0]
@@ -357,6 +364,29 @@ def _step(rng, y, p, dt, n_sub, solver, flows):
         y[slots[-1]] += left
         y[slots[0]] = 0
     np.maximum(y, 0, out=y)
+    return
+
+
+def dormand_prince(y, p, L, dt, h, dy0, df0, flows, least):
+    """ A step too fast for RK4, by Dormand-Prince, from its first stage and the quarter rule's substep h, as `ss.kernels.step()` takes it (y and flows changed in place) """
+    A, B, E = K.DP_A, K.DP_B, K.DP_E
+    dys, dfs = [dy0] + [None]*6, [df0] + [None]*6
+    elapsed = 0.0
+    while not elapsed >= dt*(1 - 1e-12):
+        for stage in range(1, 7):
+            ys = y + h*sum(A[stage, j]*dys[j] for j in range(stage))
+            dys[stage], dfs[stage], _ = derivs(ys, p, L, rates_of(ys, p, L), h, False)
+        err = np.abs(h*sum(E[j]*dys[j] for j in range(7)))/(least + K.TOL*np.maximum(np.abs(y), np.abs(ys)))
+        worst = np.max(err, where=err > 0, initial=0.0) # (Not a NaN: see ss.kernels.step())
+        if worst <= 1 or h < 1e-6*dt:
+            y[:] = ys
+            flows += h*sum(B[j]*dfs[j] for j in range(7))
+            dys[0], dfs[0] = dys[6], dfs[6]
+            elapsed += h
+        h *= 5.0 if worst == 0 else min(5.0, max(0.2, 0.9*worst**-0.2))
+        left = dt - elapsed
+        if h > left or left - h < 1e-9*dt:
+            h = left
     return
 
 

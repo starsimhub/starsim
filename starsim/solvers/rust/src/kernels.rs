@@ -170,7 +170,7 @@ pub struct Work {
     pub stack: A2<f64>,     // For working out a rate
     pub groups: A2<f64>,    // Scratch, by group (7 rows)
     pub cells: A2<f64>,     // Scratch, by cell or place (6 rows; the last is, for the exact solver by place, whether each place is idle)
-    pub dy: A3<f64>,        // The stages of the integrator
+    pub dy: A3<f64>,        // The stages of the integrator (RK4's 4, or Dormand-Prince's 7)
     pub df: A3<f64>,
     pub yt: A2<f64>,
     pub chain: A1<f64>,     // Where people at a stage of a dwell time end up: see chain_probs()
@@ -189,8 +189,8 @@ pub fn workspace(nc: usize, ng: usize, p: &Program) -> Work {
     let (o2, stack) = own2(p.depth, ng, 0.0);
     let (o3, groups) = own2(7, ng, 0.0);
     let (o4, cells) = own2(6, size, 0.0);
-    let (o5, dy) = own3(4, nc, ng, 0.0);
-    let (o6, df) = own3(4, nflows, ng, 0.0);
+    let (o5, dy) = own3(7, nc, ng, 0.0);
+    let (o6, df) = own3(7, nflows, ng, 0.0);
     let (o7, yt) = own2(nc, ng, 0.0);
     let (o8, chain) = own1(if p.src_chain.len() > 0 { max_i(p.src_chain) as usize } else { 0 } + 2, 0.0);
     let widest = (1..p.crd_starts.len()).map(|i| p.crd_starts.at(i) - p.crd_starts.at(i - 1)).max().unwrap_or(0) as usize;
@@ -430,6 +430,80 @@ avx2! {
     }
 }
 
+// Dormand-Prince, for a step of the ODE too fast for RK4 (see FAST in kernels.py)
+const FAST: f64 = 0.15;
+const TOL: f64 = 1e-6;
+const DP_A: [[f64; 7]; 7] = [[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                             [1.0/5.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                             [3.0/40.0, 9.0/40.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                             [44.0/45.0, -56.0/15.0, 32.0/9.0, 0.0, 0.0, 0.0, 0.0],
+                             [19372.0/6561.0, -25360.0/2187.0, 64448.0/6561.0, -212.0/729.0, 0.0, 0.0, 0.0],
+                             [9017.0/3168.0, -355.0/33.0, 46732.0/5247.0, 49.0/176.0, -5103.0/18656.0, 0.0, 0.0],
+                             [35.0/384.0, 0.0, 500.0/1113.0, 125.0/192.0, -2187.0/6784.0, 11.0/84.0, 0.0]];
+const DP_B: [f64; 7] = DP_A[6];
+const DP_4: [f64; 7] = [5179.0/57600.0, 0.0, 7571.0/16695.0, 393.0/640.0, -92097.0/339200.0, 187.0/2100.0, 1.0/40.0];
+
+/// Where stage s of Dormand-Prince is worked out (`dp_stage()`); out of line, so that the RK4 steps around it stay as fast
+#[inline(never)]
+#[cold]
+fn dp_stage(y: A2<f64>, yt: A2<f64>, dy: A3<f64>, h: f64, s: usize, nc: usize, ng: usize) {
+    for c in 0..nc {
+        for g in 0..ng {
+            let mut v = 0.0;
+            for j in 0..s {
+                v += DP_A[s][j]*dy.at(j, c, g);
+            }
+            yt.set(c, g, y.at(c, g) + h*v);
+        }
+    }
+}
+
+/// The end of a substep of Dormand-Prince: kept if its error is within the tolerance (y, flows and the first stage of the next changed, and `elapsed` moved on), and the length of the next, whose first stage is worked out (see `step()`)
+#[inline(never)]
+#[cold]
+#[allow(clippy::too_many_arguments)]
+fn dp_substep(y: A2<f64>, yt: A2<f64>, dy: A3<f64>, df: A3<f64>, flows: A2<f64>, mut h: f64, dt: f64, least: f64, elapsed: &mut f64, nc: usize, ng: usize, nflows: usize) -> f64 {
+    let mut worst = 0.0;
+    for c in 0..nc {
+        for g in 0..ng {
+            let mut err = 0.0;
+            for j in 0..7 {
+                err += (DP_B[j] - DP_4[j])*dy.at(j, c, g);
+            }
+            let err = (h*err).abs()/(least + TOL*mx(y.at(c, g).abs(), yt.at(c, g).abs()));
+            if err > worst {
+                worst = err;
+            }
+        }
+    }
+    if worst <= 1.0 || h < 1e-6*dt {
+        for c in 0..nc {
+            for g in 0..ng {
+                y.set(c, g, yt.at(c, g));
+                dy.set(0, c, g, dy.at(6, c, g));
+            }
+        }
+        for f in 0..nflows {
+            for g in 0..ng {
+                let mut v = 0.0;
+                for j in 0..7 {
+                    v += DP_B[j]*df.at(j, f, g);
+                }
+                flows.add(f, g, h*v);
+                df.set(0, f, g, df.at(6, f, g));
+            }
+        }
+        *elapsed += h;
+    }
+    h *= if worst == 0.0 { 5.0 } else { mn(5.0, mx(0.2, 0.9*worst.powf(-0.2))) };
+    let left = dt - *elapsed;
+    if h > left || left - h < 1e-9*dt {
+        h = left;
+    }
+    dp_stage(y, yt, dy, h, 1, nc, ng);
+    h
+}
+
 /// `step()`, for any number of groups, or (`ONE`) for one
 #[allow(clippy::too_many_arguments)]
 #[inline(always)]
@@ -440,11 +514,15 @@ fn step_groups<const ONE: bool>(rng: Rng, y: A2<f64>, p: &Program, w: &Work, dt:
     let (nc, ng) = (y.n0(), if ONE { 1 } else { y.n1() });
     let nf = p.src.len();
     let nflows = p.n_trans + p.n_movers;
-    let stages = if solver == 0 { 4 } else { 1 };
+    let mut stages = if solver == 0 { 4 } else { 1 };
     let mut h = dt;
     let timed = solver == 3 || solver == 4; // Tau-leaping and the exact solver take steps of their own length
     let by_place = solver == 4 && p.local;
     let auto = solver < 2 && n_sub <= 0;
+    let mut dp = false; // Whether the step is taken by Dormand-Prince
+    let mut first = 0; // The stage a substep starts at
+    let mut chosen = false; // Whether Dormand-Prince has just been chosen, after the step's first stage
+    let mut least = 0.0;
     let mut elapsed = 0.0;
     let mut fastest = 0.0;
     let mut sub: i64 = 0;
@@ -456,7 +534,7 @@ fn step_groups<const ONE: bool>(rng: Rng, y: A2<f64>, p: &Program, w: &Work, dt:
     let has_moved = moved_in.n0() > 0;
     let stack_top = p.depth.wrapping_sub(1); // The registers are the last rows of the stack
     loop {
-        for stage in 0..stages {
+        for stage in first..stages {
             let ys = if stage == 0 { y } else { yt };
 
             // The rate of every flow, by group
@@ -510,10 +588,8 @@ fn step_groups<const ONE: bool>(rng: Rng, y: A2<f64>, p: &Program, w: &Work, dt:
                             continue;
                         }
                         let size = p.sizes.u(t);
-                        for i in 0..size {
-                            num.set(i, 0.0);
-                            den.set(i, 0.0);
-                        }
+                        num.head(size).fill(0.0);
+                        den.head(size).fill(0.0);
                         for g in 0..ng {
                             num.add(p.levels.u(t, g), infectious.at(g));
                             den.add(p.levels.u(t, g), n.at(g));
@@ -828,7 +904,7 @@ fn step_groups<const ONE: bool>(rng: Rng, y: A2<f64>, p: &Program, w: &Work, dt:
                         everyone += y.at(c, g);
                     }
                 }
-                let least = 1e-9*everyone;
+                least = 1e-9*everyone;
                 for g in 0..ng {
                     for c in 0..nc {
                         let gain = dy.at(0, c, g) - if has_moved { moved_in.at(c, g) } else { 0.0 };
@@ -854,18 +930,34 @@ fn step_groups<const ONE: bool>(rng: Rng, y: A2<f64>, p: &Program, w: &Work, dt:
                     n_sub = more;
                     h = dt/n_sub as f64;
                 }
+                if solver == 0 && !sure && mx(fastest, growing)*dt/(n_sub as f64) > FAST { // Too fast for RK4: by Dormand-Prince, from this first stage
+                    dp = true;
+                    stages = 7;
+                    first = 1;
+                    chosen = true;
+                    dp_stage(y, yt, dy, h, 1, nc, ng);
+                    break;
+                }
             }
 
             if stage < stages - 1 { // Where the next stage is worked out
-                let ahead = if stage == 2 { h } else { h/2.0 };
-                for c in 0..nc {
-                    for g in 0..ng {
-                        yt.set(c, g, y.at(c, g) + ahead*dys.at(c, g));
+                if dp {
+                    dp_stage(y, yt, dy, h, stage + 1, nc, ng);
+                } else {
+                    let ahead = if stage == 2 { h } else { h/2.0 };
+                    for c in 0..nc {
+                        for g in 0..ng {
+                            yt.set(c, g, y.at(c, g) + ahead*dys.at(c, g));
+                        }
                     }
                 }
             }
         }
 
+        if chosen { // Only the first stage was taken: the substeps of Dormand-Prince start now
+            chosen = false;
+            continue;
+        }
         if solver >= 2 {
         } else if stages == 1 {
             for c in 0..nc {
@@ -878,6 +970,9 @@ fn step_groups<const ONE: bool>(rng: Rng, y: A2<f64>, p: &Program, w: &Work, dt:
                     flows.add(f, g, h*df.at(0, f, g));
                 }
             }
+        } else if dp { // The substep is kept if its error is within the tolerance, and the next is as long as that allows
+            h = dp_substep(y, yt, dy, df, flows, h, dt, least, &mut elapsed, nc, ng, nflows);
+            first = 1;
         } else {
             for c in 0..nc {
                 for g in 0..ng {
@@ -891,7 +986,7 @@ fn step_groups<const ONE: bool>(rng: Rng, y: A2<f64>, p: &Program, w: &Work, dt:
             }
         }
         sub += 1;
-        if (timed && elapsed >= dt - 1e-12) || (!timed && sub >= n_sub) {
+        if (timed && elapsed >= dt - 1e-12) || (dp && elapsed >= dt*(1.0 - 1e-12)) || (!timed && !dp && sub >= n_sub) {
             break;
         }
     }

@@ -1958,7 +1958,7 @@ class Problem(sc.prettyobj):
                         while True:
                             if not compiled:
                                 ss.solvers.backends.compiling('the gradient of the log-likelihood', 'JAX', 0.5, 5)
-                                compiled.append(jax.jit(fn))
+                                compiled.append(jax.jit(lambda x: fn(x))) # A new function each time, since JAX keeps the trace of one it has seen, with the old n_max in it
                             value, grad, need = compiled[0](jax.numpy.asarray(x, dtype=float))
                             if not reverse or not adaptive or need <= min(run.n_max for run in adaptive):
                                 return float(value), np.array(grad, dtype=float) # A copy, since JAX's is read-only

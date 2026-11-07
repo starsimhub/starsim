@@ -959,21 +959,17 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
                     return new + 2/self.sim.groups.n_groups
             ```
         """
-        return self.engine.transmitted(self.transmission(transition))
-
-    def transmission(self, transition=None):
-        """ One of the disease's transmissions, by transition (or name); with none given, its only one """
         trs = self.graph.transmissions if self.graph is not None else []
         if transition is None:
             if len(trs) != 1:
                 errormsg = f'"{self.name}" has {len(trs)} transmissions ({sc.strjoin(tr.name for tr in trs) or "none"}), so transmit() is given which one: def transmit(self, transition), with transition.name one of them'
                 raise ValueError(errormsg)
-            return trs[0]
+            return self.engine.transmitted(trs[0])
         name = transition if isinstance(transition, str) else transition.name
         found = [tr for tr in trs if tr.name == name]
         if not found:
             raise sc.KeyNotFoundError(f'"{name}" is not a transmission of "{self.name}"; its transmissions are {sc.strjoin(tr.name for tr in trs)}')
-        return found[0]
+        return self.engine.transmitted(found[0])
 
     @property
     def custom_transmit(self):

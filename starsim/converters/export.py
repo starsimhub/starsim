@@ -115,12 +115,23 @@ def rename(text, names, unit):
     return ast.unparse(Sub().visit(node))
 
 
-def contact_rate(sim, engine):
-    """ The mean contacts per person per unit of time of the sim's mixing (with no network, 1), or None if it has no such number """
+def contact_rate(sim, engine, saturated=True):
+    """
+    The mean contacts per person per unit of time of the sim's mixing (with no network, 1), or None if it has no such number
+
+    A network's edges each transmit at most once in a step, so as the ODE has them, its contacts are fewer in effect
+    than it has: (1 − e^(−b·D))/(b·D) of them, for a beta b and a step D (see `ss.solvers.Compartmental.saturation()`);
+    these are written, unless `saturated=False`.
+    """
     total = 0.0
     for term in sim.mixing.terms:
         if term.kind == 'homogeneous':
-            total += term.contacts
+            sat = 1.0
+            if saturated and term.get('edges') is not None and hasattr(engine, 'saturation'):
+                if engine.program is None:
+                    engine.init_program() # As the run does, for the exposures that saturation() reads
+                sat = engine.saturation(0, term) if engine.prog_exposures else 1.0
+            total += term.contacts*float(np.mean(sat))
         elif term.kind == 'matrix' and 'matrix' in term and 'cells' not in term: # The mean over people of the contacts in a row
             rows = np.asarray(term.matrix, dtype=float).sum(axis=1)
             sizes = np.asarray(engine.y).sum(axis=0)
@@ -286,7 +297,10 @@ def flatten(sim):
             lost.append(f'not exported: function "{name}" (Python code)')
     for mods,what in [(list(sim.networks()) + getattr(sim, 'mixed', []), 'network'), (sim.interventions(), 'intervention'), (sim.connectors(), 'modifier')]:
         for mod in mods:
-            extra = f' (written as homogeneous mixing with {contact_rate(sim, diseases[0].engine) if diseases else 0:n} contacts per {unit})' if what == 'network' else ''
+            extra = ''
+            if what == 'network':
+                raw, eff = (contact_rate(sim, diseases[0].engine, saturated=k) if diseases else 0.0 for k in (False, True))
+                extra = f' (written as homogeneous mixing with {raw:n} contacts per {unit}' + (f', each transmitting at most once in a step, so {eff:.4g} in effect)' if raw and eff != raw else ')')
             lost.append(f'not exported: {what} "{mod.name}"{extra}')
     if getattr(sim, 'crossings', None):
         lost.append('not exported: the coupling between diseases (each is written on its own)')

@@ -97,8 +97,8 @@ def test_rates():
     sim = ss.Sim(sir(), networks='random', n_agents=500, unit='day', stop=10, **kw)
     with pytest.warns(ss.errors.LossyExport) as record:
         text = ss.export_to(sim, 'odin', verbose=False)
-    assert 'contacts <- user(10)' in text and 'infection <- beta * contacts * S * I / N' in text
-    assert '10 contacts per day' in str(record[0].message)
+    assert 'contacts <- user(8.639' in text and 'infection <- beta * contacts * S * I / N' in text # 10 contacts, each transmitting at most once a day at a beta of 0.3: 10*(1 - exp(-0.3))/0.3
+    assert '10 contacts per day, each transmitting at most once in a step, so 8.639 in effect' in str(record[0].message)
 
     S, I, R = ss.states('S I R')
     dis = ss.Disease(infection=S >> I @ ss.seasonal(ss.perday(0.3), amplitude=0.2, peak=0.1)*I, recovery=I >> R @ ss.perday(0.1), init_prev=0.01, name='seasonal')
