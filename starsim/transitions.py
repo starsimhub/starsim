@@ -387,6 +387,7 @@ def is_lifelong(func):
 def check_who(who, what):
     """ who= says who something applies to, so an event (which triggers) goes in when= instead; a string is a path, as ss.ref() """
     who = ss.ref(who) if isinstance(who, str) else who
+    ss.conditions.check_not_time(who, what)
     if ss.conditions.has_event(ss.conditions.as_cond(who)):
         errormsg = f'who= of {what} says who it applies to, a condition (e.g. who=ss.person.age > 30); {who} is an event (or has one), which triggers it, so give the event as when=, and any condition in who= (e.g. when=preg.delivery, who=ss.person.age < 20)'
         raise TypeError(errormsg)
@@ -963,7 +964,7 @@ def move(*args, p=None, n=None, uids=None, who=None, **kwargs):
     the disease given.
 
     Args:
-        args: in any order, told apart by what they are: the state (or a list of states) to move people from and the
+        args: in any order, told apart by what they are: a move written with the states (`sir.I >> sir.R`), or the state (or a list of states) to move people from and the
             state to move them to, as the code sees them at run time (`sir.I`) or by name (`'I'`), the source first;
             the disease, which is enough to say where they come from (any of its states of people); and the agents to
             move (`ss.uids`), as `uids=`
@@ -978,6 +979,7 @@ def move(*args, p=None, n=None, uids=None, who=None, **kwargs):
     Examples:
         ```python
         ss.move(sir.I, sir.R, p=0.5) # Cure half of those infectious
+        ss.move(sir.I >> sir.R, p=0.5) # The same, written as a move, as for ss.Event()
         ss.move(sir.S, sir.I, n=5) # Five susceptible people become infectious
         ss.move(sir.S, sir.R, p=0.8, who=ss.person.age < 5) # Protect 80% of the susceptible children under 5
         sir.move(uids, sir.R) # These agents, from wherever they are (also ss.move(sir, uids, sir.R), or sir.move(uids, 'R'))
@@ -992,6 +994,14 @@ def move(*args, p=None, n=None, uids=None, who=None, **kwargs):
 
     # Tell the arguments apart
     diseases, ends = [], []
+    moves = [arg for arg in args if isinstance(arg, Transition)] # A move written with the states, sir.I >> sir.R, as for ss.Event() and ss.Treatment(moves=)
+    if moves:
+        others = [arg for arg in args if arg is not moves[0] and not is_uids(arg) and not isinstance(getattr(arg, 'graph', None), ss.graph.Graph)] # Besides the agents and the disease
+        if len(moves) > 1 or len(moves[0].dest) != 1 or others:
+            raise ValueError('ss.move() takes one move, from one or more states to one (e.g. ss.move(sir.I >> sir.R, p=0.5)), or the states (ss.move(sir.I, sir.R, p=0.5)), not both')
+        if moves[0].rate is not None:
+            raise ValueError('ss.move() moves people now, so its move has no rate: give the share as p= or the number as n= (e.g. ss.move(sir.I >> sir.R, p=0.5))')
+        args = [arg for arg in args if arg is not moves[0]] + [moves[0].source, moves[0].dest[0]]
     for arg in args:
         if isinstance(getattr(arg, 'graph', None), ss.graph.Graph):
             diseases.append(arg)
@@ -1067,6 +1077,11 @@ def is_uids(x):
     elif isinstance(x, (list, tuple)) and x:
         return all(isinstance(v, (int, np.integer)) and not isinstance(v, bool) for v in x)
     return False
+
+
+def run_move(src, dst):
+    """ The move from one state to another as code sees them at run time (`sir.I >> sir.R`), for `ss.move()`: the transition between the declared states, with no rate """
+    return run_state(src)[1] >> run_state(dst)[1]
 
 
 def run_state(x):

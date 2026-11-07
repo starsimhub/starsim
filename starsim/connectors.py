@@ -400,6 +400,7 @@ class modify(Connector):
             self.define_pars(**{'efficacy' if efficacy is not None else self.op:self.amount})
             self.amount.name = named # Named by its target when the sim is built, if it is not named (see ss.solvers.choose)
         where = ss.ref(who) if isinstance(who, str) else who # A state by its path, e.g. who='sir.I'
+        ss.conditions.check_not_time(where, 'ss.modify()')
         self.where = None if where is None else where if isinstance(where, ss.State) and where.name is None else ss.conditions.as_cond(where) # A state of a class body has no name until its disease is built (see own())
         self.start, self.stop, self.schedule = parse_when(when) # A window, and any steps within it (as an ss.schedule())
         self.when = None # A function of the timeline, true on the steps it applies, from the schedule once the sim is initialized (see init_pre())

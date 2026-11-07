@@ -462,8 +462,10 @@ class Timeline:
         """ The sim's timeline (or one standing alone): decide the calendar from the start (or, with none, the stop), then read the rest on it """
         unit_base = getattr(sim, 'unit_base', None)
         given_unit = getattr(getattr(sim, 'pars', None), 'unit', None) # unit= as given, which decides how a bare stop with no start is read
+        not_years = start is None and calendar_of(None, ss.time.cal_year_threshold, given_unit) is None # A bare stop with no start, and a unit other than years: never a year (unit='day', stop=1095)
         for key, val in dict(start=start, stop=stop).items():
-            ss.time.warn_ambiguous(val, key)
+            if not (key == 'stop' and not_years):
+                ss.time.warn_ambiguous(val, key)
         if unit_base is not None: # The model's unit (see ss.solvers.choose.init_unit())
             unit = ss.time.get_dur_class(unit_base)
         else: # On its own: the unit of a start or stop that is a duration; else years with a calendar, or with none, the step's unit

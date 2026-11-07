@@ -71,9 +71,10 @@ truth.gradient(total)
 A parameter with a value for each level of a stratification (`ss.par(ss.by(patch=[...]), bounds=...)`), an array, or a time series has a gradient for each value, named as a fit names them. A time series fitted value by value is a way to estimate a transmission rate that changes in time, with no shape assumed for it. Here the data come from an outbreak whose transmission rate fell by about a third over June (as it might when schools close for the summer), and the rate is fitted as a value every four weeks, with straight lines between them:
 
 ```{python}
-true_beta = ss.timeseries([0, 150, 180], [1.9, 1.9, 1.2], 'linear') # 1.9 until the end of May, then falling to 1.2 by the end of June
-days = list(range(0, 365, 28)) # A value every four weeks, in between which it changes linearly
-beta = ss.par(ss.timeseries(days, [1.5]*len(days), 'linear'), bounds=[0.5, 4])
+start = ss.date(pars['start'])
+true_beta = ss.timeseries({'2025-01-01': 1.9, '2025-05-31': 1.9, '2025-06-30': 1.2}, 'linear') # 1.9 until the end of May, then falling to 1.2 by the end of June
+dates = [start + ss.days(d) for d in range(0, 365, 28)] # A value every four weeks, in between which it changes linearly
+beta = ss.par(ss.timeseries(dates, [1.5]*len(dates), 'linear'), bounds=[0.5, 4])
 
 S, E, I, R = ss.states('S E I R')
 onset = E >> I @ ss.days(10)
@@ -85,10 +86,11 @@ data_t = truth_t.to_synthetic_data('cases', resample='week')
 smooth = lambda pars: 100*np.sum(np.diff(pars['beta'].values)**2) # Large changes from one value to the next are unlikely
 fit_t = ss.Sim(measles_t, data=data_t, **pars).fit(penalty=smooth, verbose=False)
 
+days = lambda times: [(ss.date(t) - start).days for t in times] # Days since the start
 t = np.arange(365)
 fig, ax = plt.subplots()
-ax.plot(t, np.interp(t, true_beta.times, true_beta.values), 'k--', label='True')
-ax.plot(fit_t.pars.beta.times, fit_t.pars.beta.values, 'o-', label='Fitted')
+ax.plot(t, np.interp(t, days(true_beta.times), true_beta.values), 'k--', label='True')
+ax.plot(days(fit_t.pars.beta.times), fit_t.pars.beta.values, 'o-', label='Fitted')
 ax.set_xlabel('Days since 1 January 2025')
 ax.set_ylabel('beta (per day)')
 ax.set_ylim(bottom=0)

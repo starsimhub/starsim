@@ -512,9 +512,6 @@ class Event(ss.products.EventSource, Intervention):
         """ Set it up from the keywords the engine reads; `__init__()` of each class makes these from its own """
         coverage, capacity = p, n
         cov_key = 'coverage' if isinstance(self, Delivery) else 'p' # The keyword the user gave it as
-        deliver = None # who= as a function of the sim: who receives it on each step; a function of (sim, uids) is a condition, who is eligible
-        if callable(who) and not isinstance(who, (ss.conditions.Cond, ss.expressions.Expr, ss.State, ss.Arr, ss.Module, ss.Transition)) and not ss.utils.takes_uids(who):
-            deliver, who = who, None
         trigger, eligible = ss.conditions.split_delivery(on=on, who=who, where=where)
         own = {key:kwargs.pop(key) for key in product_keys(self.kind) if key in kwargs} # The product's own keywords, e.g. ss.vaccinate(efficacy=0.9, ...)
         if own:
@@ -555,11 +552,8 @@ class Event(ss.products.EventSource, Intervention):
             errormsg = f'increment= of "{name or type(self).__name__}" moves people up a counter instead of delivering a product; give one or the other'
             raise ValueError(errormsg)
         rounds = sc.tolist(at)
-        if deliver is not None and (eligible is not None or coverage is not None or rounds or every is not None or trigger is not None):
-            errormsg = f'who= as a function of the sim says who is reached on each step, so it replaces when= and {cov_key}=; give one or the other'
-            raise ValueError(errormsg)
         if at_age is not None: # As people reach the age: routine delivery to those that age or older, leaving out those already past it at the start (see skip_past())
-            if rounds or every is not None or trigger is not None or deliver is not None:
+            if rounds or every is not None or trigger is not None:
                 errormsg = 'who=ss.at_age() reaches people as they reach the age, so it cannot have a when= other than ss.schedule(start=..., stop=...)'
                 raise ValueError(errormsg)
             self.where_given = None if eligible is None else ss.conditions.as_cond(eligible) # Checked for a compartmental form apart from the age: see age_reason()
@@ -585,7 +579,6 @@ class Event(ss.products.EventSource, Intervention):
             errormsg = f'A delay is the time from a trigger, so it goes with an event, as when=ss.on(event, delay=...); "{name or type(self).__name__}" has none'
             raise ValueError(errormsg)
         self.when = ss.conditions.check_when(when)
-        self.deliver = deliver
         self.trace = trace
         self.priority = priority
         self.queue = None if queue is False else queue
@@ -647,7 +640,7 @@ class Event(ss.products.EventSource, Intervention):
     @property
     def routine(self):
         """ Whether each person is offered the product once, at the first step on which they are eligible """
-        return not (self.in_rounds or self.trigger is not None or self.deliver is not None)
+        return not (self.in_rounds or self.trigger is not None)
 
     @property
     def disease(self):
@@ -798,7 +791,7 @@ class Event(ss.products.EventSource, Intervention):
             out.append(f'"{self.name}" has a queue (capacity=ss.capacity(..., queue=True)), whose people wait to be served, which only agents follow')
         if self.disease_list:
             out.append(f'"{self.name}" is delivered for several diseases (disease=[...]), which only agents follow; a product keyed by the diseases (e.g. efficacy=dict(hpv16=0.9, hpv18=0.9)) has a compartmental form')
-        for key,attr in [('who', 'eligible'), ('who', 'deliver'), ('priority', 'priority')]:
+        for key,attr in [('who', 'eligible'), ('priority', 'priority')]:
             func = getattr(self, attr)
             if callable(func) and not isinstance(func, (ss.conditions.Cond, ss.Dist, ss.expressions.Expr)) and ss.utils.takes_uids(func):
                 reason = f'{key}= of "{self.name}" takes uids'
@@ -1158,7 +1151,7 @@ class Event(ss.products.EventSource, Intervention):
         (for each round, up to 10 of them) or of (start, stop) pairs (for routine delivery, or more rounds, from a start or
         to a stop within the run); none for delivery on an event, a condition, or a function, whose times are not fixed
         """
-        if self.trigger is not None or self.when is not None or self.deliver is not None or self.round_tis is None and self.start is None and self.stop is None:
+        if self.trigger is not None or self.when is not None or self.round_tis is None and self.start is None and self.stop is None:
             return []
         timevec = self.results.timevec # Its own, the sim's time axis, which it keeps when the sim is shrunk
         tis = sorted(ti for ti in self.round_tis or [] if ti < len(timevec))
@@ -1200,10 +1193,7 @@ class Event(ss.products.EventSource, Intervention):
             return
         if self.at_age is not None and self.remembers: # Only if it keeps who was offered it (not a rate among those eligible)
             self.skip_past()
-        if self.deliver is not None:
-            self.give(self.delivered_by_function())
-        else:
-            self.receive(self.arrivals())
+        self.receive(self.arrivals())
         return
 
     def arrivals(self):
@@ -1269,13 +1259,6 @@ class Event(ss.products.EventSource, Intervention):
             past = past & new
         self.shift(self.offer(past), {self.sim.groups.dim_index(self.offered):1})
         return
-
-    def delivered_by_function(self):
-        """ Who the function given as who= says receives the product: UIDs, or a number of people per group """
-        out = ss.utils.call_fn(self.deliver, self=self, sim=self.sim)
-        if self.in_compartments is not None and not isinstance(out, (ss.uids, ss.Arr, ss.conditions.Cond)):
-            return self.in_compartments.delivered(out)
-        return self.selector.to_selection(out, 'who=')
 
     def default_eligible(self):
         """ Who is eligible if nothing is said: for a treatment that is not triggered, the people it can cure (those in the sources of its moves, or who are infected) """
@@ -1766,7 +1749,7 @@ class Event(ss.products.EventSource, Intervention):
         """ A line saying what is delivered and how """
         what = f'move {self.move_arrow}' + (f', arriving with {self.strain}' if self.strain is not None else '') if self.move_states is not None else f'increment {sc.strjoin(f"{k}{v:+d}" for k,v in self.increment.items())}' if self.increment else ('visit' if not self.move else 'transfer') if self.product is None else self.product.describe()
         routine = 'routine (each person is offered it once in each spell of being eligible)' if self.remembers else 'routine'
-        how = 'in rounds' if self.in_rounds else 'by a function' if self.deliver is not None else f'on {self.trigger}' if self.trigger is not None else routine
+        how = 'in rounds' if self.in_rounds else f'on {self.trigger}' if self.trigger is not None else routine
         if isinstance(self.eligible, ss.conditions.Cond):
             how += f', to {self.eligible}'
         sim = getattr(self, 'sim', None)

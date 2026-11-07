@@ -293,17 +293,6 @@ class CompartmentalDelivery(sc.prettyobj):
 
     #%% Choosing
 
-    def delivered(self, out):
-        """ Who a function given as who= says receives the product, given as a number of people per group """
-        d = self.delivery
-        n = self.eng.n_people(total=False)
-        out = np.asarray(out, dtype=float)
-        if out.shape != n.shape:
-            errormsg = f'In a compartmental run, the function given as who= of "{d.name}" has to return a number of people per group ({len(n)} values), not an array of shape {out.shape}'
-            raise ValueError(errormsg)
-        frac = np.clip(np.divide(out, n, out=np.zeros(len(n)), where=n>0), 0, 1)
-        return np.broadcast_to(frac[None, :], self.selector.shape).astype(float)
-
     def take(self, cands, n, key=None, wait=None):
         """ Choose `n` people from the candidates: whole cells in the order of the priority (`key`) and how long they have waited, and pro rata within a tie (see `ss.Event.take()`) """
         N = self.eng.state_counts()

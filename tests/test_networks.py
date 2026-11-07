@@ -554,6 +554,9 @@ def test_bare_units():
         warnings.simplefilter('error') # Nothing to warn of: one rule
         nets = [sim(net).init().networks[0] for net in [ss.SexualNet(dur=5), ss.SexualNet(dur=ss.days(5)), ss.DegreeNet(dur=5, acts=ss.perday(1))]]
     assert all(net.mean_dur == 5 for net in nets) # Each 5 days at daily steps, ending at a constant rate, as for ss.DegreeNet
+    with warnings.catch_warnings():
+        warnings.simplefilter('error') # A mean of one step: each lasts one step, with no division by zero
+        sim(ss.SexualNet(dur=ss.days(1))).run()
     assert isinstance(ss.SexualNet().pars.dur, ss.lognormal) and ss.SexualNet(dur=ss.years(15)).pars.dur == ss.years(15) # The default, written out, is itself; one duration is a mean
     for dur in [5, ss.days(5)]: # Random contacts that last, a bare number in the sim's unit too
         s = ss.Sim(n_agents=200, diseases=ss.SIS(beta=ss.perday(0.05)), networks=ss.RandomNet(n_contacts=4, dur=dur), dt=ss.days(1), stop=ss.days(10), verbose=0).init()

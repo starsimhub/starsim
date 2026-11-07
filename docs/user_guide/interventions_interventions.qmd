@@ -198,7 +198,7 @@ As agents, every delivery keeps the memory of its events (who it reached, and ea
 
 ### Delivery by a function
 
-When who, when, and how many depend on each other ("treat the 200 oldest people who are infected"), one function says it. It is called every step (within `start` and `stop`, if given), and returns the UIDs of the people who receive the product on that step; `capacity=` may still cap it:
+When who depends on the state of the sim ("treat the 200 oldest people who are infected"), a function in `who=` says it. It is called on each step the delivery happens (here once a year from 2005) and returns the UIDs of the people eligible then; with the default coverage, all of them receive it, and `coverage=` or `capacity=` reach fewer:
 
 ```{python}
 import numpy as np

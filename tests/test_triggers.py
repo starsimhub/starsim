@@ -318,9 +318,24 @@ def test_paths_and_memory():
     for make, match in [(lambda: ss.Transition(X, Y, on=X), 'use when='), (lambda: ss.Transition(X, Y, where=X), 'use who='), (lambda: ss.Transition(X, Y, when=ss.ref('a.b'), dur=3), 'delay='), # Old keywords
                         (lambda: ss.modify('a.pars.b', multiply=2, start=2020), 'ss.schedule'), (lambda: ss.modify('a.pars.b', multiply=2, when=[2025]), 'ss.schedule'), # Old keywords
                         (lambda: ss.modify('a.pars.b', multiply=2, hold=3), 'until='), (lambda: ss.attr(1, on=X), 'use when='), (lambda: ss.birth(on=X), 'use when='), # Old keywords
-                        (lambda: ss.move(X, Y, where=X), 'use who='), (lambda: ss.schedule(when=lambda now: True), 'as at=')]: # Old keywords
+                        (lambda: ss.move(X, Y, where=X), 'use who='), (lambda: ss.schedule(when=lambda now: True), 'as at='), # Old keywords
+                        (lambda: ss.modify('a.pars.b', multiply=2, who=lambda sim: sim.ti > 20), 'give it as when='), # who= of the time alone says when
+                        (lambda: ss.vaccinate(efficacy=0.9, who=True), 'leave it out'), (lambda: ss.Transition(X, Y, rate=0.1, who=1.0), 'leave it out')]: # who= says who, not everyone or nobody
         with pytest.raises((TypeError, ValueError), match=match):
             make()
+    return
+
+
+def test_move_arrow():
+    sc.heading('ss.move() takes a move written with the states, as ss.Event() does, the same under every solver')
+    for solver in ['abm', 'ode']:
+        sim = ss.Sim(diseases=ss.SIR(init_prev=0.5), solver=solver, n_agents=2000, total_pop=2000, start=0, stop=5, rand_seed=1, verbose=0).init()
+        sir = sim.diseases.sir
+        I0 = sir.I.n
+        n = ss.move(sir.I >> sir.R, p=0.5)
+        assert sir.R.n == n and np.isclose(n, I0/2, rtol=0.2) # About half, by chance as agents
+        with pytest.raises(ValueError, match='not both'):
+            ss.move(sir.I >> sir.R, sir.S)
     return
 
 
@@ -336,3 +351,4 @@ if __name__ == '__main__':
     test_treated_event()
     test_hpv_cancel_event()
     test_paths_and_memory()
+    test_move_arrow()

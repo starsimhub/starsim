@@ -255,8 +255,8 @@ def test_restart():
     major = (msim.results.sir.infection.values.sum(axis=1) > 100).mean()
     assert 0.25 < major < 0.75 and (msim.results.sir.I.values[:, -1] == 0).all()
 
-    # A sim that needs the loop (here, a modifier with a function of the sim) cannot be restarted, and still runs the usual way
-    masks = ss.modify('sir.pars.beta', multiply=0.5, who=lambda sim: sim.ti >= 20)
+    # A sim that needs the loop (here, a modifier with a function of the sim: masks once there are more than 10 infectious) cannot be restarted, and still runs the usual way
+    masks = ss.modify('sir.pars.beta', multiply=0.5, who=lambda sim: sim.results.sir.I[sim.ti] > 10)
     sim = ss.Sim(make_plain(0.3, init=dict(I=0.01)), unit='day', stop=100, interventions=masks, **kw).init()
     assert not sim.kernel_only() and 'masks' in sim.kernel_reason()
     assert sim.run().results.sir.I.max() < new[1]

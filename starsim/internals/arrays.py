@@ -1386,6 +1386,10 @@ class BoolState(BoolArr):
     """
     watch = None # What keeps count of the agents in the state (for a state of a declared disease run as agents, its engine), which is told of every change: see `Watch`
 
+    def __rshift__(self, other):
+        """ A move between two states of a declared disease, as code sees them at run time (`ss.move(sir.I >> sir.R, p=0.5)`); see `ss.move()` """
+        return ss.transitions.run_move(self, other)
+
     @property
     def n(self):
         """ The number of people in the state: its agents, each counted by its weight (`people.scale`), as `I.n` in a rate counts them, and as a compartmental run's state gives it """

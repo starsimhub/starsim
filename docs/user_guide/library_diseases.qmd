@@ -240,7 +240,7 @@ One of them needs agents rather than compartments: `ssl.Syphilis`, because the f
 Library modules are ordinary Starsim modules, so they can be changed in the usual ways. The simplest is to change their parameters:
 
 ```{python}
-measles = ssl.Measles(beta=ss.perday(1.2), dur_exp=ss.days(10), p_death=0.01)
+measles = ssl.Measles(beta=ss.perday(1.2), dur_exp=ss.normal(mean=ss.days(10), std=ss.days(2)), p_death=0.01)
 ```
 
 For a change to how the disease works, build on the class. Measles immunity is lifelong, but immunity to many respiratory infections is not: reinfection with the seasonal coronaviruses that cause colds is common within a year or two. Here `ssl.AgentSEIR` gets immunity that wanes, after a time drawn for each person from `dur_immune` (exponential, with a mean of a year), and a small daily chance that a susceptible person is infected from outside the population (`p_import`). The new class adds two parameters and a state in `__init__()`, schedules the loss of immunity when each agent is infected (`set_prognoses()`), and at each step makes the agents whose time has come susceptible again and infects the imported cases (`step_state()`):
