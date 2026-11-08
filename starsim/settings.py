@@ -65,6 +65,11 @@ rc_starsim = {
 }
 
 
+removed_options = dict( # Options that have been removed, and what replaces them
+    num_threads = 'ss.options.num_threads has been removed, since it meant different things in the release candidates of Starsim 4: for the threads of BLAS (the linear algebra in NumPy and SciPy), use ss.options.blas_threads; for the threads of Starsim itself (the passes over the agents, and the particles of a particle filter), ss.options.threads',
+)
+
+
 # Not public to avoid confusion with ss.options
 class Options(sc.obj):
     """
@@ -138,10 +143,13 @@ class Options(sc.obj):
         optdesc.precision = 'The precision of the floating-point arrays of agents and kernels: 32 (the default, float32) or 64 (float64)'
         options.precision = sc.parse_env('STARSIM_PRECISION', 32, int)
 
-        optdesc.num_threads = 'The number of threads that the passes over the agents of a large sim, and the particles of a particle filter, take: 0 (default) for as many as Numba has (by default, one per core), 1 for none. Each worker of ss.parallel() and of a calibration takes one, since the workers share the cores already'
-        options.num_threads = sc.parse_env('STARSIM_NUM_THREADS', 0, int)
+        optdesc.threads = 'The number of threads that the passes over the agents of a large sim, and the particles of a particle filter, take: 0 (default) for as many as Numba has (by default, one per core), 1 for none. Each worker of ss.parallel() and of a calibration takes one, since the workers share the cores already'
+        options.threads = sc.parse_env('STARSIM_THREADS', 0, int)
+        if os.getenv('STARSIM_NUM_THREADS'): # Its meaning changed between release candidates, so it is not read at all (see removed_options)
+            import warnings
+            warnings.warn('STARSIM_NUM_THREADS is not read, since it meant different things in the release candidates of Starsim 4: for the threads of BLAS (the linear algebra in NumPy and SciPy), set STARSIM_BLAS_THREADS; for the threads of Starsim itself, STARSIM_THREADS', stacklevel=2)
 
-        optdesc.blas_threads = 'The number of threads for BLAS, the linear algebra in NumPy and SciPy (for the threads of Starsim itself, see "num_threads"): 1 (default), or 0 to leave BLAS as it is. See the "Deployment" page of the user guide.'
+        optdesc.blas_threads = 'The number of threads for BLAS, the linear algebra in NumPy and SciPy (for the threads of Starsim itself, see "threads"): 1 (default), or 0 to leave BLAS as it is. See the "Deployment" page of the user guide.'
         options.blas_threads = sc.parse_env('STARSIM_BLAS_THREADS', int(os.getenv('SCIRIS_NUM_THREADS') or 1), int) # 1 by default, set before Sciris is imported (see starsim/__init__.py)
 
         optdesc.kernels = 'Which kernels run the solvers (all give the same results): "auto" (default) for Rust if it is there (in the wheels, or built: see starsim/solvers/rust/README.md), and otherwise Numba, with compartmental runs taken as plain Python until Numba has compiled (if a run, or the runs of a session, would take longer as plain Python than compiling takes, about two minutes once per install, Numba compiles first; a note says which); "rust" for Rust, compiled ahead of time, so a first run takes no compiling; "numba" to always compile with Numba first (see ss.compile()); "python" for the compartmental kernels as plain Python (the passes over agents are Numba). JAX is chosen by the run (see sim.jax), and ss.jit is always Numba'
@@ -187,13 +195,21 @@ class Options(sc.obj):
             locked = False
 
         if locked:
-            if key in self:
+            if key in removed_options:
+                raise sc.KeyNotFoundError(removed_options[key])
+            elif key in self:
                 self.set(key=key, value=value)
             else:
                 errormsg = f'Cannot set option "{key}"; valid options are:\n{sc.newlinejoin(sorted(self.keys()))}\n\nSee ss.options.disp() for details.'
                 raise sc.KeyNotFoundError(errormsg)
         else:
             return super().__setitem__(key, value)
+
+    def __getattr__(self, attr):
+        """ Only for a name that is not an option: a removed one says what replaces it """
+        if attr in removed_options:
+            raise AttributeError(removed_options[attr])
+        return super().__getattr__(attr) if hasattr(sc.obj, '__getattr__') else object.__getattribute__(self, attr)
 
     def to_dict(self):
         ''' Pull out only the settings from the options object '''
@@ -323,7 +339,9 @@ class Options(sc.obj):
 
         # Reset options
         for key, value in kwargs.items():
-            if key not in self:
+            if key in removed_options:
+                raise sc.KeyNotFoundError(removed_options[key])
+            elif key not in self:
                 keylist = self.orig_options.keys()
                 keys = '\n'.join(keylist)
                 errormsg = f'Option "{key}" not recognized; options are "defaults" or:\n{keys}\n\nSee help(ss.options.set) for more information.'

@@ -188,7 +188,7 @@ class Share:
 
 class Text(str):
     """
-    Text that shows itself: what `describe()`, `equations()`, `what_modifies()`, and `check_dt()` return
+    Text that shows itself: what `describe()`, `equations()`, `what_modifies()`, `check_dt()`, and `msim.show()` return
 
     It is a string (`print()` gives the plain text, and `text.splitlines()` or `'beta' in text` work as for any string),
     shown in color at an interactive prompt in a terminal, and as tables in a notebook if it was made from a
@@ -764,7 +764,7 @@ def describe_sim(sim, verbose=False):
             for mod in sim.declared:
                 ways.setdefault(ss.solvers.agent_solver(mod, sim, why=True), []).append(mod.name)
             for (solver, source),names in ways.items():
-                add('', f'step={solver!r}: {sc.strjoin(names)}', dict(own='its own solver=', sim=None, default='the default for agents')[source])
+                add('', f'step={solver!r}: {sc.strjoin(names)}', dict(own='its own solver=', sim=None, suggested="its class's suggested_solver", default='the default for agents')[source])
         if named is not None: # Where a named population came from
             ref = named.ref
             guess = None if named.year is not None else 'guessed: the year the sim starts' if sim.t.is_absolute else 'guessed: the year of the revision'

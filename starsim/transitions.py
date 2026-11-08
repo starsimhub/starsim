@@ -1349,7 +1349,7 @@ def immigration(state=None, n=None, name=None, label=None, **kwargs):
     return out
 
 
-def migration(rate=None, name=None):
+def migration(rate=None, rate_per=None, name=None):
     """
     Net migration of everyone, at a rate per person of either sign: arrivals less departures, as the UN gives it, e.g. `ss.migration(rate='Albania')`
 
@@ -1357,10 +1357,15 @@ def migration(rate=None, name=None):
     a negative one is departures (`ss.emigration()`). Both go in `ss.Sim(demographics=[...])`, and run under every solver.
     Since the rates are net, they say nothing about who migrates: as agents, those who leave are chosen at random.
 
+    The rates are read as those of `ss.Births` and `ss.Deaths` are (see `ss.demographics.rate_per_of()`): a bare number (per year)
+    or a typed rate is per 1,000 people if it is above 1 per year (the median of the sizes, for a time series), else per person;
+    `rate_per=` says which. A place's UN rates are per 1,000.
+
     Args:
         rate (str/float/rate/timeseries): a place by name, for its UN crude net migration rates (by year, every ten years, linearly
-            interpolated); a typed rate per person (e.g. `ss.peryear(-0.005)`), or a time series of them; or a bare number, per 1,000
-            people per year (e.g. `-5`), or a time series of them
+            interpolated); a bare number per year or a typed rate (e.g. `-5` or `ss.peryear(-5)` per 1,000, or `ss.peryear(-0.005)` per person),
+            or a time series of either
+        rate_per (float): how many people the rates are per: 1000 or 1 (per person); by default, read from their size
         name (str): the name of the transitions (by default `immigration` and `emigration`)
 
     Returns:
@@ -1369,25 +1374,32 @@ def migration(rate=None, name=None):
     Examples:
         ```python
         ss.Sim(demographics=[ss.Births(birth_rate='Albania'), ss.Deaths(death_rate='Albania'), ss.migration(rate='Albania')])
-        ss.Sim(demographics=[ss.birth(rate=20), ss.death(rate=10), ss.migration(rate=ss.peryear(0.003))]) # 3 more people per 1,000 a year
+        ss.Sim(demographics=[ss.birth(rate=20), ss.death(rate=10), ss.migration(rate=3)]) # 3 more people per 1,000 a year
+        ss.migration(rate=-0.5, rate_per=1000) # 0.5 fewer per 1,000 a year: below 1, so rate_per= says it is per 1,000
         ```
     """
-    note = None
     if isinstance(rate, str): # The UN's crude net migration rates, per 1,000 people a year
         data = ss.data.rates(rate, 'migration')
         rate = ss.timeseries(dict(zip(data.Time.values.tolist(), data.CNMR.values.tolist())), interpolation='linear')
-    per_year = lambda v: v/1000 if sc.isnumber(v) else v.to('year').value if isinstance(v, ss.Rate) and np.ndim(v.value) == 0 else None # A bare number is per 1,000 people a year
-    if isinstance(rate, ss.timeseries):
-        values = [per_year(v) for v in rate.values]
+        rate_per = sc.ifelse(rate_per, 1000)
+    per_year = lambda v: float(v) if sc.isnumber(v) else v.to('year').value if isinstance(v, ss.Rate) and np.ndim(v.value) == 0 else None # A bare number is per year
+    series = isinstance(rate, ss.timeseries)
+    values = [per_year(v) for v in rate.values] if series else [per_year(rate)]
+    if not len(values) or any(v is None for v in values):
+        errormsg = f'ss.migration() takes a place by name, a bare number per year or a typed rate (e.g. -5 per 1,000, or ss.peryear(-0.005) per person), or a time series of either; not {rate!r}'
+        raise TypeError(errormsg)
+    per = ss.demographics.rate_per_of(rate_per, values, 'ss.migration()')
+    values = [v/per for v in values]
+    if series:
         make = lambda sign: ss.timeseries(rate.times, [ss.peryear(max(sign*v, 0.0)) for v in values], interpolation=rate.interpolation, period=rate.period) # The positive or negative part: linear between the times, the two still sum to the net rate
     else:
-        values = [per_year(rate)]
         make = lambda sign: ss.peryear(max(sign*values[0], 0.0))
-    if not len(values) or any(v is None for v in values):
-        errormsg = f'ss.migration() takes a place by name, a rate per person (e.g. ss.peryear(-0.005)), a bare number per 1,000 people a year, or a time series of either; not {rate!r}'
-        raise TypeError(errormsg)
-    if any(sc.isnumber(v) for v in sc.tolist(getattr(rate, 'values', rate))):
-        note = 'the rate of ss.migration() is given as bare numbers, so it is taken as per 1,000 people per year'
+    bare = any(sc.isnumber(v) for v in sc.tolist(getattr(rate, 'values', rate)))
+    note = None
+    if rate_per is None and per == 1000:
+        note = 'the rate of ss.migration() is above 1 per year, so taken as per 1,000 people per year'
+    elif rate_per is None and bare:
+        note = 'the rate of ss.migration() is a bare number of 1 or below per year, so taken as per person per year'
     out = []
     if max(values) > 0:
         arrive = Transition(outside, None, rate=make(1), name=f'{name}_in' if name else 'immigration')

@@ -97,7 +97,10 @@ def test_multisim():
     assert np.array_equal(res.median().values, np.median(res.values, axis=0))
     res.median().plot()
     assert msim.summarize().loc['sis_I', 'std'] > 0
-    msim.show()
+    text = msim.show() # Text that shows itself, as describe() returns
+    assert isinstance(text, ss.display.Text) and 'Number of runs: 4' in text
+    with pytest.raises(TypeError, match='text = msim.show()'):
+        msim.show(output=True) # Starsim 3's way to get the text
 
     # Export results
     two = msim.results.sis.S.resample(ss.years(2))

@@ -1,7 +1,7 @@
 """
 Strains of a disease (`ss.Strains`), and protection between them (`ss.immunity`)
 
-These exist so that one disease can have several strains, with their own values and with protection between them, without being written as several diseases. The strains of a declared disease share its states; a disease written as code (`ss.AgentDisease`) handles its own, e.g. calling `transmit(rel_trans=..., rel_sus=...)` once for each strain.
+These exist so that one disease can have several strains, with their own values and with protection between them, without being written as several diseases. The strains of a declared disease share its states; a disease written as code (`ss.AgentDisease(strains=...)`) carries one at a time, as an index for each person (`dis.strain`), passed on by the same code as a declared disease's.
 
 Used with: agents and compartments; declared and coded modules
 """

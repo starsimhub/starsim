@@ -81,13 +81,13 @@ gradual = ss.vaccinate(efficacy=0.93, who=measles.age < 15, coverage=ss.probpery
 
 This is not routine childhood immunization, which vaccinates each child as they reach an age (`who=ss.at_age(ss.months(9))`), and works over years, as each new birth cohort is reached; it matters in a model of many years, with births (see [Interventions](../user_guide/interventions_interventions.qmd#rounds-and-routine-delivery)).
 
-Some interventions don't give people anything, but change how the disease spreads: isolating cases, tracing their contacts, or keeping unvaccinated children home from school. In a model, these are changes to a parameter. [`ss.modify()`](../api/connectors.qmd) changes a parameter from a given date (and, with `when=ss.schedule(start=..., stop=...)`, until another); it never overwrites the parameter, so when it stops, the parameter has its own value again. Here, an outbreak response from 1 March cuts transmission by 30%:
+Some interventions don't give people anything, but change how the disease spreads: isolating cases, tracing their contacts, or keeping unvaccinated children home from school. In a model, these are changes to a parameter. [`ss.modify()`](../api/connectors.qmd) changes a parameter from a given date (and, with `start=..., stop=...`, until another); it never overwrites the parameter, so when it stops, the parameter has its own value again. Here, an outbreak response from 1 March cuts transmission by 30%:
 
 ```{python}
-response = ss.modify(measles.pars.beta, multiply=0.7, when=ss.schedule(start='2025-03-01'))
+response = ss.modify(measles.pars.beta, multiply=0.7, start='2025-03-01')
 ```
 
-A time series does the same at several dates, each value holding until the next: for example, `ss.modify(measles.pars.beta, multiply=ss.timeseries({'2025-03-01': 0.7, '2025-06-01': 0.9}), when=ss.schedule(start='2025-03-01'))` cuts transmission by 30% from March, and by 10% from June, as the response is scaled down. [Interventions](../user_guide/interventions_interventions.qmd) covers the other options, such as changing a parameter only for some people, or only while cases are high.
+A time series does the same at several dates, each value holding until the next: for example, `ss.modify(measles.pars.beta, multiply=ss.timeseries({'2025-03-01': 0.7, '2025-06-01': 0.9}), start='2025-03-01')` cuts transmission by 30% from March, and by 10% from June, as the response is scaled down. [Interventions](../user_guide/interventions_interventions.qmd) covers the other options, such as changing a parameter only for some people, or only while cases are high.
 
 ## Comparing scenarios
 

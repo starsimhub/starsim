@@ -1212,24 +1212,25 @@ class timeseries(TimeValue):
     Before the first time the first value is used, and after the last time the last, so a
     value that holds from before the sim needs no time of its own: give it at the first time
     you have. A bare time is read as the sim reads any (see `ss.timeline`): a calendar year if the sim has a
-    calendar (a start that is a date or a year), however small, else a time in its unit from 0; a time after
-    the start is a duration (e.g. `ss.days(91)`). A bare value is read in the module's unit, as any other; to give the values a unit, put
+    calendar (a start that is a date or a year), however small, else a time in its unit from 0; a duration is a time
+    after the start (e.g. `ss.days(91)`, 91 days in; with no calendar, day 91, the same when the start is 0). A bare value is read in the module's unit, as any other; to give the values a unit, put
     the series in a type (`ss.peryear(ss.timeseries(...))`, a series of rates per year), or
     give each value one.
 
     Args:
         data (dict/str/dataframe/list): the value at each time, as a dict, a dataframe (the first column is
             the time, the second the value), or the name of a file holding one; or the times, with the values
-            as the second argument (`ss.timeseries(times, values)`). A time is a date, a bare number, or (with no calendar) a duration from 0:
-            a calendar year in a sim with a calendar (e.g. `2030`), and otherwise a time in the sim's unit from 0
+            as the second argument (`ss.timeseries(times, values)`). A time is a date, a bare number (a calendar year in a sim with a
+            calendar, e.g. `2030`, and otherwise a time in the sim's unit from 0), or a duration, that long after the start of the sim
         values (list): the values, if `data` is the times
         interpolation (str): how to interpolate: 'step' (each value holds until the next), 'linear', or 'cosine' (a smooth S-shaped change between each value and the next, as MEmilio's dampings)
-        period (dur): if given, the series repeats with this period, measured from its first time (e.g. `ss.years(1)` for a yearly pattern given over one year)
+        period (dur): if given, the series repeats with this period, measured from its first time (e.g. `ss.years(1)` for a yearly pattern given over one year); keyed by durations, they are the times within each cycle, from the start of the sim (e.g. `{ss.years(k/12): v[k] ...}`, one value per month)
 
     Examples:
         ```python
         beta = ss.timeseries({'2020-01-01': 0.3, '2020-03-15': 0.1, '2020-06-01': 0.2})
         decay = ss.timeseries({0: 0.1, 91: 0.2, 183: 0.15, 274: 0.1}, period=ss.days(365)) # The same each year, in a sim in days with no calendar
+        season = ss.timeseries({ss.months(k): v for k,v in enumerate([1, 2, 4, 2, 1, 1])}, period=ss.months(6)) # Twice a year from the sim's start, with or without a calendar
         mortality = ss.peryear(ss.timeseries({2000: 0.05, 2020: 0.02})) # Rates per year: 0.05 before 2000, and 0.02 after 2020
         S, I, R = ss.states(3)
         sir = ss.Disease(infection=S >> I @ beta*I, recovery=ss.Transition(I, R, dur=10), init_prev=0.01)
@@ -1276,7 +1277,7 @@ class timeseries(TimeValue):
 
     def years(self, sim):
         """
-        The times as years on the sim's timeline (a bare time is a year if the sim has a calendar, else a time in its unit from 0; a duration is a time from 0, for a sim with no calendar)
+        The times as years on the sim's timeline (a bare time is a year if the sim has a calendar, else a time in its unit from 0; a duration is that long after the sim's start with a calendar, else a time from 0)
 
         Args:
             sim (`ss.Sim`): the sim
@@ -1284,7 +1285,10 @@ class timeseries(TimeValue):
         if self._years is None or self._years[0] is not sim:
             out = []
             for time in self.times:
-                time = ss.connectors.to_time(sim, time)
+                if isinstance(time, ss.Duration) and sim.t.calendar is None: # A time from 0 in any unit, e.g. ss.years(k/12) for each month in a sim in days, with no warning about its unit
+                    out.append(time.years)
+                    continue
+                time = ss.connectors.to_time(sim, time) # A duration is that long after the start, with a calendar
                 out.append(time.years if isinstance(time, ss.date) else time.to('year').value)
             if np.any(np.diff(out) <= 0):
                 errormsg = f'The times of ss.timeseries() must be in order, not {self.times}'

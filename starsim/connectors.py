@@ -75,9 +75,9 @@ def to_time(sim, val):
 
     How a bare number is read is decided once, from the sim's start (see `ss.timeline.calendar_of()`): if the sim has a
     calendar (its start is a date or a year), a number is a calendar year (`2005` is the start of 2005, `2005.5` the
-    middle of it); otherwise, it is a time in the sim's unit from 0. A duration is a point on the sim's own axis, counted
-    from 0 as `sim.t.tvec` is (`ss.days(30)` is day 30), so it is for a sim with no calendar; with one, it is an error, and
-    30 days after a dated start is `sim.pars.start + ss.days(30)` (see `ss.Timeline.to_time()`).
+    middle of it); otherwise, it is a time in the sim's unit from 0. A duration is that long after the sim's start if the
+    sim has a calendar (`ss.days(30)` is 30 days in), and with none a point on the sim's own axis, counted from 0 as
+    `sim.t.tvec` is (`ss.days(30)` is day 30, the same when the start is 0); see `ss.Timeline.to_time()`.
     """
     return sim.t.to_time(val)
 
@@ -268,11 +268,16 @@ def unapplied(graph, modname, kind, name, mods):
     return None
 
 
-def parse_when(when):
+def parse_when(when, start=None, stop=None):
     """
     The `when=` of a modifier, as (start, stop, schedule): a window, and an `ss.schedule()` of the steps within it it applies on, if not all;
-    a function of the date is the schedule of the steps it is true on
+    a function of the date is the schedule of the steps it is true on. `start=` and `stop=` of `ss.modify()` are the window, as in `ss.schedule()`
     """
+    if start is not None or stop is not None:
+        if isinstance(when, ss.schedule) and (when.start is not None or when.stop is not None):
+            errormsg = f'ss.modify() was given start= or stop=, and when={when!r}, which has a window of its own; give the window once, as start= and stop= or in ss.schedule()'
+            raise ValueError(errormsg)
+        return (start, stop, parse_when(when)[2])
     if when is None:
         return None, None, None
     if isinstance(when, ss.schedule):
@@ -284,7 +289,7 @@ def parse_when(when):
         errormsg = f'when= of ss.modify() is when it applies, on time alone: ss.schedule(start=..., stop=...), or a function of the date; {when!r} is a condition on people or the population, which goes in who='
         raise TypeError(errormsg)
     first = when[0] if isinstance(when, (list, tuple)) and len(when) else when
-    errormsg = f'when= of ss.modify() is a window, ss.schedule(start=..., stop=...), or a function of the date (e.g. lambda now: now.month in [6, 7, 8]), not a time; for {when!r}, use when=ss.schedule(start={first!r}) to start then, or when=ss.schedule({when!r}) for those steps only'
+    errormsg = f'when= of ss.modify() is a window, ss.schedule(start=..., stop=...), or a function of the date (e.g. lambda now: now.month in [6, 7, 8]), not a time; for {when!r}, use start={first!r} to start then, or when=ss.schedule(at={when!r}) for those steps only'
     raise TypeError(errormsg)
 
 
@@ -328,6 +333,8 @@ class modify(Connector):
             the network returning one value per edge (e.g. `lambda net: net.edges.condoms`)
         network (str/list): for a modifier of a transmission, the network or networks (by name, as in the sim's `networks=`, including mixing pools) it applies on; by default, every one. On a parameter (e.g. `tb.pars.beta`), it acts on every transmission the parameter scales (e.g. an infection and its reinfections). A disease written as code has no transmission to name, so on a network the target is its `rel_sus` (of the people who would be infected over it)
         who (Cond/str/func): who it applies to: a condition (e.g. `sir.vaccinated`, or a state by its path, `who='sir.I'`, as `ss.ref('sir.I')`), a condition on a count (e.g. `sir.I.n > 1000`, worked out at each step; in compartments, as part of the rates where it can be, so the run stays in the kernels), or a function of the sim (default: everyone); with `network=`, the people who would be infected
+        start (date/float/dur): when it starts to apply (default: the start of the sim): a date, a bare number (a calendar year if the sim has a calendar, else a time in its unit from 0), or a duration, that long after the start of the sim; the same as `when=ss.schedule(start=...)`
+        stop (date/float/dur): when it stops applying, likewise (default: never; a stop after the end of the sim never stops it)
         when (schedule/func): when it applies, on time alone, which can be read before the run: `ss.schedule(start=..., stop=...)` for a window (a stop after the end of the sim never stops it; a bare number is a calendar year if the sim has a calendar, else a time in its unit from 0), `ss.schedule()` with times or how often for those steps only, or a function of the date of each step, true on the steps it applies (e.g. `lambda now: now.month in [6, 7, 8]`, in a sim with a calendar); a condition on anything else goes in `who=`
         until (Cond/func/dur): how long it stays on once `who=` (or `when=`) selects someone: until a condition holds, as for a lockdown that starts at one level of cases and ends at a lower one (with `who=`; while both hold, `who=` wins); or a duration, at least this long, as a rule that is lifted only after a while (a bare number is in the sim's unit)
         name (str): the name of the modifier
@@ -336,11 +343,14 @@ class modify(Connector):
         ```python
         S, I, R = ss.states(3)
         sir = ss.Disease(infection=S >> I @ 0.3*I, recovery=ss.Transition(I, R, dur=10), init_prev=0.01)
-        masks = ss.modify(sir.pars.beta, multiply=0.6, when=ss.schedule(start=30))
+        masks = ss.modify(sir.pars.beta, multiply=0.6, start=30)
         sim = ss.Sim(sir, interventions=masks, stop=100).run()
 
+        # Schools closed from day 200 to day 260 (in a sim with a calendar, that long after its start)
+        closure = ss.modify(sir.pars.beta, multiply=0.7, start=ss.days(200), stop=ss.days(260))
+
         # Changes at given times, each holding until the next; before the first, the quantity has its own value
-        lockdown = ss.modify(sir.pars.beta, multiply=ss.timeseries({30: 0.5, 60: 1.0}), when=ss.schedule(start=30))
+        lockdown = ss.modify(sir.pars.beta, multiply=ss.timeseries({30: 0.5, 60: 1.0}), start=30)
 
         # Each place on its own: contacts cut by 40% for at least 14 days once a week's cases pass 200 per 100,000
         npi = ss.modify(sir.pars.beta, multiply=0.6, who=sir.infection.incidence(over=ss.days(7), by='patch') > 200e-5, until=ss.days(14))
@@ -367,9 +377,8 @@ class modify(Connector):
 
     timepar_skip = ['where', 'until', 'when', 'schedule', 'target_module', 'hold'] # These refer to other modules, which hold their own time parameters (see Module.link_timepars()); hold is converted to steps at init
 
-    def __init__(self, target, multiply=None, add=None, set=None, efficacy=None, share=None, network=None, who=None, when=None, until=None, name=None, **kwargs):
-        window = 'when=ss.schedule(start=..., stop=...)'
-        renamed = dict(where='who=, a condition on who it applies to', start=window, stop=window, hold='until=<a duration>, e.g. until=ss.days(14)')
+    def __init__(self, target, multiply=None, add=None, set=None, efficacy=None, share=None, network=None, who=None, when=None, until=None, start=None, stop=None, name=None, **kwargs):
+        renamed = dict(where='who=, a condition on who it applies to', hold='until=<a duration>, e.g. until=ss.days(14)')
         for key in kwargs:
             if key in renamed:
                 raise TypeError(f'ss.modify() takes no {key}=; use {renamed[key]}')
@@ -402,7 +411,7 @@ class modify(Connector):
         where = ss.ref(who) if isinstance(who, str) else who # A state by its path, e.g. who='sir.I'
         ss.conditions.check_not_time(where, 'ss.modify()')
         self.where = None if where is None else where if isinstance(where, ss.State) and where.name is None else ss.conditions.as_cond(where) # A state of a class body has no name until its disease is built (see own())
-        self.start, self.stop, self.schedule = parse_when(when) # A window, and any steps within it (as an ss.schedule())
+        self.start, self.stop, self.schedule = parse_when(when, start, stop) # A window, and any steps within it (as an ss.schedule())
         self.when = None # A function of the timeline, true on the steps it applies, from the schedule once the sim is initialized (see init_pre())
         hold = until if isinstance(until, ss.Duration) or sc.isnumber(until) else None # A duration: held for at least this long
         until = None if hold is not None else until

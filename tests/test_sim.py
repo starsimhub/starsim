@@ -239,6 +239,15 @@ def test_complex_api():
     s1 = ss.Sim(pars1).run()
     s2 = ss.Sim(pars2, networks=networks, diseases=diseases, demographics=demographics, interventions=interventions).run()
     assert ss.debugtools.check_sims_match(s1, s2), 'Sims should match'
+    s3 = ss.Sim(pars=pars2, networks=networks, diseases=diseases, demographics=demographics, interventions=interventions).run() # A whole SimPars as pars=, as in Starsim 3
+    assert ss.debugtools.check_sims_match(s1, s3), 'Sims should match'
+    sir = ss.SIR()
+    s4 = ss.Sim(sir, networks='random', pars=dict(start=2000, dur=2, n_agents=200, verbose=0, beta=0.2), n_agents=300) # Settings and the model's parameters in pars=, told apart by name; a keyword wins
+    assert s4.pars.n_agents == 300 and s4.pars.dur == 2 and s4.par_values == dict(beta=0.2)
+    with pytest.raises(TypeError, match='in pars='):
+        ss.Sim(sir, beta=0.1) # A parameter of the model as a keyword
+    with pytest.raises(sc.KeyNotFoundError):
+        ss.Sim(sir, pars=dict(bta=0.1), verbose=0).init() # Neither a setting nor a parameter
     with sc.capture() as out: # A fraction: progress every quarter of the run (to a file; in a terminal or a notebook, a bar redrawn in place)
         ss.Sim(n_agents=100, start=2000, stop=2020, verbose=0.25).run()
     assert out.count('%') == 4, out
@@ -845,6 +854,14 @@ def test_solver_options():
         ss.solvers.binomial(integrator='euler')
     with pytest.raises(ValueError):
         ss.solvers.abm(step='event')
+    class Whole(ss.SIR): # A class can suggest how it runs as agents, which a sim's step and a module's own solver override
+        suggested_solver = ss.solvers.abm(step='wholestep')
+    steps = lambda dis, solver: ss.solvers.agent_solver((s := ss.Sim(dis, networks='random', n_agents=200, solver=solver, unit='day', stop=5, verbose=0).init()).diseases[0], s, why=True)
+    assert steps(Whole(), 'abm') == ('wholestep', 'suggested') and steps(Whole(), ss.solvers.abm(step='midstep')) == ('midstep', 'sim')
+    assert steps(Whole(solver=ss.solvers.abm(step='events')), 'abm') == ('events', 'own') and steps(ss.SIR(), 'abm') == ('midstep', 'default')
+    Whole.suggested_solver = 'abm-step'
+    with pytest.raises(ValueError, match='suggested_solver'):
+        steps(Whole(), 'abm')
     for key, val in [('rescale', True), ('even_draws', True)]: # For agents only
         with pytest.raises(ValueError, match='for agents'):
             ss.Sim(make(), solver='ode', **{key:val}, **kw).init()
@@ -852,10 +869,7 @@ def test_solver_options():
         ss.Sim(make(), solver='ode', n_agents=1000, unit='day', stop=30, verbose=0).init()
     with pytest.raises(TypeError, match=r'pars=dict\(beta'): # A parameter of the model as a keyword
         ss.Sim(make(), beta=0.2, **kw)
-    with pytest.raises(sc.KeyNotFoundError, match='setting of the sim'): # A setting of the sim in pars=
-        ss.Sim(make(), pars=dict(stop=10), **kw).init()
-    with pytest.raises(TypeError, match='by keyword'): # The sim's modules and settings, which are given by keyword
-        ss.Sim(pars=dict(diseases='sir', n_agents=100))
+    assert ss.Sim(pars=dict(diseases='sir', n_agents=100)).pars.n_agents == 100 # The sim's modules and settings in pars=, as in Starsim 3
     agents = ss.Sim(make(), solver='abm', n_agents=500, total_pop=5000, unit='day', stop=5, verbose=0).init()
     assert agents.pop_scale == 10 and not hasattr(agents.pars, 'pop_scale') and ss.Sim(make(), solver='ode', **kw).init().pop_scale == 1
     return euler

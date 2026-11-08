@@ -121,10 +121,10 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         init_prev (float): the initial prevalence, a share of people (up to 1), seeded through the transmission (by default 0.01, unless a state is given an initial value)
         init (dict): the share of people who start in each state, e.g. `dict(S=0.90, I=0.01, R=0.09)`, and, for a state that is not people, its amount, which can be read from the people (e.g. `dict(Sv=m*N)`, with `N = (S + I).n`); each value can be an `ss.by` or a function of the sim (in the class form, `init = dict(I=0.01)` in the class body; likewise `init_n` and `init_prev`)
         init_n (int/dict): instead, a number of people: one number is seeded through the transmission, as `init_prev` is (e.g. `init_n=10`, a parameter, like `init_prev`); a dict is the number who start in each state, e.g. `dict(I=1)` for one person
-        default_state (str): the state that everyone not put elsewhere starts in, and is born into; by default, the one named `S` or `susceptible`, else the first state of people made (in the class form, `default_state = 'N'` in the class body)
+        default_state (str/State): the state that everyone not put elsewhere starts in, and is born into (its name, or the state): by default, the one named `S` or `susceptible`, else the first state of people made (in the class form, `default_state = 'N'` in the class body). A state with a name of its own given under another keyword (e.g. `first=S`) raises, rather than being renamed
         strains (Strains): its strains (`ss.Strains`), which share its states; then `dis.strains`
         stratify (dict): the dimensions, as `stratify()` takes them, e.g. `dict(age={0: 0.3, 15: 0.6, 65: 0.1}, risk=ss.levels(['low', 'high'], states=[I]))`
-        solver (abm): its own way of running as agents, which the sim's does not override, e.g. `ss.solvers.abm(step='wholestep')` (by steps, with rates over whole steps only, for those in the state at the start of the step, as code with `ss.bernoulli()` takes them: faster, and a little less exact at a coarse step) or `ss.solvers.abm(step='events')` (event by event, in continuous time); by default, the sim's (see `ss.solvers.abm()` and `ss.solvers.agent_solver()`). An error for a compartmental run
+        solver (abm): its own way of running as agents, which the sim's does not override, e.g. `ss.solvers.abm(step='wholestep')` (by steps, with rates over whole steps only, for those in the state at the start of the step, as code with `ss.bernoulli()` takes them: faster, and a little less exact at a coarse step) or `ss.solvers.abm(step='events')` (event by event, in continuous time); by default, the sim's if it names a step, else its class's `suggested_solver` (e.g. `suggested_solver = ss.solvers.abm(step='wholestep')` in the class body), else 'midstep' (see `ss.solvers.abm()` and `ss.solvers.agent_solver()`). An error for a compartmental run
         kwargs (dict): one keyword per state, transition, parameter, result, function, or modifier (`ss.modify()`, of its own quantities, e.g. `fading=ss.modify('rel_trans', multiply=0.5, who=I)`); also `name`, `label`, and `dt`
 
     The results are the number in each state (`I`), the flow along each transition by its
@@ -164,6 +164,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
     graph = None # Its declared states and transitions (`ss.graph.Graph`); None for a disease written as code
     engine = None # Runs the declared part (see ss.solvers.make_engine()); created when the sim is initialized
     infection_log = None # An InfectionLog, if the sim has an ss.infection_log analyzer
+    suggested_solver = None # How a declared module's class suggests it runs as agents, e.g. ss.solvers.abm(step='wholestep') (or the step, 'wholestep'): followed unless the sim's solver names a step, or the module has its own solver= (see ss.solvers.agent_solver())
     code_pars = () # Parameters of a declared module that its own code reads rather than its graph (e.g. ss.Pregnancy's fertility rates)
     allow_modifiers = () # For a disease written as code: which of rel_sus, rel_trans, and its parameters its own code reads, with current_value(), so ss.modify() of them is applied (transmit(rel_trans=..., rel_sus=...) reads both)
 
@@ -287,7 +288,8 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
                 raise ValueError(f'"{name}" is already declared in "{self.name}"; names must be unique within a module (or give overwrite=True to replace it)')
             d.kwargs[name] = obj
             self.setattribute(name, obj) # So the declarations that follow can use it, e.g. self.S >> self.I
-        d.names.update(names)
+        declared = {id(obj) for obj in d.kwargs.values()}
+        d.names.update({i:n for i,n in names.items() if i not in declared}) # A local variable that holds a member already named by keyword (e.g. src = self.I) does not rename it
         return
 
     def define_states(self, *args, overwrite=False, **kwargs):
@@ -496,8 +498,17 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
             init_prev = ss.par(init_prev, name='init_n' if seed_n else 'init_prev')
         elif isinstance(init_prev, ss.par) and seed_n:
             init_prev.name = init_prev.name or 'init_n'
+        given_default = kwargs.get('default_state')
+        if isinstance(given_default, ss.State) and (given_default.name or (names or {}).get(id(given_default))): # The state itself, already named, e.g. default_state=S
+            kwargs['default_state'] = given_default.name or names.get(id(given_default))
         default_state = kwargs.pop('default_state') if isinstance(kwargs.get('default_state'), str) else getattr(type(self), 'default_state', None) # A state named "default_state" can still be declared by keyword; in the class form, default_state = 'N' in the class body
         default_state = default_state if isinstance(default_state, str) else None
+        for key,val in kwargs.items(): # A state that has a name already (from ss.states(), or its variable), given by a keyword of another name, would silently become a result, or be renamed; infected=I says which states are infected
+            own = (val.name or (names or {}).get(id(val))) if isinstance(val, ss.State) and not isinstance(val, ss.par) and key != 'infected' else None
+            if own is not None and own != key:
+                errormsg = (f'{key}={own} gives "{self.name}" its state {own} under another name, "{key}". If it is the state people are in unless put elsewhere, give default_state={own}; '
+                            f'for a result counting the people in it, give {key}={own}.n; or, to name the state "{key}", make it with that name (e.g. {key} = ss.State()) and give it as {key}={key}')
+                raise ValueError(errormsg)
         self.set_metadata(**meta)
         self.t.update(**timepars)
         holds_members = lambda leaf: any(v is m for v in ss.graph.inner_pars(leaf.raw) for m in members.values()) # A value holding the class's parameters, copied with them: by level (ss.by(sex=dict(female=p_f, male=p_m))), a distribution (ss.constant(dur_inc)), or one that varies in time
@@ -1075,11 +1086,28 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
                              '(A declared disease, such as ss.SIR, mixes homogeneously with no networks.)')
                 raise ValueError(errormsg)
         engine = self.engine
-        out = engine.over_routes(rel_trans, rel_sus, engine.code_betas(beta))
+        out = engine.over_routes(rel_trans, rel_sus, self.route_betas() if beta is None else engine.code_betas(beta))
         new, sources, routes = engine.first_infections([(srcs, trgs, nets) for trgs,srcs,nets in out])
         if self.infection_log is not None and len(new):
             self.infection_log.add_entries(new, sources, self.t.tvec[self.ti], network=routes)
         return new
+
+    def route_betas(self):
+        """
+        The beta of each of the sim's networks (by name), as a pair (p1 to p2, p2 to p1), that `transmit(rel_trans=..., rel_sus=...)` uses when not given `beta=`: by default `pars.beta`, as a number, rate, or dict by network, checked against them
+
+        Override it for betas worked out by code, e.g. by sex or genotype, starting from `super().route_betas()`.
+
+        **Example**:
+        ```python
+        class STI(ss.AgentDisease):
+            def route_betas(self):
+                betamap = super().route_betas()
+                betamap['sexual'] = [self.pars.beta_m2f, self.pars.beta_f2m] # Male to female and female to male, on ss.SexualNet
+                return betamap
+        ```
+        """
+        return self.engine.code_betas()
 
     @property
     def custom_transmit(self):
@@ -1188,8 +1216,16 @@ class AgentDisease(Disease):
     states; seeds `init_prev` of the people at the start; and each step transmits from `transmissibility()` to
     `susceptibility()` over the sim's networks (`transmit()`), counts the new cases in the `infection` result, and gives
     them their prognoses (`set_prognoses()`). A subclass overrides only what it needs: usually `set_prognoses()`, for what
-    happens to those infected, and `step_state()`, for how their states change. Anything else is plain code on the
-    arrays; e.g. a `transmit()` of its own can call `super().transmit(rel_trans=..., rel_sus=...)` once for each strain.
+    happens to those infected, and `step_state()`, for how their states change; those infected before birth (over
+    `ss.PrenatalNet`) go to `set_congenital()` instead, which a disease with outcomes at birth overrides. Anything else
+    is plain code on the arrays. The betas of the networks are `route_betas()`, which can be overridden too (e.g. by sex).
+
+    With `strains=ss.Strains(...)`, each person carries one strain at a time (`self.strain`, the index of the strain of
+    their current or last infection, -1 if none), which the disease's code reads (e.g. in `set_prognoses()`, with
+    `strain_value()` for a strain's values). The strains are transmitted in one pass, each by those infectious with it
+    at its `rel_trans`; each new case is infected by one of those who reached them in the step, at random, and takes
+    their strain, unless protected against it (`strain_sus()`: protection from `ss.immunity(due_to=<state>,
+    protection=matrix)` by the strain they had, or the disease's own), as a declared disease's strains are passed on.
 
     An infection in a step happens at its end, so a course scheduled from it starts at the next step: schedule a move
     `dur` steps after it at `self.ti + 1 + dur`, in an `ss.TimeArr`, and take it when `due()`. The seeds are dated by the
@@ -1199,6 +1235,7 @@ class AgentDisease(Disease):
 
     Args:
         pars (dict): parameters, e.g. `beta` and `init_prev` (a share, or an `ss.bernoulli`)
+        strains (`ss.Strains`): the strains, carried one at a time, sharing the disease's states (also `define_strains()`)
         kwargs (dict): parameters
 
     Example:
@@ -1220,14 +1257,28 @@ class AgentDisease(Disease):
                 self.ti_recovered[uids] = self.ti + 1 + self.pars.dur_inf
 
         sim = ss.Sim(diseases=SIR(), networks='random', unit='day', stop=100).run()
+
+        # With two strains, the second more transmissible; recovering from one protects fully against it, and partly against the other
+        class SIRS(SIR):
+            def step_state(self):
+                super().step_state()
+                self.susceptible[self.recovered] = True # Protected only by the immunity of their strain
+
+            def set_prognoses(self, uids, sources=None):
+                super().set_prognoses(uids, sources)
+                self.recovered[uids] = False
+
+        strains = ss.Strains(['H1', 'H3'], rel_trans=[1, 1.5], immunity=ss.immunity(due_to='recovered', protection=[[1, 0.5], [0.5, 1]]))
+        sim = ss.Sim(diseases=SIRS(strains=strains, name='flu'), networks='random', unit='day', stop=100).run()
+        sim.diseases.flu.strain # The strain of each person's current or last infection
         ```
     """
     allow_modifiers = ('rel_sus', 'rel_trans') # Read by transmit(), so ss.modify() of them and products (e.g. a vaccine) are applied
 
-    def __init__(self, pars=None, **kwargs):
+    def __init__(self, pars=None, strains=None, **kwargs):
         super().__init__()
         self.define_pars(init_prev=None) # None for no seeds
-        self.update_pars(pars, **kwargs)
+        self.update_pars(pars, strains=strains, **kwargs)
         self.define_states(
             ss.BoolState('susceptible', default=True, label='Susceptible'),
             ss.BoolState('infected', label='Infected'),
@@ -1239,10 +1290,70 @@ class AgentDisease(Disease):
         self.trans_rng = ss.multi_random('source', 'target') # The draws of transmission over each edge, keyed by its source and target
         return
 
+    def define_strains(self, strains):
+        """
+        Give the disease strains (`ss.Strains`, also as `strains=`), carried one at a time: the strain of each person (`self.strain`, added when the
+        sim is initialized, and set for those infected by transmission, at the start, and by `infect()`; code that infects people itself sets it)
+
+        Args:
+            strains (Strains): the strains; those infected at the start, or by `infect()` with no strain, have one drawn by its `fractions`
+        """
+        if not isinstance(strains, ss.Strains):
+            raise TypeError(f'strains= of "{self.name}" is an ss.Strains, e.g. ss.Strains(["a", "b"], rel_trans=[1, 2]); not {type(strains).__name__}')
+        if strains.max_strains > 1:
+            raise ss.CapabilityError(f'"{self.name}" is written as code, so its strains are carried one at a time, sharing its states, with protection on rel_sus due to its own states; but max_strains={strains.max_strains}. Declare the disease (see ss.Disease) for more.')
+        self.strains = strains # Its arrays are added when the sim is initialized (see init_pre()), so a subclass may define its own states after this
+        return
+
+    def update_pars(self, pars=None, **kwargs):
+        """ As `ss.Module.update_pars()`, and `strains=` for `define_strains()`, so a subclass that passes its keywords on here takes it too (e.g. `ssl.AgentSIR(strains=...)`) """
+        if isinstance(pars, dict) and 'strains' in pars: # Also in a dict of parameters
+            pars = dict(pars)
+            kwargs['strains'] = pars.pop('strains')
+        strains = kwargs.pop('strains', None)
+        if strains is not None:
+            self.define_strains(strains)
+        return super().update_pars(pars, **kwargs)
+
+    def strain_value(self, key, uids):
+        """
+        The value of `key` (given to `ss.Strains`, e.g. `dur=[0.5, 1]`) for the strain each of some agents carries (1 if they have none)
+
+        Args:
+            key (str): the name of the value
+            uids (array): the agents
+        """
+        vals = np.asarray(self.strains.values[key], dtype=float) if key in self.strains.values else np.ones(len(self.strains))
+        strain = self.strain[uids]
+        return np.where(strain >= 0, vals[np.maximum(strain, 0)], 1.0)
+
+    def strain_sus(self, k):
+        """
+        The share of their susceptibility to strain `k` that each agent (by UID) keeps: `1 − protection` from each `ss.immunity` of the strains,
+        for those in its state (e.g. `due_to='recovered'`) by the strain they had; a disease with protection of its own (e.g. from antibodies) overrides this
+
+        Args:
+            k (int): the index of the strain
+        """
+        out = 1.0
+        strain = self.strain.raw
+        for imm in self.strains.immunity:
+            held = np.logical_or.reduce([self[name].raw for name in imm.names]) & (strain >= 0)
+            out = out*np.where(held, 1 - imm.matrix(len(self.strains))[np.maximum(strain, 0), k], 1.0)
+        return out
+
     def init_pre(self, sim):
         if sc.isnumber(self.pars.init_prev): # A share, e.g. init_prev=0.01
             self.pars.init_prev = ss.bernoulli(self.pars.init_prev)
-        return super().init_pre(sim)
+        if self.strains is not None and not isinstance(getattr(self, 'strain', None), ss.IntArr): # The strain of each person, and of those infected with none given, by the split
+            n = len(self.strains)
+            self.define_states(ss.IntArr('strain', default=-1, label='Strain of the current or last infection'))
+            self.strain_dist = ss.choice(a=n, p=self.strains.fractions if self.strains.fractions is not None else np.full(n, 1/n))
+        out = super().init_pre(sim)
+        unknown = [name for imm in (self.strains.immunity if self.strains is not None else []) for name in imm.names if not isinstance(getattr(self, name, None), ss.BoolArr)]
+        if unknown:
+            raise sc.KeyNotFoundError(f'the strains of "{self.name}" are protected by ss.immunity(due_to={unknown[0]!r}), which is not one of its states (a boolean array, e.g. ss.BoolState("recovered"))')
+        return out
 
     def init_post(self):
         """ Seed `init_prev` of the people born by the start (not the fetuses of pregnancies begun before it), dated by the step before the first """
@@ -1272,7 +1383,8 @@ class AgentDisease(Disease):
     def step(self):
         """ Transmit (`transmit()`), and infect the new cases """
         super().step() # The modifiers worked out again, once the interventions have run
-        return self.infect(self.transmit(), log=False) # transmit() logs them, with their sources
+        new = self.transmit()
+        return self.infect(new, log=False, strain=self.strain[new] if self.strains is not None else None) # transmit() logs them, with their sources, and gives each the strain of their source
 
     def transmissibility(self):
         """ The transmissibility of each agent, by UID: `rel_trans`, 0 for those not infectious """
@@ -1288,27 +1400,83 @@ class AgentDisease(Disease):
             return ss.uids()
         rel_trans = self.transmissibility() if rel_trans is None else rel_trans
         rel_sus = self.susceptibility() if rel_sus is None else rel_sus
-        return super().transmit(rel_trans=rel_trans, rel_sus=rel_sus, beta=beta)
+        if self.strains is None:
+            return super().transmit(rel_trans=rel_trans, rel_sus=rel_sus, beta=beta)
+        if self.engine is None:
+            raise RuntimeError(f'"{self.name}" transmits once the sim is initialized (sim.init())')
+        betamap = self.route_betas() if beta is None else self.engine.code_betas(beta)
+        new, sources, routes, strain = self.engine.strain_cases(rel_trans, rel_sus, betamap)
+        self.strain[new] = strain # Each takes the strain of their source
+        if self.infection_log is not None and len(new):
+            self.infection_log.add_entries(new, sources, self.t.tvec[self.ti], network=routes)
+        return new
 
-    def infect(self, uids, log=True):
+    def infect(self, uids, log=True, strain=None):
         """
         Infect some agents now: those susceptible, counted in `infection` (except the seeds, which are prevalent), and given their prognoses
 
         Args:
             uids (uids): the agents (e.g. imported cases); those not susceptible are left as they are
             log (bool): record them in an `ss.infection_log`, with no source (-1)
+            strain (str/int/array): with strains, the strain they are infected with: its name or index, or one for each agent; by default drawn by the strains' `fractions`
 
         Returns:
             The agents infected
+
+        Example:
+            ```python
+            flu.infect(sim.people.auids[:20], strain='H3') # 20 imported cases of H3
+            ```
         """
         uids = ss.uids(uids)
-        uids = uids[self.susceptible[uids]]
+        if strain is not None and self.strains is None:
+            raise ss.CapabilityError(f'"{self.name}" has no strains (strains=ss.Strains(...)), so infect() takes no strain=')
+        ok = self.susceptible[uids]
+        uids = uids[ok]
+        if self.strains is not None: # Each one's strain, before their prognoses, which may read it (strain_value())
+            if strain is None:
+                strain = self.strain_dist.rvs(uids)
+            elif isinstance(strain, str):
+                if strain not in self.strains.names:
+                    raise sc.KeyNotFoundError(f'"{strain}" is not a strain of "{self.name}"; its strains are {sc.strjoin(self.strains.names)}')
+                strain = self.strains.names.index(strain)
+            elif not sc.isnumber(strain):
+                strain = np.asarray(strain)[ok]
+            self.strain[uids] = strain
         if log and self.infection_log is not None:
             self.infection_log.add_entries(uids, -1)
         if self.sim.initialized:
             ss.results.add_count(self.results.infection, self.ti, uids, self.sim)
-        self.set_prognoses(uids)
+        self.set_outcomes(uids)
         return uids
+
+    def set_outcomes(self, uids, sources=None):
+        """
+        Give those just infected their outcomes: those infected before birth (age 0 or less, e.g. over `ss.PrenatalNet`) by `set_congenital()`, the rest by `set_prognoses()`
+
+        Args:
+            uids (uids): the agents infected
+            sources (array): who infected them, if known
+        """
+        unborn = self.sim.people.age[uids] <= 0
+        if np.any(unborn):
+            self.set_congenital(uids[unborn], None if sources is None else sources[unborn])
+            uids, sources = uids[~unborn], None if sources is None else sources[~unborn]
+        self.set_prognoses(uids, sources)
+        return
+
+    def set_congenital(self, uids, sources=None):
+        """
+        What happens to those infected before birth (over `ss.PrenatalNet`; see `set_outcomes()`): by default, the same as anyone infected (`set_prognoses()`)
+
+        A disease with outcomes at birth overrides this, e.g. `ssl.CongenitalDisease` (`import starsim.library as ssl`), which schedules a
+        birth outcome (a stillbirth, a congenital infection) for each.
+
+        Args:
+            uids (uids): the people infected before birth
+            sources (array): who infected them, if known
+        """
+        return self.set_prognoses(uids, sources)
 
     def set_prognoses(self, uids, sources=None):
         """

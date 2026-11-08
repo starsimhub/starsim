@@ -117,10 +117,11 @@ class HybridNet(ss.Network):
     sizes, clusters give the same mean number of contacts as a random network.
     Each network can then be modified separately, e.g. `sim.networks.s`.
 
-    Transmissibility on each network is the disease's, by network: Covasim v3's relative
-    transmissibility of the layers was 3 for households, 0.6 for schools and workplaces, and
-    0.3 for the community, so with a beta of 0.016 a contact (Covasim's default), e.g.
-    `ss.SIS(beta=dict(h=0.048, s=0.0096, w=0.0096, c=0.0048))`.
+    Transmissibility on each network is the disease's, by network. Covasim v3's relative
+    transmissibility of the layers is `ssl.HybridNet.rel_betas` (3 for households, 0.6 for schools
+    and workplaces, and 0.3 for the community), and `ssl.HybridNet.betas()` gives a disease's beta
+    for each layer from its beta per contact (by default Covasim's, 0.016 a day), e.g.
+    `ss.SIS(beta=ssl.HybridNet.betas())`, which is `beta=dict(h=ss.perday(0.048), s=ss.perday(0.0096), w=ss.perday(0.0096), c=ss.perday(0.0048))`.
 
     Note: CRN safe, unless `dynamic=True` and people are born or die.
 
@@ -142,11 +143,33 @@ class HybridNet(ss.Network):
 
         # Larger households and smaller schools; n_contacts can be partial
         hybrid = ssl.HybridNet(household_size=ss.poisson(3), n_contacts=dict(s=ss.poisson(10)))
+
+        # Covasim's transmissibility on each layer, for a disease with twice its beta per contact
+        sir = ss.SIR(beta=ssl.HybridNet.betas(ss.perday(0.032)))
+        sim = ss.Sim(diseases=sir, networks=ssl.HybridNet(), unit='day', stop=60).run()
         ```
     """
+    rel_betas = dict(h=3.0, s=0.6, w=0.6, c=0.3) # Covasim v3's relative transmissibility of each layer (its beta_layer)
+
+    @classmethod
+    def betas(cls, beta=None):
+        """
+        The beta of a disease on each layer, by name: its beta per contact times the layer's relative transmissibility (`rel_betas`, Covasim v3's)
+
+        Args:
+            beta (float/rate): the beta per contact (default Covasim's, `ss.perday(0.016)`); a number is in the model's unit
+
+        **Example**:
+        ```python
+        ss.SIS(beta=ssl.HybridNet.betas()) # dict(h=ss.perday(0.048), s=ss.perday(0.0096), w=ss.perday(0.0096), c=ss.perday(0.0048))
+        ```
+        """
+        beta = ss.perday(0.016) if beta is None else beta
+        return {k:beta*v for k,v in cls.rel_betas.items()}
+
     def __init__(self, pars=None, household_size=_, n_contacts=_, school_ages=_, work_ages=_, dynamic=_, method=_, clustered=_, **kwargs):
         ss.networks.check_replaced(self, pars, kwargs, dict(contacts='the number of contacts in each network is n_contacts=, e.g. n_contacts=dict(s=10)',
-            beta=ss.networks.replaced_beta + "; Covasim v3's relative transmissibility of the layers was dict(h=3, s=0.6, w=0.6, c=0.3)"))
+            beta=ss.networks.replaced_beta + "; Covasim v3's for each layer is ssl.HybridNet.betas(), e.g. ss.SIS(beta=ssl.HybridNet.betas())"))
         super().__init__()
         self.define_pars(
             household_size = ss.poisson(mean=2.0), # Covasim v3 default (contacts['h'])

@@ -196,7 +196,7 @@ flu.stratify(age=[0, 5, 15, 65]) # The shares in each come from the population
 
 layers = ss.contacts('Kenya', layer=['home', 'school', 'work', 'community'])
 home, school, work, community = layers
-closure = ss.modify(school, multiply=0, when=ss.schedule(start=ss.days(10))) # No school contacts from day 10
+closure = ss.modify(school, multiply=0, start=ss.days(10)) # No school contacts from day 10
 
 kw = dict(people=ss.population('Kenya'), networks=layers, stop=ss.days(100), verbose=0)
 scenarios = {

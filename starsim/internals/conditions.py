@@ -918,7 +918,7 @@ def check_not_time(who, what):
         raise TypeError(errormsg)
     names = getattr(getattr(who, '__code__', None), 'co_names', None)
     if callable(who) and names and set(names) <= time_names:
-        errormsg = f'who= of {what} says who it applies to, but {getattr(who, "__name__", "the function")} reads only the time ({sc.strjoin(sorted(set(names)))}), which says when it applies: give it as when=, e.g. when=ss.schedule(start=...), or a function of the date, when=lambda now: now.month == 1'
+        errormsg = f'who= of {what} says who it applies to, but {getattr(who, "__name__", "the function")} reads only the time ({sc.strjoin(sorted(set(names)))}), which says when it applies: give the window as start= and stop= (which go with any when=, e.g. when=screening.positive, start=2001), or when= as a function of the date, e.g. when=lambda now: now.month == 1'
         raise TypeError(errormsg)
     return who
 

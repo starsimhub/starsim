@@ -17,18 +17,37 @@ from .agents_branching import Branching
 
 __all__ = ['agent_solver', 'Transmission', 'Agents']
 
+def suggested_step(module):
+    """ The step that a declared module's class suggests it run by as agents (its `suggested_solver`: `ss.solvers.abm(step=...)`, or the step by name), or None """
+    val = getattr(module, 'suggested_solver', None)
+    if val is None or isinstance(val, ss.solvers.abm):
+        return getattr(val, 'step', None)
+    steps = ss.solvers.abm.options['step'][1]
+    step = val.removeprefix('abm-') if isinstance(val, str) else None # 'wholestep', or as it was once spelled, 'abm-wholestep'
+    if step not in steps:
+        errormsg = f'"{module.name}" has suggested_solver={val!r}, but it must be ss.solvers.abm(step=...) or one of its steps, {sc.strjoin(steps)}'
+        raise ValueError(errormsg)
+    return step
+
+
 def agent_solver(module, sim, why=False):
     """
     How a declared module's agents are stepped, one of the steps of `ss.solvers.abm()` ('midstep', 'wholestep', or 'events'): its own
-    (`ss.Disease(..., solver=ss.solvers.abm(step=...))`), if it has one; else the sim's (`ss.Sim(solver=ss.solvers.abm(step=...))`, 'midstep' by default).
-    With `why=True`, also where it came from: `'own'`, `'sim'`, or `'default'`.
+    (`ss.Disease(..., solver=ss.solvers.abm(step=...))`), if it has one; else the sim's, if it names a step (`ss.Sim(solver=ss.solvers.abm(step=...))`);
+    else what its class suggests (`suggested_solver = ss.solvers.abm(step='wholestep')` in the class body); else 'midstep'.
+    With `why=True`, also where it came from: `'own'`, `'sim'`, `'suggested'`, or `'default'`.
     """
     own = getattr(module, 'solver', None)
     ran = sim.solver if isinstance(sim.solver, ss.solvers.abm) else ss.solvers.abm()
+    suggested = suggested_step(module)
     if own is not None:
         step, source = own.step, 'own'
+    elif ran.named:
+        step, source = ran.step, 'sim'
+    elif suggested is not None:
+        step, source = suggested, 'suggested'
     else:
-        step, source = ran.step, 'sim' if ran.given() else 'default'
+        step, source = ran.step, 'default'
     return (step, source) if why else step
 
 
@@ -145,6 +164,40 @@ class Transmission(Effects):
     def over_routes(self, rel_trans, rel_sus, betamap):
         """ The infections over each of the sim's routes in turn (`code_route()`), each a tuple of targets, sources, and network IDs: see `ss.Disease.transmit()` """
         return [self.code_route(i, route, betamap[ss.networks.standardize_netkey(nkey)], rel_trans, rel_sus) for i,(nkey,route) in enumerate(self.sim.networks.items())]
+
+    def strain_cases(self, rel_trans, rel_sus, betamap):
+        """
+        The infections of a disease written as code with strains (`ss.AgentDisease(strains=...)`), as for a declared disease's: every strain in
+        one pass, at the infectiousness of the strain each carries (`rel_trans` of `ss.Strains`); each new case is infected by one of those who
+        reached them, at random (`pick_sources()`), whose strain they take, unless protected against it (`dis.strain_sus()`, `unprotected()`)
+
+        Returns:
+            The new cases, and for each the source, the route, and the index of the strain
+        """
+        dis = self.mod
+        strains = dis.strains
+        held = dis.strain.raw
+        rel = strains.values['rel_trans'] if 'rel_trans' in strains.values else np.ones(len(strains))
+        trans = np.asarray(rel_trans.raw if isinstance(rel_trans, ss.Arr) else rel_trans)*np.where(held >= 0, rel[np.maximum(held, 0)], 0.0) # Nobody without a strain transmits
+        out = []
+        for i,(nkey,route) in enumerate(self.sim.networks.items()):
+            betas = betamap[ss.networks.standardize_netkey(nkey)]
+            if isinstance(route, ss.Network): # On a network, each case has a source, whose strain they take
+                trgs, srcs, nets = self.code_route(i, route, betas, trans, rel_sus)
+                out.append((srcs, trgs, nets, held[srcs]))
+            else: # Another route gives no sources, so each strain is transmitted over it by those who carry it
+                for k in range(len(strains)):
+                    trgs, srcs, nets = self.code_route(i, route, betas, trans*(held == k), rel_sus)
+                    out.append((srcs, trgs, nets, k))
+        out = [pair for pair in out if len(pair[1])]
+        if not out:
+            return ss.uids(), ss.uids(), np.empty(0, dtype=ss.dtypes.int), np.empty(0, dtype=ss.dtypes.int)
+        new, sources, routes, strain = self.pick_sources(out, 'infection')
+        kept = np.ones(len(new))
+        for k in np.unique(strain):
+            kept[strain == k] = np.broadcast_to(dis.strain_sus(k), trans.shape)[new[strain == k]]
+        ok = self.unprotected('infection', new, kept)
+        return new[ok], sources[ok], routes[ok], strain[ok]
 
     def code_route(self, i, route, betas, rel_trans, rel_sus):
         """
@@ -295,6 +348,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         self.triggers = [tr for tr in graph.transitions.values() if tr.trigger is not None and not tr.trigger.outcome] # Moved by ss.on(): see triggered(); those on the outcome of a delivery move as it happens (see ss.interventions.trigger_moves())
         self.trigger_mods = set().union(*[ss.conditions.module_refs(tr.trigger.x) for tr in self.triggers]) # The modules whose changes they react to
         self._seen = dict() # The events each trigger on an event has seen already
+        self._absent = set() # The triggers on an event of a module not in the sim, which never fire (noted once: see new_events())
         self.lifelong = dict() # Values by sex for everyone, by UID, and the parameters of the distributions that use them, kept for the run: see by_people() and agent_pars()
         self.lifelong_used = dict() # For each, the number of agents (by UID) made when it was worked out: the arrays have room for agents not yet made, whose values (e.g. their sex) are not known until they are
         self._news = False # Whether anyone has moved since the modules that react to this one last looked: see notify()

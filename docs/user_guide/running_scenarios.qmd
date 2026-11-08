@@ -72,7 +72,7 @@ msim = ss.parallel(sim.new(solver='gillespie'), n_runs=50)
 msim.plot('measles.I')
 ```
 
-`ss.parallel(sim, n_runs=50)` runs it 50 times, each with its own random seed (`sim.run()` runs it once, and always returns the sim; `sim.new(solver='gillespie')` is the same sim, built for the Gillespie solver). The ODE gave one outbreak peaking at about 137 infectious on day 74. The plot of the runs shows their median at each time point, and the range that holds 95% of them. `lines=True` shows each run instead, which shows what the median hides:
+`ss.parallel(sim, n_runs=50)` runs it 50 times, each with its own random seed (`sim.run()` runs it once, and always returns the sim; a single sim with no `n_runs=`, `ss.parallel(sim)` or `ss.MultiSim(sim)`, is also one run, where in Starsim 3 `ss.MultiSim(sim)` ran it four times; `sim.new(solver='gillespie')` is the same sim, built for the Gillespie solver). The ODE gave one outbreak peaking at about 137 infectious on day 74. The plot of the runs shows their median at each time point, and the range that holds 95% of them. `lines=True` shows each run instead, which shows what the median hides:
 
 ```{python}
 msim.plot('measles.I', lines=True)

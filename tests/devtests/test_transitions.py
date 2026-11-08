@@ -435,8 +435,7 @@ def test_outcomes():
     assert np.allclose(refit.results.sir.I, fit.sim.results.sir.I)
     named = ss.Sim(make(0.3), pars=dict(dur_I=ss.days(5)), rand_seed=2, **pars).run() # A parameter of the model's by name, and a sim setting by keyword
     assert named.results.sir.I.max() < 0.5*res.I.max() and named.pars.rand_seed == 2
-    with pytest.raises(sc.KeyNotFoundError, match='setting of the sim'): # pars= is only the model's parameters, so a setting of the sim there is an error, not taken as the setting
-        ss.Sim(make(0.3), pars=dict(dur_I=ss.days(5), rand_seed=2), **pars).init()
+    assert ss.Sim(make(0.3), pars=dict(dur_I=ss.days(5), rand_seed=2), **pars).pars.rand_seed == 2 # A setting of the sim in pars= too, as in Starsim 3
     with pytest.raises(TypeError, match='pars=dict'): # And a parameter of the model given as a keyword says to give it in pars=
         ss.Sim(make(0.3), dur_I=ss.days(5), **pars)
 

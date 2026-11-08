@@ -92,7 +92,7 @@ with ss.options.context(blas_threads=4): # Or just for this block
     results = my_matrix_calculation()
 ```
 
-Or set it from the shell, with `STARSIM_BLAS_THREADS=4 python my_script.py`. This is separate from `ss.options.num_threads`, which sets the threads for Starsim's own loops over agents.
+Or set it from the shell, with `STARSIM_BLAS_THREADS=4 python my_script.py`. This is separate from `ss.options.threads` (`STARSIM_THREADS`), which sets the threads for Starsim's own loops over agents. (`ss.options.num_threads` and `STARSIM_NUM_THREADS`, which meant one or the other in the release candidates of Starsim 4, are no longer read: the option raises an error, and the variable a warning, naming these two.)
 
 On Linux, this works at any time. On Windows and macOS, it can't change BLAS once NumPy has been imported, though workers of `ss.parallel()` still get it. This rarely matters, but if it does, import Starsim before NumPy, or set `OPENBLAS_NUM_THREADS` (`VECLIB_MAXIMUM_THREADS` on a Mac) before starting Python.
 

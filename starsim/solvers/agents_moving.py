@@ -392,6 +392,11 @@ class Moving:
         """ The agents an event trigger's event has happened to since it last looked """
         event = tr.trigger.x
         name = ss.conditions.modname(event.module)
+        if name not in [None, self.mod.name] and name not in {mod.name for mod in self.sim.declared}: # An event of a module that isn't in the sim (e.g. ss.ref('pregnancy.birth') with no ss.Pregnancy) never happens
+            if tr.name not in self._absent:
+                self._absent.add(tr.name)
+                ss.note(f'"{self.mod.name}.{tr.name}" is triggered by an event of "{name}", which is not in the sim, so it never happens', sim=self.sim)
+            return ss.uids()
         engine = self if name in [None, self.mod.name] else self.sim._declared_module(name).engine
         spec = event.spec()
         if len(spec) == 1 and 'tr' in spec and engine.last_batch.get(spec['tr'], 0) <= self._seen.get(tr.name, 0): # Nothing of its transition since it looked

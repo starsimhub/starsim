@@ -543,6 +543,12 @@ def test_hybrid():
     # As in Covasim v3, use random schools and workplaces, and choose the targets of edges uniformly
     sim2 = ss.Sim(n_agents=medium, diseases='sis', networks=ssl.HybridNet(clustered=False, method='uniform'), verbose=0).init()
     assert all(sim2.networks[k].pars.method == 'uniform' for k in ['s', 'w', 'c'])
+
+    # Covasim's transmissibility on each layer, as a disease's beta by network
+    betas = ssl.HybridNet.betas(ss.perday(0.02))
+    assert list(betas) == ['h', 's', 'w', 'c'] and np.isclose(betas['h'].value, 0.06) and np.isclose(betas['c'].value, 0.006) and ssl.HybridNet.rel_betas['s'] == 0.6
+    sim3 = ss.Sim(n_agents=small, diseases=ss.SIR(beta=ssl.HybridNet.betas()), networks=ssl.HybridNet(), unit='day', stop=30, verbose=0).run()
+    assert sim3.results.sir.infection.sum() > 0
     return sim
 
 

@@ -118,7 +118,9 @@ class abm(Solver):
     """
     Agents, with their options: `ss.Sim(solver=ss.solvers.abm(step='events'))`; `solver='abm'` is the same with the defaults
 
-    Also a declared module's own way of running as agents, which the sim's does not override: `ss.Disease(..., solver=ss.solvers.abm(step='wholestep'))`.
+    Also a declared module's own way of running as agents, which the sim's does not override: `ss.Disease(..., solver=ss.solvers.abm(step='wholestep'))`;
+    or what a module's class suggests, `suggested_solver = ss.solvers.abm(step='wholestep')` in the class body, which `solver='abm'` (or `'auto'`)
+    follows, and a sim's solver that names a step (e.g. `ss.solvers.abm(step='midstep')`) overrides (see `ss.solvers.agent_solver()`).
 
     Args:
         step (str): how the agents of a declared module are stepped: 'midstep' (the default: by steps, with those who arrive in a state during a step facing its rates for the rest of it), 'wholestep' (by steps, with rates over whole steps only, for those in the state at the start of the step, as code with `ss.bernoulli()` takes them: faster, and a little less exact at a coarse step), or 'events' (event by event in continuous time within each step, a prototype)
@@ -127,8 +129,9 @@ class abm(Solver):
     options = dict(step=('midstep', ['midstep', 'wholestep', 'events']))
     example = "ss.solvers.abm(step='events')"
 
-    def __init__(self, *, step='midstep'):
-        super().__init__(step=step)
+    def __init__(self, *, step=None):
+        super().__init__(step=sc.ifelse(step, 'midstep'))
+        self.named = step is not None # Whether the step was asked for, which overrides what a module's class suggests (see agent_solver())
 
 
 def as_solver(solver):
@@ -166,8 +169,12 @@ class Undeclared(Transmission):
     finalize_results = Transmission.reset_pars
 
     def define(self):
-        """ Nothing declared, so no distributions of its own: the disease's code makes its own """
+        """ Nothing declared, so no distributions of its own (the disease's code makes its own); with strains, those of who infects whom and of protection (see `Transmission.strain_cases()`), by the names a declared disease's transmission called `infection` (e.g. `ss.SIR`'s) gives them, so the same model draws the same numbers both ways """
         self.dists = sc.obj()
+        if getattr(self.mod, 'strains', None) is not None:
+            for key in ['pick_infection', 'protect_infection']:
+                self.dists[key] = ss.random(name=f'rng_{key}')
+                self.mod.setattribute(f'rng_{key}', self.dists[key])
         return
 
     def start_step(self):
@@ -306,7 +313,7 @@ def choose_solver(sim):
         solver = as_solver(solver)
     elif getattr(solver, 'dwells', None) == 'exact': # The ODE, with each dwell time as it is rather than as Erlang stages
         reason = 'requested (as an integro-differential model)'
-    elif isinstance(solver, abm) and solver.given(): # Agents in a particular way, for every declared module without its own (see agent_solver())
+    elif isinstance(solver, abm) and solver.named: # Agents in a particular way, for every declared module without its own (see agent_solver())
         how = dict(midstep='those who arrive during a step face its rates for the rest of it', wholestep='rates over whole steps only', events='by events, in continuous time')[solver.step]
         reason = f'requested ({how})'
     else:
@@ -627,7 +634,7 @@ def set_par_values(sim):
             options = [f'{mod.name}.{k}' for mod in sim.declared for k in mod.graph.pars] + [f'{mod.name}.{k}' for mod in coded for k in mod.pars.bounded()]
             listed = f'Parameters are {sc.strjoin(options)}{ss.expressions.did_you_mean(key, options)}' if options else 'This sim has none that pars= can set (those of a declared model, and those of a module written as code that have bounds).'
             if key in ss.SimPars.names(): # A sim setting, given by value
-                listed += f' "{key}" is a setting of the sim, which pars= does not take: give it by keyword, ss.Sim({key}=...) or sim.new({key}=...), or as ss.par in the sim (e.g. {key}=ss.par(..., bounds=[...])) to fit it.'
+                listed += f' "{key}" is also a setting of the sim: give it by keyword, ss.Sim({key}=...) or sim.new({key}=...), or as ss.par in the sim (e.g. {key}=ss.par(..., bounds=[...])) to fit it.'
             raise sc.KeyNotFoundError(f'pars= has a value for "{key}", which {"matches no parameter" if not mods else "is a parameter of more than one module"}. {listed}')
         attrs = getattr(mods[0], '_par_attrs', {}).get(name) if name not in mods[0].pars else None
         if attrs is None:

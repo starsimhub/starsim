@@ -390,11 +390,11 @@ class treat_pregnant(ss.Delivery):
 
     Example — treatment from 2025, of half the women eligible::
 
-        ssl.mnch.treat_pregnant(disease='sir', when=ss.schedule(start=2025), coverage=0.5)
+        ssl.mnch.treat_pregnant(disease='sir', start=2025, coverage=0.5)
     """
 
     def __init__(self, disease='sir', coverage=0.9, who=None, when=None, growth_reversal=0.7, timing_reversal=0.7, name=None, **kwargs):
-        replaced = dict(start_year='when=ss.schedule(start=...)', end_year='when=ss.schedule(stop=...)', p_treat='coverage=',
+        replaced = dict(start_year='start=', end_year='stop=', p_treat='coverage=',
                         tx_growth_reversal='growth_reversal=', tx_timing_reversal='timing_reversal=', pars='its keywords')
         for key in kwargs:
             if key in replaced:

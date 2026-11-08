@@ -123,7 +123,7 @@ About a quarter of the people who tested positive did so more than once, since c
 There is no vaccine for gonorrhea in routine use, but a meningococcal vaccine appears to give some protection, perhaps 30–40%. Suppose one that is 35% effective is given to 80% of people as they turn 15, from 2010. `at_age=` is routine delivery as people reach an age: each person is offered it once, on the step on which they reach it, and not everyone older on the first day. Vaccination of each cohort as it reaches an age takes decades to reach everyone at risk, so these runs go on to 2040:
 
 ```{python}
-vaccination = ss.vaccinate(efficacy=0.35, who=ss.at_age(15), when=ss.schedule(start='2010'), coverage=0.8)
+vaccination = ss.vaccinate(efficacy=0.35, who=ss.at_age(15), start='2010', coverage=0.8)
 
 long = dict(settings, stop=2040) # 40 years instead of 20
 sims = {

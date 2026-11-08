@@ -21,15 +21,6 @@ def level_dtype(n):
     return np.int16 if n < 2**15 else np.int32
 
 
-def is_number(string):
-    """ Whether a string is a number, e.g. '15' or '0.5' """
-    try:
-        float(string)
-        return True
-    except ValueError:
-        return False
-
-
 #%% Stratifications
 
 class Strat:
@@ -69,8 +60,6 @@ class Strat:
                 errormsg = f'"{name}" was given the share in each level twice, as a dict and as fractions=; give one'
                 raise ValueError(errormsg)
             levels, fractions = list(levels.keys()), list(levels.values())
-            if all(isinstance(v, str) and is_number(v) for v in levels): # Keys that are numbers as strings, as from R, JSON, or YAML, e.g. {'0': 0.3, '15': 0.6, '65': 0.1}
-                levels = [float(v) for v in levels]
         if isinstance(mobility, (list, tuple)) and any(isinstance(m, (Mobility, gravity, radiation)) for m in mobility):
             errormsg = f'mobility= takes one movement for "{name}", not {len(mobility)}; movements of one kind can be combined by adding their matrices (ss.geo.Mobility(M1 + M2)), but several kinds at once (e.g. a register and commuting) are not supported'
             raise TypeError(errormsg)
@@ -526,7 +515,7 @@ def who_levels(strat, spec, owner):
 
 
 replaced_options = dict( # The options that stratify() took beside the dimensions, now in ss.levels() (or replaced), and how to tell the old use from a dimension of that name
-    fractions = lambda v, n: isinstance(v, by) or (n > 0 and isinstance(v, (list, tuple, np.ndarray)) and all(sc.isnumber(x) for x in v) and np.isclose(np.sum(v), 1)),
+    fractions = lambda v, n: isinstance(v, by) or (n > 0 and isinstance(v, (list, tuple, np.ndarray)) and all(sc.isnumber(x) for x in v)), # Numbers beside another dimension, shares or counts, are the old fractions=, not a dimension of their own
     adjust = lambda v, n: isinstance(v, dict) and any(isinstance(x, (list, tuple, np.ndarray)) for x in v.values()),
     kind = lambda v, n: isinstance(v, str),
     where = lambda v, n: isinstance(v, dict) and not all(sc.isnumber(x) for x in v.values()),

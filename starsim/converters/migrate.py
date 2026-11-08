@@ -137,7 +137,7 @@ dist_keywords = {f'ss.{name}':mapping for name,mapping in dict(
 # What needs a person: a regular expression, and what to write instead
 flags = [
     (r'\bdef infect\(\s*self\s*\)|\b(super\(\)|self)\.infect\(\s*\)', "ss.Infection's transmission pass, infect(self), is ss.AgentDisease's transmit(), which returns the UIDs of the new cases (and records their sources and routes in an ss.infection_log); an override of it calls super().transmit(rel_trans=..., rel_sus=...) for its own arrays, e.g. once for each strain (infect(uids) now infects those agents at once)"),
-    (r'\bvalidate_beta\(|\broute_betas\(|\btransmit_route\(|\bfinalize_infections\(', "These steps of ss.Infection's transmission were removed: ss.AgentDisease's transmit(rel_trans=..., rel_sus=..., beta=...) is the whole of it, over every network and route, with the modifiers on rel_trans and rel_sus applied (by default, from transmissibility() and susceptibility(), and beta from self.pars.beta)"),
+    (r'\bvalidate_beta\(|\btransmit_route\(|\bfinalize_infections\(', "These steps of ss.Infection's transmission were removed: ss.AgentDisease's transmit(rel_trans=..., rel_sus=..., beta=...) is the whole of it, over every network and route, with the modifiers on rel_trans and rel_sus applied (by default, from transmissibility() and susceptibility(), and the beta of each route from route_betas(), which validate_beta() was)"),
     (r'\bss\.datedur\b', 'ss.datedur was removed: whole ss.months(n) and ss.years(n) added to a date follow the calendar (ss.datedur(months=1) is ss.months(1))'),
     (r'\bss\.beta_mean\b', "ss.beta_mean(mean=m, var=v) is ss.beta_dist(mean=m, std=s), with the standard deviation s = sqrt(v)"),
     (r'\bss\.lognorm_im\b|\blognorm_im\b', "ss.lognorm_im(m, s) is ss.lognormal(log_mean=m, log_std=s) (by keyword, since ss.lognormal(m, s) is its own mean and standard deviation)"),
@@ -170,7 +170,6 @@ flags = [
     (r'\bdur_(inf|exp)\s*=\s*(dict\(|\{|\[)', "if this is ss.SIR, ss.SIS, or ss.SEIR: give the distribution itself, e.g. dur_inf=ss.lognormal(mean=ss.years(10), std=ss.years(2)) for [10, 2] or dict(type='lognormal', ...); a duration is otherwise the mean of an exponential"),
     (r'\bdef net_beta\(', "net_beta() of a network is called for the edges of a disease written as code as net_beta(disease_beta=None, inds=None, disease=None): the edges are inds= (not uids=), and disease_beta has a value for each of them. A declared disease does not call it on a network with acts: use ss.modify(dis.infection, network=net.name, efficacy=e, share=s)"),
     (r'\b(rr_ptb|rr_ptb_age|rel_preterm|rel_preterm_age|preterm_threshold|very_preterm_threshold)\s*=(?!=)', "if this is a parameter of ss.Pregnancy, the preterm options are one keyword: preterm=ss.preterm(rel=..., by_age=..., threshold=..., very_threshold=...)"),
-    (r'\b(maternal_death_rate|p_maternal_death)\s*=(?!=)', "if this is a parameter of ss.Pregnancy, maternal deaths are one keyword, maternal_death=: a rate is the hazard while pregnant, a probability the chance at delivery"),
     (r'\bp_loss\s*=', "if this is a parameter of ss.Pregnancy, it is loss_rate=ss.probperweek(p) (or any other rate), the hazard of a spontaneous loss"),
     (r'\bsex_ratio\s*=', "if this is a parameter of ss.Pregnancy, it is p_female= (the share of babies born female), as on ss.People and ss.birth()"),
     (r'\bmetadata\s*=\s*(dict\(|\{)', "if this is metadata= of ss.Births, ss.Deaths, or ss.Pregnancy, it is columns=, the data's column for each standard key directly: columns=dict(year='Time', value='CBR') for metadata=dict(data_cols=dict(year='Time', value='CBR')), with sex_keys=dict(...) inside it for the labels of the sexes"),
@@ -179,8 +178,7 @@ flags = [
     (r'\bss\.seasonality\b', 'ss.modify(dis.rel_trans, multiply=ss.seasonal(amplitude=a, peak=p)), in connectors='),
     (r'\bss\.multi_run\(', 'ss.parallel(sim, n_runs=n).sims (iterpars= is pars=)'),
     (r'\bpop_scale\s*=(?!=)', 'pop_scale= of the sim was removed: give total_pop= (the number of people, n_agents*pop_scale) with n_agents=; sim.pop_scale is then total_pop/n_agents'),
-    (r'\bnum_threads\b', 'if this is ss.options.num_threads of the Starsim 4 release candidates (the threads of BLAS), it is ss.options.blas_threads (STARSIM_BLAS_THREADS); ss.options.num_threads (STARSIM_NUM_THREADS) is now the threads of Starsim itself'),
-    (r'\boptions\.threads\b|\boptions(\.context)?\(\s*threads\s*=|\bSTARSIM_THREADS\b', 'ss.options.threads is now ss.options.num_threads (STARSIM_NUM_THREADS), the threads of Starsim itself'),
+    (r'\bnum_threads\b', 'if this is ss.options.num_threads (STARSIM_NUM_THREADS) of the Starsim 4 release candidates, it has been removed: the threads of BLAS are ss.options.blas_threads (STARSIM_BLAS_THREADS), and those of Starsim itself ss.options.threads (STARSIM_THREADS)'),
     (r'\bss\.single_run\(', 'ss.single_run() was removed: sim.run() runs one sim (sim.copy().run() keeps the original as it was), and ss.parallel() runs many; a subclass of ss.MultiSim changes the sim of each run in its make_run()'),
     (r'\bss\.Debugger\b', 'ss.Debugger was removed: run the sims a part at a time with sim.run(until=...), and compare them with ss.debugtools.check_sims_match()'),
     (r'\bss\.check_version\(', "ss.check_version() was removed: compare ss.__version__ yourself, e.g. sc.compareversions(ss.__version__, '>=4.0')"),
@@ -575,7 +573,7 @@ def migrate_ast(text, analyzers=None):
             else:
                 edits.replace(kw.lineno, kw.col_offset, kw.col_offset + len('on'), 'who', f'on= of {func} is who=')
         if func in targeted and 'when' in keywords and isinstance(keywords['when'].value, ast.Lambda): # Starsim 3's was a function of the timeline
-            found.append((keywords['when'].lineno, f'when= of {func} as a function is of the date (e.g. lambda now: now.year >= 2025), not of the timeline; for a window, when=ss.schedule(start=, stop=); anything else of the sim goes in who='))
+            found.append((keywords['when'].lineno, f'when= of {func} as a function is of the date (e.g. lambda now: now.year >= 2025), not of the timeline; for a window, start= and stop=; anything else of the sim goes in who='))
         if func == 'ss.change' and call.args and call.lineno == call.end_lineno and {'at', 'by', 'to'} & set(keywords):
             values = keywords.get('by', keywords.get('to'))
             literals = [item.elts if isinstance(item, (ast.List, ast.Tuple)) else [item] if not isinstance(item, (ast.Name, ast.Call, ast.Attribute)) or isinstance(item, ast.Constant) else None for item in [keywords['at'].value, values.value]]
@@ -611,17 +609,6 @@ def migrate_ast(text, analyzers=None):
                 remove_kw(call, delay, f'{note}, and dur= with it is the delay: when=ss.on(event, delay=...)')
             else:
                 found.append((kw.lineno, f'{note}, and dur= with it is the delay: when=ss.on(event, delay=...)'))
-        window = [keywords[k] for k in ['start', 'stop'] if k in keywords]
-        if func == 'ss.modify' and window:
-            note = 'start= and stop= of ss.modify are when=ss.schedule(start=..., stop=...)'
-            if 'when' in keywords or not one_line(*window):
-                found.append((window[0].lineno, note + ('' if 'when' not in keywords else ', and this call has a when= too')))
-            else:
-                first = min(window, key=lambda kw: kw.col_offset)
-                edits.add(first, f"when=ss.schedule({', '.join(f'{kw.arg}={ast.unparse(kw.value)}' for kw in window)})", note)
-                for kw in window:
-                    if kw is not first:
-                        remove_kw(call, kw, note)
         if func.endswith('stratify') and 'fractions' in keywords:
             found.append((call.lineno, 'stratify() takes only dimensions: fractions= is the levels as a dict of their shares, e.g. age={0: 0.3, 15: 0.6, 65: 0.1}, or ss.levels(levels, fractions=ss.by(...)) for shares that depend on another dimension'))
         if func.endswith('stratify') and 'adjust' in keywords:

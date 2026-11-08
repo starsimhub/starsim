@@ -24,7 +24,7 @@ recovery    = I >> R @ ss.days(8)   # Infectious for 8 days on average
 measles = ss.Disease(infection, progression, recovery, init=dict(R=0.9), init_n=dict(I=10)) # 90% immune, 10 infectious
 
 vaccination = ss.vaccinate(efficacy=0.93, leaky=False, when='2025-05-01', coverage=0.8)                   # Delivers a product
-distancing = ss.modify(measles.pars.beta, multiply=0.5, when=ss.schedule(start='2025-05-01', stop='2025-07-01'))           # Changes a parameter
+distancing = ss.modify(measles.pars.beta, multiply=0.5, start='2025-05-01', stop='2025-07-01')           # Changes a parameter
 
 kw = dict(total_pop=100_000, start='2025-01-01', stop='2026-07-01', verbose=0)
 msim = ss.parallel({
@@ -45,7 +45,8 @@ A delivery says who can receive the product, when, and how many. There is one de
 | Keyword | Meaning |
 |---|---|
 | `who=` | Who can receive it: a condition on people (`ss.person.age < 15`), on the population (`sis.I.n > 1000`), or both joined with `&`; people as they reach an age (`ss.at_age(ss.months(9))`); or a function of the sim returning who is eligible |
-| `when=` | When it is delivered: at times (`'2025-05-01'`, `[2005, 2010]`, or with no calendar `ss.days(30)`, day 30), this far apart (`ss.schedule(every=ss.years(1))`), on an event (`screening.positive`, or `ss.on(screening.positive, delay=ss.months(3))`), or on a schedule with a start and stop (`ss.schedule(every=ss.years(1), start=2005)`); with none, routinely |
+| `when=` | When it is delivered: at times (`'2025-05-01'`, `[2005, 2010]`, or `ss.days(30)`, 30 days after the start), this far apart (`ss.schedule(every=ss.years(1))`), on an event (`screening.positive`, or `ss.on(screening.positive, delay=ss.months(3))`), or on a schedule with a start and stop (`ss.schedule(every=ss.years(1), start=2005)`); with none, routinely |
+| `start=`, `stop=` | A window it is delivered in, with any `when=`: `start=2005` (the same as `when=ss.schedule(start=2005)`), or `when=screening.positive, start=2005` for testing positive from 2005 |
 | `coverage=` | The share of eligible people reached |
 | `capacity=` | The number that can be delivered (per round, per step, or as a rate), or `ss.capacity(n, priority=..., queue=...)` to say who is served first and whether the rest wait |
 | `skip_reached_within=` | Skip those this delivery reached less than this long ago, e.g. `ss.years(1)` (agents only) |
@@ -67,12 +68,12 @@ kw = dict(n_agents=5000, start=2000, stop=2020, dt=ss.months(1), verbose=0)
 
 ### Rounds and routine delivery
 
-With times or how often (`ss.schedule(every=...)`) as `when=`, delivery is in **rounds**: in each round, every eligible person is offered the product once. With no `when=` (or `ss.schedule()` with only a start and stop), delivery is **routine**: each person is offered it once, at the first step on which they are eligible. `who=ss.at_age()` is routine delivery as people reach an age: `who=ss.at_age(ss.months(9))` vaccinates children as they turn 9 months old, and not everyone older on the first day. Routine delivery needs people to become eligible over time, by being born, aging, or something happening to them: in a population with no births, routine delivery to everyone is a single round on its first step. So these examples add births and deaths, of 3% a year, and compare routine vaccination of children as they turn one, yearly rounds that reach 20% of everyone, and two campaigns:
+With times or how often (`ss.schedule(every=...)`) as `when=`, delivery is in **rounds**: in each round, every eligible person is offered the product once. With no `when=` (with or without `start=` and `stop=`), delivery is **routine**: each person is offered it once, at the first step on which they are eligible. `who=ss.at_age()` is routine delivery as people reach an age: `who=ss.at_age(ss.months(9))` vaccinates children as they turn 9 months old, and not everyone older on the first day. Routine delivery needs people to become eligible over time, by being born, aging, or something happening to them: in a population with no births, routine delivery to everyone is a single round on its first step. So these examples add births and deaths, of 3% a year, and compare routine vaccination of children as they turn one, yearly rounds that reach 20% of everyone, and two campaigns:
 
 ```{python}
 kw_births = dict(kw, demographics=[ss.birth(rate=ss.peryear(0.03)), ss.death(rate=ss.peryear(0.03))])
 
-routine  = ss.vaccinate(efficacy=0.8, who=ss.at_age(ss.years(1)), when=ss.schedule(start='2005'), coverage=0.8)     # Once per child, as they turn one
+routine  = ss.vaccinate(efficacy=0.8, who=ss.at_age(ss.years(1)), start='2005', coverage=0.8)     # Once per child, as they turn one
 yearly   = ss.vaccinate(efficacy=0.8, when=ss.schedule(every=ss.years(1), start='2005'), coverage=0.2)   # A round every year
 campaign = ss.vaccinate(efficacy=0.8, when=['2005', '2010'], coverage=0.6)                  # Two rounds
 
@@ -260,8 +261,8 @@ infection = S >> I @ 0.4*I        # β = 0.4 per day
 recovery  = I >> R @ ss.days(5)   # Infectious for 5 days on average
 flu = ss.Disease(infection, recovery, init_prev=0.001)
 
-masks = ss.modify(flu.pars.beta, multiply=0.6, when=ss.schedule(start=ss.days(20), stop=ss.days(60)))
-distancing = ss.modify(flu.pars.beta, multiply=ss.timeseries({ss.days(20): 0.5, ss.days(60): 0.8}), when=ss.schedule(start=ss.days(20)))
+masks = ss.modify(flu.pars.beta, multiply=0.6, start=ss.days(20), stop=ss.days(60))
+distancing = ss.modify(flu.pars.beta, multiply=ss.timeseries({ss.days(20): 0.5, ss.days(60): 0.8}), start=ss.days(20))
 
 kw = dict(total_pop=100_000, stop=ss.days(150), verbose=0)
 scenarios = {
@@ -281,11 +282,11 @@ msim.summarize().loc['flu_infection']
 
 ### Changes at given times: `ss.timeseries()`
 
-`ss.modify(target, multiply=ss.timeseries({t1: x1, t2: x2}), when=ss.schedule(start=t1))` multiplies a quantity by each value from its time until the next; before the first, the quantity has its own value. Each multiplier is relative to the quantity's own value, not to the one before. `set=` gives values instead of multipliers, and one change needs no series: `ss.modify(flu.pars.beta, set=0.25, when=ss.schedule(start=ss.days(20)))`. The times are dates or years in a sim with a calendar (`'2025-03-01'`, or `sim.pars.start + ss.days(20)` for 20 days after the start), and in a sim with no calendar, durations or numbers in the sim's unit, counted from 0 (`ss.days(20)` is day 20).
+`ss.modify(target, multiply=ss.timeseries({t1: x1, t2: x2}), start=t1)` multiplies a quantity by each value from its time until the next; before the first, the quantity has its own value. Each multiplier is relative to the quantity's own value, not to the one before. `set=` gives values instead of multipliers, and one change needs no series: `ss.modify(flu.pars.beta, set=0.25, start=ss.days(20))`. The times are dates or years in a sim with a calendar (`'2025-03-01'`), and in a sim with no calendar, numbers in the sim's unit, counted from 0; in either, a duration is that long after the start (`ss.days(20)` is 20 days in, which is day 20 when the start is 0).
 
 ### Changes while a condition holds: `ss.modify()`
 
-`ss.modify(target, multiply=...)` changes a quantity for as long as it applies: always, at the times `when=` gives (between a start and a stop, `when=ss.schedule(start=..., stop=...)`, or on the dates a function of the date picks), or where a condition holds (`who=`), of people, of the population, or a function of the sim. It takes exactly one of:
+`ss.modify(target, multiply=...)` changes a quantity for as long as it applies: always, between a start and a stop (`start=..., stop=...`), at the times `when=` gives (or on the dates a function of the date picks), or where a condition holds (`who=`), of people, of the population, or a function of the sim. It takes exactly one of:
 
 | Keyword | What it does |
 |---|---|
@@ -299,7 +300,8 @@ and any of:
 | Keyword | Meaning |
 |---|---|
 | `who=` | Who it applies to: a condition, or a function of the sim (by default, everyone) |
-| `when=` | When it applies, on time alone (by default, always): `ss.schedule(start=..., stop=...)`, a schedule of times or how often, or a function of the date that returns `True` on the steps it applies (`lambda now: now.month in [6, 7, 8]`) |
+| `start=`, `stop=` | When it starts and stops applying (by default, always): dates, years, or durations after the start (the same as `when=ss.schedule(start=..., stop=...)`) |
+| `when=` | When it applies, on time alone (by default, always): a schedule of times or how often, or a function of the date that returns `True` on the steps it applies (`lambda now: now.month in [6, 7, 8]`) |
 | `until=` | Once `who=` (or `when=`) selects someone, it stays on for them: for at least this long (a duration), or until this condition holds |
 | `share=` | With `multiply=` or `efficacy=`, the share of acts (or contacts) it applies to, e.g. condom use in 30% of acts; with `network=`, as agents, a function of the network giving a share for each partnership, e.g. `share=lambda net: net.edges.condoms` |
 | `network=` | For a change to transmission, the network or networks it applies on, by name (by default, all) |
@@ -321,7 +323,7 @@ The target of a modifier is any named quantity in the model:
 Here faster diagnosis from day 30 halves the time that people stay infectious, by doubling the rate of recovery, and susceptibility is halved for people aged 65 and over in an age-structured version of the model:
 
 ```{python}
-faster = ss.modify(flu.recovery, multiply=2, when=ss.schedule(start=ss.days(30)))
+faster = ss.modify(flu.recovery, multiply=2, start=ss.days(30))
 sim = ss.Sim(flu, interventions=faster, **kw)
 sim.run()
 print('Infections with faster diagnosis:', round(sim.results.flu.infection.sum()))
@@ -449,6 +451,26 @@ print('Days of lockdown:', msim.sims[1].results.lockdown.active.sum())
 
 The lockdown stays in place for 38 days, until fewer than 1,000 people are infectious, rather than switching on and off around a single threshold. Once it is lifted, a second wave follows, since most people are still susceptible: the usual result of a measure that ends before immunity has built up, and a reason to run scenarios until their epidemics are over. An intervention that reads results only, as this one does, runs under every solver; one that acts on particular people (e.g. through their states) runs as agents. A product whose effect needs code is a subclass of `ss.Product` instead: see [Products](interventions_products.qmd#writing-a-product-as-code).
 
+An intervention that acts on people can be given `who=`, as a delivery is: a condition on people, a state by its path (`'flu.I'`), or a function of the sim (and of the intervention, as `self`) returning UIDs or a mask. Its `step()` then reads the UIDs of those eligible now, and alive, with `self.check_eligibility()` (everyone alive, with no `who=`); a subclass can override `check_eligibility()` for a rule of its own:
+
+```{python}
+class Isolate(ss.Intervention):
+    """ Each day, a share of the people eligible are isolated, which ends their infectiousness """
+    def __init__(self, p=0.2, **kwargs):
+        super().__init__(**kwargs) # Including who=
+        self.define_pars(p=p)
+        return
+
+    def step(self):
+        uids = self.check_eligibility()
+        self.sim.diseases.flu.move(uids, 'R', p=self.pars.p) # A share of those eligible (here the infectious)
+        return
+
+isolate = Isolate(who='flu.I')
+sim = ss.Sim(flu, interventions=isolate, n_agents=10_000, stop=ss.days(150), verbose=0).run()
+print('Peak infectious:', sim.results.flu.I.max())
+```
+
 ## Comparing scenarios
 
 An intervention's effect is the difference between a run with it and a run without, so every comparison needs a baseline that shares everything else: the same population, parameters, and, for a stochastic model, random numbers. Make the scenarios from the same model and settings, as on this page (or from one sim, with `sim.new(interventions=...)`), and run them together with `ss.parallel()`. Some things to keep in mind:
@@ -463,7 +485,7 @@ An intervention's effect is the difference between a run with it and a run witho
 - **Coverage is of the eligible.** `coverage=0.8` with `who=ss.person.age < 5` reaches 80% of children under 5, not 80% of everyone.
 - **Routine delivery needs a rate of capacity.** A bare number as `capacity=` is per round or per step; routine delivery has neither, so it needs a rate, e.g. `ss.peryear(500)`.
 - **`and`, `or`, and `not` don't combine conditions.** Use `&`, `|`, and `~`, with brackets: `(ss.person.age > 15) & ~sis.I`.
-- **A multiplier is relative to the base.** `ss.modify(beta, multiply=ss.timeseries({ss.days(20): 0.5, ss.days(60): 0.8}), when=ss.schedule(start=ss.days(20))` sets transmission to 80% of its base from day 60, not to 80% of the 50% before.
+- **A multiplier is relative to the base.** `ss.modify(beta, multiply=ss.timeseries({ss.days(20): 0.5, ss.days(60): 0.8}), start=ss.days(20))` sets transmission to 80% of its base from day 60, not to 80% of the 50% before.
 - **Susceptibility and infectiousness only multiply.** `add=` and `set=` are for parameters; on `rel_sus` and `rel_trans`, use `multiply=`.
 - **A trigger with no memory flickers.** `who=` on a threshold switches the modifier on and off as the quantity crosses it; give `until=` (a duration, or a condition) for a measure that stays in place once begun.
 - **Read stocks now, and flows from before this step.** A function given as `who=` runs after the step's stocks are recorded and before its flows are known: read a stock at `[sim.ti]` (e.g. `I[sim.ti]`), and a flow at `[sim.ti - 1]` (the last step's infections), since a flow at `[sim.ti]` isn't complete until the step ends.
@@ -545,18 +567,19 @@ The events an event, delivery, or transition can be triggered by (in `when=`), a
 | A function of the sim | `lambda sim: sim.people.age >= 15`, `lambda sim: sim.results.flu.I[sim.ti] > 5000` | Whatever it returns: a boolean array, UIDs, or one value for everyone |
 | A function of the date (`when=`) | `lambda now: now.month == 1` | Everyone, on the steps when it returns `True` |
 
-And the ways to time an event or a delivery, all as `when=`:
+And the ways to time an event or a delivery, as `when=` (and a window, `start=` and `stop=`):
 
 | `when=` | Means |
 |---|---|
 | None | Routinely: each person once, at the first step they are eligible |
 | `'2025-05-01'`, `2025`, `[5, 30]` | In rounds, at these times |
-| `ss.days(30)`, `[ss.days(30)]` | In a sim with no calendar, in a round at day 30 (a time counted from 0, the same with or without the list) |
+| `ss.days(30)`, `[ss.days(30)]` | In a round 30 days after the start (the same with or without the list; with no calendar, day 30); every 30 days is `ss.schedule(every=ss.days(30))` |
 | `ss.schedule(every=ss.years(1))` | In rounds, this far apart, from the start |
 | `sis.infection`, `screening.positive` | When the event happens, to the people it happened to |
 | `ss.on(screening.positive, delay=ss.months(3))` | That long after the event (agents only) |
 | `lambda now: now.month == 1` | On the steps whose date it is true for |
 | `ss.schedule(every=ss.years(1), start=2025, stop=2030)` | Times, how often, or a function of the date (by position, e.g. `ss.schedule([2025, 2027])`, or `every=`) between a start and a stop; with only `start=` and `stop=`, routinely between them |
+| `start=2025, stop=2030` (beside `when=`) | Any of these within that window, e.g. `when=screening.positive, start=2025`, on an event from 2025 |
 
 Reaching people as they reach an age is who, not when: `who=ss.at_age(ss.months(9))`.
 

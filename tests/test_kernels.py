@@ -335,6 +335,9 @@ def test_blas_threads():
     with ss.options.context(blas_threads=2): # It can go up as well as down
         assert current() <= {2}
     assert current() <= {1}
+    for attempt in [lambda: ss.options.num_threads, lambda: ss.options(num_threads=1), lambda: setattr(ss.options, 'num_threads', 1)]: # Its meaning changed between release candidates, so it names both that replace it
+        with pytest.raises((AttributeError, KeyError), match='blas_threads.*options.threads'):
+            attempt()
     return
 
 

@@ -272,7 +272,7 @@ class ParticleFilter(sc.prettyobj):
     (rather than drawn, as a run of the sim draws it), as the likelihood would compare it.
 
     Each particle has random numbers of its own, so the particles are shared between threads
-    (see `ss.options.num_threads`; one in the workers of `ss.parallel()` and of a calibration), and the
+    (see `ss.options.threads`; one in the workers of `ss.parallel()` and of a calibration), and the
     estimate does not depend on how many there are.
 
     Args:

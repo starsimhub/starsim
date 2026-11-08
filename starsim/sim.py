@@ -44,7 +44,7 @@ class SimPars(ss.Pars):
         # Simulation parameters
         self.start     = None  # Start of the simulation: a date or a year gives it a calendar (default 2000 for a model in years, else 0)
         self.stop      = None  # End of the simulation, read as the start is: a date, a year (or a time in the unit from 0, with no calendar), or a duration from 0 (default: a run of 100 days in days, else 50 of the sim's unit)
-        self.dur       = None  # Instead of the stop, the length of the run, e.g. ss.years(10) or a bare number (in years with a calendar of years, else in the sim's unit; the stop is the start plus it)
+        self.dur       = None  # The length of the run, e.g. ss.years(10) or a bare number (in years with a calendar of years, else in the sim's unit): the stop is the start plus it, or with a stop and no start, the start is the stop minus it
         self.dt        = None  # Timestep
         self.rand_seed = 1     # Random seed; if None, don't reset
         self.even_draws = False # Whether to space each call's random numbers evenly for agents (see ss.Sim)
@@ -474,7 +474,7 @@ class Sim(ss.modules.Base):
     Args:
         model (Module/list/dict): the model: a module or a list of modules, which are sorted by type as for `modules`; transitions, alone or in a list (or in `diseases=`), are one disease, named from its states (e.g. `sim.sir`).
             Alternatively, the sim parameters as an `ss.SimPars` object or a nested dictionary, which can include all other arguments
-        pars (dict): the values of model parameters by name, e.g. `pars=dict(beta=0.1)` or `pars=fit.pars` (see `ss.par`); only parameters of the model, since the settings of the sim are given by keyword (e.g. `stop=2030`): a name that is not a parameter of the model raises a `KeyError` when the sim is initialized
+        pars (dict/SimPars): the values of model parameters by name, e.g. `pars=dict(beta=0.1)` or `pars=fit.pars` (see `ss.par`); it can also hold settings of the sim and modules, as in Starsim 3 (e.g. `pars=dict(start=2000, dur=10, n_agents=1000, beta=0.1)`), told apart by name: a name is a setting if no parameter of the model has it (a keyword given outright wins over the same setting here). A whole `ss.SimPars` is taken as if given in place of the model. A name that is neither raises a `KeyError` when the sim is initialized
         label (str): the human-readable name of the simulation
         people (People): if provided, use this `ss.People` object
         demographics (str/Demographics/list/bool): births, deaths, and migration of everyone: declared (`ss.birth()`, `ss.death()`, for every solver), or modules (e.g. `ss.Births()`, `ss.Pregnancy()`), or a list; True for births and deaths at default rates
@@ -496,9 +496,9 @@ class Sim(ss.modules.Base):
         n_agents (int/float): the number of agents, if the model runs as agents (default 10,000); an error for a compartmental run, which has no agents (give total_pop=)
         total_pop (int/float): the number of people (default: one per agent); as agents, each stands for `total_pop/n_agents` of them (`sim.pop_scale`), and the results that count people are scaled by it
         rescale (bool/dict): for agents, start with each agent standing for one person, and increase it to `sim.pop_scale` as the agents stop being naive, making some of them naive again each time (dynamic rescaling, as in Covasim; default False); True, or a dict of its options, `dict(threshold=0.05, factor=1.2)` (the defaults): the share of agents who are not naive that triggers rescaling, and the least factor by which the scale grows each time
-        start (float/str/date): when the sim starts: a date (e.g. '2020-01-01') or a year (a number from 1800 on, e.g. 2000), which give it a calendar; any other number (or a duration) is a time in the sim's unit from 0 (default: 2000 for a model in years, else 0). With a calendar, every bare number given as a time (stop=, when=, the times of ss.schedule and ss.timeseries) is a year; without one, a time in the sim's unit from 0, as a duration given as a time is (when=ss.days(10) is day 10)
+        start (float/str/date): when the sim starts: a date (e.g. '2020-01-01') or a year (a number from 1800 on, e.g. 2000), which give it a calendar; any other number (or a duration) is a time in the sim's unit from 0 (default: 2000 for a model in years, else 0). With a calendar, every bare number given as a time (stop=, when=, the times of ss.schedule and ss.timeseries) is a year; without one, a time in the sim's unit from 0. A duration given as a time (when=ss.days(10), until=, the start= of a module) is that long after the start with a calendar, else a time from 0 (day 10; the same when the start is 0)
         stop (float/str/date/dur): when the sim ends, read as the start is: a date, a bare number (a year, or with no calendar a time in the sim's unit from 0), or a duration from 0 (e.g. stop=ss.days(100), with no start; ss.years(2030) in a sim of calendar years is the year 2030); with no start, a year starts the sim in 2000, unless unit= is other than years (unit='day', stop=3650 is 3,650 days from 0; default: a run of 100 days in days, else 50 of the sim's unit)
-        dur (float/dur): instead of `stop`, the length of the run from its start, e.g. `start=2000, dur=10` (a bare number is in years in a sim of calendar years, as a bare stop is, else in the sim's unit) or `start='2020-01-01', dur=ss.days(90)`
+        dur (float/dur): the length of the run from its start, e.g. `start=2000, dur=10` (a bare number is in years in a sim of calendar years, as a bare stop is, else in the sim's unit) or `start='2020-01-01', dur=ss.days(90)`; any two of the start, stop, and length define the third (`stop=2035, dur=10` starts in 2025), and all three must agree
         dt (float/dur): The timestep, in units of "unit" (default 1.0)
         rand_seed (int): The overall random seed for the simulation (used to set module-specific random seeds)
         even_draws (bool): Whether to space each call's random numbers evenly for agents, so that about the expected number of them move each time (default False). This reduces the variance between runs (about 3 to 10 times in final size for a simple SIR), but outbreaks die out less often than they should, and the mean of a result can shift (e.g. the peak of an SIR on a network, by about 10%). For agents only (an error for a compartmental run), and needs `ss.options.crn`
@@ -538,6 +538,11 @@ class Sim(ss.modules.Base):
                  modules=None, data=None, pars=None, copy_modules=True, **kwargs):
         self.pars = SimPars() # Make default parameters
         models = [arg for arg in models if arg is not None]
+        kinds = ss.modules.module_types() + ['modules']
+        if isinstance(pars, SimPars): # The sim's settings as a whole, e.g. ss.Sim(pars=sim.pars), as if given in place of the model
+            models, pars = models + [pars], None
+        elif isinstance(pars, dict) and any(key in kinds for key in pars): # Modules in pars=, as if given in a dict in place of the model
+            models, pars = models + [{key:val for key,val in pars.items() if key in kinds}], {key:val for key,val in pars.items() if key not in kinds}
         given = dict(label=label, people=people, demographics=demographics, connectors=connectors, networks=networks, diseases=diseases,
                      interventions=interventions, analyzers=analyzers, modules=modules, data=data)
         for arg in models: # The model: modules or transitions, or lists of them; or the sim parameters, as a dict
@@ -565,13 +570,14 @@ class Sim(ss.modules.Base):
         interventions = self._order_steps(interventions)
         self.par_values = None # Values of model parameters by name, e.g. pars=dict(beta=0.1) or pars=fit.pars
         self.jax = None # Whether a whole run of the ODE is taken in JAX (see ss.gradients): True to ask for it; otherwise the kernels take a run (see ss.solvers.choose_engine()), and JAX is used only where it is needed (gradients, and ss.parallel() for many runs with different values, unless False)
-        if isinstance(pars, SimPars) or (isinstance(pars, dict) and any(key in ss.modules.module_types() + ['modules'] for key in pars)): # The sim's settings, which are given by keyword
-            errormsg = 'pars= holds values of the model\'s parameters by name (e.g. pars=dict(beta=0.1)); give the settings and modules of the sim by keyword (e.g. ss.Sim(n_agents=1000, diseases=...)), or as a dict in place of the model, ss.Sim(dict(...))'
-            raise TypeError(errormsg)
         if isinstance(pars, dict) and len(pars): # Values of the model's parameters by name; a setting of the sim given as ss.par too (e.g. n_agents=ss.par(...), when it is fitted: pars=fit.pars)
             pars = dict(pars)
             kwargs |= {key:pars.pop(key) for key in list(pars) if isinstance(kwargs.get(key), ss.par)}
-            self.par_values = pars or None # A name that is not a parameter raises a KeyError when the sim is initialized
+            mods = ss.utils.given_modules(dict(enumerate(models)), dict(demographics=demographics, connectors=connectors, networks=networks, diseases=diseases, interventions=interventions, analyzers=analyzers, modules=modules))
+            names = {name for mod in mods for name in (mod.pars.keys() if getattr(mod, 'graph', None) is not None else mod.pars.bounded())} # Those pars= can set (see ss.solvers.set_values())
+            settings = {key:pars.pop(key) for key in list(pars) if (key in self.pars or key in SimPars.removed) and key not in names} # A setting of the sim by its own name, if no parameter of the model has it (so pars=fit.pars works with a parameter called dur, and pars=dict(dur=10) with a network that has one)
+            kwargs = sc.mergedicts({k:v for k,v in settings.items() if given.get(k) is None}, kwargs) # A keyword given outright wins
+            self.par_values = pars or None # A name that is neither raises a KeyError when the sim is initialized
         pars = None
         args = dict(label=label, people=people, demographics=demographics, connectors=connectors,
                     networks=networks, interventions=interventions, diseases=diseases, 
@@ -1702,7 +1708,7 @@ class Sim(ss.modules.Base):
         Run the model -- the main method for running a simulation.
 
         Args:
-            until (date/str/float/Expr/func): run the steps up to and including the one that starts at this time; or a condition, checked at the end of each step, that stops and finalizes the run once it holds: an expression of the model (`sir.I.n + sir.R.n >= 1000`) or a function of the sim; the results after the stop are NaN, and `sim.stopped` is the last time point with results (the condition held at the end of its step)
+            until (date/str/float/dur/Expr/func): run the steps up to and including the one that starts at this time (a duration is that long after the start, in a sim with a calendar); or a condition, checked at the end of each step, that stops and finalizes the run once it holds: an expression of the model (`sir.I.n + sir.R.n >= 1000`) or a function of the sim; the results after the stop are NaN, and `sim.stopped` is the last time point with results (the condition held at the end of its step)
             verbose (int): how much to print: 0 nothing, 1 the solver, notes, and progress (default), 2 everything (e.g. each step)
 
         Returns:
@@ -1798,7 +1804,7 @@ class Sim(ss.modules.Base):
                     mod.engine.run_all(use_jax=use_jax)
                 self.complete = True # Without making the loop's plan, which is not needed
             else:
-                if isinstance(until, ss.Duration): # A time on the sim's axis from 0, e.g. sim.t.tvec[5], checked as any duration given as a time is (see ss.Timeline.to_time())
+                if isinstance(until, ss.Duration): # As any duration given as a time is (see ss.Timeline.to_time()): that long after the start with a calendar (or a calendar year, e.g. sim.t.tvec[5]), else a time from 0
                     until = self.t.to_time(until, name='until=')
                 self.loop.run(until, profile=profile)
                 self.stopped = self.loop.stopped

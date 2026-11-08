@@ -805,8 +805,9 @@ strat_options = ['fractions', 'adjust', 'kind', 'states', 'where', 'mobility'] #
 
 
 def strat_code(kwargs):
-    """ The arguments of `stratify()` for a stratification as an importer gives it: its dimension, with the shares in each level as a dict, and its other options in `ss.levels()` (a multiplier by level, `adjust`, is written as a modifier: see `disease_code()`) """
+    """ The arguments of `stratify()` for a stratification as an importer gives it: its dimension, with the shares in each level as a dict, its other options in `ss.levels()` (a multiplier by level, `adjust`, is written as a modifier: see `disease_code()`), and any transfers along it by keyword (e.g. `aging=ss.transfer(...)`) """
     dim = next(k for k in kwargs if k not in strat_options)
+    extra = ''.join(f', {k}={code_value(v)}' for k,v in kwargs.items() if k != dim and k not in strat_options) # Transfers, e.g. aging between populations
     levels, fractions = kwargs[dim], kwargs.get('fractions')
     if fractions is not None and not isinstance(fractions, ss.by):
         levels, fractions = dict(zip(levels, np.asarray(fractions, dtype=float).tolist())), None
@@ -817,8 +818,8 @@ def strat_code(kwargs):
         opts['who'] = Code(' & '.join(conds))
     opts = {k:v for k,v in opts.items() if v is not None}
     if not opts:
-        return f'{dim}={code_value(levels)}'
-    return f'{dim}=ss.levels({code_value(levels)}, {", ".join(f"{k}={code_value(v)}" for k,v in opts.items())})'
+        return f'{dim}={code_value(levels)}{extra}'
+    return f'{dim}=ss.levels({code_value(levels)}, {", ".join(f"{k}={code_value(v)}" for k,v in opts.items())}){extra}'
 
 
 def total_init(val):
