@@ -569,7 +569,7 @@ class MultiSim:
                 stats = dict(median=np.median(vals), low=np.quantile(vals, low), high=np.quantile(vals, high), mean=vals.mean(), std=vals.std()) if len(vals) > 1 else dict(value=vals[0])
                 rows[name if n_scenarios == 1 else (name, scenario)] = {k:float(v) for k,v in stats.items()}
         if each:
-            summary = sc.dataframe(columns, index=self._run_labels()).T
+            summary = ss.results.Summary(columns, index=self._run_labels()).T
             summary.index.name = 'result'
             if one:
                 if not len(summary):
@@ -579,7 +579,7 @@ class MultiSim:
             return summary
         several = any(isinstance(row, tuple) for row in rows)
         index = pd.MultiIndex.from_tuples(list(rows), names=['result', 'scenario']) if several else pd.Index(list(rows), name='result')
-        summary = sc.dataframe(list(rows.values()), index=index)
+        summary = ss.results.Summary(list(rows.values()), index=index)
         if one:
             names = list(dict.fromkeys(summary.index.get_level_values(0))) if len(summary) else []
             if not names:
@@ -824,7 +824,7 @@ class Branching(sc.prettyobj):
     Example:
         ```python
         sir = ss.SIR(beta=ss.perday(0.3), dur_inf=ss.days(10), init_n=dict(I=1))
-        sim = ss.Sim(diseases=sir, total_pop=1e6, branching=True, solver='gillespie', unit='day', stop=ss.days(365))
+        sim = ss.Sim(diseases=sir, total_pop=1e6, branching=True, solver='gillespie', unit='day', dur=ss.days(365))
         msim = ss.parallel(sim, n_runs=200, until=sir.I.n + sir.R.n >= 200)
         msim.branching.p_extinct # About 1/R0 = 1/3
         msim.branching.plot()

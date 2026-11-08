@@ -1666,6 +1666,51 @@ def draw_marks(ax, marks, colors=None):
     return
 
 
+def format_value(v):
+    """ A number as a summary shows it: a whole number of people, or one of 100 or more, to the nearest whole number with commas (e.g. 19,536); a smaller one to 3 significant figures (e.g. 0.136) """
+    if not sc.isnumber(v) or not np.isfinite(v):
+        return str(v)
+    if abs(v) >= 100 or v == round(v):
+        return f'{v:,.0f}'
+    return f'{v:.3g}'
+
+
+class SummarySeries(pd.Series):
+    """ A row or column of a `Summary`, shown the same way """
+    @property
+    def _constructor(self):
+        return SummarySeries
+
+    @property
+    def _constructor_expanddim(self):
+        return Summary
+
+    def __repr__(self):
+        with pd.option_context('display.float_format', format_value):
+            return super().__repr__()
+
+
+class Summary(sc.dataframe):
+    """
+    The table of `sim.summarize()` and `msim.summarize()`: a dataframe, shown with its numbers rounded to sensible units (see `format_value()`); its values are not rounded
+    """
+    @property
+    def _constructor_sliced(self):
+        return SummarySeries
+
+    def __repr__(self):
+        with pd.option_context('display.float_format', format_value):
+            return super().__repr__()
+
+    def _repr_html_(self):
+        with pd.option_context('display.float_format', format_value):
+            return super()._repr_html_()
+
+    def to_string(self, *args, **kwargs):
+        kwargs.setdefault('float_format', format_value)
+        return super().to_string(*args, **kwargs)
+
+
 def summary_funcs(how, results):
     """
     The functions of `how=` in `sim.summarize()` and `msim.summarize()`, by the key of each result in `results.flatten(sep='_', columns=True)`

@@ -14,7 +14,7 @@ pars = sc.dictobj(
 # Create the sim
 sim = ss.Sim(
     n_agents=pars.n_agents,
-    stop=ss.years(pars.dur),
+    dur=pars.dur,
     diseases = 'sis',
     networks = 'random',
     verbose = 0,

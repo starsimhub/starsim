@@ -18,7 +18,7 @@ S, I, R = ss.states('S I R')
 infection = S >> I @ 0.3*I      # From S to I, at a rate of 0.3 per day times the share infectious
 recovery = I >> R @ ss.days(10) # From I to R, after 10 days on average
 sir = ss.Disease(infection, recovery, init=dict(I=0.01), name='sir')
-sim = ss.Sim(sir, total_pop=10_000, stop=ss.days(100))
+sim = ss.Sim(sir, total_pop=10_000, dur=ss.days(100))
 sim.run()
 sim.plot()
 ```
@@ -32,7 +32,7 @@ import starsim as ss
 
 S, I, R = ss.states('S I R')
 measles = ss.Disease(S >> I @ 1.9*I, I >> R @ ss.days(8), init_prev=0.001, name='measles')
-base = ss.Sim(measles, total_pop=20_000, stop=ss.days(120), verbose=0)
+base = ss.Sim(measles, total_pop=20_000, dur=ss.days(120), verbose=0)
 vaccination = ss.vaccinate(efficacy=0.9, when=ss.days(5), coverage=0.7)
 msim = ss.parallel({'No vaccine': base, 'Vaccine': base.new(interventions=vaccination)})
 msim.summarize()
@@ -58,7 +58,7 @@ Ask the user, rather than choosing, when a value would change the answer and has
 ## Default rules
 
 - Give durations and rates with units (`ss.days(10)`, `ss.years(2)`, `ss.peryear(0.1)`), so that they are right whatever the time step. `I >> R @ 8` is a rate of 8, not 8 days.
-- A plain number is in the sim's unit of time: `stop=2` in a sim in days is two days. Prefer `stop=ss.days(100)`, or dates.
+- A plain number is in the sim's unit of time (a length in a sim of calendar years is in years). Give the length of the run with units (`dur=ss.days(100)`), or the start and stop as dates; `stop=` is when the run ends, not its length.
 - With a contact matrix or network, β is per contact, so adding one multiplies R0 by the number of contacts: rescale β.
 - `init_prev` seeds the first infected state, so in an SEIR model nobody starts infectious. Use `init=dict(I=...)` to start people in a named state.
 - The population is `total_pop=` under every solver; `n_agents=` is the number of agents, and giving it means a run as agents.

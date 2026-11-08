@@ -79,7 +79,7 @@ hiv.stratify(care=ss.levels({'undx': 1, 'dx': 0, 'art': 0, 'supp': 0, 'off': 0},
 by_care = [ss.modify(hiv.rel_trans, multiply=ss.by(care=[1, 1, 0.3, 0.01, 1])), ss.modify(hiv.aids_death, multiply=ss.by(care=[1, 1, 1, 0.1, 1]))]
 main   = ss.DegreeNet(n_contacts=0.5, concurrency=0.04, max_contacts=2, dur=200)
 casual = ss.DegreeNet(n_contacts=0.3, concurrency=0.10, dur=26)
-sim = ss.Sim(hiv, networks=dict(main=main, casual=casual), connectors=by_care, n_agents=1500, stop=1040) # A step is a week
+sim = ss.Sim(hiv, networks=dict(main=main, casual=casual), connectors=by_care, n_agents=1500, dur=1040) # A step is a week
 ```
 
 ## Running the original

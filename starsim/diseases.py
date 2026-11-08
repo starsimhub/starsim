@@ -1577,14 +1577,17 @@ class SIR(Disease):
     Declared from states and transitions (see `ss.Disease`), so it runs with any
     solver: as agents over networks, or as compartments. It is the textbook SIR: the
     infectious period is exponential, as any declared duration is, and nobody dies of
-    the infection unless `p_death` is given.
+    the infection unless `p_death` is given. Its defaults are those of a respiratory
+    infection: infectious for 10 days, with an R0 of 3 without a network (β × the
+    duration); with a network, β is per contact, so R0 is that many times the number
+    of contacts.
 
     Note: CRN safe as agents.
 
     Args:
         beta (float/`ss.per`/dict): the transmission rate (per contact, if there are networks, over each step of the contact, so `ss.probperday(p)` gives each contact a chance p in a day; a dict gives one per network, and `default=` for the networks it does not name)
         init_prev (float): the fraction of people who start infected (for a number of people, give `init_n=` instead, e.g. `init_n=10`)
-        dur_inf (float/`ss.Duration`/`ss.Dist`): the mean time that people are infected for (by default 6 years), as an exponential; give a distribution (e.g. `ss.lognormal(mean=ss.years(6))`) for another shape
+        dur_inf (float/`ss.Duration`/`ss.Dist`): the mean time that people are infected for (by default 10 days), as an exponential; give a distribution (e.g. `ss.lognormal(mean=ss.days(10))`) for another shape
         p_death (float): the probability of death from infection, at the end of the infection (by default 0)
         kwargs (dict): passed to `ss.Disease`, e.g. `name`
         pars (dict): the same parameters, as a dict
@@ -1594,12 +1597,12 @@ class SIR(Disease):
 
     Example:
         ```python
-        sim = ss.Sim(diseases=ss.SIR(beta=0.1, dur_inf=ss.years(6)), networks='random', n_agents=5000)
+        sim = ss.Sim(diseases=ss.SIR(beta=0.03, dur_inf=ss.days(10)), networks='random', n_agents=5000) # R0 of 3 with 10 contacts each
         sim.run().plot()
         ```
     """
-    beta      = ss.par(ss.peryear(0.1))
-    dur_inf   = ss.par(ss.years(6))
+    beta      = ss.par(ss.perday(0.3))
+    dur_inf   = ss.par(ss.days(10))
     p_death   = ss.par(0.0)
     S         = ss.State()
     I         = ss.State(infected=True) # Counted in the results infected and prevalence
@@ -1618,21 +1621,22 @@ class SEIR(Disease):
     Args:
         beta (float/`ss.per`/dict): the transmission rate (per contact, if there are networks, over each step of the contact, so `ss.probperday(p)` gives each contact a chance p in a day; a dict gives one per network, and `default=` for the networks it does not name)
         init_prev (float): the fraction of people who start infected, who start exposed, in `E` (for a number of people, give `init_n=` instead); to start people infectious, give `init=dict(I=0.01)` or `init_n=dict(I=10)` instead
-        dur_exp (float/`ss.Duration`/`ss.Dist`): the mean time that people are exposed (latent) for (by default 0.5 years; a number is in the model's unit), as an exponential
-        dur_inf (float/`ss.Duration`/`ss.Dist`): the mean time that people are infectious for (by default 6 years), as an exponential
+        dur_exp (float/`ss.Duration`/`ss.Dist`): the mean time that people are exposed (latent) for (by default 3 days; a number is in the model's unit), as an exponential
+        dur_inf (float/`ss.Duration`/`ss.Dist`): the mean time that people are infectious for (by default 10 days), as an exponential
         p_death (float): the probability of death from infection, at the end of the infection (by default 0)
         kwargs (dict): passed to `ss.Disease`, e.g. `name`
         pars (dict): the same parameters, as a dict
 
-    As in `ss.SIR`, each duration is exponential unless a distribution is given, and
-    nobody dies of the infection unless `p_death` is given.
+    As in `ss.SIR`, the defaults are those of a respiratory infection, each duration is
+    exponential unless a distribution is given, and nobody dies of the infection unless
+    `p_death` is given.
 
     An SEIR model written as code, with lognormal durations and `p_death=0.01`, is
     `ssl.AgentSEIR`.
     """
-    beta      = ss.par(ss.peryear(0.1))
-    dur_exp   = ss.par(ss.years(0.5))
-    dur_inf   = ss.par(ss.years(6))
+    beta      = ss.par(ss.perday(0.3))
+    dur_exp   = ss.par(ss.days(3))
+    dur_inf   = ss.par(ss.days(10))
     p_death   = ss.par(0.0)
     S         = ss.State()
     E, I      = ss.states('E I', infected=True) # Counted in the results infected and prevalence
@@ -1648,13 +1652,16 @@ class SIS(Disease):
     An SIS model: people recover from infection and are susceptible again
 
     Declared from states and transitions (see `ss.Disease`), so it runs with any solver.
+    Its defaults are those of a respiratory infection that leaves no immunity: infectious
+    for 10 days, with an R0 of 2 without a network, so that half of people are infected
+    once it is endemic.
 
     Note: CRN safe as agents.
 
     Args:
         beta (float/`ss.per`/dict): the transmission rate (per contact, if there are networks, over each step of the contact, so `ss.probperday(p)` gives each contact a chance p in a day; a dict gives one per network, and `default=` for the networks it does not name)
         init_prev (float): the fraction of people who start infected (for a number of people, give `init_n=` instead, e.g. `init_n=10`)
-        dur_inf (float/`ss.Duration`/`ss.Dist`): the mean time that people are infected for (by default 10 years), as an exponential unless a distribution is given
+        dur_inf (float/`ss.Duration`/`ss.Dist`): the mean time that people are infected for (by default 10 days), as an exponential unless a distribution is given
         kwargs (dict): passed to `ss.Disease`, e.g. `name`
         pars (dict): the same parameters, as a dict
 
@@ -1662,8 +1669,8 @@ class SIS(Disease):
     waning over time (`waning=`, `imm_boost=`), which has no declared form, is
     `ssl.AgentSIS`, written as code.
     """
-    beta      = ss.par(ss.peryear(0.05))
-    dur_inf   = ss.par(ss.years(10))
+    beta      = ss.par(ss.perday(0.2))
+    dur_inf   = ss.par(ss.days(10))
     S         = ss.State()
     I         = ss.State(infected=True) # Counted in the results infected and prevalence
     infection = ss.Transition(S, I, rate=beta * I)

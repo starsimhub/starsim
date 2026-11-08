@@ -176,7 +176,8 @@ class Counter(ss.Module):
     assert migrate_text('ss.link_dists(obj, sim)')[0] == 'ss.dists.link_dists(obj, sim)' # Internal helpers are in their submodules
     text, changes, todo = migrate_text("sim = ss.Sim(pars=dict(n_agents=100, pop_scale=10)); print(sim.pars.pop_scale)")
     assert text == "sim = ss.Sim(dict(n_agents=100, pop_scale=10)); print(sim.pop_scale)" and any('total_pop' in note for _,note in todo) # Settings are not pars=, and pop_scale= is total_pop=
-    assert 'ssl.AgentSIR' in migrate_text('sir = ss.SIR(beta=0.1)')[2][0][1] # A use of ss.SIR is flagged, not rewritten
+    todo = migrate_text('sir = ss.SIR(beta=0.1)')[2]
+    assert any('ssl.AgentSIR' in note for _,note in todo) and any('probability per step' in note for _,note in todo) # A use of ss.SIR is flagged, not rewritten, and so is its bare beta, now per day
     assert any('bare number' in note for _,note in migrate_text("x = dict(beta=dict(randomnet=0.05))")[2]) # A probability per step in Starsim 3
 
     # The code cells of Quarto, Markdown, and notebooks, and nothing else in them
@@ -229,10 +230,12 @@ class Counter(ss.Module):
     old = "new = ss.uids.cat(a, b); bf = preg.breastfeeding\nnet = ss.RandomNet(n_contacts=10, uniform_targets=True)"
     assert migrate_text(old)[0] == "new = ss.uids.concatenate(a, b); bf = preg.lactating\nnet = ss.RandomNet(n_contacts=10, method='uniform')"
 
-    # dur= of the sim (here in a dict of its settings) and of ss.RandomNet, and the spellings of Starsim 4 before its release
+    # dur= of the sim (here in a dict of its settings) is kept, and that of ss.RandomNet dropped; and the spellings of Starsim 4 before its release
     text, _, todo = migrate_text("pars = dict(n_agents=100, start=2000, dur=20)\nnet = ss.RandomNet(n_contacts=ss.poisson(lam=5), dur=0)\nt = ss.Transition(R, I, on=infection, dur=ss.months(6), where=ss.person.female)\nm = ss.modify(beta, multiply=0.5, start=2001, stop=2002)\nsim.run(n_runs=3)")
-    assert 'dict(n_agents=100, start=2000, stop=ss.years(20))' in text and 'ss.RandomNet(n_contacts=ss.poisson(mean=5))' in text
+    assert 'dict(n_agents=100, start=2000, dur=20)' in text and 'ss.RandomNet(n_contacts=ss.poisson(mean=5))' in text
     assert 'ss.Transition(R, I, when=ss.on(infection, delay=ss.months(6)), who=ss.person.female)' in text and 'ss.modify(beta, multiply=0.5, when=ss.schedule(start=2001, stop=2002))' in text and [line for line,_ in todo] == [5]
+
+    assert migrate_text('births = ss.Births(birth_rate=ss.peryear(20))')[0] == 'births = ss.Births(birth_rate=ss.peryear(20))' # Starsim 3's typed rate per 1,000 reads the same: above 1, so per 1,000
 
     return new
 
@@ -324,7 +327,7 @@ def test_cli_convert(tmp_path, monkeypatch, capsys):
     code = 'import sys, starsim_cli; starsim_cli.main(["ai", "status"]); assert "starsim" not in sys.modules'
     assert subprocess.run([sys.executable, '-c', code], capture_output=True).returncode == 0 # Quick to start
     monkeypatch.chdir(tmp_path)
-    sc.savetext('sir.py', 'import starsim as ss\nsim = ss.Sim(diseases=ss.SIR(beta=0.3), total_pop=1000, unit="day", stop=50, solver="ode")\n')
+    sc.savetext('sir.py', 'import starsim as ss\nsim = ss.Sim(diseases=ss.SIR(beta=0.3), total_pop=1000, unit="day", stop=100, solver="ode")\n') # The default stop, since SBML has no run length
     assert ss.converters.sniff('sir.py') == 'starsim' # Told by what it imports
     cli.main(['export', 'sir.py', 'sbml'])
     cli.main(['convert', 'sir.xml', '--out=back.py']) # The format told from the file, and back to Starsim

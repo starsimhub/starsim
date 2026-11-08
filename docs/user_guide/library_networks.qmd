@@ -37,7 +37,7 @@ import starsim as ss
 import starsim.library as ssl
 
 sir = lambda: ss.SIR(beta=ss.perday(0.05), dur_inf=ss.days(10), init_prev=0.005)
-kw = dict(n_agents=2000, start='2000-01-01', stop=ss.days(200), dt=ss.days(1))
+kw = dict(n_agents=2000, start='2000-01-01', dur=ss.days(200), dt=ss.days(1))
 scenarios = {
     'Random contacts only': ss.Sim(diseases=sir(), networks=ss.RandomNet(n_contacts=6), **kw),
     'Households and random contacts': ss.Sim(diseases=sir(), networks=[ssl.ClusterNet(cluster_size=ss.poisson(6)), ss.RandomNet(n_contacts=1)], **kw),
@@ -52,7 +52,7 @@ The layers are what make questions about settings answerable. Here an influenza-
 
 ```{python}
 flu = lambda s=0.012: ss.SIR(beta=dict(h=ss.perday(0.06), s=ss.perday(s), w=ss.perday(0.012), c=ss.perday(0.006)), dur_inf=ss.days(5), init_prev=0.005) # Covasim's weights: 10 times as much at home as in the community
-kw = dict(n_agents=2000, start='2000', stop=ss.days(120), dt=ss.days(1))
+kw = dict(n_agents=2000, start='2000', dur=ss.days(120), dt=ss.days(1))
 scenarios = {
     'Schools open':   ss.Sim(diseases=flu(), networks=ssl.HybridNet(), **kw),
     'Schools closed': ss.Sim(diseases=flu(s=0), networks=ssl.HybridNet(), **kw),
@@ -109,7 +109,7 @@ sim = ss.Sim(networks=ssl.HouseholdNet(dhs_data=dhs_data))
 
 ```{python}
 sir = lambda: ss.SIR(beta=ss.perday(0.1), dur_inf=ss.days(10), init_n=3)
-kw = dict(n_agents=2000, start='2000-01-01', stop=ss.days(150), dt=ss.days(1))
+kw = dict(n_agents=2000, start='2000-01-01', dur=ss.days(150), dt=ss.days(1))
 disk = ss.Sim(diseases=sir(), networks=ssl.DiskNet(r=0.04, v=ss.freqperday(0.001)), **kw)
 
 states = dict(S=('Susceptible', 'lightgray'), I=('Infected', 'tab:red'), R=('Recovered', 'tab:blue'))
@@ -152,7 +152,7 @@ For movement between distinct places (villages, districts, countries) rather tha
 import networkx as nx
 
 sir = lambda: ss.SIR(beta=ss.perday(0.05), dur_inf=ss.days(10), init_prev=0.005)
-kw = dict(n_agents=2000, start='2000-01-01', stop=ss.days(200), dt=ss.days(1))
+kw = dict(n_agents=2000, start='2000-01-01', dur=ss.days(200), dt=ss.days(1))
 scenarios = {
     'Small world': ss.Sim(diseases=sir(), networks=ssl.SmallWorldNet(n_contacts=10, rewire=0.05), **kw),
     'Random regular': ss.Sim(diseases=sir(), networks=ssl.StaticNet(graph=nx.random_regular_graph, d=10), **kw),
@@ -172,7 +172,7 @@ With no graph, `ssl.StaticNet` is the classic random (Erdős–Rényi) graph: ea
 ```{python}
 def contacts(net, n_agents):
     """ The contacts among the first 1,000 agents after one step, as a set of pairs """
-    sim = ss.Sim(networks=net, n_agents=n_agents, start='2000-01-01', stop=ss.days(1), dt=ss.days(1), verbose=0)
+    sim = ss.Sim(networks=net, n_agents=n_agents, start='2000-01-01', dur=ss.days(1), dt=ss.days(1), verbose=0)
     sim.run()
     edges = sim.networks[0].to_df()
     edges = edges[(edges.p1 < 1000) & (edges.p2 < 1000)]

@@ -215,7 +215,7 @@ def test_keywords():
     with pytest.raises(TypeError, match='goes in who='): # A state is not a time
         ss.modify(d.pars.beta, multiply=0.5, when=d.I)
     with pytest.raises(AttributeError, match='goes in who='): # when= is given the date, not the sim
-        ss.Sim(d, connectors=ss.modify(d.pars.beta, multiply=0.5, when=lambda sim: sim.results), n_agents=100, start='2000-01-01', stop=ss.days(5), verbose=0).run()
+        ss.Sim(d, connectors=ss.modify(d.pars.beta, multiply=0.5, when=lambda sim: sim.results), n_agents=100, start='2000-01-01', dur=ss.days(5), verbose=0).run()
     make = lambda intv: ss.Sim(ss.SIR(beta=ss.perday(0.1), init_prev=0.1, name='d'), networks='random', interventions=intv, n_agents=200, unit='day', stop=10, solver='abm', verbose=0).run().results.vx.delivered.sum()
     assert make(ss.vaccinate(ss.Vaccine(efficacy=0), when='d.infection', name='vx')) > 0 # An event in when= triggers it, here by its path
 

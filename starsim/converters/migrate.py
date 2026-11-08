@@ -17,10 +17,10 @@ its meaning, and `ss.Infection` is now `ss.AgentDisease`), a `beta` pair on `ss.
 way), `copy_inputs=` (removed: a sim always copies its inputs), `ss.uids.cat()` (now `ss.uids.concatenate()`), an override of `step_die(uids)` (now `on_death(uids)`), `preg.breastfeeding`
 (now `preg.lactating`), `ss.RandomNet(uniform_targets=True)` (now `method='uniform'`), the keywords of `ss.SIR`, `ss.SIS`, and `ss.SEIR` that Starsim 3 read itself
 (`init_prev=ss.bernoulli(0.1)` and `p_death=ss.bernoulli(0.1)` are numbers, `init_prev=ss.choose_n(20)` is `init_n=20`, and `dur_inf=10` is
-`ss.years(10)`, since a bare number is in the model's unit), `p_loss=` of `ss.Pregnancy` (now `loss_rate=ss.probperweek(...)`), `rate_units=` (now `rate_per=`, 1000 for Starsim 3's 1e-3) , `rr_ptb=` (now `preterm=ss.preterm(rel=...)`, listed), `embryos_per_pregnancy=` (now `children=`), a typed rate of `ss.Births`, `ss.Deaths`, or `ss.Pregnancy` (per 1,000 in Starsim 3, now the bare number), `people.person()` (now `people.get_person()`), `ss.MaternalNet` (now `ss.PrenatalNet`, so `maternalnet` keys are `prenatalnet`), `ss.MixingPools` (now `ss.networks.MixingPools`), `ss.AgeGroup(lo, hi)` (now a condition on age), `src=` and `dst=` of mixing pools (now `source=` and `target=`), `age_range=[lo, hi]` of `ss.RandomNet` (now `who=`, a condition on age), and the counts of the states of Starsim's own
+`ss.years(10)`, since a bare number is in the model's unit), `p_loss=` of `ss.Pregnancy` (now `loss_rate=ss.probperweek(...)`), `rate_units=` (now `rate_per=`, 1000 for Starsim 3's 1e-3) , `rr_ptb=` (now `preterm=ss.preterm(rel=...)`, listed), `embryos_per_pregnancy=` (now `children=`), `people.person()` (now `people.get_person()`), `ss.MaternalNet` (now `ss.PrenatalNet`, so `maternalnet` keys are `prenatalnet`), `ss.MixingPools` (now `ss.networks.MixingPools`), `ss.AgeGroup(lo, hi)` (now a condition on age), `src=` and `dst=` of mixing pools (now `source=` and `target=`), `age_range=[lo, hi]` of `ss.RandomNet` (now `who=`, a condition on age), and the counts of the states of Starsim's own
 modules after results (`results.n_alive`, `res['n_infected']`, now `results.alive`, `res['infected']`; a result the code makes
 itself keeps its name, and other counts are listed), the results of `ss.Infection` (`new_infections` is `infection`, and `cum_infections` is
-`infection.cum`), the deaths and emigrants of the sim (`new_deaths` is `died`, `cum_deaths` is `died.cum`, and `new_emigrants` is `emigrated`) and of a disease (`death`), results of demographics (`births.new` is `births.birth`, `deaths.cumulative` is `deaths.death.cum`, `pregnancy.n_preterm` is `pregnancy.preterm`, `maternal_deaths` is `maternal_death`), `on=` of a modifier (now `who=`), `ss.change()` (now `ss.modify()` of an `ss.timeseries()`), `use_aging=` (now `aging=`), `n_cpus=` (now `workers=`), `custom=` of the sim (now `modules=`), and `debug=True` of a MultiSim (now `workers=1`); `dur=` of the sim, in `ss.Sim()` or in a dict of its settings (now `stop=`, with the unit), and `dur=0` of `ss.RandomNet` (the default, removed). It also rewrites the spellings of Starsim 4 before its release: `where=` of `ss.Transition` and `ss.modify` (now `who=`), `on=` of `ss.Transition`, `ss.attr`, and `ss.birth` (now `when=`; a transition's `dur=` with it is `when=ss.on(event, delay=...)`), and `start=` and `stop=` of `ss.modify` (now `when=ss.schedule(start=..., stop=...)`); and lists `fractions=` and `adjust=` of `stratify()`, and `sim.run(n_runs=)`. Read the diff
+`infection.cum`), the deaths and emigrants of the sim (`new_deaths` is `died`, `cum_deaths` is `died.cum`, and `new_emigrants` is `emigrated`) and of a disease (`death`), results of demographics (`births.new` is `births.birth`, `deaths.cumulative` is `deaths.death.cum`, `pregnancy.n_preterm` is `pregnancy.preterm`, `maternal_deaths` is `maternal_death`), `on=` of a modifier (now `who=`), `ss.change()` (now `ss.modify()` of an `ss.timeseries()`), `use_aging=` (now `aging=`), `n_cpus=` (now `workers=`), `custom=` of the sim (now `modules=`), and `debug=True` of a MultiSim (now `workers=1`); and `dur=0` of `ss.RandomNet` (the default, removed). It also rewrites the spellings of Starsim 4 before its release: `where=` of `ss.Transition` and `ss.modify` (now `who=`), `on=` of `ss.Transition`, `ss.attr`, and `ss.birth` (now `when=`; a transition's `dur=` with it is `when=ss.on(event, delay=...)`), and `start=` and `stop=` of `ss.modify` (now `when=ss.schedule(start=..., stop=...)`); and lists `fractions=` and `adjust=` of `stratify()`, and `sim.run(n_runs=)`. Read the diff
 afterwards: each change is listed with its line.
 
 Used with: agents; coded modules
@@ -85,7 +85,6 @@ renames = [
     (r'\brr_ptb\b(?!\s*=(?!=))', 'rel_preterm',                    "ss.Pregnancy's array rr_ptb is rel_preterm (as a keyword, preterm=ss.preterm(rel=...))"),
     (r'\brr_ptb_age\b(?!\s*=(?!=))', 'preterm.by_age',             "ss.Pregnancy's parameter rr_ptb_age is pars.preterm.by_age (as a keyword, preterm=ss.preterm(by_age=...))"),
     (r'\bembryos_per_pregnancy\b', 'children',                     "embryos_per_pregnancy of ss.Pregnancy is children= (as for ss.birth())"),
-    (r'(\b(?:birth_rate|death_rate|fertility_rate)\s*=\s*)ss\.(?:freq)?peryear\(\s*(\d+(?:\.\d*)?|\.\d+)\s*\)', r'\1\2', "a typed rate of ss.Births, ss.Deaths, or ss.Pregnancy is per person; Starsim 3's was per 1,000 (rate_units=1e-3), which is now the bare number"),
     (r'\.people\.person\(',        '.people.get_person(',            "people.person() is people.get_person() (beside ss.person, the conditions on people)"),
     (r'\bss\.(networks\.)?MaternalNet\b', 'ss.PrenatalNet',          'ss.MaternalNet is ss.PrenatalNet (named prenatalnet, so a beta or route= keyed maternalnet is now prenatalnet)'),
     (r'''(['"])maternal(net)?\1''', r'\1prenatal\2\1',                  'ss.MaternalNet is ss.PrenatalNet, named prenatalnet'),
@@ -165,7 +164,7 @@ flags = [
     (r'\b\w*preg\w*\.(gestation|n_miscarriages|n_stillbirths|carrying_multiple)\b', "removed from ss.Pregnancy: the gestational age is the time in P (preg.P.time_in); losses per woman are ss.attr(1, when=preg.miscarriage, combine='sum')"),
     (r'\.(make_embryos|make_pregnancies|make_p_conceive|select_conceivers|process_delivery|process_newborns|process_maternal_deaths|process_neonatal_deaths|process_prenatal_deaths|progress_pregnancies|update_breastfeeding|update_maternal_deaths|set_breastfeeding|set_rel_sus|draw_dur_pregnancy|updates_pre)\(', "a method of Starsim 3's pregnancy written as code, which was removed; ss.Pregnancy does this with its transitions and events (preg.conception, preg.delivery, preg.birth), or preg.add_callback(event, fn) from code"),
     (r'\bss\.SIS\(.*\b(waning|imm_boost)\s*=', "ssl.AgentSIS(waning=..., imm_boost=...): the declared ss.SIS has no immunity level"),
-    (r'''\bss\.(SIR|SIS|SEIR)\(|\b(type|diseases)\s*=\s*['"](sir|sis|seir)['"]''', "ss.SIR, ss.SIS, and ss.SEIR are now the textbook models (an exponential dur_inf and dur_exp, and p_death=0): for Starsim 3's model (a lognormal dur_inf and p_death=0.01), use ssl.AgentSIR, ssl.AgentSIS, or ssl.AgentSEIR"),
+    (r'''\bss\.(SIR|SIS|SEIR)\(|\b(type|diseases)\s*=\s*['"](sir|sis|seir)['"]''', "ss.SIR, ss.SIS, and ss.SEIR are now the textbook models (an exponential dur_inf and dur_exp, and p_death=0), with the defaults of a respiratory infection, in days (Starsim 3's were in years: e.g. ss.SIR had beta=0.1 a year and dur_inf=6 years): for Starsim 3's model (a lognormal dur_inf and p_death=0.01, with its defaults), use ssl.AgentSIR, ssl.AgentSIS, or ssl.AgentSEIR"),
     (r'\b(ssl|sse|library|diseases)\.(Measles|Cholera|Ebola)\(', "ssl.Measles, ssl.Cholera, and ssl.Ebola are now declared (any solver, no network needed): beta is a rate per day (per contact on a network), each duration is a distribution, as before (a single duration given is the mean of an exponential), and each probability a number (p_death=0.005, not ss.bernoulli(0.005)); results are by state (E, I, R; Cholera's W and env_conc; Ebola's Sev, D, burial). For Starsim 3's agent model, subclass ssl.AgentSEIR"),
     (r'\binit_prev\s*=\s*ss\.(bernoulli|choose_n)\(', "if this is a declared disease (ss.SIR, ss.Disease with transitions, ...): init_prev is a share (init_n= is a number of people), or a function of (sim, uids) giving a share; for a function that took (self, sim, uids), drop self. A disease written as code keeps its distribution"),
     (r'\bdur_(inf|exp)\s*=\s*(dict\(|\{|\[)', "if this is ss.SIR, ss.SIS, or ss.SEIR: give the distribution itself, e.g. dur_inf=ss.lognormal(mean=ss.years(10), std=ss.years(2)) for [10, 2] or dict(type='lognormal', ...); a duration is otherwise the mean of an exponential"),
@@ -200,7 +199,7 @@ flags = [
     (r'\bss\.(Samples|Dataset|samples)\b', 'ss.Samples and ss.Dataset were removed: ss.parallel(sim, n_runs=n) gives the runs (msim.results, msim.to_df()); save their dataframes to keep them'),
     (r'\bss\.rate\(', 'ss.peryear(x) (a rate), or ss.freqperyear(x) (a count per unit time)'),
     (r'^\s*[\w.]+\.(reduce|mean|median)\(\)\s*(#.*)?$', 'if this reduces a MultiSim in place: its results have a run axis first, e.g. res = msim.results.sis.prevalence; res.median(), res.mean(), or low, mid, high = res.quantiles([0.1, 0.5, 0.9]) (the flattened msim.results.sis_prevalence is gone); these reduce each scenario (each label of the sims) separately, where Starsim 3 pooled every sim, so give sims one label to pool them'),
-    (r'\bss\.Sim\(.*\b(birth|death)_rate\s*=', 'demographics=[ss.Births(birth_rate=...), ss.Deaths(death_rate=...)] (per 1,000, as before), or ss.birth(rate=ss.peryear(...)) per person'),
+    (r'\bss\.Sim\(.*\b(birth|death)_rate\s*=', 'demographics=[ss.Births(birth_rate=...), ss.Deaths(death_rate=...)] (per 1,000, as before), or ss.birth(rate=...) and ss.death(rate=...), which run under every solver (a rate above 1 per year is per 1,000, as for ss.Births)'),
     (r'\bss\.(MFNet|SexualNet)\(.*\bduration\s*=', 'dur= (as every other network); net.pars.duration is net.pars.dur'),
     (r'\brel_part_rates\s*=', 'participation= (rel_part_rates was removed: its multiplier goes in the probability, e.g. participation=0.45 for 0.9 times 0.5)'),
     (r'''(['"])(mf|mfnet|msm|msmnet)\1''', "ss.MFNet and ss.MSMNet are ss.SexualNet, named 'sexualnet' unless given a name: networks='sexual', and a beta or ss.modify(network=) keyed 'sexual' (or ss.SexualNet(name='mf'))"),
@@ -357,7 +356,6 @@ def removed_keyword(key, call='ss.Sim'):
     return new[0] if new else None
 
 
-sim_settings = {'n_agents', 'total_pop', 'start', 'stop', 'dt', 'unit', 'rand_seed', 'pop_scale'} # Settings of ss.Sim, which tell a dict of them from others
 targeted = ['ss.Delivery', 'ss.vaccinate', 'ss.screen', 'ss.treat', 'ss.modify', 'ss.Transition'] # What takes who=, where=, when=, or on=
 agent_bases = {'SIR': 'ssl.AgentSIR', 'SIS': 'ssl.AgentSIS', 'SEIR': 'ssl.AgentSEIR'} # Starsim 3's diseases written as code, which are declared in Starsim 4
 mf_keys = {'mf', 'mfnet'} # ss.MFNet (now ss.SexualNet), which puts men in p1, so a pair [p1 to p2, p2 to p1] is [m2f, f2m]
@@ -522,32 +520,6 @@ def migrate_ast(text, analyzers=None):
         call.keywords.remove(kw)
         return True
 
-    def sim_dur(keys, node, value, where):
-        """ dur= of the sim (node, the keyword or the key of a dict, with its value), given the other settings by name: stop=, with its unit """
-        given = ast.unparse(value)
-        unit = keys['unit'].value if isinstance(keys.get('unit'), ast.Constant) else None
-        dt = ast.unparse(keys['dt']) if 'dt' in keys else ''
-        unit = (unit or (m.group(1) if (m := re.match(r'ss\.(day|week|month|year)s\(', dt)) else 'year')).removesuffix('s')
-        note = f'dur= of {where} was removed: stop= takes a duration, which is the length of the run'
-        key = isinstance(node, ast.Constant) # A key of a dict written {...}
-        new = given if isinstance(value, ast.Call) else f'ss.{unit}s({given})' if isinstance(value, ast.Constant) else None
-        if 'stop' in keys:
-            found.append((node.lineno, f'{note}; this sim has a stop= too, so drop one of them'))
-        elif new is None or (key and node.lineno != value.end_lineno):
-            found.append((node.lineno, f'{note}: give it a unit, e.g. stop=ss.years({given})'))
-        elif key:
-            quote = edits.line(node.lineno)[node.col_offset:node.col_offset+1].decode() # The key's own quotes
-            edits.add(node, f'{quote}stop{quote}', note)
-            edits.add(value, new, note if isinstance(value, ast.Call) else f'{note}; a bare dur= was in the sim\'s unit ({unit}s)')
-        else:
-            edits.add(node, f'stop={new}', note if isinstance(value, ast.Call) else f'{note}; a bare dur= was in the sim\'s unit ({unit}s)')
-
-    for node in [n for n in ast.walk(tree) if isinstance(n, ast.Dict)]: # A dict of the sim's settings written {...}
-        keys = {k.value:v for k,v in zip(node.keys, node.values) if isinstance(k, ast.Constant) and isinstance(k.value, str)}
-        if 'dur' in keys and sim_settings & set(keys):
-            key = next(k for k in node.keys if isinstance(k, ast.Constant) and k.value == 'dur')
-            sim_dur(keys, key, keys['dur'], 'a dict of the settings of a sim')
-
     for call in [n for n in ast.walk(tree) if isinstance(n, ast.Call) and ast.unparse(n.func) == 'ss.People']:
         if not any(kw.arg in ['age_data', None] for kw in call.keywords) and len(call.args) < 2: # No ages given (None is **kwargs)
             found.append((call.lineno, "ss.People(n) with no age_data= gives agents the world's ages (Starsim 3's were uniform from 0 to 60): for Starsim 3's, ss.People(n, age_data=ss.uniform(0, 60))"))
@@ -588,8 +560,6 @@ def migrate_ast(text, analyzers=None):
                     remove_kw(call, kw, 'dur=0 of ss.RandomNet is the default (its contacts last one step)')
                 else:
                     found.append((kw.lineno, f'dur={kw.value.value} of ss.RandomNet is in the sim\'s unit; give the unit, e.g. dur=ss.years({kw.value.value})'))
-            elif kw.arg == 'dur' and (func == 'ss.Sim' or (func == 'dict' and sim_settings & {k.arg for k in call.keywords})):
-                sim_dur({k.arg:k.value for k in call.keywords}, kw, kw.value, 'ss.Sim' if func == 'ss.Sim' else 'a dict of the settings of a sim')
             elif kw.arg == 'copy_inputs':
                 if remove_kw(call, kw, 'copy_inputs= is removed: a sim always copies the modules it is given'):
                     found.append((kw.lineno, 'a sim copies the modules it is given (copy_inputs= is removed): read them, and their results, from the sim (sim.diseases.sir, sim.analyzers.myanalyzer), not from the objects given'))
@@ -682,6 +652,9 @@ def migrate_ast(text, analyzers=None):
                 value = keywords['init_prev'].value
                 if isinstance(value, ast.Call) and ast.unparse(value.func) == 'ss.choose_n' and len(value.args) == 1 and not value.keywords and not isinstance(value.args[0], (ast.Lambda, ast.Name)):
                     edits.add(keywords['init_prev'], f'init_n={ast.unparse(value.args[0])}', f'init_prev= of {func} is a share; init_n= is a number of people, as ss.choose_n() was')
+            beta = keywords['beta'].value if 'beta' in keywords else None
+            if isinstance(beta, ast.Constant) and type(beta.value) in (int, float) and beta.value:
+                found.append((beta.lineno, f'the beta {beta.value} of {func} is a bare number: Starsim 3 used it as a probability per step (of a year, by default), but Starsim 4 reads it as a rate in the unit of the model\'s typed values (days, for the defaults of {func}). Give its meaning, e.g. beta=ss.prob({beta.value}, "year") for yearly steps'))
             for key in ['dur_inf', 'dur_exp']:
                 value = keywords[key].value if key in keywords else None
                 if isinstance(value, ast.Constant) and isinstance(value.value, (int, float)):

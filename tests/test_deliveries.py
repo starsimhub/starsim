@@ -107,7 +107,7 @@ def test_change():
     # It is a modifier, so a window and a function of the date work
     for when,dates in [(ss.schedule(start=0, stop=0), {}), (ss.schedule(lambda now: False, start='2000-01-02'), dict(start='2000-01-01'))]: # A function of the date needs a calendar
         sir = make_sir()
-        sim = ss.Sim(sir, interventions=ss.modify(sir.pars.beta, multiply=0.3, when=when), solver='ode', stop=ss.days(120), **dates, **kw).run()
+        sim = ss.Sim(sir, interventions=ss.modify(sir.pars.beta, multiply=0.3, when=when), solver='ode', dur=ss.days(120), **dates, **kw).run()
         assert np.isclose(sim.results.sir.infection.cum[-1], base.results.sir.infection.cum[-1]) # Not 492 infections against 9,309
 
     # A modifier applies whatever form the parameter takes
@@ -649,7 +649,7 @@ def test_modify_until():
         sir = ss.Disease(infection=S >> I @ 0.3*I, recovery=I >> R @ ss.days(10), init_prev=1e-3, name='sir')
         kw = dict(until=sir.I.frac <= 0.05) if until else {}
         measure = ss.modify(sir.pars.beta, multiply=0.6, who=sir.I.frac >= 0.1, **kw)
-        return ss.Sim(sir, interventions=measure, total_pop=pop, stop=ss.days(200), solver=solver, verbose=0).run().results.sir.infection.values.sum()
+        return ss.Sim(sir, interventions=measure, total_pop=pop, dur=ss.days(200), solver=solver, verbose=0).run().results.sir.infection.values.sum()
     assert run('ode') < run('ode', until=False) # It stays on longer than the bare threshold
     assert run('abm', pop=20_000) < 20_000
     with pytest.raises(ValueError):
@@ -663,7 +663,7 @@ def test_paths():
     def run(make, solver='ode', key='interventions', **kw):
         S, E, I, R = ss.states('S E I R')
         d = ss.Disease(infection=S >> E @ ss.perday(0.4)*I, onset=E >> I @ ss.days(3), recovery=I >> R @ ss.days(7), name='seir', **kw)
-        return ss.Sim(d, **{key: make(d)}, total_pop=5000, stop=ss.days(60), verbose=0, solver=solver).run()
+        return ss.Sim(d, **{key: make(d)}, total_pop=5000, dur=ss.days(60), verbose=0, solver=solver).run()
     R = lambda sim: sim.results.seir.R[-1]
     for solver in ['ode', 'abm']:
         kw = dict(solver=solver, init_n=dict(I=10))
@@ -684,7 +684,7 @@ def test_paths():
     assert not note(sim) and sim.results.seir.E[0] == sim.results.seir.I[0] == 0
     S, E, I, R = ss.states('S E I R') # A network of agents runs as agents
     d = ss.Disease(infection=S >> E @ ss.peryear(10)*I, onset=E >> I @ ss.days(3), recovery=I >> R @ ss.days(7), init_n=dict(I=10), name='seir')
-    assert isinstance(ss.Sim(d, networks=ssl.HybridNet(household_size=ss.poisson(mean=3)), total_pop=2000, stop=ss.days(5), verbose=0).init().solver, ss.solvers.abm)
+    assert isinstance(ss.Sim(d, networks=ssl.HybridNet(household_size=ss.poisson(mean=3)), total_pop=2000, dur=ss.days(5), verbose=0).init().solver, ss.solvers.abm)
     return
 
 if __name__ == '__main__':

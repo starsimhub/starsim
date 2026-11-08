@@ -17,7 +17,7 @@ def make_pars(n_agents=2_000, start=2000, stop=2020):
         n_agents = n_agents,
         start    = start,
         stop     = stop,
-        diseases = 'sis',
+        diseases = ss.SIS(beta=ss.peryear(0.05), dur_inf=ss.years(10)), # In years, as the deliveries are
         networks = 'random',
         verbose  = 0,
     )
@@ -59,7 +59,7 @@ def test_products(do_plot=False):
     assert sisres.infection[pre_vx].mean() > sisres.infection[post_vx].mean(), 'Expected vaccine to reduce infections'
 
     # Treatment of a fixed number each step (Starsim 3's treat_num): those not served wait, and leave the queue if no longer infected
-    sis = ss.SIS(beta=ss.peryear(0.5))
+    sis = ss.SIS(beta=ss.peryear(0.5), dur_inf=ss.years(10))
     treatment = ss.treat(ss.Treatment(cure=0.8), when=sis.infection, capacity=ss.capacity(50, queue=True))
     res = ss.Sim(make_pars() | dict(diseases=sis), interventions=treatment).run().results.treatment
     assert res.delivered.max() == 50 and res.waiting.max() > 0, 'Expected at most 50 treated each step, and a queue'

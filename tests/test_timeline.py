@@ -56,7 +56,7 @@ def test_timeline_combinations():
 
     # Corner cases: mixed dur types, datedur dt, long ranges, leap years
     tl5 = ss.Timeline(start=ss.days(0), stop=ss.days(365), dt='week') # Days start/stop, week dt (type mismatch)
-    tl6 = ss.Timeline(start=ss.years(2000), stop=ss.years(10), dt=ss.months(1))  # Calendar months as the step, with a start that is a duration (a time from 0)
+    tl6 = ss.Timeline(start=ss.years(2000), dur=ss.years(10), dt=ss.months(1))  # Calendar months as the step, with a start that is a duration (a time from 0)
     tl7 = ss.Timeline(start=2000, stop=2100, dt='week') # Long range amplifies float discrepancy
     tl8 = ss.Timeline(start=2000, stop=2001, dt='day') # Leap year (2000) with day dt
 
@@ -150,10 +150,10 @@ def test_timeline_syntax():
     keymap = dict(
         a = 'start',
         b = 'stop',
-        c = 'removed dur',
+        c = 'dur (the length of the run)',
         d = 'dt',
         e = 'start and stop',
-        f = 'start and a stop that is a duration (the length)',
+        f = 'start and a stop that is a duration (a time, as the start is)',
         g = 'stop with no start (a calendar stop starts in 2000)',
         h = 'multiple',
     )
@@ -166,24 +166,30 @@ def test_timeline_syntax():
     kw.a3 = [dict(start=ss.years(1990), stop=None, dt=None) , dict(start=ss.years(1990), stop=ss.years(2040), dur=ss.years(50), dt=ss.years(1))] # 1,990 years from 0: no calendar
     kw.a4 = [dict(start='1990.1.1', stop=None, dt=None)     , dict(start=ss.date(1990), stop=ss.date(2040), dur=ss.years(50), dt=ss.years(1))]
     kw.a5 = [dict(start=ss.date(1990), stop=None, dt=None)  , dict(start=ss.date(1990), stop=ss.date(2040), dur=ss.years(50), dt=ss.years(1))]
-    kw.a6 = [dict(start=ss.days(5), stop=None, dt=None)     , dict(start=ss.days(5), stop=ss.days(55), dur=ss.days(50), dt=ss.days(1))]
+    kw.a6 = [dict(start=ss.days(5), stop=None, dt=None)     , dict(start=ss.days(5), stop=ss.days(105), dur=ss.days(100), dt=ss.days(1))]
 
     # Test stop
     kw.b1 = [dict(start=None, stop=2010, dt=None)           , dict(start=ss.years(2000), stop=ss.years(2010), dur=ss.years(10), dt=ss.years(1))] # A calendar stop starts at the default start, 2000
     kw.b2 = [dict(start=None, stop=1990, dt=None)           , 'exception'] # Before the default start
     kw.b3 = [dict(start=None, stop='1990.1.1', dt=None)     , 'exception']
-    kw.b4 = [dict(start=None, stop=ss.years(20), dt=None)   , dict(start=ss.years(2000), stop=ss.years(2020), dur=ss.years(20), dt=ss.years(1))] # A typed stop is the length, never a year
+    kw.b4 = [dict(start=None, stop=ss.years(20), dt=None)   , dict(start=ss.years(0), stop=ss.years(20), dur=ss.years(20), dt=ss.years(1))] # A typed stop is a time, as a start is: 20 years from 0
+    kw.b7 = [dict(start=None, stop=ss.years(2030), dt=None) , dict(start=ss.years(2000), stop=ss.years(2030), dur=ss.years(30), dt=ss.years(1))] # A typed calendar year starts at the default start, 2000
     kw.b5 = [dict(start=None, stop=ss.date(2030), dt=None)  , dict(start=ss.date(2000), stop=ss.date(2030), dur=dd30, dt=ss.years(1))]
     kw.b6 = [dict(start=None, stop=ss.days(100), dt=None)   , dict(start=ss.days(0), stop=ss.days(100), dur=ss.days(100), dt=ss.days(1))]
 
-    # Test dur, which was removed: stop= takes the length
-    kw.c1 = [dict(start=None, stop=None, dur=10, dt=None)          , 'exception']
-    kw.c2 = [dict(start=None, stop=None, dur=ss.years(10), dt=None), 'exception']
+    # Test dur, the length of the run: the stop is the start plus it
+    kw.c1 = [dict(start=None, stop=None, dur=10, dt=None)                , dict(start=ss.years(2000), stop=ss.years(2010), dur=ss.years(10), dt=ss.years(1))]
+    kw.c2 = [dict(start=None, stop=None, dur=ss.years(10), dt=None)      , dict(start=ss.years(2000), stop=ss.years(2010), dur=ss.years(10), dt=ss.years(1))]
+    kw.c3 = [dict(start=1990, stop=None, dur=ss.years(1990), dt=None)    , dict(start=ss.years(1990), stop=ss.years(3980), dur=ss.years(1990), dt=ss.years(1))] # Always the length, never a year
+    kw.c4 = [dict(start=ss.date(1990), stop=None, dur=ss.years(20), dt=None), dict(start=ss.date(1990), stop=ss.date(2010), dur=ss.years(20), dt=ss.years(1))]
+    kw.c5 = [dict(start=None, stop=None, dur=ss.days(100), dt=None)      , dict(start=ss.days(0), stop=ss.days(100), dur=ss.days(100), dt=ss.days(1))]
+    kw.c6 = [dict(start=2000, stop=2010, dur=10, dt=None)                , 'exception'] # Both the stop and the length
+    kw.c7 = [dict(start=2000, stop=None, dur='2010-01-01', dt=None)      , 'exception'] # A date is a stop, not a length
 
     # Test dt: with no stop, the length is 50 of the unit, whatever the type of the step
     kw.d1 = [dict(start=None, stop=None, dt=1)                 , dict(start=ss.years(2000), stop=ss.years(2050), dur=ss.years(50), dt=ss.years(1))]
     kw.d2 = [dict(start=None, stop=None, dt=ss.years(1))       , dict(start=ss.years(2000), stop=ss.years(2050), dur=ss.years(50), dt=ss.years(1))]
-    kw.d3 = [dict(start=None, stop=None, dt=ss.days(1))        , dict(start=ss.days(0), stop=ss.days(50), dur=ss.days(50), dt=ss.days(1))] # Alone, the unit is that of the first duration given
+    kw.d3 = [dict(start=None, stop=None, dt=ss.days(1))        , dict(start=ss.days(0), stop=ss.days(100), dur=ss.days(100), dt=ss.days(1))] # Alone, the unit is that of the first duration given
     kw.d4 = [dict(start=None, stop=None, dt='month')           , dict(start=ss.months(0), stop=ss.months(50), dur=ss.months(50), dt=ss.months(1))]
     kw.d5 = [dict(start=2000, stop=None, dt=ss.months(1))      , dict(start=ss.years(2000), stop=ss.years(2050), dur=ss.years(50), dt=ss.months(1))]
 
@@ -192,13 +198,13 @@ def test_timeline_syntax():
     kw.e2 = [dict(start=ss.years(1990), stop=2010, dt=None)      , dict(start=ss.years(1990), stop=ss.years(2010), dur=ss.years(20), dt=ss.years(1))] # No calendar: 2010 is a time from 0, in years
     kw.e4 = [dict(start=ss.date(1990), stop=2010, dt=None)       , dict(start=ss.date(1990), stop=ss.date(2010), dur=dd20, dt=ss.years(1))]
     kw.e5 = [dict(start=1990, stop=ss.date(2010), dt=None)       , dict(start=ss.date(1990), stop=ss.date(2010), dur=dd20, dt=ss.years(1))]
-    kw.e7 = [dict(start='2025-01-01', stop=50, dt=None)          , 'exception'] # The year 50: a length is ss.years(50)
+    kw.e7 = [dict(start='2025-01-01', stop=50, dt=None)          , 'exception'] # The year 50: a length is dur=50
     kw.e8 = [dict(start=0, stop='2020-01-01', dt=None)           , 'exception'] # A date with no calendar
 
     # Test start and a stop that is a duration
-    kw.f1 = [dict(start=1990, stop=ss.years(20), dt=None)        , dict(start=ss.years(1990), stop=ss.years(2010), dur=ss.years(20), dt=ss.years(1))]
-    kw.f2 = [dict(start=1990, stop=ss.years(1990), dt=None)      , dict(start=ss.years(1990), stop=ss.years(3980), dur=ss.years(1990), dt=ss.years(1))] # Always the length, never a year
-    kw.f3 = [dict(start=ss.date(1990), stop=ss.years(20), dt=None), dict(start=ss.date(1990), stop=ss.date(2010), dur=ss.years(20), dt=ss.years(1))]
+    kw.f1 = [dict(start=1990, stop=ss.years(20), dt=None)        , 'exception'] # The time 20 from 0, in a sim with a calendar: the length is dur=ss.years(20)
+    kw.f2 = [dict(start=1990, stop=ss.years(2010), dt=None)      , dict(start=ss.years(1990), stop=ss.years(2010), dur=ss.years(20), dt=ss.years(1))] # In calendar years, the year 2010
+    kw.f3 = [dict(start=ss.date(1990), stop=ss.years(20), dt=None), 'exception']
     kw.f4 = [dict(start=ss.years(0), stop=ss.days(365), dt=None) , dict(start=ss.years(0), stop=ss.years(1), dur=ss.years(1), dt=ss.years(1))]
 
     # Test stop with no start
@@ -208,7 +214,7 @@ def test_timeline_syntax():
     # Test multiple
     kw.h1 = [dict(start=ss.years(1990), stop=ss.date(2010), dt='month') , 'exception'] # A date with no calendar
     kw.h2 = [dict(start=1990, stop=2010, dt=ss.months(1))       , dict(start=ss.years(1990), stop=ss.years(2010), dur=ss.years(20), dt=ss.months(1))]
-    kw.h3 = [dict(start=1990, stop=ss.months(40), dt='month')   , dict(start=ss.years(1990), stop=ss.years(1990)+ss.months(40), dur=ss.months(40), dt=ss.months(1))]
+    kw.h3 = [dict(start=1990, dur=ss.months(40), dt='month')    , dict(start=ss.years(1990), stop=ss.years(1990)+ss.months(40), dur=ss.months(40), dt=ss.months(1))]
     kw.h4 = [dict(start='2020-01-01', stop='2020-03-01', dt=None), 'exception'] # Shorter than one step
 
 
@@ -295,7 +301,7 @@ def test_step_count():
     for sim_dt, label in [(ss.months(1), 'ss.months(1)'), (ss.years(1/12), 'ss.years(1/12)')]:
         sim = ss.Sim(
             diseases=ss.SIS(beta=ss.peryear(0.5), dur_inf=ss.years(2), dt='month'),
-            networks='random', n_agents=100, stop=ss.years(1), dt=sim_dt,
+            networks='random', n_agents=100, dur=ss.years(1), dt=sim_dt,
         )
         sim.init()
         plan = sim.loop.to_df()
@@ -324,43 +330,53 @@ def test_coded_unit():
     assert sim.unit is None and sim.t.start == 0 and len(sim.t) == 51
 
     # Typed values in days and years: a step of a day is said, unless the run is written in days
-    sis = lambda: ss.SIS(beta=ss.perday(0.002)) # Its dur_inf is in years
+    sis = lambda: ss.SIS(beta=ss.perday(0.002), dur_inf=ss.years(10))
     with pytest.warns(RuntimeWarning, match='different units'):
         ss.Sim(diseases=sis(), n_agents=small, stop=100, verbose=0).init()
     with warnings.catch_warnings():
         warnings.simplefilter('error')
-        sim = ss.Sim(diseases=sis(), n_agents=small, start='2000', stop=ss.days(100), verbose=0).init()
+        sim = ss.Sim(diseases=sis(), n_agents=small, start='2000', dur=ss.days(100), verbose=0).init()
     assert sim.t.dt == ss.days(1)
     return sim
 
 
 def test_bare_times():
-    """ How a bare number is read as a time is decided once, from the start (or with none, the stop, if the unit is years): a year with a calendar, else a time in the sim's unit from 0; a duration is a time from 0, and as stop=, the length """
+    """ How a bare number is read as a time is decided once, from the start (or with none, the stop, if the unit is years): a year with a calendar, else a time in the sim's unit from 0; a duration is a time from 0, as stop= too; dur= is the length """
     sc.heading('Bare numbers as times')
-    kw = dict(diseases='sis', networks='random', n_agents=small, verbose=0)
-    with pytest.raises(TypeError, match='dur= has been removed'):
-        ss.Sim(stop=2035, dur=10, **kw)
+    kw = dict(diseases=ss.SIS(beta=ss.peryear(0.05), dur_inf=ss.years(10)), networks='random', n_agents=small, verbose=0) # A model in years
+    with pytest.raises(ValueError, match='both given'): # The stop, or the length, not both
+        ss.Sim(stop=2035, dur=10, **kw).init()
+    sim = ss.Sim(start=2020, dur=10, **kw).init() # A bare length is in the sim's unit
+    assert sim.t.stop == ss.years(2030) and sim.t.dur == ss.years(10)
+    assert ss.Sim(start=2020, dur=10, unit='day', **kw).init().t.stop == ss.years(2030) # In years in a sim of calendar years, whatever the unit
+    assert ss.Sim(dur=10, unit='day', **kw).init().t.stop == ss.days(10) # Else in the sim's unit
+    assert sim.new(stop=2025).init().t.stop == ss.years(2025) # A new stop replaces the length,
+    assert ss.Sim(start=2020, stop=2025, **kw).new(dur=3).init().t.stop == ss.years(2023) # and a new length the stop
     sim = ss.Sim(stop=2030, **kw).init() # A calendar stop alone starts in 2000
     assert sim.t.start == ss.years(2000) and sim.t.calendar == 'years'
     sim = ss.Sim(start=2020, stop=2021, unit='day', **kw).init() # A year whatever the unit
     assert sim.t.calendar == 'years' and len(sim.t) == 366
     sim = ss.Sim(stop=3650, unit='day', **kw).init() # With no start, the explicit unit wins: 3,650 days from 0 (it ran from 2000 to the year 3650)
     assert sim.t.calendar is None and sim.t.start == ss.days(0) and sim.t.stop == ss.days(3650)
-    with pytest.raises(ValueError, match=r'stop=ss.days\(50\)'): # The year 50 after a dated start
+    with pytest.raises(ValueError, match='dur=50'): # The year 50 after a dated start
         ss.Sim(start='2025-01-01', stop=50, unit='day', **kw).init()
     with pytest.raises(ValueError, match='shorter than one step'):
-        ss.Sim(start='2020-01-01', stop='2020-03-01', **kw).init() # The default yearly step
-    for stop in [1899, 2000]: # A typed stop is the length of the run, however large: never a calendar year
+        ss.Sim(start='2020-01-01', stop='2020-03-01', **kw).init() # The yearly step of a model in years
+    for stop in [1899, 2000]: # With no calendar, a typed stop is a time from 0, however large
         sim = ss.Sim(start=0, stop=ss.years(stop), **kw).init()
         assert sim.t.start == ss.years(0) and sim.t.stop == ss.years(stop)
-    sim = ss.Sim(start=1950, stop=ss.years(20), **kw).init()
-    assert sim.t.stop == ss.years(1970)
+    with pytest.raises(ValueError, match=r'dur=ss.years\(20\)'): # With a calendar, a typed stop is a time too: the length is dur=
+        ss.Sim(start=1950, stop=ss.years(20), **kw).init()
+    assert ss.Sim(start=1950, stop=ss.years(1970), **kw).init().t.stop == ss.years(1970) # A typed calendar year
+    assert ss.Sim(start=1950, dur=ss.years(20), **kw).init().t.stop == ss.years(1970)
     t = ss.Timeline(start=2000, stop=2020, dt=1.0)
-    t.update(stop=ss.years(3)) # Also when updated
+    t.update(dur=ss.years(3)) # Also when updated
     assert t.stop == ss.years(2003) and len(t.tvec) == 4
+    t.update(stop=2010) # A new stop replaces the length
+    assert t.stop == ss.years(2010) and len(t.tvec) == 11
 
     # Times of events and modifiers, on the same axis
-    dated = ss.Sim(start='2000-01-01', stop=ss.years(40), dt=ss.years(1), **kw).init()
+    dated = ss.Sim(start='2000-01-01', dur=ss.years(40), dt=ss.years(1), **kw).init()
     years = ss.Sim(start=2000, stop=2040, **kw).init()
     for sim in [dated, years]:
         assert ss.connectors.to_ti(sim, 2030) == 30 # A bare number is a year with either calendar

@@ -264,7 +264,7 @@ def test_independence(do_plot=False, thresh=0.1):
     assert max_corr < thresh, f'The maximum correlation between variables was {max_corr}, above the threshold {thresh}'
 
     # A declared disease's random numbers do not depend on which other declared diseases are in the sim
-    kw = dict(n_agents=1000, networks='random', stop=ss.years(10), verbose=0)
+    kw = dict(n_agents=1000, networks='random', dur=ss.years(10), verbose=0)
     alone = ss.Sim(diseases=ss.SIS(), **kw).run()
     both = ss.Sim(diseases=[ss.SIR(p_death=0), ss.SIS()], **kw).run()
     assert np.array_equal(alone.results.sis.I, both.results.sis.I) # The same people infected with SIS
@@ -309,7 +309,7 @@ def test_crn_option():
     def run(crn, seed=1):
         with ss.options.context(crn=crn):
             sim = ss.Sim(diseases=ssl.AgentSIS(name='sis', beta=0.1, init_prev=0.05), networks=ss.RandomNet(), # The transmission of ss.AgentDisease
-                         n_agents=2000, stop=ss.years(30), rand_seed=seed, verbose=0)
+                         n_agents=2000, dur=ss.years(30), rand_seed=seed, verbose=0)
             sim.run()
         return sim.results['sis']['infected'].values
 

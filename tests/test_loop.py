@@ -14,14 +14,14 @@ import starsim as ss
 sc.options(interactive=False) # Assume not running interactively
 
 pars = sc.obj(
-    stop      = ss.years(20),
+    dur      = ss.years(20),
     n_agents = 1000,
     diseases = 'sis',
     networks = 'random',
 )
 
 small_pars = sc.obj(
-    stop = ss.years(5),
+    dur = ss.years(5),
     n_agents = 100,
     diseases = 'sis',
     networks = 'random',
@@ -115,7 +115,7 @@ def test_callable_cache_cleanup():
         return 5 + sim.people.age[uids] * 0
 
     pars = sc.obj(
-        stop = ss.years(5),
+        dur = ss.years(5),
         n_agents = 100,
         diseases = ss.SIR(init_prev=0.2, dur_inf=ss.normal(mean=custom_duration, std=0.1)),
         networks = 'random',

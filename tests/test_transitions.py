@@ -353,7 +353,7 @@ def test_time():
     assert ss.Sim(make_sir(), stop=10, dt=ss.weeks(1), **kw).init().unit == 'week'
     assert ss.Sim(make_sir(), start='2020-01-01', stop='2020-03-01', **kw).init().unit == 'day'
     assert ss.Sim(make_sir(), start=2020, stop=2030, **kw).init().unit == 'year'
-    assert ss.Sim(make_sir(), unit='day', stop=ss.days(3650), **kw).init().t.npts == 3651 # A duration is the length
+    assert ss.Sim(make_sir(), unit='day', dur=ss.days(3650), **kw).init().t.npts == 3651 # A duration is the length
     yearlike = ss.Sim(make_sir(), unit='day', start=2000, stop=2002, **kw).init()
     assert yearlike.t.npts == 731 # A bare number from 1900 on as the start is a calendar year, whatever the unit
 
@@ -369,9 +369,9 @@ def test_time():
         ss.Sim(ss.Disease(S >> I @ ss.perday(0.3)*I, I >> R @ ss.weeks(1), I >> ss.dead @ 0.01, name='mixed'), **kw).init()
     deaths = ss.death(rate=10) # But the deaths of everyone, as ss.Deaths reads them: per year, and above 1 per 1,000, with a note (not a warning: it is the usual spelling)
     assert ss.birth(rate=30).rate.raw == ss.peryear(0.03) and ss.birth(rate=ss.peryear(0.02)).rate.raw == ss.peryear(0.02)
-    assert ss.death(rate=ss.peryear(1.05)).rate.raw == ss.peryear(1.05) # A typed rate is per person, as given, with no warning (e.g. a host that lives a year)
+    assert ss.birth(rate=ss.peryear(30)).rate.raw == ss.peryear(0.03) and ss.death(rate=ss.peryear(1.05)).rate.raw == ss.peryear(1.05/1000) # A typed rate is read as a bare number is: above 1 per year, per 1,000
     mixed = ss.Sim(ss.Disease(S >> I @ ss.perday(0.3)*I, I >> R @ ss.weeks(1), name='mixed'), demographics=deaths, **kw).init()
-    assert mixed.diseases.mixed.pars.rate_deaths.raw == ss.peryear(0.01) and 'rate=10 is a bare number, so it is taken as 10 per 1,000 people per year' in mixed.notes
+    assert mixed.diseases.mixed.pars.rate_deaths.raw == ss.peryear(0.01) and 'rate=10 is above 1 per year, so taken as per 1,000 people per year' in mixed.notes
     zero = ss.par(0.0, name='zero') # But 0 is 0 in any unit
     assert ss.Sim(ss.Disease(S >> I @ ss.perday(0.3)*I, I >> R @ ss.weeks(1), R >> S @ zero, name='mixed'), **kw).init().unit == 'day'
 
@@ -385,7 +385,7 @@ def test_time():
     assert np.isclose(res[0][7], 10_000*np.exp(-1), rtol=1e-4) # After seven steps, a week
 
     # A duration as stop= with a start date is the length of the run; a rate of 0 never ends a dwell; and ages can be any distribution
-    assert ss.Sim(make_sir(), start='2020-01-01', stop=ss.days(735), **kw).init().t.stop == ss.date('2020-01-01') + ss.days(735)
+    assert ss.Sim(make_sir(), start='2020-01-01', dur=ss.days(735), **kw).init().t.stop == ss.date('2020-01-01') + ss.days(735)
     I, R = ss.states('I R')
     assert ss.Sim(ss.Disease(recovery=ss.Transition(I, R, rate=0), default_state='I'), stop=10, n_agents=100, **kw).run().diseases[0].results.I[-1] == 100
     assert ss.Sim(make_sir(), people=ss.People(1000, age_data=ss.uniform(20, 30)), stop=2, **kw).init().people.age.min() >= 20
@@ -904,7 +904,7 @@ def test_immediate():
     times = {}
     for through in [False, True, False, True]:
         T = sc.timer()
-        res = ss.Sim(make(through), unit='day', stop=ss.days(3650), **kw).run().results.sir
+        res = ss.Sim(make(through), unit='day', dur=ss.days(3650), **kw).run().results.sir
         times.setdefault(through, []).append(T.toc(output=True))
     assert res.X.max() == 0 and min(times[True]) < 2*min(times[False]) + 0.05, f'dur=0 took {min(times[True]):.3f} s, against {min(times[False]):.3f} s without it'
 
@@ -1138,7 +1138,7 @@ def test_stays():
     sc.heading('Testing the time people spent in a state (E.stays): the declared mean, where the difference of the times of entering is a step long')
     S, E, I, R = ss.states('S E I R')
     seir = ss.Disease(S >> E @ 1.9*I, E >> I @ ss.days(10), I >> R @ ss.days(8), init_n=dict(I=10), name='seir')
-    sim = ss.Sim(seir, n_agents=5000, stop=ss.days(200), rand_seed=1, verbose=0).run()
+    sim = ss.Sim(seir, n_agents=5000, dur=ss.days(200), rand_seed=1, verbose=0).run()
     m = sim.diseases.seir
     stays = m.E.stays
     assert isinstance(stays, ss.days) and len(stays) > 4000 and np.isclose(np.mean(stays).value, 10, atol=0.5), np.mean(stays) # The seeds, who never entered E, are not counted
@@ -1151,7 +1151,7 @@ def test_stays():
     # Going back to a state it led to (a relapse) does not change when people left
     E, I, R = ss.states('E I R')
     tb = ss.Disease(E >> I @ ss.days(5), I >> R @ ss.days(5), R >> I @ ss.days(5), init_n=dict(E=1000), name='tb')
-    m = ss.Sim(tb, n_agents=1000, stop=ss.days(60), verbose=0).run().diseases.tb
+    m = ss.Sim(tb, n_agents=1000, dur=ss.days(60), verbose=0).run().diseases.tb
     assert len(m.E.stays) == 1000 and np.isclose(np.mean(m.E.stays).value, 5, atol=0.5), np.mean(m.E.stays) # Not from the last time they entered I
     return stays
 
@@ -1336,7 +1336,7 @@ def test_given_dwell():
     def make(solver, p=None, rate=None, dur=ss.expon(ss.years(1))):
         P, C, R = ss.states('P C R')
         exits = dict(course=ss.Transition(P, {C: p(P), R: None}, dur=dur)) if p is not None else dict(clear=P >> R @ rate(P), death=P >> ss.dead @ ss.peryear(0.1))
-        return ss.Sim(ss.Disease(P, C, R, **exits, default_state='P', name='d'), n_agents=n, total_pop=n, stop=ss.years(15), dt=ss.years(0.1), solver=solver, verbose=0)
+        return ss.Sim(ss.Disease(P, C, R, **exits, default_state='P', name='d'), n_agents=n, total_pop=n, dur=ss.years(15), dt=ss.years(0.1), solver=solver, verbose=0)
 
     # A known answer: with an exponential dwell of mean 1, P(C) = 1 - exp(-dwell) sends half to C
     share = make('abm', p=lambda P: 1 - np.exp(-P.time_in)).run().results.d.C[-1]/n
@@ -1521,7 +1521,7 @@ def test_branch_ends():
         if by_age:
             dis.stratify(age={0: 0.25, 18: 0.6, 65: 0.15})
         return dis
-    run = lambda dis, **kw: ss.Sim(dis, total_pop=10_000, stop=ss.days(200), verbose=0, solver='ode', **kw).run().results
+    run = lambda dis, **kw: ss.Sim(dis, total_pop=10_000, dur=ss.days(200), verbose=0, solver='ode', **kw).run().results
     share = lambda r: r.died.sum()/(r.died.sum() + r.sir.H[-1] + r.sir.R[-1])
     base = run(make())
     assert np.isclose(share(base), 0.02)
@@ -1543,7 +1543,7 @@ def test_infected_sources():
     E = ss.State(infected=True) # I, the source of infection, is not marked
     d = ss.Disease(S, E, I, R, infection=S >> E @ ss.perday(0.5)*I, onset=E >> I @ ss.days(3), recovery=I >> ss.dead @ ss.days(7), init_n=dict(I=10), name='seir')
     seen = {} # The number alive read during each step
-    sim = ss.Sim(d, connectors=ss.modify('seir.infection', multiply=lambda sim: seen.update({sim.ti: sim.results.alive[sim.ti]}) or 1.0), total_pop=10_000, stop=ss.days(60), verbose=0, solver='ode').run()
+    sim = ss.Sim(d, connectors=ss.modify('seir.infection', multiply=lambda sim: seen.update({sim.ti: sim.results.alive[sim.ti]}) or 1.0), total_pop=10_000, dur=ss.days(60), verbose=0, solver='ode').run()
     tis = sorted(seen)
     assert np.allclose([seen[ti] for ti in tis], sim.results.alive[tis]) and seen[tis[-1]] < seen[0] # During the run, as after it
     assert np.isclose(sim.diseases.seir.R0(), 3.5)

@@ -16,9 +16,9 @@ import starsim.library as ssl
 n_agents = 2_000
 
 # Outbreak diseases specify their natural history in days, so they need a sub-year timestep
-outbreak_pars = dict(start=2000, stop=ss.years(1), dt=ss.days(1), n_agents=n_agents, rand_seed=1, verbose=0)
+outbreak_pars = dict(start=2000, dur=ss.years(1), dt=ss.days(1), n_agents=n_agents, rand_seed=1, verbose=0)
 endemic_pars  = dict(start=2000, stop=2030, n_agents=n_agents, rand_seed=1, verbose=0)
-mnch_pars     = dict(start=2000, stop=ss.years(3), dt=ss.weeks(1), n_agents=n_agents, rand_seed=1, verbose=0)
+mnch_pars     = dict(start=2000, dur=ss.years(3), dt=ss.weeks(1), n_agents=n_agents, rand_seed=1, verbose=0)
 
 
 @sc.timer()

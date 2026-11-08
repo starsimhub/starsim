@@ -156,7 +156,7 @@ class State(Nameable, Expr):
         return Count([self], kind='total')
 
 
-def states(arg, infected=False, **kwargs):
+def states(arg=None, infected=False, **kwargs):
     """
     Create several states at once
 
@@ -165,17 +165,32 @@ def states(arg, infected=False, **kwargs):
             are assigned to; or a string of names (e.g. `'S I R'`), which are used directly
         infected (bool/str/list): which of them are infected (see `ss.State`): all of them (`True`); some, by name, with names given
             up front (`'E I'`); or some, by position, with a number of states (`[1, 2]`, or `range(1, 6)`)
-        kwargs (dict): passed to each `ss.State`, e.g. `people=False`
+        kwargs (dict): instead of `arg`, the states by name, with the share of people who start in each (`S=0.9, I=0.1, R=0`); and
+            any of the arguments of `ss.State`, passed to each, e.g. `people=False`
 
     Examples:
         ```python
         S, I, R = ss.states(3)
         S, I, R = ss.states('S I R') # The same, with the names given up front
+        S, I, R = ss.states(S=0.99, I=0.01, R=0) # With the share of people who start in each
         Sv, Ev, Iv = ss.states(3, people=False) # Mosquitoes: counts, not people
         S, E, I, H, R = ss.states('S E I H R', infected='E I H') # H does not transmit, so is not infected unless said
         S, E, I, H, R = ss.states(5, infected=range(1, 4)) # The same, by position
         ```
     """
+    inits = {k:kwargs.pop(k) for k in list(kwargs) if k not in state_args} # The states by name, with their starting shares
+    if inits:
+        if arg is not None:
+            errormsg = f'ss.states() takes the states as a number or names ({arg!r}), or by name with the share of people who start in each ({sc.strjoin(inits)}), not both'
+            raise TypeError(errormsg)
+        bad = {k:v for k,v in inits.items() if not (isinstance(v, par) or (sc.isnumber(v) and 0 <= v <= 1))}
+        if bad:
+            errormsg = f'ss.states() takes each state given by name with the share of people who start in it, from 0 to 1 (e.g. ss.states(S=0.99, I=0.01, R=0)); not {sc.strjoin(f"{k}={v!r}" for k,v in bad.items())}.\n     The arguments of ss.State are {sc.strjoin(state_args)}'
+            raise ValueError(errormsg)
+        arg = ' '.join(inits)
+    elif arg is None:
+        errormsg = 'ss.states() takes the states: their number (ss.states(3)), their names (ss.states(\'S I R\')), or their names with the share of people who start in each (ss.states(S=0.99, I=0.01, R=0))'
+        raise TypeError(errormsg)
     if isinstance(arg, str):
         names = arg.replace(',', ' ').split()
         n = len(names)
@@ -200,7 +215,9 @@ def states(arg, infected=False, **kwargs):
         if bad:
             raise ValueError(f'infected= gives the positions {bad} of states, but there are {n} (positions 0 to {n-1})')
         flags = [i in chosen for i in range(n)]
-    return [State(name=name, infected=flag, **kwargs) for name,flag in zip(names, flags)]
+    return [State(name=name, infected=flag, **(kwargs | ({'init':inits[name]} if name in inits else {}))) for name,flag in zip(names, flags)]
+
+state_args = [k for k in inspect.signature(State.__init__).parameters if k not in ['self', 'kwargs']] # What ss.states() passes to each state, rather than taking as a state's name
 
 
 def pars(defaults, **kwargs):
@@ -1137,7 +1154,7 @@ def birth(state=None, rate=None, when=None, children=1, p_female=None, name=None
 
     Args:
         state (State): the state people are born into (default: the disease's first state; in `demographics=`, each disease's)
-        rate (any): the birth rate per person per unit time, e.g. `ss.peryear(0.03)` (a typed rate is always per person); for the births of everyone (no `state`), a bare number (or a time series of them) is read as `ss.Births` reads a number, per 1,000 people per year (`30` is `ss.peryear(0.03)`), and a place by name is `ss.Births(birth_rate=place)`, its UN rates as agents (e.g. `rate='Kenya'`); into a state, a bare number is in the model's unit, as any bare number in a disease
+        rate (any): the birth rate per person per unit time, e.g. `ss.peryear(0.03)`; for the births of everyone (no `state`), it is read as `ss.Births` reads a rate: a bare number (per year) or a typed rate is per 1,000 people if above 1 per year, else per person (`30` and `ss.peryear(30)` are `ss.peryear(0.03)`) (a time series by the median of its values); a place by name is `ss.Births(birth_rate=place)`, its UN rates as agents (e.g. `rate='Kenya'`); into a state, a bare number is in the model's unit, as any bare number in a disease
         when (Transition): instead of a rate, the transition whose flow drives the births
         children (int/Dist): the number of children each time: a number, or a distribution (drawn for each parent)
         p_female (float/Dist): the chance a child is female (default: as for anyone added)
@@ -1147,7 +1164,7 @@ def birth(state=None, rate=None, when=None, children=1, p_female=None, name=None
     Examples:
         ```python
         ss.Sim(sir, demographics=[ss.birth(rate=ss.peryear(0.02)), ss.death(rate=ss.peryear(0.01))])
-        ss.Sim(sir, demographics=[ss.birth(rate=20), ss.death(rate=10)]) # The same: per 1,000 people per year
+        ss.Sim(sir, demographics=[ss.birth(rate=20), ss.death(rate=10)]) # The same: above 1 per year, so per 1,000 people
         ss.Sim(sir, demographics=[ss.birth(rate='Kenya'), ss.death(rate='Kenya')]) # Kenya's UN rates (as ss.Births and ss.Deaths, agents only)
         ```
     """
@@ -1184,15 +1201,11 @@ def birth(state=None, rate=None, when=None, children=1, p_female=None, name=None
 
 def crude_rate(rate, kind):
     """
-    The rate of a birth or death of everyone (`ss.birth()`, `ss.death()`), read as `ss.Births` and `ss.Deaths` read theirs: a bare number is
-    per 1,000 people per year (see `ss.demographics.bare_rate()`). A typed rate is per person, as given, and warns above 5 per person per year
-    (no population is born or dies that fast): most likely a rate per 1,000 people, which would grow or empty the population at once. Returns the
-    rate, and the note for a bare number (see `bare_rate()`)
+    The rate of a birth or death of everyone (`ss.birth()`, `ss.death()`), read as `ss.Births` and `ss.Deaths` read theirs: per 1,000 people
+    if it is above 1 per year, a bare number or typed (e.g. 30, or `ss.peryear(30)`), else per person (see `ss.demographics.bare_rate()`).
+    Returns the rate, per person, and the note saying how it was read
     """
-    if sc.isnumber(rate) or isinstance(rate, ss.timeseries):
-        return ss.demographics.bare_rate(rate, 'rate')
-    ss.demographics.check_typed(rate, f'the rate of ss.{kind}()')
-    return rate, None
+    return ss.demographics.bare_rate(rate, 'rate')
 
 
 class lifetable:
@@ -1271,7 +1284,7 @@ def death(state=None, rate=None, dur=None, lifetable=None, name=None, label=None
 
     Args:
         state (State/list): the state people die from, or several (`[E, I]`); if not given, every state that is people
-        rate (any): the death rate per person per unit time (a typed rate is always per person); with no state (the deaths of everyone), a bare number (or a time series of them) is read as `ss.Deaths` reads a number, per 1,000 people per year (`10` is `ss.peryear(0.01)`), and a place by name is `ss.Deaths(death_rate=place)`, its UN rates by year, sex, and age, as agents (e.g. `rate='Kenya'`)
+        rate (any): the death rate per person per unit time; with no state (the deaths of everyone), it is read as `ss.Deaths` reads a rate: a bare number (per year) or a typed rate is per 1,000 people if above 1 per year, else per person (`10` and `ss.peryear(10)` are `ss.peryear(0.01)`) (a time series by the median of its values); a place by name is `ss.Deaths(death_rate=place)`, its UN rates by year, sex, and age, as agents (e.g. `rate='Kenya'`)
         dur (any): the mean time to death (instead of `rate`)
         lifetable (`ss.lifetable`): instead of a rate, a life table, as a death rate for each of its age bands, by each person's age, as `ss.Deaths(lifetable=)` takes it (which also takes one for each sex and year); in a compartmental run, which needs a stratification by age, it is a death rate for each age group of the model
         name (str): the name of the transition

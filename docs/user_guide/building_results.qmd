@@ -138,7 +138,7 @@ class ByGroup(ss.Analyzer):
         groups = self.sim.groups
         self.results.prevalence.set_groups(self.ti, groups.count(self.sim.diseases.sis.I), groups.count()) # The infected over everyone, in each group
 
-sim = ss.Sim(ss.SIS(), networks='random', analyzers=ByGroup(), stratify=dict(sex=['female', 'male'], age=[0, 15, 50]), stop=2010, verbose=0)
+sim = ss.Sim(ss.SIS(), networks='random', analyzers=ByGroup(), stratify=dict(sex=['female', 'male'], age=[0, 15, 50]), verbose=0)
 sim.run()
 sim.results.bygroup.prevalence.select(sex='female', age='15-49').plot()
 ```
@@ -210,7 +210,7 @@ class InfectionsByAge(ss.Analyzer):
         children = self.sim.people.age[new] < 15
         self.results.new_infections[self.ti] = [np.count_nonzero(children), np.count_nonzero(~children)]
 
-sim = ss.Sim(ss.SIS(), networks='random', analyzers=InfectionsByAge(), n_agents=2000, start=2000, stop=2010, dt=ss.weeks(1), verbose=0)
+sim = ss.Sim(ss.SIS(), networks='random', analyzers=InfectionsByAge(), n_agents=2000, start='2000-01-01', stop='2000-12-31', verbose=0)
 sim.run()
 res = sim.results.infectionsbyage.new_infections
 print('Shape:', res.shape)
@@ -220,8 +220,8 @@ print('Columns:', res.columns)
 Each column is available as a result of its own, as `res.adults`, `res['adults']`, or `res.select(column='adults')`. These share their data with the whole result, so changing one changes the other. Most operations handle each column separately: they are scaled by the number of people each agent stands for, `to_df()` gives one column of the table each, `sim.summarize()` summarizes each, and `resample()` sums each over the period (since this result is a flow):
 
 ```{python}
-yearly = res.resample('year')
-yearly.to_df().head()
+monthly = res.resample('month')
+monthly.to_df().head()
 ```
 
 Plotting the result shows one line per column:

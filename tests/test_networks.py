@@ -128,7 +128,7 @@ def test_randomsafe():
         return similarity
 
     # Set up a sim with some small number of births and deaths
-    pars = sc.obj(n_agents=small, stop=ss.years(5), verbose=False)
+    pars = sc.obj(n_agents=small, dur=ss.years(5), verbose=False)
     births = ss.Births(birth_rate=ss.peryear(0.005))
     simil = sc.obj()
 
@@ -140,8 +140,8 @@ def test_randomsafe():
     n2 = s2.networks[0].to_edgelist()
     simil.uid = auid_similarity(s1, s2)
     simil.rand = sc.similarity(n1, n2)
-    print(f'Similarity in UIDs after {pars.stop} with/without births:\n{simil.uid:%}')
-    print(f'Similarity for random networks after {pars.stop}:\n{simil.rand:%}\n')
+    print(f'Similarity in UIDs after {pars.dur} with/without births:\n{simil.uid:%}')
+    print(f'Similarity for random networks after {pars.dur}:\n{simil.rand:%}\n')
     assert simil.rand < 0.5, 'Random networks were more similar than expected'
 
     # Confirm that safe networks don't
@@ -152,8 +152,8 @@ def test_randomsafe():
     n4 = s4.networks[0].to_edgelist()
     simil.uid2 = auid_similarity(s3, s4)
     simil.safe = sc.similarity(n3, n4)
-    print(f'Similarity in UIDs after {pars.stop} with/without births:\n{simil.uid2:%}')
-    print(f'Similarity for random-safe networks after {pars.stop}:\n{simil.safe:%}\n')
+    print(f'Similarity in UIDs after {pars.dur} with/without births:\n{simil.uid2:%}')
+    print(f'Similarity for random-safe networks after {pars.dur}:\n{simil.safe:%}\n')
     assert simil.safe > 0.5, 'RandomSafe networks were less similar than expected'
 
     # With many agents, some random numbers are tied; check that these edges don't all go to agent 0
@@ -295,7 +295,7 @@ def test_disk():
     sc.heading('Testing Disk network')
 
     # Visualize the path of agents
-    s1 = ss.Sim(n_agents=5, stop=ss.days(50), networks=ssl.networks.DiskNet()).init()
+    s1 = ss.Sim(n_agents=5, dur=ss.days(50), networks=ssl.networks.DiskNet()).init()
     nw1 = s1.networks[0]
 
     if sc.options.interactive:
@@ -484,7 +484,7 @@ def test_one_way():
     reached = {}
     for one_way in [False, True]:
         net = ss.Network(p1=np.arange(99), p2=np.arange(1, 100), weight=np.ones(99), one_way=one_way, name='chain') # A chain, each person linked to the next
-        sim = ss.Sim(n_agents=100, diseases=ss.SIR(beta=ss.perday(5), init_prev=0, dur_inf=ss.days(1000)), networks=net, dt=ss.days(1), stop=ss.days(20), verbose=0)
+        sim = ss.Sim(n_agents=100, diseases=ss.SIR(beta=ss.perday(5), init_prev=0, dur_inf=ss.days(1000)), networks=net, dt=ss.days(1), dur=ss.days(20), verbose=0)
         sim.init()
         sim.diseases.sir.infect(ss.uids([50]))
         sim.run()
@@ -549,7 +549,7 @@ def test_hybrid():
 @sc.timer()
 def test_bare_units():
     sc.heading("Testing that a bare number in a network's dur= is in the sim's unit, and a single duration a mean")
-    sim = lambda net: ss.Sim(n_agents=200, diseases=ss.SIS(beta=ss.peract(0.05), dur_inf=ss.days(10)), networks=net, dt=ss.days(1), stop=ss.days(10), verbose=0)
+    sim = lambda net: ss.Sim(n_agents=200, diseases=ss.SIS(beta=ss.peract(0.05), dur_inf=ss.days(10)), networks=net, dt=ss.days(1), dur=ss.days(10), verbose=0)
     with warnings.catch_warnings():
         warnings.simplefilter('error') # Nothing to warn of: one rule
         nets = [sim(net).init().networks[0] for net in [ss.SexualNet(dur=5), ss.SexualNet(dur=ss.days(5)), ss.DegreeNet(dur=5, acts=ss.perday(1))]]
@@ -559,7 +559,7 @@ def test_bare_units():
         sim(ss.SexualNet(dur=ss.days(1))).run()
     assert isinstance(ss.SexualNet().pars.dur, ss.lognormal) and ss.SexualNet(dur=ss.years(15)).pars.dur == ss.years(15) # The default, written out, is itself; one duration is a mean
     for dur in [5, ss.days(5)]: # Random contacts that last, a bare number in the sim's unit too
-        s = ss.Sim(n_agents=200, diseases=ss.SIS(beta=ss.perday(0.05)), networks=ss.RandomNet(n_contacts=4, dur=dur), dt=ss.days(1), stop=ss.days(10), verbose=0).init()
+        s = ss.Sim(n_agents=200, diseases=ss.SIS(beta=ss.perday(0.05)), networks=ss.RandomNet(n_contacts=4, dur=dur), dt=ss.days(1), dur=ss.days(10), verbose=0).init()
         net = s.networks[0]
         before = set(zip(net.p1.tolist(), net.p2.tolist()))
         s.run_one_step()

@@ -78,7 +78,7 @@ def test_multi(do_plot=do_plot):
 def test_coded_declared():
     sc.heading('Testing that a disease written as code gives the same epidemic on a mixing pool as a declared one')
     S, I, R = ss.states('S I R')
-    pars = dict(networks=ss.MixingPool(n_contacts=1), n_agents=5000, stop=ss.days(150), verbose=0)
+    pars = dict(networks=ss.MixingPool(n_contacts=1), n_agents=5000, dur=ss.days(150), verbose=0)
     coded = ss.Sim(ssl.AgentSIR(beta=ss.perday(0.4), dur_inf=ss.expon(mean=ss.days(7)), p_death=0, init_prev=0.01, name='sir'), **pars).run()
     declared = ss.Sim(ss.Disease(S >> I @ 0.4*I, I >> R @ ss.days(7), init_prev=0.01, name='sir'), **pars).run()
     sizes = coded.results.sir.recovered[-1], declared.results.sir.R[-1]

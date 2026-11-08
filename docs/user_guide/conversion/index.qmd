@@ -42,10 +42,10 @@ folder = tempfile.mkdtemp()
 filename = os.path.join(folder, 'measles.R')
 sc.savetext(filename, odin_code)
 
-sim = ss.import_from(filename, start='2025-01-01', stop=ss.days(365))
+sim = ss.import_from(filename, start='2025-01-01', dur=ss.days(365))
 ```
 
-Each `deriv()` is the rate of change of a compartment, written as the total flows in and out: β S I / N people a day are infected, σ E become infectious, and γ I recover. This is the form of most textbooks and frameworks. The format is told from the file (or given with `format='odin'`). odin has no time unit, so its numbers are taken to be per day (`unit=` says otherwise), and odin is told when to stop when it is run, so the sim needs `stop=`, here 365 days; `start=` gives it dates, which a forecast hub needs ([below](#forecast-hubs)). Other arguments change the model as it is read: `pars=dict(beta=1.5)` gives a parameter another value, and `dt=` a step.
+Each `deriv()` is the rate of change of a compartment, written as the total flows in and out: β S I / N people a day are infected, σ E become infectious, and γ I recover. This is the form of most textbooks and frameworks. The format is told from the file (or given with `format='odin'`). odin has no time unit, so its numbers are taken to be per day (`unit=` says otherwise), and odin is told when to stop when it is run, so the sim needs `stop=` or `dur=`, here 365 days; `start=` gives it dates, which a forecast hub needs ([below](#forecast-hubs)). Other arguments change the model as it is read: `pars=dict(beta=1.5)` gives a parameter another value, and `dt=` a step.
 
 The importer prints how it read each rate, which is the first thing to check. A Starsim transition is a rate per person (each susceptible person is infected at a rate of β times the share infectious), so each importer turns each total flow into a rate for each person who leaves the state, by dividing by that state, and then classifies what is left:
 
@@ -81,7 +81,7 @@ infection   = S >> E @ 1.9*I
 progression = E >> I @ ss.days(10)
 recovery    = I >> R @ ss.days(8)
 measles = ss.Disease(infection, progression, recovery, init_n=dict(I=10, R=90_000), name='measles')
-mine = ss.Sim(measles, total_pop=100_000, start='2025-01-01', stop=ss.days(365))
+mine = ss.Sim(measles, total_pop=100_000, start='2025-01-01', dur=ss.days(365))
 mine.run()
 
 theirs = sim.results[sim.diseases[0].name]
@@ -249,7 +249,7 @@ print(ss.export_to(sim, 'odin'))
 ```{python}
 sbml_file = os.path.join(folder, 'measles.xml')
 ss.export_to(sim, 'sbml', filename=sbml_file)
-again = ss.import_from(sbml_file, start='2025-01-01', stop=ss.days(365), verbose=False)
+again = ss.import_from(sbml_file, start='2025-01-01', dur=ss.days(365), verbose=False)
 again.run()
 print('Infections, imported from odin:', round(sim.results.measles.S_to_E.values.sum()))
 print('Infections, after a round trip through SBML:', round(again.results.measles.S_to_E.values.sum()))

@@ -70,7 +70,7 @@ def make_met():
 
 
 models = sc.obj(
-    sir     = (make_sir,     dict(total_pop=10_000, unit='day', stop=ss.weeks(12))),
+    sir     = (make_sir,     dict(total_pop=10_000, unit='day', dur=ss.weeks(12))),
     seir    = (make_seir,    dict(unit='day', stop=200)),
     ages    = (make_ages,    dict(unit='day', stop=100, networks=ss.contacts(np.array([[8, 3, 1], [3, 6, 2], [1, 2, 3]])))),
     towns   = (make_towns,   dict(unit='day', stop=150, total_pop=100_000)),

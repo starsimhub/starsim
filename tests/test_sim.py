@@ -26,8 +26,8 @@ def make_sim_pars():
         ),
         diseases = sc.obj(
             type = 'sir',
-            dur_inf = 10,
-            beta = 0.1,
+            dur_inf = ss.years(10), # In years, as the rest of the sim
+            beta = ss.peryear(0.1),
         )
     )
     return pars
@@ -89,11 +89,11 @@ def test_demo(do_plot=do_plot):
     sc.heading('Testing demo...')
     s1 = ss.demo(plot=do_plot)
 
-    # Test explicit demo
-    s2 = ss.Sim(diseases='sir', networks='random').run()
+    # Test explicit demo: its SIR has beta per contact, for an R0 of 3 on the network
+    s2 = ss.Sim(diseases=dict(type='sir', beta=0.03), networks='random').run()
 
     # Test explicit
-    sir = ss.SIR()
+    sir = ss.SIR(beta=ss.perday(0.03))
     net = ss.RandomNet()
     s3 = ss.Sim(diseases=sir, networks=net).run()
     assert ss.debugtools.check_sims_match(s1, s2, s3), 'Sims should match'
@@ -132,7 +132,7 @@ def test_simple(do_plot=do_plot):
     class MySim(ss.Sim):
         def __init__(self, beta=0.1, **kwargs):
             super().__init__(**kwargs)
-            self.pars.diseases = ss.SIS(beta=beta, name='sis')
+            self.pars.diseases = ss.SIS(beta=ss.peryear(beta), dur_inf=ss.years(10), name='sis')
             self.pars.networks = 'random'
     mysim = MySim(beta=0.2, n_agents=n_agents, start=2000, stop=2010, verbose=0)
     mysim.pars.stop = 2005
@@ -170,9 +170,9 @@ def test_api():
     # Check different ways of setting a distribution
     kw = dict(n_agents=n_agents, networks='random')
 
-    # Check specifying a duration with a scalar, which is in the model's unit, years here
+    # Check specifying a duration with a scalar, which is in the model's unit, days here
     s4 = ss.Sim(diseases=dict(type='sir', dur_inf=10), **kw).run() # Supply values as a scalar
-    s5 = ss.Sim(diseases=dict(type='sir', dur_inf=ss.years(10)), **kw).run() # Supply as a duration
+    s5 = ss.Sim(diseases=dict(type='sir', dur_inf=ss.days(10)), **kw).run() # Supply as a duration
     assert ss.debugtools.check_sims_match(s4, s5), 'Sims should match'
 
     # Check that Bernoulli distributions can't be changed
@@ -314,7 +314,7 @@ def test_creation_syntax():
     dis = ss.SIS()
     
     # Test 1: check that order is respected when specified
-    pars = dict(n_agents=100, stop=ss.years(10))
+    pars = dict(n_agents=100, dur=ss.years(10))
     sim = ss.Sim(
         **pars,
         modules = [mod1, dem],
@@ -367,10 +367,10 @@ def test_creation_syntax():
 def test_add_module():
     """ Test adding a module to a sim that has been partly run """
     sc.heading('Testing sim.add_module()...')
-    kw = dict(n_agents=n_agents, diseases='sis', networks='random', start=2000)
+    kw = dict(n_agents=n_agents, diseases='sis', networks='random', start='2000-01-01') # The default run of 100 days
     base = ss.Sim(**kw).run()
     sim = ss.Sim(**kw)
-    sim.run(until='2010-01-01')
+    sim.run(until='2000-02-01')
     ti = sim.ti
     vx = sim.add_module(ss.modify('sis.pars.beta', multiply=0.2, name='masks'))
     with pytest.raises(ss.CapabilityError):
@@ -378,9 +378,9 @@ def test_add_module():
     sim.run()
 
     vaccine = ss.Vaccine(efficacy=0.9) # A product the sim already has can be delivered again
-    vsim = ss.Sim(**kw, interventions=ss.vaccinate(vaccine, when=[2005], coverage=0.2))
-    vsim.run(until='2010-01-01')
-    vsim.add_module(ss.vaccinate(vaccine, when=[2012], coverage=0.5, name='second'))
+    vsim = ss.Sim(**kw, interventions=ss.vaccinate(vaccine, when=['2000-01-15'], coverage=0.2))
+    vsim.run(until='2000-02-01')
+    vsim.add_module(ss.vaccinate(vaccine, when=['2000-02-15'], coverage=0.5, name='second'))
     vsim.run()
     assert vsim.interventions.second.product is vsim.products()[0]
 
@@ -523,7 +523,7 @@ def test_save_mixed_dt():
     sc.heading('Testing export with heterogeneous timelines...')
     fn = 'sim_mixed.json'
     births = ss.Births(birth_rate=20, dt=ss.years(1)) # An annual module in a sub-annual sim
-    sim = ss.Sim(n_agents=n_agents, stop=ss.years(3), dt=0.5, diseases='sis', networks='random', demographics=births).run()
+    sim = ss.Sim(n_agents=n_agents, dur=ss.years(3), dt=0.5, diseases='sis', networks='random', demographics=births).run()
 
     # With heterogeneous timelines, to_df() returns one dataframe per module rather than a single dataframe
     df = sim.to_df()
@@ -544,7 +544,7 @@ def test_rescale():
     sc.heading('Testing dynamic rescaling')
     def make_sim(init_inf, **kwargs):
         sir = ss.SIR(beta=ss.perday(0.025), dur_inf=ss.days(10), init_n=dict(I=init_inf), p_death=0)
-        return ss.Sim(n_agents=5e3, total_pop=5e4, diseases=sir, networks=ss.RandomNet(n_contacts=10), dt=ss.days(1), stop=ss.days(150), verbose=0, **kwargs)
+        return ss.Sim(n_agents=5e3, total_pop=5e4, diseases=sir, networks=ss.RandomNet(n_contacts=10), dt=ss.days(1), dur=ss.days(150), verbose=0, **kwargs)
     fixed = make_sim(init_inf=50).run() # Enough seeds, 5 agents, that the epidemic seldom dies out (with 2, a run in 6 does)
     rescaled = make_sim(init_inf=50, rescale=True).run()
     scale = rescaled.results.pop_scale
@@ -559,13 +559,13 @@ def test_rescale():
     assert abs(cum_rescaled/cum_fixed - 1) < 0.1 # Rescaling gives about the same epidemic
     S, I, R = ss.states('S I R')
     flu = ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(10), init_n=dict(I=10))
-    seeded = lambda **kw: ss.Sim(flu, total_pop=1e6, n_agents=5000, stop=ss.days(2), verbose=0, **kw).init().diseases[0].I.count()
+    seeded = lambda **kw: ss.Sim(flu, total_pop=1e6, n_agents=5000, dur=ss.days(2), verbose=0, **kw).init().diseases[0].I.count()
     assert seeded(rescale=True) == 10 # A number of people is a number of agents at the start scale (it was 0.05 agents, so nobody)
     assert seeded() == 1 # Too few to be an agent: one, with a note
 
     # A declared disease counts the people no agent stands for yet in its first state, and so do alive and the ratios
     flu = ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(10), init_n=dict(I=10), prevalence=I/(S+I+R), name='flu')
-    res = ss.Sim(flu, total_pop=1e6, n_agents=2000, stop=ss.days(60), rescale=True, verbose=0).run().results
+    res = ss.Sim(flu, total_pop=1e6, n_agents=2000, dur=ss.days(60), rescale=True, verbose=0).run().results
     assert np.allclose(res.flu.S + res.flu.I + res.flu.R, 1e6) and np.allclose(res.alive, 1e6)
     assert res.flu.I[0] == 10 and np.isclose(res.flu.prevalence[0], 1e-5)
     deadly = ss.SIR(beta=ss.perday(0.3), dur_inf=ss.days(10), p_death=0.5, init_prev=0.002) # An agent's death is scale people, not those no agent stands for yet
@@ -594,7 +594,7 @@ def test_copied_modules():
     toy = ss.Disease(S, I, inf=S >> I @ ss.peryear(2.0), rec=I >> S @ ss.days(90), name='toy')
     hs = HS(name='hs')
     deliver = lambda sim: sim.interventions.hs.served_now # The sim's copy, which runs
-    sims = [ss.Sim(toy, interventions=[hs, ss.treat(ss.Treatment(cure=1.0), who=deliver, when=ss.schedule(every=ss.days(1)), name='tx')], n_agents=2000, stop=ss.days(100), dt=ss.days(1), verbose=0).run() for _ in range(2)]
+    sims = [ss.Sim(toy, interventions=[hs, ss.treat(ss.Treatment(cure=1.0), who=deliver, when=ss.schedule(every=ss.days(1)), name='tx')], n_agents=2000, dur=ss.days(100), dt=ss.days(1), verbose=0).run() for _ in range(2)]
     assert sims[0].results.tx.delivered.values.sum() > 400
     assert sims[0].results.tx.delivered.values.sum() == sims[1].results.tx.delivered.values.sum() # The same modules, given to two sims
     assert not toy.initialized and sims[0].diseases.toy is not toy # Neither ran the module itself
@@ -743,7 +743,7 @@ def test_given_modules():
 def test_printed_output():
     sc.heading('Testing what a run prints and describes: in proportions, no notes on correct models, and plain errors')
     S, I, R = ss.states('S I R')
-    kw = dict(unit='day', stop=ss.days(70), verbose=0)
+    kw = dict(unit='day', dur=ss.days(70), verbose=0)
 
     # In proportions (total_pop=1), shares and not counts, and no note about chance
     sim = ss.Sim(ss.Disease(S >> I @ 1.4*I, I >> R @ ss.perday(0.14), init=dict(I=1e-6), name='sir'), total_pop=1, **kw).run()
@@ -795,7 +795,7 @@ def test_small_fixes():
     res = ss.Sim(d, connectors=ss.modify(d.rel_trans, multiply=ss.by(species=[2.0, 2.0])), total_pop=1000, unit='day', stop=10, verbose=0).run().results.d
     assert np.isclose(res.IV[-1], 1000*(1 - np.exp(-0.02*0.1*10))) # Twice the infectiousness
     S, I, R = ss.states('S I R')
-    sim = ss.Sim(ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(10), init=dict(I=0.01)), total_pop=1000, stop=ss.days(20), verbose=0)
+    sim = ss.Sim(ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(10), init=dict(I=0.01)), total_pop=1000, dur=ss.days(20), verbose=0)
     with pytest.raises(TypeError, match='neither a time nor a condition'): # It ran one step and gave zeros
         sim.run(until=False)
     with pytest.raises(ValueError, match='ss.modify'): # A state's rel_trans by group (it crashed the ODE); ss.modify(d.rel_trans, multiply=ss.by(...)) gives one

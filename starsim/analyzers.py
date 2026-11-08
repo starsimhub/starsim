@@ -69,7 +69,7 @@ class infection_log(Analyzer):
     Examples:
         ```python
         import starsim as ss
-        sim = ss.Sim(n_agents=1000, dt=0.2, stop=ss.years(15), diseases='sir', networks='random', analyzers='infection_log')
+        sim = ss.Sim(n_agents=1000, diseases='sir', networks='random', analyzers='infection_log')
         sim.run()
         sim.analyzers[0].plot()
         ```

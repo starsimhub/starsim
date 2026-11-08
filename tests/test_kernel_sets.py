@@ -265,7 +265,7 @@ kw = dict(verbose=0)
 S, I, R = ss.states('S I R')
 sir = lambda: ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(10), init_prev=0.01, name='sir')
 sims = [ss.Sim(sir(), networks=net, n_agents=1000, unit='day', stop=30, solver=solver, **kw) for net,solver in [(ss.RandomNet(), 'abm'), (ssl.StaticNet(n_contacts=10), 'abm'), (ssl.StaticNet(n_contacts=10), ss.solvers.abm(step='events')), (ss.MixingPool(n_contacts=ss.constant(5)), ss.solvers.abm(step='events'))]]
-sims += [ss.Sim(ss.SEIR(beta=dict(randomnet=ss.peryear(0.1), sexualnet=ss.peract(0.1))), networks=['random', 'sexual'], demographics=True, n_agents=1000, stop=ss.years(5), **kw)]
+sims += [ss.Sim(ss.SEIR(beta=dict(randomnet=ss.peryear(0.1), sexualnet=ss.peract(0.1))), networks=['random', 'sexual'], demographics=True, n_agents=1000, dur=ss.years(5), **kw)]
 sims += [ss.Sim(sir(), total_pop=10000, unit='day', stop=30, solver=solver, **kw) for solver in ['ode', 'binomial', 'gillespie', 'tau']]
 for sim in sims:
     sim.run()
@@ -300,9 +300,9 @@ def test_stale_numba(tmp_path):
 @needs_rust
 def test_agents():
     sc.heading('Testing sims with agents: the passes, networks, demographics and draws of ss.Dist, and agents by events')
-    same(lambda s: ss.Sim(n_agents=3000, diseases=ss.SIS(beta=0.1, dur_inf=ss.lognormal(ss.years(1), ss.years(0.5))), networks='random', demographics=True, stop=ss.years(20), rand_seed=s, **kw), compiled)
-    same(lambda s: ss.Sim(n_agents=3000, diseases=ss.SEIR(beta=dict(randomnet=ss.peryear(0.1), sexualnet=ss.peract(0.1))), networks=['random', 'sexual'], stop=ss.years(20), rand_seed=s, **kw), compiled)
-    same(lambda s: ss.Sim(n_agents=2000, demographics=[ss.Pregnancy(), ss.Deaths()], networks='prenatal', stop=ss.years(10), rand_seed=s, **kw), compiled)
+    same(lambda s: ss.Sim(n_agents=3000, diseases=ss.SIS(beta=0.1, dur_inf=ss.lognormal(ss.years(1), ss.years(0.5))), networks='random', demographics=True, dur=ss.years(20), rand_seed=s, **kw), compiled)
+    same(lambda s: ss.Sim(n_agents=3000, diseases=ss.SEIR(beta=dict(randomnet=ss.peryear(0.1), sexualnet=ss.peract(0.1))), networks=['random', 'sexual'], dur=ss.years(20), rand_seed=s, **kw), compiled)
+    same(lambda s: ss.Sim(n_agents=2000, demographics=[ss.Pregnancy(), ss.Deaths()], networks='prenatal', dur=ss.years(10), rand_seed=s, **kw), compiled)
     S, I, R = ss.states('S I R') # Agents by events (the pass is also called directly in test_twins())
     sirs = lambda: ss.Disease(infection=S >> I @ 0.05*I, recovery=I >> R @ 1, waning=R >> S @ (1/14), init_prev=0.01, name='sirs')
     same(lambda s: ss.Sim(sirs(), networks=[ss.RandomNet(n_contacts=10), ss.MixingPool(n_contacts=2)], n_agents=2000, solver=ss.solvers.abm(step='events'), unit='day', stop=30, rand_seed=s, **kw), compiled)

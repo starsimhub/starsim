@@ -49,7 +49,7 @@ from .core import code_value, time_names, func_names
 __all__ = ['to_json', 'load_json']
 
 # The settings of a sim that the file carries, as they were given
-settings = ['label', 'n_agents', 'total_pop', 'start', 'stop', 'dt', 'unit', 'solver', 'rand_seed', 'branching', 'approximations', 'aging']
+settings = ['label', 'n_agents', 'total_pop', 'start', 'stop', 'dur', 'dt', 'unit', 'solver', 'rand_seed', 'branching', 'approximations', 'aging']
 module_keys = ['networks', 'demographics', 'interventions', 'analyzers', 'connectors']
 values = ['par', 'seasonal', 'peract', 'timeseries', 'by', 'Rate', 'date', 'dur', 'ode', 'binomial', 'abm', 'levels'] # Starsim's values that can be written as calls, besides typed quantities and distributions (a solver with options, e.g. ode(integrator='euler'), is ss.solvers')
 dist_names = sorted(name for name in dir(ss) if isinstance(getattr(ss, name), type) and issubclass(getattr(ss, name), ss.Dist) and name != 'Dist')

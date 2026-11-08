@@ -476,7 +476,7 @@ def typical_sims():
         ss.Sim(demographics=[ss.Pregnancy(), ss.Deaths()], networks='prenatal', **small),
     ]
     if ss.options.num_threads != 1 and nb.get_num_threads() > 1: # The threaded passes, for a sim large enough to share among threads
-        sims.append(ss.Sim(diseases='sir', networks='random', n_agents=ss.solvers.backends.passes.min_threaded, start=2000, stop=2001, verbose=0))
+        sims.append(ss.Sim(diseases='sir', networks='random', n_agents=ss.solvers.backends.passes.min_threaded, dur=ss.days(5), verbose=0))
     return sims
 
 

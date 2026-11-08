@@ -56,7 +56,7 @@ class Syphilis(ss.Disease):
         net = ss.SexualNet(dur=ss.years(2), n_contacts=ss.poisson(1))
         sim = ss.Sim(diseases=ssl.Syphilis(), networks=net, n_agents=5000, start=2000, stop=2030, dt=ss.months(1))
         sim.run()
-        sim.plot('syphilis')
+        sim.syphilis.plot()
         ```
     """
     beta             = ss.par(ss.peract(m2f=0.1, f2m=0.05), doc='Transmission probability per act, by direction', source='STIsim')
@@ -120,7 +120,7 @@ class Gonorrhea(ss.Disease):
         net = ss.SexualNet(dur=ss.years(2), n_contacts=ss.poisson(1))
         sim = ss.Sim(diseases=ssl.Gonorrhea(), networks=net, n_agents=5000, start=2000, stop=2030, dt=ss.months(1))
         sim.run()
-        sim.plot('gonorrhea')
+        sim.gonorrhea.plot()
         ```
     """
     beta    = ss.par(ss.peract(m2f=0.06, f2m=0.03), doc='Transmission probability per act, by direction', source='STIsim')

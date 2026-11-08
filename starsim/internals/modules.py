@@ -319,8 +319,6 @@ class Module(Base):
         self._assigned = ss.utils.assigned_name(self) if named else None # The variable it was first assigned to, e.g. campaign = ss.vaccinate(...)
         self.set_metadata(name, label) # Usually reset as part of self.update_pars()
         unknown = [key for key in kwargs if key not in ss.Timeline.keywords]
-        if unknown == ['dur']:
-            raise TypeError(f'{type(self).__name__}(): {ss.timeline.removed_dur}')
         if unknown:
             errormsg = f'{type(self).__name__}() got {"an unexpected keyword" if len(unknown) == 1 else "unexpected keywords"} {sc.strjoin(f"{key}=" for key in unknown)} (see the migrate-starsim3 skill for keywords that have changed)'
             raise TypeError(errormsg)

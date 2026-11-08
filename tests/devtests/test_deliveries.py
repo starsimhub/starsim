@@ -516,7 +516,7 @@ def test_memory():
     assert isinstance(sim.solver, ss.solvers.abm) and sim.results.scr.delivered.sum() > 0
     S, M, H = ss.states(3)
     dis = ss.Disease(S >> M @ ss.peryear(0.5), M >> S @ ss.days(10), H >> S @ ss.days(5), name='dis')
-    sim = ss.Sim(dis, interventions=ss.Event(M >> H, who=M, when=ss.schedule(every=ss.days(1))), n_agents=1000, stop=ss.days(30), dt=ss.days(1), verbose=0).init()
+    sim = ss.Sim(dis, interventions=ss.Event(M >> H, who=M, when=ss.schedule(every=ss.days(1))), n_agents=1000, dur=ss.days(30), dt=ss.days(1), verbose=0).init()
     assert sim.diseases.dis.graph.default_state.name == 'S' # Was H, so everyone started in hospital
     return sims
 
@@ -709,7 +709,7 @@ def test_trace():
         hiv = ss.Disease(infection=ss.Transition(S, I, rate=ss.prob(0.02)*(I + D)), diagnosis=ss.Transition(I, D, rate=ss.peryear(1.0)), init_prev=0.1, name='hiv')
         net = ss.DegreeNet(n_contacts=0.7, dur=ss.weeks(10), acts=ss.perweek(2), memory=memory)
         pn = ss.screen(ss.Diagnostic(sensitivity=1.0), when=hiv.diagnosis, trace='degreenet', name='pn')
-        sim = ss.Sim(hiv, networks=net, interventions=pn, n_agents=2000, unit='week', stop=ss.years(3), rand_seed=1, verbose=0).run()
+        sim = ss.Sim(hiv, networks=net, interventions=pn, n_agents=2000, unit='week', dur=ss.years(3), rand_seed=1, verbose=0).run()
         return sim.results.pn.delivered.sum()/sim.results.hiv.diagnosis.sum()
     current, past_year = notified(None), notified(ss.months(12))
     print(f'Partners notified per diagnosis: {current:.2f} current, {past_year:.2f} in the past year')
@@ -1026,7 +1026,7 @@ def test_waning_functions():
         S, I = ss.states('S I')
         mal = ss.Disease(infection=S >> I @ ss.peryear(2.0), recovery=I >> S @ ss.days(20), name='mal')
         vax = ss.Vaccine(efficacy=dict(infection=1.0), waning=fn, name='vax')
-        sim = ss.Sim(mal, interventions=ss.vaccinate(vax, when=ss.days(10), coverage=1.0, name='once'), n_agents=1000, unit=unit, dt=dt, start=0, stop=ss.days(200), verbose=0).run()
+        sim = ss.Sim(mal, interventions=ss.vaccinate(vax, when=ss.days(10), coverage=1.0, name='once'), n_agents=1000, unit=unit, dt=dt, start=0, dur=ss.days(200), verbose=0).run()
         inf = sim.results.mal.infection
         assert isinstance(seen['t'], ss.Duration) and len(seen['uids']) == 1000
         assert inf[12:108].sum() == 0 and inf[115:].sum() > 0, unit # Protected for 100 days, in either unit

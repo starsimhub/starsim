@@ -146,7 +146,7 @@ In a sim, the same distribution draws in steps of its module instead, and from t
 A distribution can round what it draws, which matters for numbers that must be whole, such as a duration in steps: `round=True` rounds each value up or down at random in proportion to how close it is (so the mean is kept), and `round='nearest'` rounds to the nearest whole number. Either can be given when the distribution is made, or when drawing. Here a duration of about 5 days, in a sim with steps of a day, drawn for 10 people three ways (`reset=True` uses the same random numbers each time):
 
 ```{python}
-sim = ss.Sim(n_agents=10, dt=ss.days(1), start='2025-01-01', stop=ss.days(30), verbose=0).init()
+sim = ss.Sim(n_agents=10, dt=ss.days(1), start='2025-01-01', dur=ss.days(30), verbose=0).init()
 dur = ss.lognormal(ss.days(5), ss.days(2), round='nearest', name='Rounded duration')
 dur.init(sim=sim)
 

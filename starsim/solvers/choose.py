@@ -749,7 +749,7 @@ def init_unit(sim):
     calendar = ss.timeline.calendar_of(pars.start, pars.stop, pars.unit)
     dates = [v for v in [pars.start, pars.stop] if isinstance(v, (str, ss.date))]
     years = calendar == 'years' # A bare year as the start (or, with no start, as the stop)
-    durs = [v for v in [pars.start, pars.stop] if is_dur(v)]
+    durs = [v for v in [pars.start, pars.stop, pars.dur] if is_dur(v)]
     mods = [mod for key in ss.modules.module_types() + ['custom'] for mod in pars[key].values() if isinstance(mod, ss.Module)]
     setters = [mod for mod in mods if getattr(mod, 'sets_unit', True) and (mod in sim.declared or isinstance(mod, ss.Disease))] # The model's own numbers; the typed values of networks, demographics, interventions and ss.Pregnancy say nothing of them
     def mod_units(mod):
@@ -778,7 +778,7 @@ def init_unit(sim):
             bare = [name for mod in setters for name in bare_in(mod)]
             if bare: # Which unit they are in cannot be guessed
                 raise TypeError(f'the typed values in the model have different units ({sc.strjoin(disagree)}), so the unit of the bare numbers {sc.strjoin(bare)} is not known. Set it with unit=, e.g. ss.Sim(..., unit=\'{unit}\').')
-            run = {base(v) for v in durs} | ({'day'} if dates else set()) # The units the run is written in (stop=ss.days(100), or dates, which step by a day)
+            run = {base(v) for v in durs} | ({'day'} if dates else set()) # The units the run is written in (dur=ss.days(100), or dates, which step by a day)
             if pars.dt is None and unit not in run: # The finest, as the most likely, but the step is then that small, which is worth saying unless the run is written in it
                 ss.warn(f'the typed values in the model have different units ({sc.strjoin(disagree)}), so its unit is the finest, {unit}s, and it steps by one {unit}; give dt= (e.g. dt=ss.{disagree[-1]}s(1)) or unit= to say otherwise')
     elif dates:

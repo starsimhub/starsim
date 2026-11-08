@@ -246,7 +246,7 @@ def test_per_act():
     class NoRisk(ss.SexualNet):
         def net_beta(self, disease_beta=None, inds=None, disease=None):
             return 0*super().net_beta(disease_beta=disease_beta, inds=inds, disease=disease)
-    kw = dict(n_agents=500, stop=ss.years(5), verbose=0)
+    kw = dict(n_agents=500, dur=ss.years(5), verbose=0)
     assert ss.Sim(diseases=ssl.AgentSIS(beta=0.5), networks=ss.SexualNet(), **kw).run().results.agentsis.infection.sum() > 0
     assert ss.Sim(diseases=ssl.AgentSIS(beta=0.5), networks=NoRisk(), **kw).run().results.agentsis.infection.sum() == 0
     return

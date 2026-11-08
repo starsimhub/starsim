@@ -14,7 +14,7 @@ parameters came from. Core disease base classes (`ss.Disease`, `ss.AgentDisease`
 from .agents      import AgentSIR, AgentSEIR, AgentSIS
 from .cholera     import Cholera
 from .covid       import COVID
-from .dengue      import Dengue
+from .dengue      import Dengue, DengueSerotype
 from .ebola       import Ebola
 from .enteric     import Typhoid, Polio
 from .hiv         import HIV, ART, CD4_analyzer

@@ -168,7 +168,7 @@ def test_attr_in_rate_with_births():
 
     out = []
     for dem in [None, ss.Births(birth_rate=ss.peryear(0.02))]:
-        sim = ss.Sim(start=2000, stop=ss.days(10), dt=ss.days(1), n_agents=5_000, networks=ss.RandomNet(n_contacts=5), diseases=SIS(init_prev=0.01), demographics=dem, rand_seed=2, **kw).run()
+        sim = ss.Sim(start=2000, dur=ss.days(10), dt=ss.days(1), n_agents=5_000, networks=ss.RandomNet(n_contacts=5), diseases=SIS(init_prev=0.01), demographics=dem, rand_seed=2, **kw).run()
         out.append(sim.results.sis.infection.values)
     assert out[1][3:].sum() > 0.5*out[0][3:].sum() # Not stopped after the first growth
     return
@@ -186,7 +186,7 @@ def test_attr_by_event():
         dose = ss.attr({contact: hi, environment: cfu.n/2}) # By contact, a high dose; from the environment, what is there then
         onset = ss.Transition(E, I, dur=ss.lognormal(log_mean=np.log(dose), log_std=0.01, unit='day')) # The dwell is the dose, in days
         rec = I >> R @ ss.days(5)
-    sim = ss.Sim(diseases=M(init_prev=0), n_agents=3000, stop=ss.days(40), dt=ss.days(1), rand_seed=1, **kw).run()
+    sim = ss.Sim(diseases=M(init_prev=0), n_agents=3000, dur=ss.days(40), dt=ss.days(1), rand_seed=1, **kw).run()
     m = sim.diseases.m
     u = sim.people.auids
     dose = m.dose.raw[u]
@@ -209,12 +209,12 @@ def test_attr_init():
         n_inf = ss.attr(1, when=I.enter, combine='sum', init=ss.bernoulli(seroprev)*ss.poisson(mean=ss.person.age/20))
         inf = S >> I @ 0.5**n_inf*ss.perday(0.01)
         rec = I >> S @ ss.days(5)
-    sim = ss.Sim(diseases=M(init_prev=0), n_agents=20_000, stop=ss.days(5), dt=ss.days(1), rand_seed=1, **kw).init()
+    sim = ss.Sim(diseases=M(init_prev=0), n_agents=20_000, dur=ss.days(5), dt=ss.days(1), rand_seed=1, **kw).init()
     u = sim.people.auids
     n = sim.diseases.m.n_inf.raw[u]
     expected = 0.5*np.mean(sim.people.age.raw[u]/20)
     assert abs(n.mean() - expected) < 0.05*expected and n.max() > 2 and np.all(n == np.round(n))
-    sim2 = ss.Sim(diseases=M(init_prev=0), n_agents=20_000, stop=ss.days(5), dt=ss.days(1), rand_seed=1, pars={'m.seroprev': 0.1}, **kw).init() # Its parameters are the model's
+    sim2 = ss.Sim(diseases=M(init_prev=0), n_agents=20_000, dur=ss.days(5), dt=ss.days(1), rand_seed=1, pars={'m.seroprev': 0.1}, **kw).init() # Its parameters are the model's
     assert sim2.diseases.m.n_inf.raw[sim2.people.auids].mean() < 0.4*n.mean()
     return sim
 

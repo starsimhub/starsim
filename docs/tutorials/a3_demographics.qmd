@@ -120,7 +120,7 @@ The population grows from 126 million to about 260 million, as the UN projects. 
 sim.people.plot_ages()
 ```
 
-If you want to use realistic demographics for a setting that isn't in the UN data, or with rates of your own, `ss.Births()` and `ss.Deaths()` also take your own data: one rate, rates by year (a table with a column for the year and one for the rate), or for deaths, rates by year, age, and sex. There are examples of these files in the `test_data` folder (e.g. `nigeria_deaths.csv`), and `ss.People(n_agents, age_data=...)` takes the ages of the population from a file. Crude birth and death rates are usually given per 1,000 people, so these modules read a bare number that way (`ss.Births(birth_rate=20)`), while a typed rate is per person (`ss.peryear(0.02)`), as every rate in Starsim is; tables are read in the UN's units (death rates by age per person), and `rate_per=1` says that a bare number or a table is per person. See [Demographics](../user_guide/populations_demographics.qmd) in the user guide.
+If you want to use realistic demographics for a setting that isn't in the UN data, or with rates of your own, `ss.Births()` and `ss.Deaths()` also take your own data: one rate, rates by year (a table with a column for the year and one for the rate), or for deaths, rates by year, age, and sex. There are examples of these files in the `test_data` folder (e.g. `nigeria_deaths.csv`), and `ss.People(n_agents, age_data=...)` takes the ages of the population from a file. Crude birth and death rates are usually given per 1,000 people, and are well above 1 that way and well below 1 per person, so these modules read a rate above 1 a year as per 1,000 and one of 1 or below as per person, whether it is a bare number, a typed rate, or a table (from its median): `ss.Births(birth_rate=20)`, `ss.peryear(20)`, and `ss.peryear(0.02)` are the same, and the UN's death rates by age are per person. `rate_per=1000` or `rate_per=1` says which. See [Demographics](../user_guide/populations_demographics.qmd) in the user guide.
 
 ## Pregnancy
 
@@ -139,7 +139,7 @@ sim.plot('alive')
 
 The population grows much as it did with crude birth rates, but now each birth comes from a pregnancy of a particular woman, so it can be linked to her: her age, her infections, and the care she receives. The pregnancy model supplies the births, so don't also add `ss.Births()` (or `ss.birth()`) unless it stands for a separate source of people: the same births would be counted twice.
 
-Rates of your own work too: `fertility_rate` takes a table with a column for the year, one for the age, and one for the rate, e.g. `pd.read_csv('test_data/nigeria_asfr.csv')` (columns `Time`, `AgeGrp`, and `ASFR`), or one rate, e.g. `ss.peryear(0.1)` per woman, or the bare number `100` (100 births a year per 1,000 women, as for births).
+Rates of your own work too: `fertility_rate` takes a table with a column for the year, one for the age, and one for the rate, e.g. `pd.read_csv('test_data/nigeria_asfr.csv')` (columns `Time`, `AgeGrp`, and `ASFR`), or one rate, e.g. `ss.peryear(0.1)` per woman, or `100` (100 births a year per 1,000 women: above 1, so per 1,000, as for births).
 
 ## Agents standing for many people
 

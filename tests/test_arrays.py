@@ -21,7 +21,7 @@ def test_arrs():
     o = sc.obj()
 
     # Create a sim with only births
-    pars = dict(n_agents=medium, diseases='sis', networks='random')
+    pars = dict(n_agents=medium, diseases=ss.SIS(beta=ss.peryear(0.05), dur_inf=ss.years(10)), networks='random') # In years, for births and deaths over 50 years
     p1 = sc.mergedicts(pars, demographics=ss.birth(rate=ss.peryear(0.01)))
     p2 = sc.mergedicts(pars, demographics=ss.death(rate=ss.peryear(0.01)))
     s1 = ss.Sim(p1).run()
@@ -277,7 +277,7 @@ def test_arr_2d():
             self.sus_imm[self.I.uids, 1] += 0.1
             return out
 
-    sim = ss.Sim(n_agents=medium, diseases=VarSIS(), networks='random', demographics=True, stop=ss.years(10)).run()
+    sim = ss.Sim(n_agents=medium, diseases=VarSIS(), networks='random', demographics=True, dur=ss.years(10)).run()
     imm = sim.diseases.varsis.sus_imm
     assert imm.raw.shape == (sim.people.uid.len_tot, nv) # Grows along the first axis
     assert imm.values.shape == (len(sim.people), nv) # Values are active agents only

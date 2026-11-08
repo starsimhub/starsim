@@ -43,7 +43,8 @@ class SimPars(ss.Pars):
 
         # Simulation parameters
         self.start     = None  # Start of the simulation: a date or a year gives it a calendar (default 2000 for a model in years, else 0)
-        self.stop      = None  # End of the simulation: a date, a year (or a time in the unit, with no calendar), or a duration, the length of the run (default 50 of the sim's unit)
+        self.stop      = None  # End of the simulation, read as the start is: a date, a year (or a time in the unit from 0, with no calendar), or a duration from 0 (default: a run of 100 days in days, else 50 of the sim's unit)
+        self.dur       = None  # Instead of the stop, the length of the run, e.g. ss.years(10) or a bare number (in years with a calendar of years, else in the sim's unit; the stop is the start plus it)
         self.dt        = None  # Timestep
         self.rand_seed = 1     # Random seed; if None, don't reset
         self.even_draws = False # Whether to space each call's random numbers evenly for agents (see ss.Sim)
@@ -90,7 +91,6 @@ class SimPars(ss.Pars):
         return super().__setitem__(key, value)
 
     removed = dict( # Sim parameters that have been removed (or that are often guessed), and what replaces them
-        dur = ss.timeline.removed_dur,
         track_writes = 'track_writes= has been removed: sim.what_modifies() lists the modifiers on a quantity, which are declared; code that assigns rel_sus or rel_trans directly is not tracked',
         birth_rate = 'birth_rate= (births per 1,000 people per year) has been removed: declare births for the population, per person, e.g. ss.Sim(..., demographics=[ss.birth(rate=ss.peryear(0.02))]) for 20 per 1,000, which runs under every solver; or use ss.Births(birth_rate=...) for data by year',
         death_rate = 'death_rate= (deaths per 1,000 people per year) has been removed: declare deaths for the population, per person, e.g. ss.Sim(..., demographics=[ss.death(rate=ss.peryear(0.01))]) for 10 per 1,000, which runs under every solver; or use ss.Deaths(death_rate=...) for data by year, age, and sex',
@@ -385,6 +385,7 @@ class SimPars(ss.Pars):
                 # representation of a single module (as opposed to a dict containing modules)
                 modlist = sc.tolist(self[modkey])
 
+            modlist = [m for item in modlist for m in (item.values() if isinstance(item, ss.ndict) else [item])] # A set of modules given as one (e.g. the serotypes of ssl.Dengue), among others
             for i,mod in enumerate(modlist):
 
                 # Convert first from a string to a dict
@@ -496,7 +497,8 @@ class Sim(ss.modules.Base):
         total_pop (int/float): the number of people (default: one per agent); as agents, each stands for `total_pop/n_agents` of them (`sim.pop_scale`), and the results that count people are scaled by it
         rescale (bool/dict): for agents, start with each agent standing for one person, and increase it to `sim.pop_scale` as the agents stop being naive, making some of them naive again each time (dynamic rescaling, as in Covasim; default False); True, or a dict of its options, `dict(threshold=0.05, factor=1.2)` (the defaults): the share of agents who are not naive that triggers rescaling, and the least factor by which the scale grows each time
         start (float/str/date): when the sim starts: a date (e.g. '2020-01-01') or a year (a number from 1800 on, e.g. 2000), which give it a calendar; any other number (or a duration) is a time in the sim's unit from 0 (default: 2000 for a model in years, else 0). With a calendar, every bare number given as a time (stop=, when=, the times of ss.schedule and ss.timeseries) is a year; without one, a time in the sim's unit from 0, as a duration given as a time is (when=ss.days(10) is day 10)
-        stop (float/str/date/dur): when the sim ends: a date, a bare number (a year, or with no calendar a time in the sim's unit), or a duration, which is the length of the run from the start (e.g. stop=ss.days(100)); with no start, a year starts the sim in 2000, unless unit= is other than years (unit='day', stop=3650 is 3,650 days from 0; default: a run of 50 of the sim's unit)
+        stop (float/str/date/dur): when the sim ends, read as the start is: a date, a bare number (a year, or with no calendar a time in the sim's unit from 0), or a duration from 0 (e.g. stop=ss.days(100), with no start; ss.years(2030) in a sim of calendar years is the year 2030); with no start, a year starts the sim in 2000, unless unit= is other than years (unit='day', stop=3650 is 3,650 days from 0; default: a run of 100 days in days, else 50 of the sim's unit)
+        dur (float/dur): instead of `stop`, the length of the run from its start, e.g. `start=2000, dur=10` (a bare number is in years in a sim of calendar years, as a bare stop is, else in the sim's unit) or `start='2020-01-01', dur=ss.days(90)`
         dt (float/dur): The timestep, in units of "unit" (default 1.0)
         rand_seed (int): The overall random seed for the simulation (used to set module-specific random seeds)
         even_draws (bool): Whether to space each call's random numbers evenly for agents, so that about the expected number of them move each time (default False). This reduces the variance between runs (about 3 to 10 times in final size for a simple SIR), but outbreaks die out less often than they should, and the mean of a result can shift (e.g. the peak of an SIR on a network, by about 10%). For agents only (an error for a compartmental run), and needs `ss.options.crn`
@@ -935,6 +937,9 @@ class Sim(ss.modules.Base):
         vars(sim).clear()
         vars(sim).update(state)
         sim.pars.check_key_mismatch(kwargs)
+        for key, other in dict(stop='dur', dur='stop').items(): # The stop and the length are two ways of saying one thing, so a new one replaces the other
+            if kwargs.get(key) is not None and other not in kwargs:
+                kwargs[other] = None
         defaults = SimPars()
         for key,val in kwargs.items():
             sim.pars[key] = sc.dcp(defaults.get(key)) if val is None else val
@@ -1171,9 +1176,9 @@ class Sim(ss.modules.Base):
 
         Examples:
             ```python
-            sim = ss.Sim(diseases='sis', networks='random', start=2000)
-            sim.run(until='2010-01-01')
-            sim.add_module(ss.modify(sim.diseases.sis.pars.beta, multiply=0.5, when=ss.schedule(start='2012-01-01'))) # Not a delivery of a new product, which changes the model's structure
+            sim = ss.Sim(diseases='sis', networks='random', start='2000-01-01') # The default run of 100 days
+            sim.run(until='2000-02-01')
+            sim.add_module(ss.modify(sim.diseases.sis.pars.beta, multiply=0.5, when=ss.schedule(start='2000-03-01'))) # Not a delivery of a new product, which changes the model's structure
             sim.run()
             ```
         """
@@ -2095,7 +2100,7 @@ class Sim(ss.modules.Base):
             if np.ndim(value) and not one: # A 2D result with no columns= has no one number (ask for it by key)
                 continue
             values[k] = float(value) if not np.ndim(value) else value
-        summary = sc.dataframe(dict(value=list(values.values())), index=pd.Index(list(values), name='result'))
+        summary = ss.results.Summary(dict(value=list(values.values())), index=pd.Index(list(values), name='result'))
         if one:
             if not values:
                 errormsg = f'"{key}" has no summary: it is not summarized over time (give how=)'
@@ -2461,7 +2466,9 @@ def demo(run=True, plot=True, summary=True, show=None, **kwargs):
     """
     Create a simple demo simulation for Starsim
 
-    Defaults to using the SIR model with a random network, but these can be configured.
+    Defaults to using the SIR model with a random network, but these can be configured. On the
+    network, β is per contact, so the demo's SIR has β = 0.03 a day: with 10 contacts each,
+    infectious for 10 days, an R0 of 3.
 
     Args:
         run (bool): whether to run the sim
@@ -2476,7 +2483,8 @@ def demo(run=True, plot=True, summary=True, show=None, **kwargs):
         ss.demo(diseases='sis', networks='degree') # Run with different defaults
         ```
     """
-    pars = sc.mergedicts(dict(diseases='sir', networks='random'), kwargs)
+    defaults = dict(diseases=ss.SIR(beta=ss.perday(0.03)), networks='random') if 'diseases' not in kwargs and 'networks' not in kwargs else dict(diseases='sir', networks='random') # beta per contact on the network, for an R0 of 3 (see ss.SIR)
+    pars = sc.mergedicts(defaults, kwargs)
     sim = Sim(pars)
     if run:
         sc.heading('Running demo:')
