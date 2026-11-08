@@ -94,8 +94,8 @@ def test_change():
     start = ss.date('2020-01-01')
     after = ss.Sim(sir, interventions=ss.modify(sir.pars.beta, set=ss.timeseries({start + ss.days(20): 0.09, start + ss.days(60): 0.3}), when=ss.schedule(start=start + ss.days(20))), start=start, stop='2020-04-30', total_pop=50_000, verbose=0).run()
     assert np.allclose(after.results.sir.S, res.S) # A time after the start is the start plus a duration
-    with pytest.raises(ValueError, match='sim.pars.start'): # A duration alone is a time from 0, for a sim with no calendar
-        ss.Sim(sir, interventions=ss.modify(sir.pars.beta, set=0.09, when=ss.schedule(start=ss.days(20))), start='2020-01-01', stop='2020-04-30', verbose=0).init()
+    after = ss.Sim(sir, interventions=ss.modify(sir.pars.beta, set=ss.timeseries({ss.days(20): 0.09, ss.days(60): 0.3}), start=ss.days(20)), start=start, stop='2020-04-30', total_pop=50_000, verbose=0).run()
+    assert np.allclose(after.results.sir.S, res.S) # So is a duration alone, that long after the start
     with pytest.raises(ValueError, match='calendar year'): # In a sim with dates, a bare number is a year: 20 is the year 20, outside the sim
         ss.Sim(sir, interventions=ss.modify(sir.pars.beta, set=0.09, when=ss.schedule(start=20)), start='2020-01-01', stop='2020-04-30', verbose=0).init()
     with pytest.raises(ValueError): # A time outside the sim
@@ -686,6 +686,31 @@ def test_paths():
     d = ss.Disease(infection=S >> E @ ss.peryear(10)*I, onset=E >> I @ ss.days(3), recovery=I >> R @ ss.days(7), init_n=dict(I=10), name='seir')
     assert isinstance(ss.Sim(d, networks=ssl.HybridNet(household_size=ss.poisson(mean=3)), total_pop=2000, dur=ss.days(5), verbose=0).init().solver, ss.solvers.abm)
     return
+
+@sc.timer()
+def test_start_stop():
+    sc.heading('start= and stop= of a delivery or a modifier: a window, the same as in ss.schedule(), that also goes with an event in when=')
+    def run(solver, intv, **pars):
+        S, I, R = ss.states('S I R')
+        sir = ss.Disease(infection=S >> I @ 0.3*I, recovery=I >> R @ ss.days(10), init_prev=0.01, name='sir')
+        pop = dict(n_agents=2000) if solver == 'abm' else dict(total_pop=2000)
+        return ss.Sim(sir, interventions=intv(sir), start='2020-01-01', stop='2020-04-01', dt=ss.days(1), solver=solver, verbose=0, **pop, **pars).run()
+    for solver in ['binomial', 'abm']: # On an event, within a window (typhoidsim's ss.screen(test, on=onset, start=2001)), as durations after the start of a sim with a calendar
+        sim = run(solver, lambda sir: ss.screen(sensitivity=1.0, when=sir.infection, coverage=1.0, start=ss.days(30), stop='2020-03-01', name='test'))
+        tested = np.flatnonzero(sim.results.test.delivered)
+        assert tested.min() == 30 and tested.max() == 59
+    a, b = [run('binomial', lambda sir: ss.modify(sir.pars.beta, multiply=0.0, **when)).results.sir.infection.values for when in [dict(start=ss.days(20), stop=ss.days(40)), dict(when=ss.schedule(start=ss.days(20), stop=ss.days(40)))]]
+    assert np.array_equal(a, b) and a[20:40].sum() == 0 and a[40] > 0
+    once = run('abm', lambda sir: ss.vaccinate(efficacy=1.0, when=ss.days(10), coverage=0.5, name='vx')) # One duration in when= is a time, 10 days after the start, as [ss.days(10)] is
+    assert np.flatnonzero(once.results.vx.delivered).tolist() == [10]
+    with pytest.raises(ValueError, match='window of its own'): # The window once
+        ss.vaccinate(efficacy=0.9, start=2001, when=ss.schedule(start=2002))
+    with pytest.raises(ValueError, match='window of its own'):
+        ss.modify('sir.pars.beta', multiply=0.5, stop=2001, when=ss.schedule(start=2000))
+    with pytest.raises(TypeError, match='start='): # A function of the time alone in who= says when: the window is start= and stop=
+        ss.screen(sensitivity=0.9, who=lambda sim: sim.t.now() > 2001)
+    return
+
 
 if __name__ == '__main__':
     sc.options(interactive=False)

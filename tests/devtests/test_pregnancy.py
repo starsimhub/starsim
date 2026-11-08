@@ -106,7 +106,7 @@ def test_compartmental():
             assert np.isclose(f(ro), va, rtol=0.05), f'{key} at {dt}: {f(ro):.0f} in compartments, {va:.0f} as agents'
 
     # People are conserved: the start, plus births, less maternal deaths
-    sim = ss.Sim(demographics=ss.Pregnancy(fertility_rate=ss.peryear(0.1), maternal_death=ss.peryear(0.05), children=ss.choice(a=[1, 2], p=[0.8, 0.2])),
+    sim = ss.Sim(demographics=ss.Pregnancy(fertility_rate=ss.peryear(0.1), maternal_death_rate=ss.peryear(0.05), children=ss.choice(a=[1, 2], p=[0.8, 0.2])),
                  solver='binomial', total_pop=20_000, stratify=strat, **kw).run()
     r = sim.results.pregnancy
     assert r.antepartum.sum() > 0 and r.birth.sum() > 1.1*r.delivery.sum() # Twins
@@ -225,7 +225,7 @@ def mother_cond(by_path):
 
 
 def make_fetal():
-    preg = ss.Pregnancy(fertility_rate=ss.peryear(0.1), maternal_death=ss.peryear(0.05))
+    preg = ss.Pregnancy(fertility_rate=ss.peryear(0.1), maternal_death_rate=ss.peryear(0.05))
     S, I, C, Cs = ss.states('S I C Cs')
     d = ss.Disease(S, I, C, Cs,
         infection = S >> I @ ss.peryear(0.1),
@@ -362,7 +362,7 @@ def test_hiv_vertical():
 @sc.timer()
 def test_starsim3():
     sc.heading('Testing the names, results, and callbacks of ss.Pregnancy that code reads')
-    preg = ss.Pregnancy(fertility_rate=ss.peryear(0.1), maternal_death=ss.bernoulli(0.01), burnin=False)
+    preg = ss.Pregnancy(fertility_rate=ss.peryear(0.1), p_maternal_death=ss.bernoulli(0.01), burnin=False)
     S, I, C, F = ss.states('S I C F')
     d = ss.Disease(S, I, C, F,
         infection = S >> I @ ss.peryear(0.1),

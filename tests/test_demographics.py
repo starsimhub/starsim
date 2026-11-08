@@ -675,6 +675,8 @@ def test_rates_and_counts():
     sim = ss.Sim(demographics=[ss.migration(rate=-10)], start=2000, stop=2010, solver='ode', verbose=0).run() # A bare number: per 1,000
     assert np.isclose(sim.results.alive[-1], 10_000*np.exp(-0.1), rtol=1e-3)
     assert [tr.name for tr in ss.migration(rate=ss.timeseries({2000: 5, 2010: -5}))] == ['immigration', 'emigration'] # Both, as it changes sign
+    assert ss.migration(rate=ss.peryear(-10))[0].rate.raw == ss.migration(rate=-10)[0].rate.raw == ss.peryear(0.01) # Above 1 per year, bare or typed: per 1,000, as for births and deaths
+    assert ss.migration(rate=-0.5, rate_per=1000)[0].rate.raw == ss.peryear(0.0005) and ss.migration(rate=-0.5)[0].rate.raw == ss.peryear(0.5) # Below 1: per person, unless rate_per says
     assert 'emigration' in [tr.name for tr in ss.migration(rate='Albania')] # The UN's net rates, negative since 1990
     with pytest.raises(TypeError, match='n='):
         ss.immigration(**dict(rate=ss.peryear(100))) # A number of people per unit time is n=
@@ -690,14 +692,22 @@ def test_rates_and_counts():
         sim = ss.Sim(ss.SIR(init_n=many, beta=0), n_agents=1000, total_pop=1000, stop=2001, solver=solver, verbose=0).run()
         assert sim.results.sir.I[0] == many and 'init_n' in sim.diseases.sir.pars
 
-    # ss.Pregnancy: maternal_death= by type, preterm=ss.preterm(), children=, and the old keywords raise
-    preg = ss.Pregnancy(maternal_death=0.01, preterm=ss.preterm(threshold=ss.weeks(36), by_age=[[18, 35, 1000], [2, 1, 2]]), children=2)
-    assert preg.pars.maternal_death.raw == 0.01 and preg.pars.preterm.threshold == ss.weeks(36) and preg.pars.preterm.by_age[1, 0] == 2 # Under the keywords that set them
-    assert not {'p_maternal_death', 'rel_preterm', 'preterm_threshold'} & set(preg.pars)
-    assert ss.Pregnancy(maternal_death=ss.peryear(0.01)).pars.maternal_death.raw == ss.peryear(0.01)
-    for key in ['maternal_death_rate', 'rel_preterm', 'embryos_' + 'per_pregnancy']: # Spelled so the call-site rewrite leaves it
+    # ss.Pregnancy: maternal deaths while pregnant and at delivery, both at once, preterm=ss.preterm(), children=, and the old keywords raise
+    preg = ss.Pregnancy(p_maternal_death=0.01, maternal_death_rate=ss.peryear(0.02), preterm=ss.preterm(threshold=ss.weeks(36), by_age=[[18, 35, 1000], [2, 1, 2]]), children=2)
+    assert preg.pars.p_maternal_death.pars.p == 0.01 and preg.pars.maternal_death_rate.raw == ss.peryear(0.02) and preg.pars.preterm.threshold == ss.weeks(36) and preg.pars.preterm.by_age[1, 0] == 2 # Under the keywords that set them
+    assert not {'maternal_death', 'rel_preterm', 'preterm_threshold'} & set(preg.pars)
+    with pytest.raises(TypeError, match='maternal_death_rate'):
+        ss.Pregnancy(p_maternal_death=ss.peryear(0.01)) # A rate is the hazard while pregnant
+    for key in ['maternal' + '_death', 'rel_preterm', 'embryos_' + 'per_pregnancy']: # Spelled so the call-site rewrite leaves it
         with pytest.raises(TypeError, match='use'):
             ss.Pregnancy(**{key: 1})
+    kw = dict(n_agents=3000, start=2000, stop=2005, dt=ss.months(1), verbose=0)
+    md = lambda **k: ss.Sim(demographics=ss.Pregnancy(fertility_rate=ss.peryear(0.1), **k), **kw).run().results.pregnancy
+    both = md(p_maternal_death=0.05, maternal_death_rate=ss.peryear(0.1))
+    assert both.antepartum.sum() > 0 and both.maternal_death.sum() > both.antepartum.sum() # Each kind of maternal death, together
+    sim = ss.Sim(demographics=ss.Pregnancy(fertility_rate=ss.peryear(0.1)), **kw).init()
+    sim.demographics.pregnancy.pars.p_maternal_death.set(p=0.05) # Set later, as FPsim does each year
+    assert sim.run().results.pregnancy.maternal_death.sum() > 0
     return sim
 
 

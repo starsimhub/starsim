@@ -179,7 +179,7 @@ drug = ss.Treatment(cure={cure: 0.95})
 resistance = ss.Transition(I, Ir, when=drug.failed, p=0.2) # Resistance arises in 20% of failures
 ng = ss.Disease(infection, infection_res, recovery, recovery_res, cure, resistance, init_n=dict(I=500), name='ng') # 500 sensitive infections at the start
 
-treatment = ss.treat(drug, when=ss.schedule(start='2005'), coverage=ss.peryear(0.5)) # Given to the people in the source of cure, I
+treatment = ss.treat(drug, start='2005', coverage=ss.peryear(0.5)) # Given to the people in the source of cure, I
 sim = ss.Sim(ng, interventions=treatment, n_agents=5000, start=2000, stop=2030, dt=ss.months(1), verbose=0)
 sim.run()
 sim.plot(['ng.I', 'ng.Ir'])
@@ -201,7 +201,7 @@ A product made on its own can be given by several deliveries, which then share i
 kw_births = dict(kw, demographics=[ss.birth(rate=ss.peryear(0.03)), ss.death(rate=ss.peryear(0.03))])
 
 vaccine  = ss.Vaccine(efficacy=0.8)
-routine  = ss.vaccinate(vaccine, who=ss.at_age(ss.years(1)), when=ss.schedule(start='2005'), coverage=0.8)
+routine  = ss.vaccinate(vaccine, who=ss.at_age(ss.years(1)), start='2005', coverage=0.8)
 campaign = ss.vaccinate(vaccine, when=['2010'], coverage=0.5)
 separate = ss.vaccinate(efficacy=0.8, when=['2010'], coverage=0.5, name='campaign') # Makes a second vaccine
 

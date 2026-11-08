@@ -19,16 +19,33 @@ class Intervention(ss.Module):
     The key method of the intervention is `step()`, which is called on each timestep. Interventions can modify disease states (e.g. treating or vaccinating
     agents); to deliver a product, see `ss.vaccinate()`, `ss.screen()`, and `ss.treat()`.
 
+    An intervention written as code can be given `who=`, who it can reach, as for a delivery: a condition on people
+    (`ss.person.age < 5`), or a function of the sim (and of the intervention, as `self`) returning UIDs or a mask. Its
+    `step()` then reads the people eligible now with `check_eligibility()`.
+
     Args:
         args (list): passed to `ss.Module`
+        who (Cond/func): who it can reach (by default everyone alive), read by `check_eligibility()`
         kwargs (dict): passed to `ss.Module`
+
+    **Example**:
+    ```python
+    class Discount(ss.Intervention):
+        def step(self):
+            uids = self.check_eligibility() # Those who= holds for now, alive
+            self.sim.diseases.sis.rel_trans[uids] = 0.5
+
+    sim = ss.Sim(diseases='sis', networks='random', interventions=Discount(who=ss.person.age < 15)).run()
+    ```
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, who=None, **kwargs):
         if 'eligibility' in kwargs:
-            errormsg = 'eligibility= has been replaced by who=, a condition on people or a function of the sim, e.g. ss.Event(..., who=ss.person.age < 5); an intervention written as code chooses whom it reaches in its own step()'
+            errormsg = 'eligibility= is now who=, a condition on people or a function of the sim, e.g. ss.Intervention(who=lambda sim: sim.people.age < 5); check_eligibility() returns the people it holds for'
             raise TypeError(errormsg)
         super().__init__(*args, **kwargs)
+        if not isinstance(self, Event): # An event or delivery keeps its who= as its condition, self.eligible
+            self.who = who
         return
 
     @property
@@ -46,6 +63,26 @@ class Intervention(ss.Module):
         if self.has_product:
             self.product.init_pre(self.sim)
         return
+
+    def check_eligibility(self):
+        """
+        The UIDs of the people eligible now: those alive whom `who=` holds for (evaluated as a delivery's `who=` is), or everyone alive
+
+        A subclass can override it, for a rule of its own.
+        """
+        sim = self.sim
+        alive = sim.people.alive.raw
+        who = self.eligible if isinstance(self, Event) else getattr(self, 'who', None)
+        if who is None:
+            return sim.people.auids
+        selector = ss.conditions.Selector(sim)
+        if callable(who) and not isinstance(who, (ss.conditions.Cond, ss.expressions.Expr, ss.Arr, ss.Module)): # A function of the sim, given the intervention as self
+            out = ss.utils.call_fn(who, self=self, sim=sim)
+            mask = selector.to_selection(out) if out is not None else selector.nobody()
+        else:
+            who = ss.conditions.ref(who) if isinstance(who, str) else who # A state by its path, e.g. 'sis.infected'
+            mask = selector.select(ss.conditions.resolve_paths(who, sim))
+        return ss.uids(np.flatnonzero(np.asarray(mask, dtype=bool) & alive))
 
 
 #%% Events: the people something happened to on a step, and what each person remembers of them
@@ -364,8 +401,6 @@ class capacity:
 replaced = dict( # The keywords an event or delivery took before, and what says it now
     at = 'when=[...] (times), or ss.schedule([...], start=..., stop=...)',
     every = 'when=ss.schedule(every=...), e.g. when=ss.schedule(every=ss.days(30)), with start= and stop= if needed',
-    start = 'when=ss.schedule(start=..., stop=...), with how often or the times if it happens in rounds',
-    stop = 'when=ss.schedule(start=..., stop=...), with how often or the times if it happens in rounds',
     on = 'when=<an event>, e.g. when=screening.positive',
     delay = 'when=ss.on(<an event>, delay=...)',
     where = 'who=, which takes conditions on the population and functions of the sim too; join them with &',
@@ -393,11 +428,19 @@ def check_replaced(kwargs, cls):
     return
 
 
-def parse_when(when, name):
+def parse_when(when, name, start=None, stop=None):
     """
     The `when=` of an event, as the keywords of `Event._init()`: nothing (routine), an event that triggers it, times (a date, a year,
-    a duration from 0 in a sim with no calendar, or a list of them), a function of the date, or an `ss.schedule()` with these, how often, and a start and stop
+    a duration after the start of the sim, or a list of them), a function of the date, or an `ss.schedule()` with these, how often, and a start and stop;
+    and the window of `start=` and `stop=`, which any of these can have (the same as in `ss.schedule()`, which then must have none of its own)
     """
+    if start is not None or stop is not None:
+        if isinstance(when, ss.schedule) and (when.start is not None or when.stop is not None):
+            errormsg = f'"{name}" was given start= or stop=, and when={when!r}, which has a window of its own; give the window once, as start= and stop= or in ss.schedule()'
+            raise ValueError(errormsg)
+        out = parse_when(when, name)
+        out.update(start=start, stop=stop) # Within the window, whatever when= is: e.g. on an event (when=screening.positive, start=2001), or rounds
+        return out
     out = dict(at=None, every=None, start=None, stop=None, on=None, delay=None, when=None)
     if when is None:
         return out
@@ -423,7 +466,7 @@ def parse_when(when, name):
     if isinstance(when, (ss.State, ss.Arr)):
         errormsg = f'when= of "{name}" is when it happens: times, an event, or ss.schedule() (for how often, every=); {when!r} is a condition on people, which goes in who='
         raise TypeError(errormsg)
-    out['at'] = when # A time, or a list of them: dates, years, or durations from 0 (ss.days(10) is day 10, the same as [ss.days(10)]; how often is ss.schedule(every=...))
+    out['at'] = when # A time, or a list of them: dates, years, or durations after the start (ss.days(10) is 10 days in, the same as [ss.days(10)]; how often is ss.schedule(every=...))
     return out
 
 
@@ -448,10 +491,11 @@ class Event(ss.products.EventSource, Intervention):
     levels of a stratification (`dict(risk=('low', 'high'))`), or strains (`DS >> RIF`), or an increment of a counter; with none,
     it is only an event, which others trigger on (e.g. a clinic visit). **Who** it reaches: a condition on people, or on the
     population (`sir.I.n > 1000`, which decides for everyone at once), or people as they reach an age (`ss.at_age()`). And
-    **when**: at times (`when=[2025, 2030]`, `when='2024-03-01'`, or with no calendar `when=ss.days(30)`, day 30), on a schedule
+    **when**: at times (`when=[2025, 2030]`, `when='2024-03-01'`, or `when=ss.days(30)`, 30 days after the start), on a schedule
     (`when=ss.schedule(every=ss.months(1), start='2024-01-01', stop='2025-01-01')`), when another event happens
     (`when=sir.infection`, or `when=ss.on(sir.infection, delay=ss.days(5))`), or, with no `when=`, routinely: each person once,
-    at the first step they are eligible.
+    at the first step they are eligible. `start=` and `stop=` limit any of these to a window (the same as `when=ss.schedule(start=..., stop=...)`
+    for routine events), e.g. `when=screening.positive, start=2001`.
 
     `n=` and `p=` say how many it reaches each time, as for `ss.move()`: at most `n` of those eligible, chosen at random, and
     each with probability `p`.
@@ -468,10 +512,13 @@ class Event(ss.products.EventSource, Intervention):
         who (Cond/func/at_age): who it can reach: a condition on people (`ss.person.age < 5`, or a state by its path, `'sir.I'`), on the population
             (`sir.I.n > 1000`), or both joined with `&`; people as they reach an age (`ss.at_age(ss.months(9))`); or a function of the sim returning
             who is eligible (UIDs, a mask, or True or False for everyone); to reach exactly those it returns at each step, also give `when=` every step
-        when (date/list/dur/event/func/schedule): when it happens: a time or list of them (dates, years, or in a sim with no calendar durations
-            from 0: `ss.days(10)` is day 10); an event that triggers it (`sir.infection`, `screening.positive`, or a transition by its path), or
+        when (date/list/dur/event/func/schedule): when it happens: a time or list of them (dates, years, or durations after the start of the sim:
+            `ss.days(10)` is 10 days in, and with no calendar day 10); an event that triggers it (`sir.infection`, `screening.positive`, or a transition by its path), or
             `ss.on(event, delay=...)` for a time after it; a function of the date of each step, true when it happens; or `ss.schedule()`,
             for how often (`every=`), or any of these with a `start=` and `stop=` (with only those, routinely between them)
+        start (date/float/dur): the start of a window it happens in, with any `when=` (e.g. on an event, from 2001): a shorthand for
+            `when=ss.schedule(start=...)` that also goes with an event (default: the start of the sim)
+        stop (date/float/dur): the end of the window, likewise (default: the end of the sim)
         n (float/rate): the most it reaches each time: a number, or a rate (e.g. `ss.peryear(20)`), which routine events need
         p (float/rate/func): the probability that each person eligible is reached; also `ss.by(...)`, a typed rate or probability
             (e.g. `ss.perday(0.1)`), or a function of the sim returning one, or (as agents) one per person
@@ -488,6 +535,9 @@ class Event(ss.products.EventSource, Intervention):
         # A new strain on a date
         alpha = ss.Event(S >> E, n=20, when='2021-01-01', strain='alpha')
 
+        # Twenty importations a year, for the first five years
+        imports = ss.Event(S >> I, n=ss.peryear(20), stop=ss.years(5))
+
         # Moving people to high risk, five days after infection, half of them
         risky = ss.Event(dict(risk=('low', 'high')), when=ss.on(sir.infection, delay=ss.days(5)), p=0.5)
 
@@ -498,12 +548,12 @@ class Event(ss.products.EventSource, Intervention):
     compartmental = True
     kind = None # The kind of product this delivers
 
-    def __init__(self, what=None, who=None, when=None, n=None, p=None, strain=None, increment=None, name=None, label=None, **kwargs):
+    def __init__(self, what=None, who=None, when=None, n=None, p=None, strain=None, increment=None, start=None, stop=None, name=None, label=None, **kwargs):
         if isinstance(what, ss.Product):
             errormsg = f'ss.Event() is a move between states, not the delivery of a product; for {type(what).__name__}, use ss.Delivery() (or ss.vaccinate(), ss.treat(), ss.screen())'
             raise TypeError(errormsg)
         check_replaced(kwargs, type(self))
-        self._init(move=what, n=n, p=p, strain=strain, increment=increment, name=name, label=label, **parse_who(who), **parse_when(when, name or type(self).__name__), **kwargs)
+        self._init(move=what, n=n, p=p, strain=strain, increment=increment, name=name, label=label, **parse_who(who), **parse_when(when, name or type(self).__name__, start, stop), **kwargs)
         return
 
     def _init(self, product=None, who=None, move=None, increment=None, start=None, stop=None, at=None, every=None, where=None, on=None, p=None,
@@ -1804,6 +1854,8 @@ class Delivery(Event):
         when (date/list/dur/event/func/schedule): when it is delivered, as for `ss.Event`: in rounds (times, or `ss.schedule()`, e.g. with `every=`),
             on an event (with `ss.on(event, delay=...)` for a time after it, which is the time from the trigger to delivery, drawn per person
             if a distribution, agents only), or with none, routinely: each person is offered it once, at the first step they are eligible
+        start (date/float/dur): the start of a window it is delivered in, with any `when=`, as for `ss.Event`: e.g. `when=onset, start=2001`, on an event from 2001
+        stop (date/float/dur): the end of the window, likewise
         coverage (float/rate/func): the fraction of those eligible who are reached; also `ss.by(...)`, a typed rate or probability (e.g. `ss.perday(0.1)`,
             `ss.probperyear(0.5)`): the chance over the step or the round (and, for routine delivery, offered at every step to those eligible);
             or a function of the sim, called at each step, returning one of these or, as agents, a probability for each person: an array
@@ -1830,12 +1882,15 @@ class Delivery(Event):
         screening = ss.screen(sensitivity=0.9, specificity=0.95, who=ss.person.age > 30, coverage=0.4, when=ss.schedule(every=ss.days(7)))
         treatment = ss.treat(cure=0.95, when=screening.positive, coverage=0.8)
 
-        # Routine vaccination at nine months, from 2025
-        mcv1 = ss.vaccinate(efficacy=0.85, who=ss.at_age(ss.months(9)), coverage=0.8, when=ss.schedule(start=2025))
+        # Routine vaccination at nine months, from 2025 (the same as when=ss.schedule(start=2025))
+        mcv1 = ss.vaccinate(efficacy=0.85, who=ss.at_age(ss.months(9)), coverage=0.8, start=2025)
+
+        # Testing those with symptoms, from 2001 to 2010
+        testing = ss.screen(sensitivity=0.9, when=sir.infection, coverage=0.3, start=2001, stop=2010)
         ```
     """
     def __init__(self, what=None, who=None, when=None, coverage=None, capacity=None, strain=None, increment=None, trace=None,
-                 skip_reached_within=None, disease=None, name=None, label=None, **kwargs):
+                 skip_reached_within=None, disease=None, start=None, stop=None, name=None, label=None, **kwargs):
         check_replaced(kwargs, type(self))
         if 'p' in kwargs or 'n' in kwargs:
             errormsg = f'ss.{type(self).__name__}() takes coverage= and capacity= for how many it reaches, not p= and n= (which are for ss.Event)'
@@ -1847,7 +1902,7 @@ class Delivery(Event):
             priority, queue = None, None
         self._init(product=product, move=move, p=coverage, n=capacity, priority=priority, queue=queue, strain=strain, increment=increment,
                    trace=trace, skip_reached_within=skip_reached_within, disease=disease, name=name, label=label,
-                   **parse_who(who), **parse_when(when, name or type(self).__name__), **kwargs)
+                   **parse_who(who), **parse_when(when, name or type(self).__name__, start, stop), **kwargs)
         return
 
 

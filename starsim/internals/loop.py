@@ -520,7 +520,7 @@ class Loop:
         if profile is not None:
             self.profile = profile
 
-        # Convert e.g. '2020-01-01' or 2020 to a time on the timeline, as interventions read them (see ss.connectors.to_time()); a duration is a time on the timeline already (e.g. sim.t.tvec[5]: sim.run() checks one, as ss.Timeline.to_time() does)
+        # Convert e.g. '2020-01-01' or 2020 to a time on the timeline, as interventions read them (see ss.connectors.to_time()); a duration is read by sim.run(), as ss.Timeline.to_time() reads one (that long after the start with a calendar)
         cond = None
         if isinstance(until, (str, ss.date)) or sc.isnumber(until):
             until = ss.connectors.to_time(self.sim, until)

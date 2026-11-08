@@ -60,7 +60,7 @@ def test_burnin_pregnancies():
 @sc.timer()
 def test_mmr():
     sc.heading('Testing the maternal mortality ratio, and infant mortality')
-    preg = ss.Pregnancy(fertility_rate=ss.peryear(0.1), maternal_death=ss.bernoulli(0.05), p_infertile=ss.bernoulli(0.2), infant_death_rate=ss.peryear(0.05))
+    preg = ss.Pregnancy(fertility_rate=ss.peryear(0.1), p_maternal_death=ss.bernoulli(0.05), p_infertile=ss.bernoulli(0.2), infant_death_rate=ss.peryear(0.05))
     sim = ss.Sim(demographics=preg, n_agents=5000, start=2000, stop=2010, dt=ss.months(1), verbose=0).run()
     r = sim.results.pregnancy
     births, md = r.birth.values, r.maternal_death.values
@@ -79,7 +79,7 @@ def test_mmr():
 
 
 def make_fetal():
-    preg = ss.Pregnancy(fertility_rate=ss.peryear(0.1), maternal_death=ss.peryear(0.05))
+    preg = ss.Pregnancy(fertility_rate=ss.peryear(0.1), maternal_death_rate=ss.peryear(0.05))
     S, I, C, Cs = ss.states('S I C Cs')
     d = ss.Disease(S, I, C, Cs,
         infection = S >> I @ ss.peryear(0.1),

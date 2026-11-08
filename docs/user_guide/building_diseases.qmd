@@ -419,7 +419,7 @@ Each strain then has its own results (`sim.results.den1`), and a delivery can ac
 A disease that needs something states and transitions can't say, such as a quantity that each person carries and that changes continuously (a CD4 count, a viral load, or an immunity level that wanes), is written as a Python class, with arrays for each person and methods that update them. It runs as agents, and can sit in the same sim as declared diseases. There are two base classes:
 
 - **`ss.Disease`**, for a disease with no transmission between people, such as a non-communicable disease.
-- **`ss.AgentDisease`**, for a transmitted disease. It adds the states `susceptible` and `infected`, each agent's relative susceptibility and infectiousness (`rel_sus` and `rel_trans`), seeding (`init_prev`), the results `prevalence` and `infection`, and a step that transmits over the sim's networks with a `beta` for each and gives the new cases their prognoses. Each piece is a short method on plain arrays, to override on its own: who can transmit and be infected (`transmissibility()`, `susceptibility()`), who is infected (`transmit()`, e.g. calling `super().transmit(rel_trans=..., rel_sus=...)` once for each strain), and what happens to them (`set_prognoses()`). The transmission itself, `transmit(rel_trans=..., rel_sus=...)`, is the same array operation that a declared disease's transmission runs as agents. `infect(uids)` infects people from code (e.g. imported cases), counted and logged as transmission's are. `ssl.AgentSIR` and `ssl.AgentSEIR` (`import starsim.library as ssl`) are complete examples, and good bases for a disease of your own.
+- **`ss.AgentDisease`**, for a transmitted disease. It adds the states `susceptible` and `infected`, each agent's relative susceptibility and infectiousness (`rel_sus` and `rel_trans`), seeding (`init_prev`), the results `prevalence` and `infection`, and a step that transmits over the sim's networks with a `beta` for each and gives the new cases their prognoses. Each piece is a short method on plain arrays, to override on its own: who can transmit and be infected (`transmissibility()`, `susceptibility()`), who is infected (`transmit()`), with the beta of each network (`route_betas()`, e.g. to give each direction of a sexual network its own), and what happens to them (`set_prognoses()`). The transmission itself, `transmit(rel_trans=..., rel_sus=...)`, is the same array operation that a declared disease's transmission runs as agents. `infect(uids)` infects people from code (e.g. imported cases), counted and logged as transmission's are. `ssl.AgentSIR` and `ssl.AgentSEIR` (`import starsim.library as ssl`) are complete examples, and good bases for a disease of your own.
 
 A disease written as code fills in some of these methods:
 
@@ -427,9 +427,11 @@ A disease written as code fills in some of these methods:
 |--------|---------|------------------|
 | `__init__()` | Gives the parameters (`define_pars()`) and states (`define_states()`) | Always |
 | `set_prognoses(uids, sources)` | Sets what happens to the people just infected: when they recover, whether they die | Almost always, for an `ss.AgentDisease`; `super().set_prognoses()` marks them infected and no longer susceptible |
+| `set_congenital(uids, sources)` | Sets what happens to the people infected before birth (over `ss.PrenatalNet`); by default, `set_prognoses()` | For outcomes at birth, such as stillbirth; see `ssl.mnch.CongenitalDisease` |
 | `step_state()` | Moves people between states each step, before transmission (e.g. those whose recovery is due) | When the disease has states of its own |
 | `on_death(uids)` | Clears the states of people who died | When the disease has states of its own |
-| `transmit()` | Who is infected in the step, over the networks | Rarely: the built-in version handles the networks, `beta`, `rel_sus`, and `rel_trans`; override it to transmit otherwise, e.g. once for each strain |
+| `transmit()` | Who is infected in the step, over the networks | Rarely: the built-in version handles the networks, `beta`, `rel_sus`, `rel_trans`, and strains; override it to transmit otherwise, e.g. from the environment |
+| `route_betas()` | The beta of each network, as a pair (one for each direction) by network name | For betas worked out by code, e.g. by sex or genotype: start from `super().route_betas()` |
 
 In transmission, the chance that infection passes along a contact from an infectious person to a susceptible one is, in essence, β × `rel_trans` of the source × `rel_sus` of the target, where β is the transmission rate of that network. `rel_sus` and `rel_trans` are 1 by default, and are the levers that the rest of a model pulls: a vaccine lowers `rel_sus`, a treatment lowers `rel_trans`, and a connector between two diseases can raise one disease's `rel_sus` in people infected with the other. Because they are ordinary arrays, they can also be set directly. Here everyone under 20 is fully protected (`rel_sus = 0`), and compared with no protection:
 
@@ -455,6 +457,32 @@ for protect in [False, True]:
 The few under-20s infected even when protected were infected at the start (`init_prev`). Protecting them also protects older people, a little under a third of whom now escape infection, since there are fewer people to pass it on. In a model with a vaccine, the same protection would come from a [product](interventions_products.qmd), and between diseases from a [connector](interventions_connectors.qmd), rather than by setting `rel_sus` by hand.
 
 **Infected and infectious** are different things once a disease has a latent period. In `ssl.AgentSEIR`, people in `E` and `I` are both infected (and count towards prevalence), but only those in `I` are infectious; `infectious` drives transmission, and `infected` is worked out from the two. A disease whose latent people transmit too would give the exposed a `rel_trans` above 0 instead. In both classes, `set_prognoses()` calls `set_infection()` and then `set_progression()`, which can be overridden one at a time. A stage of your own after a latent period is timed from `ti_infectious`, not from the time of infection, or the latent period takes the place of part of the infectious period rather than delaying it.
+
+**Strains** of a disease written as code are given as for a declared one, `strains=ss.Strains(...)`, and each person carries one at a time: `self.strain` is the index of the strain of their current or last infection (-1 if none). Transmission passes on the strain of whoever infected each new case, at its `rel_trans`, with the protection of an `ss.immunity` due to one of the disease's own states (or of the disease's own `strain_sus()`); the disease's code reads a strain's values with `strain_value()`, and `infect(uids, strain='b')` infects people with one from code. Here the second strain is twice as transmissible, and shorter, and recovery from either protects partly against the other:
+
+```{python}
+strains = ss.Strains(['a', 'b'], rel_trans=[1, 2], dur=[1, 0.5], immunity=ss.immunity(due_to='recovered', protection=[[1, 0.5], [0.5, 1]]))
+
+class TwoStrains(ssl.AgentSIR):
+    def set_infection(self, uids):
+        super().set_infection(uids)
+        self.recovered[uids] = False # Infected again
+        return
+
+    def set_progression(self, uids):
+        dur = self.pars.dur_inf.rvs(uids)*self.strain_value('dur', uids) # As long as each strain lasts
+        self.ti_recovered[uids] = self.ti + 1 + dur
+        return
+
+    def step_state(self):
+        super().step_state()
+        self.susceptible[self.recovered] = True # Protected only by the immunity of their strain
+        return
+
+sim = ss.Sim(TwoStrains(beta=ss.perday(0.05), strains=strains), networks='random', n_agents=2000, stop=ss.days(120), verbose=0).run()
+dis = sim.diseases.twostrains
+print('People whose last infection was each strain:', dict(zip(strains.names, np.bincount(dis.strain[dis.strain >= 0], minlength=2))))
+```
 
 The parts of a module written as code (its parameters, states, results, and the order in which Starsim calls its methods) are covered in [Custom modules](building_modules.qmd), and [A1 – Diseases](../tutorials/a1_diseases.qmd) builds a disease among agents step by step.
 

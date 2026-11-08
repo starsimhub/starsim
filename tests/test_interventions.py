@@ -312,10 +312,29 @@ def test_old_keywords():
     assert 'when=ss.on(' in late.agent_reasons(sim)[0] and 'ss.capacity(' in queue.agent_reasons(sim)[0] and 'who=' in fn.agent_reasons(sim)[0]
     with pytest.raises(TypeError, match='who='):
         ss.Intervention(eligibility=lambda sim: None)
-    assert not hasattr(ss.Intervention, 'check_eligibility')
     with pytest.raises(AttributeError, match='held_share'): # Renamed
         ss.Vaccine(efficacy=0.5).coverage
     return sim
+
+
+@sc.timer()
+def test_check_eligibility():
+    sc.heading('An intervention written as code reads who it can reach with check_eligibility(), from who= as a delivery does')
+    class Count(ss.Intervention):
+        def init_results(self):
+            super().init_results()
+            self.define_results(ss.Result('n_eligible', dtype=int))
+        def step(self):
+            self.results.n_eligible[self.ti] = len(self.check_eligibility())
+
+    kw = dict(diseases=ss.SIS(), networks='random', n_agents=500, dur=3, verbose=0)
+    whos = dict(everyone=None, cond=ss.person.age < 15, fn=lambda sim: sim.people.age < 15, uids=lambda self, sim: (sim.people.age < 15).uids, path='sis.I')
+    sims = {k: ss.Sim(interventions=Count(who=who, name='count'), **kw).run() for k,who in whos.items()}
+    n = {k: sim.results.count.n_eligible[0] for k,sim in sims.items()}
+    young = (sims['cond'].people.age < 15).sum()
+    assert n['everyone'] == 500 and n['cond'] == n['fn'] == n['uids'] == young, n
+    assert 0 < n['path'] == sims['path'].results.sis.I[0] < 500, n
+    return sims
 
 
 if __name__ == '__main__':
@@ -328,5 +347,6 @@ if __name__ == '__main__':
     camp  = test_campaign_delivery()
     once  = test_disease_resolved_once()
     test_old_keywords()
+    elig  = test_check_eligibility()
 
     T.toc()

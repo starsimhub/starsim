@@ -492,7 +492,7 @@ def test_space():
     try:
         sims = []
         for threads in [1, 0]: # One thread, then as many as Numba has
-            with ss.options.context(num_threads=threads):
+            with ss.options.context(threads=threads):
                 sim = ss.Sim(make_towns(mobility=ss.geo.gravity(scale=2e-4)), stop=60, unit='day', n_agents=20_000, total_pop=100_000, **kw).init()
                 sim.loop.insert(seed_north, label='sim.start_step')
                 sims.append(sim.run())

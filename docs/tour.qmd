@@ -98,7 +98,7 @@ An intervention changes the course of the epidemic from some point on. Here are 
 
 ```{python}
 vaccination = ss.vaccinate(efficacy=0.9, who=sir.age < 15, when='2025-02-01', coverage=0.8)
-masks = ss.modify(sir.pars.beta, multiply=0.6, when=ss.schedule(start='2025-02-01'))
+masks = ss.modify(sir.pars.beta, multiply=0.6, start='2025-02-01')
 ```
 
 To compare them, make a sim for each scenario, and run them together with `ss.parallel()`:

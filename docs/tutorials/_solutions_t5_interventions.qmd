@@ -43,7 +43,7 @@ A campaign on 1 February prevents about 90% of the outbreak; on 1 March, about t
 
 ```{python}
 campaign = ss.vaccinate(efficacy=0.93, who=measles.age < 15, when='2025-03-01', coverage=0.8)
-response = ss.modify(measles.pars.beta, multiply=0.7, when=ss.schedule(start='2025-03-01'))
+response = ss.modify(measles.pars.beta, multiply=0.7, start='2025-03-01')
 sims = {
     'No intervention': ss.Sim(measles, **settings),
     'Campaign':        ss.Sim(measles, interventions=campaign, **settings),

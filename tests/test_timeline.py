@@ -183,7 +183,9 @@ def test_timeline_syntax():
     kw.c3 = [dict(start=1990, stop=None, dur=ss.years(1990), dt=None)    , dict(start=ss.years(1990), stop=ss.years(3980), dur=ss.years(1990), dt=ss.years(1))] # Always the length, never a year
     kw.c4 = [dict(start=ss.date(1990), stop=None, dur=ss.years(20), dt=None), dict(start=ss.date(1990), stop=ss.date(2010), dur=ss.years(20), dt=ss.years(1))]
     kw.c5 = [dict(start=None, stop=None, dur=ss.days(100), dt=None)      , dict(start=ss.days(0), stop=ss.days(100), dur=ss.days(100), dt=ss.days(1))]
-    kw.c6 = [dict(start=2000, stop=2010, dur=10, dt=None)                , 'exception'] # Both the stop and the length
+    kw.c6 = [dict(start=2000, stop=2010, dur=10, dt=None)                , dict(start=ss.years(2000), stop=ss.years(2010), dur=ss.years(10), dt=ss.years(1))] # All three, which agree
+    kw.c8 = [dict(start=None, stop=2010, dur=10, dt=None)                , dict(start=ss.years(2000), stop=ss.years(2010), dur=ss.years(10), dt=ss.years(1))] # The start is the stop minus the length
+    kw.c9 = [dict(start=2000, stop=2020, dur=10, dt=None)                , 'exception'] # All three, which disagree
     kw.c7 = [dict(start=2000, stop=None, dur='2010-01-01', dt=None)      , 'exception'] # A date is a stop, not a length
 
     # Test dt: with no stop, the length is 50 of the unit, whatever the type of the step
@@ -344,8 +346,6 @@ def test_bare_times():
     """ How a bare number is read as a time is decided once, from the start (or with none, the stop, if the unit is years): a year with a calendar, else a time in the sim's unit from 0; a duration is a time from 0, as stop= too; dur= is the length """
     sc.heading('Bare numbers as times')
     kw = dict(diseases=ss.SIS(beta=ss.peryear(0.05), dur_inf=ss.years(10)), networks='random', n_agents=small, verbose=0) # A model in years
-    with pytest.raises(ValueError, match='both given'): # The stop, or the length, not both
-        ss.Sim(stop=2035, dur=10, **kw).init()
     sim = ss.Sim(start=2020, dur=10, **kw).init() # A bare length is in the sim's unit
     assert sim.t.stop == ss.years(2030) and sim.t.dur == ss.years(10)
     assert ss.Sim(start=2020, dur=10, unit='day', **kw).init().t.stop == ss.years(2030) # In years in a sim of calendar years, whatever the unit
@@ -380,9 +380,7 @@ def test_bare_times():
     years = ss.Sim(start=2000, stop=2040, **kw).init()
     for sim in [dated, years]:
         assert ss.connectors.to_ti(sim, 2030) == 30 # A bare number is a year with either calendar
-        assert ss.connectors.to_ti(sim, sim.pars.start + ss.years(30)) == 30 # A time after the start
-        with pytest.raises(ValueError, match='sim.pars.start'): # A duration is a time from 0, which needs a sim with no calendar
-            ss.connectors.to_ti(sim, ss.years(30))
+        assert ss.connectors.to_ti(sim, sim.pars.start + ss.years(30)) == ss.connectors.to_ti(sim, ss.years(30)) == 30 # A time after the start, or a duration, that long after it
         with pytest.raises(ValueError, match='calendar year'):
             ss.connectors.to_ti(sim, 30)
     assert ss.connectors.to_ti(years, years.t.tvec[30]) == 30 # A time of the timeline itself, in calendar years
@@ -390,6 +388,35 @@ def test_bare_times():
     assert nocal.t.calendar is None and ss.connectors.to_ti(nocal, 30) == ss.connectors.to_ti(nocal, ss.years(30)) == 30
     with pytest.raises(ValueError, match='no calendar'):
         ss.connectors.to_ti(nocal, '2020-01-01')
+    return sim
+
+
+@sc.timer()
+def test_sim_start_stop_dur():
+    sc.heading('Any two of the start, stop, and dur define the third; a duration given as a time is that long after the start')
+    kw = dict(diseases=ss.SIS(beta=ss.peryear(0.05), dur_inf=ss.years(10)), networks='random', n_agents=small, verbose=0) # A model in years
+    sim = ss.Sim(stop=2035, dur=10, **kw).init()
+    assert sim.t.start == ss.years(2025) and sim.t.stop == ss.years(2035)
+    assert ss.Sim(stop=100, dur=30, unit='day', **kw).init().t.start == ss.days(70) # Also in a unit other than years, with no calendar
+    assert ss.Sim(stop='2035-01-01', dur=ss.years(10), **kw).init().t.start == ss.date('2025-01-01')
+    ss.Sim(start=2000, stop=2010, dur=10, **kw).init() # Three that agree are fine
+    with pytest.raises(ValueError, match='disagree'):
+        ss.Sim(start=2000, stop=2035, dur=10, **kw).init()
+    t = ss.Timeline(start=2000, stop=2020, dt=1.0)
+    t.update(dur=5) # A new dur replaces the stop
+    assert t.stop == ss.years(2005) and len(t.tvec) == 6
+
+    # With a calendar, a duration other than the sim's own stop is that long after the start: until=, a module's start=, and the keys of a periodic ss.timeseries
+    assert ss.Sim(start=2000, stop=2030, **kw).run(until=ss.years(5)).t.ti == 5 # Stops after the step that starts 5 years in
+    sim = ss.Sim(start='2020-01-15', stop='2021-01-01', dt=ss.days(1), modules=ss.Module(name='late', start=ss.days(200)), **kw).init()
+    assert sim.late.t.start == ss.date('2020-08-02') and ss.connectors.to_time(sim, ss.months(3)) == ss.date('2020-04-15')
+    monthly = lambda: ss.timeseries({ss.years(k/12): ss.peryear(1 + k % 12) for k in range(13)}, interpolation='linear', period=ss.years(1)) # As starsim-malaria's ms.monthly()
+    for pars in [dict(start=2000, stop=2003), dict(start='2020-03-01', stop='2022-01-01', dt=ss.days(7)), dict(stop=ss.days(800), dt=ss.days(1))]:
+        S, I, R = ss.states('S I R')
+        ts = monthly()
+        sim = ss.Sim(ss.Disease(S >> I @ ts*I, I >> R @ ss.days(10), init_prev=0.01), n_agents=small, verbose=0, **pars).run()
+        y0 = sim.t.yearvec[0]
+        assert [ts.at(y, sim).value for y in [y0, y0 + 0.5, y0 + 1.5]] == [1, 7, 7] # From the sim's start, each year
     return sim
 
 
@@ -431,12 +458,15 @@ def test_schedule():
     sim = ss.Sim(modules=Clinic(), n_agents=10, dt=ss.months(1), start='2010-01-01', stop='2011-01-01', verbose=0).run() # Several due in one step are counted
     assert sim.clinic.log.weekly == 53
 
-    # A duration is a time, counted from 0, whether or not it is in a list (how often is every=); with a calendar, it is an error
+    # A duration is a time, that long after the start (from 0 with no calendar), with at= or in a list; by position it could be how often (every=) too, so it is an error
     t = ss.Timeline(start=0, stop=ss.days(30), dt=ss.days(1))
-    assert list(ss.schedule(ss.days(10)).init(t).steps) == list(ss.schedule([ss.days(10)]).init(t).steps) == [10]
+    assert list(ss.schedule(at=ss.days(10)).init(t).steps) == list(ss.schedule([ss.days(10)]).init(t).steps) == [10]
     assert len(ss.schedule(every=ss.days(10)).init(t).steps) == 4
-    with pytest.raises(ValueError, match='sim.pars.start'):
-        ss.schedule(ss.days(10)).init(ss.Timeline(start='2020-01-01', stop='2020-02-01', dt=ss.days(1)))
+    with pytest.raises(TypeError, match='every=ss.weeks'):
+        ss.schedule(ss.weeks(1))
+    dated = ss.Timeline(start='2020-01-15', stop='2020-12-31', dt=ss.days(1))
+    assert [str(dated.tvec[k]) for k in ss.schedule(every=ss.months(3), start=ss.months(1)).init(dated).steps] == ['2020-02-15', '2020-05-15', '2020-08-15', '2020-11-15']
+    assert len(ss.schedule().init(dated).steps) == len(dated) # With no arguments, every step
     return sim
 
 

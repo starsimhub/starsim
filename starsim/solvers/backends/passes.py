@@ -5,7 +5,7 @@ network), and over a network's edges (new random edges, the edges that might and
 without some)
 
 Each is one pass (or two) in place of several NumPy passes and their temporaries, in chunks that several threads take for
-a large network or population (see `ss.options.num_threads`; one thread in the workers of `ss.parallel()`). Lists are kept in
+a large network or population (see `ss.options.threads`; one thread in the workers of `ss.parallel()`). Lists are kept in
 order, and random numbers come from counters, so the results do not depend on the number of threads. Called by `ss.People`, `ss.Network`, `ss.RandomNet`, `ss.SexualNet`,
 `ss.Births`, `ss.solvers.Agents` and the groups of `ss.dimensions`. They are kept apart from the
 compartmental kernels (`ss.kernels`), so a change to either does not make Numba compile the other again.
@@ -32,10 +32,10 @@ min_threaded = 200_000 # The smallest population whose passes are threaded: belo
 chunk_size = 65_536 # The fewest agents a thread takes at a time
 
 def n_chunks(n, width=1):
-    """ The number of chunks to split a pass over `n` agents into (1, unless there are threads to share it: see `ss.options.num_threads`), keeping the per-chunk counts (`width` numbers each) small """
+    """ The number of chunks to split a pass over `n` agents into (1, unless there are threads to share it: see `ss.options.threads`), keeping the per-chunk counts (`width` numbers each) small """
     if n < min_threaded:
         return 1
-    threads = ss.options.num_threads
+    threads = ss.options.threads
     if threads == 1:
         return 1
     if threads > 1 and threads != nb.get_num_threads():

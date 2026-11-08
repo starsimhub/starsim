@@ -5,7 +5,7 @@ serial and threaded passes over the agents and a network's edges (`ss.solvers.ba
 `ss.dists`, `ss.distributions` and `ss.People`, the draws of `ss.Dist` (`draws.many`), and the compartmental kernels (`ss.kernels`: see
 `compartmental()`) run in Rust, with the same arguments and results (the same
 numbers, bit for bit, whatever the number of threads). The Rust kernels are compiled ahead of time, so a first run takes no compiling, and
-they run at least as fast as Numba's in nearly every case. A threaded pass takes as many threads as Numba has (see `ss.options.num_threads`),
+they run at least as fast as Numba's in nearly every case. A threaded pass takes as many threads as Numba has (see `ss.options.threads`),
 from a pool of its own that starts the first time a pass is threaded (so the workers of `ss.parallel()`, with one thread each, start none)
 and waits between passes without spinning. Only `ss.jit` (users' own code) stays in Numba. See ../rust/README.md.
 

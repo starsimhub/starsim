@@ -646,8 +646,7 @@ class preterm(sc.objdict):
 
 
 replaced_pregnancy = dict( # Keywords of ss.Pregnancy that are given another way, with what to use instead
-    maternal_death_rate = 'maternal_death=<a rate>, e.g. maternal_death=ss.peryear(0.002), the hazard while pregnant',
-    p_maternal_death = 'maternal_death=<a probability>, e.g. maternal_death=0.001, the chance at delivery',
+    maternal_death = 'maternal_death_rate= for the hazard of death while pregnant (e.g. ss.peryear(0.002)), and p_maternal_death= for the chance of death at delivery (e.g. 0.001); either or both',
     embryos_per_pregnancy = 'children=, e.g. children=ss.choice(a=[1, 2], p=[0.98, 0.02])',
     rel_preterm = 'preterm=ss.preterm(rel=...)',
     rel_preterm_age = 'preterm=ss.preterm(by_age=...)',
@@ -666,7 +665,7 @@ class Pregnancy(Demographics, ss.Disease):
     Everyone is in `NP` (not pregnant: men and children too) or `P` (pregnant). Gestational age is `P.time_in`.
     Conception is one transition, so contraception, HIV, or LAM are modifiers of it
     (`ss.modify(preg.conception, multiply=...)`). A pregnancy ends in an abortion (at once, with `p_abortion`), a
-    miscarriage or stillbirth (a hazard before or after `loss_threshold`), a maternal death (`antepartum`, with `maternal_death`), or a
+    miscarriage or stillbirth (a hazard before or after `loss_threshold`), a maternal death (`antepartum`, with `maternal_death_rate`), or a
     delivery at the end of a dwell of `dur_pregnancy`. Each delivery gives `children` children (`birth`):
     as agents, new agents whose `parent` is the mother, placed in each declared module's state given by its own
     `ss.birth(when=preg.delivery)` (or else its first state). Children die before the age of 1 at `infant_death_rate`
@@ -704,7 +703,8 @@ class Pregnancy(Demographics, ss.Disease):
         dur_pregnancy (dur/Dist): duration of pregnancy; a number is in weeks
         loss_rate (rate/func): hazard of a spontaneous loss, or a function of `(sim, uids)`
         loss_threshold (dur): gestational age that separates a miscarriage from a stillbirth
-        maternal_death (rate/float/bernoulli): maternal death: a rate (e.g. `ss.peryear(0.002)`) is the hazard of death while pregnant (`antepartum`); a probability (e.g. `0.001`, or `ss.bernoulli(0.001)`) is the chance of death at delivery (agents only)
+        maternal_death_rate (rate/func): hazard of a maternal death while pregnant (`antepartum`), e.g. `ss.peryear(0.002)`
+        p_maternal_death (float/bernoulli): chance of a maternal death at delivery, e.g. `0.001` (agents only); can be given with `maternal_death_rate`, and set later, e.g. `preg.pars.p_maternal_death.set(p=0.002)`
         infant_death_rate (rate/func): hazard of death before the age of 1, for the children (a function of the sim and the agents is called only for the children aged 0 to 1); `ss.mother(x)` in it reads each child's mother (so fetuses need not be agents)
         p_breastfeed (bernoulli): chance a mother breastfeeds a newborn
         dur_breastfeed (dur/Dist): duration of breastfeeding
@@ -736,7 +736,7 @@ class Pregnancy(Demographics, ss.Disease):
     p_abortion     = ss.par(0.0, doc='Chance a pregnancy ends in an abortion, at conception')
     loss_rate      = ss.par(ss.peryear(0.0), doc='Hazard of a spontaneous loss')
     loss_threshold = ss.par(ss.weeks(20), doc='Gestational age below which a loss is a miscarriage, and above which a stillbirth')
-    maternal_death = ss.par(ss.peryear(0.0), doc='Maternal death: a rate is the hazard of death while pregnant (antepartum); a probability is the chance of death at delivery')
+    maternal_death_rate = ss.par(ss.peryear(0.0), doc='Hazard of a maternal death while pregnant (antepartum)')
     infant_death_rate    = ss.par(ss.peryear(0.0), doc='Hazard of death before the age of 1, for the children (infant mortality)')
     dur_pregnancy  = ss.par(ss.choice(a=ss.weeks(np.arange(32, 43)), p=np.array([0.001, 0.002, 0.005, 0.012, 0.026, 0.05, 0.087, 0.134, 0.188, 0.226, 0.269])), doc='Duration of pregnancy: the gestational age at birth, 32-42 weeks, with probabilities that approximate CDC/WHO preterm birth data')
 
@@ -744,7 +744,7 @@ class Pregnancy(Demographics, ss.Disease):
     abortion    = ss.Transition(P, NP, p=p_abortion) # At once; the rest face the dwell and the hazards
     miscarriage = ss.Transition(P, NP, rate=loss_rate*(P.time_in < loss_threshold))
     stillbirth  = ss.Transition(P, NP, rate=loss_rate*(P.time_in >= loss_threshold))
-    antepartum  = ss.Transition(P, ss.dead, rate=maternal_death)
+    antepartum  = ss.Transition(P, ss.dead, rate=maternal_death_rate)
     delivery    = ss.Transition(P, NP, dur=dur_pregnancy) # P.time_in is gestational age
     birth       = ss.birth(NP, when=delivery) # Children, linked to the mother (agents only, for now): children= of them (see __init__())
     infant_mortality = ss.Transition(NP, ss.dead, rate=infant_death_rate) # The children (not fetuses), until the age of 1: see _gate_infant()
@@ -768,12 +768,17 @@ class Pregnancy(Demographics, ss.Disease):
             p_female = ss.bernoulli(0.5), # Share of babies born female
             burnin = True, # Whether women are pregnant at the start: see burnin_plan()
             preterm = preterm(), # The risk of preterm birth: see ss.preterm
+            p_maternal_death = ss.bernoulli(p=0), # The chance of a maternal death at delivery (agents only); the hazard while pregnant is maternal_death_rate
         )
         for key in [k for k in given if k in replaced_pregnancy]:
             errormsg = f'ss.Pregnancy() takes no {key}=; use {replaced_pregnancy[key]}'
             raise TypeError(errormsg)
-        md = given.get('maternal_death')
-        at_delivery = md is not None and not (isinstance(md, ss.Rate) or isinstance(getattr(md, 'raw', None), ss.Rate) or callable(md) and not isinstance(md, ss.Dist)) # A probability: the chance at delivery, not a hazard while pregnant
+        p_md = given.get('p_maternal_death')
+        if p_md is not None and not (isinstance(p_md, ss.bernoulli) or (sc.isnumber(p_md) and 0 <= p_md <= 1)):
+            errormsg = f'p_maternal_death= of ss.Pregnancy() is the chance of a maternal death at delivery, a probability (e.g. 0.001) or an ss.bernoulli; not {p_md!r}. For a hazard while pregnant, give maternal_death_rate= (e.g. ss.peryear(0.002))'
+            raise TypeError(errormsg)
+        if sc.isnumber(p_md): # Held as a bernoulli, so it can be set later as Starsim 3's was: preg.pars.p_maternal_death.set(p=...)
+            given['p_maternal_death'] = ss.bernoulli(p=p_md)
         if 'preterm' in given and not isinstance(given['preterm'], preterm):
             errormsg = f'preterm= of ss.Pregnancy() is an ss.preterm(threshold=, very_threshold=, rel=, by_age=), not {type(given["preterm"]).__name__}'
             raise TypeError(errormsg)
@@ -799,8 +804,6 @@ class Pregnancy(Demographics, ss.Disease):
             elif isinstance(dp, ss.choice) and np.ndim(dp.pars.a) == 0:
                 dp = ss.constant(dp.pars.a)
             graph['dur_pregnancy'] = dp
-        if at_delivery: # Then no hazard while pregnant: the parameter holds the chance at delivery, which the code reads (see _deliver())
-            self.graph.transitions.antepartum.rate = ss.par.inline(ss.peryear(0.0))
         self.pars.update(**({'fertility_rate':fertility if is_function else self.conception_rate} | graph)) # Each of the three rates (fertility_rate, loss_rate, infant_death_rate) is a parameter, which can be a function of (sim, uids); conception_rate() makes the hazard of conception from the fertility rates given
         birth = self.graph.transitions.birth
         birth.n_born = self.pars.children
@@ -824,7 +827,7 @@ class Pregnancy(Demographics, ss.Disease):
             ss.BoolState('lactating', label='Breastfeeding'),
             ss.FloatArr('ti_weaned', label='The step breastfeeding ends'),
         )
-        self.rng_md = ss.random() # For a plain number as maternal_death, the chance at delivery
+        self.rng_md = ss.random() # For p_maternal_death set to a plain number later, the chance at delivery
         self.rng_dur = ss.random() # For the durations of pregnancies with a relative risk of preterm birth: see preterm_risk()
         self.fetal_agents = fetal_agents # Whether fetuses are agents, from conception: see _init_fetus()
         self._nnd = 0 # Neonatal deaths in the step
@@ -968,7 +971,7 @@ class Pregnancy(Demographics, ss.Disease):
         `dur_pregnancy` (a fixed delay, or Erlang stages for a distribution), with `n` children per delivery
         (`ss.birth(when=preg.delivery)`). The losses do not read the gestational age (`P.time_in`): the loss rate is split
         between miscarriage and stillbirth by the share of the mean gestation below `loss_threshold`. It has no fetuses,
-        no links between mothers and children, no breastfeeding, no preterm risk, and no deaths at delivery (`maternal_death` as a probability). Returns the note that says so
+        no links between mothers and children, no breastfeeding, no preterm risk, and no deaths at delivery (`p_maternal_death`). Returns the note that says so
 
         Args:
             sim (Sim): the sim being initialized
@@ -1190,7 +1193,7 @@ class Pregnancy(Demographics, ss.Disease):
                 net.add_pairs(ppl.parent.raw[kids], kids)
         self._classify_births(new, ti)
         engine.record_event('live_birth', moms)
-        p_md = self.pars.maternal_death.raw # At delivery (agents only), if a probability
+        p_md = self.pars.p_maternal_death # At delivery (agents only)
         if isinstance(p_md, ss.bernoulli) and np.any(np.asarray(p_md.pars.p) > 0) or sc.isnumber(p_md) and p_md > 0:
             dead = p_md.filter(parents) if isinstance(p_md, ss.bernoulli) else parents[self.rng_md.rvs(parents) < p_md]
             ppl.request_death(dead)

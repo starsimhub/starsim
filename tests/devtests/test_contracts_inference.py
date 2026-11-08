@@ -143,7 +143,7 @@ def test_particle_filter(key):
     data = simulate(model, **kw)
     sim = model.build(model.truth, data=data, solver='tau', **kw).init()
     filt = ss.fit.ParticleFilter(sim, likelihood=lik)
-    with ss.options.context(num_threads=1):
+    with ss.options.context(threads=1):
         one = filt(n_particles=20, rand_seed=0)
     assert filt(n_particles=20, rand_seed=0) == one # Each particle has its own random numbers, so the estimate does not depend on the threads
     name = list(fitted_pars(sim))[0]

@@ -85,7 +85,7 @@ A: The two deliveries share one vaccine, so that nobody is protected twice:
 
 ```{python}
 vaccine = ss.Vaccine(efficacy=0.35)
-vaccination = ss.vaccinate(vaccine, who=ss.at_age(15), when=ss.schedule(start='2010'), coverage=0.8)
+vaccination = ss.vaccinate(vaccine, who=ss.at_age(15), start='2010', coverage=0.8)
 catch_up = ss.vaccinate(vaccine, who=young, when=['2010'], coverage=0.8)
 
 long = dict(settings, stop=2040) # As in the tutorial, to 2040

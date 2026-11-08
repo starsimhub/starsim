@@ -48,7 +48,7 @@ for label, beta in {'No transmission': 0, 'Transmission': ss.peryear(20)}.items(
 
 Among the children infected before birth, the numbers of stillbirths and congenital infections follow the probabilities in `birth_outcomes`.
 
-To use this in a disease of your own, build on `ssl.mnch.CongenitalDisease` (or copy its `set_congenital()` and `step_congenital()`; its `set_prognoses()` calls `set_congenital()` for each person infected before birth, whose mother is `people.parent`): define `birth_outcome_keys` and `birth_outcomes` in its parameters, add a `ti_<key>` state for each outcome (and a true/false state for each outcome that doesn't kill), and call `self.step_congenital()` from `step_state()`. Outcomes named `'stillborn'`, `'miscarriage'`, or `'neonatal_death'` are deaths; the first two happen before delivery and the third after it. `ssl.HIV` (see [Library: diseases](library_diseases.qmd)) instead infects a fetus over `ss.PrenatalNet` as it infects anyone else.
+To use this in a disease of your own, build on `ssl.mnch.CongenitalDisease` (or copy its `set_congenital()` and `step_congenital()` into any `ss.AgentDisease`, which calls `set_congenital()` instead of `set_prognoses()` for each person infected before birth, whose mother is `people.parent`): define `birth_outcome_keys` and `birth_outcomes` in its parameters, add a `ti_<key>` state for each outcome (and a true/false state for each outcome that doesn't kill), and call `self.step_congenital()` from `step_state()`. Outcomes named `'stillborn'`, `'miscarriage'`, or `'neonatal_death'` are deaths; the first two happen before delivery and the third after it. `ssl.HIV` (see [Library: diseases](library_diseases.qmd)) instead infects a fetus over `ss.PrenatalNet` as it infects anyone else.
 
 ## Neonatal deaths
 
@@ -74,7 +74,7 @@ The `fetal_infection` connector pulls those levers when a pregnant woman is infe
 
 ```{python}
 def fetal(beta, treat=False):
-    treatment = ssl.mnch.treat_pregnant(disease='sir', when=ss.schedule(start=2001)) if treat else None
+    treatment = ssl.mnch.treat_pregnant(disease='sir', start=2001) if treat else None
     return ss.Sim(
         diseases      = ssl.AgentSIR(beta=beta, name='sir'),
         demographics  = demographics(),

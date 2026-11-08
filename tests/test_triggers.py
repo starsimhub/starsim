@@ -316,13 +316,18 @@ def test_paths_and_memory():
     # The old keywords say what replaces them
     X, Y = ss.states('X Y')
     for make, match in [(lambda: ss.Transition(X, Y, on=X), 'use when='), (lambda: ss.Transition(X, Y, where=X), 'use who='), (lambda: ss.Transition(X, Y, when=ss.ref('a.b'), dur=3), 'delay='), # Old keywords
-                        (lambda: ss.modify('a.pars.b', multiply=2, start=2020), 'ss.schedule'), (lambda: ss.modify('a.pars.b', multiply=2, when=[2025]), 'ss.schedule'), # Old keywords
+                        (lambda: ss.modify('a.pars.b', multiply=2, when=[2025]), 'start='), # Old keywords
                         (lambda: ss.modify('a.pars.b', multiply=2, hold=3), 'until='), (lambda: ss.attr(1, on=X), 'use when='), (lambda: ss.birth(on=X), 'use when='), # Old keywords
                         (lambda: ss.move(X, Y, where=X), 'use who='), (lambda: ss.schedule(when=lambda now: True), 'as at='), # Old keywords
-                        (lambda: ss.modify('a.pars.b', multiply=2, who=lambda sim: sim.ti > 20), 'give it as when='), # who= of the time alone says when
+                        (lambda: ss.modify('a.pars.b', multiply=2, who=lambda sim: sim.ti > 20), 'start= and stop='), # who= of the time alone says when
                         (lambda: ss.vaccinate(efficacy=0.9, who=True), 'leave it out'), (lambda: ss.Transition(X, Y, rate=0.1, who=1.0), 'leave it out')]: # who= says who, not everyone or nobody
         with pytest.raises((TypeError, ValueError), match=match):
             make()
+    class Fetal(ss.SIR): # A trigger on an event of a module not in the sim never fires, with a note (e.g. a birth outcome without ss.Pregnancy)
+        F = ss.State()
+        born = ss.Transition(F, ss.SIR.S, when=ss.ref('pregnancy.birth'))
+    sim = ss.Sim(Fetal(), networks='random', n_agents=200, start=2000, dur=1, verbose=0).run()
+    assert sim.results.fetal.born.sum() == 0 and any('not in the sim' in str(n) for n in sim.notes)
     return
 
 

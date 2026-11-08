@@ -47,7 +47,7 @@ The settings of a sim are its keywords. The ones most models use:
 | `total_pop` | The size of the population (default 10,000) |
 | `n_agents` | The number of agents, for a run as agents; giving it makes the sim run as agents (see [Branching and rescaling](running_branching.qmd)) |
 | `start`, `stop` | The time span: dates (`'2025-01-01'`), years (`2025`), or, with no calendar, durations from 0 (`ss.days(50)`) |
-| `dur` | Instead of `stop`, the length of the run (`ss.years(10)`, or a bare number in the sim's unit) |
+| `dur` | The length of the run (`ss.years(10)`, or a bare number in the sim's unit): any two of `start`, `stop`, and `dur` define the third (`stop=2035, dur=10` starts in 2025) |
 | `dt`, `unit` | The time step, and the unit of bare numbers (see [Time](building_time.qmd)) |
 | `networks` | How people mix: a contact matrix (`ss.contacts()`), a network, or a mixing pool (default: everyone mixes with everyone); see [Contact networks](populations_networks.qmd) |
 | `demographics` | Births, deaths, and migration (see [Demographics](populations_demographics.qmd)) |
@@ -280,7 +280,7 @@ Every keyword of `ss.Sim()`, by what it is for; `sim.pars` (an `ss.SimPars`) hol
 | `diseases`, `networks`, `demographics`, `interventions`, `analyzers`, `connectors` | none | Modules of each kind: a module, a name (`'sir'`), a dict with `type`, or a list; `demographics=True` gives births and deaths at 20 and 10 per 1,000 people per year |
 | `modules` | none | Modules of any kind together, sorted by kind; those of your own of no standard kind are in `sim.custom` |
 | `step_order` | 'type' | The order the modules step in: `'type'`, each kind at its place in the step, or `'given'`, in the order they were given (the model and `modules=` first) |
-| `pars` | none | Values of the model's parameters by name, e.g. `pars=dict(beta=0.1)` or `pars=fit.pars`; only the model's parameters (the settings in this table are keywords of their own, and a parameter of the model given as a keyword says to put it in `pars=`) |
+| `pars` | none | Values of the model's parameters by name, e.g. `pars=dict(beta=0.1)` or `pars=fit.pars`; the settings in this table are keywords of their own (a parameter of the model given as a keyword says to put it in `pars=`), but as in Starsim 3 `pars=` can hold them too, e.g. `pars=dict(start=2000, dur=10, n_agents=1000, beta=0.1)`, told apart by name (a name is a setting if no parameter of the model has it; a keyword given outright wins), or be a whole `ss.SimPars` |
 | `data` | none | Data to plot with the results and to fit to, with a `time` column and columns named like `measles.infection` |
 | `people` | none | An `ss.People` to use, rather than making one (see [People and agents](populations_people.qmd)) |
 | **The population** | | |
@@ -291,7 +291,7 @@ Every keyword of `ss.Sim()`, by what it is for; `sim.pars` (an `ss.SimPars`) hol
 | `stratify` | none | Groups by a property of people for every module, e.g. `dict(age=[0, 15, 65])` (see [Stratification](building_stratification.qmd)) |
 | **Time** | | |
 | `start`, `stop` | 50 of the sim's unit, from 0 (or from 2000 for a model in years) | The time span: dates, years, or, with no calendar, durations from 0. A date or a year as the start gives the sim a calendar, and every bare number given as a time is then a year |
-| `dur` | none | Instead of `stop`, the length of the run: the stop is the start plus it |
+| `dur` | none | The length of the run: the stop is the start plus it, or with a stop and no start, the start is the stop minus it; all three must agree if given |
 | `dt` | 1 | The step, in the unit of time |
 | `unit` | the model's | The unit of time, and of bare numbers in declared transitions (`'day'`, `'week'`, `'year'`, ...) |
 | **How it is run** | | |

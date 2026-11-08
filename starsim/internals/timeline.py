@@ -7,8 +7,9 @@ How a time is read is decided once, from the sim's start: if it is a date or a y
 has a calendar, and every bare number given as a time (a stop, `when=`, the times of `ss.schedule` and `ss.timeseries`) is
 a year; otherwise, a bare time is a time in the sim's unit from 0. With no start, the stop decides, as long as the unit
 is years (or not given): `ss.Sim(unit='day', stop=3650)` runs 3,650 days from 0. A duration given as a time (`when=ss.days(30)`)
-is a time on the sim's own axis, counted from 0 as `start=ss.years(2000)` and `sim.t.tvec` are, so it is for a sim with
-no calendar; `stop=` is read in the same way. The length of the run is `dur=` (the stop is then the start plus it).
+is that long after the sim's start in a sim with a calendar (`ss.years(5)` is five years in), and with none a time on the
+sim's own axis, counted from 0 as `sim.t.tvec` is (which is the same thing when the start is 0). The sim's own `stop=` is a
+time, read as the start is; its length is `dur=` (the stop is then the start plus it; given both, the start is the stop minus it).
 
 Used with: agents and compartments; declared and coded modules
 """
@@ -59,7 +60,7 @@ def same(a, b):
 def how_bare(t):
     """ How a bare number is read as a time on a timeline, for error messages """
     if t.calendar is not None:
-        return f'a bare number is a calendar year, since the sim has a calendar (it starts at {t.start}); for a time after the start, give the start plus a duration, e.g. sim.pars.start + ss.{t.unit.__name__}(30)'
+        return f'a bare number is a calendar year, since the sim has a calendar (it starts at {t.start}); for a time after the start, give a duration, e.g. ss.{t.unit.__name__}(30), which is that long after it'
     return f'a bare number is a time in the sim\'s unit ({t.unit.__name__}) from 0, since the sim has no calendar (it starts at {t.start}), as is a duration, e.g. ss.{t.unit.__name__}(30)'
 
 
@@ -73,9 +74,9 @@ class Timeline:
     to a date to get an absolute time)
 
     Args:
-        start (str/int/float/`ss.date`/`ss.Duration`): when the simulation/module starts. For the sim: a date (e.g. '2000-01-01') or a year (a bare number from 1800 on, e.g. 2000) gives it a calendar; any other number, or a duration, is a time in its unit from 0 (default: 2000 for a model in years, else 0). For a module: a time on the sim's timeline (a bare number as for the sim's stop, a duration as a time from 0 in a sim with no calendar)
+        start (str/int/float/`ss.date`/`ss.Duration`): when the simulation/module starts. For the sim: a date (e.g. '2000-01-01') or a year (a bare number from 1800 on, e.g. 2000) gives it a calendar; any other number, or a duration, is a time in its unit from 0 (default: 2000 for a model in years, else 0). For a module: a time on the sim's timeline (a bare number as for the sim's stop; a duration is that long after the sim's start, in a sim with a calendar)
         stop (str/int/float/`ss.date`/`ss.Duration`): when the simulation/module ends, read as the start is: a date, a bare number (a year if the sim has a calendar, else a time in its unit from 0), or a duration (a time from 0, for a sim with no calendar; `ss.years(2030)` in a sim of calendar years is the year 2030) (default: a run of 100 days in days, else 50 of the sim's unit)
-        dur (int/float/`ss.Duration`): instead of `stop`, the length of the run, from its start (a bare number is in years in a sim of calendar years, as a bare stop is, else in the sim's unit): `start=2000, dur=10` is the same as `start=2000, stop=2010`
+        dur (int/float/`ss.Duration`): the length of the run, from its start (a bare number is in years in a sim of calendar years, as a bare stop is, else in the sim's unit): `start=2000, dur=10` is the same as `start=2000, stop=2010`, and so is `stop=2010, dur=10` (any two define the third; all three must agree)
         dt (int/float/`ss.Duration`): the step (a bare number is in the sim's unit)
         name (str): if provided, name the `Timeline` object
         init (bool): whether or not to immediately initialize the `Timeline` object (by default, yes if start and stop are provided; otherwise no)
@@ -134,6 +135,7 @@ class Timeline:
         self.default_type = ss.years # The class of the durations of the time vector (e.g. ss.years); set in reconcile_args()
         self.calendar = None # Whether the times are on a calendar: 'dates', 'years', or None (see calendar_of()); set in reconcile_args()
         self.unit = None # The class of the sim's unit, e.g. ss.days, in which a bare time with no calendar is read
+        self.origin = None # The start of the sim's run, from which a duration given as a time is counted when there is a calendar; set in reconcile_args()
 
         # Populated later. The canonical vectors (tvec, tivec, yearvec) are built eagerly at
         # init; the human-friendly vectors (timevec, datevec, relvec) are derived lazily on
@@ -374,11 +376,12 @@ class Timeline:
         A time (a date, a bare number, or a duration) as the same kind of time as the timeline's: a date (`ss.date`) if its
         times are dates, else a duration (`ss.years` with a calendar of years, else the sim's unit)
 
-        A bare number is a calendar year if the timeline has a calendar, else a time in its unit from 0. A duration is a time
-        on the timeline's own axis, counted from 0, as its start and `tvec` are (so `ss.days(10)` is day 10, and
-        `sim.t.tvec[5]` is time point 5): it is for a sim with no calendar, and with one it is an error (unless it is a
-        calendar year, `ss.years(2005)`, in a sim of calendar years, as `tvec` holds). Its unit should be the sim's or the
-        module's (else a warning).
+        A bare number is a calendar year if the timeline has a calendar, else a time in its unit from 0. A duration is that
+        long after the sim's start if the timeline has a calendar (`ss.years(5)` in a sim from 2000 is 2005, and
+        `ss.months(3)` in one from '2020-01-15' is '2020-04-15'), unless it is a calendar year (`ss.years(2005)`, from 1800 on,
+        as the `tvec` of a sim of calendar years holds); with no calendar, it is a time on the timeline's own axis, counted
+        from 0, as its start and `tvec` are (so `ss.days(10)` is day 10, which is 10 days in when the start is 0). Its unit
+        should then be the sim's or the module's (else a warning).
 
         Args:
             val (str/float/`ss.date`/`ss.Duration`): the time
@@ -401,22 +404,28 @@ class Timeline:
         errormsg = f'{name} {val} ({type(val).__name__}) is not a time: give a date, a year, or (with no calendar) a duration from 0'
         raise TypeError(errormsg)
 
-    def dur_time(self, val, name='time'):
-        """ A duration given as a time: a point on the timeline's own axis from 0, for a sim with no calendar (see `to_time()`) """
+    def dur_time(self, val, name='time', own_stop=False):
+        """
+        A duration given as a time (see `to_time()`): with a calendar, that long after the sim's start (or a calendar year,
+        e.g. `ss.years(2005)`); with none, a point on the timeline's own axis from 0
+
+        Args:
+            val (`ss.Duration`): the duration
+            name (str): what the time is, for the error message (e.g. 'until=')
+            own_stop (bool): whether it is the sim's own stop, which with a calendar is an error (its length is `dur=`)
+        """
+        if ss.time.assume_cal_year(val) and self.calendar is not None: # A calendar year, as the times of a sim of calendar years are (e.g. sim.t.tvec[5])
+            return ss.years(val.years) if self.calendar == 'years' else ss.date(val.years)
+        if self.calendar is not None:
+            start = sc.ifelse(getattr(self, 'origin', None), self.start)
+            example = f'ss.{val!r}'
+            if own_stop:
+                date = (start if isinstance(start, ss.date) else ss.date(start.years)) + val if isinstance(start, (ss.date, ss.Duration)) else None
+                errormsg = f'{name} {example} is a duration, but the sim has a calendar{f" (it starts at {start})" if date else ""}, and its stop is a time: for the length of the run, give dur={example}; or give a date{f" (e.g. stop={str(date)!r})" if date else ""}'
+                raise ValueError(errormsg)
+            return start + val # That long after the start, following the calendar for whole months and years
         if isinstance(val, ss.dates.datedur):
             val = val.to_dur()
-        if self.calendar == 'years' and ss.time.assume_cal_year(val): # A calendar year, as the times of a sim of calendar years are (e.g. sim.t.tvec[5])
-            return ss.years(val.years)
-        if self.calendar is not None:
-            start = self.start if self.tvec is None else self.tvec[0]
-            example = f'ss.{val!r}'
-            date = (start if isinstance(start, ss.date) else ss.date(start.years)) + val
-            errormsg = f'{name} {example} is a duration, which as a time is a point counted from 0, for a sim with no calendar; but the sim has a calendar (it starts at {start}). '
-            if name == 'stop=':
-                errormsg += f'For the length of the run, give dur={example}; or give a date (e.g. stop="{date}")'
-            else:
-                errormsg += f'For a time after the start, give sim.pars.start + {example} (with start= given), or a date (e.g. "{date}")'
-            raise ValueError(errormsg)
         own = {self.unit, type(self.dt)} - {None}
         if own and type(val) not in own and not self.unitless:
             units = sc.strjoin(sorted({u.__name__ for u in own}))
@@ -466,10 +475,7 @@ class Timeline:
         return
 
     def reconcile_own(self, start, stop, dur, dt, sim=None):
-        """ The sim's timeline (or one standing alone): decide the calendar from the start (or, with none, the stop), then read the rest on it; the stop is a time, as the start is, or else the start plus the length (dur) """
-        if stop is not None and dur is not None:
-            errormsg = f'stop={stop!r} and dur={dur!r} were both given; give one: the stop is when the run ends, and dur is its length (the stop is the start plus it)'
-            raise ValueError(errormsg)
+        """ The sim's timeline (or one standing alone): decide the calendar from the start (or, with none, the stop), then read the rest on it; the stop is a time, as the start is, or else the start plus the length (dur); given the stop and the length, the start is the stop minus it """
         if isinstance(dur, (str, ss.date)) or (dur is not None and not sc.isnumber(dur) and not isinstance(dur, ss.Duration)):
             errormsg = f'dur={dur!r} is the length of the run: give a duration (e.g. dur=ss.years(10)) or a bare number in the sim\'s unit, not a {type(dur).__name__}; for when it ends, give stop='
             raise TypeError(errormsg)
@@ -493,18 +499,37 @@ class Timeline:
             calendar = 'years'
         self.calendar = calendar
 
-        # The start
-        if start is None and calendar is not None:
+        if isinstance(stop, (str, ss.date)) or isinstance(start, (str, ss.date)): # A date, with a calendar from the start or the stop (calendar years and a date make the times dates)
+            if calendar is None:
+                errormsg = f'stop={stop!r} is a date, but the sim has no calendar (it starts at {start!r}, a time in {unit.__name__} from 0); give a start date, or the length of the run, e.g. dur=ss.{unit.__name__}(100)'
+                raise ValueError(errormsg)
+            calendar = 'dates'
+        bare_unit = ss.years if calendar == 'years' else unit # A bare length is read as a bare stop would be: in years in a sim of calendar years (start=2000, dur=10), else in the sim's unit
+        length = default if stop is None and dur is None else bare_unit(dur) if sc.isnumber(dur) else dur
+        self.calendar, self.unit, self.start, self.origin, self.dt = calendar, unit, start, start, dt # For dur_time()
+
+        def parse_stop(stop): # A time on the calendar (or from 0), as the start is
+            if isinstance(stop, ss.Duration): # A time from 0, as a start given as a duration is (with a calendar, an error unless a calendar year)
+                return self.dur_time(stop, name='stop=', own_stop=True)
+            elif calendar == 'dates':
+                return ss.date(stop)
+            elif calendar == 'years':
+                return ss.years(stop)
+            elif sc.isnumber(stop):
+                return unit(stop)
+            errormsg = f'Failed to parse stop = {stop!r}: expecting a date, a number, or a duration, not {type(stop).__name__}'
+            raise TypeError(errormsg)
+
+        # The start: as given; or, given the stop and the length, the stop minus it (e.g. stop=2035, dur=10 starts in 2025); or the default
+        end = parse_stop(stop) if stop is not None and dur is not None else None # Both given: the start is the stop minus the length, and one given must agree
+        if start is None and end is not None:
+            start = end - length
+        elif start is None and calendar is not None:
             start = default_start
             if stop is not None and sim is not None:
                 ss.note(f'the sim starts in {default_start}, the default start, since only its stop ({stop}) was given; give start= for another', sim=sim)
         elif start is None:
             start = 0
-        if isinstance(stop, (str, ss.date)) or isinstance(start, (str, ss.date)): # A date, with a calendar from the start or the stop (calendar years and a date make the times dates)
-            if calendar is None:
-                errormsg = f'stop={stop!r} is a date, but the sim has no calendar (it starts at {start!r}, a time in {unit.__name__} from 0); give a start date, or the length of the run, e.g. dur=ss.{unit.__name__}(100)'
-                raise ValueError(errormsg)
-            calendar = self.calendar = 'dates'
         if calendar == 'dates':
             start = ss.date(start) # A year (e.g. 2000), or a date
         elif calendar == 'years':
@@ -514,24 +539,16 @@ class Timeline:
         elif not isinstance(start, ss.Duration):
             errormsg = f'Failed to parse start = {start!r}: expecting a date, a number, or a duration, not {type(start).__name__}'
             raise TypeError(errormsg)
+        self.start = self.origin = start
 
         # The stop: a time on the calendar (or from 0), as the start is; or the start plus the length
-        bare_unit = ss.years if calendar == 'years' else unit # A bare length is read as a bare stop would be: in years in a sim of calendar years (start=2000, dur=10), else in the sim's unit
-        length = default if stop is None and dur is None else bare_unit(dur) if sc.isnumber(dur) else dur
-        self.calendar, self.unit, self.start, self.dt = calendar, unit, start, dt # For dur_time()
         if length is not None:
             stop = start + length
-        elif isinstance(stop, ss.Duration): # A time from 0, as a start given as a duration is
-            stop = self.dur_time(stop, name='stop=')
-        elif calendar == 'dates':
-            stop = ss.date(stop)
-        elif calendar == 'years':
-            stop = ss.years(stop)
-        elif sc.isnumber(stop):
-            stop = unit(stop)
+            if end is not None and not (ss.connectors.reached(stop, end) and ss.connectors.reached(end, stop)): # Allowing for rounding, as for times on the timeline
+                errormsg = f'start={start}, stop={end}, and dur={dur!r} disagree: the start plus the length is {stop}; give two of them (any two define the third)'
+                raise ValueError(errormsg)
         else:
-            errormsg = f'Failed to parse stop = {stop!r}: expecting a date, a number, or a duration, not {type(stop).__name__}'
-            raise TypeError(errormsg)
+            stop = parse_stop(stop)
 
         self.default_type = ss.years if calendar == 'years' else unit if calendar is None else type(dt) # The class of the durations of the time vector
         self.start, self.stop, self.dt = start, stop, dt
@@ -543,6 +560,7 @@ class Timeline:
         t = sim.t
         self.calendar, self.unit = t.calendar, t.unit
         self.dt = t.unit(dt) if sc.isnumber(dt) else dt
+        self.origin = sc.ifelse(getattr(t, 'origin', None), t.start) # The sim's start, from which a duration given as a time is counted when there is a calendar
         self.start = t.start if start is None else t.to_time(start, name='start=')
         if stop is not None and dur is not None:
             errormsg = f'stop={stop!r} and dur={dur!r} were both given for "{self.name}"; give one'
@@ -713,19 +731,21 @@ def of_date(fn, t, now=None):
 
 class schedule:
     """
-    When something is due: on a calendar cadence (e.g. every 3 months), at a list of times, whenever a function of the date is true, or at every step between a start and a stop
+    When something is due: on a calendar cadence (e.g. every 3 months), at a list of times, whenever a function of the date is true, or at every step between a start and a stop (with neither, at every step)
 
     Make one as an attribute (or parameter) of a module, which links it to the module's timeline when the sim is
     initialized; then `sched.due()`, in the module's `step()`, is how many of its times fall in this step (from `now`
     up to the next step's `now`): usually 0 or 1, so `if sched.due():` works. A module can have as many as it needs.
 
     Args:
-        at (date/dur/list/func): optionally (by position or keyword): the times (a time or a list of them, e.g. `['2021-06-01', '2023-06-01']`, or years, or with no calendar durations from 0, as `ss.days(10)`, which is day 10, not every 10 days), or a function of the date of the start of each step (its `now`), true when it is due (e.g. `lambda now: now.month == 1`); told apart by type
+        at (date/dur/list/func): optionally (by position or keyword): the times (a time or a list of them, e.g. `['2021-06-01', '2023-06-01']`, or years, or durations, as `ss.days(10)`, which is 10 days after the start of the sim, not every 10 days), or a function of the date of the start of each step (its `now`), true when it is due (e.g. `lambda now: now.month == 1`); told apart by type. A single duration by position is an error, since it could be either: give `every=` or `at=`
         every (dur): how often; whole months and years are calendar offsets, so every month is the same day of the month
-        start (date/dur): the first time, as a date, a year, or with no calendar a duration from 0 (default: the start of the timeline), for `every`
+        start (date/dur): the first time, as a date, a year, or a duration after the start of the sim (default: the start of the timeline), for `every`
         stop (date/dur): no times after this, likewise (default: the end of the timeline)
 
     With only `start` and/or `stop`, it is due at every step between them (a window): as the `when=` of an `ss.Event`, routine delivery between those times.
+    With no arguments, it is due at every step, so code with an optional `every=`, `start=`, and `stop=` can always make one.
+    A duration given as a time is that long after the sim's start in a sim with a calendar, and with none a time from 0 (the same when the start is 0).
 
     Examples:
         ```python
@@ -733,6 +753,7 @@ class schedule:
             def __init__(self, **kwargs):
                 super().__init__(**kwargs)
                 self.poll = ss.schedule(every=ss.months(3), start='2020-04-01') # Every 3 months from April 2020
+                self.checkup = ss.schedule(every=ss.years(1), start=ss.months(6)) # Yearly, the first 6 months after the sim's start
                 self.campaigns = ss.schedule(['2021-06-01', '2023-06-01'])
                 self.report = ss.schedule(lambda now: now.month == 1 and now.day == 1) # New Year's Day
                 self.weekly = ss.schedule(every=ss.weeks(1)) # How often is always every=
@@ -743,17 +764,23 @@ class schedule:
                     ...
         ```
     """
-    def __init__(self, at=None, every=None, start=None, stop=None, **kwargs):
+    def __init__(self, *args, at=None, every=None, start=None, stop=None, **kwargs):
         for key in kwargs:
             if key == 'when':
                 raise TypeError('ss.schedule() takes no when=; give the function as at= (or first), e.g. ss.schedule(lambda now: now.month == 1)')
             raise TypeError(f'ss.schedule() got an unexpected keyword argument {key!r}')
+        if len(args) > 1 or (args and at is not None):
+            raise TypeError(f'ss.schedule() takes one argument by position (the times, or a function of the date), not {len(args) + (at is not None)}; give how often as every=, and the window as start= and stop=')
+        if args:
+            at = args[0]
+            if isinstance(at, ss.Duration): # Could be how often (as it once was) or a time (as in a delivery's when=), so it must say which
+                ss_at, words = f'ss.{at!r}', f'{at.value:n} {at.base.removesuffix("s") if at.value == 1 else at.base}'
+                raise TypeError(f'ss.schedule({ss_at}) could be how often or a time: give every={ss_at} for every {words}, or at={ss_at} (or [{ss_at}]) for once, {words} after the start of the sim')
         when = None
-        if callable(at) and not isinstance(at, ss.TimePar): # A duration is a time (day 10 for ss.days(10)), as in when=; how often is every=
+        if callable(at) and not isinstance(at, ss.TimePar): # A function of the date; a duration as at= is a time (10 days in for ss.days(10)), as in when=; how often is every=
             at, when = None, at
-        n_given = sum(x is not None for x in [every, at, when])
-        if n_given > 1 or (n_given == 0 and start is None and stop is None):
-            raise ValueError('A schedule needs how often (every=, e.g. ss.schedule(every=ss.months(3))), the times (ss.schedule([2025, 2030])), or a function of the date (ss.schedule(lambda now: now.month == 1)), or else a start= and/or stop= (every step between them)')
+        if sum(x is not None for x in [every, at, when]) > 1:
+            raise ValueError('A schedule takes one of how often (every=, e.g. ss.schedule(every=ss.months(3))), the times (ss.schedule([2025, 2030])), or a function of the date (ss.schedule(lambda now: now.month == 1)), each with start= and stop= if needed (with none of them, every step between those)')
         self.every = every
         self.at = None if at is None else sc.tolist(at)
         self.when = when
@@ -776,10 +803,10 @@ class schedule:
         tvec = t.tvec
         if absolute: # Dates, compared as datetime64 (in nanoseconds), so a time on a time point is in the step that starts there
             points = np.array([d.to_numpy() for d in tvec], dtype='datetime64[ns]')
-            to_time = lambda x: t.to_time(x, name='the time').to_numpy() # A bare number is a year (a duration, a time from 0, is an error here)
+            to_time = lambda x: t.to_time(x, name='the time').to_numpy() # A bare number is a year, and a duration that long after the sim's start
         else: # Durations, as years
             points = np.asarray(t.yearvec, dtype=float)
-            to_time = lambda x: t.to_time(x, name='the time').years # A bare number is a year with a calendar, else a time in the sim's unit, as a duration is
+            to_time = lambda x: t.to_time(x, name='the time').years # A bare number is a year with a calendar, else a time in the sim's unit; a duration is that long after the sim's start with a calendar, else a time from 0
         counts = np.zeros(len(points), dtype=int)
         if self.when is not None:
             for k in range(len(points)): # Step k starts at time point k

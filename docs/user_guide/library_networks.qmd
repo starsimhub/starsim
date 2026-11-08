@@ -46,16 +46,16 @@ msim = ss.parallel(scenarios, n_runs=3, workers=1)
 msim.plot(['sir.I', 'sir.R'])
 ```
 
-`ssl.HybridNet` is the population of [Covasim](https://docs.covasim.org/): households (`h`, a `ClusterNet` with sizes drawn from a Poisson distribution with a mean of 2, as in Covasim, which gives about 2 contacts per person), schools for ages 6 to 22 (`s`), workplaces for ages 22 to 65 (`w`), and the community (`c`). Schools and workplaces are clusters too, and the community is a random network, with a Poisson number of contacts in each (`n_contacts`, by default `ss.poisson(20)`, `ss.poisson(16)`, and `ss.poisson(20)`; a number is the same for everyone, as in `ss.RandomNet`); `clustered=False` makes schools and workplaces random networks, as in Covasim. When added to a sim, it becomes four networks, each reached by name. How much a contact in each transmits is the disease's, with one β per network: Covasim's relative weights are 3, 0.6, 0.6, and 0.3, so that a contact at home counts for 10 times one in the community, which for a β of 0.006 a day in the community is `ss.SIR(beta=dict(h=0.06, s=0.012, w=0.012, c=0.006))`.
+`ssl.HybridNet` is the population of [Covasim](https://docs.covasim.org/): households (`h`, a `ClusterNet` with sizes drawn from a Poisson distribution with a mean of 2, as in Covasim, which gives about 2 contacts per person), schools for ages 6 to 22 (`s`), workplaces for ages 22 to 65 (`w`), and the community (`c`). Schools and workplaces are clusters too, and the community is a random network, with a Poisson number of contacts in each (`n_contacts`, by default `ss.poisson(20)`, `ss.poisson(16)`, and `ss.poisson(20)`; a number is the same for everyone, as in `ss.RandomNet`); `clustered=False` makes schools and workplaces random networks, as in Covasim. When added to a sim, it becomes four networks, each reached by name. How much a contact in each transmits is the disease's, with one β per network: Covasim's relative weights are `ssl.HybridNet.rel_betas`, 3, 0.6, 0.6, and 0.3, so that a contact at home counts for 10 times one in the community. `ssl.HybridNet.betas()` multiplies them by a β per contact (by default Covasim's, 0.016 a day), giving a dict to use as a disease's β: for a β of 0.02 a day, `ss.SIR(beta=ssl.HybridNet.betas(ss.perday(0.02)))` is `ss.SIR(beta=dict(h=ss.perday(0.06), s=ss.perday(0.012), w=ss.perday(0.012), c=ss.perday(0.006)))`.
 
 The layers are what make questions about settings answerable. Here an influenza-like infection, infectious for 5 days, spreads with schools open, and with schools closed for the whole outbreak (a β of 0 on the school layer); each scenario is run 5 times:
 
 ```{python}
-flu = lambda s=0.012: ss.SIR(beta=dict(h=ss.perday(0.06), s=ss.perday(s), w=ss.perday(0.012), c=ss.perday(0.006)), dur_inf=ss.days(5), init_prev=0.005) # Covasim's weights: 10 times as much at home as in the community
+flu = lambda **beta: ss.SIR(beta=ssl.HybridNet.betas(ss.perday(0.02)) | beta, dur_inf=ss.days(5), init_prev=0.005) # Covasim's weights: 10 times as much at home as in the community
 kw = dict(n_agents=2000, start='2000', dur=ss.days(120), dt=ss.days(1))
 scenarios = {
     'Schools open':   ss.Sim(diseases=flu(), networks=ssl.HybridNet(), **kw),
-    'Schools closed': ss.Sim(diseases=flu(s=0), networks=ssl.HybridNet(), **kw),
+    'Schools closed': ss.Sim(diseases=flu(s=ss.perday(0)), networks=ssl.HybridNet(), **kw),
 }
 msim = ss.parallel(scenarios, n_runs=5, workers=1)
 

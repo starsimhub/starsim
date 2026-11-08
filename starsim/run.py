@@ -59,7 +59,8 @@ class MultiSim:
 
     Made and run by `ss.parallel()`, the way to run many sims; `ss.MultiSim(...)` with the same arguments,
     then `msim.run()`, does the same (and is the class to subclass). Each sim is run once unless `n_runs`,
-    `pars`, or `priors` is given. To make and initialize the sim of each run without running them, use
+    `pars`, or `priors` is given: a single sim, `ss.MultiSim(sim)`, is one run, where in Starsim 3 it was run four
+    times by default (`ss.parallel(sim, n_runs=4)` for that). To make and initialize the sim of each run without running them, use
     `msim.init_sims()`.
 
     Args:
@@ -175,18 +176,25 @@ class MultiSim:
             string += f'Warning, multisim appears to be malformed:\n{str(E)}'
         return string
 
-    def show(self):
+    def show(self, **kwargs):
         """
-        Print a moderate length summary of the MultiSim: its runs, scenarios, and sims. See also `print(msim)` (one line)
+        A moderate length summary of the MultiSim: its runs, scenarios, and sims. See also `print(msim)` (one line)
         and `msim.disp()` (every attribute).
+
+        Returns:
+            text (`ss.display.Text`): the summary, which shows itself at a prompt or in a notebook, as `describe()` does; it is a string (`print(text)`, `str(text)`)
 
         Examples:
             ```python
             msim = ss.MultiSim(ss.demo(run=False), label='Example multisim', n_runs=4)
             msim.run()
-            msim.show() # Prints moderate length output
+            msim.show() # Shows moderate length output
+            text = msim.show() # And returns it, e.g. to save it
             ```
         """
+        if kwargs:
+            errormsg = f'msim.show() takes no arguments, not {sc.strjoin(kwargs)}: it returns the summary as text that shows itself (as Starsim 3\'s output=True did), so text = msim.show() gets it, and print(msim.show()) prints it' if 'output' in kwargs else f'msim.show() takes no arguments, not {sc.strjoin(kwargs)}'
+            raise TypeError(errormsg)
         labelstr = f' "{self.label}"' if self.label else ''
         string  = f'MultiSim{labelstr} summary:\n'
         string += f'  Number of runs: {len(self)}\n'
@@ -197,8 +205,7 @@ class MultiSim:
             string += '  Sims:\n'
             for s,sim in enumerate(self.sims):
                 string += f'    {s}: {sim}\n'
-        print(string)
-        return
+        return ss.display.Text(string.rstrip())
 
     def disp(self):
         """ Display the full object """

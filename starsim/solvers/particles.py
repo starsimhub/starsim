@@ -58,7 +58,7 @@ class Particles(sc.prettyobj):
             self.stocks[:, 0, state] += y0[c] if by_group else y0[c].sum()
         self.ys = np.ascontiguousarray(np.repeat(y0[None], n, axis=0))
         self.rngs = kernel_list([np.random.Generator(bits) for bits in rng.bit_generator.spawn(n)]) # The random numbers of each run (of each place among the runs, which a run drawn again takes over)
-        self.n_threads = min(ss.options.num_threads or nb.get_num_threads(), n)
+        self.n_threads = min(ss.options.threads or nb.get_num_threads(), n)
         if self.n_threads > 1: # A copy of the program for each thread, since a step changes the parts of it that vary in time, and the threads would contend for the counts of references to shared arrays
             self.progs = kernel_list([ss.kernels.Program(*[part.copy() if isinstance(part, np.ndarray) else part for part in p]) for i in range(self.n_threads)])
         self.done = 0

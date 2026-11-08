@@ -164,7 +164,7 @@ With 1,000 agents, about 40 are born each year, and the number varies by chance 
 1. In Niger, the crude birth rate is 45 and the crude death rate is 9. Assuming these rates stay constant, and starting with its population in 2020 (`ss.population('Niger', n_agents=5000)`), how many people will there be in 2040? (You do not need to include any diseases in your model.) Compare this with its UN birth and death rates.
 2. In the measles model with births, how does the time between epidemics in the ODE change if the birth rate (and the death rate) is 20 per 1,000 per year instead of 30? Does it agree with the theory above?
 3. In the town of 20,000 with importations, how often do epidemics come if the town has 50,000 people instead (and so more births each year)? Does measles ever persist between them?
-4. Contraception lowers the rate of conception: `ss.modify(pregnancy.conception, multiply=0.7, when=ss.schedule(start=2010))` cuts it by 30% from 2010. Add it to the Nigeria model with pregnancy as an intervention. How many fewer people are there in 2030?
+4. Contraception lowers the rate of conception: `ss.modify(pregnancy.conception, multiply=0.7, start=2010)` cuts it by 30% from 2010. Add it to the Nigeria model with pregnancy as an intervention. How many fewer people are there in 2030?
 
 ## Further reading
 

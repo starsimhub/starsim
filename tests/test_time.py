@@ -515,15 +515,13 @@ def test_bare_units():
     sis = ss.Disease(S >> I @ rains*I, I >> S @ ss.days(10), init_prev=0.1, name='sis')
     ss.Sim(sis, start='2000', stop='2002', verbose=0).run()
 
-    # A bare number is a year in a sim with a calendar, dates or numeric years alike (2000 was read as 2000 days); a time after the start is the start plus a duration
+    # A bare number is a year in a sim with a calendar, dates or numeric years alike (2000 was read as 2000 days); a duration is that long after the start
     for start in [2020, '2020-01-01']:
         sim = ss.Sim(sir, start=start, stop=2021, n_agents=100, verbose=0).init()
         assert np.allclose(ss.timeseries({2000: 1, 2030.5: 2, '2040-01-01': 3}).years(sim), [2000, 2030.5, 2040])
         with pytest.raises(ValueError, match='calendar year'): # The year 30, not 30 days after the start
             ss.connectors.to_ti(sim, 30)
-        with pytest.raises(ValueError, match='sim.pars.start'): # A duration as a time is counted from 0, so needs a sim with no calendar
-            ss.connectors.to_time(sim, ss.days(30))
-        assert ss.connectors.to_time(sim, sim.pars.start + ss.days(30)) == (ss.date('2020-01-31') if sim.t.calendar == 'dates' else ss.years(ss.date('2020-01-31').years))
+        assert ss.connectors.to_ti(sim, ss.days(30)) == ss.connectors.to_ti(sim, sim.pars.start + ss.days(30)) == ss.connectors.to_ti(sim, '2020-01-31')
 
     # With no calendar, a duration as a time is a point counted from 0, as tvec is; in another unit, a warning
     sim = ss.Sim(sir, start=0, stop=ss.days(60), n_agents=100, verbose=0).init()

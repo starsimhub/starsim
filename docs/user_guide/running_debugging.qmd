@@ -141,7 +141,7 @@ Each line is the largest difference between the two runs at any time, as a share
 Interventions and connectors change parameters while the model runs. When a parameter doesn't seem to have the value you expect, `sim.what_modifies()` lists everything that changes it:
 
 ```{python}
-masks = ss.modify(measles.pars.beta, multiply=0.6, when=ss.schedule(start=ss.days(10)))
+masks = ss.modify(measles.pars.beta, multiply=0.6, start=ss.days(10))
 masked = ss.Sim(measles, total_pop=100_000, stop=ss.days(50), interventions=masks, verbose=0)
 masked.what_modifies(measles.pars.beta)
 ```
@@ -184,7 +184,7 @@ ss.Sim(make_measles(), total_pop=100_000, stop=2).run()
 
 Give times with their units (`dur=ss.years(2)`), or as dates (`start='2025-01-01', stop='2027-01-01'`). If nothing in a model has a unit, time is counted in steps, and the run says "steps" where it would say "days".
 
-**A number as a time is a year, or a time from 0.** Whether a sim has a calendar is decided once, from its start. If it has one (its start is a date, or a year such as `start=2025`), a bare number given as a time is a calendar year: `when=2026` is the start of 2026, and `when=2026.5` the middle of it, whatever the sim's unit. With no calendar (e.g. `start=0`), it is a time in the sim's unit from 0, as a duration is (`when=ss.days(30)` is day 30). With a calendar, 30 days after the start is `sim.pars.start + ss.days(30)`, or a date. Starsim stops with an error when a time falls outside the sim, saying how it read it:
+**A number as a time is a year, or a time from 0.** Whether a sim has a calendar is decided once, from its start. If it has one (its start is a date, or a year such as `start=2025`), a bare number given as a time is a calendar year: `when=2026` is the start of 2026, and `when=2026.5` the middle of it, whatever the sim's unit. With no calendar (e.g. `start=0`), it is a time in the sim's unit from 0. A duration is a time after the start: `when=ss.days(30)` is 30 days in (day 30 with no calendar, the same when the start is 0). Starsim stops with an error when a time falls outside the sim, saying how it read it:
 
 ```{python}
 vaccination = ss.vaccinate(efficacy=0.9, when=2026, coverage=0.5)
