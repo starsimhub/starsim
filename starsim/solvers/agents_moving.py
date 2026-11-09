@@ -1085,7 +1085,7 @@ class Moving:
             out |= {sim.groups.dim_index(tf.dim) for tf in mod.graph.transfers.values()}
         out |= {d for tr in self.graph.transitions.values() for d,level in (self.moves(tr) or ())}
         names = [strat.name for strat in sim.groups.strats]
-        out |= {names.index(dim) for iv in sim.interventions() for dim in list(getattr(iv, 'move', None) or {}) + list(getattr(iv, 'increment', None) or {}) if dim in names} # A delivery's move= or increment=
+        out |= {names.index(dim) for iv in sim.interventions() for dim in list(ss.dimensions.delivery_moves(iv)) + list(ss.dimensions.delivery_moves(iv, 'increment')) if dim in names} # A delivery's move= or increment=
         if getattr(sim.mixing, 'migration', None) is not None:
             out.add(sim.mixing.space)
         if getattr(sim, 'initialized', False):

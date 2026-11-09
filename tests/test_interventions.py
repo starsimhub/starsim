@@ -362,6 +362,20 @@ def test_modify_coded_intervention():
     return sim
 
 
+def test_declared_intervention():
+    sc.heading('Testing a declared module given as an intervention')
+    class Tx(ss.Disease):
+        has_product = False
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            naive, on = ss.states('naive on')
+            self.define_states(naive, on)
+            self.define_transitions(on >> naive @ ss.peryear(0.5))
+    sim = ss.Sim(diseases=ss.SIS(), interventions=Tx(name='tx'), n_agents=500, start=2000, stop=2002, verbose=0).run() # Its move() method is not read as a delivery's move=
+    assert 'tx' in sim.interventions
+    return sim
+
+
 if __name__ == '__main__':
     T = sc.timer()
     do_plot = True
