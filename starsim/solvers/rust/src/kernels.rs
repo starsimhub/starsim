@@ -45,6 +45,7 @@ pub const CONVEY: i64 = 22;
 pub const LOAD: i64 = 23;
 pub const STORE: i64 = 24;
 pub const GROUP: i64 = 25; // A count in the group each rate is for (kernels.py's GROUP)
+pub const NOISE: i64 = 26; // Gamma white noise on a rate, under the chain binomial (kernels.py's NOISE)
 
 pub const GOLDEN: u64 = 0x9e3779b97f4a7c15;
 pub const SPARSE_FLOWS: usize = 256; // The flows above which the exact solver by place follows only the compartments that hold anyone
@@ -406,6 +407,17 @@ pub fn set_movers(p: &Program) {
 
 pub fn parts(p: &Program) -> [A2<f64>; 4] { [p.fixed, p.mult, p.consts, p.rel_trans] }
 
+/// Gamma white noise over a time h: a multiplier with mean 1 and variance sigma²/h, from one uniform; 1 with no draw for sigma = 0 (`noise()`)
+#[inline(always)]
+fn noise(rng: Rng, sigma: f64, h: f64) -> f64 {
+    if sigma <= 0.0 {
+        return 1.0;
+    }
+    let var = sigma*sigma;
+    let (g, _) = crate::draws::gamma(h/var, crate::draws::stream(rng.random()));
+    g*var/h
+}
+
 /// Take one timestep (`step()`): the ODE by Euler or RK4, or the rates for the stochastic solvers, which hand them to `draw()` or `event()`
 #[allow(clippy::too_many_arguments)]
 pub fn step(rng: Rng, y: A2<f64>, p: &Program, w: &Work, dt: f64, n_sub: i64, solver: i64, flows: A2<f64>, varying: bool) {
@@ -697,6 +709,13 @@ fn step_groups<const ONE: bool>(rng: Rng, y: A2<f64>, p: &Program, w: &Work, dt:
                                 stack.set(stack_top - arg, g, stack.at(top as usize, g));
                             }
                             top -= 1;
+                        } else if op == NOISE { // Noise on the rate, drawn for each substep under the chain binomial
+                            if solver == 2 || solver == 5 {
+                                for g in 0..ng {
+                                    let v = stack.at(top as usize, g)*noise(rng, p.consts.at(arg, g), dt/(n_sub.max(1) as f64));
+                                    stack.set(top as usize, g, v);
+                                }
+                            }
                         } else if op >= EXP {
                             let r = stack.row(top as usize);
                             for g in 0..ng {

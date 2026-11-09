@@ -12,10 +12,12 @@ The IR has every stratification expanded, so a stratified model is imported with
 state for each combination of levels (`S_child_north`), which runs the same as the
 original but is not written as `stratify()`. Each transition becomes a transition, its
 rate classified by the import rules (`beta * S * I / N` is exposure to `I`); each
-observation of a flow becomes an outcome with its likelihood. What is listed as not
-translated (scheduled events, ODE compartments, forcing functions of time, and
-transitions that are not one state to another) is left for a person, or the
-convert-model skill, to add.
+observation of a flow becomes an outcome with its likelihood; an event that adds people
+at fixed times becomes an inflow from outside the population at those times. What is
+listed as not translated (other scheduled effects, ODE compartments, forcing functions of
+time, transitions that are not one state to another, extra noise in a rate, a balance,
+and any other part of the IR not read) is left for a person, or the convert-model skill,
+to add.
 
 `to_camdl()` (`ss.export_to(sim, 'camdl')`) is the reverse: it writes the compartmental
 form of a sim (`ss.converters.export.flatten()`) as a .camdl file, with its compartments,
@@ -86,6 +88,8 @@ def expr(node, ir, used):
         return repr(float(val))
     elif kind in ['pop', 'param']:
         return val
+    elif kind == 'const_ref':
+        return repr(float({c['name']:c['value'] for c in ir.get('constants', [])}[val]))
     elif kind in ['binding_ref', 'per_eval_ref']:
         used.add(val)
         return val
@@ -135,6 +139,45 @@ def guarded(node, x):
     if node.get('bin_op', {}).get('op') == 'div' and node['bin_op']['right'] == x:
         return {'bin_op': dict(op='div', left=guarded(node['bin_op']['left'], x), right={'safe': x})}
     return {k:guarded(v, x) for k,v in node.items()}
+
+
+def size(spec):
+    """ What kind a part of the IR is, and how big, without its data (e.g. "interpolated, 312 values") """
+    if not isinstance(spec, dict) or len(spec) != 1:
+        return str(spec)
+    (kind, val), = spec.items()
+    n = max([len(v) for v in val.values() if isinstance(v, list)] if isinstance(val, dict) else [], default=0)
+    return f'{kind}, {n} values' if n else kind
+
+
+def fire_times(fire, t_end):
+    """ The times at which camdl fires a scheduled event or intervention, as its runtime works them out; None if they are not fixed """
+    (kind, spec), = fire.get('scheduled', {None: None}).items()
+    if kind == 'at_times':
+        return list(spec)
+    elif kind != 'recurring':
+        return None # At times given by expressions, or when a condition holds
+    end = spec['end'] if spec.get('end') is not None else t_end
+    if end is None:
+        return None
+    period, at_day = spec['period'], spec.get('at_day')
+    t = spec['start'] if at_day is None else at_day + max(0, np.ceil((spec['start'] - at_day)/period))*period
+    times = []
+    while t <= end + period*1e-9:
+        times.append(float(t))
+        t += period
+    return times
+
+
+def when(fire, unit):
+    """ When a scheduled effect fires, in words """
+    (kind, spec), = (fire.get('scheduled') or fire).items()
+    if kind == 'at_times':
+        return f'at {sc.strjoin(f"{t:g}" for t in spec)} {unit}s' if len(spec) <= 5 else f'at {len(spec)} times'
+    elif kind == 'recurring':
+        start = spec['start'] if spec.get('at_day') is None else spec['at_day']
+        return f'every {spec["period"]:g} {unit}s from {start:g}'
+    return 'when a condition holds' if kind == 'reactive' else 'at times given by expressions'
 
 
 def prior(spec):
@@ -196,6 +239,9 @@ def load_camdl(filename, pars=None, scenario=None, solver='ode', camdlc=None, ve
             raise ValueError(errormsg)
         pars = {**scens[chosen].get('params', {}), **pars}
         src.notes.append(f'the parameter values of scenario "{chosen}" (of {sc.strjoin(scens)})')
+        for key in ['scale', 'compose', 't_end_anchor']:
+            if scens[chosen].get(key):
+                src.skip(f'{chosen} ({key})', f'the scenario\'s {key} ({scens[chosen][key]}) has no translation')
     elif scenario is not None:
         errormsg = f'The model has no scenarios, so scenario="{scenario}" cannot be chosen'
         raise ValueError(errormsg)
@@ -254,12 +300,78 @@ def load_camdl(filename, pars=None, scenario=None, solver='ode', camdlc=None, ve
         except Untranslated as E:
             src.skip(tr['name'], f'its rate has {E}')
             continue
-        src.add_flow(out[0] if out else None, into[0] if into else None, rate=rate, per='total', name=ident(tr['name']))
+        draw = tr.get('draw_method') or 'poisson' # How camdl's stochastic backends draw the flow
+        noise = None
+        if isinstance(draw, dict) and 'overdispersed' in draw: # Gamma white noise whose argument is sigma squared per unit of time (shape dt/sigma²), where ss.Transition(noise=) takes sigma, as a number or a parameter
+            var = draw['overdispersed']
+            if 'const' in var:
+                noise = float(var['const'])**0.5
+            elif 'param' in var and var['param'] in src.pars:
+                p = src.pars[var['param']]
+                noise = f'sqrt_{var["param"]}'
+                if noise not in src.pars:
+                    root = lambda v: None if v is None else float(v)**0.5
+                    src.add_par(noise, root(p.value), doc=f'the square root of {var["param"]}: sigma of the noise on a rate, where camdl\'s overdispersed() takes sigma squared', bounds=None if p.bounds is None else [root(b) for b in p.bounds])
+                    src.notes.append(f'{var["param"]} is sigma squared of the noise on {tr["name"]} in camdl, and noise= takes sigma, so it is fitted as {noise}, its square root' + (' (its prior is not carried over)' if p.prior is not None else ''))
+            else:
+                src.skip(f'{tr["name"]} (noise)', 'camdl draws it with extra noise in its rate (overdispersed), whose variance is an expression; noise= takes sigma as a number or a parameter, so the rate is used without it')
+        src.add_flow(out[0] if out else None, into[0] if into else None, rate=rate, per='total', name=ident(tr['name']), noise=noise)
+        if draw == 'deterministic' and solver != 'ode':
+            src.skip(f'{tr["name"]} (deterministic)', 'camdl adds it as it is (deterministic), but a stochastic solver draws it at random like any other flow; under ss.solvers.ode() it is the same')
+        elif draw not in ['poisson', 'deterministic'] and not (isinstance(draw, dict) and 'overdispersed' in draw):
+            src.skip(f'{tr["name"]} (draw)', f'camdl draws it as {size(draw) if isinstance(draw, dict) else draw}, which has no translation')
+        for key in sorted(set(tr) - {'name', 'stoichiometry', 'rate', 'metadata', 'draw_method', 'rate_grad', 'rate_state_grad'}): # E.g. lineage
+            if tr[key]:
+                src.skip(f'{tr["name"]} ({key})', f'camdl\'s {key} of the transition has no translation')
+
+    # Scheduled effects: adding people is an inflow from outside the population at each time it fires; the rest are listed
+    simulation = m.get('simulation', {})
+    dt = simulation.get('dt') or 1.0
+    enabled = scens[chosen].get('enable', []) if scens else []
+    disabled = scens[chosen].get('disable', []) if scens else []
+    for iv in m.get('interventions', []):
+        names = {iv['name'], iv.get('base_name')}
+        acts = sc.strjoin(list(a)[0] for a in iv['actions'])
+        fires = when(iv['fire'], unit)
+        if names & set(disabled):
+            src.notes.append(f'{iv["name"]} is off in scenario "{chosen}"')
+            continue
+        if iv.get('kind') != 'event' and not names & set(enabled): # An intervention, unlike an event, is off unless enabled: listed all the same, since a scenario that enables it is the model's question
+            where = [k for k,scen in scens.items() if names & set(scen.get('enable', []))]
+            src.skip(iv['name'], f'an intervention ({acts}, {fires}) that is off unless enabled{", as scenario " + sc.strjoin(where) + " does" if where else ""}')
+            continue
+        times = fire_times(iv['fire'], simulation.get('t_end'))
+        adds = [a['add'] for a in iv['actions'] if 'add' in a]
+        for a in iv['actions']:
+            (akind, act), = a.items()
+            name = ident(iv['name']) if len(adds) == 1 else f'{ident(iv["name"])}_{act.get("compartment", akind)}'
+            if akind == 'add' and times is not None and np.all(np.diff(times) >= dt):
+                try:
+                    count = expr(act['count'], m, used)
+                except Untranslated as E:
+                    src.skip(name, f'adds people to {act["compartment"]} {fires}, a number with {E}; write it as an inflow from outside the population, ss.unborn >> {act["compartment"]} @ ss.per{unit}(ss.timeseries(times, numbers, interpolation=\'step\')), with each number divided by the step at its time and 0 a step later')
+                    continue
+                t0 = simulation.get('t_start') or 0.0
+                pulse = {getattr(ss, f'{unit}s')(0): 0.0} # Before the first time, since a series holds its first value from the start; keyed by the time after the start
+                pulse.update({getattr(ss, f'{unit}s')(k - t0):v for t in times for k,v in [(t, 1/dt), (t + dt, 0.0)]})
+                src.add_par(f'{name}_pulse', ss.timeseries(pulse), doc=f'1/dt in the step of each time camdl fires {iv["name"]} ({fires}), and 0 otherwise')
+                src.add_flow(None, act['compartment'], rate=f'({count}) * {name}_pulse', per='total', name=name)
+                if solver != 'ode':
+                    src.skip(f'{name} (deterministic)', f'camdl adds the number to {act["compartment"]} as it is ({fires}); imported as an inflow, which a stochastic solver draws at random')
+                continue
+            elif akind == 'add':
+                advice = f'an inflow from outside the population, ss.unborn >> {act["compartment"]} @ ss.per{unit}(ss.timeseries(times, numbers, interpolation=\'step\')), with each number divided by the step at its time and 0 a step later'
+            elif akind in ['fraction_transfer', 'absolute_transfer']:
+                advice = f'a move between states, ss.Event({act["src"]} >> {act["dst"]}, when=[...], {"p" if akind == "fraction_transfer" else "n"}=...)'
+            else:
+                advice = 'an intervention (ss.Event, or custom code)'
+            src.skip(name if akind == 'add' else iv['name'], f'a scheduled effect ({akind}, {fires}); write it as {advice}')
+
     for item in sorted(used, key=str):
         if isinstance(item, tuple) and item[0] == 'time':
             fn = {f['name']:f for f in m.get('time_functions', [])}.get(item[1], {})
             src.add_par(item[1], 1.0, doc='a function of time in camdl, set to 1')
-            src.skip(item[1], f'a function of time ({fn.get("kind")}), set to 1; write it as an ss.seasonal() or ss.timeseries() value of the parameter')
+            src.skip(item[1], f'a function of time ({size(fn.get("kind"))}), set to 1; write it as an ss.seasonal() or ss.timeseries() value of the parameter')
     for eq in m.get('ode_equations', []):
         src.skip(eq['compartment'], 'a compartment given by an ODE; write it as a state that is not people (ss.State(people=False)) with flows against ss.dead')
 
@@ -304,6 +416,9 @@ def load_camdl(filename, pars=None, scenario=None, solver='ode', camdlc=None, ve
     # Observations
     for ob in m.get('observations', []):
         oname = ob['name']
+        for key in sorted(set(ob) - {'name', 'source', 'columns', 'scored', 'stratum', 'emit_schedule', 'covers', 'projection', 'projection_state_grad', 'likelihood', 'untranslated'}):
+            if ob[key]:
+                src.skip(f'{oname} ({key})', f'camdl\'s {key} of the observation has no translation')
         if 'untranslated' in ob:
             src.skip(oname, ob['untranslated'])
             continue
@@ -340,7 +455,7 @@ def load_camdl(filename, pars=None, scenario=None, solver='ode', camdlc=None, ve
                 elif len(rest) == 1 and 'const' in rest[0]:
                     p = rest[0]['const']
             if p is None and mean != {'projected': None}:
-                src.skip(oname, f'its mean ({mean}) is not a share of the flow')
+                src.skip(oname, 'its mean is not a share of the flow')
                 continue
         def arg(spec):
             e = spec['expr']
@@ -359,26 +474,32 @@ def load_camdl(filename, pars=None, scenario=None, solver='ode', camdlc=None, ve
 
         sched = ob.get('emit_schedule', {}).get('regular')
         covers = ob.get('covers', {})
-        total = sched and covers.get('kind') == 'until' and covers.get('span') == sched['step'] # A total over each period, which data by period is compared with automatically
+        span = covers.get('span')
+        total = sched and covers.get('kind') in ['from', 'until'] and span == sched['step'] # A total over each period, which data by period is compared with automatically
         if (sched or covers) and not total:
             src.skip(f'{oname} (period)', f'reported {covers or sched}, which is not a total over each period')
+        shift = (covers.get('offset') or 0) - (span if covers.get('kind') == 'until' else 0) # From the time a row of data is labeled by to the start of its period
+        if total and shift:
+            src.skip(f'{oname} (data times)', f'camdl labels each row of its data {-shift:g} {unit}s after the start of the period it covers ({covers["kind"]}), and Starsim by the start: '
+                                              f'{"subtract" if shift < 0 else "add"} {abs(shift):g} {unit}s {"from" if shift < 0 else "to"} the times of the data')
         src.add_outcome(oname, pval, p=p, likelihood=likelihood)
 
-    # Scheduled effects
-    enabled = scens[chosen].get('enable', []) if scens else []
-    for iv in m.get('interventions', []):
-        acts = sc.strjoin(list(a)[0] for a in iv['actions'])
-        when = iv['fire']
-        names = {iv['name'], iv.get('base_name')}
-        if iv.get('kind') != 'event' and not names & set(enabled): # An intervention, unlike an event, is off unless enabled: listed all the same, since a scenario that enables it is the model's question
-            where = [k for k,scen in scens.items() if names & set(scen.get('enable', []))]
-            src.skip(iv['name'], f'an intervention ({acts}, {when}) that is off unless enabled{", as scenario " + sc.strjoin(where) + " does" if where else ""}; '
-                                 f'write it as a one-off move, ss.Event(S >> V, when=...)')
-            continue
-        src.skip(iv['name'], f'a scheduled effect ({acts}, {when}); write it as a one-off move, ss.Event(S >> V, when=...)')
+    # What else the model has, which is not translated: keeping a state equal to an expression, and any part not read above
+    if m.get('balance'):
+        bal = m['balance']
+        try:
+            text = expr(bal['expr'], m, set())
+        except Untranslated:
+            text = 'an expression'
+        src.skip(f'{bal["target"]} (balance)', f'camdl sets {bal["target"]} = {text} after each step (balance), which has no translation; {bal["target"]} follows its own flows')
+    known = {'name', 'version', 'time_unit', 'description', 'origin', 'origin_rata_die', 'compartments', 'transitions', 'ode_equations', 'time_functions', 'tables', 'constants', 'interventions',
+            'observations', 'parameters', 'initial_conditions', 'ic_grad', 'output', 'simulation', 'scenarios', 'model_structure', 'balance', 'bindings', 'per_eval_bindings'} # Read, or not part of the model (gradients, output)
+    for key in sorted(set(m) - known): # E.g. quantities, contrasts, identity_tracked_compartments
+        if m[key]:
+            what = sc.strjoin(x.get('name', '?') if isinstance(x, dict) else x for x in m[key]) if isinstance(m[key], list) else size(m[key]) if isinstance(m[key], dict) else m[key]
+            src.skip(key, f'camdl\'s {key} ({what}): not translated')
 
     # The run
-    simulation = m.get('simulation', {})
     tdur = getattr(ss, f'{unit}s')
     cfg = dict(unit=unit, solver=solver)
     if solver in ['ode', 'binomial']: # camdl's ODE backend takes one RK4 step a step, and its chain binomial whole steps, so the numbers are its own
@@ -389,6 +510,17 @@ def load_camdl(filename, pars=None, scenario=None, solver='ode', camdlc=None, ve
         cfg['start'] = tdur(simulation['t_start'])
     if simulation.get('dt'):
         cfg['dt'] = tdur(simulation['dt'])
+    if scens and scens[chosen].get('t_end') is not None:
+        cfg['stop'] = tdur(scens[chosen]['t_end'])
+    if simulation.get('rng_seed') is not None:
+        cfg['rand_seed'] = simulation['rng_seed']
+    if 'stop' not in cfg and simulation.get('t_end_anchor'):
+        src.skip('simulate (to)', f'camdl ends the run at a time set by the data ({simulation["t_end_anchor"]}); give stop=')
+    method = (simulation.get('integrator') or {}).get('method', 'rk4')
+    if solver == 'ode' and method != 'rk4':
+        src.skip('simulate (integrator)', f'camdl solves its ODE with {method}, and the import takes one RK4 step a step; give ss.solvers.ode() more substeps= to come closer')
+    if simulation.get('time_semantics', 'continuous') != 'continuous':
+        src.skip('simulate (time)', f'camdl\'s time is {simulation["time_semantics"]}, which has no translation')
     src.config.update(cfg)
     sim = build(src, verbose=verbose, **kwargs)
     sim.imported.scenarios = {k:s.get('params', {}) for k,s in scens.items()} # The parameter values of each; the interventions each enables are listed in sim.imported.incomplete

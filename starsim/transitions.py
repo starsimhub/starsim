@@ -503,6 +503,9 @@ class Transition(Nameable):
         increment (str/dict): a counter that goes up as well: its name, which adds 1 (`increment='parity'`), or a dict of the amount for each
             (`increment=dict(parity=2)` for twins, `dict(doses=-1)`); a counter is a dimension with integer levels, whose last level is open-ended
         min_stay (dur): a minimum stay: nobody leaves by this transition until they have been in its source state this long (a rate applies from then on, and a dwell time starts then)
+        noise (float/par): process noise on the rate, as sigma of gamma white noise (Bretó et al. 2009; pomp's `rgammawn`): the chain binomial multiplies the rate, in each substep of length h,
+            by a gamma draw with mean 1 and variance sigma²/h, for each group (and each particle of a filter). sigma is in the square root of the sim's unit (0.0878 in He et al.'s model, in years),
+            and can be fitted (`noise=ss.par(0.1, bounds=[0, 0.3])`). The ODE leaves it out (its mean); the other solvers refuse it
         acquisition (bool): whether it is an acquisition of the disease, which `rel_sus`, a product's efficacy against acquisition, and `ss.treat` act on. If not given: a
             contact-mediated transition is, and so is any other transition out of the disease's first state if none out of it is contact-mediated (an infection by a bite rate or an EIR)
         per_strain (str): for an event of a disease with strains (`ss.Strains`) in a state they share, with an outcome for each strain
@@ -523,11 +526,12 @@ class Transition(Nameable):
         failure   = ss.Transition(Tx, I, rate=ss.peryear(0.1), move=DS >> (DS, RIF)) # Treatment fails, and the strain acquires resistance (DS, RIF = strains)
         twins     = ss.Transition(P, PP, dur=ss.months(9), p=0.02, increment=dict(parity=2)) # Parity goes up by 2
         weaning   = ss.Transition(NB, W, rate=ss.perday(0.5), min_stay=ss.days(21)) # At least 21 days old first, as EMULSION's duration
+        infection = ss.Transition(S, E, rate=beta*I, noise=0.0878) # Infection whose rate varies at random from step to step (He et al. 2010)
         postpartum = ss.Transition(PP, NP, when=ss.on(preg.delivery, delay=ss.months(6))) # Six months after each woman's own delivery
         importation = ss.Transition(S, I, rate=ss.perday(1e-4), acquisition=True) # An infection from outside, alongside one by contact
         ```
     """
-    def __init__(self, source=None, dest=None, rate=None, dur=None, p=None, stages=None, name=None, label=None, who=None, when=None, move=None, increment=None, min_stay=None, acquisition=None, per_strain=False, **kwargs):
+    def __init__(self, source=None, dest=None, rate=None, dur=None, p=None, stages=None, name=None, label=None, who=None, when=None, move=None, increment=None, min_stay=None, noise=None, acquisition=None, per_strain=False, **kwargs):
         check_renamed(kwargs, 'ss.Transition()', dict(where='who=, a condition on who it applies to', on='when=, what triggers it (an event, or ss.on(event, delay=...))', single_strain="per_strain='first' (each strain carried has its own rate, and the first to happen moves on alone)"))
         where = None if who is None else check_who(who, 'a transition')
         trigger, delay = None, None
@@ -553,6 +557,9 @@ class Transition(Nameable):
         if rate is not None and dur is not None:
             errormsg = 'A transition takes one of rate= or dur='
             raise ValueError(errormsg)
+        if noise is not None and rate is None:
+            errormsg = f'noise= is noise on a transition\'s rate, so it goes with rate= (a dwell time dur=ss.days(10) is rate=ss.perday(0.1)), not {"dur=" if dur is not None else "when=" if trigger is not None else "no rate"}'
+            raise ValueError(errormsg)
         if stages is not None and (isinstance(stages, bool) or not isinstance(stages, (int, np.integer)) or stages < 1):
             errormsg = f'stages= is the number of sub-stages a dwell time is split into, a whole number of at least 1, not {stages!r}'
             raise ValueError(errormsg)
@@ -575,6 +582,10 @@ class Transition(Nameable):
         self.acquisition_given = acquisition # Whether it is an acquisition of the disease, if given
         self.acquisition = acquisition # Whether it is, as worked out when the module is built: see ss.graph.Graph.resolve_acquisition()
         self.min_stay = min_stay # A minimum stay in the source state before this transition can happen
+        self.noise = None if noise is None else as_expr(noise) # Sigma of gamma white noise on the rate, drawn each step by the chain binomial (see ss.solvers.Compartmental.flatten_rates())
+        if self.noise is not None and not isinstance(self.noise, ss.par): # The kernels take sigma as one value (see ss.kernels.NOISE)
+            errormsg = f'noise= takes sigma as a number or a parameter (e.g. noise=ss.par(0.1, bounds=[0, 0.3])), not an expression ({self.noise}); to fit a function of sigma, fit sigma itself'
+            raise ValueError(errormsg)
         self.move = None # A change of level in some dimensions: {dim: level}
         if move is not None and not isinstance(move, dict) and isinstance(move, ss.strains.StrainMove): # A change of the strains people carry, e.g. move=DS >> (DS, RIF)
             move = {move.strains.name: move}

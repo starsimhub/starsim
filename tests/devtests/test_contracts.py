@@ -4,7 +4,6 @@ Contract tests: properties every model and solver must have, checked on the mode
 """
 
 # %% Imports and settings
-import os
 import pytest
 import numpy as np
 import sciris as sc
@@ -171,11 +170,10 @@ def mean_states(sim):
     return {f'{mod.name}.{key}':res.values.mean() for mod in sim.declared for key,res in mod.results.items() if key in mod.graph.states and isinstance(res, ss.Result) and np.ndim(res.values) == 1}
 
 
-simple = ['sir', 'seir', 'erlang', 'branching', 'ages'] # The simplest models of the corpus
-slow = bool(os.getenv('STARSIM_SLOW')) # Set to check every model of the corpus
+simple = ['sir', 'seir', 'erlang', 'branching', 'ages'] # The simplest models of the corpus; the others are checked only with -m slow
 
 
-@pytest.mark.parametrize('name', corpus.compartmental if slow else simple)
+@pytest.mark.parametrize('name', simple + [pytest.param(name, marks=pytest.mark.slow) for name in corpus.compartmental if name not in simple])
 def test_solvers_agree(name):
     sc.heading(f'Testing that every solver agrees with the ODE for the corpus model "{name}"')
     make = corpus.models[name]

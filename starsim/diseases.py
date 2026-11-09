@@ -63,7 +63,7 @@ def rebind_member(obj, memo):
     if not isinstance(obj, ss.Transition) or isinstance(obj, ss.State):
         reads = any(id(x) in memo for x in ss.expressions.nodes(obj)) or isinstance(obj, ss.outcome)
         return ss.expressions.rebind(obj, memo) if reads else obj # Unchanged otherwise, so a positional member keeps the name of its variable
-    exprs = [obj.rate, obj.dur, obj.p_die, obj.p_stay] + list(obj.p or [])
+    exprs = [obj.rate, obj.dur, obj.p_die, obj.p_stay, obj.noise] + list(obj.p or [])
     conds = [c for c in [obj.where, getattr(obj.trigger, 'x', None)] if c is not None]
     reads = any(id(x) in memo for x in list(obj.source or []) + list(obj.dest or []) + list(ss.expressions.nodes(exprs)))
     reads = reads or any(id(ev.args[1]) in memo for c in conds for ev in ss.conditions.event_leaves(c) if len(ev.args) > 1)
@@ -72,7 +72,7 @@ def rebind_member(obj, memo):
     new = sc.cp(obj)
     new.source = None if obj.source is None else [memo.get(id(st), st) for st in obj.source]
     new.dest = None if obj.dest is None else [memo.get(id(st), st) for st in obj.dest]
-    for key in ['rate', 'dur', 'p_die', 'p_stay']:
+    for key in ['rate', 'dur', 'p_die', 'p_stay', 'noise']:
         setattr(new, key, ss.expressions.rebind(getattr(obj, key), memo))
     new.p = None if obj.p is None else [ss.expressions.rebind(v, memo) for v in obj.p]
     new.where = ss.conditions.rebind(obj.where, memo)
@@ -518,7 +518,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
                 if isinstance(leaf, ss.par) and isinstance(leaf.raw, ss.expressions.Expr):
                     yield from leaves(leaf.raw)
         holds_expr = lambda leaf: isinstance(leaf.raw, ss.expressions.Expr) and any(inner is m for inner in leaves(leaf.raw) for m in members.values()) # One holding the class's parameters, copied with them
-        memo = {id(leaf):leaf for val in members.values() if isinstance(val, ss.Transition) for expr in [val.rate, val.dur, getattr(val, 'p_die', None), getattr(val, 'p_stay', None)] + sc.tolist(getattr(val, 'p', None)) if isinstance(expr, ss.expressions.Expr) for leaf in leaves(expr) if isinstance(leaf, ss.par) and not any(leaf is m for m in members.values()) and not holds_members(leaf) and not holds_expr(leaf)}
+        memo = {id(leaf):leaf for val in members.values() if isinstance(val, ss.Transition) for expr in [val.rate, val.dur, getattr(val, 'p_die', None), getattr(val, 'p_stay', None), getattr(val, 'noise', None)] + sc.tolist(getattr(val, 'p', None)) if isinstance(expr, ss.expressions.Expr) for leaf in leaves(expr) if isinstance(leaf, ss.par) and not any(leaf is m for m in members.values()) and not holds_members(leaf) and not holds_expr(leaf)}
         members = sc.dcp(members, memo=memo) # Copy class members (together, so they still refer to each other) so instances do not share them; a parameter defined outside the class (rate = ss.par(...) at module level) stays shared, as in the operator form, so it keeps its name
         for tr in [val for val in members.values() if isinstance(val, ss.Transition)]: # A sibling as an event (vax = ss.Transition(R, V, when=recovery)) is the copy
             tr.where = ss.conditions.rebind(tr.where, memo)

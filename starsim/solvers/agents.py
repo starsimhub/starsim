@@ -553,6 +553,9 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         for tr in self.graph.transmissions: # Not yet built for agents either, so not silently ignored
             if getattr(tr, 'min_stay', None) is not None:
                 raise ss.CapabilityError(f'"{tr.name}" has a minimum stay (min_stay=), which a transmission cannot have yet; put it on the transition out of the state before, or out of the state infected people enter')
+        noisy = [tr.name for tr in self.graph.transitions.values() if tr.noise is not None]
+        if noisy:
+            raise ss.CapabilityError(f'"{self.mod.name}.{noisy[0]}" has noise on its rate (noise=), which only the chain binomial draws so far; run with solver="binomial"')
         self.init_immunity()
         self.init_adjust()
         self.init_results()

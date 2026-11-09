@@ -421,7 +421,7 @@ class Graph:
 
     def counted(self, tr):
         """ The states of people of this module whose number a transition reads in its rate, other than its source, if the rate grows with them: `I` in `S >> I @ beta*I.n` (density-dependent transmission); none for births at a rate on counts (`ss.unborn >> N @ b*N.n`) """
-        if tr._inflow or tr.rate is None or count_power(tr.rate) <= 0:
+        if tr._inflow or tr.source is None or tr.rate is None or count_power(tr.rate) <= 0: # No source is everyone (ss.death(rate=...)), so whatever it counts is its source
             return []
         out = {id(st):st for leaf in tr.rate.leaves if isinstance(leaf, Count) for st in leaf.states if st.people and st.module is self.module and not any(st is src for src in tr.source)}
         return list(out.values())
@@ -656,6 +656,8 @@ class Graph:
         for p in tr.p or []:
             if isinstance(p, par) and len(tr.p) == 1:
                 slots.append(('p', p))
+        if isinstance(tr.noise, par): # Sigma of the noise on the rate, named noise_<transition> if not named
+            slots.append(('noise', tr.noise))
         return slots
 
     def resolve_pars(self):
@@ -675,7 +677,7 @@ class Graph:
         timed = lambda state: sum(tr.dur is not None and any(s is state for s in tr.source or []) for tr in self.transitions.values()) # The number of timed exits from a state
         for tr,slot,p in anon:
             qual = tr.source[0].name if slot == 'dur' and len(tr.source or []) == 1 and timed(tr.source[0]) == 1 else tr.name # A dwell time is the mean time in its state (dur_E), unless the state has several timed exits
-            name = f'{slot}_{qual}' if slot in ['dur', 'rate'] or counts[slot] > 1 or taken(slot) else slot
+            name = f'{slot}_{qual}' if slot in ['dur', 'rate', 'noise'] or counts[slot] > 1 or taken(slot) else slot
             if qual != tr.name and taken(name):
                 name = f'{slot}_{tr.name}'
             if taken(name): # e.g. a parameter of the user's called dur_rec, inside the dwell time of a transition called rec
@@ -690,7 +692,7 @@ class Graph:
                         q.name = f'{p.name}_{field}'
 
         # Register the explicit ss.par objects used in the transitions, and in the weights and likelihoods of the outcomes
-        used = [(tr.name, expr) for tr in self.transitions.values() for expr in [tr.rate, tr.dur] + sc.tolist(tr.p) + [getattr(tr, 'p_die', None), getattr(tr, 'p_stay', None)]] # Including the shares of ss.dead and ss.stay among the destinations
+        used = [(tr.name, expr) for tr in self.transitions.values() for expr in [tr.rate, tr.dur, tr.noise] + sc.tolist(tr.p) + [getattr(tr, 'p_die', None), getattr(tr, 'p_stay', None)]] # Including the shares of ss.dead and ss.stay among the destinations
         used += [(oc.name, weight) for oc in self.outcomes.values() for weight in oc.weights]
         used += [(oc.name, val) for oc in self.outcomes.values() for val in oc.likelihood_pars.values() if isinstance(val, par)]
         for oc in self.outcomes.values(): # A parameter written inside a likelihood, e.g. ss.nbinom(n=ss.par(10, bounds=[1, 100])), is named after the outcome and its keyword
@@ -1157,7 +1159,7 @@ class Graph:
     def all_pars(self):
         """ Every parameter in the graph, named or inline """
         out = {id(p):p for p in self.pars.values()}
-        exprs = [expr for tr in self.transitions.values() for expr in [tr.rate, tr.dur] + sc.tolist(tr.p)]
+        exprs = [expr for tr in self.transitions.values() for expr in [tr.rate, tr.dur, tr.noise] + sc.tolist(tr.p)]
         exprs += [w for expr in exprs if expr is not None for w in count_weights(expr)]
         for expr in exprs:
             if expr is not None:

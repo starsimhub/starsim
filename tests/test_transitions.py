@@ -1564,6 +1564,53 @@ def test_infected_sources():
     assert np.allclose(r.infected, r.E) and not d.graph.states.I.infected # As said, though I is the source
     return
 
+
+@sc.timer()
+def test_noise():
+    sc.heading('Testing noise on a rate: its multiplier has mean 1 and variance sigma²/h, sigma = 0 is no noise, it is a parameter, and the solvers that cannot draw it refuse it')
+    rng = np.random.default_rng(1)
+    for sigma, h in [(0.0878, 1/365.25), (0.3, 0.5)]: # A shape below 1 (He et al.'s, in years) and above it
+        x = np.array([ss.kernels.noise(rng, sigma, h) for _ in range(20_000)])
+        var = sigma**2/h
+        assert abs(x.mean() - 1) < 4*np.sqrt(var/len(x)) and abs(x.var()/var - 1) < 0.15, (x.mean(), x.var(), var)
+    assert ss.kernels.noise(rng, 0.0, 1.0) == 1.0
+
+    def make(noise=None, solver='binomial'):
+        S, I, R = ss.states('S I R')
+        extra = {} if noise is None else dict(noise=noise)
+        d = ss.Disease(infection=ss.Transition(S, I, rate=ss.perday(0.3)*I, **extra), recovery=I >> R @ ss.perday(0.1), init_n=dict(I=20), name='sir')
+        return ss.Sim(d, solver=solver, total_pop=20_000, unit='day', start=0, stop=120, verbose=0)
+    base = make().run().results.sir
+    assert np.array_equal(base.I, make(noise=0.0).run().results.sir.I) # No draws: the same run
+    assert not np.array_equal(base.I, make(noise=ss.par(0.5)).run().results.sir.I)
+    def fast(noise=None): # Noise on a fast rate that doesn't depend on the compartments, which sets the substeps all the same
+        S, I, R = ss.states('S I R')
+        extra = {} if noise is None else dict(noise=noise)
+        d = ss.Disease(infection=S >> I @ ss.perday(0.3)*I, recovery=ss.Transition(I, R, rate=ss.perday(2.0), **extra), init_n=dict(I=20), name='sir')
+        return ss.Sim(d, solver='binomial', total_pop=20_000, unit='week', stop=20, verbose=0)
+    assert np.array_equal(fast().run().results.sir.I, fast(noise=0.0).run().results.sir.I)
+    class Noisy(ss.Disease): # The class form, with the noise a parameter of the class
+        S, I, R = ss.states('S I R')
+        sigma = ss.par(0.0, bounds=[0, 1])
+        infection = ss.Transition(S, I, rate=ss.perday(0.3)*I, noise=sigma)
+        recovery = I >> R @ ss.perday(0.1)
+    nz = ss.Sim(Noisy(init_n=dict(I=20), name='nz'), solver='binomial', total_pop=20_000, unit='day', stop=120, verbose=0).init()
+    assert 'sigma' in nz.diseases.nz.pars and nz.diseases.nz.graph.transitions.infection.noise is nz.diseases.nz.pars.sigma # The instance's copy, keeping its name
+    sim = make(noise=0.2)
+    sim.init()
+    assert sim.diseases.sir.pars.noise_infection.value == 0.2 # Named after its slot, so it can be fitted
+    assert 'gamma white noise' in str(sim.diseases.sir.describe())
+    ode = make(noise=0.2, solver='ode').run().results.sir.I
+    assert np.array_equal(ode, make(solver='ode').run().results.sir.I) # Left out of the ODE
+    for solver in ['tau', 'gillespie', 'abm']:
+        with pytest.raises(ss.CapabilityError, match='noise='):
+            make(noise=0.2, solver=solver).run()
+    with pytest.raises(ValueError, match='noise='):
+        ss.Transition(ss.State(), ss.State(), dur=ss.days(3), noise=0.1)
+    with pytest.raises(ValueError, match='not an expression'): # Sigma is one value in the kernels
+        ss.Transition(ss.State(), ss.State(), rate=0.1, noise=ss.par(0.04)**0.5)
+    return
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -1600,3 +1647,4 @@ if __name__ == '__main__':
     state = test_state_as_result()
     ends  = test_branch_ends()
     infs  = test_infected_sources()
+    noise = test_noise()

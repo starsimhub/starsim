@@ -124,7 +124,7 @@ fit = sim.fit(method=ss.fit.method('abc-smc', samples=100, generations=7), rand_
 fit.table # The posterior median of each parameter and its 95% interval (lower, upper)
 ```
 
-Both intervals cover the true values, and are wider than those of particle MCMC on the same data (in the table above), since ABC-SMC compares the runs with the data by a distance, with no likelihood.
+Both intervals cover the true values. They are wider than those of particle MCMC on the same data (in the table above), but that is not a rule: ABC-SMC compares the runs with the data by a distance, with no likelihood, and its result approximates the posterior as closely as its final tolerance allows, so its width depends on the number of generations as well as on the data. With a likelihood, particle MCMC gives the posterior itself.
 
 ## Bringing your model in
 
