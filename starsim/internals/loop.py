@@ -100,6 +100,7 @@ class Loop:
         self._plan = None # Made when it is first needed: see the plan property
         self.insertions = []
         self.index = 0 # The next function to execute
+        self.entry = None # The entry of the plan running now, if any
         self.profile = False # If True, record per-entry CPU timing during run() (see Loop.run)
         self.cpu_time = [] # Store the CPU time of execution of each function (only if profiling)
         self.df = None # User-friendly version of the plan
@@ -490,7 +491,11 @@ class Loop:
         """
         self._check_initialized()
         entry = self.plan[self.index] # Get the next entry
-        entry.func() # Call it
+        self.entry = entry
+        try:
+            entry.func() # Call it
+        finally:
+            self.entry = None
         self.index += 1 # Increment the time
         return
 
@@ -543,7 +548,11 @@ class Loop:
 
             if self.profile:
                 start = time.perf_counter()
-            entry.func() # Execute the function -- this is where all of Starsim happens!!
+            self.entry = entry
+            try:
+                entry.func() # Execute the function -- this is where all of Starsim happens!!
+            finally:
+                self.entry = None
 
             # Tidy up
             self.index += 1 # Increment the count
