@@ -65,6 +65,9 @@ A contact matrix needs groups to act between, so the model is stratified by age 
 
 The infection here is a flu-like one, much less transmissible than measles, so that the differences between groups show:
 
+::: {.panel-tabset group="language"}
+## Python
+
 ```{python}
 import starsim as ss
 
@@ -79,6 +82,26 @@ sim = ss.Sim(flu, networks=contacts, total_pop=100_000, stop=ss.days(150))
 sim.run()
 sim.results.flu.I.by('age').plot()
 ```
+
+## R
+
+```r
+library(starsim)
+
+states("S I R")
+flu <- Disease(
+  infection = Transition(S, I, rate = 0.03 * I), # β = 0.03 per contact
+  recovery  = Transition(I, R, dur = days(5)),   # Infectious for 5 days on average
+  init_prev = 0.001
+)
+flu$stratify(age = list("0" = 0.3, "15" = 0.6, "65" = 0.1)) # Ages 0-14, 15-64, and 65+, with the share of people in each
+
+age_contacts <- contacts(ages = c(0, 15, 65), matrix = rbind(c(10, 4, 0.5), c(2, 8, 0.5), c(1.5, 3, 2))) # Contacts a day
+sim <- Sim(flu, networks = age_contacts, total_pop = 100000, stop = days(150))
+sim$run()
+sim$results$flu$I$by("age")$plot()
+```
+:::
 
 Children have the most contacts, mostly with each other, and older people the fewest, so the share infected falls with age:
 

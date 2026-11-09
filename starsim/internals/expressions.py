@@ -982,6 +982,33 @@ def as_counts(expr):
     return expr
 
 
+def is_total(expr, people):
+    """ Whether an expression is the sum of all the states that are people, e.g. `N = S + I + R` (see `ss.states(include_sum=True)`) """
+    return isinstance(expr, BinOp) and expr.op == '+' and set(map(id, expr.leaves)) == set(map(id, people)) and all(isinstance(leaf, ss.transitions.State) for leaf in expr.leaves)
+
+
+def as_share(rate, people):
+    """
+    A rate per person written with the share of people in a state, as contact with them: `beta*I/N`, with `N` the total
+    of the states that are people, is `beta*I` (frequency-dependent). Any other rate is returned as it is.
+
+    Args:
+        rate (Expr): the rate per person, as written
+        people (list): the states of the module that are people
+    """
+    num, den = factors(rate)
+    totals = [i for i,f in enumerate(den) if is_total(f, people)]
+    if not totals or not any(isinstance(leaf, ss.transitions.State) for f in num for leaf in getattr(f, 'leaves', [])):
+        return rate
+    den.pop(totals[0])
+    out = num[0]
+    for f in num[1:]:
+        out = BinOp('*', out, f)
+    for f in den:
+        out = BinOp('/', out, f)
+    return out
+
+
 def per_person(rate, src, people):
     """
     A rate written as the whole flow, as most other frameworks write it, as the rate per person in its source
@@ -1001,8 +1028,7 @@ def per_person(rate, src, people):
     if len(src or []) != 1 or not any(f is src[0] for f in num):
         return rate
     num.pop(next(i for i,f in enumerate(num) if f is src[0]))
-    total = lambda f: isinstance(f, BinOp) and f.op == '+' and set(map(id, f.leaves)) == set(map(id, people)) and all(isinstance(leaf, ss.transitions.State) for leaf in f.leaves)
-    totals = [i for i,f in enumerate(den) if total(f)]
+    totals = [i for i,f in enumerate(den) if is_total(f, people)]
     if totals: # A share of the people: contact with people in those states
         den.pop(totals[0])
     else: # A number of people

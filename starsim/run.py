@@ -1327,7 +1327,7 @@ def restart_runs(sims, n_runs, pars=None, draws=False):
     for sim in sims:
         runner = sim.new(rand_seed=sim.pars.rand_seed, verbose=0).init() # The seed as it is now, which may have been set since the sim was made; the MultiSim says what it runs
         runner.label = sim.label
-        if not runner.kernel_only() or not same_times([runners[0] if runners else runner, runner]): # Runs at different times can't be put together as results across runs
+        if runner._kernel_reason() is not None or not same_times([runners[0] if runners else runner, runner]): # Runs at different times can't be put together as results across runs
             return None
         keys = {key for p in sets if p is not None for key in p}
         for net in getattr(runner, 'mixed', []): # A network's parameter sets the contact rates when the sim is built, so each run with a value for one is built

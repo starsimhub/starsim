@@ -53,7 +53,7 @@ Start from the smallest model that represents the mechanism your question depend
 | Does closing schools help? | [Closing schools](../gallery/school_closures.qmd) |
 | Does severity depend on age, in a way that is easiest to write as a function? | [Severity by age, as a function](../gallery/custom_code.qmd) |
 | What do surveillance data say about the parameters? | [Cases, hospitalizations, and deaths, fitted to data](../gallery/outcomes_fit.qmd), [T7 – Data and calibration](../tutorials/t7_calibration.qmd) |
-| What drives recurring epidemics, such as those of measles? | [Measles in London, four ways](../gallery/measles_london.qmd) |
+| What drives recurring epidemics, such as those of measles? | [Measles in London, two ways](../gallery/measles_london.qmd) |
 | Do individual partnerships matter? | [An STI on a sexual network](../gallery/sexual_network.qmd), [A2 – Networks](../tutorials/a2_networks.qmd) |
 
 When adapting a model, first reproduce its baseline, then change one assumption at a time, and compare the results with and without each change. Record where each parameter value came from (`ss.par(..., source=...)` keeps it with the model; see [Parameters](building_parameters.qmd)), and which outputs were checked against data. If you already have a model in another framework, see [Conversion](conversion/index.qmd), and check that the translated model gives the same results as the original.

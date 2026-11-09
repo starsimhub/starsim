@@ -93,7 +93,7 @@ def run(key, how, **kwargs):
     make, pars = models[key]
     sim = ss.Sim(make(), **sc.mergedicts(pars, kw, kwargs)).init()
     if how == 'all' and key != 'tb':
-        assert sim.kernel_only()
+        assert sim._kernel_reason() is None
     return sim.profile(kind='loop', plot=False).sim if how == 'step' else sim.run() # Recording the time of each step is one of the things that needs the loop
 
 
@@ -237,7 +237,7 @@ def test_module_beside_kernels():
         stepped = make(solver=solver, analyzers=Counts()).run()
         assert np.array_equal(whole.results.sis.I, stepped.results.sis.I), f'{solver}: a module that does nothing changed the run'
         assert stepped.analyzers[0].last == whole.results.sis.I[-1]
-    assert make(analyzers=Quiet()).init().kernel_only(), 'an analyzer with an empty step needs no step of its own'
+    assert make(analyzers=Quiet()).init()._kernel_reason() is None, 'an analyzer with an empty step needs no step of its own'
 
     plain = lambda **kwargs: make(beta=ss.perday(0.2), **kwargs)
     halved = plain(interventions=Halves()).run()

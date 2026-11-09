@@ -37,6 +37,9 @@ By default (`solver='auto'`), a model runs as an ODE if every part of it can be 
 
 Here is a measles outbreak in a town of 100,000 people. Measles has a basic reproduction number R0 of about 15 (β = 1.9 per day, infectious for 8 days), but in this town 90% of people are already immune, so at the start each case infects about 15 × 0.1 = 1.5 others:
 
+::: {.panel-tabset group="language"}
+## Python
+
 ```{python}
 import starsim as ss
 
@@ -49,6 +52,24 @@ sim = ss.Sim(measles, total_pop=100_000, stop=ss.days(150))
 sim.run();
 ```
 
+## R
+
+```r
+library(starsim)
+
+states("S I R")
+measles <- Disease(
+  infection = Transition(S, I, rate = 1.9 * I), # β = 1.9 per day
+  recovery  = Transition(I, R, dur = days(8)),  # Infectious for 8 days on average
+  init   = list(R = 0.9), # 90% immune
+  init_n = list(I = 10)   # 10 infectious
+)
+
+sim <- Sim(measles, total_pop = 100000, stop = days(150))
+sim$run()
+```
+:::
+
 The first line of the output says what ran and how: here, as an ODE. The second gives R0, 15.2, and the reproduction number at the start, R = 1.52, the number of people each case infects at the start, which is R0 times the share susceptible. `sim.describe()` shows the same choice and the reason for it, before anything runs. To use another solver, give `solver=` to the sim, or to `run()`:
 
 ```python
@@ -60,6 +81,9 @@ sim = sim.new(solver='abm').run() # Runs the same sim again, as agents
 
 For a large population and a model with nothing individual in it, the solvers agree. Here is the outbreak above with each one, run side by side with `ss.parallel()`, which takes a dict of sims by label:
 
+::: {.panel-tabset group="language"}
+## Python
+
 ```{python}
 sims = {}
 for solver in ['ode', 'binomial', 'gillespie', 'tau', 'abm']:
@@ -69,6 +93,20 @@ sims['abm'] = sims['abm'].new(n_agents=100_000) # One agent per person: see belo
 msim = ss.parallel(sims)
 msim.plot('measles.I')
 ```
+
+## R
+
+```r
+sims <- list()
+for (solver in c("ode", "binomial", "gillespie", "tau", "abm")) {
+  sims[[solver]] <- Sim(measles, total_pop = 100000, stop = days(150), solver = solver)
+}
+sims$abm <- sims$abm$new(n_agents = 100000) # One agent per person: see below
+
+msim <- parallel(sims)
+msim$plot("measles.I")
+```
+:::
 
 The agents are given `n_agents=100_000`, one per person. By default a sim has 10,000 agents, so here each would stand for 10 people, and the 10 infectious people at the start would be a single agent: an outbreak started by one case, which dies out two times in three (below). When a model's start is a few people, keep agents at one per person, at least at the start; see [Branching and rescaling](running_branching.qmd).
 

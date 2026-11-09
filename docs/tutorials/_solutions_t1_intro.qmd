@@ -8,7 +8,7 @@ import starsim as ss
 
 **Suppose people with measles were infectious for only 5 days, with the same β. What would R0 be? Change the model, run it, and check the R0 the run prints. How does the epidemic change?**
 
-R0 = β × the infectious period = 1.9 × 5 = 9.5, which the second run prints. With a shorter infectious period, people recover sooner, so fewer are infectious at once, and the peak is lower; but since R0 is still well above 5, almost everyone is still infected.
+R0 = β × the infectious period = 1.9 × 5 = 9.5, as the second run prints. People recover sooner, so fewer are infectious at once and the peak is lower; but with R0 still well above 5, almost everyone is infected.
 
 ```{python}
 S, I, R = ss.states('S I R')
@@ -28,7 +28,7 @@ msim.plot('measles.I')
 
 **Run the agent version of the model with 1,000 agents instead of 10,000 (each standing for 100 people). What changes in the plot, and why?**
 
-Surprisingly little: in an epidemic this large, which infects almost everyone, even 1,000 agents follow the same course, and the two curves differ by little more than chance. What changes is the detail. Each agent now stands for 100 people, so the results move in steps of 100, and chance plays a larger part with fewer agents (try another `rand_seed=` to see how much the curve moves). This matters most when following small numbers, such as the first or last few cases of an outbreak.
+Surprisingly little: in an epidemic that infects almost everyone, even 1,000 agents follow the same course, differing by little more than chance. What changes is the detail: each agent stands for 100 people, so results move in steps of 100, and chance plays a larger part (try another `rand_seed=`). This matters most for small numbers, such as the first or last few cases of an outbreak.
 
 ```{python}
 S, I, R = ss.states('S I R')
@@ -46,7 +46,7 @@ msim.plot('measles.I')
 
 **Using the output of `describe()`, find out how Starsim assumes that people mix, and how long people stay infectious (the distribution as well as the average).**
 
-Under "Mixing and interventions", `describe()` says that mixing is homogeneous (everyone mixes with everyone else equally), marked as guessed, since no contacts were given. Under `recovery`, it says that the time in `I` is exponentially distributed, with a mean of 8 days (`time in I ~ exponential(mean = 8 days)`), also marked as guessed.
+Under "Mixing and interventions", `describe()` says mixing is homogeneous (everyone mixes with everyone equally), marked as guessed, since no contacts were given. Under `recovery`, the time in `I` is exponential with a mean of 8 days (`time in I ~ exponential(mean = 8 days)`), also guessed.
 
 ```{python}
 sim = ss.Sim(measles, total_pop=100_000, stop=ss.days(50))

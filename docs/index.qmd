@@ -14,12 +14,6 @@ A ten-minute tour: an epidemic model built step by step, with age groups, interv
 :::
 
 ::: {.g-col-4}
-[**Gallery**](gallery.qmd)
-
-Complete models built with Starsim, each with its diagram, parameters, code, and a result.
-:::
-
-::: {.g-col-4}
 [**Tutorials**](tutorials.qmd)
 
 Step-by-step lessons that build up one model, a simplified measles outbreak, and then cover agent-based modeling.
@@ -29,6 +23,12 @@ Step-by-step lessons that build up one model, a simplified measles outbreak, and
 [**User guide**](user_guide.qmd)
 
 Each topic in full: building models, populations, interventions, running, calibration, the model library, and how Starsim works inside.
+:::
+
+::: {.g-col-4}
+[**Gallery**](gallery.qmd)
+
+Complete models built with Starsim, each with its diagram, parameters, code, and a result.
 :::
 
 ::: {.g-col-4}

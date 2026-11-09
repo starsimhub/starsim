@@ -1729,7 +1729,7 @@ fixed = [ # The same, for what cannot change once the sim is initialized
 
 def not_whole(sim):
     """ Whatever stops the kernels taking the whole run """
-    return dict(reason=sim.kernel_reason()) if not sim.kernel_only() else None
+    return dict(reason=sim._kernel_reason()) if sim._kernel_reason() is not None else None
 
 
 def certain_rate(sim, mod):

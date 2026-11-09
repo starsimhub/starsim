@@ -189,11 +189,11 @@ def many_infectious(sim):
     return sim.diseases.flu.I.n >= 20_000
 
 measure = ss.modify(flu.pars.beta, multiply=0.7, who=many_infectious)
-sim = ss.Sim(flu, interventions=measure, **pars).init()
-print(sim.kernel_reason())
+sim = ss.Sim(flu, interventions=measure, **pars)
+sim.describe()
 ```
 
-`sim.kernel_reason()` says why a run is taken a step at a time (or gives `None` if it isn't), and `require_kernels=True` on the sim makes that an error instead.
+The `plan` line of `sim.describe()` says why a run is taken a step at a time (a run says so too, as it starts), and `require_kernels=True` on the sim makes that an error instead.
 
 ## Performance
 

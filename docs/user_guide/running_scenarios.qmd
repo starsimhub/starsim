@@ -13,6 +13,9 @@ A scenario is a sim with something changed: an intervention added, a parameter s
 
 Here, measles has reached a town of 20,000 people in which 90% are immune, with 50 infectious people on 1 January. The question is what a vaccination campaign that reaches half the town, with a vaccine that protects 95% of those who receive it, would avert, and whether it matters if it happens in February or March:
 
+::: {.panel-tabset group="language"}
+## Python
+
 ```{python}
 import starsim as ss
 
@@ -27,7 +30,27 @@ february = ss.vaccinate(efficacy=0.95, when='2025-02-01', coverage=0.5)
 march    = ss.vaccinate(efficacy=0.95, when='2025-03-01', coverage=0.5)
 ```
 
+## R
+
+```r
+library(starsim)
+
+states("S I R")
+beta <- par(1.9)              # Transmission rate per day
+infection <- Transition(S, I, rate = beta * I)
+recovery  <- Transition(I, R, dur = days(8)) # Infectious for 8 days on average
+measles <- Disease(infection = infection, recovery = recovery, init = list(R = 0.9), init_n = list(I = 50)) # 90% immune, 50 infectious
+
+base <- Sim(measles, total_pop = 20000, start = "2025-01-01", stop = "2025-07-01")
+february <- vaccinate(efficacy = 0.95, when = "2025-02-01", coverage = 0.5)
+march    <- vaccinate(efficacy = 0.95, when = "2025-03-01", coverage = 0.5)
+```
+:::
+
 `sim.new()` makes a new sim from the same inputs, with whatever is given changed, so each scenario is the base sim with its intervention, and the base itself is left as it was (`ss.parallel()` runs the sims it is given and labels them, so a sim given to it directly comes back run and relabeled). `ss.parallel()` runs a dict of sims by label, at the same time on the computer's cores:
+
+::: {.panel-tabset group="language"}
+## Python
 
 ```{python}
 scenarios = {
@@ -39,11 +62,34 @@ msim = ss.parallel(scenarios)
 msim.plot('measles.I')
 ```
 
+## R
+
+```r
+scenarios <- list(
+  "No campaign"          = base$new(),
+  "Campaign in February" = base$new(interventions = february),
+  "Campaign in March"    = base$new(interventions = march)
+)
+msim <- parallel(scenarios)
+msim$plot("measles.I")
+```
+:::
+
 The result is an `ss.MultiSim`: the runs of every scenario, with each result holding a row for each run. `msim.summarize()` gives each result over the whole run for each scenario: the total of each flow (`measles_infection` is the number of infections) and the final value of each state:
+
+::: {.panel-tabset group="language"}
+## Python
 
 ```{python}
 msim.summarize()
 ```
+
+## R
+
+```r
+summary(msim) # As msim$summarize(), as a data frame
+```
+:::
 
 A campaign in February averts about 490 of the 1,190 infections; by March, most of the outbreak has happened, and it averts about 140. A scenario contains exactly the interventions given to it, so the baseline is a scenario like any other. Where each sim has one disease, a result can also be named without it, as for a single sim: `msim.plot('I')` and `msim.results.I` find `I` in each sim's disease, even if the diseases are named differently (say, `sir` in one scenario and `seir` in another); a sim with several diseases needs the disease named (`'measles.I'`). The sims themselves are kept in `msim.sims`, by position (`msim.sims[0]`), or by label (`msim.sims['Campaign in March']`, which gives the list of that scenario's runs).
 
@@ -61,16 +107,39 @@ On 1 March, a month after the February campaign, about 28 people are infectious 
 
 These runs are ODEs, so each scenario has one answer: what happens on average. To see the outbreaks that could happen, run the model as a stochastic model, in which people move between states at random, and run it many times. Here is measles introduced into the same town by only five infectious people. Each case infects about 1.5 others at the start (R0 of 15 times the 10% who are susceptible). First the ODE, then 50 runs of the same model as an exact stochastic compartmental model (`solver='gillespie'`; a model that runs as agents is stochastic already; see [Solvers and backends](running_solvers.qmd) for the choices):
 
+::: {.panel-tabset group="language"}
+## Python
+
 ```{python}
 measles = ss.Disease(infection, recovery, init=dict(R=0.9), init_n=dict(I=5)) # Now 5 infectious
 sim = ss.Sim(measles, total_pop=20_000, stop=ss.days(180))
 sim.run();
 ```
 
+## R
+
+```r
+measles <- Disease(infection = infection, recovery = recovery, init = list(R = 0.9), init_n = list(I = 5)) # Now 5 infectious
+sim <- Sim(measles, total_pop = 20000, stop = days(180))
+sim$run()
+```
+:::
+
+::: {.panel-tabset group="language"}
+## Python
+
 ```{python}
 msim = ss.parallel(sim.new(solver='gillespie'), n_runs=50)
 msim.plot('measles.I')
 ```
+
+## R
+
+```r
+msim <- parallel(sim$new(solver = "gillespie"), n_runs = 50)
+msim$plot("measles.I")
+```
+:::
 
 `ss.parallel(sim, n_runs=50)` runs it 50 times, each with its own random seed (`sim.run()` runs it once, and always returns the sim; a single sim with no `n_runs=`, `ss.parallel(sim)` or `ss.MultiSim(sim)`, is also one run, where in Starsim 3 `ss.MultiSim(sim)` ran it four times; `sim.new(solver='gillespie')` is the same sim, built for the Gillespie solver). The ODE gave one outbreak peaking at about 137 infectious on day 74. The plot of the runs shows their median at each time point, and the range that holds 95% of them. `lines=True` shows each run instead, which shows what the median hides:
 
@@ -129,7 +198,10 @@ Comparing two scenarios run many times, the question is whether the difference b
 
 First, the runs of each scenario use the same seeds in the same order (the first run of each with seed 1, the second with seed 2, and so on), so the first run of the baseline and the first run of the campaign share their random numbers: the same people are infected by the same chains of transmission, until the campaign changes them. Starsim makes sure that a random number goes to the same use in both runs, even when the intervention changes how many draws are made (common random numbers; see [Random numbers](mechanics_random.qmd)). The difference between paired runs is then mostly the effect of the intervention, not noise.
 
-Second, `msim.diff()` gives the difference of each scenario from a baseline, run by run, and `msim.summarize(baseline=...)` summarizes those differences. Here are the February campaign and the baseline from above, each run 20 times with the chain binomial (`solver='binomial'`):
+Second, `msim.diff()` gives the difference of each scenario from a baseline, run by run, and `msim.summarize(baseline=...)` summarizes those differences. Here are the February campaign and the baseline from above, each run 20 times with the chain binomial (`solver='binomial'`). The "Explicit" tab makes the 20 runs of each scenario itself, with the seeds that `n_runs=20` gives them, and the results are the same:
+
+::: {.panel-tabset group="language"}
+## Python
 
 ```{python}
 scenarios = {
@@ -139,6 +211,30 @@ scenarios = {
 msim = ss.parallel(scenarios, n_runs=20)
 msim.plot('measles.I')
 ```
+
+## R
+
+```r
+scenarios <- list(
+  "No campaign"          = base$new(solver = "binomial", verbose = 0),
+  "Campaign in February" = base$new(solver = "binomial", interventions = february, verbose = 0)
+)
+msim <- parallel(scenarios, n_runs = 20)
+msim$plot("measles.I")
+```
+
+## Explicit
+
+```{python}
+scenarios = {
+    'No campaign': base.new(solver='binomial', verbose=0),
+    'Campaign in February': base.new(solver='binomial', interventions=february, verbose=0),
+}
+runs = [sim.new(rand_seed=seed, label=label) for label, sim in scenarios.items() for seed in range(1, 21)] # Each scenario with seeds 1 to 20, as n_runs=20 gives
+msim_explicit = ss.parallel(runs) # Runs with the same label are runs of one scenario
+msim_explicit.plot('measles.I')
+```
+:::
 
 ```{python}
 msim.summarize(baseline='No campaign').loc['measles_infection']
@@ -175,11 +271,23 @@ The estimate of the effect is about the same, but its interval is wider when the
 
 To see how a result depends on a parameter, run the sim with each of a set of values. `pars=` takes a list of values for each parameter, and each value is a scenario of its own, labeled with it. Here the outbreak with β from 1.5 to 2.3 per day (R0 from 12 to 18):
 
+::: {.panel-tabset group="language"}
+## Python
+
 ```{python}
 sim = base.new(verbose=0) # Back to the base sim, with 50 infectious at the start
 msim = ss.parallel(sim, pars=dict(beta=[1.5, 1.9, 2.3]))
 msim.plot('measles.I')
 ```
+
+## R
+
+```r
+sim <- base$new(verbose = 0) # Back to the base sim, with 50 infectious at the start
+msim <- parallel(sim, pars = list(beta = c(1.5, 1.9, 2.3)))
+msim$plot("measles.I")
+```
+:::
 
 ```{python}
 msim.summarize().loc['measles_infection']

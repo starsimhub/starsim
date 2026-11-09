@@ -398,7 +398,7 @@ The tools on this page and elsewhere, by the question each answers. "Builds" mea
 | `disease.equations()` | The model as the equations of an ODE | No |
 | `disease.diagram()` | The states and transitions, drawn | No |
 | `sim.solver`, `sim.solver_reason` | Which solver was chosen, and why | Builds |
-| `sim.kernel_reason()`, `require_kernels=True` | Why a compartmental run is taken a step at a time rather than in one call (see [Getting the most speed](running_performance.qmd)) | Builds |
+| `sim.describe()`, `require_kernels=True` | Why a compartmental run is taken a step at a time rather than in one call (see [Getting the most speed](running_performance.qmd)) | Builds |
 | `ss.solvers.solver_table()` | Every rule that decides which engine runs a model (see [Solvers and backends](running_solvers.qmd#appendix-what-needs-agents)) | No |
 | `sim.check_dt()` | How much each result changes with a step half as long | Runs two copies |
 | `sim.what_modifies()` | Everything that changes a parameter during the run | Builds |

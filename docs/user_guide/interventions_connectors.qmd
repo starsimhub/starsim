@@ -13,6 +13,9 @@ A **connector** links modules: it lets one part of a model change another. The c
 
 Measles, the running example of the tutorials, is a poor fit here: its interactions with other infections are not the usual reason to model it. HIV and a curable sexually transmitted infection (STI) are the classic case, since each raises the risk of the other. HIV here is the library's (`ssl.HIV`, a disease written as code, with a CD4 count for each person), and the STI is declared, with no lasting immunity. Both pass through a sexual network, with β per sex act, and are chosen so that without the interactions HIV is roughly stable at about 4% of people, and the STI at 5–10% (see [Contact networks](populations_networks.qmd#transmission-that-differs-by-route)):
 
+::: {.panel-tabset group="language"}
+## Python
+
 ```{python}
 import starsim as ss
 import starsim.library as ssl
@@ -26,7 +29,27 @@ recovery  = I >> S @ ss.years(1) # Infected for a year on average, then suscepti
 sti = ss.Disease(infection, recovery, init_prev=0.05)
 ```
 
+## R
+
+```r
+library(starsim) # Also gives ssl, Starsim's library, as in Python's import starsim.library as ssl
+
+hiv <- ssl$HIV(beta = list(sexualnet = ss$peract(m2f = 0.001, f2m = 0.0005)), init_prev = 0.05) # About 1 in 1,000 acts, from men to women
+
+S <- ss$State("S")
+I <- ss$State("I", infected = TRUE) # Gives the results infected and prevalence
+sti <- Disease(
+  infection = Transition(S, I, rate = list(sexualnet = ss$peract(m2f = 0.07, f2m = 0.035)) * I), # β per act, on the sexual network
+  recovery  = Transition(I, S, dur = years(1)), # Infected for a year on average, then susceptible again
+  init_prev = 0.05
+)
+```
+:::
+
 Each interaction is one modifier: "for people with a CD4 count below 500, multiply their susceptibility to the STI by 2", and so on. People with AIDS (a CD4 count below 200) meet both conditions on their susceptibility, so theirs is multiplied by 2 × 2.5 = 5:
+
+::: {.panel-tabset group="language"}
+## Python
 
 ```{python}
 interactions = [
@@ -46,6 +69,29 @@ scenarios = {
 msim = ss.parallel(scenarios)
 msim.plot(['hiv.infected', 'sti.I'])
 ```
+
+## R
+
+```r
+interactions <- list(
+  modify(sti$rel_sus,   multiply = 2,   who = hiv$cd4 < 500), # People with HIV are 2 times as likely to acquire the STI
+  modify(sti$rel_sus,   multiply = 2.5, who = hiv$cd4 < 200), # ... and 5 times as likely with AIDS
+  modify(sti$rel_trans, multiply = 1.5, who = hiv$cd4 < 500), # People with HIV are 1.5 times as infectious with the STI
+  modify(sti$rel_trans, multiply = 2,   who = hiv$cd4 < 200), # ... and 3 times with AIDS
+  modify(hiv$rel_sus,   multiply = 2.7, who = sti$I),         # People with the STI are 2.7 times as likely to acquire HIV
+  modify(hiv$rel_trans, multiply = 2.7, who = sti$I)          # ... and as infectious with it
+)
+
+make_sim <- function(...) { # A sim with these settings, and any others given
+  Sim(list(hiv, sti), networks = ss$SexualNet(dur = years(1)), n_agents = 2000, start = 2000, stop = 2030, dt = ss$months(1), verbose = 0, ...)
+}
+msim <- parallel(list(
+  "Without interactions" = make_sim(),
+  "With interactions"    = make_sim(connectors = interactions)
+))
+msim$plot(c("hiv.infected", "sti.I"))
+```
+:::
 
 Each disease spreads further with the other: the STI raises HIV transmission, and people with HIV, more susceptible to the STI, keep it circulating, so the two amplify each other, which neither model shows on its own. The interactions here are at the high end of estimates, and their effect compounds over the 30 years; the numbers are illustrative, and a model of a real setting would take the interactions from studies and fit the prevalence of both to data.
 

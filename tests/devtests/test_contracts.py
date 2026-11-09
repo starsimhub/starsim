@@ -574,7 +574,7 @@ def test_joint_population():
     assert isinstance(ss.Sim([split, ss.SIS(name='b')], demographics=ss.death(rate=ss.peryear(0.01)), total_pop=1000, stop=2010, verbose=0).init().solver, ss.solvers.abm)
     text = pair().init().describe()
     assert 'a × b: 2 × 2 = 4 joint states of people' in text and 'people die of a' in text and 'start independent' in text
-    assert 'plan         a, b: as compiled code, the whole run in one call; a × b as one program' in pair().init().describe(verbose=True) # How it is run, only when asked
+    assert 'plan         a, b: as compiled code, the whole run in one call; a × b as one program' in pair().init().describe() # How it is run
     return j
 
 

@@ -4,7 +4,7 @@
 
 **Q: In Niger, the crude birth rate is 45 and the crude death rate is 9. Assuming these rates stay constant, and starting with its population in 2020, how many people will there be in 2040? Compare this with its UN birth and death rates.**
 
-A: We can build a simple demographic model with these rates, and another with the UN's rates, then run them and compare the results:
+A: Run one model with these rates, and one with the UN's:
 
 ```{python}
 import numpy as np
@@ -69,7 +69,7 @@ plt.ylim(bottom=0.5)
 plt.ylabel('Number infectious');
 ```
 
-A: In the larger town, more children are born each year, so the susceptible people build up faster, and imported cases (which also come more often, since there are more susceptible people to be infected outside the town) start epidemics sooner: they come more often, and are larger. Measles still dies out between most of them, though: a town of 50,000 is still well below the critical community size of measles.
+A: In the larger town, more children are born each year, so susceptible people build up faster, and imported cases (also more frequent) start epidemics sooner: they come more often, and are larger. Measles still dies out between most of them, since 50,000 is well below its critical community size.
 
 ### Exercise 4
 

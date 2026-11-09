@@ -21,7 +21,7 @@ Complete models, each on a page of its own with the same parts: what the model i
 | [Cases, hospitalizations, and deaths, fitted to data](gallery/outcomes_fit.qmd) | Outcomes with delays; data made from the model; fitting β with `sim.fit()` |
 | [Severity by age, as a function](gallery/custom_code.qmd) | A Python function in a model, which still runs as compartments, and as agents |
 | [An STI on a sexual network](gallery/sexual_network.qmd) | Transmission per sex act over partnerships; many runs as agents |
-| [Measles in London, four ways](gallery/measles_london.qmd) | He et al. (2010)'s stochastic measles model with school terms and cohort entry: declared with a little code, with a likelihood of its own, as code, compiled, and with a particle filter |
+| [Measles in London, two ways](gallery/measles_london.qmd) | He et al. (2010)'s stochastic measles model with school terms and cohort entry: declared with a little code, and as code; fitted with a likelihood of its own, compiled, and with a particle filter |
 | [Closing schools](gallery/school_closures.qmd) | An SEIR in the United Kingdom's population, with contacts by setting, and a school closure that removes one setting |
 
 ## Checks against theory

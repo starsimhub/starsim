@@ -67,7 +67,7 @@ for sim in msim.sims:
     print('Memory of', sim.label, '- doses:', round(doses), '- infections prevented:', round(prevented), '- per dose:', round(prevented/doses, 2))
 ```
 
-The longer people remember, the more doses are sought (about 3,500 with a memory of 10 days, 4,900 with 30, and 6,100 with 90), and the more infections are prevented (about 3,100, 4,000, and 4,300). But each extra dose prevents fewer: about 0.9 infections a dose with a memory of 10 days, and 0.7 with 90. A longer memory adds doses mostly after the peak, when people still remember the outbreak but most of those it would infect have already been infected; a dose given then protects someone who was unlikely to be infected anyway.
+The longer people remember, the more doses are sought (about 3,500 with a memory of 10 days, 4,900 with 30, and 6,100 with 90), and the more infections are prevented (about 3,100, 4,000, and 4,300). But each extra dose prevents fewer: about 0.9 infections a dose with a memory of 10 days, and 0.7 with 90. A longer memory adds doses mostly after the peak, when most of those the outbreak would infect already have been, so a dose then protects someone unlikely to be infected anyway.
 
 **2. Avoiding contact as well.**
 
@@ -85,7 +85,7 @@ msim.plot('measles.I')
 msim.summarize().loc['measles_infection']
 ```
 
-Avoiding contact as well makes the outbreak about a fifth smaller again (about 4,400 infections rather than 5,400). The function reads the module from the sim (`sim.interventions.vaccinedemand`), not from a variable outside it, since the sim works on its own copy of each module; and since neither the module nor the modifier keeps anything for each person, the sim still runs as an ODE.
+Avoiding contact makes the outbreak about a fifth smaller again (about 4,400 infections rather than 5,400). The function reads the module from the sim (`sim.interventions.vaccinedemand`), not a variable outside it, since the sim works on its own copy; and since neither the module nor the modifier keeps anything for each person, the sim still runs as an ODE.
 
 **3. As agents.**
 
@@ -100,4 +100,4 @@ for sim in msim.sims:
     print(sim.label, f'({sim.solver}) - infections:', round(res.measles.infection.sum()), '- doses:', round(res.vaccinedemand.doses.sum()))
 ```
 
-The module runs unchanged as agents, and the two agree to within a few percent; the agents are one run of a random process, so they differ a little from run to run. The module needs no change because it uses only what works under every solver: a result of the sim (`cases`), the number of people in a state (`measles.S.n`), and `ss.move()` with a number of people, which as agents moves that many agents (chosen at random) from `S` to `R`. A module that picked out particular people, e.g. with `measles.S.uids`, would run only as agents ([A5](a5_modules.qmd)).
+The module runs unchanged as agents, and the two agree to within a few percent (agents vary a little from run to run). It needs no change because it uses only what works under every solver: a result of the sim (`cases`), the number of people in a state (`measles.S.n`), and `ss.move()` with a number of people, which as agents moves that many randomly chosen agents from `S` to `R`. A module that picked out particular people, e.g. with `measles.S.uids`, would run only as agents ([A5](a5_modules.qmd)).

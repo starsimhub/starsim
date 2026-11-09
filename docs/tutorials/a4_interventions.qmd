@@ -7,15 +7,15 @@ authorship:
   note: Adapted from the Starsim 3 interventions tutorial; ported to v4, with new sections on treatment, screening, partner notification, and individual histories written by AI; prevalence made realistic, and treatment outcomes added, by AI
 ---
 
-Understanding the impact of interventions is one of the most common reasons to use a disease model. [T5](t5_interventions.qmd) showed how to vaccinate a group of people and change a parameter from a date, for measles in a town. This tutorial is about interventions that reach particular people because of what has happened to them: treating people when they seek care, screening a group and treating those who test positive, notifying their partners, and vaccinating people as they reach an age. Each of these depends on individuals, their infections, their test results, and their partners, so they run as agents.
+[T5](t5_interventions.qmd) showed how to vaccinate a group and change a parameter from a date. This tutorial covers interventions that reach particular people because of what has happened to them: treating people who seek care, screening and treating those who test positive, notifying their partners, and vaccinating people as they reach an age. These depend on individuals' infections, test results, and partners, so they run as agents.
 
 ## Products and interventions
 
-Starsim contains _products_, which can be thought of as the actual test, diagnostic, treatment, or vaccine product being used, as well as _interventions_ (deliveries), which are responsible for delivering the products to the population. Starsim includes three basic types of product, `ss.Vaccine`, `ss.Diagnostic`, and `ss.Treatment`, and a delivery for each: `ss.vaccinate()`, `ss.screen()`, and `ss.treat()`. A delivery says who receives the product (`who=`, who is eligible, including people as they reach an age, `ss.at_age()`), when (`when=`: times, how often, an event that has happened to them, or `ss.schedule()`), and how many (`coverage=`, `capacity=`). These are general enough that they rarely need to be tailored to a particular disease, and you can just use them directly. That being said, you are always welcome to write your own, to capture particular features of the intervention you're modeling (see [A5](a5_modules.qmd)).
+Starsim has _products_ (the test, treatment, or vaccine itself) and _interventions_ (deliveries) that deliver them to people. There are three basic products, `ss.Vaccine`, `ss.Diagnostic`, and `ss.Treatment`, and a delivery for each: `ss.vaccinate()`, `ss.screen()`, and `ss.treat()`. A delivery says who receives the product (`who=`, including people as they reach an age, `ss.at_age()`), when (`when=`: times, how often, an event that has happened to them, or `ss.schedule()`), and how many (`coverage=`, `capacity=`). They rarely need tailoring to a disease, but you can write your own (see [A5](a5_modules.qmd)).
 
 ## Starting point
 
-Measles has no treatment, so this tutorial uses the sexually transmitted infection from [A2](a2_networks.qmd): a simplified curable bacterial infection, such as gonorrhea, that lasts 6 months on average untreated and leaves no immunity (an SIS model), on a sexual network in which partnerships last about a month. Unlike in A2, only 15% of people take part in the network (`participation=`): a core group with many short partnerships, in which the infection is concentrated, as gonorrhea is in real populations. The network remembers partnerships for a year after they end (`memory=`), which partner notification will use. Births and deaths keep the population turning over, so that people age into the groups that interventions reach. It runs as 10,000 agents for 20 years, in monthly steps:
+Measles has no treatment, so this tutorial uses the sexually transmitted infection from [A2](a2_networks.qmd): a simplified curable bacterial infection, like gonorrhea, that lasts 6 months on average untreated and leaves no immunity (SIS), on a sexual network of partnerships lasting about a month. Only 15% of people take part in the network (`participation=`): a core group with many short partnerships, where the infection is concentrated, as gonorrhea is. The network remembers partnerships for a year after they end (`memory=`), for partner notification. Births and deaths turn the population over, so people age into the groups interventions reach. It runs as 10,000 agents for 20 years, in monthly steps:
 
 ```{python}
 import numpy as np
@@ -40,22 +40,25 @@ sim.run()
 sim.plot('sti.I')
 ```
 
-The infection is endemic, with about 6% of people infected at any time, nearly all of them in the network. It takes a few years to settle: many of the 5% infected at the start are outside the network, and recover without passing it on.
+The infection is endemic, with about 6% of people infected, nearly all in the network. It takes a few years to settle, since many of those infected at the start are outside the network, and recover without passing it on.
 
 ## Treating people who seek care
 
-Some people with the infection notice symptoms and seek care. Suppose 30% of people seek care within a month of infection, on average, and are treated with a drug that cures 95% of them. The drug is the product; `ss.treat()` delivers it. `when=ss.on(sti.infection, delay=...)` delivers it to the people who were just infected, a time after their infection drawn for each person, and `coverage=0.3` to 30% of them:
+Suppose 30% of people notice symptoms and seek care within about a month of infection, and are treated with a drug that cures 95%. The drug is the product; `ss.treat()` delivers it. `when=ss.on(sti.infection, delay=...)` delivers it to people a time after their infection, drawn for each person, and `coverage=0.3` to 30% of them:
 
 ```{python}
 drug = ss.Treatment(cure=0.95) # Cures 95% of the people it is given to
 care = ss.treat(drug, when=ss.on(sti.infection, delay=ss.uniform(ss.weeks(1), ss.months(2))), coverage=0.3)
 ```
 
-The treatment is given when it is due, whether or not the person is still infected by then; for someone who has recovered already, it does nothing.
+The treatment is given when due, whether or not the person is still infected; for someone already recovered, it does nothing.
 
 ## Screening, and treating those who test positive
 
-People without symptoms don't seek care, so they can only be found by screening. Here people aged 15 to 29, who have the most partners, are screened every 6 months from 2010, with a test that finds 90% of infections (its sensitivity) and gives a false positive for 2% of those not infected (its specificity). Half of the people eligible are reached in each round. Those who test positive (`screening.positive`) are treated:
+People without symptoms can only be found by screening. Here people aged 15 to 29, who have the most partners, are screened every 6 months from 2010, with a test that finds 90% of infections (sensitivity) and gives a false positive for 2% of the uninfected (specificity). Half of those eligible are reached in each round, and those who test positive (`screening.positive`) are treated. Written out, who is eligible is a function of the sim returning their UIDs, and when is a list of dates:
+
+::: {.panel-tabset group="language"}
+## Python
 
 ```{python}
 young = (ss.person.age >= 15) & (ss.person.age < 30) # Who is eligible: a condition on each person, worked out when it is needed
@@ -63,11 +66,34 @@ screening = ss.screen(sensitivity=0.9, specificity=0.98, who=young, when=ss.sche
 treatment = ss.treat(drug, when=screening.positive)
 ```
 
-`who=` takes any condition on people or on the states of a module, combined with `&` (and), `|` (or), and `~` (not): `young & ~sti.I` would screen only young people who aren't infected, for example (which would be pointless, but possible).
+## R
+
+```r
+drug <- ss$Treatment(cure = 0.95) # As above: cures 95% of the people it is given to
+young <- (ss$person$age >= 15) & (ss$person$age < 30) # Who is eligible: a condition on each person, worked out when it is needed
+screening <- ss$screen(sensitivity = 0.9, specificity = 0.98, who = young, when = ss$schedule(every = ss$months(6), start = "2010"), coverage = 0.5)
+treatment <- ss$treat(drug, when = screening$positive)
+```
+
+## Explicit
+
+```{python}
+def young_people(sim):
+    """ The UIDs of the people aged 15 to 29 """
+    age = sim.people.age
+    return age.auids[(age.values >= 15) & (age.values < 30)]
+
+rounds = [f'{year}-{month}-01' for year in range(2010, 2020) for month in ['01', '07']] + ['2020-01-01'] # Every 6 months from 2010, to the end of the sim
+screening = ss.screen(sensitivity=0.9, specificity=0.98, who=young_people, when=rounds, coverage=0.5)
+treatment = ss.treat(drug, when=screening.positive)
+```
+:::
+
+`who=` takes any condition on people or on a module's states, combined with `&` (and), `|` (or), and `~` (not): e.g. `young & ~sti.I` would screen only young people who aren't infected.
 
 ## Notifying partners
 
-A person who tests positive was infected by someone, and may have infected others. Partner notification reaches their partners, with `trace=`: it delivers the product to the contacts, on the named network, of the people the event in `when=` selects. Since the network remembers partnerships for a year, this reaches the partners of the past year, not only the current ones. Here half of the partners of those who test positive are reached, and treated without being tested (as in expedited partner therapy):
+A person who tests positive was infected by someone, and may have infected others. With `trace=`, a delivery reaches the contacts, on the named network, of the people selected by `when=`; since the network remembers partnerships for a year, this includes past partners. Here half the partners of those who test positive are treated without testing (as in expedited partner therapy):
 
 ```{python}
 notification = ss.treat(drug, when=screening.positive, coverage=0.5, trace='sexualnet')
@@ -87,13 +113,13 @@ msim = ss.parallel(sims)
 msim.plot('sti.I')
 ```
 
-Treating people who seek care cuts the number infected by about a third, since it shortens the infections it reaches. Screening from 2010 cuts it further, and notifying partners further still: each finds infections that the others miss. The summary gives the total number of infections over the 20 years in each scenario:
+Treating people who seek care cuts the number infected by about a third. Screening cuts it further, and notifying partners further still: each finds infections the others miss. The summary gives total infections over 20 years in each scenario:
 
 ```{python}
 msim.summarize().loc['sti_infection']
 ```
 
-The deliveries have results of their own, such as the number of people screened, the number who tested positive, and the number of partners treated:
+The deliveries have results of their own, such as the numbers screened, positive, and partners treated:
 
 ```{python}
 sim = msim.sims['And partner notification']
@@ -104,11 +130,11 @@ print('... of whom cured:', sim.results.treatment.cured.sum(), '- not cured:', s
 print('Partners treated:', sim.results.notification.delivered.sum())
 ```
 
-Everyone who tests positive is treated, including those whose positive result is false, who are about half of them here: with only a few percent of people infected, even a test that is 98% specific gives about as many false positives as true ones. A treatment that cures has the outcomes `cured`, `failed` (infected, and not cured), and `unneeded` (not infected), which are results and events, so `ss.treat(..., when=treatment.failed)` would give a second-line drug to those the first failed, and resistance can be a transition of the disease triggered by `treatment.failed` (see [Products](../user_guide/interventions_products.qmd#treatment-outcomes-and-resistance)). Partner notification treats about twice as many people as screening finds, since each person who tests positive has had several partners in the past year; many of them are infected, and it is those it cures that make the difference.
+About half of those treated after a positive test weren't infected: with only a few percent infected, even a 98% specific test gives about as many false positives as true ones. A treatment's outcomes, `cured`, `failed` (infected, not cured), and `unneeded` (not infected), are results and events: `ss.treat(..., when=treatment.failed)` would give a second-line drug, and resistance can be a transition triggered by `treatment.failed` (see [Products](../user_guide/interventions_products.qmd#treatment-outcomes-and-resistance)). Partner notification treats about twice as many people as screening finds, since each person who tests positive has had several partners in the past year, many of them infected.
 
 ## Individual histories
 
-As agents, every delivery remembers, for each person, whether its event happened to them (`.ever`), how many times (`.n_times`), and how long ago (`.since`). This gives individual histories after the run, e.g. how many times each person tested positive:
+As agents, every delivery remembers for each person whether its event happened to them (`.ever`), how many times (`.n_times`), and how long ago (`.since`), e.g. how many times each person tested positive:
 
 ```{python}
 screening = sim.interventions.screening
@@ -116,11 +142,11 @@ times_positive = screening.positive.n_times.values
 print('Number of people who tested positive 0, 1, 2, ... times:', np.bincount(times_positive.astype(int)))
 ```
 
-About a quarter of the people who tested positive did so more than once, since curing an infection doesn't protect against the next one; in practice this is a reason to retest people some months after treatment. A history can also decide who receives something: `who=screening.positive.since <= ss.months(6)` would make a delivery to people who tested positive in the past 6 months (e.g. a retest), and `who=~treatment.ever` to people never treated.
+About a quarter of those who tested positive did so more than once, since a cure doesn't protect against the next infection: a reason to retest some months after treatment. A history can decide who receives something: `who=screening.positive.since <= ss.months(6)` reaches people who tested positive in the past 6 months (e.g. for a retest), and `who=~treatment.ever` people never treated.
 
 ## Vaccination as people reach an age
 
-There is no vaccine for gonorrhea in routine use, but a meningococcal vaccine appears to give some protection, perhaps 30–40%. Suppose one that is 35% effective is given to 80% of people as they turn 15, from 2010. `at_age=` is routine delivery as people reach an age: each person is offered it once, on the step on which they reach it, and not everyone older on the first day. Vaccination of each cohort as it reaches an age takes decades to reach everyone at risk, so these runs go on to 2040:
+There is no gonorrhea vaccine in routine use, but a meningococcal vaccine appears to give some protection, perhaps 30–40%. Suppose one 35% effective is given to 80% of people as they turn 15, from 2010. `ss.at_age()` is routine delivery as people reach an age: each person is offered it once, on the step they reach it (not everyone older on the first day). Reaching everyone at risk this way takes decades, so these runs go to 2040:
 
 ```{python}
 vaccination = ss.vaccinate(efficacy=0.35, who=ss.at_age(15), start='2010', coverage=0.8)
@@ -135,11 +161,11 @@ msim.plot('sti.I')
 print('Doses:', msim.sims['And vaccination at age 15'].results.vaccination.delivered.sum())
 ```
 
-The vaccine makes little difference for the first ten years, and by 2040 lowers prevalence by about a quarter: it reaches each cohort only as it turns 15, and in this model people take part in partnerships at any age after their debut, so vaccinated cohorts replace unvaccinated ones among those at risk only as the whole population turns over; and it protects each person only partly. Where infection is concentrated in young people, vaccination at 15 reaches those at risk much sooner. By default a vaccine is leaky: everyone vaccinated is 35% less likely to be infected at each exposure. With `leaky=False` it is all or nothing instead (35% fully protected, the rest not at all), and `waning=` makes protection fade; see [Products](../user_guide/interventions_products.qmd).
+The vaccine makes little difference for ten years, and by 2040 lowers prevalence by about a quarter: here people have partners at any age after debut, so vaccinated cohorts replace unvaccinated ones only as the population turns over, and protection is partial. Where infection is concentrated in the young, vaccination at 15 works much sooner. By default a vaccine is leaky: everyone vaccinated is 35% less likely to be infected at each exposure. With `leaky=False` it is all or nothing (35% fully protected), and `waning=` makes protection fade; see [Products](../user_guide/interventions_products.qmd).
 
 ## Interventions of your own
 
-These deliveries cover most programs. When who receives something depends on a rule of your own, `who=` takes a function of the sim that returns the UIDs of the people who receive it on each step; and an intervention that does something no product does is a module written as code, a class with a `step()` method. [T9](t9_modules.qmd) and [A5](a5_modules.qmd) show how, and [Interventions](../user_guide/interventions_interventions.qmd) in the user guide covers the rest: capacity, priority, queues, and delays.
+These deliveries cover most programs. For a rule of your own, `who=` takes a function of the sim that returns UIDs, as in the screening above; an intervention that does something no product does is a module written as code, a class with a `step()` method. [T9](t9_modules.qmd) and [A5](a5_modules.qmd) show how, and [Interventions](../user_guide/interventions_interventions.qmd) in the user guide covers the rest: capacity, priority, queues, and delays.
 
 ## Exercises
 

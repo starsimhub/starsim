@@ -784,7 +784,7 @@ def test_printed_output():
         def step(self):
             self.n = getattr(self, 'n', 0) + 1
     sim = ss.Sim(ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(10), init=dict(I=0.01)), interventions=Counter(), total_pop=1000, **kw)
-    assert 'a step of its own' in sim.init().kernel_reason() and 'a step of its own' in sim.run().kernel_reason()
+    assert 'a step of its own' in sim.init()._kernel_reason() and 'a step of its own' in sim.run()._kernel_reason()
 
     # Numbers by group that disagree with the split say so
     d = ss.Disease(S >> I @ ss.perweek(0.1)*I, init_n=dict(S=ss.by(risk=[999, 9000]), I=ss.by(risk=[1, 0])), name='d')

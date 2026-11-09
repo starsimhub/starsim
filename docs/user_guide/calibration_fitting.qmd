@@ -24,6 +24,9 @@ This page covers the options. The [calibration tutorial](../tutorials/t7_calibra
 
 The model is a measles outbreak in a town of 100,000 people, 90% of whom are already immune by vaccination. It is the library's measles model, `ssl.Measles`: people are infected (S to E), become infectious about 8 days later (E to I), and recover after about 11 days (I to R), or die. Here the two periods are exponential, with those means, rather than the library's normal distributions (with a spread of a day or two): run as an ODE, an exponential period is one compartment, while a period with a small spread is a chain of many, which makes each run, and so each fit, many times slower. The reported cases are a share of the people who become infectious, `report`, which the library's model does not have, so it is added to it as an outcome: a declared disease takes extra states, transitions, and outcomes beside its own, by keyword or positionally (a member of the class, such as `ssl.Measles.onset`, stands for the copy in each instance). Three things are unknown: the transmission rate `beta`, the share reported, `report`, and how many people were infectious at the start, `I0`, as a share of the town. The last is nearly always unknown for a real outbreak, since the first cases are rarely reported, and it sets when the outbreak takes off:
 
+::: {.panel-tabset group="language"}
+## Python
+
 ```{python}
 import numpy as np
 import starsim as ss
@@ -39,9 +42,30 @@ measles = ssl.Measles(beta=beta, dur_exp=ss.expon(ss.days(8)), dur_inf=ss.expon(
 pars = dict(total_pop=100_000, start='2025-01-01', stop='2026-01-01')
 ```
 
+## R
+
+```r
+library(starsim) # Also gives ssl, Starsim's library, as in Python's import starsim.library as ssl
+
+beta   <- par(1.0, bounds = c(0.3, 3), name = "beta")      # Transmission rate per day: unknown
+report <- par(0.3, bounds = c(0.05, 1), name = "report")   # Share of cases reported: unknown
+I0     <- par(0.0001, bounds = c(1e-5, 1e-3), name = "I0") # Share infectious at the start (10 people): unknown
+
+cases <- outcome(report * ssl$Measles$onset) # Reported cases: a share of the onsets, added to the library's model
+measles <- ssl$Measles(beta = beta, dur_exp = ss$expon(days(8)), dur_inf = ss$expon(days(11)), cases = cases, init = list(I = I0, R = 0.9))
+
+make_sim <- function(...) { # A sim with these settings, and any others given
+  Sim(measles, total_pop = 100000, start = "2025-01-01", stop = "2026-01-01", ...)
+}
+```
+:::
+
 The value given to each parameter is where the search starts, and the bounds are the range it searches. A parameter is named by its variable (`I0` here), or by `name=`.
 
 The data are weekly reported cases. On this page they are illustrative: made once from an agent-based run of the same disease, in which each infection is a chance event (so its outbreak is not the smooth curve of the ODE fitted below), with `beta = 1.4` (the library's default, an R0 of about 15), half of cases reported, and 30 people infectious on 1 January, and with weekly counts that vary more than Poisson counts would, as reported counts usually do. With real data, the data would be read from a file instead (see [below](#the-data)):
+
+::: {.panel-tabset group="language"}
+## Python
 
 ```{python}
 truth = ss.Sim(measles, pars=dict(beta=1.4, report=0.5, I0=0.0003), n_agents=100_000, rand_seed=3, verbose=0, **pars)
@@ -52,18 +76,52 @@ data['cases'] = rng.negative_binomial(10, 10/(10 + data.cases)) # Counts with mo
 data.head()
 ```
 
+## R
+
+```r
+truth <- make_sim(pars = list(beta = 1.4, report = 0.5, I0 = 0.0003), n_agents = 100000, rand_seed = 3, verbose = 0)
+truth$run()
+data <- truth$to_synthetic_data("cases", resample = "week", noise = NULL) # Weekly cases (whole weeks only, so not the last, partial one), as a data frame
+np <- reticulate::import("numpy") # NumPy's random numbers, to draw the same counts as in Python
+rng <- np$random$default_rng(3L)
+data$cases <- rng$negative_binomial(10L, 10 / (10 + data$cases)) # Counts with more variation than Poisson (negative binomial)
+head(data)
+```
+:::
+
 Now attach the data to a sim of the model, and fit:
+
+::: {.panel-tabset group="language"}
+## Python
 
 ```{python}
 sim = ss.Sim(measles, data=data, **pars)
 fit = sim.fit(method='nelder-mead')
 ```
 
+## R
+
+```r
+sim <- make_sim(data = data)
+fit <- sim$fit(method = "nelder-mead")
+```
+:::
+
 By default, an ODE with three parameters is fitted by gradients (`'l-bfgs-b'`, see [below](#how-the-fit-is-found)), which first compiles the model in JAX, taking a few seconds; Nelder-Mead, which needs no gradients, is quicker for a model as small as this one. The fit prints which parameters it searches on a log scale (those whose bounds span a factor of 10 or more), and whether it converged (and, if not given a method, which one it chose and why). `fit.summarize()` shows the values found, with the loss before and after:
+
+::: {.panel-tabset group="language"}
+## Python
 
 ```{python}
 fit.summarize()
 ```
+
+## R
+
+```r
+fit$summarize() # Prints the values found
+```
+:::
 
 β and the share reported are close to the values the data were made with (1.4 and 0.5). The initial infections are not: the fit finds about 7 people, not 30. In the agent-based run, the first chains of transmission are chance events, some of which die out, and its outbreak took off later than an ODE starting from 30 people would; the fit finds the start that gives an ODE the same timing. That is what a fitted initial condition means: not a count of who was infectious on 1 January, but where the model has to start to match the data. The fitted model against the data:
 
@@ -260,6 +318,9 @@ The plot shows the median and 95% of the 20 runs, as weekly totals, against the 
 
 The calibrated sim is the starting point for scenarios. `sim.new()` makes a new sim from the same inputs, with whatever is given changed; from `fit.sim`, that includes the fitted values. Here, a catch-up campaign on 1 April, well before the peak, that vaccinates half of the people who are still susceptible (found, say, from vaccination records), compared with none:
 
+::: {.panel-tabset group="language"}
+## Python
+
 ```{python}
 vaccination = ss.vaccinate(efficacy=0.97, who=measles.S, when='2025-04-01', coverage=0.5)
 scenarios = {
@@ -269,6 +330,19 @@ scenarios = {
 msim = ss.parallel(scenarios, n_runs=20)
 msim.plot('measles.cases')
 ```
+
+## R
+
+```r
+vaccination <- vaccinate(efficacy = 0.97, who = measles$S, when = "2025-04-01", coverage = 0.5)
+scenarios <- list(
+  "No campaign" = fit$sim$new(),
+  "Campaign"    = fit$sim$new(interventions = vaccination)
+)
+msim <- parallel(scenarios, n_runs = 20)
+msim$plot("measles.cases")
+```
+:::
 
 ```{python}
 msim.summarize().loc['measles_cases']

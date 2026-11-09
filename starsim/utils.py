@@ -6,6 +6,7 @@ What is shared by the rest of the code, and doesn't belong to any one part of it
 Used with: agents and compartments; declared and coded modules
 """
 import os
+import contextlib
 import types
 import functools
 import weakref
@@ -329,22 +330,49 @@ def caller_names(depth=1, skip=None):
     The names of the variables in the code that called the caller (`depth` levels above it), as a dict of the name of
     each object by its id: its local variables, else its global ones, and only for an object bound to exactly one of
     them. A declared disease (`ss.Disease(infection, recovery)`) and a sim (`ss.Sim(diseases=sir)`, `sim.new(interventions=campaign)`) look up the names of
-    what they are given once, here; nothing else does. Empty if the stack is not that deep (e.g. from R via reticulate).
+    what they are given once, here; nothing else does. If the stack is not that deep (e.g. from R via reticulate), the names given by `named()`, if any.
     The code of the function `skip`, if that is the code above, does not count.
     """
     frame = getframe(depth + 1)
     if frame is not None and skip is not None and frame.f_code is skip.__code__:
         frame = frame.f_back
     if frame is None:
-        return {}
+        return dict(given_names or {})
+    return names_of(frame.f_globals, frame.f_locals)
+
+
+def names_of(*spaces):
+    """ The name of each object in some namespaces (dicts of objects by name), by its id, for an object bound to exactly one name in the last space that has it, not starting with `_` (see `caller_names()`) """
     out = {}
-    for space in [frame.f_globals, frame.f_locals]: # The local ones win
+    for space in spaces: # The later ones win, e.g. local variables over global ones
         found = {}
         for key,val in space.items():
             if not key.startswith('_'):
                 found.setdefault(id(val), set()).add(key)
         out.update({i:(keys.pop() if len(keys) == 1 else None) for i,keys in found.items()})
     return out
+
+
+given_names = None # The names of the variables of code in another language, which Python can't see (see named())
+
+@contextlib.contextmanager
+def named(*spaces):
+    """
+    Name what is made inside by the variables of code in another language, as `caller_names()` does for Python's
+
+    R-Starsim calls Starsim from R, whose variables Python can't see, so it gives them here: e.g. `Disease(infection, recovery)`
+    in R names the transitions `infection` and `recovery`, as in Python. Only a caller that is not Python (with no frame of its own) reads them.
+
+    Args:
+        spaces (dict): the objects by name, e.g. R's global variables and then its local ones (the later ones win)
+    """
+    global given_names
+    before = given_names
+    given_names = names_of(*spaces)
+    try:
+        yield
+    finally:
+        given_names = before
 
 
 fn_names = ('self', 'sim', 'uids') # The arguments a user function can take by name: its module, the sim, and the agents

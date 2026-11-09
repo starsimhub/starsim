@@ -13,6 +13,9 @@ A sim (`ss.Sim`) is one model put together with everything needed to run it: the
 
 A sim needs a model and, usually, a population and a time span. Here is a measles outbreak in a town of 100,000 people, run for 50 days:
 
+::: {.panel-tabset group="language"}
+## Python
+
 ```{python}
 import starsim as ss
 
@@ -26,6 +29,55 @@ sim = ss.Sim(measles, total_pop=100_000, stop=ss.days(50))
 sim.run()
 sim.plot()
 ```
+
+## R
+
+```r
+library(starsim)
+
+states("S I R")
+beta <- par(1.9) # Transmission rate per day
+measles <- Disease(
+  infection = Transition(S, I, rate = beta * I),
+  recovery  = Transition(I, R, dur = days(8)), # Infectious for 8 days on average
+  init_prev = 0.001
+)
+
+sim <- Sim(measles, total_pop = 100000, stop = days(50))
+sim$run()
+sim$plot()
+```
+
+## Explicit
+
+```{python}
+S, I, R = ss.State(name='S'), ss.State(name='I'), ss.State(name='R')
+beta_explicit = ss.par(ss.perday(1.9), name='beta') # Transmission rate per day
+measles_explicit = ss.Disease(
+    transitions = [
+        ss.Transition(source=S, dest=I, rate=beta_explicit*I, name='infection'),
+        ss.Transition(source=I, dest=R, dur=ss.expon(mean=ss.days(8)), name='recovery'), # Infectious for an exponentially distributed time of 8 days on average
+    ],
+    init_prev = 0.001,
+    name = 'measles',
+)
+
+sim_explicit = ss.Sim(
+    diseases  = measles_explicit,
+    networks  = ss.contacts(1), # Everyone mixes with everyone, with one contact per person per day
+    total_pop = 100_000,
+    start     = ss.days(0),
+    stop      = ss.days(50),
+    dt        = ss.days(1),     # Steps of a day
+    unit      = 'day',          # The unit of bare numbers
+    solver    = 'ode',          # Run as an ODE
+    rand_seed = 1,              # The random seed (it matters only for a stochastic run)
+    verbose   = 1,              # Print a line for what it runs, and one when it is done
+)
+sim_explicit.run()
+sim_explicit.plot()
+```
+:::
 
 A run prints:
 
@@ -80,7 +132,10 @@ town = ss.Sim(measles, **pars)
 city = ss.Sim(pars, diseases=measles, total_pop=1_000_000) # The same settings, with one changed
 ```
 
-A dict given as the first argument is read as settings, and a keyword given as well overrides the same setting in the dict, as `total_pop` does for `city`. In such a dict, a module from Starsim's library can be given as a dict of its own parameters, with its name as `type`. This is a shorthand found in many existing scripts, for example for an agent-based SIR on a random network:
+A dict given as the first argument is read as settings, and a keyword given as well overrides the same setting in the dict, as `total_pop` does for `city`. In such a dict, a module from Starsim's library can be given as a dict of its own parameters, with its name as `type`. This is a shorthand found in many existing scripts, for example for an agent-based SIR on a random network (the "Explicit" tab gives the modules themselves, and runs the same sim):
+
+::: {.panel-tabset group="language"}
+## Python
 
 ```{python}
 pars = dict(
@@ -94,7 +149,35 @@ sim = ss.Sim(pars)
 sim.run()
 ```
 
-It is the same as giving the modules themselves, `diseases=ss.SIR(beta=..., dur_inf=...)` and `networks=ss.RandomNet(n_contacts=4)`. A name on its own (`diseases='sir'`) uses the module's default parameters.
+## R
+
+```r
+pars <- list(
+  diseases = list(type = "sir", beta = ss$perday(0.1), dur_inf = days(10)),
+  networks = list(type = "random", n_contacts = 4),
+  n_agents = 2000,
+  start = "2025-01-01",
+  stop = "2025-07-01"
+)
+sim <- Sim(pars)
+sim$run()
+```
+
+## Explicit
+
+```{python}
+sim = ss.Sim(
+    diseases = ss.SIR(beta=ss.perday(0.1), dur_inf=ss.days(10)), # The module itself, for dict(type='sir', ...)
+    networks = ss.RandomNet(n_contacts=4),                       # And for dict(type='random', ...)
+    n_agents = 2_000,
+    start = '2025-01-01',
+    stop = '2025-07-01',
+)
+sim.run()
+```
+:::
+
+A name on its own (`diseases='sir'`) uses the module's default parameters.
 
 ## What happens before the first step
 
@@ -112,6 +195,9 @@ A sim copies the modules it is given, so the same disease can be given to severa
 
 `sim.run()` on a sim that has already run runs it again from the start, as it was before it was first run: changes made to a sim once it has been initialized belong to that run only. To run it again with something changed, use `sim.new()`, which makes a new sim as this one was before it was run, with whatever is given changed. Here the same outbreak with a lower transmission rate, as if contacts were fewer, compared with the original:
 
+::: {.panel-tabset group="language"}
+## Python
+
 ```{python}
 sim = ss.Sim(measles, total_pop=100_000, stop=ss.days(50), label='Original', verbose=0)
 sim.run()
@@ -121,6 +207,19 @@ slower.run()
 msim = ss.MultiSim([sim, slower])
 msim.plot('measles.I')
 ```
+
+## R
+
+```r
+sim <- Sim(measles, total_pop = 100000, stop = days(50), label = "Original", verbose = 0)
+sim$run()
+slower <- sim$new(pars = list(beta = 1.2), label = "Fewer contacts")
+slower$run()
+
+msim <- MultiSim(list(sim, slower))
+msim$plot("measles.I")
+```
+:::
 
 With β = 1.2, R0 is about 10 rather than 15, and the peak comes later and lower. What `sim.new()` changes can be settings (`sim.new(total_pop=1_000_000)`), parameters of the model by name (`sim.new(pars=dict(beta=1.2))`, for a parameter made with `ss.par()` and so given a name; see [Parameters](building_parameters.qmd)), or modules (`sim.new(interventions=campaign)`). This is the usual way to make the scenarios of a comparison (see [Scenarios](running_scenarios.qmd)).
 
@@ -298,7 +397,7 @@ Every keyword of `ss.Sim()`, by what it is for; `sim.pars` (an `ss.SimPars`) hol
 | `solver` | `'auto'` | `'ode'`, `'binomial'`, `'gillespie'`, `'tau'`, or `'abm'`; or with options: `ss.solvers.ode(integrator=, substeps=, dwells=)`, `ss.solvers.binomial(substeps=)`, or `ss.solvers.abm(step=)` (see [Solvers and backends](running_solvers.qmd)) |
 | `branching` | False | Run as a branching process: infection takes no one from the uninfected (see [Branching and rescaling](running_branching.qmd)) |
 | `approximations` | 'note' | What to do with each approximation a solver makes: 'note' notes it, 'allow' keeps the note in `sim.notes` without printing it, 'error' makes it an error |
-| `require_kernels` | False | Raise an error, rather than run in Python, if a compartmental run can't be taken whole in the kernels (see `sim.kernel_reason()`) |
+| `require_kernels` | False | Raise an error, rather than run in Python, if a compartmental run can't be taken whole in the kernels (see `sim.describe()`) |
 | `rand_seed` | 1 | The random seed, from which each module's seeds are made |
 | `even_draws` | False | For agents (an error for a compartmental run): space each call's random numbers evenly, which reduces the variance between runs, but makes outbreaks die out less often than they should |
 | **Output** | | |

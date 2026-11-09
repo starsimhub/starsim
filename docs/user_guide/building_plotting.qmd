@@ -11,6 +11,9 @@ Starsim's results know what they are (their labels, their time points, whether t
 
 The example is the measles model of the other pages, in a town of 100,000 people in which most people are already immune, so that the outbreak is slow enough to see its shape:
 
+::: {.panel-tabset group="language"}
+## Python
+
 ```{python}
 import starsim as ss
 
@@ -25,6 +28,29 @@ sim = ss.Sim(make_measles(), total_pop=100_000, start='2025-01-01', stop='2025-0
 sim.run()
 sim.plot()
 ```
+
+## R
+
+```r
+library(starsim)
+
+make_measles <- function(immune = 0.9) {
+  states("S I R")
+  Disease(
+    infection  = Transition(S, I, rate = 1.9 * I), # β = 1.9 per day
+    recovery   = Transition(I, R, dur = days(8)),  # Infectious for 8 days on average
+    prevalence = I / (S + I + R),                  # The share of people infectious
+    init   = list(R = immune),
+    init_n = list(I = 10),
+    name = "measles"
+  )
+}
+
+sim <- Sim(make_measles(), total_pop = 100000, start = "2025-01-01", stop = "2025-07-01", verbose = 0)
+sim$run()
+plot(sim) # The same as sim$plot()
+```
+:::
 
 ## Plotting a sim
 
@@ -42,9 +68,19 @@ What to plot is given by name, as the first argument:
 
 A name that matches no result is an error that lists the names there are. Put together only results that are the same kind of quantity on a similar scale. Here the two flows, infections and recoveries (people per day), share one axes, and the number infectious (a stock: people) has its own:
 
+::: {.panel-tabset group="language"}
+## Python
+
 ```{python}
 sim.plot([['measles.infection', 'measles.recovery'], 'measles.I'], figsize=(8, 6))
 ```
+
+## R
+
+```r
+sim$plot(list(list("measles.infection", "measles.recovery"), "measles.I"), figsize = c(8, 6)) # A list in a list: together in one axes
+```
+:::
 
 New infections rise above recoveries while the outbreak grows, and fall below them once it is past its peak, which is when the number infectious is highest.
 
@@ -189,7 +225,7 @@ Every plotting function takes the settings of `ss.plot_args()` (`figsize`, `file
 | `msim.plot()` | The results of many runs or scenarios: the median and a 95% interval of each, or every run (`lines=True`) | [Comparing scenarios and runs](#comparing-scenarios-and-runs) |
 | `msim.plot_each()` | Each run on its own time axis, for sims with different time points | [Scenarios](running_scenarios.qmd) |
 | `msim.branching.plot()` | For a branching process, the distribution of the chains' sizes (and, as agents, their lengths in generations) | [Branching and rescaling](running_branching.qmd) |
-| `disease.diagram()` | A declared disease's states and transitions, as a Mermaid flowchart | [Writing models](building_writing.qmd#equations-diagram-and-transitions) |
+| `disease.diagram()`, `sim.diagram()` | A declared disease's states and transitions (or every disease's, and how they act on each other), drawn; `diagram('text')` gives a Mermaid flowchart | [Writing models](building_writing.qmd#equations-diagram-and-transitions) |
 | `sim.people.plot()`, `sim.people.plot_ages()` | Agents' attributes, as histograms; the age pyramid | [People and agents](populations_people.qmd) |
 | `network.plot()` | The contacts of a network of agents | [Contact networks](populations_networks.qmd) |
 | `dist.plot_hist()` | Draws from a distribution, as a histogram | [Distributions](mechanics_distributions.qmd) |

@@ -316,8 +316,8 @@ class ParticleFilter(sc.prettyobj):
         """ Why the particle filter cannot run a sim (apart from any data series without a likelihood), if it cannot """
         if not isinstance(sim.solver, (ss.solvers.binomial, ss.solvers.gillespie, ss.solvers.tau)):
             return f'it has solver="{sim.solver}", not a stochastic compartmental one'
-        elif not sim.kernel_only():
-            return f'it is not run in one call to the kernels ({sim.kernel_reason()})'
+        elif sim._kernel_reason() is not None:
+            return f'it is not run in one call to the kernels ({sim._kernel_reason()})'
         elif sim.data is None:
             return 'it has no data'
         for col in sim.data.columns:
@@ -1297,7 +1297,7 @@ def optimize(sim, goal, total=None, start=None, spend=None, bounds=None, target=
         return float(vals[i])
 
     runner = sim.new(pars=values(before), verbose=0).init() # Built with the spending as it will be given, so a restart can change it
-    restart = runner.kernel_only()
+    restart = runner._kernel_reason() is None
     n_runs = [0]
     def run(amounts):
         n_runs[0] += 1
@@ -1867,7 +1867,7 @@ class Problem(sc.prettyobj):
         self.fresh = False # Whether each evaluation takes seeds of its own; see choose()
         self.runner = runner = base.new() # If the sim is nothing but compartments, it is built once and restarted for each evaluation
         runner.data = base.data
-        self.can_restart = runner.init().kernel_only() and not contacts and not settings # The mixing is worked out when the sim is built, as are its settings, so a new value needs a new sim
+        self.can_restart = runner.init()._kernel_reason() is None and not contacts and not settings # The mixing is worked out when the sim is built, as are its settings, so a new value needs a new sim
         self.no_grad = ss.solvers.why_not(runner, 'jax') or (f'{contacts[0]} sets the mixing when the sim is built' if contacts else None) or (f'{settings[0]} is a setting of the sim' if settings else None) # Why there are no gradients, if there are not
         self.trials = [] # Every evaluation
         self._density = None # The log-likelihood in JAX, once built: see jax_density()

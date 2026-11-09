@@ -619,7 +619,7 @@ def test_declared_newborns():
     S, I, R = ss.states('S I R')
     sir = ss.Disease(S >> I @ ss.perday(0.3)*I, I >> R @ ss.days(8), name='sir')
     sim = ss.Sim(sir, demographics=[ss.birth(rate=ss.peryear(0.05)), ss.death(rate=ss.peryear(0.02))], start='2000', stop='2001', verbose=0).init()
-    assert isinstance(sim.solver, ss.solvers.ode) and sim.kernel_reason() is None
+    assert isinstance(sim.solver, ss.solvers.ode) and sim._kernel_reason() is None
     print('✓ (newborns in declared states)')
     return
 

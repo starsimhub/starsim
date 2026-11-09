@@ -644,22 +644,27 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         """
         return ss.display.Text('\n'.join(ss.display.equations(self.graph, self.engine)))
 
-    def diagram(self):
+    def diagram(self, kind='plot', **kwargs):
         """
-        The state-transition diagram, as a Mermaid flowchart (https://mermaid.js.org), which a notebook draws (see `ss.display.Diagram`)
+        The state-transition diagram: drawn as a Matplotlib figure, or as the text of a Mermaid flowchart (https://mermaid.js.org)
 
-        People states are rounded and counts slanted; transmissions are dashed; each
+        People states are rounded and counts square (slanted in the text); transmissions are dashed; each
         arrow is labeled with its transition's name and value (`recovery: 10 days`), and
-        the share that takes it for a transition with `p=`. `print(sir.diagram())` gives the text.
+        the share that takes it for a transition with `p=`. For every disease of a sim, and how they act on each other, see `sim.diagram()`.
+
+        Args:
+            kind (str): 'plot' to draw it, or 'text' for the Mermaid text, which a notebook draws and `print()` shows (see `ss.display.Diagram`)
+            kwargs (dict): for a plot, passed to `ss.return_fig()` (e.g. `filename=`, `do_show=`)
 
         Example:
             ```python
             S, I, R = ss.states(3)
             sir = ss.Disease(infection=S >> I @ 0.3*I, recovery=ss.Transition(I, R, dur=ss.days(10)))
             sir.diagram()
+            print(sir.diagram('text'))
             ```
         """
-        return ss.display.Diagram('\n'.join(['flowchart LR'] + ss.display.diagram(self.graph)))
+        return ss.display.show_diagram([self.graph], [self.name], kind=kind, **kwargs)
 
     def R0(self, matrix=False):
         """

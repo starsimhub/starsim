@@ -553,7 +553,7 @@ def test_coinfection_compartments():
         for key in ['hiv', 'syph']:
             assert np.isclose(sims[solver].results[key].I[-1], res[key].I[-1], rtol=0.15) # As agents, syphilis is about 5% above the ODE on average, and varies by about 3% between runs
     stepped = make('binomial').run(until=2030) # The stochastic run takes the diseases together, by one program, whole or step by step
-    assert sims.binomial.kernel_only() and np.array_equal(stepped.results.syph.I, sims.binomial.results.syph.I)
+    assert sims.binomial._kernel_reason() is None and np.array_equal(stepped.results.syph.I, sims.binomial.results.syph.I)
 
     # Each disease's moves are drawn as they would be for it alone, so two diseases with dwell times in stages, tracked jointly but not changing each other, peak as they do alone (drawn as one compartment's competing exits, they would be 7% and 31% too high at daily steps)
     def staged(crossed=True, which=None, seed=0):
@@ -824,10 +824,10 @@ def test_whole_run():
         seed = ss.Event(sir.S >> sir.I, when=[25], p=0.01, name='seed') # Between states
         return ss.Sim(sir, interventions=[offer, rounds, rollout, seed], connectors=halved, stop=100, **kw, **kwargs)
     whole = make(solver='ode').init()
-    assert whole.kernel_only(), whole.kernel_reason()
+    assert whole._kernel_reason() is None, whole._kernel_reason()
     whole.run()
     stepped = make(solver='ode').init()
-    stepped.kernel_reason = lambda: 'stepped' # As the loop takes it, one step at a time
+    stepped._kernel_reason = lambda: 'stepped' # As the loop takes it, one step at a time
     stepped.run()
     for mod,key in [('sir', 'S'), ('sir', 'I'), ('sir', 'R'), ('offer', 'delivered'), ('offer', 'eligible'), ('rounds', 'coverage'), ('rollout', 'delivered'), ('seed', 'delivered')]:
         a, b = whole.results[mod][key], stepped.results[mod][key]
@@ -845,7 +845,7 @@ def test_whole_run():
         sims = [make(solver='binomial', rand_seed=seed).init() for seed in range(16)]
         for sim in sims:
             if not whole_run:
-                sim.kernel_reason = lambda: 'stepped'
+                sim._kernel_reason = lambda: 'stepped'
             sim.run()
         jumps.append(np.array([sim.results.sir.I.values[26] - sim.results.sir.I.values[25] for sim in sims]))
     se = np.sqrt(sum(j.var()/len(j) for j in jumps))

@@ -87,7 +87,7 @@ def run(key, how, **kwargs):
     make, pars = models[key]
     sim = ss.Sim(make(), **sc.mergedicts(pars, kw, kwargs)).init()
     if how == 'all' and key != 'tb':
-        assert sim.kernel_only()
+        assert sim._kernel_reason() is None
     return sim.profile(kind='loop', plot=False).sim if how == 'step' else sim.run() # Recording the time of each step is one of the things that needs the loop
 
 
@@ -258,9 +258,9 @@ def test_restart():
     # A sim that needs the loop (here, a modifier with a function of the sim: masks once there are more than 10 infectious) cannot be restarted, and still runs the usual way
     masks = ss.modify('sir.pars.beta', multiply=0.5, who=lambda sim: sim.results.sir.I[sim.ti] > 10)
     sim = ss.Sim(make_plain(0.3, init=dict(I=0.01)), unit='day', stop=100, interventions=masks, **kw).init()
-    assert not sim.kernel_only() and 'masks' in sim.kernel_reason()
+    assert 'masks' in (sim._kernel_reason() or '')
     assert sim.run().results.sir.I.max() < new[1]
-    assert base.new().init().kernel_reason() is None
+    assert base.new().init()._kernel_reason() is None
     return msim
 
 

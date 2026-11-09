@@ -15,6 +15,9 @@ This page covers products: vaccines, tests, and treatments, how their protection
 
 There is one delivery for each kind of product: `ss.vaccinate()`, `ss.screen()`, and `ss.treat()`. Each takes the product's own keywords (a vaccine's `efficacy`, a test's `sensitivity`) and makes the product, along with how it is delivered. Here measles (an SEIR model with an R0 of about 15, latent for 10 days and infectious for 8) is brought into a town of 100,000 people, 90% of whom are immune, so that each case at the start infects about 1.5 others. A campaign reaches 80% of people with one dose of vaccine, which fully protects 93% of those who get it (`leaky=False`, all or nothing: see [below](#vaccines)), either on 1 May, three months before the outbreak would peak, or on 1 August, at its peak:
 
+::: {.panel-tabset group="language"}
+## Python
+
 ```{python}
 import numpy as np
 import starsim as ss
@@ -38,6 +41,36 @@ msim = ss.parallel(scenarios)
 msim.plot('measles.I')
 msim.summarize().loc['measles_infection']
 ```
+
+## R
+
+```r
+library(starsim)
+
+states("S E I R")
+measles <- Disease(
+  infection   = Transition(S, E, rate = 1.9 * I), # β = 1.9 per day
+  progression = Transition(E, I, dur = days(10)), # Latent for 10 days on average
+  recovery    = Transition(I, R, dur = days(8)),  # Infectious for 8 days on average
+  init   = list(R = 0.9), # 90% immune
+  init_n = list(I = 10)   # 10 infectious
+)
+
+early <- vaccinate(efficacy = 0.93, leaky = FALSE, when = "2025-05-01", coverage = 0.8)
+late  <- vaccinate(efficacy = 0.93, leaky = FALSE, when = "2025-08-01", coverage = 0.8)
+
+make_sim <- function(...) { # A sim with these settings, and any others given
+  Sim(measles, total_pop = 100000, start = "2025-01-01", stop = "2026-01-01", verbose = 0, ...)
+}
+msim <- parallel(list(
+  "No vaccination"       = make_sim(),
+  "Campaign on 1 May"    = make_sim(interventions = early),
+  "Campaign on 1 August" = make_sim(interventions = late)
+))
+msim$plot("measles.I")
+subset(summary(msim), result == "measles_infection")
+```
+:::
 
 A vaccine protects only those not yet infected, so the sooner the campaign, the more it prevents: on 1 May, it cuts the outbreak from about 6,000 infections to under 800; on 1 August, by the time it is given, most of the infections are under way, and it prevents about 2,200. Coverage (the share reached) and efficacy (the protection of those reached) are separate numbers, and both matter. Interventions are given to the sim with `interventions=`, singly or as a list. A delivery takes its name from the variable it is assigned to (`early` and `late` here), and has results of its own: the number `delivered` on each step, the number `eligible`, and the `coverage` reached (and `cost`, if the product has one). Name a delivery after the activity (`vaccination`, `screening`, `treatment`), since the product takes the name of the thing (`vaccine`, `test`, `drug`).
 
@@ -101,7 +134,10 @@ The share of people holding a product is also a quantity a rate can read: `itn.h
 
 ### Tests and what follows them
 
-A test (`ss.Diagnostic`) has a `sensitivity`, the chance that someone infected tests positive, and a `specificity`, the chance that someone not infected tests negative. `ss.screen()` delivers it, and its `positive` and `negative` are the people with each result on that step. What happens to them is another delivery, given them with `who=`, with its own coverage, so loss to follow-up is explicit. Here half of people are screened each year from 2010, and 80% of those who test positive are treated with a drug that cures 95%:
+A test (`ss.Diagnostic`) has a `sensitivity`, the chance that someone infected tests positive, and a `specificity`, the chance that someone not infected tests negative. `ss.screen()` delivers it, and its `positive` and `negative` are the people with each result on that step. What happens to them is another delivery, given them with `who=`, with its own coverage, so loss to follow-up is explicit. Here half of people are screened each year from 2010, and 80% of those who test positive are treated with a drug that cures 95%. The "Explicit" tab makes the test and the drug as products first, and gives them to the deliveries, which is what the keywords do:
+
+::: {.panel-tabset group="language"}
+## Python
 
 ```{python}
 screening = ss.screen(sensitivity=0.9, specificity=0.98, when=ss.schedule(every=ss.years(1), start='2010'), coverage=0.5)
@@ -113,6 +149,42 @@ sim.plot('sis')
 print('Positive tests:', sim.results.screening.positive.sum())
 print('Treated:', sim.results.treatment.delivered.sum())
 ```
+
+## R
+
+```r
+# The SIS model above
+states("S I")
+infection <- Transition(S, I, rate = ss$peryear(2) * I) # β = 2 per year
+recovery  <- Transition(I, S, dur = years(1))           # Infected for a year on average, then susceptible again
+sis <- Disease(infection, recovery, init_prev = 0.1)
+
+screening <- ss$screen(sensitivity = 0.9, specificity = 0.98, when = ss$schedule(every = years(1), start = "2010"), coverage = 0.5)
+treatment <- ss$treat(cure = 0.95, when = screening$positive, coverage = 0.8)
+
+sim <- Sim(sis, interventions = list(screening, treatment), n_agents = 5000, start = 2000, stop = 2020, dt = ss$months(1), verbose = 0)
+sim$run()
+sim$plot("sis")
+cat("Positive tests:", sum(sim$results$screening$positive$values), "\n")
+cat("Treated:", sum(sim$results$treatment$delivered$values), "\n")
+```
+
+## Explicit
+
+```{python}
+test = ss.Diagnostic(sensitivity=0.9, specificity=0.98) # The product: what the test does
+drug = ss.Treatment(cure=0.95)
+
+screening = ss.screen(test, when=ss.schedule(every=ss.years(1), start='2010'), coverage=0.5, name='screening') # The delivery: who gets it, and when
+treatment = ss.treat(drug, when=screening.positive, coverage=0.8, name='treatment')
+
+sim = ss.Sim(sis, interventions=[screening, treatment], **kw)
+sim.run()
+sim.plot('sis')
+print('Positive tests:', sim.results.screening.positive.sum())
+print('Treated:', sim.results.treatment.delivered.sum())
+```
+:::
 
 A follow-up can have follow-ups of its own, to any depth. By default a test detects infection with the disease it is given for; `detects=` takes a condition for anything else. `result_delay=` on the test is the time from the test to its result (the delay of a step's own `when=ss.on(event, delay=...)` is the time from its trigger to the test).
 

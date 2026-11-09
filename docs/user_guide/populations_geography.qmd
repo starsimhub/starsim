@@ -13,6 +13,9 @@ An outbreak in one town reaches the next through the people who travel between t
 
 A **geography** (`ss.geo.geography`) is a set of named places, with the population of each and where they are. Stratifying a disease by it (`stratify(patch=towns)`) makes a copy of each state for each place, and `mobility=` says how people move between them, given with the places as `stratify(patch=ss.levels(towns, mobility=...))`. Here are three towns of measles: Riverton, with 60,000 people, Hillside (30,000) 20 km away, and Lakeside (10,000) 50 km away, with 10 infectious people in Riverton at the start. People spend 0.1% of their time in the other towns, split between them by a gravity model (more to bigger and nearer towns):
 
+::: {.panel-tabset group="language"}
+## Python
+
 ```{python}
 import starsim as ss
 
@@ -34,6 +37,33 @@ sim = ss.Sim(measles, stop=ss.days(60))
 sim.run()
 sim.results.measles.I.by('patch').plot()
 ```
+
+## R
+
+```r
+library(starsim)
+
+towns <- ss$geo$geography(
+  names       = c("Riverton", "Hillside", "Lakeside"),
+  populations = c(60000, 30000, 10000),
+  x           = c(0, 20, 50), # Positions in km
+  y           = c(0, 0, 10)
+)
+
+states("S R")
+states("I", infected = TRUE) # Infected: counted in the results infected and prevalence
+measles <- Disease(
+  infection = Transition(S, I, rate = 1.9 * I), # β = 1.9 per day
+  recovery  = Transition(I, R, dur = days(8)),  # Infectious for 8 days on average
+  init_n    = list(I = ss$by(patch = c(10, 0, 0)))  # 10 infectious people in Riverton
+)
+measles$stratify(patch = ss$levels(towns, mobility = ss$geo$gravity(away = 0.001)))
+
+sim <- Sim(measles, stop = days(60))
+sim$run()
+sim$results$measles$I$by("patch")$plot()
+```
+:::
 
 The sim takes its population (100,000) from the geography. Each town has its own epidemic, a few days after the one before: Hillside, which is bigger and nearer, before Lakeside. Without `mobility=`, people mix only within their own town, and the outbreak stays in Riverton:
 

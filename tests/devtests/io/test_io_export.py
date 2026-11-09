@@ -40,7 +40,7 @@ def test_save(tmp_path):
     with pytest.raises(ValueError, match='ss.export_to'): # Another framework's format is written by its exporter (it was a TypeError from pickling)
         ss.save(tmp_path/'sir.xml', sim, format='sbml')
     sim.init()
-    assert 'I -->|"recovery: 7 days"| R' in sim.diseases.sir.diagram() # In the sim's unit of time
+    assert 'I -->|"recovery: 7 days"| R' in sim.diseases.sir.diagram('text') # In the sim's unit of time
     return sim
 
 
