@@ -294,6 +294,7 @@ class Module(Base):
     """
     _state_aliases = {} # Default state aliases; defined on the class so it always exists, e.g. while unpickling. See define_aliases()
     has_product = False # Whether it delivers a product: see ss.Intervention
+    allow_modifiers = () # For a module written as code: which of its parameters (and for a disease, of rel_sus and rel_trans) its own code reads with current_value(), so ss.modify() of them is applied, including for some people only
     _serials = itertools.count() # Which module each is, kept by its copies: see __init__()
 
     def __init_subclass__(cls, **kwargs):
@@ -610,6 +611,34 @@ class Module(Base):
             if not isinstance(raw, (ss.by, ss.parameters.by_func)) or self.sim.modifiers.get((self.name, 'par', p.name)):
                 return engine.value(p)
         return ss.parameters.current_value(raw, self.sim, cache=self.__dict__.setdefault('_converted', {}))
+
+    def current_value(self, key, uids=None):
+        """
+        A parameter (`key` is its name) with the modifiers active on it (`ss.modify('tx.pars.p_treat', ...)`), in its own type: one value, or one for each agent if they differ between agents
+
+        A module written as code reads a parameter from `self.pars` with the modifiers applied, which is one value. To apply a modifier that
+        differs between people (e.g. with `who=`), its code reads the parameter with `current_value()`, and says so in its class, `allow_modifiers = ('p_treat',)`.
+
+        Args:
+            key (str): the name of the parameter
+            uids (uids): the agents to give the values of (default: one value, or an array of every agent, by UID, if they differ between agents)
+
+        Example:
+            ```python
+            class Treat(ss.Intervention):
+                allow_modifiers = ('p_treat',) # ss.modify('treat.pars.p_treat', multiply=0.5, who=...) applies to those people only
+                def step(self):
+                    uids = self.sim.diseases.sis.infected.uids
+                    treated = uids[np.random.rand(len(uids)) < self.current_value('p_treat', uids)] # ...
+            ```
+        """
+        engine = getattr(self, 'engine', None)
+        if engine is None: # Written as code, with no engine of its own: one that reads the modifiers, kept so that a modifier that holds (hold=, until=) is remembered between steps
+            engine = self.__dict__.get('_effects')
+            if engine is None or engine.sim is not self.sim:
+                engine = ss.solvers.Effects(self, self.sim)
+                self.setattribute('_effects', engine)
+        return engine.current_par(key, uids)
 
     # Warning: do not try to use a decorator with this function, that will break argument passing!
     def update_pars(self, pars=None, **kwargs):
@@ -1144,6 +1173,7 @@ class Module(Base):
         shrunk = ss.utils.shrink()
         self.setattribute('sim', shrunk) # Use setattribute since locked otherwise
         self.setattribute('dists', shrunk)
+        self.__dict__.pop('_effects', None) # It holds the sim
         for state in self.state_list:
             with sc.tryexcept():
                 to_shrink = ['people', 'raw']

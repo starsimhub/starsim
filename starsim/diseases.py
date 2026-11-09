@@ -166,7 +166,6 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
     infection_log = None # An InfectionLog, if the sim has an ss.infection_log analyzer
     suggested_solver = None # How a declared module's class suggests it runs as agents, e.g. ss.solvers.abm(step='wholestep') (or the step, 'wholestep'): followed unless the sim's solver names a step, or the module has its own solver= (see ss.solvers.agent_solver())
     code_pars = () # Parameters of a declared module that its own code reads rather than its graph (e.g. ss.Pregnancy's fertility rates)
-    allow_modifiers = () # For a disease written as code: which of rel_sus, rel_trans, and its parameters its own code reads, with current_value(), so ss.modify() of them is applied (transmit(rel_trans=..., rel_sus=...) reads both)
 
     _infection_methods = ['set_prognoses', 'transmissibility', 'susceptibility', 'route_betas', 'set_outcomes', 'finalize_infections', 'compute_transmission', 'transmit_route', 'set_congenital'] # Methods of ss.AgentDisease's transmission, which a declared transition never calls
 
@@ -951,7 +950,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         if key not in ['rel_sus', 'rel_trans']:
             if self.graph is not None and not self.abm and uids is not None:
                 raise ss.CapabilityError(f'{self.name}.current_value() of some agents needs agents, which a compartmental run does not have; leave out uids, or use sim.what_modifies().')
-            return self.engine.current_par(key, uids)
+            return super().current_value(key, uids)
         if not isinstance(self.engine, ss.solvers.Transmission):
             raise ss.CapabilityError(f'{self.name}.current_value() is the value of each agent with the modifiers applied, which only a run as agents has; in a compartmental run, sim.what_modifies({self.name}.{key}) lists the modifiers')
         arr = self[key]

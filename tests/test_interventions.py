@@ -66,7 +66,7 @@ def test_products(do_plot=False):
 
     # The same for a disease written as code, cured by its clear_infection() (as Starsim 3's ss.Tx moved infected to susceptible)
     sis = ssl.AgentSIS(init_prev=0.1)
-    treatment = ss.treat(ss.Treatment(cure=0.8), who=sis.infected, when=ss.schedule(every=1), capacity=ss.capacity(20, queue=True))
+    treatment = ss.treat(ss.Treatment(cure=0.8), who=sis.I, when=ss.schedule(every=1), capacity=ss.capacity(20, queue=True))
     base = ss.Sim(make_pars() | dict(diseases=sis)).run().results.agentsis
     sim = ss.Sim(make_pars() | dict(diseases=sis), interventions=treatment).run()
     assert sim.results.treatment.delivered.max() == 20 and sim.results.treatment.waiting.max() > 0 and sim.results.treatment.cured.sum() > 0
@@ -335,6 +335,31 @@ def test_check_eligibility():
     assert n['everyone'] == 500 and n['cond'] == n['fn'] == n['uids'] == young, n
     assert 0 < n['path'] == sims['path'].results.sis.I[0] < 500, n
     return sims
+
+
+def test_modify_coded_intervention():
+    """ ss.modify() changes a parameter of an intervention written as code: one value in self.pars, or, with who=, each person's with current_value() """
+    class Tx(ss.Intervention):
+        allow_modifiers = ('p_treat',)
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            self.define_pars(p_treat=0.5)
+            self.seen = []
+            self.by_person = None
+        def step(self):
+            self.seen.append(self.pars.p_treat)
+            self.by_person = self.current_value('p_treat', self.sim.people.auids)
+
+    sis = ss.SIS()
+    tx = Tx(name='tx')
+    mods = [ss.modify('tx.pars.p_treat', multiply=0.2, start=2005), ss.modify('tx.pars.p_treat', multiply=0.5, who=sis.I, name='inf')]
+    sim = ss.Sim(diseases=sis, networks='random', interventions=[tx, *mods], start=2000, stop=2010, dt=ss.years(1), n_agents=500, verbose=0).run()
+    tx = sim.interventions.tx
+    assert tx.seen[0] == 0.5 and np.isclose(tx.seen[-1], 0.5), 'p_treat in self.pars is the base value, since the class reads it with current_value()'
+    vals = np.asarray(tx.by_person)
+    inf = sim.diseases.sis.I[sim.people.auids]
+    assert np.allclose(vals[inf], 0.05) and np.allclose(vals[~inf], 0.1), f'Expected 0.05 for the infected and 0.1 otherwise, not {np.unique(vals)}'
+    return sim
 
 
 if __name__ == '__main__':
