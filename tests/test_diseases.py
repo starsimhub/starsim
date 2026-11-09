@@ -424,6 +424,17 @@ def test_current_state():
     res = sim.run().results.sir
     assert (res.I[0], res.R[0]) == (2, 1) # The start counts the agents moved before the first step
 
+    # A split between several destinations, under every solver
+    for kw in [dict(n_agents=20_000), dict(solver='ode')]:
+        d = ss.Sim(diseases=ss.SIR(init_prev=0), stop=2001, verbose=0, **kw).init().diseases.sir
+        n = d.S.n
+        moved = d.move(d.S, [d.I, d.R], p=[0.2, 0.3])
+        assert np.isclose(moved, 0.5*n, rtol=0.03) and np.isclose(d.I.n, 0.2*n, rtol=0.05) and np.isclose(d.R.n, 0.3*n, rtol=0.05)
+        d.move(d.S, ['I', 'R'], p=[None, 0.5]) # The rest, by name
+        assert d.S.n == 0 and np.isclose(d.I.n, 0.45*n, rtol=0.05)
+        with pytest.raises(ValueError, match='more than everyone'):
+            d.move(d.I, [d.S, d.R], p=[0.6, 0.6])
+
     # Only the people for whom a condition holds (where=), under every solver
     for kw in [dict(n_agents=1000), dict(solver='ode')]:
         d = ss.Sim(diseases=ss.SIR(), stratify=dict(age=[0, 15]), stop=2001, verbose=0, **kw).init().diseases.sir
