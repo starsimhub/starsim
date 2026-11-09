@@ -5,6 +5,7 @@ Used with: agents and compartments; declared modules
 """
 import re
 import ast
+import shlex
 import keyword
 import numpy as np
 import pandas as pd
@@ -115,7 +116,7 @@ class Source:
         self.pars[name] = sc.obj(value=value, doc=doc, bounds=bounds, prior=prior)
         return
 
-    def add_flow(self, src, dst, rate=None, per='person', dur=None, name=None, label=None, p=None, min_stay=None):
+    def add_flow(self, src, dst, rate=None, per='person', dur=None, name=None, label=None, p=None, min_stay=None, noise=None):
         """
         A flow between states
 
@@ -129,8 +130,9 @@ class Source:
             label (str): a description
             p (list): for a branch (dst a list of states), the probability of each destination, as expressions of parameters (None for the rest)
             min_stay (dur): a minimum stay in src before the flow can happen (see `ss.Transition`)
+            noise (str/float): sigma of gamma white noise on the rate, as an expression of parameters, in the square root of the model's unit of time (see `ss.Transition`)
         """
-        self.flows.append(sc.obj(src=src, dst=dst, rate=None if rate is None else str(rate), per=per, dur=dur, name=name, label=label, p=p, min_stay=min_stay))
+        self.flows.append(sc.obj(src=src, dst=dst, rate=None if rate is None else str(rate), per=per, dur=dur, name=name, label=label, p=p, min_stay=min_stay, noise=None if noise is None else str(noise)))
         return
 
     def add_outcome(self, name, source, p=None, delay=None, dur=None, doc=None, likelihood=None):
@@ -698,6 +700,11 @@ def disease_code(source, var, total=None):
                 kw.p = shares[0] if len(shares) == 1 else '[' + ', '.join(shares) + ']'
         if flow.get('min_stay') is not None:
             kw.min_stay = code_value(flow.min_stay)
+        if flow.get('noise') is not None:
+            try:
+                kw.noise = expr_code(flow.noise, code_names)
+            except (ValueError, SyntaxError) as E:
+                source.skip(f'{arrow} (noise)', f'the noise "{flow.noise}" could not be translated ({E}); the rate is used without it')
         if flow.label is not None:
             kw.label = repr(flow.label)
         if guess:
@@ -934,7 +941,7 @@ def build(sources, verbose=None, **kwargs):
         sim.imported.prompt = handoff(sim.imported)
         items = '\n'.join(f'  {name}: {why}' for name,why in incomplete)
         ss.warn(f'{len(incomplete)} part(s) of the model were not translated:\n{items}\n'
-                f'The sim runs without them. {sim.imported.prompt}', ss.errors.ImportIncomplete)
+                f'The sim runs without them. {finishing(sim.imported)}', ss.errors.ImportIncomplete)
     return sim
 
 
@@ -947,6 +954,16 @@ def handoff(imported):
     convert-model skill is for.
     """
     source = sc.path(imported.file).name if imported.file else 'the model'
-    prompt = (f'Finish importing {source} ({imported.format}) into Starsim: save its code, sim.imported.code, to a file, translate each part listed in '
-              f'sim.imported.incomplete (the code\'s "Not translated" comments), and check the result against the original, as the skill says.')
-    return f'To finish the import, ask an AI assistant with the convert-model skill loaded (printed by `starsim ai show convert-model`, or starsim/.agents/skills/convert-model in the Starsim repo; see "Finishing an incomplete import"): "{prompt}"'
+    return (f'Finish importing {source} ({imported.format}) into Starsim: save its code, sim.imported.code, to a file, translate each part listed in '
+            f'sim.imported.incomplete (the code\'s "Not translated" comments), and check the result against the original, as Starsim\'s convert-model skill says '
+            f'(if it isn\'t loaded, run "starsim ai show convert-model").')
+
+
+def finishing(imported):
+    """ The sentence that ends the warnings of an incomplete import: how to finish it with an AI coding agent """
+    fmt = imported.format.lower()
+    if imported.file and fmt in ss.converters.importers:
+        command = f'starsim import {shlex.quote(str(imported.file))} {fmt} --ai'
+        return f'To finish it, run "{command}": an AI coding agent, with Starsim\'s convert-model skill, translates the rest and checks the result against the original.'
+    return 'To finish it, give an AI coding agent with Starsim\'s skills (starsim ai install) the request in sim.imported.prompt: it translates the rest and checks the result against the original.'
+

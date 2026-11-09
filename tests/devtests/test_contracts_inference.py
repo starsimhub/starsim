@@ -2,11 +2,10 @@
 Contract tests for inference: the likelihoods that the fitting methods use match the
 likelihood of a run, and each method recovers known values from simulated data
 
-Run the longer simulation-based calibration with STARSIM_SLOW=1.
+Run the longer tests (the particle filter at a small population, and the simulation-based calibration) with pytest -m slow.
 """
 
 # %% Imports and settings
-import os
 import pytest
 import numpy as np
 import scipy.stats as sps
@@ -15,8 +14,6 @@ import sciris as sc
 import starsim as ss
 import starsim.fit
 import corpus
-
-slow = pytest.mark.skipif(not os.getenv('STARSIM_SLOW'), reason='A longer run; set STARSIM_SLOW=1 to run it')
 
 start, stop = '2020-02-23', '2020-05-31' # As corpus.seasonal()
 weeks = pd.date_range('2020-03-01', periods=13, freq='W') # The data of the seasonal models: weekly totals
@@ -172,6 +169,41 @@ def test_particle_filter(key):
     return pf, direct
 
 
+@pytest.mark.slow
+def test_particle_filter_small():
+    sc.heading('Testing the particle filter against brute force at a small population, where its resampling matters')
+    def make(data=None):
+        S, I, R = ss.states('S I R')
+        sir = ss.Disease(infection=S >> I @ 0.5*I.frac, recovery=I >> R @ 0.25, init_n=dict(I=5), name='sir')
+        return ss.Sim(sir, solver='binomial', total_pop=300, unit='day', start='2020-01-01', stop='2020-04-15', data=data, verbose=0)
+    dates = pd.date_range('2020-01-08', periods=12, freq='W')
+    expected = ss.results.compare(make(data=pd.DataFrame(dict(infection=0.0), index=dates)).run())['infection'][1]
+    data = pd.DataFrame(dict(infection=np.random.default_rng(1).poisson(expected)), index=dates)
+    lik = dict(infection=ss.poisson())
+
+    def log_mean(logs):
+        """ The log of the mean of the likelihoods, and its Monte Carlo error (by the delta method) """
+        w = np.exp(logs - logs.max())
+        return logs.max() + np.log(w.mean()), w.std(ddof=1)/np.sqrt(len(w))/w.mean()
+
+    # Brute force: the mean likelihood over many independent runs
+    sim = make(data=data).init()
+    logs = []
+    for seed in range(50_000):
+        sim.restart(rand_seed=seed)
+        logs.append(ss.fit.loglik(sim.run(), likelihood=lik))
+    brute, brute_se = log_mean(np.array(logs))
+
+    # The filter: each estimate is unbiased in the likelihood, so they are averaged as likelihoods too
+    sim.restart()
+    filt = ss.fit.ParticleFilter(sim, likelihood=lik)
+    pf, pf_se = log_mean(np.array([filt(n_particles=1000, rand_seed=seed) for seed in range(40)]))
+    se = np.hypot(brute_se, pf_se)
+    print(f'Filter {pf:.3f} +- {pf_se:.3f}; brute force {brute:.3f} +- {brute_se:.3f}')
+    assert abs(pf - brute) < 3*se, f'The filter gives {pf:.3f}, against {brute:.3f} by brute force (Monte Carlo error {se:.3f})' # -3.534 against -3.474 when written
+    return pf, brute
+
+
 # %% Simulation-based calibration
 
 def sbc_fit(method, truth=0.35, seed=1, quick=True, verbose=False):
@@ -187,10 +219,14 @@ def sbc_fit(method, truth=0.35, seed=1, quick=True, verbose=False):
         sim = corpus.outcomes(beta=0.25, data=simulate(model, truth, seed=seed, col='infection', **kw), **kw)
         n, particles = (100, 20) if quick else (300, 50)
         return sim.fit(method=ss.fit.method(method, draws=n, warmup=n, chains=2, particles=particles, parallel=False), likelihood=dict(infection=ss.poisson()), rand_seed=seed, verbose=verbose) # Not in parallel, since forking after JAX is loaded can deadlock
+    elif method == 'abc-smc': # A stochastic sim, fitted by its loss: ABC-SMC gives no posterior for a deterministic one (its width would be set by the number of generations)
+        kw = dict(solver=ss.solvers.binomial(substeps=1), total_pop=1e4, dt=ss.days(2), rand_seed=seed + 1)
+        sim = corpus.outcomes(beta=0.25, data=simulate(model, truth, seed=seed, col='infection', **kw), **kw)
+        settings = dict(samples=60, generations=5) if quick else dict(samples=200, generations=8)
+        return sim.fit(method=ss.fit.method(method, **settings), rand_seed=seed, verbose=verbose)
     sim = corpus.outcomes(beta=0.25, likelihood=ss.poisson(), data=simulate(model, truth, seed=seed)) # Cases, with the likelihood declared on the outcome
     kwargs = dict(
         nuts   = dict(draws=100, warmup=100, chains=2) if quick else dict(draws=500, warmup=500, chains=4),
-        **{'abc-smc': dict(samples=60, generations=5) if quick else dict(samples=200, generations=8)},
         optuna = dict(n_trials=40 if quick else 200),
     ).get(method, {})
     return sim.fit(method=ss.fit.method(method, **kwargs) if kwargs else method, rand_seed=seed, verbose=verbose)
@@ -242,8 +278,8 @@ def test_sbc(method):
     check_fit(fit, truth, rtols.get(method), rhat_max=1.3 if method == 'pmcmc' else 1.1) # Two chains of 100 draws of particle MCMC are short and sticky, so their R-hat is noisy; 1.3 still catches chains stuck apart
     if fit.samples is None:
         check_converged([fit])
-    else: # Chains this short are not converged by the rule of an R-hat of at most 1.01 (nor is the tolerance of ABC-SMC settled on a deterministic model), and a posterior method should say so
-        assert fit.converged is not None and fit.why
+    else: # Chains this short are not converged by the rule of an R-hat of at most 1.01, and a posterior method should say so; ABC-SMC makes no claim (None), and says why
+        assert (fit.converged is None) == (method == 'abc-smc') and fit.why
     if method == 'if2': # And a rate that varies in time (the summer2 pattern), whose values each particle's rates are worked out from, a data point at a time
         fit_detect(quick=True)
     return fit
@@ -484,9 +520,10 @@ def test_observations():
     return fit
 
 
-@slow
+@pytest.mark.slow
 @pytest.mark.parametrize('method', methods)
 def test_sbc_slow(method):
+    """ Despite the name, this checks the coverage of the 95% intervals at a few values, not simulation-based calibration's ranks of truths drawn from the prior """
     sc.heading(f'Testing that {method} recovers known values drawn from the prior, from repeated simulated data')
     n = 10
     truths = np.random.default_rng(2).uniform(0.2, 0.5, n) # Within the bounds [0.05, 1], away from them, and from where the fit starts (0.25)
@@ -503,7 +540,8 @@ def test_sbc_slow(method):
     if method in ['nuts', 'pmcmc']:
         print(f'{method}: the 95% interval covered the truth in {covered} of {n}')
         assert covered >= 8 # With 95% intervals, 8 or more of 10 cover the truth with a probability of 0.99
-    check_converged(fits)
+    if method != 'abc-smc': # Which makes no claim of convergence
+        check_converged(fits)
     if method == 'if2':
         fit_detect(quick=False)
     return

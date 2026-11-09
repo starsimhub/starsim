@@ -34,6 +34,7 @@ CONST, COUNT, FRAC, EXPOSURE, ADD, SUB, MUL, DIV, POW, MIN, MAX, LT, LE, GT, GE,
 CONVEY = 22 # Not in a rate: a conveyor (its flow, then its slots; see convey()); kept out of the program's fields, since every field adds to the cost of each call that is passed it
 LOAD, STORE = 23, 24 # A part used more than once: STORE takes the top of the stack into register arg, and LOAD puts a copy back on top; the registers are the last rows of the stack (row depth-1-arg). The parts used by several rates are worked out first, in the operations before the first rate's (starts[0] > 0); a part used twice in one rate, in the rate
 GROUP = 25 # A count in the group each rate is for, not its place: a branching process's infection, which adds people at its rate per member of its source without taking them from it (see ss.solvers.Compartmental.init_program())
+NOISE = 26 # Gamma white noise on a rate (ss.Transition(noise=)): the chain binomial multiplies the top of the stack, in each group, by a gamma draw with mean 1 and variance sigma²/h, sigma being row arg of consts (see noise()); the other solvers leave it out (its mean, 1)
 opcodes = {'+':ADD, '-':SUB, '*':MUL, '/':DIV, '**':POW, 'minimum':MIN, 'maximum':MAX, 'exp':EXP, 'log':LOG, 'sqrt':SQRT, 'absolute':ABS, 'sin':SIN, 'cos':COS,
            'less':LT, 'less_equal':LE, 'greater':GT, 'greater_equal':GE}
 
@@ -575,6 +576,19 @@ def some_binomials(rng, n, prob, out, rows):
     return
 
 
+@kernel(inline='always')
+def noise(rng, sigma, h):
+    """
+    Gamma white noise over a time h (Bretó et al. 2009; pomp's rgammawn(sigma, h)/h): a multiplier with mean 1 and variance sigma²/h,
+    sigma²·Gamma(h/sigma²)/h, from one uniform (as `draws.nbinom()` takes a gamma); 1 with no draw for sigma = 0
+    """
+    if sigma <= 0:
+        return 1.0
+    var = sigma*sigma
+    g, st = draws._gamma(h/var, draws.stream(rng.random()))
+    return g*var/h
+
+
 @jit
 def hypergeometric(rng, good, bad, n):
     """ The number of good items in n drawn without replacement from good and bad ones, drawn one at a time (the draws of a register are small) """
@@ -900,9 +914,9 @@ def sum_exposures(expo, e, s):
 def check_ops(ops):
     """ Check that a program has only operations the kernels know, which they then need not check (see `unary()`) """
     ops = np.asarray(ops, dtype=int)
-    unknown = sorted(set(ops[(ops < CONST) | (ops > GROUP)].tolist()))
+    unknown = sorted(set(ops[(ops < CONST) | (ops > NOISE)].tolist()))
     if unknown:
-        errormsg = f'The program of a rate has unknown operations {unknown}; the kernels know {CONST} to {GROUP}'
+        errormsg = f'The program of a rate has unknown operations {unknown}; the kernels know {CONST} to {NOISE}'
         raise ValueError(errormsg)
     return ops
 
@@ -2220,6 +2234,10 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, varying):
                             for g in range(ng):
                                 stack[len(stack)-1-arg, g] = stack[top, g]
                             top -= 1
+                        elif op == NOISE: # Noise on the rate, drawn for each substep under the chain binomial (whose substeps are dt/n_sub)
+                            if solver == 2 or solver == 5:
+                                for g in range(ng):
+                                    stack[top, g] *= noise(rng, p.consts[arg, g], dt/max(n_sub, 1))
                         elif op >= EXP: # A function of one value
                             for g in range(ng):
                                 stack[top, g] = unary(op, stack[top, g])

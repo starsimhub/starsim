@@ -767,7 +767,9 @@ def test_printed_output():
         with warnings.catch_warnings():
             warnings.simplefilter('error')
             assert not sim.init().notes, sim.notes
-    meant = ss.Sim(ss.Disease(S >> I @ ss.perday(0.3)*I.n, I >> R @ ss.perday(0.1), init_n=dict(I=10)), total_pop=10_000, **kw).init() # But a beta meant for a share, with a count
+    A = ss.State(name='A')
+    ss.Sim(ss.Disease(A, ss.death(rate=ss.perday(0.05)*A.n/150), init_n=dict(A=100)), total_pop=100, unit='day', stop=10, verbose=0).run() # The deaths of everyone at a rate on counts (EMULSION's density dependence)
+    meant =ss.Sim(ss.Disease(S >> I @ ss.perday(0.3)*I.n, I >> R @ ss.perday(0.1), init_n=dict(I=10)), total_pop=10_000, **kw).init() # But a beta meant for a share, with a count
     assert any('density-dependent' in note and '.frac' in note for note in meant.notes)
 
     # Where the rest start is not guessed when the initial values account for everyone; a count is not people; values by group are rounded

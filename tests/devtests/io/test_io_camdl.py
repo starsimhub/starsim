@@ -73,7 +73,7 @@ def test_camdl_ir():
 
 
 def test_camdl_flat():
-    """ A stratified IR is imported flat; an event, a time function, and an ODE compartment are listed """
+    """ A stratified IR is imported flat; an event that adds people is an inflow at its time, and noise on a rate is noise=; a time function and a balance are listed """
     sc.heading('Testing camdl import of what is not translated')
     ir = sc.dcp(sir_ir)
     m = ir['model']
@@ -87,14 +87,27 @@ def test_camdl_flat():
     m['observations'] = []
     m['initial_conditions'] = {'S_a': {'deterministic': {'const': 990.0}}, 'S_b': {'deterministic': {'const': 1000.0}}, 'I_a': {'deterministic': {'const': 10.0}}}
     m['interventions'] = [{'name': 'seed', 'kind': 'event', 'fire': {'scheduled': {'at_times': [10.0]}}, 'actions': [{'add': {'compartment': 'I_b', 'count': {'const': 5.0}}}]}]
-    with pytest.warns(ss.errors.ImportIncomplete):
+    m['transitions'][0]['draw_method'] = {'overdispersed': par('beta')}
+    m['balance'] = {'target': 'R_a', 'expr': op('sub', {'const': 1000.0}, pop('S_a'))}
+    m['quantities'] = [{'name': 'q', 'body': {}}]
+    with pytest.warns(ss.errors.ImportIncomplete, match='AI coding agent'): # Ending with how to finish it
         sim = load_camdl(ir, pars=dict(rho=0.5, k=1), **kw)
     skipped = [name for name,why in sim.imported.incomplete]
-    assert 'season' in skipped and 'seed' in skipped, 'the time function and the event should be listed'
+    assert skipped == ['season', 'R_a (balance)', 'quantities'], f'the time function, balance, and unread part should be listed, and the event and noise translated: {skipped}'
+    assert 'noise=sqrt_beta' in sim.imported.code and 'sqrt_beta = ss.par(' in sim.imported.code, 'camdl\'s overdispersed() takes sigma squared, and noise= sigma'
     sim.run()
     res = sim.results.sir
     assert res.I_b.values[30] > 1, 'the infection should reach the second group'
-    assert np.allclose(sum(res[f'{c}_{g}'].values for c in 'SIR' for g in 'ab'), 2000), 'no one should be lost'
+    total = sum(res[f'{c}_{g}'].values for c in 'SIR' for g in 'ab')
+    assert np.allclose(total[:11], 2000) and np.allclose(total[11:], 2005), 'the event should add 5 people on day 10, and no one should be lost'
+    m['interventions'][0]['fire'] = {'scheduled': {'recurring': {'start': 0.0, 'period': 20.0, 'end': 50.0, 'at_day': 5.0}}}
+    with pytest.warns(ss.errors.ImportIncomplete):
+        sim = load_camdl(ir, pars=dict(rho=0.5, k=1), solver='binomial', **kw)
+    assert 'seed (deterministic)' in [name for name,why in sim.imported.incomplete], 'a stochastic solver draws the added number at random'
+    sim.run()
+    added = sim.results.sir.seed.values
+    assert np.all(added[[5, 25, 45]] > 0) and added.sum() == added[[5, 25, 45]].sum(), 'a recurring event should add people at each of its times and no others'
+    m.pop('balance'); m.pop('quantities'); m['transitions'][0].pop('draw_method')
 
     # A guard against an empty group (N_b > 0 ? I_b/N_b : 0), which without it would be 0/0
     for tr in m['transitions'][:2]:

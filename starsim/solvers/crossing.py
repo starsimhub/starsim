@@ -10,7 +10,7 @@ import numba as nb
 import sciris as sc
 import starsim as ss
 from .engine import by_level, no_tables
-from .compartmental import Compartmental, choose_kernels, kernel_list, run_many_parts
+from .compartmental import Compartmental, choose_kernels, kernel_list, run_many_parts, given_start
 
 __all__ = ['Crossing', 'Joint']
 
@@ -736,8 +736,8 @@ class Crossing:
         """ Warn if events of a movement register asked for more people than there were: by the disease that moves people for the sim (see `lead`) """
         return self.sim._declared_module(self.lead).engine.check_short(short)
 
-    def run_many(self, seeds):
-        """ Many runs that differ only in their seed, as `ss.solvers.Compartmental.run_many()` takes them for one engine: returns, for each engine, its name and its results """
+    def run_many(self, seeds, start=None):
+        """ Many runs that differ only in their seed, as `ss.solvers.Compartmental.run_many()` takes them for one engine (`start` with the program's compartments, and what came before by each engine's name): returns, for each engine, its name and its results """
         engines = self.engines
         for engine in engines:
             engine.restart()
@@ -746,7 +746,7 @@ class Crossing:
         y0, npts = args[0], args[3]
         rngs = kernel_list([engines[0].make_rng(stream=1, seed=seed) for seed in seeds]) # The random numbers that each run would have
         R, nc, nflows, n_runs = self.n_cols, self.n_rows, self.n_trans + self.n_movers, len(seeds)
-        grouped = self.sim.groups.n_groups > 1 and any(s or f for s,f in [engine.group_needs() for engine in engines])
+        grouped = self.sim.groups.n_groups > 1 and any(s or f for s,f in [engine.group_needs() for engine in engines]) and start is None
         rows = group_ti = None
         if grouped: # Every compartment and flow of the program by group, for the results that each engine keeps by group
             rows, group_ti = ss.solvers.group_rows(self.sim, npts, n_runs*(nc + nflows)*R*8, engines[0].max_bytes, name=' × '.join(self.names))
@@ -757,12 +757,18 @@ class Crossing:
         tally, tally_g = np.zeros((n_runs, npts, 0, 2, 1)), np.zeros((n_runs, n_rows, 0, 2, R))
         grp_state, grp_flow = (np.arange(nc), np.arange(nflows)) if grouped else (np.full(nc, -1), np.full(nflows, -1))
         ys = np.repeat(y0[None], n_runs, axis=0)
-        run_many_parts(self, rngs, ys, args, R, (stocks, flows, stocks_g, flows_g, tally, tally_g), np.arange(nc), rows, grp_state, grp_flow)
+        ti = 0
+        if start is not None:
+            ys, ti = given_start(self, start, ys, npts)
+        run_many_parts(self, rngs, ys, args, R, (stocks, flows, stocks_g, flows_g, tally, tally_g), np.arange(nc), rows, grp_state, grp_flow, start=ti)
         outs = []
         for k,engine in enumerate(engines):
             states = range(len(engine.graph.states))
             by_group = (self.engine_stocks(k, stocks_g), self.engine_flows(k, flows_g), states, range(engine.n_trans + len(engine.movers)), group_ti) if grouped else None
-            out = engine.collect(self.engine_stocks(k, stocks, by_group=False), self.engine_flows(k, flows, by_group=False), grouped=by_group, seeds=seeds)
+            e_stocks, e_flows = self.engine_stocks(k, stocks, by_group=False), self.engine_flows(k, flows, by_group=False)
+            if start is not None: # What came before, as given
+                e_stocks[:, :ti, :, 0], e_flows[:, :ti, :, 0] = start['stocks'][engine.mod.name], start['flows'][engine.mod.name]
+            out = engine.collect(e_stocks, e_flows, grouped=by_group, seeds=seeds)
             out.deliveries = sc.obj()
             outs.append((engine.mod.name, out))
         return outs

@@ -17,7 +17,7 @@ Starsim 4 adds a way to write a model as declared states and transitions, which 
 - **Partnerships**: `ss.DegreeNet` and `ss.SexualNet`, with target numbers of partners, matching and acts.
 - **Interventions**: `ss.vaccinate()`, `ss.screen()` and `ss.treat()` deliver products in rounds, routinely, at an age or on events (`who=`, `when=`), with priorities, queues and delays; `ss.modify()` changes any named quantity.
 - **Demographics**: declared `ss.Pregnancy`, `ss.birth()`, `ss.death()` and `ss.migration()`; UN data by country (`ss.population('Kenya')`, `birth_rate='Kenya'`).
-- **Fitting**: `ss.outcome()` and `sim.fit()` by optimization, MCMC (with gradients in JAX), particle MCMC, iterated filtering or ABC-SMC; `sim.sensitivity()` and `sim.optimize()`.
+- **Fitting**: `ss.outcome()` and `sim.fit()` by optimization, MCMC (with gradients in JAX), particle MCMC (keeping a run with each draw, which `fit.project()` continues), iterated filtering or ABC-SMC; process noise on a rate (`noise=`); `sim.sensitivity()` and `sim.optimize()`.
 - **Runs**: `ss.parallel()` returns a MultiSim with summaries, bands and comparisons by scenario.
 - **Importing and exporting**: `ss.import_from()` and `ss.export_to()` for 13 frameworks (EMULSION, odin, SBML, SimInf, flepiMoP, summer2, Atomica, camdl, EpiModel, epipack, epydemix, epymorph, MEmilio); `python -m starsim.converters.migrate` rewrites Starsim 3 code.
 - **Library**: `starsim.library` (`ssl`) holds simple models of many diseases, maternal and newborn health, more networks, and health economics.
@@ -52,6 +52,7 @@ Starsim 4 adds a way to write a model as declared states and transitions, which 
 - Agent passes are compiled; networks whose edges haven't changed visit only the edges that matter.
 - `pip install starsim` includes the compiled Rust kernels on all major platforms.
 - `import starsim` limits BLAS to one thread (`ss.options.blas_threads`).
+- Fixes from a review of fitting ([#1591](https://github.com/starsimhub/starsim/issues/1591)): the JAX log-density refuses what it would approximate, Optuna scores a stochastic sim by the particle filter, ABC-SMC is refused for an ODE, and chains start apart.
 - The full list of changes is in the [full changelog](https://starsim.org/v4/migration/v4_changelog.html).
 <!-- V4-PREVIEW: restore the links above to docs.starsim.org for normal publishing -->
 - *GitHub info*: PR [1437](https://github.com/starsimhub/starsim/pull/1437)

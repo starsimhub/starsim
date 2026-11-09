@@ -232,7 +232,7 @@ def test_odin_ode():
     # A scalar SIR: the same model as one written by hand
     sim = load_odin(write(odin_sir, '.R'), stop=100, **kw)
     names = list(sim.pars.diseases[0].transitions.keys())
-    assert isinstance(sim.pars.solver, ss.solvers.ode) and len(names) == 2
+    assert isinstance(sim.init().solver, ss.solvers.ode) and len(names) == 2
     assert not sim.imported.incomplete
     res = sim.run().results[sim.diseases[0].name]
     ref = hand_sir(total_pop=1000)

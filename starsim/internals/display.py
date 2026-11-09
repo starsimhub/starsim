@@ -457,9 +457,11 @@ def describe_graph(graph, sim=None, out=None):
             add('', 'flows: ' + ', '.join([f'{name} (total)'] + [f'{name}.{end}' for end in tr._ends]))
         if getattr(tr, 'min_stay', None) is not None: # A minimum stay
             add('', f'not before {quantity_str(tr.min_stay, "dur", unit)} in {sc.strjoin(s.name for s in tr.source)}')
+        if getattr(tr, 'noise', None) is not None: # Noise on the rate
+            add('', f'noise: the rate times gamma white noise with mean 1, sigma = {format_expr(tr.noise, values=True)} (per square root of a {unit})' if unit else f'noise: the rate times gamma white noise with mean 1, sigma = {format_expr(tr.noise, values=True)}', 'drawn each step by the chain binomial; left out of the ODE')
         if tr.guessed.get('import'):
             add('', f'imported as {tr.guessed["import"]}', 'guessed')
-        for expr in [tr.rate, tr.dur] + sc.tolist(tr.p): # The other parameters of the transition that are documented (or labeled) or can be fitted, each with its value
+        for expr in [tr.rate, tr.dur, getattr(tr, 'noise', None)] + sc.tolist(tr.p): # The other parameters of the transition that are documented (or labeled) or can be fitted, each with its value
             for leaf in (expr.leaves if isinstance(expr, Expr) else []):
                 if isinstance(leaf, par) and (leaf.doc or leaf.source or leaf.label or leaf.bounds is not None) and id(leaf) not in shown:
                     add('', par_str(leaf, leaf.slot if leaf.slot in ['rate', 'dur'] else None, unit), midpoint_guess(leaf))
@@ -844,6 +846,9 @@ def equation_symbols(graph, engine=None):
             frac = leaf.endswith('.frac')
             each = leaf.removesuffix('.frac').removesuffix('.n') # What is counted in each group: I for I.n, I.n_infectious as itself
             lines.append(f'In a rate, {leaf} in group i is the sum over groups j of C[i, j] * {each}[j]{" / N" if frac else ""}, with C the contact matrix of {nets}{" and N everyone in the same place" if frac else ""}')
+    noisy = [name for name,tr in graph.transitions.items() if getattr(tr, 'noise', None) is not None]
+    if noisy: # Noise on a rate, which the equations (the ODE) leave out
+        lines.append(f'The rate of {sc.strjoin(noisy)} is also multiplied by gamma white noise with mean 1 (noise=), which the chain binomial draws each step and the equations leave out')
     for name,p in graph.pars.items():
         raw = p.raw
         if isinstance(raw, ss.parameters.seasonal):

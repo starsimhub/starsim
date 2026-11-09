@@ -7,16 +7,17 @@ authorship:
   note: Written by AI, reproducing the model of He, Ionides and King (2010)
 ---
 
-Starsim declares most models in a few lines: states, transitions, rates, and the data to fit them to. Sooner or later, though, a model needs something none of these say. This page takes one such model, the measles model of He, Ionides and King (2010), and writes it in Starsim in two ways:
+Starsim declares most models in a few lines: states, transitions, rates, and the data to fit them to. Sooner or later, though, a model needs something none of these say. This page takes a model with several such parts, the measles model of He, Ionides and King (2010), and writes it in Starsim in three ways:
 
-1. **Declared, with a little code**: the states and transitions declared as usual, with functions of the sim and a small module for what they can't say.
+1. **Declared, with a little code**: the states and transitions declared as usual, with functions of the sim and a small module for the parts that are easiest to write as code.
 2. **Written as code**: the whole model as one module, with nothing declared, which can do anything.
+3. **Declared, with noise**: the whole model declared, with the noise on infection given by `noise=`, so that it runs in the compiled kernels and Starsim's own particle filter can run it.
 
-Then it fits them to the data: with a likelihood of its own, for data the built-in likelihoods don't describe; with the coded model's loop compiled with `@ss.jit`; and with a particle filter. None of this needs anything added to Starsim. Writing the model as code gives up some of what Starsim knows about it in return for freedom.
+Along the way it fits them to the data: with a likelihood of its own, for data the built-in likelihoods don't describe; with the coded model's loop compiled with `@ss.jit`; and with a particle filter, written by hand for the coded model and built in for the declared one. Writing the model as code gives up some of what Starsim knows about it in return for freedom.
 
 ## The model
 
-He et al. fitted a stochastic SEIR model to the weekly measles cases reported in London from 1944 to 1965. It is the classic test of methods for fitting stochastic models, and it has four features that Starsim's declarations don't have words for:
+He et al. fitted a stochastic SEIR model to the weekly measles cases reported in London from 1944 to 1965. It is the classic test of methods for fitting stochastic models, and it has four features beyond a plain SEIR model:
 
 - **Noise on the rate of infection.** Besides the chance of who is infected each day, the force of infection itself varies at random from day to day ("extra-demographic" noise, gamma-distributed with variance σ²).
 - **Births that enter school together.** Most children (55.7%) enter the susceptible pool all at once, on the day school starts in September; the rest enter through the year. The birth rate and the population follow the census.
@@ -61,7 +62,7 @@ def lookup(column, date):
 
 ## 1. Declared, with a little code
 
-The states, transitions and deaths are declared as usual. What they can't say is written as functions of the sim, which Starsim calls once a step: the force of infection, which reads the calendar for the school terms, and the births, which on day 251 of the year include the cohort entering school. The noise is a value that changes each step, so it is a few lines of a connector, whose `step()` draws it before the diseases run; the force of infection reads it.
+The states, transitions and deaths are declared as usual. The rest is written as functions of the sim, which Starsim calls once a step: the force of infection, which reads the calendar for the school terms, and the births, which on day 251 of the year include the cohort entering school. The noise is a value that changes each step, so it is a few lines of a connector, whose `step()` draws it before the diseases run; the force of infection reads it. (Section 3 declares all of these instead.)
 
 ```{python}
 class Noise(ss.Connector):
@@ -128,7 +129,7 @@ The model's epidemics come every other year, as London's did, though not always 
 sim.describe()
 ```
 
-What this costs: the functions run in Python once a step, so the run is taken a step at a time (a few seconds) rather than in one compiled call; and Starsim's own particle filter, which runs many copies of the kernels at once, can't take a connector, since each copy would need noise of its own. Everything declared still prints, and the run's results are ordinary results.
+What this costs: the functions run in Python once a step, so the run is taken a step at a time (a few seconds) rather than in one compiled call; and Starsim's own particle filter, which runs many copies of the run in the kernels at once, can't run a model with Python in its steps, such as this connector, which would also need to draw noise of its own for each copy. Everything declared still prints, and the run's results are ordinary results. [Section 3](#declared-with-noise) declares the same model so that the filter can run it.
 
 ## 2. Written as code
 
@@ -272,14 +273,56 @@ print(f'Log-likelihood: {sim.analyzers.pfilter.loglik:,.1f}')
 
 With 2,000 particles, ten such filters give −5,819 ± 14, against −5,827 ± 13 from pomp, the R package He et al. used; fewer particles give a lower and noisier estimate. A filter like this is the basis of fitting a stochastic model: estimate the likelihood at many parameter values and keep the best (IF2 and particle MCMC are refinements of the same idea).
 
+## 3. Declared, with noise {#declared-with-noise}
+
+Each of the four features can also be declared, so that nothing in the model is Python run once a step:
+
+- **The noise** is `noise=` on the transition of infection: gamma white noise on its rate, as pomp's `rgammawn()`, drawn for each step by the chain binomial. Its σ is in the square root of the sim's unit, here a day, so He et al.'s 0.0878 per square root of a year is multiplied by √365.25.
+- **The school terms, the census and the births** are known in advance, so they are time series with a value for each day (`ss.timeseries()`), worked out once from the same tables: the rate of infection, with the school terms and the population folded in, and the births, with the cohort on day 251. The births are an inflow from `ss.unborn`, so under the chain binomial the cohort is drawn as a random number around its size rather than added exactly, which at London's size makes no visible difference.
+- **The measurement model** is the likelihood `reported()` above.
+
+```{python}
+dates = [start + ss.days(d) for d in range(7*1096 + 1)] # Every day of the run
+days = np.array([date.day_of_year for date in dates])
+pop = np.array([lookup('pop', date) for date in dates])
+school = np.array([any(lo <= day <= hi for lo,hi in terms) for day in days])
+seas = np.where(school, 1 + pars.amplitude*0.2411/0.7589, 1 - pars.amplitude)
+beta = pars.R0*seas*(1 - np.exp(-(pars.gamma + pars.mu)))/pop # Per day, per (I + iota)^alpha
+daily_births = pop*np.array([lookup('birthrate', date) for date in dates])*((1 - pars.cohort)/365.25 + pars.cohort*(days == 251)) # Per day, with the cohort on day 251
+
+S, E, I, R = ss.states('S E I R')
+measles = ss.Disease(
+    infection = ss.Transition(S, E, rate=ss.perday(ss.timeseries(dates, beta))*(I.n + pars.iota)**pars.alpha, noise=pars.sigma_se*np.sqrt(365.25)), # σ per square root of a day
+    latency   = E >> I @ ss.perday(pars.sigma),
+    recovery  = I >> R @ ss.perday(pars.gamma),
+    births    = ss.unborn >> S @ ss.perday(ss.timeseries(dates, daily_births)),
+    deaths    = ss.death(rate=ss.perday(pars.mu)),
+    init_n    = dict(S=round(pars.s0*pop[0]), E=round(pars.e0*pop[0]), I=round(pars.i0*pop[0])),
+    name      = 'measles',
+)
+declared = ss.Sim(measles, solver=ss.solvers.binomial(substeps=1), total_pop=pop[0], start=start, stop=stop, dt=ss.days(1), data=data, verbose=0)
+declared.init()
+ss.fit.ParticleFilter.reason(declared) # Why the filter can't run the sim: None, since the kernels run it whole
+```
+
+`substeps=1` takes each day whole, with a chance of `1 − exp(−rate·dt)` on every exit, as He et al.'s Euler-multinomial step does. `declared.describe()` shows the noise under the transition of infection. Starsim's particle filter, `ss.fit.ParticleFilter`, takes the sim and the likelihood, and gives an estimate of the log-likelihood for a number of particles and a seed:
+
+```{python}
+filt = ss.fit.ParticleFilter(declared, likelihood=dict(recovery=reported))
+print(f'Log-likelihood: {filt(n_particles=200, rand_seed=0):,.1f}')
+```
+
+That is with 200 particles, to keep this page quick, which gives a lower estimate. With 2,000 particles, ten filters give −5,816.7 ± 11.5, against pomp's −5,827.4, in about 15 seconds each on two cores; without the noise, they give about −13,000, so the noise is what lets the published values fit. It is the filter that `sim.fit()` uses for IF2 (`method='if2'`) and particle MCMC (`method='pmcmc'`), so the declared model can be fitted with them: give a rate to fit bounds, e.g. `I >> R @ ss.par(ss.perday(pars.gamma), bounds=[0.05, 0.12])` (here R0 and the school terms are folded into the time series, so they stay fixed). The noise is drawn only by the chain binomial: the ODE leaves it out (and says so), and the other solvers refuse it.
+
 ## Which to use
 
 | | What you write | What Starsim still does | What is given up |
 |---|---|---|---|
-| Declared, with a little code | Functions of the sim; a connector for a value that changes each step | `describe()`, results, solvers that can take the code, outcomes and likelihoods | Speed (a step at a time), and the built-in particle filter for code that draws random numbers |
+| Declared, with a little code | Functions of the sim; a connector for a value that changes each step | `describe()`, results, solvers that can take the code, outcomes and likelihoods | Speed (a step at a time), and the built-in particle filter, IF2 and particle MCMC |
 | Written as code | A module with `step()` | Time, seeds, parallel runs, results you record | Everything about the model's structure: `describe()`, other solvers, `sim.fit()` |
+| Declared, with noise | Transitions with `noise=`, and time series worked out in advance | Everything: `describe()`, the whole run in the kernels, the built-in particle filter, IF2 and particle MCMC | Agents (which refuse the noise) and anything that isn't known in advance or declared |
 
-Either can be fitted with a likelihood of your own (`fn(observed, model)`), which gives up only gradients in JAX; and a coded model's loops can be compiled with `@ss.jit`, which gives up only the parts of Python that Numba can't compile. Start declared, and write as code only the part that needs it. Here, the declared model with a connector and two functions said almost everything, and only fitting with the noise needed the model as code.
+Either can be fitted with a likelihood of your own (`fn(observed, model)`), which gives up only gradients in JAX; and a coded model's loops can be compiled with `@ss.jit`, which gives up only the parts of Python that Numba can't compile. Start declared, and write as code only the part that needs it. Here, the whole model can be declared, and then Starsim's own particle filter runs it; the connector and the coded model show how to write what a declaration can't say.
 
 ## Going further
 

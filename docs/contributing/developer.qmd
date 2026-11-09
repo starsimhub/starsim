@@ -158,7 +158,7 @@ cd tests
 ./run_tests                                         # The core tests, in test_*.py, in parallel
 pytest devtests -n auto                             # The developer tests
 pytest devtests/test_contracts.py                   # One suite
-STARSIM_SLOW=1 pytest devtests/test_contracts.py             # The agreement test over every compartmental corpus model, not just the simple ones
+pytest devtests -m slow                             # The longer developer tests, skipped otherwise (e.g. the agreement test over the rest of the compartmental corpus models, not just the simple ones)
 pytest test_baselines.py::test_performance_guard    # The performance guard, which is skipped in parallel runs
 ```
 

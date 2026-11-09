@@ -1,6 +1,7 @@
 """
 Test results: export, resampling, plotting, 2D results, and nested results
 """
+import warnings
 import numpy as np
 import pandas as pd
 import pytest
@@ -385,6 +386,18 @@ def test_compare_data():
         ss.results.check_data(two, df.rename(columns={'sis.infection': 'infectoin'}), die=True)
     with pytest.raises(KeyError, match=r"(?s)No result is close; the results are .*aliases=dict\(result='zzzzqqq'\)"): # Nothing close is not a guess
         ss.results.check_data(two, df.rename(columns={'sis.infection': 'zzzzqqq'}), die=True)
+
+    # Weekly data on a flow labeled by the end of each week: the last week runs past the run, which is warned about; labeled by the start, it is not
+    S, I, R = ss.states(3)
+    infection = S >> I @ 0.4*I
+    sir = ss.Disease(infection, I >> R @ ss.days(7), ss.outcome(0.6*infection, name='cases'), init_n=dict(I=10), name='sir')
+    weekly = ss.Sim(sir, total_pop=1000, unit='day', stop=84, verbose=0).init()
+    ss.results.warned_data.clear()
+    with pytest.warns(RuntimeWarning, match='subtract one period'):
+        ss.results.check_data(weekly, pd.DataFrame({'cases': 1.0}, index=pd.Index(np.arange(7, 85, 7), name='time')))
+    with warnings.catch_warnings():
+        warnings.simplefilter('error', RuntimeWarning)
+        ss.results.check_data(weekly, pd.DataFrame({'cases': 1.0}, index=pd.Index(np.arange(0, 78, 7), name='time')))
     return compared
 
 

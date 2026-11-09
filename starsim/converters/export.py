@@ -295,6 +295,9 @@ def flatten(sim):
             lost.append(f'not exported: {kind} "{name}"')
         for name in sorted(mod.graph.funcs):
             lost.append(f'not exported: function "{name}" (Python code)')
+        for name,tr in mod.graph.transitions.items():
+            if tr.noise is not None:
+                lost.append(f'not exported: the noise on the rate of "{name}" (noise=)')
     for mods,what in [(list(sim.networks()) + getattr(sim, 'mixed', []), 'network'), (sim.interventions(), 'intervention'), (sim.connectors(), 'modifier')]:
         for mod in mods:
             extra = ''

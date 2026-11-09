@@ -86,16 +86,16 @@ def kernel_list(items):
     return list(items) if ss.solvers.backends.rust.on else nb.typed.List(items)
 
 
-def run_many_parts(owner, rngs, ys, args, n_cols, outputs, state_of, rows, grp_state, grp_flow):
+def run_many_parts(owner, rngs, ys, args, n_cols, outputs, state_of, rows, grp_state, grp_flow, start=0):
     """
     Many runs of a program that differ only in their seed (`rngs`), in calls to the kernels that take all of them (see `ss.kernels.run_many()`), for an
     engine or a crossing (`owner`); a part of the run at a time, so the tables of values that vary in time (by group, at every step) are not all held at
-    once. `args` are those of `run_args()`, and `outputs` the arrays the kernels fill: the stocks, flows and tallies, and those by group
+    once. `args` are those of `run_args()`, and `outputs` the arrays the kernels fill: the stocks, flows and tallies, and those by group. The runs
+    are taken from time point `start`, at which `ys` are their compartments
     """
     y0, program, dt, npts, solver, n_sub = args
     stocks, flows, stocks_g, flows_g, tally, tally_g = outputs
     length = max(int(50e6//(sum(len(table) for table in [program.fixed, program.mult, program.consts, program.rel_trans])*n_cols*8)), 1) # Steps per part
-    start = 0
     kn = owner.kernels(runs=len(rngs))
     while start < npts:
         end = min(start + length, npts) # The steps from start to end-1
@@ -103,6 +103,17 @@ def run_many_parts(owner, rngs, ys, args, n_cols, outputs, state_of, rows, grp_s
                     tally, tally_g, state_of, np.zeros(0, dtype=int) if rows is None else rows, grp_state, grp_flow)
         start = end
     return
+
+
+def given_start(owner, start, ys, npts):
+    """ The compartments of each run at the time point to take the runs from, and that time point, checked against the engine or crossing (`owner`) that takes them: see `ss.solvers.Compartmental.run_many()` """
+    ti = int(start['ti'])
+    y = np.ascontiguousarray(np.broadcast_to(np.asarray(start['y'], dtype=float), ys.shape)) if np.shape(start['y'])[-2:] == ys.shape[1:] else None
+    if y is None or not 0 <= ti <= npts:
+        what = f'compartments laid out as {np.shape(start["y"])[-2:]}, not as {ys.shape[1:]}' if y is None else f'time point {ti}, but the runs have {npts}'
+        errormsg = f'The runs of {sc.strjoin(owner.names) if hasattr(owner, "names") else owner.mod.name} cannot be taken from the start given, since it has {what}; was it from a sim with another structure?'
+        raise ValueError(errormsg)
+    return y, ti
 
 
 def exact_dwells(sim):
@@ -502,12 +513,16 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             if flow.strain and tr.const is not None: # A part of the rate with no source of infection has no strain, so is counted once, with the first
                 flow.expr = flow.expr - tr.const
             flow.dynamic = flow.expr is not None and any(isinstance(leaf, (ss.State, ss.expressions.Count, ss.expressions.HeldShare)) for leaf in flow.expr.leaves)
+            if tr.noise is not None and flow.expr is not None: # Noise on the rate is drawn inside the kernels, so the rate is worked out there (see flatten_rates())
+                flow.dynamic = True
             flow.held = self.uninfected is not None and tr.acquisition and flow.src is not None and flow.state.name in self.uninfected # An infection in a branching process: an inflow at its rate per member of its source, which it takes no one from (see init_program())
             if flow.held:
                 if flow.expr is None:
                     raise ss.CapabilityError(f'"{self.mod.name}.{tr.name}" is an infection with a dwell time rather than a rate, which a branching process cannot run as compartments; give it a rate, or run with solver="abm"')
                 flow.dynamic = True
+            flow.known = not flow.dynamic or (tr.noise is not None and not flow.held and not any(isinstance(leaf, (ss.State, ss.expressions.Count, ss.expressions.HeldShare)) for leaf in flow.expr.leaves)) # A rate known before the step (noise aside, by its mean of 1), which sets the substeps
 
+        self.check_noise()
         self.n_comps = len(self.comps)
         self.n_trans = len(self.tr_index)
         self.people_comps = [i for i,comp in enumerate(self.comps) if comp.state.people]
@@ -597,6 +612,23 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             self.tell(ss.note, f'{name} has a {dw.family} dwell time{fixed}, approximated by {what}{ide}', sim=sim, verbose=0 if approximations == 'allow' else None)
             if dw.std > ss.solvers.choose.max_cv*dw.mean: # solver='auto' runs it as agents
                 self.tell(ss.warn, f'{name} has a {dw.family} dwell time whose coefficient of variation is {dw.std/dw.mean:.3g}, so one exponential stage keeps only its mean, and its long tail is lost; run with solver="abm" to keep it')
+        return
+
+    def check_noise(self):
+        """ Refuse noise on a rate (`ss.Transition(noise=)`) where it isn't drawn: it is drawn by the chain binomial, once a substep for each flow, so a transition must be one flow; the ODE leaves it out (see `init_program()`) """
+        for tr in self.graph.transitions.values():
+            if tr.noise is None:
+                continue
+            why = None
+            if isinstance(self.solver, (ss.solvers.tau, ss.solvers.gillespie)):
+                why = f'solver="{self.solver}", which chooses its own steps, so has none to draw it for'
+            elif self.cross is not None:
+                why = 'a disease tracked jointly with another'
+            elif sum(flow.tr is tr and flow.expr is not None for flow in self.flows) > 1:
+                why = 'a transition that is several flows (from several states or compartments, or for each strain), which would each draw their own'
+            if why:
+                raise ss.CapabilityError(f'"{self.mod.name}.{tr.name}" has noise on its rate (noise=), which cannot run with {why}.\n'
+                                         f'     Run with solver="binomial", or without noise=.')
         return
 
     def unsupported(self, tr, what):
@@ -1840,6 +1872,9 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         self.pack_targets()
         self.certain() # Which refuses an infinite rate of arrivals
         self.kernel_rng = self.make_rng(stream=1) # As a whole run starts with, so stepping gives the same run
+        noisy = [tr.name for tr in self.graph.transitions.values() if tr.noise is not None]
+        if noisy and isinstance(self.solver, ss.solvers.ode):
+            ss.note(f'"{self.mod.name}" runs as an ODE, which leaves out the noise on the rate of {sc.strjoin(noisy)} (its mean, 1); solver="binomial" draws it', sim=self.sim)
         return
 
     def inline_modifiers(self):
@@ -1874,7 +1909,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                 if key[1] not in ['par', 'transition'] or not flows or any(flow.strain or (isinstance(self.solver, ss.solvers.binomial) and not flow.dynamic) for flow in flows): # The substeps of the chain binomial are chosen from the rates known at the start
                     continue
                 for flow in flows:
-                    flow.expr, flow.dynamic = change(flow.expr), True
+                    flow.expr, flow.dynamic, flow.known = change(flow.expr), True, False
                     if flow.tr.rate is not None:
                         flow.tr.rate = flow.expr
                         flow.tr.const, flow.tr.terms = ss.expressions.linear(flow.expr)
@@ -1896,7 +1931,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                         if isinstance(out, ss.expressions.Expr):
                             self.func_exprs[id(leaf)] = (leaf, out, self.expr_key(out))
                     if id(leaf) in self.func_exprs: # Worked out within the step, as the expression is
-                        flow.dynamic = True
+                        flow.dynamic, flow.known = True, False
         return
 
     def flatten_rates(self):
@@ -2107,6 +2142,11 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                     ops += [kn.GROUP, kn.MUL]
                     args += [add(sets, (flow.src,)), 0]
                     depth = max(depth, 2)
+                sigma = flow.tr.noise
+                if sigma is not None: # Times gamma noise, drawn in each substep (see ss.kernels.NOISE)
+                    check(sigma)
+                    ops.append(kn.NOISE)
+                    args.append(add(pars, ('number', repr(float(sigma.raw))) if sigma.literal and sc.isnumber(sigma.raw) else id(sigma), sigma))
                 n_local = max(n_local, len(shared.local))
             else:
                 for leaf in ([] if flow.expr is None else flow.expr.leaves) + sc.tolist(self.dwells.get(flow.tr.name, Bunch(par=None)).par):
@@ -2837,7 +2877,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
 
     def start_rates(self):
         """ The rates out of compartments at the start that do not depend on them, which a stiff ODE takes many substeps for, each as an array """
-        return [np.ravel(self.flow_base(flow)*self.flow_mult(flow)) for flow in self.flows if flow.src is not None and not flow.dynamic and flow.kind != 'conveyor']
+        return [np.ravel(self.flow_base(flow)*self.flow_mult(flow)) for flow in self.flows if flow.src is not None and flow.known and flow.kind != 'conveyor']
 
     def init_shifts(self):
         """ The deliveries that the kernels take in a whole run (see `ss.Event.tabulated`), as arrays: see `ss.kernels.Shifts` """
@@ -3040,12 +3080,17 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             mod.in_compartments.store_shifts(tally[:, self.shift_of[k]])
         return
 
-    def run_many(self, seeds):
+    def run_many(self, seeds, start=None):
         """
         Take many runs that differ only in their seed, in calls to the kernels that take all of them, a part of the run at a time
 
+        With `start`, the runs are taken from a later time point, each from compartments of its own, with what came before given
+        (e.g. a run drawn by a particle filter, to project from: see `ss.fit.ParticleFilter`); the results by group are then not kept,
+        since what came before is given as totals.
+
         Args:
             seeds (list): the seed of each run, as would be given to the sim as `rand_seed`
+            start (dict): `ti`, the time point to take the runs from; `y`, the compartments of each run there (runs by compartments by groups); and `stocks` and `flows`, by the module's name, how many were in each state and the flow along each transition and mover in each run at each time point before it (runs by time points by states, or by flows)
 
         Returns each result that is a single series, as runs by steps, and (as `out.groups`) the
         values by group of the results that keep them, as runs by rows by groups: a row for each
@@ -3063,9 +3108,9 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         state_of = np.array([states.index(comp.state.name) for comp in self.comps])
         n_flows = self.program.n_trans + self.program.n_movers
 
-        kept_s, kept_f = self.group_needs() # The states and flows to keep by group
+        kept_s, kept_f = self.group_needs() if start is None else ([], []) # The states and flows to keep by group
         rows = group_ti = None
-        if ng > 1 and (kept_s or kept_f or self.deliveries):
+        if ng > 1 and (kept_s or kept_f or self.deliveries) and start is None:
             row_bytes = len(seeds)*(len(kept_s) + len(kept_f) + 2*len(self.shifts.to))*ng*8
             rows, group_ti = ss.solvers.group_rows(self.sim, npts, row_bytes, self.max_bytes, name=self.mod.name)
             rows = np.arange(npts) if rows is None else rows
@@ -3078,7 +3123,14 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         stocks_g, flows_g = np.zeros((n_runs, n_rows, len(kept_s), ng)), np.zeros((n_runs, n_rows, len(kept_f), ng))
         tally, tally_g = np.zeros((n_runs, npts, nd, 2, 1)), np.zeros((n_runs, n_rows, nd, 2, ng))
         ys = np.repeat(y0[None], n_runs, axis=0) # The compartments of each run
-        run_many_parts(self, rngs, ys, args, ng, (stocks, flows, stocks_g, flows_g, tally, tally_g), state_of, rows, grp_state, grp_flow)
+        ti = 0
+        if start is not None:
+            ys, ti = given_start(self, start, ys, npts)
+            if np.any(self.shifts.due[:, :ti]): # Its tallies, and its effect if it was not in the run the start came from, would be missing
+                raise ss.CapabilityError(f'the runs of {self.mod.name} cannot be taken from time point {ti}, since a delivery ({sc.strjoin(mod.name for mod in self.deliveries)}) is due before it, which a continued run would leave out')
+        run_many_parts(self, rngs, ys, args, ng, (stocks, flows, stocks_g, flows_g, tally, tally_g), state_of, rows, grp_state, grp_flow, start=ti)
+        if start is not None:
+            stocks[:, :ti, :, 0], flows[:, :ti, :, 0] = start['stocks'][self.mod.name], start['flows'][self.mod.name]
         out = self.collect(stocks, flows, grouped=None if rows is None else (stocks_g, flows_g, kept_s, kept_f, group_ti), seeds=seeds)
         out.deliveries = sc.obj({mod.name:mod.in_compartments.many_shifts(tally[:, :, self.shift_of[k]], None if rows is None else tally_g[:, :, self.shift_of[k]], group_ti) for k,mod in enumerate(self.deliveries)})
         return out
@@ -3298,7 +3350,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         """
         totals = {} # The rates out of each compartment, summed: e.g. recovery and death from I
         for flow in self.flows:
-            if flow.src is not None and not flow.dynamic and flow.kind != 'conveyor' and flow.state.people:
+            if flow.src is not None and flow.known and flow.kind != 'conveyor' and flow.state.people:
                 rate = np.ravel(self.flow_base(flow)*self.flow_mult(flow))/(flow.stages if flow.kind == 'stage' else 1) # A dwell in stages, by its mean
                 rate = np.where(np.isfinite(rate), rate, 0.0)
                 totals[flow.src] = totals.get(flow.src, 0.0) + rate
