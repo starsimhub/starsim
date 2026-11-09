@@ -1139,7 +1139,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
             raise TypeError(errormsg)
         return self.transmit()
 
-    def current_state(self, states=None):
+    def current_state(self, states=None, uids=None):
         """
         The state each agent is in, as a read-only `ss.IntArr` (by UID) of its index among `states`, or -1 for none
 
@@ -1147,11 +1147,13 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
 
         Args:
             states (list): the states to look in, as names or states (default: the module's states of people, in order)
+            uids (uids): instead, only these agents, as an array of their indices (in the order given), without making one for everyone
 
         Example:
             ```python
             cs = sir.current_state() # 0 for S, 1 for I, 2 for R
             cs.labels[cs[uid]] # The name of an agent's state
+            sir.current_state(uids=uids) # The index for some agents only
             ```
         """
         graph = self.graph
@@ -1167,6 +1169,12 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         unknown = [name for name in names if name not in graph.states]
         if unknown:
             raise sc.KeyNotFoundError(f'"{self.name}" has no state {sc.strjoin(unknown)}; its states are {sc.strjoin(graph.states.keys())}')
+        if uids is not None:
+            uids = np.asarray(uids, dtype=np.int64)
+            out = np.full(len(uids), -1, dtype=ss.dtypes.int)
+            for i,name in enumerate(names):
+                out[self[name].raw[uids]] = i
+            return out
         age = self.sim.people.age # A plain array of the people, to copy
         raw = np.full(len(age.raw), -1, dtype=ss.dtypes.int)
         for i,name in enumerate(names):

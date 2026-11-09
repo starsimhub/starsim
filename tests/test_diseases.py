@@ -411,6 +411,7 @@ def test_current_state():
     assert [cs.labels[i] for i in cs[ss.uids([0, 2])]] == ['I', 'R']
     sub = sir.current_state(['R', sir.I]) # Some of them, by name or as states
     assert sub.labels == ['R', 'I'] and sub[ss.uids([0, 2, 3])].tolist() == [1, 0, -1]
+    assert sir.current_state(['R', sir.I], uids=ss.uids([3, 2, 0])).tolist() == [-1, 0, 1] # Some agents only, in the order given
     with pytest.raises(ValueError): # Read-only
         cs.raw[0] = 2
     with pytest.raises(KeyError, match='"sir" has no state X'):
