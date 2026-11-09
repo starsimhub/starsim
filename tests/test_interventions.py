@@ -173,9 +173,11 @@ def test_campaign_delivery():
     assert n_screened[~on].sum() == 0, 'Expected no screenings outside campaign years'
     assert np.all(np.diff(n_screened[on]) > 0), 'Expected each round to reach its own coverage'
 
-    # A campaign after the sim ends
-    with pytest.raises(ValueError):
-        ss.Sim(pars, interventions=ss.screen(make_dx(), when=[2030], coverage=0.5, name='screening')).init()
+    # A campaign, or a start, after the sim ends never runs, so a sim can be run to an earlier stop
+    for late in [ss.screen(make_dx(), when=[2030], coverage=0.5, name='screening'), ss.screen(make_dx(), when=ss.schedule(every=ss.years(1), start=2030), coverage=0.5, name='screening'), ss.screen(make_dx(), start=2030, coverage=ss.peryear(0.5), name='screening')]:
+        assert ss.Sim(pars, interventions=late).run().results.screening.delivered.sum() == 0
+    with pytest.raises(ValueError, match='outside the sim'): # Before it starts is still an error
+        ss.Sim(pars, interventions=ss.screen(make_dx(), when=[1950], coverage=0.5, name='screening')).init()
 
     # Plots mark the rounds, and the start and stop of a modifier; not a delivery on a condition
     sis = sim.diseases.sis
