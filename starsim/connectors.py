@@ -424,6 +424,7 @@ class modify(Connector):
         self.hold = hold
         self.until = None if until is None else ss.conditions.as_cond(ss.ref(until) if isinstance(until, str) else until)
         self.held = {} # With until=: for each engine, the step until which each agent or group is held, and the value it was held at
+        self.seen = {} # For each engine run as agents, who it applied to: in the step before, and when it was last worked out (see dying_mask())
         self.when_until = -1 # With until=<a duration> and when=: the step until which it is held
         self.writer = None # For a parameter of a module written as code that is not a disease: see init_post()
         self.inlined = False # Whether it became part of the rates: see ss.solvers.Compartmental.inline_modifiers()
@@ -523,6 +524,7 @@ class modify(Connector):
         self.hold_steps = None if self.hold is None else to_steps(sim, self.hold)
         self.when = None if self.schedule is None else Due(self.schedule, sim) # The steps it applies on
         self.held = {}
+        self.seen = {}
         self.when_until = -1
         return
 
@@ -627,6 +629,31 @@ class modify(Connector):
         out = np.where(until > ti, np.maximum(mask, value), mask)
         return out.astype(mask.dtype)
 
+    def dying_mask(self, mask, engine):
+        """
+        As agents: who the modifier applies to, including those who die in this step whom it applied to in the step before. A death in
+        another module can end the state that who= reads (e.g. of a treatment, for a death on it) before this module's step; they stay under
+        it for the rest of the step, so what it stops (e.g. an exit to ss.dead already due) does not also take them, as if this module had
+        stepped first
+        """
+        ti = self.sim.ti
+        ti_dead = self.sim.people.ti_dead.raw
+        if np.ndim(mask) != 1 or len(mask) != len(ti_dead):
+            return mask
+        last_ti, before, last = self.seen.get(id(engine), (None, None, None))
+        if last_ti != ti: # The first time in this step: who it applied to when last worked out, in an earlier step
+            before = last
+        self.seen[id(engine)] = (ti, before, mask.copy())
+        if before is None:
+            return mask
+        n = min(len(before), len(mask))
+        dying = np.flatnonzero((ti_dead[:n] == ti) & (before[:n] > mask[:n]))
+        if not len(dying):
+            return mask
+        out = mask.copy()
+        out[dying] = before[dying]
+        return out
+
     def current(self, engine, share=True, mask=None):
         """ The amount on this step: a scalar, or one value per agent or group; with share=, the multiplier on the hazard, 1 − share·(1 − multiply); given a mask, a clock is read only for the agents in it """
         convert = None if self.op == 'multiply' else engine.convert # A value that is set or added is in the target's own type
@@ -663,6 +690,8 @@ class modify(Connector):
                 raise ValueError(f'the amount of the modifier "{self.name}" is NaN for some of the people it applies to: {self.nan_sources()}')
         if mask is not None and self.holding:
             mask = self.held_mask(mask, engine)
+        if mask is not None and engine.selector.abm:
+            mask = self.dying_mask(mask, engine)
         if mask is None:
             return amount + value*0 if self.op == 'set' else value*amount if self.op == 'multiply' else value + amount
         mask = mask > 0
