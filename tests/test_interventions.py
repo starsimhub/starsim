@@ -66,7 +66,7 @@ def test_products(do_plot=False):
 
     # The same for a disease written as code, cured by its clear_infection() (as Starsim 3's ss.Tx moved infected to susceptible)
     sis = ssl.AgentSIS(init_prev=0.1)
-    treatment = ss.treat(ss.Treatment(cure=0.8), who=sis.I, when=ss.schedule(every=1), capacity=ss.capacity(20, queue=True))
+    treatment = ss.treat(ss.Treatment(cure=0.8), who=sis.infected, when=ss.schedule(every=1), capacity=ss.capacity(20, queue=True))
     base = ss.Sim(make_pars() | dict(diseases=sis)).run().results.agentsis
     sim = ss.Sim(make_pars() | dict(diseases=sis), interventions=treatment).run()
     assert sim.results.treatment.delivered.max() == 20 and sim.results.treatment.waiting.max() > 0 and sim.results.treatment.cured.sum() > 0
