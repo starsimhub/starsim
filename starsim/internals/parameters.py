@@ -300,7 +300,7 @@ class Pars(sc.obj):
 
         # Give up
         else:
-            errormsg = f'Updating timepar {old} from {type(old)} to {type(new)} is not supported'
+            errormsg = f'Updating timepar "{key}" ({old}) from {type(old)} to {type(new)} is not supported'
             raise TypeError(errormsg)
 
         return
