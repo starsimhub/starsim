@@ -8,7 +8,7 @@ Starsim 4 adds a way to write a model as declared states and transitions, which 
 <!-- V4-PREVIEW: restore the two links above to docs.starsim.org for normal publishing -->
 
 ### New features
-- **States and transitions**: declare a disease from `ss.State` and `ss.Transition` (`S >> I @ beta*I`), shown with `describe()`, `diagram()` and `equations()`, with `R0()` and `Rt()`; diseases can also be written as code, or both.
+- **States and transitions**: declare a disease from `ss.State` and `ss.Transition` (`S >> I @ beta*I`), shown with `describe()`, `diagram()` (a figure) and `equations()`, also for a whole sim (`sim.diagram()`), with `R0()` and `Rt()`; diseases can also be written as code, or both.
 - **Solvers**: one model runs as an ODE, a chain binomial, by Gillespie's method, by tau-leaping, or as agents (`ss.solvers.ode()`, `binomial()`, `gillespie()`, `tau()`, `abm()`); `'auto'` picks an ODE unless something needs agents, and says why.
 - **Agents by events** (a prototype): `ss.solvers.abm(step='events')` steps agents event by event in continuous time; a class can suggest how it runs as agents (`suggested_solver`).
 - **Stratification**: `sim.stratify(age=[0, 15, 65])` and other properties, with aging, transfers (`ss.transfer()`), contact matrices (`ss.contacts()`) and results by group.

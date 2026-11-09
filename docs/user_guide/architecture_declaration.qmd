@@ -122,7 +122,7 @@ print(sir.equations())
 sir.transitions
 ```
 
-`sir.diagram()` gives the same graph as a Mermaid flowchart, and `ss.export_to()` as odin or SBML ([below](#importers-and-exporters)).
+`sir.diagram()` draws the same graph (`sir.diagram('text')` as a Mermaid flowchart), and `ss.export_to()` as odin or SBML ([below](#importers-and-exporters)).
 
 ## Ways to write a model out
 

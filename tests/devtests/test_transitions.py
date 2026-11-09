@@ -666,7 +666,7 @@ def test_modify():
         mods = [ss.modify(sir.pars.beta, multiply=0.5, when=ss.schedule(start=30, stop=60)), ss.modify(sir.recovery, multiply=2.0, when=ss.schedule(start=40)), ss.modify(sir.rel_sus, multiply=0.8, when=ss.schedule(start=50))]
         return ss.Sim(sir, interventions=mods, unit='day', stop=120, **kw).init() # A yearly cycle needs a unit
     fast, slow = timed(), timed()
-    assert fast.kernel_only()
+    assert fast._kernel_reason() is None
     assert np.allclose(fast.run().results.sir.I, slow.profile(kind='loop', plot=False).sim.results.sir.I)
 
     # A modifier can also be given as a path, and combines with others by multiplication

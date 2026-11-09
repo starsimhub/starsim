@@ -156,7 +156,7 @@ class State(Nameable, Expr):
         return Count([self], kind='total')
 
 
-def states(arg=None, infected=False, **kwargs):
+def states(arg=None, infected=False, include_sum=False, **kwargs):
     """
     Create several states at once
 
@@ -165,6 +165,8 @@ def states(arg=None, infected=False, **kwargs):
             are assigned to; or a string of names (e.g. `'S I R'`), which are used directly
         infected (bool/str/list): which of them are infected (see `ss.State`): all of them (`True`); some, by name, with names given
             up front (`'E I'`); or some, by position, with a number of states (`[1, 2]`, or `range(1, 6)`)
+        include_sum (bool): also return the sum of the states, after them: the total of the people in them, often called `N`,
+            for rates written with it (`beta*I/N`, the same as `beta*I`; or the whole flow, `beta*S*I/N`)
         kwargs (dict): instead of `arg`, the states by name, with the share of people who start in each (`S=0.9, I=0.1, R=0`); and
             any of the arguments of `ss.State`, passed to each, e.g. `people=False`
 
@@ -176,6 +178,7 @@ def states(arg=None, infected=False, **kwargs):
         Sv, Ev, Iv = ss.states(3, people=False) # Mosquitoes: counts, not people
         S, E, I, H, R = ss.states('S E I H R', infected='E I H') # H does not transmit, so is not infected unless said
         S, E, I, H, R = ss.states(5, infected=range(1, 4)) # The same, by position
+        S, I, R, N = ss.states('S I R', include_sum=True) # N = S + I + R, the total, e.g. for S >> I @ beta*I/N
         ```
     """
     inits = {k:kwargs.pop(k) for k in list(kwargs) if k not in state_args} # The states by name, with their starting shares
@@ -215,7 +218,10 @@ def states(arg=None, infected=False, **kwargs):
         if bad:
             raise ValueError(f'infected= gives the positions {bad} of states, but there are {n} (positions 0 to {n-1})')
         flags = [i in chosen for i in range(n)]
-    return [State(name=name, infected=flag, **(kwargs | ({'init':inits[name]} if name in inits else {}))) for name,flag in zip(names, flags)]
+    out = [State(name=name, infected=flag, **(kwargs | ({'init':inits[name]} if name in inits else {}))) for name,flag in zip(names, flags)]
+    if include_sum:
+        out.append(sum(out[1:], start=out[0]))
+    return out
 
 state_args = [k for k in inspect.signature(State.__init__).parameters if k not in ['self', 'kwargs']] # What ss.states() passes to each state, rather than taking as a state's name
 

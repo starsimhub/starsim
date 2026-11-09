@@ -347,6 +347,8 @@ def describe_graph(graph, sim=None, out=None):
         add('', f'{state.name} a count, not people', f'guessed: {guess}' if guess else None)
     for state in graph.infectious:
         add('', f'{state.name} infectious' + (f', rel_trans = {value_str(state.rel_trans)}' if rel_str(state.rel_trans) else ''))
+    for state in {id(s):s for tr in graph.transitions.values() for s in graph.counted(tr) if not s.infectious}.values():
+        add('', f'{state.name} infectious, by its number (density-dependent)')
     for state in {id(s):s for tr in graph.acquisitions for s in tr.source or [] if rel_str(s.rel_sus)}.values(): # Where it applies: to an acquisition from the state
         add('', f'{state.name} susceptible, rel_sus = {value_str(state.rel_sus)}')
     infected = [s.name for s in graph.infected if s.people]
@@ -397,15 +399,22 @@ def describe_graph(graph, sim=None, out=None):
             add(name, f'{tr._arrow}   undriven: moved by {sc.strjoin(movers) if movers else "nothing" if sim is not None else "products, deliveries, or code"}')
         else:
             guess = sc.strjoin(([f'name {tr.guessed["name"]}'] if 'name' in tr.guessed else []) + ([f'acquisition: {tr.guessed["acquisition"]}'] if 'acquisition' in tr.guessed else []), sep='; ')
+            counted = graph.counted(tr) # The states a density-dependent transmission is from, e.g. I in beta*I.n
             kind = 'density-dependent' if tr.rate is not None and ss.expressions.count_power(tr.rate) > 0 else 'spontaneous' # A rate per person that grows with a number of people, e.g. beta*I.n
             if tr._inflow:
                 kind = f'inflow, in total per {unit or "step"}'
+            elif counted:
+                kind = f'transmission, from {" + ".join(s.name for s in counted)} (density-dependent)'
             elif tr.acquisition:
                 kind += ', an acquisition'
             elif 'acquisition' in tr.guessed: # Out of the first state, alongside a transmission
                 kind += ', not an acquisition'
             add(name, f'{tr._arrow}   {kind}', f'guessed: {guess}' if guess else None)
             flow_line(tr)
+            for leaf in (tr.rate.leaves if counted else []): # Its beta
+                if isinstance(leaf, par) and not leaf.literal:
+                    add('', par_str(leaf, 'rate' if leaf.slot == 'rate' else None, unit), midpoint_guess(leaf))
+                    provenance(leaf)
             if tr._immediate:
                 add('', 'immediately (dur=0), in the step people arrive')
             elif not tr._inflow and (tr.dur is not None or (engine is not None and name in engine.dwells)):
@@ -492,27 +501,296 @@ def graph_edges(graph):
     return out
 
 
-def diagram(graph):
-    """ The state-transition diagram, as the lines of a Mermaid flowchart (without its first line); see `ss.Disease.diagram()` """
+def diagram(graph, prefix=''):
+    """ The state-transition diagram, as the lines of a Mermaid flowchart (without its first line); see `ss.Disease.diagram()`. With `prefix`, before each node's name (for a sim's diagram, with a disease in each part) """
     sim = getattr(graph.module, 'sim', None)
     unit = unit_name(graph, sim if getattr(sim, 'initialized', False) else None)
     lines = []
     nulls = 0
     for state in graph.states.values():
         shape = ('(["', '"])') if state.people else ('[/"', '"/]')
-        lines.append(f'    {state.name}{shape[0]}{state.label_name}{shape[1]}')
+        lines.append(f'    {prefix}{state.name}{shape[0]}{state.label_name}{shape[1]}')
     for src,dst,name,kind,p in graph_edges(graph):
         ends = []
         for state in [src, dst]:
             if state is None:
                 nulls += 1
-                ends.append(f'null{nulls}(( ))')
+                ends.append(f'{prefix}null{nulls}(( ))')
             else:
-                ends.append(state.name)
+                ends.append(prefix + state.name)
         arrow = '-.->' if kind == 'contact' else '-->'
         text = edge_label(graph.transitions[name], p, unit).replace('"', '#quot;')
         lines.append(f'    {ends[0]} {arrow}|"{text}"| {ends[1]}')
     return lines
+
+
+def diagram_links(sim):
+    """
+    How the diseases of a sim act on each other, for `sim.diagram()` and `sim.equations()`: each as Bunch(src, state, dst, tr, label, mod), from a state of
+    one disease (`src`, `state`) to another disease (`dst`) and the transition it acts on (`tr`, or None for the disease as a whole): a modifier or
+    delivery with a condition on another disease's state (e.g. `ss.modify(hiv.rel_trans, multiply=3, who=syph.I)`), or a transition triggered by another's
+    """
+    declared = {mod.name:mod for mod in sim.declared}
+    links = []
+    def target_of(mod, graph):
+        """ The transition a modifier acts on, if it is one """
+        kind, name = getattr(mod, 'target_kind', None), getattr(mod, 'target_name', None)
+        contact = [key for key,tr in graph.transitions.items() if tr.contact]
+        if name in graph.transitions:
+            return name
+        elif kind in ['rel_sus', 'rel_trans'] and contact:
+            return contact[0]
+        for key,tr in graph.transitions.items(): # A parameter: the first transition that uses it
+            for val in [tr.rate, tr.dur]:
+                if isinstance(val, Expr) and any(isinstance(leaf, par) and leaf.name == name for leaf in val.leaves):
+                    return key
+        return None
+    for mod in list(sim.connectors()) + list(sim.interventions()):
+        home = ss.conditions.modname(getattr(mod, 'target_module', None) or getattr(mod, 'disease', None))
+        if home not in declared:
+            continue
+        tr = target_of(mod, declared[home].graph)
+        for other,state in dict.fromkeys(ss.conditions.state_refs(mod)):
+            if other in declared and other != home and state in declared[other].graph.states:
+                links.append(sc.objdict(src=other, state=state, dst=home, tr=tr, label=mod.name, mod=mod))
+    for mod in sim.declared: # A transition triggered by another disease's state or transition
+        for name,tr in mod.graph.transitions.items():
+            if tr.trigger is None:
+                continue
+            ev = ss.solvers.compartmental.synced_event(tr, sim, mod.name)
+            if ev is not None: # By a transition: from the state it goes to
+                dest = declared[ev.mod].graph.transitions[ev.tr].dest if ev.mod in declared else None
+                if dest:
+                    links.append(sc.objdict(src=ev.mod, state=dest[0].name, dst=mod.name, tr=name, label=f'on {ev.mod}.{ev.tr}', mod=None))
+            elif not tr.trigger.event and isinstance(tr.trigger.x, ss.conditions.Cond):
+                for other,state in ss.conditions.leaf_states(tr.trigger.x):
+                    other = ss.conditions.modname(other)
+                    if other in declared and other != mod.name and state in declared[other].graph.states:
+                        links.append(sc.objdict(src=other, state=state, dst=mod.name, tr=name, label=f'when {other}.{state}', mod=None))
+    return links
+
+
+def sim_diagram(sim):
+    """ The state-transition diagram of every declared disease of a sim, with how they act on each other, as the lines of a Mermaid flowchart (without its first line); see `ss.Sim.diagram()` """
+    lines = []
+    firsts = {}
+    for mod in sim.declared:
+        prefix = f'{mod.name}_'
+        lines.append(f'  subgraph {mod.name}')
+        lines += ['  ' + line for line in diagram(mod.graph, prefix=prefix)]
+        lines.append('  end')
+        firsts[mod.name] = {name:(prefix + tr.dest[0].name if tr.dest else mod.name) for name,tr in mod.graph.transitions.items()}
+    for link in diagram_links(sim):
+        dst = firsts[link.dst].get(link.tr, link.dst) if link.tr is not None else link.dst
+        lines.append(f'  {link.src}_{link.state} -..->|"{link.label}"| {dst}')
+    return lines
+
+
+def plot_diagram(graphs, titles=None, links=None, fig=None):
+    """
+    Draw state-transition diagrams in a Matplotlib figure, for `ss.Disease.diagram()` and `ss.Sim.diagram()`
+
+    Each graph is drawn left to right, from its first state, with the graphs one above the other. People states are
+    rounded boxes and counts square ones; transmissions are dashed; each arrow is labeled with its transition's name and
+    value, as in the Mermaid diagram. A link (see `diagram_links()`) is a dotted arrow from a state of one disease to the
+    transition it acts on in another.
+
+    Args:
+        graphs (list): the graphs (`ss.graph.Graph`)
+        titles (list): a title for each, e.g. the disease's name
+        links (list): how the diseases act on each other: see `diagram_links()`
+        fig (Figure): the figure to draw in (by default, a new one)
+
+    Returns:
+        The figure
+    """
+    import matplotlib.pyplot as plt
+    from matplotlib.patches import FancyArrowPatch, FancyBboxPatch, Circle
+    dx, dy, gap = 2.5, 1.2, 0.5 # Between layers, between states in a layer, and between graphs (in inches, at one inch a unit)
+    colors = sc.objdict(people='#dbe9f6', count='#fbe5c8', edge='#333333', link='#c0392b', null='#999999')
+    titles = titles or [None]*len(graphs)
+    nodes = {} # By (graph index, state name): the patch, and its center
+    mids = {} # By (graph index, transition name): the middle of its first arrow
+    items = [] # What to draw, once the size of the figure is known: (kind, args)
+    top = 0.0
+    points = [] # Everything drawn, for the size of the figure
+    for gi,graph in enumerate(graphs):
+        sim = getattr(graph.module, 'sim', None)
+        unit = unit_name(graph, sim if getattr(sim, 'initialized', False) else None)
+        edges = graph_edges(graph)
+        names = list(graph.states)
+
+        # Layers: the longest way from the first states, so each arrow forward goes one step right, and the rest curve back
+        succ = {name:[] for name in names}
+        into = set()
+        for src,dst,*_ in edges:
+            if src is not None and dst is not None and src.name != dst.name:
+                succ[src.name].append(dst.name)
+                into.add(dst.name)
+        layer = {}
+        for root in [n for n in names if n not in into] + names:
+            if root in layer:
+                continue
+            layer[root] = 0
+            queue = [root]
+            while queue:
+                name = queue.pop(0)
+                for nxt in succ[name]:
+                    if nxt not in layer:
+                        layer[nxt] = layer[name] + 1
+                        queue.append(nxt)
+        columns = sc.ddict(list)
+        for name in names:
+            columns[layer[name]].append(name)
+        if titles[gi] is not None:
+            items.append(('title', (None, top, titles[gi]))) # At the left of everything drawn
+            points.append((0, top))
+            top -= 0.3
+
+        def lay(yoff):
+            """ The graph's items, the points they cover, and the middles of its arrows, with its middle row at yoff """
+            g_items, g_points, g_mids = [], [], {}
+            pos = {}
+            for lay,col in columns.items():
+                for i,name in enumerate(col):
+                    pos[name] = (lay*dx, yoff - (i - (len(col) - 1)/2)*dy)
+            for name in names:
+                state = graph.states[name]
+                g_items.append(('node', (gi, name, pos[name], state.label_name, state.people)))
+            nulls = sc.ddict(int)
+            pairs = sc.ddict(int) # Arrows between the same two states, so that each curves its own way
+            for src,dst,name,kind,p in edges:
+                if src is not None and dst is not None and src.name == dst.name:
+                    continue
+                ends = []
+                for end,other in [(src, dst), (dst, src)]:
+                    if end is not None:
+                        ends.append(('node', (gi, end.name)))
+                    else: # Nowhere: a small circle beside the state at the other end, to the left for an inflow and below for an outflow
+                        ox, oy = pos[other.name]
+                        inflow = end is src
+                        k = nulls[(other.name, inflow)]
+                        nulls[(other.name, inflow)] += 1
+                        xy = (ox - 0.8*dx, oy - 0.45*dy*k) if inflow else (ox + 0.25*dx + 0.3*k, oy - 0.75*dy)
+                        ends.append(('null', xy))
+                a = pos[src.name] if src is not None else ends[0][1]
+                b = pos[dst.name] if dst is not None else ends[1][1]
+                key = tuple(sorted([str(a), str(b)]))
+                k = pairs[key]
+                pairs[key] += 1
+                forward = src is not None and dst is not None and layer[dst.name] == layer[src.name] + 1 and pos[src.name][1] == pos[dst.name][1]
+                dist = max(np.hypot(b[0] - a[0], b[1] - a[1]), 1e-9)
+                rad = 0.0 if (forward or src is None or dst is None) and k == 0 else min(0.35, 1.6/dist)*(1 + k//2)*(-1)**k # A bulge of under an inch, however far apart
+                label = '\n'.join(textwrap.wrap(edge_label(graph.transitions[name], p, unit), 30))
+                mid = ((a[0] + b[0])/2 + rad*(b[1] - a[1])/2, (a[1] + b[1])/2 - rad*(b[0] - a[0])/2) # Of the arc, as Matplotlib's arc3 draws it
+                g_mids.setdefault((gi, name), mid)
+                width = 0.075*max(len(line) for line in label.split('\n')) # Of the label, about
+                if src is None: # From nowhere: the label above the arrow
+                    place = (mid[0], mid[1] + 0.1, 'center', 'bottom')
+                    g_points += [(mid[0] - width/2, mid[1]), (mid[0] + width/2, mid[1] + 0.2)]
+                elif dst is None: # To nowhere: the label beside the arrow
+                    place = (mid[0] + 0.15, mid[1], 'left', 'center')
+                    g_points += [(mid[0] + 0.15 + width, mid[1])]
+                else:
+                    place = (mid[0], mid[1], 'center', 'center')
+                    g_points += [(mid[0] - width/2, mid[1]), (mid[0] + width/2, mid[1])]
+                g_items.append(('edge', (ends, a, b, rad, kind == 'contact', label, place)))
+                g_points += [a, b, mid]
+            g_points += [(x, y + 0.25) for x,y in pos.values()] + [(x, y - 0.25) for x,y in pos.values()] # The tops and bottoms of the boxes
+            return g_items, g_points, g_mids
+
+        g_items, g_points, g_mids = lay(0)
+        g_items, g_points, g_mids = lay(top - 0.2 - max(y for _,y in g_points)) # Just below the title
+        items += g_items
+        points += g_points
+        mids.update(g_mids)
+        top = min(y for _,y in points) - 0.3 - gap
+
+    # Draw, at one inch a unit
+    xmin, xmax = min(x for x,_ in points) - 0.9, max(x for x,_ in points) + 0.3
+    ymin, ymax = min(y for _,y in points) - 0.3, max(y for _,y in points) + 0.2
+    if fig is None:
+        fig = plt.figure(figsize=(xmax - xmin, ymax - ymin))
+    ax = fig.add_axes([0, 0, 1, 1])
+    ax.set_xlim(xmin, xmax)
+    ax.set_ylim(ymin, ymax)
+    ax.set_aspect('equal')
+    ax.axis('off')
+    for kind,args in items:
+        if kind == 'title':
+            _, y, text = args
+            ax.text(xmin + 0.2, y, text, fontsize=12, fontweight='bold', va='top', ha='left')
+        elif kind == 'node':
+            gi, name, (x, y), text, people = args
+            w, h = max(0.6, 0.11*len(text) + 0.35), 0.5
+            patch = FancyBboxPatch((x - w/2, y - h/2), w, h, boxstyle='round,pad=0.02,rounding_size=0.2' if people else 'square,pad=0.02',
+                                   facecolor=colors.people if people else colors.count, edgecolor=colors.edge, linewidth=1.2, zorder=3)
+            ax.add_patch(patch)
+            ax.text(x, y, text, ha='center', va='center', fontsize=11, zorder=4)
+            nodes[(gi, name)] = patch
+    for kind,args in items:
+        if kind == 'edge':
+            ends, a, b, rad, contact, label, (x, y, ha, va) = args
+            patches = []
+            for end in ends:
+                if end[0] == 'null':
+                    circle = Circle(end[1], 0.1, facecolor='white', edgecolor=colors.null, zorder=3)
+                    ax.add_patch(circle)
+                    patches.append(circle)
+                else:
+                    patches.append(nodes[end[1]])
+            arrow = FancyArrowPatch(a, b, patchA=patches[0], patchB=patches[1], connectionstyle=f'arc3,rad={rad}', arrowstyle='-|>', mutation_scale=14,
+                                    linestyle='--' if contact else '-', color=colors.edge, linewidth=1.2, zorder=2)
+            ax.add_patch(arrow)
+            ax.text(x, y, label, ha=ha, va=va, fontsize=8, zorder=5, bbox=dict(boxstyle='round,pad=0.15', facecolor='white', edgecolor='none', alpha=0.85))
+    for link in links or []:
+        gi_src = [i for i,g in enumerate(graphs) if g.module.name == link.src]
+        gi_dst = [i for i,g in enumerate(graphs) if g.module.name == link.dst]
+        if not gi_src or not gi_dst or (gi_src[0], link.state) not in nodes:
+            continue
+        patch = nodes[(gi_src[0], link.state)]
+        target = mids.get((gi_dst[0], link.tr))
+        if target is None: # The disease as a whole: its first state
+            first = [key for key in nodes if key[0] == gi_dst[0]][0]
+            target = nodes[first].get_x() + nodes[first].get_width()/2, nodes[first].get_y() + nodes[first].get_height()
+        x, y = patch.get_x() + patch.get_width()/2, patch.get_y() + patch.get_height()/2
+        arrow = FancyArrowPatch((x, y), target, patchA=patch, connectionstyle='arc3,rad=0.2', arrowstyle='-|>', mutation_scale=14, linestyle=':', color=colors.link, linewidth=1.5, zorder=6)
+        ax.add_patch(arrow)
+        ax.text((x + target[0])/2, (y + target[1])/2, link.label, color=colors.link, fontsize=8, ha='center', va='center', zorder=7,
+                bbox=dict(boxstyle='round,pad=0.15', facecolor='white', edgecolor='none', alpha=0.85))
+    return fig
+
+
+def show_diagram(graphs, titles, links=None, sim=None, kind='plot', **kwargs):
+    """ The diagram of `ss.Disease.diagram()` and `ss.Sim.diagram()`: as a figure (`kind='plot'`) or as Mermaid text (`kind='text'`) """
+    if any(graph is None for graph in graphs):
+        errormsg = f'"{titles[0]}" is written as code, so it has no states and transitions to draw; only a declared disease has a diagram'
+        raise ValueError(errormsg)
+    if kind == 'text':
+        lines = sim_diagram(sim) if sim is not None else diagram(graphs[0])
+        return Diagram('\n'.join(['flowchart LR'] + lines))
+    elif kind == 'plot':
+        fig = kwargs.pop('fig', None)
+        with ss.style():
+            fig = plot_diagram(graphs, titles=titles, links=links, fig=fig)
+        return ss.return_fig(fig, **kwargs)
+    errormsg = f'kind must be "plot" or "text", not "{kind}"'
+    raise ValueError(errormsg)
+
+
+def sim_equations(sim):
+    """ The equations of every declared disease of a sim, and how they act on each other: see `ss.Sim.equations()` """
+    lines = []
+    for mod in sim.declared:
+        lines += [f'{mod.name}:'] + [f'  {line}' for line in equations(mod.graph, mod.engine)] + ['']
+    links = diagram_links(sim)
+    if links:
+        lines.append('How the diseases act on each other:')
+        for link in links:
+            on = f'{link.dst}.{link.tr}' if link.tr is not None else link.dst
+            what = ' '.join(link.mod.describe().split()) if hasattr(link.mod, 'describe') else link.label # A modifier's line starts with its name
+            lines.append(f'  {link.src}.{link.state} → {on} ({what})')
+    return Text('\n'.join(lines).rstrip())
 
 
 def equations(graph, engine=None):
@@ -728,11 +1006,9 @@ def what_modifies(sim, target):
     return Text('\n'.join(lines))
 
 
-def describe_sim(sim, verbose=False):
+def describe_sim(sim):
     """ The resolved sim, with each guess marked: see `ss.Sim.describe()` """
-    if not sim.initialized: # Quietly: the run says its start line when it is run
-        sim._quiet = True
-        sim.init()
+    sim._init_quietly() # The run says its start line when it is run
     pars = sim.pars
     unit = sim._unit_name
     mods = list(sim.modules)
@@ -802,9 +1078,17 @@ def describe_sim(sim, verbose=False):
             add('jointly', f'{" × ".join(crossing.names)}: {" × ".join(str(n) for n in sizes)} = {int(np.prod(sizes))} joint states of people', '; '.join(crossing.reasons))
             for text in crossing.describe():
                 add('', text)
-    for mod in mods:
-        if hasattr(mod, 'describe') and getattr(mod, 'graph', None) is not None:
+    for mod in mods: # Each disease, declared or written as code, and other declared modules
+        if hasattr(mod, 'describe') and (getattr(mod, 'graph', None) is not None or isinstance(mod, ss.Disease)):
             mod.describe(out=desc)
+    shown = (ss.Disease, ss.Product, ss.modify, ss.Event) + ((ss.networks.Route,) if sim.declared else ()) # Shown already, or below, with the mixing
+    coded = [mod for mod in mods if getattr(mod, 'graph', None) is None and not isinstance(mod, shown)]
+    if coded:
+        desc.section('Written as code')
+        kinds = ss.modules.module_map()
+        for mod in coded:
+            kind = next((key for key,cls in kinds.items() if isinstance(mod, cls)), 'module')
+            add(kind.removesuffix('s') if kind != 'demographics' else kind, f'{mod.name} ({type(mod).__name__})')
     if sim.declared:
         desc.section('Mixing and interventions')
         place = f' within each {sim.groups.strats[sim.mixing.space].name}' if sim.mixing.space is not None else ''
@@ -832,21 +1116,21 @@ def describe_sim(sim, verbose=False):
             if ti is not None: # Kept by group every few steps
                 text += f'; by group every {ti[1]} {unit}s'
             add('results', text, 'guessed: to keep them by group within 100 MB; group_results=[...] keeps fewer, more often' if ti is not None else None)
-        if verbose: # What runs where, which is about the solver and not the model: the declared modules in the kernels or as agents, and the rest in Python (see sim.kernel_reason())
-            stepped = {func['module'] for func in sim.loop.funcs} - {'sim', 'people'}
-            declared = [mod.name for mod in sim.declared]
-            if isinstance(sim.solver, ss.solvers.abm):
-                add('plan', f'{sc.strjoin(declared)}: as agents, each step in Python')
-            else:
-                whole = sim.kernel_reason()
-                joint = ''.join(f'; {" × ".join(c.names)} as one program' for c in sim.crossings)
-                add('plan', f'{sc.strjoin(declared)}: as compiled code, ' + ('the whole run in one call' if whole is None else f'one step at a time, since {whole}') + joint)
-            tabulated = [mod.name for mod in sim.modules if mod.name in stepped and getattr(mod, 'tabulated', False) and not isinstance(sim.solver, ss.solvers.abm)]
-            python = [mod.name for mod in sim.modules if mod.name in stepped and mod.name not in declared + tabulated]
-            if tabulated:
-                add('', f'{sc.strjoin(tabulated)}: as tables in the compiled code, as {"it depends" if len(tabulated) == 1 else "they depend"} only on time and states')
-            if python:
-                add('', f'{sc.strjoin(python)}: in Python, at {"its" if len(python) == 1 else "their"} place in each step')
+        # What runs where, which is about the solver and not the model: the declared modules in the kernels or as agents, and the rest in Python
+        stepped = {func['module'] for func in sim.loop.funcs} - {'sim', 'people'}
+        declared = [mod.name for mod in sim.declared]
+        if isinstance(sim.solver, ss.solvers.abm):
+            add('plan', f'{sc.strjoin(declared)}: as agents, each step in Python')
+        else:
+            whole = sim._kernel_reason()
+            joint = ''.join(f'; {" × ".join(c.names)} as one program' for c in sim.crossings)
+            add('plan', f'{sc.strjoin(declared)}: as compiled code, ' + ('the whole run in one call' if whole is None else f'one step at a time, since {whole}') + joint)
+        tabulated = [mod.name for mod in sim.modules if mod.name in stepped and getattr(mod, 'tabulated', False) and not isinstance(sim.solver, ss.solvers.abm)]
+        python = [mod.name for mod in sim.modules if mod.name in stepped and mod.name not in declared + tabulated]
+        if tabulated:
+            add('', f'{sc.strjoin(tabulated)}: as tables in the compiled code, as {"it depends" if len(tabulated) == 1 else "they depend"} only on time and states')
+        if python:
+            add('', f'{sc.strjoin(python)}: in Python, at {"its" if len(python) == 1 else "their"} place in each step')
     else:
         desc.section('Running')
 
@@ -863,13 +1147,13 @@ def describe_sim(sim, verbose=False):
         desc.section('Notes')
         for note in sim.notes:
             add('note', note)
-    if verbose and sim.declared:
+    if sim.declared:
         describe_steps(sim, desc)
     return desc.as_text()
 
 
 def describe_steps(sim, desc):
-    """ The sections of `describe(verbose=True)`, added to `desc` (a `Description`): each rate and dwell time per step of its module """
+    """ The last sections of `sim.describe()`, added to `desc` (a `Description`): each rate and dwell time per step of its module """
     unit = sim._unit_name
     def plain(raw): # A single value in the sim's unit, or None if it varies (by group, by person, or in time)
         if sc.isnumber(raw) or (isinstance(raw, ss.TimePar) and np.ndim(raw.value) == 0):

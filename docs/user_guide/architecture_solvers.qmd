@@ -89,7 +89,7 @@ Each declared module gets one engine when the sim is initialized. A module writt
 
 Three details of the compartmental engine explain most of its behavior:
 
-- **A whole run in one call.** If nothing needs Python between steps (no module written as code with a step of its own, such as an intervention, analyzer, or connector, and no modifier with `who=`, `when=`, or a function as its amount), the kernels run the whole simulation in one call; otherwise they are called once per step. Values that vary in time (`ss.timeseries`, `ss.seasonal`, and `ss.by` of them, by place or age) are tabulated for every step before the run, and so are deliveries on a schedule to people chosen by state and group (`ss.Delivery.tabulated`), including a move between states such as a seed (`ss.Event(S >> I, when=...)`), so none of these makes a run stepped. The results are the same, and `sim.kernel_reason()` says why a run is stepped.
+- **A whole run in one call.** If nothing needs Python between steps (no module written as code with a step of its own, such as an intervention, analyzer, or connector, and no modifier with `who=`, `when=`, or a function as its amount), the kernels run the whole simulation in one call; otherwise they are called once per step. Values that vary in time (`ss.timeseries`, `ss.seasonal`, and `ss.by` of them, by place or age) are tabulated for every step before the run, and so are deliveries on a schedule to people chosen by state and group (`ss.Delivery.tabulated`), including a move between states such as a seed (`ss.Event(S >> I, when=...)`), so none of these makes a run stepped. The results are the same, and `sim.describe()` says why a run is stepped.
 - **Rust, Numba, or plain.** The kernels run in Rust, compiled by Numba, or as plain Python, with the same results (see [the kernels](#the-kernels), below).
 - **JAX for gradients and fitting.** `internals/gradients.py` (`ss.gradients`) runs the same program with the same steps in JAX, so results can be differentiated (`sim.gradient()`) and many parameter sets run at once. `ss.solvers.choose_engine()` uses JAX for a run, or for a sweep of many parameter sets in one call (`ss.parallel(sim, pars=...)`), only with `sim.jax = True`; gradients and `sim.fit()` use it on their own. `sim.engine_reason` says which ran, once the sim has been run.
 
@@ -114,7 +114,7 @@ Numba's kernels are the reference: a change is made there first, then in Rust's 
 
 ## What decides which engine runs a model
 
-One ordered list of rules decides it, in `solvers/choose.py`, read for `solver='auto'`, for the `CapabilityError` of a solver that was asked for, and for `sim.kernel_reason()`. Each rule says what it looks for, the engines that can run a model with it, and the message; a module adds its own reasons with `agent_reasons()`, as the built-in ones do. In the table, `compartments` is one step at a time, `kernels` is the whole run in one call, and `jax` is the ODE in JAX.
+One ordered list of rules decides it, in `solvers/choose.py`, read for `solver='auto'`, for the `CapabilityError` of a solver that was asked for, and for why a run is stepped (in `sim.describe()`). Each rule says what it looks for, the engines that can run a model with it, and the message; a module adds its own reasons with `agent_reasons()`, as the built-in ones do. In the table, `compartments` is one step at a time, `kernels` is the whole run in one call, and `jax` is the ODE in JAX.
 
 ```{python}
 ss.solvers.solver_table()

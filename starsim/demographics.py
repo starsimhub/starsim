@@ -229,7 +229,7 @@ class Flows(Demographics):
         transitions (list): births (`ss.birth()`), deaths of everyone (`ss.death()` with no state), and migration (`ss.immigration()`, `ss.emigration()` with no state)
     """
     compartmental = True
-    tabulated = True # Its step does nothing, so a compartmental run need not be taken a step at a time for it (see ss.Sim.kernel_reason())
+    tabulated = True # Its step does nothing, so a compartmental run need not be taken a step at a time for it (see ss.Sim.describe())
 
     def __init__(self, transitions, **kwargs):
         super().__init__(**kwargs)

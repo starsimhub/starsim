@@ -116,6 +116,18 @@ def test_forms():
         density.append(ss.Sim(ss.Disease(S >> I @ (3e-5*S*I if flow else 3e-5*I.n), I >> R @ 10, name='sir'), stop=50, **kw))
     assert same(*density)
     assert density[0].results.sir.I[0] == 100 # init_prev=0.01 by default
+    graph = density[0].diseases.sir.graph
+    assert 'infection' in graph.transitions and 'beta' in graph.pars # A transmission like any other: it was named S_to_I, with an unnamed coefficient
+    assert 'from I (density-dependent)' in repr(graph.transitions)
+
+    # The total, with include_sum=True: beta*I/N is beta*I (frequency-dependent), as is the whole flow beta*S*I/N
+    freq = []
+    for rate in [lambda S,I,N: 0.3*I, lambda S,I,N: 0.3*I/N, lambda S,I,N: 0.3*S*I/N]:
+        S, I, R, N = ss.states('S I R', include_sum=True)
+        assert repr(N) == 'S + I + R'
+        freq.append(ss.Sim(ss.Disease(S >> I @ rate(S, I, N), I >> R @ 10, name='sir'), stop=50, **kw))
+    assert same(*freq)
+    assert all('beta' in sim.diseases.sir.graph.pars for sim in freq)
     return forms
 
 
@@ -534,7 +546,7 @@ def test_describe():
     for string in ['10,000 people [guessed]', 'time is in timesteps',
                    'rate = 0.05 × I.n / N', 'exponential(mean = 10 steps)', 'homogeneous', 'every step: sir']:
         assert string in text, f'Expected "{string}" in describe()'
-    assert '= 0.0952 per step' in sim.describe(verbose=True) # The probability of recovering in a step, 1 - exp(-1/10)
+    assert '= 0.0952 per step' in sim.describe() # The probability of recovering in a step, 1 - exp(-1/10)
     S, I, R = ss.states(3)
     density = ss.Sim(ss.Disease(S >> I @ ss.perday(3e-5)*I.n, I >> R @ ss.days(10), init_n=dict(I=10)), **kw).init()
     assert 'mixing' not in density.describe() # Nothing is contact-mediated, so there is no mixing to describe (it said "frequency-dependent")
@@ -561,8 +573,9 @@ def test_describe():
     assert 'recovery (Recovery rate) = 0.1 per day' in ss.Sim(ss.Disease(S >> I @ beta*I, I >> R @ recovery, name='sir'), unit='day', **kw).describe()
     ss.SIR().equations() # Before the disease is in a sim
 
-    assert sir.diagram().splitlines() == ['flowchart LR', '    S(["S"])', '    I(["I"])', '    R(["R"])', '    S -.->|"infection: 0.05 × I"| I', '    I -->|"recovery: 10"| R'] # Values, not names (it was "recovery: dur = dur")
-    assert '```mermaid' in sir.diagram()._repr_markdown_() # Drawn in a notebook
+    assert sir.diagram('text').splitlines() == ['flowchart LR', '    S(["S"])', '    I(["I"])', '    R(["R"])', '    S -.->|"infection: 0.05 × I"| I', '    I -->|"recovery: 10"| R'] # Values, not names (it was "recovery: dur = dur")
+    assert '```mermaid' in sir.diagram('text')._repr_markdown_() # Drawn in a notebook
+    assert len(sir.diagram(do_show=False).axes[0].patches) >= 5 # By default, drawn with Matplotlib: three states and two arrows
 
     eqs = sir.equations()
     print(eqs)
@@ -571,9 +584,9 @@ def test_describe():
     fatal = ss.Disease(S >> I @ 0.4*I, ss.Transition(I, {R: None, ss.dead: 0.002}, dur=ss.days(8)), name='fatal')
     assert 'dR/dt =  (1 - 0.002) * I / dur' in fatal.equations() # A branch to ss.dead, given in a list, takes its share (it was "I / dur")
     text = fatal.describe()
-    assert 'null1' in fatal.diagram() and 'I -> R | (removed)' in text # ss.dead shown as leaving the model (it was "I -> ")
+    assert 'null1' in fatal.diagram('text') and 'I -> R | (removed)' in text # ss.dead shown as leaving the model (it was "I -> ")
     assert 'beta = 0.4 per day' in text # Outside a sim, in the unit of its typed values (it was "per step")
-    assert '8 days, p = 0.002"| null1' in fatal.diagram() # Each branch with its share
+    assert '8 days, p = 0.002"| null1' in fatal.diagram('text') # Each branch with its share
     S, I, R = ss.states(3)
     beta = ss.par(0.3, bounds=[0.1, 1])
     infection = S >> I @ beta*I

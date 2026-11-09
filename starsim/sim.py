@@ -506,7 +506,7 @@ class Sim(ss.modules.Base):
         aging (bool): Specify whether agents age (by default, agents age if and only if births and/or deaths are included)
         record_people (bool): Whether to collect the automatic People-level results (alive, female, died, emigrated, etc.) every timestep (default True); set to False to skip this per-timestep cost in lightweight/ODE-style sims that do not need them (note: some modules, e.g. demographics, rely on results.alive)
         step_order (str): the order in which the modules step: 'type' (default) at the place of each kind of module in the loop (see `ss.Loop`), or 'given' in the order they were given (the model and `modules=` first, then the modules given by kind, e.g. `diseases=`), before the deaths and results of the step; analyzers, which read the step's results, still step last
-        require_kernels (bool): whether to raise `ss.CapabilityError`, rather than fall back to Python, if a compartmental run cannot be taken whole in the kernels (see `sim.kernel_reason()`)
+        require_kernels (bool): whether to raise `ss.CapabilityError`, rather than fall back to Python, if a compartmental run cannot be taken whole in the kernels (see `sim.describe()`)
         group_results (list): the results to keep by group, by name, e.g. `['I', 'cases']` or `['sir.I']`; the others keep only their totals (default: all, every few steps if every step would take more than about 100 MB)
         verbose (int/float): How much to print: 0 nothing, 1 the solver, notes, and progress (default), 2 everything (e.g. each step); a fraction is as 1, with progress every that share of the run (e.g. 0.1 for every 10%)
         kwargs (dict): the settings above, by name (they are kept in `sim.pars`, an `ss.SimPars`)
@@ -1154,17 +1154,53 @@ class Sim(ss.modules.Base):
             raise KeyError(errormsg)
         return mods[name]
 
-    def describe(self, verbose=False):
+    def describe(self):
         """
-        The resolved model: every state, transition, and default, with each guess marked
+        The resolved model: every state, transition, and default, with each guess marked; what runs where (and if a compartmental run is taken a step at a time, why); and what each rate and dwell time is per step
 
-        It is text that shows itself (`ss.display.Text`), as `diagram()` is: in color at an interactive prompt in a terminal,
+        It is text that shows itself (`ss.display.Text`), as `equations()` is: in color at an interactive prompt in a terminal,
         as tables in a notebook, and as plain text with `print(sim.describe())` (e.g. in a script) or `str()`.
+        """
+        return ss.display.describe_sim(self)
+
+    def diagram(self, kind='plot', **kwargs):
+        """
+        The state-transition diagram of every declared disease, with how they act on each other (e.g. a modifier of one disease with a condition on another's state, as a dotted arrow)
 
         Args:
-            verbose (bool): also show what each rate and dwell time is per step: the probability of leaving in a step, as the solvers that take whole steps use it, and the stages of a dwell time
+            kind (str): 'plot' to draw it as a Matplotlib figure, or 'text' for the text of a Mermaid flowchart (see `ss.Disease.diagram()`)
+            kwargs (dict): for a plot, passed to `ss.return_fig()` (e.g. `filename=`, `do_show=`)
+
+        Example:
+            ```python
+            sim = ss.Sim(diseases=[ss.SIR(), ss.SIS()])
+            sim.diagram()
+            ```
         """
-        return ss.display.describe_sim(self, verbose=verbose)
+        self._init_quietly()
+        if not self.declared:
+            errormsg = 'The sim has no declared diseases to draw (a module written as code has no diagram)'
+            raise ValueError(errormsg)
+        graphs = [mod.graph for mod in self.declared]
+        return ss.display.show_diagram(graphs, [mod.name for mod in self.declared], links=ss.display.diagram_links(self), sim=self, kind=kind, **kwargs)
+
+    def equations(self):
+        """
+        The ODE systems of every declared disease, with symbolic parameter names, and how the diseases act on each other, as text that shows itself (`ss.display.Text`; `print()` it in a script); see `ss.Disease.equations()`
+        """
+        self._init_quietly()
+        return ss.display.sim_equations(self)
+
+    def _kernel_reason(self):
+        """ Why the sim is not run in one call to the kernels, in a few words, or None if it is (`sim.describe()` says so) """
+        return ss.solvers.why_not(self, 'kernels')
+
+    def _init_quietly(self):
+        """ Initialize the sim, if it isn't, without the line a run says as it starts """
+        if not self.initialized:
+            self._quiet = True
+            self.init()
+        return
 
     def add_module(self, module, key=None):
         """
@@ -1785,7 +1821,7 @@ class Sim(ss.modules.Base):
         try:
             # Main simulation loop
             restarted = self.__dict__.pop('_restarted', None)
-            reason = self.kernel_reason() if until is None and not profile and restarted is None else None
+            reason = self._kernel_reason() if until is None and not profile and restarted is None else None
             kernels = until is None and not profile and reason is None
             if reason is not None and not isinstance(self.solver, ss.solvers.abm) and getattr(self, 'declared', None): # Say once why a compartmental run is taken a step at a time (describe() says it too)
                 ss.note(f'run a step at a time, which is much slower than all at once, since {reason}', sim=self, verbose=self.verbose)
@@ -1897,21 +1933,13 @@ class Sim(ss.modules.Base):
                 res.values[ti+1:] = np.nan
         return
 
-    def kernel_reason(self):
-        """ Why the sim is not run in one call to the kernels, in a few words, or None if it is (see `sim.kernel_only()`) """
-        return ss.solvers.why_not(self, 'kernels')
-
-    def kernel_only(self):
-        """ Whether the sim is nothing but compartments that the kernels can run from start to finish: see `sim.kernel_reason()` """
-        return self.kernel_reason() is None
-
     def gradient(self, results=None, pars=None):
         """
         The derivative of results, or of a function of the run sim, with respect to parameters, at their current values
 
         The ODE run is differentiated by JAX (see `ss.gradients`), so this needs JAX, a sim
         with `solver='ode'`, and one that the kernels run from start to finish (see
-        `sim.kernel_only()`). The sim itself is not changed. A parameter with several values
+        `sim.describe()`). The sim itself is not changed. A parameter with several values
         (a value for each level, `ss.by(patch=[...])`; an array; or a time series) has a
         derivative for each, named as `sim.fit()` names them (`beta[a]`, `beta[b]`, ...).
 
@@ -1963,7 +1991,7 @@ class Sim(ss.modules.Base):
         (`sim.restart().run(until=2010)`), or for a function that sets the values to try (as for `ss.gradients.Density`).
         The values given are kept for later runs (as `sim.par_values`), until changed again.
 
-        For a sim that is nothing but compartments (see `sim.kernel_only()`), this makes
+        For a sim that is nothing but compartments (one that the kernels run from start to finish: see `sim.describe()`), this makes
         repeated runs many times faster; any other sim (or a change the compartments were
         not laid out for, such as a new distribution) is built again, as `sim.new()` would.
         `ss.parallel(sim, n_runs=...)` and `sim.fit()` use it where they can.
@@ -1981,7 +2009,7 @@ class Sim(ss.modules.Base):
         rebuild = lambda: self.new(pars=sc.mergedicts(self.par_values, pars), inplace=True, rand_seed=sc.ifelse(rand_seed, self.pars.rand_seed)) # With the values of earlier restarts
         same = not pars
         numbers = all(isinstance(val, (int, float, np.number)) for val in (pars or {}).values()) # A number in place of a number does not change how the sim runs
-        if not (numbers and self.__dict__.get('_kernels_known') or self.kernel_only()) or any(isinstance(val, ss.Dist) or key in self.pars.bounded() for key,val in (pars or {}).items()): # Not run in one call to the kernels, a distribution the compartments were not laid out for, or a sim setting (e.g. n_agents)
+        if not (numbers and self.__dict__.get('_kernels_known') or self._kernel_reason() is None) or any(isinstance(val, ss.Dist) or key in self.pars.bounded() for key,val in (pars or {}).items()): # Not run in one call to the kernels, a distribution the compartments were not laid out for, or a sim setting (e.g. n_agents)
             return rebuild()
         base = self.__dict__.get('_before_init') # The copy that sim.new() and a rerun start from, which takes the same values
         if rand_seed is not None:

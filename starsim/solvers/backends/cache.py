@@ -12,13 +12,14 @@ Compiling takes seconds the first time (and after a change to the code), so `com
 what is being compiled and about how long it takes, once a session for each thing: for Numba,
 when it starts compiling (not when it loads from its cache) one of the sets of functions in
 `slow`, or a function from `ss.jit`, with a bar of the time taken so far, redrawn until it is
-done (see `Ticker`); for JAX, where Starsim compiles something.
+done (see `Ticker`), or for `ss.compile()`, one bar for all of them (see `Batch`); for JAX, where Starsim compiles something.
 
 Used with: agents and compartments; declared and coded modules
 """
 
 import os
 import time
+import contextlib
 import hashlib
 import threading
 import numba.core.caching as caching
@@ -28,14 +29,15 @@ import starsim as ss
 deps = {} # The extra files each source file's cache depends on
 hashes = {} # The hash of each file's contents, with the time and size it was read at, so that each file is read once
 
-# Starsim's functions that take long enough to compile to say so, by module and function (or by module): what they are, and how long compiling them takes on a laptop (s)
+# Starsim's functions that take long enough to compile to say so, by module and function (or by module): what they are, and how long compiling them takes (s), erring long (measured 2026-11-07: 34 to 43 s for many runs, 32 to 46 and 33 to 55 s for the particle filter's)
 slow = {
-    'starsim.solvers.backends.kernels.run':             ('the compartmental solvers', 60, 130),
-    'starsim.solvers.backends.kernels.run_many':        ('the compartmental solvers for many runs', 4, 15),
-    'starsim.solvers.backends.kernels.one_step':        ('a step of the compartmental solvers', 3, 10),
-    'starsim.solvers.backends.kernels.advance':         ("the particle filter's steps", 10, 30),
-    'starsim.solvers.backends.kernels.advance_threads': ("the particle filter's steps in threads", 15, 45),
-    'starsim.solvers.backends.passes':                  ('the agent solver', 2, 10),
+    'starsim.solvers.backends.passes':                  ('the agent solver', 2, 15), # And for ss.compile(), the rest of what sims with agents compile (30 s measured), as 'agents'
+    'agents':                                           ('the agent solver and what sims with agents use', 20, 60),
+    'starsim.solvers.backends.kernels.run':             ('the compartmental solvers', 60, 150), # 63 s measured
+    'starsim.solvers.backends.kernels.one_step':        ('a step of the compartmental solvers', 5, 20),
+    'starsim.solvers.backends.kernels.run_many':        ('the compartmental solvers for many runs', 30, 70),
+    'starsim.solvers.backends.kernels.advance':         ("the particle filter's steps", 30, 70),
+    'starsim.solvers.backends.kernels.advance_threads': ("the particle filter's steps in threads", 40, 80),
 }
 said = set() # What has been said to be compiling, this session
 
@@ -98,11 +100,13 @@ class Ticker:
             self.thread.start()
         return
 
+    def text(self, elapsed):
+        """ The line drawn while it compiles """
+        return f'  {self.progress.bar(min(elapsed/self.high, 1))} {elapsed:.0f} s (estimated {self.low}-{self.high} s)'
+
     def run(self):
         while not self.stop.wait(0.5):
-            elapsed = time.time() - self.start
-            bar = self.progress.bar(min(elapsed/self.high, 1))
-            self.progress.draw(f'  {bar} {elapsed:.0f} s (estimated {self.low}-{self.high} s)')
+            self.progress.draw(self.text(time.time() - self.start))
         return
 
     def finish(self):
@@ -110,6 +114,52 @@ class Ticker:
         if self.thread is not None:
             self.thread.join()
         self.progress.finish(f'  Compiled {self.what} with {self.engine} in {time.time() - self.start:.0f} s')
+        return
+
+
+class Batch(Ticker):
+    """
+    One bar for compiling several of the sets of functions in `slow` in turn, as `ss.compile()` does: each part takes a share
+    of the bar by how long it is estimated to take, and is not said on its own (see `Compiling`). A part that takes longer
+    than estimated holds the bar at the end of its share until it is done.
+
+    Args:
+        what (str): what is compiled, as said when it is done
+        keys (list): the keys of `slow` that are compiled, in the order they are; `part()` says when each starts and ends
+    """
+    current = None # The batch being compiled, if any
+
+    def __init__(self, what, keys):
+        self.shares = {key:(slow[key][1] + slow[key][2])/2 for key in keys} # Each part's share of the bar
+        self.finished = set() # The parts done
+        self.key = None # The part being compiled, and when it started
+        self.part_start = None
+        said.update(slow[key][0] for key in keys) # Not said again on its own, later in the session
+        Batch.current = self
+        super().__init__(what, 'Numba', sum(slow[key][1] for key in keys), sum(slow[key][2] for key in keys))
+        return
+
+    @contextlib.contextmanager
+    def part(self, key):
+        """ Compile a part (a key of `slow`) within the block """
+        self.key, self.part_start = key, time.time()
+        try:
+            yield
+        finally:
+            self.finished.add(key)
+            self.key = None
+        return
+
+    def text(self, elapsed):
+        done = sum(self.shares[key] for key in self.finished if key in self.shares)
+        if self.key in self.shares and self.key not in self.finished:
+            done += min(time.time() - self.part_start, self.shares[self.key])
+        share = min(done/sum(self.shares.values()), 1)
+        return f'  {self.progress.bar(share)} {share:4.0%}  {elapsed:.0f} s'
+
+    def finish(self):
+        Batch.current = None
+        super().finish()
         return
 
 
@@ -122,7 +172,7 @@ class Compiling(event.Listener):
         if not Compiling.depth:
             func = ev.data['dispatcher'].py_func
             info = getattr(ev.data['dispatcher'], 'ss_compiling', None) or slow.get(f'{func.__module__}.{func.__name__}') or slow.get(func.__module__)
-            if info and compiling(info[0], 'Numba', *info[1:]):
+            if info and Batch.current is None and compiling(info[0], 'Numba', *info[1:]): # Within a batch, its bar says it
                 Compiling.ticker = Ticker(info[0], 'Numba', *info[1:])
         Compiling.depth += 1
         return

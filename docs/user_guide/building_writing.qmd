@@ -15,6 +15,9 @@ For a first walk through a model, see [T1 – Getting started](../tutorials/t1_i
 
 Here is a simplified measles outbreak in a town of 100,000 people: an SIR model, in which people are susceptible (S), infectious (I), or recovered and immune (R). Each susceptible person is infected at a rate of β = 1.9 per day times the share of people who are infectious, and people are infectious for 8 days on average:
 
+::: {.panel-tabset group="language"}
+## Python
+
 ```{python}
 import starsim as ss
 
@@ -27,6 +30,46 @@ sim = ss.Sim(measles, total_pop=100_000, stop=ss.days(50))
 sim.run()
 sim.plot()
 ```
+
+## R
+
+```r
+library(starsim)
+
+states("S I R")
+measles <- Disease(
+  infection = Transition(S, I, rate = 1.9 * I), # From S to I, at a rate of 1.9 per day times the share infectious
+  recovery  = Transition(I, R, dur = days(8)),  # From I to R, after 8 days on average
+  init_prev = 0.001
+)
+
+sim <- Sim(measles, total_pop = 100000, stop = days(50))
+sim$run()
+sim$plot()
+```
+
+## Explicit
+
+```{python}
+S, I, R = ss.State(name='S'), ss.State(name='I'), ss.State(name='R')
+infection = ss.Transition(source=S, dest=I, rate=ss.perday(1.9)*I, name='infection')       # From S to I, at a rate of 1.9 per day times the share infectious
+recovery  = ss.Transition(source=I, dest=R, dur=ss.expon(mean=ss.days(8)), name='recovery') # From I to R, after an exponentially distributed time of 8 days on average
+measles_explicit = ss.Disease(transitions=[infection, recovery], init_prev=0.001, name='measles')
+
+sim_explicit = ss.Sim(
+    diseases  = measles_explicit,
+    networks  = ss.contacts(1), # Everyone mixes with everyone, with one contact per person per day
+    total_pop = 100_000,
+    start     = ss.days(0),
+    stop      = ss.days(50),
+    dt        = ss.days(1),     # Steps of a day
+    unit      = 'day',          # The unit of bare numbers
+    solver    = 'ode',          # Run as an ODE
+)
+sim_explicit.run()
+sim_explicit.plot()
+```
+:::
 
 The basic reproduction number is R0 = β × the infectious period = 1.9 × 8 ≈ 15, as for measles, and the sim prints it when it starts. With an R0 that high, nearly everyone is infected within a few weeks.
 
@@ -76,7 +119,60 @@ sim = ss.Sim(measles, total_pop=100_000, stop=ss.days(50), solver='ode')
 sim.describe()
 ```
 
-A distribution is shown as it was given, with its units (`erlang(k=4, mean=8 days)`). `describe(verbose=True)` adds how the model is run (here, as compiled code, the whole run in one call) and what each rate and duration is per step.
+A distribution is shown as it was given, with its units (`erlang(k=4, mean=8 days)`). Near the end, it says how the model is run (here, as compiled code, the whole run in one call), and then what each rate and duration is per step.
+
+Giving each guess the value Starsim would have chosen leaves the model as it was. The "Explicit" tab is the first model with nothing left to guess: the transitions written out in full, the exponential infectious period, homogeneous mixing with one contact a day (`ss.contacts(1)`), the unit, the step, and the solver. The two give the same results:
+
+::: {.panel-tabset group="language"}
+## Python
+
+```{python}
+S, I, R = ss.states('S I R')
+infection = S >> I @ 1.9*I
+recovery  = I >> R @ ss.days(8)
+measles = ss.Disease(infection, recovery, init_prev=0.001)
+
+sim = ss.Sim(measles, total_pop=100_000, stop=ss.days(50), verbose=0)
+sim.run()
+print('Peak infectious:', round(sim.results.measles.I.max(), 2))
+```
+
+## R
+
+```r
+states("S I R")
+infection <- Transition(S, I, rate = 1.9 * I)
+recovery  <- Transition(I, R, dur = days(8))
+measles <- Disease(infection, recovery, init_prev = 0.001)
+
+sim <- Sim(measles, total_pop = 100000, stop = days(50), verbose = 0)
+sim$run()
+cat("Peak infectious:", round(max(sim$results$measles$I$values), 2), "\n")
+```
+
+## Explicit
+
+```{python}
+S, I, R = ss.State(name='S'), ss.State(name='I'), ss.State(name='R')
+infection = ss.Transition(source=S, dest=I, rate=ss.perday(1.9)*I, name='infection')
+recovery  = ss.Transition(source=I, dest=R, dur=ss.expon(mean=ss.days(8)), name='recovery') # Exponential, as a single duration means
+measles = ss.Disease(transitions=[infection, recovery], init_prev=0.001, name='measles')
+
+sim = ss.Sim(
+    diseases  = measles,
+    networks  = ss.contacts(1), # Homogeneous mixing, with one contact per person per day
+    total_pop = 100_000,
+    start     = ss.days(0),
+    stop      = ss.days(50),
+    dt        = ss.days(1),
+    unit      = 'day',
+    solver    = 'ode',
+    verbose   = 0,
+)
+sim.run()
+print('Peak infectious:', round(sim.results.measles.I.max(), 2))
+```
+:::
 
 ### Equations, diagram, and transitions
 
@@ -99,7 +195,7 @@ These are the equations whatever the model is run as: as agents, each person mov
 measles.diagram()
 ```
 
-A dashed arrow is a transmission, and a solid one any other transition; a transition with `p=` also gives the share that takes it. The diagram is a [Mermaid](https://mermaid.js.org) flowchart, which is drawn in JupyterLab and in pages built with Quarto; `print(measles.diagram())` gives its text, to paste into anything else that draws Mermaid (such as GitHub, and many wikis).
+A dashed arrow is a transmission, and a solid one any other transition; a transition with `p=` also gives the share that takes it. It is a Matplotlib figure; `measles.diagram('text')` gives it as a [Mermaid](https://mermaid.js.org) flowchart instead, which JupyterLab and Quarto draw, and whose text (`print()` it) can be pasted into anything else that draws Mermaid (such as GitHub, and many wikis). For every disease of a sim, and how they act on each other, use `sim.diagram()` and `sim.equations()`.
 
 `transitions` is a table of the transitions, with what drives each (a rate or a duration) and its kind: a transition is a **transmission** if people catch it from people in another state (here, "transmission, from I"), and **spontaneous** otherwise. Printing it also shows which state leads to which:
 
@@ -130,7 +226,7 @@ sim.diseases.measles.Rt().plot()
 
 ## Where the parts of a sim go
 
-A sim runs a copy of each module it is given, so that the same disease can go into several sims (for example, one for each scenario) without one run changing another. After a sim is initialized (by `sim.init()`, or by `sim.run()`, which initializes it if needed), its copy of each module is in `sim.diseases`, `sim.networks`, and so on, by name. A module takes its name from the variable it was assigned to (here `measles`), or from `name=`.
+A sim runs a copy of each module it is given, so that the same disease can go into several sims (for example, one for each scenario) without one run changing another. After a sim is initialized (by `sim.init()`, or by `sim.run()`, which initializes it if needed), its copy of each module is in `sim.diseases`, `sim.networks`, and so on, by name. A disease made with `ss.Disease()` takes its name from the variable it was assigned to (here `measles`); one made from a class, such as `ss.SIR()`, is named after the class in lower case (`sir`); and `name=` gives any module a name of its own. [Names with special meaning](building_diseases.qmd#names-with-special-meaning) lists these and the other names Starsim reads or fills in.
 
 ```{python}
 sim = ss.Sim(measles, total_pop=100_000, stop=ss.days(50), verbose=0)
@@ -187,7 +283,7 @@ Each value that Starsim fills in itself is marked as guessed in `describe()`, wi
 | A duration's distribution | Exponential, with the mean given | A single duration (`ss.days(8)`) | A distribution, e.g. `ss.erlang(k=4, mean=ss.days(8))` |
 | The stages of a duration | As many Erlang stages as match its mean and standard deviation | A non-Erlang distribution run as compartments | `stages=` on the transition |
 | How the epidemic starts | 1% of people infected (`init_prev=0.01`) | A disease with transmission and no `init`, `init_prev`, or `init_n` | `init_prev=`, `init=`, or `init_n=` |
-| Where people start | The state people are infected from, or else the first state made | Nobody placed in a state | `default_state=` (a state, or its name) on the disease, or `init=` |
+| Where people start | The state named `S` or `susceptible`, else the one state people are infected from, else the first state made | Nobody placed in a state | `default_state=` (a state, or its name) on the disease, or `init=` |
 | The state of the rest | The only state with no starting value | One state with none, when the first state has one | `init=` for every state |
 | A transition's name | `infection` for a disease's only transmission, else from its states (`I_to_R`) | No variable or keyword names it | A variable, a keyword, or `name=` |
 | Which transitions are acquisitions | Every transmission, or else the transitions out of the first state | `acquisition=` not given | `acquisition=True` or `False` |

@@ -61,12 +61,12 @@ website:
         text: Home
       - href: tour.qmd
         text: Tour
-      - href: gallery.qmd
-        text: Gallery
       - href: tutorials.qmd
         text: Tutorials
       - href: user_guide.qmd
         text: User guide
+      - href: gallery.qmd
+        text: Gallery
       - href: whatsnew.qmd
         text: What's new
       - href: contributing/index.qmd
@@ -302,12 +302,12 @@ website:
           text: Home
         - href: tour.qmd
           text: Tour
-        - href: gallery.qmd
-          text: Gallery
         - href: tutorials.qmd
           text: Tutorials
         - href: user_guide.qmd
           text: User guide
+        - href: gallery.qmd
+          text: Gallery
         - href: whatsnew.qmd
           text: What's new
         - href: contributing/index.qmd
@@ -437,7 +437,7 @@ format:
       light: [cosmo, ./assets/styles-light.scss]
       dark: [cosmo, ./assets/styles-dark.scss]
     css: ./assets/styles.css
-    include-after-body: ./assets/collapse_sections.html
+    include-after-body: [./assets/collapse_sections.html, ./assets/tabset_fallback.html]
     toc: true
     toc-expand: true
     toc-depth: 5

@@ -1,5 +1,5 @@
 ---
-title: Measles in London, four ways
+title: Measles in London, two ways
 jupyter: python3
 authorship:
   human: 0
@@ -7,14 +7,12 @@ authorship:
   note: Written by AI, reproducing the model of He, Ionides and King (2010)
 ---
 
-Starsim declares most models in a few lines: states, transitions, rates, and the data to fit them to. Sooner or later, though, a model needs something none of these say. This page takes one such model, the measles model of He, Ionides and King (2010), and fits it into Starsim in four ways, each a small step from the last:
+Starsim declares most models in a few lines: states, transitions, rates, and the data to fit them to. Sooner or later, though, a model needs something none of these say. This page takes one such model, the measles model of He, Ionides and King (2010), and writes it in Starsim in two ways:
 
 1. **Declared, with a little code**: the states and transitions declared as usual, with functions of the sim and a small module for what they can't say.
-2. **A likelihood of your own**, as a function, for data the built-in likelihoods don't describe.
-3. **Written as code**: the whole model as one module, with nothing declared, which can do anything.
-4. **Compiled**: the loop at the heart of that module, made fast with `@ss.jit`.
+2. **Written as code**: the whole model as one module, with nothing declared, which can do anything.
 
-None of these needs anything added to Starsim. Each gives up a little of what Starsim knows about the model in return for freedom.
+Then it fits them to the data: with a likelihood of its own, for data the built-in likelihoods don't describe; with the coded model's loop compiled with `@ss.jit`; and with a particle filter. None of this needs anything added to Starsim. Writing the model as code gives up some of what Starsim knows about it in return for freedom.
 
 ## The model
 
@@ -124,7 +122,7 @@ plt.ylabel('Cases per week')
 plt.legend()
 ```
 
-The model's epidemics come every other year, as London's did, though not always in the same years: a stochastic model's timing drifts from the data's unless it is filtered, as in step 5. `describe()` shows everything that is declared, and says what is code:
+The model's epidemics come every other year, as London's did, though not always in the same years: a stochastic model's timing drifts from the data's unless it is filtered, as with the particle filter below. `describe()` shows everything that is declared, and says what is code:
 
 ```{python}
 sim.describe()
@@ -132,24 +130,7 @@ sim.describe()
 
 What this costs: the functions run in Python once a step, so the run is taken a step at a time (a few seconds) rather than in one compiled call; and Starsim's own particle filter, which runs many copies of the kernels at once, can't take a connector, since each copy would need noise of its own. Everything declared still prints, and the run's results are ordinary results.
 
-## 2. A likelihood of your own
-
-He et al.'s measurement model is a normal whose variance grows with the mean, which isn't one of Starsim's likelihoods. Any likelihood can be given as a function of the data and the model's values, returning the log-likelihood of each. Here, as in the paper, it is the chance of the reported number rounded to a whole case:
-
-```{python}
-def reported(observed, recovered):
-    """ The log-likelihood of the reported cases, given the recoveries """
-    m = pars.rho*recovered
-    sd = np.sqrt(m*(1 - pars.rho + pars.psi**2*m)) + 1e-18
-    lik = np.where(observed > 0, sps.norm.cdf(observed + 0.5, m, sd) - sps.norm.cdf(observed - 0.5, m, sd), sps.norm.cdf(0.5, m, sd))
-    return np.log(lik + 1e-18)
-
-ss.fit.loglik(sim, likelihood=dict(recovery=reported))
-```
-
-The function can be given wherever a distribution is: on an outcome (`ss.outcome(..., likelihood=reported)`), to `sim.fit(likelihood=...)`, and to the particle filter. For a single stochastic run, the log-likelihood is low, since its epidemics are not in step with the data; a particle filter (step 5) measures the fit properly.
-
-## 3. Written as code
+## 2. Written as code
 
 The most direct way is to write the model as one module, in NumPy, with nothing declared. This is He et al.'s own algorithm, line for line (an Euler-multinomial step each day). Its states are arrays with one value for each of `n` runs, so one sim can also run many copies of the model at once:
 
@@ -206,7 +187,24 @@ print(f'Reported cases over 21 years: {np.mean(totals):,.0f} ± {np.std(totals):
 
 The module keeps nothing for each person, so the sim has no agents: Starsim runs it as it is, calling its `step()` once a day and nothing else. (A module that keeps a value for each person, with `define_states()`, runs as agents instead.) Starsim still gives it the dates, seeds, parallel runs, and anything else it asks of the sim; what it can't do is show what the module does (`describe()` lists it by name only), run it under another solver, or fit it with `sim.fit()`, since there is nothing declared to fit.
 
-## 4. Compiled
+## A likelihood of your own
+
+He et al.'s measurement model is a normal whose variance grows with the mean, which isn't one of Starsim's likelihoods. Any likelihood can be given as a function of the data and the model's values, returning the log-likelihood of each. Here, as in the paper, it is the chance of the reported number rounded to a whole case:
+
+```{python}
+def reported(observed, recovered):
+    """ The log-likelihood of the reported cases, given the recoveries """
+    m = pars.rho*recovered
+    sd = np.sqrt(m*(1 - pars.rho + pars.psi**2*m)) + 1e-18
+    lik = np.where(observed > 0, sps.norm.cdf(observed + 0.5, m, sd) - sps.norm.cdf(observed - 0.5, m, sd), sps.norm.cdf(0.5, m, sd))
+    return np.log(lik + 1e-18)
+
+ss.fit.loglik(sim, likelihood=dict(recovery=reported))
+```
+
+The function can be given wherever a distribution is: on an outcome (`ss.outcome(..., likelihood=reported)`), to `sim.fit(likelihood=...)`, and to the particle filter. For a single stochastic run, the log-likelihood is low, since its epidemics are not in step with the data; a particle filter (below) measures the fit properly.
+
+## Compiling the coded model
 
 `@ss.jit` compiles a function with Numba, with no change to what it does. The step above is written for whole arrays, so here it is again as a loop over the copies, which Numba makes fast:
 
@@ -238,9 +236,9 @@ for label,euler in [('NumPy', euler_step), ('Compiled', euler_loop)]:
 
 The first call compiles it, which takes a few seconds once; after that it is loaded from Numba's cache. Compiling pays off most for loops that NumPy can't write as whole arrays. For this model, most of the time of a large run is the random draws themselves. A function that Numba can't compile (e.g. one that calls Sciris) is an error, which says why; `@ss.jit(nopython=False)` runs it as Python instead, with a note.
 
-## 5. A particle filter
+## A particle filter
 
-The coded model's copies can be the particles of a filter. At the end of each week, an analyzer weights each copy by how likely that week's reported cases are under it (the `reported()` likelihood from step 2), and then draws the copies again in proportion to their weights, so that those that have drifted from the data are dropped. The mean weight, multiplied over the weeks, estimates the likelihood of the data:
+The coded model's copies can be the particles of a filter. At the end of each week, an analyzer weights each copy by how likely that week's reported cases are under it (the `reported()` likelihood above), and then draws the copies again in proportion to their weights, so that those that have drifted from the data are dropped. The mean weight, multiplied over the weeks, estimates the likelihood of the data:
 
 ```{python}
 class Filter(ss.Analyzer):
@@ -279,11 +277,9 @@ With 2,000 particles, ten such filters give −5,819 ± 14, against −5,827 ± 
 | | What you write | What Starsim still does | What is given up |
 |---|---|---|---|
 | Declared, with a little code | Functions of the sim; a connector for a value that changes each step | `describe()`, results, solvers that can take the code, outcomes and likelihoods | Speed (a step at a time), and the built-in particle filter for code that draws random numbers |
-| A likelihood of your own | `fn(observed, model)` | Fitting, including the particle filter for declared models | Gradients of NUTS in JAX, which falls back to Python |
 | Written as code | A module with `step()` | Time, seeds, parallel runs, results you record | Everything about the model's structure: `describe()`, other solvers, `sim.fit()` |
-| Compiled | `@ss.jit` on a function | The same | Some of Python: the function must be one Numba can compile |
 
-Start declared, and move down the table only for the part that needs it. Here, the declared model with a connector and two functions said almost everything, and only fitting with the noise needed the model as code.
+Either can be fitted with a likelihood of your own (`fn(observed, model)`), which gives up only gradients in JAX; and a coded model's loops can be compiled with `@ss.jit`, which gives up only the parts of Python that Numba can't compile. Start declared, and write as code only the part that needs it. Here, the declared model with a connector and two functions said almost everything, and only fitting with the noise needed the model as code.
 
 ## Going further
 

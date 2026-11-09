@@ -21,7 +21,7 @@ authorship:
 | `'pmcmc'` | Posterior | Stochastic compartmental | Yes | You need a posterior of a stochastic model, with its process noise counted | The model runs as agents, or is deterministic (use `'nuts'`) |
 | `'abc-smc'` | Approximate posterior | Any, including agents | No | You need a posterior but have no likelihood, or the model runs as agents | A likelihood-based posterior is possible, which is usually sharper |
 
-A "stochastic compartmental" model has `solver='binomial'`, `'gillespie'`, or `'tau'`, and is one that the kernels run from start to finish, which `sim.kernel_only()` checks. If it doesn't, `'if2'` and `'pmcmc'` raise an error that gives the reason.
+A "stochastic compartmental" model has `solver='binomial'`, `'gillespie'`, or `'tau'`, and is one that the kernels run from start to finish, as `sim.describe()` says. If it doesn't, `'if2'` and `'pmcmc'` raise an error that gives the reason.
 
 Two more methods of `scipy.optimize.minimize` can also be named: `'powell'` (no gradients) and `'slsqp'` (gradients, when the sim has them). A list runs methods in turn: see [below](#several-methods-in-turn). Every method, with the kinds of model it suits and its cost, is listed in the [appendix](#appendix-every-fitting-method).
 
@@ -229,7 +229,7 @@ The polish ends at the values that Nelder–Mead found on its own, above.
 
 ## Appendix: every fitting method
 
-Every method that `sim.fit(method=...)` takes, what it gives, which kinds of model it suits, and what it costs. "ODE with JAX" is a deterministic model whose whole run JAX can compile (see [Gradients](calibration_gradients.qmd)); "stochastic compartmental" is one run by the kernels from start to finish (`sim.kernel_only()`); "agents" is `solver='abm'`, or a stochastic compartmental model with Python in its loop. The costs are rough, in runs of the model, with the default settings and two or three parameters.
+Every method that `sim.fit(method=...)` takes, what it gives, which kinds of model it suits, and what it costs. "ODE with JAX" is a deterministic model whose whole run JAX can compile (see [Gradients](calibration_gradients.qmd)); "stochastic compartmental" is one run by the kernels from start to finish (see `sim.describe()`); "agents" is `solver='abm'`, or a stochastic compartmental model with Python in its loop. The costs are rough, in runs of the model, with the default settings and two or three parameters.
 
 | Method | Gives | ODE with JAX | ODE without JAX | Stochastic compartmental | Agents | Needs | Rough cost, in runs | Choose it when |
 |---|---|---|---|---|---|---|---|---|

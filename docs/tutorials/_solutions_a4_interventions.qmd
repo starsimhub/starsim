@@ -75,7 +75,7 @@ for label in ['Screening 15-29', 'Screening 15-49']:
     print(label, '- tests:', tests, '- infections prevented:', prevented, '- per 100 tests:', round(100*prevented/tests, 1))
 ```
 
-Screening everyone aged 15 to 49 takes a little over twice as many tests, and prevents about twice as many infections, so it prevents about as many per test. In this model, partnerships don't depend on age beyond sexual debut, so people over 30 are as much at risk as younger people; in a real setting, where infection is concentrated in young people, the answer could well be the reverse. Since each run is a single stochastic run, the infections prevented are uncertain; with several runs of each (`n_runs=`), the comparison per test would be clearer.
+Screening everyone aged 15 to 49 takes a little over twice as many tests and prevents about twice as many infections, so about as many per test. Here partnerships don't depend on age beyond debut, so people over 30 are as much at risk; where infection is concentrated in the young, the answer could be the reverse. Each is a single stochastic run; with several (`n_runs=`), the comparison would be clearer.
 
 ### Question 3
 

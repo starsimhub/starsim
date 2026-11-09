@@ -167,7 +167,7 @@ def test_crossing():
     sc.heading('Testing diseases tracked jointly: a whole run, many runs, in JAX, restarted, differentiated, filtered, and fitted')
     sim = make_coinfection()
     sim.init()
-    assert sim.kernel_only() # Modifiers on states, and a transfer at a constant rate, are worked out before the run
+    assert sim._kernel_reason() is None # Modifiers on states, and a transfer at a constant rate, are worked out before the run
     sim.run()
     stepped = make_coinfection().run(until=2030) # Step by step
     jax = run_jax(make_coinfection())
