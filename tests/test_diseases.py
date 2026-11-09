@@ -412,6 +412,11 @@ def test_current_state():
     sub = sir.current_state(['R', sir.I]) # Some of them, by name or as states
     assert sub.labels == ['R', 'I'] and sub[ss.uids([0, 2, 3])].tolist() == [1, 0, -1]
     assert sir.current_state(['R', sir.I], uids=ss.uids([3, 2, 0])).tolist() == [-1, 0, 1] # Some agents only, in the order given
+    assert ss.move(sir.S >> sir.I, sir.R >> sir.I, uids=ss.uids([2, 3, 5])) == 3 # Several moves at once, each from its own source
+    assert sir.current_state(uids=ss.uids([2, 3, 5])).tolist() == [1, 1, 1]
+    ss.move([sir.I >> sir.R], uids=ss.uids([2])); ss.move(sir.I >> sir.S, uids=ss.uids([3, 5])) # Back as they were (a list of moves too)
+    with pytest.raises(ValueError, match='separate calls'):
+        ss.move(sir.S >> sir.I, sir.I >> sir.R, uids=ss.uids([0]))
     with pytest.raises(ValueError): # Read-only
         cs.raw[0] = 2
     with pytest.raises(KeyError, match='"sir" has no state X'):
