@@ -650,6 +650,9 @@ def test_birth_death_hooks():
         def on_birth(self, parents, children):
             assert len(parents) == len(children)
             self.births += len(children)
+            preg = self.sim.demographics.get('pregnancy')
+            if preg is not None: # In the step of the delivery: the mothers delivered in it
+                assert np.isin(parents, (preg.ti_delivered == self.sim.ti).uids).all()
         def on_death(self, uids):
             self.deaths += len(uids)
         def step(self):
