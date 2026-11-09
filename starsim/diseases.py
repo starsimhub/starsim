@@ -1139,6 +1139,32 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
             raise TypeError(errormsg)
         return self.transmit()
 
+    def count(self, who=None, by=None):
+        """
+        The number of people now in a state of this disease (or for whom a condition holds), under every solver: as agents,
+        each counted by their weight and the sim's scale, as its results count them
+
+        Args:
+            who (State/Cond/str/list): the state (as code sees it, `sir.I`, or by name, `'I'`), several (a list, counted together), or a condition (e.g. `sir.I & (ss.person.age < 15)`); default: all of its people
+            by (str/bool): instead, the number in each level of a dimension the sim is stratified by (its name, e.g. `'age'`), or in each group (`True`), as an array
+
+        Examples:
+            ```python
+            sir.count('I') # The number infectious
+            sir.count([sir.I, sir.R], by='age') # The number infectious or recovered in each age group
+            ```
+        """
+        if self.engine is None:
+            raise RuntimeError(f'"{self.name}" counts its people once the sim is initialized (sim.init())')
+        if isinstance(who, (list, tuple)):
+            parts = [self[x] if isinstance(x, str) else x for x in who]
+            who = parts[0]
+            for part in parts[1:]:
+                who = who | part
+        elif isinstance(who, str):
+            who = self[who]
+        return ss.conditions.count_now(self.sim, who, self, by=by)
+
     def current_state(self, states=None, uids=None):
         """
         The state each agent is in, as a read-only `ss.IntArr` (by UID) of its index among `states`, or -1 for none
