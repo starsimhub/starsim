@@ -1137,7 +1137,7 @@ class Moving:
                 ti_exit = mod[f'ti_exit_{name}'].raw[sel]
                 new_exit = np.empty(len(sel))
                 ok = ~stalled
-                new_exit[ok] = ti + np.maximum(ti_exit[ok] - 0.5 - ti, 0)*before[ok]/now[ok] # A scheduled exit is a whole step, so what is left is taken from the middle of it
+                new_exit[ok] = ti - 1 + (np.maximum(ti_exit[ok], ti) - ti + 0.5)*before[ok]/now[ok] # A scheduled exit is a whole step, so what is left is taken from the middle of it; this step is still to come, at the new speed, so an exit due now has half a step left
                 if stalled.any(): # Now that their rate is not 0, a dwell is drawn from now
                     new_exit[stalled] = ti + self.whole_steps(sel[stalled], self.sample_dwell(candidates[i], sel[stalled]))
                 lost = ok & np.isinf(ti_exit) # Never (a rate of 0, which has changed), so the dwell time is gone: drawn again from now, less what has passed of it since entering (as if it had stalled)

@@ -281,6 +281,16 @@ def test_member():
     return
 
 
+def test_stop_due():
+    sc.heading('A modifier that stops an exit stops those due in the step it starts, as the ODE does')
+    S, I, R = ss.states('S I R')
+    for solver,kw in [('abm', dict(n_agents=2000)), ('ode', dict(total_pop=2000))]:
+        d = ss.Disease(S, I, R, infection=S >> I @ 0*I, recovery=I >> R @ ss.days(10), init_prev=0.9, name='a')
+        stopped = ss.Sim(diseases=d, connectors=ss.modify(d.recovery, multiply=0, start=5), unit='day', stop=10, solver=solver, verbose=0, **kw).run().results.a.I
+        assert stopped[4] > stopped[5] and np.all(stopped[5:] == stopped[5]), f'{solver}: {stopped}' # None leave from the step it starts
+    return
+
+
 def test_coded():
     sc.heading('ss.modify() reaches the parameters of any module written as code, which are back to their base values after the run')
     class Wealth(ss.Module):
