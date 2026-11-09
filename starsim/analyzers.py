@@ -35,7 +35,12 @@ class Analyzer(ss.Module):
                 infected, female = self.sim.diseases.sis.I, self.sim.people.female
                 self.results.infected[self.ti] = [np.count_nonzero(infected & female), np.count_nonzero(infected & ~female)]
         ```
+
+    An analyzer that reads who infected whom sets `needs_infection_log = True`: each disease then keeps its
+    infection log (`disease.infection_log`, see `ss.infection_log`), as with an `ss.infection_log` in the sim.
     """
+    needs_infection_log = False # Whether the diseases keep their infection logs for it (see ss.diseases.InfectionLog)
+
     def step(self):
         """ Nothing by default: an analyzer usually only records results (see `record_stocks()` and `record_flows()`) """
         pass
@@ -74,6 +79,8 @@ class infection_log(Analyzer):
         sim.analyzers[0].plot()
         ```
     """
+    needs_infection_log = True
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.logs = sc.obj()

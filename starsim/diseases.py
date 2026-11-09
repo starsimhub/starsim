@@ -163,7 +163,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
     """
     graph = None # Its declared states and transitions (`ss.graph.Graph`); None for a disease written as code
     engine = None # Runs the declared part (see ss.solvers.make_engine()); created when the sim is initialized
-    infection_log = None # An InfectionLog, if the sim has an ss.infection_log analyzer
+    infection_log = None # An InfectionLog, if an analyzer needs it (e.g. ss.infection_log; see ss.Analyzer)
     suggested_solver = None # How a declared module's class suggests it runs as agents, e.g. ss.solvers.abm(step='wholestep') (or the step, 'wholestep'): followed unless the sim's solver names a step, or the module has its own solver= (see ss.solvers.agent_solver())
     code_pars = () # Parameters of a declared module that its own code reads rather than its graph (e.g. ss.Pregnancy's fertility rates)
 
@@ -780,7 +780,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
 
     @ss.required()
     def init_pre(self, sim):
-        """ Link the disease to the sim, create its engine and objects, initialize results, and start its infection log if there is an `ss.infection_log` analyzer; see Module.init_pre() for details
+        """ Link the disease to the sim, create its engine and objects, initialize results, and start its infection log if an analyzer needs it (e.g. `ss.infection_log`); see Module.init_pre() for details
 
         Args:
             sim (Sim): the sim being initialized
@@ -802,7 +802,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         for name in self.remembered + list(self.remembered_events):
             self.define_states(ss.FloatArr(f'last_{name}', label=f'Time index of the last {name}'), ss.FloatArr(f'count_{name}', default=0, label=f'Number of times: {name}'))
         super().init_pre(sim)
-        if any(isinstance(a, ss.infection_log) for a in sim.analyzers.values()):
+        if any(getattr(a, 'needs_infection_log', False) for a in sim.analyzers.values()): # e.g. ss.infection_log
             self.infection_log = InfectionLog(disease=self.name, networks=sim.networks.keys(), timeline=self.t)
         self.engine.init_pre()
         return

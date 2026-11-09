@@ -48,6 +48,13 @@ def test_shared_log():
     assert sim.analyzers.steps.n == np.bincount(np.searchsorted(sim.t.yearvec, df.t), minlength=sim.t.npts).tolist() # Each step's entries, as they were logged
     assert sim.analyzers.steps.n[1:] == sim.results.d.infection.values[1:].tolist() # After the seeds, the step's infections
     assert set(df.strain) == {'A', 'B'}
+
+    # An analyzer of its own can ask for the log, with no ss.infection_log in the sim
+    class sources(steps):
+        needs_infection_log = True
+    alone = ss.Sim(dis, n_agents=500, dur=ss.years(5), networks='random', analyzers=sources(), verbose=0).run()
+    assert alone.analyzers.sources.n == sim.analyzers.steps.n
+    assert ss.Sim(dis, n_agents=500, dur=ss.years(5), networks='random', verbose=0).run().diseases.d.infection_log is None # Not kept unless asked for
     return sim
 
 
