@@ -260,6 +260,18 @@ def test_member():
     never = ss.Sim(ss.Disease(S, I, R, infection=S >> I @ ss.perday(0.15)*I, recovery=I >> R @ ss.days(8), init_prev=0.01, name='d'), solver='ode', total_pop=500, unit='day', stop=40, verbose=0).run()
     assert np.allclose(ss.Sim(d, solver='ode', total_pop=500, unit='day', stop=40, verbose=0).run().results.d.I, never.results.d.I)
 
+    # A member whose target is in another module, by its path: the same as given to the sim
+    S, I, R = ss.states('S I R')
+    a = lambda: ss.Disease(S, I, R, infection=S >> I @ 0*I, recovery=I >> R @ ss.days(5), init_prev=0.2, name='a')
+    U, V = ss.states('U V')
+    b = lambda **kw: ss.Disease(U, V, infection=U >> V @ ss.perday(0.1), init_prev=0.5, name='b', **kw)
+    kw2 = dict(n_agents=500, unit='day', stop=10, verbose=0)
+    member = ss.Sim(diseases=[a(), b(slower=ss.modify('a.recovery', multiply=0.25, who=V))], **kw2).run()
+    assert list(member.connectors.keys()) == ['b_slower']
+    given = ss.Sim(diseases=[a(), b()], connectors=ss.modify('a.recovery', multiply=0.25, who='b.V'), **kw2).run()
+    assert np.array_equal(member.results.a.R, given.results.a.R)
+    assert member.results.a.R[-1] < ss.Sim(diseases=[a(), b()], **kw2).run().results.a.R[-1] # It slows a's recovery
+
     with pytest.raises(sc.KeyNotFoundError, match='does not belong to a module'): # Not a member, it has no module
         ss.Sim(diseases='sis', networks='random', connectors=ss.modify('rel_trans', multiply=0.5), n_agents=100, verbose=0).init()
     with pytest.raises(ss.CapabilityError, match='declared disease'):

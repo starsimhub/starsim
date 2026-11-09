@@ -443,7 +443,8 @@ class modify(Connector):
             module (Module): the module
             name (str): the name of the modifier in it
         """
-        self.target_module = module
+        if self.target_module is None: # A quantity of its own; a target in another module (e.g. 'hiv.latency') stays there
+            self.target_module = module
         self.target_name = getattr(self.target_name, 'name', self.target_name)
         self.where = None if self.where is None else ss.conditions.as_cond(self.where)
         self.name = self.label = name
