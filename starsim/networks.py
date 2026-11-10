@@ -2009,7 +2009,7 @@ class MixingPools(Route):
     Args:
         source (dict): the infectious groups, by name: each a condition over people (e.g. `ss.person.age < 15`), UIDs, or a function of the sim
         target (dict): the susceptible groups; as above
-        n_contacts (array): `n_contacts[i,j]`, the number of contacts that one person in target group `i` has with people in source group `j` (rows are the people who have the contacts, as in a contact survey and `ss.contacts()`): a number is the same for everyone in the group, and a `ss.Dist` is drawn once for each person in the group, which is much slower (a state for each pair of groups, and a draw for each pair for each new person)
+        n_contacts (array/`ss.Dist`): `n_contacts[i,j]`, the number of contacts that one person in target group `i` has with people in source group `j` (rows are the people who have the contacts, as in a contact survey and `ss.contacts()`). A matrix of numbers is the same for everyone in each group. One distribution whose parameters are matrices (e.g. `ss.poisson(M)`, or `ss.nbinom(mean=M, n=2)` for more spread) is drawn for each person when they enter a target group, and kept while they are in it. A matrix of distributions (one for each entry) is also drawn for each person, but is slower (a mixing pool for each pair of groups)
         pars (dict): the same parameters, as a dict
 
     Examples:
@@ -2022,7 +2022,16 @@ class MixingPools(Route):
         )
         sim = ss.Sim(diseases='sis', networks=mps).run()
         sim.plot()
+
+        # Contacts that differ between people: a Poisson draw for each person, with the matrix as its mean
+        mps = ss.networks.MixingPools(source=mps.pars.source, target=mps.pars.target, n_contacts=ss.poisson([[2.4, 0.91], [0.49, 0.16]]))
         ```
+
+    Transmission to a susceptible person `s` is `1 − (1 − p)^(rel_sus_s · Σ_j c_sj · trans_j)`, for the disease's chance `p` over the step, `s`'s contacts `c_sj`
+    with source group `j`, and that group's mean infectiousness `trans_j`. This is exact for a force of infection proportional to the contacts and the
+    mean infectiousness. For discrete contacts with random members of a group, it is a mean-field approximation: it uses the group's mean
+    infectiousness rather than that of the people met, which slightly overstates infection (by a relative `p(1 − f)/2` when a share `f` of the
+    group is infectious). It is exact when everyone in the group is equally infectious, and close when `p` is small.
     """
     def __init__(self, pars=None, source=_, target=_, n_contacts=_, **kwargs):
         ss.v3_deprecations.check(type(self), '__init__', list(kwargs) + list(pars or {}))
@@ -2034,7 +2043,14 @@ class MixingPools(Route):
         )
         self.update_pars(pars, **kwargs)
         self.validate_pars()
-        self.pools = [] # A pool for each pair of groups, only if contacts differ between people: see plain_contacts()
+        self.contact_dist = None # With one distribution for the contacts: a copy, drawn one source group at a time (see draw_contacts())
+        if isinstance(self.pars.n_contacts, ss.Dist) and not isinstance(self.pars.n_contacts, ss.constant):
+            self.contact_dist = sc.dcp(self.pars.n_contacts)
+            self.define_states(
+                ss.IntArr('contact_group', default=-1, label='Target group the contacts were drawn for'),
+                *[ss.FloatArr(f'contacts_{j}', default=0.0, label=f'Contacts with source group {j}') for j in range(len(self.pars.source))],
+            )
+        self.pools = [] # A pool for each pair of groups, only if contacts differ between people and are a matrix of distributions: see plain_contacts()
         self.matrix = None # Otherwise, the number of contacts between groups, [target, source]
         self.source_uids = None # With a matrix: the people in each source group and each destination group, from step()
         self.target_uids = None
@@ -2077,9 +2093,16 @@ class MixingPools(Route):
         p.target = sc.obj(p.target)
         if p.n_contacts is None:
             p.n_contacts = np.ones((len(p.target), len(p.source)))
+        expected = (len(p.target), len(p.source))
+        if isinstance(p.n_contacts, ss.Dist): # One distribution: its parameters are numbers or matrices
+            try:
+                np.broadcast_shapes(expected, *[np.shape(v) for v in p.n_contacts.pars.values() if sc.isarray(v)])
+            except ValueError as e:
+                errormsg = f'The parameters of the distribution of contacts ({p.n_contacts}) are a number, or a matrix with a row for each target group (who has the contacts) and a column for each source group, so shape {expected}'
+                raise ValueError(errormsg) from e
+            return
         p.n_contacts = np.array(p.n_contacts)
         actual = p.n_contacts.shape
-        expected = (len(p.target), len(p.source))
         if actual != expected:
             errormsg = f'The mixing matrix has a row for each target group (who has the contacts) and a column for each source group, so shape {expected}, not {actual}.'
             raise ValueError(errormsg)
@@ -2103,6 +2126,8 @@ class MixingPools(Route):
     def plain_contacts(self):
         """ The contacts as an array of numbers, if each is the same for everyone in its group; else None """
         p = self.pars
+        if isinstance(p.n_contacts, ss.Dist):
+            return np.broadcast_to(p.n_contacts.pars.value, (len(p.target), len(p.source))).astype(float) if isinstance(p.n_contacts, ss.constant) else None
         values = [n.pars.value if isinstance(n, ss.constant) else n for n in p.n_contacts.flat]
         if all(sc.isnumber(v) for v in values):
             return np.array(values, dtype=float).reshape(p.n_contacts.shape)
@@ -2122,7 +2147,7 @@ class MixingPools(Route):
         if self.edges is not None or self.dims is not None or self.full is not None or self.name in sim.mixing.pool_terms: # Used from the counts in each group or band, not with a pool for each pair: see ss.solvers.Mixing.init_pools()
             return
         self.matrix = self.plain_contacts()
-        if self.matrix is not None: # Everyone in a group has the same contacts, so one pass over the groups does the work of a pool for each pair
+        if self.matrix is not None or self.contact_dist is not None: # Everyone in a group has the same contacts, or one distribution: one pass over the groups does the work of a pool for each pair
             return
         for i,dk,target in p.target.enumitems():
             for j,sk,source in p.source.enumitems():
@@ -2132,6 +2157,24 @@ class MixingPools(Route):
                 mp.init_pre(sim)
                 self.pools.append(mp)
         return
+
+    def agent_reasons(self, sim):
+        """ A number of contacts that differs between people is approximated by its mean in a compartmental run """
+        nc = self.pars.n_contacts
+        dists = [nc] if isinstance(nc, ss.Dist) else [n for n in nc.flat if isinstance(n, ss.Dist)]
+        if any(not isinstance(d, ss.constant) for d in dists):
+            return [ss.modules.Preference(f'the mixing pools "{self.name}" have numbers of contacts that differ between people')]
+        return []
+
+    def mean_matrix(self, unit):
+        """ The mean number of contacts, [target, source], per unit of the sim's time (`unit`), as a compartmental run uses them """
+        nc = self.pars.n_contacts
+        if isinstance(nc, ss.Dist): # One distribution of matrices, as a matrix of distributions, one for each entry
+            shape = (len(self.pars.target), len(self.pars.source))
+            pars = {k:np.broadcast_to(v, shape) if sc.isarray(v) else v for k,v in nc.pars.items()}
+            options = dict(unit=nc.unit) if nc.unit is not None else {}
+            nc = [[type(nc)(**{k:v[i,j] if sc.isarray(v) else v for k,v in pars.items()}, **options) for j in range(shape[1])] for i in range(shape[0])]
+        return np.vectorize(lambda n: ss.solvers.Mixing.mean(n, unit), otypes=[float])(np.array(nc, dtype=object))
 
     def init_post(self):
         """ Initialize each mixing pool, and find the diseases that use them """
@@ -2165,10 +2208,13 @@ class MixingPools(Route):
         groups would give, from the infectiousness-weighted share of each source group (`weights`, one for each agent)
         """
         share = np.array([weights[uids].mean() if len(uids) else 0.0 for uids in self.source_uids])
+        auids = self.sim.people.auids
+        if self.contact_dist is not None: # Each person's own contacts with each source group
+            expo = sum(self.state_dict[f'contacts_{j}'].raw[auids]*s for j,s in enumerate(share))
+            return auids, expo
         expo = np.zeros(len(weights))
         for uids,value in zip(self.target_uids, self.matrix @ share): # A person in several target groups has the exposure of each
             expo[uids] += value
-        auids = self.sim.people.auids
         return auids, expo[auids]
 
     def exposure(self, weights):
@@ -2217,12 +2263,42 @@ class MixingPools(Route):
         return
 
     def step(self):
-        """ Update each mixing pool, or the people in each group """
-        for mp in self.pools:
-            mp.step()
-        if self.matrix is not None:
-            self.source_uids = [pool_uids(self.sim, group) for group in self.pars.source.values()]
-            self.target_uids = [pool_uids(self.sim, group) for group in self.pars.target.values()]
+        """ Find the people in each group, once per step, and give them to each mixing pool (rather than each pool finding its own) """
+        if not (self.pools or self.matrix is not None or self.contact_dist is not None): # From the counts in each group or band (ss.contacts()): see init_pre()
+            return
+        self.source_uids = [pool_uids(self.sim, group) for group in self.pars.source.values()]
+        self.target_uids = [pool_uids(self.sim, group) for group in self.pars.target.values()]
+        for k,mp in enumerate(self.pools): # Made target by target, then source by source: see init_pre()
+            i, j = divmod(k, len(self.source_uids))
+            mp.target_uids = self.target_uids[i]
+            mp.source_uids = self.source_uids[j]
+        if self.contact_dist is not None:
+            self.draw_contacts()
+        return
+
+    def draw_contacts(self):
+        """ With one distribution for the contacts: draw them for each person who has entered a target group since the last step, from its row of the matrix (none outside every target group) """
+        group = np.full(len(self.contact_group.raw), -1)
+        for i,uids in enumerate(self.target_uids):
+            if (group[uids] >= 0).any():
+                errormsg = f'Someone is in two target groups of "{self.name}", whose contacts are drawn from one distribution for each person, so the target groups cannot overlap'
+                raise ValueError(errormsg)
+            group[uids] = i
+        auids = self.sim.people.auids
+        moved = auids[group[auids] != self.contact_group.raw[auids]]
+        if not len(moved):
+            return
+        self.contact_group[moved] = group[moved]
+        into = moved[group[moved] >= 0]
+        rows = group[into]
+        shape = (len(self.pars.target), len(self.pars.source))
+        pars = {k:np.broadcast_to(v, shape) for k,v in self.pars.n_contacts.pars.items() if sc.isarray(v)} # The parameters that differ by entry
+        for j in range(shape[1]):
+            contacts = self.state_dict[f'contacts_{j}']
+            contacts[moved] = 0.0
+            if len(into):
+                self.contact_dist.set(**{k:v[rows, j] for k,v in pars.items()}) # A value for each person: their target group's entry
+                contacts[into] = self.contact_dist.rvs(into)
         return
 
     def shrink(self):

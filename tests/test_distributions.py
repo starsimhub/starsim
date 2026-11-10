@@ -693,6 +693,19 @@ def test_even_draws():
     return
 
 
+@sc.timer()
+def test_array_pars():
+    """ Every distribution takes arrays or lists as its parameters, including those given by their moments """
+    sc.heading('Testing distributions with array parameters')
+    dists = [ss.normal(mean=[3.5, 4.5], std=[0.9, 0.8]), ss.poisson([2, 5]), ss.gamma(mean=[1, 2], std=[1, 1]), ss.beta_dist(mean=[0.2, 0.5], std=[0.1, 0.1]),
+             ss.nbinom(mean=[1, 5], n=2), ss.lognormal(mean=[1, 2], std=[1, 1]), ss.uniform([0, 10], [1, 11]), ss.constant([1, 2])]
+    for dist in dists:
+        means = dist.mock().rvs((20_000, 2)).mean(axis=0)
+        expected = [[3.5, 4.5], [2, 5], [1, 2], [0.2, 0.5], [1, 5], [1, 2], [0.5, 10.5], [1, 2]][dists.index(dist)]
+        assert np.allclose(means, expected, rtol=0.05), f'{dist}: {means} vs {expected}'
+    return
+
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)

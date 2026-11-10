@@ -389,6 +389,7 @@ class beta_dist(Dist):
                 errormsg = f'ss.beta_dist() is given by a and b, or by mean and std, not by {sc.strjoin([k for k,v in dict(a=a, b=b, mean=mean, std=std).items() if v is not None])}'
                 raise ValueError(errormsg)
             given = dict(mean=mean, std=std)
+            mean, std = ss.dists.to_array(mean), ss.dists.to_array(std)
             a, b = self.shape_pars(mean, std**2, force=force)
         a = sc.ifelse(a, 1.0)
         b = sc.ifelse(b, 1.0)
@@ -401,20 +402,21 @@ class beta_dist(Dist):
     def shape_pars(mean, var, force=False):
         """ The shape parameters a and b of a beta distribution with this mean and variance """
         eps = 1e-6 # With force=True, clip to strictly inside the valid range, since the bounds themselves are invalid
-        if not (0 < mean < 1):
+        fmt = lambda x: f'{x:n}' if np.ndim(x) == 0 else str(x) # Each may be an array, e.g. ss.beta_dist(mean=[0.2, 0.5], std=[0.1, 0.1])
+        if not np.all((0 < mean) & (mean < 1)):
             if force:
-                ss.warn(f'Clipping the mean from {mean:n} to 0 < mean < 1.')
+                ss.warn(f'Clipping the mean from {fmt(mean)} to 0 < mean < 1.')
                 mean = np.clip(mean, eps, 1-eps)
             else:
-                errormsg = f'The mean of a beta distribution must be 0 < mean < 1, not {mean:n}'
+                errormsg = f'The mean of a beta distribution must be 0 < mean < 1, not {fmt(mean)}'
                 raise ValueError(errormsg)
         max_var = mean*(1-mean)
-        if not (0 < var < max_var):
+        if not np.all((0 < var) & (var < max_var)):
             if force:
-                ss.warn(f'Clipping the standard deviation from {np.sqrt(var):n} to 0 < std < {np.sqrt(max_var):n}.')
+                ss.warn(f'Clipping the standard deviation from {fmt(np.sqrt(var))} to 0 < std < {fmt(np.sqrt(max_var))}.')
                 var = np.clip(var, eps*max_var, (1-eps)*max_var)
             else:
-                errormsg = f'The standard deviation of a beta distribution must be 0 < std < sqrt(mean*(1-mean)). For your mean={mean:n}, std={np.sqrt(var):n} is invalid; the maximum is {np.sqrt(max_var):n}.'
+                errormsg = f'The standard deviation of a beta distribution must be 0 < std < sqrt(mean*(1-mean)). For your mean={fmt(mean)}, std={fmt(np.sqrt(var))} is invalid; the maximum is {fmt(np.sqrt(max_var))}.'
                 raise ValueError(errormsg)
         a = ((1 - mean)/var - 1/mean) * mean**2
         b = a * (1 / mean - 1)
@@ -616,8 +618,10 @@ class gamma(Dist):
                 errormsg = f'ss.gamma() is given by shape and scale, or by mean and std, not by {sc.strjoin([k for k,v in dict(shape=shape, scale=scale, mean=mean, std=std).items() if v is not None])}'
                 raise ValueError(errormsg)
             given = dict(mean=mean, std=std) | (dict(loc=loc) if loc else {})
+            mean, std = ss.dists.to_array(mean), ss.dists.to_array(std)
             span = mean - loc if loc else mean # The mean of the unshifted distribution, as SciPy's mean is loc + shape×scale
-            shape = float((span/std)**2) # A mean of shape×scale and a variance of shape×scale²
+            shape = (span/std)**2 # A mean of shape×scale and a variance of shape×scale²
+            shape = float(shape) if np.ndim(shape) == 0 else shape
             scale = span/shape
         shape = sc.ifelse(shape, 1.0)
         scale = sc.ifelse(scale, 1.0)

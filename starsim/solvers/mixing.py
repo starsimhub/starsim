@@ -348,8 +348,7 @@ class Mixing(Telling):
             raise ss.CapabilityError(f'cannot run "{net.name}" with solver="{self.solver}": only mixing pools between age groups (conditions on ss.person.age, e.g. ss.person.age < 15) have a compartmental form so far. Run with solver="abm".')
         bands, target_bands = np.array(bands, dtype=float), np.array(target_bands, dtype=float)
         net.to_unit(sim)
-        contacts = np.array(pars.n_contacts, dtype=object)
-        contacts = np.vectorize(lambda n: self.mean(n, sim.unit_base))(contacts).astype(float) # [target band, source band], as a contact survey
+        contacts = net.mean_matrix(sim.unit_base) # [target band, source band], as a contact survey
         d, matrix = self.regroup_ages(net, bands, target_bands, contacts)
         return sc.obj(kind='matrix', dim=d, matrix=matrix, name=net.name)
 
