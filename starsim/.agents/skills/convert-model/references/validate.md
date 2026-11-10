@@ -8,7 +8,7 @@ Run the original in its own framework and the port in Starsim, write both as the
 
 ## Workflow
 
-1. **Run the original** in the framework's own environment, never in Starsim's (don't install a framework without asking). The framework's guide, `references/<framework>.md`, says how, under "Running the original". For a stochastic model, save every run (e.g. 200), not only a summary, so the comparison can test distributions. The [worked examples](https://github.com/starsimhub/lingua_franca/tree/main/docs/models) have a `run.py` for each model that does this.
+1. **Run the original** in the framework's own environment, never in Starsim's (don't install a framework without asking). The framework's guide, `references/<framework>.md`, says how, under "Running the original". For a stochastic model, save every run (e.g. 200), not only a summary, so the comparison can test distributions. The [worked examples](https://starsim.org/lingua_franca/models/) have a `run.py` for each model that does this.
 2. **Write the original's results as a long CSV**: columns `time`, `series`, `value`, and `run` for replicates (or `low` and `high` for a summary, e.g. the 5% and 95% quantiles). One row per run, time, and series. Use the source's own series names.
 3. **Run the port** with the same population, duration, step, and number of runs:
    ```bash

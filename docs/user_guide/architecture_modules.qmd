@@ -77,20 +77,7 @@ A module goes through four stages: it is made, initialized with the sim, stepped
 
 After that, the loop is built, and the parameters are locked, so setting one that doesn't exist raises an error.
 
-**Stepped.** Each step, the loop calls the module's methods at its kind's place in the order:
-
-| Method | Called for | What it is for |
-|---|---|---|
-| `start_step()` | every module | moving the random number streams on to this step; a declared disease's engine prepares the step |
-| `record_stocks()` | every module, after the people | recording the state at the start of the step (the stocks) |
-| `step()` | custom modules, then demographics | what the module does; births add agents, and deaths are requested |
-| `step_state()` | diseases | state changes of a disease written as code, before the networks and interventions (a declared disease takes all its transitions in `step()`) |
-| `step()` | connectors, then networks, then interventions | changes to other modules, edges, deliveries |
-| `step()` | diseases | transmission, and every transition of a declared disease |
-| `on_death(uids)` | every module that defines it, through `people.step_die()` | what happens to the agents who die this step (they leave every state) |
-| `record_flows()` | every module, after the people | recording what happened in the step (the flows) |
-| `step()` | analyzers | reading the finished step |
-| `finish_step()` | every module, then the people | tidying up; dead agents are removed |
+**Stepped.** Each step, the loop calls the module's methods at its kind's place in the order: `start_step()` (moving the random number streams on), `record_stocks()` (the state at the start of the step), `step()` (and `step_state()` for a disease written as code), `on_death(uids)` for the agents who die this step (through `people.step_die()`), `record_flows()` (what happened in the step), and `finish_step()`. The full order, and what each kind does in it, is in [Steps and time points](architecture_steps.qmd#the-order-of-a-step).
 
 A method that is sure to do nothing in this sim (the base class's own `record_flows()` for a module with nothing to count, say) is left out of the plan, so it costs nothing. A step is taken from every time point, the first and the last included, and every step runs the same methods, except that the sim's `advance()` is not called before the first. A class that defines `update_results()`, which Starsim no longer calls, raises a `TypeError` when it is made, saying to split it into `record_stocks()` and `record_flows()`.
 
@@ -219,9 +206,9 @@ A compartmental run that is taken by the kernels in one call doesn't use the pla
 
 ## In the design record
 
-- [Objects and construction](https://github.com/starsimhub/lingua_franca/blob/main/docs/design/01-objects.md): `ss.Sim`, the lifecycle, and the module contract
-- [Execution](https://github.com/starsimhub/lingua_franca/blob/main/docs/design/10-execution.md): the loop, deferred removals, and per-module timesteps
-- [Backends](https://github.com/starsimhub/lingua_franca/blob/main/docs/design/12-backends.md): how a model is laid out for each solver, and what needs agents
+- [Objects and construction](https://starsim.org/lingua_franca/design/01-objects.html): `ss.Sim`, the lifecycle, and the module contract
+- [Execution](https://starsim.org/lingua_franca/design/10-execution.html): the loop, deferred removals, and per-module timesteps
+- [Backends](https://starsim.org/lingua_franca/design/12-backends.html): how a model is laid out for each solver, and what needs agents
 
 ## Further reading
 
