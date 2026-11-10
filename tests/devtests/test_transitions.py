@@ -818,7 +818,7 @@ def test_functions():
         sir = sim.diseases.sir
         if sim.ti == 10:
             assert ss.move(sir.I, sir.R, p=0.5) > 0 and ss.move([sir.S, sir.R], sir.I, n=7) == 7 # Exactly n, as whole people too
-            ss.move(ss.outside, sir.W, n=100) # A count can come from outside the model
+            ss.move(ss.dead, sir.W, n=100) # A count can come from outside the model
             assert ss.move(sir.I, ss.dead, p=0.2) > 0 and ss.move(ss.outside, sim.diseases.sis.I, n=20) == 20 # People die, and arrive, in every disease
             with pytest.raises(ValueError, match='ss.dead'):
                 ss.move(ss.dead, sir.I, n=1)

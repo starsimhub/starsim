@@ -505,7 +505,8 @@ class Transition(Nameable):
         min_stay (dur): a minimum stay: nobody leaves by this transition until they have been in its source state this long (a rate applies from then on, and a dwell time starts then)
         noise (float/par): process noise on the rate, as sigma of gamma white noise (Bretó et al. 2009; pomp's `rgammawn`): the chain binomial multiplies the rate, in each substep of length h,
             by a gamma draw with mean 1 and variance sigma²/h, for each group (and each particle of a filter). sigma is in the square root of the sim's unit (0.0878 in He et al.'s model, in years),
-            and can be fitted (`noise=ss.par(0.1, bounds=[0, 0.3])`). The ODE leaves it out (its mean); the other solvers refuse it
+            and can be fitted (`noise=ss.par(0.1, bounds=[0, 0.3])`). Tau-leaping draws it for each leap (h its length), and agents once a step for each group (h the step);
+            the ODE leaves it out (its mean), and the exact solver (`'gillespie'`) refuses it
         acquisition (bool): whether it is an acquisition of the disease, which `rel_sus`, a product's efficacy against acquisition, and `ss.treat` act on. If not given: a
             contact-mediated transition is, and so is any other transition out of the disease's first state if none out of it is contact-mediated (an infection by a bite rate or an EIR)
         per_strain (str): for an event of a disease with strains (`ss.Strains`) in a state they share, with an outcome for each strain
@@ -1071,10 +1072,6 @@ def move(*args, p=None, n=None, uids=None, who=None, **kwargs):
     outs = [end for end in ends if isinstance(end, Outside)]
     if len(ends) == 2 and len(outs) == 2:
         raise ValueError(f'ss.move() moves people into or out of a state, not from {outs[0]} to {outs[1]}')
-    if isinstance(ends[-1], Outside) and ends[-1].kind not in Outside.dests:
-        raise ValueError(f'ss.move() cannot move people to {ends[-1]}, which is where they come from: to remove them, move them to ss.dead (they die) or ss.outside (they leave)')
-    if len(ends) == 2 and isinstance(ends[0], Outside) and ends[0].kind not in Outside.sources:
-        raise ValueError(f'ss.move() cannot move people from {ends[0]}, which is where they go: to add them, move them from ss.unborn (they are born) or ss.outside (they arrive)')
     outside = outs[0].kind if outs else None # Where people come from or go to outside the model, if they do
     to = None if isinstance(ends[-1], Outside) else find(ends[-1])
     if len(ends) == 2:
@@ -1100,6 +1097,10 @@ def move(*args, p=None, n=None, uids=None, who=None, **kwargs):
     if people and len(people) < len(states):
         counts = [state.name for state in states if not state.people]
         raise ValueError(f'ss.move() would move between people ({sc.strjoin(people)}) and counts ({sc.strjoin(counts)}, declared with people=False) of "{mod.name}"')
+    if people and isinstance(ends[-1], Outside) and ends[-1].kind not in Outside.dests:
+        raise ValueError(f'ss.move() cannot move people to {ends[-1]}, which is where they come from: to remove them, move them to ss.dead (they die) or ss.outside (they leave)')
+    if people and len(ends) == 2 and isinstance(ends[0], Outside) and ends[0].kind not in Outside.sources:
+        raise ValueError(f'ss.move() cannot move people from {ends[0]}, which is where they go: to add them, move them from ss.unborn (they are born) or ss.outside (they arrive)')
     if not srcs and n is None:
         raise ValueError(f'ss.move() from outside the model adds a number: give n=')
     if not srcs and (where is not None or uids is not None):

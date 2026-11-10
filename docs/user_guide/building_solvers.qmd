@@ -16,7 +16,7 @@ Most of a model runs under every solver: as an ODE, as a stochastic compartmenta
 | Have deaths from a disease, or imported cases? | Any | `I >> ss.dead @ rate`, `ss.immigration(I, n=...)` ([Migration](populations_demographics.qmd#migration)) |
 | Use birth and death rates by country? | Any | `ss.birth(rate='Kenya')` ([Rates from data](populations_demographics.qmd#rates-from-data)) |
 | Link each child to its mother? | Agents only | `ss.Births`, `ss.Pregnancy` ([Pregnancy](populations_demographics.qmd#pregnancy)) |
-| Add or remove people from my own code? | None | Births, deaths, and migration are declared, so every disease has the same people [CK: this can't be true, surely I can manually adjust the size of compartments ... no?!] |
+| Add or remove people from my own code? | Any | `ss.move(sir.I, ss.dead, p=0.1)`, `ss.move(ss.outside, sir.I, n=20)`; they leave or join every disease |
 
 ## Groups
 
@@ -47,7 +47,7 @@ Most of a model runs under every solver: as an ODE, as a stochastic compartmenta
 | Change a parameter from my own code? | Any | `sir.pars.beta = 0.6` in `step()` |
 | Have one disease change another's rates? | Any | `ss.modify(sti.rel_sus, multiply=3, who=hiv.I)` ([Connectors](interventions_connectors.qmd)) |
 | Have rates change over time, or by season? | Any | `ss.timeseries()`, `ss.seasonal()` ([Parameters](building_parameters.qmd#values-that-change-over-time)) |
-| Have noise on a rate? | Any | In code, a modifier with a random draw each step: `ss.modify(sir.infection, multiply=lambda sim: rng.gamma(25, 0.04))`; declared `noise=` is drawn by the chain binomial only ([Measles in London](../gallery/measles_london.qmd#declared-with-noise)) |
+| Have noise on a rate? | Any | `ss.Transition(..., noise=0.1)`: the ODE uses its mean, and the exact (Gillespie) solver refuses it ([Measles in London](../gallery/measles_london.qmd#declared-with-noise)) |
 | Have rates depend on whether someone was ever infected? | Any | `.ever` ([What can be declared](building_declared.qmd#the-vocabulary-by-idea)) |
 | Have rates depend on how long ago, or how often? | Agents only | `.since`, `.n_times`; a count kept as a group (`increment=`) runs as any ([Moving between groups](building_stratification.qmd#moving-between-groups)) |
 

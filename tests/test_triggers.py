@@ -363,6 +363,31 @@ def test_code_every_solver():
     return
 
 
+def test_move_outside():
+    sc.heading('Code adds and removes people under every solver, and every disease has them')
+    class Churn(ss.Intervention):
+        def step(self):
+            a = self.sim.diseases.a
+            ss.move(a.I, ss.dead, p=0.02) # Some of those infectious with a die
+            ss.move(ss.outside, a.I, n=5) # Some arrive infectious
+            ss.move(ss.unborn, self.sim.diseases.b.S, n=3) # Some are born
+    out = {}
+    for solver in ['ode', 'binomial', 'abm']:
+        S, I, R = ss.states('S I R')
+        a = ss.Disease(S >> I @ ss.perday(0.3)*I.frac, I >> R @ ss.perday(0.1), init_n=dict(I=200), name='a')
+        S, I, R = ss.states('S I R')
+        b = ss.Disease(S >> I @ ss.perday(0.2)*I.frac, I >> R @ ss.perday(0.05), init_n=dict(I=200), name='b')
+        sim = ss.Sim(diseases=[a, b], interventions=Churn(), solver=solver, total_pop=20_000, n_agents=20_000, unit='day', stop=40, rand_seed=1, verbose=0).run()
+        r = sim.results
+        na, nb = r.a.S + r.a.I + r.a.R, r.b.S + r.b.I + r.b.R
+        assert np.allclose(na, nb), solver # The same people in both, though they are run apart
+        out[solver] = na[-1]
+    assert np.allclose(list(out.values()), out['ode'], rtol=0.02) and out['ode'] < 20_000, out
+    with pytest.raises(ValueError, match='ss.dead'):
+        ss.move(ss.dead, sim.diseases.a.S, n=1)
+    return
+
+
 if __name__ == '__main__':
     sc.options(interactive=False)
     test_lazy()
@@ -377,3 +402,4 @@ if __name__ == '__main__':
     test_paths_and_memory()
     test_move_arrow()
     test_code_every_solver()
+    test_move_outside()
