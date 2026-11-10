@@ -37,7 +37,7 @@ Most of a model runs under every solver: as an ODE, as a stochastic compartmenta
 | Move particular people? | Agents only | `ss.move(..., uids=uids)` |
 | Move between groups from my own code? | None | `ss.move()` takes states; use `ss.Event()` or `ss.transfer()` |
 | Move people on a date, or when cases pass a threshold? | Any | `ss.Event(S >> R, when=..., who=sir.I.n > 1000)` ([Events](interventions_interventions.qmd#events-moves-without-a-product)) |
-| Move a fraction of a person each step? | Compartments only | As agents, people move as whole agents, so `n=0.3` a step moves nobody |
+| Move a fraction of a person each step? | Any | As agents, `ss.move(..., n=0.3)` moves a whole agent now and then, 0.3 people a step on average |
 
 ## Rates
 
@@ -47,7 +47,7 @@ Most of a model runs under every solver: as an ODE, as a stochastic compartmenta
 | Change a parameter from my own code? | Any | `sir.pars.beta = 0.6` in `step()` |
 | Have one disease change another's rates? | Any | `ss.modify(sti.rel_sus, multiply=3, who=hiv.I)` ([Connectors](interventions_connectors.qmd)) |
 | Have rates change over time, or by season? | Any | `ss.timeseries()`, `ss.seasonal()` ([Parameters](building_parameters.qmd#values-that-change-over-time)) |
-| Have noise on a rate? | Compartments only | The chain binomial only, `noise=` ([Measles in London](../gallery/measles_london.qmd)) [CK: surely agents can do this too in code, c'mon!] |
+| Have noise on a rate? | Any | In code, a modifier with a random draw each step: `ss.modify(sir.infection, multiply=lambda sim: rng.gamma(25, 0.04))`; declared `noise=` is drawn by the chain binomial only ([Measles in London](../gallery/measles_london.qmd#declared-with-noise)) |
 | Have rates depend on whether someone was ever infected? | Any | `.ever` ([What can be declared](building_declared.qmd#the-vocabulary-by-idea)) |
 | Have rates depend on how long ago, or how often? | Agents only | `.since`, `.n_times`; a count kept as a group (`increment=`) runs as any ([Moving between groups](building_stratification.qmd#moving-between-groups)) |
 

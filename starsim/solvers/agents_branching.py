@@ -313,13 +313,14 @@ class Branching:
             if ref <= 0:
                 continue
             mult = self.route_mult(tr.name, route) # From the modifiers of its contacts and of the transmission on it
+            scale = ref if np.isfinite(ref) else 1/dt # A probability of 1 is an infinite rate (ss.probperweek(1)): a certain transmission, beside which the others have their own chance, from their hazard in the step
             weights = None
             for state,c in coefs.items():
-                share = (c/ref if np.isfinite(ref) else -np.expm1(-c*dt))*state.rel_trans # A probability of 1 is an infinite rate (ss.probperweek(1)): a certain transmission, beside which the others have their own chance
+                share = np.minimum(c/scale, np.finfo(float).max)*state.rel_trans # Each source state's hazard, relative to the scale: the beta below is that of the scale, and over a network every factor scales the hazard (see over_network())
                 w = mod[state.name].raw if np.ndim(share) == 0 and share == 1 else mod[state.name].raw*share # The usual case, one source state, needs no product
                 weights = w if weights is None else weights + w
             rel_trans = times(self.current_value('rel_trans', weights), by_strain) # By UID
-            beta = -np.expm1(-ref*dt)
+            beta = -np.expm1(-scale*dt)
             if isinstance(route, ss.Network):
                 for pair in self.over_network(i, route, rel_trans, route_sus.raw, [beta, beta], tr.name):
                     new_cases.append(pair[1])
@@ -382,8 +383,9 @@ class Branching:
         Who is infected by each transmission (and source state) in `pairs`, in one pass over each network rather than one for each,
         when that gives the same result: the transmissions take people from different states, which none of them transmits from, and have
         the same source states with coefficients in proportion (as tbsim's reinfections are, at a relative risk), with no strains and nothing
-        that differs by transmission on a route. Each edge's chance is then the transmission's, and its random number is the same in every
-        pass, so who is infected is as if each were worked out alone. None if they cannot be worked out together.
+        that differs by transmission on a route. Each edge's hazard is then the transmission's (its rate relative to the largest scales the
+        susceptibility, as every factor scales the hazard: see `over_network()`), and its random number is the same in every pass, so who is
+        infected is as if each were worked out alone. None if they cannot be worked out together.
         """
         mod = self.mod
         sim = self.sim
@@ -416,16 +418,17 @@ class Branching:
             for c,r in coefs[1:]: # In proportion to the first, so the infectious weigh the same in each
                 if (r > 0) != (ref > 0) or (ref > 0 and not all(abs(c[k]/r - first[k]/ref) <= 1e-12*abs(first[k]/ref) for k in c)):
                     return None
-            betas = [-np.expm1(-r*dt) for c,r in coefs]
-            top = max(betas)
+            rates = [r for c,r in coefs]
+            top = max(rates)
             if top <= 0:
                 continue
             weights = mod.rel_trans.raw*0
             for state in pairs[0][0].terms:
                 weights = weights + mod[state.name].raw*(first[state.name]/ref)*state.rel_trans
             rel_trans = self.current_value('rel_trans', weights)
-            route_sus = sum(s*(b/top) for s,b in zip(sus, betas)) # Each transmission's chance, as a share of the largest
-            for _, trgs, _ in self.over_network(0, route, rel_trans, route_sus, [top, top], None):
+            route_sus = sum(s*(r/top) for s,r in zip(sus, rates)) # Each transmission's rate, as a share of the largest
+            beta = -np.expm1(-top*dt)
+            for _, trgs, _ in self.over_network(0, route, rel_trans, route_sus, [beta, beta], None):
                 for i,(tr,src) in enumerate(pairs):
                     new[i].append(trgs[mod[src.name].raw[trgs]])
         self._pairs = []

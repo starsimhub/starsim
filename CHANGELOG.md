@@ -32,6 +32,7 @@ Starsim 4 adds a way to write a model as declared states and transitions, which 
 - *Regression*: a number in an `ss.MixingPools` matrix is the same for everyone in the group.
 - *Regression*: results have a `kind=` (flow, stock or ratio), which sets their scaling and summaries; one whose kind can't be told from its name warns.
 - *Regression*: `prevalence` comes from the infected states.
+- *Regression*: over a network, every factor of a contact's hazard is in the exponent (`rel_trans`, `rel_sus`, edge weight, modifiers), so a contact infects with chance 1 − (1 − p)^(factors) rather than p × factors; an ODE on a network gives each transmission its own saturation factor.
 - *Regression*: as agents, draws are keyed by stream, step and round, so runs don't depend on batching.
 - *Regression*: fixes to delays under the chain binomial, outcomes of fractional agents, and smooth time-varying values, among others.
 

@@ -177,8 +177,17 @@ class Cond:
 
     @property
     def frac(self):
-        """ For a set of states (`(E | I).frac`, the same as `(E + I).frac`), the share of the module's people in them """
-        return ss.expressions.Count(self.as_states('frac'), kind='frac')
+        """
+        For a set of states (`(E | I).frac`, the same as `(E + I).frac`), the share of the module's people in them: in a rate, as an
+        expression; in code, in a sim that has been initialized, the share now, under every solver (as `n`)
+        """
+        states = self.as_states('frac')
+        mod = find_module(self)
+        sim = getattr(mod, 'sim', None)
+        engine = getattr(mod, 'engine', None)
+        if sim is not None and sim.initialized and engine is not None:
+            return float(engine.frac([engine.graph.states[state.name] for state in states]))
+        return ss.expressions.Count(states, kind='frac')
 
     @property
     def total(self):

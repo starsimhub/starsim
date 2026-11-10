@@ -59,9 +59,10 @@ class Transmission(Effects):
 
     Where the two differ, the caller says how:
 
-    - **Hazard or probability.** `over_network()` takes the chance of an edge in the step. A declared disease gives 1 − exp(−β·dt) from its rate,
-      or, on a network with acts, works out a hazard per act (`Agents.transmit_acts()`); one written as code gives its beta as the probability in
-      the step, converting a rate the same way (`ss.Rate.to_prob()`).
+    - **Hazard or probability.** `over_network()` takes the chance of an edge in the step, and scales its hazard by every other factor (the edge's
+      weight and acts, `rel_trans`, `rel_sus`, and the modifiers). A declared disease gives 1 − exp(−β·dt) from its rate, or, on a network with acts,
+      works out a hazard per act (`Agents.transmit_acts()`); one written as code gives its beta as the probability in the step, converting a rate the
+      same way (`ss.Rate.to_prob()`).
     - **Order and attribution.** The routes are taken in the order of `sim.networks`, and on each, p1 to p2 and then p2 to p1; someone reached by
       several is infected by the first (`first_infections()`), which is the source in the infection log. With strains, every strain is passed on
       in one pass, and someone reached by several is infected by one of them drawn at random, whose strain they take (`pick_sources()`), and
@@ -83,9 +84,10 @@ class Transmission(Effects):
 
     def over_network(self, i, route, rel_trans, rel_sus, betas, name):
         """
-        Who is infected over a network in the step: an edge from `u` to `v` transmits with probability `rel_trans[u]·rel_sus[v]·net_beta(beta)`,
-        times the modifiers on the route for `v` (see `ss.Network.transmit()`). On a network with acts, these all scale the hazard of each act, as for
-        a declared disease (see `transmit_acts()`), not the chance over all the acts, so `net_beta()` is given the chance per act they leave
+        Who is infected over a network in the step: an edge from `u` to `v` transmits with probability 1 − exp(−H), where H is the hazard of
+        the network's chance `net_beta(beta)` (with the edge's weight, and acts if it has them), times `rel_trans[u]`, `rel_sus[v]`, and the
+        modifiers on the route for `v`: every factor scales the hazard, so a contact infects at most once in the step, wherever an effect is
+        put (see `ss.Network.transmit()`), as for a declared disease on a network with acts (see `transmit_acts()`)
 
         Args:
             i (int): the index of the route in `sim.networks`, recorded for who infected whom
@@ -100,8 +102,7 @@ class Transmission(Effects):
             A list of (sources, targets, i), for each direction that transmits
         """
         mult = self.route_mult(name, route)
-        acts = route.has_acts
-        def edge_beta(d, inds, src, trg): # For the edges that might transmit
+        def edge_hazard(d, inds, src, trg): # For the edges that might transmit
             beta = betas[d]
             if isinstance(beta, np.ndarray): # A probability per act for each direction of the network
                 beta = beta[route.edge_directions(src, trg)]
@@ -109,12 +110,13 @@ class Transmission(Effects):
                 return None
             if isinstance(beta, ss.Rate): # A disease written as code can give its beta as a rate
                 beta = beta.to_prob(self.mod.t.dt)
-            if acts:
-                with np.errstate(divide='ignore'): # A chance of 1 per act is an infinite hazard, and stays 1
-                    beta = -np.expm1(np.log1p(-np.minimum(beta, 1.0))*rel_trans[src]*rel_sus[trg]*mult(inds, trg))
-                return route.net_beta(disease_beta=beta, inds=inds, disease=self.mod)
-            return route.net_beta(disease_beta=beta, inds=inds, disease=self.mod)*mult(inds, trg)
-        return [(srcs, trgs, i) for srcs,trgs in route.transmit(rel_trans, rel_sus, edge_beta, self.mod.trans_rng, prob=True if acts else None)]
+            hazard = route.net_hazard(disease_beta=beta, inds=inds, disease=self.mod)
+            m = mult(inds, trg)
+            if np.ndim(m) == 0 and m == 1: # The usual case, no modifiers on the route
+                return hazard
+            with np.errstate(invalid='ignore'): # An infinite hazard times a modifier of 0 is none (NaN never transmits)
+                return hazard*m
+        return [(srcs, trgs, i) for srcs,trgs in route.transmit(rel_trans, rel_sus, edge_hazard, self.mod.trans_rng)]
 
     @staticmethod
     def first_infections(pairs):
@@ -203,9 +205,9 @@ class Transmission(Effects):
         """
         The transmission of a disease written as code along a single network (or other route): see `ss.Disease.transmit()`
 
-        On a network, each edge transmits with probability `rel_trans·rel_sus·net_beta()` (see `ss.Network.transmit()`), times the modifiers
-        of the network's contacts and of `rel_sus` on the route (`ss.modify(..., network=)`), as for a declared disease run as agents, by the same
-        code (`over_network()`), with beta as the probability in the step. The modifiers of `rel_trans` and `rel_sus` (including products) are
+        On a network, each edge transmits with probability 1 − (1 − `net_beta()`)^(`rel_trans·rel_sus`·modifiers), the modifiers being those
+        of the network's contacts and of `rel_sus` on the route (`ss.modify(..., network=)`) (see `ss.Network.transmit()`), as for a declared disease
+        run as agents, by the same code (`over_network()`), with beta as the probability in the step. The modifiers of `rel_trans` and `rel_sus` (including products) are
         applied here.
         """
         dis = self.mod
@@ -489,7 +491,10 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
             add(f'branch_{state.name}', ss.random())
             add(f'exit_{state.name}', ss.random())
         carriage = any(getattr(strat, 'carries', None) is not None for strat in self.sim.groups.strats)
-        self.competing = {state.name: list(hazards[state.name]) for state in graph.people_states} # The rates drawn each step
+        self.lifetables = {name:None for name,tr in graph.transitions.items() if getattr(tr, 'lifetable', None) is not None} # Who dies in each step by each life table: see step_lifetables()
+        for name in self.lifetables:
+            add(f'life_{name}', ss.random())
+        self.competing = {state.name: [tr for tr in hazards[state.name] if tr.name not in self.lifetables] for state in graph.people_states} # The rates drawn each step: a life table's deaths are drawn once for each person instead, see step_lifetables()
         for name,competing in self.competing.items():
             if competing:
                 add(f'entry_{name}', ss.random()) # The competing rates of the step people enter in: see finish_moves()
@@ -704,7 +709,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         return moved
 
     def move_some(self, srcs, dst, p=None, n=None, uids=None, where=None):
-        """ A one-off move from code (`ss.move()`): a share `p` of the agents in some states (or `n` people, as the nearest whole number of agents; or of `uids`, those given; or of those for whom `where` holds), chosen at random, to a state; or of a count, to and from outside the model too (`dst` or `srcs` empty); returns the number of people moved """
+        """ A one-off move from code (`ss.move()`): a share `p` of the agents in some states (or `n` people, as a whole number of agents, rounded at random; or of `uids`, those given; or of those for whom `where` holds), chosen at random, to a state; or of a count, to and from outside the model too (`dst` or `srcs` empty); returns the number of people moved """
         if not (srcs[0] if srcs else dst).people: # A count: an exact share, as its flows are
             have = sum(self.counts[state.name].sum() for state in srcs)
             if n is not None:
@@ -730,7 +735,8 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         if n is None:
             chosen = cands[draws < p]
         else:
-            k = min(int(round(n/self.scale)), len(cands))
+            x = n/self.scale # A number of agents, rounded at random so that a fraction of one moves on average what it stands for (e.g. 0.3 people a day)
+            k = min(int(x) + int(self.rng.random() < x - int(x)), len(cands))
             chosen = cands[np.sort(np.argsort(draws, kind='stable')[:k])]
         moved = self.move_states(chosen, srcs, dst)
         return len(moved)*self.scale

@@ -36,6 +36,7 @@ class Stepping:
         self.start_phase(0)
         self.place_newcomers()
         self.renew_events()
+        self.step_lifetables()
         quick = set() if self.unscheduled is None or self.late else {name for name in self.listed if name not in self.unscheduled and self.exits_of[name] and not self.competing[name] and not self.rescaled_of(name)} # States with only scheduled exits, all scheduled already: who leaves them is found in one pass over the agents, with no need to list who is in them (see leave())
         members = self.start_counts([name for name in self.listed if name not in quick])
         self.step_counts(dt) # States that are not people, from the people at the start of the step, so that a rate of people that uses a count (a bite rate) takes it once advanced
@@ -279,6 +280,64 @@ class Stepping:
             return 1.0
         stay = (self.ti - self.mod[f'ti_{state.name}'].raw[uids])*self.dt
         return (stay >= after - 1e-9).astype(float)
+
+    def step_lifetables(self):
+        """
+        Deaths from a life table (`ss.death(lifetable=)`): each person's age at death is drawn once from its death rate for each age band (see
+        `ss.lifetable.draw()`), the first step they are alive, which is the same as drawing those rates each step, but costs nothing in the
+        steps between; they die in the step it falls in
+
+        Each person is filed under the step they die in when it is drawn, so a step takes only those who die in it, rather than going over everyone.
+        """
+        if not self.lifetables:
+            return
+        mod = self.mod
+        people = self.sim.people
+        ti = self.ti
+        n = people.uid.len_used
+        alive = people.alive.raw
+        dt = self.mod.t.dt.to('year').value if isinstance(self.mod.t.dt, ss.TimePar) else self.dt
+        for name,table in self.lifetables.items():
+            tr = self.graph.transitions[name]
+            if table is None: # The agents drawn so far (by UID); most of those still to die, in order of the step they die in (and how many have been taken); those drawn since, in no order; those due who have not died yet; and those to draw again
+                adjusted = self.adjusted(name, people.auids)
+                if np.ndim(adjusted) or adjusted != 1.0:
+                    errormsg = (f'"{name}" of "{mod.name}" is deaths from a life table, which as agents are drawn once for each person, so they cannot be modified '
+                                f'or differ by stratum during a run; give the rates by age instead, e.g. ss.death(rate=ss.by(age=..., value=...)), or use ss.Deaths(lifetable=...)')
+                    raise ss.CapabilityError(errormsg)
+                empty, empty32 = np.zeros(0, dtype=np.int64), np.zeros(0, dtype=np.int32) # Kept as 32-bit integers, to save memory
+                table = self.lifetables[name] = Bunch(n=0, uids=empty32, steps=empty32, done=0, new_uids=empty32, new_steps=empty32, carry=empty, redraw=empty)
+            new = np.concatenate([table.redraw, np.arange(table.n, n)]) # Those with no age at death yet: made since the last step, or drawn as not a number
+            table.n = n
+            new = ss.uids(new[alive[new]])
+            table.redraw = new[:0]
+            if len(new):
+                age = np.asarray(people.age.raw[new], dtype=float)
+                times = ti + (tr.lifetable.draw(age, self.draw(f'life_{name}', new)) - age)/dt
+                drawn = ~np.isnan(times)
+                table.redraw = new[~drawn] # A time of death that is not a number is drawn again next step
+                table.new_uids = np.concatenate([table.new_uids, new[drawn].astype(np.int32)])
+                table.new_steps = np.concatenate([table.new_steps, np.floor(np.minimum(times[drawn], 2**31 - 1)).astype(np.int32)]) # The step their time of death falls in
+                if len(table.new_uids) > max(10_000, (len(table.uids) - table.done)//10): # Put in order with the rest from time to time
+                    uids = np.concatenate([table.uids[table.done:], table.new_uids])
+                    steps = np.concatenate([table.steps[table.done:], table.new_steps])
+                    order = np.argsort(steps, kind='stable')
+                    table.uids, table.steps, table.done = uids[order], steps[order], 0
+                    table.new_uids, table.new_steps = uids[:0], steps[:0]
+            end = np.searchsorted(table.steps, np.int32(ti), side='right') # Of its own type: otherwise NumPy copies the whole array to compare them
+            now = table.new_steps <= ti
+            due = np.sort(np.concatenate([table.carry, table.uids[table.done:end], table.new_uids[now]]))
+            table.done = end
+            if now.any():
+                table.new_uids, table.new_steps = table.new_uids[~now], table.new_steps[~now]
+            due = ss.uids(due[alive[due]]) # Those alive whose time of death falls in this step or before it
+            placed = np.zeros(len(due), dtype=bool)
+            for state in self.graph.people_states:
+                inside = mod[state.name].raw[due]
+                placed |= inside
+                self.move(tr, state, due[inside])
+            table.carry = due[~placed] # Anyone due who is in no state does not die by it yet, and is due again next step
+        return
 
     def uncount_deaths(self):
         """ Take out of this step's death flows anyone who died of something else, when another module requested their death in the same step too (see `People.request_death()`) """

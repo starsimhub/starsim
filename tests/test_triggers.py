@@ -344,6 +344,25 @@ def test_move_arrow():
     return
 
 
+def test_code_every_solver():
+    sc.heading('Code that counts people means the same under every solver: .frac, conditions in code, people.N, and a fraction of an agent moved')
+    S, I, R = ss.states('S I R')
+    out = {}
+    for solver in ['ode', 'abm']:
+        sir = ss.Disease(S >> I @ 0.0*I, I >> R @ ss.days(10), init_prev=0.2, name='sir')
+        sim = ss.Sim(sir, solver=solver, total_pop=100_000, n_agents=10_000, stratify=dict(age=[0, 15, 65]), unit='day', stop=ss.days(10), rand_seed=1, verbose=0).init()
+        sir, people = sim.diseases.sir, sim.people
+        out[solver] = [sir.I.frac, (sir.I | sir.R).frac, (sir.I & (ss.person.age < 15)).n, people.N]
+        moved = sum(ss.move(sir.S, sir.R, n=0.3) for _ in range(500)) # 0.03 agents each time as agents: rounded at random, not to 0
+        assert np.isclose(moved, 150, rtol=0.4), moved
+        if solver == 'ode':
+            with pytest.raises(ss.CapabilityError, match='people.N'):
+                people.alive.sum() # Counts agents, which a compartmental run has none of
+    assert np.allclose(out['ode'], out['abm'], rtol=0.15), out
+    assert out['ode'][-1] == 100_000
+    return
+
+
 if __name__ == '__main__':
     sc.options(interactive=False)
     test_lazy()
@@ -357,3 +376,4 @@ if __name__ == '__main__':
     test_hpv_cancel_event()
     test_paths_and_memory()
     test_move_arrow()
+    test_code_every_solver()
