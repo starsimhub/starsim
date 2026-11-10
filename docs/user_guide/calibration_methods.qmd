@@ -13,15 +13,15 @@ authorship:
 
 | Method | Gives | The model | Likelihood needed? | Use it when | Avoid it when |
 |---|---|---|---|---|---|
-| `'nelder-mead'` | Best fit | Any; default for an ODE with one or two parameters, or one with no gradients | No | Few parameters, or a model that can't be differentiated | There are many parameters, where it gets slow |
-| `'l-bfgs-b'` | Best fit | ODE with gradients; default for three or more parameters | No | Many parameters of a deterministic model | The model is stochastic |
+| `'nelder-mead'` | Best fit | Any; default for an ODE with one or two parameters, or one whose log-likelihood JAX doesn't cover (e.g. a likelihood given as a function) | No | Few parameters, or a model that can't be differentiated | There are many parameters, where it gets slow |
+| `'l-bfgs-b'` | Best fit | ODE; default for three or more parameters, with gradients from JAX, or by finite differences if JAX can't run the model | No | Many parameters of a deterministic model | The model is stochastic |
 | `'optuna'` | Best fit | Any; default for stochastic models and agents | No | Runs are noisy, or there is no better option | You need a posterior, or a precise optimum (follow it with `'nelder-mead'`) |
 | `'if2'` | Maximum-likelihood best fit | Stochastic compartmental | Yes | You want the maximum likelihood of a stochastic model, whose noise makes a local search unreliable | A parameter is not a rate of the model (e.g. a share reported), has several values (by group, or a time series), or you need a posterior |
-| `'nuts'` | Posterior | ODE with gradients | Yes | You need a posterior of a deterministic model; it's the most efficient sampler here | The model is stochastic or has no gradients, or the data have much more chance in them than the likelihood allows (see [below](#comparing-the-methods)) |
-| `'pmcmc'` | Posterior | Stochastic compartmental | Yes | You need a posterior of a stochastic model, with its process noise counted | The model runs as agents, or is deterministic (use `'nuts'`) |
-| `'abc-smc'` | Approximate posterior | Any, including agents | No | You need a posterior but have no likelihood, or the model runs as agents | A likelihood-based posterior is possible, which is usually sharper |
+| `'nuts'` | Posterior | ODE with gradients | Yes | You need a posterior of a deterministic model; it's the most efficient sampler here | The model is stochastic or has no gradients (use `'pmcmc'`), or the data have much more chance in them than the likelihood allows (see [below](#comparing-the-methods)) |
+| `'pmcmc'` | Posterior | Stochastic compartmental, or an ODE | Yes | You need a posterior of a stochastic model, with its process noise counted, or of an ODE that JAX can't run | The model runs as agents; for an ODE with gradients, `'nuts'` is more efficient |
+| `'abc-smc'` | Approximate posterior | Any stochastic model, including agents | No | You need a posterior but have no likelihood, or the model runs as agents | A likelihood-based posterior is possible, which is exact rather than approximate; the model is deterministic (an error) |
 
-A "stochastic compartmental" model has `solver='binomial'`, `'gillespie'`, or `'tau'`, and is one that the kernels run from start to finish, which `sim.kernel_only()` checks. If it doesn't, `'if2'` and `'pmcmc'` raise an error that gives the reason.
+A "stochastic compartmental" model has `solver='binomial'`, `'gillespie'`, or `'tau'`, and is one that the kernels run from start to finish, as `sim.describe()` says. If it doesn't, `'if2'` raises an error that gives the reason, as does `'pmcmc'` for a stochastic model.
 
 Two more methods of `scipy.optimize.minimize` can also be named: `'powell'` (no gradients) and `'slsqp'` (gradients, when the sim has them). A list runs methods in turn: see [below](#several-methods-in-turn). Every method, with the kinds of model it suits and its cost, is listed in the [appendix](#appendix-every-fitting-method).
 
@@ -68,7 +68,7 @@ def fit_by(method, sim, likelihood=None, **settings):
 
 ### SciPy: `'nelder-mead'`, `'l-bfgs-b'`, and others
 
-These search from the best few points of a scan over the bounds. The gradient-based methods take their gradients from JAX (see [Gradients](calibration_gradients.qmd)). The fit has converged if the two best searches end at the same value.
+These search from the best few points of a scan over the bounds. The gradient-based methods take their gradients from JAX (see [Gradients](calibration_gradients.qmd)), or, for an ODE that JAX can't run, by finite differences (two runs for each parameter, for each gradient). On a stochastic model, they minimize the mean score of several runs (`n_runs=`, 4 by default) with the same seeds at every point; with a likelihood, that is the mean of the runs' log-likelihoods, which is not the log-likelihood. The fit has converged if the two best searches end at the same value.
 
 | Setting | Default | Meaning |
 |---|---|---|
@@ -88,11 +88,13 @@ fit.pars
 
 ### Optuna: `'optuna'`
 
-[Optuna](https://optuna.org) learns where to look from the scores so far, which suits noisy scores: each trial takes fresh random seeds, so the search averages over chance.
+[Optuna](https://optuna.org) learns where to look from the scores so far, which suits noisy scores: each trial takes fresh random seeds, so the search averages over chance. For a stochastic compartmental model whose data series all have a likelihood, each trial is scored by a particle filter's estimate of the log-likelihood (as IF2 and particle MCMC use it), so the best fit is near the maximum likelihood. Otherwise (agents, a loss, a model the filter can't run, or with `n_runs=` given), each trial is scored by the mean of several runs' scores; with a likelihood, that is the mean of the runs' log-likelihoods, which is not the log-likelihood, and can favor different values. `fit.measure` says which was used.
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `n_trials` | 100 | The number of sets of values to try |
+| `n_trials` | 50 per parameter, at least 100 | The number of sets of values to try |
+| `particles` | 200 | The number of particles of the filter that scores each trial, where one does |
+| `n_runs` | 4 (1 for agents) | The number of runs that score each trial, where the filter doesn't; given, it is used instead of the filter |
 | `workers` | 1 | The number of processes running trials at once |
 | `storage` | None | A file or database URL that keeps the trials, so a fit that stopped can be resumed |
 | Others | Optuna's | The keywords of `study.optimize()`, e.g. `timeout=600` |
@@ -123,7 +125,7 @@ fit = fit_by('if2', stochastic, likelihood=likelihood, particles=200, iterations
 fit.summarize();
 ```
 
-`fit.table` gives the range of the chains' estimates. That shows how far the chains agree, and it is not a confidence interval; `ss.fit.profile()` gives one, and `'pmcmc'` gives a posterior. Every data series needs a likelihood, and each fitted parameter needs to be a single value of one of the model's rates.
+`fit.table` gives the range of the chains' estimates. That shows how far the chains agree, and it is not a confidence interval. For a stochastic sim, `'pmcmc'` gives a posterior; `ss.fit.profile()` gives a confidence interval only for a deterministic sim. Every data series needs a likelihood, and each fitted parameter needs to be a single value of one of the model's rates.
 
 This fit has not converged: three of its four chains end at almost the same values, near the truth, but one has wandered to a low β and a long infectious period, where the outbreak barely grows and the data are very unlikely. The best chain is still the one reported, but the message says to run longer, with more passes or more particles, before trusting it. `fit.trials` has the estimate and log-likelihood at each pass, which shows which chain has not settled:
 
@@ -153,16 +155,18 @@ fit.table
 
 ### Particle MCMC: `'pmcmc'`
 
-Particle MCMC takes a random walk over the parameters, with the likelihood at each point estimated by a particle filter, so it includes the model's process noise. Its draws are more correlated than those of NUTS, so it takes more of them. `summarize()` also prints the share of proposals each chain accepted (`fit.diagnostics.acceptance`); a share of about a quarter is typical of a well-tuned random walk.
+Particle MCMC takes a random walk over the parameters, with the likelihood at each point estimated by a particle filter, so it includes the model's process noise. Its draws are more correlated than those of NUTS, so it takes more of them. `summarize()` also prints the share of proposals each chain accepted (`fit.diagnostics.acceptance`); the sampler tunes the size of its steps so that about 15% are accepted, which suits the noisy likelihoods of a particle filter, so a share well below a quarter is expected. Each chain starts from a different one of the best points of a scan that are apart, so that R-hat can see chains that end in different places. Each draw keeps the run that the filter drew with it (`fit.trajectories`), which `fit.project()` continues (see [Projecting from a posterior](calibration_fitting.qmd#projecting-from-a-posterior)).
+
+For a deterministic model (an ODE, including one that JAX can't run), `'pmcmc'` is the same random walk on the exact likelihood, with no particles, tuned toward about 23% accepted: the posterior of an ODE without gradients.
 
 | Setting | Default | Meaning |
 |---|---|---|
 | `draws` | 1000 | The number of draws kept from each chain |
 | `warmup` | 1000 | The number of warm-up draws of each chain |
 | `chains` | 4 | The number of chains |
-| `particles` | Chosen in the warm-up | The number of particles |
+| `particles` | Chosen in the warm-up | The number of particles (none for an ODE) |
 | `parallel` | True | Whether to run the chains at the same time |
-| `scan` | 10 per parameter, at most 100 | The number of points tried for the start |
+| `scan` | 10 per parameter, at most 100 | The number of points tried for the chains' starts |
 
 ```{python}
 fit = fit_by('pmcmc', stochastic, likelihood=likelihood, draws=250, warmup=250, chains=2, particles=50)
@@ -171,11 +175,11 @@ fit.table
 
 ### ABC-SMC: `'abc-smc'`
 
-Approximate Bayesian computation keeps the parameter values whose runs come closest to the data, by the goodness of fit, over generations with a shrinking tolerance. It needs no likelihood and works for agents, but each generation takes many runs, and the result is only as sharp as the final tolerance.
+Approximate Bayesian computation keeps the parameter values whose runs come closest to the data, by the goodness of fit, over generations with a shrinking tolerance. It needs no likelihood and works for agents, but each generation takes many runs. Its result is an approximation, whose width depends on the final tolerance as well as on the data, so it can be wider or narrower than the posterior; more generations shrink the tolerance. No rule says when the tolerance is small enough, so its convergence is not assessed (`fit.converged` is None); `fit.why` and `fit.diagnostics` give the final tolerance, the share of the last generation's proposals accepted, and the number of generations. A deterministic model is an error, since every run at the same values is the same, so the width would be set by the number of generations alone; with a likelihood, use `'pmcmc'` or `'nuts'`. For a stochastic compartmental model, each draw keeps the run that was accepted with it (`fit.trajectories`).
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `particles` | 200 | The number of particles, which are the draws of the posterior |
+| `samples` | 200 | The number of particles, which are the draws of the posterior |
 | `generations` | 8 | The most generations to run |
 | `quantile` | 0.5 | The quantile of the distances that sets the next tolerance |
 | `tolerance` | None | The distance to stop at |
@@ -204,9 +208,23 @@ comparison = pd.DataFrame(rows).set_index('method')
 comparison.round(3).fillna('')
 ```
 
-The table shows what the choice of method changes. The methods that fit the ODE (the SciPy methods and NUTS) agree with each other, as they fit the same deterministic curve, but that curve is not the model that made the data: in the chain binomial, people move between states once a day, and every infection is a chance event. So the ODE's best fit is a little off (a lower β and a longer infectious period than the truth), and the NUTS posterior is narrow around it, because a Poisson likelihood on an ODE counts only the noise in the reporting, not the chance in transmission. Its 95% interval for β excludes the true value: it is overconfident. Particle MCMC runs the stochastic model itself, so its posterior includes the process noise, and its intervals contain the true values. ABC-SMC, with no likelihood, gives much wider intervals, as it is only as sharp as its last tolerance. Of the best fits of the stochastic model, IF2, which maximizes its likelihood, is near the truth, and Optuna, which minimizes the mismatch averaged over runs, ends near the ODE's values; neither says how uncertain it is.
+The table shows what the choice of method changes. The methods that fit the ODE (the SciPy methods and NUTS) agree with each other, as they fit the same deterministic curve, but that curve is not the model that made the data: in the chain binomial, people move between states once a day, and every infection is a chance event. So the ODE's best fit is a little off (a lower β and a longer infectious period than the truth), and the NUTS posterior is narrow around it, because a Poisson likelihood on an ODE counts only the noise in the reporting, not the chance in transmission. Its 95% interval for β excludes the true value: it is overconfident. Particle MCMC runs the stochastic model itself, so its posterior includes the process noise, and its intervals contain the true values. ABC-SMC, with no likelihood, approximates the posterior only as closely as its last tolerance allows, so the width of its intervals depends on the number of generations as well as on the data: fewer generations would make them wider, and more, usually narrower. Of the best fits of the stochastic model, IF2, which maximizes its likelihood, is near the truth, and Optuna, which here has no likelihood and minimizes the mismatch averaged over runs, ends further from it, with a lower β and a longer infectious period (given a likelihood, it would score each trial by the particle filter instead); neither says how uncertain it is.
 
 So, for data with much more chance in them than reporting noise (a small population, or an outbreak that started from a few cases), a posterior from an ODE understates the uncertainty. A likelihood that allows more variation (`ss.nbinom(n=...)`, with `n` fitted) widens it, and a stochastic model with `'pmcmc'` counts the chance directly, at a higher cost. The times are with this page's reduced settings, and include compiling with JAX for L-BFGS-B and NUTS (a few seconds, once per model); with the defaults, each posterior takes several times longer. The cost of each method is compared in the [appendix](#appendix-every-fitting-method).
+
+## What each method guarantees
+
+What each method's result is, and what it is not, if it has converged by its own rule. All of them are relative to the model and the likelihood: a posterior is only as right as they are (and weights other than 1 make a posterior too narrow or too wide; see [Fitting a model](calibration_fitting.qmd#the-data)).
+
+| Method | Its result is | It is not |
+|---|---|---|
+| SciPy optimizers, on an ODE | A best fit: the maximum likelihood estimate with a likelihood (the most probable values, with priors), or the lowest loss, if the searches found the global optimum | An interval; `ss.fit.profile()` gives a confidence interval |
+| SciPy optimizers, on a stochastic model | The lowest mean score of several runs, with the same seeds at every point | The maximum likelihood: the mean of the runs' log-likelihoods is not the log-likelihood |
+| `'optuna'` | With a likelihood, on a model the particle filter can run: a best fit by the filter's estimate of the likelihood, close to the maximum likelihood; otherwise, the best mean score of several runs | An interval: `spread_lower` and `spread_upper` show how flat the score is near the best |
+| `'if2'` | An estimate of the maximum likelihood of the stochastic model | An interval: the spread of its chains shows how far they agree |
+| `'nuts'` | Draws from the exact posterior of the ODE, given its likelihood and priors | A posterior that counts chance in transmission: an ODE's posterior allows only the noise in its likelihood |
+| `'pmcmc'` | Draws from the exact posterior of the stochastic model, since the filter's estimate of the likelihood is unbiased; for an ODE, of its exact likelihood | Quick: its draws are correlated, so it needs many |
+| `'abc-smc'` | An approximate posterior: draws whose runs came within the final tolerance of the data | The posterior: how close it is depends on the tolerance reached, and it is not assessed |
 
 ## Several methods in turn
 
@@ -229,19 +247,19 @@ The polish ends at the values that Nelder–Mead found on its own, above.
 
 ## Appendix: every fitting method
 
-Every method that `sim.fit(method=...)` takes, what it gives, which kinds of model it suits, and what it costs. "ODE with JAX" is a deterministic model whose whole run JAX can compile (see [Gradients](calibration_gradients.qmd)); "stochastic compartmental" is one run by the kernels from start to finish (`sim.kernel_only()`); "agents" is `solver='abm'`, or a stochastic compartmental model with Python in its loop. The costs are rough, in runs of the model, with the default settings and two or three parameters.
+Every method that `sim.fit(method=...)` takes, what it gives, which kinds of model it suits, and what it costs. "ODE with JAX" is a deterministic model whose whole run JAX can compile (see [Gradients](calibration_gradients.qmd)); "stochastic compartmental" is one run by the kernels from start to finish (see `sim.describe()`); "agents" is `solver='abm'`, or a stochastic compartmental model with Python in its loop. The costs are rough, in runs of the model, with the default settings and two or three parameters.
 
 | Method | Gives | ODE with JAX | ODE without JAX | Stochastic compartmental | Agents | Needs | Rough cost, in runs | Choose it when |
 |---|---|---|---|---|---|---|---|---|
-| `'nelder-mead'` | Best fit | Yes (default for one or two parameters) | Yes (default) | Poorly (noisy scores) | Poorly | Nothing | A scan of 10 per parameter, then a few hundred per search, 3 searches | A deterministic model with few parameters |
+| `'nelder-mead'` | Best fit | Yes (default for one or two parameters) | Yes (default for one or two parameters) | Poorly (noisy scores) | Poorly | Nothing | A scan of 10 per parameter, then a few hundred per search, 3 searches | A deterministic model with few parameters |
 | `'powell'` | Best fit | Yes | Yes | Poorly | Poorly | Nothing | As Nelder–Mead | Nelder–Mead is slow to settle |
-| `'l-bfgs-b'` | Best fit | Yes (default for three or more) | No | No | No | Gradients | A scan, then tens of runs with gradients per search | Many parameters (e.g. a time series) of an ODE |
-| `'slsqp'` | Best fit | Yes | No | No | No | Gradients | As L-BFGS-B | As L-BFGS-B |
-| `'optuna'` | Best fit | Yes | Yes | Yes (default) | Yes (default) | Nothing | 100 trials, of 4 runs each (1 for agents) | A stochastic or agent model, or a first broad search |
+| `'l-bfgs-b'` | Best fit | Yes (default for three or more) | Yes, by finite differences (default for three or more) | No | No | Gradients (from JAX, or by finite differences) | A scan, then tens of runs with gradients per search (by finite differences, two runs per parameter for each gradient) | Many parameters (e.g. a time series) of an ODE |
+| `'slsqp'` | Best fit | Yes | Yes, by finite differences | No | No | Gradients (from JAX, or by finite differences) | As L-BFGS-B | As L-BFGS-B |
+| `'optuna'` | Best fit | Yes | Yes | Yes (default) | Yes (default) | Nothing | 50 trials per parameter (at least 100), each scored by a particle filter of 200 particles where one can run the model, else by 4 runs (1 for agents, and for an ODE) | A stochastic or agent model, or a first broad search |
 | `'if2'` | Maximum-likelihood best fit | No | No | Yes | No | A likelihood; parameters that are rates | 4 chains × 50 passes × 1,000 particles (each particle a run, run together) | The maximum likelihood of a stochastic model |
 | `'nuts'` | Posterior | Yes | Slowly, with `require_jax=False` | No | No | A likelihood; gradients | 4 chains × 1,000 steps, each tens of runs with gradients | A posterior of an ODE, whose data have little chance in them beyond the likelihood's |
-| `'pmcmc'` | Posterior | No | No | Yes | No | A likelihood | 4 chains × 2,000 draws × tens to hundreds of particles | A posterior of a stochastic compartmental model, with its process noise |
-| `'abc-smc'` | Approximate posterior | Yes | Yes | Yes | Yes | A goodness of fit (no likelihood) | 200 samples × 8 generations, at one to several runs each | A posterior of an agent model, or with no likelihood |
+| `'pmcmc'` | Posterior | Yes | Yes | Yes | No | A likelihood | 4 chains × 2,000 draws × tens to hundreds of particles (one run a draw for an ODE) | A posterior of a stochastic compartmental model, with its process noise, or of an ODE that JAX can't run |
+| `'abc-smc'` | Approximate posterior | No (an error) | No (an error) | Yes | Yes | A goodness of fit (no likelihood) | 200 samples × 8 generations, at one to several runs each | A posterior of an agent model, or with no likelihood |
 | A list | What its last stage gives | | | | | What each stage needs | The sum of its stages | A broad search, then a local polish |
 
 The names come from `ss.fit.methods`, and the settings each takes (in `ss.fit.method()`) from `ss.fit.method_options()`, so the list of settings can be made from them, with the defaults from each method's signature (a SciPy method also takes SciPy's own options, and Optuna those of `study.optimize()`, which are listed with their defaults too):
@@ -259,4 +277,4 @@ for method, func in ss.fit.methods.items():
 pd.DataFrame(rows).set_index('method')
 ```
 
-A default of `None` is chosen by the fit: for `scan`, 10 points per parameter, up to 100; for `restarts`, 3 searches (1 for one parameter of a deterministic model); for `particles`, chosen in each chain's warm-up for `'pmcmc'`; for `n_runs`, 4 for a stochastic compartmental model and 1 otherwise; for `workers`, 1. What each setting means is in the API docs of `ss.fit.method()` (see [ss.fit](../api/fit.qmd)); a setting the method does not take is an error that lists those it does. The samplers are also callable directly, for a log-density of your own (such as `sim.log_density()`; see [Gradients](calibration_gradients.qmd#the-log-density)): `ss.fit.nuts()`, `ss.fit.pmmh()`, and `ss.fit.abc_smc()`.
+A default of `None` is chosen by the fit: for `scan`, 10 points per parameter, up to 100; for `restarts`, 3 searches (1 for one parameter of a deterministic model); for `particles`, chosen in each chain's warm-up for `'pmcmc'` (none for an ODE), and 200 for Optuna where a particle filter scores each trial; for `n_trials`, 50 per parameter, at least 100; for `n_runs`, 4 for a stochastic compartmental model and 1 otherwise; for `workers`, 1. What each setting means is in the API docs of `ss.fit.method()` (see [ss.fit](../api/fit.qmd)); a setting the method does not take is an error that lists those it does. The samplers are also callable directly, for a log-density of your own (such as `sim.log_density()`; see [Gradients](calibration_gradients.qmd#the-log-density)): `ss.fit.nuts()`, `ss.fit.pmmh()`, and `ss.fit.abc_smc()`.

@@ -114,7 +114,7 @@ def test_groups_are_not_agents():
     sir = ss.Disease(infection=S >> I @ 0.3*I, recovery=ss.Transition(I, R, dur=10), init_prev=0.01)
     sim = ss.Sim(sir, total_pop=5000, stop=10, solver='ode', verbose=0).run()
     ppl = sim.people
-    assert np.isclose(ppl.n_alive, 5000) and len(ppl) == 5000
+    assert np.isclose(ppl.n, 5000) and len(ppl) == 1 # One group
     assert not hasattr(ppl, 'age') and not hasattr(ppl, 'auids')
     for attr in ['age', 'auids']:
         with pytest.raises(ss.CapabilityError, match=attr):

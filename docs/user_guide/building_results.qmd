@@ -13,6 +13,9 @@ A run produces results: for each disease, the number of people in each state at 
 
 After a run, `sim.results` holds the results of each module by name, and the sim's own (such as `alive`, the population size):
 
+::: {.panel-tabset group="language"}
+## Python
+
 ```{python}
 import starsim as ss
 
@@ -28,7 +31,28 @@ res = sim.results.measles
 print(res)
 ```
 
-A disease has a result for each state (`S`, `I`, `R`: the number of people in it at each time point) and each transition (`infection`, `recovery`: the number who made it during each step), named after the variables they were made from. `res.I` and `res['I']` are the same.
+## R
+
+```r
+library(starsim)
+
+states("S I R")
+measles <- Disease(
+  infection = Transition(S, I, rate = 1.9 * I), # β = 1.9 per day
+  recovery  = Transition(I, R, dur = days(8)),  # Infectious for 8 days on average
+  init   = list(R = 0.9), # 90% immune
+  init_n = list(I = 10)   # 10 infectious
+)
+
+sim <- Sim(measles, total_pop = 100000, start = "2025-01-01", stop = "2025-07-01", verbose = 0)
+sim$run()
+
+res <- sim$results$measles
+res
+```
+:::
+
+A disease has a result for each state (`S`, `I`, `R`: the number of people in it at each time point) and each transition (`infection`, `recovery`: the number who made it during each step), named after the variables they were made from. `res.I` and `res['I']` are the same. A disease with transmission also has `infected` and `prevalence`, added by Starsim; [Names with special meaning](building_diseases.qmd#names-with-special-meaning) lists the results every disease gets.
 
 The sim's own results are those of the people: `alive`, `died`, and `emigrated` (and, as agents, `female`), each step. `record_people=False` on the sim skips them, which saves a little time in a light model that doesn't need them (demographics read `alive`).
 
@@ -60,7 +84,7 @@ Each result says what kind of quantity it is, as its `kind`, which decides how i
 | `'flow'` | `'sum'` | A number of events during each step | `infection`, `recovery`, `cases` | The total |
 | `'ratio'` | `'mean'` | One number divided by another | `prevalence` | Worked out again from the totals of its parts (the mean, for one with no parts) |
 
-A result of your own gives it as `ss.Result('protected', kind='stock')`; it is required, unless the name says it (`new_...` is a flow, `n_...` and `cum_...` are stocks, and `prevalence` is a ratio), and `ss.Result('doses')` raises an error listing the kinds rather than guessing one. The kind also says whether the result is scaled by the number of people each agent stands for: a flow or stock is, and a ratio isn't (`scale=` overrides this). `kind=None` is for a result with no meaning over time, which isn't summarized. To summarize a result another way without changing what it is, give `summarize_by=` too: `ss.Result('new_cases', kind='flow', summarize_by='mean')` is a flow (it still has a running total, and is summed to compare it with weekly data) whose summary over the run is its mean per step.
+A result of your own gives it as `ss.Result('protected', kind='stock')`. The name can say it instead (`new_...` is a flow, `n_...` and `cum_...` are stocks, and a name ending in `prevalence` is a ratio); with neither, `ss.Result('doses')` is taken as a flow if its type is an integer and as a ratio otherwise, with a warning, so give `kind=`. The kind also says whether the result is scaled by the number of people each agent stands for: a flow or stock is, and a ratio isn't (`scale=` overrides this). `kind=None` is for a result with no meaning over time, which isn't summarized. To summarize a result another way without changing what it is, give `summarize_by=` too: `ss.Result('new_cases', kind='flow', summarize_by='mean')` is a flow (it still has a running total, and is summed to compare it with weekly data) whose summary over the run is its mean per step.
 
 A flow's running total is `.cum`, so `res.infection.cum[-1]` is the number of infections over the whole run. Two cautions: summing a stock over time does not count people (`res.I.sum()` counts each person once for every step they are infectious), and the people infectious at the start are not new infections during the run, so `infection.sum()` leaves them out; add them if your definition of outbreak size includes everyone ever infected.
 
@@ -78,6 +102,9 @@ print('Infectious after the first step:', round(res.I[1], 2))
 
 A model can declare more results. A ratio of states, such as prevalence, is given to the disease along with the transitions, and an outcome (`ss.outcome()`) is a quantity worked out from flows, such as the cases that are reported: here, half of infections, three days after they happen:
 
+::: {.panel-tabset group="language"}
+## Python
+
 ```{python}
 S, I, R = ss.states('S I R')
 N = S + I + R
@@ -92,6 +119,28 @@ sim.run()
 res = sim.results.measles
 sim.plot('measles')
 ```
+
+## R
+
+```r
+states("S I R")
+N <- S + I + R
+infection <- Transition(S, I, rate = 1.9 * I)
+measles <- Disease(
+  infection  = infection,
+  recovery   = Transition(I, R, dur = days(8)),
+  prevalence = I / N,                                     # The share of people infectious
+  cases      = outcome(0.5 * infection, delay = days(3)), # Half of infections are reported, 3 days later
+  init   = list(R = 0.9),
+  init_n = list(I = 10)
+)
+
+sim <- Sim(measles, total_pop = 100000, start = "2025-01-01", stop = "2025-07-01", verbose = 0)
+sim$run()
+res <- sim$results$measles
+sim$plot("measles")
+```
+:::
 
 Each result is named after its variable (`prevalence`, `cases`). See [Outcomes](building_outcomes.qmd) for reporting, delays, and how long people stay in an outcome such as hospital.
 
@@ -157,18 +206,41 @@ Data is matched to results by name: a column called `cases` in a table given as 
 
 `sim.summarize()` gives each result over the whole run, by its `summarize_by`: the total of a flow (`'sum'`), the final value of a stock (`'last'`), and the mean of a ratio (`'mean'`). It is a table with a row for each result and one column, `value`, as `msim.summarize()` gives for many runs (see below), so one run and many read the same way; results that are 0 throughout are kept, so the tables of different runs line up row for row. `sim.summarize('measles_infection')` gives one result's summary as a number, and `how=` summarizes another way, e.g. `sim.summarize('measles_I', how='max')` for the peak (`how=` takes `'mean'`, `'median'`, `'sum'`, `'last'`, `'max'`, `'min'`, or a function).
 
+::: {.panel-tabset group="language"}
+## Python
+
 ```{python}
 sim = ss.Sim(measles, total_pop=100_000, start='2025-01-01', stop='2025-07-01', verbose=0) # The measles model with prevalence and reported cases, not stratified
 sim.run()
 sim.summarize()
 ```
 
+## R
+
+```r
+sim <- Sim(measles, total_pop = 100000, start = "2025-01-01", stop = "2025-07-01", verbose = 0)
+sim$run()
+summary(sim) # As sim$summarize(), as a named vector
+```
+:::
+
 `to_df()` gives results as a table (a pandas dataframe), for one module or for the whole sim, with one column per result; it can then be saved with `df.to_csv()` or `df.to_excel()`:
+
+::: {.panel-tabset group="language"}
+## Python
 
 ```{python}
 df = sim.to_df()
 df.head()
 ```
+
+## R
+
+```r
+df <- as.data.frame(sim) # As sim$to_df(), as an R data frame
+head(df)
+```
+:::
 
 A single module's results, or a single result, give a table the same way: `sim.results.measles.to_df()`, or `res.I.to_df()`. `sim.results.flatten()` gives the same results as a flat dict, keyed like the columns (`measles_I`).
 

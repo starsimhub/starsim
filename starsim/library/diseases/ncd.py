@@ -93,7 +93,7 @@ class NCD(ss.Disease):
         super().record_stocks()
         ti = self.ti
         self.results.not_at_risk[ti]   = np.count_nonzero(self.not_at_risk)
-        self.results.prevalence[ti]    = np.count_nonzero(self.affected)/self.sim.people.n_alive
+        self.results.prevalence[ti]    = self.affected.frac
         return
 
     def record_flows(self):

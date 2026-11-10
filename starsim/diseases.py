@@ -63,7 +63,7 @@ def rebind_member(obj, memo):
     if not isinstance(obj, ss.Transition) or isinstance(obj, ss.State):
         reads = any(id(x) in memo for x in ss.expressions.nodes(obj)) or isinstance(obj, ss.outcome)
         return ss.expressions.rebind(obj, memo) if reads else obj # Unchanged otherwise, so a positional member keeps the name of its variable
-    exprs = [obj.rate, obj.dur, obj.p_die, obj.p_stay] + list(obj.p or [])
+    exprs = [obj.rate, obj.dur, obj.p_die, obj.p_stay, obj.noise] + list(obj.p or [])
     conds = [c for c in [obj.where, getattr(obj.trigger, 'x', None)] if c is not None]
     reads = any(id(x) in memo for x in list(obj.source or []) + list(obj.dest or []) + list(ss.expressions.nodes(exprs)))
     reads = reads or any(id(ev.args[1]) in memo for c in conds for ev in ss.conditions.event_leaves(c) if len(ev.args) > 1)
@@ -72,7 +72,7 @@ def rebind_member(obj, memo):
     new = sc.cp(obj)
     new.source = None if obj.source is None else [memo.get(id(st), st) for st in obj.source]
     new.dest = None if obj.dest is None else [memo.get(id(st), st) for st in obj.dest]
-    for key in ['rate', 'dur', 'p_die', 'p_stay']:
+    for key in ['rate', 'dur', 'p_die', 'p_stay', 'noise']:
         setattr(new, key, ss.expressions.rebind(getattr(obj, key), memo))
     new.p = None if obj.p is None else [ss.expressions.rebind(v, memo) for v in obj.p]
     new.where = ss.conditions.rebind(obj.where, memo)
@@ -518,7 +518,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
                 if isinstance(leaf, ss.par) and isinstance(leaf.raw, ss.expressions.Expr):
                     yield from leaves(leaf.raw)
         holds_expr = lambda leaf: isinstance(leaf.raw, ss.expressions.Expr) and any(inner is m for inner in leaves(leaf.raw) for m in members.values()) # One holding the class's parameters, copied with them
-        memo = {id(leaf):leaf for val in members.values() if isinstance(val, ss.Transition) for expr in [val.rate, val.dur, getattr(val, 'p_die', None), getattr(val, 'p_stay', None)] + sc.tolist(getattr(val, 'p', None)) if isinstance(expr, ss.expressions.Expr) for leaf in leaves(expr) if isinstance(leaf, ss.par) and not any(leaf is m for m in members.values()) and not holds_members(leaf) and not holds_expr(leaf)}
+        memo = {id(leaf):leaf for val in members.values() if isinstance(val, ss.Transition) for expr in [val.rate, val.dur, getattr(val, 'p_die', None), getattr(val, 'p_stay', None), getattr(val, 'noise', None)] + sc.tolist(getattr(val, 'p', None)) if isinstance(expr, ss.expressions.Expr) for leaf in leaves(expr) if isinstance(leaf, ss.par) and not any(leaf is m for m in members.values()) and not holds_members(leaf) and not holds_expr(leaf)}
         members = sc.dcp(members, memo=memo) # Copy class members (together, so they still refer to each other) so instances do not share them; a parameter defined outside the class (rate = ss.par(...) at module level) stays shared, as in the operator form, so it keeps its name
         for tr in [val for val in members.values() if isinstance(val, ss.Transition)]: # A sibling as an event (vax = ss.Transition(R, V, when=recovery)) is the copy
             tr.where = ss.conditions.rebind(tr.where, memo)
@@ -644,22 +644,27 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         """
         return ss.display.Text('\n'.join(ss.display.equations(self.graph, self.engine)))
 
-    def diagram(self):
+    def diagram(self, kind='plot', **kwargs):
         """
-        The state-transition diagram, as a Mermaid flowchart (https://mermaid.js.org), which a notebook draws (see `ss.display.Diagram`)
+        The state-transition diagram: drawn as a Matplotlib figure, or as the text of a Mermaid flowchart (https://mermaid.js.org)
 
-        People states are rounded and counts slanted; transmissions are dashed; each
+        People states are rounded and counts square (slanted in the text); transmissions are dashed; each
         arrow is labeled with its transition's name and value (`recovery: 10 days`), and
-        the share that takes it for a transition with `p=`. `print(sir.diagram())` gives the text.
+        the share that takes it for a transition with `p=`. For every disease of a sim, and how they act on each other, see `sim.diagram()`.
+
+        Args:
+            kind (str): 'plot' to draw it, or 'text' for the Mermaid text, which a notebook draws and `print()` shows (see `ss.display.Diagram`)
+            kwargs (dict): for a plot, passed to `ss.return_fig()` (e.g. `filename=`, `do_show=`)
 
         Example:
             ```python
             S, I, R = ss.states(3)
             sir = ss.Disease(infection=S >> I @ 0.3*I, recovery=ss.Transition(I, R, dur=ss.days(10)))
             sir.diagram()
+            print(sir.diagram('text'))
             ```
         """
-        return ss.display.Diagram('\n'.join(['flowchart LR'] + ss.display.diagram(self.graph)))
+        return ss.display.show_diagram([self.graph], [self.name], kind=kind, **kwargs)
 
     def R0(self, matrix=False):
         """
@@ -1020,7 +1025,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
 
         **As array operations.** With `rel_trans` and `rel_sus`, it is the same transmission as an operation that code calls, as agents (in a
         disease written as code, or in a declared one's own code): each edge of a network from `u` to `v` transmits with probability
-        `rel_trans[u]·rel_sus[v]` times the network's beta for the step (see `ss.Network.transmit()`), with the modifiers and products on
+        1 − exp(−`rel_trans[u]·rel_sus[v]`·H), where H is the hazard of the network's chance for the step (see `ss.Network.transmit()`), with the modifiers and products on
         `rel_trans` and `rel_sus` applied (so the disease says `allow_modifiers = ('rel_sus', 'rel_trans')`), and the draws of each edge from the
         disease's `trans_rng`; other routes (e.g. a mixing pool) give their own (`compute_transmission()`). Someone reached by several is infected
         by the first, which is their source, recorded with the route in an `ss.infection_log`. Nobody is moved: the code that calls it says what
@@ -1495,7 +1500,7 @@ class AgentDisease(Disease):
         """ The counts of the states, and the prevalence, at the start of the step """
         super().record_stocks()
         res = self.results
-        alive = self.sim.people.n_alive if ss.results.agent_weights(self.sim) is None else self.sim.results.alive[self.sim.ti] # With agents of different weights, as the people alive are counted
+        alive = self.sim.people._n_agents_alive() if ss.results.agent_weights(self.sim) is None else self.sim.results.alive[self.sim.ti] # With agents of different weights, as the people alive are counted
         res.prevalence[self.ti] = res.infected[self.ti] / alive
         return
 

@@ -146,7 +146,7 @@ for seed in range(1, 7):
 pd.DataFrame(rows).round(3)
 ```
 
-Each epidemic is a little different (the total number of reported cases ranges from about 2,800 to 3,200), and so is each estimate: β from about 1.8 to 2.0, against a true 1.9, and the share reported from about 0.48 to 0.53, against 0.5. This spread is how precisely one outbreak of this size can determine the parameters. A small outbreak, or one that dies out early by chance, leaves much less to go on. A posterior gives this uncertainty from a single data set; see [Gradients](calibration_gradients.qmd).
+Each epidemic is a little different (the total number of reported cases ranges from about 2,800 to 3,200), and so is each estimate: β from about 1.8 to 2.0, against a true 1.9, and the share reported from about 0.48 to 0.53, against 0.5. This spread is how precisely one outbreak of this size can determine the parameters. A small outbreak, or one that dies out early by chance, leaves much less to go on. A posterior gives this uncertainty from a single data set, if the model it is fitted with is as random as the process that made the data: an ODE's posterior on data like these is much narrower than this spread, and can exclude the truth, since it leaves out the chance in the epidemic. See [Gradients](calibration_gradients.qmd).
 
 ## Summary
 

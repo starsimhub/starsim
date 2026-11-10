@@ -51,7 +51,7 @@ dependencies = [
 # Gradients, fitting with them, and long runs in JAX: recommended, and optional only since JAX has no builds for Windows on Arm
 jax = [
     "jax>=0.8",
-    "blackjax",
+    "blackjax>=1.7",
 ]
 
 # For running the tests

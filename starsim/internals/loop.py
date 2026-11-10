@@ -78,7 +78,7 @@ class Loop:
     order the modules were given (a disease's `step_state()` and then its `step()`).
 
     A sim that is nothing but compartments the kernels can run from start to finish goes
-    through them in one call instead, not this order step by step (see `sim.kernel_reason()`).
+    through them in one call instead, not this order step by step (see `sim.describe()`).
 
     One time index holds for every function of a step, in every module: the step from time
     point k to k+1 is step k, and throughout it `sim.ti == k` and `sim.now` is time point k,
@@ -647,7 +647,7 @@ class Loop:
             ```python
             # Simple label matching with analyzer-like functionality
             def check_pop_size(sim):
-                print(f'Population size is {len(sim.people)}')
+                print(f'Population size is {sim.people.n:n}')
 
             sim = ss.Sim(diseases='sir', networks='random', demographics=True)
             sim.init()

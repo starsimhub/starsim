@@ -15,6 +15,9 @@ For a step-by-step introduction, see [T4 – Age groups and contacts](../tutoria
 
 Measles spreads mostly among children, because children have the most contacts, and mostly with each other, and because they are the least likely to be immune. Here the measles model is stratified into three age groups, with the share of the population in each, and given a contact matrix: row *i*, column *j* is the number of contacts per day that a person in group *i* has with people in group *j*. As in a town with a vaccination program whose coverage has slipped recently, 80% of children (0–14) start immune, and 92% of adults (15–64) and 98% of people 65 and over, with 10 people infectious:
 
+::: {.panel-tabset group="language"}
+## Python
+
 ```{python}
 import starsim as ss
 
@@ -33,6 +36,33 @@ for age in ['0-14', '15-64', '65+']:
     print('Aged', age, '-', round(infections), 'infections, or', round(infections / res.S.select(age=age)[0], 2), 'of those susceptible')
 res.I.by('age').plot()
 ```
+
+## R
+
+```r
+library(starsim)
+
+states("S I R")
+measles <- Disease(
+  infection = Transition(S, I, rate = 0.14 * I), # With contacts, beta is per contact: 0.14 per contact per day
+  recovery  = Transition(I, R, dur = days(8)),
+  init   = list(R = ss$by(age = c(0.8, 0.92, 0.98))),
+  init_n = list(I = 10)
+)
+measles$stratify(age = list("0" = 0.3, "15" = 0.6, "65" = 0.1)) # Ages 0-14, 15-64, and 65+, with the share in each
+
+age_contacts <- contacts(ages = c(0, 15, 65), matrix = rbind(c(10, 6, 1), c(3, 8, 1), c(3, 6, 3)))
+sim <- Sim(measles, networks = age_contacts, total_pop = 100000, start = "2025-01-01", stop = "2025-07-01")
+sim$run()
+res <- sim$results$measles
+for (age in c("0-14", "15-64", "65+")) {
+  infections <- sum(res$infection$select(age = age)$values)
+  susceptible <- res$S$select(age = age)$values[1]
+  cat("Aged", age, "-", round(infections), "infections, or", round(infections / susceptible, 2), "of those susceptible\n")
+}
+res$I$by("age")$plot()
+```
+:::
 
 Children are 30% of the town, but about three in five of the infections, and they are infected first: the number infectious peaks among them a few days before it does among adults. Some of this is because more children are susceptible, but not all: since they have the most contacts, about 90% of the susceptible children are infected, against two-thirds of susceptible adults. The model is still the SIR model, but each equation now holds for each age group, and transmission sums over the groups that each group meets:
 
@@ -76,7 +106,10 @@ See [Values by group](#values-by-group) below.
 
 ## Several dimensions
 
-A model can be stratified by several properties, in one call or several. Here most people are vaccinated, with a vaccine that is 97% protective, which is a second dimension, with susceptibility by level:
+A model can be stratified by several properties, in one call or several. Here most people are vaccinated, with a vaccine that is 97% protective, which is a second dimension, with susceptibility by level. The "Explicit" tab gives each dimension with `ss.levels()` and the kind that Starsim takes from its name and levels: age groups for `age=` with numbers, and plain groups for the rest:
+
+::: {.panel-tabset group="language"}
+## Python
 
 ```{python}
 def make_measles(vaccinated):
@@ -101,6 +134,33 @@ print('Among the vaccinated:', round(res.infection.select(vaccinated=True).sum()
 print('Among unvaccinated children:', round(res.infection.select(age='0-14', vaccinated=False).sum()))
 res.infection.by('vaccinated').plot()
 ```
+
+## Explicit
+
+```{python}
+def make_measles_explicit(vaccinated):
+    S, I, R = ss.states('S I R')
+    beta = 0.14*ss.by(vaccinated=[1, 0.03]) if vaccinated else 0.14 # The vaccinated are 3% as susceptible
+    infection = S >> I @ beta*I
+    recovery  = I >> R @ ss.days(8)
+    measles = ss.Disease(infection, recovery, init_prev=0.001, name='measles')
+    measles.stratify(age=ss.levels({0: 0.3, 15: 0.6, 65: 0.1}, kind='age')) # Age groups, which people age through
+    if vaccinated:
+        measles.stratify(vaccinated=ss.levels({False: 0.1, True: 0.9}, kind='plain')) # Plain groups, which people stay in
+    return measles
+
+base = ss.Sim(make_measles_explicit(False), networks=contacts, total_pop=100_000, stop=ss.days(365), verbose=0)
+base.run()
+sim = ss.Sim(make_measles_explicit(True), networks=contacts, total_pop=100_000, stop=ss.days(365), verbose=0)
+sim.run()
+res = sim.results.measles
+print('Infections with no vaccination:', round(base.results.measles.infection.sum()))
+print('Infections with 90% vaccinated:', round(res.infection.sum()))
+print('Among the vaccinated:', round(res.infection.select(vaccinated=True).sum()))
+print('Among unvaccinated children:', round(res.infection.select(age='0-14', vaccinated=False).sum()))
+res.infection.by('vaccinated').plot()
+```
+:::
 
 With 90% vaccinated, the outbreak is much smaller, and about two in five of those infected are vaccinated: when nearly everyone is vaccinated, the few vaccine failures among them can be a large share of cases, though each vaccinated person is far less likely to be infected.
 

@@ -246,7 +246,7 @@ def test_modify_fast_paths():
     fast = make(**dates)
     with mock.patch.object(ss.solvers.Compartmental, 'changing_steps', lambda *args: None):
         slow = make(**dates)
-    assert fast.kernel_only() and np.array_equal(fast.results.sir.I.values, slow.results.sir.I.values)
+    assert fast._kernel_reason() is None and np.array_equal(fast.results.sir.I.values, slow.results.sir.I.values)
     assert not np.array_equal(fast.results.sir.I.values, make().results.sir.I.values) # They had an effect
 
     # A step function is worked out where it changes, as a date is
@@ -260,7 +260,7 @@ def test_modify_fast_paths():
     fast = make(when=lambda now: now.day in [1, 15])
     with mock.patch.object(ss.solvers.Compartmental, 'changing_steps', lambda *args: None):
         slow = make(when=lambda now: now.day in [1, 15])
-    assert fast.kernel_only() and np.array_equal(fast.results.sir.I.values, slow.results.sir.I.values)
+    assert fast._kernel_reason() is None and np.array_equal(fast.results.sir.I.values, slow.results.sir.I.values)
 
     # A coverage given as a rate is one share of those eligible at each step, in the kernels
     beta = ss.par(0.3, name='beta')
@@ -290,12 +290,12 @@ def test_modify_fast_paths():
     sim = ss.Sim(sir, interventions=ss.modify(sir.pars.beta, multiply=0.75, who=sir.I.n >= 20_000), **kw).run()
     beta2 = ss.par(0.3, name='beta')
     written = ss.Sim(ss.Disease(infection=S >> I @ (beta2*(1 - 0.25*(I.n >= 20_000)))*I, recovery=I >> R @ ss.days(10), init_n=dict(I=100), name='sir'), **kw).run()
-    assert sim.kernel_only() and sim.interventions()[0].inlined
+    assert sim._kernel_reason() is None and sim.interventions()[0].inlined
     assert np.allclose(sim.results.sir.I.values, written.results.sir.I.values, rtol=1e-12)
 
     # What needs memory is applied each step, and the other sim from the same disease is unchanged
     held = ss.Sim(sir, interventions=ss.modify(sir.pars.beta, multiply=0.75, who=sir.I.n >= 20_000, until=sir.I.n <= 10_000), **kw).run()
-    assert not held.interventions()[0].inlined and not held.kernel_only()
+    assert not held.interventions()[0].inlined and held._kernel_reason() is not None
     assert ss.Sim(sir, **kw).run().results.sir.I.values.max() > 2.9e5
     return sim
 

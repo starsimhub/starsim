@@ -48,7 +48,7 @@ class SIR(ss.Disease):
     recovery  = I >> R @ ss.days(10)
 spellings['Class'] = SIR(init_prev=0.001, name='sir')
 
-# The whole flow, β S I / N, as most other frameworks write it
+# The whole flow, β S I / N, as most other frameworks write it: read as written, the share infectious, 0.3*I.frac, which is 0.3*I when everyone mixes
 S, I, R = ss.states('S I R')
 N = S + I + R
 infection = S >> I @ 0.3*S*I/N

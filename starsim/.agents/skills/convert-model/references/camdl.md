@@ -26,7 +26,10 @@ camdl is a compartmental modeling language (a compiler, `camdlc`, in OCaml; a ru
 | Dimensions, `stratify()`, families, tables, `sum(b in age, ...)`, aging along a dimension, movement | One state per combination of levels (`S_child_north`), with the IR's rates; exact, but not written as `stratify()` (listed in the notes) | yes, flat |
 | An initial number drawn from a distribution | Its mean (listed) | no |
 | A forcing function of time (`sinusoidal`, `periodic`, `piecewise`) | A parameter set to 1 (listed): write it as `ss.seasonal(...)` or `ss.timeseries(...)` | no |
-| Interventions (off unless enabled) and events (`transfer`, `add` at times) | Listed in `ImportIncomplete`, with the scenarios that enable each (a one-off move between states is `ss.Event(S >> R, when=...)`, below) | no |
+| Events that `add` people at fixed times | An inflow from outside the population at those times, `ss.unborn >> S @ (number * pulse)`, with `pulse` a step `ss.timeseries` of 1/dt in the step of each time (drawn at random by a stochastic solver, listed) | yes |
+| Interventions (off unless enabled) and other events (`transfer`, `set`) | Listed in `ImportIncomplete`, with the scenarios that enable each (a one-off move between states is `ss.Event(S >> R, when=...)`, below) | no |
+| `overdispersed(rate, var)` | `ss.Transition(..., noise=sqrt_var)`: camdl's argument is sigma squared per unit of time, Starsim's is sigma, so a parameter `var` is fitted as a new parameter `sqrt_var` (listed in the notes); a constant is taken to its square root | yes |
+| `deterministic(...)` flows under a stochastic solver, `balance { }`, data labeled by the end of each period (`closing_at`) | Listed (the balance has no translation; shift end-labeled data's times back one period) | no |
 | A compartment with an ODE (`ode`), a reaction such as `A + B --> C` | Listed | no |
 | An observation of a number in states (`prevalence`), a ratio of flows | A result, or listed; give the likelihood when calibrating | no |
 | Fitting (NUTS, IF2, PMMH) | `sim.fit(method='nuts')` for an ODE whose series all have a likelihood, `method='pmcmc'` or `'if2'` for a stochastic one (the default is a best fit) | by hand |

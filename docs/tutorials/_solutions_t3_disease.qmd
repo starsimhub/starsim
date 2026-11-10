@@ -9,7 +9,7 @@ import starsim as ss
 
 **Measles has a latent period of 10 to 12 days. Run the SEIR model with a latent period of 12 days, using `pars=`. Does R0 change? How do the timing and height of the peak change?**
 
-R0 doesn't change (15.2), since it depends only on β and the infectious period. A longer latent period makes the generation time longer, so the epidemic grows more slowly: it peaks about 3 days later, and a little lower.
+R0 doesn't change (15.2), since it depends only on β and the infectious period. A longer latent period lengthens the generation time, so the epidemic peaks about 3 days later, and a little lower.
 
 ```{python}
 S, E, I, R = ss.states('S E I R')
@@ -31,7 +31,7 @@ msim.plot('measles.I')
 
 **Give the infectious period an Erlang distribution too, with `k=4`. Using `R0()` and a plot of `I`, check whether R0 or the course of the epidemic changes.**
 
-R0 is unchanged, since the average infectious period is still 8 days. The epidemic peaks a few days sooner and higher: with an exponential infectious period, some people stay infectious for a long time, which spreads their infections out, whereas with an Erlang distribution most people are infectious for close to 8 days.
+R0 is unchanged, since the average infectious period is still 8 days. The epidemic peaks a few days sooner and higher: with an exponential infectious period, some people stay infectious a long time, spreading their infections out, whereas with an Erlang one most are infectious for close to 8 days.
 
 ```{python}
 S, E, I, R = ss.states('S E I R')
@@ -58,7 +58,7 @@ msim.plot('measles.I')
 
 **About 1 in 10 people with measles in this town are admitted to hospital, after 4 days of being infectious on average, and stay for 7 days. Add a state for people in hospital (assume they don't transmit), and find the largest number of people in hospital at once.**
 
-People leaving `I` now branch: 10% go to hospital (`H`) after 4 days on average, and 90% recover after 8. People in hospital are not in `I`, so they don't transmit, which is why R0 falls a little, to 14.4: those admitted are infectious for 4 days instead of 8.
+People leaving `I` now branch: 10% go to hospital (`H`) after 4 days on average, and 90% recover after 8. People in hospital don't transmit, so R0 falls a little, to 14.4: those admitted are infectious for 4 days instead of 8.
 
 ```{python}
 S, E, I, H, R = ss.states('S E I H R')

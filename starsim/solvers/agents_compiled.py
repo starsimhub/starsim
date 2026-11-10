@@ -36,6 +36,8 @@ def compiled_reasons(engine):
         out.append('states that are not people')
     if graph.inflows or graph.transfers:
         out.append('births or transfers')
+    if engine.lifetables:
+        out.append('a life table')
     for key in ['attrs', 'sets', 'derived', 'derived_trs', 'also', 'on_event']:
         if getattr(engine, key, None):
             out.append(key)

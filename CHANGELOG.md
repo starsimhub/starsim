@@ -8,7 +8,7 @@ Starsim 4 adds a way to write a model as declared states and transitions, which 
 <!-- V4-PREVIEW: restore the two links above to docs.starsim.org for normal publishing -->
 
 ### New features
-- **States and transitions**: declare a disease from `ss.State` and `ss.Transition` (`S >> I @ beta*I`), shown with `describe()`, `diagram()` and `equations()`, with `R0()` and `Rt()`; diseases can also be written as code, or both.
+- **States and transitions**: declare a disease from `ss.State` and `ss.Transition` (`S >> I @ beta*I`), shown with `describe()`, `diagram()` (a figure) and `equations()`, also for a whole sim (`sim.diagram()`), with `R0()` and `Rt()`; diseases can also be written as code, or both.
 - **Solvers**: one model runs as an ODE, a chain binomial, by Gillespie's method, by tau-leaping, or as agents (`ss.solvers.ode()`, `binomial()`, `gillespie()`, `tau()`, `abm()`); `'auto'` picks an ODE unless something needs agents, and says why.
 - **Agents by events** (a prototype): `ss.solvers.abm(step='events')` steps agents event by event in continuous time; a class can suggest how it runs as agents (`suggested_solver`).
 - **Stratification**: `sim.stratify(age=[0, 15, 65])` and other properties, with aging, transfers (`ss.transfer()`), contact matrices (`ss.contacts()`) and results by group.
@@ -17,7 +17,7 @@ Starsim 4 adds a way to write a model as declared states and transitions, which 
 - **Partnerships**: `ss.DegreeNet` and `ss.SexualNet`, with target numbers of partners, matching and acts.
 - **Interventions**: `ss.vaccinate()`, `ss.screen()` and `ss.treat()` deliver products in rounds, routinely, at an age or on events (`who=`, `when=`), with priorities, queues and delays; `ss.modify()` changes any named quantity.
 - **Demographics**: declared `ss.Pregnancy`, `ss.birth()`, `ss.death()` and `ss.migration()`; UN data by country (`ss.population('Kenya')`, `birth_rate='Kenya'`).
-- **Fitting**: `ss.outcome()` and `sim.fit()` by optimization, MCMC (with gradients in JAX), particle MCMC, iterated filtering or ABC-SMC; `sim.sensitivity()` and `sim.optimize()`.
+- **Fitting**: `ss.outcome()` and `sim.fit()` by optimization, MCMC (with gradients in JAX), particle MCMC (keeping a run with each draw, which `fit.project()` continues), iterated filtering or ABC-SMC; process noise on a rate (`noise=`); `sim.sensitivity()` and `sim.optimize()`.
 - **Runs**: `ss.parallel()` returns a MultiSim with summaries, bands and comparisons by scenario.
 - **Importing and exporting**: `ss.import_from()` and `ss.export_to()` for 13 frameworks (EMULSION, odin, SBML, SimInf, flepiMoP, summer2, Atomica, camdl, EpiModel, epipack, epydemix, epymorph, MEmilio); `python -m starsim.converters.migrate` rewrites Starsim 3 code.
 - **Library**: `starsim.library` (`ssl`) holds simple models of many diseases, maternal and newborn health, more networks, and health economics.
@@ -32,6 +32,7 @@ Starsim 4 adds a way to write a model as declared states and transitions, which 
 - *Regression*: a number in an `ss.MixingPools` matrix is the same for everyone in the group.
 - *Regression*: results have a `kind=` (flow, stock or ratio), which sets their scaling and summaries; one whose kind can't be told from its name warns.
 - *Regression*: `prevalence` comes from the infected states.
+- *Regression*: over a network, every factor of a contact's hazard is in the exponent (`rel_trans`, `rel_sus`, edge weight, modifiers), so a contact infects with chance 1 − (1 − p)^(factors) rather than p × factors; an ODE on a network gives each transmission its own saturation factor.
 - *Regression*: as agents, draws are keyed by stream, step and round, so runs don't depend on batching.
 - *Regression*: fixes to delays under the chain binomial, outcomes of fractional agents, and smooth time-varying values, among others.
 
@@ -52,6 +53,7 @@ Starsim 4 adds a way to write a model as declared states and transitions, which 
 - Agent passes are compiled; networks whose edges haven't changed visit only the edges that matter.
 - `pip install starsim` includes the compiled Rust kernels on all major platforms.
 - `import starsim` limits BLAS to one thread (`ss.options.blas_threads`).
+- Fixes from a review of fitting ([#1591](https://github.com/starsimhub/starsim/issues/1591)): the JAX log-density refuses what it would approximate, Optuna scores a stochastic sim by the particle filter, ABC-SMC is refused for an ODE, and chains start apart.
 - The full list of changes is in the [full changelog](https://starsim.org/v4/migration/v4_changelog.html).
 <!-- V4-PREVIEW: restore the links above to docs.starsim.org for normal publishing -->
 - *GitHub info*: PR [1437](https://github.com/starsimhub/starsim/pull/1437)

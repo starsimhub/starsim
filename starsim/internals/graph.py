@@ -10,7 +10,7 @@ import itertools
 import numpy as np
 import sciris as sc
 import starsim as ss
-from .expressions import as_expr, BinOp, Count, count_power, did_you_mean, Expr, Func, is_one, linear, par, per_person, unheld
+from .expressions import as_expr, as_share, BinOp, Count, count_power, dependence, did_you_mean, factors, is_total, Expr, Func, is_one, linear, par, per_person, unheld
 from .parameters import by, TimeValue
 from ..transitions import FlowSum, outcome, State, Transition
 
@@ -63,7 +63,8 @@ class TransitionTable(sc.obj):
         for name,tr in self.items():
             src = ' | '.join(s.name for s in tr.source) or '(outside)'
             dst = ' | '.join(s.name for s in tr.dest) or '(outside)'
-            kind = f'transmission, from {" + ".join(s.name for s in tr.terms)}' if tr.contact else 'spontaneous'
+            counted = tr.module.graph.counted(tr) if getattr(getattr(tr, 'module', None), 'graph', None) is not None else []
+            kind = f'transmission, from {" + ".join(s.name for s in tr.terms)}' if tr.contact else f'transmission, from {" + ".join(s.name for s in counted)} ({tr.module.graph.dependence(tr)}-dependent)' if counted else 'spontaneous'
             rows.append([name, src, dst, tr._driver_str, kind])
         widths = [max(len(row[i]) for row in rows) + 2 for i in range(5)]
         out = '\n'.join(''.join(cell.ljust(w) for cell,w in zip(row, widths)).rstrip() for row in rows)
@@ -383,23 +384,30 @@ class Graph:
 
             # Derive the kind from the rate, written per person (a rate written as the whole flow, e.g. beta*S*I/N, is divided by its source)
             if tr.rate is not None:
-                rate = per_person(tr.rate, tr.source, [st for st in self.states.values() if st.people])
+                people = [st for st in self.states.values() if st.people]
+                rate = per_person(tr.rate, tr.source, people)
                 if rate is not tr.rate:
                     tr.flow_given, tr.rate = tr.rate, rate
+                tr.rate = as_share(tr.rate, people) # beta*I/N is beta*I
             tr.const, tr.terms = (None, {}) if tr.rate is None else linear(tr.rate)
             tr.contact = bool(tr.terms)
             for state in tr.terms:
                 state.infectious = True
 
-        # Fallback names: the only transmission is the infection (as in ss.SIR), the rest are named after their endpoints
-        contacts = [tr for tr in list(self.transitions.values()) + self._unnamed if tr.contact]
+        # Fallback names: the only transmission (by contact, or density-dependent) is the infection (as in ss.SIR), the rest are named after their endpoints
+        contacts = [tr for tr in list(self.transitions.values()) + self._unnamed if tr.contact or self.counted(tr)]
         for tr in self._unnamed:
             src = '_'.join([s.name for s in tr.source or []]) or 'in'
             dst = '_'.join([s.name for s in tr.dest or []]) or 'out'
             if contacts == [tr] and not self.taken('infection'):
                 base, why = 'infection', 'given to the only transmission'
             else:
-                base = f'{src}_to_{dst}' if tr.dest is not None else 'immigration' if tr.migration else 'births' # A birth with no state given is into the first state, found later
+                if tr.dest is None: # A birth with no state given is into the first state, found later
+                    base = 'immigration' if tr.migration else 'births'
+                elif src == 'in' and dst == 'out': # Out of every state (ss.death() with no state), as add_flow() names it
+                    base = 'emigration' if tr.migration else 'deaths'
+                else:
+                    base = f'{src}_to_{dst}'
                 why = 'built from its endpoints'
             name = base
             count = 1
@@ -411,11 +419,31 @@ class Graph:
             self.add(self.transitions, name, tr)
         return
 
+    def counted(self, tr):
+        """
+        The states of people of this module whose number or share a transition reads in its rate, other than its source, if the rate grows with them:
+        `I` in `S >> I @ beta*I.n` (density-dependent transmission) or `S >> I @ beta*I.frac` (frequency-dependent, by the share of people in `I`; see
+        `dependence()`); none for births at a rate on counts (`ss.unborn >> N @ b*N.n`)
+        """
+        if tr._inflow or tr.source is None or self.dependence(tr) is None: # No source is everyone (ss.death(rate=...)), so whatever it counts is its source
+            return []
+        out = {id(st):st for leaf in self.counts_in(tr) for st in leaf.states if st.people and st.module is self.module and not any(st is src for src in tr.source)}
+        return list(out.values())
+
+    def counts_in(self, tr):
+        """ The counts (`I.n`, `I.frac`) in the rate of a transition, other than the total of the people it is divided by, e.g. `I.n` and not `N.n` in `beta*I.n/N.n` """
+        people = [st for st in self.states.values() if st.people]
+        total = {id(leaf) for f in factors(tr.rate)[1] if is_total(f, people) for leaf in f.leaves}
+        return [leaf for leaf in tr.rate.leaves if isinstance(leaf, Count) and id(leaf) not in total]
+
+    def dependence(self, tr):
+        """ How the rate of a transition grows with the people in other states it counts: 'density' (`beta*I.n`), 'frequency' (`beta*I.frac`, or `beta*I.n/N.n`), or None (see `ss.expressions.dependence()`) """
+        return dependence(tr.rate, [st for st in self.states.values() if st.people])
+
     def resolve_init_prev(self):
         """ By default, 1% of people start infected, seeded through the transmission (frequency- or density-dependent), unless a state is given a starting value """
         given = any(state.given_init for state in self.states.values())
-        counted = lambda tr: {id(st) for leaf in tr.rate.leaves if isinstance(leaf, Count) for st in leaf.states if st.module is self.module} - {id(st) for st in tr.source or []} # The module's states whose numbers the rate reads, other than its source: I in beta*I.n
-        transmitted = any(tr.contact or (not tr._inflow and tr.rate is not None and count_power(tr.rate) > 0 and counted(tr)) for tr in self.transitions.values()) # Births at a rate on counts (ss.unborn >> N @ b*N.n) are not a transmission
+        transmitted = any(tr.contact or self.counted(tr) for tr in self.transitions.values())
         if self.init_prev is None and not given and transmitted:
             self.init_prev = par(0.01)
             self._add_par(self.init_prev, name='init_prev')
@@ -447,7 +475,7 @@ class Graph:
         """ The states of people that transmission (by contact, or at a rate on counts of others) takes people from """
         out = {}
         for tr in self.transitions.values():
-            if tr.source and not tr._inflow and (tr.contact or (tr.rate is not None and count_power(tr.rate) > 0)):
+            if tr.source and not tr._inflow and (tr.contact or self.counted(tr)):
                 out.update({id(s):s for s in tr.source if s.people})
         return list(out.values())
 
@@ -611,10 +639,11 @@ class Graph:
         return
 
     @staticmethod
-    def set_slots(tr):
+    def set_slots(tr, density=False):
         """
         Record the kind of value each parameter of a transition is, as `par.slot` (which describe() uses):
-        'rate' or 'dur', or None for a plain number (e.g. a factor of a rate); returns the standard slots it fills, as (slot name, parameter)
+        'rate' or 'dur', or None for a plain number (e.g. a factor of a rate); returns the standard slots it fills, as (slot name, parameter).
+        `density` says the transition is a transmission at a rate on the number or share of people in a state (`beta*I.n`, `beta*I.frac`), whose coefficient is beta too
         """
         slots = []
         if tr.dur is not None:
@@ -627,7 +656,7 @@ class Graph:
             if isinstance(tr.rate, par):
                 tr.rate.slot = 'rate'
                 slots.append(('rate', tr.rate))
-            elif tr.contact and tr.const is None: # The coefficient of the source of infection is beta
+            elif (tr.contact and tr.const is None) or density: # The coefficient of the source of infection is beta, by contact (beta*I), density-dependent (beta*I.n), or frequency-dependent (beta*I.frac)
                 coefs = list(tr.terms.values())
                 rate = tr.rate
                 beta = lambda leaf: isinstance(leaf, par) and (not leaf.literal or isinstance(leaf.raw, (dict, ss.peract)) or ss.expressions.value_dimension(leaf.raw) is not None) # A parameter, a beta for each route, or a typed value
@@ -635,17 +664,25 @@ class Graph:
                 if isinstance(rate, BinOp) and rate.op == '*' and isinstance(rate.a, par) and alone:
                     rate.a.slot = 'rate'
                     slots.append(('beta', rate.a))
-                elif len(coefs) == 1 and isinstance(coefs[0], par) and not is_one(coefs[0]):
+                elif not density and len(coefs) == 1 and isinstance(coefs[0], par) and not is_one(coefs[0]):
                     coefs[0].slot = 'rate'
                     slots.append(('beta', coefs[0]))
+                elif density: # The only parameter it is multiplied by, e.g. 0.3 in 0.3*I.n/N.n
+                    num, den = factors(rate)
+                    pars = [f for f in num if isinstance(f, par)]
+                    if len(pars) == 1 and not any(isinstance(leaf, par) for f in den for leaf in f.leaves) and not any(isinstance(leaf, par) for f in num if f is not pars[0] for leaf in f.leaves):
+                        pars[0].slot = 'rate'
+                        slots.append(('beta', pars[0]))
         for p in tr.p or []:
             if isinstance(p, par) and len(tr.p) == 1:
                 slots.append(('p', p))
+        if isinstance(tr.noise, par): # Sigma of the noise on the rate, named noise_<transition> if not named
+            slots.append(('noise', tr.noise))
         return slots
 
     def resolve_pars(self):
         """ Turn inline values in the standard slots into named parameters (beta, dur, rate, p) """
-        slots = [(tr, slot, p) for tr in self.transitions.values() for slot,p in self.set_slots(tr)] # (transition, slot name, parameter)
+        slots = [(tr, slot, p) for tr in self.transitions.values() for slot,p in self.set_slots(tr, bool(self.counted(tr)))] # (transition, slot name, parameter)
 
         # Name the anonymous ones after their slot: a duration by its state and a rate by its transition, and any other qualified by the transition where two would clash
         anon = [(tr, slot, p) for tr,slot,p in slots if p.literal or getattr(p, 'slot_named', False) or (p.name is None and self.names.get(id(p)) is None)] # Including an ss.par written in the slot itself, e.g. beta=ss.par(0.3, bounds=[0.1, 1]), and one named after its slot before (in a class this one subclasses), which is named again
@@ -660,7 +697,7 @@ class Graph:
         timed = lambda state: sum(tr.dur is not None and any(s is state for s in tr.source or []) for tr in self.transitions.values()) # The number of timed exits from a state
         for tr,slot,p in anon:
             qual = tr.source[0].name if slot == 'dur' and len(tr.source or []) == 1 and timed(tr.source[0]) == 1 else tr.name # A dwell time is the mean time in its state (dur_E), unless the state has several timed exits
-            name = f'{slot}_{qual}' if slot in ['dur', 'rate'] or counts[slot] > 1 or taken(slot) else slot
+            name = f'{slot}_{qual}' if slot in ['dur', 'rate', 'noise'] or counts[slot] > 1 or taken(slot) else slot
             if qual != tr.name and taken(name):
                 name = f'{slot}_{tr.name}'
             if taken(name): # e.g. a parameter of the user's called dur_rec, inside the dwell time of a transition called rec
@@ -675,7 +712,7 @@ class Graph:
                         q.name = f'{p.name}_{field}'
 
         # Register the explicit ss.par objects used in the transitions, and in the weights and likelihoods of the outcomes
-        used = [(tr.name, expr) for tr in self.transitions.values() for expr in [tr.rate, tr.dur] + sc.tolist(tr.p) + [getattr(tr, 'p_die', None), getattr(tr, 'p_stay', None)]] # Including the shares of ss.dead and ss.stay among the destinations
+        used = [(tr.name, expr) for tr in self.transitions.values() for expr in [tr.rate, tr.dur, tr.noise] + sc.tolist(tr.p) + [getattr(tr, 'p_die', None), getattr(tr, 'p_stay', None)]] # Including the shares of ss.dead and ss.stay among the destinations
         used += [(oc.name, weight) for oc in self.outcomes.values() for weight in oc.weights]
         used += [(oc.name, val) for oc in self.outcomes.values() for val in oc.likelihood_pars.values() if isinstance(val, par)]
         for oc in self.outcomes.values(): # A parameter written inside a likelihood, e.g. ss.nbinom(n=ss.par(10, bounds=[1, 100])), is named after the outcome and its keyword
@@ -1007,7 +1044,7 @@ class Graph:
         out = {}
         for tr in self.acquisitions:
             if tr.rate is not None and not tr.contact:
-                out.update({id(leaf.states[0]):leaf.states[0] for leaf in tr.rate.leaves if isinstance(leaf, Count) and len(leaf.states) == 1
+                out.update({id(leaf.states[0]):leaf.states[0] for leaf in self.counts_in(tr) if len(leaf.states) == 1
                             and leaf.states[0].people and leaf.states[0].module is self.module and not any(leaf.states[0] is src for src in tr.source or [])})
         return list(out.values())
 
@@ -1142,7 +1179,7 @@ class Graph:
     def all_pars(self):
         """ Every parameter in the graph, named or inline """
         out = {id(p):p for p in self.pars.values()}
-        exprs = [expr for tr in self.transitions.values() for expr in [tr.rate, tr.dur] + sc.tolist(tr.p)]
+        exprs = [expr for tr in self.transitions.values() for expr in [tr.rate, tr.dur, tr.noise] + sc.tolist(tr.p)]
         exprs += [w for expr in exprs if expr is not None for w in count_weights(expr)]
         for expr in exprs:
             if expr is not None:

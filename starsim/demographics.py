@@ -229,7 +229,7 @@ class Flows(Demographics):
         transitions (list): births (`ss.birth()`), deaths of everyone (`ss.death()` with no state), and migration (`ss.immigration()`, `ss.emigration()` with no state)
     """
     compartmental = True
-    tabulated = True # Its step does nothing, so a compartmental run need not be taken a step at a time for it (see ss.Sim.kernel_reason())
+    tabulated = True # Its step does nothing, so a compartmental run need not be taken a step at a time for it (see ss.Sim.describe())
 
     def __init__(self, transitions, **kwargs):
         super().__init__(**kwargs)
@@ -372,7 +372,7 @@ class Births(Demographics):
 
         if ss.options.crn:
             # CRN-safe path: scan every woman with a per-agent Bernoulli draw (reproducible across scenarios)
-            self.dist.set(p=np.clip(scaled_birth_prob*ppl.n_alive/len(mothers), a_min=0, a_max=1)) # Update the distribution with the probabilities for this timestep
+            self.dist.set(p=np.clip(scaled_birth_prob*ppl._n_agents_alive()/len(mothers), a_min=0, a_max=1)) # Update the distribution with the probabilities for this timestep
             birth_uids = self.dist.filter(mothers)
         else:
             # Fast non-CRN path: draw the number of births directly rather than scanning every
@@ -391,7 +391,7 @@ class Births(Demographics):
         many parents uniformly from the women of reproductive age (`mothers`). Used only when
         `ss.options.crn` is False; see `get_births()`.
         """
-        n_alive = self.sim.people.n_alive
+        n_alive = self.sim.people._n_agents_alive()
         self.n_dist.set(mean=n_alive*prob)
         n_new = min(int(self.n_dist.rvs(1)[0]), len(mothers)) # Cannot have more births than mothers
         if n_new == 0:

@@ -315,7 +315,7 @@ Rename the column to match the result (`data.rename(columns={'reported': 'cases'
 
 **A method that forgot to call `super()`.** A module written as code that overrides `init_pre()`, `init_results()`, `init_post()`, `start_step()`, `finish_step()`, or `finalize()` without calling the base class's version leaves part of the module unset. At the end of a run, Starsim warns with the methods that were never called, so read that warning rather than the results.
 
-**`len(sim.people)` still counts those who died this step.** People who die in a step stay among the active agents until the step ends, so that analyzers can look at them, so a share worked out in an analyzer with `len(sim.people)` as its denominator is off by that step's deaths. Use `sim.people.n_alive`.
+**`len(sim.people)` still counts those who died this step.** People who die in a step stay among the active agents until the step ends, so that analyzers can look at them, so a share worked out in an analyzer with `len(sim.people)` as its denominator is off by that step's deaths. Use `sim.people.n`, the number of people alive (or `sim.people.alive.count()` for the number of agents alive).
 
 **A date between two steps never equals `sim.now`.** `if sim.now == ss.date('2025-03-01'):` in a sim with weekly steps does nothing, with no error, unless a step happens to fall on that date. Compare with `>=`, or give a module written as code `start=`, and it runs only from then on.
 
@@ -398,7 +398,7 @@ The tools on this page and elsewhere, by the question each answers. "Builds" mea
 | `disease.equations()` | The model as the equations of an ODE | No |
 | `disease.diagram()` | The states and transitions, drawn | No |
 | `sim.solver`, `sim.solver_reason` | Which solver was chosen, and why | Builds |
-| `sim.kernel_reason()`, `require_kernels=True` | Why a compartmental run is taken a step at a time rather than in one call (see [Getting the most speed](running_performance.qmd)) | Builds |
+| `sim.describe()`, `require_kernels=True` | Why a compartmental run is taken a step at a time rather than in one call (see [Getting the most speed](running_performance.qmd)) | Builds |
 | `ss.solvers.solver_table()` | Every rule that decides which engine runs a model (see [Solvers and backends](running_solvers.qmd#appendix-what-needs-agents)) | No |
 | `sim.check_dt()` | How much each result changes with a step half as long | Runs two copies |
 | `sim.what_modifies()` | Everything that changes a parameter during the run | Builds |

@@ -220,14 +220,14 @@ def test_epipack_reading():
     with pytest.warns(ss.errors.ImportIncomplete):
         sim = load_epipack(d, **kw)
     assert {'network', 'time'} <= {k for k,_ in sim.imported.incomplete}
-    assert isinstance(sim.pars.solver, ss.solvers.gillespie)
+    assert isinstance(sim.init().solver, ss.solvers.gillespie)
     return
 
 
 def test_epymorph():
     sc.heading('Testing importing an epymorph model, against its own runs')
     sims = [load_epymorph(sirs_epymorph(), rand_seed=i, **kw).run() for i in range(5)]
-    assert sims[0].isinstance(pars.solver, ss.solvers.tau)
+    assert isinstance(sims[0].solver, ss.solvers.tau)
     assert len(sims[0].results.epymorph.I.values) >= 120
     refs = dict(a=(16980, 48), b=(9099, 54), c=(4488, 56)) # The mean of 20 BasicSimulator runs: the peak infectious by place, and its day
     for place,(height,day) in refs.items():

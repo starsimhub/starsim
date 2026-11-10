@@ -991,7 +991,7 @@ def test_declared_transmit():
 
     # A rate as a function of any of self, sim, and uids, by name: the same expression as agents and as an ODE; uids only as agents
     S, I, R = ss.states(3)
-    rate = lambda self, sim: self.pars.beta*self.I.n/sim.people.n_alive
+    rate = lambda self, sim: self.pars.beta*self.I.n/sim.people.n
     n = [ss.Sim(ss.Disease(infection=S >> I @ rate, recovery=I >> R @ ss.years(1), beta=ss.par(ss.peryear(3)), init_prev=0.05, name='d'), solver=solver, **kw).run().results.d.infection.sum() for solver in ['abm', 'ode']]
     assert np.isclose(n[0], n[1], rtol=0.15)
     with pytest.raises(ss.CapabilityError, match='uids'):

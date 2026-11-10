@@ -79,8 +79,8 @@ class Options(sc.obj):
     to reset one parameter to default. See `ss.options.help(detailed=True)` for
     more information.
 
-    See `ss.options.context()` to set options temporarily, and `ss.style()` to
-    set the plotting style temporarily.
+    Use `ss.options(...)` (or `ss.options.context(...)`) in a `with` block to set
+    options temporarily, and `ss.style()` to set the plotting style temporarily.
 
     Common options are (see also `ss.options.help(detailed=True)`):
 
@@ -91,10 +91,12 @@ class Options(sc.obj):
         ```python
         ss.options(verbose=2) # Print everything
         ss.options(warnings='error') # Be more strict about warnings
+        with ss.options(jax='cpu'): # Just for this block
+            sim.gradient()
         ```
     """
 
-    __slots__ = ('optdesc', 'orig_options', 'on_entry', '_locked', '_style')
+    __slots__ = ('optdesc', 'orig_options', '_locked', '_style')
 
     def __init__(self):
         super().__init__()
@@ -102,7 +104,6 @@ class Options(sc.obj):
         super().update(options)  # Update this object with them
         self.setattribute('optdesc', optdesc)  # Set the description as an attribute, not a dict entry
         self.setattribute('orig_options', sc.dcp(options))  # Copy the default options
-        self.setattribute('on_entry', [])  # Stack of settings to restore, to allow nested context() blocks
         self.setattribute('_locked', True)
         return
 
@@ -155,7 +156,7 @@ class Options(sc.obj):
         optdesc.kernels = 'Which kernels run the solvers (all give the same results): "auto" (default) for Rust if it is there (in the wheels, or built: see starsim/solvers/rust/README.md), and otherwise Numba, with compartmental runs taken as plain Python until Numba has compiled (if a run, or the runs of a session, would take longer as plain Python than compiling takes, about two minutes once per install, Numba compiles first; a note says which); "rust" for Rust, compiled ahead of time, so a first run takes no compiling; "numba" to always compile with Numba first (see ss.compile()); "python" for the compartmental kernels as plain Python (the passes over agents are Numba). JAX is chosen by the run (see sim.jax), and ss.jit is always Numba'
         options.kernels = sc.parse_env('STARSIM_KERNELS', 'auto', str)
 
-        optdesc.jax = 'The platform that JAX runs on where Starsim uses it (sim.gradient(), fits, and ODE runs with sim.jax = True): "auto" (default) for JAX\'s own choice (a GPU if it finds one), or a platform, e.g. "cpu" (for a GPU that JAX cannot use) or "cuda". It sets JAX_PLATFORMS, so it applies to everything in the session that uses JAX, and must be set before JAX is first used'
+        optdesc.jax = 'The platform that JAX runs on where Starsim uses it (sim.gradient(), fits, and ODE runs with sim.jax = True): "auto" (default) for JAX\'s own choice (a GPU if it finds one), or a platform, e.g. "cpu" (for a GPU that JAX cannot use) or "cuda". It sets JAX_PLATFORMS, so it applies to everything in the session that uses JAX; if JAX has started already on other platforms, it is started again on these when Starsim next uses it (and "auto" goes back to the platforms it had before)'
         options.jax = sc.parse_env('STARSIM_JAX', 'auto', str)
 
         optdesc.uncompiled_warning = 'If True (default), say on import when Starsim has not been compiled yet (see ss.compile()) -- NOTE, only has effect via the environment variable since executed on load'
@@ -172,9 +173,9 @@ class Options(sc.obj):
 
         return optdesc, options
 
-    def __call__(self, *args, **kwargs):
-        """Allow `ss.options(verbose=0)` instead of `ss.options.set(verbose=0)` """
-        return self.set(*args, **kwargs)
+    def __call__(self, key=None, value=None, **kwargs):
+        """ Allow `ss.options(verbose=0)` instead of `ss.options.set(verbose=0)`, and `with ss.options(verbose=0):` for a block (as `context()`) """
+        return self.context(key, value, **kwargs)
 
     def update(self, *args, **kwargs):
         """ Set several options, as `set()` does (so e.g. the kernels are swapped)
@@ -221,23 +222,6 @@ class Options(sc.obj):
         output += 'Starsim options (see also ss.options.disp()):\n'
         output += sc.pp(self.to_dict(), output=True)
         return output
-
-    def __enter__(self):
-        """ Allow to be used in a with block """
-        return self
-
-    def __exit__(self, *args, **kwargs):
-        """ Allow to be used in a with block """
-        try:
-            reset = {}
-            for k, v in self.on_entry.pop().items():
-                if self[k] != v:  # Only reset settings that have changed
-                    reset[k] = v
-            self.set(**reset)
-        except IndexError as E:
-            errormsg = 'Please use ss.options.context() if using a with block'
-            raise AttributeError(errormsg) from E
-        return
 
     def disp(self):
         """ Detailed representation """
@@ -372,17 +356,22 @@ class Options(sc.obj):
 
         return
 
-    def context(self, **kwargs):
+    def context(self, key=None, value=None, **kwargs):
         """
-        Alias to set(), for use in a "with" block.
+        Set options, as `set()` does, until the end of a "with" block (the same as `ss.options(...)`)
 
         Args:
-            kwargs (dict): the options to set, by name, until the end of the "with" block
+            key (str): the option to set, or 'defaults' to set every option to its default
+            value (varies): its value
+            kwargs (dict): the options to set, by name
+
+        Returns:
+            An object that sets them back to what they were at the end of the "with" block (and outside one, does nothing)
 
         Examples:
             ```python
             # Silence all output
-            with ss.options.context(verbose=0):
+            with ss.options(verbose=0):
                 ss.Sim().run()
 
             # Convert warnings to errors
@@ -394,14 +383,10 @@ class Options(sc.obj):
                 ss.Sim().run().plot()
             ```
         """
-
-        # Store current settings
-        on_entry = {k: self[k] for k in kwargs.keys()}
-        self.on_entry.append(on_entry)
-
-        # Make changes
-        self.set(**kwargs)
-        return self
+        keys = self.keys() if key in ['default', 'defaults'] else [key, *kwargs] if key is not None else kwargs
+        before = {k:self[k] for k in keys if k in self} # Unknown ones are raised by set()
+        self.set(key, value, **kwargs)
+        return OptionsContext(self, before)
 
     def get_default(self, key):
         """ Helper function to get the original default options
@@ -517,6 +502,28 @@ def load_fonts(folder=None, name='Mulish', rebuild=False, verbose=False, **kwarg
     except Exception as E:
         if verbose: print(f'Could not find font {name}: {str(E)}')
     return
+
+
+class OptionsContext:
+    """ What `ss.options(...)` returns: at the end of a "with" block, it sets the options it changed back to what they were """
+    def __init__(self, options, before):
+        self.options = options
+        self.before = before
+        return
+
+    def __enter__(self):
+        return self.options
+
+    def __exit__(self, *args):
+        self.options.set(**{k:v for k,v in self.before.items() if self.options[k] != v}) # Only those that have changed
+        return
+
+    def __repr__(self):
+        return 'Starsim options set (see ss.options.disp())'
+
+    def _ipython_display_(self):
+        """ Show nothing when it ends a Jupyter cell (e.g. ss.options(verbose=0)) """
+        return
 
 
 # Create the options on module load

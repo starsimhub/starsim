@@ -20,6 +20,9 @@ The disease and the mixing are separate: changing from homogeneous mixing to a n
 
 Here is the same disease under three kinds of mixing. With no route, β = 0.05 per day and an infectious period of 10 days give R0 = β × the infectious period = 0.5, so there is no epidemic. With 10 contacts a day, R0 = 0.05 × 10 × 10 = 5, and the mixing pool and the random network give nearly the same epidemic:
 
+::: {.panel-tabset group="language"}
+## Python
+
 ```{python}
 import starsim as ss
 import starsim.library as ssl
@@ -38,6 +41,30 @@ scenarios = {
 msim = ss.parallel(scenarios)
 msim.plot('sir.I')
 ```
+
+## R
+
+```r
+library(starsim)
+
+states("S I R")
+sir <- Disease(
+  infection = Transition(S, I, rate = 0.05 * I), # β = 0.05: per day with no route, per contact with one
+  recovery  = Transition(I, R, dur = days(10)),  # Infectious for 10 days on average
+  init_prev = 0.01
+)
+
+make_sim <- function(...) { # A sim with these settings, and any others given
+  Sim(sir, n_agents = 10000, stop = days(120), verbose = 0, ...)
+}
+msim <- parallel(list(
+  "Homogeneous mixing"                 = make_sim(),
+  "Mixing pool (10 contacts a day)"    = make_sim(networks = ss$MixingPool(n_contacts = 10)),
+  "Random network (10 contacts a day)" = make_sim(networks = ss$RandomNet(n_contacts = 10))
+))
+msim$plot("sir.I")
+```
+:::
 
 Transmission along every route is frequency-dependent: a person's number of contacts is fixed, and what matters is the share of them who are infectious. This is the usual assumption for infections passed directly between people. A density-dependent rate, which grows with the number of people infected rather than their share, is written with the count itself, `S >> I @ ss.perday(3e-5)*I.n` (see [Diseases](building_diseases.qmd)).
 

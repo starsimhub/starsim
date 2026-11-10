@@ -30,46 +30,66 @@ diff_fields = ['inflow', 'contacts', 'mat', 'sh_val', 'tgt_w', 'crd_w', 'maps', 
 table_fields = ['fixed', 'mult', 'consts', 'rel_trans'] # As tables over the steps: see ss.solvers.Compartmental.tables()
 
 
-platform_advice = 'run JAX on the CPU: ss.options.jax = "cpu" (or the environment variable STARSIM_JAX=cpu, or JAX_PLATFORMS=cpu), before JAX is first used' # What to do when JAX fails to start on a GPU
+platform_advice = 'run JAX on the CPU: ss.options.jax = "cpu" (or the environment variable STARSIM_JAX=cpu, or JAX_PLATFORMS=cpu)' # What to do when JAX fails to start on a GPU
+original = {} # JAX's platforms, and JAX_PLATFORMS, before ss.options.jax first changed them (see jax()), which "auto" goes back to
 
 
 def jax():
     """
-    Import JAX (imported only when first used, since it takes a few tenths of a second)
+    Import JAX (imported only when first used, since it takes a few tenths of a second), on the platform that `ss.options.jax` says
 
     If JAX has not been imported yet, it is given a device for each core of the CPU (as
     `numpyro.set_host_device_count()` does), or as many as the threads asked for in the
     environment (e.g. `OMP_NUM_THREADS=1`: see `ss.settings.thread_limit`), so that the chains
     of a posterior run on cores of their own; everything else runs on the first. XLA's own
-    threads (most of them compiling) are not limited by it: no flag of XLA's limits them. The platform it runs
-    on is `ss.options.jax` (e.g. "cpu"), if not "auto". The first time, its devices are
-    started here, so that a GPU that fails to start (e.g. with a CUDA plugin of another
-    version than jaxlib) says what to do.
+    threads (most of them compiling) are not limited by it: no flag of XLA's limits them.
+
+    The platform it runs on is `ss.options.jax` (e.g. "cpu"), if not "auto". If JAX has
+    started already on others (by Starsim or anything else), it is started again on these:
+    arrays made already stay on their devices, and are moved when used with new ones, and
+    what was compiled is compiled again. "auto" goes back to the platforms JAX had before
+    Starsim first changed them. The first time, its devices are started here, so that a GPU
+    that fails to start (e.g. with a CUDA plugin of another version than jaxlib) says what to do.
     """
+    if ss.options.jax != 'auto':
+        if not original: # About to change them for the first time
+            env = os.environ.get('JAX_PLATFORMS')
+            original.update(env=env, platforms=sys.modules['jax'].config.jax_platforms if 'jax' in sys.modules else env)
+        platforms = ss.options.jax
+        os.environ['JAX_PLATFORMS'] = platforms # So that processes started from this one (e.g. MultiSim's) use them too
+    elif original: # Changed by Starsim before: go back
+        platforms = original['platforms']
+        if original['env'] is None:
+            os.environ.pop('JAX_PLATFORMS', None)
+        else:
+            os.environ['JAX_PLATFORMS'] = original['env']
+    else:
+        platforms = False # Nothing to change
     if 'jax' not in sys.modules:
         if 'xla_force_host_platform_device_count' not in os.environ.get('XLA_FLAGS', ''): # As many as the threads asked for in the environment, if any (e.g. OMP_NUM_THREADS=1: see ss.settings.thread_limit)
             devices = min(os.cpu_count() or 1, ss.settings.thread_limit or os.cpu_count() or 1)
             os.environ['XLA_FLAGS'] = f'{os.environ.get("XLA_FLAGS", "")} --xla_force_host_platform_device_count={devices}'.strip()
-        if ss.options.jax != 'auto':
-            os.environ['JAX_PLATFORMS'] = ss.options.jax
     try:
         import jax
     except ImportError as E:
         errormsg = 'Gradients need JAX, which is not installed: use pip install "starsim[jax]". Fitting by methods without gradients works without it.'
         raise ImportError(errormsg) from E
     from jax._src import xla_bridge
-    if not xla_bridge.backends_are_initialized(): # The first use, by Starsim or anything else
-        if ss.options.jax != 'auto':
-            jax.config.update('jax_platforms', ss.options.jax) # If JAX was imported before Starsim used it
-        else:
+    started = xla_bridge.backends_are_initialized() # By Starsim or anything else
+    if platforms is not False and (jax.config.jax_platforms or None) != (platforms or None):
+        if started: # On other platforms: start again
+            import jax.extend
+            jax.extend.backend.clear_backends()
+            started = False
+        jax.config.update('jax_platforms', platforms)
+    if not started:
+        if not jax.config.jax_platforms:
             check_plugins()
         try:
             jax.devices()
         except Exception as E:
             errormsg = f'JAX could not start its devices ({type(E).__name__}: {E}).\nIf this is a GPU that JAX cannot use, {platform_advice}'
             raise RuntimeError(errormsg) from E
-    elif ss.options.jax != 'auto' and ss.options.jax.split(',')[0] != jax.default_backend():
-        ss.warn(f'ss.options.jax = "{ss.options.jax}", but JAX was started already, on "{jax.default_backend()}", before Starsim used it; set it (or STARSIM_JAX, or JAX_PLATFORMS) before JAX is first used')
     if jax.config.jax_compilation_cache_dir is None: # Keep what is compiled for later sessions, unless told otherwise (e.g. by JAX_COMPILATION_CACHE_DIR)
         jax.config.update('jax_compilation_cache_dir', os.path.join(os.path.expanduser('~'), '.cache', 'starsim', 'jax'))
         jax.config.update('jax_persistent_cache_min_compile_time_secs', 0.25)
@@ -309,6 +329,8 @@ class Run(sc.prettyobj):
                 stack.append(regs[arg])
             elif op == kn.STORE:
                 regs[arg] = stack.pop()
+            elif op == kn.NOISE: # Noise on a rate, which the ODE leaves out (its mean, 1)
+                pass
             elif op == kn.EXPOSURE:
                 stack.append(exposures[arg])
             elif op == kn.TOTAL: # In the whole population, every place
@@ -1176,8 +1198,8 @@ class Density(sc.prettyobj):
 
     The numbers in the run are worked out from the parameters in JAX: the values in the rates
     by evaluating the model's own expressions, and the rest (e.g. the compartments at the start)
-    from the change in them as each parameter changes, which has to be linear (`sim.fit()` checks
-    the result against runs of the sim). Then the run, the results that have data, and the
+    from the change in them as each parameter changes, which has to be linear (checked at the corners
+    and the middle of the bounds when it is built). Then the run, the results that have data, and the
     likelihood and priors. If anything is not covered, `Unsupported` says what.
 
     Args:
@@ -1259,14 +1281,17 @@ class Density(sc.prettyobj):
             raise Unsupported(f'the fitted parameter "{self.names[i]}" is a {type(raw).__name__}')
         return convert_fitted(raw, val, self.sim.unit_base, jax().numpy)
 
+    def limits(self):
+        """ The lowest and highest value of each parameter (its initial value for one without bounds) """
+        if self.bounds is not None:
+            return [np.asarray(b, dtype=float) for b in self.bounds]
+        bound = ss.fit.bound_value
+        lims = [[bound(b, p.raw) for b in p.bounds] if p.bounds is not None else [x, x] for p,x in zip(self.fitted, self.x0)]
+        return np.array(lims, dtype=float).T
+
     def corners(self):
         """ The points where the substeps a step needs are worked out: the corners of the bounds (or with more than 4 parameters, each parameter at each of its bounds, the others at their initial values) """
-        if self.bounds is not None:
-            lows, highs = [np.asarray(b, dtype=float) for b in self.bounds]
-        else:
-            bound = ss.fit.bound_value
-            lims = [[bound(b, p.raw) for b in p.bounds] if p.bounds is not None else [x, x] for p,x in zip(self.fitted, self.x0)]
-            lows, highs = np.array(lims, dtype=float).T
+        lows, highs = self.limits()
         if len(self.x0) <= 4:
             return [np.array(corner) for corner in itertools.product(*zip(lows, highs))]
         points = []
@@ -1304,7 +1329,10 @@ class Density(sc.prettyobj):
         for x in self.corners():
             captured = self.capture(x)
             if all(Run.key(program, *how) == key for (program,how,X),key in zip(captured, keys)):
-                corners.append([c[2] for c in captured])
+                corners.append((x, [c[2] for c in captured]))
+        middle = np.mean(self.limits(), axis=0) # And at the middle of the bounds, where with many parameters all of them have moved (see corners())
+        captured = self.capture(middle)
+        checked = corners + [(middle, [c[2] for c in captured])] if all(Run.key(program, *how) == key for (program,how,X),key in zip(captured, keys)) else corners
 
         # The run of each set of engines that are run together, with room to spare for the substeps
         self.runs = []
@@ -1319,7 +1347,7 @@ class Density(sc.prettyobj):
                 args = tuple(self.X0[j] for j in unit)
             if not base.n_sub: # The most a step needs at the start and at the corners of the bounds, with room to spare, so that a draw anywhere within them gets the substeps it needs
                 need = np.asarray(call(base, 'run', args)[3]).max() # As NumPy, since a JAX array's max() outside x64 warns that it is truncated
-                for Xs in corners:
+                for x,Xs in corners:
                     need = max(need, np.asarray(call(base, 'run', Xs[unit[0]] if len(unit) == 1 else tuple(Xs[j] for j in unit))[3]).max())
                 n_max = int(2**np.ceil(np.log2(max(2*need, 1))))
             else:
@@ -1366,7 +1394,52 @@ class Density(sc.prettyobj):
                     if np.any(slope != 0):
                         self.slopes[j].setdefault(key, {})[i] = slope
         self.set_pars(self.x0)
+        self.check_linear(checked)
         return
+
+    def check_linear(self, checked, rtol=1e-6, atol=1e-9):
+        """
+        Check that the numbers worked out from their slopes at the start (see `numbers()`) are what they are at other points (the
+        corners and the middle of the bounds), and raise `Unsupported` naming those that are not, e.g. a share of `q*q`
+
+        Args:
+            checked (list): each point, and the numbers in the run of each engine there
+            rtol (float): how far a number may be from its value, relative to it (the slopes, by central differences, put a number that is linear off by about 1e-12 of it, or 1e-8 with bounds 10^4 times the starting value)
+            atol (float): the same, relative to the largest of its kind (e.g. for a number found as the difference of two large ones)
+        """
+        for x,Xs in checked:
+            for j,X0 in enumerate(self.X0):
+                exact = dict(consts=list(self.consts[j]), fixed=[f for f,flow,dw,mult in self.fixed[j]]) # The values worked out exactly instead
+                for key,start in X0.items():
+                    slopes = self.slopes[j].get(key, {})
+                    line = start + sum(slope*(x[i] - self.x0[i]) for i,slope in slopes.items())
+                    value = Xs[j][key]
+                    off = ~np.isclose(line, value, rtol=rtol, atol=atol*max(np.abs(start).max(initial=0), np.abs(value).max(initial=0)))
+                    if key in exact:
+                        off[:, exact[key], :] = False
+                    if off.any():
+                        wheres = [tuple(where) for where in np.argwhere(off)]
+                        moved = [i for i in slopes if any(slopes[i][where] != 0 for where in wheres)] or [i for i in range(len(x)) if x[i] != self.x0[i]]
+                        names = sc.strjoin([f'"{self.names[i]}"' for i in sorted(moved)], sep=' and ')
+                        what = sc.strjoin(list(dict.fromkeys(self.describe(j, key, where) for where in wheres)), sep=' and ')
+                        raise Unsupported(f'{what}, which {"is" if " and " not in what else "are"} not linear in the fitted parameter{"s" if len(moved) > 1 else ""} {names}')
+        return
+
+    def describe(self, j, key, where):
+        """ What a number in the run of engine `j` is, for a message: the entry `where` of `key` """
+        engine = self.engines[j]
+        name = lambda c: 'outside the model' if c is None or c < 0 else engine.comps[c].state.name
+        if key == 'y':
+            return f'the initial number in {name(where[0])}'
+        if key == 'tgt_w':
+            program = self.programs[j]
+            f = np.searchsorted(program.tgt_starts, where[0], side='right') - 1
+            return f'the share of {name(engine.flows[f].src)} going to {name(program.tgt_comp[where[0]])}'
+        if key in ['inflow', 'fixed', 'mult']:
+            f = where[0] if key == 'inflow' else where[1]
+            return f'the {dict(inflow="inflow", fixed="rate", mult="multiplier of the rate")[key]} of "{engine.flows[f].tr.name}"'
+        kinds = dict(contacts='contacts', mat='mixing', rel_trans='relative transmissibility', consts='values in the rates', crd_w='shares', maps='movement', mov_rate='movement')
+        return f'the {kinds.get(key, "deliveries" if key.startswith("sh_") else key)} in the run'
 
     def numbers(self, x):
         """ The numbers in the run of each engine, as JAX arrays, at some parameter values """
@@ -1376,7 +1449,7 @@ class Density(sc.prettyobj):
             X = {}
             for key,X0 in self.X0[j].items():
                 val = jnp.asarray(X0)
-                for i,slope in self.slopes[j].get(key, {}).items(): # Linear in each parameter (checked in sim.fit()); the values in the rates are replaced below by what they exactly are
+                for i,slope in self.slopes[j].get(key, {}).items(): # Linear in each parameter (checked in check_linear()); the values in the rates are replaced below by what they exactly are
                     val = val + slope*(x[i] - self.x0[i])
                 X[key] = val
             ctx = Context(self, engine, x, series=True)

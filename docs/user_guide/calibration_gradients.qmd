@@ -7,13 +7,13 @@ authorship:
   note: Based on the Claude draft, with a note on sampling-importance resampling from the Starsim 3 user guide page on SIR calibration; the time-varying transmission rate fitted to a real change, and the note on how honest the posterior is, by AI
 ---
 
-For a deterministic model, run as an ODE, Starsim can work out how each result changes as each parameter changes: the *gradient*, or the derivatives of the results with respect to the parameters. It does this by automatic differentiation with [JAX](https://docs.jax.dev), which follows the calculation of the run step by step, rather than by rerunning the model with slightly different values. Gradients make several things possible:
+For a deterministic model, run as an ODE, Starsim can work out how each result changes as each parameter changes: the *gradient*, or the derivatives of the results with respect to the parameters. It does this by automatic differentiation with [JAX](https://docs.jax.dev), which follows the calculation of the run step by step, rather than by rerunning the model with slightly different values; the cheap steps on either side of the run (from the parameters to the numbers the run uses, and from the run to the results) are differentiated by central differences (see [the log-density](#the-log-density) for how a fit uses them). Gradients make several things possible:
 
 - Fitting many parameters quickly, with an optimizer that follows the gradient (the default for an ODE with three or more fitted parameters).
 - Drawing from the posterior (the distribution of values consistent with the data and the priors) with the No-U-Turn sampler, NUTS, a Hamiltonian Monte Carlo method that uses the gradient to move through the space of parameters efficiently.
 - Seeing which parts of the epidemic a parameter affects, and by how much.
 
-This page assumes the basics of [Fitting a model](calibration_fitting.qmd). Gradients need JAX (`pip install "starsim[jax]"`), a model that runs as an ODE, and one whose whole run is compiled: a rate that calls a Python function, a module written as code, or a movement register rules them out, and the fit says which when it can't use gradients; `ss.solvers.why_not(sim, 'jax')` says so for any sim, and every reason is listed by `ss.solvers.solver_table()` (see [Solvers](architecture_solvers.qmd#what-decides-which-engine-runs-a-model)). JAX runs on a GPU if it finds one; if it can't use it (e.g. its CUDA plugin is of another version than JAX), run it on the CPU with `ss.options.jax = 'cpu'` (or the environment variable `STARSIM_JAX=cpu`) before it is first used.
+This page assumes the basics of [Fitting a model](calibration_fitting.qmd). Gradients need JAX (`pip install "starsim[jax]"`), a model that runs as an ODE, and one whose whole run is compiled: a rate that calls a Python function, a module written as code, or a movement register rules them out, and the fit says which when it can't use gradients; `ss.solvers.why_not(sim, 'jax')` says so for any sim, and every reason is listed by `ss.solvers.solver_table()` (see [Solvers](architecture_solvers.qmd#what-decides-which-engine-runs-a-model)). JAX runs on a GPU if it finds one; if it can't use it (e.g. its CUDA plugin is of another version than JAX), run it on the CPU with `ss.options.jax = 'cpu'` (or the environment variable `STARSIM_JAX=cpu`), or just for a block with `with ss.options(jax='cpu'):`.
 
 ## The model
 
@@ -116,6 +116,8 @@ print('Its gradient:', density.grad(density.x0))
 
 The gradient is positive for both parameters: at the starting values (1.5 and 0.3), increasing either would make the data more likely.
 
+The log-density is one function of the values, which has to hold over the whole of the bounds, not only where it was built. The rates in the model are worked out in JAX from the model's own expressions, so they are exact at any values. The other numbers that depend on the fitted parameters (the initial number in each state, the shares of a transition that branches, and inflows) are taken as linear in them, from how they change at the starting values. That is checked when the log-density is built, at the corners and the middle of the bounds, and a model where they aren't linear (e.g. an initial number that is the product of two fitted parameters) is an error that names them: then the default fit uses Nelder-Mead, and NUTS or L-BFGS-B need `require_jax=False`, which takes the gradients with Python in the loop. The same log-density is what L-BFGS-B and NUTS use in a fit with a likelihood.
+
 ## A best fit with gradients
 
 `sim.fit()` uses the gradient by default when a deterministic model has three or more fitted parameters (`'l-bfgs-b'`); with one or two, Nelder–Mead, which needs no gradient, is faster. Either can be asked for:
@@ -136,7 +138,7 @@ post = sim.fit(method=ss.fit.method('nuts', draws=250, warmup=250))
 post.summarize();
 ```
 
-Each chain of the sampler starts at a different point, spends `warmup=` draws tuning itself, and then makes `draws=` draws (500 of each by default; fewer here to keep this page quick). The table gives, for each parameter, the median of the posterior and its 95% interval (`lower` and `upper`), with two checks that the chains agree: the R-hat (`rhat`), which should be at most 1.01, and the effective sample size (`ess`), the number of independent draws the correlated draws are worth. [Fit diagnostics](calibration_diagnostics.qmd) says what to do if they fail.
+Each chain of the sampler starts from a draw near one of the best optima found from a scan (from the Laplace approximation there, made twice as wide in variance, so that the chains start apart and R-hat can see whether they come together), spends `warmup=` draws tuning itself, and then makes `draws=` draws (500 of each by default; fewer here to keep this page quick). The table gives, for each parameter, the median of the posterior and its 95% interval (`lower` and `upper`), with two checks that the chains agree: the R-hat (`rhat`), which should be at most 1.01, and the effective sample size (`ess`), the number of independent draws the correlated draws are worth. [Fit diagnostics](calibration_diagnostics.qmd) says what to do if they fail.
 
 The draws themselves are in `post.samples`, one row for each:
 
@@ -179,7 +181,7 @@ The interval agrees with the posterior's above. A profile needs a deterministic 
 
 ## Projecting from a posterior
 
-`fit.project()` runs the fitted model under each scenario, once for each of `n` draws from the posterior, with the same draws (and seeds) in every scenario. Each draw has a seed of its own, so the spread of the runs is the uncertainty in the fitted values, carried into the projection, together with chance. Here, a catch-up campaign on 1 April, before the peak, that vaccinates half of those still susceptible, compared with none:
+`fit.project()` runs the fitted model under each scenario, once for each of `n_runs` draws from the posterior, with the same draws (and seeds) in every scenario. Each draw has a seed of its own, so the spread of the runs is the uncertainty in the fitted values, carried into the projection, together with chance. Here, a catch-up campaign on 1 April, before the peak, that vaccinates half of those still susceptible, compared with none:
 
 ```{python}
 vaccination = ss.vaccinate(efficacy=0.97, who=measles.S, when='2025-04-01', coverage=0.5)
@@ -191,7 +193,7 @@ proj.plot('measles.cases')
 proj.summarize().loc['measles_cases']
 ```
 
-Since the model is deterministic, each run differs only in its parameter values, so the interval is the uncertainty from the fit alone. For a stochastic model, the runs would also differ by chance.
+Since the model is deterministic, each run differs only in its parameter values, so the interval is the uncertainty from the fit alone. For a stochastic model, the runs would also differ by chance, and with particle MCMC each continues a run that follows the data (see [Projecting from a posterior](calibration_fitting.qmd#projecting-from-a-posterior)).
 
 The same draws show the fit against the data: the model's weekly cases at the starting values and at the best values, with 95% of the posterior as a band:
 
@@ -203,8 +205,8 @@ post.plot()
 
 NUTS is for deterministic models. For a stochastic model, the likelihood can't be differentiated, and the other posterior methods apply (see [Fitting a model](calibration_fitting.qmd#how-the-fit-is-found)):
 
-- `method='pmcmc'`, particle MCMC, for a stochastic compartmental model (e.g. `solver='binomial'`) whose data series all have a likelihood: the likelihood at each point is estimated by running many copies of the model (particles) and weighting them by how well they match each data point.
-- `method='abc-smc'`, approximate Bayesian computation, for any model, including agents: it keeps the values whose runs come closest to the data, and needs no likelihood.
+- `method='pmcmc'`, particle MCMC, for a stochastic compartmental model (e.g. `solver='binomial'`) whose data series all have a likelihood: the likelihood at each point is estimated by running many copies of the model (particles) and weighting them by how well they match each data point. For an ODE that JAX can't run, `'pmcmc'` is a random walk on its exact likelihood, which needs no gradients.
+- `method='abc-smc'`, approximate Bayesian computation, for any stochastic model, including agents: it keeps the values whose runs come closest to the data, and needs no likelihood; its result is an approximation, whose width depends on how small its tolerance became.
 - `method='if2'`, iterated filtering, finds the maximum likelihood values of a stochastic compartmental model with particles.
 
 Starsim's samplers can also be used directly, for a log-density of your own (such as `density` above): `ss.fit.nuts()`, `ss.fit.pmmh()` (a random-walk Metropolis sampler, as particle MCMC uses), and `ss.fit.abc_smc()`; see [ss.fit](../api/fit.qmd).

@@ -156,7 +156,7 @@ class State(Nameable, Expr):
         return Count([self], kind='total')
 
 
-def states(arg=None, infected=False, **kwargs):
+def states(arg=None, infected=False, include_sum=False, **kwargs):
     """
     Create several states at once
 
@@ -165,6 +165,8 @@ def states(arg=None, infected=False, **kwargs):
             are assigned to; or a string of names (e.g. `'S I R'`), which are used directly
         infected (bool/str/list): which of them are infected (see `ss.State`): all of them (`True`); some, by name, with names given
             up front (`'E I'`); or some, by position, with a number of states (`[1, 2]`, or `range(1, 6)`)
+        include_sum (bool): also return the sum of the states, after them: the total of the people in them, often called `N`,
+            for rates written with it: `beta*I/N`, the share of people in `I`, which is `beta*I.frac`; or the whole flow, `beta*S*I/N`, the same
         kwargs (dict): instead of `arg`, the states by name, with the share of people who start in each (`S=0.9, I=0.1, R=0`); and
             any of the arguments of `ss.State`, passed to each, e.g. `people=False`
 
@@ -176,6 +178,7 @@ def states(arg=None, infected=False, **kwargs):
         Sv, Ev, Iv = ss.states(3, people=False) # Mosquitoes: counts, not people
         S, E, I, H, R = ss.states('S E I H R', infected='E I H') # H does not transmit, so is not infected unless said
         S, E, I, H, R = ss.states(5, infected=range(1, 4)) # The same, by position
+        S, I, R, N = ss.states('S I R', include_sum=True) # N = S + I + R, the total, e.g. for S >> I @ beta*I/N
         ```
     """
     inits = {k:kwargs.pop(k) for k in list(kwargs) if k not in state_args} # The states by name, with their starting shares
@@ -215,7 +218,10 @@ def states(arg=None, infected=False, **kwargs):
         if bad:
             raise ValueError(f'infected= gives the positions {bad} of states, but there are {n} (positions 0 to {n-1})')
         flags = [i in chosen for i in range(n)]
-    return [State(name=name, infected=flag, **(kwargs | ({'init':inits[name]} if name in inits else {}))) for name,flag in zip(names, flags)]
+    out = [State(name=name, infected=flag, **(kwargs | ({'init':inits[name]} if name in inits else {}))) for name,flag in zip(names, flags)]
+    if include_sum:
+        out.append(sum(out[1:], start=out[0]))
+    return out
 
 state_args = [k for k in inspect.signature(State.__init__).parameters if k not in ['self', 'kwargs']] # What ss.states() passes to each state, rather than taking as a state's name
 
@@ -497,6 +503,9 @@ class Transition(Nameable):
         increment (str/dict): a counter that goes up as well: its name, which adds 1 (`increment='parity'`), or a dict of the amount for each
             (`increment=dict(parity=2)` for twins, `dict(doses=-1)`); a counter is a dimension with integer levels, whose last level is open-ended
         min_stay (dur): a minimum stay: nobody leaves by this transition until they have been in its source state this long (a rate applies from then on, and a dwell time starts then)
+        noise (float/par): process noise on the rate, as sigma of gamma white noise (Bretó et al. 2009; pomp's `rgammawn`): the chain binomial multiplies the rate, in each substep of length h,
+            by a gamma draw with mean 1 and variance sigma²/h, for each group (and each particle of a filter). sigma is in the square root of the sim's unit (0.0878 in He et al.'s model, in years),
+            and can be fitted (`noise=ss.par(0.1, bounds=[0, 0.3])`). The ODE leaves it out (its mean); the other solvers refuse it
         acquisition (bool): whether it is an acquisition of the disease, which `rel_sus`, a product's efficacy against acquisition, and `ss.treat` act on. If not given: a
             contact-mediated transition is, and so is any other transition out of the disease's first state if none out of it is contact-mediated (an infection by a bite rate or an EIR)
         per_strain (str): for an event of a disease with strains (`ss.Strains`) in a state they share, with an outcome for each strain
@@ -517,11 +526,12 @@ class Transition(Nameable):
         failure   = ss.Transition(Tx, I, rate=ss.peryear(0.1), move=DS >> (DS, RIF)) # Treatment fails, and the strain acquires resistance (DS, RIF = strains)
         twins     = ss.Transition(P, PP, dur=ss.months(9), p=0.02, increment=dict(parity=2)) # Parity goes up by 2
         weaning   = ss.Transition(NB, W, rate=ss.perday(0.5), min_stay=ss.days(21)) # At least 21 days old first, as EMULSION's duration
+        infection = ss.Transition(S, E, rate=beta*I, noise=0.0878) # Infection whose rate varies at random from step to step (He et al. 2010)
         postpartum = ss.Transition(PP, NP, when=ss.on(preg.delivery, delay=ss.months(6))) # Six months after each woman's own delivery
         importation = ss.Transition(S, I, rate=ss.perday(1e-4), acquisition=True) # An infection from outside, alongside one by contact
         ```
     """
-    def __init__(self, source=None, dest=None, rate=None, dur=None, p=None, stages=None, name=None, label=None, who=None, when=None, move=None, increment=None, min_stay=None, acquisition=None, per_strain=False, **kwargs):
+    def __init__(self, source=None, dest=None, rate=None, dur=None, p=None, stages=None, name=None, label=None, who=None, when=None, move=None, increment=None, min_stay=None, noise=None, acquisition=None, per_strain=False, **kwargs):
         check_renamed(kwargs, 'ss.Transition()', dict(where='who=, a condition on who it applies to', on='when=, what triggers it (an event, or ss.on(event, delay=...))', single_strain="per_strain='first' (each strain carried has its own rate, and the first to happen moves on alone)"))
         where = None if who is None else check_who(who, 'a transition')
         trigger, delay = None, None
@@ -547,6 +557,9 @@ class Transition(Nameable):
         if rate is not None and dur is not None:
             errormsg = 'A transition takes one of rate= or dur='
             raise ValueError(errormsg)
+        if noise is not None and rate is None:
+            errormsg = f'noise= is noise on a transition\'s rate, so it goes with rate= (a dwell time dur=ss.days(10) is rate=ss.perday(0.1)), not {"dur=" if dur is not None else "when=" if trigger is not None else "no rate"}'
+            raise ValueError(errormsg)
         if stages is not None and (isinstance(stages, bool) or not isinstance(stages, (int, np.integer)) or stages < 1):
             errormsg = f'stages= is the number of sub-stages a dwell time is split into, a whole number of at least 1, not {stages!r}'
             raise ValueError(errormsg)
@@ -569,6 +582,10 @@ class Transition(Nameable):
         self.acquisition_given = acquisition # Whether it is an acquisition of the disease, if given
         self.acquisition = acquisition # Whether it is, as worked out when the module is built: see ss.graph.Graph.resolve_acquisition()
         self.min_stay = min_stay # A minimum stay in the source state before this transition can happen
+        self.noise = None if noise is None else as_expr(noise) # Sigma of gamma white noise on the rate, drawn each step by the chain binomial (see ss.solvers.Compartmental.flatten_rates())
+        if self.noise is not None and not isinstance(self.noise, ss.par): # The kernels take sigma as one value (see ss.kernels.NOISE)
+            errormsg = f'noise= takes sigma as a number or a parameter (e.g. noise=ss.par(0.1, bounds=[0, 0.3])), not an expression ({self.noise}); to fit a function of sigma, fit sigma itself'
+            raise ValueError(errormsg)
         self.move = None # A change of level in some dimensions: {dim: level}
         if move is not None and not isinstance(move, dict) and isinstance(move, ss.strains.StrainMove): # A change of the strains people carry, e.g. move=DS >> (DS, RIF)
             move = {move.strains.name: move}
@@ -1210,7 +1227,8 @@ def crude_rate(rate, kind):
 
 class lifetable:
     """
-    A life table: how many die at each age, which `ss.death(lifetable=)` and `ss.Deaths(lifetable=)` take as a death rate for each age band (see `hazards()`)
+    A life table: how many die at each age, which `ss.death(lifetable=)` and `ss.Deaths(lifetable=)` take as a death rate for each age band (see `hazards()`);
+    as agents, `ss.death(lifetable=)` draws each person's age at death once from those rates (see `draw()`), which is the same model
 
     Args:
         ages (list): the start of each age band, in years (the last band is as wide as the one before)
@@ -1245,15 +1263,23 @@ class lifetable:
         return np.interp(age, self.edges, self.survival, left=1.0, right=0.0)
 
     def draw(self, age, u):
-        """ The age at death of people of some ages, from uniform random numbers: a cohort's survival to it is a share (1 - u) of its survival to their age
+        """ The age at death of people of some ages, from uniform random numbers, at the death rate of each age band (see `hazards()`): the age at
+        which the deaths they face from their age on add up to -log(1 - u)
 
         Args:
             age (array): the ages of the people
             u (array): uniform random numbers, one for each person
         """
-        target = self.survive(age)*(1 - np.asarray(u))
-        keep = np.r_[True, np.diff(self.survival[::-1]) > 0] # The survival curve is flat where nobody dies, which is not a point it can be inverted at
-        out = np.interp(target, self.survival[::-1][keep], self.edges[::-1][keep])
+        if not hasattr(self, '_cumulative'): # The death rate of each band (the last is open), and the deaths faced from the first age to the start of each
+            lo = self.edges[:-1]
+            rates = self.hazards(lo)
+            self._cumulative = (lo, rates, np.r_[0.0, np.cumsum(rates[:-1]*np.diff(lo))])
+        lo, rates, cum = self._cumulative
+        age = np.asarray(age, dtype=float)
+        faced = np.where(age > lo[-1], cum[-1] + rates[-1]*(age - lo[-1]), np.interp(age, lo, cum, left=0.0)) # None before the first age
+        target = faced - np.log1p(-np.asarray(u, dtype=float))
+        keep = np.r_[np.diff(cum) > 0, True] # A band where nobody dies is flat, so it is inverted at its end
+        out = np.where(target > cum[-1], lo[-1] + (target - cum[-1])/rates[-1], np.interp(target, cum[keep], lo[keep]))
         return np.maximum(out, age)
 
     def hazards(self, edges):
@@ -1286,7 +1312,7 @@ def death(state=None, rate=None, dur=None, lifetable=None, name=None, label=None
         state (State/list): the state people die from, or several (`[E, I]`); if not given, every state that is people
         rate (any): the death rate per person per unit time; with no state (the deaths of everyone), it is read as `ss.Deaths` reads a rate: a bare number (per year) or a typed rate is per 1,000 people if above 1 per year, else per person (`10` and `ss.peryear(10)` are `ss.peryear(0.01)`) (a time series by the median of its values); a place by name is `ss.Deaths(death_rate=place)`, its UN rates by year, sex, and age, as agents (e.g. `rate='Kenya'`)
         dur (any): the mean time to death (instead of `rate`)
-        lifetable (`ss.lifetable`): instead of a rate, a life table, as a death rate for each of its age bands, by each person's age, as `ss.Deaths(lifetable=)` takes it (which also takes one for each sex and year); in a compartmental run, which needs a stratification by age, it is a death rate for each age group of the model
+        lifetable (`ss.lifetable`): instead of a rate, a life table, as a death rate for each of its age bands, by each person's age, as `ss.Deaths(lifetable=)` takes it (which also takes one for each sex and year); as agents, each person's age at death is drawn once from those rates, so they cannot be modified during a run (for that, give the rates by age: `rate=ss.by(age=...)`); in a compartmental run, which needs a stratification by age, it is a death rate for each age group of the model
         name (str): the name of the transition
         label (str): a human-readable name
     """

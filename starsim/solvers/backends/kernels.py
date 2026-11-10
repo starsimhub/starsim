@@ -34,6 +34,7 @@ CONST, COUNT, FRAC, EXPOSURE, ADD, SUB, MUL, DIV, POW, MIN, MAX, LT, LE, GT, GE,
 CONVEY = 22 # Not in a rate: a conveyor (its flow, then its slots; see convey()); kept out of the program's fields, since every field adds to the cost of each call that is passed it
 LOAD, STORE = 23, 24 # A part used more than once: STORE takes the top of the stack into register arg, and LOAD puts a copy back on top; the registers are the last rows of the stack (row depth-1-arg). The parts used by several rates are worked out first, in the operations before the first rate's (starts[0] > 0); a part used twice in one rate, in the rate
 GROUP = 25 # A count in the group each rate is for, not its place: a branching process's infection, which adds people at its rate per member of its source without taking them from it (see ss.solvers.Compartmental.init_program())
+NOISE = 26 # Gamma white noise on a rate (ss.Transition(noise=)): the chain binomial multiplies the top of the stack, in each group, by a gamma draw with mean 1 and variance sigma²/h, sigma being row arg of consts (see noise()); the other solvers leave it out (its mean, 1)
 opcodes = {'+':ADD, '-':SUB, '*':MUL, '/':DIV, '**':POW, 'minimum':MIN, 'maximum':MAX, 'exp':EXP, 'log':LOG, 'sqrt':SQRT, 'absolute':ABS, 'sin':SIN, 'cos':COS,
            'less':LT, 'less_equal':LE, 'greater':GT, 'greater_equal':GE}
 
@@ -223,7 +224,7 @@ row_groups = 50 # The groups from which a draw for every group is made as a vect
 
 
 compile_seconds = 120 # About how long compiling the kernels for a first run takes, once per install (86 to 128 s measured, 2026-10-31, with nothing in Numba's cache): runs that would take longer than this as plain Python are compiled first (by default: see choose())
-compile_all_seconds = 300 # About how long `compile()` takes (360 s measured on a busy machine, 2026-10-31); the time of each part is in `ss.solvers.backends.cache.slow`
+compile_all_seconds = 360 # About how long `compile()` takes (360 s measured on a busy machine, 2026-10-31; 153 s on another, 2026-11-07); the time of each part is in `ss.solvers.backends.cache.slow`
 note_after = 1 # The seconds of a plain run above which choose() says how long it would take compiled
 plain_total = 0.0 # The seconds that the runs taken as plain Python in this session would have taken, as estimated: see choose()
 noted = False # Whether choose() has said that a run is taken as plain Python, in this session
@@ -385,30 +386,47 @@ def compile(verbose=True):
             print('Nothing to compile: the Rust kernels are in use, and are compiled already (for Numba\'s, set ss.options.kernels="numba" first)')
         return
     T = sc.timer()
-    if verbose and not is_compiled():
-        ss.solvers.backends.compiling('the solver kernels', 'Numba', compile_all_seconds*3//4, compile_all_seconds*3//2) # Then each part, as it is compiled
+    from . import passes
+    parts = {'agents':passes.bounds, 'starsim.solvers.backends.kernels.run':run, 'starsim.solvers.backends.kernels.one_step':one_step,
+             'starsim.solvers.backends.kernels.run_many':run_many, 'starsim.solvers.backends.kernels.advance':advance, 'starsim.solvers.backends.kernels.advance_threads':advance_threads}
+    cold = [key for key,func in parts.items() if not (func.signatures or func._cache._cache_file._load_index())] # In the order compiled below
+    batch = None
+    if verbose and cold:
+        slow = ss.solvers.backends.cache.slow
+        ss.solvers.backends.compiling('the solver kernels', 'Numba', sum(slow[k][1] for k in cold), sum(slow[k][2] for k in cold))
+        batch = ss.solvers.backends.cache.Batch('the solver kernels', cold) # One bar for all the parts
+    part = batch.part if batch is not None else lambda key: contextlib.nullcontext()
     def make(solver='binomial'):
         S, I, R = ss.states(3)
         sir = ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(10), init=dict(I=0.1), name='sir')
         return ss.Sim(sir, total_pop=100, unit='day', stop=3, solver=solver, verbose=0)
-    with ss.options.context(kernels='numba', verbose=ss.options.verbose if verbose else 0):
-        make().run() # A whole run, in one call: run(), which has every solver's code
-        make().run(until=1) # A run taken a step at a time: one_step()
-        sim = make().init()
-        engine = sim.diseases[0].engine
-        engine.init_program()
-        engine.run_many([0, 1]) # An ensemble: run_many()
-        for n in [1, 2]: # The particles of a particle filter: advance(), and advance_threads()
-            engine.restart()
-            ss.solvers.Particles(engine, n, np.random.default_rng()).advance(2)
-        y, p = engine.y.copy(), engine.program # And those called on their own
-        apply_events(engine.make_rng(), y, engine.register, 0, True)
-        apply_shifts(engine.make_rng(), y, engine.shifts, 0, True, np.zeros((0, 2, y.shape[1])))
-        settle_places(y, p, workspace(y, p), engine.dt, np.zeros((p.n_trans + p.n_movers, y.shape[1])))
-        make('abm').run() # The passes over the agents (ss.solvers.backends.passes), which are cached apart from the kernels
-        for sim in typical_sims(): # And the rest of what sims with agents compile on their first run
-            sim.run()
-    if verbose:
+    try:
+        with ss.options.context(kernels='numba', verbose=ss.options.verbose if verbose else 0):
+            with part('agents'): # The passes over the agents (ss.solvers.backends.passes), which are cached apart from the kernels, and the rest of what sims with agents compile on their first run; the quickest
+                make('abm').run()
+                for sim in typical_sims():
+                    sim.run()
+            with part('starsim.solvers.backends.kernels.run'):
+                make().run() # A whole run, in one call: run(), which has every solver's code
+            with part('starsim.solvers.backends.kernels.one_step'):
+                make().run(until=1) # A run taken a step at a time: one_step()
+            sim = make().init()
+            engine = sim.diseases[0].engine
+            engine.init_program()
+            with part('starsim.solvers.backends.kernels.run_many'):
+                engine.run_many([0, 1]) # An ensemble: run_many()
+            for n,key in [(1, 'advance'), (2, 'advance_threads')]: # The particles of a particle filter: advance(), and advance_threads()
+                with part(f'starsim.solvers.backends.kernels.{key}'):
+                    engine.restart()
+                    ss.solvers.Particles(engine, n, np.random.default_rng()).advance(2)
+            y, p = engine.y.copy(), engine.program # And those called on their own
+            apply_events(engine.make_rng(), y, engine.register, 0, True)
+            apply_shifts(engine.make_rng(), y, engine.shifts, 0, True, np.zeros((0, 2, y.shape[1])))
+            settle_places(y, p, workspace(y, p), engine.dt, np.zeros((p.n_trans + p.n_movers, y.shape[1])))
+    finally:
+        if batch is not None:
+            batch.finish() # Says how long it took
+    if verbose and batch is None:
         print(f'Compiled the solver kernels in {T.toc(output=True):.0f} s')
     return
 
@@ -556,6 +574,19 @@ def some_binomials(rng, n, prob, out, rows):
     else:
         draws.binomials(n, prob, draws.uniforms(rng.integers(0, 2**62), 0, rows[0]), out, rows[2:])
     return
+
+
+@kernel(inline='always')
+def noise(rng, sigma, h):
+    """
+    Gamma white noise over a time h (Bretó et al. 2009; pomp's rgammawn(sigma, h)/h): a multiplier with mean 1 and variance sigma²/h,
+    sigma²·Gamma(h/sigma²)/h, from one uniform (as `draws.nbinom()` takes a gamma); 1 with no draw for sigma = 0
+    """
+    if sigma <= 0:
+        return 1.0
+    var = sigma*sigma
+    g, st = draws._gamma(h/var, draws.stream(rng.random()))
+    return g*var/h
 
 
 @jit
@@ -883,9 +914,9 @@ def sum_exposures(expo, e, s):
 def check_ops(ops):
     """ Check that a program has only operations the kernels know, which they then need not check (see `unary()`) """
     ops = np.asarray(ops, dtype=int)
-    unknown = sorted(set(ops[(ops < CONST) | (ops > GROUP)].tolist()))
+    unknown = sorted(set(ops[(ops < CONST) | (ops > NOISE)].tolist()))
     if unknown:
-        errormsg = f'The program of a rate has unknown operations {unknown}; the kernels know {CONST} to {GROUP}'
+        errormsg = f'The program of a rate has unknown operations {unknown}; the kernels know {CONST} to {NOISE}'
         raise ValueError(errormsg)
     return ops
 
@@ -2203,6 +2234,10 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, varying):
                             for g in range(ng):
                                 stack[len(stack)-1-arg, g] = stack[top, g]
                             top -= 1
+                        elif op == NOISE: # Noise on the rate, drawn for each substep under the chain binomial (whose substeps are dt/n_sub)
+                            if solver == 2 or solver == 5:
+                                for g in range(ng):
+                                    stack[top, g] *= noise(rng, p.consts[arg, g], dt/max(n_sub, 1))
                         elif op >= EXP: # A function of one value
                             for g in range(ng):
                                 stack[top, g] = unary(op, stack[top, g])

@@ -64,6 +64,9 @@ A result needs a name of its own. A parameter over time is a result of an expres
 
 An outcome is a reported quantity: a flow worked out from the model's other flows, which moves nobody. It is how a model says what a surveillance system would see. For measles, the rash appears about 4 days after people become infectious, and suppose half of cases are reported, a tenth of reported cases are admitted to hospital (for 5 days on average), and 2% of those admitted die:
 
+::: {.panel-tabset group="language"}
+## Python
+
 ```{python}
 S, E, I, R = ss.states('S E I R')
 infection = S >> E @ 1.9*I
@@ -84,6 +87,36 @@ print('Most in hospital at once:', round(res.n_hosp.max()))
 print('Deaths:', round(res.deaths.sum()))
 sim.diseases.measles.plot('cases', 'n_hosp')
 ```
+
+## R
+
+```r
+library(starsim)
+
+states("S E I R")
+infection <- Transition(S, E, rate = 1.9 * I)
+onset     <- Transition(E, I, dur = days(10))
+recovery  <- Transition(I, R, dur = days(8))
+
+cases  <- outcome(0.5 * onset, delay = days(4))                # Half of cases reported, at the rash
+hosp   <- outcome(0.1 * cases, delay = days(2), dur = days(5)) # A tenth of those admitted to hospital
+deaths <- outcome(0.02 * hosp, delay = days(5))                # 2% of those admitted die
+
+measles <- Disease(
+  infection = infection, onset = onset, recovery = recovery,
+  cases = cases, hosp = hosp, deaths = deaths,
+  init = list(I = 0.001)
+)
+sim <- Sim(measles, total_pop = 100000, start = "2025-01-01", stop = "2025-05-01", verbose = 0)
+sim$run()
+res <- sim$results$measles
+cat("Reported cases:", round(sum(res$cases$values)), "\n")
+cat("Hospital admissions:", round(sum(res$hosp$values)), "\n")
+cat("Most in hospital at once:", round(max(res$n_hosp$values)), "\n")
+cat("Deaths:", round(sum(res$deaths$values)), "\n")
+sim$diseases$measles$plot("cases", "n_hosp")
+```
+:::
 
 - **The source is a share of a flow**, or a sum of shares of several: `0.5*onset` is half of those who become infectious. The share is the probability of being counted. Reporting that depends on severity is a sum: `ss.outcome(0.1*mild + 0.6*severe)`, where `mild` and `severe` are transitions.
 - **Outcomes can follow from outcomes**: `hosp` is a share of `cases`, and `deaths` a share of `hosp`, so a chain of events is a line for each.

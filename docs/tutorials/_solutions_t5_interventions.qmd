@@ -37,7 +37,7 @@ msim.plot('measles.I')
 msim.summarize().loc['measles_infection']
 ```
 
-A campaign on 1 February prevents about 90% of the outbreak; on 1 March, about three quarters of it; on 1 May, when the outbreak is near its peak, only about one infection in eight. Every month of delay lets the outbreak grow by a large factor, so a campaign does the most good if it follows the first cases quickly.
+A campaign on 1 February prevents about 90% of the outbreak; on 1 March, about three quarters; on 1 May, near the peak, only about one infection in eight. Every month of delay lets the outbreak grow by a large factor, so a campaign should follow the first cases quickly.
 
 **2. The campaign and the response together.**
 
@@ -55,7 +55,7 @@ averted = -msim.summarize(baseline='No intervention').loc['measles_infection']
 averted.round()
 ```
 
-Together, they prevent more than either alone, but less than the sum of what each prevents on its own. Both act on the same outbreak: once the campaign has cut it to a fraction of its size, there are fewer infections left for the response to prevent.
+Together, they prevent more than either alone, but less than the sum: once the campaign has cut the outbreak to a fraction of its size, there are fewer infections left for the response to prevent.
 
 **3. Outbreaks that die out.** Count the runs with fewer than 100 infections:
 
@@ -66,4 +66,4 @@ totals = msim.results.measles.infection.summarize() # The total infections in ea
 print('Outbreak died out in', sum(totals < 100), 'of 50 runs; (1/R)^2 =', round((1/2.46)**2, 2))
 ```
 
-With 2 people infectious at the start, the outbreak dies out in about one run in seven, close to (1/R)² ≈ 17%. For the outbreak to die out, the chains of infection started by each of the first cases must all die out, and each does so with a chance of roughly 1/R. The match is only rough, since R = 2.46 is an average over the age groups: a first case who is a child, with many contacts, is more likely to start an outbreak than an adult, so who the first cases are matters as well as how many there are. In the runs that do take off, the size of the outbreak hardly varies; chance matters at the start, when cases are few.
+With 2 people infectious at the start, the outbreak dies out in about one run in seven, close to (1/R)² ≈ 17%: the chains of infection started by each first case must all die out, each with a chance of roughly 1/R. The match is rough, since R = 2.46 is an average over age groups: a child, with many contacts, is more likely to start an outbreak than an adult. In the runs that take off, the size hardly varies; chance matters at the start, when cases are few.
