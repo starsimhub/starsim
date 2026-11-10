@@ -9,7 +9,7 @@ import numpy as np
 import numba as nb
 import sciris as sc
 import starsim as ss
-from .crossing import JointStates
+from .joint_states import JointStates
 from .compartmental import kernel_list
 
 __all__ = ['Particles']

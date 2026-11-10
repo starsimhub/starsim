@@ -292,7 +292,7 @@ website:
             - api/solvers.agents.qmd
             - api/solvers.choose.qmd
             - api/solvers.compartmental.qmd
-            - api/solvers.crossing.qmd
+            - api/solvers.joint_states.qmd
             - api/solvers.deliveries.qmd
             - api/solvers.engine.qmd
             - api/solvers.mixing.qmd
@@ -427,7 +427,7 @@ quartodoc:
         - solvers.agents
         - solvers.choose
         - solvers.compartmental
-        - solvers.crossing
+        - solvers.joint_states
         - solvers.deliveries
         - solvers.engine
         - solvers.mixing

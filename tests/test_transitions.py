@@ -1616,9 +1616,12 @@ def test_noise():
     assert 'gamma white noise' in str(sim.diseases.sir.describe())
     ode = make(noise=0.2, solver='ode').run().results.sir.I
     assert np.array_equal(ode, make(solver='ode').run().results.sir.I) # Left out of the ODE
-    for solver in ['tau', 'gillespie', 'abm']:
-        with pytest.raises(ss.CapabilityError, match='noise='):
-            make(noise=0.2, solver=solver).run()
+    for solver in ['tau', 'abm']: # Drawn for each leap, and as agents once a step for each group
+        base = make(solver=solver).run().results.sir.I
+        assert np.array_equal(base, make(noise=0.0, solver=solver).run().results.sir.I)
+        assert not np.array_equal(base, make(noise=0.5, solver=solver).run().results.sir.I)
+    with pytest.raises(ss.CapabilityError, match='noise='):
+        make(noise=0.2, solver='gillespie').run()
     with pytest.raises(ValueError, match='noise='):
         ss.Transition(ss.State(), ss.State(), dur=ss.days(3), noise=0.1)
     with pytest.raises(ValueError, match='not an expression'): # Sigma is one value in the kernels
