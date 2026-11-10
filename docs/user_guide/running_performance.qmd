@@ -107,7 +107,7 @@ If a first run after installing is slow, the Numba kernels are being compiled; `
 
 ## Appendix: every option
 
-Starsim's global options are in `ss.options`: set one for the session with `ss.options(threads=1)`, for a block with `with ss.options.context(threads=1):`, or before Python starts with the environment variable `STARSIM_` and the option's name in capitals (`STARSIM_THREADS=1`), which is the way to set it for every worker or every task of a cluster job. `ss.options.disp()` shows the current values, and `ss.options.help(detailed=True)` each option's value, default, and variable. Here is each option with its description:
+Starsim's global options are in `ss.options`: set one for the session with `ss.options(threads=1)`, for a block with `with ss.options(threads=1):`, or before Python starts with the environment variable `STARSIM_` and the option's name in capitals (`STARSIM_THREADS=1`), which is the way to set it for every worker or every task of a cluster job. `ss.options.disp()` shows the current values, and `ss.options.help(detailed=True)` each option's value, default, and variable. Here is each option with its description:
 
 ```{python}
 import pandas as pd
