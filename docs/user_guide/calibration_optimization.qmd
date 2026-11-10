@@ -49,10 +49,10 @@ Testing does more for the money than masks, but its returns diminish, so the eve
 
 ## Finding the best allocation
 
-`sim.optimize()` keeps the total fixed (by default, the total of the current values, $100,000 here) and searches over its division between the programs, to reach its goal: `ss.fit.minimize()` the result to make as small as possible (or `ss.fit.maximize()` one to make as large as possible), with `at=` the time of the result (by default, the end):
+`sim.optimize()` keeps the total fixed (by default, the total of the current values, $100,000 here) and searches over its division between the programs, to reach its goal: `ss.fitting.minimize()` the result to make as small as possible (or `ss.fitting.maximize()` one to make as large as possible), with `at=` the time of the result (by default, the end):
 
 ```{python}
-best = sim.optimize(ss.fit.minimize('sir.R'), spend=['tests', 'masks'])
+best = sim.optimize(ss.fitting.minimize('sir.R'), spend=['tests', 'masks'])
 best.summarize()
 ```
 
@@ -75,14 +75,14 @@ How it works: the search (SciPy's SLSQP) is over the shares of the total, which 
 
 ## What to optimize, and when
 
-The goal, `ss.fit.minimize(...)` or `ss.fit.maximize(...)`, takes the name of a result, as a disease's (`'sir.R'`, or `'R'` for the first disease), whose value at the end of the run is used, or at the time given by `at=` (a date, or a year): `ss.fit.maximize('sir.S', at=2030)`. For anything else, it takes a function of the run sim, which returns the number to make small or large: here, the height of the peak, for a health system that must not be overwhelmed:
+The goal, `ss.fitting.minimize(...)` or `ss.fitting.maximize(...)`, takes the name of a result, as a disease's (`'sir.R'`, or `'R'` for the first disease), whose value at the end of the run is used, or at the time given by `at=` (a date, or a year): `ss.fitting.maximize('sir.S', at=2030)`. For anything else, it takes a function of the run sim, which returns the number to make small or large: here, the height of the peak, for a health system that must not be overwhelmed:
 
 ```{python}
 def peak_infectious(sim):
     """ The most people infectious at once """
     return sim.results.sir.I.max()
 
-peak = sim.optimize(ss.fit.minimize(peak_infectious), spend=['tests', 'masks'], verbose=False)
+peak = sim.optimize(ss.fitting.minimize(peak_infectious), spend=['tests', 'masks'], verbose=False)
 peak.summarize()
 ```
 
@@ -91,7 +91,7 @@ The best allocation for the peak is much the same as for the total here, but nee
 `start=` says when the new allocation takes effect: before it, each program keeps its current spending, and from then on, the allocation being tried. This is the usual question for a program that is already running: given what has been spent until now, how should next year's budget be divided?
 
 ```{python}
-from_april = sim.optimize(ss.fit.minimize('sir.R'), spend=['tests', 'masks'], start='2025-04-01', verbose=False)
+from_april = sim.optimize(ss.fitting.minimize('sir.R'), spend=['tests', 'masks'], start='2025-04-01', verbose=False)
 from_april.summarize()
 ```
 
@@ -102,7 +102,7 @@ The best allocation from April is the same, but it averts fewer infections (abou
 Programs can rarely be cut to nothing or grown without limit: a program may have contracts to honor, or be unable to expand faster than it can hire staff. `bounds=` gives the least and most each program can have, in dollars, by name, with `None` for no limit (a program not named has none beyond 0 and the total):
 
 ```{python}
-limited = sim.optimize(ss.fit.minimize('sir.R'), spend=['tests', 'masks'], bounds=dict(tests=(None, 60e3)), verbose=False)
+limited = sim.optimize(ss.fitting.minimize('sir.R'), spend=['tests', 'masks'], bounds=dict(tests=(None, 60e3)), verbose=False)
 limited.summarize()
 ```
 
@@ -113,7 +113,7 @@ With testing capped at $60,000, the rest goes to masks, and the result is betwee
 `total=` sets the total to divide, for the question "what if the budget were larger (or smaller)?"; the search starts from the current shares of the spending, scaled to the total. Here, the best allocation of twice the budget:
 
 ```{python}
-double = sim.optimize(ss.fit.minimize('sir.R'), spend=['tests', 'masks'], total=200e3, verbose=False)
+double = sim.optimize(ss.fitting.minimize('sir.R'), spend=['tests', 'masks'], total=200e3, verbose=False)
 double.summarize()
 ```
 
@@ -125,7 +125,7 @@ import matplotlib.pyplot as plt
 totals = [25e3, 50e3, 100e3, 200e3, 400e3]
 infections = []
 for total in totals:
-    opt = sim.optimize(ss.fit.minimize('sir.R'), spend=['tests', 'masks'], total=total, verbose=False)
+    opt = sim.optimize(ss.fitting.minimize('sir.R'), spend=['tests', 'masks'], total=total, verbose=False)
     infections.append(opt.value)
 
 plt.plot(np.array(totals)/1e3, infections, 'o-')
@@ -138,10 +138,10 @@ Each further dollar averts fewer infections until, past a certain budget, transm
 
 ## The least total that reaches a target
 
-The reverse question, how much money is needed to reach a target, is answered with `target=`: the least total whose best allocation brings the result to the target (at most the target with `ss.fit.minimize()`, at least with `ss.fit.maximize()`). The search doubles the total until it reaches the target, then halves the gap between a total that does and one that doesn't, to within 1%:
+The reverse question, how much money is needed to reach a target, is answered with `target=`: the least total whose best allocation brings the result to the target (at most the target with `ss.fitting.minimize()`, at least with `ss.fitting.maximize()`). The search doubles the total until it reaches the target, then halves the gap between a total that does and one that doesn't, to within 1%:
 
 ```{python}
-needed = sim.optimize(ss.fit.minimize('sir.R'), spend=['tests', 'masks'], target=1000, verbose=False)
+needed = sim.optimize(ss.fitting.minimize('sir.R'), spend=['tests', 'masks'], target=1000, verbose=False)
 needed.summarize()
 ```
 
@@ -149,7 +149,7 @@ This assumes that more money never does worse, which is true of any sensible mod
 
 ## Reading the result
 
-`sim.optimize()` returns an `ss.fit.Optimization`, which holds:
+`sim.optimize()` returns an `ss.fitting.Optimization`, which holds:
 
 | Attribute | What it is |
 |---|---|
@@ -173,14 +173,14 @@ An optimization in Atomica starts from a program book: a spreadsheet of programs
 
 ```python
 sim = ss.import_from('hiv_framework.xlsx', format='atomica', databook='hiv_databook.xlsx', progbook='hiv_progbook.xlsx', programs_start=2020)
-best = sim.optimize(ss.fit.maximize('all_vs', at=2030), start=2020)
-least = sim.optimize(ss.fit.maximize('all_vs', at=2030), start=2020, target=1.1*best.value) # The least money that reaches 10% more
+best = sim.optimize(ss.fitting.maximize('all_vs', at=2030), start=2020)
+least = sim.optimize(ss.fitting.maximize('all_vs', at=2030), start=2020, target=1.1*best.value) # The least money that reaches 10% more
 ```
 
 ## Pitfalls
 
 - **Spending that changes nothing.** A spending parameter that doesn't appear in any rate leaves the result unchanged, and the search returns the starting allocation; check with a few allocations by hand first, as above.
-- **Optimizing a stochastic run.** The search compares runs, so chance differences between them become apparent differences between allocations. Use the ODE, or average many runs in a function given as the goal, `ss.fit.minimize(func)`.
+- **Optimizing a stochastic run.** The search compares runs, so chance differences between them become apparent differences between allocations. Use the ODE, or average many runs in a function given as the goal, `ss.fitting.minimize(func)`.
 - **An optimum that is an artifact of the model of costs.** The answer is only as good as the curves that say what spending buys; a different saturation (or none) can move the best allocation a long way. Try the plausible range of costs and effects, as for any other uncertain parameter.
 - **A model that wasn't calibrated.** An allocation optimized on an uncalibrated model optimizes the wrong epidemic; fit it first (see [Fitting a model](calibration_fitting.qmd)).
 

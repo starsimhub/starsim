@@ -24,7 +24,7 @@ from .settings import dtypes, options, style
 settings.thread_limit = _limit
 del _limit
 from .utils import ndict, warn, load, save, plot_args, show, return_fig
-from .internals import errors, debugtools
+from .internals import errors, debugtools, v3_deprecations
 from .internals.errors import *
 
 #%% Building blocks: arrays, distributions, time, and parameters
@@ -94,7 +94,8 @@ from . import data # starsim_data is imported only when this is used
 from .internals import gradients # JAX is imported only when this is used
 from .solvers.backends import jit, draws # Draws, for ss.draws.next_u() in compiled code (see ss.Dist.streams())
 from . import sim
-from .sim import Sim, SimPars, demo
+from .simpars import SimPars
+from .sim import Sim, demo
 from .run import MultiSim, parallel
 
 #%% Importing from and exporting to other frameworks
@@ -102,14 +103,14 @@ from . import converters
 from .converters import import_from, export_to
 
 def __getattr__(name):
-    """ Import ss.fit when it is first used, so that import starsim stays fast """
-    if name == 'fit':
+    """ Import ss.fitting when it is first used, so that import starsim stays fast """
+    if name == 'fitting':
         import importlib
-        return importlib.import_module(f'.{name}', __name__)
+        return importlib.import_module('.internals.fitting', __name__)
     if name == 'library':
         hint = '; import it first: import starsim.library as ssl'
     else:
-        hint = '' if name.startswith('__') else errors.starsim3(names=name) # A name of Starsim 3's says what replaces it
+        hint = '' if name.startswith('__') else v3_deprecations.hint(names=name) # A name of Starsim 3's says what replaces it
     raise AttributeError(f'module "starsim" has no attribute "{name}"{hint}')
 
 # The kernels: Rust if it has been built (or asked for by STARSIM_KERNELS), else Numba (see ss.options.kernels)

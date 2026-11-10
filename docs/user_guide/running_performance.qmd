@@ -73,7 +73,7 @@ An agent-based run takes time in proportion to the number of agents and the numb
 
 - **Use fewer agents than people.** `total_pop=` with a smaller `n_agents=` lets each agent stand for several people (see [Branching and rescaling](running_branching.qmd)).
 - **Use compartments if nothing needs individuals.** If a model needs no network, no per-person values, and no histories, `solver='ode'` or a stochastic compartmental solver is far faster at any population size.
-- **Threads.** The passes over the agents of a large sim (more than about 200,000 agents) use several threads; `ss.options.num_threads` sets how many, and `ss.options.blas_threads` the threads of NumPy's linear algebra. When running many sims at once on one machine, one thread each (`SCIRIS_NUM_THREADS=1`) avoids them competing for the cores.
+- **Threads.** The passes over the agents of a large sim (more than about 200,000 agents) use several threads; `ss.options.threads` sets how many, and `ss.options.blas_threads` the threads of NumPy's linear algebra. When running many sims at once on one machine, one thread each (`SCIRIS_NUM_THREADS=1`) avoids them competing for the cores.
 - **Common random numbers.** `ss.options.crn = False` gives faster draws, at the cost of runs no longer matching across scenarios agent for agent (see [Random numbers](mechanics_random.qmd)).
 
 ## Code of your own

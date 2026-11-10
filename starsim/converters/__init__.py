@@ -119,6 +119,9 @@ def import_from(source, format=None, **kwargs):
     """
     Read another framework's model into a sim, e.g. `ss.import_from('workbook.xlsx')`
 
+    Use it to run, check, or extend a model built elsewhere without rewriting it by hand. Check `sim.imported`
+    for anything that was not translated; to keep the Starsim code for the model (faster to run again, and editable), use `ss.converters.convert()`.
+
     Args:
         source (str/any): the file (or, for some formats, the model object)
         format (str): the framework, one of `ss.converters.importers`; if not given, told from the file or object (see `sniff()`)

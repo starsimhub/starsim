@@ -186,7 +186,7 @@ Costs work the same under every solver. In a compartmental run, the number deliv
 - **Compare like with like.** Take costs and outcomes from the same runs, over the same period, in the same units; with chance in the model, pair the runs of each scenario by seed.
 - **The horizon matters.** Infections averted after the end of the run are not counted, and a program that starts late in a run has had little time to avert any.
 
-The API reference for this page: [Products](../api/products.qmd), [ss.fit](../api/fit.qmd).
+The API reference for this page: [Products](../api/products.qmd), [ss.fitting](../api/fit.qmd).
 
 ## Further reading
 

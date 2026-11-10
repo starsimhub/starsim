@@ -3,7 +3,7 @@ Fitting sims to data: likelihoods, particle filters, samplers, and what `sim.fit
 
 These exist so that a model can be fitted, with its uncertainty, in the same way whichever solver runs it. Parameters are chosen by giving them bounds (`ss.par`), in declared modules or in the parameters of modules written as code. Some methods are for some solvers only: gradients come from JAX, and particle filters need a stochastic compartmental solver.
 
-Imported when it is first used (by `ss.fit.X`, `sim.fit()`, or `sim.sensitivity()`), not by `import starsim`.
+Imported when it is first used (by `ss.fitting.X`, `sim.fit()`, or `sim.sensitivity()`), not by `import starsim`.
 
 Used with: agents and compartments; declared and coded modules
 """
@@ -19,7 +19,7 @@ import scipy.stats as sps
 import scipy.special as spsp
 import sciris as sc
 import starsim as ss
-from .results import compare, lineup, match_column, match_name, parse_column, column_levels, flow_at_data
+from ..results import compare, lineup, match_column, match_name, parse_column, column_levels, flow_at_data
 
 __all__ = ['method', 'mismatch', 'loglik', 'prior_draws', 'sensitivity', 'profile', 'compare_models', 'split_data', 'diagnose', 'fit_stages',
            'abc_smc', 'pmmh', 'nuts', 'Fit', 'maximize', 'minimize', 'Optimization', 'ModelComparison', 'ParticleFilter', 'Swarm']
@@ -110,7 +110,7 @@ def logpdf(dist, observed, model, xp=np, pars=None):
     lacks (e.g. a normal whose variance grows with the mean). It is worked out with
     NumPy, so the log-density in JAX does not cover it: the default fit then uses
     Nelder-Mead, which needs no gradients, and NUTS samples with Python in the loop,
-    which is much slower, only with `sim.fit(method=ss.fit.method('nuts', require_jax=False))`.
+    which is much slower, only with `sim.fit(method=ss.fitting.method('nuts', require_jax=False))`.
 
     Args:
         dist (`ss.Dist`/func): the likelihood
@@ -498,13 +498,13 @@ class ParticleFilter(sc.prettyobj):
 
 
 def data_end(sim):
-    """ The time point after the last step that the data read (as `ss.fit.ParticleFilter`'s runs end), where a run kept with a draw ends, so that a projection's scenarios differ after the data rather than after the sim's stop """
+    """ The time point after the last step that the data read (as `ss.fitting.ParticleFilter`'s runs end), where a run kept with a draw ends, so that a projection's scenarios differ after the data rather than after the sim's stop """
     return max(int(np.flatnonzero(np.any(W != 0, axis=0)).max(initial=-1)) + 1 for W,_,_ in lineup(sim).values())
 
 
 def run_kept(sim, end):
     """
-    Run a sim that the kernels take whole (restarted), and keep its run up to time point `end` (see `data_end()`), as `ss.fit.ParticleFilter`
+    Run a sim that the kernels take whole (restarted), and keep its run up to time point `end` (see `data_end()`), as `ss.fitting.ParticleFilter`
     keeps the run it draws (see `path` there), to continue from there: the run is taken in two parts, the same as one, with the
     compartments of each engine or joint states at `end` between them
     """
@@ -1046,7 +1046,7 @@ class Fit(sc.prettyobj):
         scores (list): the score of the best-fit values in each run (one for a deterministic sim, and one, the particle filter's, where it scored the points); `objective` is their mean, so it is the score that was minimized
         trials (df): every evaluation: the values, and the `objective` that the method minimized (what `measure` says; with `method='if2'`, also each pass of each chain: the middle of the swarm's values, and minus the log-likelihood of the pass, whose values were perturbed)
         samples (df): with `method='nuts'`, `'pmcmc'`, or `'abc-smc'`, the draws from the posterior: one row per draw, with its chain, its number, and a column for each parameter
-        trajectories (list): for a stochastic compartmental sim with `method='pmcmc'` or `'abc-smc'`, the run of the sim that goes with each draw of `samples` (one per row), so that each pair is a draw from the posterior of the values and the epidemic together: with `'pmcmc'`, a run drawn from the particle filter, up to the last data point (see `ss.fit.ParticleFilter`); with `'abc-smc'`, the run that was accepted. Each is, by the module that runs the compartments, the time point it ends at (`ti`), the compartments there (`y`), and by disease how many were in each state (`stocks`) and the flow along each transition (`flows`) at each time point before it; a draw that the chain stayed at shares its run with the draw before. `fit.project()` continues them. (For a deterministic sim, the run at each draw is its trajectory, so none are kept)
+        trajectories (list): for a stochastic compartmental sim with `method='pmcmc'` or `'abc-smc'`, the run of the sim that goes with each draw of `samples` (one per row), so that each pair is a draw from the posterior of the values and the epidemic together: with `'pmcmc'`, a run drawn from the particle filter, up to the last data point (see `ss.fitting.ParticleFilter`); with `'abc-smc'`, the run that was accepted. Each is, by the module that runs the compartments, the time point it ends at (`ti`), the compartments there (`y`), and by disease how many were in each state (`stocks`) and the flow along each transition (`flows`) at each time point before it; a draw that the chain stayed at shares its run with the draw before. `fit.project()` continues them. (For a deterministic sim, the run at each draw is its trajectory, so none are kept)
         study (`optuna.Study`): with `method='optuna'`, Optuna's study, e.g. for its plots (`optuna.visualization.plot_param_importances(fit.study)`)
         diagnostics (dict): what else the method reports: `divergences` (with `method='nuts'`, the number of draws that followed a divergent trajectory, which suggests the sampler missed part of the posterior), `acceptance` (with `method='pmcmc'`, the share of proposals that each chain accepted after its warm-up; with `'abc-smc'`, that of its last generation), `tolerance` and `generations` (with `'abc-smc'`, the tolerance of its last generation, which sets how close its posterior is, and the number of generations run), and `band` (with a posterior, for each data series, the 2.5th and 97.5th percentiles of the model's value over draws from it, at each step, or for a flow with data at a longer period than the step, of its totals over the data's periods; with `'pmcmc'`, each from a run with a seed of its own, so the band includes chance)
     """
@@ -1311,7 +1311,7 @@ class maximize(sc.prettyobj):
 
     Example:
         ```python
-        best = sim.optimize(ss.fit.maximize('all_vs', at=2030), spend=['testing', 'art'])
+        best = sim.optimize(ss.fitting.maximize('all_vs', at=2030), spend=['testing', 'art'])
         ```
     """
     sign = -1.0 # What the search minimizes is the sign times the result
@@ -1322,7 +1322,7 @@ class maximize(sc.prettyobj):
         return
 
     def __repr__(self):
-        return f'ss.fit.{type(self).__name__}({getattr(self.result, "__name__", repr(self.result))}' + (f', at={self.at!r}' if self.at is not None else '') + ')'
+        return f'ss.fitting.{type(self).__name__}({getattr(self.result, "__name__", repr(self.result))}' + (f', at={self.at!r}' if self.at is not None else '') + ')'
 
 
 class minimize(maximize):
@@ -1335,7 +1335,7 @@ class minimize(maximize):
 
     Example:
         ```python
-        best = sim.optimize(ss.fit.minimize('sir.R'), spend=['tests', 'masks'])
+        best = sim.optimize(ss.fitting.minimize('sir.R'), spend=['tests', 'masks'])
         ```
     """
     sign = 1.0
@@ -1376,7 +1376,7 @@ def optimize(sim, goal, total=None, start=None, spend=None, bounds=None, target=
     import scipy.optimize as spo
     verbose = sc.ifelse(verbose, ss.options.verbose)
     if not isinstance(goal, maximize): # minimize is a subclass
-        errormsg = f'sim.optimize() takes goal=ss.fit.maximize(...) or goal=ss.fit.minimize(...): a result (e.g. goal=ss.fit.maximize("all_vs", at=2030)) or a function of the sim, not {type(goal).__name__}'
+        errormsg = f'sim.optimize() takes goal=ss.fitting.maximize(...) or goal=ss.fitting.minimize(...): a result (e.g. goal=ss.fitting.maximize("all_vs", at=2030)) or a function of the sim, not {type(goal).__name__}'
         raise TypeError(errormsg)
     at = goal.at
     if spend is None:
@@ -1725,7 +1725,7 @@ def profile(sim, par, values=None, level=0.95, **kwargs):
 
     Examples:
         ```python
-        prof = ss.fit.profile(sim, 'beta', likelihood=dict(cases=ss.poisson()))
+        prof = ss.fitting.profile(sim, 'beta', likelihood=dict(cases=ss.poisson()))
         prof.interval # The 95% confidence interval of beta
         prof.table.plot('beta', 'nll')
         ```
@@ -1849,13 +1849,13 @@ def fit_stages(sim, stages, verbose=None, **kwargs):
     """
     Staged fitting: run each method in turn, each starting from the best fit of the one before; see `sim.fit()` with `method=` a list
 
-    Each stage is a method's name, or `ss.fit.method()` with that method's settings. A stage
+    Each stage is a method's name, or `ss.fitting.method()` with that method's settings. A stage
     that does not converge stops the sequence (with a warning), and the fit returned is that
     of the last stage that did, or the first stage's best attempt if it was the one that failed.
 
     Args:
         sim (Sim): the sim to fit
-        stages (list): the stages, each a method's name, or an `ss.fit.method()`
+        stages (list): the stages, each a method's name, or an `ss.fitting.method()`
         verbose (bool): whether to say what is being done (default: `ss.options.verbose`)
         kwargs (dict): passed to `sim.fit()` for every stage
 
@@ -1869,7 +1869,7 @@ def fit_stages(sim, stages, verbose=None, **kwargs):
         sir = ss.Disease(infection, I >> R @ ss.days(8), init=dict(I=0.01), name='sir')
         pars = dict(total_pop=10_000, unit='day', stop=60)
         data = ss.Sim(sir, pars=dict(beta=0.5), **pars).run().to_synthetic_data('I')
-        fit = ss.Sim(sir, data=data, **pars).fit(method=[ss.fit.method('optuna', n_trials=30), ss.fit.method('nelder-mead', maxiter=100)]) # A search, then a polish
+        fit = ss.Sim(sir, data=data, **pars).fit(method=[ss.fitting.method('optuna', n_trials=30), ss.fitting.method('nelder-mead', maxiter=100)]) # A search, then a polish
         print(fit.pars)
         ```
     """
@@ -2047,7 +2047,7 @@ class Problem(sc.prettyobj):
         if verbose and self.stochastic and method not in ['pmcmc', 'abc-smc', 'if2']: # Which take a run of their own for each point
             seeds = 'fresh seeds at each point' if self.fresh else ('the same seeds at every point' if self.n_runs > 1 and not self.particles else 'the same seed at every point')
             options = 'particles=..., n_runs=..., reseed=...' if method == 'optuna' else 'n_runs=..., reseed=...'
-            print(f'Scoring each point by {self.scored_by()}, with {seeds} (override with method=ss.fit.method("{method}", {options}))')
+            print(f'Scoring each point by {self.scored_by()}, with {seeds} (override with method=ss.fitting.method("{method}", {options}))')
         if verbose and self.use_map:
             print(f'Minimizing the negative log-posterior, since {sc.strjoin(np.array(self.names)[self.priors])} {"has a prior" if sum(self.priors) == 1 else "have priors"}')
         if self.penalty_fn is not None and (method in sampling_methods or method == 'if2'):
@@ -2076,7 +2076,7 @@ class Problem(sc.prettyobj):
         """
         given = self.given
         if given.particles is not None and given.n_runs is not None:
-            raise ValueError('ss.fit.method("optuna") scores each point by a particle filter (particles=) or by the mean of several runs (n_runs=), not both')
+            raise ValueError('ss.fitting.method("optuna") scores each point by a particle filter (particles=) or by the mean of several runs (n_runs=), not both')
         if method not in ['optuna', 'pmcmc'] or not self.stochastic or given.n_runs is not None:
             return
         why = filtered or ('the data series have no likelihood' if not self.use_lik else None) or (None if self.can_restart else 'a fitted parameter is a setting of the sim, or sets its mixing, so the sim is built again for each point')
@@ -2214,7 +2214,7 @@ class Problem(sc.prettyobj):
     def python_in_loop(self, why, what):
         """ Take something (e.g. the gradients) with Python in the loop, which is much slower, only if `require_jax=False`; otherwise say why it can't be taken in JAX """
         if self.require_jax:
-            errormsg = f'The fit would take {what} with Python in the loop, which is much slower, since {why}; to fit this way anyway, use sim.fit(method=ss.fit.method("{self.method}", require_jax=False))'
+            errormsg = f'The fit would take {what} with Python in the loop, which is much slower, since {why}; to fit this way anyway, use sim.fit(method=ss.fitting.method("{self.method}", require_jax=False))'
             raise ss.CapabilityError(errormsg)
         if self.verbose:
             print(f'Note: taking {what} with Python in the loop, which is slower, since {why}')
@@ -2374,7 +2374,7 @@ class Problem(sc.prettyobj):
         return out
 
     def result(self, method, out):
-        """ The `ss.fit.Fit` from what a method found """
+        """ The `ss.fitting.Fit` from what a method found """
         names = self.names
         if 'zs' in out: # Draws from a posterior
             self.posterior(method, out)
@@ -2448,7 +2448,7 @@ def fit_scipy(problem, method='nelder-mead', scan=None, restarts=None, **options
         sir = ss.Disease(infection, I >> R @ ss.days(8), ss.outcome(0.5*infection, name='cases'), init=dict(I=0.01), name='sir')
         pars = dict(total_pop=10_000, unit='day', stop=60)
         data = ss.Sim(sir, pars=dict(beta=0.5), rand_seed=2, **pars).run().to_synthetic_data('cases', resample='week')
-        fit = ss.Sim(sir, data=data, **pars).fit(method=ss.fit.method('nelder-mead', scan=5, restarts=2, maxiter=200))
+        fit = ss.Sim(sir, data=data, **pars).fit(method=ss.fitting.method('nelder-mead', scan=5, restarts=2, maxiter=200))
         print(fit.pars, fit.converged)
         ```
     """
@@ -2471,7 +2471,7 @@ def fit_scipy(problem, method='nelder-mead', scan=None, restarts=None, **options
         try:
             results = sorted([search(start) for start in starts], key=lambda res: res.fun)
         except spo.OptimizeWarning as E:
-            raise TypeError(f'ss.fit.method("{method}") takes scan=, restarts=, n_runs=, reseed=, and the options of this SciPy method (see `scipy.optimize.show_options()`); SciPy says: {E}') from E
+            raise TypeError(f'ss.fitting.method("{method}") takes scan=, restarts=, n_runs=, reseed=, and the options of this SciPy method (see `scipy.optimize.show_options()`); SciPy says: {E}') from E
     result = results[0]
     best = p.decode(result.x)
     if not p.stochastic: # A search can end short of the best point it tried (e.g. if a line search fails); a deterministic sim's scores are exact, so take that point
@@ -2567,7 +2567,7 @@ def fit_optuna(problem, n_trials=None, workers=None, storage=None, **kwargs): # 
         sir = ss.Disease(infection, I >> R @ ss.days(8), ss.outcome(0.5*infection, name='cases'), init=dict(I=0.01), name='sir')
         pars = dict(total_pop=10_000, unit='day', stop=60, solver='binomial')
         data = ss.Sim(sir, pars=dict(beta=0.5), rand_seed=2, **pars).run().to_synthetic_data('cases', resample='week')
-        fit = ss.Sim(sir, data=data, **pars).fit(method=ss.fit.method('optuna', n_trials=50, n_runs=4))
+        fit = ss.Sim(sir, data=data, **pars).fit(method=ss.fitting.method('optuna', n_trials=50, n_runs=4))
         print(fit.pars, fit.converged)
         ```
     """
@@ -2650,7 +2650,7 @@ def fit_if2(problem, particles=1000, iterations=50, cooling=0.5, sd=0.05, chains
         pars = dict(total_pop=10_000, unit='day', stop=60, solver='binomial')
         data = ss.Sim(sir, pars=dict(beta=0.5), rand_seed=2, **pars).run().to_synthetic_data('cases', resample='week')
         sim = ss.Sim(sir, data=data, **pars)
-        fit = sim.fit(method=ss.fit.method('if2', particles=300, iterations=50), likelihood=ss.poisson())
+        fit = sim.fit(method=ss.fitting.method('if2', particles=300, iterations=50), likelihood=ss.poisson())
         print(fit.pars, fit.converged)
         ```
     """
@@ -2719,7 +2719,7 @@ def fit_pmcmc(problem, scan=None, particles=None, draws=1000, warmup=1000, chain
         pars = dict(total_pop=10_000, unit='day', stop=60, solver='binomial')
         data = ss.Sim(sir, pars=dict(beta=0.5), rand_seed=2, **pars).run().to_synthetic_data('cases', resample='week')
         sim = ss.Sim(sir, data=data, **pars)
-        fit = sim.fit(method=ss.fit.method('pmcmc', draws=200, warmup=200, chains=2, particles=100), likelihood=ss.poisson())
+        fit = sim.fit(method=ss.fitting.method('pmcmc', draws=200, warmup=200, chains=2, particles=100), likelihood=ss.poisson())
         print(fit.table, fit.samples.head())
         ```
     """
@@ -2770,7 +2770,7 @@ def fit_abc_smc(problem, samples=200, generations=8, quantile=0.5, tolerance=Non
         sir = ss.Disease(infection, I >> R @ ss.days(8), ss.outcome(0.5*infection, name='cases'), init=dict(I=0.01), name='sir')
         pars = dict(total_pop=10_000, unit='day', stop=60, solver='binomial')
         data = ss.Sim(sir, pars=dict(beta=0.5), rand_seed=2, **pars).run().to_synthetic_data('cases', resample='week')
-        fit = ss.Sim(sir, data=data, **pars).fit(method=ss.fit.method('abc-smc', samples=100, generations=6))
+        fit = ss.Sim(sir, data=data, **pars).fit(method=ss.fitting.method('abc-smc', samples=100, generations=6))
         print(fit.table, fit.samples.head())
         ```
     """
@@ -2862,7 +2862,7 @@ def fit_nuts(problem, draws=500, warmup=500, chains=4, scan=None):
         pars = dict(total_pop=10_000, unit='day', stop=60)
         data = ss.Sim(sir, pars=dict(beta=0.5), rand_seed=2, **pars).run().to_synthetic_data('cases', resample='week')
         sim = ss.Sim(sir, data=data, **pars)
-        fit = sim.fit(method=ss.fit.method('nuts', draws=200, warmup=200, chains=2), likelihood=ss.poisson())
+        fit = sim.fit(method=ss.fitting.method('nuts', draws=200, warmup=200, chains=2), likelihood=ss.poisson())
         print(fit.table, fit.samples.head())
         ```
     """
@@ -2963,17 +2963,17 @@ class method(sc.prettyobj):
     """
     A fitting method and its settings, for `sim.fit(method=...)`
 
-    `sim.fit(method='pmcmc')` uses a method with its default settings; `ss.fit.method()` gives them, e.g.
-    `sim.fit(method=ss.fit.method('pmcmc', particles=500, chains=2))`. A setting the method does not take is an error that lists those it does.
+    `sim.fit(method='pmcmc')` uses a method with its default settings; `ss.fitting.method()` gives them, e.g.
+    `sim.fit(method=ss.fitting.method('pmcmc', particles=500, chains=2))`. A setting the method does not take is an error that lists those it does.
 
     Args:
         name (str): the method (see `sim.fit()`): 'nelder-mead', 'powell', 'l-bfgs-b', 'slsqp' (SciPy), 'optuna', 'nuts', 'pmcmc', 'if2', or 'abc-smc'
         settings (dict): the method's settings; those of each method, with their defaults:
 
             - SciPy methods: `scan` (the points spread over the bounds to try first: 10 per parameter, at most 100), `restarts` (the searches from the best of them that are apart: 3, or 1 for one parameter of a deterministic sim), and SciPy's own options, e.g. `maxiter=500` (see `scipy.optimize.show_options()`)
-            - `'optuna'`: `n_trials` (default: 50 per fitted parameter, at least 100), `particles` (for a stochastic sim that the particle filter can run, with a likelihood for every data series: the particles of the filter that scores each point, 200; see `ss.fit.ParticleFilter`), `workers` (processes that run trials at once, sharing what they learn: 1), `storage` (a file name, a database URL, or an Optuna storage, where the trials are kept so that calling the fit again resumes it), and Optuna's own keywords for `study.optimize()`, e.g. `timeout=600`
+            - `'optuna'`: `n_trials` (default: 50 per fitted parameter, at least 100), `particles` (for a stochastic sim that the particle filter can run, with a likelihood for every data series: the particles of the filter that scores each point, 200; see `ss.fitting.ParticleFilter`), `workers` (processes that run trials at once, sharing what they learn: 1), `storage` (a file name, a database URL, or an Optuna storage, where the trials are kept so that calling the fit again resumes it), and Optuna's own keywords for `study.optimize()`, e.g. `timeout=600`
             - `'nuts'`: `draws=500`, `warmup=500`, `chains=4`, `scan` (each chain starts from one of the best points of a scan that are apart)
-            - `'pmcmc'`: `draws=1000`, `warmup=1000`, `chains=4`, `particles` (of the particle filter: by default chosen by each chain in its warm-up; see `ss.fit.pmmh()`; none for a deterministic sim, whose likelihood is exact), `scan` (each chain starts from one of the best points of a scan that are apart), `parallel=True` (to run the chains in parallel processes)
+            - `'pmcmc'`: `draws=1000`, `warmup=1000`, `chains=4`, `particles` (of the particle filter: by default chosen by each chain in its warm-up; see `ss.fitting.pmmh()`; none for a deterministic sim, whose likelihood is exact), `scan` (each chain starts from one of the best points of a scan that are apart), `parallel=True` (to run the chains in parallel processes)
             - `'if2'`: `particles=1000` (of the particle filter), `iterations=50` (passes of the filter in each chain), `cooling=0.5` (the share of the first size of the random walk's steps that is left after 50 passes, as pomp's `cooling.fraction.50`), `sd=0.05` (that first size, on the scale searched on), `chains=4`
             - `'abc-smc'`: `samples=200` (the parameter values kept in each generation, which are the draws of the posterior), `generations=8`, `quantile=0.5` (of the distances, which sets the next tolerance), `tolerance` (the distance to stop at)
             - for a stochastic sim, how each point is scored (SciPy methods and Optuna; `n_runs` also for particle MCMC's start): `n_runs` (runs per point: 4 for a stochastic compartmental sim, 1 for agents and for a deterministic one; every point is scored by the mean over the same seeds of each run's score; for Optuna, giving it scores by runs in place of the particle filter), and `reseed` (whether each point takes fresh seeds: by default only for Optuna, whose search then averages over chance)
@@ -2990,13 +2990,13 @@ class method(sc.prettyobj):
         pars = dict(total_pop=10_000, unit='day', stop=60, solver='binomial')
         data = ss.Sim(sir, pars=dict(beta=0.5), rand_seed=2, **pars).run().to_synthetic_data('cases', resample='week')
         sim = ss.Sim(sir, data=data, **pars)
-        fit = sim.fit(method=ss.fit.method('optuna', n_trials=50, n_runs=4))
-        post = sim.fit(method=ss.fit.method('pmcmc', draws=200, warmup=200, chains=2, particles=100))
+        fit = sim.fit(method=ss.fitting.method('optuna', n_trials=50, n_runs=4))
+        post = sim.fit(method=ss.fitting.method('pmcmc', draws=200, warmup=200, chains=2, particles=100))
         ```
     """
     def __init__(self, name, **settings):
         if not isinstance(name, str):
-            errormsg = f'ss.fit.method() takes the name of a method first, e.g. ss.fit.method("pmcmc", chains=2), not {type(name).__name__}'
+            errormsg = f'ss.fitting.method() takes the name of a method first, e.g. ss.fitting.method("pmcmc", chains=2), not {type(name).__name__}'
             raise TypeError(errormsg)
         name = name.lower()
         if name not in methods:
@@ -3005,18 +3005,18 @@ class method(sc.prettyobj):
         options = method_options(name)
         unknown = [key for key in settings if key not in options]
         if unknown and name not in scipy_methods: # SciPy checks its own options (see fit_scipy())
-            errormsg = f'ss.fit.method("{name}") takes {sc.strjoin([f"{key}=" for key in options])}, not {sc.strjoin([f"{key}=" for key in unknown])}'
+            errormsg = f'ss.fitting.method("{name}") takes {sc.strjoin([f"{key}=" for key in options])}, not {sc.strjoin([f"{key}=" for key in unknown])}'
             raise TypeError(errormsg)
         misplaced = [key for key in settings if key in problem_settings and name not in problem_settings[key] and key not in options]
         if misplaced: # E.g. n_runs= for a SciPy method of a deterministic sim is fine, but require_jax= for Nelder-Mead does nothing
-            errormsg = f'ss.fit.method("{name}") takes {sc.strjoin([f"{key}=" for key in options if key not in problem_settings or name in problem_settings[key]])}, not {sc.strjoin([f"{key}=" for key in misplaced])}, which is for {sc.strjoin(problem_settings[misplaced[0]])}'
+            errormsg = f'ss.fitting.method("{name}") takes {sc.strjoin([f"{key}=" for key in options if key not in problem_settings or name in problem_settings[key]])}, not {sc.strjoin([f"{key}=" for key in misplaced])}, which is for {sc.strjoin(problem_settings[misplaced[0]])}'
             raise TypeError(errormsg)
         self.name = name
         self.settings = settings
         return
 
     def __repr__(self):
-        return f'ss.fit.method({self.name!r}' + ''.join(f', {key}={val!r}' for key,val in self.settings.items()) + ')'
+        return f'ss.fitting.method({self.name!r}' + ''.join(f', {key}={val!r}' for key,val in self.settings.items()) + ')'
 
     @property
     def scoring(self):
@@ -3030,11 +3030,11 @@ class method(sc.prettyobj):
 
 
 def as_method(obj):
-    """ A method given to `sim.fit()`: None (the default, chosen by the fit), a name, or an `ss.fit.method()` """
+    """ A method given to `sim.fit()`: None (the default, chosen by the fit), a name, or an `ss.fitting.method()` """
     if obj is None or isinstance(obj, method):
         return obj
     elif isinstance(obj, dict):
-        errormsg = f'A stage of a fit is a method\'s name or ss.fit.method(), e.g. ss.fit.method({obj.get("method", "nelder-mead")!r}, ...), not a dict'
+        errormsg = f'A stage of a fit is a method\'s name or ss.fitting.method(), e.g. ss.fitting.method({obj.get("method", "nelder-mead")!r}, ...), not a dict'
         raise TypeError(errormsg)
     return method(obj)
 
@@ -3086,10 +3086,10 @@ def split_data(data, holdout=0.25, folds=None):
 
 class ModelComparison(sc.prettyobj):
     """
-    The result of comparing models by how well they predict held-out data; see `ss.fit.compare_models()`
+    The result of comparing models by how well they predict held-out data; see `ss.fitting.compare_models()`
 
     Attributes:
-        fits (dict): each model's `ss.fit.Fit` (a list of them, one per fold, if there are several folds)
+        fits (dict): each model's `ss.fitting.Fit` (a list of them, one per fold, if there are several folds)
         table (df): the fitted parameters, the error on the data fitted to, the prediction error, and the rank of each model
         holdout (str): a description of what was held out
         measure (str): how the fit error and the prediction error are measured (the same for every model)
@@ -3169,11 +3169,11 @@ def compare_models(sims, data=None, holdout=0.25, folds=None, n_runs=None, **kwa
         kwargs (dict): passed to `sim.fit()`, e.g. `weights=`
 
     Returns:
-        An `ss.fit.ModelComparison`; `comp.fits` holds each model's fit
+        An `ss.fitting.ModelComparison`; `comp.fits` holds each model's fit
 
     Examples:
         ```python
-        comp = ss.fit.compare_models([sim_sir, sim_seir], data=df)
+        comp = ss.fitting.compare_models([sim_sir, sim_seir], data=df)
         comp.summarize()
         comp.plot()
         ```

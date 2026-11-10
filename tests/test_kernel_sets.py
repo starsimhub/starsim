@@ -19,9 +19,10 @@ import numpy as np
 import pandas as pd
 import sciris as sc
 import starsim as ss
-import starsim.fit
+import starsim.internals.fitting
 from test_kernels import models, make_seir
 
+pytestmark = pytest.mark.numba # Compiles Numba's kernels, so CI runs it only in the jobs for Numba (see pytest.ini)
 kw = dict(verbose=0)
 D = ss.solvers.backends.draws
 rust = ss.solvers.backends.rust.built() or sc.parse_env('STARSIM_RUST_REQUIRED', False, bool) # Whether to compare Rust's
@@ -354,7 +355,7 @@ def test_noise():
             with ss.options.context(kernels=k):
                 sim = make(0, data=data)
                 sim.init()
-                lls.append(ss.fit.ParticleFilter(sim, likelihood=dict(infection=ss.poisson()))(n_particles=20, rand_seed=1))
+                lls.append(ss.fitting.ParticleFilter(sim, likelihood=dict(infection=ss.poisson()))(n_particles=20, rand_seed=1))
         assert lls[0] == lls[1], lls
     return
 

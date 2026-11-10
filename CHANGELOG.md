@@ -39,7 +39,7 @@ Starsim 4 adds a way to write a model as declared states and transitions, which 
 ### Changes that may require migration
 - *Migration*: removed Starsim 3 names have no aliases, only errors naming the replacement; the [migration guide](https://starsim.org/v4/migration/v3_v4.html) and `python -m starsim.converters.migrate` cover them.
 - *Migration*: `ss.Infection` is `ss.AgentDisease`, which transmits in `transmit()`; new infections are counted by `infect()`.
-- *Migration*: `sim.calibrate()` is `sim.fit()`, with a method's settings in `ss.fit.method()`.
+- *Migration*: `sim.calibrate()` is `sim.fit()`, with a method's settings in `ss.fitting.method()`.
 - *Migration*: results are named after states and transitions (`sim.results.sir.I`, `infection`, `infection.cum`); `ss.Births` and `ss.Deaths` give `birth` and `death`.
 - *Migration*: interventions are deliveries of products (`ss.vaccinate()`, `ss.screen()`, `ss.treat()`; were `ss.routine_vx()` etc.), with `who=` (was `eligibility=`) and `when=`, `start=` and `stop=` (were `years=`, `start_year=` and `end_year=`).
 - *Migration*: distributions take their means by name: `ss.normal(mean=, std=)` and `ss.poisson(mean=)` (were `loc=`, `scale=`, `lam=`).

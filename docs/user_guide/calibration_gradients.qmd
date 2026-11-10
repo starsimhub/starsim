@@ -134,7 +134,7 @@ Every data series here has a likelihood, so this is the maximum likelihood estim
 A best fit is one set of values. A posterior is the whole distribution of values that are consistent with the data, which says how certain each value is, and how the parameters depend on each other. `method='nuts'` draws from it, given a likelihood for every data series. The priors are each parameter's `prior=`, or uniform over its bounds:
 
 ```{python}
-post = sim.fit(method=ss.fit.method('nuts', draws=250, warmup=250))
+post = sim.fit(method=ss.fitting.method('nuts', draws=250, warmup=250))
 post.summarize();
 ```
 
@@ -160,13 +160,13 @@ The posterior is narrow because the data were made by this very ODE, with Poisso
 A profile likelihood is another way to find a confidence interval for one parameter, without priors: at each value of it, the other parameters are refitted, and the values whose negative log-likelihood is within 1.92 of the lowest form the 95% confidence interval. It also shows whether the data determine the parameter at all: a profile that stays flat up to a bound means they don't.
 
 ```{python}
-prof = ss.fit.profile(sim, 'beta', values=np.linspace(1.86, 1.94, 9))
+prof = ss.fitting.profile(sim, 'beta', values=np.linspace(1.86, 1.94, 9))
 print('Best value of beta:', round(prof.best, 3))
 print('95% confidence interval:', np.round(prof.interval, 3))
 prof.table
 ```
 
-Without `values=`, `ss.fit.profile()` chooses the values itself, spread over the bounds and then concentrated around the best, which takes longer. Plotting the profile:
+Without `values=`, `ss.fitting.profile()` chooses the values itself, spread over the bounds and then concentrated around the best, which takes longer. Plotting the profile:
 
 ```{python}
 fig, ax = plt.subplots()
@@ -209,9 +209,9 @@ NUTS is for deterministic models. For a stochastic model, the likelihood can't b
 - `method='abc-smc'`, approximate Bayesian computation, for any stochastic model, including agents: it keeps the values whose runs come closest to the data, and needs no likelihood; its result is an approximation, whose width depends on how small its tolerance became.
 - `method='if2'`, iterated filtering, finds the maximum likelihood values of a stochastic compartmental model with particles.
 
-Starsim's samplers can also be used directly, for a log-density of your own (such as `density` above): `ss.fit.nuts()`, `ss.fit.pmmh()` (a random-walk Metropolis sampler, as particle MCMC uses), and `ss.fit.abc_smc()`; see [ss.fit](../api/fit.qmd).
+Starsim's samplers can also be used directly, for a log-density of your own (such as `density` above): `ss.fitting.nuts()`, `ss.fitting.pmmh()` (a random-walk Metropolis sampler, as particle MCMC uses), and `ss.fitting.abc_smc()`; see [ss.fitting](../api/fit.qmd).
 
-A posterior can also be put together by hand, by sampling-importance resampling, which needs only runs of the model and a likelihood: draw many sets of values from the priors and run each (`ss.parallel(sim, priors=True, n_runs=1000)`, whose `msim.runs` has the values of each run), work out the likelihood of the data for each run (`ss.fit.loglik(run)`), and resample the runs in proportion to their likelihoods. It is simple and works for any model, but most draws from a wide prior land where the likelihood is negligible, so it needs many runs for few parameters, and fails for many.
+A posterior can also be put together by hand, by sampling-importance resampling, which needs only runs of the model and a likelihood: draw many sets of values from the priors and run each (`ss.parallel(sim, priors=True, n_runs=1000)`, whose `msim.runs` has the values of each run), work out the likelihood of the data for each run (`ss.fitting.loglik(run)`), and resample the runs in proportion to their likelihoods. It is simple and works for any model, but most draws from a wide prior land where the likelihood is negligible, so it needs many runs for few parameters, and fails for many.
 
 How the gradients are computed (the run in JAX, and the steps around it) is explained in [Randomness](architecture_randomness.qmd#randomness-in-fitting).
 

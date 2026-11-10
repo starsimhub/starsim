@@ -19,7 +19,7 @@ from .agents_events import Events
 from .agents_compiled import Compiled
 from .engine import convert
 
-__all__ = ['Solver', 'ode', 'binomial', 'gillespie', 'tau', 'abm', 'solver_names', 'as_solver', 'Undeclared', 'make_engine', 'choose_solver', 'choose_engine', 'init_joint_states', 'init_capabilities', 'auto_reasons', 'why_not', 'solver_table', 'rules', 'set_par_values', 'flows_of', 'init_group_values', 'settle_start', 'group_people']
+__all__ = ['Solver', 'ode', 'binomial', 'gillespie', 'tau', 'abm', 'solver_names', 'as_solver', 'Undeclared', 'make_engine', 'choose_solver', 'choose_engine', 'init_joint_states', 'init_capabilities', 'auto_reasons', 'why_not', 'solver_table', 'rules', 'set_par_values', 'flows_of', 'init_group_values', 'settle_start', 'group_people', 'as_ode', 'in_proportions']
 
 
 
@@ -74,12 +74,12 @@ class Solver:
 
 class ode(Solver):
     """
-    The ODE solver, with its options: `ss.Sim(solver=ss.solvers.ode(integrator='euler', substeps=1))`; `solver='ode'` is the same with the defaults
+    The ODE solver (deterministic compartments: the average epidemic, with no randomness), with its options: `ss.Sim(solver=ss.solvers.ode(integrator='euler', substeps=1))`; `solver='ode'` is the same with the defaults
 
     Args:
-        integrator (str): the scheme: 'rk4' (fourth-order Runge–Kutta, the default) or 'euler'
-        substeps (int): the number of substeps per timestep (default: enough that no compartment turns over, or grows through its inflows, by more than a quarter in one); with `integrator='euler'`, `substeps=1` takes each step whole, as a model written in discrete time does
-        dwells (str): how dwell times are taken: 'stages' (the default: as Erlang stages, or exponential) or 'exact' (each as it is, as a conveyor of whole steps at its distribution's own chance of leaving: an integro-differential model, which under `branching=True` is the renewal equation; see the user guide on branching processes)
+        integrator (str): the scheme: 'rk4' (fourth-order Runge–Kutta, the default: accurate at a coarse step) or 'euler' (simpler and less accurate; use it to match a model written with Euler steps)
+        substeps (int): the number of substeps per timestep (default: enough that no compartment turns over, or grows through its inflows, by more than a quarter in one). More is more accurate and slower. With `integrator='euler'`, `substeps=1` takes each step whole, as a model written in discrete time does, e.g. to reproduce another model's numbers
+        dwells (str): how the time spent in a state is modeled: 'stages' (the default: as Erlang stages, or exponential, which is fast) or 'exact' (the duration's own distribution, e.g. a fixed 5 days, as a conveyor of whole steps at its own chance of leaving: an integro-differential model, which under `branching=True` is the renewal equation; see the user guide on branching processes). Use 'exact' when the shape of the duration matters, e.g. a fixed incubation period
     """
     name = 'ode'
     options = dict(integrator=('rk4', ['rk4', 'euler']), substeps=(None, None), dwells=('stages', ['stages', 'exact']))
@@ -91,10 +91,10 @@ class ode(Solver):
 
 class binomial(Solver):
     """
-    The chain-binomial solver (stochastic compartments), with its options: `ss.Sim(solver=ss.solvers.binomial(substeps=1))`; `solver='binomial'` is the same with the defaults
+    The chain-binomial solver (stochastic compartments: counts of people, with chance, and much faster than agents for a large population), with its options: `ss.Sim(solver=ss.solvers.binomial(substeps=1))`; `solver='binomial'` is the same with the defaults
 
     Args:
-        substeps (int): the number of substeps per timestep (default: enough that no more than about a tenth of the people in a compartment leave it in one); 1 takes each step whole, as discrete-time chain-binomial models (and most other frameworks') do
+        substeps (int): the number of substeps per timestep (default: enough that no more than about a tenth of the people in a compartment leave it in one). More is more accurate and slower; 1 takes each step whole, as discrete-time chain-binomial models (and most other frameworks') do, e.g. to reproduce their numbers
     """
     name = 'binomial'
     options = dict(substeps=(None, None))
@@ -105,12 +105,12 @@ class binomial(Solver):
 
 
 class gillespie(Solver):
-    """ The exact stochastic solver for compartments (Gillespie's algorithm), which has no options: `ss.Sim(solver='gillespie')` """
+    """ The exact stochastic solver for compartments (Gillespie's algorithm: one event at a time, with no error from the timestep, but slow for a large population), which has no options: `ss.Sim(solver='gillespie')` """
     name = 'gillespie'
 
 
 class tau(Solver):
-    """ Tau-leaping (stochastic compartments, in leaps short enough that the rates change little over each), which has no options: `ss.Sim(solver='tau')` """
+    """ Tau-leaping (stochastic compartments, in leaps short enough that the rates change little over each: close to Gillespie's exact answer, and much faster for a large population), which has no options: `ss.Sim(solver='tau')` """
     name = 'tau'
 
 
@@ -123,7 +123,11 @@ class abm(Solver):
     follows, and a sim's solver that names a step (e.g. `ss.solvers.abm(step='midstep')`) overrides (see `ss.solvers.agent_solver()`).
 
     Args:
-        step (str): how the agents of a declared module are stepped: 'midstep' (the default: by steps, with those who arrive in a state during a step facing its rates for the rest of it), 'wholestep' (by steps, with rates over whole steps only, for those in the state at the start of the step, as code with `ss.bernoulli()` takes them: faster, and a little less exact at a coarse step), or 'events' (event by event in continuous time within each step, a prototype)
+        step (str): how the agents of a declared module are stepped:
+
+            - 'midstep' (the default): by steps, with those who arrive in a state during a step facing its rates for the rest of it, which is the more exact at a coarse step
+            - 'wholestep': by steps, with rates over whole steps only, for those in the state at the start of the step, as code with `ss.bernoulli()` takes them: faster, and a little less exact at a coarse step; use it to match a model written as code
+            - 'events': event by event in continuous time within each step (a prototype)
     """
     name = 'abm'
     options = dict(step=('midstep', ['midstep', 'wholestep', 'events']))
@@ -140,10 +144,6 @@ def as_solver(solver):
         return solver
     if isinstance(solver, type) and issubclass(solver, Solver): # ss.solvers.ode, not ss.solvers.ode()
         return solver()
-    old = dict(ide="ss.solvers.ode(dwells='exact')", **{f'abm-{k}':(f"ss.solvers.abm(step='{k}')" if k != 'midstep' else "'abm'") for k in ['midstep', 'wholestep', 'events']})
-    if isinstance(solver, str) and solver in old:
-        errormsg = f'solver="{solver}" has been replaced: use solver={old[solver]}'
-        raise ValueError(errormsg)
     if not isinstance(solver, str) or solver not in solver_names:
         errormsg = f'Unknown solver {solver!r}; the choices are {sc.strjoin(solver_names)}, or with options, ss.solvers.ode(), ss.solvers.binomial(), or ss.solvers.abm()'
         raise ValueError(errormsg)
@@ -1760,3 +1760,16 @@ rules = capabilities + layouts + kernels + fixed + jax # The whole table, as sol
 def auto_reasons(sim):
     """ The reasons, from the capability record, that `solver='auto'` runs the model as agents (none if it runs it as compartments) """
     return [cap.reason for cap in getattr(sim, 'capabilities', []) if cap.get('switch', True)]
+
+
+def as_ode(sim, **kwargs):
+    """ A new sim of the same model as an ODE, for what is worked out from compartments (`R0()`, `Rt()`, an export): its number of agents is dropped, and the people they stood for are its population; the settings of agents only (`rescale=`, `even_draws=`) are dropped too, since `sim.new(solver='ode')` would refuse them """
+    if 'n_agents' in sim.given:
+        kwargs = dict(n_agents=None, total_pop=sim.pars.total_pop) | kwargs
+    agents_only = {key:None for key in ['rescale', 'even_draws'] if key in sim.given or sim.pars.get(key)} # Settings of agents only (see ss.solvers.check_solver_options()), which an ODE would refuse
+    return sim.new(solver='ode', **(agents_only | kwargs))
+
+
+def in_proportions(sim):
+    """ Whether a sim's numbers are shares of a population of 1 (`total_pop=1`): as an ODE, or as agents each a share of it, but not as a stochastic compartmental model, which then has one person """
+    return sim.pars.total_pop <= 1 and not isinstance(sim.solver or sim.pars.solver, (ss.solvers.binomial, ss.solvers.gillespie, ss.solvers.tau))

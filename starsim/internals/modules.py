@@ -189,7 +189,7 @@ class Base:
     def __len__(self):
         """ The length of a module is the number of timepoints; see also len(sim) """
         try:    return self.t.npts
-        except: return 0
+        except Exception: return 0
 
     def __repr__(self):
         """ Equivalent to sc.prettyobj() """
@@ -213,25 +213,25 @@ class Base:
     def dt(self):
         """ Get the current module timestep """
         try:    return self.t.dt
-        except: return None
+        except Exception: return None
 
     @property
     def ti(self):
         """ Get the current module time index """
         try:    return self.t.ti
-        except: return None
+        except Exception: return None
 
     @property
     def now(self):
         """ Shortcut to self.t.now() """
         try:    return self.t.now()
-        except: return None
+        except Exception: return None
 
     @property
     def timevec(self):
         """ Shortcut to self.t.timevec """
         try:    return self.t.timevec
-        except: return None
+        except Exception: return None
 
     def copy(self, die=True):
         """
@@ -375,7 +375,7 @@ class Module(Base):
             try:
                 if isinstance(getattr(self, attr),ss.Arr) and len(getattr(self, attr)) == len(value):
                     errormsg += f'\nOften this error can be resolved by replacing `self.{attr} = x` with `self.{attr}[:] = x`'
-            except:
+            except Exception:
                 pass
             raise AttributeError(errormsg)
         elif isinstance(self.__dict__.get(attr), ss.par) and attr in self.pars: # A declared parameter (e.g. sir.beta = 0.1), the same object as sir.pars.beta
@@ -424,7 +424,7 @@ class Module(Base):
         """ Show the object including parameters and states """
         try: # Default representation
             return self.brief(output=True)
-        except: # If for any reason that fails, return the full repr
+        except Exception: # If for any reason that fails, return the full repr
             return sc.prepr(self)
 
     @property
@@ -680,7 +680,7 @@ class Module(Base):
         # Should be no remaining pars
         remaining = set(pars.keys()) - set(module_args) - set(ss.Timeline.time_args)
         if len(remaining):
-            errormsg = f'{len(remaining)} unrecognized argument{"s" if len(remaining) > 1 else ""} for {self.name}: {sc.strjoin(sorted(remaining))}{ss.errors.starsim3(keys=sorted(remaining), call=f"ss.{type(self).__name__}")}'
+            errormsg = f'{len(remaining)} unrecognized argument{"s" if len(remaining) > 1 else ""} for {self.name}: {sc.strjoin(sorted(remaining))}{ss.v3_deprecations.hint(keys=sorted(remaining), call=f"ss.{type(self).__name__}")}'
             raise ValueError(errormsg)
         return
 

@@ -230,7 +230,7 @@ Every plotting function takes the settings of `ss.plot_args()` (`figsize`, `file
 | `network.plot()` | The contacts of a network of agents | [Contact networks](populations_networks.qmd) |
 | `dist.plot_hist()` | Draws from a distribution, as a histogram | [Distributions](mechanics_distributions.qmd) |
 | `fit.plot()` | A fit: the data against the model before and after fitting, and with `residuals=True`, the differences | [Fitting a model](calibration_fitting.qmd), [Fit diagnostics](calibration_diagnostics.qmd) |
-| `comparison.plot()` | Each model's fit and prediction against held-out data, from `ss.fit.compare_models()` | [Fit diagnostics](calibration_diagnostics.qmd) |
+| `comparison.plot()` | Each model's fit and prediction against held-out data, from `ss.fitting.compare_models()` | [Fit diagnostics](calibration_diagnostics.qmd) |
 | `infection_log.plot()` | When each agent was infected, from the `ss.infection_log` analyzer (and `animate()`, as an animation) | [Analyzers](interventions_analyzers.qmd#the-infection-log) |
 | `icer.plot()`, `icer.plot_ceac()` | The cost-effectiveness plane, and the cost-effectiveness acceptability curve, from `ssl.econ.ICER` | [Costs](interventions_costs.qmd) |
 | `sim.loop.plot()` | The order in which modules are called in each step | [Model execution](architecture_execution.qmd) |

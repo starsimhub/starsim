@@ -139,10 +139,6 @@ class ICER(ss.Analyzer):
         ```
     """
     def __init__(self, sims=None, outcome='dalys.dalys', cost='costs.total', baseline=None, discount=0, discount_start=None, window=None, **kwargs):
-        for old, new in dict(rate='discount', start='discount_start').items():
-            if old in kwargs:
-                errormsg = f'ssl.ICER() takes no {old}=; use {new}='
-                raise TypeError(errormsg)
         if window is not None and not isinstance(window, ss.Duration):
             errormsg = f'window= of ssl.ICER() is a duration, e.g. window=ss.years(1); not {window!r}'
             raise TypeError(errormsg)

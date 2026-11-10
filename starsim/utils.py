@@ -66,12 +66,13 @@ def skipkeys(names):
 
 class ndict(sc.obj):
     """
-    A dictionary-like class that provides additional functionalities for handling named items.
+    A dictionary of named items, such as a sim's modules (`sim.diseases`), which can also be called for its values (`sim.diseases()`)
 
-    Each item is added under its `name` (or the key given), and a key can be added only once.
+    Each item is added under its `name` (or the key given), and a key can be added only once, so that two modules
+    can't silently take the same name.
 
     Args:
-        type (type): The expected type of items.
+        type (type): the type each item must be (a module of any type is also accepted)
         args (list): the items to add, each a named item, or a list or dict of them
         kwargs (dict): more items to add, by key
 
@@ -91,7 +92,7 @@ class ndict(sc.obj):
         return
 
     def __call__(self):
-        """ Shortcut for returning values """
+        """ The values, e.g. `for disease in sim.diseases():` """
         return self.values()
 
     def append(self, arg, key=None):
@@ -101,36 +102,27 @@ class ndict(sc.obj):
             arg (Module/list/dict): the item to add, or a list or dict of them
             key (str): the key to add it under (default: its name)
         """
-        valid = False
         if arg is None:
-            return  # Nothing to do
-        elif hasattr(arg, 'name'):
+            return self
+        if hasattr(arg, 'name'):
             key = key or arg.name
-            valid = True
-        elif isinstance(arg, dict):
-            if 'name' in arg:
-                key = key or arg['name']
-                valid = True
-            else:
-                for k, v in arg.items():
-                    self.append(v, key=k)
-                valid = None  # Skip final processing
-
-        if valid is True:
-            self._check_type(arg)
-            self._check_key(key)
-            self[key] = arg # Actually add to the ndict!
-        elif valid is None:
-            pass  # Nothing to do
-        else:
-            if isinstance(arg, ss.Module):
-                # A Module missing its name attribute almost always means super().__init__() was not called
-                errormsg = (f'Could not add module of type "{type(arg).__name__}": it is missing the "name" attribute. '
-                            f'This usually means super().__init__() was not called in the module\'s __init__() method; '
-                            f'please ensure your __init__() calls super().__init__(*args, **kwargs).')
-            else:
-                errormsg = f'Could not interpret argument {arg}: does not have expected attribute "name"'
+        elif isinstance(arg, dict) and 'name' in arg:
+            key = key or arg['name']
+        elif isinstance(arg, dict): # Items by key
+            for k, v in arg.items():
+                self.append(v, key=k)
+            return self
+        elif isinstance(arg, ss.Module): # A module without a name almost always means super().__init__() was not called
+            errormsg = (f'Could not add module of type "{type(arg).__name__}": it is missing the "name" attribute. '
+                        f'This usually means super().__init__() was not called in the module\'s __init__() method; '
+                        f'please ensure your __init__() calls super().__init__(*args, **kwargs).')
             raise TypeError(errormsg)
+        else:
+            errormsg = f'Could not interpret argument {arg}: does not have expected attribute "name"'
+            raise TypeError(errormsg)
+        self._check_type(arg)
+        self._check_key(key)
+        self[key] = arg
         return self
 
     def _check_key(self, key):
@@ -142,11 +134,10 @@ class ndict(sc.obj):
         return
 
     def _check_type(self, arg):
-        """ Check types """
-        if self._type is not None:
-            if not isinstance(arg, self._type) and not isinstance(arg, ss.Module): # Module is a valid argument anywhere
-                errormsg = f'The following item does not have the expected type {self._type}:\n{arg}'
-                raise TypeError(errormsg)
+        """ Check that an item is of the type of the ndict, or a module (a module of any kind is accepted anywhere) """
+        if self._type is not None and not isinstance(arg, (self._type, ss.Module)):
+            errormsg = f'The following item does not have the expected type {self._type}:\n{arg}'
+            raise TypeError(errormsg)
         return
 
     def get(self, key, default=None, match_case=False):
@@ -172,24 +163,16 @@ class ndict(sc.obj):
             sim.diseases.get(ss.SIR)
             ```
         """
-        # Handle strings
         if isinstance(key, str):
-            if key in self: # Shortcut if a string provided and matches an entry in the dict
+            if key in self:
                 return self[key]
             elif not match_case:
-                key = key.lower()
-                return next((v for k, v in self.items() if k.lower() == key), default)
-            else:
-                return default
-
-        # Handle types
+                return next((v for k, v in self.items() if k.lower() == key.lower()), default)
+            return default
         elif isinstance(key, type):
             return next((v for v in self.values() if isinstance(v, key)), default)
-
-        # Handle exceptions
-        else:
-            errormsg = f'Key must be a str or type, not {key}'
-            raise TypeError(errormsg)
+        errormsg = f'Key must be a str or type, not {key}'
+        raise TypeError(errormsg)
 
     def extend(self, *args, **kwargs):
         """ Add new items to the ndict, by item, list, or dict
@@ -198,8 +181,7 @@ class ndict(sc.obj):
             args (list): the items to add
             kwargs (dict): more items to add, by key
         """
-        args = sc.mergelists(*args)
-        for arg in args:
+        for arg in sc.mergelists(*args):
             self.append(arg)
         for key, arg in kwargs.items():
             self.append(arg, key=key)
@@ -222,20 +204,12 @@ class ndict(sc.obj):
         return new
 
     def __add__(self, other):
-        """ Allow c = a + b """
-        new = self.copy()
-        if isinstance(other, list):
-            new.extend(other)
-        else:
-            new.append(other)
-        return new
+        """ Allow c = a + b, where b is an item or a list of them """
+        return self.copy().__iadd__(other)
 
     def __iadd__(self, other):
-        """ Allow a += b """
-        if isinstance(other, list):
-            self.extend(other)
-        else:
-            self.append(other)
+        """ Allow a += b, where b is an item or a list of them """
+        self.extend(other) if isinstance(other, list) else self.append(other) # Not returned, since a subclass's may return something else
         return self
 
 
@@ -245,21 +219,20 @@ def nlist_to_dict(nlist, die=True):
     collisions = []
     for obj in nlist:
         key = obj.name
-        if key not in out:
-            out[key] = obj
-        else:
+        if key in out:
             collisions.append(key)
+        else:
+            out[key] = obj
     if collisions:
         errormsg = f'Cannot list modules as a dict since one or more modules have the same name; use the list version instead. Collisions:\n{collisions}'
         if die:
             raise ValueError(errormsg)
-        else:
-            ss.warn(errormsg)
+        ss.warn(errormsg)
     return out
 
 
 def warn(msg, category=None, verbose=None, die=None):
-    """ Helper function to handle warnings -- shortcut to warnings.warn
+    """ Show a warning, as `ss.options.warnings` says: as a Python warning (default), printed, raised as an error, or not at all
 
     Args:
         msg (str): the text of the warning
@@ -267,31 +240,18 @@ def warn(msg, category=None, verbose=None, die=None):
         verbose (bool): whether to print it, if `ss.options.warnings` is 'print' (default: `ss.options.verbose`)
         die (bool): if True, raise it as an error, whatever `ss.options.warnings` is
     """
-
-    # Handle inputs
-    warnopt = ss.options.warnings if not die else 'error'
-    if category is None:
-        category = RuntimeWarning
-    if verbose is None:
-        verbose = ss.options.verbose
-
-    # Handle the different options
-    if warnopt in ['error', 'errors']:  # Include alias since hard to remember
+    warnopt = 'error' if die else ss.options.warnings
+    category = sc.ifelse(category, RuntimeWarning)
+    if warnopt in ['error', 'errors']: # Include alias since hard to remember
         raise category(msg)
     elif warnopt == 'warn':
-        msg = '\n' + msg
-        warnings.warn(msg, category=category, stacklevel=2)
+        warnings.warn('\n' + msg, category=category, stacklevel=2)
     elif warnopt == 'print':
-        if verbose:
-            msg = 'Warning: ' + msg
-            print(msg)
-    elif warnopt == 'ignore':
-        pass
-    else:
-        options = ['error', 'warn', 'print', 'ignore']
-        errormsg = f'Could not understand "{warnopt}": should be one of {options}'
+        if sc.ifelse(verbose, ss.options.verbose):
+            print('Warning: ' + msg)
+    elif warnopt != 'ignore':
+        errormsg = f'Could not understand "{warnopt}": should be one of {["error", "warn", "print", "ignore"]}'
         raise ValueError(errormsg)
-
     return
 
 
@@ -721,7 +681,7 @@ def save(filename, obj, **kwargs):
 
 
 class Shrunk:
-    """ Define a class to indicate an object has been shrunken
+    """ What `shrink()` puts in place of an attribute it removes, so that reading it says it was removed on purpose (rather than being None, or missing)
 
     Args:
         obj (object): the object that was shrunken
@@ -730,7 +690,7 @@ class Shrunk:
     def __init__(self, obj=None, attr=None):
         try:
             self.obj_type = type(getattr(obj, attr))
-        except:
+        except Exception: # E.g. no object, or no such attribute
             self.obj_type = None
         self.attr = attr
         return
@@ -740,8 +700,7 @@ class Shrunk:
             prefix = f'The object "{self.attr}" {self.obj_type}'
         else:
             prefix = 'This object'
-        s = f'{prefix} has been intentionally "shrunken" to save memory. Run with shrink=False to see the non-shrunken object instead.'
-        return s
+        return f'{prefix} has been intentionally "shrunken" to save memory. Run with shrink=False to see the non-shrunken object instead.'
 
     def __bool__(self):
         """ A shrunken object is falsy, so `if obj:` treats it like a missing/None value """
@@ -749,8 +708,7 @@ class Shrunk:
 
     def __getattr__(self, attr):
         """ Raise an informative error when a shrunken object's attributes are accessed """
-        # Let dunder lookups (copy, pickle, repr machinery) fail with the default error
-        if attr.startswith('__') and attr.endswith('__'):
+        if attr.startswith('__') and attr.endswith('__'): # Lookups by copy, pickle, and repr fail with the default error
             raise AttributeError(attr)
         errormsg = f'You are trying to access the attribute {attr} on a Shrunk object, which has been deleted. Rerun the sim with shrink=False to restore the original object.'
         raise AttributeError(errormsg)
@@ -783,20 +741,33 @@ def shrink(obj=None, attrs=None, verbose=False):
         sim.people = ss.utils.shrink()
         ```
     """
-    none_count = sum([x is None for x in [obj, attrs]])
-    if none_count == 2:
+    if obj is None and attrs is None:
         return Shrunk()
-    elif none_count == 1:
+    elif obj is None or attrs is None:
         errormsg = 'You can call ss.utils.shrink() with both obj and attrs, or with neither, but not one or the other'
         raise ValueError(errormsg)
-    else:
-        for attr in sc.tolist(attrs):
-            if hasattr(obj, attr):
-                shrunk = Shrunk(obj=obj, attr=attr)
-                setattr(obj, attr, shrunk)
-            elif verbose:
-                ss.warn(f'Attribute "{attr}" not found in object "{obj}"')
-        return obj
+    for attr in sc.tolist(attrs):
+        if hasattr(obj, attr):
+            setattr(obj, attr, Shrunk(obj=obj, attr=attr))
+        elif verbose:
+            ss.warn(f'Attribute "{attr}" not found in object "{obj}"')
+    return obj
+
+
+def own_size(mod):
+    """
+    The bytes needed to pickle a module, not counting its parameters or what it shares with the rest of the sim: the sim, its people, the other modules (e.g.
+    a delivery's transitions, which belong to their disease), and results (its own too, which grow with its stratifications
+    as well as with time); used by `sim.shrink()` to check that a module has let go of its arrays
+    """
+    import io, dill # dill (as sc.checkmem() uses) for what pickle can't take, e.g. a lambda
+    pars = getattr(mod, 'pars', None) # Its parameters are structure, which doesn't grow with the agents (e.g. a table of fertility rates)
+    class Pickler(dill.Pickler):
+        def persistent_id(self, obj):
+            return id(obj) if obj is not mod and (isinstance(obj, (ss.Module, ss.Sim, ss.People, ss.Results, ss.Result)) or obj is pars) else None
+    out = io.BytesIO()
+    Pickler(out, protocol=-1).dump(mod)
+    return out.tell()
 
 
 #%% Plotting helper functions
@@ -813,10 +784,7 @@ plotting_kw.return_fig = ['do_show', 'is_jupyter', 'filename']
 
 def plot_args(kwargs=None, _debug=False, **defaults):
     """
-    Process known plotting kwargs.
-
-    This function handles arguments to `sim.plot()` and other plotting functions
-    by splitting known kwargs among all the different aspects of the plot.
+    Split the keywords given to `sim.plot()` and other plotting functions among the parts of the plot they are for (the figure, the lines, the data, and so on)
 
     Note: the kwargs supplied to the parent function should be supplied as the
     first argument of this function; keyword arguments to this function are treated
@@ -890,7 +858,7 @@ def plot_args(kwargs=None, _debug=False, **defaults):
 
 
 def show(**kwargs):
-    """ Shortcut for matplotlib.pyplot.show()
+    """ Show the figures made so far (`plt.show()`), e.g. at the end of a script that makes plots with `ss.options.show = False`
 
     Args:
         kwargs (dict): passed to `plt.show()`

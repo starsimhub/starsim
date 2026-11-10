@@ -123,11 +123,8 @@ The counts jump around, as real counts do, by chance and because reporting varie
 This data is illustrative. It was made from an agent-based run of this model (so not the smooth curve of the ODE), with β = 0.16 and 40% of infections reported, and its weekly totals were drawn with more variation than Poisson counts, as reported counts usually have. So, as with real data, no parameter values fit it exactly:
 
 ```python
-import numpy as np
 truth = ss.Sim(measles, pars=dict(beta=0.16, reported=0.4), n_agents=100_000, rand_seed=3, **settings).run()
-weekly = truth.to_synthetic_data('cases', resample='week', noise=None) # Weekly reported cases, each dated by the first day of its week
-rng = np.random.default_rng(3)
-weekly['cases'] = rng.negative_binomial(30, 30/(30 + weekly.cases)) # With extra variation (negative binomial counts)
+weekly = truth.to_synthetic_data('cases', resample='week', noise=ss.nbinom(n=30)) # Weekly reported cases, each dated by the first day of its week, with extra variation (negative binomial counts)
 weekly[weekly.date <= ss.date('2025-03-12')].to_csv('data/measles_cases.csv', index=False)
 weekly[weekly.date > ss.date('2025-03-12')].to_csv('data/measles_cases_after.csv', index=False) # What happens next
 ```
@@ -188,7 +185,7 @@ Other values may fit almost as well: in the report above, one search ended at β
 The range of values consistent with the data is a **posterior**. Finding it takes two more things. A **likelihood** says how the data vary around the model: here, as counts that vary more than Poisson counts (`ss.nbinom(n=20)`, a negative binomial). A **prior** says what is known before seeing the data: the share reported has one (`prior=` above), from earlier outbreaks: about a third, with a standard deviation of 10 percentage points (a beta distribution). β has none, so its prior is uniform over its bounds. (The best fit above ignored the prior, since it uses no likelihood.) The sampler, NUTS, then draws values in proportion to how probable they are, given both:
 
 ```{python}
-post = sim.fit(method=ss.fit.method('nuts', draws=1000, warmup=1000), likelihood=dict(cases=ss.nbinom(n=20)))
+post = sim.fit(method=ss.fitting.method('nuts', draws=1000, warmup=1000), likelihood=dict(cases=ss.nbinom(n=20)))
 post.summarize()
 ```
 

@@ -102,7 +102,7 @@ import pandas as pd
 stochastic = ss.Sim(make_seir(), data=data, solver='binomial', **pars)
 rows = []
 for seed in [1, 2]:
-    fit = stochastic.fit(rand_seed=seed, verbose=False, method=ss.fit.method('optuna', n_trials=100))
+    fit = stochastic.fit(rand_seed=seed, verbose=False, method=ss.fitting.method('optuna', n_trials=100))
     rows.append(dict(rand_seed=seed, beta=fit.pars.beta, report=fit.pars.report, converged=fit.converged))
 pd.DataFrame(rows).round(3)
 ```
@@ -143,12 +143,12 @@ For any method, `fit.to_df()` has every evaluation, with the values tried and th
 
 ## Does the model predict?
 
-A model with more parameters usually fits better, without necessarily being better. A fairer test is how well a model fitted to the start of the data predicts the rest. `ss.fit.compare_models()` fits each model to the data before a cut, runs it forward, and scores it on the part held out. By default the last 25% of each series is held out, but here that would be the decline after the August peak, which is easy to predict once the peak has been fitted. The question a modeler usually faces is whether a model fitted to the rise of an outbreak predicts its peak, so `holdout=` gives a date instead: two months, and then one month, before the peak:
+A model with more parameters usually fits better, without necessarily being better. A fairer test is how well a model fitted to the start of the data predicts the rest. `ss.fitting.compare_models()` fits each model to the data before a cut, runs it forward, and scores it on the part held out. By default the last 25% of each series is held out, but here that would be the decline after the August peak, which is easy to predict once the peak has been fitted. The question a modeler usually faces is whether a model fitted to the rise of an outbreak predicts its peak, so `holdout=` gives a date instead: two months, and then one month, before the peak:
 
 ```{python}
 models = {'SIR': ss.Sim(make_sir(), data=data, **pars), 'SEIR': ss.Sim(make_seir(), data=data, **pars)}
 for cut in ['2025-06-01', '2025-07-01']:
-    comparison = ss.fit.compare_models(models, method='nelder-mead', holdout=cut, verbose=False)
+    comparison = ss.fitting.compare_models(models, method='nelder-mead', holdout=cut, verbose=False)
     comparison.summarize()
 ```
 
@@ -164,7 +164,7 @@ With data to the start of July, the SEIR model predicts the rest of the outbreak
 | The answer is stable | Fit again with another `rand_seed=` (stochastic) or from other starting points (`scan=`) | Different values each time |
 | The parameters are identifiable | A note that they can't be told apart; recover known values | A ridge, or values that move together |
 | The posterior is reliable | `rhat`, `ess`, divergences | R-hat above 1.01, few effective draws, any divergences |
-| The model predicts | `ss.fit.compare_models()` | A model that fits well but predicts badly |
+| The model predicts | `ss.fitting.compare_models()` | A model that fits well but predicts badly |
 | The fit is plausible | Compare the values with what is known from elsewhere | A reporting share above 1, an infectious period of months |
 
 The last check matters most, and no software can make it: a fit only finds the values that make this model match these data. Whether those values, and the model, make sense for the disease and the setting is a judgment for the modeler.

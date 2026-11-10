@@ -3149,7 +3149,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         Take many runs that differ only in their seed, in calls to the kernels that take all of them, a part of the run at a time
 
         With `start`, the runs are taken from a later time point, each from compartments of its own, with what came before given
-        (e.g. a run drawn by a particle filter, to project from: see `ss.fit.ParticleFilter`); the results by group are then not kept,
+        (e.g. a run drawn by a particle filter, to project from: see `ss.fitting.ParticleFilter`); the results by group are then not kept,
         since what came before is given as totals.
 
         Args:

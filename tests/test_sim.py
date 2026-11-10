@@ -756,7 +756,7 @@ def test_printed_output():
 
     # In proportions (total_pop=1), shares and not counts, and no note about chance
     sim = ss.Sim(ss.Disease(S >> I @ 1.4*I, I >> R @ ss.perday(0.14), init=dict(I=1e-6), name='sir'), total_pop=1, **kw).run()
-    assert 'in proportions' in sim._start_lines()[0] and 'at most 0.66' in sim._end_line()
+    assert 'in proportions' in ss.display.start_lines(sim)[0] and 'at most 0.66' in ss.display.end_line(sim)
     assert not any('chance' in note for note in sim.notes) and 'in proportions' in sim.describe()
 
     # No notes on models written as the docs write them: density dependence, a chain binomial in whole steps, and typed rates
@@ -846,12 +846,11 @@ def test_solver_options():
     assert repr(euler.solver) == "ss.solvers.ode(integrator='euler', substeps=2)" and repr(ss.solvers.ode()) == 'ss.solvers.ode()' and str(euler.solver) == 'ode'
     assert sc.loadobj(sc.saveobj(None, euler.solver)) == euler.solver # Pickled with its options
     assert ss.Sim(make(), solver=ss.solvers.binomial(substeps=1), **kw).init().solver.substeps == 1
-    for old, new in [({'integrator': 'euler'}, 'ss.solvers.ode'), ({'substeps': 1}, 'ss.solvers.binomial'), ({'rescale_threshold': 0.1}, 'rescale=dict'), ({'pop_scale': 10}, 'total_pop')]: # The old keywords
+    for old, new in [({'rescale_threshold': 0.1}, 'rescale=dict'), ({'pop_scale': 10}, 'total_pop')]: # Starsim 3's keywords
         with pytest.raises(TypeError, match=new.replace('.', r'\.')):
             ss.Sim(make(), **old, **kw)
-    for old in ['ide', 'abm-events', 'abm-wholestep', 'abm-midstep']:
-        with pytest.raises(ValueError, match='replaced'):
-            ss.Sim(make(), solver=old, **kw).init()
+    with pytest.raises(ValueError, match='Unknown solver'):
+        ss.Sim(make(), solver='abm-events', **kw).init()
     with pytest.raises(TypeError): # An option of another solver
         ss.solvers.binomial(integrator='euler')
     with pytest.raises(ValueError):

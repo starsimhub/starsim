@@ -1,8 +1,7 @@
 """
-Define analyzers, which are used to track variables when the sim is run.
+Analyzers, which record more than a sim records by default, as it runs
 
-Analyzers typically include things like additional tracking states by age or another
-conditional.
+For example, the number infected by age or by sex, or who infected whom (`ss.infection_log`).
 
 Used with: agents and compartments; declared and coded modules
 """
@@ -14,9 +13,8 @@ plt = sc.lazyimport('matplotlib.pyplot') # Imported when first used, since most 
 
 class Analyzer(ss.Module):
     """
-    Base class for Analyzers. Analyzers are used to provide more detailed information
-    about a simulation than is available by default -- for example, pulling states
-    out of sim.people on a particular timestep before they get updated on the next step.
+    Base class for analyzers, which record more about a sim than it records by default: for
+    example, a state of the people on each step, read before the next step changes it.
 
     An analyzer records results as any module does: those about the state at the start
     of each step (stocks) in `record_stocks()`, and those about what happened in it
@@ -47,11 +45,11 @@ class Analyzer(ss.Module):
 
 
 class infection_log(Analyzer):
-    """ Log infections -- see `ss.diseases.InfectionLog` for detail
+    """ Log who infected whom -- see `ss.diseases.InfectionLog` for detail
 
-    This analyzer activates an infection log running in each disease. This is
-    different than other analyzers, but is required since the information required
-    to create an infection log isn't kept outside of the disease's `transmit()` step.
+    This analyzer turns on the infection log of each disease, rather than recording
+    anything itself, since who infected whom is known only inside the disease's
+    `transmit()` step.
 
     Each entry has the time (`t`), the person infected (`target`), who infected them
     (`source`), and the route (`network`). The source is known only for transmission
@@ -85,10 +83,6 @@ class infection_log(Analyzer):
         super().__init__(**kwargs)
         self.logs = sc.obj()
         return
-
-    def step(self):
-        """ Handled by ss.diseases.InfectionLog() """
-        pass
 
     def finalize_results(self):
         """ Collect the infection logs from each of the diseases (the same logs, so several analyzers can share them) """
@@ -139,18 +133,13 @@ class infection_log(Analyzer):
             cmap (str): the colormap to use
             kwargs (dict): passed to `ss.plot_args()`
         """
-        # Get data
-        log = self.logs[key]
-        df = log.to_df()
+        df = self.logs[key].to_df()
 
-        # Convert to 2d coordinates using compact indexing to avoid oversized grids with sparse UIDs
-        unique_uids = sorted(df.target.unique())
-        uid_to_idx = {uid: idx for idx, uid in enumerate(unique_uids)}
+        # Place each person infected on a square grid, numbering only them so that the grid stays small when UIDs are sparse
+        unique_uids, idx = np.unique(df.target, return_inverse=True)
         side = int(np.ceil(np.sqrt(len(unique_uids))))
-        x, y = np.meshgrid(np.arange(side), np.arange(side))
-        flat = x.ravel()
-        df['x'] = [flat[uid_to_idx[uid]] for uid in df.target]
-        df['y'] = [y.ravel()[uid_to_idx[uid]] for uid in df.target]
+        df['x'] = idx % side
+        df['y'] = idx // side
 
         # Assemble into frames
         frames = sc.autolist()

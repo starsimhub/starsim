@@ -630,7 +630,7 @@ class Graph:
                 raise sc.KeyNotFoundError(f'"{name}={value}" was given to "{self.module.name}", but it has no parameter called "{name}".\n'
                                           f'     To start with people in a state, use init=dict({state}=0.01) for a share of people, or init_n=dict({state}=10) for a number; init_prev= seeds the state a new infection enters (by default 1% of people), as a share or a number of people.')
             elif name not in self.pars:
-                raise sc.KeyNotFoundError(f'"{name}={value}" was given to "{self.module.name}", but it has no parameter called "{name}"; its parameters are {sc.strjoin(self.pars.keys())}.{ss.errors.starsim3(keys=name, call=f"ss.{type(self.module).__name__}")}\n'
+                raise sc.KeyNotFoundError(f'"{name}={value}" was given to "{self.module.name}", but it has no parameter called "{name}"; its parameters are {sc.strjoin(self.pars.keys())}.{ss.v3_deprecations.hint(keys=name, call=f"ss.{type(self.module).__name__}")}\n'
                                           f'     To add a parameter, use it in a transition, e.g. infection = S >> I @ {name} * I with {name} = ss.par({value}).\n'
                                           f'     If another module reads it from this disease, add it after making the disease: {self.module.name}.define_pars({name}={value!r}).' +
                                           (f'\n     Condoms (or other protection used in some acts) are an intervention on the transmission instead, e.g. ss.modify({self.module.name}.infection, efficacy={value!r}, share=0.3, network="sexualnet").' if 'condom' in name else ''))

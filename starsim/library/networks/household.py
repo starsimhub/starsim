@@ -96,7 +96,7 @@ class HouseholdNet(ss.Network):
         sim.plot()
     """
     def __init__(self, pars=None, dhs_data=None, dynamic=None, prob_move_out=_, **kwargs):
-        ss.networks.check_replaced(self, pars, kwargs, dict(update_freq='to update the households less often, give the network its own step, e.g. dt=ss.years(1)'))
+        ss.v3_deprecations.check(type(self), '__init__', list(kwargs) + list(pars or {}))
         super().__init__()
         self.define_pars(
             prob_move_out = ss.bernoulli(p=0.7),

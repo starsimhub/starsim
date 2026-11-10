@@ -2409,7 +2409,7 @@ class Engine(Telling, Effects):
         """ For a run with real numbers (ode): say where chance would matter, as a stochastic run would show """
         sim = self.sim
         infected = [s for s in self.graph.infected if s.people]
-        if not isinstance(sim.solver, ss.solvers.ode) or not infected or not self.graph.transmissions or ss.sim.in_proportions(sim): # In proportions, there is no chance to speak of
+        if not isinstance(sim.solver, ss.solvers.ode) or not infected or not self.graph.transmissions or ss.solvers.in_proportions(sim): # In proportions, there is no chance to speak of
             return
         res = self.mod.results
         n = sum(np.asarray(res[s.name].values, dtype=float) for s in infected)

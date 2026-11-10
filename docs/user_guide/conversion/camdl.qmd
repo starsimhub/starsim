@@ -119,7 +119,7 @@ These are from Starsim's switching demo for camdl users (`tests/switching/test_c
 | A posterior by particle MCMC with nothing written but `data=` and `sim.fit(method='pmcmc')` | **Works**: the same posterior as camdl's PMMH (above) |
 | The speed of the particle filter | **Works**: 12 ms per likelihood against camdl's 10.4 ms (above), with the particles shared between threads |
 | Maximum likelihood by IF2 | **Works**: `sim.fit(method='if2')` gives camdl's estimates (above), for parameters of the model's rates; a parameter of how the data are observed (a reporting rate) cannot be fitted by IF2 yet |
-| Profile likelihoods | **Works** for an ODE: `ss.fit.profile(sim, 'beta')` refits the other parameters at each value of `beta` and gives its confidence interval; a stochastic model raises an error, since its noisy likelihoods would need a smoothed profile, which is not yet supported |
+| Profile likelihoods | **Works** for an ODE: `ss.fitting.profile(sim, 'beta')` refits the other parameters at each value of `beta` and gives its confidence interval; a stochastic model raises an error, since its noisy likelihoods would need a smoothed profile, which is not yet supported |
 | Import a `.camdl` file | **Works** (see below), with every stratification expanded into states, so a stratified model comes in as one state per combination of levels |
 | Interventions in a scenario (SIAs) in an imported model | **Not yet**: they are listed as not translated |
 | The same model as agents | **Works**: `solver='abm'` with a network; camdl is compartmental only |

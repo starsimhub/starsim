@@ -95,10 +95,10 @@ class geography:
         if distances is not None:
             self.distances = np.array(distances, dtype=float)
         elif x is not None and y is not None:
-            x, y = np.array(x, dtype=float), np.array(y, dtype=float)
+            x, y = self.x, self.y
             self.distances = np.hypot(x[:, None] - x[None, :], y[:, None] - y[None, :])
         elif lat is not None and lon is not None: # Great-circle distances, in km
-            lat, lon = np.radians(np.array(lat, dtype=float)), np.radians(np.array(lon, dtype=float))
+            lat, lon = np.radians(self.lat), np.radians(self.lon)
             a = np.sin((lat[:, None] - lat[None, :])/2)**2 + np.cos(lat[:, None])*np.cos(lat[None, :])*np.sin((lon[:, None] - lon[None, :])/2)**2
             self.distances = 2*6371*np.arcsin(np.sqrt(a))
         for key,val in dict(populations=self.populations, distances=self.distances, adjacency=self.adjacency).items():
@@ -470,15 +470,11 @@ class Mobility:
         ```
     """
     def __init__(self, matrix=None, kind=None, away=None, **kwargs):
-        if isinstance(matrix, (gravity, radiation)) or 'model' in kwargs:
-            model = kwargs.get('model', matrix)
-            errormsg = f'ss.geo.Mobility() takes a matrix; a movement model is given on its own, with its kind and amount, e.g. mobility=ss.geo.{type(model).__name__}(kind={kind or "commute"!r}{f", away={away}" if away is not None else ""})'
-            raise TypeError(errormsg)
-        if 'data' in kwargs:
-            errormsg = "a movement register is ss.geo.register(data), e.g. mobility=ss.geo.register('moves.csv')"
+        if isinstance(matrix, (gravity, radiation)):
+            errormsg = f'ss.geo.Mobility() takes a matrix; a movement model is given on its own, with its kind and amount, e.g. mobility=ss.geo.{type(matrix).__name__}(kind={kind or "commute"!r}{f", away={away}" if away is not None else ""})'
             raise TypeError(errormsg)
         if kwargs:
-            errormsg = f'ss.geo.Mobility() takes matrix=, kind=, and away=, not {sc.strjoin(kwargs)}'
+            errormsg = f'ss.geo.Mobility() takes matrix=, kind=, and away=, not {sc.strjoin(kwargs)} (a register of moves on given dates is ss.geo.register())'
             raise TypeError(errormsg)
         if matrix is None:
             errormsg = 'ss.geo.Mobility() takes a matrix of the movement between places; for a movement model, give it on its own (e.g. mobility=ss.geo.gravity()), and for a register of moves, ss.geo.register()'

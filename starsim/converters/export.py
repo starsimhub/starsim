@@ -73,7 +73,7 @@ def compartmental(sim):
     sim = initialized(sim)
     if not isinstance(sim.solver, ss.solvers.abm):
         return sim, None
-    return ss.sim.as_ode(sim, verbose=0).init(), 'changed: the agent-based sim was written as its compartmental form (an ODE)'
+    return ss.solvers.as_ode(sim, verbose=0).init(), 'changed: the agent-based sim was written as its compartmental form (an ODE)'
 
 
 def strata(sim, mod):

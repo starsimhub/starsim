@@ -317,8 +317,6 @@ def test_old_keywords():
     assert 'when=ss.on(' in late.agent_reasons(sim)[0] and 'ss.capacity(' in queue.agent_reasons(sim)[0] and 'who=' in fn.agent_reasons(sim)[0]
     with pytest.raises(TypeError, match='who='):
         ss.Intervention(eligibility=lambda sim: None)
-    with pytest.raises(AttributeError, match='held_share'): # Renamed
-        ss.Vaccine(efficacy=0.5).coverage
     return sim
 
 

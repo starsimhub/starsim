@@ -17,7 +17,7 @@ __all__ = ['Particles']
 
 class Particles(sc.prettyobj):
     """
-    Many runs of an engine's program, from its start, each with its own compartments and random numbers, stepped forward together; for `ss.fit.ParticleFilter`
+    Many runs of an engine's program, from its start, each with its own compartments and random numbers, stepped forward together; for `ss.fitting.ParticleFilter`
 
     The runs start from the engine as it is (restarted), and the engine is not changed until `restore()`.
     `advance()` takes every run through more steps, and `select()` keeps some of the runs (each as

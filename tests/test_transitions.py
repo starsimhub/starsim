@@ -15,7 +15,7 @@ import pandas as pd
 import scipy.stats as stats
 import sciris as sc
 import starsim as ss
-import starsim.fit
+import starsim.internals.fitting
 import starsim.library as ssl
 
 kw = dict(verbose=0)
@@ -615,7 +615,7 @@ def test_describe():
     S, I, R = ss.states('S I R')
     immune = ss.Sim(ss.Disease(S >> I @ 1.9*I, I >> R @ ss.days(8), init=dict(R=0.9, I=1e-3), name='measles'), unit='day', solver='ode', verbose=0).init()
     assert np.isclose(immune.diseases.measles.R0(), 15.2) # With no immunity, whoever starts immune (it was 1.52, R at the start)
-    assert 'R = 1.51 at the start, with 10% susceptible' in '\n'.join(immune._start_lines())
+    assert 'R = 1.51 at the start, with 10% susceptible' in '\n'.join(ss.display.start_lines(immune))
     S, E, I, R = ss.states('S E I R')
     seir = ss.Disease(infection=ss.Transition(S, E, rate=0.3 * I), onset=ss.Transition(E, I, dur=5),
                       recovery=ss.Transition(I, R, dur=10), death=ss.death(I, rate=0.05))

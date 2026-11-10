@@ -1001,24 +1001,24 @@ def base_name(name):
 def entries(sim, names=None):
     """
     The parameters named, or every one that has bounds (see `find_pars()`), with each that has several values as an entry for
-    each value, named as a fit names them (see `ss.fit.expand()`)
+    each value, named as a fit names them (see `ss.fitting.expand()`)
 
     Returns the entries by name; the setter of `gradient()` (a function of an array of values that restarts the sim with them);
     the values now; and the lowest and highest value of each (the value now, for one without bounds)
     """
-    import starsim.fit # For the entries of a parameter with several values
-    found, levels, elements = ss.fit.expand(sim, find_pars(sim, names, several=True))
+    import starsim.internals.fitting # For the entries of a parameter with several values
+    found, levels, elements = ss.fitting.expand(sim, find_pars(sim, names, several=True))
     if names is not None: # Only the values named, of a parameter with several ("beta[a]")
         named = lambda key: any(m in [key, base_name(key)] or key.endswith(f'.{m}') or base_name(key).endswith(f'.{m}') for n in names for m in [n, n.split('.', 1)[-1]]) # 'sir.beta' is 'beta' when one module has it (find_pars() has chosen the module)
         found = sc.obj({key:p for key,p in found.items() if named(key)})
-    raws = [ss.fit.entry(name, p, levels, elements) for name,p in found.items()]
-    x0, types = ss.fit.start_values(raws)
-    bounds = np.array([elements[name][2:4] if name in elements else [ss.fit.bound_value(b, raw) for b in p.bounds] if p.bounds is not None else [x, x] for name,p,raw,x in zip(found.keys(), found.values(), raws, x0)], dtype=float).T
+    raws = [ss.fitting.entry(name, p, levels, elements) for name,p in found.items()]
+    x0, types = ss.fitting.start_values(raws)
+    bounds = np.array([elements[name][2:4] if name in elements else [ss.fitting.bound_value(b, raw) for b in p.bounds] if p.bounds is not None else [x, x] for name,p,raw,x in zip(found.keys(), found.values(), raws, x0)], dtype=float).T
     keys = list(found.keys())
     pars = sim.par_values
 
     def set_pars(x):
-        sim.restart(pars=sc.mergedicts(pars, ss.fit.to_pars(keys, found, x, types, elements)))
+        sim.restart(pars=sc.mergedicts(pars, ss.fitting.to_pars(keys, found, x, types, elements)))
 
     return found, set_pars, x0, bounds
 
@@ -1059,7 +1059,7 @@ class Unsupported(Exception):
 
 
 def several(p):
-    """ Whether a parameter has several values, each fitted on its own (see `ss.fit.expand()`) """
+    """ Whether a parameter has several values, each fitted on its own (see `ss.fitting.expand()`) """
     return isinstance(p.raw, (ss.by, np.ndarray, ss.timeseries))
 
 
@@ -1067,7 +1067,7 @@ def fitted_index(names, fitted, mods, sim, external=None):
     """
     The position among the fitted parameters of each parameter object that stands for one (by id: the fitted parameter, and
     the parameter of a module's graph that its name gives), and the names of those that a modifier changes, which neither the
-    log-density (`Density`) nor IF2 (`ss.fit.Swarm`) covers. A parameter that belongs to a likelihood (`external`) stands for itself only.
+    log-density (`Density`) nor IF2 (`ss.fitting.Swarm`) covers. A parameter that belongs to a likelihood (`external`) stands for itself only.
     One with several values (a value for each level, an array, or a time series) stands for none: each of its values is one of the
     numbers that change linearly in the run (see `Density.init_program()`).
     """
@@ -1207,13 +1207,13 @@ class Density(sc.prettyobj):
         fitted (dict): the fitted parameters, by name
         x0 (array): their values to start from
         set_pars (func): restarts the sim with an array of values
-        likelihood (dict): the likelihood of each data series, as for `ss.fit.loglik()`
+        likelihood (dict): the likelihood of each data series, as for `ss.fitting.loglik()`
         weights (dict): a multiplier on each series' log-likelihood
         external (list): for each parameter, whether it belongs to a likelihood given at calibration time (rather than to the model)
         bounds (tuple): the lowest and highest value of each parameter, over which a step is allowed as many substeps as the run needs (default: each parameter's `bounds`)
     """
     def __init__(self, sim, fitted, x0, set_pars, likelihood=None, weights=None, external=None, bounds=None):
-        import starsim.fit # For its likelihoods and priors, which are worked out here in JAX
+        import starsim.internals.fitting # For its likelihoods and priors, which are worked out here in JAX
         self.sim = sim
         self.fitted = list(fitted.values())
         self.names = list(fitted.keys())
@@ -1234,12 +1234,12 @@ class Density(sc.prettyobj):
         self.init_program()
         self.init_outputs()
         for p,val in zip(self.fitted, self.x0): # A prior that is not covered says so now, not when the density is first traced
-            ss.fit.logprior(p, val, xp=jax().numpy)
+            ss.fitting.logprior(p, val, xp=jax().numpy)
         return
 
     def init_several(self):
         """
-        For each parameter with several values (see `ss.fit.expand()`), how its value is worked out from the fitted ones: a value
+        For each parameter with several values (see `ss.fitting.expand()`), how its value is worked out from the fitted ones: a value
         for each level as each group's (`levels`, the matrix from the levels to the groups), and a time series by interpolating
         them (`series_of`), both exactly, as a parameter with one value is; an array (`arrays`) as the numbers in the run that change
         linearly with it. Also the value of each entry as the parameter holds it (`raws`), for `convert()`.
@@ -1252,7 +1252,7 @@ class Density(sc.prettyobj):
             key = next(name for name,q in zip(self.names, self.fitted) if q is p).rpartition('[')[0]
             raw = p.raw
             if isinstance(raw, ss.by):
-                labels, values = ss.fit.vector_labels(self.sim, raw, key), sc.tolist(raw.values)
+                labels, values = ss.fitting.vector_labels(self.sim, raw, key), sc.tolist(raw.values)
             elif isinstance(raw, ss.timeseries):
                 labels, values = [str(t) for t in raw.times], raw.values
             else:
@@ -1285,7 +1285,7 @@ class Density(sc.prettyobj):
         """ The lowest and highest value of each parameter (its initial value for one without bounds) """
         if self.bounds is not None:
             return [np.asarray(b, dtype=float) for b in self.bounds]
-        bound = ss.fit.bound_value
+        bound = ss.fitting.bound_value
         lims = [[bound(b, p.raw) for b in p.bounds] if p.bounds is not None else [x, x] for p,x in zip(self.fitted, self.x0)]
         return np.array(lims, dtype=float).T
 
@@ -1465,7 +1465,7 @@ class Density(sc.prettyobj):
     def init_outputs(self):
         """ Which result each data series is compared with, and the matrix that lines it up with the data """
         sim = self.sim
-        liks = ss.fit.likelihoods(sim, likelihood=self.likelihood)
+        liks = ss.fitting.likelihoods(sim, likelihood=self.likelihood)
         for col,lik in liks.items():
             if lik is not None and not isinstance(lik, ss.Dist):
                 raise Unsupported(f'the likelihood of "{col}", a function')
@@ -1495,7 +1495,7 @@ class Density(sc.prettyobj):
                 raise Unsupported(f'the outcome "{name}"')
             W, expected, rows = lined[col]
             rows, cols = np.nonzero(W) # Each data point is a step's value, or the total over the steps since the last: kept as the entries that are not zero, since the whole matrix is the data points times the steps
-            self.series.append(sc.obj(col=col, j=j, name=name, keep=keep, W=(rows, cols, W[rows, cols], W.shape[0]), expected=expected, lik=liks[col], weight=ss.fit.series_weight(self.weights, col)))
+            self.series.append(sc.obj(col=col, j=j, name=name, keep=keep, W=(rows, cols, W[rows, cols], W.shape[0]), expected=expected, lik=liks[col], weight=ss.fitting.series_weight(self.weights, col)))
         return
 
     def outcomes(self, engine, ctx, new, npts):
@@ -1553,11 +1553,11 @@ class Density(sc.prettyobj):
         return out
 
     def loglik(self, dist, observed, model, x):
-        """ As `ss.fit.logpdf()`, in JAX, with the fitted parameters of the likelihood at their values in x """
+        """ As `ss.fitting.logpdf()`, in JAX, with the fitted parameters of the likelihood at their values in x """
         def par(val):
             i = self.index.get(id(val)) if isinstance(val, ss.par) else None
             return x[i] if i is not None else (val.raw if isinstance(val, ss.par) else val)
-        return ss.fit.logpdf(dist, observed, model, xp=jax().numpy, pars={key:par(val) for key,val in ss.fit.lik_pars(dist).items()})
+        return ss.fitting.logpdf(dist, observed, model, xp=jax().numpy, pars={key:par(val) for key,val in ss.fitting.lik_pars(dist).items()})
 
     #%% The whole of it
 
@@ -1608,7 +1608,7 @@ class Density(sc.prettyobj):
             total = total + s.weight*self.loglik(s.lik, s.expected, model, x).sum()
         if self.priors:
             for i in range(len(self.fitted)):
-                total = total + ss.fit.logprior(self.fitted[i], x[i], xp=jax().numpy)
+                total = total + ss.fitting.logprior(self.fitted[i], x[i], xp=jax().numpy)
         return total, need
 
 

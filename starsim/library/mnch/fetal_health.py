@@ -394,12 +394,7 @@ class treat_pregnant(ss.Delivery):
     """
 
     def __init__(self, disease='sir', coverage=0.9, who=None, when=None, growth_reversal=0.7, timing_reversal=0.7, name=None, **kwargs):
-        replaced = dict(start_year='start=', end_year='stop=', p_treat='coverage=',
-                        tx_growth_reversal='growth_reversal=', tx_timing_reversal='timing_reversal=', pars='its keywords')
-        for key in kwargs:
-            if key in replaced:
-                errormsg = f'ssl.mnch.treat_pregnant() takes no {key}=; use {replaced[key]}'
-                raise TypeError(errormsg)
+        ss.v3_deprecations.check(type(self), '__init__', kwargs)
         self.disease_name = disease
         self.growth_reversal = growth_reversal
         self.timing_reversal = timing_reversal

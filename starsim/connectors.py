@@ -1,9 +1,9 @@
 """
-Define connectors, which are used to mediate interactions between modules when the sim is run.
+Connectors, which link modules as the sim runs: e.g. one disease making another more likely
 
-While most of the coupling between disease modules happens automatically via shared states
-(e.g., shared susceptibility), connectors allow explicit cross-module logic such as seasonal
-forcing or co-infection effects; `ss.modify()` changes a named quantity, e.g. a seasonal
+Most links between diseases need no connector, since diseases can read each other's states (e.g. in a rate).
+A connector is for the rest, e.g. seasonal forcing or the effect of a coinfection. The one most used is
+`ss.modify()`, which changes a named quantity while a condition holds, e.g. a seasonal
 `ss.modify(sir.rel_trans, multiply=ss.seasonal(amplitude=0.2, peak='January'))`.
 
 Used with: agents and compartments; declared and coded modules
@@ -15,10 +15,9 @@ import starsim as ss
 
 class Connector(ss.Module):
     """
-    Base class for Connectors, which mediate interactions between disease (or other) modules
+    Base class for connectors, which link diseases (or other modules) to each other
 
-    Because connectors can do anything, they have no specified structure: it is
-    up to the user to define how they behave.
+    A connector can do anything, so it has no fixed structure: its `step()` says what it does.
     """
     pass
 
@@ -184,12 +183,11 @@ def route_mult(engine, name, route, inds, trg):
         inds (array): the edges of a network (Ellipsis for all), for a share given per edge; None for a route with no edges
         trg (array): the people who would be infected, by UID (or a slice of every agent)
     """
-    out = engine.contact_mult(route.name)
-    out = out[trg] if np.ndim(out) else out
+    at = lambda val: val[trg] if np.ndim(val) else val # Per agent, for the people who would be infected
+    out = at(engine.contact_mult(route.name))
     for m in engine.sim.modifiers.get((engine.mod.name, 'route', f'{name}@{route.name}')) or []:
         if not m.active:
             continue
-        at = lambda val: val[trg] if np.ndim(val) else val # Per agent, for the people who would be infected
         amount = at(np.asarray(m.current(engine, share=False), dtype=float))
         if m.share is None:
             share = 1.0
@@ -315,15 +313,25 @@ class modify(Connector):
     (interactions that are part of the model) or `interventions` (policy), or be a member of a
     declared disease, as part of its natural history.
 
+    The target can be any of these (for a modifier that is a member of a disease, its own,
+    e.g. `beta`, `recovery`, or `'rel_trans'`):
+
+    - a parameter, e.g. `sir.pars.beta`, including a parameter of any module written as code
+    - a transition, e.g. `sir.recovery`, which scales its rate (or its probability, if it is a branch with `p=`)
+    - `sir.rel_sus` or `sir.rel_trans`, each person's susceptibility or infectiousness
+    - the contacts of a network, as the network itself (e.g. `ss.contacts('Kenya', layer='school')`, matched by its name) or as a path (`'school.pars.n_contacts'`)
+    - the path of any of these as a string, e.g. `'sir.pars.beta'`
+
+    For a transition with several destinations (e.g. `ss.Transition(Tx, {R: 0.8, I: None}, rate=...)`),
+    the transition scales its rate (or its dwell time), and a destination (`'tb.treatment.R'`) scales the
+    probability of that destination. With an outcome for each strain carried (`per_strain='each'`, with
+    the probability of the first destination), that is the probability for the whole set of strains a
+    person carries (e.g. that all are cured: Π c_k), not each strain's.
+
     Note: CRN safe.
 
     Args:
-        target (par/str): the quantity to change (for a modifier that is a member of a disease, its own, e.g. `beta`, `recovery`, or `'rel_trans'`): a parameter (`sir.pars.beta`), a transition (`sir.recovery`, which
-            scales its rate, or its probability if it is a branch with `p=`), `sir.rel_sus` or `sir.rel_trans`, a parameter of any module written as code, or the path of
-            any of these as a string (`'sir.pars.beta'`); or the contacts of a network, as the network (`ss.contacts('Kenya', layer='school')`,
-            matched by its name) or as a path (`'school.pars.n_contacts'`). For a transition with several destinations (e.g. `ss.Transition(Tx, {R: 0.8, I: None}, rate=...)`),
-            the transition scales its rate (or its dwell time), and a destination (`'tb.treatment.R'`) scales the probability of that destination; with an outcome for each strain carried
-            (`per_strain='each'`, with the probability of the first destination), that is the probability for the whole set of strains a person carries (e.g. that all are cured: Π c_k), not each strain's
+        target (par/str): the quantity to change (see above)
         multiply (float): multiply the quantity by this; like `add` and `set`, it can also be `ss.by(...)`, a function of the sim, or an `ss.timeseries`, for changes at given times
         add (float): add this to the quantity: a parameter, or an inflow (a transition from `ss.outside`, e.g. CFUs shed into a reservoir), to which it adds an amount per unit time from outside the model
         set (float): replace the quantity with this (a parameter only)
@@ -378,10 +386,6 @@ class modify(Connector):
     timepar_skip = ['where', 'until', 'when', 'schedule', 'target_module', 'hold'] # These refer to other modules, which hold their own time parameters (see Module.link_timepars()); hold is converted to steps at init
 
     def __init__(self, target, multiply=None, add=None, set=None, efficacy=None, share=None, network=None, who=None, when=None, until=None, start=None, stop=None, name=None, **kwargs):
-        renamed = dict(where='who=, a condition on who it applies to', hold='until=<a duration>, e.g. until=ss.days(14)')
-        for key in kwargs:
-            if key in renamed:
-                raise TypeError(f'ss.modify() takes no {key}=; use {renamed[key]}')
         super().__init__(name=name, **kwargs)
         given = [key for key,val in dict(multiply=multiply, add=add, set=set, efficacy=efficacy).items() if val is not None]
         if len(given) != 1:
@@ -713,4 +717,5 @@ class modify(Connector):
         return out
 
     def step(self):
+        """ Nothing: a modifier acts when the quantity it changes is read (see `combine()`) """
         pass

@@ -70,9 +70,7 @@ The data are weekly reported cases. On this page they are illustrative: made onc
 ```{python}
 truth = ss.Sim(measles, pars=dict(beta=1.4, report=0.5, I0=0.0003), n_agents=100_000, rand_seed=3, verbose=0, **pars)
 truth.run()
-data = truth.to_synthetic_data('cases', resample='week', noise=None) # Weekly cases (whole weeks only, so not the last, partial one)
-rng = np.random.default_rng(3)
-data['cases'] = rng.negative_binomial(10, 10/(10 + data.cases)) # Counts with more variation than Poisson (negative binomial)
+data = truth.to_synthetic_data('cases', resample='week', noise=ss.nbinom(n=10)) # Weekly cases (whole weeks only, so not the last, partial one), with more variation than Poisson counts
 data.head()
 ```
 
@@ -81,10 +79,7 @@ data.head()
 ```r
 truth <- make_sim(pars = list(beta = 1.4, report = 0.5, I0 = 0.0003), n_agents = 100000, rand_seed = 3, verbose = 0)
 truth$run()
-data <- truth$to_synthetic_data("cases", resample = "week", noise = NULL) # Weekly cases (whole weeks only, so not the last, partial one), as a data frame
-np <- reticulate::import("numpy") # NumPy's random numbers, to draw the same counts as in Python
-rng <- np$random$default_rng(3L)
-data$cases <- rng$negative_binomial(10L, 10 / (10 + data$cases)) # Counts with more variation than Poisson (negative binomial)
+data <- truth$to_synthetic_data("cases", resample = "week", noise = ss$nbinom(n = 10)) # Weekly cases (whole weeks only, so not the last, partial one), with more variation than Poisson counts, as a data frame
 head(data)
 ```
 :::
@@ -218,11 +213,11 @@ fit_lik.table
 
 The estimates differ somewhat from those of the normalized absolute error (a lower β, with more of the cases reported and more people infectious at the start, which give much the same curve); the likelihood weighs each week by how much it is expected to vary, and gives the methods that need one (posteriors, profiles) something to work with. The fitted dispersion is a little lower than the 10 that the counts were drawn with, since it also takes in the chance of the agent-based run, which the ODE doesn't have.
 
-To score a run against its data by hand, e.g. to compare scenarios, or to weigh runs for a posterior of your own, `ss.fit.mismatch(sim)` gives the normalized absolute error (or another `loss=`) and `ss.fit.loglik(sim, likelihood=...)` the log-likelihood (with `by_series=True`, for each data series):
+To score a run against its data by hand, e.g. to compare scenarios, or to weigh runs for a posterior of your own, `ss.fitting.mismatch(sim)` gives the normalized absolute error (or another `loss=`) and `ss.fitting.loglik(sim, likelihood=...)` the log-likelihood (with `by_series=True`, for each data series):
 
 ```{python}
-print('Normalized absolute error:', ss.fit.mismatch(fit_lik.sim))
-print('Log-likelihood:', ss.fit.loglik(fit_lik.sim, likelihood=dict(cases=ss.nbinom(n=fit_lik.pars.dispersion))))
+print('Normalized absolute error:', ss.fitting.mismatch(fit_lik.sim))
+print('Log-likelihood:', ss.fitting.loglik(fit_lik.sim, likelihood=dict(cases=ss.nbinom(n=fit_lik.pars.dispersion))))
 ```
 
 Any sim that has run can be scored this way, whether or not it came from a fit, and against data it wasn't given, with `data=`. A likelihood that isn't built in is a function, `fn(observed, model)`. Here a survey tested 5,000 people for measles every two months from March, counting the number infectious. People were sampled in clusters (households, schools), so the counts vary more than binomial counts would, which a beta-binomial allows for, with SciPy's `betabinom`: the model's prevalence is the mean share positive, and `rho` sets how much more they vary (the variance is that of a binomial times 1 + (n − 1)·rho, here about 6). Both the calibrated sim and the one with the starting values are scored against it:
@@ -240,7 +235,7 @@ survey = survey[survey.date.isin(ss.date.arange('2025-03-01', '2025-11-01', ss.m
 p = np.clip(survey.prevalence.values, 1e-6, None) # Above 0, once the outbreak is over
 survey['prevalence'] = sps.betabinom.rvs(5000, p*999, (1 - p)*999, random_state=rng) # The number positive among 5,000, with rho = 0.001
 for label, run in {'Calibrated': fit_lik.sim, 'Starting values': fit_lik.before}.items():
-    print(f'{label}: {ss.fit.loglik(run, data=survey, likelihood=dict(prevalence=betabinomial)):.1f}')
+    print(f'{label}: {ss.fitting.loglik(run, data=survey, likelihood=dict(prevalence=betabinomial)):.1f}')
 ```
 
 The likelihoods of Starsim 3 are all here: `ss.Normal` is `ss.normal(std=...)`, `ss.GammaPoisson` is `ss.nbinom(n=...)` (a Poisson count whose rate varies as a gamma distribution is a negative binomial), and `ss.BetaBinomial` is a function as above.
@@ -255,7 +250,7 @@ By default a fit is a best fit (a single set of values), by a method that suits 
 | Stochastic compartmental | `'optuna'` | `'pmcmc'` (particle MCMC), given a likelihood for every series |
 | Agent-based | `'optuna'` | `'abc-smc'` (approximate Bayesian computation), which needs no likelihood |
 
-`'powell'` and `'slsqp'` (two more methods of `scipy.optimize.minimize`) can also be given, as can `'if2'` (iterated filtering, for a stochastic compartmental model). [Fitting methods](calibration_methods.qmd) compares them all, with the settings of each and an example. A method's settings are given with it, as `ss.fit.method()`: `method=ss.fit.method('nuts', draws=1000, chains=2)`; a setting the method does not take is an error that lists those it does. A list, such as `method=['optuna', 'nelder-mead']`, runs each method in turn, each starting from the best values the one before found, and stops at a method that doesn't converge.
+`'powell'` and `'slsqp'` (two more methods of `scipy.optimize.minimize`) can also be given, as can `'if2'` (iterated filtering, for a stochastic compartmental model). [Fitting methods](calibration_methods.qmd) compares them all, with the settings of each and an example. A method's settings are given with it, as `ss.fitting.method()`: `method=ss.fitting.method('nuts', draws=1000, chains=2)`; a setting the method does not take is an error that lists those it does. A list, such as `method=['optuna', 'nelder-mead']`, runs each method in turn, each starting from the best values the one before found, and stops at a method that doesn't converge.
 
 The gradient-based methods and their posteriors are covered in [Gradients](calibration_gradients.qmd).
 
@@ -271,7 +266,7 @@ fit.summarize()
 
 The estimates are less precise than those of the ODE: each score is noisy, so the search can settle anywhere in a region of similar scores (the spread of the best tenth of the trials, `spread_lower` to `spread_upper`, is wide), and a fit with another `rand_seed` gives somewhat different values. Here the default 150 trials (50 for each parameter), each scored by 4 runs, are enough for the search to settle by the fit's own rule (its best score stopped improving); a real fit usually needs more, especially with more parameters, and a fit that stops too soon says it has not converged. [Fit diagnostics](calibration_diagnostics.qmd) shows how to check how much this matters.
 
-The options that matter for a stochastic fit are settings of the method (`ss.fit.method('optuna', ...)`), except `rand_seed=`:
+The options that matter for a stochastic fit are settings of the method (`ss.fitting.method('optuna', ...)`), except `rand_seed=`:
 
 - `n_trials=` is the number of sets of values to try (50 for each parameter by default, and at least 100).
 - `particles=`: with a likelihood for every series, on a stochastic compartmental model that the kernels run whole, each set of values is scored by a particle filter's estimate of the log-likelihood, with 200 particles by default. This example has no likelihood, so it is scored by runs.
@@ -280,7 +275,7 @@ The options that matter for a stochastic fit are settings of the method (`ss.fit
 - `workers=4` runs the trials in 4 processes at once, and `storage='fit.log'` keeps the trials in a file, so that calling `fit()` again with the same file carries on where it stopped.
 - `fit.study` is Optuna's study, for its plots, e.g. `optuna.visualization.plot_param_importances(fit.study)`.
 
-Agents are fitted the same way, e.g. `ss.Sim(measles, data=data, n_agents=20_000, **pars).fit(method=ss.fit.method('optuna', n_trials=200))`. With agents each run is slower, and with few people in the model the noise is larger, so a fit usually needs more trials.
+Agents are fitted the same way, e.g. `ss.Sim(measles, data=data, n_agents=20_000, **pars).fit(method=ss.fitting.method('optuna', n_trials=200))`. With agents each run is slower, and with few people in the model the noise is larger, so a fit usually needs more trials.
 
 ### Expected flows
 
@@ -435,7 +430,7 @@ The priors that `ss.par(..., prior=)` takes, used by the methods that use likeli
 
 ## Appendix: what a fit holds
 
-The attributes of the `ss.fit.Fit` that `sim.fit()` returns (see [ss.fit.Fit](../api/fit.qmd)):
+The attributes of the `ss.fitting.Fit` that `sim.fit()` returns (see [ss.fitting.Fit](../api/fit.qmd)):
 
 | Attribute | What it is |
 |---|---|
