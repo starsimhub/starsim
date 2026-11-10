@@ -251,6 +251,22 @@ sim.results.flu.I.by('age').plot()
 
 As agents, a contact matrix works as a set of mixing pools, one for each pair of groups (`ss.networks.MixingPools`; see [Contact networks](populations_networks.qmd#mixing-pools)). It is not a network: nobody has particular contacts, so contact tracing needs a network instead.
 
+### Contacts that differ between people
+
+A matrix gives the mean contacts, and as agents, everyone in an age group has that many. For contacts that differ between people, give a distribution whose parameters are the matrix: here a lognormal with a standard deviation of half the mean, from a country's matrix (`ss.data.contacts()`, a table of contacts a day, whose age groups and unit the distribution's parameters carry):
+
+```{python}
+C = ss.data.contacts('Kenya') # The mean contacts a day, by 5-year age group
+mixing = ss.contacts(ss.lognormal(mean=C, std=C*0.5))
+
+S, I, R = ss.states('S I R')
+flu = ss.Disease(S >> I @ 0.03*I, I >> R @ ss.days(5), init_prev=0.001)
+sim = ss.Sim(flu, people=ss.population('Kenya', n_agents=10_000), networks=mixing, stop=ss.days(100), verbose=0).run()
+sim.results.flu.I.plot()
+```
+
+Each person draws their contacts with each age group when they enter an age group, and keeps them while they are in it. Any distribution of values that are not negative will do (e.g. `ss.poisson(C)`, as in Starsim 3, or `ss.nbinom(mean=C, n=2)` for more spread); a matrix of your own takes its age groups by `ages=`, e.g. `ss.contacts(ss.poisson(M), ages=[0, 15, 65])`. A compartmental run uses the means.
+
 ## Data of your own
 
 Data of your own takes the same forms as the data by place. Ages are a table of counts or shares by age group, for `ss.People(n_agents, age_data=...)` (see [People and agents](populations_people.qmd#ages-and-sex)), and `ss.data.age()` gives a country's in that form, for a different year or to change before use:

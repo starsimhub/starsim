@@ -145,6 +145,34 @@ def test_matrix():
 
 
 @sc.timer()
+def test_matrix_dist():
+    """ One distribution of matrices (ss.poisson(M)) draws each person's contacts with no pools, as a matrix of distributions does with a pool for each pair """
+    sc.heading('Testing MixingPools with one distribution of matrices...')
+    matrix = np.array([[2.4, 0.9], [0.5, 1.6]])
+    groups = dict(young=ss.person.age < 30, old=ss.person.age >= 30)
+    entries = np.vectorize(ss.poisson, otypes=[object])(matrix)
+    sims = [ss.Sim(ss.SIS(init_prev=0.02, beta=ss.perday(0.05)), networks=ss.networks.MixingPools(source=groups, target=groups, n_contacts=n), n_agents=5000, unit='day', stop=40, verbose=0).run() for n in [ss.poisson(matrix), entries]]
+    net = sims[0].networks[0]
+    assert sims[0].solver.name == 'abm' and len(net.pools) == 0 and len(sims[1].networks[0].pools) == 4
+    auids = sims[0].people.auids
+    young = (sims[0].people.age.raw[auids] < 30)
+    contacts = net.contacts_0.raw[auids][young] # Each young person's contacts with the young: a Poisson of mean 2.4
+    assert np.isclose(contacts.mean(), 2.4, rtol=0.1) and np.isclose(contacts.var(), 2.4, rtol=0.2)
+    assert np.isclose(*[sim.results.sis.infection.sum() for sim in sims], rtol=0.1)
+    with pytest.raises(ValueError):
+        ss.networks.MixingPools(source=groups, target=groups, n_contacts=ss.poisson([[1, 2, 3]]))
+
+    # Through ss.contacts(), from a country's table of contacts a day, in a sim by week; and negative contacts are an error
+    C = ss.data.contacts('Kenya')
+    sim = ss.Sim(ss.SIS(beta=ss.perday(0.02)), networks=ss.contacts(ss.poisson(C)), n_agents=2000, unit='week', stop=4, verbose=0).run()
+    net = sim.networks[0]
+    assert net.contact_scale == 7 and len(net.pools) == 0
+    with pytest.raises(ValueError, match='negative'):
+        ss.Sim(ss.SIS(beta=ss.perday(0.05)), networks=ss.contacts(ss.normal(matrix, 2*matrix), ages=[0, 30]), n_agents=1000, stop=2, verbose=0).run()
+    return
+
+
+@sc.timer()
 def test_counts():
     """ A contact matrix acts on what the rate says: the share of each group (beta*I), the number in each (beta*I.n), or that over everyone (beta*I.frac), as compartments and as agents """
     sc.heading('Testing what a contact matrix acts on...')

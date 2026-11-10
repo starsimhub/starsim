@@ -101,6 +101,15 @@ def positive(x):
     return x > 0 if isinstance(x, (int, float)) else every(np.asarray(x) > 0)
 
 
+def to_array(val):
+    """ A list or tuple of numbers as an array, so a distribution's parameters can be given as lists (e.g. `ss.normal(mean=[3.5, 4.5], std=[0.9, 0.8])`); anything else as it is """
+    if isinstance(val, (list, tuple)):
+        arr = np.asarray(val)
+        if arr.dtype.kind in 'biuf':
+            return arr
+    return val
+
+
 static_types = (int, float, bool, type(None), np.number, type) # Parameter values that cannot change without being replaced
 
 def same_objects(a, b):
@@ -480,7 +489,7 @@ class Dist:
         self.dist = scipy_dist(dist) if isinstance(dist, str) else dist # The type of distribution
         self.distname = distname
         self.name = name
-        self.pars = sc.obj(kwargs) # The user-defined kwargs
+        self.pars = sc.obj({k:to_array(v) for k,v in kwargs.items()}) # The user-defined kwargs, with lists of numbers as arrays
         self.unit = ss.time.get_unit_class('full', unit) # The timepar class -- can be None
         self.round = self.validate_round(round) # Whether and how to round the values
         self.seed = seed # Usually determined once added to the container
