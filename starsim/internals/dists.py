@@ -419,8 +419,7 @@ class Dist:
         unit (str/`ss.TimePar`): if provided, convert the output of the distribution to a timepar (e.g. rate or duration); can also be inferred from distribution parameters (see examples below)
         round (bool/str): if True (or 'stochastic'), randomly round each value up or down to an integer; if 'nearest', round to the nearest integer (see `dist.rvs()`)
         seed (int): the user-chosen random seed (e.g. 3)
-        offset (int): the seed offset; will be automatically assigned (based on hashing the name) if None
-        stream (str): the name of its random stream, hashed for its seed in place of its path in the sim, so that its draws stay the same if it moves (e.g. to another module); it must be unique within the sim
+        offset (int/str): the seed offset, in place of the one from its path in the sim (e.g. `offset='hiv_art'`), so that its draws stay the same if it moves (e.g. to another module); it must be unique within the sim. If None (the default), the path in the sim is hashed for it
         strict (bool): if True, require initialization
         sim (Sim): usually determined on initialization; the sim to use as input to callable parameters
         module (Module): usually determined on initialization; the module to use as input to callable parameters
@@ -472,7 +471,7 @@ class Dist:
     renamed = None # SciPy's or NumPy's names that a distribution takes as others, e.g. dict(loc='mean', scale='std') for ss.normal(), for the error
     hash_dtype = None # The dtype of the CRN uniforms passed to ppf(); None for ss.dtypes.float
 
-    def __init__(self, dist=None, distname=None, name=None, unit=None, round=False, seed=None, offset=None, stream=None,
+    def __init__(self, dist=None, distname=None, name=None, unit=None, round=False, seed=None, offset=None,
                  strict=True, sim=None, module=None, mock=False, **kwargs):
         # If a string is provided as "dist" but there's no distname, swap the dist and the distname
         if isinstance(dist, str) and distname is None:
@@ -487,7 +486,7 @@ class Dist:
         self.seed = seed # Usually determined once added to the container
         self.user_seed = seed # Stored separately so re-initializing doesn't add the offset twice
         self.offset = offset
-        self.stream = stream
+        self.user_offset = offset # Stored separately, as the seed is, since the offset is worked out again on initialization
         self.module = module
         self.sim = sim
         self.slots = None # Created on initialization with a sim
@@ -834,10 +833,11 @@ class Dist:
     def process_seed(self, trace=None, seed=None):
         """ Obtain the seed offset by hashing the path to this distribution; not for the user """
         unique_name = trace or self.trace or self.name
-        if getattr(self, 'stream', None): # Named by the user, in place of its path
+        user_offset = getattr(self, 'user_offset', None)
+        if user_offset is not None: # Given by the user, in place of its path
             self.trace = unique_name
             self.name = self.name or unique_name
-            self.offset = str2int(self.stream)
+            self.offset = user_offset if isinstance(user_offset, int) else str2int(str(user_offset))
         elif unique_name:
             if not self.name:
                 self.name = unique_name

@@ -518,16 +518,18 @@ def test_crn_code_moves():
 
 
 # %% Run as a script
-def test_named_stream():
-    """ A distribution with stream= draws the same numbers wherever it is in the sim, and two with the same stream are refused """
+def test_offset():
+    """ A distribution with offset= draws the same numbers wherever it is in the sim, and two with the same offset are refused """
     class Holder(ss.Analyzer):
-        def __init__(self, **kwargs):
+        def __init__(self, offset='my_stream', **kwargs):
             super().__init__(**kwargs)
-            self.my_dist = ss.random(stream='my_stream')
-    def draws(name):
-        sim = ss.Sim(diseases='sis', analyzers=Holder(name=name), n_agents=100, start=2000, stop=2001, dt=ss.years(1), verbose=0).init()
+            self.my_dist = ss.random(offset=offset)
+    def draws(name, offset='my_stream'):
+        sim = ss.Sim(diseases='sis', analyzers=Holder(offset=offset, name=name), n_agents=100, start=2000, stop=2001, dt=ss.years(1), verbose=0).init()
         return sim.analyzers[name].my_dist(sim.people.auids)
-    assert np.array_equal(draws('holder1'), draws('holder2')), 'A named stream should not depend on where the distribution is'
+    for offset in ['my_stream', 123]:
+        assert np.array_equal(draws('holder1', offset), draws('holder2', offset)), f'offset={offset!r} should not depend on where the distribution is'
+    assert not np.array_equal(draws('holder1', 'my_stream'), draws('holder1', 'other')), 'Different offsets should draw differently'
     with pytest.raises(ss.errors.DistSeedRepeatError):
         ss.Sim(diseases='sis', analyzers=[Holder(name='a'), Holder(name='b')], n_agents=100, start=2000, stop=2001, dt=ss.years(1), verbose=0).init()
 

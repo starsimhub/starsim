@@ -98,11 +98,11 @@ def test_change():
     assert np.allclose(after.results.sir.S, res.S) # So is a duration alone, that long after the start
     with pytest.raises(ValueError, match='calendar year'): # In a sim with dates, a bare number is a year: 20 is the year 20, outside the sim
         ss.Sim(sir, interventions=ss.modify(sir.pars.beta, set=0.09, when=ss.schedule(start=20)), start='2020-01-01', stop='2020-04-30', verbose=0).init()
-    with pytest.raises(ValueError): # A time outside the sim
-        ss.Sim(sir, interventions=ss.modify(sir.pars.beta, set=0.09, when=ss.schedule(start=2030)), start='2020-01-01', stop='2020-04-30', verbose=0).init()
+    late = ss.Sim(sir, interventions=ss.modify(sir.pars.beta, set=0.09, when=ss.schedule(start=2030)), start='2020-01-01', stop='2020-04-30', verbose=0).init() # A start after the end never applies, so a sim can be run to an earlier stop
+    assert any('never applies' in note for note in late.notes)
     ss.Sim(sir, interventions=ss.modify(sir.pars.beta, set=0.09, when=ss.schedule(start='2020-04-30')), start='2020-01-01', stop='2020-04-30', verbose=0).init() # At the stop is fine, since the last step starts there
-    with pytest.raises(ValueError): # After the stop, where no step starts, so it would never apply
-        ss.Sim(sir, interventions=ss.modify(sir.pars.beta, set=0.09, when=ss.schedule(start='2020-05-01')), start='2020-01-01', stop='2020-04-30', verbose=0).init()
+    late = ss.Sim(sir, interventions=ss.modify(sir.pars.beta, set=0.09, when=ss.schedule(start='2020-05-01')), start='2020-01-01', stop='2020-04-30', verbose=0).init() # After the stop, where no step starts, so it never applies
+    assert any('never applies' in note for note in late.notes)
 
     # It is a modifier, so a window and a function of the date work
     for when,dates in [(ss.schedule(start=0, stop=0), {}), (ss.schedule(lambda now: False, start='2000-01-02'), dict(start='2000-01-01'))]: # A function of the date needs a calendar
