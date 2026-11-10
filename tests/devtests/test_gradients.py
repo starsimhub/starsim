@@ -148,7 +148,7 @@ def test_posterior():
 
 
 def make_coinfection(beta=0.15, data=None, dt=0.25, **kwargs):
-    """ Two diseases that modify each other, so whose states are tracked jointly (see ss.solvers.Crossing), one with a transfer at a constant rate """
+    """ Two diseases that modify each other, so whose states are tracked jointly (see ss.solvers.JointStates), one with a transfer at a constant rate """
     beta = ss.par(beta, bounds=[0.05, 0.5], name='beta')
     S, I = ss.states('S I')
     hiv = ss.Disease(infection=ss.Transition(S, I, rate=beta * I), death=ss.death(I, rate=0.05*ss.by(art=[1.0, 0.2])), init_prev=0.05, name='hiv')

@@ -1079,7 +1079,7 @@ def describe_sim(sim):
             add('dimension', text, f'guessed: {"; ".join(guesses)}' if guesses else None)
             for row in strat_rows(strat):
                 add('', row)
-        for crossing in sim.crossings: # Diseases tracked jointly: why, how big, and what is assumed (see ss.solvers.Crossing)
+        for crossing in sim.crossings: # Diseases tracked jointly: why, how big, and what is assumed (see ss.solvers.JointStates)
             sizes = [sim.groups.strats[sim.groups.dim_index(name)].n for name in crossing.names]
             add('jointly', f'{" × ".join(crossing.names)}: {" × ".join(str(n) for n in sizes)} = {int(np.prod(sizes))} joint states of people', '; '.join(crossing.reasons))
             for text in crossing.describe():

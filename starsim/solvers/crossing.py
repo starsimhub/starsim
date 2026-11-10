@@ -12,18 +12,18 @@ import starsim as ss
 from .engine import by_level, no_tables
 from .compartmental import Compartmental, choose_kernels, kernel_list, run_many_parts, given_start
 
-__all__ = ['Crossing', 'Joint']
+__all__ = ['JointStates', 'Joint']
 
 
 class Joint:
     """
     An engine's compartments by its groups (`engine.y`), when its disease is tracked jointly with others: a view of the
-    compartments of their program (`Crossing.y`), so there is one copy of the people. Reading some of them gathers them,
+    compartments of their program (`JointStates.y`), so there is one copy of the people. Reading some of them gathers them,
     and writing them (e.g. an intervention that moves people) changes the program's, which every engine then sees. A
-    group that the engine keeps empty (see `Crossing.init_layout()`) reads as nobody, and writing to it changes nothing.
+    group that the engine keeps empty (see `JointStates.init_layout()`) reads as nobody, and writing to it changes nothing.
 
     Args:
-        cross (Crossing): the crossing
+        cross (JointStates): the crossing
         idx (array): where each of the engine's compartments, in each of its groups, is in the program's (flattened), or -1
     """
     def __init__(self, cross, idx):
@@ -51,7 +51,7 @@ class Joint:
         return self[:]
 
 
-class Crossing:
+class JointStates:
     """
     Diseases whose states are tracked jointly in a compartmental run, since a condition in one refers to a state of another (e.g. `ss.modify(hiv.rel_trans, multiply=3, who=syph.I)`)
 
@@ -96,7 +96,7 @@ class Crossing:
         return
 
     def __repr__(self):
-        return f'Crossing({" × ".join(self.names)})'
+        return f'JointStates({" × ".join(self.names)})'
 
     @property
     def lead(self):

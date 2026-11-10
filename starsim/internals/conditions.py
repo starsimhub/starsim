@@ -1122,7 +1122,7 @@ class Selector(sc.prettyobj):
             return self.in_states([name])
         elif graph is not None and (name in graph.transitions or name in graph.transfers): # A path to a transition (ss.ref('ng.cure')): the people who went through it this step
             return self.event(mod, name)
-        elif not self.abm and graph is not None and name in graph.states and self.mod.name in getattr(self.dim_strat(mod.name), 'holders', []): # A state of a disease tracked jointly with this one: see ss.solvers.Crossing
+        elif not self.abm and graph is not None and name in graph.states and self.mod.name in getattr(self.dim_strat(mod.name), 'holders', []): # A state of a disease tracked jointly with this one: see ss.solvers.JointStates
             return np.isin(self.dim(mod.name), self.dim_strat(mod.name).state_levels[name])
         elif name in dims:
             return self.dim(name)

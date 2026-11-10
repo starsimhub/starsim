@@ -669,14 +669,14 @@ def compile_run(run, kind):
 
 class CrossRun(sc.prettyobj):
     """
-    The diseases of a crossing, run together by the crossing's program (see `ss.solvers.Crossing`)
+    The diseases of a crossing, run together by the crossing's program (see `ss.solvers.JointStates`)
 
     Called with a tuple of the numbers of each disease's run: they are put together into the numbers of the
-    program (`ss.solvers.Crossing.numbers()`), which is run as any other, and its output is split between the diseases
+    program (`ss.solvers.JointStates.numbers()`), which is run as any other, and its output is split between the diseases
     again. Returns what `Run.function()` does, with a tuple over the diseases for each of the first three.
 
     Args:
-        cross (`ss.solvers.Crossing`): the crossing
+        cross (`ss.solvers.JointStates`): the crossing
         run (Run): the run of its program
     """
     def __init__(self, cross, run):

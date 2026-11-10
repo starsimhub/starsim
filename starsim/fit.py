@@ -267,7 +267,7 @@ class ParticleFilter(sc.prettyobj):
     which is what particle MCMC needs.
 
     Each declared disease is filtered on its own, since the diseases of a sim that the kernels run
-    whole do not affect each other, except those tracked jointly (see `ss.solvers.Crossing`), which are
+    whole do not affect each other, except those tracked jointly (see `ss.solvers.JointStates`), which are
     filtered together, as the runs of their program. An outcome is compared with the data as its expected number
     (rather than drawn, as a run of the sim draws it), as the likelihood would compare it.
 

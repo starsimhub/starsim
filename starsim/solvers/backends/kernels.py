@@ -63,7 +63,7 @@ fields = [
     'places',     # The place of each group (all zero if the model has none)
     'n_places',
     # Exposure to each infectious state
-    'exp_set',    # The set of compartments that are the state; or, if negative, minus the number of exposures before it whose sum it is (diseases tracked jointly, see ss.solvers.Crossing)
+    'exp_set',    # The set of compartments that are the state; or, if negative, minus the number of exposures before it whose sum it is (diseases tracked jointly, see ss.solvers.JointStates)
     'exp_n',      # Whether it is to the number in the state, not its share: a count in a rate that the contact matrices act on (`beta*I.n`), through them only (see ss.solvers.Mixing.count_terms())
     'rel_trans',  # Its infectiousness, by group
     'levels',     # For each mixing term, the cell that each group is in

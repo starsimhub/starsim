@@ -1150,7 +1150,7 @@ def init_crossings(sim, layouts=None):
     HIV who also have syphilis. Each disease in a crossing becomes a dimension of the sim, whose levels
     are its compartments and which applies to the people of the others, so the model grows to the
     product of their compartments, which is counted before anything is made, and kept within
-    `ss.options.max_joint`. See `ss.solvers.Crossing`.
+    `ss.options.max_joint`. See `ss.solvers.JointStates`.
 
     Args:
         sim (`ss.Sim`): the sim
@@ -1168,7 +1168,7 @@ def init_crossings(sim, layouts=None):
             raise ss.CapabilityError(f'cannot run with solver="{sim.solver}": {reason}.\n'
                                      f'     Run with solver="abm" (or "auto", which does), or raise the limit if there is the memory for it, e.g. ss.options(max_joint={layout.cells}).')
         sim.groups.cross_strats += layout.strats
-        sim.crossings.append(ss.solvers.Crossing(sim, layout.names, reasons=layout.reasons))
+        sim.crossings.append(ss.solvers.JointStates(sim, layout.names, reasons=layout.reasons))
         ss.note(f'the states of {" × ".join(layout.names)} are tracked jointly: {" × ".join(map(str, layout.sizes))} = {int(np.prod(layout.sizes)):,} joint states per group ({"; ".join(layout.reasons)})', sim=sim)
     sim.groups.init()
     sim.mixing = ss.solvers.Mixing(sim)

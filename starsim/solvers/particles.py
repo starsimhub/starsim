@@ -9,7 +9,7 @@ import numpy as np
 import numba as nb
 import sciris as sc
 import starsim as ss
-from .crossing import Crossing
+from .crossing import JointStates
 from .compartmental import kernel_list
 
 __all__ = ['Particles']
@@ -24,7 +24,7 @@ class Particles(sc.prettyobj):
     often as it is picked), as a filter does when it draws them again.
 
     Args:
-        engine (`ss.solvers.Compartmental`): the engine of a declared disease, restarted; or an `ss.solvers.Crossing`, for diseases tracked jointly, whose program's compartments are then the states
+        engine (`ss.solvers.Compartmental`): the engine of a declared disease, restarted; or an `ss.solvers.JointStates`, for diseases tracked jointly, whose program's compartments are then the states
         n (int): the number of runs
         rng (`np.random.Generator`): from which the random numbers of each run are spawned
         by_group (bool): whether to keep the stocks and flows by group (else their total, as one group)
@@ -38,7 +38,7 @@ class Particles(sc.prettyobj):
     def __init__(self, engine, n, rng, by_group=False):
         args, tables = engine.run_args()
         self.engines = engine.engines
-        if isinstance(engine, Crossing):
+        if isinstance(engine, JointStates):
             state_of = np.arange(engine.n_rows)
             n_states, n_groups = engine.n_rows, engine.n_cols
         else:

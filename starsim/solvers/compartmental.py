@@ -273,7 +273,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
 
     @property
     def shared(self):
-        """ Whether this engine moves people in ways that belong to the sim rather than to the module (aging, relocating, the movement register): in a crossing, only one does (see `ss.solvers.Crossing.lead`), since they all see the same people """
+        """ Whether this engine moves people in ways that belong to the sim rather than to the module (aging, relocating, the movement register): in a crossing, only one does (see `ss.solvers.JointStates.lead`), since they all see the same people """
         return self.cross is None or self.cross.lead == self.mod.name
 
     def init_register(self):
@@ -709,7 +709,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             for name in self.flowcounts:
                 self.flowcounts[name] = 0.0
             self.forced = dict()
-        if self.sim.mixing.register is not None and self.cross is None: # The events dated at the start (in a crossing, they happen to everyone once the diseases have their people: see ss.solvers.Crossing.init())
+        if self.sim.mixing.register is not None and self.cross is None: # The events dated at the start (in a crossing, they happen to everyone once the diseases have their people: see ss.solvers.JointStates.init())
             self.check_short(self.kernels().apply_events(self.make_rng(stream=2), self.y, self.init_register(), 0, self.integer))
         self.count_stocks() # The results at the first time point are the start
         self.n_start = sum(self.y[self.state_comps[s.name]].sum() for s in self.graph.infected if s.people) # The number infected at the start: see note_chance()
@@ -847,7 +847,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
 
     @property
     def owner(self):
-        """ What holds the people and the program that runs them: this engine, or the crossing its disease is tracked jointly in (see `ss.solvers.Crossing`), whose program steps them all """
+        """ What holds the people and the program that runs them: this engine, or the crossing its disease is tracked jointly in (see `ss.solvers.JointStates`), whose program steps them all """
         return self if self.cross is None else self.cross
 
     @property
@@ -1168,7 +1168,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         """
         Have the other diseases lose (or with `added`, gain) the people this one lost or gained from code (`ss.move()` to or from
         outside the model), by group, so that every disease has the same people. Diseases tracked jointly with this one (see
-        `ss.solvers.Crossing`) have them already. A disease run apart loses them from its states in proportion, in each group, as it
+        `ss.solvers.JointStates`) have them already. A disease run apart loses them from its states in proportion, in each group, as it
         has them, which is exact on average: it runs apart since its states do not depend on this one's, so within a group, which of
         its states someone is in does not depend on which of this one's they are in. People added are in its first state, as at birth.
         """
@@ -1334,7 +1334,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
     def init_syncs(self):
         """
         Synchronized flows: a transition of another module triggered by a transition of this one
-        (`ss.on(a.tr)`, or a branch, `ss.on(a.tr.to(X))`). The two modules are tracked jointly (`ss.solvers.Crossing`),
+        (`ss.on(a.tr)`, or a branch, `ss.on(a.tr.to(X))`). The two modules are tracked jointly (`ss.solvers.JointStates`),
         so this module's flow also carries the other's coordinate from the source of its transition to its destination,
         in the same flow: exact. Each has a row of its own after the transitions, which the flow credits, and which the
         other module records as its transition's flow (see `pass_syncs()`)

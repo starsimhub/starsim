@@ -194,7 +194,7 @@ class CompartmentalDelivery(sc.prettyobj):
             return
         for mod in sim.declared:
             frac = sel
-            if mod is not d.dis and mod.engine.cross is not None and mod.engine.cross is self.eng.cross: # The same people, tracked jointly: see ss.solvers.Crossing
+            if mod is not d.dis and mod.engine.cross is not None and mod.engine.cross is self.eng.cross: # The same people, tracked jointly: see ss.solvers.JointStates
                 continue
             if mod is not d.dis: # Another disease has other states, so the selection cannot depend on the state
                 if not np.allclose(sel, sel[0]):
@@ -392,7 +392,7 @@ class CompartmentalDelivery(sc.prettyobj):
         """
         The treatment of several diseases: the people chosen in each compartment and group are moved as a population of their
         own (with `force()`), so the share forced is chosen × probability in each, and the rest of them have failed. Diseases
-        tracked jointly (see `ss.solvers.Crossing`) pass the same people on, by way of the joint array, so each sees those the
+        tracked jointly (see `ss.solvers.JointStates`) pass the same people on, by way of the joint array, so each sees those the
         others treated. Its outcomes are events as shares of this disease's states and groups; someone cured of one disease and
         failed for another counts in both, and anyone in both outcomes for two diseases counts twice (clipped at all)
         """
