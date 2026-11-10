@@ -28,6 +28,7 @@ class EventSource:
 
     @property
     def event(self):
+        """ The event itself (the people it reached on the step), as a condition """
         return ss.conditions.Cond('event', self, None)
 
     @property
@@ -181,8 +182,6 @@ class Product(EventSource, ss.Module):
         try:
             return super().__getattr__(attr)
         except AttributeError:
-            if attr == 'coverage' and hasattr(type(self), 'held_share'): # Renamed in Starsim 4
-                raise AttributeError(f'{type(self).__name__} has no attribute "coverage": the share of people who hold it is .held_share (e.g. itn.held_share, a quantity for a rate), and the share a delivery reaches is its p=') from None
             if not attr.startswith('_') and self.outcome_names():
                 raise self.no_outcome(attr) from None
             raise
@@ -275,6 +274,7 @@ class Effect(sc.prettyobj):
         return sc.isnumber(eff) or (isinstance(eff, ss.by) and not any(isinstance(v, ss.parameters.TimeValue) for v in eff.items))
 
     def apply(self, value, engine):
+        """ The quantity (e.g. `rel_sus`, per agent or per state and group) scaled by `1 - efficacy` for those who hold the product """
         product = self.product
         selector = engine.selector
         level = selector.dim(product.dim)
@@ -546,7 +546,7 @@ class Held(Product):
         Args:
             sim (Sim): the sim being initialized
         """
-        if getattr(self, 'linked', False): # Both the sim and the deliveries initialize a product
+        if getattr(self, 'linked', False):
             return
         super().init_pre(sim)
         if not self.holds:
@@ -615,55 +615,50 @@ class Held(Product):
         return
 
     def step_waning(self):
-        """ In an agent-based run: holders lose their protection at a constant rate, and (with `during=`) once they are no longer in those states. Called by the deliveries; acts once per step """
+        """
+        Called by its deliveries at the start of each step (it acts once per step): holders stop holding it once they leave the
+        states of `during=` (under every solver); and as agents, they lose protection at a constant rate (`waning=` a duration),
+        or stop holding it once none is left (`waning=` a shape or function of time)
+        """
         sim = self.sim
         if not self.holds or getattr(self, '_ti_waned', None) == sim.ti:
             return
         self._ti_waned = sim.ti
-        if self.during is not None and not isinstance(sim.solver, ss.solvers.abm): # Held only while in some states: in a compartmental run, the share of each group not in them stops holding it
+        abm = isinstance(sim.solver, ss.solvers.abm)
+        if self.during is not None:
             delivery = next(d for d in sim.interventions() if isinstance(d, ss.Event) and d.product is self)
             selector = delivery.selector
-            gone = (selector.dim(self.dim) > 0)*selector.everyone()*(1 - selector.select(self.during))
-            if np.any(gone):
-                delivery.shift(gone, {sim.groups.dim_index(self.dim):0})
+        if not abm:
+            if self.during is not None: # In a compartmental run, the share of each group not in those states stops holding it
+                gone = (selector.dim(self.dim) > 0)*selector.everyone()*(1 - selector.select(self.during))
+                if np.any(gone):
+                    delivery.shift(gone, {sim.groups.dim_index(self.dim):0})
             return
-        if not isinstance(sim.solver, ss.solvers.abm):
+        arr = sim.people[self.dim]
+        def lose(uids):
+            if len(uids):
+                arr[uids] = 0
+                sim.groups.groups_changed(uids)
             return
-        if self.during is not None: # Held only while in some states
-            arr = sim.people[self.dim]
-            delivery = next(d for d in sim.interventions() if isinstance(d, ss.Event) and d.product is self)
-            gone = (arr.raw > 0) & ~np.asarray(delivery.selector.select(self.during), dtype=bool)
-            gone[len(arr.raw):] = False
-            lost = ss.uids(np.flatnonzero(gone[:len(arr.raw)]))
-            if len(lost):
-                arr[lost] = 0
-                sim.groups.groups_changed(lost)
-        if self.fades: # Protection that fades by a shape or function of time: held until none is left (e.g. the end of a boxcar), unless an effect does not wane
+        if self.during is not None:
+            gone = (arr.raw > 0) & ~np.asarray(selector.select(self.during), dtype=bool)
+            lose(ss.uids(np.flatnonzero(gone[:len(arr.raw)])))
+        if self.fades: # Held until no protection is left (e.g. the end of a boxcar), unless an effect does not wane
             keys = {key for effects in self.disease_effects(sim).values() for key in effects}
             fns = [self.waning.get(key) for key in keys] if isinstance(self.waning, dict) else [self.waning]
-            arr = sim.people[self.dim]
             uids = (arr > 0).uids
             if len(uids) and all(callable(fn) for fn in fns):
                 holds = np.zeros(len(arr.raw), dtype=bool)
                 holds[uids] = True
                 eng = (ss.interventions.coded_disease(sim, self.disease) or sim._declared_module(self.disease)).engine
                 left = np.max([self.remaining(fn, holds, eng)[uids] for fn in fns], axis=0)
-                lost = uids[left <= 0]
-                if len(lost):
-                    arr[lost] = 0
-                    sim.groups.groups_changed(lost)
-            return
-        if not self.loses:
-            return
-        arr = sim.people[self.dim]
-        uids = (arr == 1).uids
-        if len(uids):
-            dis = ss.interventions.coded_disease(sim, self.disease) or sim._declared_module(self.disease)
-            eng = dis.engine
-            p = -np.expm1(-eng.dt/eng.convert(self.waning))
-            lost = uids[self.rng_wane.rvs(uids) < p]
-            arr[lost] = 0
-            sim.groups.groups_changed(lost)
+                lose(uids[left <= 0])
+        elif self.loses:
+            uids = (arr == 1).uids
+            if len(uids):
+                eng = (ss.interventions.coded_disease(sim, self.disease) or sim._declared_module(self.disease)).engine
+                p = -np.expm1(-eng.dt/eng.convert(self.waning))
+                lose(uids[self.rng_wane.rvs(uids) < p])
         return
 
     def describe(self):
@@ -677,22 +672,28 @@ class Vaccine(Held):
     """
     A vaccine: what `ss.vaccinate()` delivers
 
+    How protection is lost, `waning=` (by default, never):
+
+    - A duration (e.g. `ss.years(5)`): lost all at once, after a time drawn from an exponential distribution with that mean.
+    - `ss.boxcar(plateau=..., decay=...)`: full protection for a time, then (optionally) an exponential decline; under every solver.
+    - A function of the time since delivery, returning the share of protection that remains: `fn(t)` or `fn(t, sim, uids)`, with
+      `t` a duration (e.g. `t < ss.days(180)`, `t.years`) and `uids` the agents who hold it (e.g. `sim.people.age[uids] - t.years`
+      is their age when it was given); agents only.
+    - A dict, giving each effect its own of these (e.g. `dict(acquisition=ss.boxcar(plateau=ss.years(1)), transmission=None)`).
+
+    A vaccine that fades by a shape or function is held (`vx.held`) until no protection is left (as agents, e.g. at the end of a
+    boxcar), and a delivery gives it again to those who hold it, restarting it. For other shapes under every solver (two rates in
+    turn), write the protection as states and move people into them: see `ss.Event`.
+
     Note: CRN safe as agents.
 
     Args:
         efficacy (float/dict): protection against acquisition (required); or a dict of efficacy against each of 'acquisition' (scales
             `rel_sus`), 'transmission' (scales `rel_trans`), 'mortality' (scales the death transitions), or any named transition
-        waning (dur/boxcar/func/dict): a duration, for protection that is lost after an exponentially distributed time with that mean;
-            `ss.boxcar(plateau=..., decay=...)`, full protection for a time and then (optionally) an exponential decline, under every solver;
-            or a function of the time since delivery returning the share of protection that remains, `fn(t)` or `fn(t, sim, uids)`, with `t` a
-            duration (e.g. `t < ss.days(180)`, `t.years`) and `uids` the agents who hold it (e.g. `sim.people.age[uids] - t.years`, their age when it was given; agents only). It is held (`vx.held`) until no
-            protection is left (as agents, e.g. at the end of a boxcar), and a delivery gives a product that fades by a shape or function
-            again to those who hold it, restarting it. A dict gives each effect its own (e.g.
-            `dict(acquisition=ss.boxcar(plateau=ss.years(1)), transmission=None)`). For other shapes under every solver (two rates in turn),
-            write the protection as states and move people into them: see `ss.Event`
+        waning (dur/boxcar/func/dict): how protection is lost, as above
         doses (list): for a vaccine given in doses, the relative efficacy after each (e.g. `[0.85, 1.0]`); holding it then has a
             level per dose, and each delivery to someone who holds it gives them the next dose
-        leaky (bool): if True (the default), everyone who receives it is partly protected (by `efficacy`); if False, a share `efficacy` of them are fully protected and the rest not at all ("all or nothing")
+        leaky (bool): if True (the default), everyone who receives it is partly protected (by `efficacy`); if False, a share `efficacy` of them are fully protected and the rest not at all ("all or nothing"). The two give the same protection on average, but differ once people are exposed again and again: all or nothing leaves some never infected
         during (Cond): if given, it is held only while people are in these states (e.g. `during=sir.I`): they stop holding it when they leave them
         cost (float): the cost of each delivery
         name (str): the name; if not given, taken from the variable the vaccine is assigned to

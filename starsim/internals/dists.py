@@ -648,13 +648,13 @@ class Dist:
     @property
     def bitgen(self):
         try:    return self.rng._bit_generator
-        except: return None
+        except Exception: return None
 
     @property
     def state(self):
         """ Get the current state """
         try:    return self.bitgen.state
-        except: return None
+        except Exception: return None
 
     def get_state(self):
         """ Return a copy of the state """
@@ -1458,10 +1458,10 @@ class Dist:
             if self.dist is not None:
                 try:
                     diststr = f'dist={self.dist.name}, '
-                except:
+                except Exception:
                     try: # What is wrong with you, SciPy -- after initialization, it moves here
                         diststr = f'dist={self.dist.dist.name}, '
-                    except:
+                    except Exception:
                         diststr = f'dist={type(self.dist)}'
             elif self.distname is not None:
                 diststr = f'dist={self.distname}, '

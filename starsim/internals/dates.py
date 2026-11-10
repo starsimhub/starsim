@@ -41,7 +41,7 @@ class DateArray(np.ndarray):
                     try: # Else, if the input is datelike (>1), assume date
                         assert np.all(arr >= 1.0)
                         unit = ss.date
-                    except: # Otherwise, assume years
+                    except Exception: # Otherwise, assume years
                         unit = ss.years
             else:
                 if isinstance(unit, str): # e.g. 'month'
@@ -79,7 +79,7 @@ class DateArray(np.ndarray):
     @property
     def unit(self):
         try:    return self._unit
-        except: return ss.date
+        except Exception: return ss.date
 
     def __add__(self, other):
         return NotImplemented # Delegate to the other class - typically date.__radd__() or dur.__radd__()
@@ -117,7 +117,7 @@ class DateArray(np.ndarray):
             delta = self[1] - self[0]
             years = getattr(delta, 'years', delta) # A date or duration difference must be converted to years, since that is what ss.date.subdaily() expects; a plain float is already in years
             return ss.date.subdaily(years)
-        except:
+        except Exception:
             return False
 
     @property

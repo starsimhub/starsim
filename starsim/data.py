@@ -68,9 +68,9 @@ def age_pyramid(sim, strat=None):
     named = getattr(sim, 'named_people', None)
     if named is not None:
         return named.ages, named.counts
-    elif getattr(sim, 'given_pyramid', None) is not None:
+    if getattr(sim, 'given_pyramid', None) is not None:
         return sim.given_pyramid
-    elif strat is None or strat.guessed.get('fractions') == world.guess:
+    if strat is None or strat.guessed.get('fractions') == world.guess:
         return world.ages, world.counts
     return None
 
@@ -227,18 +227,24 @@ def geography(place, level=1, year=None, places=None):
         except ValueError: # Not available at this level
             adjacency = None
     info = ref(ssd, frames[0], place=place, level=level, year=year, places=None if places is None else list(names), boundaries=sc.strjoin(sorted(set(df.source))))
-    out = dict(names=names, pop=df.population.values.astype(float), lat=df.lat.values.astype(float), lon=df.lon.values.astype(float),
-               area=df.area_km2.values.astype(float), codes=list(df.pcode), adjacency=adjacency, ref=info)
-    return out
+    return dict(names=names, pop=df.population.values.astype(float), lat=df.lat.values.astype(float), lon=df.lon.values.astype(float),
+                area=df.area_km2.values.astype(float), codes=list(df.pcode), adjacency=adjacency, ref=info)
 
 
 def rates(place, which, revision=None):
     """
     The UN World Population Prospects birth, death, fertility, or net migration rates of a named place, for `ss.Births(birth_rate='Kenya')`, `ss.Deaths(death_rate='Kenya')`, and `ss.Pregnancy(fertility_rate='Kenya')`
 
+    The rates are:
+
+    - 'births': crude birth rates per 1,000 people, by year
+    - 'deaths': death rates per person, by year, sex, and age
+    - 'fertility': age-specific fertility rates per 1,000 women, by year and 5-year age group
+    - 'migration': crude net migration rates per 1,000 people, by year (arrivals less departures)
+
     Args:
         place (str): a country, by name or code
-        which (str): 'births' (crude birth rates per 1,000, by year), 'deaths' (death rates per person, by year, sex, and age), 'fertility' (age-specific fertility rates per 1,000 women, by year and 5-year age group), or 'migration' (crude net migration rates per 1,000, by year: arrivals less departures)
+        which (str): 'births', 'deaths', 'fertility', or 'migration' (see above)
         revision (str): the WPP revision (default: the latest bundled)
     """
     ssd = provider()
@@ -322,10 +328,18 @@ def contacts(place, study=None, layer='all'):
     """
     A contact matrix by age for a named place, for `ss.contacts('Kenya')`
 
+    The studies (all but the first are downloaded on first use):
+
+    - 'prem2021': Prem et al. 2021, bundled; 177 places
+    - 'prem': Prem 2021, with Prem 2017 for the places it lacks; 187 places
+    - 'prem2017': Prem et al. 2017; 152 places
+    - 'mistry2021': Mistry et al. 2021, by single year of age; 36 places
+    - 'mistry2021_us': Mistry et al. 2021 for the 50 US states and DC, by single year of age
+
     Args:
         place (str): a country, by name or code; or a US state, e.g. 'United States:Massachusetts'
-        study (str): the study: 'prem2021' (bundled; 177 places), 'prem' (Prem 2021, with Prem 2017 for the places it lacks; 187), 'prem2017' (152), 'mistry2021' (36, by single year of age), or 'mistry2021_us' (the default for a US state; the 50 states and DC, by single year of age); all but the first are fetched on first use. The default for a country is 'prem': the bundled 'prem2021' where it has the country, else Prem 2017 (e.g. for Japan and Australia)
-        layer (str): the setting: 'all', 'home', 'school', 'work', or 'community'
+        study (str): the study the matrix is from (see above); by default, for a country, Prem 2021 where it has the country (bundled, so no download), else Prem 2017 (e.g. for Japan and Australia); for a US state, 'mistry2021_us'
+        layer (str): the setting: 'all', 'home', 'school', 'work', or 'community', e.g. 'school' to model school closures
 
     Returns:
         A dataframe of the contacts a day that a person in each age group (a row) has with people in each (a column), with the groups labeled '0-4', '5-9', ..., '75+' (or by single year of age), and where it came from in `.attrs['ref']`; `ss.contacts()` takes it

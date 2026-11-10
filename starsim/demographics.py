@@ -11,7 +11,6 @@ import sciris as sc
 import pandas as pd
 
 ss_float = ss.dtypes.float
-ss_int = ss.dtypes.int
 _ = None
 
 
@@ -257,12 +256,10 @@ class Flows(Demographics):
 
 class Births(Demographics):
     """
-    Create births based on rates, rather than based on pregnancy.
+    Births at a crude birth rate, without modeling pregnancy: for when the number of births matters but not the pregnancies behind them (for those, use `ss.Pregnancy`)
 
-    Births are generated using population-level birth rates that can vary
-    by year. The number of births per timestep is determined by applying
-    the birth rate to the current population size; each newborn's parent
-    (`people.parent`) is a woman of reproductive age (`min_age` to `max_age`).
+    The birth rate can vary by year. The number of births in each step is the birth rate times the number of people alive;
+    each newborn's parent (`people.parent`) is a woman of reproductive age (`min_age` to `max_age`).
 
     Note: CRN safe.
 
@@ -347,9 +344,7 @@ class Births(Demographics):
         return
 
     def get_births(self):
-        """
-        Extract the right birth rates to use and translate it into a number of people to add.
-        """
+        """ The mothers of the step's births: the birth rate of this year, as a chance over the step, drawn among women of reproductive age so that there are as many births as at that rate for everyone """
         sim = self.sim
         p = self.pars
 
@@ -359,9 +354,9 @@ class Births(Demographics):
         else:
             this_birth_rate = p.birth_rate
             if isinstance(this_birth_rate, ss.Rate):
-                this_birth_rate = ss.prob(this_birth_rate.value / self.pars.rate_per * self.pars.rel_birth, this_birth_rate.unit).to_prob(ss.years(1))
-            else: # number
-                this_birth_rate = this_birth_rate / self.pars.rate_per * self.pars.rel_birth
+                this_birth_rate = ss.prob(this_birth_rate.value / p.rate_per * p.rel_birth, this_birth_rate.unit).to_prob(ss.years(1))
+            else: # A number, per year
+                this_birth_rate = this_birth_rate / p.rate_per * p.rel_birth
         scaled_birth_prob = ss.probperyear(np.asarray(this_birth_rate, dtype=float)).to_prob(self.t.dt) # A probability per year, over the step
 
         # The rate is per person, but the parents are women of reproductive age: the same number of births, from them
@@ -406,7 +401,7 @@ class Births(Demographics):
         return new_uids
 
     def add_births(self):
-        """ Add n_new births to each state in the sim """
+        """ Add the step's newborns to the population, each with their mother as `parent` """
         people = self.sim.people
         birth_uids = self.get_births()
         new_uids = people.grow(len(birth_uids), parent=birth_uids, age=0)
@@ -459,16 +454,12 @@ def lifetable_rates(tables):
 
 class Deaths(Demographics):
     """
-    Configure disease-independent "background" deaths.
+    Background deaths: deaths from causes other than the diseases modeled
 
-    The probability of death for each agent on each timestep is determined
-    by the `death_rate` parameter and the time step. By default, this is
-    `ss.peryear(0.01)` (10 per 1,000 people per year), so all agents face about a 1% chance of
-    death per year.
-
-    However, this function can be made more realistic by using a dataframe
-    for the `death_rate` parameter, to allow it to vary by year, sex, and
-    age.  The separate `columns` argument says which columns of the data are which.
+    Each agent's chance of dying in each step comes from `death_rate` and the length of the step. By default, this is
+    `ss.peryear(0.01)` (10 per 1,000 people per year), so everyone faces about a 1% chance of death per year. For more
+    realism, give rates that vary by year, sex, and age (a table, a life table, or a place by name, for its UN rates);
+    `columns=` says which columns of a table are which.
 
     Note: CRN safe.
 
@@ -506,13 +497,13 @@ class Deaths(Demographics):
 
         # Process data, which may be provided as a number, dict, dataframe, or series, or a named place (its UN rates)
         # If it's a number it's left as-is; otherwise it's converted to a dataframe
-        self.death_rate_data = self.standardize_death_data() # TODO: refactor
+        self.death_rate_data = self.standardize_death_data()
         self.death_rows = rate_rows(self.death_rate_data)
         if self.named_data: # Estimates for single years, every ten years: interpolated between them
             self.death_rows = yearly_rows(self.death_rows)
         given = death_rate if death_rate is not _ else sc.mergedicts(pars).get('death_rate', self.pars.death_rate) # As given: a bare number becomes a typed rate in the parameters
         self.pars.rate_per = rate_per_of(self.pars.rate_per, given if self.death_rows is None else self.death_rate_data, 'death_rate') # Per 1,000 or per person, from their size (the UN's rates by age, mx, are per person)
-        self._p_death = ss.bernoulli(p=0)  # Placeholder, populated by make_p_death
+        self._p_death = ss.bernoulli(p=0) # Set to the chances from make_p_death() each step
         self.n_deaths = 0 # For results tracking
         return
 
@@ -529,7 +520,7 @@ class Deaths(Demographics):
         return death_rate
 
     def make_p_death(self):
-        """ Take in the module, sim, and uids, and return the probability of death for each UID on this timestep """
+        """ The chance that each agent alive dies in this step: one number if it is the same for everyone, else one for each, by age, sex, and year """
         sim = self.sim
         drd = self.death_rate_data
 
@@ -543,10 +534,9 @@ class Deaths(Demographics):
                 # Convert from prob per drd.unit to prob per year, converted to a probability per timestep below
                 death_rate = np.array([ss.prob(drd.value / self.pars.rate_per * self.pars.rel_death, drd.unit).to_prob(ss.years(1))])
 
-        # Process data
-        else:
+        else: # Rates by year, sex, and age
             ppl = sim.people
-            uids = ppl.auids  # Get the UIDs of all alive people
+            uids = ppl.auids
 
             rows, years, ages = self.death_rows
             nearest_year = period_year(years, sim.t.now('year')) # Each period's rate holds until the next
@@ -560,9 +550,7 @@ class Deaths(Demographics):
                 death_rate[:] = rows[nearest_year][binned_ages]
             death_rate *= self.pars.rel_death / self.pars.rate_per
 
-        # Scale from rate to probability
-        death_rate = ss.peryear(death_rate)
-        p_death = death_rate.to_prob(self.t.dt)  # Convert to probability per timestep
+        p_death = ss.peryear(death_rate).to_prob(self.t.dt) # A rate per year, as a probability over the step
 
         if sc.isnumber(drd) or isinstance(drd, ss.Rate):
             p_death = p_death[0] # to_prob() returns an array; extract the scalar when the input was scalar/Rate
@@ -589,8 +577,7 @@ class Deaths(Demographics):
 
     def step(self):
         """ Select people to die """
-        p_death = self.make_p_death()  # Get the probability of death for each agent
-        self._p_death.set(p=p_death)  # Update the distribution with the probabilities for this timestep
+        self._p_death.set(p=self.make_p_death())
         death_uids = self._p_death.filter()
         ppl = self.sim.people
         if ppl.has_unborn: # Fetuses as agents (e.g. ss.Pregnancy(fetal_agents=True)) die only with their mother or by the pregnancy's own losses
@@ -643,16 +630,6 @@ class preterm(sc.objdict):
 
     def __repr__(self):
         return f'preterm(threshold={self.threshold}, very_threshold={self.very_threshold}, rel={self.rel}, by_age={self.by_age.tolist()})'
-
-
-replaced_pregnancy = dict( # Keywords of ss.Pregnancy that are given another way, with what to use instead
-    maternal_death = 'maternal_death_rate= for the hazard of death while pregnant (e.g. ss.peryear(0.002)), and p_maternal_death= for the chance of death at delivery (e.g. 0.001); either or both',
-    embryos_per_pregnancy = 'children=, e.g. children=ss.choice(a=[1, 2], p=[0.98, 0.02])',
-    rel_preterm = 'preterm=ss.preterm(rel=...)',
-    rel_preterm_age = 'preterm=ss.preterm(by_age=...)',
-    preterm_threshold = 'preterm=ss.preterm(threshold=...)',
-    very_preterm_threshold = 'preterm=ss.preterm(very_threshold=...)',
-)
 
 
 #%% Pregnancy, declared: its states and transitions are the same objects as a disease's, so it runs as agents or as
@@ -772,9 +749,7 @@ class Pregnancy(Demographics, ss.Disease):
             preterm = preterm(), # The risk of preterm birth: see ss.preterm
             p_maternal_death = ss.bernoulli(p=0), # The chance of a maternal death at delivery (agents only); the hazard while pregnant is maternal_death_rate
         )
-        for key in [k for k in given if k in replaced_pregnancy]:
-            errormsg = f'ss.Pregnancy() takes no {key}=; use {replaced_pregnancy[key]}'
-            raise TypeError(errormsg)
+        ss.v3_deprecations.check(type(self), '__init__', given)
         p_md = given.get('p_maternal_death')
         if p_md is not None and not (isinstance(p_md, ss.bernoulli) or (sc.isnumber(p_md) and 0 <= p_md <= 1)):
             errormsg = f'p_maternal_death= of ss.Pregnancy() is the chance of a maternal death at delivery, a probability (e.g. 0.001) or an ss.bernoulli; not {p_md!r}. For a hazard while pregnant, give maternal_death_rate= (e.g. ss.peryear(0.002))'
@@ -786,7 +761,7 @@ class Pregnancy(Demographics, ss.Disease):
             raise TypeError(errormsg)
         unknown = [k for k in given if k not in self.pars]
         if unknown:
-            raise sc.KeyNotFoundError(f'"{self.name}" has no parameter named {sc.strjoin(unknown)}. Its parameters are {sc.strjoin(self.pars.keys())}{ss.expressions.did_you_mean(unknown[0], self.pars.keys())}{ss.errors.starsim3(keys=unknown, call=f"ss.{type(self).__name__}")}')
+            raise sc.KeyNotFoundError(f'"{self.name}" has no parameter named {sc.strjoin(unknown)}. Its parameters are {sc.strjoin(self.pars.keys())}{ss.expressions.did_you_mean(unknown[0], self.pars.keys())}{ss.v3_deprecations.hint(keys=unknown, call=f"ss.{type(self).__name__}")}')
         fertility = given.pop('fertility_rate', ss.peryear(0.1)) # 100 per 1,000 women per year. Rates (a number, a table, or a place) for conception_rate(), or the hazard of conception as a function
         defaults = dict(year='Time', age='AgeGrp', value='ASFR')
         if isinstance(fertility, str): # A named place: its UN age-specific fertility rates, per 1,000 women, by year and 5-year age group
@@ -865,7 +840,7 @@ class Pregnancy(Demographics, ss.Disease):
         """ Time since the last live birth (inf if never); survives later losses """
         return self.live_birth.since
 
-    def attr(self, name, dist, when='conception', **kwargs):
+    def attr(self, name, dist, when='conception'):
         """
         A value drawn for each woman each time a transition of the pregnancy happens to her, e.g. the gestational age of
         her first antenatal visit, for conditions such as `preg.P & (preg.P.time_in >= anc_ga)`: an `ss.attr(dist, when=)` of
@@ -876,7 +851,6 @@ class Pregnancy(Demographics, ss.Disease):
             dist (Dist): what it is drawn from (durations are in the sim's unit when read)
             when (str/Transition): the transition, by name (e.g. 'conception' or 'delivery') or as itself (`preg.delivery`)
         """
-        ss.transitions.check_renamed(kwargs, 'preg.attr()', dict(on="when=, the transition of the pregnancy it is drawn on, e.g. when='delivery'"))
         graph = self.graph
         key = getattr(when, 'name', when)
         if key not in graph.transitions:
@@ -1302,7 +1276,6 @@ class Pregnancy(Demographics, ss.Disease):
         asfr[:, tdim-1:] = cs[:, tdim-1:] - np.hstack([np.zeros((len(cs), 1)), cs[:, :-tdim]])
         self.asfr = asfr
         return
-
 
     def on_death(self, uids):
         """

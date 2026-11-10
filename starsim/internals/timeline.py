@@ -177,7 +177,7 @@ class Timeline:
         """ The number of time points (inclusive of both endpoints, so one more than the number of steps) """
         try:
             return self.tvec.shape[0]
-        except:
+        except Exception:
             return 0
 
     @property
@@ -278,7 +278,7 @@ class Timeline:
         """
         try:
             return isinstance(self.start, ss.date)
-        except:
+        except Exception:
             return False
 
     def now(self, key=None):
@@ -766,8 +766,6 @@ class schedule:
     """
     def __init__(self, *args, at=None, every=None, start=None, stop=None, **kwargs):
         for key in kwargs:
-            if key == 'when':
-                raise TypeError('ss.schedule() takes no when=; give the function as at= (or first), e.g. ss.schedule(lambda now: now.month == 1)')
             raise TypeError(f'ss.schedule() got an unexpected keyword argument {key!r}')
         if len(args) > 1 or (args and at is not None):
             raise TypeError(f'ss.schedule() takes one argument by position (the times, or a function of the date), not {len(args) + (at is not None)}; give how often as every=, and the window as start= and stop=')

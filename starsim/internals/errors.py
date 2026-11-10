@@ -9,7 +9,6 @@ is 1 or more (see `ss.note()`).
 
 Used with: agents and compartments; declared and coded modules
 """
-import re
 import sciris as sc
 import starsim as ss
 
@@ -53,25 +52,6 @@ def note(msg, sim=None, verbose=None):
 
 
 #%% Errors
-
-def starsim3(names=None, keys=None, call='ss.Sim'):
-    """
-    The end of an error for a name of Starsim 3's (`ss.<name>`) or keywords that Starsim 4 does not have, saying what replaces it and where the migration guide is; '' if none is one
-
-    Args:
-        names (str/list): names looked up at the root of Starsim, e.g. 'lognorm_ex'
-        keys (str/list): keywords given to `call`, e.g. 'n_cpus'
-        call (str): what the keywords were given to, e.g. 'ss.Sim' or 'ss.Pregnancy'
-    """
-    from starsim.converters import migrate # Only when there is an error, so that import starsim stays fast
-    found = [(f'ss.{name}', migrate.removed(name)) for name in sc.tolist(names)] + [(f'{key}=', migrate.removed_keyword(key, call)) for key in sc.tolist(keys)]
-    for subject, text in found:
-        if text:
-            if not re.search(r"Starsim 3|removed", text): # Otherwise the text says it already
-                text = f'{subject} is from Starsim 3: {text}'
-            return f'\n     {text}. See https://docs.starsim.org/v3v4 for help migrating from Starsim 3' # No full stop, since Python may add one with "Did you mean"
-    return ''
-
 
 class CapabilityError(ValueError):
     """

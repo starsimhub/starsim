@@ -361,7 +361,7 @@ class Pars(sc.obj):
         new_keys = pars.keys()
         mismatches = [key for key in new_keys if key not in available_keys]
         if len(mismatches):
-            errormsg = f'Key(s) {mismatches} not found; available keys are {available_keys}{ss.errors.starsim3(keys=mismatches, call="ss.Sim" if isinstance(self, ss.SimPars) else "ss.Module")}'
+            errormsg = f'Key(s) {mismatches} not found; available keys are {available_keys}{ss.v3_deprecations.hint(keys=mismatches, call="ss.Sim" if isinstance(self, ss.SimPars) else "ss.Module")}'
             raise sc.KeyNotFoundError(errormsg)
         return
 
@@ -461,6 +461,9 @@ def isnull(val):
 class by:
     """
     A value for each level of one or more stratifications, or of people's own properties
+
+    Use it for a parameter that differs between groups, e.g. a higher transmission rate for
+    children, or a death rate by age and sex.
 
     With several dimensions as keywords, the value of a group is the product of
     its value in each. A table gives every combination directly: it has a column
@@ -1224,7 +1227,7 @@ class timeseries(TimeValue):
             as the second argument (`ss.timeseries(times, values)`). A time is a date, a bare number (a calendar year in a sim with a
             calendar, e.g. `2030`, and otherwise a time in the sim's unit from 0), or a duration, that long after the start of the sim
         values (list): the values, if `data` is the times
-        interpolation (str): how to interpolate: 'step' (each value holds until the next), 'linear', or 'cosine' (a smooth S-shaped change between each value and the next, as MEmilio's dampings)
+        interpolation (str): how to interpolate: 'step' (each value holds until the next, as for a policy that starts on a date), 'linear' (a steady change from each value to the next, as for coverage that is scaled up), or 'cosine' (a smooth S-shaped change between each value and the next, as MEmilio's dampings)
         period (dur): if given, the series repeats with this period, measured from its first time (e.g. `ss.years(1)` for a yearly pattern given over one year); keyed by durations, they are the times within each cycle, from the start of the sim (e.g. `{ss.years(k/12): v[k] ...}`, one value per month)
 
     Examples:

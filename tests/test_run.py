@@ -271,7 +271,7 @@ def test_one_way():
     sir = ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(8), init=dict(I=0.01), name='sir')
     sim = ss.Sim(sir, unit='day', stop=30, total_pop=1000, solver='binomial', verbose=0)
     assert sim.run() is sim and sim.restart(pars=dict(beta=0.4)).run() is sim
-    for key,new in dict(n_runs='ss.parallel', pars='restart', solver='new', profile="kind='loop'").items(): # Each names what replaced it
+    for key,new in dict(shrink='sim.shrink', profile="kind='loop'").items(): # Starsim 3's: each names what replaced it
         with pytest.raises(TypeError, match=new):
             sim.run(**{key: 1})
     with pytest.raises(TypeError, match='dict by label'): # Sims are not keywords, so the keywords are only options

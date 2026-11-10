@@ -102,6 +102,7 @@ Names were renamed where they meant different things in different places, or whe
 - *Migration*: `ss.uids.cat()` and `concat()` are `concatenate()`; `Pars.dict_update()` and `Arr.notnanvals` are removed.
 - *Migration*: the options `license`, `numba_indexing`, `check_method_calls`, `install_fonts` and `sep` are removed, as is `ss.options.set(use=)`; new options are `threads` (Starsim's own threads, for the passes over agents and the particles of a particle filter, `STARSIM_THREADS`; 0, the default, for as many as Numba has), `blas_threads` (BLAS's, `STARSIM_BLAS_THREADS`), `kernels` (`'auto'`, `'rust'`, `'numba'` or `'python'`; `STARSIM_KERNELS`), `jax`, `keep_times`, `max_steps`, `max_years`, `max_joint`, and `uncompiled_warning`.
 - *Migration*: Starsim 4's errors and warnings: `ss.errors` keeps 5 error classes (`CapabilityError`, `AlreadyRunError`, `DistNotInitializedError`, `DistSeedRepeatError`, `BooleanOperationError`) and a few warnings (`ImportIncomplete`, `LossyExport`, `NotConverged`, `AtBound`); every other error is a built-in exception (`ValueError`, `KeyError`, `TypeError`, ...). Errors name current spellings only, and "did you mean" lists only the closest names.
+- *Migration*: a name of Starsim 3's that Starsim 4 does not have raises an error saying what replaces it; these are all in `ss.v3_deprecations`, by class, method, and name. `ss.SimPars` is defined in `starsim/simpars.py`.
 
 ## New features
 

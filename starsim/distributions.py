@@ -17,10 +17,9 @@ ss_int = ss.dtypes.int
 
 def combine_rands(a, b):
     """
-    Efficient algorithm for combining two arrays of random integers into an array
-    of floats.
+    Combine two arrays of random integers into one array of random numbers between 0 and 1, e.g. one for each pair of agents
 
-    See ss.multi_random() for the user-facing version.
+    See `ss.multi_random()`, which is the version to use in almost all cases.
 
     Inputs must be uint64: signed integers would produce output in [-0.5, 0.5] rather than
     [0, 1], so they raise an error rather than being cast, since casting would silently copy
@@ -39,11 +38,10 @@ def combine_rands(a, b):
         errormsg = f'combine_rands() requires uint64 arrays, not a={a_dtype} and b={b_dtype}. Signed integers give output in [-0.5, 0.5] instead of [0, 1]. Use ss.randint(low=0, high=np.iinfo(np.uint64).max, dtype=np.uint64), or arr.view(np.uint64) to reinterpret the bits without copying.'
         raise TypeError(errormsg)
     c = np.bitwise_xor(a*b, a-b)
-    u = c / np.iinfo(np.uint64).max
-    return u
+    return c / np.iinfo(np.uint64).max
 
 
-# Common distributions, assigned to a variable since used in help messages
+# The distributions, by name, for help messages
 dist_list = ['random', 'uniform', 'normal', 'truncnorm', 'lognormal', 'expon',
              'poisson', 'nbinom', 'binom', 'beta_dist', 'weibull', 'gamma', 'erlang', 'constant',
              'randint', 'bernoulli', 'choose_n', 'choice', 'histogram']
@@ -72,7 +70,7 @@ class random(Dist):
 
 class uniform(Dist):
     """
-    Uniform distribution, values on interval (low, high)
+    Uniform distribution, values on interval (low, high); with one argument, it is the upper bound (`ss.uniform(5)` is between 0 and 5)
 
     Args:
         low (float): the lower bound of the distribution (default 0.0)
@@ -83,26 +81,18 @@ class uniform(Dist):
     unit_pars = ('low', 'high')
 
     def __init__(self, low=None, high=None, **kwargs):
-        if high is None and low is not None: # One argument, swap
-            high = low
-            low = 0.0
-        if low is None:
-            low = 0.0
-        if high is None:
-            high = 1.0
-        super().__init__(distname='uniform', low=low, high=high, **kwargs)
+        if high is None and low is not None: # One argument, the upper bound
+            low, high = 0.0, low
+        super().__init__(distname='uniform', low=sc.ifelse(low, 0.0), high=sc.ifelse(high, 1.0), **kwargs)
         return
 
     def make_rvs(self):
-        """ Specified here because uniform() doesn't take a dtype argument """
-        p = self._pars
-        rvs = self.rand(self._size) * (p.high - p.low) + p.low
-        return rvs
+        """ Scaled from the raw uniform draws, which are in Starsim's precision (NumPy's uniform takes no dtype) """
+        return self.ppf(self.rand(self._size))
 
     def ppf(self, rands):
         p = self._pars
-        rvs = rands * (p.high - p.low) + p.low
-        return rvs
+        return rands * (p.high - p.low) + p.low
 
 
 class normal(Dist):
@@ -520,31 +510,24 @@ class randint(Dist):
     valid_pars = ['low', 'high', 'dtype']
 
     def __init__(self, *args, low=None, high=None, dtype=None, **kwargs):
-        # Handle input arguments
-        if len(args):
-            if len(args) == 1:
-                high = args[0]
-            elif len(args) == 2:
-                low,high = args
-            else:
-                errormsg = f'ss.randint() takes one or two arguments, not {len(args)}'
-                raise ValueError(errormsg)
-        if dtype is None:
-            dtype = ss.dtypes.rand_int # Not a default argument, so it follows ss.options.precision
-        if low is None:
-            low = 0
-        if high is None:
-            high = np.iinfo(ss.dtypes.rand_int).max
-
-        # integers (rather than randint) because we interface a numpy.random.Generator
-        super().__init__(distname='integers', low=low, high=high, dtype=dtype, **kwargs)
+        if len(args) == 1: # One argument, the upper bound
+            high = args[0]
+        elif len(args) == 2:
+            low, high = args
+        elif len(args):
+            errormsg = f'ss.randint() takes one or two arguments, not {len(args)}'
+            raise ValueError(errormsg)
+        dtype = sc.ifelse(dtype, ss.dtypes.rand_int) # Not a default argument, so it follows ss.options.precision
+        low = sc.ifelse(low, 0)
+        high = sc.ifelse(high, np.iinfo(ss.dtypes.rand_int).max)
+        super().__init__(distname='integers', low=low, high=high, dtype=dtype, **kwargs) # NumPy's Generator calls it integers()
         return
 
     def convert_timepars(self):
+        """ The bounds of a random integer can't have units """
+        timepar = (ss.Duration, ss.Rate)
         for key, v in self._pars.items():
-            if isinstance(v, ss.Duration) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.Duration):
-                raise NotImplementedError('randint parameters must be nondimensional')
-            if isinstance(v, ss.Rate) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.Rate):
+            if isinstance(v, timepar) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], timepar):
                 raise NotImplementedError('randint parameters must be nondimensional')
 
     @property
@@ -600,8 +583,7 @@ class weibull(Dist):
 
     def make_rvs(self):
         """ Use SciPy rather than NumPy to include the scale parameter """
-        rvs = self.dist.rvs(self._size)
-        return rvs
+        return self.dist.rvs(self._size)
 
 
 class gamma(Dist):
@@ -653,8 +635,7 @@ class gamma(Dist):
 
     def make_rvs(self):
         """ Use SciPy rather than NumPy to include the scale parameter """
-        rvs = self.dist.rvs(self._size)
-        return rvs
+        return self.dist.rvs(self._size)
 
 
 def erlang(k=1, mean=1.0, **kwargs):
@@ -679,13 +660,13 @@ def erlang(k=1, mean=1.0, **kwargs):
         raise ValueError(errormsg)
     loc = kwargs.get('loc')
     dist = gamma(shape=int(k), scale=(mean - loc if loc else mean)/k, **kwargs)
-    dist.given = ('erlang', dict(k=int(k), mean=mean) | ({'loc':kwargs['loc']} if kwargs.get('loc') else {}))
+    dist.given = ('erlang', dict(k=int(k), mean=mean) | (dict(loc=loc) if loc else {}))
     return dist
 
 
 class constant(Dist):
     """
-    Constant (delta) distribution: equivalent to np.full()
+    Constant (delta) distribution: every draw is the same value, e.g. for a parameter that takes a distribution but should not vary
 
     Args:
         value (float): the value to return
@@ -700,16 +681,16 @@ class constant(Dist):
     def make_rvs(self):
         return np.full(self._size, self._pars.value)
 
-    def ppf(self, rands): # NB: don't actually need to use random numbers here, but not worth the complexity of avoiding this
+    def ppf(self, rands): # The random numbers aren't needed, but drawing them keeps it like any other distribution
         return np.full(rands.shape, self._pars.value)
 
 
 class bernoulli(Dist):
     """
-    Bernoulli distribution: return True or False with the specified probability (which can be an array)
+    Bernoulli distribution: True or False with the given probability (which can be an array, or a function of the agents)
 
-    Unlike other distributions, Bernoulli distributions have a filter() method,
-    which returns elements of the array that return True.
+    Unlike most distributions, it has a `filter()` method, which returns the agents for whom it is True
+    (e.g. those who are infected, out of those exposed), and `split()`, which returns those for whom it is True and False.
 
     Args:
         p (float): the probability of returning True (default 0.5)
@@ -723,36 +704,28 @@ class bernoulli(Dist):
         return
 
     def __bool__(self):
-        if callable(self.pars.p) or np.any(sc.toarray(self.pars.p) > 0):
-            return True
-        else:
-            return False
+        """ False if it can never be True (p is 0), e.g. `if dist:` to skip the draws """
+        return bool(callable(self.pars.p) or np.any(sc.toarray(self.pars.p) > 0))
 
     def make_rvs(self):
-        rvs = self.rand(self._size) < self._pars.p # 3x faster than using rng.binomial(1, p, size)
-        return rvs
+        return self.rand(self._size) < self._pars.p # 3x faster than using rng.binomial(1, p, size)
 
     def ppf(self, rands):
-        rvs = rands < self._pars.p
-        return rvs
+        return rands < self._pars.p
 
     def filter(self, uids=None, both=False):
-        """ Return UIDs that correspond to True, or optionally return both True and False
+        """ The agents for whom it is True, or with both=True, those for whom it is True and those for whom it is False
 
         Args:
             uids (array): the agents to choose among (default: all active agents)
             both (bool): if True, return the UIDs for both True and False
         """
         if uids is None:
-            uids = self.sim.people.auids # All active UIDs
+            uids = self.sim.people.auids
         elif isinstance(uids, (ss.BoolArr, ss.arrays.IndexArr)):
             uids = uids.uids
-
         bools = self.rvs(uids)
-        if both:
-            return uids[bools], uids[~bools]
-        else:
-            return uids[bools]
+        return (uids[bools], uids[~bools]) if both else uids[bools]
 
     def split(self, uids=None):
         """ Alias to filter(uids, both=True)
@@ -832,7 +805,7 @@ class choose_n(Dist):
             both (bool): if True, also return the UIDs not chosen
         """
         if uids is None:
-            uids = self.sim.people.auids # All active UIDs
+            uids = self.sim.people.auids
         elif isinstance(uids, (ss.BoolArr, ss.arrays.IndexArr)):
             uids = uids.uids
         chosen = ss.uids(np.sort(uids[self._choose(uids)]))
@@ -922,41 +895,24 @@ class choice(Dist):
             a = np.concatenate([np.atleast_1d(np.asarray((v if type(v) is unit else unit(v)).value, dtype=float)) for v in items])
             kwargs['unit'] = unit
         super().__init__(distname='choice', a=a, p=p, replace=replace, **kwargs)
-        if not replace:
-            # Sampling without replacement is a joint draw over all elements, so it
-            # cannot be expressed as an independent per-slot inverse-CDF. Keep the
-            # native (make_rvs) path in that case, but draw exactly len(uids) values
-            # rather than slots.max()+1 (see process_size below).
+        if not replace: # A joint draw over all the agents, which can't be one draw per slot through the inverse CDF: drawn natively, one value per agent (see process_size())
             self._use_ppf = False
-        # For the (default) replace=True case, leave _use_ppf as None so that the
-        # ppf path is used for UID draws. This maps each slot's uniform through the
-        # inverse CDF (below), which is CRN-safe and, crucially, avoids the
-        # make_rvs path's drawing slots.max()+1 values and discarding most
-        # -- as for bernoulli, poisson, etc.
+        # With replacement, each slot's uniform goes through the inverse CDF (ppf()), as for ss.bernoulli: the same numbers in every scenario, and only one per agent
         return
 
     def process_size(self, n=1):
         """ For replace=False, draw one value per UID; not for the user """
         size, slots = super().process_size(n)
-        if not self.pars.replace and slots is not None:
-            # Without replacement can't be slot-indexed CRN (it's a joint draw), and
-            # requesting slots.max()+1 distinct items is wasteful, and an error once
-            # slots.max() >= len(a). Draw exactly one value per UID instead. Like
-            # ss.options.crn=False, this is statistically valid but not CRN-safe
-            # across scenarios -- which is inherent to sampling without replacement.
+        if not self.pars.replace and slots is not None: # Drawing by slot would need slots.max()+1 distinct items, an error once that is more than len(a); like crn=False, valid, but not the same in every scenario, which is inherent to drawing without replacement
             self._slots = None
             size = self._size = len(self._uids)
             slots = None
         return size, slots
 
     def ppf(self, rands):
-        """ Map uniform values to choices via the inverse CDF (one draw per slot). """
+        """ The choice for each uniform random number, by the inverse CDF """
         pars = self._pars
-        a = pars.a
-        if np.isscalar(a):
-            a = np.arange(a)
-        else:
-            a = np.asarray(a) # Ensure array indexing works below (e.g. a=[30, 70] passed as a list)
+        a = np.arange(pars.a) if np.isscalar(pars.a) else np.asarray(pars.a) # E.g. a=[30, 70] given as a list
         if pars.p is None: # Uniform over the choices
             n = len(a)
             inds = np.minimum((rands*n).astype(int), n - 1) # minimum guards against rands == 1.0
@@ -987,7 +943,7 @@ class choice(Dist):
 
 class histogram(Dist):
     """
-    Sample from a histogram with defined bins
+    Draws from a histogram, uniform within each bin, e.g. ages from the number of people in each age group
 
     Note: unlike other distributions, the parameters of this distribution can't
     be modified after creation.
@@ -1029,8 +985,7 @@ class histogram(Dist):
             if values is not None:
                 errormsg = 'You can supply values or data, but not both'
                 raise ValueError(errormsg)
-            kw = {'bins':bins} if bins is not None else {} # Hack to not overwrite default bins value
-            values, bins = np.histogram(data, **kw)
+            values, bins = np.histogram(data, **({'bins':bins} if bins is not None else {})) # NumPy's default bins, unless given
         else:
             if values is None:
                 values = [1.0] # Uniform distribution
@@ -1038,11 +993,8 @@ class histogram(Dist):
             if bins is None:
                 bins = np.arange(len(values)+1)
             bins = sc.toarray(bins)
-        if len(bins) == len(values): # Append a final bin, if necessary
-            delta = bins[-1] - bins[-2]
-            bins = np.append(bins, bins[-1]+delta)
-
-        # Validate inputs
+        if len(bins) == len(values): # Left edges only: the last bin is as wide as the one before
+            bins = np.append(bins, bins[-1] + (bins[-1] - bins[-2]))
         values = values.astype(float)
         vsum = values.sum()
         if vsum != 1.0:
@@ -1054,12 +1006,7 @@ class histogram(Dist):
         self.cdf_bins = (np.hstack([0.0, np.cumsum(pdf*widths)]), bins.astype(float)) # For ppf()
         self.hist = (values, bins, density) # As given (not in pars): for copies, see ss.transitions.numeric_dist()
         self.parts = None # One histogram for each group, see by_group()
-        # Leave _use_ppf as None (the default) so UID draws go through the hash-based
-        # CRN path: one uniform per slot mapped through the histogram's inverse
-        # CDF (ppf()). This is CRN-safe and draws exactly len(uids) numbers,
-        # avoiding drawing slots.max()+1 values and discarding most.
-        # The values/bins arrays are not treated as per-UID pars.
-        return
+        return # Draws by UID are one uniform per slot through the inverse CDF (ppf()), so the same in every scenario
 
     @classmethod
     def by_group(cls, parts, group, **kwargs):
@@ -1097,12 +1044,11 @@ class histogram(Dist):
 
 class multi_random(sc.prettyobj):
     """
-    A class for holding two or more ss.random() distributions, and generating
-    random numbers linked to each of them. Useful for e.g. pairwise transmission
-    probabilities.
+    Random numbers for pairs (or larger groups) of agents, e.g. one for each edge of a network in a transmission
 
-    See ss.distributions.combine_rands() for the manual version; in almost all cases this class
-    should be used instead.
+    It holds an `ss.random()` for each member of the pair, and combines their numbers, so the number for a pair
+    depends on both agents and, with common random numbers, not on which other pairs are drawn for.
+    For the manual version, see `ss.distributions.combine_rands()`; this class should be used in almost all cases.
 
     Args:
         names (str/list): name(s) for each internal random distribution
@@ -1126,7 +1072,7 @@ class multi_random(sc.prettyobj):
         return len(self.dists)
 
     def init(self, *args, **kwargs):
-        """ Not usually needed since each dist will handle this automatically; for completeness only
+        """ Initialize each distribution; not usually needed, since the sim does it
 
         Args:
             args (list): passed to the `init()` of each distribution
@@ -1136,7 +1082,7 @@ class multi_random(sc.prettyobj):
         return
 
     def reset(self, *args, **kwargs):
-        """ Not usually needed since each dist will handle this automatically; for completeness only
+        """ Reset each distribution; not usually needed, since the sim does it
 
         Args:
             args (list): passed to the `reset()` of each distribution
@@ -1146,7 +1092,7 @@ class multi_random(sc.prettyobj):
         return
 
     def jump(self, *args, **kwargs):
-        """ Not usually needed since each dist will handle this automatically; for completeness only
+        """ Move each distribution on to its next random numbers; not usually needed, since the sim does it
 
         Args:
             args (list): passed to the `jump()` of each distribution
@@ -1158,16 +1104,12 @@ class multi_random(sc.prettyobj):
     @staticmethod
     @nb.jit(fastmath=True, parallel=False, cache=True) # Numba is 3x faster, but disabling parallel for efficiency
     def combine_rvs(rvs_list, int_type, int_max):
-        """ Combine inputs into one number """
-        # Combine using bitwise-xor
+        """ Combine the random numbers of each distribution into one, by bitwise XOR of their bits """
         rand_ints = rvs_list[0].view(int_type)
         for rand_floats in rvs_list[1:]:
             rand_ints2 = rand_floats.view(int_type)
             rand_ints = np.bitwise_xor(rand_ints*rand_ints2, rand_ints-rand_ints2)
-
-        # Normalize
-        rvs = rand_ints / int_max
-        return rvs
+        return rand_ints / int_max # Normalized to [0, 1]
 
     @staticmethod
     @nb.jit(fastmath=True, parallel=False, cache=True)
@@ -1179,20 +1121,18 @@ class multi_random(sc.prettyobj):
         return rand_ints / int_max
 
     def rvs(self, *args):
-        """ Get random variates from each of the underlying distributions and combine them efficiently
+        """ One random number between 0 and 1 for each pair (or group) of agents
 
         Args:
-            args (list): the UIDs for each distribution, in order
+            args (list): the UIDs for each distribution, in order, e.g. the sources and the targets
         """
-        # Validation
         n_args = len(args)
         n_dists = len(self)
-        if n_args != len(self):
+        if n_args != n_dists:
             errormsg = f'Number of UID lists supplied ({n_args}) does not match number of distributions ({n_dists})'
             raise ValueError(errormsg)
 
-        # Fast non-CRN path: a single plain uniform draw per element, skipping the
-        # slot gathers and XOR combine. Statistically valid but not CRN-safe.
+        # Without common random numbers, one plain uniform draw for each pair, which is faster but differs between scenarios
         crn = ss.options.crn if self.crn is None else self.crn
         if not crn:
             dist = self.dists[0]
@@ -1202,14 +1142,10 @@ class multi_random(sc.prettyobj):
 
         rvs_list = [dist.rvs(arg) for dist,arg in zip(self.dists, args)]
 
-        # The XOR-combine reinterprets the float bytes as unsigned ints, so the int width must
-        # match the float width - we need to base it on the width of ss.dtypes.float, not ss.dtypes.rand_uint
+        # Combining them reads the bits of the floats as unsigned integers, so of the width of ss.dtypes.float (not of ss.dtypes.rand_uint)
         itemsize = np.dtype(ss.dtypes.float).itemsize
-        if itemsize == 4:
-            int_type = np.uint32
-        elif itemsize == 8:
-            int_type = np.uint64
-        else:
+        int_type = {4:np.uint32, 8:np.uint64}.get(itemsize)
+        if int_type is None:
             errormsg = f'Unexpected float itemsize {itemsize}; expected 4 (float32) or 8 (float64)'
             raise ValueError(errormsg)
         int_max = np.iinfo(int_type).max

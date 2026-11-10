@@ -60,9 +60,7 @@ class HIV(ss.AgentDisease):
         ```
     """
     def __init__(self, pars=None, **kwargs):
-        if 'p_death' in kwargs or 'p_death' in (pars or {}):
-            errormsg = 'ssl.HIV() takes no p_death=; its death is a rate per unit time, death_rate= (e.g. death_rate=ss.peryear(0.05))'
-            raise TypeError(errormsg)
+        ss.v3_deprecations.check(type(self), '__init__', list(kwargs) + list(pars or {}))
         super().__init__()
         self.define_pars(
             beta = 0.0, # Placeholder value: set it for transmission to occur
@@ -152,10 +150,7 @@ class ART(ss.Delivery):
         ```
     """
     def __init__(self, coverage=1.0, who=None, when=None, art_delay=ss.years(1), name=None, **kwargs):
-        for old, new in dict(year='coverage=ss.timeseries(...)', pars='art_delay=').items():
-            if old in kwargs:
-                errormsg = f'ssl.ART() takes no {old}=; use {new}'
-                raise TypeError(errormsg)
+        ss.v3_deprecations.check(type(self), '__init__', kwargs)
         self.art_delay = art_delay
         eligible = self.eligible if who is None else ss.conditions.Cond('&', who, self.eligible)
         super().__init__(ARTDrug(name='art_drug'), who=eligible, when=when, coverage=coverage, disease='hiv', name=name, **kwargs)

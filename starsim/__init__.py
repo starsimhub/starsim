@@ -24,7 +24,7 @@ from .settings import dtypes, options, style
 settings.thread_limit = _limit
 del _limit
 from .utils import ndict, warn, load, save, plot_args, show, return_fig
-from .internals import errors, debugtools
+from .internals import errors, debugtools, v3_deprecations
 from .internals.errors import *
 
 #%% Building blocks: arrays, distributions, time, and parameters
@@ -94,7 +94,8 @@ from . import data # starsim_data is imported only when this is used
 from .internals import gradients # JAX is imported only when this is used
 from .solvers.backends import jit, draws # Draws, for ss.draws.next_u() in compiled code (see ss.Dist.streams())
 from . import sim
-from .sim import Sim, SimPars, demo
+from .simpars import SimPars
+from .sim import Sim, demo
 from .run import MultiSim, parallel
 
 #%% Importing from and exporting to other frameworks
@@ -109,7 +110,7 @@ def __getattr__(name):
     if name == 'library':
         hint = '; import it first: import starsim.library as ssl'
     else:
-        hint = '' if name.startswith('__') else errors.starsim3(names=name) # A name of Starsim 3's says what replaces it
+        hint = '' if name.startswith('__') else v3_deprecations.hint(names=name) # A name of Starsim 3's says what replaces it
     raise AttributeError(f'module "starsim" has no attribute "{name}"{hint}')
 
 # The kernels: Rust if it has been built (or asked for by STARSIM_KERNELS), else Numba (see ss.options.kernels)

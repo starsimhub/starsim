@@ -196,7 +196,7 @@ class StrainMove:
         return out
 
     def __repr__(self):
-        show = lambda ss_: ss_[0].name if len(ss_) == 1 else '(' + ', '.join(s.name for s in ss_) + ')'
+        show = lambda strains: strains[0].name if len(strains) == 1 else '(' + ', '.join(s.name for s in strains) + ')'
         return f'{show(self.src)} >> {show(self.dst)}'
 
     def mapping(self):
@@ -235,10 +235,11 @@ class Strains:
     Args:
         strains (list/dict): the strains: their names, or a dict of the values of each, by name
         immunity (immunity/list): protection between strains, one `ss.immunity` or a list of them; the matrices have rows and columns in the order of the strains
-        max_strains (int): the most strains anyone carries at once (default 1)
+        max_strains (int): the most strains anyone carries at once (default 1); more allows coinfection (e.g. drug-sensitive and resistant TB together), at the cost of a level for each set of strains
         transmit (str): what a carrier of several strains passes on: 'one' (the default: one strain per transmission, chosen in proportion to the strains' rel_trans, at the infectiousness of the most infectious), or 'each' (each strain at its own rate)
         fractions (list/dict): the share of each strain among the people infected at the start (default: equal); or, by label, the share of each strain or set of strains carried together, e.g. `fractions={'DS': 0.5, 'DS+INH': 0.5}`
         name (str): the name of the strain dimension, for results (`res.I.by('strain')`) and conditions (default 'strain')
+        label (str): its label, for plots and printing (default: the name)
         values (dict): values for each strain by parameter, e.g. `rel_trans=[1, 0.575], cure=[1, 1/3]`
 
     Examples:
@@ -313,7 +314,7 @@ class Strains:
     def immunity(self, value):
         value = sc.tolist(value)
         for imm in value:
-            if not isinstance(imm, immunity_class):
+            if not isinstance(imm, ss.immunity):
                 errormsg = f'immunity= of "{self.name}" takes ss.immunity() objects, e.g. ss.immunity(due_to=R, protection=matrix); not {type(imm).__name__}'
                 raise TypeError(errormsg)
         self._immunity = value
@@ -439,7 +440,8 @@ class Strains:
     def describe(self, graph, out):
         """ The strains of a disease, as rows of its description (`out`, an `ss.display.Description`): how they are run, their values, and the protection between them """
         sets = f'sets of up to {self.max_strains} carried at once ({sc.strjoin(self.labels)}), a new strain replacing the oldest once full' if self.max_strains > 1 else 'one carried at a time'
-        out.add('strains', f'{sc.strjoin(self.names)} ("{self.name}"): one course; {sets}; carried in {sc.strjoin(self._carriers(graph))}')
+        carriers = self._carriers(graph)
+        out.add('strains', f'{sc.strjoin(self.names)} ("{self.name}"): one course; {sets}; carried in {sc.strjoin(carriers)}')
         per = {tr.name:tr.per_given for tr in graph.transitions.values() if getattr(tr, 'per_given', None)}
         chances = {p['p']:name for name,p in per.items() if isinstance(p.get('p'), str)}
         for key,vals in self.values.items():
@@ -448,14 +450,11 @@ class Strains:
         how = dict(one='one strain per transmission, chosen in proportion to rel_trans, at the infectiousness of the most infectious', each='each strain at its own rate')
         out.add('', f'transmit: {how[self.transmit]}' + (' (from a set)' if self.max_strains > 1 else ''))
         for imm in self.immunity:
-            extra = '; the rest is superinfection' if any(n in self._carriers(graph) for n in imm.names) else ''
+            extra = '; the rest is superinfection' if any(n in carriers for n in imm.names) else ''
             out.add('', f'immunity: rel_sus × (1 − protection), due to {imm.source}, {imm.rule()} over the strains{extra}')
         reason = self.needs_agents(graph)
         out.add('', 'solvers: ' + (f'agents only ({reason})' if reason else 'all'))
         return out
-
-
-immunity_class = immunity
 
 
 def attach(dis, strains):

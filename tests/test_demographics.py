@@ -701,7 +701,7 @@ def test_rates_and_counts():
     assert not {'maternal_death', 'rel_preterm', 'preterm_threshold'} & set(preg.pars)
     with pytest.raises(TypeError, match='maternal_death_rate'):
         ss.Pregnancy(p_maternal_death=ss.peryear(0.01)) # A rate is the hazard while pregnant
-    for key in ['maternal' + '_death', 'rel_preterm', 'embryos_' + 'per_pregnancy']: # Spelled so the call-site rewrite leaves it
+    for key in ['embryos_' + 'per_pregnancy', 'preterm_threshold']: # Starsim 3's, spelled so the call-site rewrite leaves it
         with pytest.raises(TypeError, match='use'):
             ss.Pregnancy(**{key: 1})
     kw = dict(n_agents=3000, start=2000, stop=2005, dt=ss.months(1), verbose=0)
@@ -727,7 +727,7 @@ def test_signed_rates():
         ss.Sim(demographics=[ss.Births(birth_rate=20), ss.Deaths(death_rate=10)], n_agents=200, unit='week', start='2000-01-01', stop='2000-03-01', verbose=0).run()
     preg = ss.Pregnancy()
     assert preg.attr('anc', ss.weeks(12), when='delivery').name == 'anc'
-    with pytest.raises(TypeError, match="use when="):
+    with pytest.raises(TypeError, match="unexpected keyword"):
         ss.Pregnancy().attr('anc', ss.weeks(12), on='delivery')
     return sim
 

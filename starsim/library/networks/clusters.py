@@ -43,7 +43,7 @@ class ClusterNet(ss.Network):
         ```
     """
     def __init__(self, pars=None, cluster_size=_, who=_, dynamic=_, **kwargs):
-        ss.networks.check_replaced(self, pars, kwargs, dict(where=ss.networks.replaced_who, beta=ss.networks.replaced_beta))
+        ss.v3_deprecations.check(type(self), '__init__', list(kwargs) + list(pars or {}))
         super().__init__()
         self.define_pars(
             cluster_size = ss.poisson(mean=4),
@@ -168,8 +168,7 @@ class HybridNet(ss.Network):
         return {k:beta*v for k,v in cls.rel_betas.items()}
 
     def __init__(self, pars=None, household_size=_, n_contacts=_, school_ages=_, work_ages=_, dynamic=_, method=_, clustered=_, **kwargs):
-        ss.networks.check_replaced(self, pars, kwargs, dict(contacts='the number of contacts in each network is n_contacts=, e.g. n_contacts=dict(s=10)',
-            beta=ss.networks.replaced_beta + "; Covasim v3's for each layer is ssl.HybridNet.betas(), e.g. ss.SIS(beta=ssl.HybridNet.betas())"))
+        ss.v3_deprecations.check(type(self), '__init__', list(kwargs) + list(pars or {}))
         super().__init__()
         self.define_pars(
             household_size = ss.poisson(mean=2.0), # Covasim v3 default (contacts['h'])

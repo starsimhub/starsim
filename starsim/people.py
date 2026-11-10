@@ -11,8 +11,6 @@ import sciris as sc
 import starsim as ss
 from pathlib import Path
 plt = sc.lazyimport('matplotlib.pyplot') # Imported when first used, since most runs never plot
-import numba as nb
-
 
 
 class LazyPeople:
@@ -89,23 +87,19 @@ class MadeOnUse:
 
 class People:
     """
-    A class to perform all the operations on the people
+    The people in a sim: their ages, sexes, who is alive, and the states that modules add to them; also how agents are born, die, and are counted
 
-    This class is usually created automatically by the sim, from `n_agents=` (and
-    `total_pop=`, the people they stand for). Give one yourself for agents' ages from data
-    of your own (`ss.People(n_agents, age_data=...)`, where a string is a CSV file) or extra
-    states; for the population of a place, use `ss.population('Kenya')`, where a string is the
-    place. In a compartmental run, each row is a group of people rather than an agent.
-
-    Note that this class handles the mechanics of updating the actual people,
-    as well as the additional housekeeping methods (exporting, plotting, etc.).
+    The sim usually makes this itself, from `n_agents=` (and `total_pop=`, the people they stand for). Give one
+    yourself to give agents ages from data of your own (`ss.People(n_agents, age_data=...)`) or extra states; for
+    the population of a place, use `ss.population('Kenya')`. In a compartmental run, each row is a group of people
+    rather than an agent.
 
     Args:
         n_agents (int): the initial number of agents in the model
-        age_data (dataframe/series/array/str/`ss.Dist`): the age distribution: a dataframe with columns `age` (the lower edge of each age bin) and `value` (the number or share of people in it), a series of values indexed by age, a two-column array, a CSV file with the dataframe's columns, or a distribution of ages. This gives agents ages; for age groups in a compartmental model, use `disease.stratify(age={0: 0.3, 15: 0.6, 65: 0.1})` instead
-        extra_states (list): non-default states to initialize
+        age_data (dataframe/series/array/str/`ss.Dist`): the age distribution: a dataframe with columns `age` (the lower edge of each age bin) and `value` (the number or share of people in it), a series of values indexed by age, a two-column array, a CSV file with the dataframe's columns, or a distribution of ages (default: the world's ages). This gives agents ages; for age groups in a compartmental model, use `disease.stratify(age={0: 0.3, 15: 0.6, 65: 0.1})` instead
+        extra_states (list): more properties of each person, e.g. `[ss.FloatArr('income')]` (modules can also add them, with `people.add_state()`)
         p_female (float): the share of agents who are female
-        mock (bool): if True, initialize the People object with a mock Sim object (for debugging only)
+        mock (bool): if True, link the people to a mock sim, so they can be used without one (for testing and debugging)
 
     Examples:
         ```python
@@ -120,15 +114,13 @@ class People:
     parent = MadeOnUse()
 
     def __init__(self, n_agents, age_data=None, extra_states=None, p_female=0.5, mock=False):
-        """ Initialize """
-
         # We internally store states in a dict keyed by the memory ID of the state, so that we can have colliding names
         # e.g., across modules, but we will never change the size of a state multiple times in the same iteration over
         # _states. This is a hidden variable because it is internally used to synchronize the size of all states contained
         # within the sim, regardless of where they are. In contrast, `People.states` offers a more user-friendly way to access
         # a selection of the states e.g., module states could be added in there, while intervention states might not.
         self._states = {}
-        self.version = ss.__version__  # Store version info
+        self.version = ss.__version__
         self.untraited = [] # Ranges of UIDs made by code that sets their properties afterwards (grow() without age=), whose traits are drawn at the next step: see grow()
         self._age_bins = {} # The bin of each agent by age, for each set of edges: see age_bins()
         self.has_unborn = False # Whether a module makes agents before they are born, with a negative age (e.g. ss.Pregnancy's fetuses), who are not counted among the people: see unborn_uids()
@@ -138,18 +130,15 @@ class People:
 
         # The four fundamental arrays (auids, uid, slot, and parent) are made on first use: see make_uids()
 
-        # Handle additional states
-        extra_states = sc.tolist(extra_states)
         states = [
             ss.BoolState('alive', default=True),  # Whether the agent is alive
             ss.FloatArr('age', default=self.get_age_dist(age_data)),  # NaN until conceived
             ss.BoolState('female', default=ss.bernoulli(name='female', p=p_female)),
-            ss.TimeArr('ti_dead'),  # Time index for death
-            ss.TimeArr('ti_removed'),  # Time index for removal (e.g. emigration)
+            ss.TimeArr('ti_dead'),  # The step of death
+            ss.TimeArr('ti_removed'),  # The step of leaving for another reason (e.g. emigration)
             AgentScale('scale', default=1.0, shared=True), # The scale factor for the agents (multiplied for making results); no memory until one is set
             ss.Arr('cause_of_death', dtype=np.int16, default=-1, nan=-1, label='Cause of death', shared=True), # Its position in people.causes (-1 for none); no memory until someone dies
-        ]
-        states.extend(extra_states)
+        ] + sc.tolist(extra_states)
         self.states = ss.ndict(type=ss.Arr)
         for state in states:
             self.states.append(state)
@@ -164,7 +153,6 @@ class People:
 
         if mock:
             self.init_mock()
-
         return
 
     def make_uids(self):
@@ -221,12 +209,7 @@ class People:
 
     def _link_state(self, state, die=True):
         """
-        Link a state with the People instance for dynamic resizing; usually called by
-        `state.link_people()`
-
-        All states should be registered by this function for the purpose of connecting them to the
-        People's UIDs and to have them be automatically resized when the number of agents changes.
-        This operation is normally triggered as part of initializing the state (via `Arr.init()`)
+        Register a state with the people, so that it grows when agents are added; called by `state.link_people()`
 
         Args:
             state (Arr): the state to register
@@ -241,8 +224,7 @@ class People:
 
     def __getattr__(self, attr):
         """ Called only if the attribute isn't found: in a compartmental run, per-agent attributes that are not stratifications do not exist """
-        if attr == 'n_alive':
-            raise AttributeError('people.n_alive was removed: the number of people alive is people.n (as agents, the people they stand for), and the number of agents alive is people.alive.count()')
+        ss.v3_deprecations.check_attr(ss.People, attr)
         missing = self.__dict__.get('_no_groups', [])
         if attr == 'auids' and '_no_groups' in self.__dict__:
             raise ss.errors.NoAgentAttribute('people.auids was asked for, but this run has no agents: it has one row for each group of people.\n'
@@ -255,20 +237,16 @@ class People:
         raise AttributeError(f'People object has no attribute "{attr}"')
 
     def __getitem__(self, key):
-        """
-        Allow people['attr'] instead of getattr(people, 'attr')
-        If the key is an integer, alias `people.get_person()` to return a `Person` instance
-        """
+        """ `people['age']` for an attribute, or `people[14]` for one person (see `get_person()`) """
         if isinstance(key, (int, np.integer)):
             return self.get_person(key)
         elif isinstance(key, str):
             return getattr(self, key)
-        else:
-            errormsg = f"Cannot handle {key} ({type(key)}: must be str to access an attribute, e.g. people['age'], or int to access a person, e.g. people[14]"
-            raise TypeError(errormsg)
+        errormsg = f"Cannot handle {key} ({type(key)}: must be str to access an attribute, e.g. people['age'], or int to access a person, e.g. people[14]"
+        raise TypeError(errormsg)
 
     def __setitem__(self, key, value):
-        """ Allow people['attr'] = value as an alias for setattr """
+        """ `people['attr'] = value`, as `setattr()` """
         return setattr(self, key, value)
 
     def __iter__(self):
@@ -284,18 +262,14 @@ class People:
 
     def __setstate__(self, state):
         """
-        Set the state upon unpickling/deepcopying
-
-        If a People instance is copied (by any mechanism) then the keys in the `_states`
-        registry will no longer match the memory addresses of the new copied states. Therefore,
-        after copying, we need to re-create the states registry with the new object IDs
+        Rebuild the registry of states when unpickled or copied, since it is keyed by the ids of the states, which a copy changes
         """
         state['_states'] = {id(v):v for v in state['_states'].values()}
         self.__dict__ = state
         return
-    
+
     def __bool__(self):
-        """ Ensure that zero-length people are still truthy """
+        """ People with no agents are still true (otherwise `len()` would make them false) """
         return True
 
     def __len__(self):
@@ -323,12 +297,10 @@ class People:
         return self.brief(output=True)
 
     def __str__(self):
-        out = self.brief(output=True)[:-1] # Remove trailing parenthesis
-        out += f'; states=[{sc.strjoin(self.states.keys())}])'
-        return out
+        return self.brief(output=True)[:-1] + f'; states=[{sc.strjoin(self.states.keys())}])' # Inside the closing parenthesis
 
     def disp(self):
-        """ Full object information """
+        """ Print every attribute of the people """
         return sc.pr(self)
 
     @property
@@ -353,23 +325,21 @@ class People:
         else:
             alive = len(self)
             alive_str = f'{alive=:n}; ' if alive != n else ''
-            age_mean = self.age.mean()
-            age_std = self.age.std()
-            out = f'People({n=:n}; {alive_str}age={age_mean:0.1f}±{age_std:0.1f})'
+            out = f'People({n=:n}; {alive_str}age={self.age.mean():0.1f}±{self.age.std():0.1f})'
         return out if output else print(out)
-    
+
     def keys(self):
-        """ Return keys of the states stored in the People object """
+        """ The names of the people's states, including those of modules (e.g. 'sir.S') """
         return self.states.keys()
 
     @staticmethod
     def get_age_dist(age_data):
         """
-        Return an age distribution based on provided data
+        The distribution that new agents' ages are drawn from, made from age data
 
-        The data should be provided in the form of either an Nx2 array, a pandas series
-        with age as the index and counts/probability as the value, or a pandas DataFrame
-        with "age" and "value" as columns. Each of these should look like e.g.:
+        The data are a two-column array, a pandas series with age as the index and the
+        number (or share) of people as the value, a dataframe with "age" and "value"
+        columns, or the name of a CSV file with those columns, e.g.:
 
             age      value
             0      220.548
@@ -377,60 +347,39 @@ class People:
             2      195.792
             3      187.442
 
-        The ages will be interpreted as lower bin edges. An upper bin edge will
-        automatically be added based on the final age plus the difference of the
-        last two bins. To explicitly control the width of the upper age bin, add
-        an extra entry to the `age_data` with a value of 0 and an age value
-        corresponding to the desired upper age bound.
+        The ages are the lower edges of the bins, so ages within a bin are spread evenly.
+        The last bin is as wide as the one before it; to set its upper edge, add a row with
+        that age and a value of 0. Counts and shares give the same distribution.
 
         Args:
-            age_data: An array/series/dataframe with an index corresponding to age values, and a value corresponding to histogram counts
-                         or relative proportions. A distribution will be estimated based on the histogram. The histogram will be
-                         assumed to correspond to probability density if the sum of the histogram values is equal to 1, otherwise
-                         it will be assumed to correspond to counts.
-
-        Note: `age_data` can also be provided as a string (interpreted as a filename).
-
-        If no value is provided, the ages are the world's (`ss.data.age('world')`), as for a sim
-        with no named population.
+            age_data (array/series/dataframe/str/`ss.Dist`): the data, as above, or a distribution of ages, used as it is (default: the world's ages, `ss.data.age('world')`, as for a sim with no named population)
 
         Returns:
-            An `ss.Dist` instance that returns an age for newly created agents
+            An `ss.Dist` of ages
         """
         if age_data is None:
             age_data = ss.data.age('world')
-        if isinstance(age_data, ss.Dist): # A distribution of ages, used as is
-            dist = age_data
+        if isinstance(age_data, ss.Dist):
+            return age_data
+        if isinstance(age_data, (str, Path)):
+            age_data = pd.read_csv(age_data)
+        if isinstance(age_data, np.ndarray):
+            age_bins, age_props = age_data[:,0], age_data[:,1]
+        elif isinstance(age_data, pd.Series):
+            age_bins, age_props = age_data.index, age_data.values
+        elif isinstance(age_data, pd.DataFrame):
+            age_bins, age_props = age_data['age'].values, age_data['value'].values
         else:
-            # Try loading from file
-            if isinstance(age_data, str) or isinstance(age_data, Path):
-                age_data = pd.read_csv(age_data)
-
-            # Process
-            if isinstance(age_data, np.ndarray): # TODO: accept output of np.histogram()
-                age_bins = age_data[:,0]
-                age_props = age_data[:,1]
-            elif isinstance(age_data, pd.Series):
-                age_bins = age_data.index
-                age_props = age_data.values
-            elif isinstance(age_data, pd.DataFrame):
-                age_bins = age_data['age'].values
-                age_props = age_data['value'].values
-            else:
-                errormsg = f'age_data must be a file, an array, a Series, a dataframe, or an ss.Dist, not {type(age_data)}'
-                raise TypeError(errormsg)
-
-            # Convert to a histogram
-            dist = ss.histogram(values=age_props, bins=age_bins, name='Age distribution')
-
-        return dist
+            errormsg = f'age_data must be a file, an array, a Series, a dataframe, or an ss.Dist, not {type(age_data)}'
+            raise TypeError(errormsg)
+        return ss.histogram(values=age_props, bins=age_bins, name='Age distribution')
 
     def link_sim(self, sim, init=False):
-        """ Initialization """
+        """ Link the people to the sim, and their distributions (e.g. of ages) to its random numbers; called by `sim.init()` """
         if self.initialized:
             errormsg = 'Cannot re-initialize a People object directly; use sim.new() to make the sim again'
             raise RuntimeError(errormsg)
-        self.sim = sim # Store the sim
+        self.sim = sim
         for arr in [self.ti_dead, self.ti_removed]:
             arr.t = sim.t
         ss.dists.link_dists(obj=self.states, sim=sim, module=self, skip=[ss.Sim, ss.Module], init=init)
@@ -439,49 +388,32 @@ class People:
     @property
     def auto_state_list(self):
         """
-        List of "automatic" states with boolean type (`ss.BoolState`)
+        The people's own `ss.BoolState` states (e.g. alive, female), each of which makes a result of the same name, the number of people in it
 
-        BoolStates automatically generate results of the same names (alive, female, etc.), the number in each.
-        This only includes BoolStates that belong directly to People, not those
-        from modules (which have their own result generation).
-        For a list of all states, see `People.states`.
+        Not those of modules (named like "sir.S"), which make their own results; for all states, see `People.states`.
         """
-        # Only include BoolStates that belong directly to People, not module states
-        # Module states have combined names like "sir.S" with a dot
         return [state for key, state in self.states.items()
                 if isinstance(state, ss.BoolState) and '.' not in key]
 
     def init_results(self):
         """
-        Initialize results for People; called during `Sim.init_results()`
+        Make the results of the people; called by `Sim.init_results()`
 
-        By default, People reports on counts for any `ss.BoolState` instances, e.g. if
-        People contains a `ss.BoolState` called 'alive' it will automatically contain a
-        Result for 'alive' (the number alive). For identical behavior that does not automatically
-        generate results, use `ss.BoolArr` instead of `ss.BoolState`.
+        Each of the people's own `ss.BoolState` states makes a result of the number in it (e.g. `alive`, the
+        number alive); for a state that makes no result, use `ss.BoolArr` instead. There are also the flows of
+        people who died and who left (`died` and `emigrated`; `results.died.cum` is the cumulative total).
 
-        This method also creates the standard people-related results like died and
-        emigrated, the flows of people who died or left (`results.died.cum` is the cumulative total).
-
-        If `sim.pars.record_people` is False, People-level result collection is disabled
-        (no results are created here and `People.record_stocks()` and `record_flows()` are skipped in the loop).
+        With `sim.pars.record_people=False`, there are none of these (and `record_stocks()` and
+        `record_flows()` are skipped in the loop), which saves a little time and memory.
         """
-        if not self.sim.pars.get('record_people', True): # Opt-out: skip People-level results entirely
+        if not self.sim.pars.get('record_people', True):
             return
         kw = dict(module='People', shape=self.sim.t.npts, timevec=self.sim.t.timevec, dtype=int, scale=True)
-        results = []
-
-        # Create results for all BoolStates
-        for state in self.auto_state_list:
-            results.append(ss.Result(state.name, label=state.label, kind='stock', **kw))
-
-        # Add standard people-related results
-        results.extend([
+        results = [ss.Result(state.name, label=state.label, kind='stock', **kw) for state in self.auto_state_list]
+        results += [
             ss.Result('died', label='Deaths', kind='flow', **kw),
             ss.Result('emigrated', label='Emigrants', kind='flow', **kw),
-        ])
-
-        # Add results to the sim
+        ]
         self.sim.results += results
         return
 
@@ -494,10 +426,7 @@ class People:
 
     def add_module(self, module):
         """
-        Add a Module to the People instance
-
-        This method is used to add a module to the People. It will register any module states with this
-        people instance for dynamic resizing, and expose the module via People, in two ways
+        Add a module to the people: its states are registered, so that they grow with the agents, and the module is found in two ways
 
         - `People.<module>` will be a reference to the module itself, enabling access via `people.sir.S`
         - `People.states['<module>.<state>']` will be a reference to the state, enabling access via `people.states['sir.S']`
@@ -505,22 +434,16 @@ class People:
         Args:
             module (Module): the module to add
         """
-
-        # Connect the module as People attribute
         if hasattr(self, module.name):
             existing = getattr(self, module.name)
             what = 'a module of that name is already in the sim' if isinstance(existing, ss.Module) else f'people already have a property called "{module.name}"'
             raise AttributeError(f'The {type(module).__name__} "{module.name}" cannot be added to the people, since {what}; give it another name, e.g. name="{module.name}_mod"')
-        else:
-            setattr(self, module.name, module)
-
-        if len(module.state_list):
-            for state in module.state_list:
-                state.link_people(self)
-                if isinstance(state, ss.TimeArr) and state.t is None: # Times as steps of the module's timeline (see due())
-                    state.t = module.t
-                combined_name = module.name + '.' + state.name
-                self.states[combined_name] = state # Register the state on the user-facing side using the combined name. Within the original module, it can still be referenced by its original name
+        setattr(self, module.name, module)
+        for state in module.state_list:
+            state.link_people(self)
+            if isinstance(state, ss.TimeArr) and state.t is None: # Times as steps of the module's timeline (see due())
+                state.t = module.t
+            self.states[f'{module.name}.{state.name}'] = state # By the combined name here; in the module, by its own name
         return
 
     def add_state(self, state):
@@ -564,7 +487,7 @@ class People:
         return state
 
     def init_vals(self):
-        """ Populate states with initial values, the final step of initialization """
+        """ Give each state its initial values (e.g. agents' ages), the final step of initialization """
         for state in self.states():
             if not state.initialized:
                 state.init_vals()
@@ -572,7 +495,7 @@ class People:
         return
 
     def init_mock(self):
-        """ Initialize with a mock simulation (for debugging purposes only) """
+        """ Link the people to a mock sim and give them their values, so they can be used without a sim (for testing and debugging) """
         sim = ss.debugtools.mock_sim(n_agents=self.n_agents)
         self.link_sim(sim, init=True)
         self.init_vals()
@@ -580,12 +503,12 @@ class People:
 
     @property
     def n_agents(self):
-        """ Alias for len(people) """
+        """ The number of active agents, as `len(people)` (for the number of people alive, see `people.n`) """
         return len(self)
 
     @property
     def n_uids(self):
-        """ Number of UIDs used in People """
+        """ The number of agents ever made, alive or not (each has its own UID) """
         return self.uid.len_used
     
     @property
@@ -612,32 +535,26 @@ class People:
         return dead
 
     @property
-    def born(self):
-        """ Born boolean """
-        return self.age >= 0
-
-    @property
     def male(self):
-        """ Male boolean  (female is a state) """
+        """ Whether each agent is male (`~people.female`; female is a state) """
         return ~self.female
 
     def grow(self, n=None, new_slots=None, placed=False, parent=None, age=None):
         """
-        Increase the number of agents
+        Add agents, e.g. newborns or immigrants, and return their UIDs
 
         Args:
-            n: Integer number of agents to add
-            new_slots: Optionally specify the slots to assign for the new agents. Otherwise, it will default to the new UIDs
-            placed: whether the caller gives them their levels of the sim's stratifications; if not, they are drawn from each one's split
-            parent: the parent of each (e.g. for newborns), set before their levels are drawn, so they can be born where their parent is
-            age: their age (e.g. 0 for newborns), likewise
+            n (int): the number of agents to add (default: one for each of `new_slots`)
+            new_slots (array): the slots of the new agents, which say which random numbers each draws (default: their UIDs)
+            placed (bool): whether the caller gives them their levels of the sim's stratifications; if not, they are drawn from each one's split
+            parent (array): the parent of each (e.g. for newborns), set before their levels are drawn, so they can be born where their parent is
+            age (array): their age (e.g. 0 for newborns), likewise
         """
         if n is None:
             if new_slots is None:
                 errormsg = 'Must supply either n or new_slots'
                 raise ValueError(errormsg)
-            else:
-                n = len(new_slots)
+            n = len(new_slots)
 
         if n == 0:
             return np.array([], dtype=ss.dtypes.int)
@@ -652,17 +569,13 @@ class People:
             new_slots = new_uids
         self.slot.grow(new_uids, new_vals=new_slots)
 
-        self.parent.grow(new_uids) # Grow parent array: none, until set
-
-        # Grow the states
+        self.parent.grow(new_uids) # None, until set
         for state in self._states.values():
             state.grow(new_uids)
         if parent is not None:
             self.parent[new_uids] = parent
         if age is not None:
             self.age[new_uids] = age
-
-        # Finally, update the alive indices
         self.add_active(new_uids)
         sim = getattr(self, 'sim', None)
         if isinstance(getattr(sim, 'solver', None), ss.solvers.abm): # A dimension called sex is people.female
@@ -695,8 +608,7 @@ class People:
 
     def scale_flows(self, inds):
         """
-        Return the scaled versions of the flows -- replacement for len(inds)
-        followed by scale factor multiplication
+        The number of people some agents stand for, by their weights (`people.scale`), e.g. for a result that counts people rather than agents
 
         Args:
             inds (array): the agents to count
@@ -704,7 +616,7 @@ class People:
         return self.scale[inds].sum()
 
     def update_post(self):
-        """ Final updates at the very end of the timestep """
+        """ Updates at the end of each step: agents get older (see `finish_step()`) """
         sim = self.sim
         if sim.pars.aging and isinstance(sim.solver, ss.solvers.abm): # In a compartmental run, each row is a group, whose age stays the middle of the group (people move between groups as they age)
             self.age[self.alive.uids] += sim.t.dt_year
@@ -712,18 +624,15 @@ class People:
 
     def request_death(self, uids, cause=None, hazard=None):
         """
-        External-facing function to request an agent die at the current timestep
+        Request that agents die at this step; how a module kills agents
 
-        In general, users should not directly interact with `People.ti_dead` to minimize
-        interactions between modules (e.g., if a module requesting a future death, overwrites
-        death due to a different module taking place at the current timestep).
+        Use this rather than setting `People.ti_dead` directly, so that modules don't overwrite each
+        other's deaths (e.g. a death set for the future overwriting one due now from another module).
+        A module with a future time of death (e.g. after the course of a disease) keeps it itself, and
+        calls this when the time comes, with itself as the cause.
 
-        Modules that have a future time of death (e.g., due to disease duration) should keep
-        track of that internally. When the module is ready to cause the agent to die, it should
-        call this method, with itself as the cause.
-
-        The actual deaths are resolved after modules have all run, but before analyzers. That way,
-        analyzers will be able to see and record outcomes for agents that died this timestep.
+        The deaths happen after every module has stepped, but before the analyzers, so that analyzers
+        can see and record the agents who died in this step.
 
         Each person dies once, of one cause: if several modules request the death of the same person
         in the same step, one of them is chosen at random (whatever the order of the modules, with
@@ -733,7 +642,7 @@ class People:
         `people.died_of(module)`, so a death is counted once.
 
         Args:
-            uids: Agent IDs to request deaths for
+            uids (array): the agents who die
             cause (Module/str): what they die of: a module (by its name) or a name (default: none)
             hazard (float/array): the hazard of this death, one number or one per agent (in any unit, the same for every module, e.g. per year), to weight the choice of cause among the claims on the same person in the step (e.g. `dis.death.hazard(uids)` for a declared transition)
         """
@@ -804,8 +713,7 @@ class People:
 
     def request_removal(self, uids):
         """
-        Request an agent to be removed from the simulation
-        Similar to request_death, but in this case the agent will be recorded as removed instead of dead
+        Request that agents leave the sim at this step for a reason other than death (e.g. emigration), so they are counted as having left (`results.emigrated`) rather than as having died
 
         Args:
             uids (array): the agents to remove
@@ -814,7 +722,7 @@ class People:
         return
 
     def step_die(self):
-        """ Carry out any deaths or removals that took place this timestep """
+        """ Carry out the deaths and removals of this step (those requested in it, or set for it before), and return who died or left """
         ti = self.sim.ti
         deaths, n_alive = ss.solvers.backends.passes.due_alive(self.alive.raw[:self.uid.len_used], self.ti_dead.raw, self.ti_removed.raw, ti) # As ((self.ti_dead <= ti) | (self.ti_removed <= ti)).uids, in one pass by UID, since the active agents are those alive...
         if n_alive != len(self.auids): # ...unless something else has changed who is alive: then from the active agents themselves
@@ -1002,58 +910,37 @@ class People:
 
     def plot(self, key=None, alive=True, bins=50, hist_kw=None, max_plots=20, figsize=(16,12), **kwargs):
         """
-        Plot all the properties of the People object
+        Plot the distribution of each of the people's states: a histogram for numbers, and a bar chart for true/false
 
         Args:
-            key (str/list): the state(s) to plot
-            alive (bool): if false, use all agents in the simulation instead of active (alive) ones
+            key (str/list): the state(s) to plot (default: all, up to `max_plots`)
+            alive (bool): if False, include every agent ever made, not only those active
             bins (int): the number of bins to use in `plt.hist()`
             hist_kw (dict): passed to `plt.hist()`
             max_plots (int): the maximum number of plots to create
             figsize (tuple): passed to `plt.figure()`; by default large since the plots are crowded
             **kwargs (dict): passed to `sc.getrowscols()`, including `fig_kw`
         """
-        # Handle figsize
-        if 'figsize' not in kwargs:
-            kwargs['figsize'] = figsize
-
-        # Decide what to plot
-        if key is None:
-            key = self.states.keys()
-        key = sc.tolist(key)
+        kwargs.setdefault('figsize', figsize)
+        key = sc.tolist(self.states.keys() if key is None else key)
         if max_plots:
             key = key[:max_plots]
-        n_keys = len(key)
 
-        # Create figure and plot
-        fig,axs = sc.getrowscols(n_keys, make=True, **kwargs)
+        fig,axs = sc.getrowscols(len(key), make=True, **kwargs)
         for i,k in enumerate(key):
             ax = fig.axes[i]
             state = self.states[k]
-            if alive:
-                data = state.values
-            else:
-                data = state.raw
-
-            # It's a float array, plot a histogram
+            data = state.values if alive else state.raw
             if isinstance(state, ss.FloatArr):
                 data = sc.rmnans(data)
                 if not len(data):
                     print(f'Not plotting "{k}" since all values are NaN')
                 ax.hist(data, bins=bins, **sc.mergedicts(hist_kw))
-
-            # It's a boolean array, plot the proportions
             elif isinstance(state, ss.BoolArr):
-                true,false = data.sum(), (~data).sum()
-                labels = ['False', 'True']
-                ax.bar(labels, [false,true], color=['#E0D3DE', '#3C88A3'])
-
-            # Give up
+                ax.bar(['False', 'True'], [(~data).sum(), data.sum()], color=['#E0D3DE', '#3C88A3'])
             else:
                 warnmsg = f'Cannot understand state of {type(state)} for plotting; skipping'
                 ss.warn(warnmsg)
-
-            # Tidy up
             ax.set_title(f'{state.name} (mean={data.mean():n})')
             ax.set_ylabel('Count')
             sc.commaticks(ax)
@@ -1064,10 +951,10 @@ class People:
 
     def plot_ages(self, bins=None, absolute=False, fig_kw=None):
         """
-        Plot the age pyramid for males and females.
+        Plot the age pyramid: the number or share of females and males in each age group
 
         Args:
-            bins (list/int): optional list or int for binning age groups (default: 5-year bins up to max age)
+            bins (list/int): the edges of the age groups, or the width of each (default: 5-year groups up to the oldest age)
             absolute (bool): whether to show absolute numbers or percentage of the population
             fig_kw (dict): passed to `plt.subplots()`
 
@@ -1077,30 +964,15 @@ class People:
             sim.people.plot_ages()
             ```
         """
-        # Preliminaries
         age = self.age
         female = self.female
-        f_age = age[female]
-        m_age = age[~female]
-        max_age = age.max()
-
-        # Define age bins
-        if np.iterable(bins):
-            width = None # Already defined, don't need
-        elif np.isscalar(bins):
-            width = bins
-        else:
-            width = 5
-        if width is not None:
-            max_bin = (np.ceil(max_age / width) + 1) * width
-            bins = np.arange(0, max_bin, width)
+        if not np.iterable(bins): # A width, by default 5 years
+            width = bins if np.isscalar(bins) else 5
+            bins = np.arange(0, (np.ceil(age.max()/width) + 1)*width, width)
         y_pos = np.arange(len(bins)-1)
+        f_vals, _ = np.histogram(age[female], bins=bins)
+        m_vals, _ = np.histogram(age[~female], bins=bins)
 
-        # Histogram counts
-        f_vals, _ = np.histogram(f_age, bins=bins)
-        m_vals, _ = np.histogram(m_age, bins=bins)
-
-        # Optionally convert to percentages
         if absolute:
             xlabel = 'Number of people'
         else:
@@ -1132,10 +1004,10 @@ class People:
 
     def get_person(self, ind):
         """
-        Get all the properties for a single person.
+        All the properties of one agent, as an `ss.people.Person`
 
         Args:
-            ind (int): the index of the person
+            ind (int): the UID of the agent
 
         Examples:
             ```python
@@ -1186,7 +1058,7 @@ def population(place, year=None, n_agents=None, revision=None):
 
 class Person(sc.obj):
     """
-    A simple class to hold all attributes of a person
+    All the properties of one agent (see `People.get_person()`), as a dict that can be turned into a dataframe
 
     Examples:
         ```python
@@ -1195,7 +1067,7 @@ class Person(sc.obj):
         ```
     """
     def to_df(self):
-        """ Convert to a dataframe """
+        """ The properties as a dataframe, one row each """
         df = sc.dataframe.from_dict(self, orient='index', columns=['value'])
         df.index.name = 'key'
         return df

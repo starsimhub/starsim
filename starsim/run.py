@@ -15,14 +15,7 @@ plt = sc.lazyimport('matplotlib.pyplot') # Imported when first used, since most 
 import starsim as ss
 
 
-
 run_options = ['workers', 'par_args', 'shrink', 'verbose', 'until', 'run_args'] # How to run the sims, as opposed to which runs to take
-removed_methods = ['reduce', 'mean', 'median'] # Starsim 3's, which reduced the sims in place
-replaced_options = dict( # Keywords that running many sims no longer takes, and what replaces each
-    parallel = 'workers=1 runs them one after another in this process (workers=None, the default, runs them in parallel, one worker per CPU)',
-    base_sim = 'the first sim is the one whose label and settings the MultiSim shows (msim.base_sim)',
-    initialize = 'msim.init_sims() makes and initializes the sim of each run without running them',
-)
 
 
 def labeled(sims):
@@ -37,18 +30,16 @@ def labeled(sims):
     return out
 
 
-def check_run_options(kwargs, options=run_options, call='ss.parallel'):
-    """ A clear error for a keyword that is not an option for running many sims: one that was replaced, a sim given by keyword, or an unknown one """
+def check_run_options(kwargs, options=run_options, call=(None, 'parallel')):
+    """ A clear error for a keyword that is not an option for running many sims: one of Starsim 3's, a sim given by keyword, or an unknown one; `call` is the (class, method) it was given to, as `ss.v3_deprecations.check()` takes them """
     for key,val in kwargs.items():
-        if key in replaced_options:
-            errormsg = f'{call}() takes no {key}=: {replaced_options[key]}'
-            raise TypeError(errormsg)
+        ss.v3_deprecations.check(*call, [key])
         if isinstance(val, ss.Sim):
-            errormsg = f'Sims are not given to {call}() by keyword ({key}=...): give them as a dict by label, e.g. ss.parallel({{"{key}": sim, ...}}), so that keywords are only options for running them'
+            errormsg = f'Sims are not given to {ss.v3_deprecations.call_name(*call)} by keyword ({key}=...): give them as a dict by label, e.g. ss.parallel({{"{key}": sim, ...}}), so that keywords are only options for running them'
             raise TypeError(errormsg)
     unknown = set(kwargs) - set(options)
     if unknown:
-        errormsg = f'Unknown argument{"s" if len(unknown) > 1 else ""} {sc.strjoin(sorted(unknown))} for running many sims; the options are n_runs, pars, priors, inplace, and {sc.strjoin(options)}{ss.errors.starsim3(keys=sorted(unknown), call=call)}'
+        errormsg = f'Unknown argument{"s" if len(unknown) > 1 else ""} {sc.strjoin(sorted(unknown))} for running many sims; the options are n_runs, pars, priors, inplace, and {sc.strjoin(options)}{ss.v3_deprecations.hint(keys=sorted(unknown), call=ss.v3_deprecations.call_name(*call)[:-2])}'
         raise TypeError(errormsg)
     return
 
@@ -70,7 +61,7 @@ class MultiSim:
         pars (dict/list): sets of values of parameters to run each sim with; see `ss.parallel()`
         priors (bool/dict): draw `n_runs` sets of values from the priors of the parameters, or the draws to run; see `ss.parallel()`
         inplace (bool): whether to update sims that are run as they are (with no `n_runs` or `pars`) with their results (default True)
-        kwargs (dict): how to run the sims, as for `ss.parallel()`: `workers` (the number of worker processes: by default one per CPU; 1 runs them one after another in this process), `par_args` (passed to `sc.Parallel()`), `shrink`, `verbose`, `until` (as for `sim.run()`), and `run_args` (passed to `sim.run()`)
+        kwargs (dict): how to run the sims, as for `ss.parallel()`: `workers` (the number of worker processes: by default one per CPU; 1 runs them one after another in this process), `until` and `verbose` (as for `sim.run()`), `shrink`, `par_args`, and `run_args`
 
     By default (`verbose` not given: the sims' own `verbose`, if they share one, else `ss.options.verbose`) the runs print
     nothing of their own, and the MultiSim shows their progress: nothing for
@@ -122,12 +113,12 @@ class MultiSim:
         elif isinstance(sims, (list, tuple)):
             merged_sims = []
             for entry in sims:
-                if isinstance(entry, ss.Sim): # Standard case: use directly
+                if isinstance(entry, ss.Sim):
                     merged_sims.append(entry)
-                elif isinstance(entry, ss.MultiSim): # Extract sims
+                elif isinstance(entry, ss.MultiSim):
                     merged_sims.extend(entry.sims)
-                elif isinstance(entry, (list, tuple)): # Merge with current list (rare)
-                    merged_sims.extend(list(entry)) # Does not handle doubly nested MultiSim, and that's ok!
+                elif isinstance(entry, (list, tuple)): # A list of sims within the list (not of MultiSims)
+                    merged_sims.extend(entry)
                 else:
                     errormsg = f'Unable to process sim {entry}: expecting ss.Sim or ss.MultiSim'
                     raise TypeError(errormsg)
@@ -139,7 +130,7 @@ class MultiSim:
             errormsg = 'You must supply at least one sim to create a MultiSim'
             raise ValueError(errormsg)
 
-        check_run_options(kwargs, self.run_options, call=type(self).__name__)
+        check_run_options(kwargs, self.run_options, call=(type(self), '__init__'))
 
         # Set properties
         self.sims = sims
@@ -152,7 +143,7 @@ class MultiSim:
         self._same_times = True # Whether the sims have the same time points, so their results can be put together as runs (see collect())
         self.runs = None # One row per run: its scenario, the values of any parameters swept, and its seed
         self.ready = False # Whether the sim of each run has been made, by init_sims()
-        self.timer = sc.timer() # Create a timer
+        self.timer = sc.timer()
 
         # Sims that have already run: their results across runs, without running them again
         if all(sim.results_ready for sim in sims):
@@ -161,7 +152,7 @@ class MultiSim:
         return
 
     def __len__(self):
-        """ The length of a MultiSim is its number of runs """
+        """ The number of runs (before it is run, the number of sims) """
         if self.runs is not None:
             return len(self.runs)
         return len(self.sims) if self.sims is not None else 0
@@ -193,7 +184,8 @@ class MultiSim:
             ```
         """
         if kwargs:
-            errormsg = f'msim.show() takes no arguments, not {sc.strjoin(kwargs)}: it returns the summary as text that shows itself (as Starsim 3\'s output=True did), so text = msim.show() gets it, and print(msim.show()) prints it' if 'output' in kwargs else f'msim.show() takes no arguments, not {sc.strjoin(kwargs)}'
+            ss.v3_deprecations.check(type(self), 'show', kwargs)
+            errormsg = f'msim.show() takes no arguments, not {sc.strjoin(kwargs)}'
             raise TypeError(errormsg)
         labelstr = f' "{self.label}"' if self.label else ''
         string  = f'MultiSim{labelstr} summary:\n'
@@ -208,7 +200,7 @@ class MultiSim:
         return ss.display.Text(string.rstrip())
 
     def disp(self):
-        """ Display the full object """
+        """ Print every attribute of the MultiSim """
         return sc.pr(self)
 
     @property
@@ -313,9 +305,7 @@ class MultiSim:
 
     def __getattr__(self, attr):
         """ Called only if the attribute isn't found: what replaced Starsim 3's methods that reduced the sims """
-        if attr in removed_methods:
-            errormsg = f'msim.{attr}() was removed: the results of a MultiSim have a run axis first, e.g. res = msim.results.sis.prevalence, then res.{attr}() (by scenario), or low, mid, high = res.quantiles([0.1, 0.5, 0.9])'
-            raise AttributeError(errormsg)
+        ss.v3_deprecations.check_attr(type(self), attr)
         raise AttributeError(f"'{type(self).__name__}' object has no attribute '{attr}'")
 
     def init_sims(self, **kwargs):
@@ -343,7 +333,7 @@ class MultiSim:
         Returns:
             The MultiSim, with its results
         """
-        check_run_options({k:v for k,v in kwargs.items() if k not in ['n_runs', 'pars', 'priors', 'inplace']}, self.run_options, call='msim.run')
+        check_run_options({k:v for k,v in kwargs.items() if k not in ['n_runs', 'pars', 'priors', 'inplace']}, self.run_options, call=(type(self), 'run'))
         kwargs = sc.mergedicts(self.run_args, kwargs)
         n_runs, pars, priors = [kwargs.pop(key, None) for key in ['n_runs', 'pars', 'priors']]
         inplace = kwargs.pop('inplace', True)
@@ -429,20 +419,19 @@ class MultiSim:
         return
 
     def copy(self, die=True):
-        """ Perform a deep copy of the MultiSim (including sims contained within)
+        """ A deep copy of the MultiSim, its sims included
 
         Args:
-            die (bool): whether to raise an exception if copy fails (else, try a shallow copy)
+            die (bool): whether to raise an exception if the copy fails (else, make a shallow copy)
         """
-        out = sc.dcp(self, die=die)
-        return out
+        return sc.dcp(self, die=die)
 
     def shrink(self, **kwargs):
         """
-        Shrink each sim in the msim (the results across runs are kept); see sim.shrink() for more information.
+        Shrink each sim, to save memory (e.g. before saving the MultiSim), keeping the results across runs; see `sim.shrink()`
 
         Args:
-            kwargs (dict): passed to sim.shrink() for each sim
+            kwargs (dict): passed to `sim.shrink()` for each sim
         """
         self.base_sim.shrink(**kwargs)
         sims = self.sims.made.values() if isinstance(self.sims, RestartedSims) else self.sims # Of sims restarted for their runs, only those that have been made
@@ -1217,7 +1206,6 @@ def par_sets(pars):
     return [dict(p) for p in pars]
 
 
-
 def by_scenario(sims, key):
     """ For `msim.sims['Vaccine']`: the sim of the scenario, or a list of them if it has several runs """
     scenarios = getattr(sims, 'scenarios', None) or []
@@ -1413,15 +1401,29 @@ def parallel(*args, n_runs=None, pars=None, priors=False, **kwargs):
     This is the one way to run many sims (`sim.run()` runs one, and returns it). Every way of running ends in the
     same results: each result with a run axis first.
 
-    By default the runs are in parallel, with a worker process per CPU; `workers=1` runs them one after another in
-    this process (e.g. on a shared machine, or to debug a run).
-
     Args:
         args (list): the sims to run, or a dict of them by label (e.g. `{'No intervention': s1, 'Vaccine': s2}`)
         n_runs (int): if provided, run each sim this many times, each with its own seed (the sim's seed, plus 1, 2, ...)
-        pars (dict/list): sets of values of parameters to run each sim with: a dict with a list of values for each parameter (`dict(beta=[0.2, 0.3])`), or a list of dicts; each set is run `n_runs` times (default 1), with the same seeds for every set, and each set is a scenario of its own; the values are in `msim.runs` (and can be selected, e.g. `res.select(beta=0.2)`), with each run's `rand_seed`. Seeds can be given too, e.g. `pars=dict(rand_seed=[1, 5, 9])`, as runs of the scenario rather than scenarios
-        priors (bool/dict): draw `n_runs` sets of values from the priors of the parameters (`ss.par(prior=...)`, or uniform over its bounds), on a Latin hypercube, one run each: a projection that carries the uncertainty in the values; or the draws themselves, as for `pars=` (e.g. from a posterior, as `fit.project()` passes them). Unlike a sweep with `pars=`, the draws are runs of their sim's scenario, each with a seed of its own (the sim's seed, plus 1, 2, ...), so quantiles over a scenario's runs include both the draws and chance
-        kwargs (dict): how to run them: `workers` (the number of worker processes: by default one per CPU; 1 runs them one after another in this process), `until` and `verbose` (as for `sim.run()`), `shrink`, `par_args` (passed to `sc.Parallel()`), and `run_args` (passed to each `sim.run()`); see `ss.MultiSim`
+        pars (dict/list): sets of values of parameters to run each sim with, to compare them (a sweep): a dict with a list of values for each parameter (`dict(beta=[0.2, 0.3])`), or a list of dicts; see below
+        priors (bool/dict): True to draw `n_runs` sets of values from the priors of the parameters, to carry the uncertainty in them into a projection; or the draws themselves (e.g. from a posterior); see below
+        kwargs (dict): how to run them; see below
+
+    With `pars=`, each set of values is run `n_runs` times (default 1), with the same seeds for every set, and each set is a
+    scenario of its own. The values are in `msim.runs` (and can be selected, e.g. `res.select(beta=0.2)`), with each run's
+    `rand_seed`. Seeds can be given too, e.g. `pars=dict(rand_seed=[1, 5, 9])`, as runs of the scenario rather than scenarios.
+
+    With `priors=True`, `n_runs` sets of values are drawn from the priors of the parameters (`ss.par(prior=...)`, or uniform
+    over its bounds), on a Latin hypercube, and each is run once; draws can also be given, as for `pars=` (as `fit.project()`
+    passes those of a posterior). Unlike a sweep with `pars=`, the draws are runs of their sim's scenario, each with a seed of
+    its own (the sim's seed, plus 1, 2, ...), so quantiles over a scenario's runs include both the draws and chance.
+
+    How to run them, by keyword (see also `ss.MultiSim`):
+
+    - `workers`: the number of worker processes (by default, one per CPU); 1 runs them one after another in this process, e.g. on a shared machine, or to debug a run
+    - `until` and `verbose`: as for `sim.run()`
+    - `shrink`: whether to shrink each sim after it runs, to save memory (see `sim.shrink()`)
+    - `par_args`: passed to `sc.Parallel()`
+    - `run_args`: passed to each `sim.run()`
 
     Returns:
         A run MultiSim. Each result is available across the runs, with the label of each sim as its scenario, e.g. `msim.results.sir.I.quantiles([0.025, 0.5, 0.975])`.

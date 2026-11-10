@@ -107,6 +107,75 @@ class Progress:
         return
 
 
+def start_lines(sim, notes=()):
+    """ What a run says as it starts: what is run and how, R0 (as a check that the model and its seed are what was meant), and the notes """
+    t = sim.t
+    mods = list(sim.diseases.keys()) or [mod.name for mod in sim.modules]
+    when = f'{ss.utils.time_str(t.tvec[0], None)} to {ss.utils.time_str(t.tvec[-1], None)}' if t.is_absolute else f'{ss.utils.time_str(t.tvec[0], sim, plural=True)} to {ss.utils.num_str(t.tvec[-1])}' # On the timeline's own axis, though stop may be given in another unit (e.g. ss.weeks(8))
+    stop = t.stop.to_year() if isinstance(t.stop, ss.date) else t.stop.years if isinstance(t.stop, ss.Duration) else None
+    if stop is not None and stop - t.yearvec[-1] > 1e-6: # The stop is not a whole number of steps from the start, so the run ends at the last step before it
+        given = ss.utils.time_str(t.stop, None) if t.is_absolute else ss.utils.num_str(type(t.tvec[-1])(t.stop) if isinstance(t.tvec[-1], ss.Duration) else t.stop)
+        when += f' (the last whole step before {given})'
+    if isinstance(sim.solver, ss.solvers.abm):
+        rounded = float(f'{sim.pop_scale:.3g}') # To 3 significant figures, without an exponent (e.g. 25,300)
+        scale = '' if rounded == 1 else f', each {rounded:,.0f} people' if rounded >= 10 else f', each {rounded:g} people'
+        how = f'as {len(sim.people):,} agents{scale}' if not sim.pars.branching else f'{sim.pars.total_pop:,.0f} people, as a branching process of agents (starting with {len(sim.people):,})'
+    else:
+        kind = dict(ode='an ODE', ide='an integro-differential model', binomial='a stochastic compartmental model (chain binomial)', gillespie='a stochastic compartmental model (Gillespie)', tau='a stochastic compartmental model (tau-leaping)')
+        short = dict(ode='ODE', ide='integro-differential', binomial='chain binomial', gillespie='Gillespie', tau='tau-leaping')
+        solver = 'ide' if ss.solvers.compartmental.exact_dwells(sim) else str(sim.solver) # Run as the ODE, with its dwell times as they are
+        people = sim.declared or 'total_pop' in sim.given or sim.pop_from # Modules written as code with nothing per person (e.g. an ODE of their own) have no population, unless one was given
+        pop = sim.pars.total_pop
+        how = ((f'in proportions (total_pop={pop:g}), ' if ss.sim.in_proportions(sim) else f'{pop:,.0f} people, ') if people else '') + 'as ' + (f'a branching process ({short.get(solver, solver)})' if sim.pars.branching else kind.get(solver, solver))
+    label = f' "{sim.label}"' if sim.label else ''
+    what = f'{sc.strjoin(mods)}, ' if mods else ''
+    lines = [ss.display.style(f'Sim{label}: {what}{how}, {when}', 'bold', color=ss.display.in_color())]
+    if not isinstance(sim.solver, ss.solvers.abm):
+        for dis in sim.declared:
+            sources = dis.graph.infectious or dis.graph.count_sources
+            if dis.graph.transmissions or sources:
+                try:
+                    ngm, ngm_start = dis.engine.next_generation(), dis.engine.next_generation(start=True) # In a population with no immunity, and as it starts
+                except Exception: # Not every model has one; the line is only a check
+                    ngm = None
+                if ngm is not None:
+                    R0, R = [float(np.max(np.abs(np.linalg.eigvals(m)))) for m in [ngm, ngm_start]]
+                    count = float(dis.engine.count(sources))
+                    shown = f'{count:,.0f}' if count >= 100 or count == round(count) else f'{count:.3g}' # A share, with total_pop=1, is not 0
+                    at_start = ''
+                    if abs(R - R0) > 0.01*R0: # Some start immune
+                        graph = dis.graph
+                        sources = {id(s):s for tr in graph.acquisitions for s in tr.source or [] if s.people}.values() # Every state infected from, as susceptible as its rel_sus, up to fully
+                        susceptible = sum(float(dis.engine.count([s]))*(min(s.rel_sus, 1) if sc.isnumber(s.rel_sus) else 1) for s in sources)
+                        infected = {id(s) for s in graph.infected}
+                        share = susceptible/float(dis.engine.count([s for s in graph.people_states if id(s) not in infected]))
+                        at_start = f' (R = {R:.3g} at the start, with {share:.0%} susceptible)'
+                    timed = [name for name,p in dis.graph.pars.items() if isinstance(p.raw, ss.parameters.TimeValue)] # So R0 is at the start time
+                    when = f' at the start ({sc.strjoin(timed)} {"varies" if len(timed) == 1 else "vary"} in time)' if timed else ''
+                    lines.append(f'  {dis.name}: R0 = {R0:.3g}{when}{at_start}, with {shown} infectious at the start')
+    if sim.pars.solver == 'auto' and isinstance(sim.solver, ss.solvers.abm) and sim.declared and not any(sim.solver_reason in note for note in notes):
+        lines.append(f'  Running as agents: {sim.solver_reason}')
+    lines += [f'  Note: {note}' for note in notes]
+    return lines
+
+def end_line(sim):
+    """ What a run says when it ends: how long it took, and for each disease with a transmission, its infections and their peak """
+    parts = []
+    for dis in getattr(sim, 'declared', []):
+        trs = dis.graph.transmissions or (dis.graph.acquisitions if dis.graph.count_sources else [])
+        if trs and all(tr.name in dis.results for tr in trs):
+            total = sum(dis.results[tr.name].values.sum() for tr in trs)
+            infectious = sum(dis.results[state.name].values for state in dis.graph.infectious or dis.graph.count_sources if state.name in dis.results)
+            if np.ndim(infectious):
+                peak = int(np.argmax(infectious))
+                tvec = dis.t.tvec if len(dis.t.tvec) == len(infectious) else sim.t.tvec # On the disease's own timeline, if it has one
+                when = ss.utils.time_str(tvec[peak], sim) # A date, or e.g. day 27, as in the first line
+                fmt = '.3g' if ss.sim.in_proportions(sim) else ',.0f' # In proportions, shares rather than counts
+                parts.append(f'{dis.name}: {total:{fmt}} infections; at most {infectious[peak]:{fmt}} infectious, on {when}')
+    took = f'{sim.elapsed:.2g}' if sim.elapsed < 1 else f'{sim.elapsed:.1f}'
+    return f'  Done in {took} s' + (f'; {"; ".join(parts)}' if parts else '')
+
+
 class RunsProgress(Progress):
     """
     The progress of the runs of a MultiSim (see `ss.run.run_each()`), from how far each has got (`store`, which each run's `Share` sets)
@@ -1449,7 +1518,7 @@ def dist_unit(dist, val):
 def func_source(func):
     """ The source text of a function, if available, without the indentation of where it was defined """
     try:    return textwrap.dedent(inspect.getsource(func))
-    except: return None
+    except Exception: return None
 
 
 def func_json(func):

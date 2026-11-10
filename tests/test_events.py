@@ -80,8 +80,6 @@ def test_events_refuse():
         ss.Sim(m, networks=ss.MixingPool(n_contacts=3), n_agents=500, solver=ss.solvers.abm(step='events'), **kw).init()
     with pytest.raises(ss.CapabilityError, match='no route'):
         ss.Sim(make_sirs(), n_agents=500, solver=ss.solvers.abm(step='events'), **kw).init()
-    with pytest.raises(ValueError, match="step='events'"):
-        make_sirs(**{'solver': 'abm-events'}) # The old name says what replaces it
     with pytest.raises(ss.CapabilityError, match='for agents only'):
         ss.Sim(make_sirs(solver=ss.solvers.abm(step='events')), total_pop=500, solver='ode', **kw).init()
     return

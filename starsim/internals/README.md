@@ -8,6 +8,7 @@ How Starsim works under the hood, for developers rather than modelers. Each modu
 - `fitting.py`: fitting to data (`ss.fitting`, and what `sim.fit()` runs): likelihoods, particle filters, and samplers; imported when first used
 - `gradients.py`: the ODE run in JAX, for gradients (`sim.gradient()`), log-densities (`sim.log_density()`), and many runs at once
 - `errors.py`: the errors and warnings that are classes (e.g. `ss.CapabilityError`, `ss.errors.AtBound`), and `ss.note()`
+- `v3_deprecations.py`: what replaces each name of Starsim 3 that Starsim 4 does not have (`ss.v3_deprecations`), keyed by class, method, and name
 - `debugtools.py`: profiling, debugging, and mock objects for testing
 - The `starsim` command is not here but in `starsim_cli/`, beside the package, so that it starts without importing Starsim
 - `assets/`: the fonts for plots (see its README)

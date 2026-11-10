@@ -111,13 +111,12 @@ def find_contacts(p1, p2, inds, as_array=False):
 
 
 def standardize_netkey(key):
-    """ 
-    Standardize network key names
-    
-    Networks can be upper or lowercase, have a suffix 'net' or not, and may include
-    a number added to make the name unique; this function standardizes them. For
-    example, 'RandomNet', 'randomnet', and 'randomnet_1' would all be standardized
-    to 'random'.
+    """
+    The name of a network, standardized, so that a beta by route matches it however it is written
+
+    A network's name can be upper or lowercase, end in 'net' or not, and have a number
+    added to make it unique: 'RandomNet' and 'randomnet' both become 'random', and
+    'randomnet_1' becomes 'random_1'.
     """
     return re.sub(r'net(_\d+)?$', r'\1', key.lower())
 
@@ -144,27 +143,6 @@ def cond_str(cond):
     return getattr(cond, '__name__', str(cond))
 
 
-replaced_beta = "a route's transmissibility is the disease's, by route: e.g. ss.SIS(beta=dict(randomnet=0.05)), or S >> I @ dict(h=0.3, s=0.06)*I in a declared disease (0 for a route it does not spread on)"
-replaced_who = 'who takes part is who= (a condition over people, e.g. who=ss.person.pwid)'
-
-
-def check_replaced(net, pars, kwargs, replaced):
-    """ A `TypeError` for a keyword that a network no longer takes (given as a keyword or in `pars`), saying what replaces it
-
-    Args:
-        net (Route): the network
-        pars (dict): its parameters, as given
-        kwargs (dict): its keywords, as given
-        replaced (dict): each keyword it no longer takes, and what replaces it
-    """
-    for key in list(kwargs) + list(pars or {}):
-        if key in replaced:
-            lib = type(net).__module__.startswith('starsim.library')
-            errormsg = f'{"ssl" if lib else "ss"}.{type(net).__name__}() takes no {key}=: {replaced[key]}'
-            raise TypeError(errormsg)
-    return
-
-
 def check_edges(edges):
     """ The weight of each edge is `weight`; a column `beta` (Starsim 3's name for it) is an error, since a disease's beta is the disease's """
     if edges is not None and 'beta' in edges:
@@ -188,7 +166,9 @@ def people_mask(sim, cond):
 
 class Route(ss.Module):
     """
-    A transmission route -- e.g., a network, mixing pool, environmental transmission, etc.
+    A way a disease spreads between people: the base class of networks and mixing pools
+
+    A disease's beta can be given for each route, by its name (e.g. `ss.SIS(beta=dict(randomnet=0.05))`).
     """
     sets_unit = False # Its typed defaults (e.g. how long partnerships last) do not set the unit of the model's bare numbers: see ss.solvers.choose.init_unit()
     one_step = False # Whether every edge lasts one step: the edges of the dead then end at the next step anyway, so People.remove_dead() leaves them (see RandomNet)
@@ -197,7 +177,7 @@ class Route(ss.Module):
         return []
 
     def compute_transmission(self, rel_sus, rel_trans, disease_beta, disease=None):
-        """ Compute transmission probabilities along this route (must be overridden by subclasses).
+        """ The people infected over this route in a step, for a disease written as code; a route other than a network (e.g. a mixing pool) defines it
 
         Args:
             rel_sus (array): the relative susceptibility of each agent
@@ -211,15 +191,14 @@ class Route(ss.Module):
 
 class Network(Route):
     """
-    A class holding a single network of contact edges (connections) between people
-    as well as methods for updating these. Networks mediate disease transmission
-    between agents in `ss.People`; see `ss.Disease` for how transmission uses
-    network edges, and `ss.RandomNet`, `ss.SexualNet`, `ss.PrenatalNet` for
-    built-in network types.
+    A network of contacts (edges) between people, over which diseases spread, and the methods
+    for changing them. This base class has fixed edges, given by hand; the built-in networks,
+    which make their own and change them over time, are its subclasses, e.g. `ss.RandomNet`,
+    `ss.DegreeNet`, `ss.SexualNet`, and `ss.PrenatalNet`. See `ss.Disease` for how
+    transmission uses the edges.
 
-    The input is typically arrays including: person 1 of the connection, person 2 of
-    the connection, the weight of the connection, the duration and start/end times of
-    the connection.
+    Each edge has the two people it joins (`p1` and `p2`) and a weight; subclasses add other
+    columns, e.g. how long it lasts (`dur`) or the acts in it (`acts`).
 
     Note: CRN safe, with the edges given.
 
@@ -230,11 +209,10 @@ class Network(Route):
         p2 (array): an array of length N, the number of connections in the network, with the indices of people on the other side of the connection.
         weight (array): the weight of each edge, which scales the hazard of transmission over it (1 if not given; see `net_beta()`); a disease's own beta on the network is on the disease
         one_way (bool): whether it transmits only from p1 to p2, as mother-to-child networks do (by default, both ways)
-        kwargs (dict): standard module arguments (e.g. `name`, `label`, `dt`) are passed to `update_pars()`; other keys are copied directly into the network as edges
+        kwargs (dict): standard module arguments (e.g. `name`, `label`, `dt`) are passed to `update_pars()`; other keys are copied directly into the network as columns of the edges
 
-    Note that all edge arguments must be arrays of the same length,
-    although not all have to be supplied at the time of creation (they must all
-    be the same at the time of initialization, though, or else validation will fail).
+    All the columns of the edges must be arrays of the same length when the sim is
+    initialized, though not all need be given when the network is made.
 
     Examples:
         ```python
@@ -256,19 +234,14 @@ class Network(Route):
     """
 
     def __init__(self, pars=None, edges=None, **kwargs):
-        # Initialize as a module
         super().__init__()
-
-        # Each relationship is characterized by these default set of keys
-        self.meta = sc.obj(
+        self.meta = sc.obj( # The columns of the edges, and their types
             p1 = ss_int,
             p2 = ss_int,
             weight = ss_float,
         )
 
         self.edge_defaults = dict(weight=1.0) # Values of edge columns that need not be given when edges are added (e.g. condoms=0 on a sexual network)
-
-        # Initialize the keys of the network
         self.edges = sc.obj()
         self.participant = ss.BoolArr('participant')
         self.agent_edges = None # The edges of each agent, once the edges have stayed the same for a step (see edge_index())
@@ -451,14 +424,10 @@ class Network(Route):
             sim (Sim): the sim being initialized
         """
         super().init_pre(sim)
-
-        # Define states using placeholder values
         n = len(self.edges['p1']) if 'p1' in self.edges else 0
-        for key, dtype in self.meta.items():
+        for key, dtype in self.meta.items(): # The columns not given: their defaults, or empty
             if key not in self.edges:
                 self.edges[key] = np.full(n, self.edge_defaults[key], dtype=dtype) if key in self.edge_defaults else np.empty((0,), dtype=dtype)
-
-        # Check that p1 and p2 are ss.uids()
         self.validate_uids()
         return
 
@@ -489,16 +458,16 @@ class Network(Route):
         return None, ''
 
     def __len__(self):
-        """ The length is the number of edges """
+        """ The number of edges """
         try:    return len(self.edges.p1)
-        except: return 0
+        except Exception: return 0 # E.g. before the edges exist, or once shrunk
 
     def __repr__(self, **kwargs):
-        """ Same as default, except with length """
+        """ The usual brief description, with the number of edges """
         return self.brief(output=True, extra=f'n_edges={len(self)}')
 
     def __str__(self):
-        """ Slightly more detailed, show the dataframe as well """
+        """ The brief description, and the edges as a dataframe """
         out = self.brief(output=True)
         if not self.initialized or not len(self.edges): # No edges yet, before the sim is initialized
             return out + '\n(no edges yet)'
@@ -507,30 +476,28 @@ class Network(Route):
 
     def __contains__(self, item):
         """
-        Check if a person is present in a network
+        Whether a person (by UID) is in any edge of the network
 
         Args:
-            item: Person index
-
-        Returns: True if person index appears in any interactions
+            item (int): the person's UID
         """
         return (item in self.edges.p1) or (item in self.edges.p2) # TODO: check if (item in self.members) is faster
 
     @property
     def members(self):
-        """ Return sorted array of all members """
+        """ The UIDs of everyone in at least one edge, sorted """
         return np.unique([self.edges.p1, self.edges.p2]).view(ss.uids)
 
     def meta_keys(self):
-        """ Return the keys for the network's meta information """
+        """ The names of the columns of the edges """
         return self.meta.keys()
 
     def set_network_states(self, people):
         """
-        Many network states depend on properties of people -- e.g. MSM depends on being male,
-        age of debut varies by sex and over time, and participation rates vary by age.
-        Each time states are dynamically grown, this function should be called to set the network
-        states that depend on other states.
+        Set the states of people that the network depends on (nothing by default)
+
+        Some depend on other properties of people, e.g. the age of debut on a sexual network
+        varies by sex and over time, so they are set again whenever people are added.
 
         Args:
             people (People): the people
@@ -538,41 +505,32 @@ class Network(Route):
         pass
 
     def validate_uids(self):
-        """ Ensure that p1, p2 are both UID arrays """
-        edges = self.edges
+        """ Make p1 and p2 UID arrays, if they are not """
         for key in ['p1', 'p2']:
-            if key in edges:
-                arr = edges[key]
-                if not isinstance(arr, ss.uids):
-                    self.edges[key] = ss.uids(arr)
+            if key in self.edges and not isinstance(self.edges[key], ss.uids):
+                self.edges[key] = ss.uids(self.edges[key])
         return
 
     def validate(self):
         """
-        Check the integrity of the network: right types, right lengths.
-
-        If dtype is incorrect, try to convert automatically; if length is incorrect,
-        do not.
+        Check the columns of the edges: convert any of the wrong type, and raise an error for any of the wrong length
         """
         if not len(self.edges): # No edges have been added yet
             return
         n = len(self.edges.p1)
         for key, dtype in self.meta.items():
-            if dtype:
-                actual = self.edges[key].dtype
-                expected = dtype
-                if actual != expected:
-                    self.edges[key] = np.array(self.edges[key], dtype=expected)  # Try to convert to correct type
+            if dtype and self.edges[key].dtype != dtype:
+                self.edges[key] = np.array(self.edges[key], dtype=dtype)
             actual_n = len(self.edges[key])
             if n != actual_n:
-                errormsg = f'Expecting length {n} for network key "{key}"; got {actual_n}'  # Report length mismatches
+                errormsg = f'Expecting length {n} for network key "{key}"; got {actual_n}'
                 raise TypeError(errormsg)
         self.validate_uids()
         return
 
     def eligible(self, who=None):
         """
-        Return the agents who can form edges: alive, born, and (optionally) those a condition holds for
+        The agents who can form edges, as a boolean array: alive, born, and (optionally) those a condition holds for
 
         Args:
             who (Cond/str/func): if given, only these people: a condition over people (e.g. `(ss.person.age >= 18) & (ss.person.age < 65)`), as for `ss.DegreeNet`
@@ -585,30 +543,29 @@ class Network(Route):
 
     def get_inds(self, inds, remove=False):
         """
-        Get the specified indices from the edgelist and return them as a dict.
+        The edges at the given indices, as a dict of arrays by column
 
         Args:
-            inds (int, array, slice): the indices to find
-            remove (bool): whether to remove the indices
+            inds (int, array, slice): the indices of the edges
+            remove (bool): whether to also remove them from the network
         """
         output = {}
         for key in self.meta_keys():
-            output[key] = self.edges[key][inds]  # Copy to the output object
+            output[key] = self.edges[key][inds]
             if remove:
-                self.edges[key] = np.delete(self.edges[key], inds)  # Remove from the original
-                self.validate_uids()
+                self.edges[key] = np.delete(self.edges[key], inds)
+        if remove:
+            self.validate_uids()
         return output
 
     def pop_inds(self, inds):
         """
-        "Pop" the specified indices from the edgelist and return them as a dict.
-        Returns arguments in the right format to be used with network.append().
+        Remove the edges at the given indices, and return them as a dict, as `network.append()` takes them
 
         Args:
-            inds (int, array, slice): the indices to be removed
+            inds (int, array, slice): the indices of the edges to remove
         """
-        popped_inds = self.get_inds(inds, remove=True)
-        return popped_inds
+        return self.get_inds(inds, remove=True)
 
     def remove_edges(self, inds):
         """
@@ -640,7 +597,7 @@ class Network(Route):
 
     def append(self, edges=None, **kwargs):
         """
-        Append edges to the current network.
+        Add edges to the network
 
         Args:
             edges (dict): a dictionary of arrays with keys p1, p2, and optionally weight (1 if not given), as returned from network.pop_inds()
@@ -657,7 +614,7 @@ class Network(Route):
             else:
                 errormsg = f'Cannot append edges since required key "{key}" is missing'
                 raise KeyError(errormsg)
-            self.edges[key] = np.concatenate([curr_arr, new_arr])  # Resize to make room, preserving dtype
+            self.edges[key] = np.concatenate([curr_arr, new_arr])
         self.validate_uids()
         return
 
@@ -669,7 +626,7 @@ class Network(Route):
 
     def to_graph(self, max_edges=None, random=False): # pragma: no cover
         """
-        Convert to a networkx DiGraph
+        The network as a NetworkX `DiGraph`, e.g. to draw it or to use NetworkX's measures of networks
 
         Args:
             max_edges (int): the maximum number of edges to show
@@ -698,19 +655,16 @@ class Network(Route):
         return G
 
     def to_edgelist(self):
-        """ Convert the network to a list of edges (paired nodes) """
-        out = list(zip(self.p1, self.p2))
-        return out
+        """ The edges, as a list of (p1, p2) pairs """
+        return list(zip(self.p1, self.p2))
 
     def to_dict(self):
-        """ Convert to dictionary """
-        d = {k: self.edges[k] for k in self.meta_keys()}
-        return d
+        """ The edges, as a dict of arrays by column """
+        return {k: self.edges[k] for k in self.meta_keys()}
 
     def to_df(self):
-        """ Convert to dataframe """
-        df = sc.dataframe.from_dict(self.to_dict())
-        return df
+        """ The edges, as a dataframe """
+        return sc.dataframe.from_dict(self.to_dict())
 
     def from_df(self, df, keys=None):
         """
@@ -741,7 +695,7 @@ class Network(Route):
         return self
 
     def shrink(self):
-        """ Shrink the size of the network for saving to disk """
+        """ Remove the edges, to save memory (e.g. before saving the sim) """
         super().shrink()
         shrunk = ss.utils.shrink()
         self.edges = shrunk
@@ -751,7 +705,7 @@ class Network(Route):
 
     def plot(self, max_edges=500, random=False, alpha=0.2, **kwargs):
         """
-        Plot the network using NetworkX.
+        Draw the network (or some of its edges), using NetworkX
 
         Args:
             max_edges (int): the maximum number of edges to show
@@ -767,25 +721,17 @@ class Network(Route):
             G = self.to_graph(max_edges=max_edges, random=random)
             nx.draw_networkx(G, alpha=alpha, ax=ax, **kwargs)
             if max_edges:
-                n_edges = len(self)
-                if n_edges > max_edges:
-                    edgestr = f'{max_edges:n} of {len(self):n} connections shown'
-                else:
-                    edgestr = f'{len(self):n} connections'
+                edgestr = f'{max_edges:n} of {len(self):n} connections shown' if len(self) > max_edges else f'{len(self):n} connections'
                 plt.title(f'{self.label}: {edgestr}')
         return ss.return_fig(fig)
 
     def find_contacts(self, inds, as_array=True):
         """
-        Find all contacts of the specified people
+        Find all contacts of the given people, e.g. for contact tracing
 
-        For some purposes (e.g. contact tracing) it's necessary to find all the edges
-        associated with a subset of the people in this network. Since edges are bidirectional
-        it's necessary to check both p1 and p2 for the target indices. Each contact is only
-        returned once (otherwise if the Network has explicit symmetric interactions, they could
-        appear multiple times), so the calling code doesn't need to perform its own unique()
-        operation. Note that this cannot be used for cases where multiple connections count
-        differently than a single infection, e.g. exposure risk.
+        Both ends of each edge are checked, and each contact is returned once, however many
+        edges join them to the people given. So it is not for uses where several edges count
+        for more than one, e.g. exposure risk.
 
         Args:
             inds (array): indices of people whose edges to return
@@ -808,14 +754,12 @@ class Network(Route):
         return partners if as_array else set(partners.tolist())
 
     def add_pairs(self):
-        """ Define how pairs of people are formed """
+        """ Add new edges: nothing in this base class, whose edges are given; subclasses say how pairs are formed """
         pass
 
     def remove_uids(self, uids):
         """
-        Remove interactions involving specified UIDs
-        This method is typically called via `People.remove_dead()` and
-        is specifically used when removing agents from the simulation.
+        Remove the edges of the given people, e.g. when they die (called by `People.remove_dead()`)
 
         Args:
             uids (array): the agents to remove
@@ -824,7 +768,7 @@ class Network(Route):
         n = len(self.sim.people.alive.raw) if self.initialized else max(np.max(p1, initial=-1), np.max(p2, initial=-1)) + 1 # Every UID in the network
         is_removed = np.zeros(max(n, np.max(uids, initial=-1) + 1), dtype=bool) # A lookup table of the UIDs to remove (much faster than np.isin() for many edges)
         is_removed[uids] = True
-        self.drop_edges(*ss.solvers.backends.passes.touching(p1, p2, is_removed)) # Remove edges where either partner is being removed
+        self.drop_edges(*ss.solvers.backends.passes.touching(p1, p2, is_removed))
         return
 
     def drop_edges(self, k, gone):
@@ -847,10 +791,13 @@ class Network(Route):
             inds (array): the edges (default: all of them)
             disease (Disease): the disease
         """
-        if inds is None: inds = Ellipsis
-        times = self.edges.weight[inds]*self.edges.acts[inds] if self.has_acts else self.edges.weight[inds] # The number of acts in each partnership in the step
         with np.errstate(divide='ignore', invalid='ignore'): # A chance of 1 is an infinite hazard, and stays 1 (but none on an edge of weight 0)
-            return -np.expm1(np.log1p(-np.minimum(disease_beta, 1.0))*times) # Beta should already include dt if desired
+            return -np.expm1(np.log1p(-np.minimum(disease_beta, 1.0))*self._edge_times(inds)) # Beta should already include dt if desired
+
+    def _edge_times(self, inds=None):
+        """ How many times the disease's probability applies on each edge in a step: its weight, times its acts on a network with acts """
+        if inds is None: inds = Ellipsis
+        return self.edges.weight[inds]*self.edges.acts[inds] if self.has_acts else self.edges.weight[inds]
 
     def net_hazard(self, disease_beta=None, inds=None, disease=None):
         """
@@ -860,9 +807,7 @@ class Network(Route):
         with np.errstate(divide='ignore', invalid='ignore'): # A chance of 1 is an infinite hazard (but none on an edge of weight 0)
             if type(self).net_beta is not Network.net_beta:
                 return -np.log1p(-self.net_beta(disease_beta=disease_beta, inds=inds, disease=disease))
-            if inds is None: inds = Ellipsis
-            times = self.edges.weight[inds]*self.edges.acts[inds] if self.has_acts else self.edges.weight[inds]
-            return -np.log1p(-np.minimum(disease_beta, 1.0))*times
+            return -np.log1p(-np.minimum(disease_beta, 1.0))*self._edge_times(inds)
 
     def ends(self, d):
         """ The sources and targets of every edge, in direction `d`: p1 to p2 (0) or p2 to p1 (1) """
@@ -883,7 +828,7 @@ class DynamicNetwork(Network):
     def __init__(self, pars=None, edges=None, memory=None, **kwargs):
         super().__init__(pars=pars, edges=edges, **kwargs)
         self.define_pars(memory=memory)
-        self.meta.dur = ss_float # Add duration to the meta keys for dynamic networks
+        self.meta.dur = ss_float # How many more steps each edge lasts
         self.history = None # With memory=: the partnerships that ended, as p1, p2, and the step they ended on
         return
 
@@ -894,7 +839,7 @@ class DynamicNetwork(Network):
         return
 
     def end_pairs(self):
-        """ Remove partnerships whose duration has expired or whose members have died. """
+        """ Remove partnerships whose duration has expired or whose members have died """
         n = len(self)
         k, gone = ss.solvers.backends.passes.ending(self.edges.dur, self.edges.p1, self.edges.p2, self.sim.people.alive.raw) # Those with no steps left after this one, or a partner not alive
         if self.pars.get('memory') is not None:
@@ -954,8 +899,6 @@ def check_acts(net, acts):
 
 
 # %% Specific instances of networks
-
-
 
 class RandomNet(DynamicNetwork):
     """
@@ -1019,8 +962,7 @@ class RandomNet(DynamicNetwork):
     methods = ['fast', 'exact', 'uniform', 'safe']
 
     def __init__(self, pars=None, n_contacts=_, dur=_, who=_, dynamic=_, method=_, remove_self_loops=_, memory=_, **kwargs):
-        """ Initialize """
-        check_replaced(self, pars, kwargs, dict(where=replaced_who, beta=replaced_beta))
+        ss.v3_deprecations.check(type(self), '__init__', list(kwargs) + list(pars or {}))
         super().__init__()
         self.define_pars(
             n_contacts = ss.constant(10),
@@ -1053,13 +995,12 @@ class RandomNet(DynamicNetwork):
 
     def get_edges(self, inds, n_contacts):
         """
-        Efficiently find edges
+        Find new edges, by `method=`
 
-        Note that each person is assigned 2N contacts (i.e. if a person has 5 contacts,
-        they appear 5 times in the 'source' array and, on average, 5 times in the 'target'
-        array). Therefore, the `n_contacts` argument to this function should be HALF of
-        the total contacts a person is expected to have, if both the source and target
-        array outputs are used (e.g. for social contacts)
+        Each person is at both ends of edges: a person given 5 contacts appears 5 times
+        in `source` and, on average, 5 times in `target`, so has 10 in all. So `n_contacts`
+        here is HALF the contacts a person is expected to have, when both are used (as for
+        social contacts).
 
         Args:
             inds (list/array): person indices
@@ -1201,7 +1142,7 @@ class RandomNet(DynamicNetwork):
         return np.full(n, dur/self.t.dt.to(unit).value, dtype=ss_float)
 
     def add_pairs(self):
-        """ Generate edges """
+        """ Add the new edges needed to bring each agent up to their number of contacts """
         p = self.pars
         people = self.sim.people
         uids = self.eligible(p.who).uids
@@ -1222,7 +1163,6 @@ class RandomNet(DynamicNetwork):
             n_conn = n_conn*needed/orig
             n_conn = p.n_contacts.randround(n_conn) # CRN-safe stochastic integer rounding
 
-        # Get the new edges -- the key step
         p1, p2 = self.pair(uids, n_conn)
         if p.remove_self_loops:
             keep = p1 != p2 # One pass over the new edges; finding duplicates would need a sort of all of them
@@ -1231,10 +1171,9 @@ class RandomNet(DynamicNetwork):
         weight = np.ones(n, dtype=ss_float)
         dur = self.edge_steps(p1)
 
-        # Use zero-copy view for UIDs and skip concatenation when network is empty
-        p1 = p1.view(ss.uids)
+        p1 = p1.view(ss.uids) # No copy
         p2 = p2.view(ss.uids)
-        if current == 0:
+        if current == 0: # Nothing to append to
             self.edges.p1 = p1
             self.edges.p2 = p2
             self.edges.weight = weight
@@ -1309,7 +1248,7 @@ class DegreeNet(DynamicNetwork):
         ```
     """
     def __init__(self, pars=None, n_contacts=_, dur=_, concurrency=_, max_contacts=_, match=_, acts=_, who=_, between=_, memory=_, **kwargs):
-        check_replaced(self, pars, kwargs, dict(where=replaced_who, beta=replaced_beta))
+        ss.v3_deprecations.check(type(self), '__init__', list(kwargs) + list(pars or {}))
         super().__init__()
         self.define_pars(between=None)
         if not self.forms_own: # A subclass that forms its own partnerships uses none of these
@@ -1374,7 +1313,7 @@ class DegreeNet(DynamicNetwork):
         return super().side_raw()
 
     def active(self, people):
-        """ Return boolean array of agents who can have partners: alive, and with `who=`, those it gives, and with `between`, those in one of its groups
+        """ The agents who can have partners, as a boolean array: alive, and with `who=`, those it gives, and with `between`, those in one of its groups
 
         Args:
             people (People): the people
@@ -1389,6 +1328,11 @@ class DegreeNet(DynamicNetwork):
         return active
 
     def init_pre(self, sim):
+        """ Check the parameters, and work out the targets: the distribution of the number of partners, and how often people look for one
+
+        Args:
+            sim (Sim): the sim being initialized
+        """
         match = self.pars.get('match')
         if match is not None and (not isinstance(match, dict) or not match or not all(sc.isnumber(v) and 0 <= v <= 1 for v in match.values())):
             errormsg = f'match= of "{self.name}" takes properties of people and the share of partnerships at the same level of each, e.g. dict(risk=0.8), not {match}'
@@ -1521,6 +1465,7 @@ class DegreeNet(DynamicNetwork):
         return np.asarray(sim.people[name].raw)
 
     def init_results(self):
+        """ With a target, the partnerships formed and the realized number of partners; with match=, the share at the same level """
         super().init_results()
         if self.targeted:
             self.define_results(
@@ -1711,6 +1656,7 @@ class DegreeNet(DynamicNetwork):
         return
 
     def step(self):
+        """ End partnerships, set the states of people (e.g. debut), and form new partnerships """
         self.end_pairs()
         self.set_network_states()
         self.add_pairs()
@@ -1799,6 +1745,7 @@ class DegreeNet(DynamicNetwork):
         n = len(self.dists_degree) if getattr(self, 'dists_degree', None) is not None else 0
         return [str(label) for label in strats[name].labels] if name in strats else [str(lev) for lev in range(n)]
 
+
 class SexualNet(DegreeNet):
     """
     Sexual partnerships that form and dissolve, between two groups of people: by default, men and women
@@ -1833,9 +1780,9 @@ class SexualNet(DegreeNet):
     Args:
         between (str/tuple): who partnerships are between: `'mf'` (the default), a man and a woman, so its directions are `m2f` and `f2m` and a disease's beta on it is `ss.peract(m2f=..., f2m=...)`, or one value for both; `'mm'`, two men (men who have sex with men), with one beta; or a pair of groups, each the name of a boolean property of people or of a level of a stratification, e.g. `('fsw', 'client')`, whose directions are `fsw2client` and `client2fsw` (nobody can be in both)
         dur (`ss.Dist`/`ss.Duration`/float): how long partnerships last, as for `ss.DegreeNet`: a single duration, e.g. `ss.months(6)`, is a mean, and partnerships end at a constant rate (an exponential); a bare number is in the sim's unit; give a distribution for any other spread, e.g. `ss.lognormal(mean=ss.months(6), std=ss.months(3))`, which can vary by age, year, and individual pair (default: `ss.lognormal(mean=ss.years(15), std=ss.years(1))`)
-        debut (`ss.Dist`): the age of debut; can vary by using callable parameter values
+        debut (`ss.Dist`): the age at which people start taking part (default: normal, mean 16); its parameters can be functions, e.g. to vary it by sex or over time
         acts (`ss.freq`/`ss.Dist`): the number of acts per unit time in each partnership: a frequency (e.g. `ss.freqperweek(2)`, or `ss.freqperyear(80)`; a rate, `ss.peryear(80)`, is the same), or a distribution of them drawn once for each partnership (default: lognormal, mean 80 a year, standard deviation 30)
-        participation (`ss.Dist`): whether each person takes part, drawn at their debut; can vary by individual properties (age, sex, ...) using callable parameter values
+        participation (`ss.Dist`): whether each person takes part, drawn at their debut (default: 90% do); its parameters can be functions, e.g. to vary it by age or sex
         n_contacts (float/`ss.Dist`/dict): if given, a target for the number of partners people have at a time: a number, which is the mean of a Poisson, or a distribution over whole numbers; or one for each group of `between`, e.g. `dict(fsw=3, client=0.5)` (each partnership has one of each, so these should give the two groups about as many partners in all)
         concurrency (float): with `n_contacts`, the share of people with two or more partners at once
         max_contacts (int): with `n_contacts`, the most partners anyone has at once
@@ -1852,7 +1799,7 @@ class SexualNet(DegreeNet):
         ```
     """
     def __init__(self, pars=None, between=_, dur=_, debut=_, acts=_, participation=_, n_contacts=_, concurrency=_, max_contacts=_, match=_, **kwargs):
-        check_replaced(self, pars, kwargs, dict(where=replaced_who, beta=replaced_beta))
+        ss.v3_deprecations.check(type(self), '__init__', list(kwargs) + list(pars or {}))
         super().__init__()
         self.define_pars(between='mf')
         if not self.forms_own: # A subclass that forms its own partnerships uses none of these
@@ -1860,8 +1807,8 @@ class SexualNet(DegreeNet):
                 n_contacts = None,
                 dur = ss.lognormal(mean=ss.years(15), std=ss.years(1)),  # Can vary by age, year, and individual pair
                 acts = ss.lognormal(ss.freqperyear(80), ss.freqperyear(30)), # Acts per unit time, drawn once for each partnership
-                debut = ss.normal(mean=16),  # Age of debut can vary by using callable parameter values
-                participation = ss.bernoulli(p=0.9),  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
+                debut = ss.normal(mean=16),
+                participation = ss.bernoulli(p=0.9), # Drawn at debut
             )
         given = dur if dur is not None else (pars or {}).get('dur')
         single = not self.forms_own and (isinstance(given, ss.Duration) or sc.isnumber(given))
@@ -1880,7 +1827,7 @@ class SexualNet(DegreeNet):
         return
 
     def active(self, people):
-        """ Return boolean array of agents who are alive, participating, past sexual debut, and in a group of `between`
+        """ The agents who can have partners, as a boolean array: alive, taking part, past their debut, and in a group of `between`
 
         Args:
             people (People): the people
@@ -1888,7 +1835,7 @@ class SexualNet(DegreeNet):
         return self.participant & (people.age > self.debut) & super().active(people)
 
     def available(self, people, sex):
-        """ Return UIDs of active agents of the given sex who are not currently partnered.
+        """ The UIDs of the agents of the given sex who can have partners and have none now
 
         Args:
             people (People): the people
@@ -1921,10 +1868,10 @@ def find_pregnancy(net):
 
 class PrenatalNet(Network):
     """
-    Prenatal transmission network
+    A network from each pregnant woman to her unborn child, for transmission in pregnancy
 
-    Although edges change over time, the edges are managed by ss.Pregnancy as pregnancies start and finish (with fetuses as agents).
-    The prenatal network therefore is not derived from DynamicNetwork as it does not manage its own updates.
+    Its edges change over time, but `ss.Pregnancy` adds and removes them as pregnancies start and
+    end (with the unborn as agents), so it is not a `DynamicNetwork`: it does not update itself.
     It transmits one way only, from the mother (`p1`) to the child (`p2`), so its one direction is `mother2child`.
 
     Note: CRN safe.
@@ -1943,7 +1890,7 @@ class PrenatalNet(Network):
         return
 
     def step(self):
-        # Adding/removing edges is managed by ss.Pregnancy
+        """ Nothing: `ss.Pregnancy` adds and removes the edges """
         pass
 
     def add_pairs(self, mother_uids=None, unborn_uids=None):
@@ -1961,17 +1908,14 @@ class PrenatalNet(Network):
 
 class PostnatalNet(DynamicNetwork):
     """
-    Network to track postnatal processes
+    A network from each mother to her infant after birth, for transmission after birth (e.g. by close contact)
 
-    This network automatically has edges added between mothers and infants upon birth if
-    a `Pregnancy` module is present in the simulation. The edges persist until the specified
-    duration has elapsed, at which point they are automatically removed. This allows
-    different `PostnatalNet` instances to have different postnatal periods specific to
-    what is being modeled. Transmission along this network is possible if a beta
-    value >0 is specified. Otherwise, transmission will be skipped.
+    `ss.Pregnancy` (which the sim needs) adds an edge from the mother to each infant at birth,
+    and it lasts for `dur`, so several of these networks can have postnatal periods of their own,
+    e.g. one for each route of transmission. A disease transmits on it if its beta on it is above 0.
 
-    By default, the postnatal duration is based on the maternal UID and would be the same
-    for all infants of that mother, although derived classes could modify this behavior.
+    The duration is drawn by the mother's UID, so it is the same for all her infants
+    (a subclass can change this).
     It transmits one way only, from the mother (`p1`) to the child (`p2`), so its one direction is `mother2child`.
 
     Note: CRN safe.
@@ -2008,15 +1952,13 @@ class PostnatalNet(DynamicNetwork):
             mother_uids (array): the mothers, with repeats if a mother has several infants
             infant_uids (array): the infants
         """
-        # Note that the mother_uids should contain repeat entries if a mother has multiple infants
         n = len(mother_uids) if mother_uids is not None else 0
         p = self.pars
-
         if n:
             if isinstance(p.dur, ss.Dist):
                 dur = p.dur.rvs(mother_uids) + 1 # +1 since edges are added by Pregnancy before end_pairs() decrements them in the same step
             elif p.dur is None:
-                dur = np.full(n,fill_value=np.inf)
+                dur = np.full(n, np.inf)
             else:
                 dur = np.full(n, p.dur/self.t.dt + 1)
             self.append(p1=mother_uids, p2=infant_uids, weight=np.ones(n), dur=dur)
@@ -2025,11 +1967,10 @@ class PostnatalNet(DynamicNetwork):
 
 class BreastfeedingNet(PostnatalNet):
     """
-    Network for breastfeeding transmission
+    A network from each mother to her infant while she breastfeeds, for transmission by breastfeeding
 
-    To model breastfeeding transmission, include this network in a `Sim` that contains a `Pregnancy`
-    module. Edges will be automatically added and removed from this network tracking the breastfeeding
-    status from the `Pregnancy` module (`preg.lactating`).
+    The sim needs an `ss.Pregnancy`, which adds an edge at birth; it ends when the mother stops
+    breastfeeding (`preg.lactating`).
 
     Note: CRN safe.
 
@@ -2039,7 +1980,9 @@ class BreastfeedingNet(PostnatalNet):
 
     def __init__(self, pars=None, **kwargs):
         super().__init__(pars=pars, **kwargs)
-        assert self.pars.dur is None, 'BreastfeedingNet does not accept a `dur` parameter as breastfeeding duration is determined by the Pregnancy module'
+        if self.pars.dur is not None:
+            errormsg = 'BreastfeedingNet does not accept a `dur` parameter as breastfeeding duration is determined by the Pregnancy module'
+            raise ValueError(errormsg)
         return
 
     def end_pairs(self):
@@ -2052,15 +1995,16 @@ class BreastfeedingNet(PostnatalNet):
 
 #%% Mixing pools
 
-
-
 class MixingPools(Route):
     """
-    A container for creating a rectangular array of MixingPool instances
+    Mixing between groups of people, by a matrix of contacts between them: a mixing pool (`ss.MixingPool`) for each pair of groups, without edges
 
-    Note: CRN safe as agents.
+    Usually made by `ss.contacts()`, from a contact matrix. With no edges, mixing pools suit mixing
+    in which who meets whom matters only by group (e.g. age group), not person by person.
 
     Every communicable disease transmits over them; a disease's beta on them is the disease's, by route (0 for one that does not spread here).
+
+    Note: CRN safe as agents.
 
     Args:
         source (dict): the infectious groups, by name: each a condition over people (e.g. `ss.person.age < 15`), UIDs, or a function of the sim
@@ -2081,7 +2025,7 @@ class MixingPools(Route):
         ```
     """
     def __init__(self, pars=None, source=_, target=_, n_contacts=_, **kwargs):
-        check_replaced(self, pars, kwargs, dict(beta=replaced_beta, diseases=pool_diseases_msg))
+        ss.v3_deprecations.check(type(self), '__init__', list(kwargs) + list(pars or {}))
         super().__init__()
         self.define_pars(
             source = None,
@@ -2116,14 +2060,13 @@ class MixingPools(Route):
         return
 
     def __len__(self):
+        """ The number of pools """
         try:    return len(self.pools)
-        except: return 0
+        except Exception: return 0 # Before the pools exist
 
     def validate_pars(self):
-        """ Check that source and target have correct types, and contacts is the correct shape """
+        """ Check that source and target are dicts of groups, and n_contacts has a row for each target group (who has the contacts) and a column for each source group """
         p = self.pars
-
-        # Validate source and target
         if not isinstance(p.source, dict):
             errormsg = f'source= of ss.networks.MixingPools is a dict of groups, not {type(p.source)}'
             raise TypeError(errormsg)
@@ -2132,8 +2075,6 @@ class MixingPools(Route):
             raise TypeError(errormsg)
         p.source = sc.obj(p.source)
         p.target = sc.obj(p.target)
-
-        # Validate the n_contacts: a row for each target group (who has the contacts), a column for each source group
         if p.n_contacts is None:
             p.n_contacts = np.ones((len(p.target), len(p.source)))
         p.n_contacts = np.array(p.n_contacts)
@@ -2142,7 +2083,6 @@ class MixingPools(Route):
         if actual != expected:
             errormsg = f'The mixing matrix has a row for each target group (who has the contacts) and a column for each source group, so shape {expected}, not {actual}.'
             raise ValueError(errormsg)
-
         return
 
     def check_full(self, sim):
@@ -2189,7 +2129,7 @@ class MixingPools(Route):
                 n_contacts = p.n_contacts[i,j] # A number is the same for everyone in the group, as with no pools (a distribution elsewhere in the matrix does not change that)
                 name = f'{self.name}:{sk}->{dk}' # Named after the whole, so that two of them (e.g. home and school contacts) can be in one sim
                 mp = MixingPool(name=name, n_contacts=n_contacts, source=source, target=target, **time_args)
-                mp.init_pre(sim) # Initialize the pool
+                mp.init_pre(sim)
                 self.pools.append(mp)
         return
 
@@ -2286,7 +2226,7 @@ class MixingPools(Route):
         return
 
     def shrink(self):
-        """ Shrink the size of the mixing pools for saving to disk """
+        """ Remove the people in each group, to save memory (e.g. before saving the sim) """
         super().shrink()
         for mp in self.pools:
             mp.shrink()
@@ -2326,9 +2266,6 @@ def transmits(disease):
     return 'beta' in disease.pars
 
 
-pool_diseases_msg = "every communicable disease transmits over a mixing pool; to keep one off it, give its beta on the pool as 0, e.g. ss.SIS(beta=dict(mixingpool=0, randomnet=0.05))"
-
-
 def pool_diseases(route):
     """ The diseases that transmit over a mixing pool or pools: every communicable disease (one whose beta on it is 0 transmits nothing there) """
     return [d for d in route.sim.diseases.values() if transmits(d)]
@@ -2357,11 +2294,16 @@ def pool_uids(sim, group):
 
 class MixingPool(Route):
     """
-    Define a single mixing pool; can be used as a drop-in replacement for a network.
+    Mixing between two groups of people (or everyone), without edges: used in place of a network
 
-    Note: CRN safe as agents.
+    Each person in the target group is exposed to the average infectiousness of the source group,
+    times their number of contacts. With no edges, it suits mixing in which who meets whom does
+    not matter person by person. For mixing between several groups by a contact matrix, see
+    `ss.contacts()`.
 
     Every communicable disease transmits over it; a disease's beta on it is the disease's, by route (0 for one that does not spread here).
+
+    Note: CRN safe as agents.
 
     Args:
         source (Cond/uids/func): the infectious side: a condition over people (e.g. `ss.person.age < 15`), UIDs, or a function of the sim; None for everyone alive
@@ -2392,7 +2334,7 @@ class MixingPool(Route):
         ```
     """
     def __init__(self, pars=None, source=_, target=_, n_contacts=_, **kwargs):
-        check_replaced(self, pars, kwargs, dict(beta=replaced_beta, diseases=pool_diseases_msg))
+        ss.v3_deprecations.check(type(self), '__init__', list(kwargs) + list(pars or {}))
         super().__init__()
         self.define_pars(
             source = None,
@@ -2421,7 +2363,7 @@ class MixingPool(Route):
         return []
 
     def shrink(self):
-        """ Shrink the size of the mixing pool for saving to disk """
+        """ Remove the people in each group, to save memory (e.g. before saving the sim) """
         super().shrink()
         shrunk = ss.utils.shrink()
         self.diseases = shrunk
@@ -2431,10 +2373,8 @@ class MixingPool(Route):
         return
 
     def __len__(self):
-        try:
-            return len(self.pars.target)
-        except:
-            return 0
+        try:    return len(self.pars.target)
+        except Exception: return 0 # E.g. a target of None, or before the parameters exist
 
     def init_pre(self, sim):
         """ A number of contacts given as a rate (e.g. `ss.perday(10)`) is a number per unit of the sim's time, as a bare number is
@@ -2451,13 +2391,13 @@ class MixingPool(Route):
         return
 
     def init_post(self):
+        """ Find the diseases that transmit over it """
         super().init_post()
-
         self.diseases = pool_diseases(self)
         return
 
     def remove_uids(self, uids):
-        """ If UIDs are supplied explicitly, remove them if people die
+        """ Remove people who leave (e.g. die) from source and target, if these are given as UIDs
 
         Args:
             uids (array): the agents to remove
@@ -2470,7 +2410,7 @@ class MixingPool(Route):
 
     def compute_transmission(self, rel_sus, rel_trans, disease_beta, disease):
         """
-        Calculate transmission
+        The people infected over the pool in a step
 
         This is called by transmission (`ss.Disease.transmit()`, declared, or as code from `ss.AgentDisease`) together with network transmission.
 
@@ -2478,13 +2418,12 @@ class MixingPool(Route):
             rel_sus (float): Relative susceptibility
             rel_trans (float): Relative infectiousness
             disease_beta (float): The beta value for the disease, as the probability in the step
+            disease (Disease): The disease
+
         Returns:
             UIDs of agents who acquired the disease at this step
         """
-        if (disease_beta == 0) or (disease not in self.diseases):
-            return []
-
-        if len(self.source_uids) == 0 or len(self.target_uids) == 0:
+        if disease_beta == 0 or disease not in self.diseases or len(self.source_uids) == 0 or len(self.target_uids) == 0:
             return []
 
         # Calculate transmission: the hazard of the step, from the disease's beta, is multiplied by the infectious share and the contacts before being turned back into a probability, as for a declared disease (see ss.solvers.Transmission)
@@ -2499,7 +2438,6 @@ class MixingPool(Route):
         self.source_uids = pool_uids(self.sim, self.pars.source)
         self.target_uids = pool_uids(self.sim, self.pars.target)
         return
-
 
 
 def check_contacts(matrix, dim):
@@ -2575,8 +2513,8 @@ def contacts(matrix=None, ages=None, dims=None, name=None, study=None, layer='al
         mixing = ss.contacts(matrix, dims=['sex', 'risk'])
         ```
     """
-    if 'source' in by_dim: # The study was once source=, which mixing pools use for the infectious side
-        errormsg = f"ss.contacts() takes no source=: the study a country's matrix is from is study=, e.g. ss.contacts('Japan', study={by_dim['source']!r})"
+    if 'source' in by_dim: # Otherwise read as a matrix over a stratification called "source"
+        errormsg = f"ss.contacts() takes no source= (the infectious side of a mixing pool): the study a country's matrix is from is study=, e.g. ss.contacts('Japan', study={by_dim['source']!r})"
         raise TypeError(errormsg)
     if isinstance(layer, (list, tuple)): # Several settings, e.g. ss.contacts('Kenya', layer=['home', 'school', 'work', 'community'])
         return [contacts(matrix, ages=ages, dims=dims, study=study, layer=lay, unit=unit, **by_dim) for lay in layer]

@@ -95,7 +95,7 @@ class Result(ss.arrays.BaseArr):
         name (str): the name of this result, e.g. 'infection'
         shape (int/tuple): the shape of the result array (usually `module.npts`)
         scale (bool): whether the result scales with the population (by `pop_scale`, the people each agent stands for): by default ('auto'), by its kind, so a flow or stock (a count, e.g. infections) does, and a ratio (e.g. prevalence) does not
-        auto_plot (bool): whether to include automatically in `sim.plot()` results
+        auto_plot (bool): whether `sim.plot()` shows it by default; False keeps a result that is rarely wanted (e.g. a cumulative total) out of the default plots
         label (str): a human-readable label for the result
         values (array): prepopulate the Result with these values
         timevec (array): an array of time points
@@ -108,8 +108,7 @@ class Result(ss.arrays.BaseArr):
         groups (bool): for a module written as code in a stratified sim: keep the values by group too, so they can be selected (`res.select(sex='female')`, `res.by('age')`) as a declared module's are; set them with `set_groups()`
 
     In most cases, [`ss.Result`](`starsim.results.Result`) behaves exactly like `np.array()`, except with
-    the additional fields listed above. To see everything contained in a result,
-    you can use result.disp().
+    the additional fields listed above. To see everything in a result, use `result.disp()`.
 
     For a 2D result, `res.alpha`, `res['alpha']`, or `res.select(column='alpha')` returns a 1D result for
     that column (which shares data with the 2D result), and `res[ti]` returns the row for that timestep. The
@@ -182,32 +181,26 @@ class Result(ss.arrays.BaseArr):
         return set(dir(Result)) | set(Result('x', kind=None).__dict__)
 
     def __repr__(self):
-        """ Show all data """
+        """ The values in full: as an array, or for a result split into groups, as a table with a column for each """
         cls_name = self.__class__.__name__
         if self.columns is not None and self.runs is None and np.ndim(self.values) == 2 and np.shape(self.values)[1] == len(self.columns): # A column for each group, e.g. from res.by('sex'), labeled
             index = self.timevec if self.timevec is not None and len(self.timevec) == len(self.values) else None
             return f'{cls_name}({self.key}), by {", ".join(map(str, self.columns))}:\n{pd.DataFrame(self.values, columns=self.columns, index=index)}'
         arrstr = super().__repr__().removeprefix(cls_name)
-        out = f'{cls_name}({self.key}):\narray{arrstr}'
-        return out
+        return f'{cls_name}({self.key}):\narray{arrstr}'
 
     def __str__(self, label=True):
-        """ Short representation for string """
-        cls_name = self.__class__.__name__
+        """ One line: the key, and the smallest, mean, and largest value """
         try:
-            minval = self.values.min()
-            meanval = self.values.mean()
-            maxval = self.values.max()
-            valstr = f'min={minval:n}, mean={meanval:n}, max={maxval:n}'
-        except:
+            valstr = f'min={self.values.min():n}, mean={self.values.mean():n}, max={self.values.max():n}'
+        except Exception: # E.g. no values yet, or values that are not numbers
             valstr = f'{self.values}'
         labelstr = f'{self.key}: ' if label else ''
         runstr = f'{self.n_runs} runs, ' if self.runs is not None and 'quantile' not in self.runs else ''
-        out = f'{cls_name}({labelstr}{runstr}{valstr})'
-        return out
+        return f'{self.__class__.__name__}({labelstr}{runstr}{valstr})'
 
     def to_str(self, label=True):
-        """ Convert Result object to a string
+        """ The result as one line of text (see `__str__()`)
 
         Args:
             label (bool): whether to include the label
@@ -215,7 +208,7 @@ class Result(ss.arrays.BaseArr):
         return self.__str__(label=label)
 
     def disp(self):
-        """ Full display of all attributes/methods """
+        """ Print every attribute of the result """
         return sc.pr(self)
 
     def __getitem__(self, key):
@@ -224,15 +217,13 @@ class Result(ss.arrays.BaseArr):
             if self.columns is not None and key in self.columns:
                 return self._column(key)
             return getattr(self, key)
-        else:
-            return super().__getitem__(key)
+        return super().__getitem__(key)
 
     def __setitem__(self, key, value):
         """ Allow e.g. result['low'] = 2 """
         if isinstance(key, str):
             return setattr(self, key, value)
-        else:
-            return super().__setitem__(key, value)
+        return super().__setitem__(key, value)
 
     @property
     def initialized(self):
@@ -241,12 +232,12 @@ class Result(ss.arrays.BaseArr):
 
     @property
     def has_dates(self):
-        """ Check whether the time vector uses dates (rather than numbers) """
+        """ Whether the time points are dates (rather than numbers) """
         try:    return not sc.isnumber(self.timevec[0])
-        except: return False
+        except Exception: return False # No time points
 
     def _init_values(self, values=None, dtype=None, shape=None, force=False):
-        """ Handle values """
+        """ Make the array of values, if there is none yet (or if `force`): from the values given, else zeros of the shape given (with a column axis for a 2D result), else None """
         if not self.initialized or force:
             values = sc.ifelse(values, self.values)
             dtype = sc.ifelse(dtype, self.dtype)
@@ -448,6 +439,7 @@ class Result(ss.arrays.BaseArr):
         return 0 if self.runs is None else 1
 
     def _check_runs(self, what):
+        """ Raise an error saying why `what` can't be done, unless this is a result across runs (and not their quantiles) """
         if self.runs is None:
             errormsg = f'{what} is for a result across the runs of a MultiSim; "{self.name}" is the result of one run'
             raise ValueError(errormsg)
@@ -750,13 +742,13 @@ class Result(ss.arrays.BaseArr):
         return self
 
     def update(self, *args, **kwargs):
-        """ Update parameters, and initialize values if needed
+        """ Set attributes of the result, and make its values if it has none yet
 
         Args:
             args (list): the attributes to update, as a dict
             kwargs (dict): the attributes to update, by name
         """
-        if 'shape' in kwargs: # Handle shape, which is renamed _shape as an attribute
+        if 'shape' in kwargs: # Stored as _shape
             kwargs['_shape'] = kwargs.pop('shape')
         super().update(*args, **kwargs)
         self._init_values()
@@ -764,21 +756,15 @@ class Result(ss.arrays.BaseArr):
 
     @property
     def key(self):
-        """ Return the unique key of the result: <module>.<name>, e.g. "hiv.infection" """
-        modulestr = f'{self.module}.' if (self.module is not None) else ''
-        namestr = self.name if (self.name is not None) else 'unnamed'
-        key = modulestr + namestr
-        return key
+        """ The unique key of the result: <module>.<name>, e.g. "hiv.infection" """
+        modulestr = f'{self.module}.' if self.module is not None else ''
+        return modulestr + sc.ifelse(self.name, 'unnamed')
 
     @property
     def full_label(self):
-        """ Return the full label of the result: <Module>: <label>, e.g. "HIV: New infections" """
-        reslabel = sc.ifelse(self.label, self.name)
-        if self.module == 'sim': # Don't add anything if it's the sim
-            full = f'Sim: {reslabel}'
-        else:
-            full = f'{self.module}: {reslabel}'
-        return full
+        """ The full label of the result: <Module>: <label>, e.g. "HIV: New infections" """
+        module = 'Sim' if self.module == 'sim' else self.module
+        return f'{module}: {sc.ifelse(self.label, self.name)}'
 
     @staticmethod
     def _periods_sum(arr, starts, ends):
@@ -1040,12 +1026,13 @@ class Result(ss.arrays.BaseArr):
 
     def to_series(self, set_name=False, resample=None, sep='_', **kwargs):
         """
-        Convert to a series with timevec as the index and value as the data
+        The result as a pandas Series, with the time points as the index
+
         Args:
-            set_name (bool): whether to set the name of the series to the name of the result
-            resample (str): if provided, resample the data to this frequency
-            kwargs: passed to the resample method
+            set_name (bool): whether to name the series after the result
+            resample (str): if provided, resample the data to this unit first (see `resample()`), e.g. 'year'
             sep (str): the separator between the name and column in each column of a 2D result
+            kwargs (dict): passed to `resample()`
 
         For a 2D result, return a dataframe with one column per result column, e.g. `infection_alpha`.
         """
@@ -1056,7 +1043,7 @@ class Result(ss.arrays.BaseArr):
         return pd.Series(res.values, index=timevec, name=res.name if set_name else None)
 
     def _convert_timevec(self, force=False):
-        """ Make sure we're using a timevec that's in the right format i.e. dates """
+        """ The time points as a table shows them: dates for a sim with a calendar (including numbers that are calendar years), numbers for elapsed time or for periods labeled by year (`use_years`); `force` makes them dates whatever they are """
         if self.timevec is None:
             return None
         if self.use_years and not force: # Resampled with use_years=True: the periods are labeled by their year
@@ -1069,7 +1056,7 @@ class Result(ss.arrays.BaseArr):
 
     def to_df(self, sep='_', col_names='vlh', bounds=True, resample=None, set_date_index=False, quantiles=None, **kwargs):
         """
-        Convert to a dataframe with time, value, low, and high columns
+        The result as a dataframe, with columns for the time, value, and (if it has them) low and high bounds
 
         For a result across runs, a long dataframe instead: one row per run and time point (columns `run`,
         `scenario`, any parameters swept, `time`, and `value`), or with `quantiles=`, one row per scenario,
@@ -1077,12 +1064,12 @@ class Result(ss.arrays.BaseArr):
 
         Args:
             sep (str): separator for the column names
-            col_names (str or None): if None, uses the name of the result. Default is 'vlh' which uses value, low, high
+            col_names (str or None): the names of the columns: 'vlh' (default) for `value`, `low`, and `high`; None for the name of the result (e.g. `infection` and `infection_low`); or another name to use instead
+            bounds (bool): include the low and high bounds, if the result has them
+            resample (str): if provided, resample the data to this unit first (see `resample()`), e.g. 'year'
             set_date_index (bool): if True, use the times as the index
-            bounds (bool): include high and low bounds as well (if and only if they exist)
-            resample (str): if provided, resample the data to this frequency
             quantiles (list): for a result across runs, the quantiles over the runs of each scenario
-            kwargs: passed to the resample method, if resample is given
+            kwargs (dict): passed to `resample()`, if `resample` is given
 
         For a 2D result, there is one set of dataframe columns per result column, e.g. `alpha` and `alpha_low`
         (or `infection_alpha` and `infection_alpha_low` if `col_names='infection'`).
@@ -1120,7 +1107,7 @@ class Result(ss.arrays.BaseArr):
             name = stem if col is None else col if stem == 'vlh' else f'{stem}{sep}{col}'
             valcol, prefix = ('value', '') if name == 'vlh' else (name, name + sep)
             data[valcol] = part.values
-            if bounds: # If high and low exist, include them too
+            if bounds:
                 data |= {f'{prefix}{key}':part[key] for key in ['low', 'high'] if part[key] is not None}
         return sc.dataframe(data, index=timevec) if set_date_index else sc.dataframe(data)
 
@@ -1270,7 +1257,7 @@ def resamplable(res, kwargs=None):
 
 
 class Results(ss.ndict):
-    """ Container for storing results
+    """ The results of a module (or of the sim, whose results also hold each module's), by name; a result can be found however it is spelled (see `find()`)
 
     Args:
         module (Module/str): the module the results belong to, or its name
@@ -1291,28 +1278,16 @@ class Results(ss.ndict):
 
     def __init__(self, module=None, *args, **kwargs):
         if module is not None and not isinstance(module, str):
-            modlabel = getattr(module, 'label', None)
-            modname = getattr(module, 'name', None)
-            modcls = module.__class__.__name__
-            module = sc.ifelse(modlabel, modname, modcls)
+            module = sc.ifelse(getattr(module, 'label', None), getattr(module, 'name', None), module.__class__.__name__)
         self.setattribute('_module', module)
         super().__init__(type=Result, *args, **kwargs)
         return
 
     def __repr__(self, indent=4, head_col=None, key_col=None, **kwargs): # kwargs are not used, but are needed for disp() to work
-
-        def format_head(string):
-            string = sc.colorize(head_col, string, output=True) if head_col else string
-            return string
-
-        def format_key(k):
-            keystr = sc.colorize(key_col, k, output=True) if key_col else k
-            return keystr
-
-        # Make the heading
-        string = format_head(f'Results({self._module})') + '\n'
-
-        # Loop over the other items
+        """ Each result on a line of its own, numbered; `head_col` and `key_col` color the heading and the keys """
+        color = lambda col, text: sc.colorize(col, text, output=True) if col else text
+        format_key = lambda k: color(key_col, k)
+        string = color(head_col, f'Results({self._module})') + '\n'
         for i,key,res in self.enumitems():
             if key == 'timevec':
                 entry = f'array(start={res[0]}, stop={res[-1]})'
@@ -1328,8 +1303,7 @@ class Results(ss.ndict):
                 string += entry + '\n'
             else:
                 string += f'{i}. {format_key(key)}: {entry}\n'
-        string = string.rstrip()
-        return string
+        return string.rstrip()
 
     def __str__(self, indent=4, head_col='cyan', key_col='green'):
         return self.__repr__(indent=indent, head_col=head_col, key_col=key_col)
@@ -1497,7 +1471,7 @@ class Results(ss.ndict):
         for key, res in self.items():
             if not resamplable(res, kwargs):
                 continue
-            elif isinstance(res, (Results, Result)):
+            if isinstance(res, (Results, Result)):
                 new[key] = res.resample(new_unit, **kwargs)
                 if isinstance(res, Result) and timevec is None:
                     timevec = new[key].timevec # Store the resampled timevec
@@ -1812,10 +1786,10 @@ class SimData:
         return f'ss.SimData({source}{aliases}); data.load() gives the dataframe'
 
     def load(self, sim=None):
-        """ Load the data and rename the columns
+        """ The data as a dataframe: read from the file (or copied from the dataframe given), with the columns of `aliases` renamed, and with `ignore_extra`, the columns that match no result of the sim left out
 
         Args:
-            sim (Sim): the sim the data is for
+            sim (Sim): the sim the data is for (needed to leave out columns with `ignore_extra`)
         """
         if isinstance(self.source, (str, os.PathLike)): # Separated by commas, tabs, or semicolons, whichever the file uses
             df = sc.dataframe(pd.read_csv(self.source, sep=None, engine='python'))
@@ -1841,45 +1815,34 @@ class SimData:
 
 def validate_sim_data(data=None, die=None):
     """
-    Validate data intended to be compared to the sim outputs, e.g. for calibration
+    Data to compare with the sim's results (e.g. for calibration), as a dataframe with its time column as the index, and times written as dates (e.g. '2020-01-08') as `ss.date`s, so they can be plotted against the sim's
 
     Args:
         data (df/dict): a dataframe (or dict) of data, with a time column (see `ss.SimData`) plus one column per result, e.g. "cases" or "hiv.infection"
-        die (bool): whether to raise an exception if the data cannot be converted (default: die if data is not None but cannot be converted)
-
+        die (bool): whether to raise an error if the data cannot be converted (by default, yes); False prints the error instead, e.g. to look at data that will not load. With True, no data (None) is an error too
     """
-    success = False
-    if data is not None:
-        # Try loading the data
-        try:
-            data = sc.dataframe(data) # Convert it to a dataframe
-            timecols = ss.SimData.time_cols # If a time column is supplied, use it as the index
-            found = False
-            for timecol in timecols:
-                if timecol in data.cols:
-                    if found:
-                        errormsg = f'Multiple time columns found: please ensure only one of {timecols} is present; you supplied {data.cols}.'
-                        raise ValueError(errormsg)
-                    data.set_index(timecol, inplace=True)
-                    found = True
-            dates = isinstance(data.index, pd.DatetimeIndex) or all(isinstance(v, (str, dt.date, np.datetime64)) for v in data.index) # Dates written as text (e.g. '2020-01-08'), or as dates in pandas (as from sim.to_synthetic_data())
-            if len(data.index) and dates: # Are ss.dates, so they can be plotted against the sim's
-                data.index = pd.Index([ss.date(v) for v in data.index], dtype=object, name=data.index.name)
-            success = True
-
-        # Data loading failed
-        except Exception as E:
-            errormsg = f'Failed to add data "{data}": expecting a dataframe-compatible object. Error:\n{E}'
-            if die == False:
-                print(errormsg)
-            else:
-                raise ValueError(errormsg)
-
-    # Validation
-    if not success and die == True:
-        errormsg = f'Data "{data}" could not be converted and die == True'
-        raise ValueError(errormsg)
-
+    if data is None:
+        if die == True:
+            errormsg = 'There is no data to validate (data=None), and die=True'
+            raise ValueError(errormsg)
+        return data
+    try:
+        data = sc.dataframe(data)
+        timecols = [col for col in ss.SimData.time_cols if col in data.cols]
+        if len(timecols) > 1:
+            errormsg = f'Multiple time columns found: please ensure only one of {ss.SimData.time_cols} is present; you supplied {data.cols}.'
+            raise ValueError(errormsg)
+        if timecols:
+            data.set_index(timecols[0], inplace=True)
+        dates = isinstance(data.index, pd.DatetimeIndex) or all(isinstance(v, (str, dt.date, np.datetime64)) for v in data.index) # Dates written as text (e.g. '2020-01-08'), or as dates in pandas (as from sim.to_synthetic_data())
+        if len(data.index) and dates:
+            data.index = pd.Index([ss.date(v) for v in data.index], dtype=object, name=data.index.name)
+    except Exception as E:
+        errormsg = f'Failed to add data "{data}": expecting a dataframe-compatible object. Error:\n{E}'
+        if die == False:
+            print(errormsg)
+        else:
+            raise ValueError(errormsg)
     return data
 
 
@@ -2052,11 +2015,10 @@ def time_weights(sim_t, data_t, flow, annual=False):
         spacing = np.median(np.diff(data_t)) if len(data_t) > 1 else step
         lo, hi = data_t, np.append(data_t[1:], data_t[-1] + spacing) if len(data_t) else data_t
         inside = (data_t >= sim_t.min() - eps) & ((hi <= end + eps) if flow else (data_t <= sim_t.max() + eps))
-    if flow: # The steps that start in [lo, hi)
+    if flow or annual: # The steps that start in [lo, hi): for a flow, their sum; for a stock or ratio by year, the mean of their values
         W = ((sim_t[None,:] >= lo[:,None] - eps) & (sim_t[None,:] < hi[:,None] - eps)).astype(float)
-    elif annual: # The mean of the time points in [lo, hi)
-        W = ((sim_t[None,:] >= lo[:,None] - eps) & (sim_t[None,:] < hi[:,None] - eps)).astype(float)
-        W /= np.maximum(W.sum(axis=1, keepdims=True), 1)
+        if not flow:
+            W /= np.maximum(W.sum(axis=1, keepdims=True), 1)
     else: # As np.interp(): the first or last value outside the steps
         W = np.zeros((len(data_t), len(sim_t)))
         j = np.clip(np.searchsorted(sim_t, data_t, side='right') - 1, 0, max(len(sim_t) - 2, 0))

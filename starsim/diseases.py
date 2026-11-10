@@ -12,8 +12,6 @@ import sciris as sc
 import starsim as ss
 plt = sc.lazyimport('matplotlib.pyplot') # Imported when first used, since most runs never plot
 
-ss_int = ss.dtypes.int
-
 
 
 class BuiltAfterInit(type):
@@ -26,7 +24,7 @@ class BuiltAfterInit(type):
 
 
 def check_init_prev(init_prev, seed_n, name):
-    """ init_prev= is a share of people, so more than 1 raises (pointing to init_n=, a number of people), and a whole number 1 is everyone, with a warning, as for init=; init_n= is not negative """
+    """ Check the starting infections: `init_prev=` is a share of people (up to 1; for a number of people, `init_n=`), so a whole number 1 means everyone and warns; `init_n=` is not negative """
     value = init_prev.raw if isinstance(init_prev, ss.par) else init_prev
     if not sc.isnumber(value):
         return
@@ -124,8 +122,14 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         default_state (str/State): the state that everyone not put elsewhere starts in, and is born into (its name, or the state): by default, the one named `S` or `susceptible`, else the first state of people made (in the class form, `default_state = 'N'` in the class body). A state with a name of its own given under another keyword (e.g. `first=S`) raises, rather than being renamed
         strains (Strains): its strains (`ss.Strains`), which share its states; then `dis.strains`
         stratify (dict): the dimensions, as `stratify()` takes them, e.g. `dict(age={0: 0.3, 15: 0.6, 65: 0.1}, risk=ss.levels(['low', 'high'], states=[I]))`
-        solver (abm): its own way of running as agents, which the sim's does not override, e.g. `ss.solvers.abm(step='wholestep')` (by steps, with rates over whole steps only, for those in the state at the start of the step, as code with `ss.bernoulli()` takes them: faster, and a little less exact at a coarse step) or `ss.solvers.abm(step='events')` (event by event, in continuous time); by default, the sim's if it names a step, else its class's `suggested_solver` (e.g. `suggested_solver = ss.solvers.abm(step='wholestep')` in the class body), else 'midstep' (see `ss.solvers.abm()` and `ss.solvers.agent_solver()`). An error for a compartmental run
+        solver (abm): how this disease runs as agents, whatever the sim's solver says, e.g. `ss.solvers.abm(step='wholestep')` (see below); an error for a compartmental run
         kwargs (dict): one keyword per state, transition, parameter, result, function, or modifier (`ss.modify()`, of its own quantities, e.g. `fading=ss.modify('rel_trans', multiply=0.5, who=I)`); also `name`, `label`, and `dt`
+
+    A disease's own `solver=` is useful when one disease of a sim needs a different way of running as agents from the others:
+
+    - `ss.solvers.abm(step='wholestep')`: by steps, with rates applied over whole steps to those in the state at the start of the step, as code with `ss.bernoulli()` does; faster, and a little less exact when the step is coarse
+    - `ss.solvers.abm(step='events')`: event by event, in continuous time
+    - by default: the sim's, if it names a step; else the class's `suggested_solver` (e.g. `suggested_solver = ss.solvers.abm(step='wholestep')` in the class body); else `'midstep'` (see `ss.solvers.abm()` and `ss.solvers.agent_solver()`)
 
     The results are the number in each state (`I`), the flow along each transition by its
     name (`infection`, with its cumulative total as `res.infection.cum`), and the results and
@@ -178,7 +182,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
             base = f'is an ss.AgentDisease, as {base} is (import starsim.library as ssl)' if base else 'is an ss.AgentDisease'
             errormsg = (f'{cls.__name__} declares states or transitions and defines {sc.strjoin(overridden)}, which a declared transition never calls, so it would be silently ignored.\n'
                         f'     To write a declared transmission as code, override transmit(self, transition), which gives who is infected (see ss.Disease.transmit()); a disease written as code from the start {base}.\n'
-                        f'     If this was written for Starsim 3, see https://docs.starsim.org/v3v4 for help migrating.')
+                        f'     If this was written for Starsim 3, see {ss.v3_deprecations.guide} for help migrating.')
             raise ss.CapabilityError(errormsg)
         rebound = [name for name in dict.fromkeys(k for base in cls.__mro__[1:] for k,v in vars(base).items() if isinstance(v, ss.par)) if name in vars(cls) and not isinstance(vars(cls)[name], (ss.par, ss.expressions.Expr))]
         if rebound: # A declared parameter rebound to something else (a method, a number) is dropped from the model, and its transitions keep the base class's parameter, so it would be silently ignored
@@ -554,7 +558,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
             modifier.own(self, name)
         for key in sc.mergedicts(pars):
             if key not in self.pars:
-                raise sc.KeyNotFoundError(f'"{self.name}" has no parameter named "{key}". Its parameters are {sc.strjoin(self.pars.keys())}{ss.expressions.did_you_mean(key, self.pars.keys())}{ss.errors.starsim3(keys=key, call=f"ss.{type(self).__name__}")}')
+                raise sc.KeyNotFoundError(f'"{self.name}" has no parameter named "{key}". Its parameters are {sc.strjoin(self.pars.keys())}{ss.expressions.did_you_mean(key, self.pars.keys())}{ss.v3_deprecations.hint(keys=key, call=f"ss.{type(self).__name__}")}')
         self.pars.update(pars) # A declared parameter keeps its bounds and name: see ss.Pars
         return
 
@@ -633,9 +637,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
             desc.add('parameters', ', '.join(self.pars.keys()))
             if self.strains is not None:
                 desc.add('strains', f'{sc.strjoin(self.strains.names)}, one carried at a time')
-        if out is not None:
-            return desc
-        return desc.as_text()
+        return desc if out is not None else desc.as_text()
 
     def equations(self):
         """
@@ -742,7 +744,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         stored = {} # The people in each state of each group at each kept time point
         group_ti = None
         for name in engine.state_comps.keys():
-            res = results.get(name) if name in results else None
+            res = results[name] if name in results else None # Not get(), which ignores case
             if res is None:
                 continue
             elif getattr(res, 'strata', None) is not None:
@@ -776,7 +778,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
 
     @ss.required()
     def init_pre(self, sim):
-        """ Link the disease to the sim, create its engine and objects, initialize results, and start its infection log if an analyzer needs it (e.g. `ss.infection_log`); see Module.init_pre() for details
+        """ Link the disease to the sim, create its engine and objects, initialize results, and start its infection log if an analyzer needs it (e.g. `ss.infection_log`); see `ss.Module.init_pre()`
 
         Args:
             sim (Sim): the sim being initialized
@@ -786,7 +788,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         unknown = [key for key in self.pars if key not in self.graph.pars and key not in self.code_pars] if self.graph is not None else [] # Added after the disease was made, so nothing reads it
         if unknown:
             hint = ' The starting values are given when the disease is made, e.g. ss.Disease(..., init=dict(I=0.01)) or init_n=dict(I=100), and cannot be set through pars.' if 'init' in unknown or 'init_n' in unknown else ''
-            raise sc.KeyNotFoundError(f'"{self.name}" has no parameter named {sc.strjoin(unknown)}, so nothing would read it. Its parameters are {sc.strjoin(self.graph.pars.keys())}{ss.expressions.did_you_mean(unknown[0], self.graph.pars.keys())}{hint}{ss.errors.starsim3(keys=unknown, call=f"ss.{type(self).__name__}")}')
+            raise sc.KeyNotFoundError(f'"{self.name}" has no parameter named {sc.strjoin(unknown)}, so nothing would read it. Its parameters are {sc.strjoin(self.graph.pars.keys())}{ss.expressions.did_you_mean(unknown[0], self.graph.pars.keys())}{hint}{ss.v3_deprecations.hint(keys=unknown, call=f"ss.{type(self).__name__}")}')
         self.engine = ss.solvers.make_engine(self, sim)
         self.engine.define()
         needs = ss.interventions.memory_needs(sim) if isinstance(sim, ss.Sim) and self.graph is not None and self.graph.transitions else {} # Not a mock sim
@@ -906,19 +908,13 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
 
     def on_death(self, uids):
         """
-        Carry out state changes upon death: the agents who died leave every declared state (as agents)
+        What happens to agents when they die: as agents, they leave every declared state
 
-        This function is triggered after deaths are resolved, and before analyzers are run.
-        See `ssl.AgentSIR` for a typical use case - deaths are requested as an autonomous
-        update, to take effect after transmission on the same timestep. State changes that occur
-        upon death (e.g., clearing an `infected` flag) are executed in this function. That also
-        allows an intervention to avert a death scheduled on the same timestep, without having
-        to undo any state changes that have already been applied (because they only run via this
-        function if the death actually occurs).
-
-        Unlike other methods during the integration loop, this method is not called directly
-        by the sim; instead, it is called by people.step_die(), which reconciles the UIDs of
-        the agents who will die.
+        It is called once the step's deaths are settled, before the analyzers run. A disease written as code overrides it
+        for what changes at death (e.g. clearing `infected`). A death is only requested during the step (e.g. in
+        `step_state()`, as `ssl.AgentSIR` does), so an intervention on the same step can still avert it, and nothing
+        needs undoing, since these changes are made only if the death happens. The sim does not call it directly:
+        `people.step_die()` does, once it knows who died.
 
         Args:
             uids (array): the agents who died
@@ -1116,8 +1112,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
     @property
     def custom_transmit(self):
         """ Whether the disease is declared and has its own `transmit()`, which the engine calls for its transmissions """
-        cls = type(self)
-        return self.graph is not None and cls.transmit is not Disease.transmit
+        return self.graph is not None and type(self).transmit is not Disease.transmit
 
     def call_transmit(self, tr):
         """ The disease's own `transmit()` for one of its transmissions, with or without the transition as its argument (see `transmit()`) """
@@ -1523,7 +1518,7 @@ class AgentDisease(Disease):
 
 class InfectionLog:
     """
-    Record infections
+    A record of who infected whom, and when: kept by a disease when an analyzer needs it (e.g. `ss.infection_log`), to trace chains of transmission
 
     The infection log records transmission events and optionally other data
     associated with each transmission. Entries are stored as one chunk of arrays
@@ -1582,11 +1577,8 @@ class InfectionLog:
 
     def __repr__(self):
         """ Brief summary of the log, without building the dataframe """
-        string = f'InfectionLog(disease={self.disease!r}, n={self.n}'
-        if self.n:
-            string += f', t={self.chunks[0]["t"][0]}–{self.chunks[-1]["t"][0]}'
-        string += ')'
-        return string
+        times = f', t={self.chunks[0]["t"][0]}–{self.chunks[-1]["t"][0]}' if self.n else ''
+        return f'InfectionLog(disease={self.disease!r}, n={self.n}{times})'
 
     def disp(self, **kwargs):
         """ Full display of the infection log
