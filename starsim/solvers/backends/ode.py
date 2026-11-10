@@ -127,6 +127,8 @@ class Layout:
                     stack.append(regs[arg])
                 elif op == K.STORE:
                     regs[arg] = stack.pop()
+                elif op == K.NOISE: # Noise on a rate, which the ODE leaves out (its mean, 1)
+                    pass
                 elif op >= K.EXP:
                     c = stack.pop()
                     stack.append(node((op, c), level[c] + 1))

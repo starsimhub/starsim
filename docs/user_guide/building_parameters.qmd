@@ -11,7 +11,10 @@ The parameters of a model are the numbers in it: transmission rates, durations, 
 
 ## Values live in the model
 
-In a declared disease, a value lives where it is used. There is no separate block of parameters to fill in: each number becomes a parameter, named after its role:
+In a declared disease, a value lives where it is used. There is no separate block of parameters to fill in: each number becomes a parameter, named after its role. The "Explicit" tab gives each parameter its name outright, with `ss.par(..., name=...)`, and β its unit; the parameters, and the results, are the same:
+
+::: {.panel-tabset group="language"}
+## Python
 
 ```{python}
 import starsim as ss
@@ -23,6 +26,37 @@ measles = ss.Disease(infection, recovery, init_prev=0.001)
 
 measles.pars
 ```
+
+## R
+
+```r
+library(starsim)
+
+states("S I R")
+infection <- Transition(S, I, rate = 1.9 * I)
+recovery  <- Transition(I, R, dur = days(8))
+measles <- Disease(infection, recovery, init_prev = 0.001)
+
+measles$pars
+```
+
+## Explicit
+
+```{python}
+beta  = ss.par(ss.perday(1.9), name='beta') # Named for what it multiplies: the share infectious
+dur_I = ss.par(ss.days(8), name='dur_I')    # Named for the state it is the time in
+
+S, I, R = ss.State(name='S'), ss.State(name='I'), ss.State(name='R')
+measles_explicit = ss.Disease(
+    ss.Transition(source=S, dest=I, rate=beta*I, name='infection'),
+    ss.Transition(source=I, dest=R, dur=dur_I, name='recovery'),
+    init_prev = 0.001,
+    name = 'measles',
+)
+
+measles_explicit.pars
+```
+:::
 
 The number that multiplies a source of infection is `beta` (named by its transition, `beta_infection`, only where two would have the same name). A duration is named by the state it is the time in (`dur_E`, `dur_I`), or by its transition if people can leave that state after more than one duration (`dur_recovery`, `dur_death`), and a rate by its transition (`rate_death`). What a number means is given by where it is: after `@` and multiplying `I`, a rate; as `init_prev=`, a share of the population.
 
@@ -36,6 +70,9 @@ Values are converted to the time step of the sim, whatever it is, so the same mo
 
 When a parameter is to be documented, reused, or fitted, give it a name with `ss.par()`. It behaves like its value in a rate, so it can be used anywhere a number can:
 
+::: {.panel-tabset group="language"}
+## Python
+
 ```{python}
 beta = ss.par(1.9, bounds=[1, 3], doc='Transmission rate per day', source='Chosen to give R0 of about 15')
 dur  = ss.par(ss.days(8), bounds=[ss.days(6), ss.days(10)], doc='Infectious period', source='About 4 days either side of the rash')
@@ -47,6 +84,25 @@ measles = ss.Disease(infection, recovery, init_prev=0.001)
 
 measles.pars
 ```
+
+## R
+
+```r
+library(starsim)
+
+beta <- par(1.9, bounds = c(1, 3), doc = "Transmission rate per day", source = "Chosen to give R0 of about 15")
+dur  <- par(days(8), bounds = c(days(6), days(10)), doc = "Infectious period", source = "About 4 days either side of the rash")
+
+states("S I R")
+measles <- Disease(
+  infection = Transition(S, I, rate = beta * I),
+  recovery  = Transition(I, R, dur = dur),
+  init_prev = 0.001
+)
+
+measles$pars
+```
+:::
 
 - The name is taken from the variable (`beta`), or given with `name=`.
 - `bounds` is the range of plausible values. A parameter with bounds can be fitted: `sim.fit()` fits every parameter that has bounds to every result that has data ([Fitting a model](calibration_fitting.qmd)). A value outside its bounds is an error.
@@ -65,11 +121,23 @@ sim.describe()
 
 A parameter can be changed when the sim is made, by name, without changing the model. This is how a set of values for one setting, or a fitted set, is used:
 
+::: {.panel-tabset group="language"}
+## Python
+
 ```{python}
 sim = ss.Sim(measles, pars=dict(beta=1.5), total_pop=100_000, stop=ss.days(50))
 sim.run()
 print('R0 with beta = 1.5:', round(sim.diseases.measles.R0(), 1))
 ```
+
+## R
+
+```r
+sim <- Sim(measles, pars = list(beta = 1.5), total_pop = 100000, stop = days(50))
+sim$run()
+cat("R0 with beta = 1.5:", round(sim$diseases$measles$R0(), 1), "\n")
+```
+:::
 
 With several modules, a parameter's name is given with its module's, e.g. `pars={'measles.beta': 1.5}`. A name that matches no parameter is an error, which lists the names there are, so a misspelled parameter is never silently ignored:
 
@@ -103,7 +171,10 @@ Any of these can be wrapped in `ss.par()` to give it a name, bounds, or a source
 
 ### Values for each group
 
-`ss.by()` gives a value for each level of a stratification. Here, in a town where 80% of children (0–14), 92% of adults (15–64), and 98% of older adults (65+) are immune, susceptible children are the most likely to be infected, and older adults the least, as a higher β for children than for older adults says. Each scenario reports the share of each group's susceptible people who are infected over a year:
+`ss.by()` gives a value for each level of a stratification. Here, in a town where 80% of children (0–14), 92% of adults (15–64), and 98% of older adults (65+) are immune, susceptible children are the most likely to be infected, and older adults the least, as a higher β for children than for older adults says. Each scenario reports the share of each group's susceptible people who are infected over a year. The "Explicit" tab gives β by age as a plain function of each person's age instead; since it is about individuals, that model runs as agents, so its shares differ from the ODE's by chance:
+
+::: {.panel-tabset group="language"}
+## Python
 
 ```{python}
 import pandas as pd
@@ -128,6 +199,58 @@ for label, beta in betas.items():
     attack[label] = {age: round(res.infection.select(age=age).sum() / res.S.select(age=age)[0], 2) for age in ['0-14', '15-64', '65+']}
 pd.DataFrame(attack) # The share of each group's susceptible people infected
 ```
+
+## R
+
+```r
+make_measles <- function(beta) {
+  states("S I R")
+  infection <- Transition(S, I, rate = beta * I)
+  recovery  <- Transition(I, R, dur = days(8))
+  measles <- Disease(infection, recovery, init = list(R = ss$by(age = c(0.8, 0.92, 0.98))), init_n = list(I = 10), name = "measles")
+  measles$stratify(age = list("0" = 0.3, "15" = 0.6, "65" = 0.1)) # Ages 0-14, 15-64, and 65+, with the share in each
+  measles
+}
+
+betas <- list(
+  "The same for everyone" = 1.9,
+  "By age"                = ss$by(age = c(2.5, 1.9, 1.0))
+)
+attack <- sapply(betas, function(beta) {
+  sim <- Sim(make_measles(beta), total_pop = 100000, start = "2025-01-01", stop = "2026-01-01", verbose = 0)
+  sim$run()
+  res <- sim$results$measles
+  sapply(c("0-14", "15-64", "65+"), function(age) {
+    round(sum(res$infection$select(age = age)$values) / res$S$select(age = age)$values[1], 2)
+  })
+})
+attack # The share of each group's susceptible people infected
+```
+
+## Explicit
+
+```{python}
+import numpy as np
+
+def beta_by_age(sim, uids):
+    """ β for each person: 2.5 per day under 15, 1.9 from 15 to 64, and 1.0 from 65 """
+    age = sim.people.age[uids]
+    return ss.perday(np.where(age < 15, 2.5, np.where(age < 65, 1.9, 1.0)))
+
+betas_explicit = {
+    'The same for everyone': 1.9,
+    'By age':                ss.par(beta_by_age),
+}
+attack_explicit = {}
+for label, beta in betas_explicit.items():
+    sim = ss.Sim(make_measles(beta), total_pop=100_000, n_agents=20_000, start='2025-01-01', stop='2026-01-01', verbose=0)
+    sim.run()
+    res = sim.results.measles
+    attack_explicit[label] = {age: round(res.infection.select(age=age).sum() / res.S.select(age=age)[0], 2) for age in ['0-14', '15-64', '65+']}
+pd.DataFrame(attack_explicit) # The same, as agents
+```
+
+:::
 
 With the same β for everyone and homogeneous mixing, every susceptible person has the same risk, so the same share of each group is infected (about two-thirds), whatever its size or immunity. With β by age, the share is higher among children and lower among older adults; since children are most of those still susceptible, the outbreak as a whole is also larger.
 

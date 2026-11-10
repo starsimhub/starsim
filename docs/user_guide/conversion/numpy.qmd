@@ -86,7 +86,7 @@ There is no switching demo for NumPy users, since a NumPy model is whatever its 
 | Many runs over seeds, with ranges | **Works**: `ss.parallel(sim, n_runs=)` runs them in parallel; `msim.summarize()` gives the median, an interval, and the mean of each result over the runs, and `res.quantiles()` the range at each time point |
 | Fitting to data | **Works**: `sim.fit()` chooses the method from the model (by gradients for an ODE, by simulation for a stochastic model), and gives a posterior when one is asked for (`method='nuts'`, `'pmcmc'`, or `'abc-smc'`) |
 | Anything the loop does that is not a flow between states (a running maximum, a rule in Python) | **Works**: a module written as code, with a `step()` in Python; a value it keeps can be read by a function in a rate, which runs under any solver |
-| Speed for a small model run once | **Slower**: 13 ms against 0.7 ms (above), which is under the north star's limit but 18 times slower |
+| Speed for a small model run once | 18 times slower: 13 ms against 0.7 ms (above), which is under the north star's limit and called about the same in the [landscape](../library_landscape.qmd), since a single run under 0.1 s is too short to notice |
 
 ## Bringing your model in
 

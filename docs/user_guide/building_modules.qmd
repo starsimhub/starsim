@@ -30,7 +30,7 @@ Many things that once needed a module of their own are declared, and a declared 
 | Protection that depends on the time since an event, such as immunity that halves every 60 days after recovery | `ss.modify(cold.rel_sus, multiply=1 - 0.5**(cold.recovery.since/ss.days(60)))` | [What can be declared](building_declared.qmd#a-declared-disease-with-immunity-written-as-code) |
 | Counting events in each person, such as past infections or doses | `increment=` on a transition | [Stratification](building_stratification.qmd#moving-between-groups) |
 
-Write a module as code when the model needs something none of these can say. A module that keeps a value for each person, like the one below, works on agents, so a sim with one runs as agents by itself (`n_agents=` says how many); it works with declared diseases in the same sim. A module can also say so in its class: `compartmental = False` says that it needs agents, and `compartmental = True` that its code works on groups too, so that a compartmental run can include it ([Modules](architecture_modules.qmd)). A module that keeps nothing per person, such as an ODE of its own, runs with no agents, and costs the loop only its own methods; [Measles in London, four ways](../gallery/measles_london.qmd) works through an example, from declared to compiled code.
+Write a module as code when the model needs something none of these can say. A module that keeps a value for each person, like the one below, works on agents, so a sim with one runs as agents by itself (`n_agents=` says how many); it works with declared diseases in the same sim. A module can also say so in its class: `compartmental = False` says that it needs agents, and `compartmental = True` that its code works on groups too, so that a compartmental run can include it ([Modules](architecture_modules.qmd)). A module that keeps nothing per person, such as an ODE of its own, runs with no agents, and costs the loop only its own methods; [Measles in London, two ways](../gallery/measles_london.qmd) works through an example, declared and as code.
 
 ## An example: immunity that fades gradually
 
@@ -199,7 +199,7 @@ def init_results(self):
     )
 ```
 
-`kind=` says how the result is summed over time and compared with data: `'flow'` for a number of events in each step (e.g. new infections), `'stock'` for a quantity at each time point (e.g. the number infected), and `'ratio'` for a share or a mean. It is required unless the name says it (`new_...` is a flow, `n_...` and `cum_...` are stocks, `prevalence` is a ratio): nothing is guessed from the type, since a count taken for a ratio would not be scaled. A flow or stock is a count, which is multiplied by the number of people each agent stands for when the population is [rescaled](running_branching.qmd); a ratio (a share, a mean, or a level) isn't. `scale=` overrides this. Fill results at `self.ti`: a stock in `record_stocks()`, called at the start of each step before any module steps, so that it is the state at the time point; a flow in `record_flows()`, called at the end of the step after every module has stepped and the deaths have happened (or in `step()`, as the events happen, e.g. `self.results.doses[self.ti] += len(uids)`). A result that needs both, such as a rate of births over the people alive, goes in `record_flows()`, reading the stock from its result (`self.sim.results.alive[self.ti]`), or in `finalize_results()`, over the whole run at once. A class that defines `update_results()`, as Starsim 3 and early versions of Starsim 4 did, raises a `TypeError` saying to split it.
+`kind=` says how the result is summed over time and compared with data: `'flow'` for a number of events in each step (e.g. new infections), `'stock'` for a quantity at each time point (e.g. the number infected), and `'ratio'` for a share or a mean. Give it unless the name says it (`new_...` is a flow, `n_...` and `cum_...` are stocks, a name ending in `prevalence` is a ratio). With neither, the kind is guessed from the type, with a warning: an integer is taken as a flow, and anything else as a ratio, which would leave a count unscaled. [Names with special meaning](building_diseases.qmd#names-with-special-meaning) lists the other names Starsim reads. A flow or stock is a count, which is multiplied by the number of people each agent stands for when the population is [rescaled](running_branching.qmd); a ratio (a share, a mean, or a level) isn't. `scale=` overrides this. Fill results at `self.ti`: a stock in `record_stocks()`, called at the start of each step before any module steps, so that it is the state at the time point; a flow in `record_flows()`, called at the end of the step after every module has stepped and the deaths have happened (or in `step()`, as the events happen, e.g. `self.results.doses[self.ti] += len(uids)`). A result that needs both, such as a rate of births over the people alive, goes in `record_flows()`, reading the stock from its result (`self.sim.results.alive[self.ti]`), or in `finalize_results()`, over the whole run at once. A class that defines `update_results()`, as Starsim 3 and early versions of Starsim 4 did, raises a `TypeError` saying to split it.
 
 ## The work: `step()`
 
@@ -235,7 +235,10 @@ Always call the base class's method (`super().init_results()`, `super().record_s
 
 ## Modules from functions
 
-For a quick piece of logic, a function of the sim is enough: it becomes the module's `step()`, called once each step. A function given as `interventions=` becomes an `ss.Intervention`, one given as `analyzers=` an `ss.Analyzer`, and one given as `modules=` an `ss.Module`, named after the function. A common use is a check while a model is being built, such as that everyone is in one state of a disease at each step:
+For a quick piece of logic, a function of the sim is enough: it becomes the module's `step()`, called once each step. A function given as `interventions=` becomes an `ss.Intervention`, one given as `analyzers=` an `ss.Analyzer`, and one given as `modules=` an `ss.Module`, named after the function. A common use is a check while a model is being built, such as that everyone is in one state of a disease at each step (the "Explicit" tab makes the analyzer from the function itself, with `ss.Analyzer.from_func()`):
+
+::: {.panel-tabset group="language"}
+## Python
 
 ```{python}
 S, I, R = ss.states('S I R')
@@ -247,13 +250,35 @@ def check_states(sim):
     """ Check that everyone alive is in exactly one state of measles """
     m = sim.diseases.measles
     in_states = m.S.sum() + m.I.sum() + m.R.sum()
-    assert in_states == sim.people.n_alive, f'{in_states} people in states, but {sim.people.n_alive} alive'
+    assert in_states == sim.people.alive.count(), f'{in_states} agents in states, but {sim.people.alive.count()} alive'
     return
 
 sim = ss.Sim(measles, analyzers=check_states, n_agents=10_000, stop=ss.days(50), verbose=0)
 sim.run()
 print(sim.analyzers[0].name)
 ```
+
+## Explicit
+
+```{python}
+S, I, R = ss.states('S I R')
+infection = S >> I @ 1.9*I        # β = 1.9 per day
+recovery  = I >> R @ ss.days(8)   # Infectious for 8 days on average
+measles = ss.Disease(infection, recovery, init_prev=0.001)
+
+def check_states(sim):
+    """ Check that everyone alive is in exactly one state of measles """
+    m = sim.diseases.measles
+    in_states = m.S.sum() + m.I.sum() + m.R.sum()
+    assert in_states == sim.people.alive.count(), f'{in_states} agents in states, but {sim.people.alive.count()} alive'
+    return
+
+checker = ss.Analyzer.from_func(check_states) # The analyzer that analyzers=check_states makes
+sim = ss.Sim(measles, analyzers=checker, n_agents=10_000, stop=ss.days(50), verbose=0)
+sim.run()
+print(sim.analyzers[0].name)
+```
+:::
 
 A function module is called at every step, so it has to check the time itself if it should act only at some (e.g. `if sim.now >= ss.date('2025-03-01'):`; not `==`, which a date between two steps never meets). Its keyword arguments with defaults are its parameters, passed to it at each call, so one given as `ss.par` with bounds can be fitted and set by name like any other parameter (`def close_schools(sim, start=2025, share=ss.par(0.5, bounds=[0.2, 0.8])):`; see [Fitting a model](calibration_fitting.qmd#a-value-that-isnt-a-parameter)). It has no states or results of its own; as soon as it needs them, write a class instead. `ss.Intervention.from_func(fn)` (and likewise for the other types) makes the module from a function explicitly. For analyzers, see [Analyzers](interventions_analyzers.qmd).
 

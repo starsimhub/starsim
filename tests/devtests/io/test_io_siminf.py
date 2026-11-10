@@ -53,7 +53,7 @@ def test_mparse():
     choices = '\n'.join(sim.imported.choices)
     assert 'exposure to I' in choices # beta*S*I/N, with N <- S + I + R
     assert 'mu * (S.n + I.n + R.n)' in choices # Births in proportion to everyone
-    assert isinstance(sim.pars.solver, ss.solvers.gillespie)
+    assert isinstance(sim.init().solver, ss.solvers.gillespie)
     sim.run()
     res = sim.results.model
     assert res.I.values.max() > 50

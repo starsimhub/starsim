@@ -13,7 +13,10 @@ This page covers births and deaths declared for a population, which work however
 
 ## Births and deaths
 
-Births and deaths for the whole population go in `demographics=`. `ss.birth(rate=r)` adds people at a crude birth rate `r` (per year, and per 1,000 people if above 1, else per person, as `ss.Births` reads it: `ss.peryear(0.03)`, `ss.peryear(30)`, and the bare number `30` are the same), into the first state of each disease (here `S`); `ss.death(rate=r)` removes people from every state at rate `r`, read the same way. Here is the measles model of the tutorials over 30 years, with 30 births and 10 deaths per 1,000 people a year:
+Births and deaths for the whole population go in `demographics=`. `ss.birth(rate=r)` adds people at a crude birth rate `r` (per year, and per 1,000 people if above 1, else per person, as `ss.Births` reads it: `ss.peryear(0.03)`, `ss.peryear(30)`, and the bare number `30` are the same), into the first state of each disease (here `S`); `ss.death(rate=r)` removes people from every state at rate `r`, read the same way. Here is the measles model of the tutorials over 30 years, with 30 births and 10 deaths per 1,000 people a year. The "Explicit" tab declares the same births and deaths in the disease itself, as transitions, which is what `demographics=` does with them for each disease:
+
+::: {.panel-tabset group="language"}
+## Python
 
 ```{python}
 import starsim as ss
@@ -34,6 +37,49 @@ fig = msim.plot('measles.I', log=True, do_show=False) # A log scale shows the la
 fig.axes[0].set_ylim(0.1, 200_000)
 fig
 ```
+
+## R
+
+```r
+library(starsim)
+
+states("S I R")
+infection <- Transition(S, I, rate = 1.9 * I) # β = 1.9 per day
+recovery  <- Transition(I, R, dur = days(8))  # Infectious for 8 days on average
+measles <- Disease(infection, recovery, init_prev = 0.001)
+
+demographics <- list(
+  ss$birth(rate = ss$peryear(0.03)), # 30 births per 1,000 people per year
+  ss$death(rate = ss$peryear(0.01))  # 10 deaths per 1,000 people per year
+)
+make_sim <- function(...) { # A sim with these settings, and any others given
+  Sim(measles, total_pop = 100000, start = "2000", stop = "2030", dt = days(1), verbose = 0, ...)
+}
+msim <- parallel(list("No births or deaths" = make_sim(), "Births and deaths" = make_sim(demographics = demographics)))
+fig <- msim$plot("measles.I", log = TRUE, do_show = FALSE) # A log scale shows the later epidemics, which are far smaller than the first
+fig$axes[[1]]$set_ylim(0.1, 200000) # The first axes (R counts from 1)
+fig
+```
+
+## Explicit
+
+```{python}
+S, I, R = ss.states('S I R')
+measles_demog = ss.Disease(
+    infection = S >> I @ 1.9*I,
+    recovery  = I >> R @ ss.days(8),
+    births    = ss.birth(S, rate=ss.peryear(0.03)), # Births into S, the first state, as a transition of the disease
+    deaths    = ss.death(rate=ss.peryear(0.01)),    # Deaths from every state
+    init_prev = 0.001,
+    name = 'measles',
+)
+sim_explicit = ss.Sim(measles_demog, **pars) # No demographics= needed: the disease has them
+msim_explicit = ss.parallel({'No births or deaths': ss.Sim(measles, **pars), 'Births and deaths': sim_explicit})
+fig = msim_explicit.plot('measles.I', log=True, do_show=False)
+fig.axes[0].set_ylim(0.1, 200_000)
+fig
+```
+:::
 
 `log=True` plots on a log scale; `do_show=False` returns the figure without showing it, so it can be changed (here, the range of the axis) before it is shown.
 
@@ -62,6 +108,9 @@ A death from a disease, rather than from every state, is a transition of the dis
 
 A birth or death rate can also change over time, with `ss.timeseries()`. By default each value holds until the next; `'linear'` interpolates between them. Here the birth rate falls from 40 to 20 per 1,000 a year over 30 years, compared with a birth rate that stays at 40:
 
+::: {.panel-tabset group="language"}
+## Python
+
 ```{python}
 deaths = ss.death(rate=ss.peryear(0.01))
 constant = ss.birth(rate=ss.peryear(0.04))
@@ -74,6 +123,33 @@ msim = ss.parallel({
 })
 msim.plot(['alive', 'measles.I'])
 ```
+
+## R
+
+```r
+library(starsim)
+
+states("S I R")
+measles <- Disease(
+  infection = Transition(S, I, rate = 1.9 * I), # β = 1.9 per day
+  recovery  = Transition(I, R, dur = days(8)),  # Infectious for 8 days on average
+  init_prev = 0.001
+)
+
+deaths   <- ss$death(rate = ss$peryear(0.01))
+constant <- ss$birth(rate = ss$peryear(0.04))
+falling  <- ss$birth(rate = ss$timeseries(list("2000-01-01" = ss$peryear(0.04), "2030-01-01" = ss$peryear(0.02)), interpolation = "linear"))
+
+make_sim <- function(...) { # A sim with these settings, and any others given
+  Sim(measles, total_pop = 100000, start = "2000", stop = "2030", dt = ss$months(1), verbose = 0, ...)
+}
+msim <- parallel(list(
+  "Constant birth rate" = make_sim(demographics = list(constant, deaths)),
+  "Falling birth rate"  = make_sim(demographics = list(falling, deaths))
+))
+msim$plot(c("alive", "measles.I"))
+```
+:::
 
 The population grows more slowly with the falling birth rate, and with fewer susceptible children born each year, the endemic level of measles is lower. The times of a series can also be years (`{2000: ..., 2030: ...}`): a bare number from 1800 on is a calendar year (in a sim with a calendar, any bare number is one), and in a sim with no calendar, a bare number is a time in the sim's unit from 0. See [Parameters](building_parameters.qmd) for `ss.timeseries()` and other parameters that vary over time.
 

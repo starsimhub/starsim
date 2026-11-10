@@ -13,6 +13,9 @@ What a vaccine, test, or treatment does is on [Products](interventions_products.
 
 Here are the two kinds side by side, against an outbreak of measles in a town of 100,000 people, 90% of whom are immune (an SEIR model with an R0 of about 15, latent for 10 days and infectious for 8, as on [Products](interventions_products.qmd)): a vaccination campaign that reaches 80% of people on 1 May, three months before the outbreak would peak, and distancing that halves transmission from 1 May to 1 July:
 
+::: {.panel-tabset group="language"}
+## Python
+
 ```{python}
 import numpy as np
 import starsim as ss
@@ -36,6 +39,65 @@ msim.plot('measles.I')
 msim.summarize().loc['measles_infection']
 ```
 
+## R
+
+```r
+library(starsim)
+
+states("S E I R")
+measles <- Disease(
+  infection   = Transition(S, E, rate = 1.9 * I), # β = 1.9 per day
+  progression = Transition(E, I, dur = days(10)), # Latent for 10 days on average
+  recovery    = Transition(I, R, dur = days(8)),  # Infectious for 8 days on average
+  init   = list(R = 0.9), # 90% immune
+  init_n = list(I = 10)   # 10 infectious
+)
+
+vaccination <- vaccinate(efficacy = 0.93, leaky = FALSE, when = "2025-05-01", coverage = 0.8)        # Delivers a product
+distancing  <- modify(measles$pars$beta, multiply = 0.5, start = "2025-05-01", stop = "2025-07-01") # Changes a parameter
+
+make_sim <- function(...) { # A sim with these settings, and any others given
+  Sim(measles, total_pop = 100000, start = "2025-01-01", stop = "2026-07-01", verbose = 0, ...)
+}
+msim <- parallel(list(
+  "No intervention" = make_sim(),
+  "Vaccination"     = make_sim(interventions = vaccination),
+  "Distancing"      = make_sim(interventions = distancing)
+))
+msim$plot("measles.I")
+subset(summary(msim), result == "measles_infection")
+```
+
+## Explicit
+
+```{python}
+S, E, I, R = ss.State(name='S'), ss.State(name='E'), ss.State(name='I'), ss.State(name='R')
+measles_explicit = ss.Disease(
+    transitions = [
+        ss.Transition(source=S, dest=E, rate=ss.perday(1.9)*I, name='infection'),
+        ss.Transition(source=E, dest=I, dur=ss.expon(mean=ss.days(10)), name='progression'),
+        ss.Transition(source=I, dest=R, dur=ss.expon(mean=ss.days(8)), name='recovery'),
+    ],
+    init   = dict(R=0.9), # The rest start in S
+    init_n = dict(I=10),
+    name   = 'measles',
+)
+
+vaccine = ss.Vaccine(efficacy=0.93, leaky=False) # The product: 93% of those vaccinated fully protected, the rest not at all
+vaccination_explicit = ss.vaccinate(vaccine, when='2025-05-01', coverage=0.8, name='vaccination') # The delivery: when, and how many
+distancing_explicit  = ss.modify(measles_explicit.pars.beta, multiply=0.5, start='2025-05-01', stop='2025-07-01', name='distancing')
+
+kw_explicit = dict(networks=ss.contacts(1), total_pop=100_000, start='2025-01-01', stop='2026-07-01', dt=ss.days(1), unit='day', solver='ode', verbose=0)
+msim_explicit = ss.parallel({
+    'No intervention': ss.Sim(diseases=measles_explicit, **kw_explicit),
+    'Vaccination':     ss.Sim(diseases=measles_explicit, interventions=vaccination_explicit, **kw_explicit),
+    'Distancing':      ss.Sim(diseases=measles_explicit, interventions=distancing_explicit, **kw_explicit),
+})
+msim_explicit.plot('measles.I')
+msim_explicit.summarize().loc['measles_infection']
+```
+:::
+
 The campaign (with an all-or-nothing vaccine, `leaky=False`, as measles vaccine roughly is, protecting 93% of those vaccinated) protects those it reaches for good, and cuts the outbreak from about 6,000 infections to under 800. Distancing stops the outbreak growing while it lasts, since halving transmission brings the number each case infects below one; but when it ends, the people it protected are still susceptible, and the outbreak resumes, peaking in the winter instead of the summer, and infecting nearly as many in the end. The run is 18 months long so that this shows: a run that ended in December would credit distancing with infections it only delayed.
 
 ## Delivering products
@@ -57,6 +119,9 @@ The product is the first argument (`ss.vaccinate(vaccine, ...)`), or is made fro
 
 The examples in this section use a curable infection with no lasting immunity, over 20 years, as an SIS model run as agents (since some of what follows depends on each person's own history):
 
+::: {.panel-tabset group="language"}
+## Python
+
 ```{python}
 S, I = ss.states('S I')
 infection = S >> I @ ss.peryear(2)*I  # β = 2 per year
@@ -66,9 +131,28 @@ sis = ss.Disease(infection, recovery, init_prev=0.1)
 kw = dict(n_agents=5000, start=2000, stop=2020, dt=ss.months(1), verbose=0)
 ```
 
+## R
+
+```r
+states("S I")
+sis <- Disease(
+  infection = Transition(S, I, rate = ss$peryear(2) * I), # β = 2 per year
+  recovery  = Transition(I, S, dur = years(1)),           # Infected for a year on average, then susceptible again
+  init_prev = 0.1
+)
+
+make_sim <- function(...) { # A sim with these settings, and any others given
+  Sim(sis, n_agents = 5000, start = 2000, stop = 2020, dt = ss$months(1), verbose = 0, ...)
+}
+```
+:::
+
 ### Rounds and routine delivery
 
 With times or how often (`ss.schedule(every=...)`) as `when=`, delivery is in **rounds**: in each round, every eligible person is offered the product once. With no `when=` (with or without `start=` and `stop=`), delivery is **routine**: each person is offered it once, at the first step on which they are eligible. `who=ss.at_age()` is routine delivery as people reach an age: `who=ss.at_age(ss.months(9))` vaccinates children as they turn 9 months old, and not everyone older on the first day. Routine delivery needs people to become eligible over time, by being born, aging, or something happening to them: in a population with no births, routine delivery to everyone is a single round on its first step. So these examples add births and deaths, of 3% a year, and compare routine vaccination of children as they turn one, yearly rounds that reach 20% of everyone, and two campaigns:
+
+::: {.panel-tabset group="language"}
+## Python
 
 ```{python}
 kw_births = dict(kw, demographics=[ss.birth(rate=ss.peryear(0.03)), ss.death(rate=ss.peryear(0.03))])
@@ -89,6 +173,61 @@ for sim in msim.sims[1:]:
     delivery = sim.interventions[0]
     print(sim.label, '- doses:', round(sim.results[delivery.name].delivered.sum()))
 ```
+
+## R
+
+```r
+births_deaths <- list(ss$birth(rate = ss$peryear(0.03)), ss$death(rate = ss$peryear(0.03)))
+
+routine  <- vaccinate(efficacy = 0.8, who = ss$at_age(years(1)), start = "2005", coverage = 0.8)                  # Once per child, as they turn one
+yearly   <- vaccinate(efficacy = 0.8, when = ss$schedule(every = years(1), start = "2005"), coverage = 0.2) # A round every year
+campaign <- vaccinate(efficacy = 0.8, when = c("2005", "2010"), coverage = 0.6)                            # Two rounds
+
+scenarios <- list(
+  "No vaccination"          = make_sim(demographics = births_deaths),
+  "Routine at age one, 80%" = make_sim(demographics = births_deaths, interventions = routine),
+  "Yearly rounds, 20%"      = make_sim(demographics = births_deaths, interventions = yearly),
+  "Two campaigns, 60%"      = make_sim(demographics = births_deaths, interventions = campaign)
+)
+msim <- parallel(scenarios)
+msim$plot("sis.I")
+deliveries <- list("Routine at age one, 80%" = "routine", "Yearly rounds, 20%" = "yearly", "Two campaigns, 60%" = "campaign")
+for (label in names(deliveries)) {
+  doses <- scenarios[[label]]$results[[deliveries[[label]]]]$delivered$values
+  cat(label, "- doses:", round(sum(doses)), "\n")
+}
+```
+:::
+
+`ss.schedule()` makes a list of times. The yearly rounds could also be given as the list itself, made in plain Python, with the same doses:
+
+::: {.panel-tabset group="language"}
+## Python
+
+```{python}
+yearly = ss.vaccinate(efficacy=0.8, when=ss.schedule(every=ss.years(1), start='2005'), coverage=0.2)
+sim = ss.Sim(sis, interventions=yearly, **kw_births).run()
+print('Doses:', round(sim.results.yearly.delivered.sum()))
+```
+
+## R
+
+```r
+yearly <- vaccinate(efficacy = 0.8, when = ss$schedule(every = years(1), start = "2005"), coverage = 0.2)
+sim <- make_sim(demographics = births_deaths, interventions = yearly)$run()
+cat("Doses:", round(sum(sim$results$yearly$delivered$values)), "\n")
+```
+
+## Explicit
+
+```{python}
+rounds = [f'{year}-01-01' for year in range(2005, 2021)] # 1 January of each year, from 2005 to the end of the run
+yearly = ss.vaccinate(efficacy=0.8, when=rounds, coverage=0.2)
+sim = ss.Sim(sis, interventions=yearly, **kw_births).run()
+print('Doses:', round(sim.results.yearly.delivered.sum()))
+```
+
+:::
 
 Routine vaccination of children acts slowly, since it reaches only each new birth cohort (about 3% of people a year); rounds of everyone protect much of the population at once, for more doses. Which is realistic depends on the program: routine childhood vaccination is the usual way of reaching each new cohort, and campaigns the way to reach those it missed.
 
@@ -222,6 +361,9 @@ A function in `who=`, like any condition there, says who is eligible: it can ret
 
 `ss.Event()` is what the deliveries are made from: something that happens to people, here a move between states, with no product. It takes `who=` and `when=` as a delivery does, and says how many it reaches with `n=` (at most that many each time) and `p=` (the chance for each person), as `ss.move()` does; `coverage=`, `capacity=`, and the rest are for deliveries of a product. It runs under every solver. Here measles is brought into the town of the first example from outside, by two infections a month (`S >> E`, with `n=2` each time), and the campaign of the first example is a move of the susceptible people it protects (80% reached, of whom 93% are protected) to the recovered state:
 
+::: {.panel-tabset group="language"}
+## Python
+
 ```{python}
 S, E, I, R = ss.states('S E I R')
 infection   = S >> E @ 1.9*I
@@ -240,6 +382,31 @@ msim = ss.parallel({
 msim.plot('measles.I')
 ```
 
+## R
+
+```r
+states("S E I R")
+measles <- Disease(
+  infection   = Transition(S, E, rate = 1.9 * I),
+  progression = Transition(E, I, dur = days(10)),
+  recovery    = Transition(I, R, dur = days(8)),
+  init = list(R = 0.9)  # Nobody infected at the start
+)
+
+imports  <- ss$Event(Transition(S, E), when = ss$schedule(every = days(30)), n = 2) # Two susceptible people infected each month
+campaign <- ss$Event(Transition(S, R), when = "2025-05-01", p = 0.8 * 0.93)       # Protection as a move between states
+
+make_sim <- function(...) { # A sim with these settings, and any others given
+  Sim(measles, total_pop = 100000, start = "2025-01-01", stop = "2026-07-01", verbose = 0, ...)
+}
+msim <- parallel(list(
+  "Imported cases"                = make_sim(interventions = imports),
+  "Imported cases and a campaign" = make_sim(interventions = list(imports, campaign))
+))
+msim$plot("measles.I")
+```
+:::
+
 With imports, the outbreak is not a single event: after the campaign, imported cases go on arriving, but each infects too few others for an outbreak to take off. The other forms of an event:
 
 - `dict(vaccinated=True)` moves people along a stratification of the model (to a level), and `dict(risk=('low', 'high'))` from one level to another, e.g. a campaign that leaves a mark, or a program that changes people's risk group (see [Stratification](building_stratification.qmd)).
@@ -251,7 +418,10 @@ With imports, the outbreak is not a single event: after the campaign, imported c
 
 ### Masks and distancing
 
-Here is a flu-like epidemic in a town of 100,000, with β = 0.4 per day and an infectious period of 5 days (R0 = 2), and two policies: masks worn from day 20 to day 60, which cut transmission by 40%, and distancing that halves transmission from day 20 and then eases to 80% of its usual level from day 60:
+Here is a flu-like epidemic in a town of 100,000, with β = 0.4 per day and an infectious period of 5 days (R0 = 2), and two policies: masks worn from day 20 to day 60, which cut transmission by 40%, and distancing that halves transmission from day 20 and then eases to 80% of its usual level from day 60. The "Explicit" tab does the same in plain Python, with a function for each policy, given to the sim as an intervention, which sets β at each step:
+
+::: {.panel-tabset group="language"}
+## Python
 
 ```{python}
 import starsim as ss
@@ -274,7 +444,56 @@ msim = ss.parallel(scenarios)
 msim.plot('flu.I')
 ```
 
-`flu.pars.beta` is the β of the transmission, which a declared disease names `beta`. Masks delay the epidemic, but once they come off, most of it still happens; distancing, which never fully ends, cuts it by more:
+## R
+
+```r
+states("S I R")
+infection <- Transition(S, I, rate = 0.4 * I) # β = 0.4 per day
+recovery  <- Transition(I, R, dur = days(5))  # Infectious for 5 days on average
+flu <- Disease(infection, recovery, init_prev = 0.001)
+
+masks <- modify(flu$pars$beta, multiply = 0.6, start = days(20), stop = days(60))
+distancing <- modify(flu$pars$beta, multiply = ss$timeseries(list(days(20), days(60)), c(0.5, 0.8)), start = days(20)) # The times, and the value from each
+
+make_sim <- function(...) { # A sim with these settings, and any others given
+  Sim(flu, total_pop = 100000, stop = days(150), verbose = 0, ...)
+}
+scenarios <- list(
+  "No intervention" = make_sim(),
+  "Masks"           = make_sim(interventions = masks),
+  "Distancing"      = make_sim(interventions = distancing)
+)
+msim <- parallel(scenarios)
+msim$plot("flu.I")
+```
+
+## Explicit
+
+```{python}
+def masks_fn(sim):
+    """ β is 60% of its usual 0.4 per day from day 20 to day 60 (each step is a day) """
+    day = sim.ti
+    sim.diseases.flu.pars.beta = 0.4*(0.6 if 20 <= day < 60 else 1.0)
+    return
+
+def distancing_fn(sim):
+    """ β is halved from day 20, and 80% of its usual value from day 60 """
+    day = sim.ti
+    sim.diseases.flu.pars.beta = 0.4*(1.0 if day < 20 else 0.5 if day < 60 else 0.8)
+    return
+
+scenarios_explicit = {
+    'No intervention': ss.Sim(flu, **kw),
+    'Masks': ss.Sim(flu, interventions=masks_fn, **kw),
+    'Distancing': ss.Sim(flu, interventions=distancing_fn, **kw),
+}
+msim_explicit = ss.parallel(scenarios_explicit)
+msim_explicit.plot('flu.I')
+```
+
+:::
+
+The results are the same, but the functions overwrite β, so they can't be combined with another change to it, and they make the run go back to Python at every step. `flu.pars.beta` is the β of the transmission, which a declared disease names `beta`. Masks delay the epidemic, but once they come off, most of it still happens; distancing, which never fully ends, cuts it by more:
 
 ```{python}
 msim.summarize().loc['flu_infection']

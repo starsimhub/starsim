@@ -265,7 +265,7 @@ If two modules would kill the same person in the same step, one of them is chose
 
 ## In a compartmental run
 
-In a compartmental run there are no agents. `sim.people` then has one row for each group the model is split into, and asking for a property of each person, such as `sim.people.age` in a model not split by age, raises an error saying to stratify by it or to run as agents. Results, `describe()`, and conditions such as `who=ss.person.age < 5` (for a model stratified by age) work the same either way.
+In a compartmental run there are no agents. `sim.people` then has one row for each group the model is split into, and asking for a property of each person, such as `sim.people.age` in a model not split by age, raises an error saying to stratify by it or to run as agents. Results, `describe()`, the number of people alive (`sim.people.n`), and conditions such as `who=ss.person.age < 5` (for a model stratified by age) work the same either way; counting agents (`sim.people.alive.sum()`) raises an error saying to use `sim.people.n`.
 
 The API reference for this page: [People](../api/people.qmd), [Arrays](../api/internals.arrays.qmd).
 
@@ -281,7 +281,8 @@ The properties and methods of `sim.people` for looking at the agents (see [Peopl
 
 | Name | What it gives |
 |---|---|
-| `len(people)`, `people.n_alive` | The number of agents taking part, and the number of people they stand for |
+| `people.n` | The number of people alive, under every solver: as agents, the people the agents stand for (the same as `people.alive.n`) |
+| `len(people)`, `people.alive.count()` | The number of agents taking part (including any who died this step), and the number alive |
 | `people.auids` | The UIDs of the agents taking part (alive and not removed) |
 | `people.alive`, `people.dead`, `people.female`, `people.male` | Who is alive, has died, is female, or is male, as states (`.uids` for their UIDs) |
 | `people.age` | Each agent's age, in years |

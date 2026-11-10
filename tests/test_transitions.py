@@ -116,6 +116,29 @@ def test_forms():
         density.append(ss.Sim(ss.Disease(S >> I @ (3e-5*S*I if flow else 3e-5*I.n), I >> R @ 10, name='sir'), stop=50, **kw))
     assert same(*density)
     assert density[0].results.sir.I[0] == 100 # init_prev=0.01 by default
+    graph = density[0].diseases.sir.graph
+    assert 'infection' in graph.transitions and 'beta' in graph.pars # A transmission like any other: it was named S_to_I, with an unnamed coefficient
+    assert 'from I (density-dependent)' in repr(graph.transitions)
+
+    # The total, with include_sum=True: beta*I/N is literally the share infectious, beta*I.frac (frequency-dependent), as is the whole flow beta*S*I/N; well mixed, the same as contact, beta*I
+    freq = []
+    for rate in [lambda S,I,N: 0.3*I, lambda S,I,N: 0.3*I.frac, lambda S,I,N: 0.3*I/N, lambda S,I,N: 0.3*S*I/N, lambda S,I,N: 0.3*I.n/(S.n + I.n + R.n)]:
+        S, I, R, N = ss.states('S I R', include_sum=True)
+        assert repr(N) == 'S + I + R'
+        freq.append(ss.Sim(ss.Disease(S >> I @ rate(S, I, N), I >> R @ 10, name='sir'), stop=50, **kw))
+    assert same(*freq)
+    for sim in freq:
+        graph = sim.diseases.sir.graph
+        assert 'infection' in graph.transitions and 'beta' in graph.pars and graph.init_prev is not None
+        assert [s.name for s in graph.infected] == ['I']
+    assert all(repr(sim.diseases.sir.graph.transitions.infection.rate) == 'beta * I.frac' for sim in freq[1:4]) # Written with counts, it is kept as written
+    assert 'from I (frequency-dependent)' in repr(freq[1].diseases.sir.graph.transitions)
+
+    # On a network, only contact can be used: the share or number of everyone would ignore whom people meet, so is refused
+    for rate in [lambda S,I,N: 0.3*I.frac, lambda S,I,N: 0.3*S*I/N, lambda S,I,N: 3e-4*I.n]:
+        S, I, R, N = ss.states('S I R', include_sum=True)
+        with pytest.raises(ValueError, match='write the bare state'):
+            ss.Sim(ss.Disease(S >> I @ rate(S, I, N), I >> R @ 10, name='sir'), networks=ss.RandomNet(), n_agents=100, stop=5, verbose=0).init()
     return forms
 
 
@@ -534,7 +557,7 @@ def test_describe():
     for string in ['10,000 people [guessed]', 'time is in timesteps',
                    'rate = 0.05 × I.n / N', 'exponential(mean = 10 steps)', 'homogeneous', 'every step: sir']:
         assert string in text, f'Expected "{string}" in describe()'
-    assert '= 0.0952 per step' in sim.describe(verbose=True) # The probability of recovering in a step, 1 - exp(-1/10)
+    assert '= 0.0952 per step' in sim.describe() # The probability of recovering in a step, 1 - exp(-1/10)
     S, I, R = ss.states(3)
     density = ss.Sim(ss.Disease(S >> I @ ss.perday(3e-5)*I.n, I >> R @ ss.days(10), init_n=dict(I=10)), **kw).init()
     assert 'mixing' not in density.describe() # Nothing is contact-mediated, so there is no mixing to describe (it said "frequency-dependent")
@@ -561,8 +584,9 @@ def test_describe():
     assert 'recovery (Recovery rate) = 0.1 per day' in ss.Sim(ss.Disease(S >> I @ beta*I, I >> R @ recovery, name='sir'), unit='day', **kw).describe()
     ss.SIR().equations() # Before the disease is in a sim
 
-    assert sir.diagram().splitlines() == ['flowchart LR', '    S(["S"])', '    I(["I"])', '    R(["R"])', '    S -.->|"infection: 0.05 × I"| I', '    I -->|"recovery: 10"| R'] # Values, not names (it was "recovery: dur = dur")
-    assert '```mermaid' in sir.diagram()._repr_markdown_() # Drawn in a notebook
+    assert sir.diagram('text').splitlines() == ['flowchart LR', '    S(["S"])', '    I(["I"])', '    R(["R"])', '    S -.->|"infection: 0.05 × I"| I', '    I -->|"recovery: 10"| R'] # Values, not names (it was "recovery: dur = dur")
+    assert '```mermaid' in sir.diagram('text')._repr_markdown_() # Drawn in a notebook
+    assert len(sir.diagram(do_show=False).axes[0].patches) >= 5 # By default, drawn with Matplotlib: three states and two arrows
 
     eqs = sir.equations()
     print(eqs)
@@ -571,9 +595,9 @@ def test_describe():
     fatal = ss.Disease(S >> I @ 0.4*I, ss.Transition(I, {R: None, ss.dead: 0.002}, dur=ss.days(8)), name='fatal')
     assert 'dR/dt =  (1 - 0.002) * I / dur' in fatal.equations() # A branch to ss.dead, given in a list, takes its share (it was "I / dur")
     text = fatal.describe()
-    assert 'null1' in fatal.diagram() and 'I -> R | (removed)' in text # ss.dead shown as leaving the model (it was "I -> ")
+    assert 'null1' in fatal.diagram('text') and 'I -> R | (removed)' in text # ss.dead shown as leaving the model (it was "I -> ")
     assert 'beta = 0.4 per day' in text # Outside a sim, in the unit of its typed values (it was "per step")
-    assert '8 days, p = 0.002"| null1' in fatal.diagram() # Each branch with its share
+    assert '8 days, p = 0.002"| null1' in fatal.diagram('text') # Each branch with its share
     S, I, R = ss.states(3)
     beta = ss.par(0.3, bounds=[0.1, 1])
     infection = S >> I @ beta*I
@@ -746,7 +770,7 @@ def test_lifetable_and_seeding():
         sir = ss.Disease(S >> I @ 0.3*I.frac, I >> R @ ss.days(8), death=ss.death(lifetable=table), init=dict(I=0), name='sir')
         return sir.stratify(age=[0, 20, 40, 60, 70, 80, 90]) if strat else sir
 
-    # As agents, the death rate of each person's age band of the table, as ss.Deaths(lifetable=) takes it (before, each person's age at death was drawn once)
+    # As agents, the death rate of each person's age band of the table, as ss.Deaths(lifetable=) takes it, drawn as each person's age at death once
     ppl = ss.People(20_000, age_data=np.array([np.arange(100), np.exp(-0.02*np.arange(100))]).T)
     sim = ss.Sim(make(), people=ppl, unit='year', dt=1, stop=3, verbose=0).init()
     assert isinstance(sim.solver, ss.solvers.abm) # Without a stratification by age, a life table needs agents
@@ -756,6 +780,9 @@ def test_lifetable_and_seeding():
     assert np.isclose(res.death[0], expected, rtol=0.1) and np.isclose(res.S[0] - res.S[1], res.death[0]) # Deaths in the first year, as the table gives them
     with pytest.raises(ss.CapabilityError):
         ss.Sim(make(), unit='year', stop=3, solver='ode', verbose=0).init()
+    sir = make()
+    with pytest.raises(ss.CapabilityError, match='drawn once'): # Drawn once, so the rate cannot change during the run
+        ss.Sim(sir, interventions=ss.modify(sir.death, multiply=2), people=ss.People(1000), unit='year', stop=3, verbose=0).run()
     ode = ss.Sim(make(strat=True), unit='year', stop=3, solver='ode', verbose=0).run() # Stratified by age, it is a death rate for each age group
     assert ode.results.sir.death[1] > 0
 
@@ -1551,6 +1578,56 @@ def test_infected_sources():
     assert np.allclose(r.infected, r.E) and not d.graph.states.I.infected # As said, though I is the source
     return
 
+
+@sc.timer()
+def test_noise():
+    sc.heading('Testing noise on a rate: its multiplier has mean 1 and variance sigma²/h, sigma = 0 is no noise, it is a parameter, and the solvers that cannot draw it refuse it')
+    rng = np.random.default_rng(1)
+    for sigma, h in [(0.0878, 1/365.25), (0.3, 0.5)]: # A shape below 1 (He et al.'s, in years) and above it
+        x = np.array([ss.kernels.noise(rng, sigma, h) for _ in range(20_000)])
+        var = sigma**2/h
+        assert abs(x.mean() - 1) < 4*np.sqrt(var/len(x)) and abs(x.var()/var - 1) < 0.15, (x.mean(), x.var(), var)
+    assert ss.kernels.noise(rng, 0.0, 1.0) == 1.0
+
+    def make(noise=None, solver='binomial'):
+        S, I, R = ss.states('S I R')
+        extra = {} if noise is None else dict(noise=noise)
+        d = ss.Disease(infection=ss.Transition(S, I, rate=ss.perday(0.3)*I, **extra), recovery=I >> R @ ss.perday(0.1), init_n=dict(I=20), name='sir')
+        return ss.Sim(d, solver=solver, total_pop=20_000, unit='day', start=0, stop=120, verbose=0)
+    base = make().run().results.sir
+    assert np.array_equal(base.I, make(noise=0.0).run().results.sir.I) # No draws: the same run
+    assert not np.array_equal(base.I, make(noise=ss.par(0.5)).run().results.sir.I)
+    def fast(noise=None): # Noise on a fast rate that doesn't depend on the compartments, which sets the substeps all the same
+        S, I, R = ss.states('S I R')
+        extra = {} if noise is None else dict(noise=noise)
+        d = ss.Disease(infection=S >> I @ ss.perday(0.3)*I, recovery=ss.Transition(I, R, rate=ss.perday(2.0), **extra), init_n=dict(I=20), name='sir')
+        return ss.Sim(d, solver='binomial', total_pop=20_000, unit='week', stop=20, verbose=0)
+    assert np.array_equal(fast().run().results.sir.I, fast(noise=0.0).run().results.sir.I)
+    class Noisy(ss.Disease): # The class form, with the noise a parameter of the class
+        S, I, R = ss.states('S I R')
+        sigma = ss.par(0.0, bounds=[0, 1])
+        infection = ss.Transition(S, I, rate=ss.perday(0.3)*I, noise=sigma)
+        recovery = I >> R @ ss.perday(0.1)
+    nz = ss.Sim(Noisy(init_n=dict(I=20), name='nz'), solver='binomial', total_pop=20_000, unit='day', stop=120, verbose=0).init()
+    assert 'sigma' in nz.diseases.nz.pars and nz.diseases.nz.graph.transitions.infection.noise is nz.diseases.nz.pars.sigma # The instance's copy, keeping its name
+    sim = make(noise=0.2)
+    sim.init()
+    assert sim.diseases.sir.pars.noise_infection.value == 0.2 # Named after its slot, so it can be fitted
+    assert 'gamma white noise' in str(sim.diseases.sir.describe())
+    ode = make(noise=0.2, solver='ode').run().results.sir.I
+    assert np.array_equal(ode, make(solver='ode').run().results.sir.I) # Left out of the ODE
+    for solver in ['tau', 'abm']: # Drawn for each leap, and as agents once a step for each group
+        base = make(solver=solver).run().results.sir.I
+        assert np.array_equal(base, make(noise=0.0, solver=solver).run().results.sir.I)
+        assert not np.array_equal(base, make(noise=0.5, solver=solver).run().results.sir.I)
+    with pytest.raises(ss.CapabilityError, match='noise='):
+        make(noise=0.2, solver='gillespie').run()
+    with pytest.raises(ValueError, match='noise='):
+        ss.Transition(ss.State(), ss.State(), dur=ss.days(3), noise=0.1)
+    with pytest.raises(ValueError, match='not an expression'): # Sigma is one value in the kernels
+        ss.Transition(ss.State(), ss.State(), rate=0.1, noise=ss.par(0.04)**0.5)
+    return
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -1587,3 +1664,4 @@ if __name__ == '__main__':
     state = test_state_as_result()
     ends  = test_branch_ends()
     infs  = test_infected_sources()
+    noise = test_noise()

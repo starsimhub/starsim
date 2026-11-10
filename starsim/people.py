@@ -241,10 +241,12 @@ class People:
 
     def __getattr__(self, attr):
         """ Called only if the attribute isn't found: in a compartmental run, per-agent attributes that are not stratifications do not exist """
+        if attr == 'n_alive':
+            raise AttributeError('people.n_alive was removed: the number of people alive is people.n (as agents, the people they stand for), and the number of agents alive is people.alive.count()')
         missing = self.__dict__.get('_no_groups', [])
         if attr == 'auids' and '_no_groups' in self.__dict__:
             raise ss.errors.NoAgentAttribute('people.auids was asked for, but this run has no agents: it has one row for each group of people.\n'
-                                             '     Use the number alive (people.n_alive) or the number in a disease\'s states (e.g. sir.I.n), or run with solver="abm".')
+                                             '     Use the number of people alive (people.n) or the number in a disease\'s states (e.g. sir.I.n), or run with solver="abm".')
         if attr in missing:
             raise ss.errors.NoAgentAttribute(f'people.{attr} was asked for, but it is a per-agent attribute and not a stratification, so it does not exist in a compartmental run.\n'
                                              f'     Stratify by it (e.g. sim.stratify({attr}=[...])), or run with solver="abm".')
@@ -297,25 +299,26 @@ class People:
         return True
 
     def __len__(self):
-        """ The number of people: the active agents, or in a compartmental run, the people alive, to the nearest whole person """
-        return round(self.alive.sum()) if '_no_groups' in self.__dict__ else len(self.auids)
+        """
+        The number of rows: the active agents, or in a compartmental run, the groups of people. Agents who die in a step stay
+        among the active agents until the step ends, so that analyzers can still look at them; the number of people alive is `people.n`
+        """
+        return self.n_agents_init if '_no_groups' in self.__dict__ else len(self.auids)
 
     @property
-    def n_alive(self):
+    def n(self):
         """
-        The number of living agents, which is what `results.alive` records (with each agent counted by its weight if agents' weights differ: see `people.scale`);
-        in a compartmental run, the number of people alive
+        The number of people alive now, under every solver, as `sir.I.n` counts the people in a state (the same as `people.alive.n`):
+        as agents, each agent counted by the people it stands for (its weight and the sim's scale), not counting those not yet born
+        (made at conception by `ss.Pregnancy`); in a compartmental run, the people in the compartments. `people.alive.count()` counts agents.
+        """
+        return self.alive.n
 
-        This is not the same as `len(people)`: agents who died on the current timestep are
-        not removed from `auids` until `finish_step()`, so that analyzers can still inspect
-        them, and the unborn (agents made at conception by `ss.Pregnancy`) are not counted. Use
-        this rather than `len(people)` for any per-timestep denominator.
-        """
-        if '_no_groups' in self.__dict__:
-            return self.alive.sum()
+    def _n_agents_alive(self):
+        """ The number of agents alive, not counting those not yet born: `results.alive` before it is scaled (with agents all of the same weight) """
         unborn = self.unborn_uids()
         return np.count_nonzero(self.alive) - np.count_nonzero(self.alive.raw[unborn])
-    
+
     def __repr__(self):
         return self.brief(output=True)
 
@@ -334,14 +337,6 @@ class People:
         sim = getattr(self, 'sim', None)
         return sim is not None and getattr(sim, 'solver', None) is not None and not isinstance(sim.solver, ss.solvers.abm) and bool(getattr(sim, 'declared', None))
 
-    @property
-    def n(self):
-        """ In a compartmental run, the number of people in each group now, from the compartments (one row per group); as agents, the number alive """
-        if not self.grouped:
-            return len(self)
-        engine = self.sim.declared[0].engine
-        return engine.n_people(total=False) if engine is not None else np.full(self.n_agents_init, np.nan)
-
     def brief(self, output=False):
         """ Print a one-line summary of the people
 
@@ -351,7 +346,7 @@ class People:
         n = self.n_agents_init
         if self.grouped and self.initialized: # A compartmental run: the rows are groups of people
             age = '' if 'age' in self.__dict__.get('_no_groups', []) else f'; age={self.age.mean():0.1f}±{self.age.std():0.1f} over the groups' # Not when unstratified by age
-            out = f'People({n:n} group{"s"*(n != 1)}; {float(np.sum(self.n)):n} people{age})'
+            out = f'People({n:n} group{"s"*(n != 1)}; {self.n:n} people{age})'
             return out if output else print(out)
         if not self.initialized: # Age and other states hold uninitialized memory until init_vals() runs
             out = f'People({n=:n}; uninitialized)'

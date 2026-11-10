@@ -16,15 +16,16 @@ pub fn true_raw<T: Copy + PartialEq + Default>(auids: &[i64], raw: &[T], want: b
     out
 }
 
-/// The (source, target) of the edges that transmit (`networks.nb_transmit()`)
-pub fn transmit<V: Copy + Into<f64>>(src: &[i64], trg: &[i64], p: impl Fn(usize, usize, usize) -> f64, rvs: &[V]) -> (Vec<i64>, Vec<i64>) {
+/// The (source, target) of the edges that transmit (`networks.nb_transmit()`): `h` gives each edge's hazard, and it transmits with probability 1 − exp(−h)
+pub fn transmit<V: Copy + Into<f64>>(src: &[i64], trg: &[i64], h: impl Fn(usize, usize, usize) -> f64, rvs: &[V]) -> (Vec<i64>, Vec<i64>) {
     let (mut s_out, mut t_out) = (Vec::with_capacity(src.len()), Vec::with_capacity(src.len()));
     let (so, to) = (s_out.spare_capacity_mut(), t_out.spare_capacity_mut());
     let mut m = 0;
     for i in 0..src.len() { // Written every time (branchless), kept only if m advances
         so[m].write(src[i]);
         to[m].write(trg[i]);
-        m += (p(i, src[i] as usize, trg[i] as usize) > rvs[i].into()) as usize;
+        let (x, rv) = (h(i, src[i] as usize, trg[i] as usize), rvs[i].into());
+        m += (x > rv && -(-x).exp_m1() > rv) as usize; // 1 − exp(−x) ≤ x, so most edges are ruled out without the exp
     }
     unsafe {
         s_out.set_len(m);
@@ -156,7 +157,7 @@ pub mod bind {
     #[pyfunction]
     fn transmit<'py>(py: Python<'py>, src: &Bound<'py, PyAny>, trg: &Bound<'py, PyAny>, rel_trans: &Bound<'py, PyAny>, rel_sus: &Bound<'py, PyAny>, beta: &Bound<'py, PyAny>,
                      rvs: &Bound<'py, PyAny>) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyAny>)> {
-        // rel_trans[u]*rel_sus[v]*beta[i] in the type Numba gives it: float32 if all three are, else float64
+        // The hazard rel_trans[u]*rel_sus[v]*hazard[i] in the type Numba gives it: float32 if all three are, else float64
         typed!(rvs, V in [f64, f32] => {
             if let (Ok(t), Ok(s), Ok(b)) = (sl::<f32>(rel_trans), sl::<f32>(rel_sus), sl::<f32>(beta)) {
                 let (s, t) = small::transmit(sl(src)?, sl(trg)?, |i, u, v| (t[u]*s[v]*b[i]) as f64, sl::<V>(rvs)?);

@@ -39,7 +39,7 @@ for coverage in [0.6, 0.8]:
     print('Coverage in the community', coverage, '- infections in the community:', round(res.infection.select(community='close-knit').sum()), '- in the rest of the town:', round(res.infection.select(community='general').sum()))
 ```
 
-With 80% coverage in the community, there are about 700 fewer infections in the rest of the town (about 1,000 rather than 1,700), although nothing has changed there. Since the rest of the town can't sustain an outbreak on its own (its reproduction number is about 0.8), its infections are mostly seeded from the community, and each infection prevented in the community prevents the chains of infection that would have followed from it in the rest of the town. This is an indirect benefit of vaccination: a model that counted only the infections prevented in the people vaccinated would miss it.
+With 80% coverage in the community, there are about 700 fewer infections in the rest of the town (about 1,000 rather than 1,700), though nothing changed there. The rest of the town can't sustain an outbreak on its own (its reproduction number is about 0.8), so its infections are mostly seeded from the community, and each infection prevented there prevents the chains that would have followed. This is an indirect benefit of vaccination, which a model counting only infections prevented in the vaccinated would miss.
 
 **2. The same doses outside the community.**
 
@@ -56,7 +56,7 @@ for sim in msim.sims:
     print(sim.label, '- doses:', round(doses), '- infections:', round(res.infection.sum()))
 ```
 
-A rate of 0.5 a year outside the community gives about the same number of doses (about 600), but prevents only about 200 infections, against about 1,000 for the doses given in the community: five times fewer for each dose. Outside the community, most unvaccinated people are surrounded by vaccinated ones and are unlikely to be infected anyway; in the community, each dose removes someone from where the outbreak is spreading. Stratifying by community is what lets the model show this.
+A rate of 0.5 a year outside the community gives about the same number of doses (about 600), but prevents only about 200 infections, against about 1,000 in the community: five times fewer per dose. Outside the community, most unvaccinated people are surrounded by vaccinated ones and unlikely to be infected anyway; in the community, each dose removes someone from where the outbreak is spreading. Stratifying by community lets the model show this.
 
 **3. A measles campaign, and pneumococcus.**
 
@@ -96,4 +96,4 @@ print(summary.loc['measles_infection'])
 summary.loc['pneumococcus_acquisition']
 ```
 
-The campaign prevents about 7,900 of the 8,800 measles infections, the same with or without the interaction. Without it, the campaign prevents no pneumococcus at all, since the two diseases are independent. With it, the campaign also prevents about 97,000 pneumococcus acquisitions over the three years (nearly all of the extra ones that measles caused), about 12 for each measles infection prevented, both among the children spared measles and among the people they would have passed pneumococcus to. An evaluation of measles vaccination that counted only measles would miss this benefit, which is why the estimates of immune amnesia matter for the case for measles vaccination.
+The campaign prevents about 7,900 of the 8,800 measles infections, with or without the interaction. Without it, the campaign prevents no pneumococcus, since the diseases are independent. With it, the campaign also prevents about 97,000 pneumococcus acquisitions over the three years (nearly all the extra ones measles caused), about 12 per measles infection prevented, among the children spared measles and the people they would have passed pneumococcus to. An evaluation counting only measles would miss this benefit, which is why estimates of immune amnesia matter for the case for measles vaccination.

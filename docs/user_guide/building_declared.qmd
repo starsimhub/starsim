@@ -9,7 +9,7 @@ authorship:
 
 A Starsim model is made of two kinds of part. A **declared** part is a description that Starsim reads: states, transitions and their rates, conditions, interventions, and results. A part **written as code** is a Python function or class that Starsim calls as the model runs. This page lists what can be declared, idea by idea, with an example of each and of what would need code instead; then shows how to mix the two, and what each costs in speed.
 
-For how to write a declared model, see [Writing models](building_writing.qmd); for modules written as code, [Custom modules](building_modules.qmd).
+For how to write a declared model, see [Writing models](building_writing.qmd); for modules written as code, [Custom modules](building_modules.qmd). For questions such as "can people die" or "can I double a rate", and whether each runs under every solver, see [Will my model run as an ODE?](building_solvers.qmd).
 
 ## Why the difference matters
 
@@ -189,11 +189,11 @@ def many_infectious(sim):
     return sim.diseases.flu.I.n >= 20_000
 
 measure = ss.modify(flu.pars.beta, multiply=0.7, who=many_infectious)
-sim = ss.Sim(flu, interventions=measure, **pars).init()
-print(sim.kernel_reason())
+sim = ss.Sim(flu, interventions=measure, **pars)
+sim.describe()
 ```
 
-`sim.kernel_reason()` says why a run is taken a step at a time (or gives `None` if it isn't), and `require_kernels=True` on the sim makes that an error instead.
+The `plan` line of `sim.describe()` says why a run is taken a step at a time (a run says so too, as it starts), and `require_kernels=True` on the sim makes that an error instead.
 
 ## Performance
 
@@ -265,6 +265,7 @@ The loop in Python takes several times as long as the whole rest of the run. Wri
 
 ## Further reading
 
+- [Will my model run as an ODE?](building_solvers.qmd): questions modelers ask, and which solvers each answer runs under
 - [Custom modules](building_modules.qmd): writing modules as code, and what to check before doing so
 - [Getting the most speed](running_performance.qmd): what keeps a run in compiled code, and fast code of your own
 - [Solvers and backends](running_solvers.qmd): which solver runs a model, and why

@@ -104,7 +104,7 @@ def test_sti_failure():
     return sims
 
 
-def test_crossed_outcomes():
+def test_joint_outcomes():
     """ The outcomes of a treatment of two diseases tracked jointly are events as compartments too: steps on them, and a failure triggered by one """
     sc.heading('Testing the outcomes of a treatment of two diseases tracked jointly')
     def make(**kwargs):
@@ -213,7 +213,7 @@ def test_syndromic():
     check_close(sims, lambda sim: sim.results.ng.fail.sum(), rtol=0.2)
     check_close(sims, lambda sim: sim.results.syndromic.unneeded.select(disease='ct').sum(), rtol=0.15)
     check_close(sims, lambda sim: sim.results.syndromic.cured.select(disease='ng').sum(), rtol=0.15)
-    assert sims.ode.crossings # The diseases are tracked jointly, since the treatment acts on both
+    assert sims.ode.joint_states # The diseases are tracked jointly, since the treatment acts on both
     return sims
 
 

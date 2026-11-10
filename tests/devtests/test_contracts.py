@@ -4,7 +4,6 @@ Contract tests: properties every model and solver must have, checked on the mode
 """
 
 # %% Imports and settings
-import os
 import pytest
 import numpy as np
 import sciris as sc
@@ -171,11 +170,10 @@ def mean_states(sim):
     return {f'{mod.name}.{key}':res.values.mean() for mod in sim.declared for key,res in mod.results.items() if key in mod.graph.states and isinstance(res, ss.Result) and np.ndim(res.values) == 1}
 
 
-simple = ['sir', 'seir', 'erlang', 'branching', 'ages'] # The simplest models of the corpus
-slow = bool(os.getenv('STARSIM_SLOW')) # Set to check every model of the corpus
+simple = ['sir', 'seir', 'erlang', 'branching', 'ages'] # The simplest models of the corpus; the others are checked only with -m slow
 
 
-@pytest.mark.parametrize('name', corpus.compartmental if slow else simple)
+@pytest.mark.parametrize('name', simple + [pytest.param(name, marks=pytest.mark.slow) for name in corpus.compartmental if name not in simple])
 def test_solvers_agree(name):
     sc.heading(f'Testing that every solver agrees with the ODE for the corpus model "{name}"')
     make = corpus.models[name]
@@ -321,7 +319,7 @@ def test_conservation(name):
 
 
 @pytest.mark.parametrize('dwell', ['exponential', 'fixed', 'erlang', 'lognormal', 'after'])
-def test_crossing_conservation(dwell):
+def test_joint_conservation(dwell):
     sc.heading(f'Testing that diseases tracked jointly keep their people under every solver, with a dwell that is {dwell}')
     dwells = dict(
         exponential = lambda P, NP: ss.Transition(P, NP, dur=ss.months(9)),
@@ -338,7 +336,7 @@ def test_crossing_conservation(dwell):
         mod = ss.modify(p.conception, multiply=0.1, who=M[1]) # Crosses the two
         size = dict(n_agents=2000) if solver == 'abm' else dict(total_pop=2000)
         sim = ss.Sim([m, p], connectors=mod, start=2000, stop=2010, dt=ss.months(1), solver=solver, verbose=0, **size).run()
-        assert solver == 'abm' or sim.crossings
+        assert solver == 'abm' or sim.joint_states
         for mod in sim.declared:
             total = sum(mod.results[f'{state.name}'].values for state in mod.states.values() if state.people)
             assert np.allclose(total, 2000, rtol=1e-9), f'{dwell} under {solver}: the population of {mod.name} goes from {total[0]:n} to {total[-1]:n}'
@@ -551,7 +549,7 @@ def test_joint_population():
     for solver in ['ode', 'binomial']:
         sim = pair(solver).run()
         res = sim.results
-        assert sim.crossings and np.allclose(res.a.S + res.a.I, res.b.S + res.b.I)
+        assert sim.joint_states and np.allclose(res.a.S + res.a.I, res.b.S + res.b.I)
 
     # The same as the joint model written as one disease, whose states are the combinations
     SS, SI, IS, II = ss.states('SS SI IS II')
@@ -574,7 +572,7 @@ def test_joint_population():
     assert isinstance(ss.Sim([split, ss.SIS(name='b')], demographics=ss.death(rate=ss.peryear(0.01)), total_pop=1000, stop=2010, verbose=0).init().solver, ss.solvers.abm)
     text = pair().init().describe()
     assert 'a × b: 2 × 2 = 4 joint states of people' in text and 'people die of a' in text and 'start independent' in text
-    assert 'plan         a, b: as compiled code, the whole run in one call; a × b as one program' in pair().init().describe(verbose=True) # How it is run, only when asked
+    assert 'plan         a, b: as compiled code, the whole run in one call; a × b as one program' in pair().init().describe() # How it is run
     return j
 
 

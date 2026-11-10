@@ -16,8 +16,10 @@ from unittest import mock
 import numba as nb
 import pytest
 import numpy as np
+import pandas as pd
 import sciris as sc
 import starsim as ss
+import starsim.fit
 from test_kernels import models, make_seir
 
 kw = dict(verbose=0)
@@ -336,6 +338,28 @@ def test_compartmental():
 
 
 @sc.timer()
+def test_noise():
+    sc.heading('Testing noise on a rate (ss.kernels.NOISE): the same draws in each set of kernels, by group, in whole steps and substeps, and in each particle of a filter')
+    def make(seed, substeps=None, data=None):
+        S, I, R = ss.states('S I R')
+        d = ss.Disease(infection=ss.Transition(S, I, rate=ss.perday(0.25)*I, noise=ss.par(0.4)), recovery=I >> R @ ss.perday(0.1), init_n=dict(I=20), name='sir')
+        d.stratify(age={0: 0.4, 20: 0.6})
+        return ss.Sim(d, solver=ss.solvers.binomial(substeps=substeps), total_pop=5000, unit='day', start=0, stop=60, rand_seed=seed, data=data, **kw)
+    for substeps in [None, 1, 3]:
+        same(lambda s: make(s, substeps), compiled + ['python'], seeds=[0])
+    if rust:
+        data = pd.DataFrame(dict(infection=make(5).run().results.sir.infection.values[1::7][:8]), index=np.arange(1, 57, 7))
+        lls = []
+        for k in compiled:
+            with ss.options.context(kernels=k):
+                sim = make(0, data=data)
+                sim.init()
+                lls.append(ss.fit.ParticleFilter(sim, likelihood=dict(infection=ss.poisson()))(n_particles=20, rand_seed=1))
+        assert lls[0] == lls[1], lls
+    return
+
+
+@sc.timer()
 def test_full_share():
     sc.heading('Testing a time share with an entry for every pair of places: by BLAS, against each set of kernels and the entries one at a time')
     rng = np.random.default_rng(1)
@@ -445,6 +469,7 @@ if __name__ == '__main__':
     T = sc.timer()
     test_agents()
     test_compartmental()
+    test_noise()
     test_jax()
     test_draws()
     test_twins()

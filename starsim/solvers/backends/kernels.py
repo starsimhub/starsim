@@ -34,6 +34,7 @@ CONST, COUNT, FRAC, EXPOSURE, ADD, SUB, MUL, DIV, POW, MIN, MAX, LT, LE, GT, GE,
 CONVEY = 22 # Not in a rate: a conveyor (its flow, then its slots; see convey()); kept out of the program's fields, since every field adds to the cost of each call that is passed it
 LOAD, STORE = 23, 24 # A part used more than once: STORE takes the top of the stack into register arg, and LOAD puts a copy back on top; the registers are the last rows of the stack (row depth-1-arg). The parts used by several rates are worked out first, in the operations before the first rate's (starts[0] > 0); a part used twice in one rate, in the rate
 GROUP = 25 # A count in the group each rate is for, not its place: a branching process's infection, which adds people at its rate per member of its source without taking them from it (see ss.solvers.Compartmental.init_program())
+NOISE = 26 # Gamma white noise on a rate (ss.Transition(noise=)): the chain binomial multiplies the top of the stack, in each group, by a gamma draw with mean 1 and variance sigma²/h, sigma being row arg of consts (see noise()); tau-leaping multiplies the flow's rate by one for each leap; the ODE leaves it out (its mean, 1)
 opcodes = {'+':ADD, '-':SUB, '*':MUL, '/':DIV, '**':POW, 'minimum':MIN, 'maximum':MAX, 'exp':EXP, 'log':LOG, 'sqrt':SQRT, 'absolute':ABS, 'sin':SIN, 'cos':COS,
            'less':LT, 'less_equal':LE, 'greater':GT, 'greater_equal':GE}
 
@@ -62,7 +63,7 @@ fields = [
     'places',     # The place of each group (all zero if the model has none)
     'n_places',
     # Exposure to each infectious state
-    'exp_set',    # The set of compartments that are the state; or, if negative, minus the number of exposures before it whose sum it is (diseases tracked jointly, see ss.solvers.Crossing)
+    'exp_set',    # The set of compartments that are the state; or, if negative, minus the number of exposures before it whose sum it is (diseases tracked jointly, see ss.solvers.JointStates)
     'exp_n',      # Whether it is to the number in the state, not its share: a count in a rate that the contact matrices act on (`beta*I.n`), through them only (see ss.solvers.Mixing.count_terms())
     'rel_trans',  # Its infectiousness, by group
     'levels',     # For each mixing term, the cell that each group is in
@@ -94,7 +95,7 @@ fields = [
     'mov_base',   # For an entry whose rate is a parameter that can vary in time (see mov_par), its rate without it
     'mov_par',    # The row of consts whose value, in the group people move from, times mov_base is its rate (set by set_movers()), or -1
     # For the stochastic solvers: the flows in the order they are drawn, grouped by the compartment they leave
-    'src_starts', # (In the program of a crossing, the flows of each disease are drawn in turn: an empty set of flows ends each disease's; see draw())
+    'src_starts', # (In the program of joint states, the flows of each disease are drawn in turn: an empty set of flows ends each disease's; see draw())
     'src_flows',
     'src_chain',  # For the compartments of a dwell time in stages: the number of stages left (this one included), so the chain-binomial solver can move people through several in a step; 0 otherwise
     'src_stage',  # Their flow to the next stage
@@ -223,7 +224,7 @@ row_groups = 50 # The groups from which a draw for every group is made as a vect
 
 
 compile_seconds = 120 # About how long compiling the kernels for a first run takes, once per install (86 to 128 s measured, 2026-10-31, with nothing in Numba's cache): runs that would take longer than this as plain Python are compiled first (by default: see choose())
-compile_all_seconds = 300 # About how long `compile()` takes (360 s measured on a busy machine, 2026-10-31); the time of each part is in `ss.solvers.backends.cache.slow`
+compile_all_seconds = 360 # About how long `compile()` takes (360 s measured on a busy machine, 2026-10-31; 153 s on another, 2026-11-07); the time of each part is in `ss.solvers.backends.cache.slow`
 note_after = 1 # The seconds of a plain run above which choose() says how long it would take compiled
 plain_total = 0.0 # The seconds that the runs taken as plain Python in this session would have taken, as estimated: see choose()
 noted = False # Whether choose() has said that a run is taken as plain Python, in this session
@@ -385,30 +386,47 @@ def compile(verbose=True):
             print('Nothing to compile: the Rust kernels are in use, and are compiled already (for Numba\'s, set ss.options.kernels="numba" first)')
         return
     T = sc.timer()
-    if verbose and not is_compiled():
-        ss.solvers.backends.compiling('the solver kernels', 'Numba', compile_all_seconds*3//4, compile_all_seconds*3//2) # Then each part, as it is compiled
+    from . import passes
+    parts = {'agents':passes.bounds, 'starsim.solvers.backends.kernels.run':run, 'starsim.solvers.backends.kernels.one_step':one_step,
+             'starsim.solvers.backends.kernels.run_many':run_many, 'starsim.solvers.backends.kernels.advance':advance, 'starsim.solvers.backends.kernels.advance_threads':advance_threads}
+    cold = [key for key,func in parts.items() if not (func.signatures or func._cache._cache_file._load_index())] # In the order compiled below
+    batch = None
+    if verbose and cold:
+        slow = ss.solvers.backends.cache.slow
+        ss.solvers.backends.compiling('the solver kernels', 'Numba', sum(slow[k][1] for k in cold), sum(slow[k][2] for k in cold))
+        batch = ss.solvers.backends.cache.Batch('the solver kernels', cold) # One bar for all the parts
+    part = batch.part if batch is not None else lambda key: contextlib.nullcontext()
     def make(solver='binomial'):
         S, I, R = ss.states(3)
         sir = ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(10), init=dict(I=0.1), name='sir')
         return ss.Sim(sir, total_pop=100, unit='day', stop=3, solver=solver, verbose=0)
-    with ss.options.context(kernels='numba', verbose=ss.options.verbose if verbose else 0):
-        make().run() # A whole run, in one call: run(), which has every solver's code
-        make().run(until=1) # A run taken a step at a time: one_step()
-        sim = make().init()
-        engine = sim.diseases[0].engine
-        engine.init_program()
-        engine.run_many([0, 1]) # An ensemble: run_many()
-        for n in [1, 2]: # The particles of a particle filter: advance(), and advance_threads()
-            engine.restart()
-            ss.solvers.Particles(engine, n, np.random.default_rng()).advance(2)
-        y, p = engine.y.copy(), engine.program # And those called on their own
-        apply_events(engine.make_rng(), y, engine.register, 0, True)
-        apply_shifts(engine.make_rng(), y, engine.shifts, 0, True, np.zeros((0, 2, y.shape[1])))
-        settle_places(y, p, workspace(y, p), engine.dt, np.zeros((p.n_trans + p.n_movers, y.shape[1])))
-        make('abm').run() # The passes over the agents (ss.solvers.backends.passes), which are cached apart from the kernels
-        for sim in typical_sims(): # And the rest of what sims with agents compile on their first run
-            sim.run()
-    if verbose:
+    try:
+        with ss.options.context(kernels='numba', verbose=ss.options.verbose if verbose else 0):
+            with part('agents'): # The passes over the agents (ss.solvers.backends.passes), which are cached apart from the kernels, and the rest of what sims with agents compile on their first run; the quickest
+                make('abm').run()
+                for sim in typical_sims():
+                    sim.run()
+            with part('starsim.solvers.backends.kernels.run'):
+                make().run() # A whole run, in one call: run(), which has every solver's code
+            with part('starsim.solvers.backends.kernels.one_step'):
+                make().run(until=1) # A run taken a step at a time: one_step()
+            sim = make().init()
+            engine = sim.diseases[0].engine
+            engine.init_program()
+            with part('starsim.solvers.backends.kernels.run_many'):
+                engine.run_many([0, 1]) # An ensemble: run_many()
+            for n,key in [(1, 'advance'), (2, 'advance_threads')]: # The particles of a particle filter: advance(), and advance_threads()
+                with part(f'starsim.solvers.backends.kernels.{key}'):
+                    engine.restart()
+                    ss.solvers.Particles(engine, n, np.random.default_rng()).advance(2)
+            y, p = engine.y.copy(), engine.program # And those called on their own
+            apply_events(engine.make_rng(), y, engine.register, 0, True)
+            apply_shifts(engine.make_rng(), y, engine.shifts, 0, True, np.zeros((0, 2, y.shape[1])))
+            settle_places(y, p, workspace(y, p), engine.dt, np.zeros((p.n_trans + p.n_movers, y.shape[1])))
+    finally:
+        if batch is not None:
+            batch.finish() # Says how long it took
+    if verbose and batch is None:
         print(f'Compiled the solver kernels in {T.toc(output=True):.0f} s')
     return
 
@@ -556,6 +574,19 @@ def some_binomials(rng, n, prob, out, rows):
     else:
         draws.binomials(n, prob, draws.uniforms(rng.integers(0, 2**62), 0, rows[0]), out, rows[2:])
     return
+
+
+@kernel(inline='always')
+def noise(rng, sigma, h):
+    """
+    Gamma white noise over a time h (Bretó et al. 2009; pomp's rgammawn(sigma, h)/h): a multiplier with mean 1 and variance sigma²/h,
+    sigma²·Gamma(h/sigma²)/h, from one uniform (as `draws.nbinom()` takes a gamma); 1 with no draw for sigma = 0
+    """
+    if sigma <= 0:
+        return 1.0
+    var = sigma*sigma
+    g, st = draws._gamma(h/var, draws.stream(rng.random()))
+    return g*var/h
 
 
 @jit
@@ -743,7 +774,7 @@ def draw_chain(rng, y, p, w, s, dt, new, flows):
     d = p.src_chain[s]
     stage = p.src_stage[s]
     src = p.src[stage]
-    stride = p.tgt_comp[p.tgt_starts[stage]] - src # How far apart its stages are: 1, except in the program of a crossing
+    stride = p.tgt_comp[p.tgt_starts[stage]] - src # How far apart its stages are: 1, except in the program of joint states
     for g in range(ng):
         r = max(rates[stage, g], 0.0)
         h = 0.0
@@ -806,7 +837,7 @@ def draw(rng, y, p, w, dt, flows, tau, whole):
     new[:] = y
     for s in range(len(p.src_starts) - 1):
         a, b = p.src_starts[s], p.src_starts[s+1]
-        if a == b: # In the program of a crossing, the end of one disease's flows: the next disease's are drawn from where these left people (each from the rates at the start of the step), so each disease's moves are drawn as they would be for it alone
+        if a == b: # In the program of joint states, the end of one disease's flows: the next disease's are drawn from where these left people (each from the rates at the start of the step), so each disease's moves are drawn as they would be for it alone
             y[:] = new
             continue
         src = p.src[p.src_flows[a]]
@@ -883,9 +914,9 @@ def sum_exposures(expo, e, s):
 def check_ops(ops):
     """ Check that a program has only operations the kernels know, which they then need not check (see `unary()`) """
     ops = np.asarray(ops, dtype=int)
-    unknown = sorted(set(ops[(ops < CONST) | (ops > GROUP)].tolist()))
+    unknown = sorted(set(ops[(ops < CONST) | (ops > NOISE)].tolist()))
     if unknown:
-        errormsg = f'The program of a rate has unknown operations {unknown}; the kernels know {CONST} to {GROUP}'
+        errormsg = f'The program of a rate has unknown operations {unknown}; the kernels know {CONST} to {NOISE}'
         raise ValueError(errormsg)
     return ops
 
@@ -1833,7 +1864,7 @@ def certain(rng, y, p, w, rates, flows, move, solver):
     left, n, prob, k = np.empty(ng), np.empty(ng), np.empty(ng), np.zeros(ng)
     for s in range(len(p.src_starts) - 1):
         a, b = p.src_starts[s], p.src_starts[s+1]
-        if a == b or p.src[p.src_flows[a]] < 0: # The end of a disease's flows (in a crossing), or inflows, which have no compartment to empty
+        if a == b or p.src[p.src_flows[a]] < 0: # The end of a disease's flows (in joint states), or inflows, which have no compartment to empty
             continue
         src = p.src[p.src_flows[a]]
         if move:
@@ -1927,7 +1958,7 @@ def release_rates(y, p, rates, dt):
     its end, the exits act over the whole delay, as for agents: a delay of K steps keeps a share
     exp(-h·K·dt), where leaving the last slot by itself kept exp(-h·(K - 1/2)·dt).
 
-    A flow from a last slot to last slots only (in a crossing, another disease's move, which
+    A flow from a last slot to last slots only (in joint states, another disease's move, which
     keeps the slot) is not an exit: the people it moves are due to leave as well, and those
     in all the last slots together leave over the step, so none are left when the slots move.
     """
@@ -2080,6 +2111,7 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, varying):
     extra = len(p.starts) - nf - 1 # Conveyors, whose operations follow the flows'
     pending = step_start(y, p, dt, solver) if extra else False # Whether the people due to leave a conveyor have yet to leave
     sure = False # Whether a flow has an infinite rate (see certain())
+    noisy = False # Whether a rate has noise, drawn for each leap once its length is known (tau-leaping: see NOISE)
     for f in range(nflows):
         for g in range(ng):
             flows[f, g] = 0
@@ -2203,6 +2235,12 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, varying):
                             for g in range(ng):
                                 stack[len(stack)-1-arg, g] = stack[top, g]
                             top -= 1
+                        elif op == NOISE: # Noise on the rate, drawn for each substep under the chain binomial (whose substeps are dt/n_sub), and for each leap under tau-leaping, once its length is known (below)
+                            if solver == 2 or solver == 5:
+                                for g in range(ng):
+                                    stack[top, g] *= noise(rng, p.consts[arg, g], dt/max(n_sub, 1))
+                            elif solver == 3:
+                                noisy = True
                         elif op >= EXP: # A function of one value
                             for g in range(ng):
                                 stack[top, g] = unary(op, stack[top, g])
@@ -2257,6 +2295,12 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, varying):
                 else:
                     if solver == 3: # Tau-leaping: a leap short enough that the rates change little over it
                         h = min(end - elapsed, 0.03/max(fastest, 1e-12))
+                        if noisy: # The noise on a rate over the leap (NOISE is the last operation of its flow), the leap chosen by the mean rates
+                            for f in range(nf):
+                                for k in range(p.starts[f], p.starts[f+1]):
+                                    if p.ops[k] == NOISE:
+                                        for g in range(ng):
+                                            rates[f, g] *= noise(rng, p.consts[p.args[k], g], h)
                     draw(rng, y, p, w, h, flows, solver == 3, solver == 5)
                 if p.has_det and not by_place: # By place, the counts are settled after the step's events: see settle_places()
                     settle(y, p, w, h, flows)

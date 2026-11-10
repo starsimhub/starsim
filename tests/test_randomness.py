@@ -489,6 +489,34 @@ def test_crn_one_agent():
     return
 
 
+@sc.timer()
+def test_crn_code_moves():
+    """ With common random numbers, an intervention that moves some agents from code, between states that transmission does not read, leaves every other agent's draws as they were """
+    sc.heading('Testing that moves from code leave the draws of the agents they do not move as they were')
+    moved = ss.uids(np.arange(0, 400, 7))
+    def make(move):
+        S, I, R, W = ss.states('S I R W')
+        sir = ss.Disease(S >> I @ 0.1*I, ss.Transition(I, R, dur=ss.expon(10)), R >> W @ 0.0, name='sir', init_prev=0.02)
+        class Mover(ss.Intervention):
+            def step(self):
+                if move:
+                    ss.move(self.sim.diseases.sir.R >> self.sim.diseases.sir.W, uids=moved)
+        sim = ss.Sim(sir, interventions=Mover(name='mover'), networks='random', n_agents=2000, start=0, stop=60, rand_seed=3, keep_times=True, verbose=0).run()
+        return sim.diseases.sir
+
+    def check():
+        a, b = make(False), make(True)
+        assert b.W.n > 0, 'The intervention should have moved someone'
+        others = np.setdiff1d(np.arange(2000), moved)
+        for key in ['ti_I', 'ti_R']:
+            assert np.array_equal(a[key][others], b[key][others], equal_nan=True), f'Moves from code changed {key} of agents they did not move'
+
+    check()
+    with mock.patch.object(ss.solvers.agents_compiled, 'compiled_reasons', lambda engine: ['off']): # The agent engine's own moves, not the compiled ones
+        check()
+    return
+
+
 # %% Run as a script
 def test_named_stream():
     """ A distribution with stream= draws the same numbers wherever it is in the sim, and two with the same stream are refused """
@@ -521,6 +549,7 @@ if __name__ == '__main__':
     o12 = test_repeated_uids()
     o13 = test_crn_undriven()
     o14 = test_crn_one_agent()
+    o15 = test_crn_code_moves()
 
     T.toc()
 

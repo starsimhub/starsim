@@ -78,7 +78,7 @@ class Loop:
     order the modules were given (a disease's `step_state()` and then its `step()`).
 
     A sim that is nothing but compartments the kernels can run from start to finish goes
-    through them in one call instead, not this order step by step (see `sim.kernel_reason()`).
+    through them in one call instead, not this order step by step (see `sim.describe()`).
 
     One time index holds for every function of a step, in every module: the step from time
     point k to k+1 is step k, and throughout it `sim.ti == k` and `sim.now` is time point k,
@@ -100,6 +100,7 @@ class Loop:
         self._plan = None # Made when it is first needed: see the plan property
         self.insertions = []
         self.index = 0 # The next function to execute
+        self.entry = None # The entry of the plan running now, if any
         self.profile = False # If True, record per-entry CPU timing during run() (see Loop.run)
         self.cpu_time = [] # Store the CPU time of execution of each function (only if profiling)
         self.df = None # User-friendly version of the plan
@@ -490,7 +491,11 @@ class Loop:
         """
         self._check_initialized()
         entry = self.plan[self.index] # Get the next entry
-        entry.func() # Call it
+        self.entry = entry
+        try:
+            entry.func() # Call it
+        finally:
+            self.entry = None
         self.index += 1 # Increment the time
         return
 
@@ -543,7 +548,11 @@ class Loop:
 
             if self.profile:
                 start = time.perf_counter()
-            entry.func() # Execute the function -- this is where all of Starsim happens!!
+            self.entry = entry
+            try:
+                entry.func() # Execute the function -- this is where all of Starsim happens!!
+            finally:
+                self.entry = None
 
             # Tidy up
             self.index += 1 # Increment the count
@@ -638,7 +647,7 @@ class Loop:
             ```python
             # Simple label matching with analyzer-like functionality
             def check_pop_size(sim):
-                print(f'Population size is {len(sim.people)}')
+                print(f'Population size is {sim.people.n:n}')
 
             sim = ss.Sim(diseases='sir', networks='random', demographics=True)
             sim.init()

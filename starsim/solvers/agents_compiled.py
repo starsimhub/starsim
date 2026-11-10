@@ -36,6 +36,8 @@ def compiled_reasons(engine):
         out.append('states that are not people')
     if graph.inflows or graph.transfers:
         out.append('births or transfers')
+    if engine.lifetables:
+        out.append('a life table')
     for key in ['attrs', 'sets', 'derived', 'derived_trs', 'also', 'on_event']:
         if getattr(engine, key, None):
             out.append(key)
@@ -262,7 +264,7 @@ class Compiled(Agents):
         k.againx = np.array([[any(position[e.name] <= position[tr.name] for e in self.exits_of.get(s.name, [])) for s in states] for tr in trs]).reshape(nt, ns) # An arrival by it in a state with a scheduled exit before it in the sweep means another pass
         self.kplan = k
         self.ktables = None
-        self.kcrn = None
+        self.kcrn = {} # By the module whose rounds these are: see crn_tables()
         self.kseen = self.n_batches
         return
 
@@ -529,12 +531,12 @@ class Compiled(Agents):
         for r, key in enumerate(k.streams):
             dist = self.dists[key]
             seed = dist.seed
-            RS[r] = [seed] + [ss.dists.str2int(f'{seed}:{tr.name}') for tr in k.trs]
+            RS[r] = [self.round_seed(seed, None)] + [self.round_seed(seed, tr.name) for tr in k.trs]
             dtype = np.dtype(dist.hash_dtype or ss.dtypes.float)
             ush[r], usc[r] = ss.solvers.backends.draws.crn_bits(dtype)
             z32[r] = dtype.itemsize <= 4 # SciPy's ndtri of these is single precision (see ss.normal.ppf())
-        self.kcrn = (RS, ush, usc, z32)
-        return self.kcrn
+        self.kcrn[self._source] = (RS, ush, usc, z32)
+        return self.kcrn[self._source]
 
     def start_cascade(self):
         """ A same-step cascade begins, as `finish_moves()` begins one: its first pass is the next round, and the calls it takes (see `run_moves()`) count its passes """
@@ -615,7 +617,7 @@ class Compiled(Agents):
             ti_enter = ti
         shift = self.index_of(ti_enter) - ti_enter
         slots = people.slot_raw()
-        RS, ush, usc, z32 = self.kcrn or self.crn_tables()
+        RS, ush, usc, z32 = self.kcrn.get(self._source) or self.crn_tables()
         crn = (np.empty(0, np.int64) if slots is None else slots, ROUNDS + self.step_key()*ROUND_MAX + self._kbase, RS, ush, usc, z32, k.dstream, k.bstream, k.tstream, k.back, k.againx, self._kagain)
         flow, flowdst, dlive = np.zeros(k.nt), np.zeros((k.nt, k.flowdst_w)), np.zeros(k.ns, np.int64)
         logs = []

@@ -175,7 +175,7 @@ def test_counts():
             self.peaks = []
         def step(self):
             d = self.sim.diseases.behavior
-            self.peak = max(self.peak, d.I.n/self.sim.people.alive.sum())
+            self.peak = max(self.peak, d.I.n/self.sim.people.n)
             self.peaks.append(self.peak)
     slowing = lambda sim: np.exp(-5*sim.connectors.track.peak)
     S, I, R = ss.states(3)
@@ -185,7 +185,7 @@ def test_counts():
     assert np.allclose(sim.connectors.track.peaks, np.maximum.accumulate(frac)) # Set from the start of each step, one from each time point
     assert frac.max() < 0.15 # Without the slowing, 30% are infectious at the peak
     ode = ss.Sim(behavior, connectors=Track(name='track'), unit='day', stop=200, total_pop=10_000, solver='ode', **kw).run() # The same code, as compartments: the number alive is the number of people, not of groups
-    assert np.isclose(ode.people.alive.sum(), 10_000) and np.isclose(ode.connectors.track.peak, frac.max(), rtol=0.2)
+    assert np.isclose(ode.people.n, 10_000) and np.isclose(ode.connectors.track.peak, frac.max(), rtol=0.2)
 
     # A comparison is 1 or 0, so a rate can stop at a capacity
     S, I, Q, R = ss.states(4)
@@ -666,7 +666,7 @@ def test_modify():
         mods = [ss.modify(sir.pars.beta, multiply=0.5, when=ss.schedule(start=30, stop=60)), ss.modify(sir.recovery, multiply=2.0, when=ss.schedule(start=40)), ss.modify(sir.rel_sus, multiply=0.8, when=ss.schedule(start=50))]
         return ss.Sim(sir, interventions=mods, unit='day', stop=120, **kw).init() # A yearly cycle needs a unit
     fast, slow = timed(), timed()
-    assert fast.kernel_only()
+    assert fast._kernel_reason() is None
     assert np.allclose(fast.run().results.sir.I, slow.profile(kind='loop', plot=False).sim.results.sir.I)
 
     # A modifier can also be given as a path, and combines with others by multiplication
@@ -814,15 +814,16 @@ def test_functions():
     sim = ss.Sim(seeded(seed), stop=6, unit='day', **kw).run()
     assert isinstance(sim.solver, ss.solvers.ode) and sim.results.sir.I[-1] > 4.9 # Called each step, not skipped by a whole run (was 0)
     assert ss.Sim(seeded(seed), stop=6, unit='day', solver='abm', **kw).run().results.sir.I[-1] == 5 # The same code, as agents
-    def cure(sim): # People are moved, never made or lost: the number of people stays the same in every disease
+    def cure(sim): # People are moved, and made or lost, the same in every disease
         sir = sim.diseases.sir
         if sim.ti == 10:
             assert ss.move(sir.I, sir.R, p=0.5) > 0 and ss.move([sir.S, sir.R], sir.I, n=7) == 7 # Exactly n, as whole people too
             ss.move(ss.dead, sir.W, n=100) # A count can come from outside the model
+            assert ss.move(sir.I, ss.dead, p=0.2) > 0 and ss.move(ss.outside, sim.diseases.sis.I, n=20) == 20 # People die, and arrive, in every disease
+            with pytest.raises(ValueError, match='ss.dead'):
+                ss.move(ss.dead, sir.I, n=1)
             with pytest.raises(ss.CapabilityError, match='ss.move'): # Setting the number of people in a state would make or lose people
                 sir.I.n = 0
-            with pytest.raises(ValueError):
-                ss.move(sir.I, ss.dead)
     for solver in ['ode', 'binomial', 'abm']:
         S, I, R, W = ss.State(name='S'), ss.State(name='I'), ss.State(name='R'), ss.State(name='W', people=False)
         dying = ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(7), I >> ss.dead @ ss.perday(0.01), W >> ss.dead @ ss.perday(0.5), init=dict(I=0.01), name='sir')

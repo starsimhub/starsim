@@ -243,7 +243,7 @@ def test_atomica_junction():
     assert '\nch_prev = ' in code and code.count('ch_prev') > code.count('\nch_prev = ') + 1, 'The characteristic should be written once and used by name'
     assert 'sus_to_jn_inf' in code and 'sus_to_jn_rec' in code, 'A junction whose shares change should be a transition to each destination, with its share in the rate'
     sim.init()
-    assert sim.kernel_reason() is None, 'The whole run should be taken in one call to the kernels'
+    assert sim._kernel_reason() is None, 'The whole run should be taken in one call to the kernels'
     sim.run()
     res = sim.results.tiny
 

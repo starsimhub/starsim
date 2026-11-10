@@ -1258,11 +1258,12 @@ class RestartedSims(ByScenario, cabc.Sequence):
     asked for: a copy of its scenario's sim, restarted with the run's seed and values
     and run. `runners` are the sims (one per scenario) that were restarted.
     """
-    def __init__(self, runners, sets, n_runs, seeds):
+    def __init__(self, runners, sets, n_runs, seeds, given=False):
         self.runners = runners
         self.sets = sets # The values of each set, for each runner
         self.n_runs = n_runs
         self.seeds = seeds # The seed of each run
+        self.given = given # Whether the runs continued from starts given (see restart_runs()), which a sim cannot
         self.made = {}
         return
 
@@ -1275,6 +1276,9 @@ class RestartedSims(ByScenario, cabc.Sequence):
         if isinstance(ind, slice):
             return [self[i] for i in range(*ind.indices(len(self)))]
         ind = range(len(self))[ind] # Raises an IndexError if out of range, and handles negative indices
+        if ind not in self.made and self.given:
+            errormsg = 'These runs continued from runs drawn with a posterior (see fit.project()), which a sim cannot start from, so only their results are kept: see msim.results'
+            raise ValueError(errormsg)
         if ind not in self.made:
             r = ind // (len(self.sets[0])*self.n_runs)
             runner = self.runners[r]
@@ -1306,7 +1310,7 @@ def base_values(sim, keys):
     return {key:sc.dcp(p.raw) for key,p in found.items()}
 
 
-def restart_runs(sims, n_runs, pars=None, draws=False):
+def restart_runs(sims, n_runs, pars=None, draws=False, starts=None):
     """
     Run each sim a number of times, each with its own seed, by building it once and restarting it
 
@@ -1318,6 +1322,10 @@ def restart_runs(sims, n_runs, pars=None, draws=False):
     With `pars=` (see `ss.parallel()`), each set of values is run `n_runs` times (as runs of their sim's scenario if they are `draws`). An ODE
     with `sim.jax = True` (and JAX installed) takes them all in one call to JAX (see `ss.gradients`), which is faster than
     the kernels for tens of thousands of runs, once JAX has started.
+
+    With `starts`, one for each set of values: where its runs start, by the name of the module that runs the compartments (each a `start`
+    of `ss.solvers.Compartmental.run_many()`), for the runs to continue from (e.g. from the runs drawn with a posterior: see `ss.fit.Fit.project()`);
+    a module without one starts at the start. The sims of the runs are then not available, only their results.
     """
     has_graph = lambda sim: any(getattr(mod, 'graph', None) is not None for mod in ss.utils.given_modules(sim.pars)) # Only a sim with a declared module can be run whole
     if not all(has_graph(sim) for sim in sims):
@@ -1327,7 +1335,7 @@ def restart_runs(sims, n_runs, pars=None, draws=False):
     for sim in sims:
         runner = sim.new(rand_seed=sim.pars.rand_seed, verbose=0).init() # The seed as it is now, which may have been set since the sim was made; the MultiSim says what it runs
         runner.label = sim.label
-        if not runner.kernel_only() or not same_times([runners[0] if runners else runner, runner]): # Runs at different times can't be put together as results across runs
+        if runner._kernel_reason() is not None or not same_times([runners[0] if runners else runner, runner]): # Runs at different times can't be put together as results across runs
             return None
         keys = {key for p in sets if p is not None for key in p}
         for net in getattr(runner, 'mixed', []): # A network's parameter sets the contact rates when the sim is built, so each run with a value for one is built
@@ -1348,7 +1356,7 @@ def restart_runs(sims, n_runs, pars=None, draws=False):
     group_ti = dict()
     for r,sim in enumerate(runners):
         first = r*len(sets[r])*n_runs # The position of the sim's first run
-        if pars is not None and None not in sets[r] and sim.jax is True and ss.solvers.why_not(sim, 'jax') is None: # Every run in one call to JAX (an ODE run does not depend on the seed)
+        if pars is not None and None not in sets[r] and starts is None and sim.jax is True and ss.solvers.why_not(sim, 'jax') is None: # Every run in one call to JAX (an ODE run does not depend on the seed)
             outs = list(ss.gradients.run_sets(sim, [p for p in sets[r] for i in range(n_runs)]).items())
         else:
             outs = []
@@ -1357,11 +1365,15 @@ def restart_runs(sims, n_runs, pars=None, draws=False):
                     sim.restart(pars=p)
                 run_seeds = np.array(seeds[first + j*n_runs:first + (j+1)*n_runs])
                 for mod in sim.declared:
-                    cross = mod.engine.cross
-                    if cross is None:
-                        outs.append((mod.name, mod.engine.run_many(run_seeds)))
-                    elif mod.name == cross.names[0]: # Diseases tracked jointly are run together
-                        outs += cross.run_many(run_seeds)
+                    joint = mod.engine.joint
+                    start = starts[j].get(mod.name) if starts is not None else None
+                    if start is not None: # The same for each run of the set
+                        start = sc.mergedicts(start, dict(y=np.repeat(np.asarray(start['y'])[None], n_runs, axis=0),
+                            stocks={key:np.repeat(np.asarray(v)[None], n_runs, axis=0) for key,v in start['stocks'].items()}, flows={key:np.repeat(np.asarray(v)[None], n_runs, axis=0) for key,v in start['flows'].items()}))
+                    if joint is None:
+                        outs.append((mod.name, mod.engine.run_many(run_seeds, start=start)))
+                    elif mod.name == joint.names[0]: # Diseases tracked jointly are run together
+                        outs += joint.run_many(run_seeds, start=start)
         for modname,out in list(outs):
             outs += list(out.pop('deliveries', {}).items()) # The results of the deliveries the kernels took, as those of modules of their own
         for modname,out in outs:
@@ -1391,7 +1403,7 @@ def restart_runs(sims, n_runs, pars=None, draws=False):
         for key,vals in (counts or {}).items():
             arrays[None, key] = dict(like=sim.results[key], values=vals, strata=None, denom=None)
     timevec = sim.results.get('timevec')
-    return RestartedSims(runners, sets, n_runs, seeds), MultiResults.build(arrays, runs, timevec=timevec, order=sim.results), runs
+    return RestartedSims(runners, sets, n_runs, seeds, given=starts is not None), MultiResults.build(arrays, runs, timevec=timevec, order=sim.results), runs
 
 
 def parallel(*args, n_runs=None, pars=None, priors=False, **kwargs):

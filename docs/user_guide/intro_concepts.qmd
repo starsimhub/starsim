@@ -53,6 +53,9 @@ The model itself doesn't say which: a disease written as states and transitions 
 
 A disease is declared the way a compartmental model is drawn: as boxes and the arrows between them. `S >> I @ 1.9*I` is the arrow from S to I, taken at a rate of 1.9 per day times the share of people who are infectious (frequency-dependent transmission, as in a textbook SIR model); `I >> R @ ss.days(8)` is the arrow from I to R, taken after 8 days on average.
 
+::: {.panel-tabset group="language"}
+## Python
+
 ```{python}
 import starsim as ss
 
@@ -62,6 +65,31 @@ recovery  = I >> R @ ss.days(8)   # From I to R, after 8 days on average
 measles = ss.Disease(infection, recovery, init_prev=0.001)
 measles.diagram()
 ```
+
+## R
+
+```r
+library(starsim)
+
+states("S I R")
+measles <- Disease(
+  infection = Transition(S, I, rate = 1.9 * I), # From S to I, at 1.9 per day times the share infectious
+  recovery  = Transition(I, R, dur = days(8)),  # From I to R, after 8 days on average
+  init_prev = 0.001
+)
+measles$diagram()
+```
+
+## Explicit
+
+```{python}
+S, I, R = ss.State(name='S'), ss.State(name='I'), ss.State(name='R')
+infection = ss.Transition(source=S, dest=I, rate=ss.perday(1.9)*I, name='infection')       # From S to I, at 1.9 per day times the share infectious
+recovery  = ss.Transition(source=I, dest=R, dur=ss.expon(mean=ss.days(8)), name='recovery') # From I to R, after an exponentially distributed time of 8 days on average
+measles_explicit = ss.Disease(transitions=[infection, recovery], init_prev=0.001, name='measles')
+measles_explicit.diagram()
+```
+:::
 
 This is a simplified measles outbreak, the example that runs through the tutorials and this guide. Because the model is a description rather than code, Starsim can read it: it can write out its equations (`measles.equations()`), draw its diagram (as above), work out its basic reproduction number (`measles.R0()`, about 15 here), and list everything it assumed (`sim.describe()`). See [Writing models](building_writing.qmd).
 
@@ -102,6 +130,9 @@ The **solver** is the method that turns the model into numbers over time. There 
 
 By default (`solver='auto'`), a model runs as an ODE if every part of it can be written as compartments, and as agents if anything needs individuals: a network of individual contacts, `n_agents=`, or a module written as code that keeps a value for each person. The sim says which it chose and why, and `solver=` overrides it; the options of a solver are given with its helper, e.g. `solver=ss.solvers.ode(integrator='euler')` (see [Solvers and backends](running_solvers.qmd)). Here is the same measles model run as an ODE and as agents, with two lengths of step:
 
+::: {.panel-tabset group="language"}
+## Python
+
 ```{python}
 pars = dict(total_pop=100_000, stop=ss.days(50), verbose=0)
 sims = [
@@ -114,6 +145,25 @@ for sim in sims:
     print(sim.label, '-', sim.solver_reason)
 msim.plot('measles.I')
 ```
+
+## R
+
+```r
+make_sim <- function(...) { # A sim with these settings, and any others given
+  Sim(measles, total_pop = 100000, stop = days(50), verbose = 0, ...)
+}
+sims <- list(
+  make_sim(label = "ODE"),
+  make_sim(n_agents = 20000, label = "Agents, daily steps"),
+  make_sim(n_agents = 20000, dt = days(0.25), label = "Agents, quarter-day steps")
+)
+msim <- parallel(sims)
+for (sim in sims) {
+  cat(sim$label, "-", sim$solver_reason, "\n")
+}
+msim$plot("measles.I")
+```
+:::
 
 The sims have different steps, so `msim.plot()` plots each against its own time points. Their results can't be put together as runs of one thing, so what needs that, such as the median across runs (`msim.summarize()`, or a band in the plot), raises an error saying so.
 

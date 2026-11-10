@@ -341,7 +341,7 @@ def test_modifier_tables():
     I = lambda sim: sim.results.d.I.values.copy()
     sim = make().run()
     ref = I(sim)
-    assert sim.kernel_reason() is None
+    assert sim._kernel_reason() is None
     assert np.array_equal(I(sim.run()), ref), 'A rerun gives the same'
     assert np.allclose(I(make().run(until=200)), ref, rtol=1e-12), 'A run a step at a time gives the same'
     assert np.array_equal(I(make(wrap=True).run()), ref), 'The seasonal factor inside a parameter varies in time'
@@ -359,6 +359,19 @@ def test_modifier_tables():
     return
 
 
+def test_sim_diagram():
+    sc.heading('A sim\'s diagram and equations show every disease, and how they act on each other')
+    hiv, syph = ss.SIS(name='hiv'), ss.SIR(name='syph')
+    sim = ss.Sim(diseases=[hiv, syph], connectors=ss.modify(hiv.rel_trans, multiply=3, who=syph.I), verbose=0)
+    text = sim.diagram('text')
+    assert 'subgraph hiv' in text and 'subgraph syph' in text and 'syph_I -..->' in text # The link, from syphilis to HIV
+    eqs = sim.equations()
+    assert 'hiv:' in eqs and 'syph:' in eqs and 'syph.I → hiv.infection' in eqs
+    fig = sim.diagram(do_show=False)
+    assert fig is not None and len(fig.axes[0].patches) > 8
+    return
+
+
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -368,5 +381,6 @@ if __name__ == '__main__':
     lazy = test_lazy_arrays()
     test_where_count()
     test_modifier_tables()
+    test_sim_diagram()
 
     T.toc()

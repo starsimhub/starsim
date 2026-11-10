@@ -61,12 +61,12 @@ website:
         text: Home
       - href: tour.qmd
         text: Tour
-      - href: gallery.qmd
-        text: Gallery
       - href: tutorials.qmd
         text: Tutorials
       - href: user_guide.qmd
         text: User guide
+      - href: gallery.qmd
+        text: Gallery
       - href: whatsnew.qmd
         text: What's new
       - href: contributing/index.qmd
@@ -135,6 +135,7 @@ website:
           contents:
             - user_guide/building_writing.qmd
             - user_guide/building_declared.qmd
+            - user_guide/building_solvers.qmd
             - user_guide/building_diseases.qmd
             - user_guide/building_parameters.qmd
             - user_guide/building_time.qmd
@@ -291,7 +292,7 @@ website:
             - api/solvers.agents.qmd
             - api/solvers.choose.qmd
             - api/solvers.compartmental.qmd
-            - api/solvers.crossing.qmd
+            - api/solvers.joint_states.qmd
             - api/solvers.deliveries.qmd
             - api/solvers.engine.qmd
             - api/solvers.mixing.qmd
@@ -302,12 +303,12 @@ website:
           text: Home
         - href: tour.qmd
           text: Tour
-        - href: gallery.qmd
-          text: Gallery
         - href: tutorials.qmd
           text: Tutorials
         - href: user_guide.qmd
           text: User guide
+        - href: gallery.qmd
+          text: Gallery
         - href: whatsnew.qmd
           text: What's new
         - href: contributing/index.qmd
@@ -426,7 +427,7 @@ quartodoc:
         - solvers.agents
         - solvers.choose
         - solvers.compartmental
-        - solvers.crossing
+        - solvers.joint_states
         - solvers.deliveries
         - solvers.engine
         - solvers.mixing
@@ -437,7 +438,7 @@ format:
       light: [cosmo, ./assets/styles-light.scss]
       dark: [cosmo, ./assets/styles-dark.scss]
     css: ./assets/styles.css
-    include-after-body: ./assets/collapse_sections.html
+    include-after-body: [./assets/collapse_sections.html, ./assets/tabset_fallback.html]
     toc: true
     toc-expand: true
     toc-depth: 5

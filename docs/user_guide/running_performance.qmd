@@ -20,15 +20,14 @@ pars = dict(total_pop=1_000_000, start='2026-01-01', stop='2026-12-31', dt=ss.da
 
 ## A compartmental run in one call
 
-A compartmental run is fastest when the compiled kernels can take every step in one call, with nothing in Python between the steps. Anything that needs Python at each step takes the run a step at a time, which is typically 30 to 100 times slower. `sim.kernel_reason()` says why a run is taken a step at a time, or gives `None` if it is not:
+A compartmental run is fastest when the compiled kernels can take every step in one call, with nothing in Python between the steps. Anything that needs Python at each step takes the run a step at a time, which is typically 30 to 100 times slower. The `plan` line of `sim.describe()` says whether a run is taken in one call, and if not, why (a run says so too, as it starts):
 
 ```{python}
 masks = ss.modify(sir.pars.beta, multiply=0.75, who=sir.I.n >= 20_000) # Fewer contacts while prevalence is high
-sim = ss.Sim(sir, interventions=masks, **pars).init()
-print(sim.kernel_reason())
-
 late = ss.modify(sir.pars.beta, multiply=0.75, who=sir.I.n >= 20_000, until=sir.I.n <= 10_000) # As above, ending at a lower level
-print(ss.Sim(sir, interventions=late, **pars).init().kernel_reason())
+for mod in [masks, late]:
+    plan = [line for line in ss.Sim(sir, interventions=mod, **pars).describe().splitlines() if 'plan' in line]
+    print(plan[0].strip())
 ```
 
 The first runs in one call: a condition on a count is worked out within the kernels as part of the rate. The second needs to remember whether the measure is on, so it is taken a step at a time. To be told rather than slowed, give the sim `require_kernels=True`: a run that would fall back to Python then raises `ss.CapabilityError`, with the reason.
@@ -108,7 +107,7 @@ If a first run after installing is slow, the Numba kernels are being compiled; `
 
 ## Appendix: every option
 
-Starsim's global options are in `ss.options`: set one for the session with `ss.options(threads=1)`, for a block with `with ss.options.context(threads=1):`, or before Python starts with the environment variable `STARSIM_` and the option's name in capitals (`STARSIM_THREADS=1`), which is the way to set it for every worker or every task of a cluster job. `ss.options.disp()` shows the current values, and `ss.options.help(detailed=True)` each option's value, default, and variable. Here is each option with its description:
+Starsim's global options are in `ss.options`: set one for the session with `ss.options(threads=1)`, for a block with `with ss.options(threads=1):`, or before Python starts with the environment variable `STARSIM_` and the option's name in capitals (`STARSIM_THREADS=1`), which is the way to set it for every worker or every task of a cluster job. `ss.options.disp()` shows the current values, and `ss.options.help(detailed=True)` each option's value, default, and variable. Here is each option with its description:
 
 ```{python}
 import pandas as pd

@@ -35,7 +35,7 @@ for guess in [dict(beta=0.14, reported=0.5), dict(beta=0.3, reported=0.2)]:
     print('Starting from', guess, '- beta:', round(fit.pars.beta, 3), '- reported:', round(fit.pars.reported, 3), '- objective:', round(fit.objective, 4))
 ```
 
-From either starting point, the fit finds the same values (β ≈ 0.169, 26% reported): the fit starts by scanning the whole range within the bounds, and then searches from the best few points of the scan, so it doesn't depend much on the starting guesses. Searches that agree show that the search has found the best fit to the data, not that the data pin the values down: as the posterior shows, a range of shares reported fits the rise of the outbreak nearly as well.
+From either starting point, the fit finds the same values (β ≈ 0.169, 26% reported): it first scans the whole range within the bounds, then searches from the best few points, so the starting guesses matter little. Agreement shows that the search found the best fit, not that the data pin the values down: as the posterior shows, a range of shares reported fits the rise nearly as well.
 
 **2. Without the prior.**
 
@@ -51,7 +51,7 @@ for label, prior in [('With the prior', True), ('Without it', False)]:
           '- projected cases:', proj.summarize().loc['measles_cases'].round().to_dict())
 ```
 
-Without the prior, the interval for the share reported is a little wider (from 16% to 52%, rather than from 18% to 46%), and the range of the projected outbreak much wider (from about 1,500 to 5,100 reported cases, rather than 1,800 to 4,100), since a lower share reported means a larger outbreak. Much of the narrower range in the tutorial comes from the prior, that is, from what was known before this outbreak, not from its data. That is legitimate, if the prior is sound, but worth knowing: with a different prior, the projection would be different.
+Without the prior, the interval for the share reported is a little wider (16% to 52%, rather than 18% to 46%), and the range of the projected outbreak much wider (about 1,500 to 5,100 reported cases, rather than 1,800 to 4,100), since a lower share reported means a larger outbreak. Much of the tutorial's narrower range comes from the prior, what was known before this outbreak, not from its data. That is legitimate if the prior is sound, but with a different prior, the projection would differ.
 
 **3. A later or smaller campaign.**
 
@@ -67,4 +67,4 @@ proj = post.project(scenarios, n_runs=100)
 proj.summarize().loc['measles_cases']
 ```
 
-A campaign on 15 April prevents less than half as many cases as one on 1 April (about 230, rather than 550), as by then the outbreak is near its peak. A campaign on 1 April that reaches only half of children prevents more than one at 80% two weeks later: here, speed matters more than coverage.
+A campaign on 15 April prevents less than half as many cases as one on 1 April (about 230, rather than 550), since the outbreak is then near its peak. A campaign on 1 April reaching only half of children prevents more than one at 80% two weeks later: here, speed matters more than coverage.

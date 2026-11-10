@@ -56,6 +56,8 @@ class Events(Agents):
             no(f'{sc.strjoin(s.name for s in graph.count_states)} {"is a state" if len(graph.count_states) == 1 else "are states"} that are not people')
         if self.attrs or self.sets or self.derived:
             no('it has attributes or clocks')
+        if self.lifetables:
+            no('it has a life table')
         if graph.inflows or graph.transfers:
             no('people enter it by a transition (births) or move by a transfer')
         if len(graph.transmissions) > 1:

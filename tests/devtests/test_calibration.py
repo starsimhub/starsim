@@ -66,9 +66,9 @@ def test_particle_mcmc():
     with pytest.raises(ValueError): # A posterior needs a likelihood
         make(data=data).fit(method='pmcmc', loss='nae')
 
-    # A best fit scores each point by the mean of several runs, with fresh seeds at each point under Optuna, and reports the score of the best values over the first seeds
-    best = make(beta=0.3, data=data).fit(method=ss.fit.method('optuna', n_trials=8), rand_seed=1)
-    assert len(best.scores) == 4 # The default for a stochastic compartmental sim
+    # A best fit by Optuna scores each point by the particle filter where it can run the sim, or else (with n_runs=) by the mean of several runs, with fresh seeds at each point, and reports the score of the best values over the first seeds
+    best = make(beta=0.3, data=data).fit(method=ss.fit.method('optuna', n_trials=8, n_runs=4), rand_seed=1)
+    assert len(best.scores) == 4 and best.measure == 'negative mean log-likelihood of 4 runs'
     assert ss.fit.Problem(make(data=data).new(solver='abm', n_agents=2000)).n_runs == 1 # But one for agents, whose runs are slow (Optuna's search learns from nearby points)
     assert np.isclose(best.objective, np.mean(best.scores))
     assert best.trials.objective.nunique() == len(best.trials) # Fresh seeds, so no two trials share their chance

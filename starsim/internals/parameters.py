@@ -956,9 +956,10 @@ class by:
         except AttributeError:
             raise sc.KeyNotFoundError(f'ss.by() is by "{dim}", which is neither a dimension of the sim nor a property of people{ss.expressions.did_you_mean(dim, list(people.states.keys()))}') from None
         if kind == 'edges':
+            edges = np.asarray(keys, dtype=float)
             def plan(uids):
                 raw = some(people[attr].raw, uids)
-                pos = np.digitize(raw, keys) - 1
+                pos = (some(people.age_bins(edges), uids) if attr == 'age' else np.digitize(raw, edges)) - 1 # Ages are kept binned, and worked out again only for those who leave their bin
                 return n, np.where((pos < 0) | np.isnan(raw.astype(float)), n, pos)
             return plan
         def plan(uids):

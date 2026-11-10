@@ -1,0 +1,85 @@
+---
+title: Will my model run as an ODE?
+authorship:
+  human: 20
+  ai: 80
+  note: Drafted by AI, revised by a human
+---
+
+Most of a model runs under every solver: as an ODE, as a stochastic compartmental model, or as agents. In the tables below, **Any** means every solver, **Compartments only** means it works as an ODE (or another compartmental solver) but not as agents, **Agents only** means the model runs as agents, and **None** means no solver does it yet. With `solver='auto'`, Starsim picks agents when it has to, and `sim.solver_reason` says why ([How Starsim chooses](running_solvers.qmd#how-starsim-chooses)).
+
+## People
+
+| Can I... | Runs as | More |
+|---|---|---|
+| Have births, deaths, and migration? | Any | Declared: `ss.birth()`, `ss.death()`, `ss.migration()` ([Demographics](populations_demographics.qmd)) |
+| Have deaths from a disease, or imported cases? | Any | `I >> ss.dead @ rate`, `ss.immigration(I, n=...)` ([Migration](populations_demographics.qmd#migration)) |
+| Use birth and death rates by country? | Any | `ss.birth(rate='Kenya')` ([Rates from data](populations_demographics.qmd#rates-from-data)) |
+| Link each child to its mother? | Agents only | `ss.Births`, `ss.Pregnancy` ([Pregnancy](populations_demographics.qmd#pregnancy)) |
+| Add or remove people from my own code? | Any | `ss.move(sir.I, ss.dead, p=0.1)`, `ss.move(ss.outside, sir.I, n=20)`; they leave or join every disease |
+
+## Groups
+
+| Can I... | Runs as | More |
+|---|---|---|
+| Group people by age, sex, risk, or place? | Any | `stratify()` ([Stratification](building_stratification.qmd)) |
+| Have people age? | Any | Automatic with births or deaths ([Aging](populations_demographics.qmd#aging)) |
+| Move people between groups (e.g. low to high risk)? | Any | `ss.transfer()` at a rate, `ss.Event()` once ([Moving between groups](building_stratification.qmd#moving-between-groups)) |
+| Give rates a value for each group? | Any | `ss.by()` ([How groups differ](building_stratification.qmd#how-groups-differ)) |
+| Use a rate that depends on exact age? | Agents only | Compartments have age groups, not ages ([Severity by age](../gallery/custom_code.qmd)) |
+
+## Moving people between states
+
+| Can I... | Runs as | More |
+|---|---|---|
+| Move people between states? | Any | `ss.move(sir.I, sir.R, p=0.5)` ([Vaccine demand](../tutorials/t9_modules.qmd#vaccine-demand)) |
+| Move only some groups (e.g. children)? | Any | `ss.move(..., who=ss.person.age < 5)`, as agents or in a model stratified by age |
+| Move particular people? | Agents only | `ss.move(..., uids=uids)` |
+| Move between groups from my own code? | None | `ss.move()` takes states; use `ss.Event()` or `ss.transfer()` |
+| Move people on a date, or when cases pass a threshold? | Any | `ss.Event(S >> R, when=..., who=sir.I.n > 1000)` ([Events](interventions_interventions.qmd#events-moves-without-a-product)) |
+| Move a fraction of a person each step? | Any | As agents, `ss.move(..., n=0.3)` moves a whole agent now and then, 0.3 people a step on average |
+
+## Rates
+
+| Can I... | Runs as | More |
+|---|---|---|
+| Change a rate without moving anyone (e.g. double it)? | Any | `ss.modify(sir.pars.beta, multiply=2)` ([Changing parameters](interventions_interventions.qmd#changing-parameters)) |
+| Change a parameter from my own code? | Any | `sir.pars.beta = 0.6` in `step()` |
+| Have one disease change another's rates? | Any | `ss.modify(sti.rel_sus, multiply=3, who=hiv.I)` ([Connectors](interventions_connectors.qmd)) |
+| Have rates change over time, or by season? | Any | `ss.timeseries()`, `ss.seasonal()` ([Parameters](building_parameters.qmd#values-that-change-over-time)) |
+| Have noise on a rate? | Any | `ss.Transition(..., noise=0.1)`: the ODE uses its mean, and the exact (Gillespie) solver refuses it ([Measles in London](../gallery/measles_london.qmd#declared-with-noise)) |
+| Have rates depend on whether someone was ever infected? | Any | `.ever` ([What can be declared](building_declared.qmd#the-vocabulary-by-idea)) |
+| Have rates depend on how long ago, or how often? | Agents only | `.since`, `.n_times`; a count kept as a group (`increment=`) runs as any ([Moving between groups](building_stratification.qmd#moving-between-groups)) |
+
+## Interventions
+
+| Can I... | Runs as | More |
+|---|---|---|
+| Vaccinate, test, and treat? | Any | Products and deliveries ([Products](interventions_products.qmd)) |
+| Have protection wane with a fixed shape? | Any | `ss.boxcar()` ([Vaccines](interventions_products.qmd#vaccines)) |
+| Have protection wane from each person's own date? | Agents only | ([What needs agents](interventions_interventions.qmd#appendix-what-needs-agents)) |
+| Trace contacts? | Agents only | ([What needs agents](interventions_interventions.qmd#appendix-what-needs-agents)) |
+
+## Contacts and differences between people
+
+| Can I... | Runs as | More |
+|---|---|---|
+| Use a contact matrix? | Any | `ss.contacts()` ([Age groups and contacts](building_stratification.qmd#age-groups-and-contacts)) |
+| Use a network (partnerships, households)? | Agents only | `solver='ode'` uses random mixing instead, with a note ([Networks](populations_networks.qmd#which-solver-runs-it)) |
+| Have susceptibility differ by group? | Any | `ss.by()` |
+| Have susceptibility differ person by person? | Agents only | `ss.attr()`; a compartmental solver uses the mean, with a note ([Parameters](building_parameters.qmd#values-that-vary-between-people)) |
+
+## Code of my own
+
+| Can I... | Runs as | More |
+|---|---|---|
+| Write a module that reads counts and results? | Any | `sir.I.n`, `sim.results` ([Modules](architecture_modules.qmd#declared-modules-and-modules-written-as-code)) |
+| Write a module that keeps a value for each person? | Agents only | `define_states()` ([Custom modules](building_modules.qmd)) |
+| Write a rate as a Python function? | Any | If it works on groups ([Severity by age](../gallery/custom_code.qmd)) |
+| Read counts by group from code? | Compartments only | `sir.I.values` is per group as compartments, per agent as agents; use results instead |
+| Write my own ODE in NumPy? | Any | As agents, it runs beside them, unconnected ([Measles in London](../gallery/measles_london.qmd)) |
+
+## Further reading
+
+- [What can be declared](building_declared.qmd): every idea that can be declared, and the name for it
+- [Solvers and backends](running_solvers.qmd#appendix-what-needs-agents): everything that needs agents, as Starsim checks it

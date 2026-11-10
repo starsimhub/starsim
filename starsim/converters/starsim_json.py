@@ -136,10 +136,10 @@ class Writer:
         if p is not None: # A split, or a share of the people leaving by a transition with one destination (e.g. recovery with p=1 - p_death beside death with p=p_death)
             p = sc.tolist(p) + [tr.p_stay]*bool(tr.stays) + [tr.p_die]*bool(tr.may_die)
             out.p = [None if x is None else self.expr(x, pars) for x in p]
-        for key in ['min_stay', 'label', 'stages']:
+        for key in ['min_stay', 'noise', 'label', 'stages']:
             val = getattr(tr, key, None)
             if val is not None:
-                out[key] = self.expr(val, pars) if key == 'min_stay' else val
+                out[key] = self.expr(val, pars) if key in ['min_stay', 'noise'] else val
         for key in ['where', 'move', 'increment']:
             if getattr(tr, key, None) is not None:
                 self.lost.append(f'not exported: the {"who" if key == "where" else key}= of transition "{g.module.name}.{tr.name}"') # who= is stored as where
@@ -422,7 +422,7 @@ class Reader:
             if src.startswith('['): # People leaving any of several states, which the operators write as their sum
                 src = '(' + ' + '.join(ast.unparse(e) for e in ast.parse(src, mode='eval').body.elts) + ')'
             return f'{src} >> {self.ends(dst, names, where)} @ {rate if simple else f"({rate})"}'
-        unknown = set(tr) - {'source', 'dest', 'rate', 'dur', 'p', 'min_stay', 'label', 'stages'}
+        unknown = set(tr) - {'source', 'dest', 'rate', 'dur', 'p', 'min_stay', 'noise', 'label', 'stages'}
         if unknown:
             self.error(where, f'{sc.strjoin(sorted(unknown))} is not an argument of a transition here')
         dest = tr.get('dest')
@@ -434,7 +434,7 @@ class Reader:
         else:
             dst = self.ends(dest if isinstance(dest, str) else '[' + ', '.join(x or 'dead' for x in dest) + ']' if dest else 'dead', names, where)
         args = [self.ends(tr.get('source') or 'unborn', names, where), dst]
-        for key in ['rate', 'dur', 'p', 'min_stay', 'stages', 'label']:
+        for key in ['rate', 'dur', 'p', 'min_stay', 'noise', 'stages', 'label']:
             if key == 'p' and split:
                 continue
             if tr.get(key) is not None:

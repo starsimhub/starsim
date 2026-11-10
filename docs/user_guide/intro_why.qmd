@@ -32,6 +32,9 @@ print('Most infectious at once:', round(out.y[1].max()))
 
 And here is the same model in Starsim:
 
+::: {.panel-tabset group="language"}
+## Python
+
 ```{python}
 import starsim as ss
 
@@ -40,6 +43,46 @@ measles = ss.Disease(S >> I @ 1.9*I, I >> R @ ss.days(8), init_n=dict(I=100))
 sim = ss.Sim(measles, total_pop=N, stop=ss.days(50), verbose=0).run()
 print('Most infectious at once:', round(sim.results.measles.I.max()))
 ```
+
+## R
+
+```r
+library(starsim)
+
+N <- 100000
+states("S I R")
+measles <- Disease(Transition(S, I, rate = 1.9 * I), Transition(I, R, dur = days(8)), init_n = list(I = 100))
+sim <- Sim(measles, total_pop = N, stop = days(50), verbose = 0)$run()
+cat("Most infectious at once:", round(max(sim$results$measles$I$values)), "\n")
+```
+
+## Explicit
+
+```{python}
+S, I, R = ss.State(name='S'), ss.State(name='I'), ss.State(name='R')
+measles = ss.Disease(
+    transitions = [
+        ss.Transition(source=S, dest=I, rate=ss.perday(1.9)*I, name='infection'),       # β S I / N
+        ss.Transition(source=I, dest=R, dur=ss.expon(mean=ss.days(8)), name='recovery'), # γ I, with γ = 1/8
+    ],
+    init_n = dict(I=100), # 100 infectious at the start, and the rest susceptible
+    name   = 'measles',
+)
+sim = ss.Sim(
+    diseases  = measles,
+    networks  = ss.contacts(1), # Everyone mixes with everyone, with one contact per person per day
+    total_pop = N,
+    start     = ss.days(0),
+    stop      = ss.days(50),
+    dt        = ss.days(1),
+    unit      = 'day',
+    solver    = 'ode',
+    verbose   = 0,
+)
+sim.run()
+print('Most infectious at once:', round(sim.results.measles.I.max()))
+```
+:::
 
 The two agree to within a couple of people. If this is the whole job (one model, run deterministically, read by you), the plain version is fine: there is nothing to install or learn, and nothing between you and the equations. The same is true in R with deSolve or odin. Starsim is not faster than good code of your own for a model like this, and it doesn't try to be.
 

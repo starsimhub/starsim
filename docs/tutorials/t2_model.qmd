@@ -7,7 +7,7 @@ authorship:
   note: Written by AI and lightly edited by a human; merged with a second AI draft
 ---
 
-[Tutorial 1](t1_intro.qmd) wrote an SIR model of measles and ran it. This tutorial goes through the same model again, in more depth, to answer a question that matters for any outbreak: **what decides how many people are infected?** Along the way, it covers what each line of the model means, how to say who starts where, how to change a parameter and compare runs, how to read results, how Starsim handles time, and how to save a model and its results.
+This tutorial goes through the SIR model of [Tutorial 1](t1_intro.qmd) in more depth, to answer a question that matters for any outbreak: **what decides how many people are infected?**
 
 By the end of this tutorial, you will be able to:
 
@@ -19,7 +19,7 @@ By the end of this tutorial, you will be able to:
 
 ## What the model says
 
-This is the model from Tutorial 1: measles in a town of 100,000 people, as an SIR model, with a transmission rate β of 1.9 per day and an infectious period of 8 days, run for 50 days.
+This is the model from Tutorial 1: measles in a town of 100,000 people, with β = 1.9 per day and an infectious period of 8 days.
 
 ```{python}
 import starsim as ss
@@ -34,19 +34,19 @@ sim.run()
 sim.plot()
 ```
 
-**States.** `ss.states('S I R')` makes three states, the compartments of the model. A state is a group of people (or, as agents, a label each person carries). The order matters in one way: the first state, here `S`, is where people start unless they are put somewhere else.
+**States.** `ss.states('S I R')` makes three states: the compartments (or, as agents, a label each person carries). People start in the first state, `S`, unless put elsewhere.
 
-**Transitions.** `S >> I @ rate` is a transition from `S` to `I` at a rate. The rate is a *per capita* rate: the rate at which each person in `S` moves to `I`. For an infection, this per capita rate is the force of infection, λ = β I / N: β times the share of people who are infectious. `1.9*I` says exactly this, since a state in a rate stands for the share of people in it. Multiplied by the number of susceptible people, it gives the number of infections per day, β S I / N. Because `I` appears in the rate, Starsim knows that this transition is a transmission, and that people in `I` are infectious.
+**Transitions.** `S >> I @ rate` moves people from `S` to `I` at a *per capita* rate: the rate for each person in `S`. For an infection, this is the force of infection, λ = β I / N, which is what `1.9*I` says, since a state in a rate is the share of people in it. Times S, it gives β S I / N infections a day. Because `I` is in the rate, Starsim knows the transition is a transmission, and that `I` is infectious.
 
-The same transition can also be written as the whole flow, as many textbooks write it: with `N = S + I + R`, `S >> I @ 1.9*S*I/N` is the same model. Both are *frequency-dependent* transmission: what matters is the share of people who are infectious, so a larger town has more infections but not a faster epidemic. For *density-dependent* transmission, where what matters is the number of infectious people (as for some diseases of animals), use the number in the state, `I.n`, as in `S >> I @ beta*I.n`. Then β is per infectious person, so it is much smaller, and R0 (β N × the infectious period) grows with the size of the population. Starsim prints R0 and counts infections for either form.
+This is *frequency-dependent* transmission: what matters is the share infectious, so a larger town has more infections but not a faster epidemic. A bare state in a rate means contact with the people in it, which, with nobody in particular meeting anybody in particular, is their share; with a contact matrix ([Tutorial 4](t4_ages.qmd)) or a network, the same `1.9*I` is worked out from whom each person meets. To say exactly the share, write `1.9*I.frac` (which a sim with a network refuses, since it would ignore whom people meet); for *density-dependent* transmission (as for some diseases of animals), write the number, `beta*I.n`, so that β is per infectious person and R0 (β N × the infectious period) grows with the population. A rate is read as it is written: with the total, from `S, I, R, N = ss.states('S I R', include_sum=True)`, `1.9*I/N` is the share, as in the equations, the same as `1.9*I.frac`; and the whole flow, as many textbooks write it, `S >> I @ 1.9*S*I/N`, is too ([Building diseases](../user_guide/building_diseases.qmd#transmission) has all the forms).
 
-**Durations.** `I >> R @ ss.days(8)` has a duration instead of a rate: people spend 8 days in `I` on average, which is the same as a per capita rate of recovery of 1/8 per day. As in the standard SIR model, the time each person spends infectious is exponentially distributed, with this mean. [Tutorial 3](t3_disease.qmd) shows how to give other distributions.
+**Durations.** `I >> R @ ss.days(8)` gives a duration instead of a rate: 8 days in `I` on average, or a recovery rate of 1/8 per day, exponentially distributed as in the standard SIR model ([Tutorial 3](t3_disease.qmd) shows other distributions).
 
-**The disease.** `ss.Disease` puts the states and transitions together, with how the outbreak starts (below). It takes its name, `measles`, from its variable, and so do the transitions (`infection` and `recovery`), which is how their results are named.
+**The disease.** `ss.Disease` puts the transitions together, with how the outbreak starts. It is named `measles` after its variable, as the transitions (`infection`, `recovery`) are, which names their results.
 
 ## How the outbreak starts
 
-By default, everyone starts in the first state, `S`, except those who start infected. There are three ways to say who starts where:
+There are three ways to say who starts where:
 
 | Argument | Meaning |
 |---|---|
@@ -54,9 +54,12 @@ By default, everyone starts in the first state, `S`, except those who start infe
 | `init=dict(I=0.001, R=0.9)` | The share of people who start in each state, for any states |
 | `init_n=dict(I=10)` | The number of people who start in each state |
 
-Use whichever says what you mean; naming the state (`init` or `init_n`) makes it clear whether the people introduced are already infectious. The shares can also be given where the states are made, as `S, I, R = ss.states(S=0.099, I=0.001, R=0.9)`, which is the same as `init=dict(I=0.001, R=0.9)`.
+Naming the state (`init` or `init_n`) makes clear whether those introduced are already infectious. `S, I, R = ss.states(S=0.099, I=0.001, R=0.9)` is the same as `init=dict(I=0.001, R=0.9)`.
 
-Measles is a disease that most people are immune to, by vaccination or from an earlier infection. Suppose 90% of the town is immune, and 0.1% are infectious. To compare this with the town where nobody is immune, run both for a year with `ss.parallel()`, as in Tutorial 1:
+Most people are immune to measles, by vaccination or earlier infection. Suppose 90% of the town is immune. To compare with a town where nobody is, run both for a year with `ss.parallel()`:
+
+::: {.panel-tabset group="language"}
+## Python
 
 ```{python}
 measles_immune = ss.Disease(infection, recovery, init=dict(I=0.001, R=0.9), name='measles') # Named measles too, so the two runs' results can be compared
@@ -66,17 +69,56 @@ msim = ss.parallel({'Nobody immune': nobody, '90% immune': immune})
 msim.plot('measles.I')
 ```
 
-With only 10% of people susceptible, each infectious person infects 15 × 0.1 ≈ 1.5 others on average. This is the reproduction number at the start, which the run prints after R0 (`R = 1.51 at the start, with 10% susceptible`): R0 itself is for a population in which everyone is susceptible, and is still 15.2. So the outbreak still grows, but slowly: it peaks at about 700 people infectious at once rather than 74,000, and infects about 6,000 people over the year instead of almost everyone. An outbreak can only grow when the reproduction number is above 1, so to stop measles spreading, more than 1 − 1/R0 = 1 − 1/15 ≈ 93% of people must be immune: the herd immunity threshold. Try `R=0.95` to see an outbreak that dies out.
+## R
+
+```r
+library(starsim)
+
+states("S I R")
+infection <- Transition(S, I, rate = 1.9 * I)
+recovery  <- Transition(I, R, dur = days(8))
+measles <- Disease(infection = infection, recovery = recovery, init_prev = 0.001)
+measles_immune <- Disease(infection = infection, recovery = recovery, init = list(I = 0.001, R = 0.9), name = "measles")
+
+nobody <- Sim(measles, total_pop = 100000, stop = days(365))
+immune <- Sim(measles_immune, total_pop = 100000, stop = days(365))
+msim <- parallel(list("Nobody immune" = nobody, "90% immune" = immune))
+msim$plot("measles.I")
+```
+
+## Explicit
+
+```{python}
+S, I, R = ss.State(name='S'), ss.State(name='I'), ss.State(name='R')
+infection_explicit = ss.Transition(source=S, dest=I, rate=ss.perday(1.9)*I, name='infection')
+recovery_explicit  = ss.Transition(source=I, dest=R, dur=ss.expon(mean=ss.days(8)), name='recovery')
+transitions = [infection_explicit, recovery_explicit]
+nobody_immune = ss.Disease(transitions=transitions, init=dict(S=0.999, I=0.001), name='measles')        # The share of people in each state at the start
+some_immune   = ss.Disease(transitions=transitions, init=dict(S=0.099, I=0.001, R=0.9), name='measles')
+
+settings = dict(networks=ss.contacts(1), total_pop=100_000, start=ss.days(0), stop=ss.days(365), dt=ss.days(1), unit='day', solver='ode')
+msim_explicit = ss.parallel({
+    'Nobody immune': ss.Sim(diseases=nobody_immune, **settings),
+    '90% immune':    ss.Sim(diseases=some_immune, **settings),
+})
+msim_explicit.plot('measles.I')
+```
+:::
+
+With 10% susceptible, each infectious person infects 15 × 0.1 ≈ 1.5 others: the reproduction number at the start, which the run prints after R0 (`R = 1.51 at the start, with 10% susceptible`). R0, for a fully susceptible population, is still 15.2. The outbreak grows slowly, peaking at about 700 infectious rather than 74,000, and infects about 6,000 people rather than almost everyone. An outbreak grows only when the reproduction number is above 1, so to stop measles, more than 1 − 1/R0 ≈ 93% of people must be immune: the herd immunity threshold. Try `R=0.95` to see an outbreak die out.
 
 ## Changing parameters
 
-Starsim takes the parameters of a disease from its transitions: β from the rate of `infection` (named `beta`, since it multiplies a state in a transmission), and the infectious period from the duration of `recovery` (named `dur_I`, the mean time in I, as in the equations of Tutorial 1). They are listed in the disease's `pars`:
+Starsim takes a disease's parameters from its transitions: `beta` from the rate of `infection`, and `dur_I` (the mean time in I) from the duration of `recovery`:
 
 ```{python}
 measles.pars
 ```
 
-To run the model with another value, give the sim `pars=`, with the new values by name. This changes the value in that sim only, and leaves `measles` as it was. (`sim.new(pars=dict(beta=0.5))` does the same, starting from an existing sim.) Here is the model with four values of β, from 0.15 to 1.9 per day, run for a year:
+To run with another value, give the sim `pars=` by name; this changes that sim only, not `measles` (`sim.new(pars=dict(beta=0.5))` does the same from an existing sim). Here are four values of β over a year. `ss.parallel()` runs the sims and plots them together, as running and plotting each in turn would:
+
+::: {.panel-tabset group="language"}
+## Python
 
 ```{python}
 sims = {}
@@ -86,7 +128,33 @@ msim = ss.parallel(sims)
 msim.plot('measles.I')
 ```
 
-The lower β is, the later and lower the peak. To see how many people are infected in the end, read R0 and the number recovered from each run (`msim.sims` has the sims, in order):
+## R
+
+```r
+sims <- list()
+for (beta in c(0.15, 0.25, 0.5, 1.9)) {
+  sims[[paste("beta =", beta)]] <- Sim(measles, pars = list(beta = beta), total_pop = 100000, stop = days(365))
+}
+msim <- parallel(sims)
+msim$plot("measles.I")
+```
+
+## Explicit
+
+```{python}
+import matplotlib.pyplot as plt
+
+for beta in [0.15, 0.25, 0.5, 1.9]:
+    one = ss.Sim(measles, pars=dict(beta=beta), total_pop=100_000, stop=ss.days(365), verbose=0)
+    one.run()
+    plt.plot(one.timevec, one.results.measles.I, label='beta = ' + str(beta))
+plt.xlabel('Day')
+plt.ylabel('Number infectious')
+plt.legend();
+```
+:::
+
+The lower β, the later and lower the peak. For the share infected in the end, read each run's R0 and number recovered (`msim.sims` has the sims, in order):
 
 ```{python}
 for sim in msim.sims:
@@ -95,13 +163,13 @@ for sim in msim.sims:
     print(sim.label, ' R0 =', round(R0, 1), ' share infected =', round(share, 2))
 ```
 
-The share infected rises steeply with R0 at first, then levels off: with an R0 of 2, 80% of people are infected, and above 4, almost everyone is. These are the values of the classic final size relation for an SIR model, z = 1 − exp(−R0 z), where z is the share infected. A model with an R0 above about 5 is, for this purpose, not sensitive to the exact value of R0, which is why measles infects almost everyone in a population with no immunity. So the answer to this tutorial's question is: R0, and how many people are immune to begin with. β and the infectious period matter only through R0, and they decide how fast the outbreak happens, not how big it is.
+The share infected rises steeply with R0, then levels off: 80% at an R0 of 2, almost everyone above 4. This is the classic final size relation of an SIR model, z = 1 − exp(−R0 z), for a share z infected. Above an R0 of about 5 the final size hardly changes, which is why measles infects almost everyone where nobody is immune. So the answer to this tutorial's question is R0, and how many people are immune to begin with. β and the infectious period matter only through R0; they decide how fast the outbreak happens, not how big it is.
 
-[Tutorial 3](t3_disease.qmd) shows how to name parameters yourself, and give them a range of plausible values for [calibration](t7_calibration.qmd). For more on parameters, see [Parameters](../user_guide/building_parameters.qmd) in the user guide.
+[Tutorial 3](t3_disease.qmd) shows how to name parameters yourself, with a range of plausible values for [calibration](t7_calibration.qmd). See also [Parameters](../user_guide/building_parameters.qmd) in the user guide.
 
 ## Results
 
-A run's results are in `sim.results`, by module, so those of the disease are in `sim.results.measles`:
+A run's results are in `sim.results`, by module:
 
 ```{python}
 sim = ss.Sim(measles, total_pop=100_000, stop=ss.days(50))
@@ -112,10 +180,10 @@ res
 
 There are two kinds of result:
 
-- **A state** (`S`, `I`, `R`) is the number of people in it at each time point. This is the prevalence, as a count.
-- **A transition** (`infection`, `recovery`) is the number of people who made it in each step: a flow. `infection` is the incidence of new infections, per day here.
+- **A state** (`S`, `I`, `R`) is the number of people in it at each time point (the prevalence, as a count).
+- **A transition** (`infection`, `recovery`) is the number who made it in each step: a flow. `infection` is the daily incidence.
 
-Each result is a time series, with numbers that can be read off it:
+Each result is a time series:
 
 ```{python}
 print('Peak number infectious:', round(res.I.max()))
@@ -123,28 +191,28 @@ print('Total infections:', round(res.infection.sum()))
 print('Recovered by the end:', round(res.R[-1]))
 ```
 
-To count infections, sum the flow `infection`, not the state `I`: summing `I` would count each person once for every day they are infectious. `res.infection.cum` is the running total of a flow (the cumulative incidence). Any result can be plotted on its own:
+To count infections, sum the flow `infection`, not the state `I`, which counts each person once per day infectious. `res.infection.cum` is the running total (the cumulative incidence). Any result can be plotted:
 
 ```{python}
 res.infection.plot()
 ```
 
-For a table of every result at every time point (a pandas DataFrame), use `sim.to_df()`, or `res.infection.to_df()` for one result:
+`sim.to_df()` gives every result as a pandas DataFrame (and `res.infection.to_df()` one result):
 
 ```{python}
 df = sim.to_df()
 df.head()
 ```
 
-[Results](../user_guide/building_results.qmd) in the user guide covers results in full, including those of many runs.
+See [Results](../user_guide/building_results.qmd) in the user guide for more.
 
 ## Time
 
-**Units.** Every run has a unit of time. Here it is a day, which Starsim takes from the durations in the model (`ss.days(8)`). A number with no unit, such as β = 1.9, is in the same unit: 1.9 per day. To give a rate its unit explicitly, write it with one: `ss.perday(1.9)` is the same rate as `1.9` here, and `ss.perweek(13.3)` is nearly the same again. Durations can be given in any unit (`ss.days()`, `ss.weeks()`, `ss.months()`, `ss.years()`), and rates and durations in different units are converted to the unit of the model.
+**Units.** Every run has a unit of time, here a day, taken from the durations in the model (`ss.days(8)`). A bare number, such as β = 1.9, is in the same unit: 1.9 per day, the same as `ss.perday(1.9)` (and nearly `ss.perweek(13.3)`). Durations can be in any unit (`ss.days()`, `ss.weeks()`, `ss.months()`, `ss.years()`), converted to the model's.
 
-If a model has values in more than one unit, such as a duration in years as well as durations in days ([Tutorial 3](t3_disease.qmd)), Starsim can't tell which unit the bare numbers (such as β = 1.9) are in, and says so. Then either give them units, or say which unit the model is in, e.g. `ss.Sim(..., unit='day')`.
+If a model has values in more than one unit, such as days and years ([Tutorial 3](t3_disease.qmd)), Starsim can't tell which unit bare numbers are in, and says so. Then give them units, or the model's unit, e.g. `ss.Sim(..., unit='day')`.
 
-**Start and stop.** `stop=ss.days(50)` runs the model from day 0 to day 50 (as does `dur=ss.days(50)`, the length of the run). A run can also start and stop on dates, so that results are dated:
+**Start and stop.** `stop=ss.days(50)` runs from day 0 to day 50 (as does `dur=ss.days(50)`). A run can also start and stop on dates:
 
 ```{python}
 sim = ss.Sim(measles, total_pop=100_000, start='2025-01-01', stop='2025-02-20')
@@ -152,7 +220,7 @@ sim.run()
 sim.plot()
 ```
 
-**Steps, people, and agents.** A run moves forward in steps of time, `dt`, which is one of the unit by default: here one day. For the ODE, the step is only how often results are recorded, since the equations are solved more finely in between. For agents, the step matters more, since each agent's moves are drawn once per step, so those infected in a step wait until the next to move on. [Tutorial 1](t1_intro.qmd) showed that this outbreak is too fast for a step of a day as agents. Here are agents with a step of a day and of a quarter of a day, with the ODE:
+**Steps, people, and agents.** A run moves in steps, `dt`, by default one of the unit (a day). For the ODE, the step is only how often results are recorded. For agents, moves are drawn once per step, so those infected in a step wait until the next to move on; [Tutorial 1](t1_intro.qmd) showed that a day is too long a step for this outbreak. Here are agents with steps of a day and a quarter day, with the ODE:
 
 ```{python}
 ode = ss.Sim(measles, total_pop=100_000, stop=ss.days(50), verbose=0)
@@ -162,24 +230,20 @@ msim = ss.parallel({'ODE': ode, 'Agents, step of 1 day': day, 'Agents, step of 1
 msim.plot('measles.I')
 ```
 
-`sim.new()` makes a new sim from an existing one, with whatever is given changed (here, the step); `verbose=0` turns off the lines a run prints. With a step of a quarter of a day, the peak comes on day 6.75, close to the ODE (day 6), rather than on day 9. A good check of any model run as agents is to halve the step and see whether the results change; `sim.check_dt()` does this and reports the difference.
+`sim.new()` copies a sim with whatever is given changed; `verbose=0` silences the run. With a quarter-day step, the peak comes on day 6.75, close to the ODE (day 6), rather than day 9. A good check of any agent model is to halve the step and see whether results change; `sim.check_dt()` does this for you. (With different steps, `msim.plot()` plots each sim against its own time points; combining them as runs of one thing, e.g. their median, raises an error.)
 
-The sims run together with `ss.parallel()`, as above. Since they have different steps, `msim.plot()` plots each against its own time points; what needs their results put together as runs of one thing, such as the median across runs, raises an error saying so.
-
-`total_pop` is the number of people in the population. When the model runs as agents, `n_agents` is the number of agents simulated, and each stands for `total_pop / n_agents` people (here 10). Results are always in people, not agents. More agents give results that vary less by chance, but take longer to run; 10,000 is often enough to see the shape of an epidemic, and more are needed to follow small numbers, such as the last few cases of an outbreak. [Time](../user_guide/building_time.qmd) in the user guide has more on units, dates, and steps.
+`total_pop` is the number of people; as agents, each of the `n_agents` stands for `total_pop / n_agents` people (here 10). Results are always in people. More agents vary less by chance but take longer; 10,000 is often enough for the shape of an epidemic, but small numbers, such as the last few cases, need more. See [Time](../user_guide/building_time.qmd) in the user guide for more.
 
 ## Saving and loading
 
-`sim.save()` saves a sim to a file, and `ss.load()` loads it again:
+`sim.save()` saves a sim, and `ss.load()` loads it:
 
 ```{python}
 sim.save('my-measles.sim')
 sim2 = ss.load('my-measles.sim')
 ```
 
-By default, this leaves out the people and anything else that is only needed to run the sim, so that the file is small; the model and results are kept. To save everything, for example to continue a run later, use `sim.save('my-measles.sim', shrink=False)`.
-
-To use the results in another program, such as a spreadsheet, save them as a table:
+By default, this keeps the model and results but leaves out the people, so the file is small; `shrink=False` saves everything, e.g. to continue a run later. To use the results elsewhere, save them as a table:
 
 ```{python}
 df = sim.to_df()

@@ -156,7 +156,7 @@ class State(Nameable, Expr):
         return Count([self], kind='total')
 
 
-def states(arg=None, infected=False, **kwargs):
+def states(arg=None, infected=False, include_sum=False, **kwargs):
     """
     Create several states at once
 
@@ -165,6 +165,8 @@ def states(arg=None, infected=False, **kwargs):
             are assigned to; or a string of names (e.g. `'S I R'`), which are used directly
         infected (bool/str/list): which of them are infected (see `ss.State`): all of them (`True`); some, by name, with names given
             up front (`'E I'`); or some, by position, with a number of states (`[1, 2]`, or `range(1, 6)`)
+        include_sum (bool): also return the sum of the states, after them: the total of the people in them, often called `N`,
+            for rates written with it: `beta*I/N`, the share of people in `I`, which is `beta*I.frac`; or the whole flow, `beta*S*I/N`, the same
         kwargs (dict): instead of `arg`, the states by name, with the share of people who start in each (`S=0.9, I=0.1, R=0`); and
             any of the arguments of `ss.State`, passed to each, e.g. `people=False`
 
@@ -176,6 +178,7 @@ def states(arg=None, infected=False, **kwargs):
         Sv, Ev, Iv = ss.states(3, people=False) # Mosquitoes: counts, not people
         S, E, I, H, R = ss.states('S E I H R', infected='E I H') # H does not transmit, so is not infected unless said
         S, E, I, H, R = ss.states(5, infected=range(1, 4)) # The same, by position
+        S, I, R, N = ss.states('S I R', include_sum=True) # N = S + I + R, the total, e.g. for S >> I @ beta*I/N
         ```
     """
     inits = {k:kwargs.pop(k) for k in list(kwargs) if k not in state_args} # The states by name, with their starting shares
@@ -215,7 +218,10 @@ def states(arg=None, infected=False, **kwargs):
         if bad:
             raise ValueError(f'infected= gives the positions {bad} of states, but there are {n} (positions 0 to {n-1})')
         flags = [i in chosen for i in range(n)]
-    return [State(name=name, infected=flag, **(kwargs | ({'init':inits[name]} if name in inits else {}))) for name,flag in zip(names, flags)]
+    out = [State(name=name, infected=flag, **(kwargs | ({'init':inits[name]} if name in inits else {}))) for name,flag in zip(names, flags)]
+    if include_sum:
+        out.append(sum(out[1:], start=out[0]))
+    return out
 
 state_args = [k for k in inspect.signature(State.__init__).parameters if k not in ['self', 'kwargs']] # What ss.states() passes to each state, rather than taking as a state's name
 
@@ -497,6 +503,10 @@ class Transition(Nameable):
         increment (str/dict): a counter that goes up as well: its name, which adds 1 (`increment='parity'`), or a dict of the amount for each
             (`increment=dict(parity=2)` for twins, `dict(doses=-1)`); a counter is a dimension with integer levels, whose last level is open-ended
         min_stay (dur): a minimum stay: nobody leaves by this transition until they have been in its source state this long (a rate applies from then on, and a dwell time starts then)
+        noise (float/par): process noise on the rate, as sigma of gamma white noise (Bretó et al. 2009; pomp's `rgammawn`): the chain binomial multiplies the rate, in each substep of length h,
+            by a gamma draw with mean 1 and variance sigma²/h, for each group (and each particle of a filter). sigma is in the square root of the sim's unit (0.0878 in He et al.'s model, in years),
+            and can be fitted (`noise=ss.par(0.1, bounds=[0, 0.3])`). Tau-leaping draws it for each leap (h its length), and agents once a step for each group (h the step);
+            the ODE leaves it out (its mean), and the exact solver (`'gillespie'`) refuses it
         acquisition (bool): whether it is an acquisition of the disease, which `rel_sus`, a product's efficacy against acquisition, and `ss.treat` act on. If not given: a
             contact-mediated transition is, and so is any other transition out of the disease's first state if none out of it is contact-mediated (an infection by a bite rate or an EIR)
         per_strain (str): for an event of a disease with strains (`ss.Strains`) in a state they share, with an outcome for each strain
@@ -517,11 +527,12 @@ class Transition(Nameable):
         failure   = ss.Transition(Tx, I, rate=ss.peryear(0.1), move=DS >> (DS, RIF)) # Treatment fails, and the strain acquires resistance (DS, RIF = strains)
         twins     = ss.Transition(P, PP, dur=ss.months(9), p=0.02, increment=dict(parity=2)) # Parity goes up by 2
         weaning   = ss.Transition(NB, W, rate=ss.perday(0.5), min_stay=ss.days(21)) # At least 21 days old first, as EMULSION's duration
+        infection = ss.Transition(S, E, rate=beta*I, noise=0.0878) # Infection whose rate varies at random from step to step (He et al. 2010)
         postpartum = ss.Transition(PP, NP, when=ss.on(preg.delivery, delay=ss.months(6))) # Six months after each woman's own delivery
         importation = ss.Transition(S, I, rate=ss.perday(1e-4), acquisition=True) # An infection from outside, alongside one by contact
         ```
     """
-    def __init__(self, source=None, dest=None, rate=None, dur=None, p=None, stages=None, name=None, label=None, who=None, when=None, move=None, increment=None, min_stay=None, acquisition=None, per_strain=False, **kwargs):
+    def __init__(self, source=None, dest=None, rate=None, dur=None, p=None, stages=None, name=None, label=None, who=None, when=None, move=None, increment=None, min_stay=None, noise=None, acquisition=None, per_strain=False, **kwargs):
         check_renamed(kwargs, 'ss.Transition()', dict(where='who=, a condition on who it applies to', on='when=, what triggers it (an event, or ss.on(event, delay=...))', single_strain="per_strain='first' (each strain carried has its own rate, and the first to happen moves on alone)"))
         where = None if who is None else check_who(who, 'a transition')
         trigger, delay = None, None
@@ -547,6 +558,9 @@ class Transition(Nameable):
         if rate is not None and dur is not None:
             errormsg = 'A transition takes one of rate= or dur='
             raise ValueError(errormsg)
+        if noise is not None and rate is None:
+            errormsg = f'noise= is noise on a transition\'s rate, so it goes with rate= (a dwell time dur=ss.days(10) is rate=ss.perday(0.1)), not {"dur=" if dur is not None else "when=" if trigger is not None else "no rate"}'
+            raise ValueError(errormsg)
         if stages is not None and (isinstance(stages, bool) or not isinstance(stages, (int, np.integer)) or stages < 1):
             errormsg = f'stages= is the number of sub-stages a dwell time is split into, a whole number of at least 1, not {stages!r}'
             raise ValueError(errormsg)
@@ -569,6 +583,10 @@ class Transition(Nameable):
         self.acquisition_given = acquisition # Whether it is an acquisition of the disease, if given
         self.acquisition = acquisition # Whether it is, as worked out when the module is built: see ss.graph.Graph.resolve_acquisition()
         self.min_stay = min_stay # A minimum stay in the source state before this transition can happen
+        self.noise = None if noise is None else as_expr(noise) # Sigma of gamma white noise on the rate, drawn each step by the chain binomial (see ss.solvers.Compartmental.flatten_rates())
+        if self.noise is not None and not isinstance(self.noise, ss.par): # The kernels take sigma as one value (see ss.kernels.NOISE)
+            errormsg = f'noise= takes sigma as a number or a parameter (e.g. noise=ss.par(0.1, bounds=[0, 0.3])), not an expression ({self.noise}); to fit a function of sigma, fit sigma itself'
+            raise ValueError(errormsg)
         self.move = None # A change of level in some dimensions: {dim: level}
         if move is not None and not isinstance(move, dict) and isinstance(move, ss.strains.StrainMove): # A change of the strains people carry, e.g. move=DS >> (DS, RIF)
             move = {move.strains.name: move}
@@ -974,11 +992,16 @@ def move(*args, p=None, n=None, uids=None, who=None, **kwargs):
     """
     Move people between states of a declared disease from code, the same way under every solver
 
-    A one-off move along no transition (as `ss.Event(I >> R)` is for a declared one), so people
-    are moved and never made or lost: the number of people stays the same in every disease. A count that is not
-    people (`ss.State(people=False)`, e.g. mosquitoes) moves the same way, and also from and to outside the model
-    (`ss.unborn`, `ss.dead`, or `ss.outside`), which for people is a birth, a death, or a move, and is declared. Also `disease.move(...)`, the same with
-    the disease given.
+    A one-off move along no transition (as `ss.Event(I >> R)` is for a declared one). People can also be moved
+    into the model and out of it: to `ss.dead` (they die) or `ss.outside` (they leave), and from `ss.unborn` (they
+    are born) or `ss.outside` (they arrive), with `n=`. Every disease has the same people, so people who die or leave
+    leave every disease, and people added are in each other disease's first state, under every solver: as agents,
+    they are agents who die or are made (a death happens at the end of the step, as `people.request_death()` does);
+    in a compartmental run, the diseases tracked jointly lose and gain the same people, and a disease run apart
+    loses them from its states in proportion, in each group, as it has them (it runs apart since its states do not
+    depend on the others'). People added are placed in groups as declared births (`ss.unborn`) or arrivals
+    (`ss.outside`) are. A count that is not people (`ss.State(people=False)`, e.g. mosquitoes) moves the same way.
+    Also `disease.move(...)`, the same with the disease given.
 
     Args:
         args: in any order, told apart by what they are: a move written with the states (`sir.I >> sir.R`), or the state (or a list of states) to move people from and the
@@ -1001,6 +1024,9 @@ def move(*args, p=None, n=None, uids=None, who=None, **kwargs):
         ss.move(sir.S, sir.R, p=0.8, who=ss.person.age < 5) # Protect 80% of the susceptible children under 5
         sir.move(uids, sir.R) # These agents, from wherever they are (also ss.move(sir, uids, sir.R), or sir.move(uids, 'R'))
         self.move(self.I, self.R, uids=uids) # In a disease's own code: these agents, if they are infectious
+        ss.move(sir.I, ss.dead, p=0.1) # A tenth of those infectious die
+        ss.move(ss.outside, sir.I, n=20) # Twenty people arrive infectious
+        sir.move(uids, ss.dead) # These agents die, whatever their state
         ss.move(mosq.Sv, ss.dead, p=0.1) # A tenth of the mosquitoes die
         ```
     """
@@ -1043,16 +1069,20 @@ def move(*args, p=None, n=None, uids=None, who=None, **kwargs):
                 raise sc.KeyNotFoundError(f'"{x}" is not a state of "{home.name}". Its states are {sc.strjoin(home.graph.states.keys())}')
             x = getattr(home, x)
         return run_state(x)
+    outs = [end for end in ends if isinstance(end, Outside)]
+    if len(ends) == 2 and len(outs) == 2:
+        raise ValueError(f'ss.move() moves people into or out of a state, not from {outs[0]} to {outs[1]}')
+    outside = outs[0].kind if outs else None # Where people come from or go to outside the model, if they do
     to = None if isinstance(ends[-1], Outside) else find(ends[-1])
     if len(ends) == 2:
         src = ends[0]
         srcs = [] if isinstance(src, Outside) else [find(x) for x in sc.tolist(src)]
     elif home is None:
         raise ValueError('ss.move() was given only the state people move to; give the state they move from too, or the disease, for any of its states (e.g. sir.move(uids, sir.R))')
-    elif to is None or not to[1].people:
+    elif to is not None and not to[1].people:
         raise ValueError('ss.move() of a count needs the state it comes from (or ss.outside)')
-    else: # Any of the disease's states of people but the destination
-        srcs = [(home, state) for state in home.graph.people_states if state is not to[1]]
+    else: # Any of the disease's states of people but the destination (e.g. sir.move(uids, ss.dead): these agents die, whatever state they are in)
+        srcs = [(home, state) for state in home.graph.people_states if to is None or state is not to[1]]
     pairs = srcs + ([] if to is None else [to])
     mods = {id(mod):mod for mod,_ in pairs} | ({id(home):home} if home is not None else {})
     if len(mods) != 1:
@@ -1067,10 +1097,14 @@ def move(*args, p=None, n=None, uids=None, who=None, **kwargs):
     if people and len(people) < len(states):
         counts = [state.name for state in states if not state.people]
         raise ValueError(f'ss.move() would move between people ({sc.strjoin(people)}) and counts ({sc.strjoin(counts)}, declared with people=False) of "{mod.name}"')
-    if people and (not srcs or to is None):
-        raise ValueError(f'ss.move() moves people between states, so the number of people stays the same; people come into the model and leave it by births, deaths, and migration, which are declared (e.g. ss.birth(), ss.death(), ss.immigration())')
+    if people and isinstance(ends[-1], Outside) and ends[-1].kind not in Outside.dests:
+        raise ValueError(f'ss.move() cannot move people to {ends[-1]}, which is where they come from: to remove them, move them to ss.dead (they die) or ss.outside (they leave)')
+    if people and len(ends) == 2 and isinstance(ends[0], Outside) and ends[0].kind not in Outside.sources:
+        raise ValueError(f'ss.move() cannot move people from {ends[0]}, which is where they go: to add them, move them from ss.unborn (they are born) or ss.outside (they arrive)')
     if not srcs and n is None:
         raise ValueError(f'ss.move() from outside the model adds a number: give n=')
+    if not srcs and (where is not None or uids is not None):
+        raise ValueError(f'ss.move() from outside the model adds people, so there is nobody to pick with {"who=" if where is not None else "uids="}')
     if where is not None and not people:
         raise ValueError(f'ss.move() with who= picks people, but it moves a count of "{mod.name}" (declared with people=False), which has none to pick')
     if uids is not None and (not isinstance(mod.sim.solver, ss.solvers.abm) or not people):
@@ -1080,6 +1114,8 @@ def move(*args, p=None, n=None, uids=None, who=None, **kwargs):
     kw = dict(uids=uids.uids if hasattr(uids, 'uids') else ss.uids(uids)) if uids is not None else dict()
     if where is not None:
         kw['where'] = where
+    if people and outside is not None:
+        kw['outside'] = outside
     return mod.engine.move_some([state for _,state in srcs], None if to is None else to[1], p=p, n=n, **kw)
 
 
@@ -1210,7 +1246,8 @@ def crude_rate(rate, kind):
 
 class lifetable:
     """
-    A life table: how many die at each age, which `ss.death(lifetable=)` and `ss.Deaths(lifetable=)` take as a death rate for each age band (see `hazards()`)
+    A life table: how many die at each age, which `ss.death(lifetable=)` and `ss.Deaths(lifetable=)` take as a death rate for each age band (see `hazards()`);
+    as agents, `ss.death(lifetable=)` draws each person's age at death once from those rates (see `draw()`), which is the same model
 
     Args:
         ages (list): the start of each age band, in years (the last band is as wide as the one before)
@@ -1245,15 +1282,23 @@ class lifetable:
         return np.interp(age, self.edges, self.survival, left=1.0, right=0.0)
 
     def draw(self, age, u):
-        """ The age at death of people of some ages, from uniform random numbers: a cohort's survival to it is a share (1 - u) of its survival to their age
+        """ The age at death of people of some ages, from uniform random numbers, at the death rate of each age band (see `hazards()`): the age at
+        which the deaths they face from their age on add up to -log(1 - u)
 
         Args:
             age (array): the ages of the people
             u (array): uniform random numbers, one for each person
         """
-        target = self.survive(age)*(1 - np.asarray(u))
-        keep = np.r_[True, np.diff(self.survival[::-1]) > 0] # The survival curve is flat where nobody dies, which is not a point it can be inverted at
-        out = np.interp(target, self.survival[::-1][keep], self.edges[::-1][keep])
+        if not hasattr(self, '_cumulative'): # The death rate of each band (the last is open), and the deaths faced from the first age to the start of each
+            lo = self.edges[:-1]
+            rates = self.hazards(lo)
+            self._cumulative = (lo, rates, np.r_[0.0, np.cumsum(rates[:-1]*np.diff(lo))])
+        lo, rates, cum = self._cumulative
+        age = np.asarray(age, dtype=float)
+        faced = np.where(age > lo[-1], cum[-1] + rates[-1]*(age - lo[-1]), np.interp(age, lo, cum, left=0.0)) # None before the first age
+        target = faced - np.log1p(-np.asarray(u, dtype=float))
+        keep = np.r_[np.diff(cum) > 0, True] # A band where nobody dies is flat, so it is inverted at its end
+        out = np.where(target > cum[-1], lo[-1] + (target - cum[-1])/rates[-1], np.interp(target, cum[keep], lo[keep]))
         return np.maximum(out, age)
 
     def hazards(self, edges):
@@ -1286,7 +1331,7 @@ def death(state=None, rate=None, dur=None, lifetable=None, name=None, label=None
         state (State/list): the state people die from, or several (`[E, I]`); if not given, every state that is people
         rate (any): the death rate per person per unit time; with no state (the deaths of everyone), it is read as `ss.Deaths` reads a rate: a bare number (per year) or a typed rate is per 1,000 people if above 1 per year, else per person (`10` and `ss.peryear(10)` are `ss.peryear(0.01)`) (a time series by the median of its values); a place by name is `ss.Deaths(death_rate=place)`, its UN rates by year, sex, and age, as agents (e.g. `rate='Kenya'`)
         dur (any): the mean time to death (instead of `rate`)
-        lifetable (`ss.lifetable`): instead of a rate, a life table, as a death rate for each of its age bands, by each person's age, as `ss.Deaths(lifetable=)` takes it (which also takes one for each sex and year); in a compartmental run, which needs a stratification by age, it is a death rate for each age group of the model
+        lifetable (`ss.lifetable`): instead of a rate, a life table, as a death rate for each of its age bands, by each person's age, as `ss.Deaths(lifetable=)` takes it (which also takes one for each sex and year); as agents, each person's age at death is drawn once from those rates, so they cannot be modified during a run (for that, give the rates by age: `rate=ss.by(age=...)`); in a compartmental run, which needs a stratification by age, it is a death rate for each age group of the model
         name (str): the name of the transition
         label (str): a human-readable name
     """

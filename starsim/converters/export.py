@@ -295,6 +295,9 @@ def flatten(sim):
             lost.append(f'not exported: {kind} "{name}"')
         for name in sorted(mod.graph.funcs):
             lost.append(f'not exported: function "{name}" (Python code)')
+        for name,tr in mod.graph.transitions.items():
+            if tr.noise is not None:
+                lost.append(f'not exported: the noise on the rate of "{name}" (noise=)')
     for mods,what in [(list(sim.networks()) + getattr(sim, 'mixed', []), 'network'), (sim.interventions(), 'intervention'), (sim.connectors(), 'modifier')]:
         for mod in mods:
             extra = ''
@@ -302,7 +305,7 @@ def flatten(sim):
                 raw, eff = (contact_rate(sim, diseases[0].engine, saturated=k) if diseases else 0.0 for k in (False, True))
                 extra = f' (written as homogeneous mixing with {raw:n} contacts per {unit}' + (f', each transmitting at most once in a step, so {eff:.4g} in effect)' if raw and eff != raw else ')')
             lost.append(f'not exported: {what} "{mod.name}"{extra}')
-    if getattr(sim, 'crossings', None):
+    if getattr(sim, 'joint_states', None):
         lost.append('not exported: the coupling between diseases (each is written on its own)')
     if not isinstance(sim.solver, ss.solvers.ode) and how is None:
         lost.append(f'changed: solver="{sim.solver}" is not carried; the model is written as an ODE')

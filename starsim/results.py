@@ -1937,6 +1937,9 @@ def match_name(sim, col):
     return res if isinstance(res, ss.Result) else None
 
 
+warned_data = set() # The warnings about data already given (see check_data())
+
+
 def check_data(sim, df, die=False):
     """
     Check that every data column matches a result, and that the data overlaps the simulated period
@@ -1987,6 +1990,18 @@ def check_data(sim, df, die=False):
         outside = (data_t < sim_t.min() - eps) | (data_t > sim_t.max() + eps)
         if outside.any() and not outside.all():
             ss.note(f'{outside.sum()} of the {len(data_t)} times in the data are outside the simulated period ({sim.t.start} to {sim.t.stop}), so are not compared with the results', sim=sim)
+
+        # Data on a flow by period whose last period starts inside the run but ends after it, so is not compared: a sign of data labeled by the end of each period (e.g. weeks ending on a date)
+        flows = [col for col in df.columns if getattr(match_column(sim, col), 'kind', None) == 'flow' and np.isfinite(np.asarray(df[col], dtype=float)[-1])]
+        spacing = np.median(np.diff(data_t)) if len(data_t) > 1 else 0
+        last = data_t[-1]
+        if flows and not by_year(df) and spacing > 3*eps and sim_t.min() - eps <= last <= sim_t.max() + eps and last + spacing > sim_t.max() + 3*eps:
+            msg = (f'the last row of the data on {sc.strjoin(flows)} ({df.index[-1]}) starts a period that ends after the run, so it is not compared with the results. '
+                   f'Starsim labels each row of data on a flow by the start of the period it covers; if these data are labeled by its end (e.g. weeks ending on a date), '
+                   f'subtract one period from their times; if not, run the sim to the end of that period.')
+            if msg not in warned_data: # Once, not again for each sim of a fit
+                warned_data.add(msg)
+                ss.warn(msg)
     return
 
 
@@ -2068,7 +2083,7 @@ def compare(sim, data=None):
     """
     Line up a sim's results with its data
 
-    A flow (new infections, reported cases) is summed over the interval ending at each data time; a stock or ratio (a count,
+    A flow (new infections, reported cases) is summed over the interval starting at each data time; a stock or ratio (a count,
     a prevalence) is interpolated at the data's time. Data by calendar year (an integer `year` column) is compared with the
     year each row names: a flow summed over the year, a stock or ratio averaged over it. A column that matches no result is
     left out (see `check_data()`).
