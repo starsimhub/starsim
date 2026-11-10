@@ -166,7 +166,7 @@ def states(arg=None, infected=False, include_sum=False, **kwargs):
         infected (bool/str/list): which of them are infected (see `ss.State`): all of them (`True`); some, by name, with names given
             up front (`'E I'`); or some, by position, with a number of states (`[1, 2]`, or `range(1, 6)`)
         include_sum (bool): also return the sum of the states, after them: the total of the people in them, often called `N`,
-            for rates written with it (`beta*I/N`, the same as `beta*I`; or the whole flow, `beta*S*I/N`)
+            for rates written with it: `beta*I/N`, the share of people in `I`, which is `beta*I.frac`; or the whole flow, `beta*S*I/N`, the same
         kwargs (dict): instead of `arg`, the states by name, with the share of people who start in each (`S=0.9, I=0.1, R=0`); and
             any of the arguments of `ss.State`, passed to each, e.g. `people=False`
 

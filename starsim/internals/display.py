@@ -347,8 +347,8 @@ def describe_graph(graph, sim=None, out=None):
         add('', f'{state.name} a count, not people', f'guessed: {guess}' if guess else None)
     for state in graph.infectious:
         add('', f'{state.name} infectious' + (f', rel_trans = {value_str(state.rel_trans)}' if rel_str(state.rel_trans) else ''))
-    for state in {id(s):s for tr in graph.transitions.values() for s in graph.counted(tr) if not s.infectious}.values():
-        add('', f'{state.name} infectious, by its number (density-dependent)')
+    for name,state in {id(s):(graph.dependence(tr), s) for tr in graph.transitions.values() for s in graph.counted(tr) if not s.infectious}.values():
+        add('', f'{state.name} infectious, by its {"number" if name == "density" else "share"} ({name}-dependent)')
     for state in {id(s):s for tr in graph.acquisitions for s in tr.source or [] if rel_str(s.rel_sus)}.values(): # Where it applies: to an acquisition from the state
         add('', f'{state.name} susceptible, rel_sus = {value_str(state.rel_sus)}')
     infected = [s.name for s in graph.infected if s.people]
@@ -399,12 +399,13 @@ def describe_graph(graph, sim=None, out=None):
             add(name, f'{tr._arrow}   undriven: moved by {sc.strjoin(movers) if movers else "nothing" if sim is not None else "products, deliveries, or code"}')
         else:
             guess = sc.strjoin(([f'name {tr.guessed["name"]}'] if 'name' in tr.guessed else []) + ([f'acquisition: {tr.guessed["acquisition"]}'] if 'acquisition' in tr.guessed else []), sep='; ')
-            counted = graph.counted(tr) # The states a density-dependent transmission is from, e.g. I in beta*I.n
-            kind = 'density-dependent' if tr.rate is not None and ss.expressions.count_power(tr.rate) > 0 else 'spontaneous' # A rate per person that grows with a number of people, e.g. beta*I.n
+            counted = graph.counted(tr) # The states a density- or frequency-dependent transmission is from, e.g. I in beta*I.n or beta*I.frac
+            dep = graph.dependence(tr)
+            kind = f'{dep}-dependent' if dep else 'spontaneous' # A rate per person that grows with a number or share of people, e.g. beta*I.n
             if tr._inflow:
                 kind = f'inflow, in total per {unit or "step"}'
             elif counted:
-                kind = f'transmission, from {" + ".join(s.name for s in counted)} (density-dependent)'
+                kind = f'transmission, from {" + ".join(s.name for s in counted)} ({dep}-dependent)'
             elif tr.acquisition:
                 kind += ', an acquisition'
             elif 'acquisition' in tr.guessed: # Out of the first state, alongside a transmission

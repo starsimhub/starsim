@@ -978,6 +978,13 @@ def check_routes(sim):
                 continue
             counts = [leaf for leaf in (tr.rate.leaves if tr.rate is not None else []) if isinstance(leaf, ss.expressions.Count) and any(getattr(s, 'people', True) for s in leaf.states)]
             others = [r for r in routes if r not in matrices] if counts and id(counts[0]) in met else routes
+            infecting = mod.graph.counted(tr) if all(s.people for s in tr.source or []) else [] # A transmission at a rate on the share or number of people in a state of the disease, e.g. beta*I.frac
+            if infecting and others: # It would infect whoever the routes say people meet, without them: refused, rather than ignoring them
+                written = f' (written as {tr.flow_given})' if tr.flow_given is not None else ''
+                dep = mod.graph.dependence(tr)
+                raise ValueError(f'"{mod.name}.{name}" infects at a rate on the {"share" if dep == "frequency" else "number"} of people in {sc.strjoin(s.name for s in infecting)}, {tr.rate}{written}, '
+                                 f'of everyone, whoever they meet; but this sim has {sc.strjoin(others)}, which {"says" if len(others) == 1 else "say"} who meets whom. '
+                                 f'For transmission through {"it" if len(others) == 1 else "them"}, write the bare state, e.g. {tr.source[0].name} >> {tr.dest[0].name if tr.dest else "..."} @ beta*{infecting[0].name}; or remove the {"network" if len(others) == 1 else "networks"}')
             if counts and others:
                 ss.note(f'"{mod.name}.{name}" uses {counts[0]} literally, so {sc.strjoin(others)} {"does" if len(others) == 1 else "do"} not apply to it; write the bare state (e.g. {counts[0].states[0].label_name}) for exposure through the routes', sim=sim)
     return
