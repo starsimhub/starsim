@@ -120,14 +120,25 @@ def test_forms():
     assert 'infection' in graph.transitions and 'beta' in graph.pars # A transmission like any other: it was named S_to_I, with an unnamed coefficient
     assert 'from I (density-dependent)' in repr(graph.transitions)
 
-    # The total, with include_sum=True: beta*I/N is beta*I (frequency-dependent), as is the whole flow beta*S*I/N
+    # The total, with include_sum=True: beta*I/N is literally the share infectious, beta*I.frac (frequency-dependent), as is the whole flow beta*S*I/N; well mixed, the same as contact, beta*I
     freq = []
-    for rate in [lambda S,I,N: 0.3*I, lambda S,I,N: 0.3*I/N, lambda S,I,N: 0.3*S*I/N]:
+    for rate in [lambda S,I,N: 0.3*I, lambda S,I,N: 0.3*I.frac, lambda S,I,N: 0.3*I/N, lambda S,I,N: 0.3*S*I/N, lambda S,I,N: 0.3*I.n/(S.n + I.n + R.n)]:
         S, I, R, N = ss.states('S I R', include_sum=True)
         assert repr(N) == 'S + I + R'
         freq.append(ss.Sim(ss.Disease(S >> I @ rate(S, I, N), I >> R @ 10, name='sir'), stop=50, **kw))
     assert same(*freq)
-    assert all('beta' in sim.diseases.sir.graph.pars for sim in freq)
+    for sim in freq:
+        graph = sim.diseases.sir.graph
+        assert 'infection' in graph.transitions and 'beta' in graph.pars and graph.init_prev is not None
+        assert [s.name for s in graph.infected] == ['I']
+    assert all(repr(sim.diseases.sir.graph.transitions.infection.rate) == 'beta * I.frac' for sim in freq[1:4]) # Written with counts, it is kept as written
+    assert 'from I (frequency-dependent)' in repr(freq[1].diseases.sir.graph.transitions)
+
+    # On a network, only contact can be used: the share or number of everyone would ignore whom people meet, so is refused
+    for rate in [lambda S,I,N: 0.3*I.frac, lambda S,I,N: 0.3*S*I/N, lambda S,I,N: 3e-4*I.n]:
+        S, I, R, N = ss.states('S I R', include_sum=True)
+        with pytest.raises(ValueError, match='write the bare state'):
+            ss.Sim(ss.Disease(S >> I @ rate(S, I, N), I >> R @ 10, name='sir'), networks=ss.RandomNet(), n_agents=100, stop=5, verbose=0).init()
     return forms
 
 

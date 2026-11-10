@@ -94,9 +94,23 @@ A transition that has no variable or keyword to be named by is named `infection`
 
 ## Transmission
 
-A bare state in a rate, like `I` in `1.9*I`, means contact with the people in that state. With no contacts given (homogeneous mixing), that is the share of the population in it, `I/N`, so `S >> I @ beta*I` is the textbook frequency-dependent transmission, with a flow of β S I / N. With a contact matrix or a network, the same rate is worked out from whom each person actually meets, and β is the rate per contact (see [Stratification](building_stratification.qmd) and [Population data](populations_data.qmd)). A transition whose rate contains a bare state is **contact-mediated**, and that state is a source of infection.
+The textbook SIR model, with frequency-dependent transmission, is
 
-For density-dependent transmission, in which the number of contacts grows with the size of the population (as is often assumed for animal or vector populations), write the count itself, `I.n`. The flow is then β S I:
+- dS/dt = −β S I / N
+- dI/dt = β S I / N − γ I
+- dR/dt = γ I
+
+Each transition in Starsim has a rate per person in its source, so the rate of `S >> I` is the force of infection, λ = β I / N, not the flow β S I / N. There are three ways to write it, and each says something different about who meets whom:
+
+| Rate | Read as | Force of infection |
+|---|---|---|
+| `beta*I` | contact with the people in `I` | well mixed, β I / N; with a contact matrix or a network, from whom each person meets, with β per contact |
+| `beta*I.frac` | the share of people in `I` | β I / N, of everyone (in a model with places, in the same place); with a contact matrix, met by it |
+| `beta*I.n` | the number of people in `I` | β I: density-dependent; with a contact matrix, met by it |
+
+With no contacts given (homogeneous mixing), the first two are the same model. They part when the model says who meets whom. With a contact matrix by age, `beta*I` is each group's share infectious, met by the matrix (β Σ_j C_ij I_j / N_j, as from a contact survey); `beta*I.frac` is each group's number infectious over everyone (β Σ_j C_ij I_j / N, as in a who-acquires-infection-from-whom matrix); and `beta*I.n` is their number (β Σ_j C_ij I_j). As agents on a network, only `beta*I` can be used: it is from each person's contacts, while `beta*I.frac` and `beta*I.n` would infect people whoever they meet, so a sim with a network refuses them, rather than ignoring the network. In density-dependent transmission, the number of contacts grows with the size of the population (as is often assumed for animal or vector populations), so β is per infectious person, and R0 grows with the population.
+
+`beta*I` is the usual form, written without `.frac` or `.n`, because it is the one that stays right when the model changes: the same disease runs well mixed, with a contact matrix, or on a network, as an ODE or as agents, and β is the rate per contact in each. A transition whose rate contains a bare state is **contact-mediated**, and that state is a source of infection. Any of the three is a transmission, whose coefficient is the parameter `beta`, and which is named `infection` if it is the only one:
 
 ```{python}
 S, I, R = ss.states('S I R')
@@ -104,12 +118,12 @@ measles_density = ss.Disease(S >> I @ 1.9e-5*I.n, I >> R @ ss.days(8), init_prev
 measles_density.equations()
 ```
 
-Either way, the coefficient is the parameter `beta`, and the transition, if it is the only transmission, is `infection`. To write the share infectious as it is in the equations, `I/N`, ask for the total of the states with `include_sum=True`: `S, I, R, N = ss.states('S I R', include_sum=True)` makes `N = S + I + R` as well, and `beta*I/N` is the same frequency-dependent model as `beta*I`. A rate can also be written as the whole flow, as in the equations of other frameworks: `S >> I @ beta*S*I/N` is the same model again, and `beta*S*I` the same density-dependent model as `beta*I.n`.
+**As it is written.** A rate is read as it is written. Only a state on its own, as in `beta*I`, means contact; a state that is written with other states, as it would be in the equations, is a number of people. To write the share infectious as the equations do, ask for the total of the states with `include_sum=True`: `S, I, R, N = ss.states('S I R', include_sum=True)` makes `N = S + I + R` as well, and `beta*I/N` is the share infectious, the same as `beta*I.frac` (as `prevalence = I/N` would be in a result). A rate can also be written as the whole flow, as other frameworks write it, which is divided by its source: `S >> I @ beta*S*I/N` is `beta*I.frac`, and `beta*S*I` is `beta*I.n`.
 
 ```{python}
 S, I, R, N = ss.states('S I R', include_sum=True)
-measles_share = ss.Disease(S >> I @ 1.9*I/N, I >> R @ ss.days(8), init_prev=0.001)
-measles_share.equations()
+measles_share = ss.Disease(S >> I @ 1.9*S*I/N, I >> R @ ss.days(8), init_prev=0.001)
+measles_share.describe()
 ```
 
 **Infected states and prevalence.** A disease with transmission has two more results, `infected` (the number in its infected states) and `prevalence` (their share of everyone in its states). The infected states are those of the force of infection: the states people are infected into and those that infect them, `E` and `I` in `S >> E @ beta*I`, and each state's `infected` says so (`seir.E.infected`). Where the transitions don't show it, say which states are infected: for a stage that is infected but doesn't transmit (say, `H`, in hospital), `infected = E + I + H` given to the disease, or `ss.states('S E I H R', infected='E I H')`, or `ss.State('Hospitalized', infected=True)` for each. What the model says is used as it is: with `infected = I`, `E` is not counted. A disease without transmission, such as a staged condition, has neither result unless it says which states are infected; one that defines its own `infected` or `prevalence` keeps it; and one with a state called `infected` has that state's count under the name, and no `prevalence` unless it defines one. The infected states are also what a test detects and a treatment cures, unless told otherwise ([Names with special meaning](#names-with-special-meaning)).

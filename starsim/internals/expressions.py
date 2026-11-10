@@ -411,14 +411,31 @@ def as_stocks(expr):
     return expr
 
 
-def count_power(expr):
-    """ How many counts of people (`I.n`) a rate is multiplied by, net of those it is divided by: 1 for `beta * I.n` (density-dependent), 0 for `beta * I.frac` or `k * N.n / S.n` """
+def count_power(expr, kinds=('n', 'total')):
+    """ How many counts of people (`I.n`) a rate is multiplied by, net of those it is divided by: 1 for `beta * I.n` (density-dependent), 0 for `beta * I.frac` or `k * N.n / S.n`; with `kinds=['frac']`, how many shares of people (1 for `beta * I.frac`, frequency-dependent) """
     if isinstance(expr, Count):
-        return int(expr.kind in ['n', 'total'] and all(getattr(s, 'people', True) for s in expr.states))
+        return int(expr.kind in kinds and all(getattr(s, 'people', True) for s in expr.states))
     elif isinstance(expr, BinOp):
-        a, b = count_power(expr.a), count_power(expr.b)
+        a, b = count_power(expr.a, kinds), count_power(expr.b, kinds)
         return a + b if expr.op == '*' else a - b if expr.op == '/' else max(a, b) if expr.op in ['+', '-'] else 0
     return 0
+
+
+def dependence(rate, people=()):
+    """
+    How a rate per person grows with the people in states it counts: 'density' with their number (`beta*I.n`), 'frequency' with their
+    share (`beta*I.frac`; or, given the states that are `people`, their number over the total of them, `beta*I.n/N.n`), or None
+    """
+    if rate is None:
+        return None
+    elif count_power(rate) > 0:
+        return 'density'
+    elif count_power(rate, kinds=['frac']) > 0:
+        return 'frequency'
+    num, den = factors(rate)
+    if people and sum(is_total(f, people) for f in den) == 1 and sum(isinstance(f, Count) and f.kind == 'n' and all(st.people for st in f.states) for f in num) == 1: # Including a weighted count, (ss.by(w)*I).n/N.n
+        return 'frequency'
+    return None
 
 
 class Prop(Expr):
@@ -982,15 +999,34 @@ def as_counts(expr):
     return expr
 
 
+def counted_in(expr):
+    """ The states of people whose number an expression is, each counted once, unweighted, or None: [I] for `I` or `I.n`, and [S, I, R] for `S + I + R`, `(S + I + R).n`, or `S.n + I.n + R.n` """
+    if isinstance(expr, ss.transitions.State):
+        return [expr] if expr.people else None
+    elif isinstance(expr, Count):
+        return expr.states if expr.kind == 'n' and not expr.weighted and all(st.people for st in expr.states) else None
+    elif isinstance(expr, BinOp) and expr.op == '+':
+        a, b = counted_in(expr.a), counted_in(expr.b)
+        if a is None or b is None or set(map(id, a)) & set(map(id, b)):
+            return None
+        return a + b
+    return None
+
+
 def is_total(expr, people):
-    """ Whether an expression is the sum of all the states that are people, e.g. `N = S + I + R` (see `ss.states(include_sum=True)`) """
-    return isinstance(expr, BinOp) and expr.op == '+' and set(map(id, expr.leaves)) == set(map(id, people)) and all(isinstance(leaf, ss.transitions.State) for leaf in expr.leaves)
+    """ Whether an expression is the number of all the people of the module (see `counted_in()`): e.g. `N = S + I + R` (see `ss.states(include_sum=True)`), `N.n`, or `S.n + I.n + R.n` """
+    states = counted_in(expr)
+    return states is not None and set(map(id, states)) == set(map(id, people))
 
 
 def as_share(rate, people):
     """
-    A rate per person written with the share of people in a state, as contact with them: `beta*I/N`, with `N` the total
-    of the states that are people, is `beta*I` (frequency-dependent). Any other rate is returned as it is.
+    A rate per person written with a state over the total, as the share of people in it: `beta*I/N`, with `N` the total
+    of the states that are people, is `beta*I.frac`. Any other rate is returned as it is, including one written with counts
+    (`beta*I.n/N.n`, which is the share as written).
+
+    A state written on its own in a rate (`beta*I`) is contact with the people in it; over the total, it is the share of
+    people in it, as it would be in a result (`prevalence = I/N`).
 
     Args:
         rate (Expr): the rate per person, as written
@@ -998,8 +1034,10 @@ def as_share(rate, people):
     """
     num, den = factors(rate)
     totals = [i for i,f in enumerate(den) if is_total(f, people)]
-    if not totals or not any(isinstance(leaf, ss.transitions.State) for f in num for leaf in getattr(f, 'leaves', [])):
+    shares = [i for i,f in enumerate(num) if not isinstance(f, Count) and counted_in(f)]
+    if len(totals) != 1 or len(shares) != 1:
         return rate
+    num[shares[0]] = Count(counted_in(num[shares[0]]), kind='frac')
     den.pop(totals[0])
     out = num[0]
     for f in num[1:]:
@@ -1014,10 +1052,9 @@ def per_person(rate, src, people):
     A rate written as the whole flow, as most other frameworks write it, as the rate per person in its source
 
     A rate with its source as a factor (`S >> I @ beta*S*I/N`) is the whole flow, so it is divided by the
-    source, and its other states are numbers of people: divided by the total of the states that are people,
-    a share of them, which is contact with people in those states, so `beta*S*I/N` is `beta*I` (frequency-dependent);
-    otherwise the numbers themselves, so `beta*S*I` is `beta*I.n` (density-dependent). Any other rate is per
-    person already, and is returned as it is.
+    source, and its other states are numbers of people: `beta*S*I` is `beta*I.n` (density-dependent), and
+    `beta*S*I/N`, over the total of the people, `beta*I.n/N.n`, the share of them (see `as_share()`), `beta*I.frac`.
+    Any other rate is per person already, and is returned as it is.
 
     Args:
         rate (Expr): the rate as written
@@ -1028,17 +1065,18 @@ def per_person(rate, src, people):
     if len(src or []) != 1 or not any(f is src[0] for f in num):
         return rate
     num.pop(next(i for i,f in enumerate(num) if f is src[0]))
-    totals = [i for i,f in enumerate(den) if is_total(f, people)]
-    if totals: # A share of the people: contact with people in those states
-        den.pop(totals[0])
-    else: # A number of people
-        num, den = [as_counts(f) for f in num], [as_counts(f) for f in den]
-    out = num[0] if num else par.inline(1)
-    for f in num[1:]:
-        out = BinOp('*', out, f)
-    for f in den:
-        out = BinOp('/', out, f)
-    return out
+    def product(num, den):
+        out = num[0] if num else par.inline(1)
+        for f in num[1:]:
+            out = BinOp('*', out, f)
+        for f in den:
+            out = BinOp('/', out, f)
+        return out
+    out = product(num, den)
+    share = as_share(out, people)
+    if share is not out: # A state over the total: its share
+        return share
+    return product([as_counts(f) for f in num], [as_counts(f) for f in den]) # Otherwise, numbers of people
 
 
 def divide(a, b, xp=np):
