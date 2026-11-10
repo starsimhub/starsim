@@ -85,7 +85,7 @@ Each declared module gets one engine when the sim is initialized. A module writt
 |---|---|---|
 | Compartmental | `solvers/compartmental.py`, `solvers/mixing.py`, `solvers/backends/kernels.py` | Expands states into compartments (one per group, branch and Erlang stage) and transitions into a flat list of flows, the *program*. The kernels (small functions in `solvers/backends/kernels.py`, compiled with Numba, or their Rust copies) step that program for all the compartmental solvers. `mixing.py` turns networks and mixing pools into contact rates between groups. |
 | Agents | `solvers/agents.py`, `solvers/agents_*.py`, `solvers/backends/passes.py` | Each state is a boolean array over agents. A dwell time is drawn on entry and the exit scheduled; competing rates out of a state are resolved in one draw; transmission is drawn over each network's edges. The moves of a step are taken in rounds (below), each a few NumPy passes over the agents who move. The heavy passes over agents and edges are compiled. |
-| Crossing | `solvers/crossing.py` | Diseases tracked jointly, when a condition in one refers to a state of another (`ss.modify(hiv.rel_trans, multiply=3, who=syph.I)`). Their compartments are crossed and run as one program, up to a budget (`ss.options.max_joint`); above it, `'auto'` uses agents. |
+| JointStates | `solvers/joint_states.py` | Diseases tracked jointly, when a condition in one refers to a state of another (`ss.modify(hiv.rel_trans, multiply=3, who=syph.I)`). Their compartments are crossed and run as one program, up to a budget (`ss.options.max_joint`); above it, `'auto'` uses agents. |
 
 Three details of the compartmental engine explain most of its behavior:
 

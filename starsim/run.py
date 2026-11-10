@@ -1365,15 +1365,15 @@ def restart_runs(sims, n_runs, pars=None, draws=False, starts=None):
                     sim.restart(pars=p)
                 run_seeds = np.array(seeds[first + j*n_runs:first + (j+1)*n_runs])
                 for mod in sim.declared:
-                    cross = mod.engine.cross
+                    joint = mod.engine.joint
                     start = starts[j].get(mod.name) if starts is not None else None
                     if start is not None: # The same for each run of the set
                         start = sc.mergedicts(start, dict(y=np.repeat(np.asarray(start['y'])[None], n_runs, axis=0),
                             stocks={key:np.repeat(np.asarray(v)[None], n_runs, axis=0) for key,v in start['stocks'].items()}, flows={key:np.repeat(np.asarray(v)[None], n_runs, axis=0) for key,v in start['flows'].items()}))
-                    if cross is None:
+                    if joint is None:
                         outs.append((mod.name, mod.engine.run_many(run_seeds, start=start)))
-                    elif mod.name == cross.names[0]: # Diseases tracked jointly are run together
-                        outs += cross.run_many(run_seeds, start=start)
+                    elif mod.name == joint.names[0]: # Diseases tracked jointly are run together
+                        outs += joint.run_many(run_seeds, start=start)
         for modname,out in list(outs):
             outs += list(out.pop('deliveries', {}).items()) # The results of the deliveries the kernels took, as those of modules of their own
         for modname,out in outs:

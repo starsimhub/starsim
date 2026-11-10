@@ -23,7 +23,7 @@ import numpy as np
 import sciris as sc
 import starsim as ss
 
-__all__ = ['jax', 'Run', 'CrossRun', 'run', 'run_sets', 'gradient', 'of_results', 'Density', 'LogDensity', 'Unsupported'] # Used as ss.gradients (not imported into ss); these are the names documented
+__all__ = ['jax', 'Run', 'JointRun', 'run', 'run_sets', 'gradient', 'of_results', 'Density', 'LogDensity', 'Unsupported'] # Used as ss.gradients (not imported into ss); these are the names documented
 
 # The parts of the program that are numbers, and so can be differentiated (the rest says how the flows are put together)
 diff_fields = ['inflow', 'contacts', 'mat', 'sh_val', 'tgt_w', 'crd_w', 'maps', 'mov_rate']
@@ -667,20 +667,20 @@ def compile_run(run, kind):
     return jx.jit(lambda X, dX: jx.vmap(lambda d: jx.jvp(run, (X,), (d,))[1][:3])(dX)) # The substeps a step needs have no derivative
 
 
-class CrossRun(sc.prettyobj):
+class JointRun(sc.prettyobj):
     """
-    The diseases of a crossing, run together by the crossing's program (see `ss.solvers.Crossing`)
+    The diseases of joint states, run together by the joint states' program (see `ss.solvers.JointStates`)
 
     Called with a tuple of the numbers of each disease's run: they are put together into the numbers of the
-    program (`ss.solvers.Crossing.numbers()`), which is run as any other, and its output is split between the diseases
+    program (`ss.solvers.JointStates.numbers()`), which is run as any other, and its output is split between the diseases
     again. Returns what `Run.function()` does, with a tuple over the diseases for each of the first three.
 
     Args:
-        cross (`ss.solvers.Crossing`): the crossing
+        joint (`ss.solvers.JointStates`): the joint states
         run (Run): the run of its program
     """
-    def __init__(self, cross, run):
-        self.cross = cross
+    def __init__(self, joint, run):
+        self.joint = joint
         self.run = run
         self.runs = [run]
         self.npts = run.npts
@@ -701,9 +701,9 @@ class CrossRun(sc.prettyobj):
         jnp = jax().numpy
         inner = self.run.function(clamp)
 
-        def run(Xs): # The crossing is looked up when traced, so a run shared by the sims of a model keeps only the latest one's (see `joint_runner()`)
-            y_end, stocks, flows, n = inner(self.cross.numbers(list(Xs), xp=jnp))
-            parts = [self.cross.split(k, y_end, stocks, flows, xp=jnp) for k in range(len(Xs))]
+        def run(Xs): # The joint states are looked up when traced, so a run shared by the sims of a model keeps only the latest one's (see `joint_runner()`)
+            y_end, stocks, flows, n = inner(self.joint.numbers(list(Xs), xp=jnp))
+            parts = [self.joint.split(k, y_end, stocks, flows, xp=jnp) for k in range(len(Xs))]
             return tuple(part[0] for part in parts), tuple(part[1] for part in parts), tuple(part[2] for part in parts), n
 
         return run
@@ -747,34 +747,34 @@ def runner(engine, program, how):
     return runs[key]
 
 
-def joint_runner(cross, captured, n_max=None):
-    """ The `CrossRun` of a crossing, from the program and how to run each of its engines; made again only if how the program's flows, or the engines' within it, are put together has changed (or, with `n_max`, always), and shared with any other crossing put together the same way, as `runner()` does """
+def joint_runner(joint, captured, n_max=None):
+    """ The `JointRun` of joint states, from the program and how to run each of its engines; made again only if how the program's flows, or the engines' within it, are put together has changed (or, with `n_max`, always), and shared with any other joint states put together the same way, as `runner()` does """
     programs = [program for program,how in captured]
-    if cross.program is None or cross.built != [id(p) for p in programs]:
-        cross.build(programs)
+    if joint.program is None or joint.built != [id(p) for p in programs]:
+        joint.build(programs)
     how = captured[0][1][:4]
     if n_max is not None:
-        return CrossRun(cross, Run(cross.program, *how, n_max=n_max))
-    key = (Run.key(cross.program, *how),) + tuple(Run.key(program, *eng_how) for program,eng_how in captured) # The engines' programs fix where each one's numbers go in the crossing's
+        return JointRun(joint, Run(joint.program, *how, n_max=n_max))
+    key = (Run.key(joint.program, *how),) + tuple(Run.key(program, *eng_how) for program,eng_how in captured) # The engines' programs fix where each one's numbers go in the joint states'
     if key not in runs:
-        runs[key] = CrossRun(cross, Run(cross.program, *how, n_max=4))
-    runs[key].cross = cross # Put together the same way, so the same run; the numbers are gathered from this crossing (and an earlier sim's is not kept)
+        runs[key] = JointRun(joint, Run(joint.program, *how, n_max=4))
+    runs[key].joint = joint # Put together the same way, so the same run; the numbers are gathered from these joint states (and an earlier sim's is not kept)
     return runs[key]
 
 
 def units(sim):
-    """ The declared modules that are run together, by their positions in `sim.declared`: the diseases of each crossing (in the order they step), and each other one on its own """
+    """ The declared modules that are run together, by their positions in `sim.declared`: the diseases of each set of joint states (in the order they step), and each other one on its own """
     names = [mod.name for mod in sim.declared]
-    out = [[names.index(name) for name in cross.names] for cross in sim.crossings]
+    out = [[names.index(name) for name in joint.names] for joint in sim.joint_states]
     crossed = {j for unit in out for j in unit}
     out += [[j] for j in range(len(names)) if j not in crossed]
     return out
 
 
-def run_crossing(cross):
-    """ Take a whole run of the diseases of a crossing in JAX: returns, for each, what `ss.kernels.run()` does """
-    captured = [capture(engine) for engine in cross.engines]
-    run = joint_runner(cross, [c[:2] for c in captured])
+def run_joint(joint):
+    """ Take a whole run of the diseases of joint states in JAX: returns, for each, what `ss.kernels.run()` does """
+    captured = [capture(engine) for engine in joint.engines]
+    run = joint_runner(joint, [c[:2] for c in captured])
     ys, stocks, flows, n = call(run, 'run', tuple(c[2] for c in captured))
     return [(np.asarray(ys[k]), np.asarray(stocks[k]), np.asarray(flows[k]), 0.0) for k in range(len(captured))]
 
@@ -836,8 +836,8 @@ def outputs(sim, Xs, kind='run', dX=None):
             run = runner(sim.declared[unit[0]].engine, *programs[0][0])
             out[unit[0]] = [np.asarray(v) for v in call(run, kind, *[arg[0] for arg in args])]
         else:
-            cross = sim.declared[unit[0]].engine.cross
-            res = call(joint_runner(cross, [progs[0] for progs in programs]), kind, *args)
+            joint = sim.declared[unit[0]].engine.joint
+            res = call(joint_runner(joint, [progs[0] for progs in programs]), kind, *args)
             for k,j in enumerate(unit):
                 out[j] = [np.asarray(v[k]) for v in res[:3]] + [np.asarray(v) for v in res[3:]]
     return out
@@ -1342,8 +1342,8 @@ class Density(sc.prettyobj):
                 base = runner(self.engines[j], self.programs[j], self.hows[j])
                 args = self.X0[j]
             else:
-                cross = self.engines[unit[0]].cross
-                base = joint_runner(cross, [(self.programs[j], self.hows[j]) for j in unit])
+                joint = self.engines[unit[0]].joint
+                base = joint_runner(joint, [(self.programs[j], self.hows[j]) for j in unit])
                 args = tuple(self.X0[j] for j in unit)
             if not base.n_sub: # The most a step needs at the start and at the corners of the bounds, with room to spare, so that a draw anywhere within them gets the substeps it needs
                 need = np.asarray(call(base, 'run', args)[3]).max() # As NumPy, since a JAX array's max() outside x64 warns that it is truncated
@@ -1355,7 +1355,7 @@ class Density(sc.prettyobj):
             if len(unit) == 1:
                 self.runs.append(Run(self.programs[unit[0]], *self.hows[unit[0]], n_max=n_max))
             else:
-                self.runs.append(joint_runner(cross, [(self.programs[j], self.hows[j]) for j in unit], n_max=n_max))
+                self.runs.append(joint_runner(joint, [(self.programs[j], self.hows[j]) for j in unit], n_max=n_max))
 
         # The values in the rates that are fitted, and the flows whose rate is worked out from fitted parameters alone
         self.consts = []

@@ -12,36 +12,36 @@ import starsim as ss
 from .engine import by_level, no_tables
 from .compartmental import Compartmental, choose_kernels, kernel_list, run_many_parts, given_start
 
-__all__ = ['Crossing', 'Joint']
+__all__ = ['JointStates', 'Joint']
 
 
 class Joint:
     """
     An engine's compartments by its groups (`engine.y`), when its disease is tracked jointly with others: a view of the
-    compartments of their program (`Crossing.y`), so there is one copy of the people. Reading some of them gathers them,
+    compartments of their program (`JointStates.y`), so there is one copy of the people. Reading some of them gathers them,
     and writing them (e.g. an intervention that moves people) changes the program's, which every engine then sees. A
-    group that the engine keeps empty (see `Crossing.init_layout()`) reads as nobody, and writing to it changes nothing.
+    group that the engine keeps empty (see `JointStates.init_layout()`) reads as nobody, and writing to it changes nothing.
 
     Args:
-        cross (Crossing): the crossing
+        joint (JointStates): the joint states
         idx (array): where each of the engine's compartments, in each of its groups, is in the program's (flattened), or -1
     """
-    def __init__(self, cross, idx):
-        self.cross = cross
+    def __init__(self, joint, idx):
+        self.joint = joint
         self.idx = np.maximum(idx, 0)
         self.valid = idx >= 0
         self.shape = idx.shape
         return
 
     def __repr__(self):
-        return f'Joint({self.cross}, shape={self.shape})'
+        return f'Joint({self.joint}, shape={self.shape})'
 
     def __getitem__(self, key):
-        return np.where(self.valid[key], self.cross.y.ravel()[self.idx[key]], 0.0)
+        return np.where(self.valid[key], self.joint.y.ravel()[self.idx[key]], 0.0)
 
     def __setitem__(self, key, value):
         idx, keep = self.idx[key], self.valid[key]
-        self.cross.y.flat[idx[keep]] = np.broadcast_to(value, idx.shape)[keep]
+        self.joint.y.flat[idx[keep]] = np.broadcast_to(value, idx.shape)[keep]
         return
 
     def __array__(self, dtype=None, copy=None):
@@ -51,11 +51,11 @@ class Joint:
         return self[:]
 
 
-class Crossing:
+class JointStates:
     """
     Diseases whose states are tracked jointly in a compartmental run, since a condition in one refers to a state of another (e.g. `ss.modify(hiv.rel_trans, multiply=3, who=syph.I)`)
 
-    Each disease in the crossing is a dimension of the sim, named after it, whose levels are
+    Each disease in the joint states is a dimension of the sim, named after it, whose levels are
     its compartments and which applies to the people of the others. Each keeps its own engine,
     which works out its rates and its results, and sees the people as it has them: by its own
     compartments, and by groups that include the compartments of the others (with its own
@@ -66,12 +66,12 @@ class Crossing:
     combination of the others'), and its groups are those of the sim's other dimensions. Each flow
     of a disease is a flow of the program for each combination of the others' compartments, so
     every rate is worked out from the people as they are at the start of the step (not each disease
-    in turn), and a whole run, many runs, a particle filter, and a run in JAX take a crossing as they
+    in turn), and a whole run, many runs, a particle filter, and a run in JAX take joint states as they
     take one disease. The solvers that draw whole events in steps draw each disease's in turn, from
     those rates, so each disease's moves (e.g. through the stages of a dwell time) are drawn as they
     would be for it alone. The program's compartments (`y`) are the one copy of the people: each engine's
     (`engine.y`) are a view of them (`Joint`), so a change made in Python (e.g. by an intervention) is
-    seen by all of them at once. The crossing is run as one engine is (see `ss.solvers.Compartmental.step()`
+    seen by all of them at once. The joint states are run as one engine is (see `ss.solvers.Compartmental.step()`
     and `run_all()`, where it is the engine's `owner`): the last disease to step takes the step for all of
     them, and the first to take a whole run takes it for all of them, and gives each its part.
     Its size is counted before it is made (see `ss.solvers.choose.joint_layout()`), and kept within
@@ -80,7 +80,7 @@ class Crossing:
     Args:
         sim (`ss.Sim`): the sim
         names (list): the names of the diseases
-        reasons (list): why they are tracked jointly (see `ss.solvers.choose.crossing_groups()`)
+        reasons (list): why they are tracked jointly (see `ss.solvers.choose.joint_groups()`)
     """
     def __init__(self, sim, names, reasons=None):
         self.sim = sim
@@ -96,7 +96,7 @@ class Crossing:
         return
 
     def __repr__(self):
-        return f'Crossing({" × ".join(self.names)})'
+        return f'JointStates({" × ".join(self.names)})'
 
     @property
     def lead(self):
@@ -191,7 +191,7 @@ class Crossing:
 
     def check(self):
         """
-        Each dimension other than the diseases' own has to apply to every state of people in the crossing, or to
+        Each dimension other than the diseases' own has to apply to every state of people in the joint states, or to
         some states of one disease only (e.g. a strain), but not to its first state, where people born to the others start;
         and the diseases step together, so they have to have the same timestep
         """
@@ -321,7 +321,7 @@ class Crossing:
         arr = lambda items: np.array(items, dtype=np.int64)
         pairs = lambda I, C: (arr(I), np.array(C, dtype=np.int64).reshape(len(I), R))
 
-        positions = {} # The position of each key in its dict (sets, exposures, maps), kept so that finding it is not a search of the dict, which made building a crossing of three diseases take hours
+        positions = {} # The position of each key in its dict (sets, exposures, maps), kept so that finding it is not a search of the dict, which made building joint states of three diseases take hours
         def add(items, key, val=None):
             pos = positions.setdefault(id(items), {})
             if key not in pos:
@@ -350,7 +350,7 @@ class Crossing:
                 if np.any(block):
                     out.append((o2, add(maps, (k, int(m), o, o2))))
             if not np.allclose(sum(M[:, L.cols[o2]].sum(axis=1) for o2 in range(L.O)), M.sum(axis=1)):
-                raise ss.CapabilityError(f'a transition of "{self.names[k]}" moves people to groups outside the crossing\'s layout, which cannot run with solver="{self.sim.solver}".\n'
+                raise ss.CapabilityError(f'a transition of "{self.names[k]}" moves people to groups outside the joint states\' layout, which cannot run with solver="{self.sim.solver}".\n'
                                          f'     Run with solver="abm".')
             return out
 
@@ -700,7 +700,7 @@ class Crossing:
     def run(self, use_jax=False):
         """ A whole run of the diseases together, in one call to the kernels (or to JAX): gives each engine its part of the output (as `ss.gradients` does; see `ss.solvers.Compartmental.run_all()`) """
         if use_jax:
-            parts = ss.gradients.run_crossing(self)
+            parts = ss.gradients.run_joint(self)
         else:
             args, tables = self.run_args()
             tally = np.zeros((args[3], 0, 2, self.n_cols))

@@ -43,7 +43,7 @@ def synced_event(tr, sim, home):
 def choose_kernels(owner, runs, seconds):
     """
     The kernels for a run of a program (or `runs` runs), compiled or as plain Python, chosen once for a run (see `ss.kernels.choose()`), for an
-    engine or a crossing (`owner`, which keeps the choice as `compiled`); `seconds()` is about how long the run would take as plain Python
+    engine or joint states (`owner`, which keeps the choice as `compiled`); `seconds()` is about how long the run would take as plain Python
     """
     if ss.solvers.backends.rust.on: # Compiled ahead of time, so nothing to choose
         return ss.kernels.choose()
@@ -89,7 +89,7 @@ def kernel_list(items):
 def run_many_parts(owner, rngs, ys, args, n_cols, outputs, state_of, rows, grp_state, grp_flow, start=0):
     """
     Many runs of a program that differ only in their seed (`rngs`), in calls to the kernels that take all of them (see `ss.kernels.run_many()`), for an
-    engine or a crossing (`owner`); a part of the run at a time, so the tables of values that vary in time (by group, at every step) are not all held at
+    engine or joint states (`owner`); a part of the run at a time, so the tables of values that vary in time (by group, at every step) are not all held at
     once. `args` are those of `run_args()`, and `outputs` the arrays the kernels fill: the stocks, flows and tallies, and those by group. The runs
     are taken from time point `start`, at which `ys` are their compartments
     """
@@ -106,7 +106,7 @@ def run_many_parts(owner, rngs, ys, args, n_cols, outputs, state_of, rows, grp_s
 
 
 def given_start(owner, start, ys, npts):
-    """ The compartments of each run at the time point to take the runs from, and that time point, checked against the engine or crossing (`owner`) that takes them: see `ss.solvers.Compartmental.run_many()` """
+    """ The compartments of each run at the time point to take the runs from, and that time point, checked against the engine or joint states (`owner`) that takes them: see `ss.solvers.Compartmental.run_many()` """
     ti = int(start['ti'])
     y = np.broadcast_to(np.asarray(start['y'], dtype=float), ys.shape).copy() if np.shape(start['y'])[-2:] == ys.shape[1:] else None
     if y is None or not 0 <= ti <= npts:
@@ -151,7 +151,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         self.whole = None # Why the kernels cannot take the whole run in one call, as far as it is fixed when the sim is initialized (False if nothing stops them): see kernel_reason()
         self.given = None # The output of a run taken elsewhere, for run_all() to use: see ss.gradients
         self.jax_run = None # The run in JAX, if one has been made: see ss.gradients
-        self.cross = next((c for c in sim.crossings if module.name in c.names), None)
+        self.joint = next((c for c in sim.joint_states if module.name in c.names), None)
         self.rated = None # The time point it last worked out its rates for: see step_rates()
         self._n_sub = None # The chain binomial's substeps, once chosen: see substeps()
         self.tape = None # The expressions worked out once a step, in one call to the kernels: see init_tape()
@@ -273,8 +273,8 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
 
     @property
     def shared(self):
-        """ Whether this engine moves people in ways that belong to the sim rather than to the module (aging, relocating, the movement register): in a crossing, only one does (see `ss.solvers.Crossing.lead`), since they all see the same people """
-        return self.cross is None or self.cross.lead == self.mod.name
+        """ Whether this engine moves people in ways that belong to the sim rather than to the module (aging, relocating, the movement register): in joint states, only one does (see `ss.solvers.JointStates.lead`), since they all see the same people """
+        return self.joint is None or self.joint.lead == self.mod.name
 
     def init_register(self):
         """ The movement register as arrays for the kernels (with no events, if there is none): see `ss.kernels.Register` """
@@ -615,14 +615,14 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         return
 
     def check_noise(self):
-        """ Refuse noise on a rate (`ss.Transition(noise=)`) where it isn't drawn: it is drawn by the chain binomial, once a substep for each flow, so a transition must be one flow; the ODE leaves it out (see `init_program()`) """
+        """ Refuse noise on a rate (`ss.Transition(noise=)`) where it isn't drawn: it is drawn by the chain binomial, once a substep for each flow, and by tau-leaping once a leap, so a transition must be one flow; the ODE leaves it out (see `init_program()`) """
         for tr in self.graph.transitions.values():
             if tr.noise is None:
                 continue
             why = None
-            if isinstance(self.solver, (ss.solvers.tau, ss.solvers.gillespie)):
-                why = f'solver="{self.solver}", which chooses its own steps, so has none to draw it for'
-            elif self.cross is not None:
+            if isinstance(self.solver, ss.solvers.gillespie):
+                why = f'solver="{self.solver}", which takes one event at a time, so has no steps to draw it for'
+            elif self.joint is not None:
                 why = 'a disease tracked jointly with another'
             elif sum(flow.tr is tr and flow.expr is not None for flow in self.flows) > 1:
                 why = 'a transition that is several flows (from several states or compartments, or for each strain), which would each draw their own'
@@ -637,7 +637,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
 
     def step_known(self):
         """ The step in the sim's unit, or None if it isn't known yet (laid out before the module is in a sim, for its equations: see ss.display.flow_terms()) """
-        step = getattr(getattr(self.mod, 't', None), 'dt', None) or getattr(getattr(self.sim, 'pars', None), 'dt', None) # The sim's, if the module has no timeline yet (see init_crossings())
+        step = getattr(getattr(self.mod, 't', None), 'dt', None) or getattr(getattr(self.sim, 'pars', None), 'dt', None) # The sim's, if the module has no timeline yet (see init_joint_states())
         return step.to(self.sim.unit_base).value if isinstance(step, ss.Duration) else None
 
     def whole_steps(self, tr, what, dur, lowest, nearest=False):
@@ -704,12 +704,12 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             self.backfill_burnin(burnin)
         if self.integer: # People are whole; a count that is not people (a reservoir) need not be
             self.y[self.people_comps] = self.round_preserving(self.y[self.people_comps])
-        if any(not tr.static for tr in self.triggers) and self.cross is None: # Those a trigger on time or counts holds for move on before the start, not counted as flows
+        if any(not tr.static for tr in self.triggers) and self.joint is None: # Those a trigger on time or counts holds for move on before the start, not counted as flows
             self.sweep_triggers()
             for name in self.flowcounts:
                 self.flowcounts[name] = 0.0
             self.forced = dict()
-        if self.sim.mixing.register is not None and self.cross is None: # The events dated at the start (in a crossing, they happen to everyone once the diseases have their people: see ss.solvers.Crossing.init())
+        if self.sim.mixing.register is not None and self.joint is None: # The events dated at the start (in joint states, they happen to everyone once the diseases have their people: see ss.solvers.JointStates.init())
             self.check_short(self.kernels().apply_events(self.make_rng(stream=2), self.y, self.init_register(), 0, self.integer))
         self.count_stocks() # The results at the first time point are the start
         self.n_start = sum(self.y[self.state_comps[s.name]].sum() for s in self.graph.infected if s.people) # The number infected at the start: see note_chance()
@@ -768,7 +768,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         """ The parameters read by the start and the branches (see `start_key()`), or False if something else can change them, or doing it has an effect of its own """
         graph = self.graph
         plain = [track for tracks in self.tracks.values() for track in tracks]
-        if self.cross is not None or self.triggers or self.sim.mixing.register is not None or self.mod.burnin_plan(self) is not None or self.branch_adjust:
+        if self.joint is not None or self.triggers or self.sim.mixing.register is not None or self.mod.burnin_plan(self) is not None or self.branch_adjust:
             return False
         if any(getattr(track, 'apart', False) or getattr(track, 'trigger', False) or getattr(track.tr, 'where', None) is not None for track in plain):
             return False
@@ -847,16 +847,16 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
 
     @property
     def owner(self):
-        """ What holds the people and the program that runs them: this engine, or the crossing its disease is tracked jointly in (see `ss.solvers.Crossing`), whose program steps them all """
-        return self if self.cross is None else self.cross
+        """ What holds the people and the program that runs them: this engine, or the joint states its disease is tracked jointly in (see `ss.solvers.JointStates`), whose program steps them all """
+        return self if self.joint is None else self.joint
 
     @property
     def engines(self):
-        """ The engines whose people its program holds, as a crossing's: this one """
+        """ The engines whose people its program holds, as joint states': this one """
         return [self]
 
     def flows_of(self, flows):
-        """ The flows of each engine its program holds, as a crossing's: this one's """
+        """ The flows of each engine its program holds, as joint states': this one's """
         return [flows]
 
     #%% The context used to evaluate expressions
@@ -961,7 +961,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         roots = dict()
         exprs = [p for tr in self.graph.transitions.values() for p in sc.tolist(tr.p) + [tr.p_stay, tr.p_die] if p is not None]
         exprs += [flow.expr for flow in self.flows if flow.expr is not None and flow.kind != 'contact']
-        if self.cross is None: # Diseases tracked jointly count their states together
+        if self.joint is None: # Diseases tracked jointly count their states together
             for expr in exprs:
                 k = key(expr)
                 if k is not None:
@@ -1112,8 +1112,13 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             self.arrive(dst.name, total, y)
         return (total, recorded) if syn is not None else total
 
-    def move_some(self, srcs, dst, p=None, n=None, where=None):
-        """ A one-off move from code (`ss.move()`): a share `p` of the people in some states (or `n` of them, exactly where the solver keeps whole people; of those for whom `where` holds) to a state, or of a count, to and from outside the model too (`dst` or `srcs` empty); returns the number moved """
+    def move_some(self, srcs, dst, p=None, n=None, where=None, outside=None):
+        """
+        A one-off move from code (`ss.move()`): a share `p` of the people in some states (or `n` of them, exactly where the solver keeps
+        whole people; of those for whom `where` holds) to a state, or to and from outside the model (`dst` or `srcs` empty, and for
+        people, `outside`: 'dead' and 'outside', or 'unborn' and 'outside'), which the other diseases follow (see `others_follow()`);
+        returns the number moved
+        """
         comps = [comp for state in srcs for comp in self.state_comps[state.name]]
         sel = 1.0 if where is None else np.broadcast_to(np.asarray(self.selector.select(where), dtype=float), self.selector.shape) # The share of each state and group for whom it holds
         have = self.y[comps]
@@ -1129,12 +1134,68 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             if dst is not None:
                 self.arrive(dst.name, moved.sum(axis=0) if srcs else moved, self.y)
             return float(moved.sum())
+        if not srcs: # People added: born or arriving, placed as declared births and arrivals are
+            split = (self.inflow_splits if outside == 'unborn' else self.state_split)[dst.name]
+            added = n*split
+            if self.integer: # Whole people, rounded at random
+                k = int(n) + int(self.rng.random() < n - int(n))
+                added = self.rng.multinomial(k, split/split.sum()).astype(float) if split.sum() > 0 else 0*split
+            self.arrive(dst.name, added, self.y)
+            self.others_follow(added, added=True)
+            return float(added.sum())
         given = None
         if n is not None and self.integer: # Exactly n whole people, chosen at random from those there
             draw = self.rng.multivariate_hypergeometric(np.round(have).astype(np.int64).ravel(), int(min(round(n), round(total))))
             given = dict(zip(comps, draw.reshape(have.shape).astype(float)))
         frac = np.full(self.selector.shape, float(p)) if np.ndim(p) == 0 else np.broadcast_to(p, self.selector.shape)
+        if dst is None:
+            return float(self.remove_people(frac*sel, srcs, given=given).sum())
         return float(self.move_states(frac*sel, srcs, dst, given=given).sum())
+
+    def remove_people(self, frac, srcs, given=None):
+        """ Take a share of the people in each of some states and groups (or `given`, the number from each compartment) out of the model, and the same people out of the other diseases (see `others_follow()`); returns the number by group """
+        removed = np.zeros(self.n_groups)
+        for state in srcs:
+            s = self.selector.states.index(state.name)
+            for comp in self.state_comps[state.name]:
+                n = self.take(self.y[comp], frac[s]) if given is None else given[comp]
+                self.y[comp] = self.y[comp] - n
+                removed += n
+        self.others_follow(removed)
+        return removed
+
+    def others_follow(self, change, added=False):
+        """
+        Have the other diseases lose (or with `added`, gain) the people this one lost or gained from code (`ss.move()` to or from
+        outside the model), by group, so that every disease has the same people. Diseases tracked jointly with this one (see
+        `ss.solvers.JointStates`) have them already. A disease run apart loses them from its states in proportion, in each group, as it
+        has them, which is exact on average: it runs apart since its states do not depend on this one's, so within a group, which of
+        its states someone is in does not depend on which of this one's they are in. People added are in its first state, as at birth.
+        """
+        sim = self.sim
+        others = [mod.engine for mod in sim.declared if mod.engine is not self and getattr(mod.engine, 'people_comps', None)]
+        others = [engine for engine in others if self.joint is None or engine.joint is not self.joint]
+        if not others:
+            return
+        if sim.joint_states: # Groups that include the states of other diseases, which this one's people are not counted by
+            raise ss.CapabilityError(f'"{self.mod.name}" adds or removes people from code (ss.move() to or from outside the model), and the states of {sc.strjoin(c.names for c in sim.joint_states)} are tracked jointly apart from it, which a compartmental run cannot follow yet.\n'
+                                     f'     Run with solver="abm".')
+        for engine in others:
+            if added:
+                engine.arrive(engine.graph.default_state.name, change, engine.y)
+                continue
+            comps = engine.people_comps
+            have = np.array([engine.y[c] for c in comps])
+            total = have.sum(axis=0)
+            if engine.integer: # Whole people, chosen at random from those there
+                out = np.zeros_like(have)
+                for g in np.flatnonzero(change > 0):
+                    out[:, g] = engine.rng.multivariate_hypergeometric(have[:, g].astype(np.int64), int(min(round(change[g]), total[g])))
+            else:
+                out = have*np.divide(change, total, out=np.zeros_like(total), where=total>0)
+            for c,amount in zip(comps, out):
+                engine.y[c] = engine.y[c] - amount
+        return
 
     def move_share(self, tr, frac, srcs):
         """ Move a share of each state and group (within the sources `srcs`) along a triggered transition: with p=, that share of them; with several destinations, split between them """
@@ -1273,7 +1334,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
     def init_syncs(self):
         """
         Synchronized flows: a transition of another module triggered by a transition of this one
-        (`ss.on(a.tr)`, or a branch, `ss.on(a.tr.to(X))`). The two modules are tracked jointly (`ss.solvers.Crossing`),
+        (`ss.on(a.tr)`, or a branch, `ss.on(a.tr.to(X))`). The two modules are tracked jointly (`ss.solvers.JointStates`),
         so this module's flow also carries the other's coordinate from the source of its transition to its destination,
         in the same flow: exact. Each has a row of its own after the transitions, which the flow credits, and which the
         other module records as its transition's flow (see `pass_syncs()`)
@@ -1289,7 +1350,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                     continue
                 tr = self.graph.transitions[ev.tr]
                 where = f'"{mod.name}.{otr.name}" (triggered by {otr.trigger.x.label}) cannot run with solver="{sim.solver}"'
-                if self.cross is None or mod.name not in self.cross.names:
+                if self.joint is None or mod.name not in self.joint.names:
                     raise ss.CapabilityError(f'{where}: "{mod.name}" and "{self.mod.name}" are not tracked jointly. Run with solver="abm".')
                 if otr.where is not None:
                     raise ss.CapabilityError(f'{where} with who=: a synchronized flow moves everyone in its source. Put the condition in the source states, or run with solver="abm".')
@@ -1310,7 +1371,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
     def sync_maps(self, sy):
         """
         For a synchronized flow: the map between groups that moves the other module's coordinate (its dimension in the
-        crossing) from the levels of its transition's source to those of its destination (entry, split by its branches),
+        joint) from the levels of its transition's source to those of its destination (entry, split by its branches),
         the share of each group that it moves, and where the flow is recorded in the other module's groups
         """
         if sy.S is not None:
@@ -1619,7 +1680,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
     def add_per_births(self):
         """ After a step: the children of those who went through a transition with births driven by its flow (`ss.birth(when=)`), `n` for each, in the youngest groups of their parents' place """
         for tr in self.graph.inflows:
-            if getattr(tr, 'birth_on', None) is None or ss.conditions.modname(tr.birth_on.module) not in [None, self.mod.name]: # Another module's children, placed here by the crossing (see ss.solvers.init_crossings())
+            if getattr(tr, 'birth_on', None) is None or ss.conditions.modname(tr.birth_on.module) not in [None, self.mod.name]: # Another module's children, placed here by the joint states (see ss.solvers.init_joint_states())
                 continue
             flow = np.broadcast_to(self.last_flows.get(tr.birth_on.name, 0.0), (self.n_groups,))
             if not flow.any():
@@ -1886,7 +1947,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         """
         sim, graph = self.sim, self.graph
         for key,mods in list(sim.modifiers.items()):
-            if key[0] != self.mod.name or self.cross is not None or any(m.op == 'add' for m in mods):
+            if key[0] != self.mod.name or self.joint is not None or any(m.op == 'add' for m in mods):
                 continue
             for m in list(mods):
                 expr = getattr(m, 'where', None)
@@ -2073,7 +2134,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                 check(expr)
                 ops.append(kn.CONST)
                 args.append(add(pars, ('number', repr(float(expr.raw))) if expr.literal and sc.isnumber(expr.raw) else id(expr), expr)) # The same number, wherever it is written, once
-            elif isinstance(expr, ss.expressions.Count) and id(expr) in met and not (expr.weighted and self.cross is not None): # Met through the contact matrices: the number, as an exposure to the count's set (and a share, over everyone in the same place)
+            elif isinstance(expr, ss.expressions.Count) and id(expr) in met and not (expr.weighted and self.joint is not None): # Met through the contact matrices: the number, as an exposure to the count's set (and a share, over everyone in the same place)
                 ops.append(kn.EXPOSURE)
                 args.append(add(exposures, (count_set(expr), None, None, None, None), (None, None, None, None)))
                 if expr.kind == 'frac':
@@ -2081,7 +2142,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                     ops.append(kn.DIV)
                     args.append(0)
                     return 2
-            elif isinstance(expr, ss.expressions.Count) and expr.weighted and self.cross is None and not self.split_states(expr.states)[1]: # A weighted count: each state's compartments counted by its weight, a row of consts (see weight())
+            elif isinstance(expr, ss.expressions.Count) and expr.weighted and self.joint is None and not self.split_states(expr.states)[1]: # A weighted count: each state's compartments counted by its weight, a row of consts (see weight())
                 ops.append(kn.COUNT)
                 args.append(add(sets, count_set(expr)))
             elif isinstance(expr, ss.expressions.Count) and (self.split_states(expr.states)[1] or expr.weighted): # Another disease's states, or a weighted count of diseases tracked jointly, counted once a step, as a function of the sim is
@@ -2120,7 +2181,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         for flow,uses in zip(self.flows, flow_uses):
             if flow.dynamic:
                 count_uses(flow.expr, uses, reps)
-        if not isinstance(self.solver, ss.solvers.gillespie) and self.cross is None: # The parts several rates share, worked out first; not for the exact solver (whose places work out a few rates at a time) or for diseases tracked jointly (whose program is joined rate by rate)
+        if not isinstance(self.solver, ss.solvers.gillespie) and self.joint is None: # The parts several rates share, worked out first; not for the exact solver (whose places work out a few rates at a time) or for diseases tracked jointly (whose program is joined rate by rate)
             n_flows = {}
             for uses in flow_uses:
                 for k in uses:
@@ -2478,7 +2539,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         a modifier may do anything, each step works out its own values.
         """
         if self.steady is None:
-            self.steady = self.cross is None and self.kernel_reason() is None
+            self.steady = self.joint is None and self.kernel_reason() is None
         self.fresh = False
         if self.steady:
             values = self.par_values()
@@ -2914,9 +2975,9 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
     def run_all(self, use_jax=False):
         """ Take every step of the run in one call to the kernels (or to JAX: see `ss.gradients`), and fill in the results from what comes back """
         tally = None
-        if self.given is None and self.cross is not None: # Together with the other diseases in the crossing, by one program: the first to be asked takes the run, and gives each its part
-            self.cross.run(use_jax=use_jax)
-        if self.given is not None: # The run has been taken already, by ss.gradients or the crossing
+        if self.given is None and self.joint is not None: # Together with the other diseases in the joint states, by one program: the first to be asked takes the run, and gives each its part
+            self.joint.run(use_jax=use_jax)
+        if self.given is not None: # The run has been taken already, by ss.gradients or the joint states
             out, self.given = self.given, None
         elif use_jax:
             out = ss.gradients.run(self)
@@ -2930,9 +2991,9 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             for k,mod in enumerate(self.deliveries):
                 mod.in_compartments.store_shifts(tally[:, self.shift_of[k]])
         y, stocks, flows, short = out
-        if self.cross is None:
+        if self.joint is None:
             self.y = y
-        else: # Into the crossing's compartments, of which this engine's are a view
+        else: # Into the joint states' compartments, of which this engine's are a view
             self.y[:] = y
         if tally is None and getattr(self, 'deliveries', None): # The ODE taken in JAX: the deliveries' results, from the compartments at each time point they happened at
             self.store_replayed(stocks)
@@ -3394,9 +3455,9 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         if self.mod.custom_transmit: # Its own transmit(), taken at the start of the step
             self.step_transmit()
         owner = self.owner
-        if owner is not self and self is not owner.engines[-1]: # In a crossing, the last disease to step takes the step for all of them, once each has worked out its rates
+        if owner is not self and self is not owner.engines[-1]: # In joint states, the last disease to step takes the step for all of them, once each has worked out its rates
             return
-        first = owner.engines[0] # Whose step and substeps the program takes (the diseases of a crossing have the same step)
+        first = owner.engines[0] # Whose step and substeps the program takes (the diseases of joint states have the same step)
         sim, dt, kn, rng = self.sim, first.dt, owner.kernels(), owner.kernel_rng
         tables, row = owner.step_tables()
         y, flows = kn.one_step(rng, owner.y, owner.program, dt, ss.kernels.solver_code(sim), first.substeps(), tables, row)

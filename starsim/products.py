@@ -909,7 +909,7 @@ class Treatment(Held):
         return list(dict.fromkeys(name for tr,_ in self.edge_specs() if (name := self.edge_disease(tr)) is not None))
 
     def refs(self):
-        """ The source states of the transitions it moves people along, as (disease, state), for tracking diseases jointly (see `ss.solvers.Crossing`) """
+        """ The source states of the transitions it moves people along, as (disease, state), for tracking diseases jointly (see `ss.solvers.JointStates`) """
         out = []
         for tr,_ in (self.edge_specs() if self.moves is not None else []):
             name = self.edge_disease(tr)
@@ -1182,7 +1182,7 @@ class Diagnostic(Product):
         return list(dict.fromkeys(mod for mod,_ in self.refs()))
 
     def refs(self):
-        """ The states of named diseases it is keyed by, as (disease, state), for tracking diseases jointly (see `ss.solvers.Crossing`) """
+        """ The states of named diseases it is keyed by, as (disease, state), for tracking diseases jointly (see `ss.solvers.JointStates`) """
         return [ref for key in self.state_keys() if (ref := self.key_ref(key))[0] is not None]
 
     def layout(self, sim, home):

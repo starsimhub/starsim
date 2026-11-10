@@ -34,7 +34,7 @@ CONST, COUNT, FRAC, EXPOSURE, ADD, SUB, MUL, DIV, POW, MIN, MAX, LT, LE, GT, GE,
 CONVEY = 22 # Not in a rate: a conveyor (its flow, then its slots; see convey()); kept out of the program's fields, since every field adds to the cost of each call that is passed it
 LOAD, STORE = 23, 24 # A part used more than once: STORE takes the top of the stack into register arg, and LOAD puts a copy back on top; the registers are the last rows of the stack (row depth-1-arg). The parts used by several rates are worked out first, in the operations before the first rate's (starts[0] > 0); a part used twice in one rate, in the rate
 GROUP = 25 # A count in the group each rate is for, not its place: a branching process's infection, which adds people at its rate per member of its source without taking them from it (see ss.solvers.Compartmental.init_program())
-NOISE = 26 # Gamma white noise on a rate (ss.Transition(noise=)): the chain binomial multiplies the top of the stack, in each group, by a gamma draw with mean 1 and variance sigma²/h, sigma being row arg of consts (see noise()); the other solvers leave it out (its mean, 1)
+NOISE = 26 # Gamma white noise on a rate (ss.Transition(noise=)): the chain binomial multiplies the top of the stack, in each group, by a gamma draw with mean 1 and variance sigma²/h, sigma being row arg of consts (see noise()); tau-leaping multiplies the flow's rate by one for each leap; the ODE leaves it out (its mean, 1)
 opcodes = {'+':ADD, '-':SUB, '*':MUL, '/':DIV, '**':POW, 'minimum':MIN, 'maximum':MAX, 'exp':EXP, 'log':LOG, 'sqrt':SQRT, 'absolute':ABS, 'sin':SIN, 'cos':COS,
            'less':LT, 'less_equal':LE, 'greater':GT, 'greater_equal':GE}
 
@@ -63,7 +63,7 @@ fields = [
     'places',     # The place of each group (all zero if the model has none)
     'n_places',
     # Exposure to each infectious state
-    'exp_set',    # The set of compartments that are the state; or, if negative, minus the number of exposures before it whose sum it is (diseases tracked jointly, see ss.solvers.Crossing)
+    'exp_set',    # The set of compartments that are the state; or, if negative, minus the number of exposures before it whose sum it is (diseases tracked jointly, see ss.solvers.JointStates)
     'exp_n',      # Whether it is to the number in the state, not its share: a count in a rate that the contact matrices act on (`beta*I.n`), through them only (see ss.solvers.Mixing.count_terms())
     'rel_trans',  # Its infectiousness, by group
     'levels',     # For each mixing term, the cell that each group is in
@@ -95,7 +95,7 @@ fields = [
     'mov_base',   # For an entry whose rate is a parameter that can vary in time (see mov_par), its rate without it
     'mov_par',    # The row of consts whose value, in the group people move from, times mov_base is its rate (set by set_movers()), or -1
     # For the stochastic solvers: the flows in the order they are drawn, grouped by the compartment they leave
-    'src_starts', # (In the program of a crossing, the flows of each disease are drawn in turn: an empty set of flows ends each disease's; see draw())
+    'src_starts', # (In the program of joint states, the flows of each disease are drawn in turn: an empty set of flows ends each disease's; see draw())
     'src_flows',
     'src_chain',  # For the compartments of a dwell time in stages: the number of stages left (this one included), so the chain-binomial solver can move people through several in a step; 0 otherwise
     'src_stage',  # Their flow to the next stage
@@ -774,7 +774,7 @@ def draw_chain(rng, y, p, w, s, dt, new, flows):
     d = p.src_chain[s]
     stage = p.src_stage[s]
     src = p.src[stage]
-    stride = p.tgt_comp[p.tgt_starts[stage]] - src # How far apart its stages are: 1, except in the program of a crossing
+    stride = p.tgt_comp[p.tgt_starts[stage]] - src # How far apart its stages are: 1, except in the program of joint states
     for g in range(ng):
         r = max(rates[stage, g], 0.0)
         h = 0.0
@@ -837,7 +837,7 @@ def draw(rng, y, p, w, dt, flows, tau, whole):
     new[:] = y
     for s in range(len(p.src_starts) - 1):
         a, b = p.src_starts[s], p.src_starts[s+1]
-        if a == b: # In the program of a crossing, the end of one disease's flows: the next disease's are drawn from where these left people (each from the rates at the start of the step), so each disease's moves are drawn as they would be for it alone
+        if a == b: # In the program of joint states, the end of one disease's flows: the next disease's are drawn from where these left people (each from the rates at the start of the step), so each disease's moves are drawn as they would be for it alone
             y[:] = new
             continue
         src = p.src[p.src_flows[a]]
@@ -1864,7 +1864,7 @@ def certain(rng, y, p, w, rates, flows, move, solver):
     left, n, prob, k = np.empty(ng), np.empty(ng), np.empty(ng), np.zeros(ng)
     for s in range(len(p.src_starts) - 1):
         a, b = p.src_starts[s], p.src_starts[s+1]
-        if a == b or p.src[p.src_flows[a]] < 0: # The end of a disease's flows (in a crossing), or inflows, which have no compartment to empty
+        if a == b or p.src[p.src_flows[a]] < 0: # The end of a disease's flows (in joint states), or inflows, which have no compartment to empty
             continue
         src = p.src[p.src_flows[a]]
         if move:
@@ -1958,7 +1958,7 @@ def release_rates(y, p, rates, dt):
     its end, the exits act over the whole delay, as for agents: a delay of K steps keeps a share
     exp(-h·K·dt), where leaving the last slot by itself kept exp(-h·(K - 1/2)·dt).
 
-    A flow from a last slot to last slots only (in a crossing, another disease's move, which
+    A flow from a last slot to last slots only (in joint states, another disease's move, which
     keeps the slot) is not an exit: the people it moves are due to leave as well, and those
     in all the last slots together leave over the step, so none are left when the slots move.
     """
@@ -2111,6 +2111,7 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, varying):
     extra = len(p.starts) - nf - 1 # Conveyors, whose operations follow the flows'
     pending = step_start(y, p, dt, solver) if extra else False # Whether the people due to leave a conveyor have yet to leave
     sure = False # Whether a flow has an infinite rate (see certain())
+    noisy = False # Whether a rate has noise, drawn for each leap once its length is known (tau-leaping: see NOISE)
     for f in range(nflows):
         for g in range(ng):
             flows[f, g] = 0
@@ -2234,10 +2235,12 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, varying):
                             for g in range(ng):
                                 stack[len(stack)-1-arg, g] = stack[top, g]
                             top -= 1
-                        elif op == NOISE: # Noise on the rate, drawn for each substep under the chain binomial (whose substeps are dt/n_sub)
+                        elif op == NOISE: # Noise on the rate, drawn for each substep under the chain binomial (whose substeps are dt/n_sub), and for each leap under tau-leaping, once its length is known (below)
                             if solver == 2 or solver == 5:
                                 for g in range(ng):
                                     stack[top, g] *= noise(rng, p.consts[arg, g], dt/max(n_sub, 1))
+                            elif solver == 3:
+                                noisy = True
                         elif op >= EXP: # A function of one value
                             for g in range(ng):
                                 stack[top, g] = unary(op, stack[top, g])
@@ -2292,6 +2295,12 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, varying):
                 else:
                     if solver == 3: # Tau-leaping: a leap short enough that the rates change little over it
                         h = min(end - elapsed, 0.03/max(fastest, 1e-12))
+                        if noisy: # The noise on a rate over the leap (NOISE is the last operation of its flow), the leap chosen by the mean rates
+                            for f in range(nf):
+                                for k in range(p.starts[f], p.starts[f+1]):
+                                    if p.ops[k] == NOISE:
+                                        for g in range(ng):
+                                            rates[f, g] *= noise(rng, p.consts[p.args[k], g], h)
                     draw(rng, y, p, w, h, flows, solver == 3, solver == 5)
                 if p.has_det and not by_place: # By place, the counts are settled after the step's events: see settle_places()
                     settle(y, p, w, h, flows)

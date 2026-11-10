@@ -19,7 +19,7 @@ from .agents_events import Events
 from .agents_compiled import Compiled
 from .engine import convert
 
-__all__ = ['Solver', 'ode', 'binomial', 'gillespie', 'tau', 'abm', 'solver_names', 'as_solver', 'Undeclared', 'make_engine', 'choose_solver', 'choose_engine', 'init_crossings', 'init_capabilities', 'auto_reasons', 'why_not', 'solver_table', 'rules', 'set_par_values', 'flows_of', 'init_group_values', 'settle_start', 'group_people']
+__all__ = ['Solver', 'ode', 'binomial', 'gillespie', 'tau', 'abm', 'solver_names', 'as_solver', 'Undeclared', 'make_engine', 'choose_solver', 'choose_engine', 'init_joint_states', 'init_capabilities', 'auto_reasons', 'why_not', 'solver_table', 'rules', 'set_par_values', 'flows_of', 'init_group_values', 'settle_start', 'group_people']
 
 
 
@@ -372,7 +372,7 @@ def init_model(sim):
     sim.modifiers = sc.ddict(list) # The modifiers on each quantity: ss.modify(), and the efficacy of products
     sim.overlaps = [] # Pairs of modifiers that set the same quantity at once, which is noted
     sim.clipped = set() # Quantities whose modifiers took them out of their range, which were clipped to it
-    sim.crossings = [] # Diseases whose states are tracked jointly in a compartmental run: see init_crossings()
+    sim.joint_states = [] # Diseases whose states are tracked jointly in a compartmental run: see init_joint_states()
     sim.layouts = {} # The engines of the declared modules, laid out as compartments to choose the solver, by name: see lay_out()
     sim.groups = ss.dimensions.Groups(sim) # The groups of people that the stratifications give: see ss.dimensions.Groups
     for key in [key for key in pars.keys() if key not in ss.SimPars.names()]: # A model parameter assigned on the sim's parameters, e.g. sim.pars.beta = 0.1, is a value by name
@@ -471,7 +471,7 @@ def init_compartments(sim, joints=None, mixing=None):
         sim.groups.init()
         sim.mixing = ss.solvers.Mixing(sim)
 
-    init_crossings(sim, joints)
+    init_joint_states(sim, joints)
     if mixing is not None and mixing.laid_out == (sim.groups, sim.groups.version):
         sim.mixing = mixing
         mixing.say()
@@ -564,7 +564,7 @@ def init_flows(sim):
 
     People are born and die once, so these become the transitions of one disease, the first declared (or, for births into a
     state that is given, the one it is a state of), whose people are everyone's: as agents, the diseases share the people, and
-    in a compartmental run with several declared diseases, their states are tracked jointly (see `ss.solvers.init_crossings()`). For the
+    in a compartmental run with several declared diseases, their states are tracked jointly (see `ss.solvers.init_joint_states()`). For the
     same reason, births or deaths of everyone declared in more than one disease are an error.
     """
     for flows in [mod for mod in sim.pars.demographics.values() if isinstance(mod, ss.demographics.Flows)]:
@@ -863,8 +863,8 @@ def settle_start(sim):
     if isinstance(sim.solver, ss.solvers.abm):
         for mod in sim.declared:
             mod.engine.settle_start()
-    for crossing in sim.crossings: # Once every disease in it has its initial conditions
-        crossing.init()
+    for joint in sim.joint_states: # Once every disease in it has its initial conditions
+        joint.init()
     for mod in sim.declared: # Moves at the start are part of the state there, not a flow of the first step
         mod.engine.clear_flows()
     return
@@ -1036,9 +1036,9 @@ def leaves(mod):
     return [tr for tr in mod.graph.transitions.values() if tr.people and tr.source and (not tr.dest or tr.may_die) and not getattr(tr, 'every_state', False)]
 
 
-def crossing_groups(sim):
+def joint_groups(sim):
     """
-    The groups of diseases whose states are tracked jointly in a compartmental run (see `init_crossings()`), each as Bunch(names, reasons)
+    The groups of diseases whose states are tracked jointly in a compartmental run (see `init_joint_states()`), each as Bunch(names, reasons)
 
     Diseases are tracked jointly when a condition or trigger in one refers to a state or transition of another, or when the
     people of one change in a way that the others' must follow: people born or dying (`init_flows()`), or dying of a
@@ -1092,7 +1092,7 @@ def crossing_groups(sim):
 
 def joint_layout(sim, group, solver):
     """
-    For a group of diseases to track jointly (see `crossing_groups()`): a dimension for each, whose levels are its compartments of people,
+    For a group of diseases to track jointly (see `joint_groups()`): a dimension for each, whose levels are its compartments of people,
     and the size of the program that runs them: its compartments in each group (`rows`: the product of the diseases' compartments of people,
     including the stages of their dwell times and the slots of their fixed delays, and a copy of each compartment that is not people, such
     as a reservoir, for each combination of the others'), the groups of the sim's other dimensions (`cols`), and the two multiplied (`cells`).
@@ -1135,28 +1135,28 @@ def joint_layout(sim, group, solver):
 
 
 def over_budget(layout):
-    """ Why a crossing (see `joint_layout()`) is more than `ss.options.max_joint` allows, or None """
+    """ Why tracking diseases jointly (see `joint_layout()`) takes more than `ss.options.max_joint` allows, or None """
     budget = ss.options.max_joint
     if budget and layout.cells > budget:
         return f'tracking {" × ".join(layout.names)} jointly takes {layout.rows:,} compartments in each of {layout.cols:,} group{"s" if layout.cols != 1 else ""} ({layout.cells:,} in all), more than ss.options.max_joint ({budget:,})'
     return None
 
 
-def init_crossings(sim, layouts=None):
+def init_joint_states(sim, layouts=None):
     """
-    In a compartmental run: track jointly the states of diseases that refer to each other, or whose people are born or die (see `crossing_groups()`)
+    In a compartmental run: track jointly the states of diseases that refer to each other, or whose people are born or die (see `joint_groups()`)
 
     For example, `ss.modify(hiv.rel_trans, multiply=3, who=syph.I)` needs the number of people with
-    HIV who also have syphilis. Each disease in a crossing becomes a dimension of the sim, whose levels
+    HIV who also have syphilis. Each disease in joint states becomes a dimension of the sim, whose levels
     are its compartments and which applies to the people of the others, so the model grows to the
     product of their compartments, which is counted before anything is made, and kept within
-    `ss.options.max_joint`. See `ss.solvers.Crossing`.
+    `ss.options.max_joint`. See `ss.solvers.JointStates`.
 
     Args:
         sim (`ss.Sim`): the sim
         layouts (list): the layouts already made for the sim's groups (see `joint_layout()`), if any
     """
-    groups = crossing_groups(sim)
+    groups = joint_groups(sim)
     if not groups:
         return
     cols = int(np.prod([strat.n for strat in sim.groups.strats if strat.kind != 'disease']))
@@ -1167,8 +1167,8 @@ def init_crossings(sim, layouts=None):
         if reason:
             raise ss.CapabilityError(f'cannot run with solver="{sim.solver}": {reason}.\n'
                                      f'     Run with solver="abm" (or "auto", which does), or raise the limit if there is the memory for it, e.g. ss.options(max_joint={layout.cells}).')
-        sim.groups.cross_strats += layout.strats
-        sim.crossings.append(ss.solvers.Crossing(sim, layout.names, reasons=layout.reasons))
+        sim.groups.joint_strats += layout.strats
+        sim.joint_states.append(ss.solvers.JointStates(sim, layout.names, reasons=layout.reasons))
         ss.note(f'the states of {" × ".join(layout.names)} are tracked jointly: {" × ".join(map(str, layout.sizes))} = {int(np.prod(layout.sizes)):,} joint states per group ({"; ".join(layout.reasons)})', sim=sim)
     sim.groups.init()
     sim.mixing = ss.solvers.Mixing(sim)
@@ -1577,7 +1577,7 @@ def refused_joints(sim):
     if sim.pars.solver != 'auto' or auto_reasons(sim) or len(sim.declared) <= 1:
         return
     sim.laid.joints = []
-    for group in crossing_groups(sim):
+    for group in joint_groups(sim):
         try:
             sim.laid.joints.append(joint_layout(sim, group, ode()))
             reason = over_budget(sim.laid.joints[-1])
@@ -1642,7 +1642,7 @@ def weighted_rate(sim, mod):
             yield leaf, held
             if isinstance(leaf, ss.par) and isinstance(leaf.raw, ss.expressions.Expr):
                 yield from leaves(leaf.raw, True)
-    stepped = lambda leaf, held: other(leaf) or isinstance(leaf, ss.expressions.HeldShare) or (count(leaf) and leaf.weighted and (held or mod.engine.cross is not None))
+    stepped = lambda leaf, held: other(leaf) or isinstance(leaf, ss.expressions.HeldShare) or (count(leaf) and leaf.weighted and (held or mod.engine.joint is not None))
     leaf = next((leaf for tr in mod.graph.transitions.values() for expr in [tr.rate, tr.dur] if isinstance(expr, ss.expressions.Expr) for leaf,held in leaves(expr) if stepped(leaf, held)), None)
     return None if leaf is None else dict(leaf=leaf, what='a count of another disease' if other(leaf) else 'a weighted count' if count(leaf) else 'the coverage of a product')
 
@@ -1712,7 +1712,7 @@ def step_function(sim, mod):
 def changing_transfer(sim, mod):
     """ A transfer whose rate changes, other than as a parameter that varies in time (diseases tracked jointly hold the rates of their movers for the run) """
     engine = mod.engine
-    tf = next((tf for tf in mod.graph.transfers.values() if not (engine.constant_transfer(tf) or (engine.par_transfer(tf) and engine.cross is None))), None)
+    tf = next((tf for tf in mod.graph.transfers.values() if not (engine.constant_transfer(tf) or (engine.par_transfer(tf) and engine.joint is None))), None)
     if tf is None:
         return None
     leaves = [leaf for expr in [tf.rate, tf.dur] + sc.tolist(tf.p) if expr is not None for leaf in expr.leaves]

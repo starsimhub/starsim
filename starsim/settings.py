@@ -168,7 +168,7 @@ class Options(sc.obj):
         optdesc.keep_times = 'If True, a declared disease run as agents keeps the time each agent entered every state (e.g. ti_S) and the history of every transition (e.g. sir.infection.n_times, .since, and .ever); by default (False), only those the engine or the model needs (with, for each, the time each agent last left the state, for its stays, e.g. I.stays), to save memory (reading another raises an error); the default for ss.Sim(keep_times=...), which sets it for one sim'
         options.keep_times = sc.parse_env('STARSIM_KEEP_TIMES', False, bool)
 
-        optdesc.max_joint = 'The most compartments that the diseases tracked jointly in a compartmental run may take (their joint states times the groups of the other dimensions; see ss.solvers.Crossing): above it, solver="auto" runs agents, and a compartmental solver that was asked for stops before anything is made. 0 for no limit'
+        optdesc.max_joint = 'The most compartments that the diseases tracked jointly in a compartmental run may take (their joint states times the groups of the other dimensions; see ss.solvers.JointStates): above it, solver="auto" runs agents, and a compartmental solver that was asked for stops before anything is made. 0 for no limit'
         options.max_joint = sc.parse_env('STARSIM_MAX_JOINT', 10_000, int) # 6,912 compartments (three diseases with Erlang stages, by four age groups) take about 2 GB over 400 steps
 
         return optdesc, options

@@ -350,7 +350,7 @@ class Effects(sc.prettyobj):
     """
     agents = False # Whether it runs the disease's states as agents
     compartmental = False # Whether it runs them as compartments; a disease written as code does neither
-    cross = None # In a compartmental run, the diseases whose states are tracked jointly with this one's, if any: see ss.solvers.Crossing
+    joint = None # In a compartmental run, the diseases whose states are tracked jointly with this one's, if any: see ss.solvers.JointStates
 
     def __init__(self, module, sim):
         self.mod = module
@@ -654,7 +654,7 @@ class Engine(Telling, Effects):
                 if getattr(strat, 'stages_of', None) is not None: # The stages of a transfer: for its own module's states only
                     names = (strat.states or [s.name for s in graph.people_states]) if strat.stages_of[0] == self.mod.name else []
                 flag = bool(state.people or strat.kind == 'space') if names is None else state.name in names # A place applies to everything; other properties of people, to people
-                if strat.kind == 'disease': # The compartments of another disease, tracked jointly with this one: see ss.solvers.Crossing
+                if strat.kind == 'disease': # The compartments of another disease, tracked jointly with this one: see ss.solvers.JointStates
                     flag = bool(state.people) and self.mod.name in strat.holders
                 levels = coords[:, d]
                 first = levels == 0
@@ -686,8 +686,8 @@ class Engine(Telling, Effects):
             errormsg = f'"{self.mod.name}" has more than one strain dimension ({sc.strjoin(sim.groups.strats[d].name for d in strains)}); a person carries one strain of a disease at a time, so combine them into one'
             raise ValueError(errormsg)
         self.strain = strains[0] if strains else None
-        self.foreign = set() # In a crossing: the dimensions that only another disease's states have, whose level this one's people keep
-        if self.cross is not None:
+        self.foreign = set() # In joint states: the dimensions that only another disease's states have, whose level this one's people keep
+        if self.joint is not None:
             people = [state.name for state in graph.people_states]
             self.foreign = {d for d,strat in enumerate(sim.groups.strats) if strat.kind != 'disease' and not any(self.applies[name][d] for name in people)}
         return

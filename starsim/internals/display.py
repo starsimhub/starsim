@@ -872,7 +872,7 @@ def flow_terms(graph, engine=None, contacts=None):
     """
     mod = graph.module
     if engine is None or not engine.compartmental: # Not in a compartmental sim, so lay the model out with a stand-in
-        mock = sc.obj(unit_base='day', solver=ss.solvers.ode(), groups=sc.obj(n_groups=1), pars=sc.obj(rand_seed=0, total_pop=1, approximations='allow', solver='ode', branching=False), unit=None, _unit_name='day', crossings=[])
+        mock = sc.obj(unit_base='day', solver=ss.solvers.ode(), groups=sc.obj(n_groups=1), pars=sc.obj(rand_seed=0, total_pop=1, approximations='allow', solver='ode', branching=False), unit=None, _unit_name='day', joint_states=[])
         engine = ss.solvers.Compartmental(mod, mock)
         engine.init_dwells()
         engine.build_layout()
@@ -1079,10 +1079,10 @@ def describe_sim(sim):
             add('dimension', text, f'guessed: {"; ".join(guesses)}' if guesses else None)
             for row in strat_rows(strat):
                 add('', row)
-        for crossing in sim.crossings: # Diseases tracked jointly: why, how big, and what is assumed (see ss.solvers.Crossing)
-            sizes = [sim.groups.strats[sim.groups.dim_index(name)].n for name in crossing.names]
-            add('jointly', f'{" × ".join(crossing.names)}: {" × ".join(str(n) for n in sizes)} = {int(np.prod(sizes))} joint states of people', '; '.join(crossing.reasons))
-            for text in crossing.describe():
+        for joint in sim.joint_states: # Diseases tracked jointly: why, how big, and what is assumed (see ss.solvers.JointStates)
+            sizes = [sim.groups.strats[sim.groups.dim_index(name)].n for name in joint.names]
+            add('jointly', f'{" × ".join(joint.names)}: {" × ".join(str(n) for n in sizes)} = {int(np.prod(sizes))} joint states of people', '; '.join(joint.reasons))
+            for text in joint.describe():
                 add('', text)
     for mod in mods: # Each disease, declared or written as code, and other declared modules
         if hasattr(mod, 'describe') and (getattr(mod, 'graph', None) is not None or isinstance(mod, ss.Disease)):
@@ -1129,7 +1129,7 @@ def describe_sim(sim):
             add('plan', f'{sc.strjoin(declared)}: as agents, each step in Python')
         else:
             whole = sim._kernel_reason()
-            joint = ''.join(f'; {" × ".join(c.names)} as one program' for c in sim.crossings)
+            joint = ''.join(f'; {" × ".join(c.names)} as one program' for c in sim.joint_states)
             add('plan', f'{sc.strjoin(declared)}: as compiled code, ' + ('the whole run in one call' if whole is None else f'one step at a time, since {whole}') + joint)
         tabulated = [mod.name for mod in sim.modules if mod.name in stepped and getattr(mod, 'tabulated', False) and not isinstance(sim.solver, ss.solvers.abm)]
         python = [mod.name for mod in sim.modules if mod.name in stepped and mod.name not in declared + tabulated]

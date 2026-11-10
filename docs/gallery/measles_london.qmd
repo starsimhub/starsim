@@ -320,7 +320,7 @@ That is with 200 particles, to keep this page quick, which gives a lower estimat
 |---|---|---|---|
 | Declared, with a little code | Functions of the sim; a connector for a value that changes each step | `describe()`, results, solvers that can take the code, outcomes and likelihoods | Speed (a step at a time), and the built-in particle filter, IF2 and particle MCMC |
 | Written as code | A module with `step()` | Time, seeds, parallel runs, results you record | Everything about the model's structure: `describe()`, other solvers, `sim.fit()` |
-| Declared, with noise | Transitions with `noise=`, and time series worked out in advance | Everything: `describe()`, the whole run in the kernels, the built-in particle filter, IF2 and particle MCMC | Agents (which refuse the noise) and anything that isn't known in advance or declared |
+| Declared, with noise | Transitions with `noise=`, and time series worked out in advance | Everything: `describe()`, the whole run in the kernels, the built-in particle filter, IF2 and particle MCMC | The exact (Gillespie) solver, which refuses the noise, and anything that isn't known in advance or declared |
 
 Either can be fitted with a likelihood of your own (`fn(observed, model)`), which gives up only gradients in JAX; and a coded model's loops can be compiled with `@ss.jit`, which gives up only the parts of Python that Numba can't compile. Start declared, and write as code only the part that needs it. Here, the whole model can be declared, and then Starsim's own particle filter runs it; the connector and the coded model show how to write what a declaration can't say.
 

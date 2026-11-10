@@ -6,7 +6,7 @@ The same `ss.graph.Graph` can be run as compartments (`ode`, with its dwell time
 the sim's loop like any other module code.
 
 The modules: `engine` (what the engines share), `mixing` (who meets whom in a
-compartmental run), `compartmental` and `agents` (the two engines; `agents_expressions`, `agents_moving`, `agents_stepping`, and `agents_branching` are parts of the second, `agents_compiled` runs its moves as one compiled call, and `agents_events` takes it event by event), `crossing`
+compartmental run), `compartmental` and `agents` (the two engines; `agents_expressions`, `agents_moving`, `agents_stepping`, and `agents_branching` are parts of the second, `agents_compiled` runs its moves as one compiled call, and `agents_events` takes it event by event), `joint_states`
 (diseases tracked jointly), `choose` (which solver runs a model, and why),
 `deliveries` (what a delivery does differently in a compartmental run), and
 `particles` (many runs of a program stepped together, for a particle filter).
@@ -18,7 +18,7 @@ Used with: agents and compartments; declared and coded modules
 from .engine import *
 from .mixing import *
 from .compartmental import *
-from .crossing import *
+from .joint_states import *
 from .agents import *
 from .agents_events import *
 from .agents_compiled import *

@@ -399,7 +399,7 @@ class Stepping:
             for c,k in enumerate(born):
                 for dst,n in zip(tr.dest, self.rng.multinomial(k, [share[c]/expected[c] for share in shares]) if len(ps) > 1 else [k]) if k else []:
                     if n:
-                        enter.append((cells[c, 0] if d is not None else 0, (dst.name,), n))
+                        enter.append((cells[c, 0] if d is not None else 0, ((self.mod.name, dst.name),), n)) # This module's state, not another's of the same name
                         of.append(np.full(n, c))
             levels = {dim:cells[np.concatenate(of), j] for j,dim in enumerate(dims) if dim != d} if of else None
             new = self.add_people(enter, self.ti, f'born_{tr.name}', newborn=not tr.migration, levels=levels)
@@ -746,7 +746,7 @@ class Stepping:
         Add agents to places, in given states
 
         Args:
-            enter (list): for each place (0, if there are no places), the states to put people in (None for each module's first state) and the number of agents
+            enter (list): for each place (0, if there are no places), the states to put people in (None for each module's first state; a name is the state of that name in every module that has one, and (module name, state name) the state of that module only) and the number of agents
             ti (int): the time they enter their states
             key (str): what adds them, which names the distributions their levels and states are drawn from
             newborn (bool): whether they are born, so are in the youngest age group; if not, their ages are drawn from the population's age distribution
@@ -788,7 +788,8 @@ class Stepping:
             choice = np.empty(total, dtype=object)
             start = 0
             for dst,states,k in enter: # The same states for each entry's people, so they are chosen for all of them at once
-                own = np.array([name for name in (states or []) if name in placed] or placed[:1], dtype=object)
+                names = [(s[1] if s[0] == mod.name else None) if isinstance(s, tuple) else s for s in (states or [])]
+                own = np.array([name for name in names if name in placed] or placed[:1], dtype=object)
                 choice[start:start+k] = own[np.minimum((rvs[start:start+k]*len(own)).astype(int), len(own) - 1)] # Shared equally between the states named
                 start += k
             for name in dict.fromkeys(choice): # In a fixed order, since the draws are made in it

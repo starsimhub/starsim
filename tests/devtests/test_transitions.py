@@ -814,15 +814,16 @@ def test_functions():
     sim = ss.Sim(seeded(seed), stop=6, unit='day', **kw).run()
     assert isinstance(sim.solver, ss.solvers.ode) and sim.results.sir.I[-1] > 4.9 # Called each step, not skipped by a whole run (was 0)
     assert ss.Sim(seeded(seed), stop=6, unit='day', solver='abm', **kw).run().results.sir.I[-1] == 5 # The same code, as agents
-    def cure(sim): # People are moved, never made or lost: the number of people stays the same in every disease
+    def cure(sim): # People are moved, and made or lost, the same in every disease
         sir = sim.diseases.sir
         if sim.ti == 10:
             assert ss.move(sir.I, sir.R, p=0.5) > 0 and ss.move([sir.S, sir.R], sir.I, n=7) == 7 # Exactly n, as whole people too
             ss.move(ss.dead, sir.W, n=100) # A count can come from outside the model
+            assert ss.move(sir.I, ss.dead, p=0.2) > 0 and ss.move(ss.outside, sim.diseases.sis.I, n=20) == 20 # People die, and arrive, in every disease
+            with pytest.raises(ValueError, match='ss.dead'):
+                ss.move(ss.dead, sir.I, n=1)
             with pytest.raises(ss.CapabilityError, match='ss.move'): # Setting the number of people in a state would make or lose people
                 sir.I.n = 0
-            with pytest.raises(ValueError):
-                ss.move(sir.I, ss.dead)
     for solver in ['ode', 'binomial', 'abm']:
         S, I, R, W = ss.State(name='S'), ss.State(name='I'), ss.State(name='R'), ss.State(name='W', people=False)
         dying = ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(7), I >> ss.dead @ ss.perday(0.01), W >> ss.dead @ ss.perday(0.5), init=dict(I=0.01), name='sir')
