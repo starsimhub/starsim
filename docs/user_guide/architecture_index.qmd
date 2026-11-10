@@ -72,6 +72,7 @@ A few things to notice in the map:
 
 - [Model declaration](architecture_declaration.qmd): states, transitions, rates and parameters as objects; how the graph resolves, completes and checks them; and how importers turn another framework's model into the same objects.
 - [Model execution](architecture_execution.qmd): what `sim.init()` does, units and time, the order modules run in each step, and the policy on errors, warnings, and notes.
+- [Steps and time points](architecture_steps.qmd): what a step is, the order of a step, why stocks and flows are recorded separately, and how the state is updated within a step, compared with Starsim 3 and with an Euler step.
 - [Engines and kernels](architecture_solvers.qmd): how the solver is chosen, the engines that run each one, the kernel sets, and the tests that pin each path.
 - [Transmission](architecture_transmission.qmd): routes (networks and mixing pools), how one module changes another (`ss.modify`), deliveries, and results.
 - [Randomness](architecture_randomness.qmd): random streams and common random numbers, run identity, and how randomness is handled in fitting.
@@ -82,9 +83,9 @@ How the design is tested (the test suites, and which to run after a change) is i
 ## In the design record
 
 - [constitution.md](https://github.com/starsimhub/lingua_franca/blob/main/docs/admin/constitution.md): the principles in full
-- [00-overview.md](https://github.com/starsimhub/lingua_franca/blob/main/docs/design/00-overview.md): the whole language on one page, and the object model
-- [design/README.md](https://github.com/starsimhub/lingua_franca/blob/main/docs/design/README.md): the index of the spec
-- [README.md](https://github.com/starsimhub/lingua_franca/blob/main/README.md): where the design record starts
+- [Overview](https://starsim.org/lingua_franca/design/00-overview.html): the whole language on one page, and the object model
+- [The spec](https://starsim.org/lingua_franca/design/): the index of the spec
+- [lingua_franca](https://starsim.org/lingua_franca/): where the design record starts
 
 ## Further reading
 

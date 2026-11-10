@@ -247,6 +247,6 @@ This assumes you're about to release version `4.1.1`.
 
 ## In the design record
 
-- [18-conformance.md](https://github.com/starsimhub/lingua_franca/blob/main/docs/design/18-conformance.md): every claim of the spec and the test that checks it, and the corpus
-- [12-backends.md](https://github.com/starsimhub/lingua_franca/blob/main/docs/design/12-backends.md#agreement-between-solvers): how closely the solvers agree, and why
+- [Conformance](https://starsim.org/lingua_franca/design/18-conformance.html): every claim of the spec and the test that checks it, and the corpus
+- [Solvers: choosing, approximating, and building](https://starsim.org/lingua_franca/design/12-backends.html#agreement-between-solvers): how closely the solvers agree, and why
 - [constitution.md](https://github.com/starsimhub/lingua_franca/blob/main/docs/admin/constitution.md): the principles the tests ultimately serve

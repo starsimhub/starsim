@@ -212,6 +212,7 @@ website:
           contents:
             - user_guide/architecture_declaration.qmd
             - user_guide/architecture_execution.qmd
+            - user_guide/architecture_steps.qmd
             - user_guide/architecture_solvers.qmd
             - user_guide/architecture_transmission.qmd
             - user_guide/architecture_randomness.qmd
