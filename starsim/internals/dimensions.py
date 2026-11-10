@@ -17,9 +17,8 @@ __all__ = ['Strat', 'Transfer', 'transfer', 'levels', 'Groups']
 
 
 def delivery_moves(mod, attr='move'):
-    """ A delivery's move= or increment= ({dim: level or step}), or {} (as for a declared module given as an intervention, whose move() is a method) """
-    out = getattr(mod, attr, None)
-    return out if isinstance(out, dict) else {}
+    """ A delivery's move= or increment= ({dim: level or step}), or {} for any other module (e.g. a declared module given as an intervention, whose move() is a method) """
+    return (getattr(mod, attr) or {}) if isinstance(mod, ss.Event) else {}
 
 
 def level_dtype(n):

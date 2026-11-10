@@ -546,16 +546,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
             self.setattribute(name, tf)
         for key in ['rel_sus', 'rel_trans']: # So they can be the target of ss.modify() before the sim exists
             self.setattribute(key, ss.connectors.Target(self, key))
-        coded = set(self.pars) # The parameters defined in code so far
-        try:
-            self.define_pars(**self.graph.pars) # The parameters themselves, so e.g. sir.pars.beta can be the target of ss.modify()
-        except TypeError as e: # A value named after its transition (e.g. rate_recovery, for a method as its rate) that is also a parameter defined in code, of another kind
-            for key,p in self.graph.pars.items():
-                if key in coded and getattr(p, 'slot_named', False):
-                    trs = [tr.name for tr in self.graph.transitions.values() if any(leaf is p for expr in [tr.rate, tr.dur, *(tr.p or [])] if isinstance(expr, ss.expressions.Expr) for leaf in expr.leaves)]
-                    errormsg = f'"{self.name}" has a parameter "{key}" defined in code (a {type(self.pars[key]).__name__}), and "{key}" is also the name given to the {key.split("_")[0]} of its transition {sc.strjoin(trs) or "?"} (a {type(p.value).__name__}); rename the transition or the parameter'
-                    raise TypeError(errormsg) from e
-            raise
+        self.define_pars(**self.graph.pars) # The parameters themselves, so e.g. sir.pars.beta can be the target of ss.modify()
         for name,par in self.pars.items(): # So sir.beta is this module's parameter, not the one of the class it was copied from
             if isinstance(par, ss.par) and isinstance(getattr(type(self), name, par), ss.par):
                 self.setattribute(name, par)

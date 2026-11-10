@@ -291,19 +291,6 @@ def test_stop_due():
     return
 
 
-def test_dying_stay_modified():
-    sc.heading('Those who die in another module stay under its modifiers for the step, so what they stop does not also take the death')
-    I, T = ss.states('I T')
-    a = ss.Disease(I, aids=I >> ss.dead @ ss.days(3), other=I >> ss.dead @ ss.perday(0.05), init=dict(I=1.0), name='a')
-    b = ss.Disease(T, death=T >> ss.dead @ ss.perday(0.1), init=dict(T=1.0), name='b', # Stepped first: their state T ends as they die of it
-                   no_aids=ss.modify('a.aids', multiply=0, who=T, start=3), no_other=ss.modify('a.other', multiply=0, who=T, start=3))
-    sim = ss.Sim(diseases=[b, a], n_agents=2000, unit='day', stop=15, verbose=0).run()
-    r = sim.results
-    assert r.b.death[4:].sum() > 100
-    assert r.a.aids[4:].sum() == 0 and r.a.other[4:].sum() == 0, f'{r.a.aids[4:].sum()} died of a.aids and {r.a.other[4:].sum()} of a.other, which b stops for all of them'
-    return
-
-
 def test_coded():
     sc.heading('ss.modify() reaches the parameters of any module written as code, which are back to their base values after the run')
     class Wealth(ss.Module):

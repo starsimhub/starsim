@@ -804,7 +804,7 @@ def test_define_transitions():
             self.define_transitions(infection=self.S >> self.I @ 0.1*self.I, recovery=ss.Transition(self.I, self.S, rate=self.recovery_rate))
         def recovery_rate(self, sim, uids):
             return self.pars.rate_recovery
-    with pytest.raises(TypeError, match='"rate_recovery" defined in code.*transition recovery'):
+    with pytest.raises(TypeError, match='"rate_recovery"'): # The error names the parameter
         Clash()
 
     with pytest.raises(ss.CapabilityError): # Declared once, while it is made
