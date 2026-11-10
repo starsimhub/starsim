@@ -359,6 +359,8 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         self._backfill = None # While people are back-dated: see backfill()
         self.round = (None, 0, None) # The step and the round of moves within it that the engine's draws are keyed by, and the transition it is for: see new_round()
         self._round_seeds = {} # The seeds of the rounds named by a transition: see round_seed()
+        self._source = None # The module whose rounds these are, if not this one, and the rounds of the others: see new_round()
+        self._rounds = {}
         self._drawn = {} # With STARSIM_CHECK_DRAWS, who has been drawn from each stream in this round: see draw()
         self._route_memo = None # The coefficients worked out on each route in a transmission: see route_beta()
         self._route_kept = {} # Those that are fixed for the run (see is_route_fixed()), and whether each coefficient is

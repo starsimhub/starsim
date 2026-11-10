@@ -720,7 +720,17 @@ class Moving:
         A round for one transition of the cascade is named by it (`tag`, its name) within the round of its pass, and its draws
         are keyed by the name rather than by how many rounds came before, so adding a transition (e.g. one only a product
         takes) leaves the draws of the others as they were (see `round_seed()`).
+
+        A round taken while another module's function of the loop runs (e.g. an intervention's step that starts treatment
+        through `ss.move()`) is counted by that module and keyed by its name, so its moves leave the rounds of the module's
+        own passes, and those of any other module, as they were.
         """
+        entry = self.sim.loop.entry
+        source = None if entry is None or entry.module == self.mod.name else entry.module
+        if source != self._source: # Each counts its own rounds
+            self._rounds[self._source] = self.round
+            self.round = self._rounds.get(source, (None, 0, None))
+            self._source = source
         ti = self.step_key()
         step, n = self.round[:2]
         if tag is None or step != ti:
@@ -736,15 +746,17 @@ class Moving:
         ti, n = self.round[:2]
         return ROUNDS + ti*ROUND_MAX + n
 
-    def round_seed(self, seed):
-        """ The seed of a distribution's draws in this round: its own, or, in a round named by a transition (see `new_round()`), one from both """
-        tag = self.round[2]
-        if tag is None:
+    def round_seed(self, seed, tag=False):
+        """ The seed of a distribution's draws in this round: its own, or, in a round named by a transition or taken for another module (see `new_round()`), one from these """
+        if tag is False:
+            tag = self.round[2]
+        source = self._source
+        if tag is None and source is None:
             return seed
-        key = (seed, tag)
+        key = (seed, tag, source)
         out = self._round_seeds.get(key)
         if out is None:
-            out = self._round_seeds[key] = ss.dists.str2int(f'{seed}:{tag}')
+            out = self._round_seeds[key] = ss.dists.str2int(f'{seed}:{tag}' if source is None else f'{seed}:{tag}:{source}')
         return out
 
     def draw(self, key, uids):
