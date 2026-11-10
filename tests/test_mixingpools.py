@@ -161,6 +161,14 @@ def test_matrix_dist():
     assert np.isclose(*[sim.results.sis.infection.sum() for sim in sims], rtol=0.1)
     with pytest.raises(ValueError):
         ss.networks.MixingPools(source=groups, target=groups, n_contacts=ss.poisson([[1, 2, 3]]))
+
+    # Through ss.contacts(), from a country's table of contacts a day, in a sim by week; and negative contacts are an error
+    C = ss.data.contacts('Kenya')
+    sim = ss.Sim(ss.SIS(beta=ss.perday(0.02)), networks=ss.contacts(ss.poisson(C)), n_agents=2000, unit='week', stop=4, verbose=0).run()
+    net = sim.networks[0]
+    assert net.contact_scale == 7 and len(net.pools) == 0
+    with pytest.raises(ValueError, match='negative'):
+        ss.Sim(ss.SIS(beta=ss.perday(0.05)), networks=ss.contacts(ss.normal(matrix, 2*matrix), ages=[0, 30]), n_agents=1000, stop=2, verbose=0).run()
     return
 
 
