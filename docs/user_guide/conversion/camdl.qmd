@@ -105,7 +105,7 @@ Lines are lines of model code (not counting blank lines, comments, imports, or p
 
 The last two rows were measured on 18 October 2026, on a machine shared with other jobs: Starsim's particle filter took 12 ms per likelihood with 200 particles (on the machine's threads; 36 ms on one) against camdl's 10.4 ms.
 
-These times are indicative only. By the rule on the [index page](../library_landscape.qmd) (about the same within a factor of 2 or within 10 ms), one run of either model is about the same in the two, except the rerun of the stratified model, where Starsim is faster; the particle filter and IF2 are about the same, and particle MCMC took longer in Starsim, with a different number of particles. camdl's times are for the command, so they include starting the program (about 10 ms), while Starsim's are inside Python, with Starsim already imported (which takes about 2 s): which is fair depends on the work, since a fit or a sweep from Python pays the import once.
+These times are indicative only. By the rule on the [index page](../library_landscape.qmd) (about the same within a factor of 2, or within 0.1 s for a first run or 1 ms for a rerun), the first run of either model is about the same in the two, and Starsim is faster to rerun both; the particle filter and IF2 are about the same, and particle MCMC took longer in Starsim, with a different number of particles. camdl's times are for the command, so they include starting the program (about 10 ms), while Starsim's are inside Python, with Starsim already imported (which takes about 2 s): which is fair depends on the work, since a fit or a sweep from Python pays the import once.
 
 ## What works and what does not yet
 
