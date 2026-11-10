@@ -194,7 +194,7 @@ class CompartmentalDelivery(sc.prettyobj):
             return
         for mod in sim.declared:
             frac = sel
-            if mod is not d.dis and mod.engine.cross is not None and mod.engine.cross is self.eng.cross: # The same people, tracked jointly: see ss.solvers.JointStates
+            if mod is not d.dis and mod.engine.joint is not None and mod.engine.joint is self.eng.joint: # The same people, tracked jointly: see ss.solvers.JointStates
                 continue
             if mod is not d.dis: # Another disease has other states, so the selection cannot depend on the state
                 if not np.allclose(sel, sel[0]):
@@ -353,7 +353,7 @@ class CompartmentalDelivery(sc.prettyobj):
         diseases = list(dict.fromkeys(e.dis for e in d.edges))
         if diseases == [d.dis.name]:
             return self.cure_groups(chosen)
-        return self.cure_crossed(chosen, diseases)
+        return self.cure_joint(chosen, diseases)
 
     def cure_groups(self, chosen):
         """ The treatment of one disease: each move in turn, from those in its sources """
@@ -388,7 +388,7 @@ class CompartmentalDelivery(sc.prettyobj):
         d.fire('unneeded', unneeded, before=before)
         return [(cured, None), (failed + unneeded, before)]
 
-    def cure_crossed(self, chosen, diseases):
+    def cure_joint(self, chosen, diseases):
         """
         The treatment of several diseases: the people chosen in each compartment and group are moved as a population of their
         own (with `force()`), so the share forced is chosen × probability in each, and the rest of them have failed. Diseases
@@ -399,7 +399,7 @@ class CompartmentalDelivery(sc.prettyobj):
         d = self.delivery
         sim = self.sim
         home = self.eng
-        cross = home.cross
+        joint = home.joint
         rows = home.people_comps
         state_of = [home.selector.states.index(home.comps[i].state.name) for i in rows]
         C = home.take(home.y[rows], chosen[state_of]) # The people chosen, by compartment and group
@@ -409,9 +409,9 @@ class CompartmentalDelivery(sc.prettyobj):
         for dis in diseases:
             eng = sim._declared_module(dis).engine
             if eng is not cur:
-                if cross is None or eng.cross is not cross:
+                if joint is None or eng.joint is not joint:
                     raise ss.CapabilityError(f'"{d.name}" treats "{dis}" and "{cur.mod.name}", whose states are not tracked jointly, with solver="{sim.solver}". Run with solver="abm".')
-                C, U = [cross.local(cross.joint(cur, X), eng) for X in [C, U]]
+                C, U = [joint.local(joint.joint(cur, X), eng) for X in [C, U]]
             edges = [e for e in d.edges if e.dis == dis]
             U = U.copy()
             U[[eng.people_comps.index(c) for e in edges for s in e.srcs for c in eng.state_comps[s.name]]] = 0
@@ -419,7 +419,7 @@ class CompartmentalDelivery(sc.prettyobj):
             parts.append((eng, cured, failed))
             cur = eng
         def home_share(*pairs): # People by compartment of their engines, as a share of each state and group of this disease now
-            X = sum(X if eng is home else cross.local(cross.joint(eng, X), home) for eng,X in pairs)
+            X = sum(X if eng is home else joint.local(joint.joint(eng, X), home) for eng,X in pairs)
             counts = np.array([X[[j for j,s in enumerate(state_of) if s == k]].sum(axis=0) for k in range(len(home.selector.states))])
             n = home.state_counts()
             return np.clip(np.divide(counts, n, out=np.zeros_like(n), where=n>0), 0, 1)
@@ -471,7 +471,7 @@ class CompartmentalDelivery(sc.prettyobj):
         """ Whether the kernels can take the delivery in a whole run: see `ss.Event.tabulated` """
         d = self.delivery
         sim = self.sim
-        if len(sim.declared) != 1 or self.eng.cross is not None:
+        if len(sim.declared) != 1 or self.eng.joint is not None:
             return False
         product = d.product
         moves = (product is None and (d.move_states is None or self.plain_move())) or (product is not None and product.holds and getattr(product, 'take', None) is None) # A move between states only within each group, and not an all-or-nothing vaccine, whose doses are not all held

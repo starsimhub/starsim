@@ -350,7 +350,7 @@ class Effects(sc.prettyobj):
     """
     agents = False # Whether it runs the disease's states as agents
     compartmental = False # Whether it runs them as compartments; a disease written as code does neither
-    cross = None # In a compartmental run, the diseases whose states are tracked jointly with this one's, if any: see ss.solvers.JointStates
+    joint = None # In a compartmental run, the diseases whose states are tracked jointly with this one's, if any: see ss.solvers.JointStates
 
     def __init__(self, module, sim):
         self.mod = module
@@ -686,8 +686,8 @@ class Engine(Telling, Effects):
             errormsg = f'"{self.mod.name}" has more than one strain dimension ({sc.strjoin(sim.groups.strats[d].name for d in strains)}); a person carries one strain of a disease at a time, so combine them into one'
             raise ValueError(errormsg)
         self.strain = strains[0] if strains else None
-        self.foreign = set() # In a crossing: the dimensions that only another disease's states have, whose level this one's people keep
-        if self.cross is not None:
+        self.foreign = set() # In joint states: the dimensions that only another disease's states have, whose level this one's people keep
+        if self.joint is not None:
             people = [state.name for state in graph.people_states]
             self.foreign = {d for d,strat in enumerate(sim.groups.strats) if strat.kind != 'disease' and not any(self.applies[name][d] for name in people)}
         return

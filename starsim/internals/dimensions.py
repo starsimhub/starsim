@@ -631,7 +631,7 @@ class Groups(sc.prettyobj):
         self.sim = sim
         self.strats = [] # The stratifications, in the order of the dimensions of the groups: see init()
         self.sim_strats = [] # The ones given to the sim, which apply to every module
-        self.cross_strats = [] # The dimensions for diseases whose states are tracked jointly: see ss.solvers.init_crossings()
+        self.joint_strats = [] # The dimensions for diseases whose states are tracked jointly: see ss.solvers.init_joint_states()
         self.dim_moves = [] # Movement between levels that belongs to no one module, e.g. the protection of a product waning
         self.version = 0 # How many times the groups were worked out, so a layout knows whether it holds for them (see ss.solvers.Compartmental.current())
         return
@@ -694,7 +694,7 @@ class Groups(sc.prettyobj):
             if strat is not None and strat.guessed.get('fractions') == 'equal across levels':
                 strat.fractions = strat.first()
                 strat.guessed['fractions'] = f'everyone at {strat.labels[0]}, the first level, since people are moved between its levels'
-        for strat in self.cross_strats:
+        for strat in self.joint_strats:
             if strat.name in strats:
                 raise ValueError(f'the sim has a dimension called "{strat.name}", which is also the name of a disease whose states are tracked jointly with another\'s; rename one of them.')
             strats[strat.name] = strat

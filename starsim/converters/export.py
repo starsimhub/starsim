@@ -305,7 +305,7 @@ def flatten(sim):
                 raw, eff = (contact_rate(sim, diseases[0].engine, saturated=k) if diseases else 0.0 for k in (False, True))
                 extra = f' (written as homogeneous mixing with {raw:n} contacts per {unit}' + (f', each transmitting at most once in a step, so {eff:.4g} in effect)' if raw and eff != raw else ')')
             lost.append(f'not exported: {what} "{mod.name}"{extra}')
-    if getattr(sim, 'crossings', None):
+    if getattr(sim, 'joint_states', None):
         lost.append('not exported: the coupling between diseases (each is written on its own)')
     if not isinstance(sim.solver, ss.solvers.ode) and how is None:
         lost.append(f'changed: solver="{sim.solver}" is not carried; the model is written as an ODE')

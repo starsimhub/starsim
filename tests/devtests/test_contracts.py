@@ -319,7 +319,7 @@ def test_conservation(name):
 
 
 @pytest.mark.parametrize('dwell', ['exponential', 'fixed', 'erlang', 'lognormal', 'after'])
-def test_crossing_conservation(dwell):
+def test_joint_conservation(dwell):
     sc.heading(f'Testing that diseases tracked jointly keep their people under every solver, with a dwell that is {dwell}')
     dwells = dict(
         exponential = lambda P, NP: ss.Transition(P, NP, dur=ss.months(9)),
@@ -336,7 +336,7 @@ def test_crossing_conservation(dwell):
         mod = ss.modify(p.conception, multiply=0.1, who=M[1]) # Crosses the two
         size = dict(n_agents=2000) if solver == 'abm' else dict(total_pop=2000)
         sim = ss.Sim([m, p], connectors=mod, start=2000, stop=2010, dt=ss.months(1), solver=solver, verbose=0, **size).run()
-        assert solver == 'abm' or sim.crossings
+        assert solver == 'abm' or sim.joint_states
         for mod in sim.declared:
             total = sum(mod.results[f'{state.name}'].values for state in mod.states.values() if state.people)
             assert np.allclose(total, 2000, rtol=1e-9), f'{dwell} under {solver}: the population of {mod.name} goes from {total[0]:n} to {total[-1]:n}'
@@ -549,7 +549,7 @@ def test_joint_population():
     for solver in ['ode', 'binomial']:
         sim = pair(solver).run()
         res = sim.results
-        assert sim.crossings and np.allclose(res.a.S + res.a.I, res.b.S + res.b.I)
+        assert sim.joint_states and np.allclose(res.a.S + res.a.I, res.b.S + res.b.I)
 
     # The same as the joint model written as one disease, whose states are the combinations
     SS, SI, IS, II = ss.states('SS SI IS II')

@@ -2036,14 +2036,14 @@ class Sim(ss.modules.Base):
         self.complete = False
         self.results_ready = False
         self.t.ti = 0
-        for crossing in self.crossings: # Nothing left over from the run that has ended
-            crossing.reset()
+        for joint in self.joint_states: # Nothing left over from the run that has ended
+            joint.reset()
         for mod in self.declared:
             mod.t.ti = 0
             mod.finalized = False
             mod.engine.restart()
-        for crossing in self.crossings: # As in init()
-            crossing.init()
+        for joint in self.joint_states: # As in init()
+            joint.init()
         self._kernels_known = True
         self._restarted = 'same' if same else 'new' # For the run that follows, which need not check the same things again
         return self
@@ -2195,8 +2195,8 @@ class Sim(ss.modules.Base):
                 for mod in sim.modules:
                     with sc.tryexcept(die=die):
                         mod.shrink()
-                for crossing in sim.crossings:
-                    crossing.shrink()
+                for joint in sim.joint_states:
+                    joint.shrink()
 
                 # Check that the module successfully shrunk
                 if size_limit:

@@ -126,13 +126,13 @@ def test_stochastic():
     sim = ss.Sim(lognormal, demographics=[ss.birth(rate=ss.peryear(0.05)), ss.death(rate=ss.peryear(0.02))], total_pop=1000, stop=10, solver='gillespie', **kw).init()
     for ti in range(5):
         sim.run_one_step()
-    kn, cross = ss.kernels, sim.crossings[0]
-    p, places = cross.program, np.arange(cross.program.n_places)
+    kn, joint = ss.kernels, sim.joint_states[0]
+    p, places = joint.program, np.arange(joint.program.n_places)
     out = sc.obj()
     for how in ['sparse', 'dense']:
         times = []
         for rep in range(3):
-            y, flows = cross.y.copy(), np.zeros((p.n_trans + p.n_movers, cross.y.shape[1]))
+            y, flows = joint.y.copy(), np.zeros((p.n_trans + p.n_movers, joint.y.shape[1]))
             args = (y, p, kn.workspace(y, p), places, 0, len(places), 1.0, flows, np.uint64(rep))
             T = sc.timer()
             kn.sparse_events(*args, kn.sparse_maps(p, len(y))) if how == 'sparse' else kn.place_events(*args)

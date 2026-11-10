@@ -163,7 +163,7 @@ def make_coinfection(beta=0.15, data=None, dt=0.25, **kwargs):
 
 
 @sc.timer()
-def test_crossing():
+def test_joint_states():
     sc.heading('Testing diseases tracked jointly: a whole run, many runs, in JAX, restarted, differentiated, filtered, and fitted')
     sim = make_coinfection()
     sim.init()
@@ -181,7 +181,7 @@ def test_crossing():
     ds = [ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=5), waning=ss.Transition(R, S, dur=20), init_prev=0.01, name=f'd{i}') for i in range(3)]
     mods = [ss.modify(ds[i].rel_sus, multiply=0.5, who=ds[(i+1) % 3].R, name=f'm{i}') for i in range(3)]
     three = ss.Sim(diseases=ds, connectors=mods, unit='day', stop=100, total_pop=10_000, solver='ode', **kw).run()
-    assert len(three.crossings[0].program.ops) == 81 and np.isclose(three.results.d0.I[50], 656.392, rtol=1e-6) # One operation for each of the 81 flows; the same run
+    assert len(three.joint_states[0].program.ops) == 81 and np.isclose(three.results.d0.I[50], 656.392, rtol=1e-6) # One operation for each of the 81 flows; the same run
 
     # The diseases are one model, so every flow is worked out from the people at the start of the step (each disease in turn, before, was 1% off a fine step)
     fine = make_coinfection(dt=0.025).run()
@@ -384,7 +384,7 @@ if __name__ == '__main__':
     fit = test_fit()
     ident = test_identifiability()
     post = test_posterior()
-    cross = test_crossing()
+    joint = test_joint_states()
     post_data = test_posterior_data()
     msim = test_parallel_pars()
     several = test_several_values()

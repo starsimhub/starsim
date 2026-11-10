@@ -390,24 +390,24 @@ class ParticleFilter(sc.prettyobj):
         total = 0.0
         self.path = None if swarm is not None else sc.obj()
         for j,engine in self.engines.items():
-            cross = engine.cross
-            if cross is None:
+            joint = engine.joint
+            if joint is None:
                 total += self.filter([j], n_particles, rng, swarm=swarm)
-            elif j == min(i for i,e in self.engines.items() if e.cross is cross): # Once for the diseases tracked jointly
-                total += self.filter([i for i,e in self.engines.items() if e.cross is cross], n_particles, rng, cross=cross, swarm=swarm)
+            elif j == min(i for i,e in self.engines.items() if e.joint is joint): # Once for the diseases tracked jointly
+                total += self.filter([i for i,e in self.engines.items() if e.joint is joint], n_particles, rng, joint=joint, swarm=swarm)
         return total
 
-    def filter(self, js, n, rng, cross=None, swarm=None):
-        """ The estimate of the log-likelihood of the data of one disease (or of the diseases of a crossing, run by its program) """
+    def filter(self, js, n, rng, joint=None, swarm=None):
+        """ The estimate of the log-likelihood of the data of one disease (or of the diseases of joint states, run by its program) """
         series = [s for s in self.series if s.j in js]
         by_group = any(s.keep is not None for s in series)
 
         def view(j, arrays):
             """ The stocks or flows of disease j, as its engine has them """
-            if cross is None:
+            if joint is None:
                 return arrays
-            k = cross.engines.index(self.engines[j])
-            return (cross.engine_stocks(k, arrays[0], by_group), cross.engine_flows(k, arrays[1], by_group))
+            k = joint.engines.index(self.engines[j])
+            return (joint.engine_stocks(k, arrays[0], by_group), joint.engine_flows(k, arrays[1], by_group))
 
         # The data points in order, with the last step each needs and the first step that any later one needs
         points = sc.ddict(list)
@@ -417,7 +417,7 @@ class ParticleFilter(sc.prettyobj):
         order = sorted(points)
         last = np.maximum.accumulate([max(s.spans[i][1] - 1 for s,i in points[row]) for row in order])
         first = [min(max(s.spans[i][0] - s.back, 0) if s.back is not None else 0 for s,i in points[row]) for row in order]
-        runs = ss.solvers.Particles(self.engines[js[0]] if cross is None else cross, n, rng, by_group=by_group)
+        runs = ss.solvers.Particles(self.engines[js[0]] if joint is None else joint, n, rng, by_group=by_group)
         resampled = [] # The particles picked at each resampling, and the first step they keep
         npts = runs.npts
         needed = np.append(np.minimum.accumulate(first[::-1])[::-1][1:], npts) # For each point, the earliest step of the runs that the points after it read
@@ -449,17 +449,17 @@ class ParticleFilter(sc.prettyobj):
                     vals = (arr*s.keep).sum(axis=-1) if s.keep is not None else arr.sum(axis=-1)
                 obs += s.weight*logpdf(s.lik, s.expected[i], vals @ s.W[i, lo:hi])
             obs = np.where(np.isnan(obs), -np.inf, obs)
-            joint = logw + obs
-            top = joint.max()
+            logjoint = logw + obs
+            top = logjoint.max()
             if not np.isfinite(top) and swarm is not None: # For IF2, a data point that no run can give is skipped (as camdl does), rather than ending the pass
                 continue
             elif not np.isfinite(top): # No run can give this data
                 runs.restore()
                 self.path = None
                 return -np.inf
-            norm = top + np.log(np.exp(joint - top).sum())
+            norm = top + np.log(np.exp(logjoint - top).sum())
             total += norm
-            logw = joint - norm
+            logw = logjoint - norm
             weights = np.exp(logw)
             if (1/(weights**2).sum() < n/2 and k < len(order) - 1) or swarm is not None: # Too uneven (or for IF2, always): draw the runs again (systematically), and keep the steps that are still needed
                 cum = np.cumsum(weights)
@@ -471,10 +471,10 @@ class ParticleFilter(sc.prettyobj):
                 logw = np.full(n, -np.log(n))
         runs.restore()
         if self.path is not None:
-            self.keep_path(js, runs, rng.choice(n, p=np.exp(logw)/np.exp(logw).sum()), resampled, cross, by_group)
+            self.keep_path(js, runs, rng.choice(n, p=np.exp(logw)/np.exp(logw).sum()), resampled, joint, by_group)
         return total
 
-    def keep_path(self, js, runs, b, resampled, cross=None, by_group=False):
+    def keep_path(self, js, runs, b, resampled, joint=None, by_group=False):
         """
         Keep the run of particle `b` in `path`: its stocks and flows, by tracing the particles it was copied from at each
         resampling back to the start, and its compartments now. At a resampling, the runs keep the steps from `keep` on
@@ -490,10 +490,10 @@ class ParticleFilter(sc.prettyobj):
         stocks[:end], flows[:end] = runs.stocks[b, :end], runs.flows[b, :end]
         stocks, flows = stocks[:runs.done], flows[:runs.done]
         path = sc.obj(ti=runs.done, y=y, stocks=sc.obj(), flows=sc.obj())
-        for k,engine in enumerate([self.engines[js[0]]] if cross is None else cross.engines): # Every disease the run has, including those of a crossing with no data
-            s, f = (stocks, flows) if cross is None else (cross.engine_stocks(k, stocks, by_group), cross.engine_flows(k, flows, by_group))
+        for k,engine in enumerate([self.engines[js[0]]] if joint is None else joint.engines): # Every disease the run has, including those of joint states with no data
+            s, f = (stocks, flows) if joint is None else (joint.engine_stocks(k, stocks, by_group), joint.engine_flows(k, flows, by_group))
             path.stocks[engine.mod.name], path.flows[engine.mod.name] = s.sum(axis=-1), f.sum(axis=-1) # The totals, by time point and state (or flow)
-        self.path[self.engines[js[0]].mod.name if cross is None else cross.names[0]] = path # By the module that runs the compartments, as ss.parallel() runs them
+        self.path[self.engines[js[0]].mod.name if joint is None else joint.names[0]] = path # By the module that runs the compartments, as ss.parallel() runs them
         return
 
 
@@ -506,20 +506,20 @@ def run_kept(sim, end):
     """
     Run a sim that the kernels take whole (restarted), and keep its run up to time point `end` (see `data_end()`), as `ss.fit.ParticleFilter`
     keeps the run it draws (see `path` there), to continue from there: the run is taken in two parts, the same as one, with the
-    compartments of each engine or crossing at `end` between them
+    compartments of each engine or joint states at `end` between them
     """
     ys = {}
     if 0 < end < sim.t.npts:
         sim.run(until=sim.t.timevec[end - 1]) # Through the step from end-1, so the compartments are those at end
         for mod in sim.declared:
             engine = mod.engine
-            ys.setdefault(mod.name if engine.cross is None else engine.cross.names[0], np.array((engine.cross if engine.cross is not None else engine).y))
+            ys.setdefault(mod.name if engine.joint is None else engine.joint.names[0], np.array((engine.joint if engine.joint is not None else engine).y))
     sim.run()
     out = sc.obj()
     for mod in sim.declared:
         engine = mod.engine
-        owner = engine.cross if engine.cross is not None else engine
-        key = mod.name if engine.cross is None else engine.cross.names[0]
+        owner = engine.joint if engine.joint is not None else engine
+        key = mod.name if engine.joint is None else engine.joint.names[0]
         ti = end if key in ys else mod.t.npts
         if key not in out:
             out[key] = sc.obj(ti=ti, y=ys.get(key, np.array(owner.y)), stocks=sc.obj(), flows=sc.obj())
@@ -561,7 +561,7 @@ class Swarm(sc.prettyobj):
         self.factor = cooling**(1/(50*(1 + n_points))) # Each pass perturbs the values at the start and before each data point
         self.steps = 0
         self.z = None
-        mods = [mod for mod in sim.declared if mod.engine.cross is None]
+        mods = [mod for mod in sim.declared if mod.engine.joint is None]
         engines = {id(mod.engine):mod.engine for mod in sim.declared}
         if len(engines) != 1 or not mods:
             errormsg = 'IF2 fits a sim with one declared disease (not tracked jointly with another); use method="pmcmc"'

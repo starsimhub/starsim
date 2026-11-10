@@ -263,7 +263,7 @@ pub fn draw_chain(rng: Rng, y: A2<f64>, p: &Program, w: &Work, s: usize, dt: f64
     let d = p.src_chain.u(s);
     let stage = p.src_stage.u(s);
     let src = p.src.u(stage);
-    let stride = p.tgt_comp.u(p.tgt_starts.u(stage)) - src; // How far apart its stages are: 1, except in the program of a crossing
+    let stride = p.tgt_comp.u(p.tgt_starts.u(stage)) - src; // How far apart its stages are: 1, except in the program of joint states
     for g in 0..ng {
         let r = mx(rates.at(stage, g), 0.0);
         let mut h = 0.0;
@@ -326,7 +326,7 @@ pub fn draw(rng: Rng, y: A2<f64>, p: &Program, w: &Work, dt: f64, flows: A2<f64>
     new.copy_from(y);
     for s in 0..p.src_starts.len() - 1 {
         let (a, b) = (p.src_starts.u(s), p.src_starts.u(s + 1));
-        if a == b { // In the program of a crossing, the end of one disease's flows
+        if a == b { // In the program of joint states, the end of one disease's flows
             y.copy_from(new);
             continue;
         }

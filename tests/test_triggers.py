@@ -63,7 +63,7 @@ def test_hpv_cancel():
 
     # As compartments, tracked jointly; arrivals by the other's move are canceled at the next loop time
     ode = ss.Sim([make(g) for g in names], solver='ode', total_pop=5000, start=2000, stop=2020, unit='year', **kw).run()
-    assert ode.crossings and np.isclose(ode.results.hpv16.canceled.sum(), sims[0].results.hpv16.canceled.sum(), rtol=0.25)
+    assert ode.joint_states and np.isclose(ode.results.hpv16.canceled.sum(), sims[0].results.hpv16.canceled.sum(), rtol=0.25)
     return ode
 
 
@@ -165,7 +165,7 @@ def test_ct_by_sex():
 
 @sc.timer()
 def test_with_conveyor():
-    sc.heading('ss.stay and ss.on out of a fixed dwell (a conveyor), in a crossing made by a trigger; a clock there needs agents')
+    sc.heading('ss.stay and ss.on out of a fixed dwell (a conveyor), in joint states made by a trigger; a clock there needs agents')
     size = lambda solver: dict(n_agents=10_000) if solver == 'abm' else dict(total_pop=10_000)
     for solver in ['abm', 'ode']: # Those who stay at the end of a fixed dwell are not in the flow
         LL, T, Sp = ss.states('LL T Sp')
