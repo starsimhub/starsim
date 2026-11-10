@@ -250,7 +250,7 @@ def check_states(sim):
     """ Check that everyone alive is in exactly one state of measles """
     m = sim.diseases.measles
     in_states = m.S.sum() + m.I.sum() + m.R.sum()
-    assert in_states == sim.people.n_alive, f'{in_states} people in states, but {sim.people.n_alive} alive'
+    assert in_states == sim.people.alive.count(), f'{in_states} agents in states, but {sim.people.alive.count()} alive'
     return
 
 sim = ss.Sim(measles, analyzers=check_states, n_agents=10_000, stop=ss.days(50), verbose=0)
@@ -270,7 +270,7 @@ def check_states(sim):
     """ Check that everyone alive is in exactly one state of measles """
     m = sim.diseases.measles
     in_states = m.S.sum() + m.I.sum() + m.R.sum()
-    assert in_states == sim.people.n_alive, f'{in_states} people in states, but {sim.people.n_alive} alive'
+    assert in_states == sim.people.alive.count(), f'{in_states} agents in states, but {sim.people.alive.count()} alive'
     return
 
 checker = ss.Analyzer.from_func(check_states) # The analyzer that analyzers=check_states makes

@@ -1511,7 +1511,7 @@ class Sim(ss.modules.Base):
         # With dynamic rescaling, store the scale factor for each timestep, and the people no agent stands for yet (see rescale())
         if self.pars.rescale:
             self.results += ss.Result('pop_scale', label='Population scale factor', kind='ratio', scale=False, auto_plot=False, timevec=self.timevec, values=np.ones(self.t.npts))
-            self.results += ss.Result('unrepresented', label='People no agent stands for yet', kind='stock', scale=False, auto_plot=False, timevec=self.timevec, values=np.full(self.t.npts, (self.pop_scale - 1)*self.people.n_alive, dtype=float))
+            self.results += ss.Result('unrepresented', label='People no agent stands for yet', kind='stock', scale=False, auto_plot=False, timevec=self.timevec, values=np.full(self.t.npts, (self.pop_scale - 1)*self.people._n_agents_alive(), dtype=float))
 
         # A product with no results of its own (most are only given by a delivery, which keeps the results) is left out
         for prod in self.products():
@@ -1600,7 +1600,7 @@ class Sim(ss.modules.Base):
                 max_ratio = full/scale[ti] # Don't exceed the total population size
                 scaling_ratio = min(max(ratio/opts.threshold, opts.factor), max_ratio)
                 new_scale = full if scaling_ratio == max_ratio else scale[ti]*scaling_ratio # Exactly the full scale at the end, so no rounding is left over
-                self.results.unrepresented[ti:] -= (new_scale - scale[ti])*self.people.n_alive # The agents alive now stand for that many more people
+                self.results.unrepresented[ti:] -= (new_scale - scale[ti])*self.people._n_agents_alive() # The agents alive now stand for that many more people
                 scale[ti:] = new_scale # Update the scale factor from here on
                 n = int(round(len(not_naive)*(1.0 - 1.0/scaling_ratio))) # For example, rescaling by 2 makes half of the non-naive agents naive
                 self.rng_rescale.set(n=n)

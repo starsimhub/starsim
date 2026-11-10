@@ -138,6 +138,7 @@ dist_keywords = {f'ss.{name}':mapping for name,mapping in dict(
 flags = [
     (r'\bdef infect\(\s*self\s*\)|\b(super\(\)|self)\.infect\(\s*\)', "ss.Infection's transmission pass, infect(self), is ss.AgentDisease's transmit(), which returns the UIDs of the new cases (and records their sources and routes in an ss.infection_log); an override of it calls super().transmit(rel_trans=..., rel_sus=...) for its own arrays, e.g. once for each strain (infect(uids) now infects those agents at once)"),
     (r'\bvalidate_beta\(|\btransmit_route\(|\bfinalize_infections\(', "These steps of ss.Infection's transmission were removed: ss.AgentDisease's transmit(rel_trans=..., rel_sus=..., beta=...) is the whole of it, over every network and route, with the modifiers on rel_trans and rel_sus applied (by default, from transmissibility() and susceptibility(), and the beta of each route from route_betas(), which validate_beta() was)"),
+    (r'\b(people|ppl)\.n_alive\b', 'people.n_alive (the number of agents alive) was removed: people.n is the number of people alive (as agents, the people they stand for, which is the number of agents only with no population scale), and people.alive.count() is the number of agents alive'),
     (r'\bss\.datedur\b', 'ss.datedur was removed: whole ss.months(n) and ss.years(n) added to a date follow the calendar (ss.datedur(months=1) is ss.months(1))'),
     (r'\bss\.beta_mean\b', "ss.beta_mean(mean=m, var=v) is ss.beta_dist(mean=m, std=s), with the standard deviation s = sqrt(v)"),
     (r'\bss\.lognorm_im\b|\blognorm_im\b', "ss.lognorm_im(m, s) is ss.lognormal(log_mean=m, log_std=s) (by keyword, since ss.lognormal(m, s) is its own mean and standard deviation)"),
@@ -322,7 +323,7 @@ def count_flags(line, names, context):
     """ What needs a person on a line, by what the code defines and uses (see `find_names()` and `file_context()`) """
     out = []
     states = set(counted.split('|')) | names.states
-    found = [m.group(1) or m.group(3) for m in re.finditer(r"""\.n_(\w+)\b|(['"])(?:\w+[._])?n_(\w+)\2""", line)]
+    found = [m.group(1) or m.group(3) for m in re.finditer(r"""(?<!people)(?<!ppl)\.n_(\w+)\b|(['"])(?:\w+[._])?n_(\w+)\2""", line)] # Not people.n_alive, which is listed by itself (in flags)
     found = [s for s in found if s in states and f'n_{s}' not in names.own]
     if found:
         out.append(f"if this is the count of a state that Starsim 3 made (n_{found[0]}: a module's results, a key of them, or a column of sim.to_df()), it is now named after the state ({found[0]}); a result the code defines itself keeps its name")

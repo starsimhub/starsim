@@ -108,12 +108,12 @@ def run_many_parts(owner, rngs, ys, args, n_cols, outputs, state_of, rows, grp_s
 def given_start(owner, start, ys, npts):
     """ The compartments of each run at the time point to take the runs from, and that time point, checked against the engine or crossing (`owner`) that takes them: see `ss.solvers.Compartmental.run_many()` """
     ti = int(start['ti'])
-    y = np.ascontiguousarray(np.broadcast_to(np.asarray(start['y'], dtype=float), ys.shape)) if np.shape(start['y'])[-2:] == ys.shape[1:] else None
+    y = np.broadcast_to(np.asarray(start['y'], dtype=float), ys.shape).copy() if np.shape(start['y'])[-2:] == ys.shape[1:] else None
     if y is None or not 0 <= ti <= npts:
         what = f'compartments laid out as {np.shape(start["y"])[-2:]}, not as {ys.shape[1:]}' if y is None else f'time point {ti}, but the runs have {npts}'
         errormsg = f'The runs of {sc.strjoin(owner.names) if hasattr(owner, "names") else owner.mod.name} cannot be taken from the start given, since it has {what}; was it from a sim with another structure?'
         raise ValueError(errormsg)
-    return y, ti
+    return y, ti # A copy, since a broadcast is read-only, and Numba's kernels refuse to write to it (Rust's don't check)
 
 
 def exact_dwells(sim):

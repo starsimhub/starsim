@@ -1273,9 +1273,9 @@ class BoolArr(Arr):
 
     @property
     def frac(self):
-        """ The share of the people alive it is True for now (`n` over `people.N`), as `(sir.I | sir.R).frac` gives it under every solver """
+        """ The share of the people alive it is True for now (`n` over `people.n`), as `(sir.I | sir.R).frac` gives it under every solver """
         with np.errstate(invalid='ignore', divide='ignore'): # A share of nobody is NaN, with no warning
-            return self.n/self.people.N
+            return self.n/self.people.n
 
     def __eq__(self, other):
         if isinstance(other, uids):
@@ -1402,12 +1402,11 @@ class BoolState(BoolArr):
 
     @property
     def n(self):
-        """ The number of people in the state: its agents, each counted by its weight (`people.scale`), as `I.n` in a rate counts them, and as a compartmental run's state gives it """
-        uids = self.uids
+        """ The number of people in the state: its agents, each counted by the people it stands for (its weight and the sim's scale), as `I.n` in a rate counts them, and as a compartmental run's state gives it; `count()` is the number of agents """
         engine = getattr(self.watch, 'engine', None)
         if engine is not None: # A declared disease's engine counts people, with each agent's weight and the population's scale
-            return float(engine.n_of(uids))*engine.scale
-        return float(len(uids))
+            return float(engine.n_of(self.uids))*engine.scale
+        return super().n
 
     @n.setter
     def n(self, value):
@@ -1577,16 +1576,18 @@ class GroupAlive(BoolState):
     `people.alive` in a run without agents: one row per group of people, not one per person
 
     Counting it (`.sum()`, `.count()`) counts agents, which a run without agents does not have, so these raise, as do
-    `.uids` and `.true()`, saying what to use instead: the number of people alive under every solver is `people.N`.
+    `.uids` and `.true()`, saying what to use instead: the number of people alive under every solver is `people.n` (or `people.alive.n`).
     """
-    def n_alive(self):
-        """ The number of people (`people.n`, the same in every declared disease), or with none, the population """
-        people = self.people
-        return float(np.sum(people.n)) if people.grouped else people.sim.pars.total_pop
+    @property
+    def n(self):
+        """ The number of people alive: the people in the compartments (the same in every declared disease), or with none, the population """
+        sim = self.people.sim
+        engine = sim.declared[0].engine if self.people.grouped else None
+        return float(engine.n_people()) if engine is not None else float(sim.pars.total_pop)
 
     def no_agents(self, what):
         raise ss.CapabilityError(f'people.alive.{what} was asked for, but this run has no agents: it has one row for each group of people.\n'
-                                 f'     Use the number of people alive (people.N) or the number in a disease\'s states (e.g. sir.I.n), or run with solver="abm", e.g. ss.Sim(..., solver="abm") or sim.new(solver="abm").run(); a module written as code that reads agents can say so with compartmental = False.')
+                                 f'     Use the number of people alive (people.n) or the number in a disease\'s states (e.g. sir.I.n), or run with solver="abm", e.g. ss.Sim(..., solver="abm") or sim.new(solver="abm").run(); a module written as code that reads agents can say so with compartmental = False.')
 
     def sum(self, *args, **kwargs): self.no_agents('sum()')
     def count(self, *args, **kwargs): self.no_agents('count()')

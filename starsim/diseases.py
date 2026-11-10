@@ -1500,7 +1500,7 @@ class AgentDisease(Disease):
         """ The counts of the states, and the prevalence, at the start of the step """
         super().record_stocks()
         res = self.results
-        alive = self.sim.people.n_alive if ss.results.agent_weights(self.sim) is None else self.sim.results.alive[self.sim.ti] # With agents of different weights, as the people alive are counted
+        alive = self.sim.people._n_agents_alive() if ss.results.agent_weights(self.sim) is None else self.sim.results.alive[self.sim.ti] # With agents of different weights, as the people alive are counted
         res.prevalence[self.ti] = res.infected[self.ti] / alive
         return
 

@@ -438,7 +438,7 @@ def call_fn(func, names=fn_names, positions=None, **values):
 
     Example:
         ```python
-        ss.utils.call_fn(lambda self, sim: self.pars.beta*sim.people.n_alive, self=sir, sim=sim) # Each argument is passed if it is named
+        ss.utils.call_fn(lambda self, sim: self.pars.beta*sim.people.n, self=sir, sim=sim) # Each argument is passed if it is named
         ```
     """
     return func(*[values.get(name) for name in fn_args(func, names=names, positions=positions)])

@@ -125,7 +125,7 @@ class Alarm(ss.Module):
 
     def step(self):
         sir = self.sim.diseases.sir
-        if sir.I.n > self.pars.threshold*self.sim.people.N:
+        if sir.I.n > self.pars.threshold*self.sim.people.n:
             self.days_over += 1
 
 class Exposure(ss.Module):
