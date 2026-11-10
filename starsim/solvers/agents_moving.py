@@ -505,13 +505,13 @@ class Moving:
         return new
 
     def into(self, tr):
-        """ The names of the states that children born by a transition are put in: this inflow's, and that of each declared module's own `ss.birth(when=)` of the same transition """
-        out = [d.name for d in tr.dest]
+        """ The states that children born by a transition are put in, as (module name, state name): this inflow's, and that of each declared module's own `ss.birth(when=)` of the same transition """
+        out = [(self.mod.name, d.name) for d in tr.dest]
         per = (ss.conditions.modname(tr.birth_on.module) or self.mod.name, tr.birth_on.name)
         for mod in self.sim.declared:
             for other in mod.graph.inflows:
                 if getattr(other, 'birth_on', None) is not None and (ss.conditions.modname(other.birth_on.module) or mod.name, other.birth_on.name) == per:
-                    out += [d.name for d in other.dest]
+                    out += [(mod.name, d.name) for d in other.dest]
         return list(dict.fromkeys(out))
 
     def fresh(self, key, tr, unique=True):

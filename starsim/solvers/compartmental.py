@@ -615,13 +615,13 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         return
 
     def check_noise(self):
-        """ Refuse noise on a rate (`ss.Transition(noise=)`) where it isn't drawn: it is drawn by the chain binomial, once a substep for each flow, so a transition must be one flow; the ODE leaves it out (see `init_program()`) """
+        """ Refuse noise on a rate (`ss.Transition(noise=)`) where it isn't drawn: it is drawn by the chain binomial, once a substep for each flow, and by tau-leaping once a leap, so a transition must be one flow; the ODE leaves it out (see `init_program()`) """
         for tr in self.graph.transitions.values():
             if tr.noise is None:
                 continue
             why = None
-            if isinstance(self.solver, (ss.solvers.tau, ss.solvers.gillespie)):
-                why = f'solver="{self.solver}", which chooses its own steps, so has none to draw it for'
+            if isinstance(self.solver, ss.solvers.gillespie):
+                why = f'solver="{self.solver}", which takes one event at a time, so has no steps to draw it for'
             elif self.cross is not None:
                 why = 'a disease tracked jointly with another'
             elif sum(flow.tr is tr and flow.expr is not None for flow in self.flows) > 1:
@@ -1112,8 +1112,13 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             self.arrive(dst.name, total, y)
         return (total, recorded) if syn is not None else total
 
-    def move_some(self, srcs, dst, p=None, n=None, where=None):
-        """ A one-off move from code (`ss.move()`): a share `p` of the people in some states (or `n` of them, exactly where the solver keeps whole people; of those for whom `where` holds) to a state, or of a count, to and from outside the model too (`dst` or `srcs` empty); returns the number moved """
+    def move_some(self, srcs, dst, p=None, n=None, where=None, outside=None):
+        """
+        A one-off move from code (`ss.move()`): a share `p` of the people in some states (or `n` of them, exactly where the solver keeps
+        whole people; of those for whom `where` holds) to a state, or to and from outside the model (`dst` or `srcs` empty, and for
+        people, `outside`: 'dead' and 'outside', or 'unborn' and 'outside'), which the other diseases follow (see `others_follow()`);
+        returns the number moved
+        """
         comps = [comp for state in srcs for comp in self.state_comps[state.name]]
         sel = 1.0 if where is None else np.broadcast_to(np.asarray(self.selector.select(where), dtype=float), self.selector.shape) # The share of each state and group for whom it holds
         have = self.y[comps]
@@ -1129,12 +1134,68 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             if dst is not None:
                 self.arrive(dst.name, moved.sum(axis=0) if srcs else moved, self.y)
             return float(moved.sum())
+        if not srcs: # People added: born or arriving, placed as declared births and arrivals are
+            split = (self.inflow_splits if outside == 'unborn' else self.state_split)[dst.name]
+            added = n*split
+            if self.integer: # Whole people, rounded at random
+                k = int(n) + int(self.rng.random() < n - int(n))
+                added = self.rng.multinomial(k, split/split.sum()).astype(float) if split.sum() > 0 else 0*split
+            self.arrive(dst.name, added, self.y)
+            self.others_follow(added, added=True)
+            return float(added.sum())
         given = None
         if n is not None and self.integer: # Exactly n whole people, chosen at random from those there
             draw = self.rng.multivariate_hypergeometric(np.round(have).astype(np.int64).ravel(), int(min(round(n), round(total))))
             given = dict(zip(comps, draw.reshape(have.shape).astype(float)))
         frac = np.full(self.selector.shape, float(p)) if np.ndim(p) == 0 else np.broadcast_to(p, self.selector.shape)
+        if dst is None:
+            return float(self.remove_people(frac*sel, srcs, given=given).sum())
         return float(self.move_states(frac*sel, srcs, dst, given=given).sum())
+
+    def remove_people(self, frac, srcs, given=None):
+        """ Take a share of the people in each of some states and groups (or `given`, the number from each compartment) out of the model, and the same people out of the other diseases (see `others_follow()`); returns the number by group """
+        removed = np.zeros(self.n_groups)
+        for state in srcs:
+            s = self.selector.states.index(state.name)
+            for comp in self.state_comps[state.name]:
+                n = self.take(self.y[comp], frac[s]) if given is None else given[comp]
+                self.y[comp] = self.y[comp] - n
+                removed += n
+        self.others_follow(removed)
+        return removed
+
+    def others_follow(self, change, added=False):
+        """
+        Have the other diseases lose (or with `added`, gain) the people this one lost or gained from code (`ss.move()` to or from
+        outside the model), by group, so that every disease has the same people. Diseases tracked jointly with this one (see
+        `ss.solvers.Crossing`) have them already. A disease run apart loses them from its states in proportion, in each group, as it
+        has them, which is exact on average: it runs apart since its states do not depend on this one's, so within a group, which of
+        its states someone is in does not depend on which of this one's they are in. People added are in its first state, as at birth.
+        """
+        sim = self.sim
+        others = [mod.engine for mod in sim.declared if mod.engine is not self and getattr(mod.engine, 'people_comps', None)]
+        others = [engine for engine in others if self.cross is None or engine.cross is not self.cross]
+        if not others:
+            return
+        if sim.crossings: # Groups that include the states of other diseases, which this one's people are not counted by
+            raise ss.CapabilityError(f'"{self.mod.name}" adds or removes people from code (ss.move() to or from outside the model), and the states of {sc.strjoin(c.names for c in sim.crossings)} are tracked jointly apart from it, which a compartmental run cannot follow yet.\n'
+                                     f'     Run with solver="abm".')
+        for engine in others:
+            if added:
+                engine.arrive(engine.graph.default_state.name, change, engine.y)
+                continue
+            comps = engine.people_comps
+            have = np.array([engine.y[c] for c in comps])
+            total = have.sum(axis=0)
+            if engine.integer: # Whole people, chosen at random from those there
+                out = np.zeros_like(have)
+                for g in np.flatnonzero(change > 0):
+                    out[:, g] = engine.rng.multivariate_hypergeometric(have[:, g].astype(np.int64), int(min(round(change[g]), total[g])))
+            else:
+                out = have*np.divide(change, total, out=np.zeros_like(total), where=total>0)
+            for c,amount in zip(comps, out):
+                engine.y[c] = engine.y[c] - amount
+        return
 
     def move_share(self, tr, frac, srcs):
         """ Move a share of each state and group (within the sources `srcs`) along a triggered transition: with p=, that share of them; with several destinations, split between them """

@@ -991,11 +991,16 @@ def move(*args, p=None, n=None, uids=None, who=None, **kwargs):
     """
     Move people between states of a declared disease from code, the same way under every solver
 
-    A one-off move along no transition (as `ss.Event(I >> R)` is for a declared one), so people
-    are moved and never made or lost: the number of people stays the same in every disease. A count that is not
-    people (`ss.State(people=False)`, e.g. mosquitoes) moves the same way, and also from and to outside the model
-    (`ss.unborn`, `ss.dead`, or `ss.outside`), which for people is a birth, a death, or a move, and is declared. Also `disease.move(...)`, the same with
-    the disease given.
+    A one-off move along no transition (as `ss.Event(I >> R)` is for a declared one). People can also be moved
+    into the model and out of it: to `ss.dead` (they die) or `ss.outside` (they leave), and from `ss.unborn` (they
+    are born) or `ss.outside` (they arrive), with `n=`. Every disease has the same people, so people who die or leave
+    leave every disease, and people added are in each other disease's first state, under every solver: as agents,
+    they are agents who die or are made (a death happens at the end of the step, as `people.request_death()` does);
+    in a compartmental run, the diseases tracked jointly lose and gain the same people, and a disease run apart
+    loses them from its states in proportion, in each group, as it has them (it runs apart since its states do not
+    depend on the others'). People added are placed in groups as declared births (`ss.unborn`) or arrivals
+    (`ss.outside`) are. A count that is not people (`ss.State(people=False)`, e.g. mosquitoes) moves the same way.
+    Also `disease.move(...)`, the same with the disease given.
 
     Args:
         args: in any order, told apart by what they are: a move written with the states (`sir.I >> sir.R`), or the state (or a list of states) to move people from and the
@@ -1018,6 +1023,9 @@ def move(*args, p=None, n=None, uids=None, who=None, **kwargs):
         ss.move(sir.S, sir.R, p=0.8, who=ss.person.age < 5) # Protect 80% of the susceptible children under 5
         sir.move(uids, sir.R) # These agents, from wherever they are (also ss.move(sir, uids, sir.R), or sir.move(uids, 'R'))
         self.move(self.I, self.R, uids=uids) # In a disease's own code: these agents, if they are infectious
+        ss.move(sir.I, ss.dead, p=0.1) # A tenth of those infectious die
+        ss.move(ss.outside, sir.I, n=20) # Twenty people arrive infectious
+        sir.move(uids, ss.dead) # These agents die, whatever their state
         ss.move(mosq.Sv, ss.dead, p=0.1) # A tenth of the mosquitoes die
         ```
     """
@@ -1060,16 +1068,24 @@ def move(*args, p=None, n=None, uids=None, who=None, **kwargs):
                 raise sc.KeyNotFoundError(f'"{x}" is not a state of "{home.name}". Its states are {sc.strjoin(home.graph.states.keys())}')
             x = getattr(home, x)
         return run_state(x)
+    outs = [end for end in ends if isinstance(end, Outside)]
+    if len(ends) == 2 and len(outs) == 2:
+        raise ValueError(f'ss.move() moves people into or out of a state, not from {outs[0]} to {outs[1]}')
+    if isinstance(ends[-1], Outside) and ends[-1].kind not in Outside.dests:
+        raise ValueError(f'ss.move() cannot move people to {ends[-1]}, which is where they come from: to remove them, move them to ss.dead (they die) or ss.outside (they leave)')
+    if len(ends) == 2 and isinstance(ends[0], Outside) and ends[0].kind not in Outside.sources:
+        raise ValueError(f'ss.move() cannot move people from {ends[0]}, which is where they go: to add them, move them from ss.unborn (they are born) or ss.outside (they arrive)')
+    outside = outs[0].kind if outs else None # Where people come from or go to outside the model, if they do
     to = None if isinstance(ends[-1], Outside) else find(ends[-1])
     if len(ends) == 2:
         src = ends[0]
         srcs = [] if isinstance(src, Outside) else [find(x) for x in sc.tolist(src)]
     elif home is None:
         raise ValueError('ss.move() was given only the state people move to; give the state they move from too, or the disease, for any of its states (e.g. sir.move(uids, sir.R))')
-    elif to is None or not to[1].people:
+    elif to is not None and not to[1].people:
         raise ValueError('ss.move() of a count needs the state it comes from (or ss.outside)')
-    else: # Any of the disease's states of people but the destination
-        srcs = [(home, state) for state in home.graph.people_states if state is not to[1]]
+    else: # Any of the disease's states of people but the destination (e.g. sir.move(uids, ss.dead): these agents die, whatever state they are in)
+        srcs = [(home, state) for state in home.graph.people_states if to is None or state is not to[1]]
     pairs = srcs + ([] if to is None else [to])
     mods = {id(mod):mod for mod,_ in pairs} | ({id(home):home} if home is not None else {})
     if len(mods) != 1:
@@ -1084,10 +1100,10 @@ def move(*args, p=None, n=None, uids=None, who=None, **kwargs):
     if people and len(people) < len(states):
         counts = [state.name for state in states if not state.people]
         raise ValueError(f'ss.move() would move between people ({sc.strjoin(people)}) and counts ({sc.strjoin(counts)}, declared with people=False) of "{mod.name}"')
-    if people and (not srcs or to is None):
-        raise ValueError(f'ss.move() moves people between states, so the number of people stays the same; people come into the model and leave it by births, deaths, and migration, which are declared (e.g. ss.birth(), ss.death(), ss.immigration())')
     if not srcs and n is None:
         raise ValueError(f'ss.move() from outside the model adds a number: give n=')
+    if not srcs and (where is not None or uids is not None):
+        raise ValueError(f'ss.move() from outside the model adds people, so there is nobody to pick with {"who=" if where is not None else "uids="}')
     if where is not None and not people:
         raise ValueError(f'ss.move() with who= picks people, but it moves a count of "{mod.name}" (declared with people=False), which has none to pick')
     if uids is not None and (not isinstance(mod.sim.solver, ss.solvers.abm) or not people):
@@ -1097,6 +1113,8 @@ def move(*args, p=None, n=None, uids=None, who=None, **kwargs):
     kw = dict(uids=uids.uids if hasattr(uids, 'uids') else ss.uids(uids)) if uids is not None else dict()
     if where is not None:
         kw['where'] = where
+    if people and outside is not None:
+        kw['outside'] = outside
     return mod.engine.move_some([state for _,state in srcs], None if to is None else to[1], p=p, n=n, **kw)
 
 

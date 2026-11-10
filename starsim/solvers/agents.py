@@ -302,6 +302,50 @@ class Transmission(Effects):
         return betamap
 
 
+class RateNoise(sc.prettyobj):
+    """
+    Gamma white noise on a transition's rate as agents (`ss.Transition(noise=)`), as a modifier of it: a multiplier with
+    mean 1 and variance sigma²/dt, drawn once a step for each group, as the chain binomial draws it in each of its steps
+    (see `ss.kernels.noise()`; Bretó et al. 2009)
+
+    Args:
+        tr (Transition): the transition
+    """
+    op = 'multiply'
+    active = True
+    tabulated = False
+    constant = False
+
+    def __init__(self, tr):
+        self.tr = tr
+        self.name = f'noise on {tr.name}'
+        self.ti = None
+        self.values = None
+        return
+
+    def draw(self, engine):
+        """ The multiplier in each group this step, drawn once a step """
+        if self.ti != engine.ti:
+            sigma = float(np.asarray(engine.eval(self.tr.noise)).flat[0])
+            n = engine.sim.groups.n_groups
+            if sigma > 0:
+                var, h = sigma**2, engine.dt
+                self.values = engine.rng.gamma(h/var, var/h, size=n)
+            else:
+                self.values = np.ones(n)
+            self.ti = engine.ti
+        return self.values
+
+    def apply(self, value, engine):
+        values = self.draw(engine)
+        if engine.selector.abm: # For each agent, by their group
+            values = values[engine.sim.groups.group_raw()] if len(values) > 1 else values[0]
+        return value*values
+
+    def describe(self):
+        return f'{self.name:<16s} multiply=gamma white noise, sigma={self.tr.noise}'
+
+
 class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
     """
     Runs a graph as agents
@@ -520,7 +564,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
                 add(f'transfer_to_{name}', ss.random()) # Which level they move to
         if self.sim.mixing.migration is not None:
             add('migrate', ss.random())
-        adders = [f'born_{tr.name}' for tr in graph.inflows if tr.people] # What adds people: births, and a movement register
+        adders = [f'born_{tr.name}' for tr in graph.inflows if tr.people] + ['added'] # What adds people: births, code (ss.move() from outside the model), and a movement register
         if self.sim.mixing.register is not None:
             add('register', ss.random()) # The order in which people in a place are chosen
             adders.append('register')
@@ -558,9 +602,9 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         for tr in self.graph.transmissions: # Not yet built for agents either, so not silently ignored
             if getattr(tr, 'min_stay', None) is not None:
                 raise ss.CapabilityError(f'"{tr.name}" has a minimum stay (min_stay=), which a transmission cannot have yet; put it on the transition out of the state before, or out of the state infected people enter')
-        noisy = [tr.name for tr in self.graph.transitions.values() if tr.noise is not None]
-        if noisy:
-            raise ss.CapabilityError(f'"{self.mod.name}.{noisy[0]}" has noise on its rate (noise=), which only the chain binomial draws so far; run with solver="binomial"')
+        for tr in self.graph.transitions.values(): # Noise on a rate (noise=): a multiplier on it, drawn once a step for each group, as the chain binomial draws it
+            if tr.noise is not None:
+                self.sim.modifiers[(self.mod.name, 'transition', tr.name)].append(RateNoise(tr))
         self.init_immunity()
         self.init_adjust()
         self.init_results()
@@ -708,8 +752,13 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
             self.count_stocks()
         return moved
 
-    def move_some(self, srcs, dst, p=None, n=None, uids=None, where=None):
-        """ A one-off move from code (`ss.move()`): a share `p` of the agents in some states (or `n` people, as a whole number of agents, rounded at random; or of `uids`, those given; or of those for whom `where` holds), chosen at random, to a state; or of a count, to and from outside the model too (`dst` or `srcs` empty); returns the number of people moved """
+    def move_some(self, srcs, dst, p=None, n=None, uids=None, where=None, outside=None):
+        """
+        A one-off move from code (`ss.move()`): a share `p` of the agents in some states (or `n` people, as a whole number of agents,
+        rounded at random; or of `uids`, those given; or of those for whom `where` holds), chosen at random, to a state; or to and from
+        outside the model (`dst` or `srcs` empty, and for people, `outside`: 'dead' and 'outside', or 'unborn' and 'outside'), as
+        agents who die (or leave) at the end of the step, or are made now; returns the number of people moved
+        """
         if not (srcs[0] if srcs else dst).people: # A count: an exact share, as its flows are
             have = sum(self.counts[state.name].sum() for state in srcs)
             if n is not None:
@@ -724,22 +773,45 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
             return float(np.sum(moved))
         mod = self.mod
         self.new_round()
+        if not srcs: # Made: n people, as a whole number of agents
+            return len(self.add_from_outside(dst, self.round_agents(n), newborn=outside == 'unborn'))*self.scale
         cands = ss.uids.concatenate([mod[state.name].uids for state in srcs])
         if uids is not None:
             cands = cands.intersect(uids)
         if where is not None:
             cands = cands[np.asarray(self.selector.select(where), dtype=bool)[cands]]
         if n is None and np.ndim(p) == 0 and p == 1: # Everyone: no random numbers to draw
-            return len(self.move_states(cands, srcs, dst))*self.scale
-        draws = self.draw('move', cands)
-        if n is None:
-            chosen = cands[draws < p]
+            chosen = cands
         else:
-            x = n/self.scale # A number of agents, rounded at random so that a fraction of one moves on average what it stands for (e.g. 0.3 people a day)
-            k = min(int(x) + int(self.rng.random() < x - int(x)), len(cands))
-            chosen = cands[np.sort(np.argsort(draws, kind='stable')[:k])]
+            draws = self.draw('move', cands)
+            if n is None:
+                chosen = cands[draws < p]
+            else:
+                k = min(self.round_agents(n), len(cands))
+                chosen = cands[np.sort(np.argsort(draws, kind='stable')[:k])]
+        if dst is None: # They die, or leave, at the end of the step, as other deaths do
+            people = self.sim.people
+            chosen = chosen[~((people.ti_dead.raw[chosen] == self.sim.ti) | (people.ti_removed.raw[chosen] == self.sim.ti))] # Not those already dying in this step
+            if outside == 'outside':
+                self.sim.people.request_removal(chosen)
+            else:
+                self.sim.people.request_death(chosen, cause=mod)
+            return len(chosen)*self.scale
         moved = self.move_states(chosen, srcs, dst)
         return len(moved)*self.scale
+
+    def round_agents(self, n):
+        """ A number of people as a whole number of agents, rounded at random, so that a fraction of one moves on average what it stands for (e.g. 0.3 people a day) """
+        x = n/self.scale
+        return int(x) + int(self.rng.random() < x - int(x))
+
+    def add_from_outside(self, dst, k, newborn):
+        """ Make `k` agents in a state (`ss.move()` from outside the model), and in each other disease's first state: in places drawn by the place's split, and at the other levels as people born (`newborn`) or arriving are """
+        sim = self.sim
+        d = sim.mixing.space
+        counts = [k] if d is None else self.rng.multinomial(k, sim.groups.strats[d].fractions)
+        enter = [(place, ((self.mod.name, dst.name),), int(c)) for place,c in enumerate(counts) if c]
+        return self.add_people(enter, self.ti, 'added', newborn=newborn)
 
     @property
     def scale(self):

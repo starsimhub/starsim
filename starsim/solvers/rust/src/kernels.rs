@@ -541,6 +541,7 @@ fn step_groups<const ONE: bool>(rng: Rng, y: A2<f64>, p: &Program, w: &Work, dt:
     let extra = p.starts.len() - nf - 1; // Conveyors, whose operations follow the flows'
     let mut pending = if extra > 0 { step_start(y, p, dt, solver) } else { false };
     let mut sure = false;
+    let mut noisy = false; // Whether a rate has noise, drawn for each leap once its length is known (tau-leaping: see NOISE)
     flows.fill(0.0);
     let (_om, moved_in) = if auto && p.n_movers > 0 { own2(nc, ng, 0.0) } else { own2(0, 0, 0.0) };
     let has_moved = moved_in.n0() > 0;
@@ -709,12 +710,14 @@ fn step_groups<const ONE: bool>(rng: Rng, y: A2<f64>, p: &Program, w: &Work, dt:
                                 stack.set(stack_top - arg, g, stack.at(top as usize, g));
                             }
                             top -= 1;
-                        } else if op == NOISE { // Noise on the rate, drawn for each substep under the chain binomial
+                        } else if op == NOISE { // Noise on the rate, drawn for each substep under the chain binomial, and for each leap under tau-leaping, once its length is known (below)
                             if solver == 2 || solver == 5 {
                                 for g in 0..ng {
                                     let v = stack.at(top as usize, g)*noise(rng, p.consts.at(arg, g), dt/(n_sub.max(1) as f64));
                                     stack.set(top as usize, g, v);
                                 }
+                            } else if solver == 3 {
+                                noisy = true;
                             }
                         } else if op >= EXP {
                             let r = stack.row(top as usize);
@@ -798,6 +801,19 @@ fn step_groups<const ONE: bool>(rng: Rng, y: A2<f64>, p: &Program, w: &Work, dt:
                 } else {
                     if solver == 3 {
                         h = mn(end - elapsed, 0.03/mx(fastest, 1e-12));
+                        if noisy { // The noise on a rate over the leap (NOISE is the last operation of its flow), the leap chosen by the mean rates
+                            for f in 0..nf {
+                                for k in p.starts.u(f)..p.starts.u(f + 1) {
+                                    if p.ops.at(k) == NOISE {
+                                        let arg = p.args.u(k);
+                                        for g in 0..ng {
+                                            let v = rates.at(f, g)*noise(rng, p.consts.at(arg, g), h);
+                                            rates.set(f, g, v);
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                     draw(rng, y, p, w, h, flows, solver == 3, solver == 5);
                 }

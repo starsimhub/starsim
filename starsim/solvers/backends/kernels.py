@@ -34,7 +34,7 @@ CONST, COUNT, FRAC, EXPOSURE, ADD, SUB, MUL, DIV, POW, MIN, MAX, LT, LE, GT, GE,
 CONVEY = 22 # Not in a rate: a conveyor (its flow, then its slots; see convey()); kept out of the program's fields, since every field adds to the cost of each call that is passed it
 LOAD, STORE = 23, 24 # A part used more than once: STORE takes the top of the stack into register arg, and LOAD puts a copy back on top; the registers are the last rows of the stack (row depth-1-arg). The parts used by several rates are worked out first, in the operations before the first rate's (starts[0] > 0); a part used twice in one rate, in the rate
 GROUP = 25 # A count in the group each rate is for, not its place: a branching process's infection, which adds people at its rate per member of its source without taking them from it (see ss.solvers.Compartmental.init_program())
-NOISE = 26 # Gamma white noise on a rate (ss.Transition(noise=)): the chain binomial multiplies the top of the stack, in each group, by a gamma draw with mean 1 and variance sigma²/h, sigma being row arg of consts (see noise()); the other solvers leave it out (its mean, 1)
+NOISE = 26 # Gamma white noise on a rate (ss.Transition(noise=)): the chain binomial multiplies the top of the stack, in each group, by a gamma draw with mean 1 and variance sigma²/h, sigma being row arg of consts (see noise()); tau-leaping multiplies the flow's rate by one for each leap; the ODE leaves it out (its mean, 1)
 opcodes = {'+':ADD, '-':SUB, '*':MUL, '/':DIV, '**':POW, 'minimum':MIN, 'maximum':MAX, 'exp':EXP, 'log':LOG, 'sqrt':SQRT, 'absolute':ABS, 'sin':SIN, 'cos':COS,
            'less':LT, 'less_equal':LE, 'greater':GT, 'greater_equal':GE}
 
@@ -2111,6 +2111,7 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, varying):
     extra = len(p.starts) - nf - 1 # Conveyors, whose operations follow the flows'
     pending = step_start(y, p, dt, solver) if extra else False # Whether the people due to leave a conveyor have yet to leave
     sure = False # Whether a flow has an infinite rate (see certain())
+    noisy = False # Whether a rate has noise, drawn for each leap once its length is known (tau-leaping: see NOISE)
     for f in range(nflows):
         for g in range(ng):
             flows[f, g] = 0
@@ -2234,10 +2235,12 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, varying):
                             for g in range(ng):
                                 stack[len(stack)-1-arg, g] = stack[top, g]
                             top -= 1
-                        elif op == NOISE: # Noise on the rate, drawn for each substep under the chain binomial (whose substeps are dt/n_sub)
+                        elif op == NOISE: # Noise on the rate, drawn for each substep under the chain binomial (whose substeps are dt/n_sub), and for each leap under tau-leaping, once its length is known (below)
                             if solver == 2 or solver == 5:
                                 for g in range(ng):
                                     stack[top, g] *= noise(rng, p.consts[arg, g], dt/max(n_sub, 1))
+                            elif solver == 3:
+                                noisy = True
                         elif op >= EXP: # A function of one value
                             for g in range(ng):
                                 stack[top, g] = unary(op, stack[top, g])
@@ -2292,6 +2295,12 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, varying):
                 else:
                     if solver == 3: # Tau-leaping: a leap short enough that the rates change little over it
                         h = min(end - elapsed, 0.03/max(fastest, 1e-12))
+                        if noisy: # The noise on a rate over the leap (NOISE is the last operation of its flow), the leap chosen by the mean rates
+                            for f in range(nf):
+                                for k in range(p.starts[f], p.starts[f+1]):
+                                    if p.ops[k] == NOISE:
+                                        for g in range(ng):
+                                            rates[f, g] *= noise(rng, p.consts[p.args[k], g], h)
                     draw(rng, y, p, w, h, flows, solver == 3, solver == 5)
                 if p.has_det and not by_place: # By place, the counts are settled after the step's events: see settle_places()
                     settle(y, p, w, h, flows)
