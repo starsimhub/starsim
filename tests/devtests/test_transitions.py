@@ -175,7 +175,7 @@ def test_counts():
             self.peaks = []
         def step(self):
             d = self.sim.diseases.behavior
-            self.peak = max(self.peak, d.I.n/self.sim.people.alive.sum())
+            self.peak = max(self.peak, d.I.n/self.sim.people.N)
             self.peaks.append(self.peak)
     slowing = lambda sim: np.exp(-5*sim.connectors.track.peak)
     S, I, R = ss.states(3)
@@ -185,7 +185,7 @@ def test_counts():
     assert np.allclose(sim.connectors.track.peaks, np.maximum.accumulate(frac)) # Set from the start of each step, one from each time point
     assert frac.max() < 0.15 # Without the slowing, 30% are infectious at the peak
     ode = ss.Sim(behavior, connectors=Track(name='track'), unit='day', stop=200, total_pop=10_000, solver='ode', **kw).run() # The same code, as compartments: the number alive is the number of people, not of groups
-    assert np.isclose(ode.people.alive.sum(), 10_000) and np.isclose(ode.connectors.track.peak, frac.max(), rtol=0.2)
+    assert np.isclose(ode.people.N, 10_000) and np.isclose(ode.connectors.track.peak, frac.max(), rtol=0.2)
 
     # A comparison is 1 or 0, so a rate can stop at a capacity
     S, I, Q, R = ss.states(4)

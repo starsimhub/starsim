@@ -44,9 +44,11 @@ def fisher_yates_shuffle(arr, randvals):
 
 
 @nb.jit(cache=True) # No fastmath: a stray NaN must compare False (no transmission), not be assumed absent
-def nb_transmit(src, trg, rel_trans, rel_sus, beta, randvals):
+def nb_transmit(src, trg, rel_trans, rel_sus, hazard, randvals):
     """ Optimized transmission kernel: returns the (source, target) UIDs of transmitting edges.
 
+    Edge i transmits with probability 1 − exp(−rel_trans[src]·rel_sus[trg]·hazard[i]): every factor scales the hazard in the step,
+    so one contact infects at most once, whichever factor a model puts its effect in (see `Network.transmit()`).
     Fuses the gather/multiply/compare *and* the UID extraction into a single branchless pass.
     This avoids a full-length boolean temporary and two separate gather passes
     (`trg[mask]`, `src[mask]`) -- ~1.4x faster at typical transmission rates, more when
@@ -57,7 +59,8 @@ def nb_transmit(src, trg, rel_trans, rel_sus, beta, randvals):
     trg_out = np.empty(n, dtype=np.int64)
     m = 0
     for i in range(n):
-        transmitted = rel_trans[src[i]] * rel_sus[trg[i]] * beta[i] > randvals[i]
+        x = float(rel_trans[src[i]] * rel_sus[trg[i]] * hazard[i])
+        transmitted = x > randvals[i] and -np.expm1(-x) > randvals[i] # 1 − exp(−x) ≤ x, so most edges are ruled out without the exp
         src_out[m] = src[i] # Written every iteration (branchless); kept only if m advances
         trg_out[m] = trg[i]
         m += transmitted
@@ -225,7 +228,7 @@ class Network(Route):
         edges (dict/dataframe): the edges of the network, as an alternative to passing them as keyword arguments
         p1 (array): an array of length N, the number of connections in the network, with the indices of people on one side of the connection.
         p2 (array): an array of length N, the number of connections in the network, with the indices of people on the other side of the connection.
-        weight (array): the weight of each edge, which multiplies the chance it transmits (1 if not given); a disease's own beta on the network is on the disease
+        weight (array): the weight of each edge, which scales the hazard of transmission over it (1 if not given; see `net_beta()`); a disease's own beta on the network is on the disease
         one_way (bool): whether it transmits only from p1 to p2, as mother-to-child networks do (by default, both ways)
         kwargs (dict): standard module arguments (e.g. `name`, `label`, `dt`) are passed to `update_pars()`; other keys are copied directly into the network as edges
 
@@ -296,7 +299,7 @@ class Network(Route):
 
     @property
     def weight(self):
-        """ The weight of each edge, which multiplies the chance it transmits """
+        """ The weight of each edge, which scales the hazard of transmission over it (see `net_beta()`) """
         return self.edges['weight'] if 'weight' in self.edges else None
 
     #%% Sides, directions, and acts
@@ -361,11 +364,12 @@ class Network(Route):
             raise ValueError(f'"{self.name}" has a partnership from {src[k]} to {trg[k]}, whose sides give no direction it has ({sc.strjoin(dirs)}; {self.name} has {self.sides_str()}){hint}')
         return out
 
-    def transmit(self, rel_trans, rel_sus, edge_beta, rng, prob=None):
+    def transmit(self, rel_trans, rel_sus, edge_hazard, rng, prob=None):
         """
         The edges that transmit in a step, in each direction the network transmits in (p1 to p2, then p2 to p1 unless it is one way)
 
-        An edge from `source` to `target` transmits with probability `rel_trans[source]·rel_sus[target]·beta`, or `prob()` if it is given.
+        An edge from `source` to `target` transmits with probability 1 − exp(−`rel_trans[source]·rel_sus[target]·hazard`), or `prob()` if it is given:
+        each factor scales the hazard over the step, so a contact infects at most once in it, wherever a model puts an effect.
         Random numbers are drawn only for the edges that can transmit: with CRN, each edge's number depends only on its source
         and target, so this gives the same result as drawing one for every edge. The beta is worked out only for the edges from
         someone infectious to someone susceptible, which are found for both directions in one pass over the edges, or, once the
@@ -375,11 +379,11 @@ class Network(Route):
         Args:
             rel_trans (array): the transmissibility of each agent, by UID (0 if not infectious)
             rel_sus (array): the susceptibility of each agent, by UID (0 if not susceptible)
-            edge_beta (func): of the direction (0 or 1), and the indices, sources, and targets of the edges from someone with `rel_trans` not 0
-                to someone with `rel_sus` not 0, the beta of each of them (an array, or a number for all; see `net_beta()`): with a function
-                as `prob`, only where it is 0 matters (no transmission), and with `prob=True` it is already the probability; None to skip the direction (no random numbers are drawn)
+            edge_hazard (func): of the direction (0 or 1), and the indices, sources, and targets of the edges from someone with `rel_trans` not 0
+                to someone with `rel_sus` not 0, the hazard of each of them in the step (an array, or a number for all): with a function
+                as `prob`, only where it is 0 matters (no transmission); None to skip the direction (no random numbers are drawn)
             rng (`ss.multi_random`): the random numbers, by source and target
-            prob (func/bool): of the direction, and the indices, sources, and targets of the edges that can transmit, the probability of each, in place of the product above; True if `edge_beta` gives it
+            prob (func): of the direction, and the indices, sources, and targets of the edges that can transmit, the probability of each, in place of the one above
 
         Returns:
             A list of the (source UIDs, target UIDs) that transmit, for each direction not skipped
@@ -391,20 +395,20 @@ class Network(Route):
         found = ss.solvers.backends.passes.candidates(edges.p1, edges.p2, rel_trans, rel_sus, two_way=not self.one_way, index=self.edge_index()) # Mother-to-child networks transmit one way
         for d,inds in enumerate(found):
             source, target = [ends[inds] for ends in self.ends(d)]
-            beta = edge_beta(d, inds, source, target)
-            if beta is None:
+            hazard = edge_hazard(d, inds, source, target)
+            if hazard is None:
                 continue
-            beta = np.asarray(beta, dtype=ss_float) if np.ndim(beta) == 0 else beta # One value for all edges
-            can = ss.solvers.backends.passes.can_transmit(source, target, rel_trans, rel_sus, beta) # Of those, the ones with a chance above 0, exactly as over every edge
+            hazard = np.asarray(hazard, dtype=ss_float) if np.ndim(hazard) == 0 else hazard # One value for all edges
+            can = ss.solvers.backends.passes.can_transmit(source, target, rel_trans, rel_sus, hazard) # Of those, the ones with a chance above 0, exactly as over every edge
             if len(can) < len(inds):
                 inds, source, target = inds[can], source[can], target[can]
-                beta = beta[can] if np.ndim(beta) else beta
+                hazard = hazard[can] if np.ndim(hazard) else hazard
             rvs = rng.rvs(source, target) # Called even if empty, to keep CRN draws in sync
             if prob is None:
-                beta = np.broadcast_to(beta, len(inds)) if np.ndim(beta) == 0 else beta
-                source, target = nb_transmit(np.asarray(source), np.asarray(target), rel_trans, rel_sus, beta, rvs)
+                hazard = np.broadcast_to(hazard, len(inds)) if np.ndim(hazard) == 0 else hazard
+                source, target = nb_transmit(np.asarray(source), np.asarray(target), rel_trans, rel_sus, hazard, rvs)
             else:
-                hit = rvs < (beta if prob is True else prob(d, inds, source, target))
+                hit = rvs < prob(d, inds, source, target)
                 source, target = np.asarray(source)[hit], np.asarray(target)[hit]
             out.append((source.view(ss.uids), target.view(ss.uids))) # View (no copy): the kernel's output is its own int64 array
         return out
@@ -834,9 +838,9 @@ class Network(Route):
 
     def net_beta(self, disease_beta=None, inds=None, disease=None):
         """
-        The probability that each edge transmits in a step, given the disease's probability (in the step, or on a network with acts, per act)
+        The probability that each edge transmits in a step, given the disease's probability (in the step, or on a network with acts, per act), for people with `rel_trans` and `rel_sus` of 1
 
-        On a network with acts, `disease_beta` has a value for each edge, already scaled for the `rel_trans` and `rel_sus` of its two people, since these act on each act, as for a declared disease. A network written as code can override this, for a disease written as code; a declared disease works out a network with acts from its hazard per act (see `ss.modify()` for what changes it on one route).
+        The edge's weight, and on a network with acts its number of acts in the step, scale the hazard: the probability is 1 − (1 − beta)^(weight·acts). The `rel_trans` and `rel_sus` of its two people, and the modifiers on the route, then scale the hazard this gives (see `Network.transmit()`). A network written as code can override this, for a disease written as code; a declared disease works out a network with acts from its hazard per act (see `ss.modify()` for what changes it on one route).
 
         Args:
             disease_beta (float): the disease's probability
@@ -844,9 +848,21 @@ class Network(Route):
             disease (Disease): the disease
         """
         if inds is None: inds = Ellipsis
-        if self.has_acts: # The number of acts in each partnership in the step
-            return self.edges.weight[inds] * (1 - (1 - disease_beta) ** self.edges.acts[inds])
-        return self.edges.weight[inds] * disease_beta # Beta should already include dt if desired
+        times = self.edges.weight[inds]*self.edges.acts[inds] if self.has_acts else self.edges.weight[inds] # The number of acts in each partnership in the step
+        with np.errstate(divide='ignore', invalid='ignore'): # A chance of 1 is an infinite hazard, and stays 1 (but none on an edge of weight 0)
+            return -np.expm1(np.log1p(-np.minimum(disease_beta, 1.0))*times) # Beta should already include dt if desired
+
+    def net_hazard(self, disease_beta=None, inds=None, disease=None):
+        """
+        The hazard of each edge in a step, −log(1 − `net_beta()`), which `rel_trans`, `rel_sus`, and the modifiers on the route then scale (see
+        `ss.Network.transmit()`): worked out directly, with the same arguments, unless a subclass overrides `net_beta()`
+        """
+        with np.errstate(divide='ignore', invalid='ignore'): # A chance of 1 is an infinite hazard (but none on an edge of weight 0)
+            if type(self).net_beta is not Network.net_beta:
+                return -np.log1p(-self.net_beta(disease_beta=disease_beta, inds=inds, disease=disease))
+            if inds is None: inds = Ellipsis
+            times = self.edges.weight[inds]*self.edges.acts[inds] if self.has_acts else self.edges.weight[inds]
+            return -np.log1p(-np.minimum(disease_beta, 1.0))*times
 
     def ends(self, d):
         """ The sources and targets of every edge, in direction `d`: p1 to p2 (0) or p2 to p1 (1) """

@@ -2005,7 +2005,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                     plains[k] = not isinstance(e, (ss.State, ss.expressions.Prop)) and not (isinstance(e, ss.par) and id(e) in self.func_exprs)
             return plains[k]
 
-        shared = sc.obj(common={}, local={}, done={}, uses={}) # The register of each part several rates share, and of each one rate uses twice; those worked out so far; and the uses in the rate being flattened
+        shared = sc.obj(common={}, local={}, done={}, uses={}, flow=None) # The register of each part several rates share, and of each one rate uses twice; those worked out so far; the uses in the rate being flattened; and its flow, if its exposures are its own (see saturation())
 
         def flatten(expr, strain, routes=None, rtr=None, keep=True):
             """
@@ -2075,7 +2075,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                 args.append(add(pars, ('number', repr(float(expr.raw))) if expr.literal and sc.isnumber(expr.raw) else id(expr), expr)) # The same number, wherever it is written, once
             elif isinstance(expr, ss.expressions.Count) and id(expr) in met and not (expr.weighted and self.cross is not None): # Met through the contact matrices: the number, as an exposure to the count's set (and a share, over everyone in the same place)
                 ops.append(kn.EXPOSURE)
-                args.append(add(exposures, (count_set(expr), None, None, None), (None, None, None)))
+                args.append(add(exposures, (count_set(expr), None, None, None, None), (None, None, None, None)))
                 if expr.kind == 'frac':
                     flatten_part(ss.expressions.Count(self.graph.people_states, kind='n'), strain)
                     ops.append(kn.DIV)
@@ -2107,7 +2107,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             elif isinstance(expr, ss.State):
                 routes = routes[expr.name] if isinstance(routes, dict) else routes # Under the partner-change model, for each source state
                 ops.append(kn.EXPOSURE)
-                args.append(add(exposures, (expr.name, strain, None if routes is None else tuple(tuple(np.atleast_1d(r).tolist()) for r in routes), None if rtr is None else (rtr[0].name, rtr[1].name)), (expr, routes, rtr)))
+                args.append(add(exposures, (expr.name, strain, None if routes is None else tuple(tuple(np.atleast_1d(r).tolist()) for r in routes), None if rtr is None else (rtr[0].name, rtr[1].name), None if shared.flow is None else id(shared.flow)), (expr, routes, rtr, shared.flow)))
             else:
                 errormsg = f'"{self.mod.name}" has a rate with a part the compartmental solvers cannot work out: {expr!r}'
                 raise TypeError(errormsg)
@@ -2136,8 +2136,10 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                 rtr = (flow.tr, flow.state) if flow.kind == 'contact' and self.route_mods(flow.tr) else None
                 shared.uses, shared.local = uses, {}
                 shared.done = {k:shared.common[k] for k in shared.common}
+                shared.flow = flow if flow.kind == 'contact' and self.saturates else None # Over a network whose edges saturate, each flow by contact has its own exposures, each with the factor of its own rate
                 with self.evaluating(src=flow.state):
                     depth = max(depth, flatten(flow.expr, flow.strain, routes, rtr))
+                shared.flow = None
                 if flow.held: # Times the people in its source, in its own group
                     ops += [kn.GROUP, kn.MUL]
                     args += [add(sets, (flow.src,)), 0]
@@ -2205,12 +2207,14 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         self.prog_exposures = []
         self.prog_routes = [] # The beta of each term of the mixing, for an exposure through a transmission with a beta for each route (or None)
         self.prog_rtrs = [] # The transmission and its source state, for an exposure through a transmission that modifiers act on, on some routes (or None)
-        for (name,strain,key,rkey),(state,routes,rtr) in rates.exposures.items():
+        self.prog_flows = [] # The flow whose own exposure it is, over a network whose edges saturate (or None: see saturation())
+        for (name,strain,key,rkey,fkey),(state,routes,rtr,flow) in rates.exposures.items():
             rates.sets.setdefault(self.exposure_comps(name))
             masked = strain is not None and self.applies[name][self.strain] # Only the people who carry this strain
             self.prog_exposures.append((state, self.strain_weights[self.sim.groups.group_coords[:, self.strain], strain] if masked else 1.0))
             self.prog_routes.append(routes)
             self.prog_rtrs.append(rtr)
+            self.prog_flows.append(flow)
         return
 
     def exposure_comps(self, name):
@@ -2259,8 +2263,8 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             det        = np.array([self.det_flow(flow) for flow in self.flows], dtype=bool),
             places     = np.array(mixing.places) if mixing.space is not None else np.zeros(ng, dtype=int),
             n_places   = sim.groups.strats[mixing.space].n if mixing.space is not None else 1,
-            exp_set    = np.array([setlist.index(self.exposure_comps(name)) for name,strain,key,rkey in exposures], dtype=int),
-            exp_n      = np.array([isinstance(name, tuple) for name,strain,key,rkey in exposures], dtype=bool),
+            exp_set    = np.array([setlist.index(self.exposure_comps(name)) for name,strain,key,rkey,fkey in exposures], dtype=int),
+            exp_n      = np.array([isinstance(name, tuple) for name,strain,key,rkey,fkey in exposures], dtype=bool),
             rel_trans  = np.ones((len(exposures), ng)),
             levels     = mix.levels,
             sizes      = mix.sizes,
@@ -2324,10 +2328,12 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         transmit at rate b over a step D (the longer of the network's and the disease's), by group (of the people who would be
         infected); 1 for any other term of the mixing
 
-        As agents, an edge transmits at most once to its susceptible end in a step, so the force of infection through K
-        contacts per unit time is K·(1 − e^(−b·D))/D, not K·b (see `ss.solvers.Mixing.edge_dur()`). Here b is the transmission's
-        beta (with a beta for each route, that route's, given as `beta`) times the susceptibility of each group, its modifiers,
-        and the mean infectiousness of the source state; it is worked out each step, so a beta that varies in time is followed.
+        As agents, an edge transmits at most once to its susceptible end in a step, with every factor of its hazard in the exponent
+        (see `ss.Network.transmit()`), so the force of infection through K contacts per unit time is K·(1 − e^(−b·D))/D, not K·b
+        (see `ss.solvers.Mixing.edge_dur()`). Each flow by contact has its own exposures here (see `flatten_rates()`), so b is that
+        flow's own: the coefficient of the exposure's state in its rate (with a beta for each route, that route's, given as `beta`),
+        times the susceptibility of each group, its modifiers, and the mean infectiousness of the state. A flow from several source
+        states takes the factor of each, not that of their mean. It is worked out each step, so a beta that varies in time is followed.
 
         Args:
             e (int): the exposure in the program
@@ -2339,22 +2345,19 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         if 'edge_dur' not in term:
             term.edge_dur = ss.solvers.Mixing.edge_dur(term.edges, self.sim)
         D = None if term.edge_dur is None else max(term.edge_dur, float(ss.solvers.engine.convert(self.mod.dt, self.sim.unit_base))) # The disease transmits only at its own steps, over the edges there are then
-        flow = self.exposure_flow(e)
-        if D is None or flow is None:
-            return 1.0
+        flow = self.prog_flows[e]
         state, mask = self.prog_exposures[e]
+        if D is None or flow is None or state is None:
+            return 1.0
+        coef = next((c for s,c in flow.tr.terms.items() if s.name == state.name), None)
+        if coef is None:
+            return 1.0
+        with self.evaluating(strain=flow.strain, routes=self.prog_routes[e], rtr=self.prog_rtrs[e], src=flow.state): # A beta for each route is 1 here, and given as beta
+            rate = np.asarray(self.eval(coef), dtype=float)
         trans = np.asarray(self.exposure_trans(state, mask), dtype=float)
         trans = trans[trans > 0].mean() if np.any(trans > 0) else 0.0
-        rate = np.prod([np.asarray(self.prog_value(leaf), dtype=float) for leaf in flow.expr.leaves if isinstance(leaf, ss.par) and leaf.slot == 'rate'], axis=0) if flow.expr is not None else 1.0
         bD = np.broadcast_to(np.asarray(beta*rate*self.flow_mult(flow)*trans, dtype=float)*D, self.n_groups)
         return np.divide(-np.expm1(-bD), bD, out=np.ones(self.n_groups), where=bD > 1e-12)
-
-    def exposure_flow(self, e):
-        """ The first flow by contact whose rate reads an exposure of the program, for its beta (see `saturation()`) """
-        state = self.prog_exposures[e][0]
-        if state is None:
-            return None
-        return next((flow for flow in self.flows if flow.kind == 'contact' and flow.expr is not None and any(leaf is state or getattr(leaf, 'name', None) == state.name and isinstance(leaf, ss.State) for leaf in flow.expr.leaves)), None)
 
     def route_mods(self, tr):
         """ Whether modifiers act on a transmission on some of its routes (`ss.modify(..., network=)`) """

@@ -952,6 +952,23 @@ def test_network_saturation():
     sparse = make('abm', ss.RandomNet(n_contacts=K))/ode
     dense = make('abm', ss.RandomNet(n_contacts=60), beta=b*K/60)/make('ode', ss.RandomNet(n_contacts=60), beta=b*K/60)
     assert abs(sparse - dense) < 0.08, f'agents ÷ ODE is {sparse:.3f} on the sparse network but {dense:.3f} on the dense one' # About 0.25 apart without the correction
+
+    # Each flow saturates by its own rate, and each source state by its own coefficient: a reinfection at a quarter of the rate, from a state half as infectious
+    def make2(solver, K, b, n=5_000, sus=1.0):
+        S, A, I, R = ss.states('S A I R')
+        beta = ss.peryear(b)
+        dis = ss.Disease(infection=ss.Transition(S, A, rate=beta*(0.5*A + I)), reinfection=ss.Transition(R, A, rate=0.25*beta*(0.5*A + I)),
+                         progression=ss.Transition(A, I, rate=ss.peryear(4)), recovery=ss.Transition(I, R, rate=ss.peryear(4)), init_prev=0.1, name='d')
+        mods = ss.modify('d.rel_sus', multiply=sus) if sus != 1 else None
+        sim = ss.Sim(diseases=dis, networks=ss.RandomNet(n_contacts=K), connectors=mods, n_agents=n, total_pop=n, start=2000, stop=2030, dt=ss.months(1), solver=solver, verbose=0).run()
+        return sim.results.d.prevalence[-120:].mean()
+    sparse2 = make2('abm', 3, 6.0)/make2('ode', 3, 6.0)
+    dense2 = make2('abm', 60, 6.0*3/60)/make2('ode', 60, 6.0*3/60)
+    assert abs(sparse2 - dense2) < 0.08, f'agents ÷ ODE is {sparse2:.3f} on the sparse network but {dense2:.3f} on the dense one' # About 0.5 apart with one factor per exposure, from its first flow
+
+    # Every factor of an edge's hazard is in the exponent, so a modifier of rel_sus is the same as that factor in beta
+    halved = make2('abm', 3, 12.0, n=2000, sus=0.5)
+    assert halved > 0 and np.isclose(halved, make2('abm', 3, 6.0, n=2000), rtol=1e-6), halved
     return ode, sparse, dense
 
 @sc.timer()

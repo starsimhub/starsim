@@ -1025,7 +1025,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
 
         **As array operations.** With `rel_trans` and `rel_sus`, it is the same transmission as an operation that code calls, as agents (in a
         disease written as code, or in a declared one's own code): each edge of a network from `u` to `v` transmits with probability
-        `rel_trans[u]·rel_sus[v]` times the network's beta for the step (see `ss.Network.transmit()`), with the modifiers and products on
+        1 − exp(−`rel_trans[u]·rel_sus[v]`·H), where H is the hazard of the network's chance for the step (see `ss.Network.transmit()`), with the modifiers and products on
         `rel_trans` and `rel_sus` applied (so the disease says `allow_modifiers = ('rel_sus', 'rel_trans')`), and the draws of each edge from the
         disease's `trans_rng`; other routes (e.g. a mixing pool) give their own (`compute_transmission()`). Someone reached by several is infected
         by the first, which is their source, recorded with the route in an `ss.infection_log`. Nobody is moved: the code that calls it says what

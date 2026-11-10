@@ -298,7 +298,7 @@ class People:
 
     def __len__(self):
         """ The number of people: the active agents, or in a compartmental run, the people alive, to the nearest whole person """
-        return round(self.alive.sum()) if '_no_groups' in self.__dict__ else len(self.auids)
+        return round(self.alive.n_alive()) if '_no_groups' in self.__dict__ else len(self.auids)
 
     @property
     def n_alive(self):
@@ -312,7 +312,7 @@ class People:
         this rather than `len(people)` for any per-timestep denominator.
         """
         if '_no_groups' in self.__dict__:
-            return self.alive.sum()
+            return self.alive.n_alive()
         unborn = self.unborn_uids()
         return np.count_nonzero(self.alive) - np.count_nonzero(self.alive.raw[unborn])
     
@@ -327,6 +327,23 @@ class People:
     def disp(self):
         """ Full object information """
         return sc.pr(self)
+
+    @property
+    def N(self):
+        """
+        The number of people alive now, under every solver: as agents, each agent counted by the people it stands for (its weight and the
+        sim's scale), as `sir.I.n` counts them; in a compartmental run, the people in the compartments. `n_alive` is the number of agents.
+        """
+        if '_no_groups' in self.__dict__:
+            return float(self.alive.n_alive())
+        sim = getattr(self, 'sim', None)
+        if sim is None or not getattr(sim, 'initialized', False):
+            return float(self.n_alive)
+        alive = self.alive.raw.copy()
+        alive[self.unborn_uids()] = False
+        weights = ss.results.agent_weights(sim)
+        n = weights[alive].sum() if weights is not None else np.count_nonzero(alive)
+        return float(n*sim.current_scale)
 
     @property
     def grouped(self):

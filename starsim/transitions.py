@@ -1227,7 +1227,8 @@ def crude_rate(rate, kind):
 
 class lifetable:
     """
-    A life table: how many die at each age, which `ss.death(lifetable=)` and `ss.Deaths(lifetable=)` take as a death rate for each age band (see `hazards()`)
+    A life table: how many die at each age, which `ss.death(lifetable=)` and `ss.Deaths(lifetable=)` take as a death rate for each age band (see `hazards()`);
+    as agents, `ss.death(lifetable=)` draws each person's age at death once from those rates (see `draw()`), which is the same model
 
     Args:
         ages (list): the start of each age band, in years (the last band is as wide as the one before)
@@ -1262,15 +1263,23 @@ class lifetable:
         return np.interp(age, self.edges, self.survival, left=1.0, right=0.0)
 
     def draw(self, age, u):
-        """ The age at death of people of some ages, from uniform random numbers: a cohort's survival to it is a share (1 - u) of its survival to their age
+        """ The age at death of people of some ages, from uniform random numbers, at the death rate of each age band (see `hazards()`): the age at
+        which the deaths they face from their age on add up to -log(1 - u)
 
         Args:
             age (array): the ages of the people
             u (array): uniform random numbers, one for each person
         """
-        target = self.survive(age)*(1 - np.asarray(u))
-        keep = np.r_[True, np.diff(self.survival[::-1]) > 0] # The survival curve is flat where nobody dies, which is not a point it can be inverted at
-        out = np.interp(target, self.survival[::-1][keep], self.edges[::-1][keep])
+        if not hasattr(self, '_cumulative'): # The death rate of each band (the last is open), and the deaths faced from the first age to the start of each
+            lo = self.edges[:-1]
+            rates = self.hazards(lo)
+            self._cumulative = (lo, rates, np.r_[0.0, np.cumsum(rates[:-1]*np.diff(lo))])
+        lo, rates, cum = self._cumulative
+        age = np.asarray(age, dtype=float)
+        faced = np.where(age > lo[-1], cum[-1] + rates[-1]*(age - lo[-1]), np.interp(age, lo, cum, left=0.0)) # None before the first age
+        target = faced - np.log1p(-np.asarray(u, dtype=float))
+        keep = np.r_[np.diff(cum) > 0, True] # A band where nobody dies is flat, so it is inverted at its end
+        out = np.where(target > cum[-1], lo[-1] + (target - cum[-1])/rates[-1], np.interp(target, cum[keep], lo[keep]))
         return np.maximum(out, age)
 
     def hazards(self, edges):
@@ -1303,7 +1312,7 @@ def death(state=None, rate=None, dur=None, lifetable=None, name=None, label=None
         state (State/list): the state people die from, or several (`[E, I]`); if not given, every state that is people
         rate (any): the death rate per person per unit time; with no state (the deaths of everyone), it is read as `ss.Deaths` reads a rate: a bare number (per year) or a typed rate is per 1,000 people if above 1 per year, else per person (`10` and `ss.peryear(10)` are `ss.peryear(0.01)`) (a time series by the median of its values); a place by name is `ss.Deaths(death_rate=place)`, its UN rates by year, sex, and age, as agents (e.g. `rate='Kenya'`)
         dur (any): the mean time to death (instead of `rate`)
-        lifetable (`ss.lifetable`): instead of a rate, a life table, as a death rate for each of its age bands, by each person's age, as `ss.Deaths(lifetable=)` takes it (which also takes one for each sex and year); in a compartmental run, which needs a stratification by age, it is a death rate for each age group of the model
+        lifetable (`ss.lifetable`): instead of a rate, a life table, as a death rate for each of its age bands, by each person's age, as `ss.Deaths(lifetable=)` takes it (which also takes one for each sex and year); as agents, each person's age at death is drawn once from those rates, so they cannot be modified during a run (for that, give the rates by age: `rate=ss.by(age=...)`); in a compartmental run, which needs a stratification by age, it is a death rate for each age group of the model
         name (str): the name of the transition
         label (str): a human-readable name
     """

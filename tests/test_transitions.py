@@ -759,7 +759,7 @@ def test_lifetable_and_seeding():
         sir = ss.Disease(S >> I @ 0.3*I.frac, I >> R @ ss.days(8), death=ss.death(lifetable=table), init=dict(I=0), name='sir')
         return sir.stratify(age=[0, 20, 40, 60, 70, 80, 90]) if strat else sir
 
-    # As agents, the death rate of each person's age band of the table, as ss.Deaths(lifetable=) takes it (before, each person's age at death was drawn once)
+    # As agents, the death rate of each person's age band of the table, as ss.Deaths(lifetable=) takes it, drawn as each person's age at death once
     ppl = ss.People(20_000, age_data=np.array([np.arange(100), np.exp(-0.02*np.arange(100))]).T)
     sim = ss.Sim(make(), people=ppl, unit='year', dt=1, stop=3, verbose=0).init()
     assert isinstance(sim.solver, ss.solvers.abm) # Without a stratification by age, a life table needs agents
@@ -769,6 +769,9 @@ def test_lifetable_and_seeding():
     assert np.isclose(res.death[0], expected, rtol=0.1) and np.isclose(res.S[0] - res.S[1], res.death[0]) # Deaths in the first year, as the table gives them
     with pytest.raises(ss.CapabilityError):
         ss.Sim(make(), unit='year', stop=3, solver='ode', verbose=0).init()
+    sir = make()
+    with pytest.raises(ss.CapabilityError, match='drawn once'): # Drawn once, so the rate cannot change during the run
+        ss.Sim(sir, interventions=ss.modify(sir.death, multiply=2), people=ss.People(1000), unit='year', stop=3, verbose=0).run()
     ode = ss.Sim(make(strat=True), unit='year', stop=3, solver='ode', verbose=0).run() # Stratified by age, it is a death rate for each age group
     assert ode.results.sir.death[1] > 0
 
