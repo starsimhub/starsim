@@ -5,11 +5,13 @@ Test the exact draws in starsim/solvers/backends/draws.py against their distribu
 # %% Imports and settings
 import numpy as np
 import numba as nb
+import pytest
 import sciris as sc
 import scipy.special as spec
 import scipy.stats as sps
 import starsim as ss
 
+pytestmark = pytest.mark.numba # Compiles Numba's draws, so CI runs it only in the jobs for Numba (see pytest.ini)
 D = ss.solvers.backends.draws
 N = 200_000 # Draws for each distribution
 rng = np.random.default_rng(1)

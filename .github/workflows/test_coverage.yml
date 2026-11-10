@@ -24,13 +24,20 @@ jobs:
         with:
           python-version: '3.13'
           architecture: x64
-      - uses: ./.github/actions/install
+      - id: install
+        uses: ./.github/actions/install
         with:
           extras: '[dev]'
           numba: true
       - name: Run tests with coverage
         working-directory: ./tests
         run: pytest test_*.py -n logical --cov-config=.coveragerc --cov=../starsim --durations=0
+      - name: Save Numba's cache # Even after a failure or timeout, so the next run compiles less
+        if: always() && github.event_name != 'schedule'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.numba
+          key: ${{ steps.install.outputs.numba-key }}
       - name: Print coverage report
         working-directory: ./tests
         run: coverage report

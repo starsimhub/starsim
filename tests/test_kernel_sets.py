@@ -22,6 +22,7 @@ import starsim as ss
 import starsim.fit
 from test_kernels import models, make_seir
 
+pytestmark = pytest.mark.numba # Compiles Numba's kernels, so CI runs it only in the jobs for Numba (see pytest.ini)
 kw = dict(verbose=0)
 D = ss.solvers.backends.draws
 rust = ss.solvers.backends.rust.built() or sc.parse_env('STARSIM_RUST_REQUIRED', False, bool) # Whether to compare Rust's
