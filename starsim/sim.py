@@ -1843,20 +1843,6 @@ class Sim(ss.modules.Base):
         return self.results.plot(key=key, fig=fig, data=data, label=self.label, show_skipped=show_skipped, annualize=annualize, marks=marks, **kwargs)
 
 
-
-def as_ode(sim, **kwargs):
-    """ A new sim of the same model as an ODE, for what is worked out from compartments (`R0()`, `Rt()`, an export): its number of agents is dropped, and the people they stood for are its population; the settings of agents only (`rescale=`, `even_draws=`) are dropped too """
-    if 'n_agents' in sim.given:
-        kwargs = dict(n_agents=None, total_pop=sim.pars.total_pop) | kwargs
-    agents_only = {key:None for key in ['rescale', 'even_draws'] if key in sim.given or sim.pars.get(key)} # Settings of agents only (see ss.solvers.check_solver_options()), which an ODE would refuse
-    return sim.new(solver='ode', **(agents_only | kwargs))
-
-
-def in_proportions(sim):
-    """ Whether a sim's numbers are shares of a population of 1 (`total_pop=1`): as an ODE, or as agents each a share of it, but not as a stochastic compartmental model, which then has one person """
-    return sim.pars.total_pop <= 1 and not isinstance(sim.solver or sim.pars.solver, (ss.solvers.binomial, ss.solvers.gillespie, ss.solvers.tau))
-
-
 def demo(run=True, plot=True, summary=True, show=None, **kwargs):
     """
     Create a simple demo simulation for Starsim

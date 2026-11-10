@@ -704,7 +704,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
             ```
         """
         if self.sim is not None and self.sim.initialized:
-            sim = ss.sim.as_ode(self.sim, verbose=0).init()
+            sim = ss.solvers.as_ode(self.sim, verbose=0).init()
             dis = sim.diseases[self.name]
         else: # This disease alone, whatever the sim names it
             sim = ss.Sim(sc.dcp(self), solver='ode', verbose=0).init()
@@ -738,7 +738,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         if sim is None or not sim.results_ready:
             errormsg = f'"{self.name}" has no run to take R over time from: run the sim first, e.g. sim.run(), then sim.diseases.{self.name}.Rt() (for the start alone, see R0())'
             raise RuntimeError(errormsg)
-        copy = ss.sim.as_ode(sim, verbose=0).init()
+        copy = ss.solvers.as_ode(sim, verbose=0).init()
         engine = copy.diseases[self.name].engine
         results = sim.results[self.name]
         stored = {} # The people in each state of each group at each kept time point

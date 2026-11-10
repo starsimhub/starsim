@@ -19,7 +19,7 @@ from .agents_events import Events
 from .agents_compiled import Compiled
 from .engine import convert
 
-__all__ = ['Solver', 'ode', 'binomial', 'gillespie', 'tau', 'abm', 'solver_names', 'as_solver', 'Undeclared', 'make_engine', 'choose_solver', 'choose_engine', 'init_joint_states', 'init_capabilities', 'auto_reasons', 'why_not', 'solver_table', 'rules', 'set_par_values', 'flows_of', 'init_group_values', 'settle_start', 'group_people']
+__all__ = ['Solver', 'ode', 'binomial', 'gillespie', 'tau', 'abm', 'solver_names', 'as_solver', 'Undeclared', 'make_engine', 'choose_solver', 'choose_engine', 'init_joint_states', 'init_capabilities', 'auto_reasons', 'why_not', 'solver_table', 'rules', 'set_par_values', 'flows_of', 'init_group_values', 'settle_start', 'group_people', 'as_ode', 'in_proportions']
 
 
 
@@ -1760,3 +1760,16 @@ rules = capabilities + layouts + kernels + fixed + jax # The whole table, as sol
 def auto_reasons(sim):
     """ The reasons, from the capability record, that `solver='auto'` runs the model as agents (none if it runs it as compartments) """
     return [cap.reason for cap in getattr(sim, 'capabilities', []) if cap.get('switch', True)]
+
+
+def as_ode(sim, **kwargs):
+    """ A new sim of the same model as an ODE, for what is worked out from compartments (`R0()`, `Rt()`, an export): its number of agents is dropped, and the people they stood for are its population; the settings of agents only (`rescale=`, `even_draws=`) are dropped too, since `sim.new(solver='ode')` would refuse them """
+    if 'n_agents' in sim.given:
+        kwargs = dict(n_agents=None, total_pop=sim.pars.total_pop) | kwargs
+    agents_only = {key:None for key in ['rescale', 'even_draws'] if key in sim.given or sim.pars.get(key)} # Settings of agents only (see ss.solvers.check_solver_options()), which an ODE would refuse
+    return sim.new(solver='ode', **(agents_only | kwargs))
+
+
+def in_proportions(sim):
+    """ Whether a sim's numbers are shares of a population of 1 (`total_pop=1`): as an ODE, or as agents each a share of it, but not as a stochastic compartmental model, which then has one person """
+    return sim.pars.total_pop <= 1 and not isinstance(sim.solver or sim.pars.solver, (ss.solvers.binomial, ss.solvers.gillespie, ss.solvers.tau))

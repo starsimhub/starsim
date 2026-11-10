@@ -70,9 +70,7 @@ The data are weekly reported cases. On this page they are illustrative: made onc
 ```{python}
 truth = ss.Sim(measles, pars=dict(beta=1.4, report=0.5, I0=0.0003), n_agents=100_000, rand_seed=3, verbose=0, **pars)
 truth.run()
-data = truth.to_synthetic_data('cases', resample='week', noise=None) # Weekly cases (whole weeks only, so not the last, partial one)
-rng = np.random.default_rng(3)
-data['cases'] = rng.negative_binomial(10, 10/(10 + data.cases)) # Counts with more variation than Poisson (negative binomial)
+data = truth.to_synthetic_data('cases', resample='week', noise=ss.nbinom(n=10)) # Weekly cases (whole weeks only, so not the last, partial one), with more variation than Poisson counts
 data.head()
 ```
 
@@ -81,10 +79,7 @@ data.head()
 ```r
 truth <- make_sim(pars = list(beta = 1.4, report = 0.5, I0 = 0.0003), n_agents = 100000, rand_seed = 3, verbose = 0)
 truth$run()
-data <- truth$to_synthetic_data("cases", resample = "week", noise = NULL) # Weekly cases (whole weeks only, so not the last, partial one), as a data frame
-np <- reticulate::import("numpy") # NumPy's random numbers, to draw the same counts as in Python
-rng <- np$random$default_rng(3L)
-data$cases <- rng$negative_binomial(10L, 10 / (10 + data$cases)) # Counts with more variation than Poisson (negative binomial)
+data <- truth$to_synthetic_data("cases", resample = "week", noise = ss$nbinom(n = 10)) # Weekly cases (whole weeks only, so not the last, partial one), with more variation than Poisson counts, as a data frame
 head(data)
 ```
 :::

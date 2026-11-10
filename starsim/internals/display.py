@@ -126,7 +126,7 @@ def start_lines(sim, notes=()):
         solver = 'ide' if ss.solvers.compartmental.exact_dwells(sim) else str(sim.solver) # Run as the ODE, with its dwell times as they are
         people = sim.declared or 'total_pop' in sim.given or sim.pop_from # Modules written as code with nothing per person (e.g. an ODE of their own) have no population, unless one was given
         pop = sim.pars.total_pop
-        how = ((f'in proportions (total_pop={pop:g}), ' if ss.sim.in_proportions(sim) else f'{pop:,.0f} people, ') if people else '') + 'as ' + (f'a branching process ({short.get(solver, solver)})' if sim.pars.branching else kind.get(solver, solver))
+        how = ((f'in proportions (total_pop={pop:g}), ' if ss.solvers.in_proportions(sim) else f'{pop:,.0f} people, ') if people else '') + 'as ' + (f'a branching process ({short.get(solver, solver)})' if sim.pars.branching else kind.get(solver, solver))
     label = f' "{sim.label}"' if sim.label else ''
     what = f'{sc.strjoin(mods)}, ' if mods else ''
     lines = [ss.display.style(f'Sim{label}: {what}{how}, {when}', 'bold', color=ss.display.in_color())]
@@ -170,7 +170,7 @@ def end_line(sim):
                 peak = int(np.argmax(infectious))
                 tvec = dis.t.tvec if len(dis.t.tvec) == len(infectious) else sim.t.tvec # On the disease's own timeline, if it has one
                 when = ss.utils.time_str(tvec[peak], sim) # A date, or e.g. day 27, as in the first line
-                fmt = '.3g' if ss.sim.in_proportions(sim) else ',.0f' # In proportions, shares rather than counts
+                fmt = '.3g' if ss.solvers.in_proportions(sim) else ',.0f' # In proportions, shares rather than counts
                 parts.append(f'{dis.name}: {total:{fmt}} infections; at most {infectious[peak]:{fmt}} infectious, on {when}')
     took = f'{sim.elapsed:.2g}' if sim.elapsed < 1 else f'{sim.elapsed:.1f}'
     return f'  Done in {took} s' + (f'; {"; ".join(parts)}' if parts else '')
@@ -1094,7 +1094,7 @@ def describe_sim(sim):
     stopguess = '' if ('stop' in sim.given or 'dur' in sim.given) else ' [guessed]' # The default length of a run
     t = sim.t
     when = f'{unit}s {t.start} to {t.stop}' if sim.unit is None or not t.is_absolute else f'{t.start} to {t.stop}'
-    pop = f'in proportions (total_pop={pars.total_pop:g})' if ss.sim.in_proportions(sim) else f'{pars.total_pop:,.0f} people'
+    pop = f'in proportions (total_pop={pars.total_pop:g})' if ss.solvers.in_proportions(sim) else f'{pars.total_pop:,.0f} people'
     desc.section('Sim', f'{len(mods)} module{"s" if len(mods) != 1 else ""}, {pop}{popguess}, {when}{stopguess}')
     if sim.declared:
         guessed = pars.solver == 'auto'
