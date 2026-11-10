@@ -135,6 +135,7 @@ website:
           contents:
             - user_guide/building_writing.qmd
             - user_guide/building_declared.qmd
+            - user_guide/building_solvers.qmd
             - user_guide/building_diseases.qmd
             - user_guide/building_parameters.qmd
             - user_guide/building_time.qmd
