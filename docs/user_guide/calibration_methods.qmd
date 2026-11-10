@@ -57,12 +57,12 @@ fits = {} # Each method's fit and how long it took, for the comparison at the en
 def fit_by(method, sim, likelihood=None, **settings):
     """ Fit by one method, with its settings, and keep the fit and its time """
     start = time.time()
-    fit = sim.fit(method=ss.fit.method(method, **settings), likelihood=likelihood, verbose=False)
+    fit = sim.fit(method=ss.fitting.method(method, **settings), likelihood=likelihood, verbose=False)
     fits[method] = dict(fit=fit, seconds=time.time() - start)
     return fit
 ```
 
-`fit_by()` is only for the comparison at the end of the page: each call is `sim.fit(method=ss.fit.method(name, **settings))`, timed. A method with its default settings is given by name alone, e.g. `sim.fit(method='optuna')`.
+`fit_by()` is only for the comparison at the end of the page: each call is `sim.fit(method=ss.fitting.method(name, **settings))`, timed. A method with its default settings is given by name alone, e.g. `sim.fit(method='optuna')`.
 
 ## Best fits
 
@@ -125,7 +125,7 @@ fit = fit_by('if2', stochastic, likelihood=likelihood, particles=200, iterations
 fit.summarize();
 ```
 
-`fit.table` gives the range of the chains' estimates. That shows how far the chains agree, and it is not a confidence interval. For a stochastic sim, `'pmcmc'` gives a posterior; `ss.fit.profile()` gives a confidence interval only for a deterministic sim. Every data series needs a likelihood, and each fitted parameter needs to be a single value of one of the model's rates.
+`fit.table` gives the range of the chains' estimates. That shows how far the chains agree, and it is not a confidence interval. For a stochastic sim, `'pmcmc'` gives a posterior; `ss.fitting.profile()` gives a confidence interval only for a deterministic sim. Every data series needs a likelihood, and each fitted parameter needs to be a single value of one of the model's rates.
 
 This fit has not converged: three of its four chains end at almost the same values, near the truth, but one has wandered to a low β and a long infectious period, where the outbreak barely grows and the data are very unlikely. The best chain is still the one reported, but the message says to run longer, with more passes or more particles, before trusting it. `fit.trials` has the estimate and log-likelihood at each pass, which shows which chain has not settled:
 
@@ -218,7 +218,7 @@ What each method's result is, and what it is not, if it has converged by its own
 
 | Method | Its result is | It is not |
 |---|---|---|
-| SciPy optimizers, on an ODE | A best fit: the maximum likelihood estimate with a likelihood (the most probable values, with priors), or the lowest loss, if the searches found the global optimum | An interval; `ss.fit.profile()` gives a confidence interval |
+| SciPy optimizers, on an ODE | A best fit: the maximum likelihood estimate with a likelihood (the most probable values, with priors), or the lowest loss, if the searches found the global optimum | An interval; `ss.fitting.profile()` gives a confidence interval |
 | SciPy optimizers, on a stochastic model | The lowest mean score of several runs, with the same seeds at every point | The maximum likelihood: the mean of the runs' log-likelihoods is not the log-likelihood |
 | `'optuna'` | With a likelihood, on a model the particle filter can run: a best fit by the filter's estimate of the likelihood, close to the maximum likelihood; otherwise, the best mean score of several runs | An interval: `spread_lower` and `spread_upper` show how flat the score is near the best |
 | `'if2'` | An estimate of the maximum likelihood of the stochastic model | An interval: the spread of its chains shows how far they agree |
@@ -231,7 +231,7 @@ What each method's result is, and what it is not, if it has converged by its own
 With a list, each method starts from the best values of the one before, and the list stops at a method that doesn't converge, with a warning (so a search that is still improving is not followed by a polish from the wrong place). A broad search followed by a local one is the usual pairing. A setting goes to the stages that take it, and an entry can be a dict to give one stage its own settings:
 
 ```{python}
-fit = deterministic.fit(method=[ss.fit.method('optuna', n_trials=200), ss.fit.method('nelder-mead', maxiter=100)], verbose=False)
+fit = deterministic.fit(method=[ss.fitting.method('optuna', n_trials=200), ss.fitting.method('nelder-mead', maxiter=100)], verbose=False)
 fit.pars
 ```
 
@@ -262,19 +262,19 @@ Every method that `sim.fit(method=...)` takes, what it gives, which kinds of mod
 | `'abc-smc'` | Approximate posterior | No (an error) | No (an error) | Yes | Yes | A goodness of fit (no likelihood) | 200 samples × 8 generations, at one to several runs each | A posterior of an agent model, or with no likelihood |
 | A list | What its last stage gives | | | | | What each stage needs | The sum of its stages | A broad search, then a local polish |
 
-The names come from `ss.fit.methods`, and the settings each takes (in `ss.fit.method()`) from `ss.fit.method_options()`, so the list of settings can be made from them, with the defaults from each method's signature (a SciPy method also takes SciPy's own options, and Optuna those of `study.optimize()`, which are listed with their defaults too):
+The names come from `ss.fitting.methods`, and the settings each takes (in `ss.fitting.method()`) from `ss.fitting.method_options()`, so the list of settings can be made from them, with the defaults from each method's signature (a SciPy method also takes SciPy's own options, and Optuna those of `study.optimize()`, which are listed with their defaults too):
 
 ```{python}
 import inspect
 import optuna
 
 rows = []
-for method, func in ss.fit.methods.items():
+for method, func in ss.fitting.methods.items():
     defaults = {key:p.default for key, p in inspect.signature(optuna.Study.optimize).parameters.items()}
     defaults |= {key:p.default for key, p in inspect.signature(func).parameters.items()} | dict(require_jax=True) # n_runs and reseed are chosen by the fit
-    settings = [f'{key}={defaults.get(key)}' for key in ss.fit.method_options(method)]
+    settings = [f'{key}={defaults.get(key)}' for key in ss.fitting.method_options(method)]
     rows.append(dict(method=method, settings=', '.join(settings)))
 pd.DataFrame(rows).set_index('method')
 ```
 
-A default of `None` is chosen by the fit: for `scan`, 10 points per parameter, up to 100; for `restarts`, 3 searches (1 for one parameter of a deterministic model); for `particles`, chosen in each chain's warm-up for `'pmcmc'` (none for an ODE), and 200 for Optuna where a particle filter scores each trial; for `n_trials`, 50 per parameter, at least 100; for `n_runs`, 4 for a stochastic compartmental model and 1 otherwise; for `workers`, 1. What each setting means is in the API docs of `ss.fit.method()` (see [ss.fit](../api/fit.qmd)); a setting the method does not take is an error that lists those it does. The samplers are also callable directly, for a log-density of your own (such as `sim.log_density()`; see [Gradients](calibration_gradients.qmd#the-log-density)): `ss.fit.nuts()`, `ss.fit.pmmh()`, and `ss.fit.abc_smc()`.
+A default of `None` is chosen by the fit: for `scan`, 10 points per parameter, up to 100; for `restarts`, 3 searches (1 for one parameter of a deterministic model); for `particles`, chosen in each chain's warm-up for `'pmcmc'` (none for an ODE), and 200 for Optuna where a particle filter scores each trial; for `n_trials`, 50 per parameter, at least 100; for `n_runs`, 4 for a stochastic compartmental model and 1 otherwise; for `workers`, 1. What each setting means is in the API docs of `ss.fitting.method()` (see [ss.fitting](../api/fit.qmd)); a setting the method does not take is an error that lists those it does. The samplers are also callable directly, for a log-density of your own (such as `sim.log_density()`; see [Gradients](calibration_gradients.qmd#the-log-density)): `ss.fitting.nuts()`, `ss.fitting.pmmh()`, and `ss.fitting.abc_smc()`.

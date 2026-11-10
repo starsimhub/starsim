@@ -16,7 +16,7 @@ import pandas as pd
 import scipy.stats as stats
 import sciris as sc
 import starsim as ss
-import starsim.fit
+import starsim.internals.fitting
 import starsim.library as ssl
 
 kw = dict(verbose=0)
@@ -427,9 +427,9 @@ def test_outcomes():
     fit.summarize()
     assert np.isclose(fit.pars.beta, 0.3, rtol=0.01), f'Expected to recover beta=0.3, not {fit.pars.beta}'
     assert fit.objective < 0.01 < fit.objective_before
-    assert fit.converged and not sim.fit(method=ss.fit.method('nelder-mead', maxiter=3, scan=0), verbose=0).converged
+    assert fit.converged and not sim.fit(method=ss.fitting.method('nelder-mead', maxiter=3, scan=0), verbose=0).converged
     assert np.isclose(sim.new().init().diseases.sir.pars.beta.value, 0.15) # The original is not changed
-    zeros = ss.fit.mismatch(truth, fit.sim.data.assign(deaths=0.0)) # An all-zero series is scaled by the model, not counted raw
+    zeros = ss.fitting.mismatch(truth, fit.sim.data.assign(deaths=0.0)) # An all-zero series is scaled by the model, not counted raw
     assert np.isclose(zeros, 0.5) # Cases exact (0), deaths 1; before, the raw count of deaths (about 420 a week) swamped the cases
     refit = ss.Sim(make(0.15), pars=fit.pars, **pars).run() # The best-fit values can be passed to another sim
     assert np.allclose(refit.results.sir.I, fit.sim.results.sir.I)
@@ -556,7 +556,7 @@ def test_likelihood():
     assert fit.measure == 'negative log-likelihood'
     assert np.isclose(fit.pars.beta.value, 0.4, rtol=0.05)
     assert 2 < fit.pars.k < 100
-    assert np.isclose(ss.fit.loglik(fit.sim), -fit.objective)
+    assert np.isclose(ss.fitting.loglik(fit.sim), -fit.objective)
     pulled = make(beta=0.2, k=3, exposed=True, prior=ss.normal(0.3, 0.002)).fit(data=df, method='l-bfgs-b') # With a prior, the most probable value
     assert pulled.measure == 'negative log-posterior' and pulled.pars.beta.value < 0.35
 
@@ -573,11 +573,11 @@ def test_likelihood():
     assert np.isclose(fit2.pars.beta.value, 0.4, rtol=0.01)
 
     # The model that made the data predicts the held-out weeks better
-    comp = ss.fit.compare_models([make(), make(exposed=True)], data=df, verbose=0) # verbose= is passed to each fit (it was given twice)
+    comp = ss.fitting.compare_models([make(), make(exposed=True)], data=df, verbose=0) # verbose= is passed to each fit (it was given twice)
     assert comp.table.index[0] == 'SEIR'
     assert list(comp.fits.keys()) == ['SIR', 'SEIR']
     with pytest.raises(ValueError, match='lik has likelihoods and nolik not'): # One measure for every model, so likelihoods for all or none
-        ss.fit.compare_models(dict(lik=make(), nolik=make(lik=False)), data=df)
+        ss.fitting.compare_models(dict(lik=make(), nolik=make(lik=False)), data=df)
 
     # Data with its dates as text can be plotted with the sim
     dated = ss.Sim(make_sir(), start='2020-01-01', stop='2020-02-01', data=pd.DataFrame(dict(date=['2020-01-08', '2020-01-15'], infection=[5, 9])), **kw).run()

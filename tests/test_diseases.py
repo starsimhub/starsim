@@ -654,7 +654,7 @@ def test_mixed_disease():
     assert isinstance(sim.solver, ss.solvers.abm) # The coded array needs agents
     assert mixed.results.infection.sum() > 0 and mixed.years_infected.sum() > 0 # Both parts ran
     assert np.isclose(mixed.years_infected.sum(), (mixed.results.I[1:].sum() + mixed.I.n)*sim.t.dt_year) # One step for each step spent infected, the last step's included
-    fitted, _ = ss.fit.bounded_pars(ss.Sim(diseases=Mixed(rate=ss.par(1.0, bounds=[0.5, 2])), n_agents=100, verbose=0).init())
+    fitted, _ = ss.fitting.bounded_pars(ss.Sim(diseases=Mixed(rate=ss.par(1.0, bounds=[0.5, 2])), n_agents=100, verbose=0).init())
     assert list(fitted.keys()) == ['rate'] # Its code's parameter can be fitted too
     with pytest.raises(ss.CapabilityError): # A declared transition never calls set_prognoses()
         type('Bad', (ss.SIS,), dict(set_prognoses=lambda self, uids, sources=None: None))

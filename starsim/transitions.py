@@ -1486,7 +1486,7 @@ class outcome(Nameable):
         source (Transition/outcome/list): a transition, one branch of one (`cin.to(CA)`), another outcome, or a weighted sum of them, e.g. `0.5 * infection`
         delay (any): the time from the source event to this one: a duration or a distribution
         dur (any): how long each event counted stays in the outcome (e.g. a hospital stay), as a duration or a distribution; if given, also produces `n_<name>`: the number currently in it
-        likelihood (`ss.Dist`/func): optional likelihood, for calibration: a distribution, or a function `fn(observed, model)` returning the log-likelihood of each value (see `ss.fit.logpdf()`)
+        likelihood (`ss.Dist`/func): optional likelihood, for calibration: a distribution, or a function `fn(observed, model)` returning the log-likelihood of each value (see `ss.fitting.logpdf()`)
         name (str): the name; if not given, taken from the keyword or the variable it is assigned to
         label (str): a human-readable name
 

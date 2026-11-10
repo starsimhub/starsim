@@ -247,10 +247,10 @@ def _(): ss.Sim(sir(), networks=ss.DegreeNet(n_contacts=0.7, dur=1000), n_agents
 def _(): fittable(beta=ss.par(0.1, bounds=[0.05, 0.15])).fit()
 
 @trigger('so the stages after it were not run', RuntimeWarning)
-def _(): fittable().fit(method=[ss.fit.method('nelder-mead', maxiter=2, scan=0), 'nelder-mead'])
+def _(): fittable().fit(method=[ss.fitting.method('nelder-mead', maxiter=2, scan=0), 'nelder-mead'])
 
 @trigger('the chains disagree about beta', ss.errors.NotConverged)
-def _(): fittable(solver='binomial', total_pop=10_000).fit(method=ss.fit.method('pmcmc', draws=10, warmup=10, chains=2, particles=10, parallel=False), likelihood=dict(I=ss.poisson()), rand_seed=1).summarize() # Warned when the fit is summarized
+def _(): fittable(solver='binomial', total_pop=10_000).fit(method=ss.fitting.method('pmcmc', draws=10, warmup=10, chains=2, particles=10, parallel=False), likelihood=dict(I=ss.poisson()), rand_seed=1).summarize() # Warned when the fit is summarized
 
 @trigger('not exported: network', ss.errors.LossyExport)
 def _(): ss.export_to(ss.Sim(sir(), networks='random', n_agents=100, **kw), 'odin')

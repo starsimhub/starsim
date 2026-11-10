@@ -306,8 +306,8 @@ def test_odin2(tmp_path):
     # Data with ~ are outcomes with their likelihoods: cases is the weekly count, and deaths a share rho of it with a negative binomial
     weekly = a.incidence.values[1:99].reshape(14, 7).sum(axis=1)
     data = pd.DataFrame(dict(cases=np.round(weekly), deaths=np.round(0.5*weekly)), index=a.timevec[7:99:7])
-    lik = ss.fit.loglik(two, data=data, by_series=True)
-    assert np.isclose(lik.cases, ss.fit.loglik(one, data=data[['cases']].rename(columns=dict(cases='incidence')), likelihood=dict(incidence=ss.poisson())))
+    lik = ss.fitting.loglik(two, data=data, by_series=True)
+    assert np.isclose(lik.cases, ss.fitting.loglik(one, data=data[['cases']].rename(columns=dict(cases='incidence')), likelihood=dict(incidence=ss.poisson())))
     assert np.isfinite(lik.deaths) and 1*two.diseases[0].pars.rho == 0.5
     return two
 

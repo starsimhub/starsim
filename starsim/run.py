@@ -260,7 +260,7 @@ class MultiSim:
                 errormsg = 'ss.parallel() takes pars= or priors=, not both'
                 raise ValueError(errormsg)
             if priors is True:
-                from .fit import prior_draws
+                from .internals.fitting import prior_draws
                 pars = prior_draws(sims[0], sc.ifelse(n_runs, 100), rand_seed=sims[0].pars.rand_seed)
             else:
                 if n_runs is not None:
@@ -1324,7 +1324,7 @@ def restart_runs(sims, n_runs, pars=None, draws=False, starts=None):
     the kernels for tens of thousands of runs, once JAX has started.
 
     With `starts`, one for each set of values: where its runs start, by the name of the module that runs the compartments (each a `start`
-    of `ss.solvers.Compartmental.run_many()`), for the runs to continue from (e.g. from the runs drawn with a posterior: see `ss.fit.Fit.project()`);
+    of `ss.solvers.Compartmental.run_many()`), for the runs to continue from (e.g. from the runs drawn with a posterior: see `ss.fitting.Fit.project()`);
     a module without one starts at the start. The sims of the runs are then not available, only their results.
     """
     has_graph = lambda sim: any(getattr(mod, 'graph', None) is not None for mod in ss.utils.given_modules(sim.pars)) # Only a sim with a declared module can be run whole

@@ -257,7 +257,7 @@ website:
         - section: "**Workflows**"
           contents:
             - api/run.qmd
-            - api/fit.qmd
+            - api/internals.fitting.qmd
             - api/geo.qmd
             - api/data.qmd
         - section: "**I/O**"
@@ -334,7 +334,6 @@ quartodoc:
         - demographics
         - diseases
         - distributions
-        - fit
         - geo
         - interventions
         - networks
@@ -369,6 +368,7 @@ quartodoc:
         - internals.dists
         - internals.errors
         - internals.expressions
+        - internals.fitting
         - internals.gradients
         - internals.graph
         - internals.loop

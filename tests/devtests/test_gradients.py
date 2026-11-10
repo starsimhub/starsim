@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import sciris as sc
 import starsim as ss
-import starsim.fit
+import starsim.internals.fitting
 from test_kernels import models, largest_diff
 
 kw = dict(verbose=0)
@@ -96,8 +96,8 @@ def test_fit():
     print(fit.table)
     assert fit.method == 'l-bfgs-b'
     assert np.allclose(fit.table.best, [0.5, 6, 0.002], rtol=1e-2)
-    assert ss.fit.default_method(fit.sim, False, n_pars=2)[0] == 'nelder-mead' # Faster than gradients for one or two parameters
-    assert ss.fit.default_method(fit.sim, True)[0] == 'l-bfgs-b' # A best fit, with a likelihood too: a posterior is asked for by name
+    assert ss.fitting.default_method(fit.sim, False, n_pars=2)[0] == 'nelder-mead' # Faster than gradients for one or two parameters
+    assert ss.fitting.default_method(fit.sim, True)[0] == 'l-bfgs-b' # A best fit, with a likelihood too: a posterior is asked for by name
     return fit
 
 
@@ -126,21 +126,21 @@ def test_posterior():
     truth = make_sir(beta=0.5, dur=6).run().results.sir
     weekly = np.add.reduceat(truth.cases.values, np.arange(0, len(truth.cases), 7))[:-1] # A flow is compared with its total over the steps from its data point to the next (the last, partial week left out)
     data = pd.DataFrame(dict(cases=np.random.default_rng(1).poisson(weekly)), index=truth.timevec[::7][:len(weekly)])
-    fit = make_sir(dur=6, data=data).fit(pars=['beta'], likelihood=dict(cases=ss.poisson()), method=ss.fit.method('nuts', draws=100, warmup=100, chains=2), rand_seed=1, verbose=True)
+    fit = make_sir(dur=6, data=data).fit(pars=['beta'], likelihood=dict(cases=ss.poisson()), method=ss.fitting.method('nuts', draws=100, warmup=100, chains=2), rand_seed=1, verbose=True)
     fit.summarize()
     table = fit.table.set_index('par')
     assert fit.method == 'nuts'
     assert len(fit.samples) == 200 and list(fit.samples.columns) == ['chain', 'draw', 'beta']
     assert table.lower.beta < 0.5 < table.upper.beta # The posterior covers the value that made the data
     assert np.all(table.rhat < 1.1)
-    assert np.isnan(ss.fit.diagnose(np.random.default_rng(1).random((2, 3, 1)))[1]).all() # Chains too short for an effective sample size
+    assert np.isnan(ss.fitting.diagnose(np.random.default_rng(1).random((2, 3, 1)))[1]).all() # Chains too short for an effective sample size
     chains = np.zeros((4, 4000)) # Four AR(1) chains with a lag-1 correlation of 0.5, whose effective sample size is a third of the draws
     noise = np.random.default_rng(1).standard_normal(chains.shape)
     for t in range(1, chains.shape[1]):
         chains[:, t] = 0.5*chains[:, t-1] + noise[:, t]
-    rhat, ess = ss.fit.diagnose(chains[:, :, None])
+    rhat, ess = ss.fitting.diagnose(chains[:, :, None])
     assert rhat[0] < 1.01 and np.isclose(ess[0], chains.size/3, rtol=0.05)
-    assert ss.fit.diagnose(chains[:, :, None] + np.array([0, 0, 0, 1.0])[:, None, None])[0][0] > 1.05 # One chain apart from the others
+    assert ss.fitting.diagnose(chains[:, :, None] + np.array([0, 0, 0, 1.0])[:, None, None])[0][0] > 1.05 # One chain apart from the others
     assert fit.diagnostics.band['cases'].shape == (2, len(data)) # Over the weeks of the data, as the fit compares them
     with pytest.raises(ValueError): # A posterior needs a likelihood
         make_sir(data=data).fit(pars=['beta'], method='nuts')
@@ -208,14 +208,14 @@ def test_joint_states():
     large = make_coinfection(beta=0.2, total_pop=1e7).run().results # Large, so that runs differ little
     data = pd.DataFrame({'hiv.I':large.hiv.I.values, 'syph.I':large.syph.I.values}, index=large.hiv.timevec)[::8]
     lik = {'hiv.I':ss.nbinom(n=20), 'syph.I':ss.nbinom(n=20)}
-    pf = np.mean([ss.fit.ParticleFilter(make_coinfection(beta=0.2, data=data, solver='binomial', total_pop=1e7).init(), likelihood=lik)(n_particles=20, rand_seed=seed) for seed in range(3)])
-    direct = np.mean([ss.fit.loglik(make_coinfection(beta=0.2, data=data, solver='binomial', total_pop=1e7, rand_seed=seed).run(), likelihood=lik) for seed in range(3)])
+    pf = np.mean([ss.fitting.ParticleFilter(make_coinfection(beta=0.2, data=data, solver='binomial', total_pop=1e7).init(), likelihood=lik)(n_particles=20, rand_seed=seed) for seed in range(3)])
+    direct = np.mean([ss.fitting.loglik(make_coinfection(beta=0.2, data=data, solver='binomial', total_pop=1e7, rand_seed=seed).run(), likelihood=lik) for seed in range(3)])
     print(f'Particle filter {pf:.2f}, direct runs {direct:.2f}')
     assert abs(pf - direct) < 1 # The filter estimates the likelihood of runs of the sim
 
     # NUTS, with the log-density in JAX
     data = pd.DataFrame({'hiv.I':fresh.hiv.I.values, 'syph.I':fresh.syph.I.values}, index=fresh.hiv.timevec)[::8]
-    fit = make_coinfection(data=data).fit(likelihood={'hiv.I':ss.normal(std=50), 'syph.I':ss.normal(std=50)}, method=ss.fit.method('nuts', draws=50, warmup=50, chains=2), rand_seed=1, verbose=True)
+    fit = make_coinfection(data=data).fit(likelihood={'hiv.I':ss.normal(std=50), 'syph.I':ss.normal(std=50)}, method=ss.fitting.method('nuts', draws=50, warmup=50, chains=2), rand_seed=1, verbose=True)
     table = fit.table.set_index('par')
     assert fit.method == 'nuts'
     assert table.lower['hiv.beta'] < 0.2 < table.upper['hiv.beta']
@@ -245,7 +245,7 @@ def test_posterior_data():
     # Fitted with the log-density in JAX: it is checked against runs of the sim, and sampled again with Python in the loop if they differ
     with sc.capture() as txt, warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter('always')
-        fit = make(data=pd.DataFrame(rows)).fit(likelihood=dict(I=ss.normal(std=50), n_hosp=ss.normal(std=5)), method=ss.fit.method('nuts', draws=50, warmup=50, chains=2), rand_seed=1, verbose=True)
+        fit = make(data=pd.DataFrame(rows)).fit(likelihood=dict(I=ss.normal(std=50), n_hosp=ss.normal(std=5)), method=ss.fitting.method('nuts', draws=50, warmup=50, chains=2), rand_seed=1, verbose=True)
     assert 'Python in the loop' not in txt and not any('differs' in str(w.message) for w in caught)
     table = fit.table.set_index('par')
     assert table.lower.beta < 0.5 < table.upper.beta
@@ -304,15 +304,15 @@ def test_several_values():
     x = ld.x0*1.1
     out = {}
     for name,rmin,ckpt in [('forward', np.inf, np.inf), ('reverse', 0, np.inf), ('checkpointed', 0, 0)]:
-        reverse_min, checkpoint_bytes = ss.fit.reverse_min, ss.gradients.checkpoint_bytes
-        ss.fit.reverse_min, ss.gradients.checkpoint_bytes = rmin, ckpt
+        reverse_min, checkpoint_bytes = ss.fitting.reverse_min, ss.gradients.checkpoint_bytes
+        ss.fitting.reverse_min, ss.gradients.checkpoint_bytes = rmin, ckpt
         try:
-            problem = ss.fit.Problem(sim, likelihood=dict(infection=ss.poisson()), verbose=0)
+            problem = ss.fitting.Problem(sim, likelihood=dict(infection=ss.poisson()), verbose=0)
             out[name] = problem.with_gradient(x)
             if name == 'reverse': # With more substeps than at the start: taken again with more
                 out['more'] = problem.with_gradient(x*2)
         finally:
-            ss.fit.reverse_min, ss.gradients.checkpoint_bytes = reverse_min, checkpoint_bytes
+            ss.fitting.reverse_min, ss.gradients.checkpoint_bytes = reverse_min, checkpoint_bytes
     for name in ['reverse', 'checkpointed']:
         assert np.isclose(out[name][0], out['forward'][0], rtol=1e-10) and np.allclose(out[name][1], out['forward'][1], rtol=1e-8), name
     assert np.isclose(out['more'][0], problem.objective(x*2), rtol=1e-8)
@@ -329,7 +329,7 @@ def test_several_values():
     fd = [(ld(x + 1e-6*e) - ld(x - 1e-6*e))/2e-6 for e in np.eye(3)]
     assert ld.names == ['dur[a]', 'dur[b]', 'dur[c]'] and np.allclose(ld.grad(x), fd, rtol=1e-5)
     run = ss.Sim(sir, unit='day', start=0, stop=60, data=ss.SimData(df), pars={'dur': ss.by(patch=[ss.days(v) for v in x])}, **kw).run()
-    assert np.isclose(ld(x), ss.fit.loglik(run, likelihood=dict(infection=ss.poisson())) + sum(ss.fit.logprior(dur, v) for v in x), rtol=1e-9) # As a run of the sim gives it
+    assert np.isclose(ld(x), ss.fitting.loglik(run, likelihood=dict(infection=ss.poisson())) + sum(ss.fitting.logprior(dur, v) for v in x), rtol=1e-9) # As a run of the sim gives it
 
     # A time series, fitted value by value
     days = [0, 20, 40, 60]
@@ -350,7 +350,7 @@ def test_several_values():
     sim = in_time([0.3]*4, data=ss.SimData(df))
     with pytest.raises(ss.CapabilityError, match='require_jax=False'):
         sim.fit(likelihood=dict(infection=poisson), method='l-bfgs-b', verbose=0)
-    problem = ss.fit.Problem(sim, likelihood=dict(infection=poisson), require_jax=False, verbose=0)
+    problem = ss.fitting.Problem(sim, likelihood=dict(infection=poisson), require_jax=False, verbose=0)
     value, grad = problem.with_gradient(problem.x0)
     assert np.isfinite(value) and np.all(np.isfinite(grad))
     return fit

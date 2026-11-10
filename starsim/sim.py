@@ -964,7 +964,7 @@ class Sim(ss.modules.Base):
 
         Fits every parameter that has `bounds` (see `ss.par`) to every result that has
         data (see `ss.Sim(data=...)`). The original sim is not changed. The fitting itself
-        is in `ss.fit`, which is imported when it is first used.
+        is in `ss.fitting`, which is imported when it is first used.
 
         A parameter can be one of a declared model, of a module written as code (`ssl.HIV(beta=ss.par(...))`,
         also a value in a dict parameter, fitted as e.g. `cin_fn.k`, or a setting kept as an attribute),
@@ -989,12 +989,12 @@ class Sim(ss.modules.Base):
             likelihood (`ss.Dist`/dict/bool): the likelihood of every data series (e.g. `ss.poisson()`), or of each by its name (e.g. `dict(prevalence=ss.normal(std=0.02))`), in place of any declared on its outcome; or False, for none (the declared ones are not used, and the fit minimizes the loss). The fit then maximizes their sum (plus the log of the priors of the parameters that have one, for the methods that find a best fit: the most probable values)
             loss (str/func): the measure of the mismatch to minimize, with no likelihoods (or in place of those declared on the outcomes): 'nae' (normalized absolute error, the default), 'rmse', or a function of the sim; any other name is an error
             penalty (func): a function of the parameter values (a dict by name, an array whole) returning a number added to what a best fit minimizes, e.g. a smoothness penalty, `lambda pars: 10*np.sum(np.diff(pars['knots'], 2)**2)`
-            method (str/`ss.fit.method`/list): by default, a best fit (a point estimate), by the method that suits the sim, which is printed with the reason: 'l-bfgs-b' for a deterministic sim, with gradients from JAX (see `ss.gradients`), or by finite differences for one that JAX cannot run; 'nelder-mead' for one whose likelihood or priors JAX does not cover (e.g. a likelihood given as a function), or with one or two fitted parameters (where it is faster than gradients); and 'optuna' for a stochastic sim, including an agent-based one. A posterior is asked for by name: 'nuts' (the No-U-Turn sampler, for a deterministic sim with gradients whose data series all have a likelihood, with each chain started from a draw near one of the best optima found from a scan over the bounds), 'pmcmc' (particle MCMC, for a sim whose data series all have a likelihood: a random-walk Metropolis sampler on the likelihood estimated by a particle filter for a stochastic compartmental sim (see `ss.fit.ParticleFilter`), or on the exact likelihood for a deterministic sim, e.g. one JAX cannot run; each chain starts from a different one of the best points of a scan, and a run is kept with each draw, `fit.trajectories`, which `fit.project()` continues), or 'abc-smc' (approximate Bayesian computation by sequential Monte Carlo, for any stochastic sim, with no likelihood needed; its accuracy depends on the tolerance it reaches, and it gives no posterior for a deterministic sim); the priors are the parameters' `prior=`, or uniform over their bounds. Also: 'if2' (iterated filtering, for the sims that 'pmcmc' fits: the maximum-likelihood values, from passes of a particle filter in which each particle's values are perturbed by a shrinking random walk; see `ss.fit.Swarm`), 'powell' (no gradients) or 'slsqp' (with gradients, like 'l-bfgs-b'). A method with settings is `ss.fit.method()`, e.g. `ss.fit.method('optuna', n_trials=200)` (the settings of each method, such as the number of runs per point for a stochastic sim, are listed there); a list of methods runs each from the best fit of the one before (a stage that does not converge stops the list, but not one whose convergence is not assessed, such as ABC-SMC's; see `ss.fit.fit_stages()`)
+            method (str/`ss.fitting.method`/list): by default, a best fit (a point estimate), by the method that suits the sim, which is printed with the reason: 'l-bfgs-b' for a deterministic sim, with gradients from JAX (see `ss.gradients`), or by finite differences for one that JAX cannot run; 'nelder-mead' for one whose likelihood or priors JAX does not cover (e.g. a likelihood given as a function), or with one or two fitted parameters (where it is faster than gradients); and 'optuna' for a stochastic sim, including an agent-based one. A posterior is asked for by name: 'nuts' (the No-U-Turn sampler, for a deterministic sim with gradients whose data series all have a likelihood, with each chain started from a draw near one of the best optima found from a scan over the bounds), 'pmcmc' (particle MCMC, for a sim whose data series all have a likelihood: a random-walk Metropolis sampler on the likelihood estimated by a particle filter for a stochastic compartmental sim (see `ss.fitting.ParticleFilter`), or on the exact likelihood for a deterministic sim, e.g. one JAX cannot run; each chain starts from a different one of the best points of a scan, and a run is kept with each draw, `fit.trajectories`, which `fit.project()` continues), or 'abc-smc' (approximate Bayesian computation by sequential Monte Carlo, for any stochastic sim, with no likelihood needed; its accuracy depends on the tolerance it reaches, and it gives no posterior for a deterministic sim); the priors are the parameters' `prior=`, or uniform over their bounds. Also: 'if2' (iterated filtering, for the sims that 'pmcmc' fits: the maximum-likelihood values, from passes of a particle filter in which each particle's values are perturbed by a shrinking random walk; see `ss.fitting.Swarm`), 'powell' (no gradients) or 'slsqp' (with gradients, like 'l-bfgs-b'). A method with settings is `ss.fitting.method()`, e.g. `ss.fitting.method('optuna', n_trials=200)` (the settings of each method, such as the number of runs per point for a stochastic sim, are listed there); a list of methods runs each from the best fit of the one before (a stage that does not converge stops the list, but not one whose convergence is not assessed, such as ABC-SMC's; see `ss.fitting.fit_stages()`)
             rand_seed (int): the random seed for the fitting method (default: the sim's, so a fit gives the same answer each time)
             verbose (bool): whether to print progress
 
         Returns:
-            An `ss.fit.Fit`, with the calibrated sim as `fit.sim` and the best-fit values as `fit.pars`
+            An `ss.fitting.Fit`, with the calibrated sim as `fit.sim` and the best-fit values as `fit.pars`
 
         Examples:
             ```python
@@ -1004,15 +1004,15 @@ class Sim(ss.modules.Base):
             sim = ss.Sim(sir, data='cases.csv', start='2020-01-01', stop='2020-06-01')
             fit = sim.fit() # A best fit
             post = sim.fit(method='nuts', likelihood=ss.poisson()) # A posterior, with a likelihood for each data series
-            more = sim.fit(method=ss.fit.method('nuts', draws=1000, chains=2), likelihood=ss.poisson()) # With settings of the method
+            more = sim.fit(method=ss.fitting.method('nuts', draws=1000, chains=2), likelihood=ss.poisson()) # With settings of the method
             fit.sim.plot()
             ```
         """
-        from . import fit
+        from .internals import fitting as fit
         if kwargs: # The settings of a method, which were keywords of sim.fit()
             key = list(kwargs)[0]
             name = method if isinstance(method, str) else getattr(method, 'name', 'optuna')
-            errormsg = f'sim.fit() takes no {key}=; the settings of a method are given with it, e.g. sim.fit(method=ss.fit.method("{name}", {key}=...))'
+            errormsg = f'sim.fit() takes no {key}=; the settings of a method are given with it, e.g. sim.fit(method=ss.fitting.method("{name}", {key}=...))'
             raise TypeError(errormsg)
         common = dict(pars=pars, data=data, weights=weights, likelihood=likelihood, loss=loss, penalty=penalty, rand_seed=rand_seed, verbose=verbose)
         if isinstance(method, (list, tuple)): # Staged fitting: each method starts from the best fit of the one before
@@ -1033,44 +1033,44 @@ class Sim(ss.modules.Base):
         over the shares of the total, and each point is a run (restarted, if the sim is nothing but compartments).
         With `target=`, the total is doubled until its best allocation reaches the target, then found by bisection
         between a total that reaches it and one that does not (to within 1%), assuming that more money never does worse.
-        The sim itself is not changed. The search is in `ss.fit`, which is imported when it is first used.
+        The sim itself is not changed. The search is in `ss.fitting`, which is imported when it is first used.
 
         Args:
-            goal (`ss.fit.maximize`/`ss.fit.minimize`): what to make as large or as small as possible: a result (e.g. `ss.fit.maximize('all_vs', at=2030)`, or `ss.fit.minimize('hiv.new_infections')`), or a function of the run sim
+            goal (`ss.fitting.maximize`/`ss.fitting.minimize`): what to make as large or as small as possible: a result (e.g. `ss.fitting.maximize('all_vs', at=2030)`, or `ss.fitting.minimize('hiv.new_infections')`), or a function of the run sim
             total (float): the total to allocate (default: the current total); with `target=`, the total the search starts from
             start (float/date): when the new allocation takes effect (default: the start of the sim), read as any time is (see `ss.connectors.to_time()`: a bare number is a year if the sim has a calendar)
             spend (dict/list): the spending parameters: names, or {program: name} (default: the imported programs)
             bounds (tuple/dict): the least and most a program can have, as amounts (default: 0 and the total); a dict gives them by program, e.g. `dict(testing=(1e5, None))` (None for no limit), and a program not in it has the default
-            target (float): the value of the result to reach (at least this with `ss.fit.maximize()`, at most with `ss.fit.minimize()`) with the least total
+            target (float): the value of the result to reach (at least this with `ss.fitting.maximize()`, at most with `ss.fitting.minimize()`) with the least total
             maxiter (int): the most iterations of the search (of each total's, with `target=`)
             verbose (bool): whether to print progress
 
-        Returns an `ss.fit.Optimization`.
+        Returns an `ss.fitting.Optimization`.
 
         Examples:
             ```python
             sim = ss.import_from('hiv_framework.xlsx', format='atomica', databook='hiv_databook.xlsx', progbook='hiv_progbook.xlsx', programs_start=2020)
-            best = sim.optimize(ss.fit.maximize('all_vs', at=2030), start=2020)
+            best = sim.optimize(ss.fitting.maximize('all_vs', at=2030), start=2020)
             best.summarize()
-            least = sim.optimize(ss.fit.maximize('all_vs', at=2030), start=2020, target=1.1*best.value) # The least money that reaches it
+            least = sim.optimize(ss.fitting.maximize('all_vs', at=2030), start=2020, target=1.1*best.value) # The least money that reaches it
             ```
         """
-        from . import fit
+        from .internals import fitting as fit
         for key in ['maximize', 'minimize', 'at']:
             if key in kwargs:
-                errormsg = f'sim.optimize() takes the goal as goal=ss.fit.{"maximize" if key == "at" else key}(...){", with at= in it" if key == "at" else ""}, e.g. goal=ss.fit.{"maximize" if key == "at" else key}("all_vs", at=2030), not {key}='
+                errormsg = f'sim.optimize() takes the goal as goal=ss.fitting.{"maximize" if key == "at" else key}(...){", with at= in it" if key == "at" else ""}, e.g. goal=ss.fitting.{"maximize" if key == "at" else key}("all_vs", at=2030), not {key}='
                 raise TypeError(errormsg)
         if kwargs:
             raise TypeError(f'sim.optimize() got an unexpected keyword argument "{list(kwargs)[0]}"')
         return fit.optimize(self, goal=goal, total=total, start=start, spend=spend, bounds=bounds, target=target, maxiter=maxiter, verbose=verbose)
 
     def sensitivity(self, **kwargs):
-        """ Which parameters matter: partial rank correlations of each parameter with bounds and each result, over samples within the bounds; see `ss.fit.sensitivity()`
+        """ Which parameters matter: partial rank correlations of each parameter with bounds and each result, over samples within the bounds; see `ss.fitting.sensitivity()`
 
         Args:
-            kwargs (dict): passed to `ss.fit.sensitivity()`
+            kwargs (dict): passed to `ss.fitting.sensitivity()`
         """
-        from . import fit
+        from .internals import fitting as fit
         return fit.sensitivity(self, **kwargs)
 
     def check_dt(self, factor=2):
@@ -2262,7 +2262,7 @@ class Sim(ss.modules.Base):
         Args:
             results (str/list): the results, by name, e.g. 'cases' (or 'sir.cases' if more than one module has one of that name)
             resample (str): the period each value is over, e.g. 'week' for the total of a flow over each week
-            noise (str/`ss.Dist`): 'poisson' (the default), for counts drawn with each value as their mean; a likelihood as `sim.fit()` takes it, with each value as its mean, e.g. `ss.nbinom(n=10)` for counts with a variance of mean + mean²/10 (see `ss.fit.logpdf()`); or None, for the values themselves
+            noise (str/`ss.Dist`): 'poisson' (the default), for counts drawn with each value as their mean; a likelihood as `sim.fit()` takes it, with each value as its mean, e.g. `ss.nbinom(n=10)` for counts with a variance of mean + mean²/10 (see `ss.fitting.logpdf()`); or None, for the values themselves
             rand_seed (int): the random seed for the noise (default: the sim's)
 
         Returns:
@@ -2294,7 +2294,7 @@ class Sim(ss.modules.Base):
                 raise ValueError(errormsg)
             series = res.to_series(resample=resample)
             values = series.to_numpy(dtype=float)
-            columns[name] = values if noise is None else ss.fit.draw(noise, values, rng)
+            columns[name] = values if noise is None else ss.fitting.draw(noise, values, rng)
         timecol = 'date' if isinstance(series.index[0], (ss.date, pd.Timestamp)) else 'time'
         return sc.dataframe({timecol:list(series.index), **columns})
 

@@ -24,7 +24,7 @@ def test_make_index():
     assert len(names) == len(set(names)), 'Entries should be unique'
 
     print('Checking entries')
-    namespaces = {'ss':ss, 'ssl':ssl, 'ss.solvers':ss.solvers, 'ss.fit':ss.fit, 'ss.geo':ss.geo, 'ss.data':ss.data}
+    namespaces = {'ss':ss, 'ssl':ssl, 'ss.solvers':ss.solvers, 'ss.fitting':ss.fitting, 'ss.geo':ss.geo, 'ss.data':ss.data}
     for entry in entries:
         name = entry['name']
         prefix, attr = name.rsplit('.', 1)
@@ -39,7 +39,7 @@ def test_make_index():
     assert entrydict['ss.SIR']['pars']['beta'] == 'ss.perday(0.3)', 'Expecting ss.SIR to list its default pars'
     assert entrydict['ss.Sim']['example'], 'Expecting ss.Sim to have an example'
     assert entrydict['ssl.Cholera']['module'] == 'library.diseases'
-    assert entrydict['ss.fit.compare_models']['module'] == 'fit' and 'ss.geo.gravity' in entrydict and 'ss.data.population' in entrydict
+    assert entrydict['ss.fitting.compare_models']['module'] == 'fitting' and 'ss.geo.gravity' in entrydict and 'ss.data.population' in entrydict
     assert entrydict['ss.Arr']['extension'] and not entrydict['ss.Sim']['extension'], 'Expecting the index to mark the names for extending Starsim'
     assert 'run()' in entrydict['ss.Sim']['methods'] and 'init_module_attrs()' not in entrydict['ss.Sim']['methods'], 'Expecting public methods only'
     for alias,canonical in index['aliases'].items():

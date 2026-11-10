@@ -102,10 +102,10 @@ from . import converters
 from .converters import import_from, export_to
 
 def __getattr__(name):
-    """ Import ss.fit when it is first used, so that import starsim stays fast """
-    if name == 'fit':
+    """ Import ss.fitting when it is first used, so that import starsim stays fast """
+    if name == 'fitting':
         import importlib
-        return importlib.import_module(f'.{name}', __name__)
+        return importlib.import_module('.internals.fitting', __name__)
     if name == 'library':
         hint = '; import it first: import starsim.library as ssl'
     else:

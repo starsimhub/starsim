@@ -200,7 +200,7 @@ def reported(observed, recovered):
     lik = np.where(observed > 0, sps.norm.cdf(observed + 0.5, m, sd) - sps.norm.cdf(observed - 0.5, m, sd), sps.norm.cdf(0.5, m, sd))
     return np.log(lik + 1e-18)
 
-ss.fit.loglik(sim, likelihood=dict(recovery=reported))
+ss.fitting.loglik(sim, likelihood=dict(recovery=reported))
 ```
 
 The function can be given wherever a distribution is: on an outcome (`ss.outcome(..., likelihood=reported)`), to `sim.fit(likelihood=...)`, and to the particle filter. For a single stochastic run, the log-likelihood is low, since its epidemics are not in step with the data; a particle filter (below) measures the fit properly.
@@ -302,13 +302,13 @@ measles = ss.Disease(
 )
 declared = ss.Sim(measles, solver=ss.solvers.binomial(substeps=1), total_pop=pop[0], start=start, stop=stop, dt=ss.days(1), data=data, verbose=0)
 declared.init()
-ss.fit.ParticleFilter.reason(declared) # Why the filter can't run the sim: None, since the kernels run it whole
+ss.fitting.ParticleFilter.reason(declared) # Why the filter can't run the sim: None, since the kernels run it whole
 ```
 
-`substeps=1` takes each day whole, with a chance of `1 − exp(−rate·dt)` on every exit, as He et al.'s Euler-multinomial step does. `declared.describe()` shows the noise under the transition of infection. Starsim's particle filter, `ss.fit.ParticleFilter`, takes the sim and the likelihood, and gives an estimate of the log-likelihood for a number of particles and a seed:
+`substeps=1` takes each day whole, with a chance of `1 − exp(−rate·dt)` on every exit, as He et al.'s Euler-multinomial step does. `declared.describe()` shows the noise under the transition of infection. Starsim's particle filter, `ss.fitting.ParticleFilter`, takes the sim and the likelihood, and gives an estimate of the log-likelihood for a number of particles and a seed:
 
 ```{python}
-filt = ss.fit.ParticleFilter(declared, likelihood=dict(recovery=reported))
+filt = ss.fitting.ParticleFilter(declared, likelihood=dict(recovery=reported))
 print(f'Log-likelihood: {filt(n_particles=200, rand_seed=0):,.1f}')
 ```
 

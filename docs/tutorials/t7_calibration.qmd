@@ -188,7 +188,7 @@ Other values may fit almost as well: in the report above, one search ended at β
 The range of values consistent with the data is a **posterior**. Finding it takes two more things. A **likelihood** says how the data vary around the model: here, as counts that vary more than Poisson counts (`ss.nbinom(n=20)`, a negative binomial). A **prior** says what is known before seeing the data: the share reported has one (`prior=` above), from earlier outbreaks: about a third, with a standard deviation of 10 percentage points (a beta distribution). β has none, so its prior is uniform over its bounds. (The best fit above ignored the prior, since it uses no likelihood.) The sampler, NUTS, then draws values in proportion to how probable they are, given both:
 
 ```{python}
-post = sim.fit(method=ss.fit.method('nuts', draws=1000, warmup=1000), likelihood=dict(cases=ss.nbinom(n=20)))
+post = sim.fit(method=ss.fitting.method('nuts', draws=1000, warmup=1000), likelihood=dict(cases=ss.nbinom(n=20)))
 post.summarize()
 ```
 

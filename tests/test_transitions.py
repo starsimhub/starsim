@@ -15,7 +15,7 @@ import pandas as pd
 import scipy.stats as stats
 import sciris as sc
 import starsim as ss
-import starsim.fit
+import starsim.internals.fitting
 import starsim.library as ssl
 
 kw = dict(verbose=0)

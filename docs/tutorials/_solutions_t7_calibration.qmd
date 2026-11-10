@@ -44,7 +44,7 @@ likelihood = dict(cases=ss.nbinom(n=20))
 posts = {}
 for label, prior in [('With the prior', True), ('Without it', False)]:
     sim = ss.Sim(make_measles(prior=prior), data=data, **settings)
-    posts[label] = sim.fit(method=ss.fit.method('nuts', draws=1000, warmup=1000), likelihood=likelihood, verbose=False)
+    posts[label] = sim.fit(method=ss.fitting.method('nuts', draws=1000, warmup=1000), likelihood=likelihood, verbose=False)
     row = posts[label].table.set_index('par').loc['reported']
     proj = posts[label].project(n_runs=100)
     print(label, '- reported:', round(row['median'], 2), f"({round(row['lower'], 2)} to {round(row['upper'], 2)})",

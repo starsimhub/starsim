@@ -87,7 +87,7 @@ module_titles = sc.obj(
     parameters    = 'Parameters',
     results       = 'Results',
     run           = 'Running multiple simulations',
-    fit           = 'Fitting to data',
+    fitting       = 'Fitting to data',
     geo           = 'Places and movement',
     data          = 'Data by place',
     arrays        = 'Arrays and agent indexing',
@@ -287,7 +287,7 @@ def _getnames(prefix):
         return [name for name in ssl.__all__ if name not in libraries]
     elif prefix == 'ss.solvers': # Only the solvers to choose from; the engines are internal
         return [name for name in ss.solvers.solver_names if name != 'auto']
-    return getattr(ss, prefix.removeprefix('ss.')).__all__ # e.g. ss.fit
+    return getattr(ss, prefix.removeprefix('ss.')).__all__ # e.g. ss.fitting
 
 
 def make_index():
@@ -310,7 +310,7 @@ def make_index():
     entries = []
     aliasmap = {}
     public = _docnames()
-    for prefix, namespace in [('ss', ss), ('ss.solvers', ss.solvers), ('ss.fit', ss.fit), ('ss.geo', ss.geo), ('ss.data', ss.data), ('ssl', ssl)]:
+    for prefix, namespace in [('ss', ss), ('ss.solvers', ss.solvers), ('ss.fitting', ss.fitting), ('ss.geo', ss.geo), ('ss.data', ss.data), ('ssl', ssl)]:
 
         # Group names by object, so aliases collapse into one entry
         groups = {} # Map id(obj) to the list of names pointing at it

@@ -135,7 +135,7 @@ Each path below is checked against a reference where one exists: the ODE against
 | A declared model as agents | `abm`, or `'auto'` choosing it | `devtests/test_contracts.py::test_solvers_agree`, `test_agents_match_ode` (within 3% of the ODE), `test_dwell_forms` |
 | Built-in modules as agents | `ss.SIR`, `ss.RandomNet`, births and deaths | `test_baselines.py::test_baseline` (results identical to the recorded baseline) |
 | Modules written as code | their own `step()`, alone or beside a declared model | `test_composition.py`; `devtests/test_contracts.py::test_coded_beside` (code beside a declared model leaves its results unchanged) |
-| Particle filter | `ss.fit.ParticleFilter` | `devtests/test_contracts_inference.py::test_particle_filter` (against direct runs) |
+| Particle filter | `ss.fitting.ParticleFilter` | `devtests/test_contracts_inference.py::test_particle_filter` (against direct runs) |
 | `@ss.jit` | users' compiled code | `test_jit.py` (same results compiled as run as Python) |
 
 The [developer guide](../contributing/developer.qmd#testing) explains the suites these come from, and which to run after a change.

@@ -150,7 +150,7 @@ def test_multisim():
         assert len(set(draws.results.sir.infection.values.sum(axis=1))) == 3 # So they differ by chance as well as by their values
         assert draws.sims[2].pars.rand_seed == 3 and np.array_equal(draws.sims[2].results.sir.I.values, draws.results.sir.I.values[2])
     drawn = ss.Disease(infection=S >> I @ ss.par(0.3, bounds=[0.2, 0.4])*I, recovery=I >> R @ ss.par(0.1, prior=ss.normal(0.1, 0.01)), init_n=dict(I=10), name='sir')
-    draws = ss.fit.prior_draws(ss.Sim(drawn, total_pop=1000, stop=5, unit='day', solver='ode', verbose=0), n=8, rand_seed=1)
+    draws = ss.fitting.prior_draws(ss.Sim(drawn, total_pop=1000, stop=5, unit='day', solver='ode', verbose=0), n=8, rand_seed=1)
     assert sorted(np.floor((np.array(list(draws.values())[0]) - 0.2)/0.2*8)) == list(range(8)) # A Latin hypercube: one draw in each slice of the bounds
     # Runs taken in the kernels have the sim's own results, as runs one at a time do
     fast = ss.parallel(ss.Sim(sir, solver='binomial', total_pop=10_000, stop=50, verbose=0), n_runs=3, workers=1)

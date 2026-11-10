@@ -201,7 +201,7 @@ The model's value is the mean of the distribution, and the rest (here the disper
 
 ## Appendix: every likelihood
 
-A likelihood is given with an outcome (`ss.outcome(..., likelihood=...)`), or to the fit by the name of the data series (`sim.fit(likelihood=dict(cases=...))`). In each, the model's value at the data is the mean (or the probability), and the other parameters can be numbers or fitted `ss.par()`s. See [`ss.fit`](../api/fit.qmd).
+A likelihood is given with an outcome (`ss.outcome(..., likelihood=...)`), or to the fit by the name of the data series (`sim.fit(likelihood=dict(cases=...))`). In each, the model's value at the data is the mean (or the probability), and the other parameters can be numbers or fitted `ss.par()`s. See [`ss.fitting`](../api/fit.qmd).
 
 | Likelihood | The model's value is | Suits |
 |---|---|---|

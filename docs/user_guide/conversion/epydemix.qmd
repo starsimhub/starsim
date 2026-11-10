@@ -108,7 +108,7 @@ truth = make_sim(ss.par(0.5), rand_seed=2).run()
 data = truth.to_synthetic_data('infection', resample='week', noise=None) # Compared with the result infection
 
 sim = make_sim(ss.par(0.5, bounds=[0.1, 1]), data=data)
-fit = sim.fit(method=ss.fit.method('abc-smc', samples=50, generations=3), rand_seed=1, verbose=0)
+fit = sim.fit(method=ss.fitting.method('abc-smc', samples=50, generations=3), rand_seed=1, verbose=0)
 fit.table # The posterior median of b and its 95% interval (lower, upper); the true value is 0.5
 ```
 
