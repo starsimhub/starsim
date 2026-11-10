@@ -344,6 +344,8 @@ def count_now(sim, cond=None, mod=None):
     sel = selector.select(cond)
     if selector.abm:
         sel = np.asarray(sel, dtype=bool) & sim.people.alive.raw
+        if sim.people.has_unborn: # Agents not yet born are not people yet (as in the result alive)
+            sel[sim.people.unborn_uids()] = False
         weights = ss.results.agent_weights(sim)
         n = np.sum(weights[sel]) if weights is not None else np.count_nonzero(sel)
         return float(n*sim.current_scale)

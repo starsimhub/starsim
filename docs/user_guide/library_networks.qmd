@@ -61,7 +61,7 @@ msim = ss.parallel(scenarios, n_runs=5, workers=1)
 
 sim = msim.sims[0]
 for name, net in sim.networks.items():
-    print(name, 'contacts per person:', round(2*len(net) / sim.people.n_alive, 1))
+    print(name, 'contacts per person:', round(2*len(net) / sim.people.alive.count(), 1))
 msim.plot('sir.I')
 ```
 

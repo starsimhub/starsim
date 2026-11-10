@@ -2234,7 +2234,7 @@ class Engine(Telling, Effects):
         sim = self.sim
         if not isinstance(sim.solver, ss.solvers.abm) or not sim.pars.rescale or 'unrepresented' not in sim.results:
             return self.stocks, self.stock_groups
-        n_alive = sim.people.n_alive
+        n_alive = sim.people._n_agents_alive()
         extra = sim.results.unrepresented[sim.ti]/self.scale/n_alive if n_alive else 0.0 # For each agent alive, in agents
         if not extra:
             return self.stocks, self.stock_groups

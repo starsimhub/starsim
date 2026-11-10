@@ -284,7 +284,8 @@ def mock_people(n_agents=100, min_age=0, max_age=70, age_seed=1):
         slot = np.arange(n_agents),
         age = rng.uniform(min_age, max_age, size=n_agents),
         alive = np.ones(n_agents, dtype=bool),
-        n_alive = n_agents, # A mock People has no deaths, so this matches len(people)
+        n = n_agents, # A mock People has no deaths or scale, so this matches len(people)
+        _n_agents_alive = lambda: n_agents,
         add_module = lambda x: None, # Placeholder function
     )
     return people

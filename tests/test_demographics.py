@@ -543,7 +543,7 @@ def test_unborn():
     r = sim.results
     born = ppl.alive.raw[ppl.auids] & (ppl.age.raw[ppl.auids] >= 0)
     assert r.alive[-1] < r.alive[-1] + r.pregnancy.unborn[-1] and r.pregnancy.unborn[-1] > 0
-    assert np.isclose(ppl.n_alive, born.sum())
+    assert np.isclose(ppl.n, born.sum())
     return sim
 
 

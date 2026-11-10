@@ -638,7 +638,7 @@ class Loop:
             ```python
             # Simple label matching with analyzer-like functionality
             def check_pop_size(sim):
-                print(f'Population size is {len(sim.people)}')
+                print(f'Population size is {sim.people.n:n}')
 
             sim = ss.Sim(diseases='sir', networks='random', demographics=True)
             sim.init()

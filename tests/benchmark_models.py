@@ -40,7 +40,7 @@ class MosquitoODE(ss.Module):
 
     def step(self):
         dt = self.t.dt.days
-        n = self.sim.people.N
+        n = self.sim.people.n
         lam = self.a*self.p_inf
         S, E, I = self.S, self.E, self.I
         self.S = max(S + (self.rate_now()*n - lam*S - self.mu*S)*dt, 0)

@@ -503,16 +503,25 @@ def test_cli_compile_rust(tmp_path, monkeypatch):
 
 
 def test_jax_platform(monkeypatch):
-    """ ss.options.jax chooses JAX's platform, and a GPU plugin of another version than jaxlib is warned of before JAX starts (it can crash XLA) """
+    """ ss.options.jax chooses JAX's platform, also once JAX has started, and a GPU plugin of another version than jaxlib is warned of before JAX starts (it can crash XLA) """
     sc.heading('Testing the platform of JAX')
     with pytest.raises(ValueError, match='JAX platform'):
         ss.options.jax = 3
-    with ss.options.context(jax='cpu'):
+    with ss.options(jax='cpu'):
         assert ss.options.jax == 'cpu'
     assert ss.options.jax == 'auto'
 
     import importlib.metadata as md
     pytest.importorskip('jax')
+    env = os.environ.get('JAX_PLATFORMS')
+    jax = ss.gradients.jax() # Started on its own platforms (the CPU in the tests: see conftest.py)
+    with ss.options(jax='cpu'): # Started again, on these
+        assert ss.gradients.jax().default_backend() == 'cpu'
+        assert os.environ['JAX_PLATFORMS'] == 'cpu'
+        assert float(jax.numpy.ones(2).sum()) == 2
+    ss.gradients.jax() # And back to what it had
+    assert os.environ.get('JAX_PLATFORMS') == env
+    assert (jax.config.jax_platforms or None) == ss.gradients.original['platforms']
     real = md.distributions
     class Plugin:
         version = '0.0.1'

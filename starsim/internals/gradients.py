@@ -30,46 +30,66 @@ diff_fields = ['inflow', 'contacts', 'mat', 'sh_val', 'tgt_w', 'crd_w', 'maps', 
 table_fields = ['fixed', 'mult', 'consts', 'rel_trans'] # As tables over the steps: see ss.solvers.Compartmental.tables()
 
 
-platform_advice = 'run JAX on the CPU: ss.options.jax = "cpu" (or the environment variable STARSIM_JAX=cpu, or JAX_PLATFORMS=cpu), before JAX is first used' # What to do when JAX fails to start on a GPU
+platform_advice = 'run JAX on the CPU: ss.options.jax = "cpu" (or the environment variable STARSIM_JAX=cpu, or JAX_PLATFORMS=cpu)' # What to do when JAX fails to start on a GPU
+original = {} # JAX's platforms, and JAX_PLATFORMS, before ss.options.jax first changed them (see jax()), which "auto" goes back to
 
 
 def jax():
     """
-    Import JAX (imported only when first used, since it takes a few tenths of a second)
+    Import JAX (imported only when first used, since it takes a few tenths of a second), on the platform that `ss.options.jax` says
 
     If JAX has not been imported yet, it is given a device for each core of the CPU (as
     `numpyro.set_host_device_count()` does), or as many as the threads asked for in the
     environment (e.g. `OMP_NUM_THREADS=1`: see `ss.settings.thread_limit`), so that the chains
     of a posterior run on cores of their own; everything else runs on the first. XLA's own
-    threads (most of them compiling) are not limited by it: no flag of XLA's limits them. The platform it runs
-    on is `ss.options.jax` (e.g. "cpu"), if not "auto". The first time, its devices are
-    started here, so that a GPU that fails to start (e.g. with a CUDA plugin of another
-    version than jaxlib) says what to do.
+    threads (most of them compiling) are not limited by it: no flag of XLA's limits them.
+
+    The platform it runs on is `ss.options.jax` (e.g. "cpu"), if not "auto". If JAX has
+    started already on others (by Starsim or anything else), it is started again on these:
+    arrays made already stay on their devices, and are moved when used with new ones, and
+    what was compiled is compiled again. "auto" goes back to the platforms JAX had before
+    Starsim first changed them. The first time, its devices are started here, so that a GPU
+    that fails to start (e.g. with a CUDA plugin of another version than jaxlib) says what to do.
     """
+    if ss.options.jax != 'auto':
+        if not original: # About to change them for the first time
+            env = os.environ.get('JAX_PLATFORMS')
+            original.update(env=env, platforms=sys.modules['jax'].config.jax_platforms if 'jax' in sys.modules else env)
+        platforms = ss.options.jax
+        os.environ['JAX_PLATFORMS'] = platforms # So that processes started from this one (e.g. MultiSim's) use them too
+    elif original: # Changed by Starsim before: go back
+        platforms = original['platforms']
+        if original['env'] is None:
+            os.environ.pop('JAX_PLATFORMS', None)
+        else:
+            os.environ['JAX_PLATFORMS'] = original['env']
+    else:
+        platforms = False # Nothing to change
     if 'jax' not in sys.modules:
         if 'xla_force_host_platform_device_count' not in os.environ.get('XLA_FLAGS', ''): # As many as the threads asked for in the environment, if any (e.g. OMP_NUM_THREADS=1: see ss.settings.thread_limit)
             devices = min(os.cpu_count() or 1, ss.settings.thread_limit or os.cpu_count() or 1)
             os.environ['XLA_FLAGS'] = f'{os.environ.get("XLA_FLAGS", "")} --xla_force_host_platform_device_count={devices}'.strip()
-        if ss.options.jax != 'auto':
-            os.environ['JAX_PLATFORMS'] = ss.options.jax
     try:
         import jax
     except ImportError as E:
         errormsg = 'Gradients need JAX, which is not installed: use pip install "starsim[jax]". Fitting by methods without gradients works without it.'
         raise ImportError(errormsg) from E
     from jax._src import xla_bridge
-    if not xla_bridge.backends_are_initialized(): # The first use, by Starsim or anything else
-        if ss.options.jax != 'auto':
-            jax.config.update('jax_platforms', ss.options.jax) # If JAX was imported before Starsim used it
-        else:
+    started = xla_bridge.backends_are_initialized() # By Starsim or anything else
+    if platforms is not False and (jax.config.jax_platforms or None) != (platforms or None):
+        if started: # On other platforms: start again
+            import jax.extend
+            jax.extend.backend.clear_backends()
+            started = False
+        jax.config.update('jax_platforms', platforms)
+    if not started:
+        if not jax.config.jax_platforms:
             check_plugins()
         try:
             jax.devices()
         except Exception as E:
             errormsg = f'JAX could not start its devices ({type(E).__name__}: {E}).\nIf this is a GPU that JAX cannot use, {platform_advice}'
             raise RuntimeError(errormsg) from E
-    elif ss.options.jax != 'auto' and ss.options.jax.split(',')[0] != jax.default_backend():
-        ss.warn(f'ss.options.jax = "{ss.options.jax}", but JAX was started already, on "{jax.default_backend()}", before Starsim used it; set it (or STARSIM_JAX, or JAX_PLATFORMS) before JAX is first used')
     if jax.config.jax_compilation_cache_dir is None: # Keep what is compiled for later sessions, unless told otherwise (e.g. by JAX_COMPILATION_CACHE_DIR)
         jax.config.update('jax_compilation_cache_dir', os.path.join(os.path.expanduser('~'), '.cache', 'starsim', 'jax'))
         jax.config.update('jax_persistent_cache_min_compile_time_secs', 0.25)

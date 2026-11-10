@@ -306,7 +306,7 @@ The kernels are the compiled code under every solver. All the sets give the same
 | `'numba'` | Kernels in Numba, compiled on first use (a few minutes, once per install, kept on disk; `ss.compile()` or `starsim init compile` does it ahead of time) | Without Rust: always for agents, and for compartmental runs once compiled, or long enough to be worth compiling first | An install from source without Rust; and comparing with Rust's, since Numba's are the reference. Your own `@ss.jit` code is compiled by Numba with any setting |
 | `'python'` | The compartmental kernels run as plain Python (the passes over agents are still compiled) | Without Rust, for a compartmental run too short to be worth compiling for (with a note) | Stepping through a compartmental run in a debugger; it is slow |
 
-JAX is not one of these sets: it takes an ODE run when asked (`sim.jax = True`), many ODE runs with different values, and gradients (`sim.gradient()`, and fits that use them). `ss.options.jax` (`STARSIM_JAX`) is the platform it runs on: `'auto'`, JAX's own choice, which is a GPU if it finds one, or a platform such as `'cpu'` or `'cuda'`; set it before JAX is first used in the session.
+JAX is not one of these sets: it takes an ODE run when asked (`sim.jax = True`), many ODE runs with different values, and gradients (`sim.gradient()`, and fits that use them). `ss.options.jax` (`STARSIM_JAX`) is the platform it runs on: `'auto'`, JAX's own choice, which is a GPU if it finds one, or a platform such as `'cpu'` or `'cuda'`. It can be changed at any time, e.g. for a block with `with ss.options(jax='cpu'):`: if JAX has started already on other platforms, Starsim starts it again on these the next time it uses it.
 
 ## Appendix: what needs agents
 
