@@ -11,6 +11,7 @@ import pandas as pd
 import sciris as sc
 import starsim as ss
 import datetime as dt
+import weakref
 from .expressions import as_expr, evaluate, Expr, par
 
 
@@ -1207,6 +1208,9 @@ class TimeValue:
         return val.__array_ufunc__(ufunc, method, *[val if x is self else x for x in inputs], **kwargs)
 
 
+shared_years = weakref.WeakKeyDictionary() # The times of time series as years, for each sim, by the times (see timeseries.years())
+
+
 class timeseries(TimeValue):
     """
     A value that varies in time, given at some times and interpolated between them
@@ -1287,6 +1291,11 @@ class timeseries(TimeValue):
             sim (`ss.Sim`): the sim
         """
         if self._years is None or self._years[0] is not sim:
+            key = tuple(map(float, self.times)) if all(sc.isnumber(t) for t in self.times) else None # Bare numbers, worked out once for each sim, since a model can have thousands of time series with the same times
+            shared = shared_years.setdefault(sim, {})
+            if key in shared:
+                self._years = (sim, shared[key])
+                return shared[key]
             out = []
             for time in self.times:
                 if isinstance(time, ss.Duration) and sim.t.calendar is None: # A time from 0 in any unit, e.g. ss.years(k/12) for each month in a sim in days, with no warning about its unit
@@ -1306,6 +1315,8 @@ class timeseries(TimeValue):
             elif len(out) > 1 and (out[-1] < start or out[0] > stop) and any(sc.isnumber(time) for time in self.times): # Bare times all outside the run: the value is flat over it
                 ss.note(f'every time of an ss.timeseries ({self.times[0]} to {self.times[-1]}) is outside the run, so its value is the same throughout: {ss.timeline.how_bare(sim.t)}', sim=sim)
             self._years = (sim, np.array(out, dtype=float))
+            if key is not None:
+                shared[key] = self._years[1]
         return self._years[1]
 
     fields = ['values']

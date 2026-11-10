@@ -533,6 +533,7 @@ def test_bare_units():
     for start in [2020, '2020-01-01']:
         sim = ss.Sim(sir, start=start, stop=2021, n_agents=100, verbose=0).init()
         assert np.allclose(ss.timeseries({2000: 1, 2030.5: 2, '2040-01-01': 3}).years(sim), [2000, 2030.5, 2040])
+        assert ss.timeseries({2000: 1, 2030: 2}).years(sim) is ss.timeseries({2000: 3, 2030: 4}).years(sim) # Bare times are worked out once for each sim, as a model can have thousands of time series
         with pytest.raises(ValueError, match='calendar year'): # The year 30, not 30 days after the start
             ss.connectors.to_ti(sim, 30)
         assert ss.connectors.to_ti(sim, ss.days(30)) == ss.connectors.to_ti(sim, sim.pars.start + ss.days(30)) == ss.connectors.to_ti(sim, '2020-01-31')
