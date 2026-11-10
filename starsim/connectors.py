@@ -443,7 +443,8 @@ class modify(Connector):
             module (Module): the module
             name (str): the name of the modifier in it
         """
-        self.target_module = module
+        if self.target_module is None: # A quantity of its own; a target in another module (e.g. 'hiv.latency') stays there
+            self.target_module = module
         self.target_name = getattr(self.target_name, 'name', self.target_name)
         self.where = None if self.where is None else ss.conditions.as_cond(self.where)
         self.name = self.label = name
@@ -515,8 +516,8 @@ class modify(Connector):
         for key in [name] if self.networks is None else [f'{tr}@{route}' for tr in names for route in self.networks]: # On a route, under the transmission's name and the route's (see ss.connectors.route_mult())
             sim.modifiers[(modname, kind, key)].append(self)
         ss.conditions.check_clocks(self.amount, self.where, f'the modifier "{self.name}"')
-        if self.start is not None: # It must be within the sim
-            to_ti(sim, self.start, name=f'the start of "{self.name}"')
+        if self.start is not None and to_ti(sim, self.start, name=f'the start of "{self.name}"', after=True) >= sim.t.npts: # A start after the end never starts it, e.g. in a sim run to an earlier stop
+            ss.note(f'the modifier "{self.name}" starts after the end of the sim, so it never applies', sim=sim)
         if self.stop is not None:
             to_ti(sim, self.stop, name=f'the stop of "{self.name}"', after=True) # A stop after the end never stops it
         self.hold_steps = None if self.hold is None else to_steps(sim, self.hold)
@@ -584,7 +585,9 @@ class modify(Connector):
             return []
         sim = self.sim
         timevec = sim.results.timevec
-        start = 0 if self.start is None else to_ti(sim, self.start)
+        start = 0 if self.start is None else to_ti(sim, self.start, after=True)
+        if start >= len(timevec): # It never starts
+            return []
         stop = len(timevec) - 1 if self.stop is None else min(to_ti(sim, self.stop, after=True), len(timevec) - 1)
         return [(timevec[start], timevec[stop])]
 

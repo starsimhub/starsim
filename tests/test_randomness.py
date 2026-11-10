@@ -518,6 +518,20 @@ def test_crn_code_moves():
 
 
 # %% Run as a script
+def test_named_stream():
+    """ A distribution with stream= draws the same numbers wherever it is in the sim, and two with the same stream are refused """
+    class Holder(ss.Analyzer):
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            self.my_dist = ss.random(stream='my_stream')
+    def draws(name):
+        sim = ss.Sim(diseases='sis', analyzers=Holder(name=name), n_agents=100, start=2000, stop=2001, dt=ss.years(1), verbose=0).init()
+        return sim.analyzers[name].my_dist(sim.people.auids)
+    assert np.array_equal(draws('holder1'), draws('holder2')), 'A named stream should not depend on where the distribution is'
+    with pytest.raises(ss.errors.DistSeedRepeatError):
+        ss.Sim(diseases='sis', analyzers=[Holder(name='a'), Holder(name='b')], n_agents=100, start=2000, stop=2001, dt=ss.years(1), verbose=0).init()
+
+
 if __name__ == '__main__':
     T = sc.timer()
     do_plot = False

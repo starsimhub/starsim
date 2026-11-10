@@ -173,9 +173,14 @@ def test_campaign_delivery():
     assert n_screened[~on].sum() == 0, 'Expected no screenings outside campaign years'
     assert np.all(np.diff(n_screened[on]) > 0), 'Expected each round to reach its own coverage'
 
-    # A campaign after the sim ends
-    with pytest.raises(ValueError):
-        ss.Sim(pars, interventions=ss.screen(make_dx(), when=[2030], coverage=0.5, name='screening')).init()
+    # A campaign, or a start, after the sim ends never runs, so a sim can be run to an earlier stop
+    for late in [ss.screen(make_dx(), when=[2030], coverage=0.5, name='screening'), ss.screen(make_dx(), when=ss.schedule(every=ss.years(1), start=2030), coverage=0.5, name='screening'), ss.screen(make_dx(), start=2030, coverage=ss.peryear(0.5), name='screening')]:
+        assert ss.Sim(pars, interventions=late).run().results.screening.delivered.sum() == 0
+    late = ss.Sim(pars, interventions=ss.modify('sis.pars.beta', multiply=0, start=2030)).run() # So does a modifier
+    assert np.array_equal(late.results.sis.prevalence, ss.Sim(pars).run().results.sis.prevalence)
+    for early in [ss.screen(make_dx(), when=[1950], coverage=0.5, name='screening'), ss.modify('sis.pars.beta', multiply=0, start=1950)]:
+        with pytest.raises(ValueError, match='outside the sim'): # Before it starts is still an error
+            ss.Sim(pars, interventions=early).init()
 
     # Plots mark the rounds, and the start and stop of a modifier; not a delivery on a condition
     sis = sim.diseases.sis
@@ -335,6 +340,45 @@ def test_check_eligibility():
     assert n['everyone'] == 500 and n['cond'] == n['fn'] == n['uids'] == young, n
     assert 0 < n['path'] == sims['path'].results.sis.I[0] < 500, n
     return sims
+
+
+def test_modify_coded_intervention():
+    """ ss.modify() changes a parameter of an intervention written as code: one value in self.pars, or, with who=, each person's with current_value() """
+    class Tx(ss.Intervention):
+        allow_modifiers = ('p_treat',)
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            self.define_pars(p_treat=0.5)
+            self.seen = []
+            self.by_person = None
+        def step(self):
+            self.seen.append(self.pars.p_treat)
+            self.by_person = self.current_value('p_treat', self.sim.people.auids)
+
+    sis = ss.SIS()
+    tx = Tx(name='tx')
+    mods = [ss.modify('tx.pars.p_treat', multiply=0.2, start=2005), ss.modify('tx.pars.p_treat', multiply=0.5, who=sis.I, name='inf')]
+    sim = ss.Sim(diseases=sis, networks='random', interventions=[tx, *mods], start=2000, stop=2010, dt=ss.years(1), n_agents=500, verbose=0).run()
+    tx = sim.interventions.tx
+    assert tx.seen[0] == 0.5 and np.isclose(tx.seen[-1], 0.5), 'p_treat in self.pars is the base value, since the class reads it with current_value()'
+    vals = np.asarray(tx.by_person)
+    inf = sim.diseases.sis.I[sim.people.auids]
+    assert np.allclose(vals[inf], 0.05) and np.allclose(vals[~inf], 0.1), f'Expected 0.05 for the infected and 0.1 otherwise, not {np.unique(vals)}'
+    return sim
+
+
+def test_declared_intervention():
+    sc.heading('Testing a declared module given as an intervention')
+    class Tx(ss.Disease):
+        has_product = False
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            naive, on = ss.states('naive on')
+            self.define_states(naive, on)
+            self.define_transitions(on >> naive @ ss.peryear(0.5))
+    sim = ss.Sim(diseases=ss.SIS(), interventions=Tx(name='tx'), n_agents=500, start=2000, stop=2002, verbose=0).run() # Its move() method is not read as a delivery's move=
+    assert 'tx' in sim.interventions
+    return sim
 
 
 if __name__ == '__main__':

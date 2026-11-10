@@ -1097,7 +1097,7 @@ class Moving:
             out |= {sim.groups.dim_index(tf.dim) for tf in mod.graph.transfers.values()}
         out |= {d for tr in self.graph.transitions.values() for d,level in (self.moves(tr) or ())}
         names = [strat.name for strat in sim.groups.strats]
-        out |= {names.index(dim) for iv in sim.interventions() for dim in list(getattr(iv, 'move', None) or {}) + list(getattr(iv, 'increment', None) or {}) if dim in names} # A delivery's move= or increment=
+        out |= {names.index(dim) for iv in sim.interventions() for dim in list(ss.dimensions.delivery_moves(iv)) + list(ss.dimensions.delivery_moves(iv, 'increment')) if dim in names} # A delivery's move= or increment=
         if getattr(sim.mixing, 'migration', None) is not None:
             out.add(sim.mixing.space)
         if getattr(sim, 'initialized', False):
@@ -1149,7 +1149,7 @@ class Moving:
                 ti_exit = mod[f'ti_exit_{name}'].raw[sel]
                 new_exit = np.empty(len(sel))
                 ok = ~stalled
-                new_exit[ok] = ti + np.maximum(ti_exit[ok] - 0.5 - ti, 0)*before[ok]/now[ok] # A scheduled exit is a whole step, so what is left is taken from the middle of it
+                new_exit[ok] = ti - 1 + (np.maximum(ti_exit[ok], ti) - ti + 0.5)*before[ok]/now[ok] # A scheduled exit is a whole step, so what is left is taken from the middle of it; this step is still to come, at the new speed, so an exit due now has half a step left
                 if stalled.any(): # Now that their rate is not 0, a dwell is drawn from now
                     new_exit[stalled] = ti + self.whole_steps(sel[stalled], self.sample_dwell(candidates[i], sel[stalled]))
                 lost = ok & np.isinf(ti_exit) # Never (a rate of 0, which has changed), so the dwell time is gone: drawn again from now, less what has passed of it since entering (as if it had stalled)

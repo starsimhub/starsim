@@ -796,6 +796,17 @@ def test_define_transitions():
             self.define_transitions(infection=self.S >> self.I @ 0.1*self.I)
     assert Fitted(init_prev=ss.par(0.1, bounds=[0, 0.2])).pars.init_prev.bounds == [0, 0.2]
 
+    class Clash(ss.Disease): # A method as a rate is named after its transition (rate_recovery), which a parameter defined in code already is
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            self.define_states(ss.states('S I'))
+            self.define_pars(rate_recovery=ss.peryear(0.1))
+            self.define_transitions(infection=self.S >> self.I @ 0.1*self.I, recovery=ss.Transition(self.I, self.S, rate=self.recovery_rate))
+        def recovery_rate(self, sim, uids):
+            return self.pars.rate_recovery
+    with pytest.raises(TypeError, match='"rate_recovery"'): # The error names the parameter
+        Clash()
+
     with pytest.raises(ss.CapabilityError): # Declared once, while it is made
         sirs = SIRS()
         sirs.graph

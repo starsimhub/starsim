@@ -16,6 +16,11 @@ from ..transitions import level_pair, parse_increment
 __all__ = ['Strat', 'Transfer', 'transfer', 'levels', 'Groups']
 
 
+def delivery_moves(mod, attr='move'):
+    """ A delivery's move= or increment= ({dim: level or step}), or {} for any other module (e.g. a declared module given as an intervention, whose move() is a method) """
+    return (getattr(mod, attr) or {}) if isinstance(mod, ss.Event) else {}
+
+
 def level_dtype(n):
     """ The integers that levels or groups are kept as, n of them: 16-bit if they fit, to save memory """
     return np.int16 if n < 2**15 else np.int32
@@ -677,7 +682,7 @@ class Groups(sc.prettyobj):
                     strat.owner = mod.name # Part of the scenario, not of the model
                     strats.setdefault(strat.name, strat)
                 self.dim_moves += [move for move in mod.dim_moves(sim) if move.dim not in [m.dim for m in self.dim_moves]]
-                for dim in list(mod.move or {}) + list(getattr(mod, 'increment', None) or {}):
+                for dim in list(delivery_moves(mod)) + list(delivery_moves(mod, 'increment')):
                     if dim not in strats:
                         raise sc.KeyNotFoundError(f'the transfer "{mod.name}" moves people along "{dim}", but the model is not stratified by it. Add e.g. sim.stratify({dim}=[...]).')
         if (sim.solver is not None and not isinstance(sim.solver, ss.solvers.abm)): # In a compartmental run, a transfer whose dur= is a distribution passes people through Erlang stages: a dimension of the people at the levels it moves from (see ss.solvers.Compartmental.init_movers())
@@ -688,7 +693,7 @@ class Groups(sc.prettyobj):
                         strats[strat.name] = strat
         moved = [tf.dim for mod in sim.declared for tf in mod.graph.transfers.values()] # A dimension that people are moved along, with no split of its own, starts with everyone at its first level
         moved += [dim for mod in sim.declared for tr in mod.graph.transitions.values() for dim in list(getattr(tr, 'move', None) or {}) + list(getattr(tr, 'increment', None) or {})]
-        moved += [dim for mod in sim.pars.interventions.values() for dim in list(getattr(mod, 'move', None) or {}) + list(getattr(mod, 'increment', None) or {})]
+        moved += [dim for mod in sim.pars.interventions.values() for dim in list(delivery_moves(mod)) + list(delivery_moves(mod, 'increment'))]
         for name in moved:
             strat = strats.get(name)
             if strat is not None and strat.guessed.get('fractions') == 'equal across levels':
@@ -825,9 +830,9 @@ class Groups(sc.prettyobj):
                 if tf.dim == strat.name:
                     events.append((name, f'{tf.increment:+d}' if tf.increment is not None else ' | '.join(map(str, tf.dsts))))
         for mod in sim.pars.interventions.values():
-            if strat.name in (getattr(mod, 'increment', None) or {}):
+            if strat.name in delivery_moves(mod, 'increment'):
                 events.append((mod.name, f'{mod.increment[strat.name]:+d}'))
-            elif strat.name in (getattr(mod, 'move', None) or {}):
+            elif strat.name in delivery_moves(mod):
                 events.append((mod.name, str(mod.move[strat.name])))
         if not events:
             return ''

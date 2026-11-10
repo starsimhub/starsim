@@ -674,7 +674,9 @@ class Pregnancy(Demographics, ss.Disease):
 
     For other modules, `preg.delivery` happens to the mother, and to her fetuses (if they are agents: see `_init_fetus()`)
     before they are born, so a death of a fetus `when=preg.delivery` is a stillbirth; `preg.birth` happens to the newborns,
-    so a neonatal death is `when=preg.birth`.
+    so a neonatal death is `when=preg.birth`. Code reads a step's newborns and their mothers in that step, before the
+    diseases' step, with `on_birth(parents, children)` in any module (see `ss.Module.on_birth()`), which is called at the
+    delivery; the mothers delivered in the step are also `preg.ti_delivered == sim.ti`.
 
     As agents, a live birth starts breastfeeding (`lactating`, with `p_breastfeed`), or restarts it for a woman breastfeeding
     already; it ends after `dur_breastfeed`, or at once if a child of hers dies before the age of 1. It is a state of each

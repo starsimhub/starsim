@@ -954,11 +954,11 @@ class Event(ss.products.EventSource, Intervention):
             self.trace_nets = [sim.networks[net if isinstance(net, str) else net.name] for net in sc.tolist(self.trace)]
         to_ti = ss.connectors.to_ti
         npts = sim.t.npts
-        self.ti_start = 0 if self.start is None else to_ti(sim, self.start, name=f'the start of "{self.name}"') # The first step is 0 (see ss.loop.Loop)
+        self.ti_start = 0 if self.start is None else to_ti(sim, self.start, name=f'the start of "{self.name}"', after=True) # The first step is 0 (see ss.loop.Loop); a start after the end never starts it, e.g. in a sim run to an earlier stop
         self.ti_stop = npts if self.stop is None else to_ti(sim, self.stop, name=f'the stop of "{self.name}"', after=True) # A stop after the end never stops it
         self.round_tis = None
         if self.in_rounds:
-            tis = [to_ti(sim, time, name=f'a round of "{self.name}"') for time in self.rounds]
+            tis = [ti for time in self.rounds if (ti := to_ti(sim, time, name=f'a round of "{self.name}"', after=True)) < npts] # A round after the end is not run
             every = 1
             if self.every is not None:
                 steps = self.convert(self.every)/self.dt_sim
@@ -969,7 +969,7 @@ class Event(ss.products.EventSource, Intervention):
                 interval = self.every if isinstance(self.every, ss.Duration) else ss.time.get_dur_class(sim.unit_base)(self.convert(self.every))
                 if steps < 0.5 or (abs(steps - every) < 1e-9 and interval.base in ['days', 'weeks']): # A whole number of steps of fixed length (e.g. weekly rounds on daily steps), or less than one step
                     tis += list(range(self.ti_start, last, every))
-                else: # Each round on the first step from its time, the start plus a whole number of intervals, as dates: yearly rounds on weekly steps are a year apart, not 52 weeks (364 days)
+                elif self.ti_start < last: # Each round on the first step from its time, the start plus a whole number of intervals, as dates: yearly rounds on weekly steps are a year apart, not 52 weeks (364 days)
                     yearvec = np.asarray(sim.t.yearvec, dtype=float)
                     n = int((yearvec[last - 1] - yearvec[self.ti_start])/interval.years) + 1
                     times = [sim.t.tvec[self.ti_start] + interval*k for k in range(n)] # One by one, since a calendar interval (a datedur) doesn't take an array
@@ -981,6 +981,8 @@ class Event(ss.products.EventSource, Intervention):
             gaps = np.diff(tis)
             gaps = np.append(gaps[:1], gaps) if len(gaps) else [every] # The first round covers as long as the next gap (or the interval, or a step)
             self.round_span = {ti:gap*self.dt_sim for ti,gap in zip(tis, gaps)} # The time each round stands for, which a capacity or coverage per unit time is scaled by
+        if self.ti_start >= npts or self.round_tis == set():
+            ss.note(f'"{self.name}" starts after the end of the sim, so it never runs', sim=sim)
         if self.move_states is not None:
             states = self.dis.graph.states
             for name in self.move_names:
