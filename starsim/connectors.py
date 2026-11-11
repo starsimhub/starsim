@@ -8,6 +8,8 @@ A connector is for the rest, e.g. seasonal forcing or the effect of a coinfectio
 
 Used with: agents and compartments; declared and coded modules
 """
+# Authorship: written by AI, reviewed by humans
+
 import numpy as np
 import sciris as sc
 import starsim as ss

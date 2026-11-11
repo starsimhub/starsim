@@ -1,10 +1,15 @@
 """
 Births, deaths, migration, and pregnancy
 
-These exist so that the population can change during a run. `ss.Births` and `ss.Deaths` are written as code, `ss.birth()` and the like declare the same flows for the whole population, and `ss.Pregnancy` is declared, so that conception and delivery are transitions that other modules can modify or respond to.
+These exist so that the population can change during a run. `ss.Births` and `ss.Deaths`
+are written as code, `ss.birth()` and the like declare the same flows for the whole
+population, and `ss.Pregnancy` is declared, so that conception and delivery are transitions
+that other modules can modify or respond to.
 
 Used with: agents and compartments; declared and coded modules
 """
+# Authorship: written by humans, heavily rewritten by AI, reviewed by humans
+
 import numpy as np
 import starsim as ss
 import sciris as sc
@@ -12,7 +17,6 @@ import pandas as pd
 
 ss_float = ss.dtypes.float
 _ = None
-
 
 
 def rate_size(rates):

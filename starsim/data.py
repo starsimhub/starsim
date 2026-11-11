@@ -16,6 +16,8 @@ record of where it came from (`ref`; for a table, in `.attrs['ref']`), which `si
 
 Used with: agents and compartments; declared and coded modules
 """
+# Authorship: written by AI, reviewed by humans
+
 import re
 import numpy as np
 import pandas as pd

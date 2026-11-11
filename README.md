@@ -4,8 +4,7 @@
 [![Downloads](https://static.pepy.tech/personalized-badge/starsim?period=total&units=international_system&left_color=grey&right_color=blue&left_text=Downloads)](https://pepy.tech/project/starsim)
 [![Tests](https://github.com/starsimhub/starsim/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/starsimhub/starsim/actions/workflows/tests.yml)
 
-> [!IMPORTANT]
-> **Starsim v4 is available.** It's quite different from v3, with a new and simpler syntax for creating diseases, and support for compartmental and geospatial models. Models written for v3 will need to be [migrated](https://docs.starsim.org/v3v4); see the [changelog](https://starsim.org/v4/whatsnew.html) for details, or [contact us](mailto@info@starsim.org) for help. To continue using [Starsim v3](https://starsim.org/v3), use `pip install starsim<4`.
+> **Note: Starsim v4 is now available.** It's quite different from v3, with a new and simpler syntax for creating diseases, and support for compartmental and geospatial models. Models written for v3 will need to be [migrated](https://docs.starsim.org/v3v4); see the [changelog](https://starsim.org/v4/whatsnew.html) for details, or [contact us](mailto@info@starsim.org) for help. To continue using [Starsim v3](https://starsim.org/v3), use `pip install starsim<4`.
 
 [Starsim](https://starsim.org) is a fast, flexible disease modeling framework, from compartments to agents. It supports modeling multiple co-transmitting diseases, including infectious and non-infectious diseases plus other health states (such as pregnancy and birth), and captures their biological and behavioral interactions. It lets users compare intervention strategies, such as vaccines or treatments, across delivery methods like mass campaigns or targeted outreach. It also includes built-in tools for scenario analyses and calibrating models to real-world data.
 
