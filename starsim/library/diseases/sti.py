@@ -15,7 +15,7 @@ class Syphilis(ss.Disease):
 
     People who are infected incubate (`E`), then have a primary chancre (`P`), then secondary syphilis (`Se`),
     and then early latent syphilis (`El`), from which some relapse to secondary syphilis and the rest pass to late
-    latent syphilis (`Ll`). A share of those develop tertiary syphilis (`T`), which can kill; the rest are no
+    latent syphilis (`Ll`). A fraction of those develop tertiary syphilis (`T`), which can kill; the rest are no
     longer infectious (`R`).
 
     How infectious a person with latent syphilis is falls with the time since their latent stage began, a quantity
@@ -25,7 +25,7 @@ class Syphilis(ss.Disease):
     Source: the natural history and its parameters are those of the syphilis module of STIsim
     (https://github.com/starsimhub/stisim, `stisim/diseases/syphilis.py`), whose own sources are cited there: the
     incubation period, primary and secondary stages from Garnett GP et al. (1997), the definition of early latent
-    syphilis as up to two years after infection from WHO Europe, and the share developing tertiary syphilis. The
+    syphilis as up to two years after infection from WHO Europe, and the fraction developing tertiary syphilis. The
     half-life of latent infectiousness is STIsim's.
 
     Nobody is treated here, and the latent and tertiary stages last for years and count towards `prevalence`, so
@@ -42,8 +42,8 @@ class Syphilis(ss.Disease):
         dur_secondary (`ss.Duration`): the mean duration of the secondary stage
         dur_early (`ss.Duration`): the mean duration of early latent syphilis
         dur_late (`ss.Duration`): the mean time in late latent syphilis before tertiary syphilis, for those who develop it
-        p_reactivate (float): the share of people with early latent syphilis who relapse to secondary syphilis
-        p_tertiary (float): the share who develop tertiary syphilis
+        p_reactivate (float): the fraction of people with early latent syphilis who relapse to secondary syphilis
+        p_tertiary (float): the fraction who develop tertiary syphilis
         death_rate (`ss.per`): the rate of dying of tertiary syphilis
         latent_half_life (`ss.Duration`): the half-life of infectiousness during latent syphilis
         kwargs (dict): passed to `ss.Disease`, e.g. `init` or `name`
@@ -65,8 +65,8 @@ class Syphilis(ss.Disease):
     dur_secondary    = ss.par(ss.months(3.6), doc='Mean duration of the secondary stage',          source='STIsim (Garnett et al. 1997)')
     dur_early        = ss.par(ss.months(23),  doc='Mean duration of early latent syphilis',        source='STIsim (WHO Europe: up to two years after infection)')
     dur_late         = ss.par(ss.years(10),   doc='Mean time to tertiary syphilis, for those who develop it', source='STIsim')
-    p_reactivate     = ss.par(0.35, doc='Share with early latent syphilis who relapse to the secondary stage', source='STIsim')
-    p_tertiary       = ss.par(0.35, doc='Share who develop tertiary syphilis',                     source='STIsim')
+    p_reactivate     = ss.par(0.35, doc='Fraction with early latent syphilis who relapse to the secondary stage', source='STIsim')
+    p_tertiary       = ss.par(0.35, doc='Fraction who develop tertiary syphilis',                  source='STIsim')
     death_rate       = ss.par(ss.peryear(0.05), doc='Rate of dying of tertiary syphilis',          source='STIsim')
     latent_half_life = ss.par(ss.years(1), doc='Half-life of infectiousness during latent syphilis', source='STIsim')
 

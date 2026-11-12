@@ -89,17 +89,17 @@ msim = ss.parallel({
 msim.plot('ageatinfection.mean_age')
 ```
 
-A result that is a count (a flow or a stock) is multiplied by the number of people each agent stands for when the run ends; an average or a share (a ratio, as `mean_age` is given) is not. `scale=` overrides this.
+A result that is a count (a flow or a stock) is multiplied by the number of people each agent stands for when the run ends; an average or a fraction (a ratio, as `mean_age` is given) is not. `scale=` overrides this.
 
 ### When an analyzer runs
 
-An analyzer runs at the end of each step, after the step's results have been recorded. In it, `sim.ti` (or `self.ti` in a class) is the index of the step: the stocks there are the state at the step's start, and the flows the totals over the step, while the people it sees are as they are at the step's end. A declared disease dates each entry into a state in its state `ti_<state>`, so the people infected during this step are those with `ti_E.isclose(ti)` (`==` raises for a time). A result about the state at the start of a step belongs in `record_stocks()` (see [Custom modules](building_modules.qmd)), and anything to set up before the first `step()` in `init_post()`.
+An analyzer runs at the end of each step, after the step's results have been recorded. In it, `sim.ti` (or `self.ti` in a class) is the index of the step: the stocks there are the state at the step's start, and the flows the totals over the step, while the people it sees are as they are at the step's end. A declared disease dates each entry into a state in its state `ti_<state>`, so the people infected during this step are those with `ti_E.isclose(ti)` (`==` raises for a time). A result about the state at the start of a step belongs in `record_states()` (see [Custom modules](building_modules.qmd)), and anything to set up before the first `step()` in `init_post()`.
 
 An analyzer can also be given to a model that runs as compartments, as any module written as code can that keeps nothing for each person. There, it sees the number of people in each compartment (`sim.diseases.measles.I.n`), and the run goes a step at a time, so it is slower; a quantity that can be worked out from the results after the run is better computed from them.
 
 ## The infection log
 
-The infection log records each infection: when it happened, who was infected, and, where there is a network, by whom. It needs agents and a contact network, since otherwise nobody is the source of a particular infection: an infection by a mixing pool (`ss.MixingPool`), a contact matrix, or mixing with everyone comes from the share infectious in a group, not from a particular person, so its `source` and `network` are NaN (seeds have a source of -1). Give `analyzers='infection_log'`:
+The infection log records each infection: when it happened, who was infected, and, where there is a network, by whom. It needs agents and a contact network, since otherwise nobody is the source of a particular infection: an infection by a mixing pool (`ss.MixingPool`), a contact matrix, or mixing with everyone comes from the fraction infectious in a group, not from a particular person, so its `source` and `network` are NaN (seeds have a source of -1). Give `analyzers='infection_log'`:
 
 ```{python}
 S, I, R = ss.states('S I R')

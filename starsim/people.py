@@ -55,7 +55,7 @@ person = LazyPeople()
 
 
 class AgentScale(ss.FloatArr):
-    """ The number of people each agent stands for relative to the others (`people.scale`); setting it other than 1 makes results, and the counts in a declared model's rates (`I.n`, `I.frac`, and the share infectious in a transmission), add up the agents' weights """
+    """ The number of people each agent stands for relative to the others (`people.scale`); setting it other than 1 makes results, and the counts in a declared model's rates (`I.n`, `I.frac`, and the fraction infectious in a transmission), add up the agents' weights """
     weighted = False # Set once any agent's scale is set other than 1, so that results are unweighted until then
 
     def __setitem__(self, key, value):
@@ -96,9 +96,9 @@ class People:
 
     Args:
         n_agents (int): the initial number of agents in the model
-        age_data (dataframe/series/array/str/`ss.Dist`): the age distribution: a dataframe with columns `age` (the lower edge of each age bin) and `value` (the number or share of people in it), a series of values indexed by age, a two-column array, a CSV file with the dataframe's columns, or a distribution of ages (default: the world's ages). This gives agents ages; for age groups in a compartmental model, use `disease.stratify(age={0: 0.3, 15: 0.6, 65: 0.1})` instead
+        age_data (dataframe/series/array/str/`ss.Dist`): the age distribution: a dataframe with columns `age` (the lower edge of each age bin) and `value` (the number or fraction of people in it), a series of values indexed by age, a two-column array, a CSV file with the dataframe's columns, or a distribution of ages (default: the world's ages). This gives agents ages; for age groups in a compartmental model, use `disease.stratify(age={0: 0.3, 15: 0.6, 65: 0.1})` instead
         extra_states (list): more properties of each person, e.g. `[ss.FloatArr('income')]` (modules can also add them, with `people.add_state()`)
-        p_female (float): the share of agents who are female
+        p_female (float): the fraction of agents who are female
         mock (bool): if True, link the people to a mock sim, so they can be used without one (for testing and debugging)
 
     Examples:
@@ -338,7 +338,7 @@ class People:
         The distribution that new agents' ages are drawn from, made from age data
 
         The data are a two-column array, a pandas series with age as the index and the
-        number (or share) of people as the value, a dataframe with "age" and "value"
+        number (or fraction) of people as the value, a dataframe with "age" and "value"
         columns, or the name of a CSV file with those columns, e.g.:
 
             age      value
@@ -349,7 +349,7 @@ class People:
 
         The ages are the lower edges of the bins, so ages within a bin are spread evenly.
         The last bin is as wide as the one before it; to set its upper edge, add a row with
-        that age and a value of 0. Counts and shares give the same distribution.
+        that age and a value of 0. Counts and fractions give the same distribution.
 
         Args:
             age_data (array/series/dataframe/str/`ss.Dist`): the data, as above, or a distribution of ages, used as it is (default: the world's ages, `ss.data.age('world')`, as for a sim with no named population)
@@ -403,8 +403,8 @@ class People:
         number alive); for a state that makes no result, use `ss.BoolArr` instead. There are also the flows of
         people who died and who left (`died` and `emigrated`; `results.died.cum` is the cumulative total).
 
-        With `sim.pars.record_people=False`, there are none of these (and `record_stocks()` and
-        `record_flows()` are skipped in the loop), which saves a little time and memory.
+        With `sim.pars.record_people=False`, there are none of these (and `record_states()` and
+        `record_events()` are skipped in the loop), which saves a little time and memory.
         """
         if not self.sim.pars.get('record_people', True):
             return
@@ -737,7 +737,7 @@ class People:
         while len(dying):
             self.resolve_causes(dying[self.ti_dead.raw[dying] <= ti])
             self.alive[dying] = False  # While not dead, removed agents should not be included in alive totals
-            self._dying = death_uids # Still active until the end of the step: see record_flows() and remove_dead()
+            self._dying = death_uids # Still active until the end of the step: see record_events() and remove_dead()
             self._knock_on = [] # Filled by request_death() during on_death()
             try:
                 for mod in self.death_modules():
@@ -833,7 +833,7 @@ class People:
         dying = getattr(self, '_dying', None)
         return dying if dying is not None else ss.uids()
 
-    def record_stocks(self):
+    def record_states(self):
         """ Record the population counts at the start of the step (each `ss.BoolState`, e.g. alive, female), at its index (see `ss.loop.Loop`) """
         ti = self.sim.ti
         res = self.sim.results
@@ -858,7 +858,7 @@ class People:
             res[state.name][ti] = counts[i] if counts is not None else state.count()
         return
 
-    def record_flows(self):
+    def record_events(self):
         """ Record the people who died or left in the step, at its index; they are taken out at the end of it (see `finish_step()`), whenever in the step it was requested """
         ti = self.sim.ti
         res = self.sim.results
@@ -951,7 +951,7 @@ class People:
 
     def plot_ages(self, bins=None, absolute=False, fig_kw=None):
         """
-        Plot the age pyramid: the number or share of females and males in each age group
+        Plot the age pyramid: the number or fraction of females and males in each age group
 
         Args:
             bins (list/int): the edges of the age groups, or the width of each (default: 5-year groups up to the oldest age)

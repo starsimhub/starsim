@@ -24,7 +24,7 @@ class BuiltAfterInit(type):
 
 
 def check_init_prev(init_prev, seed_n, name):
-    """ Check the starting infections: `init_prev=` is a share of people (up to 1; for a number of people, `init_n=`), so a whole number 1 means everyone and warns; `init_n=` is not negative """
+    """ Check the starting infections: `init_prev=` is a fraction of people (up to 1; for a number of people, `init_n=`), so a whole number 1 means everyone and warns; `init_n=` is not negative """
     value = init_prev.raw if isinstance(init_prev, ss.par) else init_prev
     if not sc.isnumber(value):
         return
@@ -33,10 +33,10 @@ def check_init_prev(init_prev, seed_n, name):
             raise ValueError(f'init_n= of "{name}" is a number of people, not {value:n}')
         return
     if value > 1:
-        errormsg = f'init_prev= of "{name}" is a share of people (1.0 is everyone), not {value:n}; for a number of people, use init_n={value:n}'
+        errormsg = f'init_prev= of "{name}" is a fraction of people (1.0 is everyone), not {value:n}; for a number of people, use init_n={value:n}'
         raise ValueError(errormsg)
     if value == 1 and isinstance(value, (int, np.integer)):
-        ss.warn(f'init_prev= of "{name}" is the whole number 1, which is read as a share: everyone starts infected. Write 1.0 for everyone, or init_n=1 for one person')
+        ss.warn(f'init_prev= of "{name}" is the whole number 1, which is read as a fraction: everyone starts infected. Write 1.0 for everyone, or init_n=1 for one person')
     return
 
 
@@ -116,8 +116,8 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         transitions (list): transitions, as a list (for longer models)
         results (list): extra results: sums and ratios of states
         outcomes (list): `ss.outcome` objects
-        init_prev (float): the initial prevalence, a share of people (up to 1), seeded through the transmission (by default 0.01, unless a state is given an initial value)
-        init (dict): the share of people who start in each state, e.g. `dict(S=0.90, I=0.01, R=0.09)`, and, for a state that is not people, its amount, which can be read from the people (e.g. `dict(Sv=m*N)`, with `N = (S + I).n`); each value can be an `ss.by` or a function of the sim (in the class form, `init = dict(I=0.01)` in the class body; likewise `init_n` and `init_prev`)
+        init_prev (float): the initial prevalence, a fraction of people (up to 1), seeded through the transmission (by default 0.01, unless a state is given an initial value)
+        init (dict): the fraction of people who start in each state, e.g. `dict(S=0.90, I=0.01, R=0.09)`, and, for a state that is not people, its amount, which can be read from the people (e.g. `dict(Sv=m*N)`, with `N = (S + I).n`); each value can be an `ss.by` or a function of the sim (in the class form, `init = dict(I=0.01)` in the class body; likewise `init_n` and `init_prev`)
         init_n (int/dict): instead, a number of people: one number is seeded through the transmission, as `init_prev` is (e.g. `init_n=10`, a parameter, like `init_prev`); a dict is the number who start in each state, e.g. `dict(I=1)` for one person
         default_state (str/State): the state that everyone not put elsewhere starts in, and is born into (its name, or the state): by default, the one named `S` or `susceptible`, else the first state of people made (in the class form, `default_state = 'N'` in the class body). A state with a name of its own given under another keyword (e.g. `first=S`) raises, rather than being renamed
         strains (Strains): its strains (`ss.Strains`), which share its states; then `dis.strains`
@@ -134,7 +134,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
     The results are the number in each state (`I`), the flow along each transition by its
     name (`infection`, with its cumulative total as `res.infection.cum`), and the results and
     outcomes declared (e.g. `active=(E + I).frac`). Its infected states also give the results `infected`,
-    the number in them, and `prevalence`, their share of everyone in the disease's states, unless it
+    the number in them, and `prevalence`, their fraction of everyone in the disease's states, unless it
     defines its own: those of its force of infection (`E` and `I` in `S >> E @ beta*I`), or those it says
     are infected (`infected = E + I + H`, `ss.State(infected=True)`, or `ss.states('S E I H R', infected='E I H')`).
 
@@ -493,7 +493,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         seed_n = init_n is not None and not isinstance(init_n, dict) # A number of people, seeded through the transmission as init_prev is (init_n=dict(I=10) is by state)
         if seed_n:
             if init_prev is not None:
-                errormsg = f'"{self.name}" is given both init_prev= (a share of people) and init_n= (a number of people), which both seed the transmission; give one or the other'
+                errormsg = f'"{self.name}" is given both init_prev= (a fraction of people) and init_n= (a number of people), which both seed the transmission; give one or the other'
                 raise ValueError(errormsg)
             init_prev, init_n = init_n, None
         check_init_prev(init_prev, seed_n, self.name)
@@ -537,7 +537,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         for key,val in kwargs.items(): # By keyword, an expression is a result, so one with a value for each person cannot be: it would be dropped (in the class body, it can be a helper that other members use)
             if isinstance(val, ss.expressions.Expr) and not isinstance(val, (ss.par, ss.State, ss.expressions.attr, ss.Transition, ss.outcome)) and ss.expressions.per_person_in(val):
                 errormsg = (f'{key}={val} was given to "{self.name}" as a result, but it has a value for each person (it reads a property of people, a clock, or a value by person), so it cannot be one. '
-                            f'For a share of the people in some states, write e.g. {key}=(E + I).frac')
+                            f'For a fraction of the people in some states, write e.g. {key}=(E + I).frac')
                 raise ValueError(errormsg)
         members = sc.mergedicts(members, kwargs)
         args, members = self.reuse(args, members, names)
@@ -567,7 +567,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         Stratify the disease by a property of the people in it (age, risk, place, ...), in place, and return it
 
         Every keyword is a dimension, with its levels: bin edges (for a continuous property such as age) or labels,
-        or a dict of the share of the population in each level (if not given: from a named population or geography;
+        or a dict of the fraction of the population in each level (if not given: from a named population or geography;
         for age groups, the world's ages; for a boolean dimension, or one that people are moved along, everyone at
         the first level; otherwise equal). `ss.levels()` adds the options that are needed less often: the states it
         applies to (`states=`), the people it applies to (`who=`), its kind, and the movement between places.
@@ -581,7 +581,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
 
         Examples:
             ```python
-            sir.stratify(age={0: 0.3, 15: 0.6, 65: 0.1}) # With the share of people in each age group
+            sir.stratify(age={0: 0.3, 15: 0.6, 65: 0.1}) # With the fraction of people in each age group
             sir.stratify(age=[0, 15, 65], risk={'low': 0.8, 'high': 0.2})
             sir.stratify(sex=['female', 'male'], parity=ss.levels(['0', '1-2', '3+'], who=ss.person.female)) # Only women have a parity
             sir.stratify(severity=ss.levels({'mild': 0.9, 'severe': 0.1}, states=[sir.I]))
@@ -651,7 +651,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
 
         People states are rounded and counts square (slanted in the text); transmissions are dashed; each
         arrow is labeled with its transition's name and value (`recovery: 10 days`), and
-        the share that takes it for a transition with `p=`. For every disease of a sim, and how they act on each other, see `sim.diagram()`.
+        the fraction that takes it for a transition with `p=`. For every disease of a sim, and how they act on each other, see `sim.diagram()`.
 
         Args:
             kind (str): 'plot' to draw it, or 'text' for the Mermaid text, which a notebook draws and `print()` shows (see `ss.display.Diagram`)
@@ -685,7 +685,7 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
         the disease alone, under homogeneous mixing, with the default number of people. Values that vary in time
         (a seasonal β) are taken at the start, so this is R0 at the start time.
         A sim runs a copy of the disease it is given, so the R0 of a sim's model is `sim.diseases.<name>.R0()`;
-        this matters where a count is a number rather than a share of the people (mosquitoes per person).
+        this matters where a count is a number rather than a fraction of the people (mosquitoes per person).
 
         This is the largest eigenvalue of the next-generation matrix. Where infection
         passes through a vector (people infect mosquitoes, which infect people), each
@@ -766,8 +766,8 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
                 comps = engine.state_comps[name]
                 now = y[comps]
                 total = now.sum(axis=0)
-                share = np.divide(now, total, out=np.full_like(now, 1/len(comps)), where=total > 0)
-                y[comps] = share*vals[row]
+                frac = np.divide(now, total, out=np.full_like(now, 1/len(comps)), where=total > 0)
+                y[comps] = frac*vals[row]
             ngm = engine.next_generation(y=y)
             if ngm is None:
                 errormsg = f'Nothing in "{self.name}" moves people into an infected state, so it has no R'
@@ -1186,14 +1186,14 @@ class Disease(ss.Module, metaclass=BuiltAfterInit):
             self.run_callbacks()
         return
 
-    def record_stocks(self):
-        """ The counts of the states at the start of the step; for a disease written as code, the count of each `ss.BoolState` (see `ss.Module.record_stocks()`) """
-        self.engine.record_stocks()
+    def record_states(self):
+        """ The counts of the states at the start of the step; for a disease written as code, the count of each `ss.BoolState` (see `ss.Module.record_states()`) """
+        self.engine.record_states()
         return
 
-    def record_flows(self):
+    def record_events(self):
         """ The flows of the step, and the results worked out from them """
-        self.engine.record_flows()
+        self.engine.record_events()
         return
 
     def finalize_results(self):
@@ -1233,7 +1233,7 @@ class AgentDisease(Disease):
     A disease that can be written as states and transitions is shorter declared (see `ss.SIR`), and runs with every solver.
 
     Args:
-        pars (dict): parameters, e.g. `beta` and `init_prev` (a share, or an `ss.bernoulli`)
+        pars (dict): parameters, e.g. `beta` and `init_prev` (a fraction, or an `ss.bernoulli`)
         strains (`ss.Strains`): the strains, carried one at a time, sharing the disease's states (also `define_strains()`)
         kwargs (dict): parameters
 
@@ -1328,7 +1328,7 @@ class AgentDisease(Disease):
 
     def strain_sus(self, k):
         """
-        The share of their susceptibility to strain `k` that each agent (by UID) keeps: `1 − protection` from each `ss.immunity` of the strains,
+        The fraction of their susceptibility to strain `k` that each agent (by UID) keeps: `1 − protection` from each `ss.immunity` of the strains,
         for those in its state (e.g. `due_to='recovered'`) by the strain they had; a disease with protection of its own (e.g. from antibodies) overrides this
 
         Args:
@@ -1342,7 +1342,7 @@ class AgentDisease(Disease):
         return out
 
     def init_pre(self, sim):
-        if sc.isnumber(self.pars.init_prev): # A share, e.g. init_prev=0.01
+        if sc.isnumber(self.pars.init_prev): # A fraction, e.g. init_prev=0.01
             self.pars.init_prev = ss.bernoulli(self.pars.init_prev)
         if self.strains is not None and not isinstance(getattr(self, 'strain', None), ss.IntArr): # The strain of each person, and of those infected with none given, by the split
             n = len(self.strains)
@@ -1490,9 +1490,9 @@ class AgentDisease(Disease):
         self.ti_infected[uids] = self.ti
         return
 
-    def record_stocks(self):
+    def record_states(self):
         """ The counts of the states, and the prevalence, at the start of the step """
-        super().record_stocks()
+        super().record_states()
         res = self.results
         alive = self.sim.people._n_agents_alive() if ss.results.agent_weights(self.sim) is None else self.sim.results.alive[self.sim.ti] # With agents of different weights, as the people alive are counted
         res.prevalence[self.ti] = res.infected[self.ti] / alive

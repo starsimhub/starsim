@@ -10,13 +10,13 @@ class Typhoid(ss.Disease):
     """
     Typhoid fever, with chronic carriers
 
-    Most people recover from typhoid, but a small share become chronic carriers, who shed for life and are much
+    Most people recover from typhoid, but a small fraction become chronic carriers, who shed for life and are much
     less infectious than an acute case (`rel_carrier`), while contributing to transmission for decades. Immunity
     after infection wanes slowly, if at all.
 
     Sources: the values of the carriers are from Pitzer VE et al., "Predicting the impact of vaccination on the
     transmission dynamics of typhoid in South Asia", *PLoS Negl Trop Dis* 2014;8(1):e2642
-    (https://doi.org/10.1371/journal.pntd.0002642): a relative infectiousness of carriers of 0.01, a share
+    (https://doi.org/10.1371/journal.pntd.0002642): a relative infectiousness of carriers of 0.01, a fraction
     becoming carriers within their 0.3% to 10% by age, and a rate of waning immunity estimated as close to zero,
     so immunity is lifelong by default. `beta` is set to give their estimated R0 of 2.8 for Kolkata and Vellore.
     The duration of acute infection, 4 weeks, is a standard value.
@@ -26,7 +26,7 @@ class Typhoid(ss.Disease):
     Args:
         beta (`ss.per`): the transmission rate (R0 of 2.8 with the defaults)
         rel_carrier (float): the infectiousness of a chronic carrier, relative to an acute case
-        p_carrier (float): the share of cases who become chronic carriers
+        p_carrier (float): the fraction of cases who become chronic carriers
         dur_inf (`ss.Duration`): the mean duration of acute infection
         dur_imm (`ss.Duration`): the mean time immune after recovering (lifelong by default)
         birth_rate (`ss.per`): the birth and death rate
@@ -44,7 +44,7 @@ class Typhoid(ss.Disease):
     """
     beta        = ss.par(ss.perday(0.072), doc='Transmission rate (R0 of 2.8)',                source='Pitzer et al. (2014)')
     rel_carrier = ss.par(0.01, doc='Infectiousness of a chronic carrier, relative to an acute case', source='Pitzer et al. (2014)')
-    p_carrier   = ss.par(0.05, doc='Share of cases who become chronic carriers',                     source='Pitzer et al. (2014): 0.3% to 10% by age')
+    p_carrier   = ss.par(0.05, doc='Fraction of cases who become chronic carriers',                  source='Pitzer et al. (2014): 0.3% to 10% by age')
     dur_inf     = ss.par(ss.weeks(4), doc='Mean duration of acute infection',                        source='Standard value')
     dur_imm     = ss.par(ss.years(1000), doc='Mean time immune after recovering (lifelong by default)', source='Pitzer et al. (2014): waning estimated as close to zero')
     birth_rate  = ss.par(ss.peryear(1/60), doc='Birth and death rate', source='Illustrative')
@@ -67,7 +67,7 @@ class Polio(ss.Disease):
     Poliovirus, with a paralytic fraction
 
     Nearly every infection with wild poliovirus passes without paralysis, so the states are those of the
-    infection, and paralysis is a rare outcome of it: a share `p_paralysis` of infections end in `P` rather than
+    infection, and paralysis is a rare outcome of it: a fraction `p_paralysis` of infections end in `P` rather than
     `R`, and the result `outcome.P` counts the paralytic cases, which are the ones surveillance sees.
 
     Sources: about 1 in 200 infections with wild poliovirus type 1 causes paralysis in a fully susceptible person
@@ -83,7 +83,7 @@ class Polio(ss.Disease):
         beta (`ss.per`): the transmission rate (R0 of 6 with the defaults)
         dur_exp (`ss.Duration`): the mean time from infection to shedding
         dur_inf (`ss.Duration`): the mean time shedding
-        p_paralysis (float): the share of infections that cause paralysis
+        p_paralysis (float): the fraction of infections that cause paralysis
         birth_rate (`ss.per`): the birth and death rate, which supplies the susceptible children
         kwargs (dict): passed to `ss.Disease`, e.g. `init` or `name`
 
@@ -100,7 +100,7 @@ class Polio(ss.Disease):
     beta        = ss.par(ss.perday(0.3), doc='Transmission rate (R0 of 6)',       source='Fine and Carneiro (1999): R0 of 5 to 7')
     dur_exp     = ss.par(ss.days(3),  doc='Mean time from infection to shedding', source='Standard value')
     dur_inf     = ss.par(ss.days(20), doc='Mean time shedding',                   source='Standard value')
-    p_paralysis = ss.par(1/200, doc='Share of infections that cause paralysis',   source='US CDC Pink Book: about 1 in 200 for wild type 1')
+    p_paralysis = ss.par(1/200, doc='Fraction of infections that cause paralysis',source='US CDC Pink Book: about 1 in 200 for wild type 1')
     birth_rate  = ss.par(ss.peryear(0.03), doc='Birth and death rate',            source='Illustrative')
 
     S = ss.State()

@@ -7,7 +7,7 @@ authorship:
   note: Written by AI, with the section on parameters of modules written as code adapted from the Starsim 3 user guide page on parameters; examples made realistic and an appendix added by AI; shortened on Nov 11 by AI
 ---
 
-The parameters of a model are the numbers in it: transmission rates, durations, shares, and the like. This page covers where they live, their units, how to name and change them, and the forms a value can take.
+The parameters of a model are the numbers in it: transmission rates, durations, fractions, and the like. This page covers where they live, their units, how to name and change them, and the forms a value can take.
 
 ## Values live in the model
 
@@ -43,7 +43,7 @@ measles$pars
 ## Explicit
 
 ```{python}
-beta  = ss.par(ss.perday(1.9), name='beta') # Named for what it multiplies: the share infectious
+beta  = ss.par(ss.perday(1.9), name='beta') # Named for what it multiplies: the fraction infectious
 dur_I = ss.par(ss.days(8), name='dur_I')    # Named for the state it is the time in
 
 S, I, R = ss.State(name='S'), ss.State(name='I'), ss.State(name='R')
@@ -152,7 +152,7 @@ A parameter can also be changed during a run, from a date or when a condition ho
 
 ## The forms a value can take
 
-Where a value is given decides what it means; the form it takes is free. Each of these can be a rate, a duration, a share, or a starting value:
+Where a value is given decides what it means; the form it takes is free. Each of these can be a rate, a duration, a fraction, or a starting value:
 
 | Form | Example | Means |
 |---|---|---|
@@ -171,7 +171,7 @@ Any of these can be wrapped in `ss.par()` to give it a name, bounds, or a source
 
 ### Values for each group
 
-`ss.by()` gives a value for each level of a stratification. Here β is higher for children than for older adults, and each scenario reports the share of each age group's susceptible people infected in a year. The "Explicit" tab gives β by age as a function of each person's age instead, so it runs as agents:
+`ss.by()` gives a value for each level of a stratification. Here β is higher for children than for older adults, and each scenario reports the fraction of each age group's susceptible people infected in a year. The "Explicit" tab gives β by age as a function of each person's age instead, so it runs as agents:
 
 ::: {.panel-tabset group="language"}
 ## Python
@@ -184,7 +184,7 @@ def make_measles(beta):
     infection = S >> I @ beta*I
     recovery  = I >> R @ ss.days(8)
     measles = ss.Disease(infection, recovery, init=dict(R=ss.by(age=[0.8, 0.92, 0.98])), init_n=dict(I=10), name='measles')
-    measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1}) # Ages 0-14, 15-64, and 65+, with the share in each
+    measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1}) # Ages 0-14, 15-64, and 65+, with the fraction in each
     return measles
 
 betas = {
@@ -197,7 +197,7 @@ for label, beta in betas.items():
     sim.run()
     res = sim.results.measles
     attack[label] = {age: round(res.infection.select(age=age).sum() / res.S.select(age=age)[0], 2) for age in ['0-14', '15-64', '65+']}
-pd.DataFrame(attack) # The share of each group's susceptible people infected
+pd.DataFrame(attack) # The fraction of each group's susceptible people infected
 ```
 
 ## R
@@ -208,7 +208,7 @@ make_measles <- function(beta) {
   infection <- Transition(S, I, rate = beta * I)
   recovery  <- Transition(I, R, dur = days(8))
   measles <- Disease(infection, recovery, init = list(R = ss$by(age = c(0.8, 0.92, 0.98))), init_n = list(I = 10), name = "measles")
-  measles$stratify(age = list("0" = 0.3, "15" = 0.6, "65" = 0.1)) # Ages 0-14, 15-64, and 65+, with the share in each
+  measles$stratify(age = list("0" = 0.3, "15" = 0.6, "65" = 0.1)) # Ages 0-14, 15-64, and 65+, with the fraction in each
   measles
 }
 
@@ -224,7 +224,7 @@ attack <- sapply(betas, function(beta) {
     round(sum(res$infection$select(age = age)$values) / res$S$select(age = age)$values[1], 2)
   })
 })
-attack # The share of each group's susceptible people infected
+attack # The fraction of each group's susceptible people infected
 ```
 
 ## Explicit
@@ -256,7 +256,7 @@ The values can also be given by label (`ss.by(age={'0-14': 2.5, ...})`), as a ta
 
 ### Values that change over time
 
-Contact patterns, reporting, and treatment change over time, and so do the parameters that stand for them. A value can be a time series (`ss.timeseries()`), held or interpolated between given dates; a smooth yearly cycle (`ss.seasonal()`); or a function of the sim, worked out at each step. Each goes wherever a number would, in a rate, a share, or a starting value. [Time](building_time.qmd#values-that-change-over-time) covers them, with examples of measles with and without school terms. A change made by an intervention, from a date or when a condition holds (`ss.modify()`), is covered in [Interventions](interventions_interventions.qmd).
+Contact patterns, reporting, and treatment change over time, and so do the parameters that stand for them. A value can be a time series (`ss.timeseries()`), held or interpolated between given dates; a smooth yearly cycle (`ss.seasonal()`); or a function of the sim, worked out at each step. Each goes wherever a number would, in a rate, a fraction, or a starting value. [Time](building_time.qmd#values-that-change-over-time) covers them, with examples of measles with and without school terms. A change made by an intervention, from a date or when a condition holds (`ss.modify()`), is covered in [Interventions](interventions_interventions.qmd).
 
 ### Values that vary between people
 

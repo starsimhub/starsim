@@ -138,7 +138,7 @@ pub fn split(rng: Rng, n: A1<f64>, a: usize, b: usize, weights: A2<f64>, credit:
                 total.add(g, weights.at(k, g));
             }
             whole = whole && (total.at(g) - 1.0).abs() < 1e-9;
-            if 0.0 < total.at(g) && total.at(g) < 1.0 - 1e-9 { // Shares that sum below 1 leave the rest nowhere, as in the ODE
+            if 0.0 < total.at(g) && total.at(g) < 1.0 - 1e-9 { // Fractions that sum below 1 leave the rest nowhere, as in the ODE
                 total.set(g, 1.0);
             }
         }

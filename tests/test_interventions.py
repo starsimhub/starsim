@@ -212,8 +212,8 @@ def test_state_results_at_start():
         def step(self):
             self.new_reached = 1
 
-        def record_flows(self):
-            super().record_flows()
+        def record_events(self):
+            super().record_events()
             self.results.new_reached[self.ti] = self.new_reached
 
     pars = dict(n_agents=100, diseases='sis', networks='random', verbose=0)
@@ -274,7 +274,7 @@ def test_modify_fast_paths():
 
     # An amount or share that varies in time is not taken for a dated one
     series = ss.timeseries({30: 1.0, 100: 0.2})
-    for kwargs in [dict(multiply=0.5*ss.par(series)), dict(multiply=0.5, share=series)]:
+    for kwargs in [dict(multiply=0.5*ss.par(series)), dict(multiply=0.5, frac=series)]:
         beta = ss.par(0.3, name='beta')
         sir = ss.Disease(infection=S >> I @ beta*I, recovery=I >> R @ ss.days(10), init_n=dict(I=100), name='sir')
         sim = ss.Sim(sir, interventions=ss.modify(sir.pars.beta, **kwargs), **kw).run()

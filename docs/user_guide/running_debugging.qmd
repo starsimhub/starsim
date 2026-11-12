@@ -112,7 +112,7 @@ Where two runs of what should be the same model differ only from some step on (a
 
 ### Checking the numbers
 
-A few numbers can be checked by hand. The run prints R0, which for an SIR is β × the infectious period; if it is far from what you expected, a rate or a duration is wrong, often in its units (see [Common pitfalls](#common-pitfalls)). Another check is to run the same model in another way, such as agents against the ODE: a large difference that doesn't shrink with more agents points to the time step, or to something only one of them does ([Solvers and backends](running_solvers.qmd#when-they-disagree) says when to expect them to differ). For the time step, `sim.check_dt()` runs the model with its step and with one half as long, and shows the largest difference in each result at any time, as a share of the result's largest value:
+A few numbers can be checked by hand. The run prints R0, which for an SIR is β × the infectious period; if it is far from what you expected, a rate or a duration is wrong, often in its units (see [Common pitfalls](#common-pitfalls)). Another check is to run the same model in another way, such as agents against the ODE: a large difference that doesn't shrink with more agents points to the time step, or to something only one of them does ([Solvers and backends](running_solvers.qmd#when-they-disagree) says when to expect them to differ). For the time step, `sim.check_dt()` runs the model with its step and with one half as long, and shows the largest difference in each result at any time, as a fraction of the result's largest value:
 
 ```{python}
 agent_sim = ss.Sim(measles, n_agents=20_000, stop=ss.days(50), verbose=0)
@@ -155,7 +155,7 @@ R0 comes out at 0.24 instead of 15. Give a duration with its unit (`ss.days(8)`)
 - **Data is matched to results by name.** A column called `reported` is not compared with the result `cases` (Starsim notes it, and `sim.fit()` stops); rename it, or use `ss.SimData(data, aliases=dict(cases='reported'))` ([Fitting a model](calibration_fitting.qmd#the-data)).
 - **Counts over a period are compared with totals over the same period.** Infections are summed between data points, while the number infectious is compared at each; check which kind each column is ([Fitting a model](calibration_fitting.qmd#the-data)).
 - **A method that forgot to call `super()`.** A module written as code that overrides `init_pre()`, `init_post()`, `finish_step()`, and the like without calling the base class's version leaves part of it unset; Starsim warns at the end of the run ([Custom modules](building_modules.qmd#pitfalls)).
-- **`len(sim.people)` still counts those who died this step.** For a share worked out in an analyzer, use `sim.people.n`, the number alive.
+- **`len(sim.people)` still counts those who died this step.** For a fraction worked out in an analyzer, use `sim.people.n`, the number alive.
 - **A date between two steps never equals `sim.now`.** `if sim.now == ss.date('2025-03-01')` with weekly steps does nothing; compare with `>=`, or give the module `start=`.
 
 More are in the pitfalls of [Custom modules](building_modules.qmd#pitfalls) and [Interventions](interventions_interventions.qmd#pitfalls).

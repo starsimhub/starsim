@@ -21,7 +21,7 @@ medium = 1000
 def test_groups_kept(monkeypatch, tmp_path):
     sc.heading('Testing results kept by group: only those named, and every few steps if every step would take too much memory')
     S, I, R = ss.states(3)
-    sir = ss.Disease(infection=S >> I @ 0.3 * I, recovery=I >> R @ ss.days(10), share=I / (S + I + R), init=dict(I=0.01), name='sir')
+    sir = ss.Disease(infection=S >> I @ 0.3 * I, recovery=I >> R @ ss.days(10), frac=I / (S + I + R), init=dict(I=0.01), name='sir')
     make = lambda solver, **kw: ss.Sim(sir, unit='day', stop=91, total_pop=10_000, n_agents=medium, solver=solver, stratify=dict(age=[0, 50]), verbose=0, **kw)
     res = make('ode', group_results=['I', 'infection']).run().results.sir
     assert res.I.strata is not None and getattr(res.S, 'strata', None) is None and res.infection.cum.strata is not None # Only the named results by group (and the cumulative total of a flow kept by group)
@@ -38,7 +38,7 @@ def test_groups_kept(monkeypatch, tmp_path):
         assert np.allclose(res.I, full.I) # The totals at every step (as agents, with the same seed)
         assert np.isclose(res.infection.select(age='0-49')[2], full.infection.select(age='0-49')[2*k:3*k].sum()) # A flow by group: its total over the steps of a row
         assert np.isclose(res.I.select(age='50+')[2], full.I.select(age='50+')[2*k]) # A state by group: at the start of a row
-        assert np.isclose(res.share.select(age='0-49')[-1], full.share.select(age='0-49')[res.I.group_ti[-1]]) # A ratio by group: of its parts at the start of the last row
+        assert np.isclose(res.frac.select(age='0-49')[-1], full.frac.select(age='0-49')[res.I.group_ti[-1]]) # A ratio by group: of its parts at the start of the last row
         assert np.allclose(res.infection.resample(ss.days(2*k)).select(age='0-49'), full.infection.resample(ss.days(2*k)).select(age='0-49'))
 
     # Data by group, even from a file, keeps them by group at every step, since it is compared with each one
@@ -50,8 +50,8 @@ def test_groups_kept(monkeypatch, tmp_path):
     # Many runs: a ratio by group is the ratio of its parts in each run, as in one sim (before: the numerator, or an error)
     for solver in ['binomial', 'abm']:
         msim = ss.parallel(make(solver), n_runs=3)
-        share = msim.results.sir.share.select(age='0-49')
-        assert np.isclose(share.values[-1, -1], msim.sims[-1].results.sir.share.select(age='0-49')[-1]) and share.values.max() <= 1 # The last run's sim
+        frac = msim.results.sir.frac.select(age='0-49')
+        assert np.isclose(frac.values[-1, -1], msim.sims[-1].results.sir.frac.select(age='0-49')[-1]) and frac.values.max() <= 1 # The last run's sim
 
     # Many runs: by group every few steps too, if all of them would take too much memory
     monkeypatch.setattr(ss.solvers.Compartmental, 'max_bytes', 1000)

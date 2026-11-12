@@ -496,7 +496,7 @@ class MultiSim:
 
         Args:
             key (str): if given, only this result (e.g. `'sir_infection'` or `'sir.infection'`), as `msim.summarize().loc[key]`: its row (or a row per scenario, if there are several)
-            interval (float): the share of runs the interval holds (default 0.95: from the 2.5th to the 97.5th percentile), as `msim.plot()` shows
+            interval (float): the fraction of runs the interval holds (default 0.95: from the 2.5th to the 97.5th percentile), as `msim.plot()` shows
             how (str/dict): how to summarize each result over each run: 'mean', 'median', 'sum', 'last', 'max', 'min', or a function, or a dict of these by result key, as for `sim.summarize()`
             baseline (str): the label of a scenario to compare with: each other scenario's difference from it, run by run (the runs are paired by position, as in `msim.diff()`), so the interval is of the paired differences
             each (bool): if True, a column for each run (labeled by its scenario), with its own value of each result, rather than the statistics across the runs
@@ -812,7 +812,7 @@ class Branching(sc.prettyobj):
     Attributes:
         sizes (array): the people infected in each run, the seeds included
         outcomes (array): each run's outcome: `'extinct'`, `'stopped'` (by `until=`), or `'ongoing'`
-        p_extinct (float): the share of the runs that went extinct, and `p_extinct_ci` its 95% interval (Wilson's)
+        p_extinct (float): the fraction of the runs that went extinct, and `p_extinct_ci` its 95% interval (Wilson's)
         lengths (array): as agents, the most generations of each run's chain
         offspring (array): as agents, the number each person infected, of everyone infected long enough before the end that their offspring are all counted (see `sim.branching`); only if no run was stopped by `until=`, since where a run stops depends on its offspring
         R, k (float): as agents, the mean of the offspring and their dispersion, as a negative binomial fitted by maximum likelihood (k is infinite for offspring no more variable than a Poisson's); None if a run was stopped by `until=`, so to estimate them, run for a fixed `dur` instead
@@ -910,7 +910,7 @@ def single_run(sim, ind=0, shrink=True, run_args=None, verbose=None, copy_sim=Fa
     if not sim.label:
         sim.label = f'Sim {ind}'
     if track:
-        sim.progress = ss.display.Share(sim, globaldict, ind, show)
+        sim.progress = ss.display.Frac(sim, globaldict, ind, show)
     sim.run(**sc.mergedicts({'verbose': verbose}, run_args))
     if track:
         globaldict[ind] = 1.0

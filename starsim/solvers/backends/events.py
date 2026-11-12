@@ -5,7 +5,7 @@ Each agent has a state, the time and transition of its scheduled exit (a dwell t
 version, raised at each move, so that what was queued for it before is skipped. Within the step, events come off one heap in
 time order: an agent's own exit (the earliest of its scheduled exit and an exponential of its competing rates), or a contact
 of an infectious agent on a route (to a neighbor on a network, a member of a pool, or one of a cell of a contact matrix, the
-cell drawn by its weight), accepted with the share its real hazard is of the bound its clock ran at (thinning).
+cell drawn by its weight), accepted with the fraction its real hazard is of the bound its clock ran at (thinning).
 
 Its Rust copy (`starsim/solvers/rust/src/events.rs`) gives the same events and numbers, bit for bit, with no compiling; this is the reference.
 
@@ -113,7 +113,7 @@ def draw_exit(a, s, t, key, ctr, br_ptr, br_tr, br_cum, tm_ptr, tm_tr, dw_kind, 
 
 @jit
 def queue(a, s, t, t1, key, ctr, ht, ha, hk, hv, hr, size, ver, t_exit, exit_tr, haz_ptr, haz_tr, haz_rate, haz_row, rate_rows,
-          r_kind, x_off, r_n, r_scale, r_bound, share, w_agent, r_deg, a_ctc):
+          r_kind, x_off, r_n, r_scale, r_bound, frac, w_agent, r_deg, a_ctc):
     """
     Queue what an agent in state `s` does next from time `t`: its own exit (the earliest of the scheduled one and an exponential of
     the competing rates, the exit chosen in proportion to them), if within the step, and its first contact on each route it is a source on;
@@ -138,7 +138,7 @@ def queue(a, s, t, t1, key, ctr, ht, ha, hk, hv, hr, size, ver, t_exit, exit_tr,
     if tn < t1 and trn >= 0:
         size = push(ht, ha, hk, hv, hr, size, tn, a, -1, ver[a], trn)
     for r in range(len(r_kind)):
-        rate = contact_rate(a, s, r, r_kind, x_off, r_n, r_scale, r_bound, share, w_agent, r_deg, a_ctc)
+        rate = contact_rate(a, s, r, r_kind, x_off, r_n, r_scale, r_bound, frac, w_agent, r_deg, a_ctc)
         if rate > 0:
             size = push(ht, ha, hk, hv, hr, size, t - np.log(rand(key, a, ctr))/rate, a, r, ver[a], -1)
     return size
@@ -163,9 +163,9 @@ def neighbor(a, j, r, x_off, beta_off, s1, e1, o1, s2, e2, o2, w1, w2):
 
 
 @jit
-def contact_rate(a, s, r, r_kind, x_off, r_n, r_scale, r_bound, share, w_agent, r_deg, a_ctc):
+def contact_rate(a, s, r, r_kind, x_off, r_n, r_scale, r_bound, frac, w_agent, r_deg, a_ctc):
     """ The rate of the contacts of an agent in state `s` on route `r`, at the bound that each is then thinned from: 0 if it is not a source there """
-    sh = share[r, s]*w_agent[a]
+    sh = frac[r, s]*w_agent[a]
     if sh <= 0:
         return 0.0
     deg = degree(a, r, x_off, r_n, r_deg) if r_kind[r] == 0 else a_ctc[r, a]
@@ -179,7 +179,7 @@ def step_events(t0, t1, seed, state, ver, t_exit, exit_tr, fresh,
                 dw_kind, dw_k, dw_mean, dw_row, pool,
                 dst_ptr, dst_state, dst_cum, inf_tr,
                 sus_state, sus_agent, w_agent,
-                r_kind, x_off, r_n, r_scale, r_bound, share,
+                r_kind, x_off, r_n, r_scale, r_bound, frac,
                 s1, e1, o1, s2, e2, o2, r_deg, w1, w2, beta_off,
                 members, mem_eff, mem_off, mem_n, a_ctc,
                 r_blk, a_cell, c_ptr, c_first, c_row, c_cum):
@@ -198,7 +198,7 @@ def step_events(t0, t1, seed, state, ver, t_exit, exit_tr, fresh,
         dst_ptr, dst_state, dst_cum: each transition's destinations (-1 for a death), with their cumulative chances
         inf_tr (int): the transmission (-1 for none)
         sus_state, sus_agent: susceptibility: by state (0 for none) and by agent; w_agent: infectiousness by agent
-        r_kind (0 network, 1 pool, 2 contact matrix), x_off, r_n (each network's place in s1, s2 and r_deg, and its number of agents; each matrix's place in a_cell), r_scale (the coefficient per unit of share), r_bound (the bound that each contact is thinned from), share (route x state): the routes
+        r_kind (0 network, 1 pool, 2 contact matrix), x_off, r_n (each network's place in s1, s2 and r_deg, and its number of agents; each matrix's place in a_cell), r_scale (the coefficient per unit of `frac`), r_bound (the bound that each contact is thinned from), frac (route x state): the routes
         s1, e1, o1, s2, e2, o2, r_deg, w1, w2, beta_off: the edges of each agent on each network (`ss.Network.edge_index()`), concatenated, with each agent's number of neighbors (r_deg), and the weight of each edge from p1 to p2 (w1) and from p2 to p1 (w2: the same array unless the weights differ by direction, as on a network with acts), each network's edges from beta_off
         members, mem_eff, mem_off, mem_n: the pools: who can be reached, and the contacts of each in that pool; where they start, how many
         a_ctc (route x agent): on each pool or contact matrix, each agent's contacts per unit of the coefficient (0 if not a source there)
@@ -225,7 +225,7 @@ def step_events(t0, t1, seed, state, ver, t_exit, exit_tr, fresh,
     for s in range(ns):
         busy[s] = haz_ptr[s+1] > haz_ptr[s]
         for r in range(len(r_kind)):
-            busy[s] |= share[r, s] > 0
+            busy[s] |= frac[r, s] > 0
     for a in range(n): # Everyone's next exit and first contacts; the competing rates and contacts are drawn again each step, since they are memoryless
         s = state[a]
         if s < 0:
@@ -238,7 +238,7 @@ def step_events(t0, t1, seed, state, ver, t_exit, exit_tr, fresh,
         if size + 1 + len(r_kind) > len(ht):
             ht, ha, hk, hv, hr = grow(ht, ha, hk, hv, hr, size, 1 + len(r_kind))
         size = queue(a, s, t0, t1, key, ctr, ht, ha, hk, hv, hr, size, ver, t_exit, exit_tr, haz_ptr, haz_tr, haz_rate, haz_row, rate_rows,
-                                         r_kind, x_off, r_n, r_scale, r_bound, share, w_agent, r_deg, a_ctc)
+                                         r_kind, x_off, r_n, r_scale, r_bound, frac, w_agent, r_deg, a_ctc)
     ecap = 1024
     e_a = np.empty(ecap, np.int64); e_tr = np.empty(ecap, np.int64); e_src = np.empty(ecap, np.int64); e_dst = np.empty(ecap, np.int64); e_t = np.empty(ecap); e_by = np.empty(ecap, np.int64); e_rt = np.empty(ecap, np.int64)
     ne = 0
@@ -278,7 +278,7 @@ def step_events(t0, t1, seed, state, ver, t_exit, exit_tr, fresh,
                 x = 1.0
             sb = state[b]
             p = 0.0 if sb < 0 else sus_state[sb]*sus_agent[b]*x/r_bound[k]
-            rate = contact_rate(a, s, k, r_kind, x_off, r_n, r_scale, r_bound, share, w_agent, r_deg, a_ctc) # The next contact of the same agent
+            rate = contact_rate(a, s, k, r_kind, x_off, r_n, r_scale, r_bound, frac, w_agent, r_deg, a_ctc) # The next contact of the same agent
             if size + 1 > len(ht):
                 ht, ha, hk, hv, hr = grow(ht, ha, hk, hv, hr, size, 1)
             size = push(ht, ha, hk, hv, hr, size, t - np.log(rand(key, a, ctr))/rate, a, k, ver[a], -1)
@@ -313,5 +313,5 @@ def step_events(t0, t1, seed, state, ver, t_exit, exit_tr, fresh,
         if size + 1 + len(r_kind) > len(ht):
             ht, ha, hk, hv, hr = grow(ht, ha, hk, hv, hr, size, 1 + len(r_kind))
         size = queue(b, d, t, t1, key, ctr, ht, ha, hk, hv, hr, size, ver, t_exit, exit_tr, haz_ptr, haz_tr, haz_rate, haz_row, rate_rows,
-                                         r_kind, x_off, r_n, r_scale, r_bound, share, w_agent, r_deg, a_ctc)
+                                         r_kind, x_off, r_n, r_scale, r_bound, frac, w_agent, r_deg, a_ctc)
     return e_a[:ne], e_tr[:ne], e_src[:ne], e_dst[:ne], e_t[:ne], e_by[:ne], e_rt[:ne], over

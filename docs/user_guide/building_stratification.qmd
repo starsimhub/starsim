@@ -11,7 +11,7 @@ People differ in ways that change how a disease spreads: children mix more than 
 
 ## Age groups and contacts
 
-Here the measles model is stratified into three age groups, with the share of the population in each, and given a contact matrix: row *i*, column *j* is the number of contacts per day that a person in group *i* has with people in group *j*. 80% of children (0–14) start immune, 92% of adults (15–64), and 98% of people 65 and over:
+Here the measles model is stratified into three age groups, with the fraction of the population in each, and given a contact matrix: row *i*, column *j* is the number of contacts per day that a person in group *i* has with people in group *j*. 80% of children (0–14) start immune, 92% of adults (15–64), and 98% of people 65 and over:
 
 ::: {.panel-tabset group="language"}
 ## Python
@@ -23,7 +23,7 @@ S, I, R = ss.states('S I R')
 infection = S >> I @ 0.14*I    # With contacts, beta is per contact: 0.14 per contact per day
 recovery  = I >> R @ ss.days(8)
 measles = ss.Disease(infection, recovery, init=dict(R=ss.by(age=[0.8, 0.92, 0.98])), init_n=dict(I=10))
-measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1}) # Ages 0-14, 15-64, and 65+, with the share in each
+measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1}) # Ages 0-14, 15-64, and 65+, with the fraction in each
 
 contacts = ss.contacts(ages=[0, 15, 65], matrix=[[10, 6, 1], [3, 8, 1], [3, 6, 3]])
 sim = ss.Sim(measles, networks=contacts, total_pop=100_000, start='2025-01-01', stop='2025-07-01')
@@ -47,7 +47,7 @@ measles <- Disease(
   init   = list(R = ss$by(age = c(0.8, 0.92, 0.98))),
   init_n = list(I = 10)
 )
-measles$stratify(age = list("0" = 0.3, "15" = 0.6, "65" = 0.1)) # Ages 0-14, 15-64, and 65+, with the share in each
+measles$stratify(age = list("0" = 0.3, "15" = 0.6, "65" = 0.1)) # Ages 0-14, 15-64, and 65+, with the fraction in each
 
 age_contacts <- contacts(ages = c(0, 15, 65), matrix = rbind(c(10, 6, 1), c(3, 8, 1), c(3, 6, 3)))
 sim <- Sim(measles, networks = age_contacts, total_pop = 100000, start = "2025-01-01", stop = "2025-07-01")
@@ -68,20 +68,20 @@ Each equation of the SIR model now holds for each age group, and transmission su
 sim.diseases.measles.equations()
 ```
 
-With contacts, β is the rate of infection per contact with an infectious person, and R0 depends on the whole contact matrix. [Places and data](populations_places.qmd) covers contact matrices, including those for real countries (`ss.contacts('Kenya')`), and [what a matrix acts on](populations_mixing.qmd#what-a-matrix-acts-on): with `beta*I`, as here, the share of each group who are infectious; with `beta*I.n`, their number; and with `beta*I.frac`, their number over everyone, as in Keeling & Rohani's matrices.
+With contacts, β is the rate of infection per contact with an infectious person, and R0 depends on the whole contact matrix. [Places and data](populations_places.qmd) covers contact matrices, including those for real countries (`ss.contacts('Kenya')`), and [what a matrix acts on](populations_mixing.qmd#what-a-matrix-acts-on): with `beta*I`, as here, the fraction of each group who are infectious; with `beta*I.n`, their number; and with `beta*I.frac`, their number over everyone, as in Keeling & Rohani's matrices.
 
-## Levels and shares
+## Levels and fractions
 
-The levels of a dimension are given as a list, or as a dict with the share of people in each:
+The levels of a dimension are given as a list, or as a dict with the fraction of people in each:
 
 | Levels | Example | Groups |
 |---|---|---|
 | Lower edges of bins, for a number such as age | `age=[0, 15, 65]` | 0-14, 15-64, 65+ |
 | Labels | `risk=['low', 'high']` | low, high |
 | True and false | `vaccinated=[False, True]` | False, True |
-| A dict of levels and shares | `age={0: 0.3, 15: 0.6, 65: 0.1}`, `risk={'low': 0.8, 'high': 0.2}` | The same, with these shares of people |
+| A dict of levels and fractions | `age={0: 0.3, 15: 0.6, 65: 0.1}`, `risk={'low': 0.8, 'high': 0.2}` | The same, with these fractions of people |
 
-If the shares aren't given, they come from the population where it has them (the ages of a named population such as `ss.population('Kenya')`), or else from the world's population by age for age groups, everyone in the first level for true and false, and equal shares otherwise, each marked as a guess by `describe()`. A level is referred to by its label (`'0-14'`) or its position (`0`). Several dimensions can be given in one call, e.g. `measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1}, risk={'low': 0.8, 'high': 0.2})`.
+If the fractions aren't given, they come from the population where it has them (the ages of a named population such as `ss.population('Kenya')`), or else from the world's population by age for age groups, everyone in the first level for true and false, and equal fractions otherwise, each marked as a guess by `describe()`. A level is referred to by its label (`'0-14'`) or its position (`0`). Several dimensions can be given in one call, e.g. `measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1}, risk={'low': 0.8, 'high': 0.2})`.
 
 The options that are needed less often go with the levels, in `ss.levels()` (listed in the [appendix](#appendix-every-option-of-a-stratification)). What kind of dimension it is comes from its name and levels: `age=` with numbers is age groups (people age between them), a geography or `mobility=` makes places, and anything else is plain groups; `ss.levels(..., kind='age')`, `'space'`, or `'plain'` says so instead.
 
@@ -89,7 +89,7 @@ The options that are needed less often go with the levels, in `ss.levels()` (lis
 
 By default, a dimension applies to every state of people, in every group. Two options of `ss.levels()` narrow it:
 
-- `states=` gives the states it applies to. Severity, for example, is a property of the infected only: people entering `I` take a level in proportion to the shares.
+- `states=` gives the states it applies to. Severity, for example, is a property of the infected only: people entering `I` take a level in proportion to the fractions.
 - `who=` gives the people it applies to, as a condition on the other dimensions: `measles.stratify(sex=['female', 'male'], pregnant=ss.levels({False: 0.95, True: 0.05}, who=ss.person.female))` gives only women a level of pregnancy, so `res.I.select(pregnant=True)` counts women only. A condition can name levels (`ss.person.risk == 'high'`), the edges of age groups (`ss.person.age >= 15`), or several of these joined with `&`.
 
 ```{python}
@@ -118,16 +118,16 @@ A stratified model is the same model in each group until something says otherwis
 
 ### Values by group
 
-`ss.by()` gives a value for each level of one or more dimensions, by position or by label, wherever a value is used: in a rate, as a share, or as the coverage of an intervention:
+`ss.by()` gives a value for each level of one or more dimensions, by position or by label, wherever a value is used: in a rate, as a fraction, or as the coverage of an intervention:
 
 ```python
 beta = ss.by(age=[2.5, 1.9, 1.0])                          # By position
 beta = ss.by(age={'0-14': 2.5, '15-64': 1.9, '65+': 1.0})  # By label
 beta = ss.by(age=[2.5, 1.9, 1.0], risk=[1.0, 3.0])         # One value per age group and risk level: the product
-init = ss.by(age=[0.002, 0.001, 0])                         # A share of each age group
+init = ss.by(age=[0.002, 0.001, 0])                         # A fraction of each age group
 ```
 
-A starting share, like `init` above, is of each group, not of everyone: 0.0001 of everyone infected, all in a high-risk group that is 20% of people, is `init=dict(I=ss.by(risk=[0.0001/0.2, 0]))`. A table (a dataframe with a column for each dimension and a column `value`) gives each combination directly, and a table by single year of age works whatever the model's age groups. A value for each group can itself change over time. See [Parameters](building_parameters.qmd#values-for-each-group).
+A starting fraction, like `init` above, is of each group, not of everyone: 0.0001 of everyone infected, all in a high-risk group that is 20% of people, is `init=dict(I=ss.by(risk=[0.0001/0.2, 0]))`. A table (a dataframe with a column for each dimension and a column `value`) gives each combination directly, and a table by single year of age works whatever the model's age groups. A value for each group can itself change over time. See [Parameters](building_parameters.qmd#values-for-each-group).
 
 For a disease that is already written, `ss.modify()` multiplies one of its quantities by a value for each level: a transition's rate (for a branch chosen with `p=`, its probability), or `rel_sus` and `rel_trans`, the susceptibility and infectiousness of the people in each group:
 
@@ -189,9 +189,9 @@ sim.results.measles.infection.by('vaccinated').plot()
 ```
 :::
 
-`sim.describe()` lists each dimension with its levels and shares, and each rate with its values by group. A share given for each level of a dimension applies within each level of the others: here 90% of each age group is vaccinated; shares that differ by age are an `ss.by()` over both dimensions.
+`sim.describe()` lists each dimension with its levels and fractions, and each rate with its values by group. A fraction given for each level of a dimension applies within each level of the others: here 90% of each age group is vaccinated; fractions that differ by age are an `ss.by()` over both dimensions.
 
-**Mixing is a separate decision.** Stratifying doesn't by itself say who meets whom: without a contact matrix, people in every group mix at random, in proportion to their numbers. With several dimensions, each with its own matrix, contacts are assumed to be separable (age and risk affect contacts independently); when they aren't, give a joint matrix. Likewise, shares given separately for two dimensions assume that they are independent; when they aren't, give shares with `ss.by()` over both.
+**Mixing is a separate decision.** Stratifying doesn't by itself say who meets whom: without a contact matrix, people in every group mix at random, in proportion to their numbers. With several dimensions, each with its own matrix, contacts are assumed to be separable (age and risk affect contacts independently); when they aren't, give a joint matrix. Likewise, fractions given separately for two dimensions assume that they are independent; when they aren't, give fractions with `ss.by()` over both.
 
 ## Moving between groups
 
@@ -249,7 +249,7 @@ Further reading:
 
 ## Appendix: every option of a stratification
 
-`stratify()` on a disease (and `stratify=dict(...)` on a sim or a disease) takes each dimension by keyword, with its levels (see [Levels and shares](#levels-and-shares)) or a geography (`patch=ss.geo.geography(...)`), `inplace=False` to return a stratified copy, and a transfer by keyword ([Moving between groups](#moving-between-groups)). See [`ss.Disease.stratify`](../api/diseases.qmd) for the details. The levels can be given with these options, as `ss.levels(levels, ...)`:
+`stratify()` on a disease (and `stratify=dict(...)` on a sim or a disease) takes each dimension by keyword, with its levels (see [Levels and fractions](#levels-and-fractions)) or a geography (`patch=ss.geo.geography(...)`), `inplace=False` to return a stratified copy, and a transfer by keyword ([Moving between groups](#moving-between-groups)). See [`ss.Disease.stratify`](../api/diseases.qmd) for the details. The levels can be given with these options, as `ss.levels(levels, ...)`:
 
 | Option | What it gives |
 |---|---|
@@ -257,7 +257,7 @@ Further reading:
 | `who` | The people it applies to, as a condition on the other dimensions, e.g. `who=ss.person.female`; others have no level of it |
 | `kind` | `'age'`, `'space'`, or `'plain'`, if not as its name and levels say |
 | `mobility` | For places, the movement between them: `ss.geo.gravity()`, `ss.geo.radiation()`, `ss.geo.Mobility()`, or a matrix ([Places and data](populations_places.qmd)) |
-| `fractions` | Shares that depend on the levels of other dimensions, as an `ss.by()` over both, e.g. a share severe by age |
+| `fractions` | Fractions that depend on the levels of other dimensions, as an `ss.by()` over both, e.g. a fraction severe by age |
 
 ### Names that mean something
 
@@ -265,7 +265,7 @@ Most dimensions are plain groups, whatever they are called (`risk`, `vaccinated`
 
 | Name or form | What it means |
 |---|---|
-| `age`, with numbers | Age groups: people age between them (in a model with births or deaths), a contact matrix by age is converted to them, and the shares come from a named population or the world's ages |
+| `age`, with numbers | Age groups: people age between them (in a model with births or deaths), a contact matrix by age is converted to them, and the fractions come from a named population or the world's ages |
 | `sex` | People's sex (`ss.person.female` as agents): two levels, one of them `'female'` (e.g. `sex=['female', 'male']`) |
 | A geography, or `ss.levels(..., mobility=...)` | Places (`kind='space'`), with movement between them; see [Places and data](populations_places.qmd) |
 | `patch`, `region`, `district`, `county`, `province`, `place`, `location`, with only names | Plain groups that mix as one population, with a note, since a list of names alone gives no movement; give a geography or `ss.levels(..., mobility=...)` for places |

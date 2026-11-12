@@ -276,7 +276,7 @@ class ICER(ss.Analyzer):
 
     def plot_ceac(self, wtp=None, **kwargs):
         """
-        Plot the cost-effectiveness acceptability curve: the share of runs in which each scenario is the best, by willingness to pay
+        Plot the cost-effectiveness acceptability curve: the fraction of runs in which each scenario is the best, by willingness to pay
 
         Args:
             wtp (array): the values of willingness to pay (default: 50 values from 0 up to twice the largest ICER)
@@ -286,13 +286,13 @@ class ICER(ss.Analyzer):
         if wtp is None:
             top = self.df.ICER.max()
             wtp = np.linspace(0, 2*top if np.isfinite(top) and top > 0 else 1, 50)
-        shares = pd.DataFrame([self.net_benefit(w).idxmax(axis=1).value_counts(normalize=True) for w in wtp], index=wtp).fillna(0)
+        fracs = pd.DataFrame([self.net_benefit(w).idxmax(axis=1).value_counts(normalize=True) for w in wtp], index=wtp).fillna(0)
         with ss.style(**kw.style):
             fig, ax = plt.subplots(**kw.fig)
-            for label in shares.columns:
-                ax.plot(wtp, shares[label], label=label)
+            for label in fracs.columns:
+                ax.plot(wtp, fracs[label], label=label)
             ax.set_xlabel('Willingness to pay per outcome averted')
-            ax.set_ylabel('Share of runs in which it is the best')
+            ax.set_ylabel('Fraction of runs in which it is the best')
             ax.set_ylim(0, 1)
             ax.legend(frameon=False)
         return ss.return_fig(fig, **kw.return_fig)

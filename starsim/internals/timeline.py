@@ -595,7 +595,7 @@ class Timeline:
             if sim.t.initialized: # It's initialized
                 if all([type(getattr(self, key)) == type(getattr(sim.t, key)) for key in tvkeys]): # Types match
                     if all([getattr(self, key) == getattr(sim.t, key) for key in tvkeys]): # Values match
-                        self._share_from(sim.t)
+                        self._frac_from(sim.t)
                         self.initialized = True
                         return self
 
@@ -667,7 +667,7 @@ class Timeline:
         self.initialized = True
         return self
 
-    def _share_from(self, source):
+    def _frac_from(self, source):
         """
         Copy the time vectors from a matching (sim) timeline
 

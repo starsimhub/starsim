@@ -102,7 +102,7 @@ def test_2d_results():
             super().init_results()
             self.define_results(ss.Result('infected', columns=['female', 'male'], label='Infected', kind='stock'))
 
-        def record_stocks(self): # The state at the start of each step
+        def record_states(self): # The state at the start of each step
             infected = self.sim.diseases.sis.I
             female = self.sim.people.female
             self.results.infected[self.ti] = [np.count_nonzero(infected & female), np.count_nonzero(infected & ~female)]
@@ -114,7 +114,7 @@ def test_2d_results():
             self.results['nested'] = ss.Results(self)
             self.results.nested += ss.Result('infected', shape=self.t.npts, timevec=self.t.timevec, kind='stock')
 
-        def record_stocks(self):
+        def record_states(self):
             self.results.nested.infected[self.ti] = np.count_nonzero(self.sim.diseases.sis.I)
 
     sim = ss.Sim(n_agents=small, total_pop=10*small, diseases='sis', networks='random', analyzers=[BySex(), Nested()], start=2000) # Calendar years, resampled by year below
@@ -140,11 +140,11 @@ def test_2d_results():
 def test_declared_scale():
     sc.heading('Testing that results declared as sums of states are scaled, as agents')
     S, I, R = ss.states(3)
-    sir = ss.Disease(S >> I @ 0.3 * I, I >> R @ ss.days(10), ever=I + R, share=I / (S + I + R), init=dict(I=0.01), name='sir')
+    sir = ss.Disease(S >> I @ 0.3 * I, I >> R @ ss.days(10), ever=I + R, frac=I / (S + I + R), init=dict(I=0.01), name='sir')
     sim = ss.Sim(sir, unit='day', stop=60, total_pop=10_000, n_agents=medium, solver='abm', verbose=0).run()
     res = sim.results.sir
     assert np.allclose(res.ever, res.I + res.R) # Numbers of people, not of agents
-    assert np.allclose(res.share, res.I/(res.S + res.I + res.R)) # A ratio is the same either way
+    assert np.allclose(res.frac, res.I/(res.S + res.I + res.R)) # A ratio is the same either way
     return sim
 
 
@@ -171,9 +171,9 @@ def test_flow_ratios():
     # A ratio with nobody in its denominator is 0 (nothing divided by anything), not an error
     for solver in ['ode', 'abm']:
         S, I, R = ss.states(3)
-        sir = ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(10), share=R/R, init=dict(I=0.01), name='sir')
+        sir = ss.Disease(S >> I @ 0.3*I, I >> R @ ss.days(10), frac=R/R, init=dict(I=0.01), name='sir')
         res = ss.Sim(sir, unit='day', stop=10, total_pop=10_000, n_agents=medium, solver=solver, verbose=0).run().results.sir
-        assert res.share[0] == 0 and res.share[-1] == 1
+        assert res.frac[0] == 0 and res.frac[-1] == 1
 
     return sim
 
@@ -274,7 +274,7 @@ def test_results_by_group():
             super().init_results()
             self.define_results(ss.Result('n_infected', groups=True), ss.Result('prevalence', scale=False, groups=True))
 
-        def record_stocks(self): # The state at the start of each step
+        def record_states(self): # The state at the start of each step
             groups, dis = self.sim.groups, self.sim.diseases[0]
             infected = groups.count(dis.I if dis.states else dis.infected) # Declared, or written as code
             self.results.n_infected.set_groups(self.ti, infected)

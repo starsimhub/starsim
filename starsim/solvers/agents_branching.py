@@ -316,8 +316,8 @@ class Branching:
             scale = ref if np.isfinite(ref) else 1/dt # A probability of 1 is an infinite rate (ss.probperweek(1)): a certain transmission, beside which the others have their own chance, from their hazard in the step
             weights = None
             for state,c in coefs.items():
-                share = np.minimum(c/scale, np.finfo(float).max)*state.rel_trans # Each source state's hazard, relative to the scale: the beta below is that of the scale, and over a network every factor scales the hazard (see over_network())
-                w = mod[state.name].raw if np.ndim(share) == 0 and share == 1 else mod[state.name].raw*share # The usual case, one source state, needs no product
+                frac = np.minimum(c/scale, np.finfo(float).max)*state.rel_trans # Each source state's hazard, relative to the scale: the beta below is that of the scale, and over a network every factor scales the hazard (see over_network())
+                w = mod[state.name].raw if np.ndim(frac) == 0 and frac == 1 else mod[state.name].raw*frac # The usual case, one source state, needs no product
                 weights = w if weights is None else weights + w
             rel_trans = times(self.current_value('rel_trans', weights), by_strain) # By UID
             beta = -np.expm1(-scale*dt)
@@ -331,15 +331,15 @@ class Branching:
                 auids = sim.people.auids
                 n = np.bincount(groups[auids], minlength=sim.groups.n_groups).astype(float)
                 for k,strain in enumerate(strains):
-                    share = 1.0 if strain is None else self.strain_weights[strain_raw, strain]
-                    infectious = np.bincount(groups[auids], weights=(rel_trans*share)[auids], minlength=sim.groups.n_groups)
+                    frac = 1.0 if strain is None else self.strain_weights[strain_raw, strain]
+                    infectious = np.bincount(groups[auids], weights=(rel_trans*frac)[auids], minlength=sim.groups.n_groups)
                     expo = sim.mixing.term_exposure(sim.mixing.pool_terms[route.name], infectious, n)
                     pool_hazard[k] += ref*expo[groups]*route_sus.raw*mult(None, slice(None))
-            elif isinstance(route, ss.networks.MixingPools) and not route.pools: # A matrix of numbers: from the share of each group or band that is infectious
+            elif isinstance(route, ss.networks.MixingPools) and not route.pools: # A matrix of numbers: from the fraction of each group or band that is infectious
                 any_pools = True
                 for k,strain in enumerate(strains):
-                    share = 1.0 if strain is None else self.strain_weights[strain_raw, strain]
-                    auids, expo = route.exposure(rel_trans*share)
+                    frac = 1.0 if strain is None else self.strain_weights[strain_raw, strain]
+                    auids, expo = route.exposure(rel_trans*frac)
                     pool_hazard[k][auids] += ref*expo*route_sus.raw[auids]*mult(None, auids)
             elif isinstance(route, (ss.MixingPool, ss.networks.MixingPools)): # Has no direction
                 any_pools = True
@@ -347,8 +347,8 @@ class Branching:
                     if len(pool.source_uids) and len(pool.target_uids):
                         dst = pool.target_uids
                         for k,strain in enumerate(strains):
-                            share = 1.0 if strain is None else self.strain_weights[strain_raw[pool.source_uids], strain]
-                            trans = np.mean(rel_trans[pool.source_uids]*share) # The infectiousness-weighted fraction of the source group that is infectious
+                            frac = 1.0 if strain is None else self.strain_weights[strain_raw[pool.source_uids], strain]
+                            trans = np.mean(rel_trans[pool.source_uids]*frac) # The infectiousness-weighted fraction of the source group that is infectious
                             pool_hazard[k][dst] += ref*trans*pool.eff_contacts.raw[dst]*route_sus.raw[dst]*mult(None, dst)
             else: # Any other route works out its own transmission
                 new_cases.append(ss.uids(route.compute_transmission(route_sus, mod.rel_trans.asnew(rel_trans, copy=False), beta, disease=mod)))
@@ -426,7 +426,7 @@ class Branching:
             for state in pairs[0][0].terms:
                 weights = weights + mod[state.name].raw*(first[state.name]/ref)*state.rel_trans
             rel_trans = self.current_value('rel_trans', weights)
-            route_sus = sum(s*(r/top) for s,r in zip(sus, rates)) # Each transmission's rate, as a share of the largest
+            route_sus = sum(s*(r/top) for s,r in zip(sus, rates)) # Each transmission's rate, as a fraction of the largest
             beta = -np.expm1(-top*dt)
             for _, trgs, _ in self.over_network(0, route, rel_trans, route_sus, [beta, beta], None):
                 for i,(tr,src) in enumerate(pairs):
@@ -523,8 +523,8 @@ class Branching:
         rvs = self.draw(f'mix_{tr.name}', sus)
         infected = rvs < p
         if self.strain is not None and infected.any(): # The same draw chooses the strain, in proportion to each one's hazard
-            share = np.cumsum(hazards, axis=0)[:, infected]/total[infected]
-            strain = (rvs[infected]/p[infected] >= share).sum(axis=0)
+            frac = np.cumsum(hazards, axis=0)[:, infected]/total[infected]
+            strain = (rvs[infected]/p[infected] >= frac).sum(axis=0)
             self.set_strain(sus[infected], np.array(self.strain_levels())[np.minimum(strain, len(hazards) - 1)], carried)
         return sus[infected]
 
@@ -541,7 +541,7 @@ class Branching:
         return
 
     def protection(self, state, uids, strain):
-        """ The share of the force of infection of a strain (one, or one for each agent) that reaches some agents in a state: by the strains they carry there, and by the products they hold """
+        """ The fraction of the force of infection of a strain (one, or one for each agent) that reaches some agents in a state: by the strains they carry there, and by the products they hold """
         out = super().protection(state, self.strain_raw()[uids], strain) if state.name in self.protect else 1.0
         if self.sim.modifiers.get((self.mod.name, 'strain_sus', None)) and len(uids):
             if np.ndim(strain): # One for each agent

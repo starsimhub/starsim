@@ -115,7 +115,7 @@ class Expressions:
             return lambda: self.clock(expr)
         elif isinstance(expr, E.attr):
             return lambda: self.attr(expr)
-        return lambda: ss.expressions.evaluate(expr, self) # Anything else (a share of a row, a mother's value) as it evaluates itself
+        return lambda: ss.expressions.evaluate(expr, self) # Anything else (a fraction of a row, a mother's value) as it evaluates itself
 
     def memoized(self, expr, func):
         """ A part of an expression, as a function, whose value is kept in `self._memo`, while it is kept, for the same agents and the same route and strain """
@@ -277,7 +277,7 @@ class Expressions:
         return out
 
     def clock_values(self, clock, uids):
-        """ Time in some states (or the share of the dwell time elapsed), for some agents; NaN for those not in them """
+        """ Time in some states (or the fraction of the dwell time elapsed), for some agents; NaN for those not in them """
         mod = self.mod
         names = clock.names
         inside = np.zeros(len(uids), dtype=bool)

@@ -247,11 +247,11 @@ def test_pregnancy():
         mean_results[k] = mean_gestation
         n = len(babies_of_these_mothers)
         print(f'  {n} babies born to mothers aged {k} at birth')
-        # Share of babies born preterm (<37 weeks)
+        # Fraction of babies born preterm (<37 weeks)
         n_preterm = np.sum(sim.people.pregnancy.gestation_at_birth[babies_of_these_mothers] < 37)
-        preterm_share = n_preterm / n if n > 0 else np.nan
-        print(f'  Preterm births (<37 weeks): {n_preterm} ({preterm_share:.1%})')
-        ptb_results[k] = preterm_share
+        preterm_frac = n_preterm / n if n > 0 else np.nan
+        print(f'  Preterm births (<37 weeks): {n_preterm} ({preterm_frac:.1%})')
+        ptb_results[k] = preterm_frac
 
     # Assertions: not on the mean gestational ages themselves, which a relative risk of 1.2 (4.6% to 5.5% preterm) moves by about 0.05 weeks, less than half
     # their standard error at these numbers of babies (about 0.11 weeks), so their order is as often chance as not; on the risk each mother had instead
@@ -611,8 +611,8 @@ def test_declared_newborns():
         assert np.isclose(n_states, alive), f'{dem.name}: {n_states} in states but {alive} alive'
         new = sim.people.auids[sim.people.auids >= 2000]
         assert len(new) > 100
-        share = sim.people.risk[new].mean()
-        assert 0.7 < share < 0.9, f'{dem.name}: {share:.2f} of newborns are high risk, not 0.8'
+        frac = sim.people.risk[new].mean()
+        assert 0.7 < frac < 0.9, f'{dem.name}: {frac:.2f} of newborns are high risk, not 0.8'
         assert sim.diseases.sis.I[new].any() # Newborns can be infected
 
     # Declared births and deaths of the population are run by the disease, so an ODE run needs no step-by-step loop for them (it said "flows has a step of its own")

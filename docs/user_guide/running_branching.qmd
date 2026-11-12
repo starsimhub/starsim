@@ -45,7 +45,7 @@ sir = ss.Disease(infection, recovery, init_n=dict(I=1), name='sir') # One import
 sim = ss.Sim(sir, total_pop=1e6, stop=ss.days(100), solver='gillespie', branching=True, verbose=0)
 msim = ss.parallel(sim, n_runs=100, until=sir.I.n + sir.R.n >= 100)
 b = msim.branching
-print(f'Share of introductions that died out: {b.p_extinct:.2f} (95% interval {b.p_extinct_ci[0]:.2f} to {b.p_extinct_ci[1]:.2f}; theory: 1/R0 = 0.5)')
+print(f'Fraction of introductions that died out: {b.p_extinct:.2f} (95% interval {b.p_extinct_ci[0]:.2f} to {b.p_extinct_ci[1]:.2f}; theory: 1/R0 = 0.5)')
 ```
 
 `until=` stops a run once a condition holds: an expression of the model, as here, or a function of the sim, checked at the end of each step (it works for any run). Without it, a branching process that takes off grows without limit. `msim.branching.plot()` shows how large the chains got, and the gallery page [The chance of a major outbreak](../gallery/theory_checks.qmd#the-chance-of-a-major-outbreak) does the same over a range of R0.
@@ -66,7 +66,7 @@ print(f'{len(sim.people):,} agents for {sim.pars.total_pop:,.0f} people; {b.leng
 
 ```{python}
 n = b.offspring[b.complete]
-print('Cases:', len(n), ' Mean offspring:', n.mean().round(2), ' Variance:', n.var().round(1), ' Share with none:', (n == 0).mean().round(2))
+print('Cases:', len(n), ' Mean offspring:', n.mean().round(2), ' Variance:', n.var().round(1), ' Fraction with none:', (n == 0).mean().round(2))
 ```
 
 To give the cases different infectiousness, give the disease `rel_trans` as an attribute drawn for each person, `ss.attr()`. With a fixed infectious period, a gamma distribution with mean 1 and shape *k* gives a negative binomial offspring distribution with dispersion *k*. Here, for a SARS-like infection (R0 = 2, *k* = 0.2), the offspring with and without it, each over 8 runs of 20 imported cases:
@@ -86,7 +86,7 @@ for label, extra in [('Same infectiousness', {}), (f'Overdispersed (k = {k})', d
 bins = np.arange(0, 16)
 plt.hist(list(offspring.values()), bins=bins, density=True, label=list(offspring.keys()))
 plt.xlabel('Number of people infected by each case')
-plt.ylabel('Share of cases')
+plt.ylabel('Fraction of cases')
 plt.legend();
 ```
 
@@ -128,7 +128,7 @@ Each agent stands for 100 people, and the counts in the agents' results are mult
 
 ### Static scaling
 
-The number of people each agent stands for is `sim.pop_scale`, which is `total_pop / n_agents`: give the number of people and the number of agents, and the scale follows. Results that are counts (such as `I`) are multiplied by it when the run ends; results that are shares or averages (such as prevalence) are not.
+The number of people each agent stands for is `sim.pop_scale`, which is `total_pop / n_agents`: give the number of people and the number of agents, and the scale follows. Results that are counts (such as `I`) are multiplied by it when the run ends; results that are fractions or averages (such as prevalence) are not.
 
 The cost is resolution. With 5,000 agents for a million people, each agent is 200 people, so an epidemic can't start from fewer than 200 people, and an outbreak started by 10 people can't be represented at all:
 
@@ -148,7 +148,7 @@ static.run();
 
 ### Dynamic rescaling
 
-With `rescale=True`, each agent starts by standing for one person, and the number grows as the epidemic does, up to `sim.pop_scale`. When the share of agents who are no longer naive (who have left the first state of any disease) passes a threshold (5% by default), the sim multiplies the number of people per agent by at least a factor (1.2 by default), and makes enough of the agents who are not naive naive again to keep the infected people's numbers the same. So every agent always stands for the same number of people, and agents are freed to stand for the part of the population that has not been infected yet. The 10 people infectious at the start, as in the first static sim, are now 10 agents:
+With `rescale=True`, each agent starts by standing for one person, and the number grows as the epidemic does, up to `sim.pop_scale`. When the fraction of agents who are no longer naive (who have left the first state of any disease) passes a threshold (5% by default), the sim multiplies the number of people per agent by at least a factor (1.2 by default), and makes enough of the agents who are not naive naive again to keep the infected people's numbers the same. So every agent always stands for the same number of people, and agents are freed to stand for the part of the population that has not been infected yet. The 10 people infectious at the start, as in the first static sim, are now 10 agents:
 
 ```{python}
 sir = ss.Disease(infection, recovery, init_n=dict(I=10)) # 10 people infectious at the start, as above
@@ -202,7 +202,7 @@ A count that is added up during the run would mix steps with different numbers o
 - **Results during a run are in agents.** Counts are scaled when the run ends; an analyzer that reads a count during the run sees agents.
 - **Rare events.** An event that happens to fewer people than an agent stands for (a rare complication) happens to whole agents or not at all; such a model needs more agents.
 - **Dynamic rescaling with births and deaths.** The people no agent stands for are not born and do not die, so with many births or deaths before the scale reaches `pop_scale`, the population differs from that of a run with each agent standing for `pop_scale` from the start (and the count of people no agent stands for can even fall below 0).
-- **Treating a depleting run as a branching process.** Chains and offspring counted once a sizable share of people have been infected are biased down; count them only while the outbreak is small.
+- **Treating a depleting run as a branching process.** Chains and offspring counted once a sizable fraction of people have been infected are biased down; count them only while the outbreak is small.
 - **Networks in a branching process of agents.** It mixes in groups and places; a contact network raises a `CapabilityError`.
 
 ## Further reading
@@ -226,7 +226,7 @@ A count that is added up during the run would mix steps with different numbers o
 | `offspring` | `sim.branching` | agents | For each agent, the number it infected |
 | `complete` | `sim.branching` | agents | For each agent, whether it was infected long enough before the end that all its offspring are counted |
 | `sizes`, `outcomes` | `msim.branching` | all | The `size` and `outcome` of each run |
-| `p_extinct`, `p_extinct_ci` | `msim.branching` | all | The share of runs that went extinct, and its 95% interval (Wilson's) |
+| `p_extinct`, `p_extinct_ci` | `msim.branching` | all | The fraction of runs that went extinct, and its 95% interval (Wilson's) |
 | `lengths` | `msim.branching` | agents | The `length` of each run |
 | `offspring` | `msim.branching` | agents | The offspring of every agent counted in full, over all runs; None if a run was stopped by `until=` |
 | `R`, `k` | `msim.branching` | agents | The mean of the offspring and their dispersion, as a negative binomial fitted by maximum likelihood (`k` is infinite for offspring no more variable than a Poisson's); None if a run was stopped by `until=` |

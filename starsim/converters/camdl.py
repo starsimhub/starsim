@@ -438,7 +438,7 @@ def load_camdl(filename, pars=None, scenario=None, solver='ode', camdlc=None, ve
             src.skip(oname, f'an observation of {pkind}, which has no translation')
             continue
 
-        # The mean as a share of the projected flow, and the likelihood
+        # The mean as a fraction of the projected flow, and the likelihood
         lik = ob.get('likelihood') or {}
         (lkind, lkw), = lik.items() if lik else [(None, {})]
         p = None
@@ -455,7 +455,7 @@ def load_camdl(filename, pars=None, scenario=None, solver='ode', camdlc=None, ve
                 elif len(rest) == 1 and 'const' in rest[0]:
                     p = rest[0]['const']
             if p is None and mean != {'projected': None}:
-                src.skip(oname, 'its mean is not a share of the flow')
+                src.skip(oname, 'its mean is not a fraction of the flow')
                 continue
         def arg(spec):
             e = spec['expr']

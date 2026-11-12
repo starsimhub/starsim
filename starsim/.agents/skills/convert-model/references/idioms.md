@@ -29,7 +29,7 @@ What to write for the pieces that `ss.import_from()` lists as not translated (`I
 | A capacity (fewer than K in a state) | A comparison of counts in the rate: `I >> Q @ 0.01 * (Q.n < K)` |
 | A minimum stay before the other ways out apply | `min_stay=` on each way out (`ss.Transition(E, I, rate=0.3, min_stay=ss.days(10))`); a way out with no `min_stay=` applies throughout (EMULSION's escape) |
 | A variable that is not a flow (odin's `update()` of a lag, a running maximum, a switch) | A module written as code keeps it in its `step()` (a connector with `self.peak = max(self.peak, I.n/N)`), and a function in the rate reads it (`lambda sim: np.exp(-5*sim.connectors.track.peak)`); agents only |
-| Groups (age, place, risk) | `dis.stratify(age={0: 0.3, 15: 0.6, 65: 0.1})` (levels and their shares), with a value by group in a rate (`S >> I @ beta*ss.by(age=[...])*I`); options in `ss.levels(...)` (`states=`, `who=`, `kind=`, `mobility=`); places with `ss.geo.geography(...)` and `ss.levels(..., mobility=ss.geo.Mobility(...))` |
+| Groups (age, place, risk) | `dis.stratify(age={0: 0.3, 15: 0.6, 65: 0.1})` (levels and their fractions), with a value by group in a rate (`S >> I @ beta*ss.by(age=[...])*I`); options in `ss.levels(...)` (`states=`, `who=`, `kind=`, `mobility=`); places with `ss.geo.geography(...)` and `ss.levels(..., mobility=ss.geo.Mobility(...))` |
 
 ## People coming and going
 

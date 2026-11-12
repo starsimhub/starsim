@@ -14,10 +14,10 @@ class Ebola(ss.Disease):
     """
     Ebola, including severe disease and transmission from unburied bodies
 
-    People infected are latent (`E`) for `dur_exp`, then symptomatic (`I`). A share `p_sev` become severely ill
-    (`Sev`), and the rest recover; of the severe, a share `p_death` die, and the rest recover. Severe cases are more
+    People infected are latent (`E`) for `dur_exp`, then symptomatic (`I`). A fraction `p_sev` become severely ill
+    (`Sev`), and the rest recover; of the severe, a fraction `p_death` die, and the rest recover. Severe cases are more
     infectious (`sev_factor`), and so are the bodies of those who have died (`D`), until they are buried
-    (`unburied_factor`): a share `p_safe_bury` are buried safely, at once, and the rest after `dur_dead2buried`.
+    (`unburied_factor`): a fraction `p_safe_bury` are buried safely, at once, and the rest after `dur_dead2buried`.
     Bodies are people until they are buried, when they leave the population; the outcome `burial` counts both
     kinds of burial (`safe_burial` and `unsafe_burial`), and `deaths` every death. It is declared, so it runs under any solver.
 

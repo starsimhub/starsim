@@ -169,7 +169,7 @@ def step_moves(agents, arr_tr, arr_src, arr_kind, arr_p, arr_q, scan, start, ti_
     `arr_tr` (to enter its destination now), or -1 for one to look at only. Exits are due by `ti_due` and moves after an event by
     `ti_delay`; agents enter at `ti_enter`. Stops early, at an agent, when the log of moves may not have room for its moves, and
     returns where it stopped (the number of agents, or of `agents`, if it finished) and the length of the log. A trigger on a condition
-    (`trig_cond`, the column of `WH` that holds it, or -1) is due at once for anyone who enters its source while it holds. The shares of a
+    (`trig_cond`, the column of `WH` that holds it, or -1) is due at once for anyone who enters its source while it holds. The fractions of a
     split worked out on demand (`lazy`) are NaN in `E` until they are: an agent who reaches one stops there, before anything is drawn for
     that move, and is listed in `pend_*` (the agent, the transition, its state, 0 to take it again as an arrival or 1 to look again, and its
     pass and place in the cascade), `n_pend[0]` of them, for the caller to work them out and take the agent on from where it stopped
@@ -254,7 +254,7 @@ def step_moves(agents, arr_tr, arr_src, arr_kind, arr_p, arr_q, scan, start, ti_
                             trig = g
                 if t < 0:
                     break
-            if split[t] and lazy[t] and np.isnan(E[a, dst_col[t] + 1]): # Its shares are not worked out yet: stopped here, as it was
+            if split[t] and lazy[t] and np.isnan(E[a, dst_col[t] + 1]): # Its fractions are not worked out yet: stopped here, as it was
                 m = n_pend[0]
                 pend_a[m] = a
                 pend_t[m] = t
@@ -276,7 +276,7 @@ def step_moves(agents, arr_tr, arr_src, arr_kind, arr_p, arr_q, scan, start, ti_
             if back[t] and p < npass: # Another pass, for a trigger before it that waits for its event
                 again[p] = True
 
-            # Where to: one destination, or one of several (beyond the last share, they stay)
+            # Where to: one destination, or one of several (beyond the last fraction, they stay)
             lo = dst_ptr[t]
             hi = dst_ptr[t+1]
             if split[t]:
@@ -333,7 +333,7 @@ def step_moves(agents, arr_tr, arr_src, arr_kind, arr_p, arr_q, scan, start, ti_
                 c = trig_cond[g]
                 if c >= 0 and src_mask[tr_trig[g], d] and WH[c][a]:
                     TT[g][a] = -np.inf
-            if comp_state[d] and has_late[d]: # The share of a step of its competing rates missed (see ss.solvers.Agents.enter()); in the state-change row, the engine draws half a step of them for those who arrived, after the call
+            if comp_state[d] and has_late[d]: # The fraction of a step of its competing rates missed (see ss.solvers.Agents.enter()); in the state-change row, the engine draws half a step of them for those who arrived, after the call
                 if mode == 0:
                     LATE[d][a] = 0.5
                 else:

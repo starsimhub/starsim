@@ -81,12 +81,12 @@ pub struct Pass<'a> {
     pub dw_kind: &'a [i64], pub dw_k: &'a [i64], pub dw_mean: &'a [f64], pub dw_row: &'a [i64], pub pool: &'a [f64],
     pub dst_ptr: &'a [i64], pub dst_state: &'a [i64], pub dst_cum: &'a [f64], pub inf_tr: i64,
     pub sus_state: &'a [f64], pub sus_agent: &'a [f64], pub w_agent: &'a [f64],
-    pub r_kind: &'a [i64], pub x_off: &'a [i64], pub r_n: &'a [i64], pub r_scale: &'a [f64], pub r_bound: &'a [f64], pub share: &'a [f64],
+    pub r_kind: &'a [i64], pub x_off: &'a [i64], pub r_n: &'a [i64], pub r_scale: &'a [f64], pub r_bound: &'a [f64], pub frac: &'a [f64],
     pub s1: &'a [i64], pub e1: &'a [i64], pub o1: &'a [i64], pub s2: &'a [i64], pub e2: &'a [i64], pub o2: &'a [i64], pub r_deg: &'a [i64], pub w1: &'a [f64], pub w2: &'a [f64], pub beta_off: &'a [i64],
     pub members: &'a [i64], pub mem_eff: &'a [f64], pub mem_off: &'a [i64], pub mem_n: &'a [i64], pub a_ctc: &'a [f64],
     pub r_blk: &'a [i64], pub a_cell: &'a [i64], pub c_ptr: &'a [i64], pub c_first: &'a [i64], pub c_row: &'a [i64], pub c_cum: &'a [f64],
     pub n: usize, // The number of agents, the length of each row of rate_rows, pool and a_ctc
-    pub ns: usize, // The number of states, the length of each row of share
+    pub ns: usize, // The number of states, the length of each row of frac
 }
 
 /// The events of a step, as `events.step_events()` returns them
@@ -204,7 +204,7 @@ impl Pass<'_> {
     /// The rate of the contacts of an agent in state `s` on route `r`, at their bound (`events.contact_rate()`)
     #[inline(always)]
     fn contact_rate(&self, a: usize, s: usize, r: usize) -> f64 {
-        let sh = self.share[r*self.ns + s]*self.w_agent[a];
+        let sh = self.frac[r*self.ns + s]*self.w_agent[a];
         if sh <= 0.0 {
             return 0.0;
         }
@@ -228,7 +228,7 @@ pub fn step_events(p: &Pass, t0: f64, t1: f64, seed: u64, state: &mut [i64], ver
     let mut ctr = vec![0u64; n]; // Each agent's draws so far in the step
     let alive = state.iter().filter(|&&s| s >= 0).count();
     let mut heap = Heap(Vec::with_capacity(1024 + alive*(1 + nr)));
-    let busy: Vec<bool> = (0..p.ns).map(|s| p.haz_ptr[s + 1] > p.haz_ptr[s] || (0..nr).any(|r| p.share[r*p.ns + s] > 0.0)).collect(); // The states with competing rates or contacts
+    let busy: Vec<bool> = (0..p.ns).map(|s| p.haz_ptr[s + 1] > p.haz_ptr[s] || (0..nr).any(|r| p.frac[r*p.ns + s] > 0.0)).collect(); // The states with competing rates or contacts
     for a in 0..n { // Everyone's next exit and first contacts
         let s = state[a];
         if s < 0 {
@@ -355,7 +355,7 @@ pub mod bind {
     #[allow(clippy::too_many_arguments)]
     #[pyo3(signature = (t0, t1, seed, state, ver, t_exit, exit_tr, fresh, haz_ptr, haz_tr, haz_rate, haz_row, rate_rows, br_ptr, br_tr, br_cum, tm_ptr, tm_tr,
                         dw_kind, dw_k, dw_mean, dw_row, pool, dst_ptr, dst_state, dst_cum, inf_tr, sus_state, sus_agent, w_agent,
-                        r_kind, x_off, r_n, r_scale, r_bound, share, s1, e1, o1, s2, e2, o2, r_deg, w1, w2, beta_off,
+                        r_kind, x_off, r_n, r_scale, r_bound, frac, s1, e1, o1, s2, e2, o2, r_deg, w1, w2, beta_off,
                         members, mem_eff, mem_off, mem_n, a_ctc, r_blk, a_cell, c_ptr, c_first, c_row, c_cum))]
     fn step_events<'py>(py: Python<'py>, t0: f64, t1: f64, seed: &Arr<'py>, state: &Arr<'py>, ver: &Arr<'py>, t_exit: &Arr<'py>, exit_tr: &Arr<'py>, fresh: &Arr<'py>,
                         haz_ptr: &Arr<'py>, haz_tr: &Arr<'py>, haz_rate: &Arr<'py>, haz_row: &Arr<'py>, rate_rows: &Arr<'py>,
@@ -363,7 +363,7 @@ pub mod bind {
                         dw_kind: &Arr<'py>, dw_k: &Arr<'py>, dw_mean: &Arr<'py>, dw_row: &Arr<'py>, pool: &Arr<'py>,
                         dst_ptr: &Arr<'py>, dst_state: &Arr<'py>, dst_cum: &Arr<'py>, inf_tr: i64,
                         sus_state: &Arr<'py>, sus_agent: &Arr<'py>, w_agent: &Arr<'py>,
-                        r_kind: &Arr<'py>, x_off: &Arr<'py>, r_n: &Arr<'py>, r_scale: &Arr<'py>, r_bound: &Arr<'py>, share: &Arr<'py>,
+                        r_kind: &Arr<'py>, x_off: &Arr<'py>, r_n: &Arr<'py>, r_scale: &Arr<'py>, r_bound: &Arr<'py>, frac: &Arr<'py>,
                         s1: &Arr<'py>, e1: &Arr<'py>, o1: &Arr<'py>, s2: &Arr<'py>, e2: &Arr<'py>, o2: &Arr<'py>, r_deg: &Arr<'py>, w1: &Arr<'py>, w2: &Arr<'py>, beta_off: &Arr<'py>,
                         members: &Arr<'py>, mem_eff: &Arr<'py>, mem_off: &Arr<'py>, mem_n: &Arr<'py>, a_ctc: &Arr<'py>,
                         r_blk: &Arr<'py>, a_cell: &Arr<'py>, c_ptr: &Arr<'py>, c_first: &Arr<'py>, c_row: &Arr<'py>, c_cum: &Arr<'py>)
@@ -382,7 +382,7 @@ pub mod bind {
             dw_kind: sl(dw_kind)?, dw_k: sl(dw_k)?, dw_mean: sl(dw_mean)?, dw_row: sl(dw_row)?, pool: table(pool, n)?,
             dst_ptr: sl(dst_ptr)?, dst_state: sl(dst_state)?, dst_cum: sl(dst_cum)?, inf_tr,
             sus_state: sl(sus_state)?, sus_agent: sl(sus_agent)?, w_agent: sl(w_agent)?,
-            r_kind: sl(r_kind)?, x_off: sl(x_off)?, r_n: sl(r_n)?, r_scale: sl(r_scale)?, r_bound: sl(r_bound)?, share: table(share, ns)?,
+            r_kind: sl(r_kind)?, x_off: sl(x_off)?, r_n: sl(r_n)?, r_scale: sl(r_scale)?, r_bound: sl(r_bound)?, frac: table(frac, ns)?,
             s1: sl(s1)?, e1: sl(e1)?, o1: sl(o1)?, s2: sl(s2)?, e2: sl(e2)?, o2: sl(o2)?, r_deg: sl(r_deg)?, w1: sl(w1)?, w2: sl(w2)?, beta_off: sl(beta_off)?,
             members: sl(members)?, mem_eff: sl(mem_eff)?, mem_off: sl(mem_off)?, mem_n: sl(mem_n)?, a_ctc: table(a_ctc, n)?,
             r_blk: sl(r_blk)?, a_cell: sl(a_cell)?, c_ptr: sl(c_ptr)?, c_first: sl(c_first)?, c_row: sl(c_row)?, c_cum: sl(c_cum)?,

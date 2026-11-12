@@ -137,7 +137,7 @@ Where they don't, such as adding a rate to a probability, it is an error that sa
 
 - **A rate** (`ss.peryear(0.01)`) for anything that happens to a person once, at some rate: infection, recovery, death. This is what most models use, and what an ODE means by a rate.
 - **A duration** (`ss.days(8)`) for the average time spent in a state; it is the same as the rate 1/duration, and usually easier to read.
-- **A probability per period** (`ss.prob(0.01, 'year')`) when the data is a share of people in a period: for example, 10 deaths in a year among 1,000 people.
+- **A probability per period** (`ss.prob(0.01, 'year')`) when the data is a fraction of people in a period: for example, 10 deaths in a year among 1,000 people.
 - **A frequency** (`ss.freqperyear(80)`) for a number of events that can each happen many times, such as contacts or acts.
 
 `ss.prob` is a *number*, a time-aware value you can multiply and convert; `ss.bernoulli` is a *distribution* sampled for each agent (`dist.filter(uids)` gives the agents for whom the trial succeeded), which is what a module written as code uses to decide who is infected, dies, or is vaccinated. See [Distributions](mechanics_distributions.qmd).
@@ -221,7 +221,7 @@ print(sim.t.relvec[:4]) # Weeks since the start
 
 ## Values that change over time
 
-Any value in a model (a rate, a share, a starting value, an intervention's coverage) can change over time, in one of three ways.
+Any value in a model (a rate, a fraction, a starting value, an intervention's coverage) can change over time, in one of three ways.
 
 **A time series**, `ss.timeseries()`, gives the value at some times, and holds each until the next (`interpolation='step'`, the default), interpolates between them (`'linear'`), or changes in an S-shaped curve (`'cosine'`). With `period=`, it repeats. Here, in the endemic measles model of [Diseases](building_diseases.qmd#starting-values-births-and-deaths), β is higher during school terms than in the summer holiday:
 
@@ -323,7 +323,7 @@ import numpy as np
 def seasonal_fn(sim):
     """ 1.9 per day, ±10% over the year, highest in mid-January """
     year = sim.now.years + sim.t.dt_year/2 # The middle of this step, as a year with decimals
-    peak = 0.5/12                           # The middle of January, as a share of the year
+    peak = 0.5/12                           # The middle of January, as a fraction of the year
     return ss.perday(1.9*(1 + 0.1*np.cos(2*np.pi*(year - peak))))
 
 scenarios = {'Constant': ss.perday(1.9), 'Seasonal (±10%)': seasonal_fn}

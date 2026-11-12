@@ -106,7 +106,7 @@ def age(place='world', year=None):
 
 def age_split(edges, ages, counts):
     """
-    The share of people in each age group, from counts by 5-year age group, with ages uniform within each
+    The fraction of people in each age group, from counts by 5-year age group, with ages uniform within each
 
     Args:
         edges (array): the lower edge of each age group; the last is open-ended

@@ -693,16 +693,16 @@ def test_modify():
         ss.Sim(d, people=ss.People(1000, extra_states=[ss.FloatArr('nab_imm')]), connectors=ss.modify(d.rel_sus, multiply=0.5, name='nab_imm'), start=2000, stop=2001, **kw).run()
 
     # A multiplier by level on a branch chosen with p= scales its probability, as ss.modify does, under every solver (it divided the dwell; the ODE read a share by a dimension split on entry at its first level)
-    def branch_share(solver, by_level=False, modify=False):
+    def branch_frac(solver, by_level=False, modify=False):
         S, D, R = ss.states('S D R')
-        d = ss.Disease(S, D, R, onset=S >> D @ ss.peryear(2), death=ss.Transition(D, ss.dead, dur=ss.days(10), p=0.1), recovery=ss.Transition(D, R, dur=ss.days(10)), back=R >> S @ ss.days(5), name='d')
+        d = ss.Disease(S, D, R, onset=S >> D @ ss.peryear(2), death=ss.Transition(D, ss.dead, dur=ss.days(10), p=0.1), recovery=ss.Transition(D, R, dur=ss.days(10), p=None), back=R >> S @ ss.days(5), name='d')
         d.stratify(type=ss.levels(['watery', 'bloody'], states=[D]))
         con = ss.modify(d.death, multiply=5, who=d.type == 'bloody') if modify else ss.modify(d.death, multiply=ss.by(type=[1, 5])) if by_level else None
         res = ss.Sim(d, connectors=con, n_agents=20_000, total_pop=20_000, solver=solver, dt=ss.days(1), start=2000, stop=2001, **kw).run().results.d
         return res.death.by('type').values.sum(0)/res.onset.by('type').values.sum(0)
     for solver in ['ode', 'binomial', 'abm']:
-        for share in [branch_share(solver, by_level=True), branch_share(solver, modify=True)]:
-            assert np.allclose(share, [0.1, 0.5], atol=0.02), f'{solver}: {share}'
+        for frac in [branch_frac(solver, by_level=True), branch_frac(solver, modify=True)]:
+            assert np.allclose(frac, [0.1, 0.5], atol=0.02), f'{solver}: {frac}'
 
     # On one transition with several destinations and a dwell, a modifier changes the dwell, and a note names the destinations that change a branch
     G, A, B = ss.states('G A B')
@@ -909,7 +909,7 @@ def test_functions():
     assert ss.Sim(gated, n_agents=1000, stop=10, unit='day', verbose=0).run().results.gated.R[-1] == 1000
     for solver in ['ode', 'abm']:
         E, A, Y = ss.states(3)
-        d = ss.Disease(E=E, A=A, Y=Y, symp=ss.Transition(E, Y, p=lambda sim: 0.9, dur=ss.weeks(1)), asymp=ss.Transition(E, A, dur=ss.weeks(1)), default_state='E', name='d')
+        d = ss.Disease(E=E, A=A, Y=Y, symp=ss.Transition(E, Y, p=lambda sim: 0.9, dur=ss.weeks(1)), asymp=ss.Transition(E, A, dur=ss.weeks(1), p=None), default_state='E', name='d')
         res = ss.Sim(d, n_agents=10_000, total_pop=10_000, start=2000, stop=2001, dt=1/52, solver=solver, verbose=0).run().results.d
         assert np.isclose(res.symp.sum()/(res.symp.sum() + res.asymp.sum()), 0.9, atol=0.01)
     return sim
@@ -1083,8 +1083,8 @@ def test_stays_and_offspring():
     S, X, A, B = ss.states('S X A B')
     d = ss.Disease(S, X, A, B, enter=ss.Transition(S, X, rate=ss.peryear(0.5)), timed=ss.Transition(X, A, dur=ss.constant(ss.months(1))), hazard=ss.Transition(X, B, rate=ss.peryear(1.0)), name='d')
     r = ss.Sim(d, n_agents=20_000, start=2000, stop=2010, dt=ss.months(1), verbose=0).run().results.d
-    share = r.hazard.values.sum()/(r.hazard.values.sum() + r.timed.values.sum())
-    assert np.isclose(share, 1 - np.exp(-1/12), rtol=0.1)
+    frac = r.hazard.values.sum()/(r.hazard.values.sum() + r.timed.values.sum())
+    assert np.isclose(frac, 1 - np.exp(-1/12), rtol=0.1)
 
     G, L, NB = ss.states(3) # A litter is a birth driven by the transition (EMULSION's offspring)
     farrowing = ss.Transition(G, L, dur=ss.days(10))
@@ -1126,7 +1126,7 @@ def test_branch_where():
     # A remainder for the same people as the branches, beside an exit for others (it raised)
     P, C, R = ss.states('P C R')
     female = lambda sim: sim.people.female.raw
-    d = ss.Disease(P, C, R, to_cin=ss.Transition(P, C, dur=ss.years(3), p=0.25, who=female), to_clear=ss.Transition(P, R, dur=ss.years(1), who=female),
+    d = ss.Disease(P, C, R, to_cin=ss.Transition(P, C, dur=ss.years(3), p=0.25, who=female), to_clear=ss.Transition(P, R, dur=ss.years(1), who=female, p=None),
                    male=ss.Transition(P, R, dur=ss.years(1), who=lambda sim: ~sim.people.female.raw), default_state='P', name='d')
     res = ss.Sim(d, n_agents=10_000, start=2000, stop=2010, dt=ss.years(0.25), verbose=0).run().results.d
     assert 1000 < res.C[-1] < 1500 # A quarter of about 5,000 women
@@ -1150,8 +1150,8 @@ def test_branches():
             size = dict(n_agents=5000) if solver == 'abm' else dict(total_pop=5000)
             sim = ss.Sim(make(which), solver=solver, unit='day', stop=60, **size, **kw).run()
             res = sim.results.d
-            share = res.rec[1:].sum()/(res.rec[1:].sum() + res.rec2[1:].sum())
-            assert np.isclose(share, 0.3, atol=0.05), f'{which} ({solver}): {share:.2f} went to P, not 0.3'
+            frac = res.rec[1:].sum()/(res.rec[1:].sum() + res.rec2[1:].sum())
+            assert np.isclose(frac, 0.3, atol=0.05), f'{which} ({solver}): {frac:.2f} went to P, not 0.3'
     with pytest.raises(ValueError, match='the branch probabilities out of state "E" sum to 0.3, not 1'): # Only one can take the remainder
         E, P, A, R = ss.states('E P A R')
         ss.Disease(sev=ss.Transition(E, P, p=0.3), a=ss.Transition(E, A, dur=2), b=ss.Transition(E, R, dur=2))
@@ -1168,14 +1168,14 @@ def test_branches():
         ss.Sim(d, **agents).run()
     for solver in ['abm', 'ode']: # A branch probability over 1 raises, as a sum over 1 does at build (it was used as 1, killing 5,854 of 5,901)
         S, D, R = ss.states('S D R')
-        d = ss.Disease(S, D, R, onset=S >> D @ ss.peryear(2), death=ss.Transition(D, ss.dead, dur=ss.days(5), p=ss.by(type=[0.1, 1.5])), recovery=ss.Transition(D, R, dur=ss.days(5)), name='d')
+        d = ss.Disease(S, D, R, onset=S >> D @ ss.peryear(2), death=ss.Transition(D, ss.dead, dur=ss.days(5), p=ss.by(type=[0.1, 1.5])), recovery=ss.Transition(D, R, dur=ss.days(5), p=None), name='d')
         d.stratify(type=ss.levels(['watery', 'bloody'], states=[D]))
         with pytest.raises(ValueError, match='1.5'):
             ss.Sim(d, n_agents=1000, total_pop=1000, solver=solver, start=2000, stop=2001, **kw).run()
 
     # A branch probability set after building: a new value for one that was given, and a clear error for one that was not (it raised "'by' object has no attribute 'leaves'")
     S, I, R = ss.states('S I R')
-    d = ss.Disease(S, I, R, infection=S >> I @ ss.peryear(1), death=ss.Transition(I, ss.dead, dur=ss.days(20), p=0.1), rec=ss.Transition(I, R, dur=ss.days(20)), name='d')
+    d = ss.Disease(S, I, R, infection=S >> I @ ss.peryear(1), death=ss.Transition(I, ss.dead, dur=ss.days(20), p=0.1), rec=ss.Transition(I, R, dur=ss.days(20), p=None), name='d')
     d.death.p = ss.by(age=[0.5, 0.0])
     d.stratify(age=[0, 15])
     res = ss.Sim(d, n_agents=5000, aging=False, start=2000, stop=2001, **kw).run().results.d
@@ -1424,16 +1424,16 @@ def test_init_expression():
         S = ss.State(init=np.minimum(1, 1 - (A - age)/(k*age + A))) # Gauld et al.'s share susceptible by age
         default_state = 'U'
         become = U >> S @ ss.peryear(0.01)
-    share = lambda sim: sim.results.m.S[0]/(sim.results.m.S[0] + sim.results.m.U[0])
+    frac = lambda sim: sim.results.m.S[0]/(sim.results.m.S[0] + sim.results.m.U[0])
     sim = ss.Sim(diseases=M(), n_agents=20_000, dur=ss.days(3), dt=ss.days(1), verbose=0, rand_seed=1).run()
     age = sim.people.age.raw[sim.people.auids]
     expected = np.mean(np.minimum(1, 1 - (20 - age)/(age + 20)))
-    assert abs(share(sim) - expected) < 0.01
+    assert abs(frac(sim) - expected) < 0.01
     ode = ss.Sim(diseases=M(), total_pop=20_000, dur=ss.days(3), dt=ss.days(1), verbose=0, solver='ode', aging=True)
     ode.stratify(age=[0, 5, 10, 15, 20, 100])
-    assert abs(share(ode.run()) - expected) < 0.03 # By age group
+    assert abs(frac(ode.run()) - expected) < 0.03 # By age group
     fitted = ss.Sim(diseases=M(), n_agents=20_000, dur=ss.days(3), dt=ss.days(1), verbose=0, rand_seed=1, pars={'m.A': 5}).run()
-    assert share(fitted) > share(sim) + 0.05
+    assert frac(fitted) > frac(sim) + 0.05
     class Q(ss.Disease): # Given in __init__(), reading the class's parameters
         U, S = ss.states('U S')
         default_state = 'U'

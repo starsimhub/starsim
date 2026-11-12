@@ -235,7 +235,7 @@ def network(net, src, name, acts=None):
                 continue
             stratify(attr)
             kw.match = {attr: round(val/edges, 10)}
-            src.notes.append(f'{name}: nodematch("{attr}") is the share of partnerships within a level of a stratification "{attr}", split as on the network [guessed: matches the share, not an ERGM fit]')
+            src.notes.append(f'{name}: nodematch("{attr}") is the fraction of partnerships within a level of a stratification "{attr}", split as on the network [guessed: matches the fraction, not an ERGM fit]')
         else:
             src.skip(f'{name}: {t["text"]}', 'an ERGM term with no counterpart in ss.DegreeNet (it matches the number of partners, concurrency, a maximum, and mixing within a group)')
     if net['dissolution'].replace(' ', '') != '~offset(edges)':

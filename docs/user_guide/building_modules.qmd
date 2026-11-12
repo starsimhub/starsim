@@ -70,14 +70,14 @@ class Antibodies(ss.Module):
         return
 
     def step(self):
-        decay = 0.5**(self.t.dt/self.pars.half_life) # The share left after one step
+        decay = 0.5**(self.t.dt/self.pars.half_life) # The fraction left after one step
         self.level[:] = self.level*decay
         recovered = self.sim.diseases.cold.recovery.uids # Those who recovered in the last step
         self.level[recovered] = np.minimum(1.0, self.level[recovered] + self.pars.boost)
         return
 
-    def record_stocks(self):
-        super().record_stocks()
+    def record_states(self):
+        super().record_states()
         self.results.mean_level[self.ti] = self.level.mean() # The level at the start of the step
         return
 ```
@@ -161,7 +161,7 @@ Code reads the same names a declaration does: a condition or an event's memory o
 
 ### Results
 
-To report a result of your own, override `init_results()` and give it with `define_results()`, as above. `kind=` says how it is summed over time, compared with data, and scaled when the population is [rescaled](running_branching.qmd): `'flow'` for a number of events in each step, `'stock'` for a quantity at each time point, and `'ratio'` for a share or a mean, which isn't scaled ([Results](building_results.qmd)). Fill results at `self.ti`: a stock in `record_stocks()`, so that it is the state at the time point, and a flow in `record_flows()`, after every module has stepped (or in `step()`, as the events happen, e.g. `self.results.doses[self.ti] += len(uids)`). A result that needs both, such as births over the people alive, goes in `record_flows()`, reading the stock from its result (`self.sim.results.alive[self.ti]`), or in `finalize_results()`, over the whole run at once ([why](architecture_run.qmd#why-stocks-and-flows-are-recorded-separately)).
+To report a result of your own, override `init_results()` and give it with `define_results()`, as above. `kind=` says how it is summed over time, compared with data, and scaled when the population is [rescaled](running_branching.qmd): `'flow'` for a number of events in each step, `'stock'` for a quantity at each time point, and `'ratio'` for a fraction or a mean, which isn't scaled ([Results](building_results.qmd)). Fill results at `self.ti`: a stock in `record_states()`, so that it is the state at the time point, and a flow in `record_events()`, after every module has stepped (or in `step()`, as the events happen, e.g. `self.results.doses[self.ti] += len(uids)`). A result that needs both, such as births over the people alive, goes in `record_events()`, reading the stock from its result (`self.sim.results.alive[self.ti]`), or in `finalize_results()`, over the whole run at once ([why](architecture_run.qmd#why-stocks-and-flows-are-recorded-separately)).
 
 ### The work of each step
 
@@ -186,9 +186,9 @@ When a sim is built and run, each module goes through these stages:
 1. **`__init__()`**: the module is made; its parameters and states are given.
 2. **`init_pre(sim)`**: called once when the sim is built. It links the module to the sim and the people, sets up its time steps, and calls `init_results()`. Override it rarely.
 3. **`init_post()`**: called once the people exist and their states have their initial values; for setup that needs them.
-4. **`record_stocks()`**: called at the start of each step, before any module has stepped, to record the state then.
+4. **`record_states()`**: called at the start of each step, before any module has stepped, to record the state then.
 5. **`step()`**: called once each step.
-6. **`record_flows()`**: called at the end of each step, after every module has stepped, to record what happened in it.
+6. **`record_events()`**: called at the end of each step, after every module has stepped, to record what happened in it.
 7. **`finalize()`** and **`finalize_results()`**: called once at the end of the run, e.g. to work out a result from others.
 
 ## Modules from functions
@@ -238,11 +238,11 @@ print(sim.analyzers[0].name)
 ```
 :::
 
-A function module is called at every step, so it has to check the time itself if it should act only at some (e.g. `if sim.now >= ss.date('2025-03-01'):`; not `==`, which a date between two steps never meets). Its keyword arguments with defaults are its parameters, passed to it at each call, so one given as `ss.par` with bounds can be fitted and set by name like any other parameter (`def close_schools(sim, start=2025, share=ss.par(0.5, bounds=[0.2, 0.8])):`; see [Fitting a model](calibration_fitting.qmd#a-value-that-isnt-a-parameter)). It has no states or results of its own; as soon as it needs them, write a class instead. `ss.Intervention.from_func(fn)` (and likewise for the other types) makes the module from a function explicitly. For analyzers, see [Analyzers](interventions_analyzers.qmd).
+A function module is called at every step, so it has to check the time itself if it should act only at some (e.g. `if sim.now >= ss.date('2025-03-01'):`; not `==`, which a date between two steps never meets). Its keyword arguments with defaults are its parameters, passed to it at each call, so one given as `ss.par` with bounds can be fitted and set by name like any other parameter (`def close_schools(sim, start=2025, frac=ss.par(0.5, bounds=[0.2, 0.8])):`; see [Fitting a model](calibration_fitting.qmd#a-value-that-isnt-a-parameter)). It has no states or results of its own; as soon as it needs them, write a class instead. `ss.Intervention.from_func(fn)` (and likewise for the other types) makes the module from a function explicitly. For analyzers, see [Analyzers](interventions_analyzers.qmd).
 
 ## Pitfalls
 
-- **Forgetting `super()`.** Call `super().__init__()` with no arguments as the first line of `__init__()`, and the base class's method whenever you override `init_results()`, `record_stocks()`, `record_flows()`, `init_post()`, and the like. Leaving one out gives a warning after the run that a required method was not called, not an error.
+- **Forgetting `super()`.** Call `super().__init__()` with no arguments as the first line of `__init__()`, and the base class's method whenever you override `init_results()`, `record_states()`, `record_events()`, `init_post()`, and the like. Leaving one out gives a warning after the run that a required method was not called, not an error.
 - **Keeping a reference to another module.** A sim copies the modules it is given when it is built, so reach the rest of the sim through `self.sim` in `step()` (e.g. `self.sim.diseases.cold`), not through an object kept from before.
 - **Comparing `self.ti` across modules with their own timelines.** A module given `start=`, `stop=`, or a `dt=` of its own runs only on its own steps, and its `self.ti` counts those steps, not the sim's. To compare times between modules, use dates or durations (`self.now`), not step indices.
 - **Writing into another module's arrays at your own `ti`.** Write into another module's results and time arrays at its index, not yours: `disease.results.treated[disease.ti]`, and `disease.ti_recovered[uids] = disease.ti`. With a yearly sim and a monthly disease, `self.ti` is the wrong row.

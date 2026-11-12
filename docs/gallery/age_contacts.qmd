@@ -7,7 +7,7 @@ authorship:
   note: Merged from the gallery pages "Age groups and a contact matrix" and "Closing schools" on Nov 11 by AI; both written by AI, the second adapting the school closure example of the Epidemics R package
 ---
 
-People of different ages mix differently: children have the most contacts, and most of them with other children. An age-structured model splits each state by age group, and a contact matrix says how many contacts a day a person in each group has with people in each other group. With contacts, β is the rate of infection per contact, and the force of infection on group *i* is β times the sum over groups *j* of the contacts of *i* with *j* times the share of *j* who are infectious. This page builds an age-structured SIR with a contact matrix written by hand, as in the age-structured models of Keeling and Rohani (2008, chapter 3). Then it uses a real country's population and contact matrices, one for each setting (home, school, work, and the rest of the community), and closes schools by removing one of them.
+People of different ages mix differently: children have the most contacts, and most of them with other children. An age-structured model splits each state by age group, and a contact matrix says how many contacts a day a person in each group has with people in each other group. With contacts, β is the rate of infection per contact, and the force of infection on group *i* is β times the sum over groups *j* of the contacts of *i* with *j* times the fraction of *j* who are infectious. This page builds an age-structured SIR with a contact matrix written by hand, as in the age-structured models of Keeling and Rohani (2008, chapter 3). Then it uses a real country's population and contact matrices, one for each setting (home, school, work, and the rest of the community), and closes schools by removing one of them.
 
 ## The model
 
@@ -35,7 +35,7 @@ S, I, R = ss.states('S I R')
 infection = S >> I @ 0.05*I
 recovery  = I >> R @ ss.days(10)
 sir = ss.Disease(infection, recovery, init=dict(I=0.001), name='sir')
-sir.stratify(age={0: 0.3, 15: 0.5, 65: 0.2})  # The lower edge of each age group, and its share of people
+sir.stratify(age={0: 0.3, 15: 0.5, 65: 0.2})  # The lower edge of each age group, and its fraction of people
 
 contacts = ss.contacts(ages=[0, 15, 65], matrix=[[8, 5, 2], [3, 6, 2], [3, 5, 3]])
 ```
@@ -71,12 +71,12 @@ Closing schools is one of the first measures considered against a new respirator
 | β | 0.016 per contact | Rate of infection per contact with an infectious person |
 | Latent period | 3 days | Mean time in E (exponential) |
 | Infectious period | 7 days | Mean time in I (exponential) |
-| Age groups | 0–19, 20–39, 40+ | With the shares of the United Kingdom's population |
+| Age groups | 0–19, 20–39, 40+ | With the fractions of the United Kingdom's population |
 | Contacts | Prem et al. (2021) | One matrix each for home, school, work, and the rest of the community |
 | Infectious at the start | One in a million | |
 | Closure | Days 200 to 260 | School contacts removed; the others go on |
 
-Rather than writing the shares of each age group and the matrix by hand, `ss.population()` gives the country's population by age, and `ss.contacts()` its matrix for each setting, for the age groups of the model:
+Rather than writing the fractions of each age group and the matrix by hand, `ss.population()` gives the country's population by age, and `ss.contacts()` its matrix for each setting, for the age groups of the model:
 
 ```{python}
 S, E, I, R = ss.states('S E I R')
@@ -124,7 +124,7 @@ By age, the number infectious falls in every group while schools are closed, and
 sims['Schools closed for 60 days'].results.flu.I.by('age').plot()
 ```
 
-The Epidemics package says a closure another way: as a share by which the contacts of each age group fall (e.g. by half for those under 20). That works in Starsim too, as a modifier of each group's susceptibility and transmissibility, e.g. `ss.modify(flu.rel_sus, multiply=0.5, who=flu.age < 20, start=..., stop=...)`. Removing the school contacts says more directly what a closure does, when the contacts by setting are known.
+The Epidemics package says a closure another way: as a fraction by which the contacts of each age group fall (e.g. by half for those under 20). That works in Starsim too, as a modifier of each group's susceptibility and transmissibility, e.g. `ss.modify(flu.rel_sus, multiply=0.5, who=flu.age < 20, start=..., stop=...)`. Removing the school contacts says more directly what a closure does, when the contacts by setting are known.
 
 ## Going further
 

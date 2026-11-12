@@ -157,7 +157,7 @@ class Transmission(Effects):
         return ss.uids(trgs), *[col[order][first] for col in cols]
 
     def unprotected(self, name, uids, kept):
-        """ Which of some agents reached by a strain are infected by it: each with the chance `kept`, the share of the force of infection of the strain that reaches them (1 − their protection against it), drawn from `protect_<name>` """
+        """ Which of some agents reached by a strain are infected by it: each with the chance `kept`, the fraction of the force of infection of the strain that reaches them (1 − their protection against it), drawn from `protect_<name>` """
         return self.step_draw(f'protect_{name}', uids) < kept
 
 
@@ -464,7 +464,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
                 if rescalable: # Only needed if a rate can change after dwell times are drawn: see rescale_exits()
                     arrs.append(ss.FloatArr(f'mult_{name}', default=1.0, label=f'Speed of the scheduled exit from {name}, when it was scheduled'))
             if hazards[name] and (name in self.scheduled or name in self.halved) and not self.wholestep: # See enter()
-                arrs.append(ss.FloatArr(f'late_{name}', default=0.0, label=f'The share of a step of the competing rates out of {name} missed in the step of entering it (less than 0 if too much)'))
+                arrs.append(ss.FloatArr(f'late_{name}', default=0.0, label=f'The fraction of a step of the competing rates out of {name} missed in the step of entering it (less than 0 if too much)'))
                 self.late.add(name)
         self.attrs = graph.attrs # Attributes: an array each (for a derived one, its values when last worked out); see fire() and attr_values()
         self.on_event = [a for a in self.attrs.values() if a.events] # Set at events, in the order declared
@@ -531,7 +531,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
             add('burnin', ss.random()) # Who starts part way through, and since when: see backfill_burnin()
         for state in graph.people_states:
             init = state.init.raw if isinstance(state.init, ss.par) else state.init
-            if isinstance(init, ss.by) or (isinstance(init, ss.expressions.Expr) and ss.expressions.per_person_in(init)): # For a share given for each person's own properties: see init_post()
+            if isinstance(init, ss.by) or (isinstance(init, ss.expressions.Expr) and ss.expressions.per_person_in(init)): # For a fraction given for each person's own properties: see init_post()
                 add(f'init_{state.name}', ss.random())
         for state in graph.people_states:
             add(f'branch_{state.name}', ss.random())
@@ -678,7 +678,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
 
     def lifelong_mods(self, mods):
         """ Whether modifiers only say who a quantity is for, by something that never changes (e.g. a transition with `who=ss.person.female`), so each person's multiplier stays the same for the whole run """
-        return all(type(m) is ss.modify and m.op == 'multiply' and m.start is None and m.stop is None and m.when is None and not m.holding and m.share is None and sc.isnumber(m.amount) and m.where is not None and self.is_fixed(m.where) for m in mods)
+        return all(type(m) is ss.modify and m.op == 'multiply' and m.start is None and m.stop is None and m.when is None and not m.holding and m.frac is None and sc.isnumber(m.amount) and m.where is not None and self.is_fixed(m.where) for m in mods)
 
     def mult(self, kind, name, uids):
         """ The multiplier on a quantity for some agents, from its modifiers """
@@ -756,12 +756,12 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
 
     def move_some(self, srcs, dst, p=None, n=None, uids=None, where=None, outside=None):
         """
-        A one-off move from code (`ss.move()`): a share `p` of the agents in some states (or `n` people, as a whole number of agents,
+        A one-off move from code (`ss.move()`): a fraction `p` of the agents in some states (or `n` people, as a whole number of agents,
         rounded at random; or of `uids`, those given; or of those for whom `where` holds), chosen at random, to a state; or to and from
         outside the model (`dst` or `srcs` empty, and for people, `outside`: 'dead' and 'outside', or 'unborn' and 'outside'), as
         agents who die (or leave) at the end of the step, or are made now; returns the number of people moved
         """
-        if not (srcs[0] if srcs else dst).people: # A count: an exact share, as its flows are
+        if not (srcs[0] if srcs else dst).people: # A count: an exact fraction, as its flows are
             have = sum(self.counts[state.name].sum() for state in srcs)
             if n is not None:
                 p = min(n/have, 1.0) if have > 0 else 0.0
@@ -852,9 +852,9 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
             for g in np.unique(groups):
                 inds = uids[groups == g]
                 inds = inds[np.argsort(rvs[groups == g], kind='stable')] # In a random order
-                share = np.array([np.broadcast_to(fracs[name], self.sim.groups.n_groups)[g] for name in names])
-                plan[g] = (inds, share*len(inds), Compartmental.round_preserving(share*len(inds))) # The number in each state is exact, as it is in a compartmental run
-                wanted += share*len(inds)
+                frac = np.array([np.broadcast_to(fracs[name], self.sim.groups.n_groups)[g] for name in names])
+                plan[g] = (inds, frac*len(inds), Compartmental.round_preserving(frac*len(inds))) # The number in each state is exact, as it is in a compartmental run
+                wanted += frac*len(inds)
                 placed += plan[g][2]
             for i in np.flatnonzero((wanted > 0) & (placed == 0)): # Rounded to whole agents, a small seed would be nobody at all: one agent instead, in the group that wanted the most, taken from its largest state
                 g = max(plan, key=lambda g: plan[g][1][i])
@@ -868,20 +868,20 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
                     chosen = inds[edges[i]:edges[i+1]]
                     mod[name][chosen] = True
                     self.stamp(name, chosen, self.seed_ti(name))
-            for state in self.graph.people_states: # A share given for each person's own properties (e.g. init=dict(I=ss.by(dict(age=[0, 15], value=[0, 0.1])))): drawn for each agent of the first state
+            for state in self.graph.people_states: # A fraction given for each person's own properties (e.g. init=dict(I=ss.by(dict(age=[0, 15], value=[0, 0.1])))): drawn for each agent of the first state
                 init = state.init.raw if isinstance(state.init, ss.par) else state.init
                 per_person = isinstance(init, ss.expressions.Expr) and ss.expressions.per_person_in(init) # e.g. init=dict(S=1 - (A - age)/(k*age + A))
                 if per_person or (isinstance(init, ss.by) and init.on_people(self.sim)):
                     first = self.members(self.graph.default_state)
-                    share = self.values_for(init, first) if per_person else init.lookup(self.sim, self.convert)[first]
-                    chosen = first[self.draw(f'init_{state.name}', first) < share]
+                    frac = self.values_for(init, first) if per_person else init.lookup(self.sim, self.convert)[first]
+                    chosen = first[self.draw(f'init_{state.name}', first) < frac]
                     mod[self.graph.default_state.name][chosen] = False
                     mod[state.name][chosen] = True
                     self.stamp(state.name, chosen, self.seed_ti(state.name))
             seed = self.seed_dist()
             if seed is not None:
                 first = self.members(self.graph.default_state)
-                # A share for each agent: from their own properties (ss.by), or a function of the sim (and the agents)
+                # A fraction for each agent: from their own properties (ss.by), or a function of the sim (and the agents)
                 p = seed.lookup(self.sim, self.convert)[first] if isinstance(seed, ss.by) else ss.utils.call_fn(seed, self=mod, sim=self.sim, uids=first) # Of any of self, sim, and uids
                 p = np.asarray(p.raw if isinstance(p, ss.Arr) else p, dtype=float)
                 p = p[first] if np.ndim(p) and len(p) == len(self.mod.rel_sus.raw) and len(p) != len(first) else p # One value per agent, by UID
@@ -930,8 +930,8 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         elif callable(init_prev) and not isinstance(init_prev, (ss.Dist, ss.by)):
             return init_prev
         elif sc.isnumber(init_prev) and init_prev > 0 and len(self.seed_transmissions()) > 1: # Through several transmissions, each to those it can infect (see seed()): agent by agent
-            share = init_prev/self.total_pop if self.graph.seed_n else init_prev
-            return lambda sim: share
+            frac = init_prev/self.total_pop if self.graph.seed_n else init_prev
+            return lambda sim: frac
         return None
 
     def can_infect(self, tr, uids=None):
@@ -1006,7 +1006,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
             strains = self.sim.groups.strats[self.strain].strains
             self.set_strain(uids, np.full(len(uids), strains.level_of([strains.names.index(getattr(strain, 'name', strain))])))
         which = np.zeros(len(uids), dtype=int)
-        if len(tr.dest) > 1: # Where a new infection goes, in its shares
+        if len(tr.dest) > 1: # Where a new infection goes, in its fractions
             self._uids = uids
             ps = [np.broadcast_to(p, len(uids)) for p in self.branch_probs_for(tr, uids)]
             which = np.minimum((np.cumsum(ps, axis=0) <= self.draw('seed_where', uids)[None, :]).sum(axis=0), len(tr.dest) - 1)
@@ -1036,7 +1036,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
     def seed(self, uids, log=True):
         """
         Seed some agents who are in the first state: put them where a new infection puts them, the destinations of the first
-        transmission in its shares, as init_prev does; returns those seeded
+        transmission in its fractions, as init_prev does; returns those seeded
 
         Args:
             uids (uids): the agents; those not in the first state are left where they are
@@ -1053,7 +1053,7 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
             raise ValueError(errormsg)
         if len(trs) == 1 and len(trs[0].dest) == 1:
             dsts = [(trs[0].dest[0], uids)]
-        else: # Each seed to a destination of a transmission that can infect them, in the shares of its destinations
+        else: # Each seed to a destination of a transmission that can infect them, in the fractions of its destinations
             self._uids = uids
             ps = [np.broadcast_to(w*p, len(uids)) for tr,w in zip(trs, self.seed_reach(trs, uids)) for p in (self.branch_probs_for(tr, uids) if len(tr.dest) > 1 else [1.0])]
             edges = np.cumsum([np.zeros(len(uids))] + ps, axis=0)
@@ -1300,11 +1300,11 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         """ Under homogeneous mixing: the infectiousness-weighted fraction of people in the state """
         mod = self.mod
         uids = self.members(state)
-        share = 1.0
+        frac = 1.0
         if self._strain is not None and self.applies[state.name][self.strain]: # Only the people who carry this strain
-            share = self.strain_weights[self.strain_raw()[uids], self._strain]
-            uids, share = uids[share > 0], share[share > 0]
-        infectious = mod.rel_trans[uids]*self.mult('rel_trans', None, uids)*state.rel_trans*share
+            frac = self.strain_weights[self.strain_raw()[uids], self._strain]
+            uids, frac = uids[frac > 0], frac[frac > 0]
+        infectious = mod.rel_trans[uids]*self.mult('rel_trans', None, uids)*state.rel_trans*frac
         mixing = self.sim.mixing
         people = self.sim.people
         weighted = people.scale.weighted
@@ -1408,8 +1408,8 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
             w = w*self.sim.people.scale.raw[uids]
         return w
 
-    def held_share(self, expr):
-        """ The share holding a product (`itn.held_share`): the share of the agents in the same place who hold it, each by the protection they have left (or a function of the time since delivery) """
+    def held_frac(self, expr):
+        """ The fraction holding a product (`itn.held_frac`): the fraction of the agents in the same place who hold it, each by the protection they have left (or a function of the time since delivery) """
         sim = self.sim
         people = sim.people
         mixing = sim.mixing
@@ -1426,8 +1426,8 @@ class Agents(Expressions, Moving, Stepping, Branching, Engine, Transmission):
         places = self.place_raw()
         n_places = sim.groups.strats[mixing.space].n
         auids = people.auids
-        share = np.bincount(places[auids], weights=w[auids], minlength=n_places)/np.maximum(np.bincount(places[auids], weights=n[auids], minlength=n_places), 1e-12)
-        return share[mixing.places] if self._by_group else self.for_uids(share[places])
+        frac = np.bincount(places[auids], weights=w[auids], minlength=n_places)/np.maximum(np.bincount(places[auids], weights=n[auids], minlength=n_places), 1e-12)
+        return frac[mixing.places] if self._by_group else self.for_uids(frac[places])
 
     def note_counter(self, strat, what):
         """ Agents add to each person's own value, so a counter's levels need not be one apart (see `Compartmental.note_counter()`) """

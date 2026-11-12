@@ -27,7 +27,7 @@ def at_start(sim):
     sim.init()
     for mod in sim.declared:
         mod.engine.start_step()
-        mod.engine.record_stocks()
+        mod.engine.record_states()
     return sim.results
 
 
@@ -458,13 +458,13 @@ def test_space():
             contacts = run(make(), solver, networks=ss.contacts(place=M.T + np.diag(1 - M.sum(axis=1))), total_pop=20_000, unit='day', stop=200).results.sir.infection.cum.by('place').values[-1]
             assert np.allclose(contacts, attack), f'Expected the contact matrix to give the same run as kind="force" with {solver}: {contacts} against {attack}'
 
-    # A movement matrix may be sparse, for many places; the time share is kept sparse either way, with the same run
+    # A movement matrix may be sparse, for many places; the time fraction is kept sparse either way, with the same run
     finals = []
     for matrix in [[[0, 0.1], [0.05, 0]], sps.csr_array([[0, 0.1], [0.05, 0]])]:
         S, I, R = ss.states('S I R')
         sir = ss.Disease(infection=ss.Transition(S, I, rate=0.3 * I), recovery=ss.Transition(I, R, dur=10), init_n=dict(I=ss.by(place=[10, 0])), name='sir')
         sim = run(sir.stratify(place=ss.levels(['a', 'b'], kind='space', mobility=ss.geo.Mobility(matrix=matrix, kind='commute'))), 'ode', total_pop=20_000, unit='day', stop=100)
-        assert sps.issparse(sim.mixing.time_share)
+        assert sps.issparse(sim.mixing.time_frac)
         finals.append(sim.results.sir.infection.cum.by('place').values[-1])
     assert np.array_equal(*finals) and finals[0][1] > 1000 # The same with either
 
@@ -515,8 +515,8 @@ def test_space():
         rtol = 0.05 if solver == 'ode' else 0.5 # A stochastic fit takes fresh seeds at each point, so it does not reproduce the data's own draws (0.023 to 0.029 over three seeds of the fit)
         assert np.isclose(fit.pars.away, 0.02, rtol=rtol), f'Expected to recover away=0.02 with {solver}, not {fit.pars.away}' # Before, a TypeError at init
     sim = ss.Sim(commuters(away), n_agents=3000, solver='abm', **pars).init()
-    shares = [sim.new(pars=dict(away=val)).init().mixing.time_share.diagonal() for val in [0.01, 0.2]] # As agents too: the share of time at home
-    assert np.allclose(shares[0], 0.99) and np.allclose(shares[1], 0.8)
+    fracs = [sim.new(pars=dict(away=val)).init().mixing.time_frac.diagonal() for val in [0.01, 0.2]] # As agents too: the share of time at home
+    assert np.allclose(fracs[0], 0.99) and np.allclose(fracs[1], 0.8)
     restarted = ss.Sim(commuters(away), solver='ode', **pars).init().restart(pars=dict(away=0.05)).run().results.sir.I.values # The mixing is worked out again on a restart
     assert np.allclose(restarted, ss.Sim(commuters(0.05), solver='ode', **pars).run().results.sir.I.values)
 
@@ -531,7 +531,7 @@ def test_space():
     M = ss.geo.radiation().matrix(ss.dimensions.Strat('patch', line))
     assert np.allclose(M[0], np.array([0, 4/20, 8/35, 12/70])/(1 - 4/10)) and np.allclose(M.sum(axis=1), 1) # m·n/((m + s)(m + n + s)), for the finite population (with no ties in distance, each row sums to 1)
     sim = ss.Sim(make_towns(mobility=ss.geo.radiation()), unit='day', **kw).init()
-    assert np.allclose(sim.mixing.time_share.diagonal(), 0.9) # As for gravity, 10% of time away unless away= is given
+    assert np.allclose(sim.mixing.time_frac.diagonal(), 0.9) # As for gravity, 10% of time away unless away= is given
     sim = ss.Sim(make_towns(mobility=ss.geo.radiation(away=0.01)), stop=150, unit='day', solver='ode', total_pop=100_000, **kw).init()
     sim.loop.insert(seed_north, label='sim.start_step')
     peaks = sim.run().results.sir.I.by('patch').values.argmax(axis=0)
@@ -656,8 +656,8 @@ def test_mixing():
     moving = make_places(ss.geo.Mobility(matrix=[[0, 0.01], [0.01, 0]], kind='migrate'))
     assert moving.run().results.sir.infection.cum.by('place').values[-1, 1] > 1000
     agents = make_places().new(n_agents=13_500).run()
-    shares = [np.mean((agents.people.place[agents.people.age < 5] == 0)), np.mean((agents.people.place[agents.people.age >= 50] == 0))]
-    assert np.allclose(shares, [0.75, 0.8], atol=0.05) # As agents, where people live depends on their age
+    fracs = [np.mean((agents.people.place[agents.people.age < 5] == 0)), np.mean((agents.people.place[agents.people.age >= 50] == 0))]
+    assert np.allclose(fracs, [0.75, 0.8], atol=0.05) # As agents, where people live depends on their age
 
     # As agents, the contact matrix acts within each place too, with commuting between them
     assert agents.results.sir.infection.cum.by('place').values[-1, 1] == 0

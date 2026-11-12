@@ -502,7 +502,7 @@ def test_observations():
     sc.heading('Testing binomial and Bernoulli observations')
     k, p = np.array([0, 3, 10]), np.array([0.1, 0.3, 0.5])
     assert np.allclose(ss.fitting.logpdf(ss.binom(n=20), k, p), sps.binom.logpmf(k, 20, p)) # The same as SciPy's
-    with pytest.raises(ValueError, match='takes counts'): # Shares rather than the positives among n
+    with pytest.raises(ValueError, match='takes counts'): # Fractions rather than the positives among n
         ss.fitting.logpdf(ss.binom(n=20), k/20, p)
     assert np.allclose(ss.fitting.logpdf(ss.bernoulli(), np.array([0, 1]), np.array([0.2, 0.7])), np.log([0.8, 0.7]))
 

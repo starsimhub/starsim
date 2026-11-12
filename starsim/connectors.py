@@ -175,14 +175,14 @@ def scaled_transmissions(graph, par, what):
 def route_mult(engine, name, route, inds, trg):
     """
     The multiplier on a transmission over one route to the people who would be infected (`trg`), 1 if there are none: from the modifiers
-    of the route's contacts (`n_contacts`), and from those given the network (`ss.modify(..., network=)`), each `1 − share·(1 − multiply)` for the
+    of the route's contacts (`n_contacts`), and from those given the network (`ss.modify(..., network=)`), each `1 − frac·(1 − multiply)` for the
     people it applies to (`who=`, of the people who would be infected)
 
     Args:
         engine (`ss.solvers.Transmission`): the engine of the disease, as agents
         name (str): the name the modifiers on the route are under: a declared disease's transmission, or `rel_sus` for a disease written as code
         route (Route): the route
-        inds (array): the edges of a network (Ellipsis for all), for a share given per edge; None for a route with no edges
+        inds (array): the edges of a network (Ellipsis for all), for a fraction given per edge; None for a route with no edges
         trg (array): the people who would be infected, by UID (or a slice of every agent)
     """
     at = lambda val: val[trg] if np.ndim(val) else val # Per agent, for the people who would be infected
@@ -190,16 +190,16 @@ def route_mult(engine, name, route, inds, trg):
     for m in engine.sim.modifiers.get((engine.mod.name, 'route', f'{name}@{route.name}')) or []:
         if not m.active:
             continue
-        amount = at(np.asarray(m.current(engine, share=False), dtype=float))
-        if m.share is None:
-            share = 1.0
+        amount = at(np.asarray(m.current(engine, frac=False), dtype=float))
+        if m.frac is None:
+            frac = 1.0
         elif m.per_edge:
             if inds is None:
-                raise ss.CapabilityError(f'share= of the modifier "{m.name}" is a function of the network, one value per edge, but "{route.name}" has no edges; give a number, an ss.timeseries, or an ss.by')
-            share = np.asarray(m.share_of(engine, route), dtype=float)[inds]
+                raise ss.CapabilityError(f'frac= of the modifier "{m.name}" is a function of the network, one value per edge, but "{route.name}" has no edges; give a number, an ss.timeseries, or an ss.by')
+            frac = np.asarray(m.frac_of(engine, route), dtype=float)[inds]
         else:
-            share = at(np.asarray(m.share_of(engine), dtype=float))
-        mult = 1 - share*(1 - amount)
+            frac = at(np.asarray(m.frac_of(engine), dtype=float))
+        mult = 1 - frac*(1 - amount)
         if m.where is not None:
             mask = engine.selector.select(m.where)
             if m.holding:
@@ -337,9 +337,9 @@ class modify(Connector):
         multiply (float): multiply the quantity by this; like `add` and `set`, it can also be `ss.by(...)`, a function of the sim, or an `ss.timeseries`, for changes at given times
         add (float): add this to the quantity: a parameter, or an inflow (a transition from `ss.outside`, e.g. CFUs shed into a reservoir), to which it adds an amount per unit time from outside the model
         set (float): replace the quantity with this (a parameter only)
-        efficacy (float): for protection such as a condom or a needle program, the share of the risk it removes: the same as `multiply=1 - efficacy` (give one of them)
-        share (float): with `multiply=` or `efficacy=`, the share of acts (or, on a route without acts, of contacts) it acts on: the hazard is multiplied by
-            `1 − share·(1 − multiply)`, exactly, since hazards add; a number, an `ss.timeseries`, an `ss.by`, or (with `network=`, as agents) a function of
+        efficacy (float): for protection such as a condom or a needle program, the fraction of the risk it removes: the same as `multiply=1 - efficacy` (give one of them)
+        frac (float): with `multiply=` or `efficacy=`, the fraction of acts (or, on a route without acts, of contacts) it acts on: the hazard is multiplied by
+            `1 − frac·(1 − multiply)`, exactly, since hazards add; a number, an `ss.timeseries`, an `ss.by`, or (with `network=`, as agents) a function of
             the network returning one value per edge (e.g. `lambda net: net.edges.condoms`)
         network (str/list): for a modifier of a transmission, the network or networks (by name, as in the sim's `networks=`, including mixing pools) it applies on; by default, every one. On a parameter (e.g. `tb.pars.beta`), it acts on every transmission the parameter scales (e.g. an infection and its reinfections). A disease written as code has no transmission to name, so on a network the target is its `rel_sus` (of the people who would be infected over it)
         who (Cond/str/func): who it applies to: a condition (e.g. `sir.vaccinated`, or a state by its path, `who='sir.I'`, as `ss.ref('sir.I')`), a condition on a count (e.g. `sir.I.n > 1000`, worked out at each step; in compartments, as part of the rates where it can be, so the run stays in the kernels), or a function of the sim (default: everyone); with `network=`, the people who would be infected
@@ -368,9 +368,9 @@ class modify(Connector):
         # A lockdown that starts when 2% of people are infectious and ends when 1% are
         lockdown = ss.modify(sir.pars.beta, multiply=0.5, who=sir.I.frac >= 0.02, until=sir.I.frac <= 0.01)
 
-        # Condoms, 90% effective against gonorrhea, used in a share of acts that grows over time, on one network
+        # Condoms, 90% effective against gonorrhea, used in a fraction of acts that grows over time, on one network
         use = ss.timeseries({2000: 0.05, 2020: 0.3})
-        condoms = ss.modify(ng.infection, efficacy=0.9, share=use, network='sexualnet')
+        condoms = ss.modify(ng.infection, efficacy=0.9, frac=use, network='sexualnet')
 
         # A member of a disease, with the rest of its natural history
         class Measles(ss.Disease):
@@ -387,20 +387,20 @@ class modify(Connector):
 
     timepar_skip = ['where', 'until', 'when', 'schedule', 'target_module', 'hold'] # These refer to other modules, which hold their own time parameters (see Module.link_timepars()); hold is converted to steps at init
 
-    def __init__(self, target, multiply=None, add=None, set=None, efficacy=None, share=None, network=None, who=None, when=None, until=None, start=None, stop=None, name=None, **kwargs):
+    def __init__(self, target, multiply=None, add=None, set=None, efficacy=None, frac=None, network=None, who=None, when=None, until=None, start=None, stop=None, name=None, **kwargs):
         super().__init__(name=name, **kwargs)
         given = [key for key,val in dict(multiply=multiply, add=add, set=set, efficacy=efficacy).items() if val is not None]
         if len(given) != 1:
             errormsg = f'ss.modify() takes exactly one of multiply=, add=, set=, or efficacy= (which is multiply=1 - efficacy); you supplied {given or "none"}'
             raise ValueError(errormsg)
-        if share is not None and given[0] not in ['multiply', 'efficacy']:
-            errormsg = f'share= of ss.modify() is the share of acts (or contacts) a multiplier acts on, so it goes with multiply= or efficacy=, not {given[0]}='
+        if frac is not None and given[0] not in ['multiply', 'efficacy']:
+            errormsg = f'frac= of ss.modify() is the fraction of acts (or contacts) a multiplier acts on, so it goes with multiply= or efficacy=, not {given[0]}='
             raise ValueError(errormsg)
         self.target_module, self.target_kind, self.target_name = parse_target(target) # Resolved by name when the sim is built, since the sim works on copies
         self.efficacy = efficacy
         if efficacy is not None:
             given, multiply = ['multiply'], efficacy
-        self.share = share
+        self.frac = frac
         self.networks = None if network is None else sc.tolist(network)
         self.op = given[0]
         if name is None: # Until it is named from its variable: what it does, so several unnamed modifiers do not clash
@@ -580,9 +580,9 @@ class modify(Connector):
 
     @property
     def constant_amount(self):
-        """ Whether the amount and share are the same at every step: numbers, or expressions of parameters with plain values """
+        """ Whether the amount and `frac` are the same at every step: numbers, or expressions of parameters with plain values """
         plain = lambda val: not callable(val) and not isinstance(val, ss.by)
-        values = [leaf.raw if isinstance(leaf, ss.par) else leaf for val in [self.amount, self.share] for leaf in (val.leaves if isinstance(val, ss.expressions.Expr) else [val])]
+        values = [leaf.raw if isinstance(leaf, ss.par) else leaf for val in [self.amount, self.frac] for leaf in (val.leaves if isinstance(val, ss.expressions.Expr) else [val])]
         return all(plain(val) for val in values)
 
     def marks(self):
@@ -635,29 +635,29 @@ class modify(Connector):
         out = np.where(until > ti, np.maximum(mask, value), mask)
         return out.astype(mask.dtype)
 
-    def current(self, engine, share=True, mask=None):
-        """ The amount on this step: a scalar, or one value per agent or group; with share=, the multiplier on the hazard, 1 − share·(1 − multiply); given a mask, a clock is read only for the agents in it """
+    def current(self, engine, frac=True, mask=None):
+        """ The amount on this step: a scalar, or one value per agent or group; with frac=, the multiplier on the hazard, 1 − frac·(1 − multiply); given a mask, a clock is read only for the agents in it """
         convert = None if self.op == 'multiply' else engine.convert # A value that is set or added is in the target's own type
         amount = engine.selector.per_person(self.amount, convert=convert, mask=mask)
         if self.efficacy is not None:
             amount = 1 - amount
-        if share and self.share is not None:
-            amount = 1 - self.share_of(engine)*(1 - amount)
+        if frac and self.frac is not None:
+            amount = 1 - self.frac_of(engine)*(1 - amount)
         return amount
 
-    def share_of(self, engine, net=None):
-        """ The share of acts (or contacts) it acts on this step: a scalar, or one value per agent or group; or, given a network, a function of it gives one per edge """
-        share = self.share
+    def frac_of(self, engine, net=None):
+        """ The fraction of acts (or contacts) it acts on this step: a scalar, or one value per agent or group; or, given a network, a function of it gives one per edge """
+        frac = self.frac
         if self.per_edge:
             if net is None:
-                raise ss.CapabilityError(f'share= of the modifier "{self.name}" is a function of the network, one value per edge, which only a run as agents has; give a number, an ss.timeseries, or an ss.by over a dimension, or run with solver="abm"')
-            return np.asarray(share(net), dtype=float)
-        return engine.selector.per_person(share)
+                raise ss.CapabilityError(f'frac= of the modifier "{self.name}" is a function of the network, one value per edge, which only a run as agents has; give a number, an ss.timeseries, or an ss.by over a dimension, or run with solver="abm"')
+            return np.asarray(frac(net), dtype=float)
+        return engine.selector.per_person(frac)
 
     @property
     def per_edge(self):
-        """ Whether its share is a function of the network, one value per edge """
-        return self.networks is not None and callable(self.share) and not isinstance(self.share, (ss.parameters.TimeValue, ss.Dist))
+        """ Whether its fraction is a function of the network, one value per edge """
+        return self.networks is not None and callable(self.frac) and not isinstance(self.frac, (ss.parameters.TimeValue, ss.Dist))
 
     def apply(self, value, engine):
         """ Apply the modifier to a value, for the people it applies to """
@@ -699,8 +699,8 @@ class modify(Connector):
         """ One line saying what the modifier does """
         amount = self.amount.__name__ if callable(self.amount) and hasattr(self.amount, '__name__') else self.amount
         out = f'{self.name:<16s} ' + (f'efficacy={amount}' if self.efficacy is not None else f'{self.op}={amount}')
-        if self.share is not None:
-            out += f'   share={getattr(self.share, "__name__", self.share)}'
+        if self.frac is not None:
+            out += f'   frac={getattr(self.frac, "__name__", self.frac)}'
         if self.networks is not None:
             out += f'   network={sc.strjoin(self.networks)}'
         if self.where is not None:

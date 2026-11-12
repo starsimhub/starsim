@@ -178,8 +178,8 @@ class Cond:
     @property
     def frac(self):
         """
-        For a set of states (`(E | I).frac`, the same as `(E + I).frac`), the share of the module's people in them: in a rate, as an
-        expression; in code, in a sim that has been initialized, the share now, under every solver (as `n`)
+        For a set of states (`(E | I).frac`, the same as `(E + I).frac`), the fraction of the module's people in them: in a rate, as an
+        expression; in code, in a sim that has been initialized, the fraction now, under every solver (as `n`)
         """
         states = self.as_states('frac')
         mod = find_module(self)
@@ -313,7 +313,7 @@ class Cond:
             a, b = ctx.check_edge(b, a_val), ctx.check_edge(a, b_val)
         a, b = evaluate(a, ctx), evaluate(b, ctx)
         if op in ['&', '|']:
-            if not getattr(ctx, 'abm', True) and (has_event(args[0]) or has_event(args[1])): # In a compartmental run, the people an event happened to are a share of each state and group, and the other side is a condition, which holds for all of a group or none (two events together are agents only: see group_reasons())
+            if not getattr(ctx, 'abm', True) and (has_event(args[0]) or has_event(args[1])): # In a compartmental run, the people an event happened to are a fraction of each state and group, and the other side is a condition, which holds for all of a group or none (two events together are agents only: see group_reasons())
                 a, b = np.asarray(a, dtype=float), np.asarray(b, dtype=float)
                 return np.clip(a*b if op == '&' else a + b - a*b, 0, 1)
             a, b = as_bool(a), as_bool(b)
@@ -1003,7 +1003,7 @@ class Selector(sc.prettyobj):
     """
     Evaluates conditions for one module's engine, and holds the arithmetic for selecting people
 
-    It exists so that one set of rules turns a condition into people as agents, or into shares of groups as compartments.
+    It exists so that one set of rules turns a condition into people as agents, or into fractions of groups as compartments.
 
     In an agent-based run, a selection is a boolean per agent (indexed by UID). In a
     compartmental run it is the fraction selected of each state in each group, an
@@ -1132,7 +1132,7 @@ class Selector(sc.prettyobj):
         return mod[name].raw
 
     def incidence(self, cond):
-        """ The number who went through a transition over a window, as a share of the people at the same level of a stratification, for each agent or group (see `ss.Transition.incidence()`) """
+        """ The number who went through a transition over a window, as a fraction of the people at the same level of a stratification, for each agent or group (see `ss.Transition.incidence()`) """
         sim = self.sim
         tr, over, by = cond.args
         mod = self.mod if getattr(tr, 'module', None) is None else self.module(modname(tr.module))
@@ -1148,10 +1148,10 @@ class Selector(sc.prettyobj):
         level = np.zeros(len(flows), dtype=int) if by is None else np.maximum(sim.groups.group_levels[:, sim.groups.dim_index(by)], 0)
         num = np.bincount(level, weights=flows)
         den = np.bincount(level, weights=people)
-        share = np.divide(num, den, out=np.zeros(len(num)), where=den > 0)[level] # For each group
+        frac = np.divide(num, den, out=np.zeros(len(num)), where=den > 0)[level] # For each group
         if self.abm:
-            return share[sim.groups.group_raw()] if len(share) > 1 else np.full(self.shape, share[0])
-        return share[None, :]
+            return frac[sim.groups.group_raw()] if len(frac) > 1 else np.full(self.shape, frac[0])
+        return frac[None, :]
 
     def event(self, mod, name, to=None):
         """ The people who went through a declared transition or transfer this step (to one destination, in a compartmental run: see `event_of()`) """
@@ -1163,7 +1163,7 @@ class Selector(sc.prettyobj):
         if name in mod.graph.transfers: # The people who moved along a stratification this step
             raise ss.CapabilityError(f'the transfer "{name}" of "{mod.name}" as an event cannot run with solver="{self.sim.solver}" yet.\n'
                                      f'     Run with solver="abm", or leave the solver as "auto".')
-        if self.mod is not None and mod is not self.mod: # Its shares are of the states of another module
+        if self.mod is not None and mod is not self.mod: # Its fractions are of the states of another module
             raise ss.CapabilityError(f'the event {mod.name}.{name} cannot select people of "{self.mod.name}" with solver="{self.sim.solver}": a compartmental run does not follow which state of "{self.mod.name}" '
                                      f'the people who went through a transition of "{mod.name}" are in. Run with solver="abm", or use an event of "{self.mod.name}".')
         return engine.event_frac(name, to=to)

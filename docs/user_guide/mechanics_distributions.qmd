@@ -28,7 +28,7 @@ durations = {
 plt.figure()
 for label, dist in durations.items():
     draws = dist.rvs(10_000) # In days, the unit it was given in
-    print(label, '- share under 4 days:', np.mean(draws < 4).round(2))
+    print(label, '- fraction under 4 days:', np.mean(draws < 4).round(2))
     plt.hist(draws, bins=np.arange(0, 40), histtype='step', lw=2, label=label)
 plt.xlabel('Days')
 plt.legend()
@@ -47,7 +47,7 @@ recovery = I >> R @ ss.lognormal(mean=8, std=2, unit='days') # The same: the uni
 
 A distribution's unit is given on its parameters, as typed durations, or once with `unit=`, which applies to every parameter of it that is a time. As agents, each person draws their own duration when they enter the state. As compartments, there are no individuals to draw for, so an Erlang distribution is run exactly as `k` compartments in a row (stages), a fixed duration or a choice of whole numbers of steps (`ss.choice` of days, with daily steps) as one compartment for each step people have been in the state, which is exact, and any other distribution as Erlang stages with the same mean and standard deviation, with a note that says how many.
 
-More generally, a distribution given as a parameter's value gives each person their own value of it: a share (`p=`), or the rate of a transition, can vary between people too. A model whose parameters vary between people, other than durations, needs individuals to hold their values, so it runs as agents. A value that differs by group, rather than at random between people, is better given with `ss.by()` ([Parameters](building_parameters.qmd#values-for-each-group)): it is the same for everyone in a group, and runs under every solver.
+More generally, a distribution given as a parameter's value gives each person their own value of it: a fraction (`p=`), or the rate of a transition, can vary between people too. A model whose parameters vary between people, other than durations, needs individuals to hold their values, so it runs as agents. A value that differs by group, rather than at random between people, is better given with `ss.by()` ([Parameters](building_parameters.qmd#values-for-each-group)): it is the same for everyone in a group, and runs under every solver.
 
 ## Available distributions
 
@@ -125,7 +125,7 @@ The parameters of a distribution that is already made, such as the default of a 
 
 ### A fixed number of people
 
-Some things are a number of people, not a share: to start an outbreak with exactly 5 infectious people, give a number (`init_n=dict(I=5)` for the state, or `init_n=5`, seeded through the transmission as `init_prev=` is; `init_prev=` itself is always a share):
+Some things are a number of people, not a fraction: to start an outbreak with exactly 5 infectious people, give a number (`init_n=dict(I=5)` for the state, or `init_n=5`, seeded through the transmission as `init_prev=` is; `init_prev=` itself is always a fraction):
 
 ```{python}
 S, I, R = ss.states('S I R')

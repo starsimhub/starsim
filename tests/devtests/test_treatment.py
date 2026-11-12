@@ -74,8 +74,8 @@ def test_sti_failure():
     for solver,sim in sims.items():
         res = sim.results
         early, late = slice(0, 100), slice(101, None)
-        share = lambda s: res.clinic.cured[s].sum()/(res.clinic.cured[s].sum() + res.clinic.failed[s].sum())
-        assert np.isclose(share(early), 0.8, atol=0.04) and np.isclose(share(late), 0.4, atol=0.05), f'{solver}: {share(early):.2f}, {share(late):.2f}'
+        frac = lambda s: res.clinic.cured[s].sum()/(res.clinic.cured[s].sum() + res.clinic.failed[s].sum())
+        assert np.isclose(frac(early), 0.8, atol=0.04) and np.isclose(frac(late), 0.4, atol=0.05), f'{solver}: {frac(early):.2f}, {frac(late):.2f}'
         assert np.isclose(res.ng.fail.sum(), res.clinic.failed.sum()) # Every failure (in C) moved to A
     check_close(sims, lambda sim: sim.results.clinic.failed.sum(), rtol=0.15)
 
@@ -146,8 +146,8 @@ def test_efficacy_forms():
                           connectors=ss.modify(ng.cure, multiply=0.5, who=ng.amr == 'res'), **kwargs)
         for solver,sim in run_both(make).items():
             r = sim.results.clinic
-            shares = [r.cured.select(amr=lvl).sum()/(r.cured.select(amr=lvl).sum() + r.failed.select(amr=lvl).sum()) for lvl in ['sens', 'res']]
-            assert np.allclose(shares, expected, atol=0.04), f'{solver}: {shares} for {expected}'
+            fracs = [r.cured.select(amr=lvl).sum()/(r.cured.select(amr=lvl).sum() + r.failed.select(amr=lvl).sum()) for lvl in ['sens', 'res']]
+            assert np.allclose(fracs, expected, atol=0.04), f'{solver}: {fracs} for {expected}'
     return sim
 
 

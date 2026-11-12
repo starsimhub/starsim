@@ -137,15 +137,15 @@ class Source:
 
     def add_outcome(self, name, source, p=None, delay=None, dur=None, doc=None, likelihood=None):
         """
-        A reported quantity: a share of a flow, or of another outcome, with a delay (see `ss.outcome`)
+        A reported quantity: a fraction of a flow, or of another outcome, with a delay (see `ss.outcome`)
 
         Args:
             name (str): the outcome's name
             source (str/list): the name of a flow (from `add_flow()`), several to add together, or another outcome
-            p (float/str): the share of the source, as a number (a parameter named p_<name>) or the name of a parameter
+            p (float/str): the fraction of the source, as a number (a parameter named p_<name>) or the name of a parameter
             delay (any): the time from the source event, as a duration or a distribution
             dur (any): how long each stays in the outcome, if the number in it is wanted
-            doc (str): a description of the share, for its parameter
+            doc (str): a description of the fraction, for its parameter
             likelihood (func): a function of the parameters (by name) that gives the likelihood, e.g. `lambda pars: ss.nbinom(n=pars.k)`
         """
         self.outcomes[name] = sc.obj(source=source, p=p, delay=delay, dur=dur, doc=doc, likelihood=likelihood)
@@ -415,7 +415,7 @@ class Code(str):
 
 def expr_code(text, names):
     """
-    A rate, a share, or a result as Python: each name in it must be a state or parameter of the model (in names);
+    A rate, a fraction, or a result as Python: each name in it must be a state or parameter of the model (in names);
     functions are NumPy's (and SciPy's expit), typed quantities Starsim's, and people's properties (people.age) ss.person's.
     Anything else raises a ValueError, so that a flow the code cannot say is listed as not translated
     """
@@ -546,7 +546,7 @@ def linked_states(source):
 class Named(sc.prettyobj):
     """
     The named expressions of a source (e.g. an Atomica model's parameter functions and characteristics) that its rates use,
-    each written once, with states as their counts (I.n), so a rate or share that contains one is written with its name
+    each written once, with states as their counts (I.n), so a rate or fraction that contains one is written with its name
 
     `Rates.parse()` writes them out, as the rules for reading a rate need; `fold()` puts their names back in what it gives.
     A named expression that is only a state, a parameter, or a number is left written out, as is one that names a transition.
@@ -627,12 +627,12 @@ def disease_code(source, var, total=None):
     named = Named(source, rates, taken | naming)
     code_names = names | set(named.forms) # What a rate can use, written with its named expressions
 
-    # Parameters, including the shares of outcomes that are not parameters of the source
-    shares = sc.obj()
+    # Parameters, including the fractions of outcomes that are not parameters of the source
+    fracs = sc.obj()
     for name,o in source.outcomes.items():
         if not (o.p is None or isinstance(o.p, str) or (sc.isnumber(o.p) and o.p == 1)):
-            shares[f'p_{name}'] = sc.obj(value=o.p, doc=o.doc)
-    for name,p in {**source.pars, **shares}.items():
+            fracs[f'p_{name}'] = sc.obj(value=o.p, doc=o.doc)
+    for name,p in {**source.pars, **fracs}.items():
         extra = ''.join(f', {k}={code_value(p.get(k))}' for k in ['doc', 'bounds', 'prior'] if p.get(k) is not None)
         add(f'{name} = ss.par({code_value(p.value)}{extra})')
     if lines:
@@ -693,11 +693,11 @@ def disease_code(source, var, total=None):
                 guessed.setdefault(name, {})['import'] = how[-1]
             choices.append(f'  {arrow:16s} {flow.rate} : {"; ".join(how)} => {text}')
         if flow.get('p') is not None:
-            shares = ['None' if v is None else expr_code(named.fold(ast.unparse(rates.counts_of(rates.parse(v)))), code_names) for v in flow.p] # States as their counts (a share that changes with them)
-            if branch: # Each destination with its share
-                dst = '{' + ', '.join(f'{d}: {v}' for d,v in zip(flow.dst, shares)) + '}'
+            fracs = ['None' if v is None else expr_code(named.fold(ast.unparse(rates.counts_of(rates.parse(v)))), code_names) for v in flow.p] # States as their counts (a fraction that changes with them)
+            if branch: # Each destination with its fraction
+                dst = '{' + ', '.join(f'{d}: {v}' for d,v in zip(flow.dst, fracs)) + '}'
             else:
-                kw.p = shares[0] if len(shares) == 1 else '[' + ', '.join(shares) + ']'
+                kw.p = fracs[0] if len(fracs) == 1 else '[' + ', '.join(fracs) + ']'
         if flow.get('min_stay') is not None:
             kw.min_stay = code_value(flow.min_stay)
         if flow.get('noise') is not None:
@@ -718,22 +718,22 @@ def disease_code(source, var, total=None):
         taken.add(name)
 
     # Outcomes, which may refer to the transitions and to each other
-    objs = {name:ss.par(1.0, name=name) for name in list(source.pars) + list(shares)} # For a likelihood that uses them
+    objs = {name:ss.par(1.0, name=name) for name in list(source.pars) + list(fracs)} # For a likelihood that uses them
     for name,o in source.outcomes.items():
         parts = sc.tolist(o.source)
         if any(part not in taken - names - reserved for part in parts):
             errormsg = f'The outcome "{name}" refers to {o.source}, which is not a transition or an earlier outcome'
             raise ValueError(errormsg)
         whole = o.p is None or (sc.isnumber(o.p) and o.p == 1) # All of the source
-        share = o.p if isinstance(o.p, str) else f'p_{name}'
+        frac = o.p if isinstance(o.p, str) else f'p_{name}'
         base = ' + '.join(parts)
-        expr = base if whole else f'{share}*{base if len(parts) == 1 else f"({base})"}'
+        expr = base if whole else f'{frac}*{base if len(parts) == 1 else f"({base})"}'
         kw = {k:code_value(o[k]) for k in ['delay', 'dur'] if o[k] is not None}
         if o.get('likelihood') is not None:
             kw['likelihood'] = code_value(o.likelihood(objs), pars=objs)
         members.append((name, f'ss.outcome({expr}{"".join(f", {k}={v}" for k,v in kw.items())})'))
         taken.add(name)
-        choices.append(f'  {name:16s} an outcome: {"" if whole else f"{share} × "}{" + ".join(parts)}' + ''.join(f', {k} {o[k]}' for k in ['delay', 'dur'] if o[k] is not None))
+        choices.append(f'  {name:16s} an outcome: {"" if whole else f"{frac} × "}{" + ".join(parts)}' + ''.join(f', {k} {o[k]}' for k in ['delay', 'dur'] if o[k] is not None))
     choices += [f'  {note}' for note in source.notes]
     defs = named.definitions()
     if defs:
@@ -760,10 +760,10 @@ def disease_code(source, var, total=None):
             choices.append(f'  {name:16s} a result: {text}')
 
     # Initial numbers
-    init, init_n = {}, {} # Shares of people (and the amounts of states that are not people), and numbers of people
+    init, init_n = {}, {} # Fractions of people (and the amounts of states that are not people), and numbers of people
     for name,s in source.states.items():
         val = s.init
-        if not sc.isnumber(val) and val is not None: # e.g. ss.by(place=[...]): numbers of people, or shares if some were below one person (see atomica.py)
+        if not sc.isnumber(val) and val is not None: # e.g. ss.by(place=[...]): numbers of people, or fractions if some were below one person (see atomica.py)
             (init_n if s.people and (val.is_count() or np.any(np.asarray(val.values) > 1)) else init)[name] = val
         elif val:
             near = round(float(val))
@@ -812,7 +812,7 @@ strat_options = ['fractions', 'adjust', 'kind', 'states', 'where', 'mobility'] #
 
 
 def strat_code(kwargs):
-    """ The arguments of `stratify()` for a stratification as an importer gives it: its dimension, with the shares in each level as a dict, its other options in `ss.levels()` (a multiplier by level, `adjust`, is written as a modifier: see `disease_code()`), and any transfers along it by keyword (e.g. `aging=ss.transfer(...)`) """
+    """ The arguments of `stratify()` for a stratification as an importer gives it: its dimension, with the fractions in each level as a dict, its other options in `ss.levels()` (a multiplier by level, `adjust`, is written as a modifier: see `disease_code()`), and any transfers along it by keyword (e.g. `aging=ss.transfer(...)`) """
     dim = next(k for k in kwargs if k not in strat_options)
     extra = ''.join(f', {k}={code_value(v)}' for k,v in kwargs.items() if k != dim and k not in strat_options) # Transfers, e.g. aging between populations
     levels, fractions = kwargs[dim], kwargs.get('fractions')

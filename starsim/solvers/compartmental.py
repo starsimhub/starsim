@@ -236,7 +236,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                 shift = (k - 1)*int(mults[s])
             moved = [src + (np.broadcast_to(dst, (ng,))[src] - coords[src, d])*int(mults[d]) - shift for dst in dsts]
             matrix = self.mover_matrix(np.tile(src, len(dsts)), np.concatenate(moved), np.repeat(np.arange(1.0, len(dsts) + 1), len(src))) # Tagged by the level each entry moves people to
-            dest = matrix.data.astype(int) - 1 if tf.p is not None else None # With several, the share of each is applied with the rate: see mover_rates()
+            dest = matrix.data.astype(int) - 1 if tf.p is not None else None # With several, the fraction of each is applied with the rate: see mover_rates()
             matrix.data[:] = float(k)
             self.movers.append(sc.obj(name=name, comps=comps, matrix=matrix, transfer=tf, dest=dest))
         if sim.mixing.migration is not None and graph.people_states and shared: # People relocating between places
@@ -338,8 +338,8 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                 matrix = mover.matrix.copy() # With the same entries, each times the rate of the group it is from
                 rows = np.repeat(np.arange(self.n_groups), np.diff(matrix.indptr))
                 matrix.data = matrix.data*(rate if np.ndim(rate) == 0 else np.asarray(rate)[rows])
-                if mover.dest is not None: # And the share that moves to each level
-                    ps = self.branch_shares([f'{tf.name}.{dst}' for dst in tf.dsts], [None if p is None else self.eval(p) for p in tf.p], [None]*len(tf.p))
+                if mover.dest is not None: # And the fraction that moves to each level
+                    ps = self.branch_fracs([f'{tf.name}.{dst}' for dst in tf.dsts], [None if p is None else self.eval(p) for p in tf.p], [None]*len(tf.p))
                     matrix.data = matrix.data*np.array([np.broadcast_to(p, (self.n_groups,)) for p in ps])[mover.dest, rows]
                 out.append(matrix)
         return out
@@ -442,7 +442,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                     p = tr.p[0] if tr.p is not None and not tr._split else None # A split between several destinations takes what the branches leave over
                     tracks.append(Bunch(tr=tr, p=p, immediate=tr.rate is None and (tr.dur is None or tr._immediate))) # With neither (or dur=0), nobody waits in the branch
             else:
-                apart = len(staged) > 1 # Several, each for other people (who=, e.g. by sex): a track for each, which each group enters by the one it has (see apart_shares())
+                apart = len(staged) > 1 # Several, each for other people (who=, e.g. by sex): a track for each, which each group enters by the one it has (see apart_fracs())
                 if apart and (stays or any(self.dwells[tr.name].fixed for tr in staged)):
                     self.unsupported(staged[1], f'two non-exponential dwell times out of "{name}" when one is a fixed delay or the state has min_stay=')
                 if apart and any(tr.where is None for tr in staged): # For the same people: they race, as one track of stages by each (see add_raced())
@@ -512,7 +512,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             flow.expr = None if (flow.kind in ['stage', 'conveyor', 'slot'] or (flow.kind != 'contact' and tr.dur is not None)) else tr.rate
             if flow.strain and tr.const is not None: # A part of the rate with no source of infection has no strain, so is counted once, with the first
                 flow.expr = flow.expr - tr.const
-            flow.dynamic = flow.expr is not None and any(isinstance(leaf, (ss.State, ss.expressions.Count, ss.expressions.HeldShare)) for leaf in flow.expr.leaves)
+            flow.dynamic = flow.expr is not None and any(isinstance(leaf, (ss.State, ss.expressions.Count, ss.expressions.HeldFrac)) for leaf in flow.expr.leaves)
             if tr.noise is not None and flow.expr is not None: # Noise on the rate is drawn inside the kernels, so the rate is worked out there (see flatten_rates())
                 flow.dynamic = True
             flow.held = self.uninfected is not None and tr.acquisition and flow.src is not None and flow.state.name in self.uninfected # An infection in a branching process: an inflow at its rate per member of its source, which it takes no one from (see init_program())
@@ -520,7 +520,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                 if flow.expr is None:
                     raise ss.CapabilityError(f'"{self.mod.name}.{tr.name}" is an infection with a dwell time rather than a rate, which a branching process cannot run as compartments; give it a rate, or run with solver="abm"')
                 flow.dynamic = True
-            flow.known = not flow.dynamic or (tr.noise is not None and not flow.held and not any(isinstance(leaf, (ss.State, ss.expressions.Count, ss.expressions.HeldShare)) for leaf in flow.expr.leaves)) # A rate known before the step (noise aside, by its mean of 1), which sets the substeps
+            flow.known = not flow.dynamic or (tr.noise is not None and not flow.held and not any(isinstance(leaf, (ss.State, ss.expressions.Count, ss.expressions.HeldFrac)) for leaf in flow.expr.leaves)) # A rate known before the step (noise aside, by its mean of 1), which sets the substeps
 
         self.check_noise()
         self.n_comps = len(self.comps)
@@ -719,12 +719,12 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
     def backfill_burnin(self, sp):
         """
         A module's people who start part way through (`ss.Pregnancy(burnin=True)`: see its `burnin_plan()`): each group's
-        share of the first state (`sp.share()`) is moved to the target, spread evenly over its compartments (stages, or the
-        slots of a fixed time), as if they entered uniformly over the steps before the start (the module's share takes off those
+        fraction of the first state (`sp.frac()`) is moved to the target, spread evenly over its compartments (stages, or the
+        slots of a fixed time), as if they entered uniformly over the steps before the start (the module's fraction takes off those
         who would have left on the way)
         """
         first, target = self.state_comps[self.graph.default_state.name], self.state_comps[sp.target[0]]
-        moved = self.y[first]*np.asarray(sp.share(), dtype=float)
+        moved = self.y[first]*np.asarray(sp.frac(), dtype=float)
         self.y[first] -= moved
         self.y[target] += moved.sum(axis=0)/len(target)
         ss.note(sp.note, sim=self.sim)
@@ -804,8 +804,8 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             vals = np.asarray(new[rows, cols], dtype=float).ravel() if len(rows) else np.zeros(0)
             return vals if np.count_nonzero(vals) == np.count_nonzero(new.data) else None
         p = self.program
-        if p is not None and mixing.share is not None:
-            vals = onto(mixing.share, p.sh_pair[0], p.sh_pair[1])
+        if p is not None and mixing.frac is not None:
+            vals = onto(mixing.frac, p.sh_pair[0], p.sh_pair[1])
             if vals is None:
                 return False
             p.sh_val[:] = vals
@@ -823,11 +823,11 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         return True
 
     @staticmethod
-    def at_home(share):
-        """ Whether a time share between places (a sparse array) keeps everyone at home, as `np.allclose(share, np.eye(P))` would say, without forming either """
-        coo = share.tocoo()
+    def at_home(frac):
+        """ Whether a time fraction between places (a sparse array) keeps everyone at home, as `np.allclose(frac, np.eye(P))` would say, without forming either """
+        coo = frac.tocoo()
         diag = coo.row == coo.col
-        home = np.zeros(share.shape[0])
+        home = np.zeros(frac.shape[0])
         home[coo.row[diag]] = coo.data[diag]
         return bool(np.all(np.abs(coo.data[~diag]) <= 1e-8) and np.all(np.abs(home - 1) <= 1e-8 + 1e-5))
 
@@ -1114,20 +1114,20 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
 
     def move_some(self, srcs, dst, p=None, n=None, where=None, outside=None):
         """
-        A one-off move from code (`ss.move()`): a share `p` of the people in some states (or `n` of them, exactly where the solver keeps
+        A one-off move from code (`ss.move()`): a fraction `p` of the people in some states (or `n` of them, exactly where the solver keeps
         whole people; of those for whom `where` holds) to a state, or to and from outside the model (`dst` or `srcs` empty, and for
         people, `outside`: 'dead' and 'outside', or 'unborn' and 'outside'), which the other diseases follow (see `others_follow()`);
         returns the number moved
         """
         comps = [comp for state in srcs for comp in self.state_comps[state.name]]
-        sel = 1.0 if where is None else np.broadcast_to(np.asarray(self.selector.select(where), dtype=float), self.selector.shape) # The share of each state and group for whom it holds
+        sel = 1.0 if where is None else np.broadcast_to(np.asarray(self.selector.select(where), dtype=float), self.selector.shape) # The fraction of each state and group for whom it holds
         have = self.y[comps]
         if where is not None:
             have = have*np.array([sel[self.selector.states.index(state.name)] for state in srcs for _ in self.state_comps[state.name]])
         total = have.sum()
         if n is not None:
             p = min(n/total, 1.0) if total > 0 else 0.0
-        if not (srcs[0] if srcs else dst).people: # A count: an exact share, as its flows are
+        if not (srcs[0] if srcs else dst).people: # A count: an exact fraction, as its flows are
             moved = have*p if srcs else n*self.state_split[dst.name]
             for comp,amount in zip(comps, moved):
                 self.y[comp] -= amount
@@ -1153,7 +1153,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         return float(self.move_states(frac*sel, srcs, dst, given=given).sum())
 
     def remove_people(self, frac, srcs, given=None):
-        """ Take a share of the people in each of some states and groups (or `given`, the number from each compartment) out of the model, and the same people out of the other diseases (see `others_follow()`); returns the number by group """
+        """ Take a fraction of the people in each of some states and groups (or `given`, the number from each compartment) out of the model, and the same people out of the other diseases (see `others_follow()`); returns the number by group """
         removed = np.zeros(self.n_groups)
         for state in srcs:
             s = self.selector.states.index(state.name)
@@ -1197,18 +1197,18 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                 engine.y[c] = engine.y[c] - amount
         return
 
-    def move_share(self, tr, frac, srcs):
-        """ Move a share of each state and group (within the sources `srcs`) along a triggered transition: with p=, that share of them; with several destinations, split between them """
+    def move_frac(self, tr, frac, srcs):
+        """ Move a fraction of each state and group (within the sources `srcs`) along a triggered transition: with p=, that fraction of them; with several destinations, split between them """
         ps = self.branch_probs(tr) if tr._split else [self.selector.per_person(tr.p[0]) if tr.p else 1.0]
         N = self.state_counts()
-        for dst,p in zip(tr.dest, ps): # Each as a share of those still in the source
+        for dst,p in zip(tr.dest, ps): # Each as a fraction of those still in the source
             cur = self.state_counts()
             self.force(np.clip(np.divide(frac*p*N, cur, out=np.zeros_like(cur), where=cur>0), 0, 1), tr, dst, srcs=srcs)
         return
 
     def step_triggers(self):
         """
-        The transitions moved by an event of this module (`when=` one of its transitions), at the end of each step: the share of each
+        The transitions moved by an event of this module (`when=` one of its transitions), at the end of each step: the fraction of each
         source state and group the step's event happened to moves then, as a delivery's people do (triggers on conditions are
         passed straight through instead: see `update_targets()` and `sweep_triggers()`)
         """
@@ -1218,7 +1218,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             if tr.where is not None and tr.where is not tr.trigger.x:
                 frac = frac*self.selector.select(tr.where)
             if frac.any():
-                self.move_share(tr, frac, srcs)
+                self.move_frac(tr, frac, srcs)
         return
 
     def event_frac(self, name, to=None):
@@ -1261,14 +1261,14 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         return self.sim.mixing.count_terms()
 
     def met_count(self, states, expr):
-        """ The number of people in some states met through the contact matrices, by group: as `exposure()`, on the number (each counted by its weight in a weighted count) rather than the share """
+        """ The number of people in some states met through the contact matrices, by group: as `exposure()`, on the number (each counted by its weight in a weighted count) rather than the fraction """
         mixing = self.sim.mixing
         mults = [self.contact_mult(term.name) for term in mixing.terms] if self.net_mods else None
         num = sum(self.count([state], total=False)*self.weight(expr, state) for state in states) if expr.weighted else self.count(states, total=False)
         return mixing.exposure(num, self.n_people(total=False), mults, counts=True)
 
-    def held_share(self, expr):
-        """ The share holding a product (`itn.held_share`): the share of the people in the same place who hold it, by what each level of holding it counts as (see `ss.expressions.HeldShare.level_weights()`) """
+    def held_frac(self, expr):
+        """ The fraction holding a product (`itn.held_frac`): the fraction of the people in the same place who hold it, by what each level of holding it counts as (see `ss.expressions.HeldFrac.level_weights()`) """
         sim = self.sim
         product = self.product_of(expr)
         weights = expr.level_weights(sim)
@@ -1295,7 +1295,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         return mixing.exposure(infectious, self.n_people(total=False), mults)
 
     def prop(self, cond):
-        """ A property of people or a condition, in a rate (see `ss.expressions.Prop`): its value for each group (for a condition, the share of the group it holds for; on states, of the people in the state the flow leaves) """
+        """ A property of people or a condition, in a rate (see `ss.expressions.Prop`): its value for each group (for a condition, the fraction of the group it holds for; on states, of the people in the state the flow leaves) """
         out = np.asarray(cond.eval(self.selector), dtype=float)
         if out.ndim == 2 and out.shape[0] > 1: # By state
             src = getattr(self, '_src', None)
@@ -1372,7 +1372,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         """
         For a synchronized flow: the map between groups that moves the other module's coordinate (its dimension in the
         joint) from the levels of its transition's source to those of its destination (entry, split by its branches),
-        the share of each group that it moves, and where the flow is recorded in the other module's groups
+        the fraction of each group that it moves, and where the flow is recorded in the other module's groups
         """
         if sy.S is not None:
             return sy
@@ -1391,7 +1391,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             if np.ptp(w) > 1e-12:
                 raise ss.CapabilityError(f'"{sy.mod.name}.{sy.otr.name}" is triggered by {sy.otr.trigger.x.label}, and {what} differs between groups, which a synchronized flow cannot carry yet. Run with solver="abm".')
             return float(w[0])
-        dst = sc.ddict(float) # Level of the other's dimension -> share, for people leaving the source
+        dst = sc.ddict(float) # Level of the other's dimension -> fraction, for people leaving the source
         ps = [scalar(p, 'its branch probability') for p in other.branch_probs(sy.otr)]
         for state,p in zip(sy.otr.dest, ps):
             comps, credits = other.entry[state.name]
@@ -1511,9 +1511,9 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                 continue
             rest = 1.0
             for dst,p in zip(tr.dest, self.branch_probs(tr)):
-                share = np.divide(p, rest, out=np.zeros(np.broadcast(p, rest).shape), where=np.asarray(rest) > 0)
-                self.force(frac*share, tr, dst)
-                frac = frac*(1 - share)
+                p_dst = np.divide(p, rest, out=np.zeros(np.broadcast(p, rest).shape), where=np.asarray(rest) > 0)
+                self.force(frac*p_dst, tr, dst)
+                frac = frac*(1 - p_dst)
                 rest = rest - p
         return
 
@@ -1523,9 +1523,9 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         for name,tracks in self.tracks.items():
             plain = [tr for tr in tracks if not getattr(tr, 'trigger', False)]
             apart = [track for track in plain if getattr(track, 'apart', False)]
-            ps = self.apart_shares(name, apart) if apart else [None if tr.p is None else self.eval(tr.p) for tr in plain]
+            ps = self.apart_fracs(name, apart) if apart else [None if tr.p is None else self.eval(tr.p) for tr in plain]
             mults = self.where_mults([tr.tr for tr in plain], name, [self.branch_mult(tr.tr) for tr in plain]) # With each branch's who=: closed in the groups it does not hold in
-            probs[name] = self.branch_shares([tr.tr for tr in plain], ps, mults)
+            probs[name] = self.branch_fracs([tr.tr for tr in plain], ps, mults)
             if len(plain) < len(tracks): # Triggers on states and strata: in the groups where one holds, arrivals pass straight through (the compartments vanish)
                 left = np.ones(self.n_groups)
                 masks = []
@@ -1539,7 +1539,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             if tr.name not in dests:
                 dests[tr.name] = self.branch_probs(tr)
             return dests[tr.name]
-        key = [np.asarray(p, dtype=float) for shares in probs.values() for p in shares] + [np.asarray(p, dtype=float) for tr in self.graph.transitions.values() if tr.dest is not None and tr._split for p in dest_probs(tr)]
+        key = [np.asarray(p, dtype=float) for fracs in probs.values() for p in fracs] + [np.asarray(p, dtype=float) for tr in self.graph.transitions.values() if tr.dest is not None and tr._split for p in dest_probs(tr)]
         last = getattr(self, '_target_key', None)
         if last is not None and len(last) == len(key) and all(np.array_equal(a, b) for a,b in zip(last, key)):
             return
@@ -1554,7 +1554,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             for track,p in zip(self.tracks[name], probs[name]):
                 if track.immediate: # Nobody waits in this branch: pass straight through to its destination
                     dps = dest_probs(track.tr)
-                    die = self.die_share(track.tr, dps) # Those who took ss.dead leave the model, as by an outflow
+                    die = self.die_frac(track.tr, dps) # Those who took ss.dead leave the model, as by an outflow
                     credits.append((self.tr_index[track.tr.name], weight*p*(sum(dps) + die if track.tr.stays else 1), parent))
                     me = len(credits) - 1
                     for dst,dp in zip(track.tr.dest, dps):
@@ -1594,18 +1594,18 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                     syn = self.syncs_of(flow.tr, dst.name)
                     for ind,w in comps:
                         dim_map = self.synced(self.dim_map(src, self.comps[ind].state.name, flow.strain, move=self.moves(flow.tr)), syn) # Moving other modules' coordinates too (a synchronized flow)
-                        if dim_map is not None and np.ndim(w): # A branch share decided on entry, by the groups people land in, which can have a dimension the source lacks
+                        if dim_map is not None and np.ndim(w): # A branch fraction decided on entry, by the groups people land in, which can have a dimension the source lacks
                             landed = dim_map*w
                             total = landed.sum(axis=1)
                             flow.targets.append((ind, p*total, np.divide(landed, total[:, None], out=np.zeros_like(landed), where=total[:, None] > 0)))
-                            self._landed = True # The map changes with the shares, so the program is packed again whenever they do
+                            self._landed = True # The map changes with the fractions, so the program is packed again whenever they do
                         else:
-                            flow.targets.append((ind, w*p, dim_map)) # (compartment, share, where in it)
+                            flow.targets.append((ind, w*p, dim_map)) # (compartment, fraction, where in it)
                     flow.recs += [self.tr_index[f'{flow.tr.name}.{dst.name}'] if (flow.named or flow.tr.stays) and flow.tr._ends else -1]*len(comps) # Also counted in the flow to this destination
                     off = len(flow.credits) # Credits are (transition index, weight, parent): the credit it is nested in, -1 for none, or -2 if it overlaps the others (drawn on its own)
                     flow.credits += [(ind, w*p, par + off if par >= 0 else -1) for ind,w,par in credits]
                     flow.credits += [(sy.row, p*sy.mask, -2) for sy in syn] # Moved in another module too
-                die = self.die_share(flow.tr, ps) # Those who took ss.dead go to no compartment: they leave the model, as by an outflow
+                die = self.die_frac(flow.tr, ps) # Those who took ss.dead go to no compartment: they leave the model, as by an outflow
                 if flow.tr.may_die and flow.tr._ends and flow.tr.stays: # Otherwise, the flow less the flows to its states (see count_deaths())
                     flow.credits.append((self.tr_index[f'{flow.tr.name}.dead'], die, -2))
                 if flow.tr.stays and src is not None: # Those who took ss.stay go to the state's compartment with no exit of its own, and are not in the flow
@@ -1649,7 +1649,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         """
         cdf = ss.transitions.dwell_cdf(dwell.raw, self.convert)
         dt = self.step_known()
-        G = cdf((np.arange(most + 1) + 0.5)*dt) # The share who leave within each number of steps, to the nearest step
+        G = cdf((np.arange(most + 1) + 0.5)*dt) # The fraction who leave within each number of steps, to the nearest step
         rates = []
         before = 0.0
         for j in range(most + 1):
@@ -1665,8 +1665,8 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         """ In a branching process, whether a move from one state to another is from the infected side back into the uninfected side, which it takes people out of the model by instead """
         return self.uninfected is not None and src is not None and src not in self.uninfected and dst in self.uninfected
 
-    def apart_shares(self, name, tracks):
-        """ For several non-exponential dwell times out of a state, each for other people (who=): the share of each group that enters each one's track, 1 for the one it has (the first, if none) """
+    def apart_fracs(self, name, tracks):
+        """ For several non-exponential dwell times out of a state, each for other people (who=): the fraction of each group that enters each one's track, 1 for the one it has (the first, if none) """
         ng = self.n_groups
         firsts = [next(flow for flow in self.flows if flow.tr is track.tr and flow.src == track.first) for track in tracks]
         active = np.array([np.broadcast_to(np.asarray(self.flow_mult(flow)) > 0, (ng,)) for flow in firsts], dtype=float)
@@ -1901,10 +1901,10 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             comps = sorted({flow.src for flow in self.flows if flow.tr is tr and flow.kind == 'contact'})
             states = list({id(self.comps[c].state):self.comps[c].state for c in comps}.values())
             have = sum(self.y[c] for c in comps) if comps else np.zeros(self.n_groups)
-            share = np.clip(np.divide(count, have, out=np.zeros(self.n_groups), where=have > 0), 0, 1)
+            ratio = np.clip(np.divide(count, have, out=np.zeros(self.n_groups), where=have > 0), 0, 1)
             frac = np.zeros(self.selector.shape)
             for state in states:
-                frac[self.selector.states.index(state.name)] = share
+                frac[self.selector.states.index(state.name)] = ratio
             self.force(frac, tr, tr.dest[0], srcs=states)
         return
 
@@ -1952,7 +1952,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             for m in list(mods):
                 expr = getattr(m, 'where', None)
                 simple = isinstance(m, ss.modify) and isinstance(expr, ss.expressions.Func) and expr.name in ss.expressions.comparisons and m.op == 'multiply'
-                if not simple or m.holding or m.start is not None or m.stop is not None or m.share is not None or m.when is not None or not m.constant_amount:
+                if not simple or m.holding or m.start is not None or m.stop is not None or m.frac is not None or m.when is not None or not m.constant_amount:
                     continue
                 if any(isinstance(leaf, ss.expressions.Count) and any(all(state is not own for own in graph.states.values()) for state in leaf.states) for leaf in expr.leaves):
                     continue
@@ -2134,7 +2134,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                 check(expr)
                 ops.append(kn.CONST)
                 args.append(add(pars, ('number', repr(float(expr.raw))) if expr.literal and sc.isnumber(expr.raw) else id(expr), expr)) # The same number, wherever it is written, once
-            elif isinstance(expr, ss.expressions.Count) and id(expr) in met and not (expr.weighted and self.joint is not None): # Met through the contact matrices: the number, as an exposure to the count's set (and a share, over everyone in the same place)
+            elif isinstance(expr, ss.expressions.Count) and id(expr) in met and not (expr.weighted and self.joint is not None): # Met through the contact matrices: the number, as an exposure to the count's set (and a fraction, over everyone in the same place)
                 ops.append(kn.EXPOSURE)
                 args.append(add(exposures, (count_set(expr), None, None, None, None), (None, None, None, None)))
                 if expr.kind == 'frac':
@@ -2149,9 +2149,9 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
                 if id(expr) not in self.foreign_pars:
                     self.foreign_pars[id(expr)] = ss.par.inline((lambda e: lambda sim: self.count_expr(e))(expr), name=f'{ss.expressions.format_expr(expr)} (counted by its disease)')
                 return flatten(self.foreign_pars[id(expr)], strain, routes, rtr)
-            elif isinstance(expr, ss.expressions.HeldShare): # The share holding a product, worked out once a step
+            elif isinstance(expr, ss.expressions.HeldFrac): # The fraction holding a product, worked out once a step
                 if id(expr) not in self.foreign_pars:
-                    self.foreign_pars[id(expr)] = ss.par.inline((lambda e: lambda sim: self.held_share(e))(expr), name=f'{expr} (worked out each step)')
+                    self.foreign_pars[id(expr)] = ss.par.inline((lambda e: lambda sim: self.held_frac(e))(expr), name=f'{expr} (worked out each step)')
                 return flatten(self.foreign_pars[id(expr)], strain, routes, rtr)
             elif isinstance(expr, ss.expressions.Count):
                 ops.append(kn.COUNT if expr.kind == 'n' else kn.TOTAL if expr.kind == 'total' else kn.FRAC)
@@ -2237,19 +2237,19 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         ng = self.n_groups
         place_of = np.array(mixing.places) if mixing.space is not None else np.zeros(ng, dtype=int)
         pl_starts, pl_groups = by_level(place_of, place_of.max() + 1)
-        self._local_mixing = all(term.kind == 'homogeneous' for term in mixing.terms) and (mixing.space is None or mixing.time_share is None or self.at_home(mixing.time_share))
+        self._local_mixing = all(term.kind == 'homogeneous' for term in mixing.terms) and (mixing.space is None or mixing.time_frac is None or self.at_home(mixing.time_frac))
 
-        # Exposure: each group is in one cell of each mixing term, and the cells are mixed by the time share between places and the term's matrix between levels (see Mixing.term_exposure())
+        # Exposure: each group is in one cell of each mixing term, and the cells are mixed by the time fraction between places and the term's matrix between levels (see Mixing.term_exposure())
         nt = len(mixing.terms)
         sizes = np.ones(nt, dtype=int)
         block = np.ones(nt, dtype=int)
         levels = np.zeros((nt, ng), dtype=int)
-        use = np.zeros((3, nt), dtype=bool) # Whether the share is used before prevalence is worked out, the matrix after, and then the share
+        use = np.zeros((3, nt), dtype=bool) # Whether the time fraction is used before prevalence is worked out, the matrix after, and then the time fraction
         for t,term in enumerate(mixing.terms):
             if term.kind == 'homogeneous' and mixing.space is not None: # People mix where they are
                 levels[t] = mixing.places
                 sizes[t] = sim.groups.strats[mixing.space].n
-                use[:, t] = [mixing.share is not None and mixing.present, False, mixing.share is not None]
+                use[:, t] = [mixing.frac is not None and mixing.present, False, mixing.frac is not None]
             elif term.kind != 'homogeneous':
                 levels[t] = term.cells if 'cells' in term else sim.groups.group_coords[:, term.dim]
                 block[t] = len(term.matrix)
@@ -2259,8 +2259,8 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         for t,term in enumerate(mixing.terms):
             if use[1, t]:
                 mat[t, :block[t], :block[t]] = term.matrix
-        share = mixing.share if mixing.share is not None else sps.csr_array((1, 1))
-        return sc.obj(pl_starts=pl_starts, pl_groups=pl_groups, nt=nt, sizes=sizes, block=block, levels=levels, use=use, mat=mat, share=share)
+        frac = mixing.frac if mixing.frac is not None else sps.csr_array((1, 1))
+        return sc.obj(pl_starts=pl_starts, pl_groups=pl_groups, nt=nt, sizes=sizes, block=block, levels=levels, use=use, mat=mat, frac=frac)
 
     def init_exposures(self, rates):
         """ What each operation that reads an exposure needs, kept for each run, and the parameters of the operations """
@@ -2294,8 +2294,8 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         ng, nf, nt = self.n_groups, len(self.flows), mix.nt
         exposures = rates.exposures
         by_group = any(routes is not None for routes in self.prog_routes) or any(getattr(m, 'where', None) is not None for m in self.net_mods) or any(self.prog_rtrs) or self.saturates # Contacts by exposure and group: see set_contacts()
-        share = mix.share
-        share.sort_indices() # A full matrix of entries is read as one, in order (see ss.kernels.share())
+        frac = mix.frac
+        frac.sort_indices() # A full matrix of entries is read as one, in order (see ss.kernels.frac())
         setlist = list(rates.sets)
         members = [[m if isinstance(m, tuple) else (m, -1) for m in item] for item in setlist] # A weighted count's are (compartment, row of its weight)
         order = {id(flow):i for i,flow in enumerate(self.flows)}
@@ -2333,8 +2333,8 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             contacts   = np.array([term.get('contacts', 1.0) for term in mixing.terms], dtype=float).reshape(1, nt, 1)*np.ones((len(exposures), 1, ng) if by_group and exposures else (1, 1, 1)),
             use        = mix.use,
             mat        = mix.mat,
-            sh_pair    = np.array([np.repeat(np.arange(share.shape[0]), np.diff(share.indptr)), share.indices], dtype=int).reshape(2, -1),
-            sh_val     = share.data.astype(float),
+            sh_pair    = np.array([np.repeat(np.arange(frac.shape[0]), np.diff(frac.indptr)), frac.indices], dtype=int).reshape(2, -1),
+            sh_val     = frac.data.astype(float),
             tgt_starts = np.zeros(nf + 1, dtype=int),
             tgt_comp   = np.zeros(0, dtype=int),
             tgt_w      = np.zeros((0, ng)),
@@ -2385,7 +2385,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
 
     def saturation(self, e, term, beta=1.0):
         """
-        The share of the transmission of mass action that a network's edges give as agents: (1 − e^(−b·D))/(b·D), for edges that
+        The fraction of the transmission of mass action that a network's edges give as agents: (1 − e^(−b·D))/(b·D), for edges that
         transmit at rate b over a step D (the longer of the network's and the disease's), by group (of the people who would be
         infected); 1 for any other term of the mixing
 
@@ -2425,7 +2425,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         return any(self.sim.modifiers.get((self.mod.name, 'route', f'{tr.name}@{term.name}')) for term in self.sim.mixing.terms)
 
     def route_mults(self, tr, state):
-        """ The multiplier on the contacts through each term of the mixing, from the modifiers of a transmission on that route: `1 − share·(1 − multiply)`, a number or one for each group (of the people who would be infected) """
+        """ The multiplier on the contacts through each term of the mixing, from the modifiers of a transmission on that route: `1 − frac·(1 − multiply)`, a number or one for each group (of the people who would be infected) """
         out = []
         for term in self.sim.mixing.terms:
             mult = 1.0
@@ -2841,7 +2841,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
 
     def mod_values(self):
         """ What the modifiers are worked out from, beyond their amounts (see `par_values()`): when they act, on whom, and how; to tell whether the tables of the last run still hold """
-        keys = ['op', 'amount', 'efficacy', 'share', 'start', 'stop', 'when', 'where', 'hold', 'until', 'networks']
+        keys = ['op', 'amount', 'efficacy', 'frac', 'start', 'stop', 'when', 'where', 'hold', 'until', 'networks']
         out = []
         for mods in self.sim.modifiers.values():
             for m in mods:
@@ -2864,7 +2864,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             return None
 
         def in_time(val):
-            """ Whether an amount or share varies in time (a number for each group does not) """
+            """ Whether an amount or `frac` varies in time (a number for each group does not) """
             raws = [leaf.raw if isinstance(leaf, ss.par) else leaf for leaf in (val.leaves if isinstance(val, ss.expressions.Expr) else [val])]
             return any(isinstance(raw, ss.parameters.TimeValue) or (isinstance(raw, ss.by) and raw.varies) or (callable(raw) and not isinstance(raw, ss.by)) for raw in raws)
 
@@ -2882,8 +2882,8 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
 
         steps = set()
         for m in mods:
-            if in_time(m.amount) or in_time(m.share): # A step function changes only where its value does; anything else, at any step
-                if m.share is not None or not isinstance(m.amount, ss.timeseries) or not self.held(m.amount) or m.amount.period is not None:
+            if in_time(m.amount) or in_time(m.frac): # A step function changes only where its value does; anything else, at any step
+                if m.frac is not None or not isinstance(m.amount, ss.timeseries) or not self.held(m.amount) or m.amount.period is not None:
                     sim.t.ti = 0
                     return None
                 steps.update(first_step(lambda: sim.t.now('year') + 1e-9 >= year) for year in m.amount.years(sim))
@@ -3277,7 +3277,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             seeds (list): see `derived_outcomes()`
 
         Returns a dict of the outcomes and the results given as expressions.
-        This is what `record_flows()` does on each step, for every step at once.
+        This is what `record_events()` does on each step, for every step at once.
         """
         graph = self.graph
         out = self.derived_outcomes(new, expected=expected, seeds=seeds) if outcomes else sc.obj()
@@ -3354,7 +3354,7 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
             for name,info in todo.items():
                 amount = 0.0
                 for (key,_),weight in zip(info.sources, weights[name]):
-                    amount = amount + self.outcome_share(flows[key][:, ti] if key in flows else out[key][:, ti], weight, True)
+                    amount = amount + self.outcome_frac(flows[key][:, ti] if key in flows else out[key][:, ti], weight, True)
                 if f'n_{name}' in out: # At the start of the step
                     out[f'n_{name}'][:, ti] = bufs[name].n
                 out[name][:, ti] = self.report_outcome(info, bufs[name], np.asarray(amount, dtype=float), ti, True)
@@ -3368,9 +3368,9 @@ class Compartmental(Engine): # Never searched for distributions (see ss.dists.no
         if not all(np.all((0 <= np.asarray(weight)) & (np.asarray(weight) <= 1)) for _,_,weight in parts):
             return None
         flow = np.stack([part[1] for part in parts]) # Parts by width by steps
-        share = np.broadcast_to(np.stack([np.broadcast_to(part[2], (width,)) for part in parts])[:, :, None], flow.shape)
+        frac = np.broadcast_to(np.stack([np.broadcast_to(part[2], (width,)) for part in parts])[:, :, None], flow.shape)
         whole = np.floor(flow)
-        drawn = self.rng.binomial(whole.astype(int).transpose(2, 0, 1), share.transpose(2, 0, 1)).transpose(1, 2, 0) + (flow - whole)*share
+        drawn = self.rng.binomial(whole.astype(int).transpose(2, 0, 1), frac.transpose(2, 0, 1)).transpose(1, 2, 0) + (flow - whole)*frac
         out = sc.obj()
         for i,(name,_,_) in enumerate(parts):
             out[name] = out.get(name, 0) + drawn[i]*todo[name].kernel[0]

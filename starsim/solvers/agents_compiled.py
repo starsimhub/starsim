@@ -211,7 +211,7 @@ class Compiled(Agents):
         k.ae_ptr, k.ae_trig = ptr(after), ints([g for x in after for g in x])
         k.trig_where = np.full(len(trigs), -1, np.int64)
         k.trig_cond = np.full(len(trigs), -1, np.int64) # The column of the condition of a trigger on one
-        k.lazy = np.zeros(nt, dtype=bool) # The splits whose shares are worked out on demand, for the agents that take them (see lay_out_values())
+        k.lazy = np.zeros(nt, dtype=bool) # The splits whose fractions are worked out on demand, for the agents that take them (see lay_out_values())
         self.kwhere = []
         for g, tr in enumerate(trigs):
             if tr.where is not None:
@@ -223,8 +223,8 @@ class Compiled(Agents):
         k.trigs = trigs
         k.cond_trigs = [(g, [index[s.name] for s in tr.source if s.people and s.name in index]) for g, tr in enumerate(trigs) if not tr.trigger.event]
 
-        # The columns of the table of shares: each state's branches, and each split's destinations
-        self.kedges = [] # (key, function of uids giving the cumulative shares, one row per edge)
+        # The columns of the table of fractions: each state's branches, and each split's destinations
+        self.kedges = [] # (key, function of uids giving the cumulative fractions, one row per edge)
         k.br_col = np.full(ns, -1, np.int64)
         k.dst_col = np.full(nt, -1, np.int64)
         ncol = 0
@@ -239,7 +239,7 @@ class Compiled(Agents):
                 self.kedges.append((('dest', tr.name), lambda u, tr=tr: self.dest_edges(tr, u, np.full(len(u), -1))))
                 ncol += len(dsts[i]) + 1
         k.ncol = ncol
-        k.dst_width = [len(x) + 1 for x in dsts] # The columns of a split's shares: one per destination (a death included), and its end
+        k.dst_width = [len(x) + 1 for x in dsts] # The columns of a split's fractions: one per destination (a death included), and its end
         k.fam = ints([f for f, _ in self.kspecs])
         k.flowdst_w = max([len(x) for x in dsts] + [1])
         k.nt, k.ns, k.ntrig = nt, ns, len(trigs)
@@ -337,7 +337,7 @@ class Compiled(Agents):
         return ('vary', full) # For the agents the call takes (see vary())
 
     def lay_out_values(self):
-        """ Where each value the call reads comes from: each distribution's parameters (see `kspecs`), and the shares of each branch and split """
+        """ Where each value the call reads comes from: each distribution's parameters (see `kspecs`), and the fractions of each branch and split """
         self.kpar_src = []
         for d, (fam, spec) in enumerate(self.kspecs):
             if spec[0] == 'dist':
@@ -376,7 +376,7 @@ class Compiled(Agents):
             width = len(self.branches_of(key[1])) + 1 if key[0] == 'branch' else k.dst_width[k.tid[key[1]]]
             i = k.tid.get(key[1]) if key[0] == 'dest' else None
             if kind == 'vary' and i is not None and not any(isinstance(x, ss.expressions.mother) for p in (k.trs[i].p or []) if p is not None for x in ss.expressions.nodes(p)):
-                # Only for those who reach it, as they reach it; not a branch (drawn as people enter a state, so worked out for everyone in the call), nor shares that read other
+                # Only for those who reach it, as they reach it; not a branch (drawn as people enter a state, so worked out for everyone in the call), nor fractions that read other
                 # agents (e.g. a fetus's mother, who may move in the same call), which are as they were at the start of the call
                 k.lazy[i] = True
                 self.klazy[i] = (c, width, get)
@@ -459,7 +459,7 @@ class Compiled(Agents):
         return
 
     def vary(self, agents):
-        """ The values that change from step to step (e.g. shares by age), worked out for the agents the call takes, who are the only ones it reads them for """
+        """ The values that change from step to step (e.g. fractions by age), worked out for the agents the call takes, who are the only ones it reads them for """
         t = self.ktables
         if not t.varies or not len(agents):
             return
@@ -649,7 +649,7 @@ class Compiled(Agents):
         return arrived
 
     def fill_pending(self, pend, m):
-        """ The agents a call stopped at a split whose shares were not worked out: their shares, worked out now, and them to take on from there, as the next batch (None if there are none) """
+        """ The agents a call stopped at a split whose fractions were not worked out: their fractions, worked out now, and them to take on from there, as the next batch (None if there are none) """
         if not m:
             return None
         pa, pt, ps, pk, pp, pq = [x[:m].copy() for x in pend]

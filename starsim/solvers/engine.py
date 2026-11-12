@@ -502,7 +502,7 @@ class Engine(Telling, Effects):
         self.compiled = None # Whether the run is taken by the compiled kernels or as plain Python, once chosen: see Compartmental.kernels()
         return
 
-    #%% What each engine defines, in its own terms: as agents, uids; in compartments, shares of each state and group
+    #%% What each engine defines, in its own terms: as agents, uids; in compartments, fractions of each state and group
 
     def undefined(self, name):
         """ The error for a method this engine does not define """
@@ -584,9 +584,9 @@ class Engine(Telling, Effects):
         """ The value of a clock (`X.time_in`), as an expression reads it """
         raise self.undefined('clock')
 
-    def held_share(self, expr):
-        """ The share holding a product, as an expression reads it """
-        raise self.undefined('held_share')
+    def held_frac(self, expr):
+        """ The fraction holding a product, as an expression reads it """
+        raise self.undefined('held_frac')
 
     def mother(self, expr):
         """ The value of an expression for each person's mother (`ss.mother()`) """
@@ -636,7 +636,7 @@ class Engine(Telling, Effects):
             if getattr(tr, 'per_capita', False) and self.by_dims(tr.per_person, space=False):
                 tr.rate, tr.by_level = self.per_level(tr.per_person)
         self.applies = sc.obj() # For each state: whether each dimension applies to it
-        self.state_split = sc.obj() # The share of a state's initial people (or count) in each group
+        self.state_split = sc.obj() # The fraction of a state's initial people (or count) in each group
         self.inflow_splits = sc.obj() # Where an inflow into each state arrives
         self.inflow_factors = sc.obj() # The same, as a factor for each dimension
         self.inflow_local = sc.obj() # The same, for an inflow whose rate is worked out for each place, so is already the inflow there
@@ -659,11 +659,11 @@ class Engine(Telling, Effects):
                 levels = coords[:, d]
                 first = levels == 0
                 if flag:
-                    split = split*strat.shares(coords)
-                    share = first if strat.kind == 'age' else strat.shares(coords) # People are born into the youngest group
-                    inflow = inflow*share
-                    factors.append(share)
-                    local = local*(1.0 if strat.kind == 'space' else share)
+                    split = split*strat.fracs(coords)
+                    frac = first if strat.kind == 'age' else strat.fracs(coords) # People are born into the youngest group
+                    inflow = inflow*frac
+                    factors.append(frac)
+                    local = local*(1.0 if strat.kind == 'space' else frac)
                 else:
                     split = split*first
                     inflow = inflow*first
@@ -776,7 +776,7 @@ class Engine(Telling, Effects):
                 for d,strat in enumerate(self.sim.groups.strats):
                     n = strat.n
                     factor = np.zeros((n, n))
-                    if d in moved and isinstance(moved[d], tuple) and moved[d][0] == 'matrix' and b[d]: # A share of each level to each (see ss.strains.prepare())
+                    if d in moved and isinstance(moved[d], tuple) and moved[d][0] == 'matrix' and b[d]: # A fraction of each level to each (see ss.strains.prepare())
                         factor = np.array(moved[d][1])
                     elif d in moved and isinstance(moved[d], tuple) and moved[d][0] != 'matrix': # A counter (each level to the one k up), or a change of strains
                         factor[np.arange(n), strat.target(moved[d])] = 1
@@ -802,7 +802,7 @@ class Engine(Telling, Effects):
                         ng = len(coords)
                         pairs = np.repeat(coords[:, None, :], ng, axis=1) # From each group (rows) to each group (columns), with the level of this dimension from the column
                         pairs[:, :, d] = coords[None, :, d]
-                        cond = strat.shares(pairs.reshape(ng*ng, -1)).reshape(ng, ng)
+                        cond = strat.fracs(pairs.reshape(ng*ng, -1)).reshape(ng, ng)
                         split = np.broadcast_to(strat.fractions[coords[:, d]], (ng, ng))
                         out = out*np.divide(cond, split, out=np.zeros((ng, ng)), where=split>0) # The kron above entered each level in proportion to the split overall
                 out = self.sim.groups.fold_matrix(out)
@@ -858,7 +858,7 @@ class Engine(Telling, Effects):
         return
 
     def protection(self, state, levels, strain):
-        """ The share of the force of infection of a strain that reaches people in a state at some levels of the strain dimension, by the strains they carry there (see `init_immunity()`) """
+        """ The fraction of the force of infection of a strain that reaches people in a state at some levels of the strain dimension, by the strains they carry there (see `init_immunity()`) """
         table = self.protect.get(state.name)
         return 1.0 if table is None else table[levels, strain]
 
@@ -891,7 +891,7 @@ class Engine(Telling, Effects):
 
     def init_strain_weights(self):
         """
-        The share of the infectiousness of the people at each level of the strain dimension that goes to each strain (levels by strains)
+        The fraction of the infectiousness of the people at each level of the strain dimension that goes to each strain (levels by strains)
 
         Someone who carries one strain passes it on; someone who carries several passes on
         each in proportion to its infectiousness (its `rel_trans`); their own infectiousness is that of their level.
@@ -1007,7 +1007,7 @@ class Engine(Telling, Effects):
         The branches' multipliers with their who=: a branch is closed to the people (or groups) it does not hold for, so the
         others share the rest; but if every branch is closed to someone, they are split as before and wait until one opens
         """
-        ws = [self.where_share(tr, state, uids) if tr is not None and getattr(tr, 'where', None) is not None else None for tr in branches]
+        ws = [self.where_frac(tr, state, uids) if tr is not None and getattr(tr, 'where', None) is not None else None for tr in branches]
         if all(w is None for w in ws):
             return mults
         n = len(uids) if uids is not None else self.n_groups
@@ -1019,7 +1019,7 @@ class Engine(Telling, Effects):
                 out[i] = w if out[i] is None else out[i]*w
         return out
 
-    def where_share(self, tr, state, uids=None):
+    def where_frac(self, tr, state, uids=None):
         """ For a branch with who=: 1 for the people it is open to and 0 for the others (agents: for `uids`; compartments: for each group of `state`, if the condition is on states and strata), or None """
         sel = self.selector
         if sel.abm:
@@ -1045,9 +1045,9 @@ class Engine(Telling, Effects):
             out = out*(adjust if uids is None else adjust[self.sim.groups.group_raw()[uids]])
         return out
 
-    def dest_shares(self, tr, ps, uids=None, ev=None, ends=False):
+    def dest_fracs(self, tr, ps, uids=None, ev=None, ends=False):
         """
-        The probability of each destination of a transition with several, with the modifiers of each (`'progression.C'`, `'outcome.dead'`), as `branch_shares()` does for branches
+        The probability of each destination of a transition with several, with the modifiers of each (`'progression.C'`, `'outcome.dead'`), as `branch_fracs()` does for branches
 
         ss.dead and ss.stay are branches like the states: given a probability, they keep it (scaled with the others if a modifier makes them come to more than 1), and a modifier on one of them scales it.
         With no destination left to take the rest, it goes to ss.stay if it is one, and otherwise to ss.dead.
@@ -1057,7 +1057,7 @@ class Engine(Telling, Effects):
             ps (list): the probability of each of its states, evaluated, or None for the one that takes the rest
             uids (array): the agents, for an agent engine
             ev (func): how to evaluate the probabilities of ss.dead and ss.stay (default: `self.eval`)
-            ends (bool): whether to return the shares of ss.dead and ss.stay too, after those of the states (in that order, those that are destinations)
+            ends (bool): whether to return the fractions of ss.dead and ss.stay too, after those of the states (in that order, those that are destinations)
         """
         ev = ev or self.eval
         names = [f'{tr.name}.{dst.name}' for dst in tr.dest] + [f'{tr.name}.dead']*tr.may_die + [f'{tr.name}.stay']*tr.stays
@@ -1066,10 +1066,10 @@ class Engine(Telling, Effects):
         if all(p is not None for p in ps) and len(ps) > len(tr.dest): # Every destination given a value: what is left stays, or else dies
             ps[-1] = None
         mults = [self.branch_mult_of(name, uids) for name in names]
-        shares = self.branch_shares(names, ps, mults)
-        return shares if ends else shares[:len(tr.dest)]
+        fracs = self.branch_fracs(names, ps, mults)
+        return fracs if ends else fracs[:len(tr.dest)]
 
-    def branch_shares(self, trs, ps, mults):
+    def branch_fracs(self, trs, ps, mults):
         """
         The probability of each branch out of a state, with their modifiers
 
@@ -1397,7 +1397,7 @@ class Engine(Telling, Effects):
         return
 
     def frac(self, states):
-        with np.errstate(invalid='ignore', divide='ignore'): # A share of nobody (before there are people) is NaN, with no warning
+        with np.errstate(invalid='ignore', divide='ignore'): # A fraction of nobody (before there are people) is NaN, with no warning
             return self.count(states)/self.n_people()
 
     def local_count(self, states):
@@ -1462,10 +1462,10 @@ class Engine(Telling, Effects):
         raise NotImplementedError
 
     def product_of(self, expr):
-        """ The sim's copy of the product of a share holding it (`itn.held_share`, see `ss.expressions.HeldShare`) """
+        """ The sim's copy of the product of a fraction holding it (`itn.held_frac`, see `ss.expressions.HeldFrac`) """
         product = next((p for p in self.sim.products() if p.name == expr.product.name), None)
         if product is None or not product.holds:
-            errormsg = f'{expr} is the share holding "{expr.product.name}", which is not a product that people hold delivered in the sim; deliver it, e.g. ss.vaccinate({expr.product.name}, ...)'
+            errormsg = f'{expr} is the fraction holding "{expr.product.name}", which is not a product that people hold delivered in the sim; deliver it, e.g. ss.vaccinate({expr.product.name}, ...)'
             raise ValueError(errormsg)
         return product
 
@@ -1584,9 +1584,9 @@ class Engine(Telling, Effects):
     def note_fast_steps(self):
         """ See `note_steps()` """
         sim = self.sim
-        for tr in self.graph.acquisitions: # An infection at a rate per person that grows with a count of people, which is often a count written for a share
+        for tr in self.graph.acquisitions: # An infection at a rate per person that grows with a count of people, which is often a count written for a fraction
             if tr.people and not tr._inflow and tr.rate is not None and tr.flow_given is None and ss.expressions.count_power(tr.rate) > 0 and not self.plausible_density(tr): # Not for the whole flow written without a total (beta*S*I), which says so
-                ss.note(f'{tr.name} has a rate per person of {ss.expressions.format_expr(tr.rate)}, which grows with the number of people (density-dependent), and is fast for that: one infectious person would infect {self.density_rate(tr):,.3g} people a day, if everyone were susceptible. For a share of the population, write .frac (e.g. I.frac), or write the transmission with the bare state (e.g. beta * I)', sim=sim)
+                ss.note(f'{tr.name} has a rate per person of {ss.expressions.format_expr(tr.rate)}, which grows with the number of people (density-dependent), and is fast for that: one infectious person would infect {self.density_rate(tr):,.3g} people a day, if everyone were susceptible. For a fraction of the population, write .frac (e.g. I.frac), or write the transmission with the bare state (e.g. beta * I)', sim=sim)
         if isinstance(sim.solver, (ss.solvers.gillespie, ss.solvers.tau)) and self.smooth: # Exact only for rates that are constant within a step
             what = 'solver="gillespie"' if isinstance(sim.solver, ss.solvers.gillespie) else 'Tau-leaping'
             msg = f'{what} holds values that vary in time for each step, at its middle'
@@ -1610,7 +1610,7 @@ class Engine(Telling, Effects):
         plural = lambda n: f'{n:.2g} {unit}{"s" if n != 1 else ""}'
         fast = [] # What is fast compared with the step, as (rate × step, its name, what it is)
         for tr in self.graph.transitions.values(): # Transmission: someone infected in a step infects others only from the next, so a fast one is slowed down (as measles is at daily steps)
-            if tr.contact and tr.people and not tr._inflow: # Its β for each infectious state, per contact (with a network) or per share infectious
+            if tr.contact and tr.people and not tr._inflow: # Its β for each infectious state, per contact (with a network) or per fraction infectious
                 E = ss.expressions
                 if any(isinstance(leaf, (ss.transitions.State, E.Count, E.Clock, E.Flow, E.Stock)) for coef in tr.terms.values() for leaf in getattr(coef, 'leaves', [])):
                     continue # It reads states (e.g. another disease's prevalence), which have no values yet
@@ -1631,8 +1631,8 @@ class Engine(Telling, Effects):
                 continue
             if mean is not None and np.ndim(mean) == 0 and mean > 0: # The chain-binomial solver moves people through the stages exactly (see ss.kernels.draw_chain()), and agents draw the whole dwell time, so it is the mean that matters
                 x = dt/mean
-                share = min(x, 1) if euler else -np.expm1(-x)
-                leave = 'almost everyone leaves' if share > 0.99 else f'{share:.0%} leave'
+                frac = min(x, 1) if euler else -np.expm1(-x)
+                leave = 'almost everyone leaves' if frac > 0.99 else f'{frac:.0%} leave'
                 src = sc.strjoin([state.name for state in tr.source or []], sep=' or ') or name # Named by the state left, which its exits (e.g. recovery and death) share
                 fast.append((x, src, f'people leave {src} after {plural(mean)} on average, so {leave} in a {step}'))
         fast = sorted([f for f in fast if f[0] > 0.1], key=lambda f: -f[0]) # The fastest first, since it is what the step is too long for
@@ -1676,8 +1676,8 @@ class Engine(Telling, Effects):
     def plausible_density(self, tr):
         """
         Whether an acquisition at a rate on counts of people is density-dependent transmission as meant (`S >> I @ beta*I.n`), rather than a count
-        written for a share: whether one infectious person would infect fewer than 10 people a day in a population with no immunity (measles
-        infects about 2). A beta meant for a share (0.3 a day) gives 0.3 × N, which is far more in any population but a handful of people
+        written for a fraction: whether one infectious person would infect fewer than 10 people a day in a population with no immunity (measles
+        infects about 2). A beta meant for a fraction (0.3 a day) gives 0.3 × N, which is far more in any population but a handful of people
         """
         rate = self.density_rate(tr)
         return rate is None or rate < 10
@@ -1707,7 +1707,7 @@ class Engine(Telling, Effects):
         counts = sc.obj({s.name:0.0 for s in graph.count_states})
         by_count = {} # Starting values read from the numbers in other states, e.g. init=m*N: worked out from the others, once they are known
         for state in graph.states.values():
-            is_n = state.init_n is not None # init_n= is a number of people, and init= a share of them (or, for a state that is not people, its amount)
+            is_n = state.init_n is not None # init_n= is a number of people, and init= a fraction of them (or, for a state that is not people, its amount)
             init = state.init_n if is_n else state.init
             if init is None:
                 continue
@@ -1715,7 +1715,7 @@ class Engine(Telling, Effects):
                 init = init.raw
             if isinstance(init, ss.expressions.Expr) and any(isinstance(leaf, (ss.expressions.Count, ss.expressions.Stock)) for leaf in init.leaves):
                 if state.people:
-                    raise ss.CapabilityError(f'init= of "{state.name}" in "{self.mod.name}" reads the number in another state, but a state of people starts with a share of them; give a share or a number, which only a state that is not people (ss.State(people=False)) can read')
+                    raise ss.CapabilityError(f'init= of "{state.name}" in "{self.mod.name}" reads the number in another state, but a state of people starts with a fraction of them; give a fraction or a number, which only a state that is not people (ss.State(people=False)) can read')
                 by_count[state.name] = init
                 continue
             if isinstance(init, ss.expressions.Expr) and ss.expressions.per_person_in(init): # An expression of people's properties and parameters, e.g. 1 - (A - age)/(k*age + A)
@@ -1726,9 +1726,9 @@ class Engine(Telling, Effects):
                 init = float(self.eval(init))
             if callable(init) and not isinstance(init, (ss.by, ss.Dist)): # A function of the sim, as for init_prev
                 init = self.call(init)
-            if isinstance(init, ss.by) and self.strain is not None and self.sim.groups.strats[self.strain].name in init.dims: # A share by strain would be of the people at a level of the strains, where nobody is before they are infected
+            if isinstance(init, ss.by) and self.strain is not None and self.sim.groups.strats[self.strain].name in init.dims: # A fraction by strain would be of the people at a level of the strains, where nobody is before they are infected
                 strat = self.sim.groups.strats[self.strain]
-                errormsg = f'init= of "{state.name}" in "{self.mod.name}" is given by "{strat.name}", the strains people carry; give how many start infected in init= (e.g. init=dict({state.name}=0.1)), and the share of each strain, or set of strains carried together, in ss.Strains(fractions=...), e.g. fractions={{"{strat.labels[0]}": 0.5, "{strat.labels[-1]}": 0.5}}'
+                errormsg = f'init= of "{state.name}" in "{self.mod.name}" is given by "{strat.name}", the strains people carry; give how many start infected in init= (e.g. init=dict({state.name}=0.1)), and the fraction of each strain, or set of strains carried together, in ss.Strains(fractions=...), e.g. fractions={{"{strat.labels[0]}": 0.5, "{strat.labels[-1]}": 0.5}}'
                 raise ValueError(errormsg)
             if isinstance(init, ss.by) and state.people and not is_n and isinstance(self.solver, ss.solvers.abm) and init.on_people(self.sim): # Read from each person's own properties, as agents: see Agents.init_post()
                 continue
@@ -1736,10 +1736,10 @@ class Engine(Telling, Effects):
                 sim = self.sim
                 ds, given = init.grid(sim)
                 if state.people and not is_n:
-                    self.check_share(state, given, init.is_count())
+                    self.check_frac(state, given, init.is_count())
                 grid, index = sim.groups.grid_index(ds, given, count=is_n if state.people else init.is_count() or np.any(given > 1)) # A group with no level of a dimension gets the mean fraction, or no one of a number
                 cells = np.ravel_multi_index(index, grid.shape) # The combination of levels each group is in
-                split = np.bincount(cells, weights=sim.groups.group_split, minlength=grid.size)[cells] # The share of people at that combination
+                split = np.bincount(cells, weights=sim.groups.group_split, minlength=grid.size)[cells] # The fraction of people at that combination
                 if state.people:
                     split = np.bincount(cells, weights=self.state_split[state.name], minlength=grid.size)[cells] # ... of those this state is split between, which for a dimension of some states only is not everyone
                     vals = grid[index] # For each group
@@ -1751,42 +1751,42 @@ class Engine(Telling, Effects):
                         cells = sorted({'(' + ', '.join(f'{strats[d].name}={strats[d].labels[ix[g]]}' for d,ix in zip(ds, index) if ix[g] < strats[d].n) + ')' for g in np.flatnonzero(lost)})
                         msg = f'init= of "{state.name}" in "{self.mod.name}" is given at {sc.strjoin(cells[:3])}{" and more" if len(cells) > 3 else ""}, where the split puts nobody'
                         if not np.any((vals > 0) & (size > 0)):
-                            raise ValueError(f'{msg}, so nobody would start in {state.name}. Give shares of the levels that put people there, or init= at levels that have people.')
+                            raise ValueError(f'{msg}, so nobody would start in {state.name}. Give fractions of the levels that put people there, or init= at levels that have people.')
                         ss.note(f'{msg}; nobody starts in {state.name} there', sim=sim)
                 else:
-                    share = np.divide(self.state_split[state.name], split, out=np.zeros(sim.groups.n_groups), where=split>0) # Its split over the other dimensions
+                    frac = np.divide(self.state_split[state.name], split, out=np.zeros(sim.groups.n_groups), where=split>0) # Its split over the other dimensions
                     counts[state.name] = given.sum()
-                    self.state_split[state.name] = share*grid[index]/max(given.sum(), 1e-300)
+                    self.state_split[state.name] = frac*grid[index]/max(given.sum(), 1e-300)
                 continue
             if not state.people:
                 counts[state.name] = float(init)
             elif is_n:
                 fracs[state.name] = init/self.total_pop
             else:
-                self.check_share(state, init, isinstance(init, (int, np.integer)))
-                fracs[state.name] = np.asarray(init, dtype=float)[()] # A share, or one for each group (from a function)
+                self.check_frac(state, init, isinstance(init, (int, np.integer)))
+                fracs[state.name] = np.asarray(init, dtype=float)[()] # A fraction, or one for each group (from a function)
 
         # Initial prevalence is seeded through the transmission, so people start wherever a new infection starts
         init_prev = graph.init_prev
         if isinstance(init_prev, ss.expressions.par): # A parameter (e.g. sir.pars.init_prev), whose value can be a value for each level (worked out for each group below, not for each agent)
             init_prev = init_prev.raw if isinstance(init_prev.raw, (ss.Dist, ss.by)) else self.value(init_prev)
         if isinstance(init_prev, ss.Dist):
-            raise TypeError(f'init_prev of "{self.mod.name}" is {init_prev!r}: for a declared disease, give a share, or a function of the sim; or init_n= for a number of people')
+            raise TypeError(f'init_prev of "{self.mod.name}" is {init_prev!r}: for a declared disease, give a fraction, or a function of the sim; or init_n= for a number of people')
         if init_prev is not None and self.seed_dist() is not None: # Drawn for each agent instead: see Agents.init_post()
             init_prev = None
-        if isinstance(init_prev, ss.by): # A share for each level of some dimensions (a property of each person that is not one raises here, unless run as agents: see seed_dist())
+        if isinstance(init_prev, ss.by): # A fraction for each level of some dimensions (a property of each person that is not one raises here, unless run as agents: see seed_dist())
             init_prev = init_prev.per_group(self.sim, self.convert)
-        elif callable(init_prev): # A function of the sim, giving a share (or one for each group)
+        elif callable(init_prev): # A function of the sim, giving a fraction (or one for each group)
             init_prev = self.call(init_prev)
         if init_prev is not None and np.any(init_prev):
-            if graph.seed_n: # A number of people (init_n=10), as a share of everyone
+            if graph.seed_n: # A number of people (init_n=10), as a fraction of everyone
                 if np.ndim(init_prev):
                     raise ValueError(f'init_n= of "{self.mod.name}" is one number of people, seeded through the transmission; for the number in each state, give init_n=dict(I=...)')
                 init_prev = init_prev/self.total_pop
             elif np.ndim(init_prev) and np.any(np.asarray(init_prev) > 1):
-                raise ValueError(f'init_prev of "{self.mod.name}" gives a share of more than 1 for some groups ({np.max(init_prev):n}); a value for each group is a share of the people in it')
-            elif np.ndim(init_prev) == 0 and init_prev > 1: # A share (1.0 is everyone), so more than 1 is a mistake
-                raise ValueError(f'init_prev of "{self.mod.name}" is a share of people (1.0 is everyone), not {init_prev:n}; for a number of people, use init_n={init_prev:n}')
+                raise ValueError(f'init_prev of "{self.mod.name}" gives a fraction of more than 1 for some groups ({np.max(init_prev):n}); a value for each group is a fraction of the people in it')
+            elif np.ndim(init_prev) == 0 and init_prev > 1: # A fraction (1.0 is everyone), so more than 1 is a mistake
+                raise ValueError(f'init_prev of "{self.mod.name}" is a fraction of people (1.0 is everyone), not {init_prev:n}; for a number of people, use init_n={init_prev:n}')
             trs = self.seed_transmissions()
             if not trs:
                 errormsg = f'"{self.mod.name}" has no transmission or acquisition to seed init_prev through; use init= on a state instead'
@@ -1794,8 +1794,8 @@ class Engine(Telling, Effects):
             dst = [state for tr in trs for state in tr.dest]
             if graph.infectious and not any(state.infectious for state in dst): # e.g. E in an SEIR
                 seeded = sc.strjoin(dict.fromkeys(state.name for state in dst))
-                ss.note(f'init_prev seeds {seeded} of "{self.mod.name}", where a new infection starts, so nobody is infectious at the start; to seed infectious people, use init=dict({graph.infectious[0].name}=...) (a share) or init_n= (a number)', sim=self.sim)
-            with self.evaluating(by_group=True): # The share of each destination in each group, before there are agents to evaluate it for
+                ss.note(f'init_prev seeds {seeded} of "{self.mod.name}", where a new infection starts, so nobody is infectious at the start; to seed infectious people, use init=dict({graph.infectious[0].name}=...) (a fraction) or init_n= (a number)', sim=self.sim)
+            with self.evaluating(by_group=True): # The fraction of each destination in each group, before there are agents to evaluate it for
                 reach = self.seed_reach(trs)
                 for tr,w in zip(trs, reach):
                     for state,p in zip(tr.dest, self.branch_probs(tr)):
@@ -1812,7 +1812,7 @@ class Engine(Telling, Effects):
                 groups, g = self.sim.groups, int(np.argmax(total))
                 where = ', '.join(f'{strat.name}={strat.labels[lev]}' for strat,lev in zip(groups.strats, groups.group_levels[g]) if lev >= 0)
                 room = self.total_pop*groups.group_split[g]
-                errormsg = f'init_n= of "{self.mod.name}" puts {total[g]*room:,.6g} people at {where}, but the split of the stratification puts {room:,.6g} there (of total_pop={self.total_pop:,.6g}); give the stratification shares that agree with init_n= (its levels as a dict, e.g. age={{0: 0.3, 15: 0.7}})'
+                errormsg = f'init_n= of "{self.mod.name}" puts {total[g]*room:,.6g} people at {where}, but the split of the stratification puts {room:,.6g} there (of total_pop={self.total_pop:,.6g}); give the stratification fractions that agree with init_n= (its levels as a dict, e.g. age={{0: 0.3, 15: 0.7}})'
             else:
                 errormsg = f'The initial fractions of "{self.mod.name}" sum to {np.max(total):n}, which is more than 1: {dict(fracs)}. If some of these states are not people (e.g. mosquitoes), declare them with ss.State(people=False), whose init= is a count'
             raise ValueError(errormsg)
@@ -1838,7 +1838,7 @@ class Engine(Telling, Effects):
         return fracs, counts
 
     def start_count(self, name, init, fracs, counts, later):
-        """ The starting amount of a state that is not people, read from the numbers in other states (e.g. init=m*N): those in the states of people are their shares of the population """
+        """ The starting amount of a state that is not people, read from the numbers in other states (e.g. init=m*N): those in the states of people are their fractions of the population """
         def number(state):
             key = state.name
             if key in fracs:
@@ -1858,14 +1858,14 @@ class Engine(Telling, Effects):
             raise ValueError(f'the initial value of "{name}" in "{self.mod.name}" is {val}; an initial value must be finite and not negative.')
         return val
 
-    def check_share(self, state, vals, whole):
-        """ Check a share given with init=: more than 1 raises, and a whole number 1 is everyone, with a warning to write 1.0 (or init_n= for one person) """
+    def check_frac(self, state, vals, whole):
+        """ Check a fraction given with init=: more than 1 raises, and a whole number 1 is everyone, with a warning to write 1.0 (or init_n= for one person) """
         name, mod = state.name, self.mod.name
         if np.any(np.asarray(vals) > 1):
-            errormsg = f'init= of "{name}" in "{mod}" is {np.max(vals):n}, but init= is a share of people (1.0 is everyone); for a number of people, use init_n=dict({name}={np.max(vals):n})'
+            errormsg = f'init= of "{name}" in "{mod}" is {np.max(vals):n}, but init= is a fraction of people (1.0 is everyone); for a number of people, use init_n=dict({name}={np.max(vals):n})'
             raise ValueError(errormsg)
         if whole and np.any(np.asarray(vals) == 1):
-            ss.warn(f'init= of "{name}" in "{mod}" is the whole number 1, which is read as a share: everyone starts in {name}. Write 1.0 for everyone, or init_n=dict({name}=1) for one person')
+            ss.warn(f'init= of "{name}" in "{mod}" is the whole number 1, which is read as a fraction: everyone starts in {name}. Write 1.0 for everyone, or init_n=dict({name}=1) for one person')
         return
 
     def seed_dist(self):
@@ -1882,7 +1882,7 @@ class Engine(Telling, Effects):
 
     def seed_reach(self, trs, uids=None):
         """
-        For seeding through several transmissions (see `seed_transmissions()`): the share of the seeds of each group (or of each agent, with `uids`)
+        For seeding through several transmissions (see `seed_transmissions()`): the fraction of the seeds of each group (or of each agent, with `uids`)
         that each takes, equal among those that can infect them (a coefficient above 0 for them), e.g. a transmission to women only seeds women
         """
         if len(trs) == 1:
@@ -1901,17 +1901,17 @@ class Engine(Telling, Effects):
         if not tr._split:
             return [1.0]*len(tr.dest)
         ps = [None if p is None else self.eval(p) for p in (tr.p if ps is None else ps)]
-        return self.dest_shares(tr, ps) # With ss.stay or ss.dead, what the states leave over stays or dies
+        return self.dest_fracs(tr, ps) # With ss.stay or ss.dead, what the states leave over stays or dies
 
-    def die_share(self, tr, shares, ev=None, uids=None):
-        """ The probability of ss.dead in a split (0 if it is not one of the destinations), given the shares of its states: what they leave over, less what ss.stay takes """
+    def die_frac(self, tr, fracs, ev=None, uids=None):
+        """ The probability of ss.dead in a split (0 if it is not one of the destinations), given the fractions of its states: what they leave over, less what ss.stay takes """
         if not tr.may_die:
             return 0.0
         if not tr.stays:
-            return 1.0 - sum(shares, 0.0)
+            return 1.0 - sum(fracs, 0.0)
         ev = ev or self.eval
         ps = [None if p is None else ev(p) for p in tr.p or [None]*len(tr.dest)]
-        return self.dest_shares(tr, ps, uids, ev=ev, ends=True)[len(tr.dest)]
+        return self.dest_fracs(tr, ps, uids, ev=ev, ends=True)[len(tr.dest)]
 
     def eval(self, expr):
         return ss.expressions.evaluate(expr, self)
@@ -1957,7 +1957,7 @@ class Engine(Telling, Effects):
             if stages is not None and not stages.dwell.exact: # Erlang stages: see ss.dimensions.transfer_stages()
                 self.note_stages(name, stages.dwell)
         mod.define_results(*results)
-        written = {r.name for r in results if isinstance(r, ss.Result)} | set(graph.states) | set(graph.transitions) # Those the engine writes, which are scaled when written (see record_stocks() and record_flows()); not those of the disease's own code, which are counted in agents and scaled at the end
+        written = {r.name for r in results if isinstance(r, ss.Result)} | set(graph.states) | set(graph.transitions) # Those the engine writes, which are scaled when written (see record_states() and record_events()); not those of the disease's own code, which are counted in agents and scaled at the end
         ss.results.in_people(*[r for key,r in mod.results.items() if isinstance(r, ss.Result) and (key in written or key.partition('.')[0] in graph.transitions)])
 
         # Stratified results are one result with a dimension for each stratification: see res.select() and res.by()
@@ -2072,7 +2072,7 @@ class Engine(Telling, Effects):
                     continue
                 info = sc.obj(sources=sources, now=0.0, n=0.0)
 
-                # The delay, as the share of events that are reported after each number of steps
+                # The delay, as the fraction of events that are reported after each number of steps
                 delay = oc.delay
                 if delay is None:
                     kernel = np.ones(1)
@@ -2089,7 +2089,7 @@ class Engine(Telling, Effects):
                 info.kernel = kernel
                 info.pending = np.zeros((len(kernel) + 1, self.sim.groups.n_groups)) # The events still to be reported at each of the next steps (in turn, as a ring), by group, so an outcome can be selected by stratum
                 info.p_leave = info.stay = None
-                if isinstance(oc.dur, ss.Dist): # The share who stay each number of steps (at least one)
+                if isinstance(oc.dur, ss.Dist): # The fraction who stay each number of steps (at least one)
                     rvs = self.sample(oc.dur, 20_000)
                     info.stay = np.bincount(np.maximum(np.round(rvs/dt), 1).astype(int))/len(rvs)
                     info.leaving = np.zeros((len(info.stay) + 1, self.sim.groups.n_groups)) # Likewise, those leaving
@@ -2147,14 +2147,14 @@ class Engine(Telling, Effects):
                         continue
                     with self.evaluating(by_group=True): # One weight for each group, as the flows are
                         weight = self.eval(weight)
-                amount += self.outcome_share(flow, weight, integer)
+                amount += self.outcome_frac(flow, weight, integer)
             if info.stay is not None or info.p_leave is not None: # The number in it at the start of the step
                 store(f'n_{name}', info.n, False)
             info.now = self.report_outcome(info, info, amount, ti, integer)
             store(name, info.now, True)
         return
 
-    def outcome_share(self, flow, weight, draw):
+    def outcome_frac(self, flow, weight, draw):
         """ The events of an outcome from those of one of its sources, times its weight: a fraction of whole events is a draw if `draw`, and the part of an event left over (from agents who stand for a fraction of a person) is kept as its mean """
         if np.ndim(weight) == 0 and weight == 1: # Every event counts: nothing to draw
             return np.asarray(flow, dtype=float)
@@ -2217,7 +2217,7 @@ class Engine(Telling, Effects):
         return
 
     def count_stocks(self):
-        """ Count the number in each state now: after the initialization, and at the end of each step, which the next step's `record_stocks()` records as the state at its start """
+        """ Count the number in each state now: after the initialization, and at the end of each step, which the next step's `record_states()` records as the state at its start """
         for state in self.graph.states.values():
             self.stocks[state.name] = self.stock(state)
         return
@@ -2228,8 +2228,8 @@ class Engine(Telling, Effects):
 
         Each agent stands for `scale` people; the people no agent stands for (`sim.results.unrepresented`, see `ss.Sim.rescale()`) are
         like the agents, and are shared out as the agents alive are, in agents (as the other counts are, before they are scaled). For a
-        disease, which rescaling makes naive again, they have never been infected, so their share is in its first state; for another
-        module (e.g. `ss.Pregnancy`), each state has its share. The engine's own stocks (used in the dynamics) are untouched.
+        disease, which rescaling makes naive again, they have never been infected, so their fraction is in its first state; for another
+        module (e.g. `ss.Pregnancy`), each state has its fraction. The engine's own stocks (used in the dynamics) are untouched.
         """
         sim = self.sim
         if not isinstance(sim.solver, ss.solvers.abm) or not sim.pars.rescale or 'unrepresented' not in sim.results:
@@ -2282,11 +2282,11 @@ class Engine(Telling, Effects):
                 r._write_scale = scale
         return scale
 
-    def record_stocks(self):
+    def record_states(self):
         """
         Record the number in each state at the start of the step, at its index (so `R[ti]` has the people recovered by time
         point `ti`, before the step from it, whose recoveries are `recovery[ti]`); they are kept for the results worked out
-        with the flows of the step (see `record_flows()`)
+        with the flows of the step (see `record_events()`)
         """
         mod = self.mod
         res = mod.results
@@ -2310,12 +2310,12 @@ class Engine(Telling, Effects):
             for r in self.stock_people:
                 r[ti] = r[ti]*scale
         if self.coded: # The module's own `ss.BoolState`s (and derived states), counted as for a module written as code
-            ss.Module.record_stocks(mod, names=self.coded)
+            ss.Module.record_states(mod, names=self.coded)
         if mod is self.sim.declared[-1]: # Once every declared module has its states for the step: the number alive, as agents record it at the start of the step
             record_people(self.sim, ti, keys=['alive'])
         return
 
-    def record_flows(self):
+    def record_events(self):
         """ Record the flows of the step, at its index, and the results worked out from them and the states at its start """
         mod = self.mod
         graph = self.graph

@@ -295,8 +295,8 @@ def test_coded_modifiers():
                 self.sim.people.request_death(self.sim.people.auids, cause=self, hazard=self.hazard)
     sim = ss.Sim(connectors=[Killer(9, name='a'), Killer(1, name='b')], n_agents=5000, start=2000, stop=2003, verbose=0).run()
     codes = sim.people.cause_of_death.raw
-    share = np.mean(codes[codes >= 0] == sim.people.causes.index('a'))
-    assert np.isclose(share, 0.9, atol=0.02), share
+    frac = np.mean(codes[codes >= 0] == sim.people.causes.index('a'))
+    assert np.isclose(frac, 0.9, atol=0.02), frac
     S, I = ss.states('S I')
     dis = ss.Disease(S, I, infection=S >> I @ ss.peryear(1), death=I >> ss.dead @ ss.peryear(0.3), name='d')
     sim = ss.Sim(diseases=dis, interventions=ss.modify(dis.death, multiply=0.5, who=ss.person.female), n_agents=500, start=2000, stop=2001, verbose=0).run()

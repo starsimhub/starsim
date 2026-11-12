@@ -13,7 +13,7 @@ In an SEIR model, people infected first pass through a latent period (E, exposed
 
 | Parameter | Value | Meaning |
 |---|---|---|
-| β | 0.3 per day | Rate of infection per susceptible person, per unit of the share infectious |
+| β | 0.3 per day | Rate of infection per susceptible person, per unit of the fraction infectious |
 | Latent period | 5 days | Mean time in E (exponential) |
 | Infectious period | 10 days | Mean time in I: exponential, or Erlang with 3 stages |
 | R0 | 3 | β × the mean infectious period |
@@ -59,7 +59,7 @@ msim = ss.parallel(sims)
 msim.plot('seir')
 ```
 
-Both have the same R0, so the same share of people is infected in the end. But with the Erlang period, people infect others over a narrower window of time after they were infected, so the epidemic grows faster, and peaks earlier and higher. A model fitted to the growth of an epidemic with the wrong distribution of the infectious period gets R0 wrong, which is one reason for the stages.
+Both have the same R0, so the same fraction of people is infected in the end. But with the Erlang period, people infect others over a narrower window of time after they were infected, so the epidemic grows faster, and peaks earlier and higher. A model fitted to the growth of an epidemic with the wrong distribution of the infectious period gets R0 wrong, which is one reason for the stages.
 
 ## Going further
 

@@ -452,7 +452,7 @@ def load_odin(filename, unit='day', stop=None, pars=None, verbose=None, **kwargs
         src.exprs[var] = ast.unparse(py(items[0][1]))
 
     # Initial numbers
-    shares = np.zeros(n_levels)
+    fracs = np.zeros(n_levels)
     for s in states:
         items = eqs['initial'].get(s, [])
         vals = np.zeros(n_levels)
@@ -467,11 +467,11 @@ def load_odin(filename, unit='day', stop=None, pars=None, verbose=None, **kwargs
             init = vals[0]
         else:
             init = vals.sum()
-            shares += vals
+            fracs += vals
         if mixing is not None and init: # Groups coupled only by the contacts, each with its own numbers
             src.add_state(s, init=ss.by(**{dim:list(vals)}))
         else:
-            src.add_state(s, init=float(np.round(init, 6)) if init else None) # Rounded, since a sum of shares is not exact
+            src.add_state(s, init=float(np.round(init, 6)) if init else None) # Rounded, since a sum of fractions is not exact
 
     # Flows: each term of each equation, by state
     terms = {} # canonical text: list of (state, sign, node, levels)
@@ -520,8 +520,8 @@ def load_odin(filename, unit='day', stop=None, pars=None, verbose=None, **kwargs
             else:
                 src.skip(f'flows between levels ({base})', f'{sc.strjoin(ss_)} move from each level of the index to the next at "{base}", which is not one rate for each level ending in 0, so it was not read as aging')
         if strat is not None:
-            if shares.sum() > 0:
-                strat['fractions'] = list(shares/shares.sum())
+            if fracs.sum() > 0:
+                strat['fractions'] = list(fracs/fracs.sum())
             src.stratify(**strat)
         if mixing is not None and strat is not None: # Age groups with a contact matrix between them
             src.config.networks = Code(f'ss.contacts({mixing[1].tolist()!r})')
@@ -529,7 +529,7 @@ def load_odin(filename, unit='day', stop=None, pars=None, verbose=None, **kwargs
             src.skip(f'contact matrix {mixing[0]}', 'the levels it is between are not a stratification, so it was not translated')
     elif mixing is not None:
         levels = [str(lev) for lev in range(1, n_levels + 1)]
-        src.stratify(**{dim:levels}, fractions=list(shares/shares.sum()))
+        src.stratify(**{dim:levels}, fractions=list(fracs/fracs.sum()))
         src.config.networks = Code(f'ss.contacts({mixing[1].tolist()!r})' if dim == 'age' else f'ss.contacts({dim}={mixing[1].tolist()!r})')
         notes.append(f'the arrays ({sc.strjoin(arrayed)}) over {n_levels} levels of {dim}, coupled by the contact matrix {mixing[0]}: stratified by {dim} ("1" to "{n_levels}"), with ss.contacts({dim}={mixing[0]})')
     elif arrayed and not copies:
@@ -562,7 +562,7 @@ def load_odin(filename, unit='day', stop=None, pars=None, verbose=None, **kwargs
         else:
             src.skip(f'update({s})', f'a count over a period of {total}, which is not a sum of flows that were translated')
 
-    # odin2's data and their likelihoods: cases ~ Poisson(incidence) is an outcome named for the data, a share of a flow or count, with its likelihood
+    # odin2's data and their likelihoods: cases ~ Poisson(incidence) is an outcome named for the data, a fraction of a flow or count, with its likelihood
     used = set()
     for var,rhs in compare:
         var = var.strip()
@@ -596,7 +596,7 @@ def load_odin(filename, unit='day', stop=None, pars=None, verbose=None, **kwargs
         else:
             src.add_par(var, float(val) if not isinstance(val, bool) else val)
 
-    # A delay's factor has to be the share who survive it, from the other ways out of the state
+    # A delay's factor has to be the fraction who survive it, from the other ways out of the state
     for dname,frm,tau,factor in src.delays:
         rates = []
         for f in [f for f in src.flows if f.src == frm and f.dur is None]:
@@ -606,7 +606,7 @@ def load_odin(filename, unit='day', stop=None, pars=None, verbose=None, **kwargs
                 rates.append(None)
         expected = math.exp(-sum(rates)*tau) if None not in rates else None
         if expected is None or not np.isclose(factor, expected, rtol=1e-6):
-            src.skip(f'{dname} (factor)', f'the factor {factor:.6g} in the delay is not the share who survive {tau:n} in {frm} ({"its other ways out are not all fixed rates" if expected is None else f"{expected:.6g}"}), so the dwell time leaves out part of what the original does')
+            src.skip(f'{dname} (factor)', f'the factor {factor:.6g} in the delay is not the fraction who survive {tau:n} in {frm} ({"its other ways out are not all fixed rates" if expected is None else f"{expected:.6g}"}), so the dwell time leaves out part of what the original does')
 
     # Index names left in the rates are what could not be translated
     for f in list(src.flows):
@@ -665,7 +665,7 @@ def flow(src, frm, to, term, discrete, env, assign, dt, unit, notes):
             factor = None
         if len(flows_in) == 1 and factor is not None:
             src.add_flow(frm, to, dur=ss.constant(getattr(ss, f'{unit}s')(tau)), label=f'delay({ast.unparse(inner)}, {tau:n})')
-            notes.append(f'{name} = delay({ast.unparse(inner)}, {tau:n}) read as a fixed dwell time of {tau:n} in {frm}, whose outflows give the share who survive it ({factor:.6g})')
+            notes.append(f'{name} = delay({ast.unparse(inner)}, {tau:n}) read as a fixed dwell time of {tau:n} in {frm}, whose outflows give the fraction who survive it ({factor:.6g})')
             src.delays.append((name, frm, tau, factor))
             src.skip(f'{name} (history)', f'for the first {tau:n}, odin\'s delay() gives the value at time 0 (as if the flow had been going on before the start), while the import starts with no one partway through {frm}; a workaround is an inflow to {to} for the first {tau:n} (ss.unborn >> {to} @ ss.timeseries(...))')
             return

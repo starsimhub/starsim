@@ -76,7 +76,8 @@ from .solvers.backends import kernels
 from .solvers.backends.kernels import compile
 from .internals import expressions
 from .internals.expressions import par, mother, attr
-from .transitions import (
+from .internals import transitions
+from .internals.transitions import (
     State, states, pars, unborn, dead, outside, stay, on,
     Transition, move, birth, death, lifetable, immigration, emigration, migration, outcome, lifelong,
 )

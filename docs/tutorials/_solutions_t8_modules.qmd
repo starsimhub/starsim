@@ -35,15 +35,15 @@ class VaccineDemand(ss.Intervention):
         )
         return
 
-    def share(self):
-        """ The share of the highest demand, from the cases remembered """
+    def demand(self):
+        """ The fraction of the highest demand, from the cases remembered """
         return self.remembered/(self.remembered + self.pars.half)
 
     def step(self):
         measles = self.sim.diseases.measles
         dt = self.t.dt
         self.remembered += self.sim.results.measles.cases[self.ti-1] - self.remembered*(dt/self.pars.memory)
-        doses = (self.pars.max_rate*self.share()).to_prob(dt)*measles.S.n
+        doses = (self.pars.max_rate*self.demand()).to_prob(dt)*measles.S.n
         if self.pars.capacity is not None:
             doses = min(doses, self.pars.capacity.to_events(dt))
         ss.move(measles.S, measles.R, n=doses*self.pars.efficacy)
@@ -52,7 +52,7 @@ class VaccineDemand(ss.Intervention):
         return
 ```
 
-The module is the one from the tutorial, with the share of the highest demand as a method of its own (`share()`), so that exercise 2 can use it too.
+The module is the one from the tutorial, with the fraction of the highest demand as a method of its own (`demand()`), so that exercise 2 can use it too.
 
 **1. How long people remember.**
 
@@ -74,7 +74,7 @@ The longer people remember, the more doses are sought (about 3,500 with a memory
 ```{python}
 def avoidance(sim):
     """ Susceptibility falls by up to 30% as people remember more cases """
-    return 1 - 0.3*sim.interventions.vaccinedemand.share()
+    return 1 - 0.3*sim.interventions.vaccinedemand.demand()
 
 sims = {
     'Vaccine demand':               ss.Sim(measles, interventions=VaccineDemand(), **settings),
@@ -180,7 +180,7 @@ msim = ss.parallel(sims)
 msim.plot('cold.I')
 ```
 
-With half of the 4 contacts at random, the epidemic is almost the same as with all contacts random: a few long-range contacts are enough to carry the infection across the ages, as in a "small-world" network. (`AgeNet` pairs each person with an even number of neighbors, so to try smaller shares, give it more contacts and the random network fewer, keeping the total the same, e.g. 6 and 2.)
+With half of the 4 contacts at random, the epidemic is almost the same as with all contacts random: a few long-range contacts are enough to carry the infection across the ages, as in a "small-world" network. (`AgeNet` pairs each person with an even number of neighbors, so to try smaller fractions, give it more contacts and the random network fewer, keeping the total the same, e.g. 6 and 2.)
 
 **6. Losing immunity with a constant chance each step.** A constant chance each step gives an exponential (or, in whole steps, geometric) duration of immunity, with the same mean as `ss.expon(mean=ss.days(180))` if the chance per day is 1/180, so the waning works the same way, and the epidemic is the same up to chance:
 

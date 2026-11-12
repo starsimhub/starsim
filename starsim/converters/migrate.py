@@ -148,7 +148,7 @@ flags = [
     (r'\bss\.(networks\.)?MixingPools\(', "the contacts matrix of ss.networks.MixingPools is read as a contact survey: row i is the contacts of a person in target group i, with each source group by column (Starsim 3's was [source, target]): transpose it. A number in it is now the same for everyone in the group (Starsim 3's was the mean of a Poisson draw for each person): for Starsim 3's contacts, give n_contacts=ss.poisson(M.T)"),
     (r'\bss\.ErdosRenyiNet\b|\bErdosRenyiNet\b', 'ss.ErdosRenyiNet was removed: ssl.StaticNet(p=...) is a fixed random (Erdos-Renyi) graph, and ss.RandomNet(n_contacts=...) random contacts drawn again each step'),
     (r'\bss\.(distributions\.)?(scale_types|rand_raw)\b', "ss.scale_types and ss.rand_raw were removed: a distribution's scaling is a string on the class ('predraw', 'postdraw', both as a list, or None; see the ss.Dist docstring), and raw uint64 draws for ss.combine_rands() are ss.randint(low=0, high=np.iinfo('uint64').max, dtype=np.uint64)"),
-    (r'\bss\.(routine|campaign)_(vx|screening|triage)\b', "a delivery: ss.vaccinate(efficacy=e, coverage=p, when=ss.schedule(every=ss.years(1), start=y)) for routine (Starsim 3's prob= was a share reached each year), when=[...] for a campaign; ss.screen() for screening, and for triage a second ss.screen(when=screening.positive) of its own"),
+    (r'\bss\.(routine|campaign)_(vx|screening|triage)\b', "a delivery: ss.vaccinate(efficacy=e, coverage=p, when=ss.schedule(every=ss.years(1), start=y)) for routine (Starsim 3's prob= was a fraction reached each year), when=[...] for a campaign; ss.screen() for screening, and for triage a second ss.screen(when=screening.positive) of its own"),
     (r'\bss\.(RoutineDelivery|CampaignDelivery|BaseTest|BaseScreening|BaseTriage|BaseTreatment|BaseVaccination)\b', "Starsim 3's delivery classes were removed: ss.screen(), ss.vaccinate(), or ss.treat() with coverage= (prob=p is coverage=ss.probperyear(p), offered at every step), when=ss.schedule(start=, stop=) (start_year=, end_year=; stop is not included), when=[...] (a campaign's years=), and who= (eligibility=); a subclass that overrides step() is an ss.Intervention written as code"),
     (r'\bss\.treat_num\b', 'ss.treat(cure=e, when=dis.infection (or when=screening.positive), capacity=ss.capacity(n, queue=True)): those not served wait, and leave the queue when no longer eligible'),
     (r'\bss\.(Dx|Tx|Vx)\b', "Starsim 3's products written as code were removed: ss.Diagnostic (a table of more than two results is outcomes=dict(...), most severe first), ss.Treatment (cure=, or cure=dict(<state>=...) by state), ss.Vaccine (efficacy=); an administer() of your own is administer(self, uids) on a subclass of ss.Product, returning its outcomes as dict(positive=uids)"),
@@ -167,12 +167,12 @@ flags = [
     (r'\bss\.SIS\(.*\b(waning|imm_boost)\s*=', "ssl.AgentSIS(waning=..., imm_boost=...): the declared ss.SIS has no immunity level"),
     (r'''\bss\.(SIR|SIS|SEIR)\(|\b(type|diseases)\s*=\s*['"](sir|sis|seir)['"]''', "ss.SIR, ss.SIS, and ss.SEIR are now the textbook models (an exponential dur_inf and dur_exp, and p_death=0), with the defaults of a respiratory infection, in days (Starsim 3's were in years: e.g. ss.SIR had beta=0.1 a year and dur_inf=6 years): for Starsim 3's model (a lognormal dur_inf and p_death=0.01, with its defaults), use ssl.AgentSIR, ssl.AgentSIS, or ssl.AgentSEIR"),
     (r'\b(ssl|sse|library|diseases)\.(Measles|Cholera|Ebola)\(', "ssl.Measles, ssl.Cholera, and ssl.Ebola are now declared (any solver, no network needed): beta is a rate per day (per contact on a network), each duration is a distribution, as before (a single duration given is the mean of an exponential), and each probability a number (p_death=0.005, not ss.bernoulli(0.005)); results are by state (E, I, R; Cholera's W and env_conc; Ebola's Sev, D, burial). For Starsim 3's agent model, subclass ssl.AgentSEIR"),
-    (r'\binit_prev\s*=\s*ss\.(bernoulli|choose_n)\(', "if this is a declared disease (ss.SIR, ss.Disease with transitions, ...): init_prev is a share (init_n= is a number of people), or a function of (sim, uids) giving a share; for a function that took (self, sim, uids), drop self. A disease written as code keeps its distribution"),
+    (r'\binit_prev\s*=\s*ss\.(bernoulli|choose_n)\(', "if this is a declared disease (ss.SIR, ss.Disease with transitions, ...): init_prev is a fraction (init_n= is a number of people), or a function of (sim, uids) giving a fraction; for a function that took (self, sim, uids), drop self. A disease written as code keeps its distribution"),
     (r'\bdur_(inf|exp)\s*=\s*(dict\(|\{|\[)', "if this is ss.SIR, ss.SIS, or ss.SEIR: give the distribution itself, e.g. dur_inf=ss.lognormal(mean=ss.years(10), std=ss.years(2)) for [10, 2] or dict(type='lognormal', ...); a duration is otherwise the mean of an exponential"),
-    (r'\bdef net_beta\(', "net_beta() of a network is called for the edges of a disease written as code as net_beta(disease_beta=None, inds=None, disease=None): the edges are inds= (not uids=), and disease_beta has a value for each of them. A declared disease does not call it on a network with acts: use ss.modify(dis.infection, network=net.name, efficacy=e, share=s)"),
+    (r'\bdef net_beta\(', "net_beta() of a network is called for the edges of a disease written as code as net_beta(disease_beta=None, inds=None, disease=None): the edges are inds= (not uids=), and disease_beta has a value for each of them. A declared disease does not call it on a network with acts: use ss.modify(dis.infection, network=net.name, efficacy=e, frac=s)"),
     (r'\b(rr_ptb|rr_ptb_age|rel_preterm|rel_preterm_age|preterm_threshold|very_preterm_threshold)\s*=(?!=)', "if this is a parameter of ss.Pregnancy, the preterm options are one keyword: preterm=ss.preterm(rel=..., by_age=..., threshold=..., very_threshold=...)"),
     (r'\bp_loss\s*=', "if this is a parameter of ss.Pregnancy, it is loss_rate=ss.probperweek(p) (or any other rate), the hazard of a spontaneous loss"),
-    (r'\bsex_ratio\s*=', "if this is a parameter of ss.Pregnancy, it is p_female= (the share of babies born female), as on ss.People and ss.birth()"),
+    (r'\bsex_ratio\s*=', "if this is a parameter of ss.Pregnancy, it is p_female= (the fraction of babies born female), as on ss.People and ss.birth()"),
     (r'\bmetadata\s*=\s*(dict\(|\{)', "if this is metadata= of ss.Births, ss.Deaths, or ss.Pregnancy, it is columns=, the data's column for each standard key directly: columns=dict(year='Time', value='CBR') for metadata=dict(data_cols=dict(year='Time', value='CBR')), with sex_keys=dict(...) inside it for the labels of the sexes"),
     (r'\bage_range\s*=', "if this is age_range= of a network (ss.RandomNet, ssl.ClusterNet) or of net.eligible(), it is who=, a condition over people: who=(ss.person.age >= lo) & (ss.person.age < hi)"),
     (r'\bss\.AgeGroup\(', "ss.AgeGroup was removed: a group of a mixing pool is a condition on people, e.g. (ss.person.age >= 5) & (ss.person.age < 15), or ss.person.age >= 65 for an open group"),
@@ -190,7 +190,7 @@ flags = [
     (r'\bss\.MultiSim\((?![^)]*\bn_runs\s*=)', 'ss.MultiSim(sim) of one sim runs it once (Starsim 3 ran it 4 times): give n_runs=4, or use ss.parallel(sim, n_runs=4)'),
     (r'\.compare\(', 'if this is msim.compare(), it is msim.summarize(each=True) (a column for each run), with t= for the values at one time point'),
     (r'\.plot_compare\(', 'msim.summarize(each=True) gives a column for each run (t= for the values at one time point), to plot as a table, e.g. msim.summarize(each=True).T.plot.barh(subplots=True)'),
-    (r'''\bss\.Result\((?![^)]*\bkind\s*=)(?!\s*['"](\w*new_|n_|\w*cum_|\w*prevalence))''', "ss.Result() should give kind= ('flow', a number of events in each step; 'stock', a quantity at each time point; 'ratio', a share or a mean; or None), unless the name says it (new_..., n_..., cum_..., prevalence): otherwise it is guessed from the dtype, as in Starsim 3, with a warning"),
+    (r'''\bss\.Result\((?![^)]*\bkind\s*=)(?!\s*['"](\w*new_|n_|\w*cum_|\w*prevalence))''', "ss.Result() should give kind= ('flow', a number of events in each step; 'stock', a quantity at each time point; 'ratio', a fraction or a mean; or None), unless the name says it (new_..., n_..., cum_..., prevalence): otherwise it is guessed from the dtype, as in Starsim 3, with a warning"),
     (r'\bss\.dynamics_by_age\b', "ss.dynamics_by_age was removed: stratify the sim by age (sim.stratify(age=[0, 20, 40])) and read a result by age group (res.I.by('age')), or write an analyzer of your own (see the user guide on analyzers)"),
     (r'\b(ppl|people)\.filter\(|\bss\.Filter\b', "People.filter() and its Filter were removed: use the states as arrays and conditions, e.g. ppl.female.uids, (ppl.female & (ppl.age > 5)).uids, or who=ss.person.age < 15"),
     (r'\.to_df\(.*\bdescend\s*=', 'results.to_df() always includes the results of the modules too (as sim.to_df() did), with the times as the column time, or as the index with set_date_index=True'),
@@ -435,7 +435,7 @@ def find_analyzers(texts):
 
 
 def migrate_ast(text, analyzers=None):
-    """ The changes that need the structure of the code: the bases of diseases written as code; and what to check about the results, which are recorded at the start of a step (stocks, `record_stocks()`) and at its end (flows, `record_flows()`), where Starsim 3 recorded both at its end in `update_results()` """
+    """ The changes that need the structure of the code: the bases of diseases written as code; and what to check about the results, which are recorded at the start of a step (stocks, `record_states()`) and at its end (flows, `record_events()`), where Starsim 3 recorded both at its end in `update_results()` """
     tree = ast.parse(text)
     edits = Edits(text)
     found = [] # (line, message) for a person
@@ -447,11 +447,11 @@ def migrate_ast(text, analyzers=None):
         if analyzer and func.name == 'step':
             analyzer_steps.append(func.lineno)
         elif func.name == 'update_results':
-            found.append((func.lineno, 'update_results() is split in two: record_stocks(), at the start of the step, for the results that are the state then (e.g. self.results.n_x[self.ti] = self.x.sum()), and record_flows(), at its end, for those about what happened in it (e.g. new infections); a result that needs both goes in record_flows(), reading the stock from its result, or in finalize_results() for the whole run'))
+            found.append((func.lineno, 'update_results() is split in two: record_states(), at the start of the step, for the results that are the state then (e.g. self.results.n_x[self.ti] = self.x.sum()), and record_events(), at its end, for those about what happened in it (e.g. new infections); a result that needs both goes in record_events(), reading the stock from its result, or in finalize_results() for the whole run'))
         elif func.name == 'finish_step':
             for node in ast.walk(func):
                 if isinstance(node, (ast.Assign, ast.AugAssign)) and 'results' in ast.unparse(node):
-                    found.append((node.lineno, 'a result written in finish_step() comes after record_flows() has run for the step: count it in step() instead, at self.ti'))
+                    found.append((node.lineno, 'a result written in finish_step() comes after record_events() has run for the step: count it in step() instead, at self.ti'))
                     break
 
     for cls in [n for n in ast.walk(tree) if isinstance(n, ast.ClassDef)]:
@@ -467,7 +467,7 @@ def migrate_ast(text, analyzers=None):
                 visit_func(stmt, analyzer)
 
     if analyzer_steps:
-        found.append((analyzer_steps[0], f'an analyzer\'s step() (line{"s" if len(analyzer_steps) > 1 else ""} {sc.strjoin(analyzer_steps)}) runs at the end of each step, so the people it sees are as they are at the next time point: a result about the state at the step\'s start (as Starsim 3 recorded at the step\'s index) goes in record_stocks() instead'))
+        found.append((analyzer_steps[0], f'an analyzer\'s step() (line{"s" if len(analyzer_steps) > 1 else ""} {sc.strjoin(analyzer_steps)}) runs at the end of each step, so the people it sees are as they are at the next time point: a result about the state at the step\'s start (as Starsim 3 recorded at the step\'s index) goes in record_states() instead'))
 
     # A beta pair for each network, e.g. beta={'mf': [0.08, 0.04]}: Starsim 3's [p1 to p2, p2 to p1] has direction names in Starsim 4
     def is_beta(node):
@@ -611,7 +611,7 @@ def migrate_ast(text, analyzers=None):
             else:
                 found.append((kw.lineno, f'{note}, and dur= with it is the delay: when=ss.on(event, delay=...)'))
         if func.endswith('stratify') and 'fractions' in keywords:
-            found.append((call.lineno, 'stratify() takes only dimensions: fractions= is the levels as a dict of their shares, e.g. age={0: 0.3, 15: 0.6, 65: 0.1}, or ss.levels(levels, fractions=ss.by(...)) for shares that depend on another dimension'))
+            found.append((call.lineno, 'stratify() takes only dimensions: fractions= is the levels as a dict of their fractions, e.g. age={0: 0.3, 15: 0.6, 65: 0.1}, or ss.levels(levels, fractions=ss.by(...)) for fractions that depend on another dimension'))
         if func.endswith('stratify') and 'adjust' in keywords:
             found.append((call.lineno, 'stratify() takes only dimensions: adjust= is a value by level, ss.by(risk=[...]), in the rate (S >> I @ beta*ss.by(risk=[1, 3])*I), or ss.modify(sir.infection, multiply=ss.by(risk=[1, 3])) for a disease already written'))
         if func.endswith('.run') and 'n_runs' in keywords:
@@ -639,7 +639,7 @@ def migrate_ast(text, analyzers=None):
             if 'init_prev' in keywords:
                 value = keywords['init_prev'].value
                 if isinstance(value, ast.Call) and ast.unparse(value.func) == 'ss.choose_n' and len(value.args) == 1 and not value.keywords and not isinstance(value.args[0], (ast.Lambda, ast.Name)):
-                    edits.add(keywords['init_prev'], f'init_n={ast.unparse(value.args[0])}', f'init_prev= of {func} is a share; init_n= is a number of people, as ss.choose_n() was')
+                    edits.add(keywords['init_prev'], f'init_n={ast.unparse(value.args[0])}', f'init_prev= of {func} is a fraction; init_n= is a number of people, as ss.choose_n() was')
             beta = keywords['beta'].value if 'beta' in keywords else None
             if isinstance(beta, ast.Constant) and type(beta.value) in (int, float) and beta.value:
                 found.append((beta.lineno, f'the beta {beta.value} of {func} is a bare number: Starsim 3 used it as a probability per step (of a year, by default), but Starsim 4 reads it as a rate in the unit of the model\'s typed values (days, for the defaults of {func}). Give its meaning, e.g. beta=ss.prob({beta.value}, "year") for yearly steps'))

@@ -412,7 +412,7 @@ class Births(Demographics):
         people.born(new_uids)
         return new_uids
 
-    def record_flows(self):
+    def record_events(self):
         """ The births of the step (already counted) """
         self.results.birth[self.ti] = self.n_births_this_step
         return
@@ -589,7 +589,7 @@ class Deaths(Demographics):
         ppl.request_death(death_uids, cause=self)
         return death_uids
 
-    def record_flows(self):
+    def record_events(self):
         self.n_deaths = len(self.sim.people.died_of(self)) # Once each death has one cause: someone another module killed in the same step may have died of that instead
         self.results.death[self.ti] = self.n_deaths
         return
@@ -694,7 +694,7 @@ class Pregnancy(Demographics, ss.Disease):
         p_abortion (float): chance a pregnancy ends in an abortion, at conception
         burnin (bool): whether women are pregnant at the start, at the gestational ages they would have reached (default True; see `burnin_plan()`); agents only
         fetal_agents (bool/str): whether fetuses are agents from conception: 'auto' (the default), if something reads them (a prenatal network, or `ss.mother()` in a module); agents only
-        p_female (float/bernoulli): the share of babies born female (default 0.5)
+        p_female (float/bernoulli): the fraction of babies born female (default 0.5)
         children (int/Dist): the number of children of each delivery: a number, or a distribution (e.g. `ss.choice(a=[1, 2], p=[0.98, 0.02])` for twins)
         preterm (`ss.preterm`): the risk of preterm birth (see `ss.preterm()`): the thresholds, each woman's relative risk, and the relative risk by her age
         columns (dict): if `fertility_rate` is a table, its column for each standard key, where they differ from the defaults (`year='Time'`, `age='AgeGrp'`, `value='ASFR'`)
@@ -728,7 +728,7 @@ class Pregnancy(Demographics, ss.Disease):
     miscarriage = ss.Transition(P, NP, rate=loss_rate*(P.time_in < loss_threshold))
     stillbirth  = ss.Transition(P, NP, rate=loss_rate*(P.time_in >= loss_threshold))
     antepartum  = ss.Transition(P, ss.dead, rate=maternal_death_rate)
-    delivery    = ss.Transition(P, NP, dur=dur_pregnancy) # P.time_in is gestational age
+    delivery    = ss.Transition(P, NP, dur=dur_pregnancy, p=None) # The rest (those not aborted); P.time_in is gestational age
     birth       = ss.birth(NP, when=delivery) # Children, linked to the mother (agents only, for now): children= of them (see __init__())
     infant_mortality = ss.Transition(NP, ss.dead, rate=infant_death_rate) # The children (not fetuses), until the age of 1: see _gate_infant()
 
@@ -748,7 +748,7 @@ class Pregnancy(Demographics, ss.Disease):
             dur_breastfeed = ss.lognormal(mean=ss.years(0.75), std=ss.years(0.5)),
             p_breastfeed = ss.bernoulli(p=1),
             children = ss.choice(a=np.array([1, 2]), p=np.array([1.0, 0.0])), # The number of children of each delivery
-            p_female = ss.bernoulli(0.5), # Share of babies born female
+            p_female = ss.bernoulli(0.5), # Fraction of babies born female
             burnin = True, # Whether women are pregnant at the start: see burnin_plan()
             preterm = preterm(), # The risk of preterm birth: see ss.preterm
             p_maternal_death = ss.bernoulli(p=0), # The chance of a maternal death at delivery (agents only); the hazard while pregnant is maternal_death_rate
@@ -904,7 +904,7 @@ class Pregnancy(Demographics, ss.Disease):
         having conceived in the mean duration of a pregnancy before the start, at her conception hazard then
         (`1 - exp(-h*dur)`), at a step uniform over it, and is run forward by the pregnancy's own transitions
         (abortion, losses, and delivery, with no births), so the start has the gestational ages and the first steps
-        their deliveries. In the compartmental form, the same share
+        their deliveries. In the compartmental form, the same fraction
         of each group, less the abortions and the losses on the way, is spread evenly over gestation (see `ss.solvers.Compartmental.backfill_burnin()`).
 
         Args:
@@ -919,7 +919,7 @@ class Pregnancy(Demographics, ss.Disease):
             g = self.graph
             loss = ss.solvers.convert(g.pars.loss_rate.raw, 'year')*self.mean_dur_pregnancy
             kept = (1 - g.pars.p_abortion.raw)*(-np.expm1(-loss)/loss if loss > 0 else 1.0)
-        def share():
+        def frac():
             sim = engine.sim
             fertility = self.graph.pars.fertility_rate.raw # conception_rate() unless a function was given
             if not callable(fertility):
@@ -942,7 +942,7 @@ class Pregnancy(Demographics, ss.Disease):
                         mod.engine.live = None
                         mod.engine.count_stocks()
         note = f'{self.name}: women pregnant at the start, conceived over the {"step" if steps == 1 else f"{steps} steps"} before it (burnin=True)'
-        return sc.obj(share=share, steps=steps, tr=self.graph.transitions.conception, target=['P'], note=note, after=after)
+        return sc.obj(frac=frac, steps=steps, tr=self.graph.transitions.conception, target=['P'], note=note, after=after)
 
     def compartmental_form(self, sim):
         """
@@ -950,7 +950,7 @@ class Pregnancy(Demographics, ss.Disease):
         agents): the states `NP` and `P`, conception, abortion, maternal deaths, and the delivery at the end of
         `dur_pregnancy` (a fixed delay, or Erlang stages for a distribution), with `n` children per delivery
         (`ss.birth(when=preg.delivery)`). The losses do not read the gestational age (`P.time_in`): the loss rate is split
-        between miscarriage and stillbirth by the share of the mean gestation below `loss_threshold`. It has no fetuses,
+        between miscarriage and stillbirth by the fraction of the mean gestation below `loss_threshold`. It has no fetuses,
         no links between mothers and children, no breastfeeding, no preterm risk, and no deaths at delivery (`p_maternal_death`). Returns the note that says so
 
         Args:
@@ -963,7 +963,7 @@ class Pregnancy(Demographics, ss.Disease):
         early = float(np.clip(convert(g.pars.loss_threshold.raw)/dur, 0, 1))
         trs.miscarriage.rate = g.pars.loss_rate*early
         trs.stillbirth.rate = g.pars.loss_rate*(1 - early)
-        note = (f'"{self.name}" runs in its small compartmental form: losses at a constant rate, {early:.0%} of them miscarriages (the share of the mean gestation below loss_threshold); '
+        note = (f'"{self.name}" runs in its small compartmental form: losses at a constant rate, {early:.0%} of them miscarriages (the fraction of the mean gestation below loss_threshold); '
                 f'no fetuses, links between mothers and children, breastfeeding, preterm risk, or deaths at delivery. Run with solver="abm" for these')
         return note
 
@@ -1067,7 +1067,7 @@ class Pregnancy(Demographics, ss.Disease):
         """
         At conception: each woman's relative risk of preterm birth (`rel_preterm`), her baseline (`rel_preterm`) times the risk at her
         age (`preterm.by_age`), multiplies her probability of a preterm duration (below `preterm.threshold`), capped at 1; the
-        durations within the preterm and the term ones keep their shares. For `dur_pregnancy` as an `ss.choice` (the
+        durations within the preterm and the term ones keep their fractions. For `dur_pregnancy` as an `ss.choice` (the
         default), each duration is drawn so (one uniform number, by inverse transform), kept in weeks (`dur_gestation`, the
         gestational age at birth), and the delivery scheduled by it, as the engine schedules a dwell time (agents only)
 
@@ -1219,14 +1219,14 @@ class Pregnancy(Demographics, ss.Disease):
         self.asfr = np.zeros((len(self.asfr_bins) - 1, self.t.npts))
         return
 
-    def record_stocks(self):
-        super().record_stocks()
+    def record_states(self):
+        super().record_states()
         if self.abm and self.fetal_agents:
             self.results.unborn[self.ti] = np.count_nonzero(self.fetal.raw & self.sim.people.alive.raw)*self.sim.current_scale
         return
 
-    def record_flows(self):
-        super().record_flows()
+    def record_events(self):
+        super().record_events()
         self.results.neonatal_death[self.ti] = self._nnd*self.sim.current_scale
         self._nnd = 0
         self.compute_asfr()

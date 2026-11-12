@@ -22,8 +22,8 @@ infection = S >> E @ 1.9*I
 onset     = E >> I @ ss.days(10)
 recovery  = I >> R @ ss.days(8)
 
-prevalence = (E + I)/N # The share of people infected, latent or infectious
-immune     = R/N       # The share immune, as a serosurvey would measure it
+prevalence = (E + I)/N # The fraction of people infected, latent or infectious
+immune     = R/N       # The fraction immune, as a serosurvey would measure it
 
 measles = ss.Disease(infection, onset, recovery, prevalence, immune, init=dict(I=0.001))
 sim = ss.Sim(measles, total_pop=100_000, start='2025-01-01', stop='2025-05-01', verbose=0)
@@ -31,7 +31,7 @@ sim.run()
 sim.diseases.measles.plot('prevalence', 'immune')
 ```
 
-Flows can be used the same way: `infection/S` is the incidence per susceptible person. A ratio is a ratio of sums: by group or over a longer period, its numerator and denominator are each summed, and then divided, never averaged.
+In rates and conditions, a state gives its number and fraction directly: `I.n` is the number in `I`, and `I.frac` the fraction of people in it. Flows can be used the same way: `infection/S` is the incidence per susceptible person. A ratio is a ratio of sums: by group or over a longer period, its numerator and denominator are each summed, and then divided, never averaged.
 
 A result needs a name of its own. A parameter over time is a result of an expression of it under another name, `eir_now = 1*eir`; giving the parameter itself (`eir=eir`) raises an error. In a class, an expression with a value for each person, such as `age = ss.person.age` or `duration = affected.time_in`, is a helper for the rates, not a result.
 
@@ -93,13 +93,13 @@ sim$diseases$measles$plot("cases", "n_hosp")
 ```
 :::
 
-- **The source is a share of a flow**, or a sum of shares of several: `0.5*onset` is half of those who become infectious. The share is the probability of being counted. Reporting that depends on severity is a sum: `ss.outcome(0.1*mild + 0.6*severe)`, where `mild` and `severe` are transitions.
-- **Outcomes can follow from outcomes**: `hosp` is a share of `cases`, and `deaths` a share of `hosp`, so a chain of events is a line for each.
+- **The source is a fraction of a flow**, or a sum of fractions of several: `0.5*onset` is half of those who become infectious. The fraction is the probability of being counted. Reporting that depends on severity is a sum: `ss.outcome(0.1*mild + 0.6*severe)`, where `mild` and `severe` are transitions.
+- **Outcomes can follow from outcomes**: `hosp` is a fraction of `cases`, and `deaths` a fraction of `hosp`, so a chain of events is a line for each.
 - **`delay=`** is the time from the source event to this one: a duration (exponentially distributed, as for any duration), a distribution such as `ss.constant(ss.days(4))` or `ss.lognormal(...)`, or a function of the sim.
 - **`dur=`** is how long each event counted stays in the outcome (here, a stay in hospital), and gives a second result, `n_<name>`: the number currently in it, here the number in hospital.
-- **A share can be a parameter**: `ss.par(0.5, bounds=[0.1, 0.9])` makes the reporting rate fittable, and `ss.by(age=[...])` gives a share for each age group, as for any value ([Parameters](building_parameters.qmd)).
+- **A fraction can be a parameter**: `ss.par(0.5, bounds=[0.1, 0.9])` makes the reporting rate fittable, and `ss.by(age=[...])` gives a fraction for each age group, as for any value ([Parameters](building_parameters.qmd)).
 
-An outcome is worked out from the counts of its source flows, in each group, so it never records which people were counted. In a deterministic run, the share multiplies the flow and the delay spreads it over the following steps; in a stochastic or agent-based run, those counted are a binomial draw, and their delays are drawn too. Define what the data measures (cases dated by onset, or by report) before choosing the source and delay, and note that a delay moves events past the end of the run, so the last weeks of an outcome are lower than they will be.
+An outcome is worked out from the counts of its source flows, in each group, so it never records which people were counted. In a deterministic run, the fraction multiplies the flow and the delay spreads it over the following steps; in a stochastic or agent-based run, those counted are a binomial draw, and their delays are drawn too. Define what the data measures (cases dated by onset, or by report) before choosing the source and delay, and note that a delay moves events past the end of the run, so the last weeks of an outcome are lower than they will be.
 
 `describe()` gives each outcome's definition, under the disease's transitions, e.g. `cases   outcome: 0.5 × onset, after 4 days (exponential)`.
 
@@ -134,7 +134,7 @@ sim.plot('cases')
 
 The plot shows the model's cases summed over each week of the data, as they are compared in a fit, and its title says so.
 
-- **Data need not be on the model's time step.** A flow, such as weekly reported cases, is compared with the model's total over each week of the data, from the data's date to the next (so a week is dated by its first day); a stock or a ratio, such as the share immune in a serosurvey, with the model's value on the date of the data. The result already knows which it is.
+- **Data need not be on the model's time step.** A flow, such as weekly reported cases, is compared with the model's total over each week of the data, from the data's date to the next (so a week is dated by its first day); a stock or a ratio, such as the fraction immune in a serosurvey, with the model's value on the date of the data. The result already knows which it is.
 - **With several diseases**, a column is matched to the one that has a result of that name, or is named with its disease, `measles.cases`.
 - **Data by group** is given in long form: extra columns named after dimensions (`age`) say which group each row is for, and each row is compared with `cases.select(age=...)`.
 - **A missing value is not a zero.** Leave weeks with no report empty (`NaN`) rather than 0, so that they are left out of the comparison rather than compared with a count of none.
@@ -182,6 +182,6 @@ A likelihood is given with an outcome (`ss.outcome(..., likelihood=...)`), or to
 | `ss.nbinom(n=...)` | The mean count; `n` is the dispersion (smaller means more spread) | Overdispersed counts, as most surveillance data are: reporting that varies from week to week |
 | `ss.binom(n=...)` | The probability; `n` is the number of trials | The positives among `n` people tested, e.g. a prevalence survey or a serosurvey |
 | `ss.bernoulli()` | The probability | Whether something happened, as 0 or 1, e.g. whether an outbreak was reported |
-| `ss.normal(std=...)` | The mean; `std` is the standard deviation | A continuous measure with noise of a known size, e.g. a share estimated with a standard error |
+| `ss.normal(std=...)` | The mean; `std` is the standard deviation | A continuous measure with noise of a known size, e.g. a fraction estimated with a standard error |
 | `ss.lognormal(std=...)` | The mean; `std` is the standard deviation | A positive measure whose noise grows with its size, e.g. a concentration in wastewater |
 | A function `fn(observed, model)` | Whatever the function says: it returns the log-likelihood of each value | Anything else, e.g. a normal whose variance grows with the mean (not available for NUTS in JAX, which then runs with Python in the loop) |

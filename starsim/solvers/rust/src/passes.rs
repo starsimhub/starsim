@@ -1061,9 +1061,9 @@ pub fn competing_exits<L: Ix>(uids: &[i64], slots: &[L], key: u64, shift: u64, s
     close_gaps(pos, &found, n)
 }
 
-/// As competing_exits(), with chances that differ between agents: each one's chance of leaving, and the exits' hazards (a row for each exit), whose running total times share are the edges (`passes.competing_agent_exits()`)
+/// As competing_exits(), with chances that differ between agents: each one's chance of leaving, and the exits' hazards (a row for each exit), whose running total times frac are the edges (`passes.competing_agent_exits()`)
 #[allow(clippy::too_many_arguments)]
-pub fn competing_agent_exits<L: Ix>(uids: &[i64], slots: &[L], key: u64, shift: u64, scale: f64, p_exit: &[f64], share: &[f64], hazards: &[f64], n_exits: usize, pos: &mut [i64], which: &mut [i64], nchunks: usize) -> usize {
+pub fn competing_agent_exits<L: Ix>(uids: &[i64], slots: &[L], key: u64, shift: u64, scale: f64, p_exit: &[f64], frac: &[f64], hazards: &[f64], n_exits: usize, pos: &mut [i64], which: &mut [i64], nchunks: usize) -> usize {
     let n = uids.len();
     let by_uid = slots.is_empty();
     let cols = if n_exits > 0 { hazards.len()/n_exits } else { 0 };
@@ -1081,7 +1081,7 @@ pub fn competing_agent_exits<L: Ix>(uids: &[i64], slots: &[L], key: u64, shift: 
                     let mut edge = 0.0;
                     while t < n_exits {
                         edge += hazards[t*cols + j];
-                        if u < edge*share[j] {
+                        if u < edge*frac[j] {
                             break;
                         }
                         t += 1;
@@ -1355,11 +1355,11 @@ pub mod bind {
 
     #[pyfunction]
     #[allow(clippy::too_many_arguments)]
-    fn competing_agent_exits(py: Python, uids: &Arr, slots: &Arr, seed: &Arr, ind: &Arr, shift: u64, scale: f64, p_exit: &Arr, share: &Arr, hazards: &Arr, pos: &Arr, which: &Arr, nchunks: i64) -> PyResult<usize> {
+    fn competing_agent_exits(py: Python, uids: &Arr, slots: &Arr, seed: &Arr, ind: &Arr, shift: u64, scale: f64, p_exit: &Arr, frac: &Arr, hazards: &Arr, pos: &Arr, which: &Arr, nchunks: i64) -> PyResult<usize> {
         let nchunks = chunks(py, nchunks)?;
         let k = key(seed, ind)?;
         let n_exits = hazards.cast::<PyArrayDyn<f64>>()?.shape()[0];
-        typed!(slots, L in [i64, i32] => Ok(passes::competing_agent_exits::<L>(sl(uids)?, sl(slots)?, k, shift, scale, sl(p_exit)?, sl(share)?, flat(hazards)?, n_exits, sl_mut(pos)?, sl_mut(which)?, nchunks)))
+        typed!(slots, L in [i64, i32] => Ok(passes::competing_agent_exits::<L>(sl(uids)?, sl(slots)?, k, shift, scale, sl(p_exit)?, sl(frac)?, flat(hazards)?, n_exits, sl_mut(pos)?, sl_mut(which)?, nchunks)))
     }
 
     /// Add these kernels to the module

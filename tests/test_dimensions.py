@@ -27,7 +27,7 @@ def at_start(sim):
     sim.init()
     for mod in sim.declared:
         mod.engine.start_step()
-        mod.engine.record_stocks()
+        mod.engine.record_states()
     return sim.results
 
 

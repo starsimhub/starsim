@@ -25,7 +25,7 @@ class COVID(ss.Disease):
 
     The disease is stratified by age into MEmilio's six groups (0-4, 5-14, 15-34, 35-59, 60-79, and 80+), since
     the severity of COVID-19 rises steeply with age: in the oldest group, a symptomatic case is 30 times as likely
-    to become severe as in a child, and a critical one 12 times as likely to die. The share of people in each group
+    to become severe as in a child, and a critical one 12 times as likely to die. The fraction of people in each group
     is the world's, unless the sim's population says otherwise (e.g. `people=ss.population('Germany')`).
 
     Source: the values for Germany of MEmilio (Kühn MJ et al., *Mathematical Biosciences* 2021,
@@ -53,10 +53,10 @@ class COVID(ss.Disease):
         dur_sym (`ss.Duration`/`ss.by`): the mean time with symptoms
         dur_sev (`ss.Duration`/`ss.by`): the mean time with severe disease
         dur_crit (`ss.Duration`/`ss.by`): the mean time with critical disease
-        p_sym (float/`ss.by`): the share of people without symptoms who go on to have symptoms
-        p_sev (float/`ss.by`): the share of people with symptoms whose disease becomes severe
-        p_crit (float/`ss.by`): the share of severe cases that become critical
-        p_death (float/`ss.by`): the share of critical cases who die
+        p_sym (float/`ss.by`): the fraction of people without symptoms who go on to have symptoms
+        p_sev (float/`ss.by`): the fraction of people with symptoms whose disease becomes severe
+        p_crit (float/`ss.by`): the fraction of severe cases that become critical
+        p_death (float/`ss.by`): the fraction of critical cases who die
         kwargs (dict): passed to `ss.Disease`, e.g. `init` or `name`
 
     Examples:
@@ -82,13 +82,13 @@ class COVID(ss.Disease):
     dur_sym  = ss.par(days(7.0, 7.0, 7.1, 6.9, 6.8, 6.8),    doc='Mean time with symptoms',        source=source)
     dur_sev  = ss.par(days(5.0, 5.0, 5.9, 7.6, 8.5, 11.0),   doc='Mean time with severe disease',  source=source)
     dur_crit = ss.par(days(7.0, 7.0, 6.9, 17.4, 17.1, 11.6), doc='Mean time with critical disease', source=source)
-    p_sym    = ss.par(by_age(0.75, 0.75, 0.8, 0.8, 0.8, 0.8),               doc='Share of people without symptoms who go on to have symptoms', source=source)
-    p_sev    = ss.par(by_age(0.0075, 0.0075, 0.019, 0.0615, 0.165, 0.225),  doc='Share of symptomatic cases that become severe',               source=source)
-    p_crit   = ss.par(by_age(0.075, 0.075, 0.075, 0.15, 0.30, 0.40),        doc='Share of severe cases that become critical',                  source=source)
-    p_death  = ss.par(by_age(0.05, 0.05, 0.14, 0.14, 0.40, 0.60),           doc='Share of critical cases who die',                             source=source)
+    p_sym    = ss.par(by_age(0.75, 0.75, 0.8, 0.8, 0.8, 0.8),               doc='Fraction of people without symptoms who go on to have symptoms', source=source)
+    p_sev    = ss.par(by_age(0.0075, 0.0075, 0.019, 0.0615, 0.165, 0.225),  doc='Fraction of symptomatic cases that become severe',               source=source)
+    p_crit   = ss.par(by_age(0.075, 0.075, 0.075, 0.15, 0.30, 0.40),        doc='Fraction of severe cases that become critical',                  source=source)
+    p_death  = ss.par(by_age(0.05, 0.05, 0.14, 0.14, 0.40, 0.60),           doc='Fraction of critical cases who die',                             source=source)
 
     S, E, INS, ISy, ISev, ICr, R = ss.states(7)
-    infected = E + INS + ISy + ISev + ICr # Severe and critical cases don't transmit here, so they are infected only if said; prevalence is the share of everyone in these
+    infected = E + INS + ISy + ISev + ICr # Severe and critical cases don't transmit here, so they are infected only if said; prevalence is the fraction of everyone in these
 
     infection = S >> E @ beta*rel_sus*(rel_ins*INS + rel_sym*ISy)
     onset     = E >> INS @ dur_exp

@@ -96,7 +96,7 @@ def test_syphilis_stay():
     # The remainder of branches whose p= is not a constant
     def branches(p):
         I, H, R = ss.states('I H R')
-        return ss.Disease(I, H, R, severe=ss.Transition(I, H, p=p, dur=ss.years(1)), mild=ss.Transition(I, R, dur=ss.years(1)), default_state='I', name='d') # Everyone starts in I
+        return ss.Disease(I, H, R, severe=ss.Transition(I, H, p=p, dur=ss.years(1)), mild=ss.Transition(I, R, dur=ss.years(1), p=None), default_state='I', name='d') # Everyone starts in I
     for solver in ['abm', 'ode']:
         size = dict(n_agents=10_000) if solver == 'abm' else dict(total_pop=10_000)
         ns = [ss.Sim(branches(p), solver=solver, start=2000, stop=2010, unit='year', **size, **kw).run().results.d.H[-1] for p in [0.3, lambda sim: 0.3]]

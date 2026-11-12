@@ -27,10 +27,10 @@ infection   = S >> E @ beta*I       # Infection, at a rate of β times the conta
 progression = E >> I @ ss.days(10)  # Latent for 10 days on average
 recovery    = I >> R @ ss.days(8)   # Infectious for 8 days on average
 measles = ss.Disease(infection, progression, recovery,
-    init   = dict(R=ss.by(age=[0.8, 0.92, 0.98])), # The share immune in each age group
+    init   = dict(R=ss.by(age=[0.8, 0.92, 0.98])), # The fraction immune in each age group
     init_n = dict(I=10),                           # 10 people infectious at the start
 )
-measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1}) # Ages 0-14, 15-64, and 65+, with the share of people in each
+measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1}) # Ages 0-14, 15-64, and 65+, with the fraction of people in each
 
 contacts = ss.contacts(ages=[0, 15, 65], matrix=[[10, 6, 1], [3, 8, 1], [3, 6, 3]]) # Contacts a day, between age groups
 settings = dict(networks=contacts, total_pop=100_000, start='2025-01-01', stop='2026-01-01')
@@ -44,7 +44,7 @@ About 89% of people are immune, short of the 1 − 1/R0 ≈ 94% needed with R0 =
 
 ## A vaccination campaign
 
-A vaccine has two parts in a model: the **product**, what it does to those who get it (here, it cuts their chance of infection by 93%, about what one dose of measles vaccine does), and the **delivery**, who gets it and when. [`ss.vaccinate()`](../api/interventions.qmd) takes both: the efficacy, the group (`who=`), the share reached (`coverage=`), and when (`when=`).
+A vaccine has two parts in a model: the **product**, what it does to those who get it (here, it cuts their chance of infection by 93%, about what one dose of measles vaccine does), and the **delivery**, who gets it and when. [`ss.vaccinate()`](../api/interventions.qmd) takes both: the efficacy, the group (`who=`), the fraction reached (`coverage=`), and when (`when=`).
 
 Suppose a campaign on 1 March reaches 80% of children under 15. A scenario is a sim with its own interventions; make one for each, labeled, and run them together with `ss.parallel()`:
 
@@ -351,7 +351,7 @@ These deliveries cover most programs. For a rule of your own, `who=` takes a fun
 
 1. The campaign above is run on 1 March. How many infections does it prevent if it is run on 1 February instead, or on 1 May? What does this say about how quickly a campaign should follow the first cases?
 2. Add a scenario that combines the campaign and the response (`interventions=[campaign, response]`). Is its effect the sum of the two on their own? Why not?
-3. Start the outbreak with 2 infectious people rather than 10 (`init_n=dict(I=2)`), and run the model with no intervention 50 times as a stochastic model. In what share of runs does the outbreak die out? Compare this with (1/R)², where R ≈ 2.5 is the reproduction number at the start: roughly the chance that the chains of infection started by both people die out.
+3. Start the outbreak with 2 infectious people rather than 10 (`init_n=dict(I=2)`), and run the model with no intervention 50 times as a stochastic model. In what fraction of runs does the outbreak die out? Compare this with (1/R)², where R ≈ 2.5 is the reproduction number at the start: roughly the chance that the chains of infection started by both people die out.
 4. In the scenario with partner notification, what happens if the partners of people who seek care are notified too (a second notification, with `when=care`)? Is the effect larger than notifying the partners of those found by screening?
 5. Screening reaches people aged 15 to 29. How much does the effect change if it reaches everyone aged 15 to 49 instead, and how many more tests does it take? Which gives more infections prevented per test?
 

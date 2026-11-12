@@ -233,7 +233,7 @@ class Run(sc.prettyobj):
         self.gather_crd = np.zeros((ncr, nf))
         self.gather_crd[np.arange(ncr), self.crd_flow] = 1
         self.simple = p.n_places == 1 and ng == 1 # One group: no places or cells to go through
-        self.dense_share = 8*len(p.sh_val) >= p.n_places**2 > 1 # A time share with at least an eighth of its entries is taken as a matrix (see function())
+        self.dense_frac = 8*len(p.sh_val) >= p.n_places**2 > 1 # A time fraction with at least an eighth of its entries is taken as a matrix (see function())
         conveyors = [(p.starts[i], p.starts[i+1]) for i in range(nf, len(p.starts) - 1)] # After the flows' operations (see ss.kernels.convey())
         self.cv_flow = np.array([p.args[a] for a,b in conveyors], dtype=int)
         slots = [p.args[a+1:b] for a,b in conveyors] # The slots of each conveyor: its first, last, and each that people move along from and to
@@ -289,13 +289,13 @@ class Run(sc.prettyobj):
                 den = self.cells[t].sum(n)
                 block = int(p.block[t])
                 if p.use[0, t]: # Move people to where they spend their time
-                    num = self.share(num, block, X, True)
-                    den = self.share(den, block, X, True)
+                    num = self.frac(num, block, X, True)
+                    den = self.frac(den, block, X, True)
                 prev = num if p.exp_n[e] else jnp.where(den > 0, num/jnp.where(den > 0, den, 1.0), 0.0)
                 if p.use[1, t]: # Mix between the levels in each place
                     prev = (prev.reshape(-1, block) @ X['mat'][t, :block, :block].T).ravel()
                 if p.use[2, t]: # Mix between places
-                    prev = self.share(prev, block, X, False)
+                    prev = self.frac(prev, block, X, False)
                 expo = expo + X['contacts'][min(e, len(p.contacts) - 1), t]*self.cells[t].spread(prev)
             exposures.append(expo)
 
@@ -341,7 +341,7 @@ class Run(sc.prettyobj):
                 local = self.members(ys, arg, consts).sum(axis=0)
                 if not self.simple:
                     local = self.place.local(local)
-                stack.append(jnp.where(local_n > 0, local/jnp.where(local_n > 0, local_n, 1.0), 0.0) if op == kn.FRAC else local) # As ss.kernels.leaf_share(): the share of an empty place is 0
+                stack.append(jnp.where(local_n > 0, local/jnp.where(local_n > 0, local_n, 1.0), 0.0) if op == kn.FRAC else local) # As ss.kernels.leaf_frac(): the fraction of an empty place is 0
             elif op >= kn.EXP:
                 x = stack.pop()
                 func = {kn.EXP:jnp.exp, kn.LOG:jnp.log, kn.SQRT:jnp.sqrt, kn.ABS:jnp.abs, kn.SIN:jnp.sin, kn.COS:jnp.cos}[op]
@@ -364,12 +364,12 @@ class Run(sc.prettyobj):
                     raise ValueError(f'Unknown operation {op} on two values in the program of a rate')
         return stack[0] if stack else None # None for the shared parts, which leave nothing on the stack
 
-    def share(self, v, block, X, by_columns):
-        """ The time share between places times values by place and level (as `ss.kernels.share()`) """
+    def frac(self, v, block, X, by_columns):
+        """ The time fraction between places times values by place and level (as `ss.kernels.frac()`) """
         jnp = jax().numpy
         p = self.p
         v = v.reshape(-1, block)
-        if self.dense_share:
+        if self.dense_frac:
             return (X['sh_mat' if by_columns else 'sh_mat_t'] @ v).ravel()
         frm, to = (p.sh_pair[0], p.sh_pair[1]) if by_columns else (p.sh_pair[1], p.sh_pair[0]) # Taken from the entry's row and added to its column, or the reverse
         return jnp.zeros_like(v).at[to].add(X['sh_val'][:, None]*v[frm]).ravel()
@@ -439,11 +439,11 @@ class Run(sc.prettyobj):
             rows = step_rows or {} # The rows of the tables that vary in time for this step, if given (see function())
             due = y[self.cv_last] # The people due to leave each conveyor, at a constant rate over the step (see ss.kernels.convey())
 
-            if len(self.cv_flow): # The people due to leave each conveyor leave at a constant rate over the step, as the inflow of its flow (whose last target is its last slot, with a share of -1), lowered so that the slot is empty at its end with its other exits (see ss.kernels.release_rates())
+            if len(self.cv_flow): # The people due to leave each conveyor leave at a constant rate over the step, as the inflow of its flow (whose last target is its last slot, with a fraction of -1), lowered so that the slot is empty at its end with its other exits (see ss.kernels.release_rates())
                 x = self.cv_exits @ jnp.maximum(self.rates(y, vals(ti)), 0.0)*dt
                 small = x < 1e-12
-                share = jnp.where(small, 1.0, jnp.where(small, 1.0, x)/jnp.expm1(jnp.where(small, 1.0, x)))
-                Xs = dict(X, inflow=X['inflow'].at[self.cv_flow].set(due/dt*share))
+                frac = jnp.where(small, 1.0, jnp.where(small, 1.0, x)/jnp.expm1(jnp.where(small, 1.0, x)))
+                Xs = dict(X, inflow=X['inflow'].at[self.cv_flow].set(due/dt*frac))
             else:
                 Xs = X
             if self.n_sub:
@@ -579,11 +579,11 @@ class Run(sc.prettyobj):
 
     def prepare(self, X):
         """
-        The numbers of a run, with what is worked out from them once a run: the time share as a matrix from place to
+        The numbers of a run, with what is worked out from them once a run: the time fraction as a matrix from place to
         place, if it is dense (a product with it is much faster in XLA than adding into an array at indices: 4x for 50
         places), and its transpose (since XLA transposes a matrix that is an input again at every step: 10x slower for 260 places)
         """
-        if not self.dense_share:
+        if not self.dense_frac:
             return X
         p = self.p
         zeros = jax().numpy.zeros((p.n_places, p.n_places))
@@ -1400,7 +1400,7 @@ class Density(sc.prettyobj):
     def check_linear(self, checked, rtol=1e-6, atol=1e-9):
         """
         Check that the numbers worked out from their slopes at the start (see `numbers()`) are what they are at other points (the
-        corners and the middle of the bounds), and raise `Unsupported` naming those that are not, e.g. a share of `q*q`
+        corners and the middle of the bounds), and raise `Unsupported` naming those that are not, e.g. a fraction of `q*q`
 
         Args:
             checked (list): each point, and the numbers in the run of each engine there
@@ -1434,11 +1434,11 @@ class Density(sc.prettyobj):
         if key == 'tgt_w':
             program = self.programs[j]
             f = np.searchsorted(program.tgt_starts, where[0], side='right') - 1
-            return f'the share of {name(engine.flows[f].src)} going to {name(program.tgt_comp[where[0]])}'
+            return f'the fraction of {name(engine.flows[f].src)} going to {name(program.tgt_comp[where[0]])}'
         if key in ['inflow', 'fixed', 'mult']:
             f = where[0] if key == 'inflow' else where[1]
             return f'the {dict(inflow="inflow", fixed="rate", mult="multiplier of the rate")[key]} of "{engine.flows[f].tr.name}"'
-        kinds = dict(contacts='contacts', mat='mixing', rel_trans='relative transmissibility', consts='values in the rates', crd_w='shares', maps='movement', mov_rate='movement')
+        kinds = dict(contacts='contacts', mat='mixing', rel_trans='relative transmissibility', consts='values in the rates', crd_w='fractions', maps='movement', mov_rate='movement')
         return f'the {kinds.get(key, "deliveries" if key.startswith("sh_") else key)} in the run'
 
     def numbers(self, x):
@@ -1519,7 +1519,7 @@ class Density(sc.prettyobj):
             if info.stay is not None: # Each arrival leaves after a stay drawn for it
                 leaving = jnp.convolve(now, jnp.asarray(info.stay))[:npts]
                 out[f'n_{name}'] = before(jnp.cumsum(now - leaving))
-            elif info.p_leave is not None: # A share leaves at each step: the arrivals of each step, decaying since
+            elif info.p_leave is not None: # A fraction leaves at each step: the arrivals of each step, decaying since
                 decay = (1 - np.asarray(info.p_leave, dtype=float))**np.arange(npts)
                 out[f'n_{name}'] = before(jnp.convolve(now, jnp.asarray(decay))[:npts])
             out[name] = now

@@ -1273,8 +1273,8 @@ class BoolArr(Arr):
 
     @property
     def frac(self):
-        """ The share of the people alive it is True for now (`n` over `people.n`), as `(sir.I | sir.R).frac` gives it under every solver """
-        with np.errstate(invalid='ignore', divide='ignore'): # A share of nobody is NaN, with no warning
+        """ The fraction of the people alive it is True for now (`n` over `people.n`), as `(sir.I | sir.R).frac` gives it under every solver """
+        with np.errstate(invalid='ignore', divide='ignore'): # A fraction of nobody is NaN, with no warning
             return self.n/self.people.n
 
     def __eq__(self, other):

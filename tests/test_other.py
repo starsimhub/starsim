@@ -162,17 +162,17 @@ class Counter(ss.Module):
         self.results.seen[self.ti] = self.results.new_events[self.ti]
 '''
     new, changes, todo = migrate_text(old)
-    assert new == old and any('record_stocks()' in msg and 'record_flows()' in msg for line,msg in todo) # update_results() is split in two, which needs a person
+    assert new == old and any('record_states()' in msg and 'record_events()' in msg for line,msg in todo) # update_results() is split in two, which needs a person
     assert any(line == 7 and 'should give kind=' in msg for line,msg in todo) # ss.Result('seen') says nothing of its kind, which is guessed from the dtype, with a warning
     scope = {}
-    exec(new.replace('update_results', 'record_flows').replace("'seen', dtype=int,", "'seen', dtype=int, kind='flow',"), scope) # A flow seen at the end of the step, as a person would split it and give its kind
+    exec(new.replace('update_results', 'record_events').replace("'seen', dtype=int,", "'seen', dtype=int, kind='flow',"), scope) # A flow seen at the end of the step, as a person would split it and give its kind
     sim = ss.Sim(n_agents=100, modules=scope['Counter'](), start=0, stop=10, verbose=0).run()
     assert sim.results.counter.seen.sum() == 55 and sim.results.counter.new_events[0] == 5 # Every step's events seen, the first step's at the first time point
 
     # Renames, verbose, and Starsim 3's diseases written as code
     text, changes, todo = migrate_text("p = ss.time_prob(0.1); pars = dict(verbose=-1)\nclass MySIS(ss.SIS): pass\nclass MyNCD(ss.Disease): pass\nclass MyHIV(ss.Infection): pass")
     assert text == "p = ss.probperyear(0.1); pars = dict(verbose=0)\nclass MySIS(ssl.AgentSIS): pass\nclass MyNCD(ss.Disease): pass\nclass MyHIV(ss.AgentDisease): pass" # ss.Disease keeps its meaning, and ss.Infection is ss.AgentDisease
-    assert migrate_text('pars = dict(verbose=0.1)')[0] == 'pars = dict(verbose=0.1)' # A fraction is progress every that share of the run
+    assert migrate_text('pars = dict(verbose=0.1)')[0] == 'pars = dict(verbose=0.1)' # A fraction is progress each time that fraction of the run is done
     assert migrate_text('ss.link_dists(obj, sim)')[0] == 'ss.dists.link_dists(obj, sim)' # Internal helpers are in their submodules
     text, changes, todo = migrate_text("sim = ss.Sim(pars=dict(n_agents=100, pop_scale=10)); print(sim.pars.pop_scale)")
     assert text == "sim = ss.Sim(dict(n_agents=100, pop_scale=10)); print(sim.pop_scale)" and any('total_pop' in note for _,note in todo) # Settings are not pars=, and pop_scale= is total_pop=

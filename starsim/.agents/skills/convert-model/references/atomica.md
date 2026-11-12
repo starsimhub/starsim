@@ -15,7 +15,7 @@ An Atomica model is a framework workbook (compartments, characteristics, paramet
 | Format `duration` | `1 / par` | yes |
 | A `duration` marked `Timed` | A fixed dwell time, `ss.constant(ss.years(d))` (a compartmental run approximates it by Erlang stages, which differs from Atomica by about 1e-5) | yes |
 | Format `number` | The whole flow, divided among the source's people | yes |
-| Format `proportion` (junctions) | The shares of a branch (below) | yes |
+| Format `proportion` (junctions) | The fractions of a branch (below) | yes |
 | A parameter function | An expression of counts (`ch_prev * transpercontact`); `floor(x)` written as `x` (listed if `x` is not whole) | yes |
 | Databook values by year | `ss.timeseries(..., interpolation='linear')`, held constant outside, as Atomica does | yes |
 | Initial numbers | Solved from the databook's compartments and characteristics at the first year, as Atomica does: those with a setup weight (by default, those in the databook or with a default), zeros fixed, least squares with the smallest norm | yes |

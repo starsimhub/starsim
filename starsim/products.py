@@ -87,7 +87,7 @@ class EventSource:
         return
 
     def fire(self, outcome, sel, eng=None, before=None):
-        """ Record that an event happened to some people now: a boolean per agent, or the share of each state and group (as they were in `before`, if given) """
+        """ Record that an event happened to some people now: a boolean per agent, or the fraction of each state and group (as they were in `before`, if given) """
         sim = self.sim
         ti = sim.ti
         if isinstance(sim.solver, ss.solvers.abm):
@@ -170,7 +170,7 @@ class Product(EventSource, ss.Module):
     A product whose effect is code of your own defines `administer()`.
     """
     holds = False # Whether people hold it (see ss.products.Held)
-    take = None # For an all-or-nothing vaccine, the share fully protected (see ss.Vaccine)
+    take = None # For an all-or-nothing vaccine, the fraction fully protected (see ss.Vaccine)
     cost = None
     disease = None # Set by its delivery
 
@@ -249,7 +249,7 @@ class Effect(sc.prettyobj):
     Args:
         product (Product): the product
         key (str): what it acts on, e.g. `'acquisition'`
-        efficacy (float): the share of the quantity it removes
+        efficacy (float): the fraction of the quantity it removes
     """
     op = 'multiply'
     active = True
@@ -322,10 +322,10 @@ class boxcar:
     """
     Protection that is full for a time (a plateau), then lost at once, or (with `decay=`) fading exponentially: the `waning=` of a product
 
-    As agents, it is the share of protection left, `t` after delivery (1 for `t < plateau`, then `exp(-(t - plateau)/decay)`, or 0).
+    As agents, it is the fraction of protection left, `t` after delivery (1 for `t < plateau`, then `exp(-(t - plateau)/decay)`, or 0).
     In a compartmental run, holding the product has levels: the plateau, as `stages` levels each left at `stages/plateau` (Erlang
     stages, so the end of the plateau is spread over about `plateau/sqrt(stages)`), then a level left at the rate `1/decay`, so the
-    share holding it falls as the protection of agents does.
+    fraction holding it falls as the protection of agents does.
 
     Args:
         plateau (dur): how long protection is full
@@ -352,7 +352,7 @@ class boxcar:
         return
 
     def __call__(self, t):
-        """ The share of protection left, `t` after delivery (a duration; a bare number is in years) """
+        """ The fraction of protection left, `t` after delivery (a duration; a bare number is in years) """
         t = np.asarray(t.years if isinstance(t, ss.Duration) else t, dtype=float)
         plateau = self.plateau.years
         if self.decay is None:
@@ -441,9 +441,9 @@ class Held(Product):
     held = held_cond() # Whether each person holds it now (until it is lost, or none of its protection is left), as a condition: `ss.modify(..., who=vx.held)`; or any product of a kind: `who=ss.Vaccine.held`
 
     @property
-    def held_share(self):
-        """ The share of the people in the same place who hold it, as a quantity in a rate, each counted by the protection they have left, e.g. `itn.held_share`, or `itn.held_share(fn)` by a function of the time since delivery (see `ss.expressions.HeldShare`) """
-        return ss.expressions.HeldShare(self)
+    def held_frac(self):
+        """ The fraction of the people in the same place who hold it, as a quantity in a rate, each counted by the protection they have left, e.g. `itn.held_frac`, or `itn.held_frac(fn)` by a function of the time since delivery (see `ss.expressions.HeldFrac`) """
+        return ss.expressions.HeldFrac(self)
 
     @property
     def effects(self):
@@ -511,7 +511,7 @@ class Held(Product):
 
     def remaining(self, fn, holds, engine):
         """
-        As agents: the share of protection left for each agent (by UID) who holds the product, by a function of the time since
+        As agents: the fraction of protection left for each agent (by UID) who holds the product, by a function of the time since
         delivery: `fn(t)` or `fn(t, sim, uids)`, with `t` a duration in the sim's unit (e.g. `ss.days`, so `t < ss.days(180)` and
         `t.years` read the same in any sim), for the agents `uids` who hold it (so `sim.people.age[uids] - t.years` is their age when it was given)
 
@@ -629,7 +629,7 @@ class Held(Product):
             delivery = next(d for d in sim.interventions() if isinstance(d, ss.Event) and d.product is self)
             selector = delivery.selector
         if not abm:
-            if self.during is not None: # In a compartmental run, the share of each group not in those states stops holding it
+            if self.during is not None: # In a compartmental run, the fraction of each group not in those states stops holding it
                 gone = (selector.dim(self.dim) > 0)*selector.everyone()*(1 - selector.select(self.during))
                 if np.any(gone):
                     delivery.shift(gone, {sim.groups.dim_index(self.dim):0})
@@ -676,7 +676,7 @@ class Vaccine(Held):
 
     - A duration (e.g. `ss.years(5)`): lost all at once, after a time drawn from an exponential distribution with that mean.
     - `ss.boxcar(plateau=..., decay=...)`: full protection for a time, then (optionally) an exponential decline; under every solver.
-    - A function of the time since delivery, returning the share of protection that remains: `fn(t)` or `fn(t, sim, uids)`, with
+    - A function of the time since delivery, returning the fraction of protection that remains: `fn(t)` or `fn(t, sim, uids)`, with
       `t` a duration (e.g. `t < ss.days(180)`, `t.years`) and `uids` the agents who hold it (e.g. `sim.people.age[uids] - t.years`
       is their age when it was given); agents only.
     - A dict, giving each effect its own of these (e.g. `dict(acquisition=ss.boxcar(plateau=ss.years(1)), transmission=None)`).
@@ -693,7 +693,7 @@ class Vaccine(Held):
         waning (dur/boxcar/func/dict): how protection is lost, as above
         doses (list): for a vaccine given in doses, the relative efficacy after each (e.g. `[0.85, 1.0]`); holding it then has a
             level per dose, and each delivery to someone who holds it gives them the next dose
-        leaky (bool): if True (the default), everyone who receives it is partly protected (by `efficacy`); if False, a share `efficacy` of them are fully protected and the rest not at all ("all or nothing"). The two give the same protection on average, but differ once people are exposed again and again: all or nothing leaves some never infected
+        leaky (bool): if True (the default), everyone who receives it is partly protected (by `efficacy`); if False, a fraction `efficacy` of them are fully protected and the rest not at all ("all or nothing"). The two give the same protection on average, but differ once people are exposed again and again: all or nothing leaves some never infected
         during (Cond): if given, it is held only while people are in these states (e.g. `during=sir.I`): they stop holding it when they leave them
         cost (float): the cost of each delivery
         name (str): the name; if not given, taken from the variable the vaccine is assigned to
@@ -713,10 +713,10 @@ class Vaccine(Held):
         if efficacy is None:
             errormsg = 'ss.Vaccine() needs efficacy=: the protection against acquisition (e.g. ss.Vaccine(efficacy=0.9)), or a dict of efficacy against each thing'
             raise ValueError(errormsg)
-        take = None # With leaky=False: the share of those who receive it who are protected, fully
+        take = None # With leaky=False: the fraction of those who receive it who are protected, fully
         if not leaky:
             if not sc.isnumber(efficacy):
-                errormsg = f'With leaky=False, the efficacy= of ss.Vaccine() is the share of those who receive it who are fully protected, a number, not {efficacy}'
+                errormsg = f'With leaky=False, the efficacy= of ss.Vaccine() is the fraction of those who receive it who are fully protected, a number, not {efficacy}'
                 raise ValueError(errormsg)
             take, efficacy = efficacy, 1.0
         super().__init__(efficacy=efficacy, **kwargs)

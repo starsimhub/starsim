@@ -36,9 +36,9 @@ sim.plot()
 
 **States.** `ss.states('S I R')` makes three states: the compartments (or, as agents, a label each person carries). People start in the first state, `S`, unless put elsewhere.
 
-**Transitions.** `S >> I @ rate` moves people from `S` to `I` at a *per capita* rate: the rate for each person in `S`. For an infection, this is the force of infection, λ = β I / N, which is what `1.9*I` says, since a state in a rate is the share of people in it. Times S, it gives β S I / N infections a day. Because `I` is in the rate, Starsim knows the transition is a transmission, and that `I` is infectious.
+**Transitions.** `S >> I @ rate` moves people from `S` to `I` at a *per capita* rate: the rate for each person in `S`. For an infection, this is the force of infection, λ = β I / N, which is what `1.9*I` says, since a state in a rate is the fraction of people in it. Times S, it gives β S I / N infections a day. Because `I` is in the rate, Starsim knows the transition is a transmission, and that `I` is infectious.
 
-This is *frequency-dependent* transmission: what matters is the share infectious, so a larger town has more infections but not a faster epidemic. A bare state in a rate means contact with the people in it, which, with nobody in particular meeting anybody in particular, is their share; with a contact matrix ([Tutorial 4](t4_mixing.qmd)) or a network, the same `1.9*I` is worked out from whom each person meets. To say exactly the share, write `1.9*I.frac` (which a sim with a network refuses, since it would ignore whom people meet); for *density-dependent* transmission (as for some diseases of animals), write the number, `beta*I.n`, so that β is per infectious person and R0 (β N × the infectious period) grows with the population. A rate is read as it is written: with the total, from `S, I, R, N = ss.states('S I R', include_sum=True)`, `1.9*I/N` is the share, as in the equations, the same as `1.9*I.frac`; and the whole flow, as many textbooks write it, `S >> I @ 1.9*S*I/N`, is too ([Building diseases](../user_guide/building_diseases.qmd#transmission) has all the forms).
+This is *frequency-dependent* transmission: what matters is the fraction infectious, so a larger town has more infections but not a faster epidemic. A bare state in a rate means contact with the people in it, which, with nobody in particular meeting anybody in particular, is their fraction; with a contact matrix ([Tutorial 4](t4_mixing.qmd)) or a network, the same `1.9*I` is worked out from whom each person meets. To say exactly the fraction, write `1.9*I.frac` (which a sim with a network refuses, since it would ignore whom people meet); for *density-dependent* transmission (as for some diseases of animals), write the number, `beta*I.n`, so that β is per infectious person and R0 (β N × the infectious period) grows with the population. A rate is read as it is written: with the total, from `S, I, R, N = ss.states('S I R', include_sum=True)`, `1.9*I/N` is the fraction, as in the equations, the same as `1.9*I.frac`; and the whole flow, as many textbooks write it, `S >> I @ 1.9*S*I/N`, is too ([Building diseases](../user_guide/building_diseases.qmd#transmission) has all the forms).
 
 **Durations.** `I >> R @ ss.days(8)` gives a duration instead of a rate: 8 days in `I` on average, or a recovery rate of 1/8 per day, exponentially distributed as in the standard SIR model ([Tutorial 3](t3_disease.qmd) shows other distributions).
 
@@ -51,7 +51,7 @@ There are three ways to say who starts where:
 | Argument | Meaning |
 |---|---|
 | `init_prev=0.001` | 0.1% of people start infected (the initial prevalence), in the state that an infection leads to: `I` here, but `E` in a model with a latent period ([Tutorial 3](t3_disease.qmd)) |
-| `init=dict(I=0.001, R=0.9)` | The share of people who start in each state, for any states |
+| `init=dict(I=0.001, R=0.9)` | The fraction of people who start in each state, for any states |
 | `init_n=dict(I=10)` | The number of people who start in each state |
 
 Naming the state (`init` or `init_n`) makes clear whether those introduced are already infectious. `S, I, R = ss.states(S=0.099, I=0.001, R=0.9)` is the same as `init=dict(I=0.001, R=0.9)`.
@@ -93,7 +93,7 @@ S, I, R = ss.State(name='S'), ss.State(name='I'), ss.State(name='R')
 infection_explicit = ss.Transition(source=S, dest=I, rate=ss.perday(1.9)*I, name='infection')
 recovery_explicit  = ss.Transition(source=I, dest=R, dur=ss.expon(mean=ss.days(8)), name='recovery')
 transitions = [infection_explicit, recovery_explicit]
-nobody_immune = ss.Disease(transitions=transitions, init=dict(S=0.999, I=0.001), name='measles')        # The share of people in each state at the start
+nobody_immune = ss.Disease(transitions=transitions, init=dict(S=0.999, I=0.001), name='measles')        # The fraction of people in each state at the start
 some_immune   = ss.Disease(transitions=transitions, init=dict(S=0.099, I=0.001, R=0.9), name='measles')
 
 settings = dict(networks=ss.contacts(1), total_pop=100_000, start=ss.days(0), stop=ss.days(365), dt=ss.days(1), unit='day', solver='ode')
@@ -154,16 +154,16 @@ plt.legend();
 ```
 :::
 
-The lower β, the later and lower the peak. For the share infected in the end, read each run's R0 and number recovered (`msim.sims` has the sims, in order):
+The lower β, the later and lower the peak. For the fraction infected in the end, read each run's R0 and number recovered (`msim.sims` has the sims, in order):
 
 ```{python}
 for sim in msim.sims:
     R0 = sim.diseases.measles.R0()
-    share = sim.results.measles.R[-1] / 100_000
-    print(sim.label, ' R0 =', round(R0, 1), ' share infected =', round(share, 2))
+    frac = sim.results.measles.R[-1] / 100_000
+    print(sim.label, ' R0 =', round(R0, 1), ' fraction infected =', round(frac, 2))
 ```
 
-The share infected rises steeply with R0, then levels off: 80% at an R0 of 2, almost everyone above 4. This is the classic final size relation of an SIR model, z = 1 − exp(−R0 z), for a share z infected. Above an R0 of about 5 the final size hardly changes, which is why measles infects almost everyone where nobody is immune. So the answer to this tutorial's question is R0, and how many people are immune to begin with. β and the infectious period matter only through R0; they decide how fast the outbreak happens, not how big it is.
+The fraction infected rises steeply with R0, then levels off: 80% at an R0 of 2, almost everyone above 4. This is the classic final size relation of an SIR model, z = 1 − exp(−R0 z), for a fraction z infected. Above an R0 of about 5 the final size hardly changes, which is why measles infects almost everyone where nobody is immune. So the answer to this tutorial's question is R0, and how many people are immune to begin with. β and the infectious period matter only through R0; they decide how fast the outbreak happens, not how big it is.
 
 [Tutorial 3](t3_disease.qmd) shows how to name parameters yourself, with a range of plausible values for [calibration](t6_data.qmd). See also [Parameters](../user_guide/building_parameters.qmd) in the user guide.
 

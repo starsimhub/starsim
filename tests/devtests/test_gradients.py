@@ -359,18 +359,18 @@ def test_several_values():
 @sc.timer()
 def test_nonlinear():
     sc.heading('Testing that a number in the run that is not linear in a fitted parameter is refused, not approximated')
-    def make(share=True, data=None):
+    def make(frac=True, data=None):
         q = ss.par(0.5, bounds=[0.1, 0.9], name='q')
         S, I, R, D = ss.states('S I R D')
-        to_D, init = (q*q, 0.001) if share else (0.2, 0.01*q*q)
+        to_D, init = (q*q, 0.001) if frac else (0.2, 0.01*q*q)
         sir = ss.Disease(S >> I @ 0.4*I, ss.Transition(I, {R: None, D: to_D}, dur=ss.days(8)), init=dict(I=init), name='sir')
         return ss.Sim(sir, data=data, total_pop=1e5, unit='day', stop=100, **kw)
     data = pd.DataFrame(dict(D=np.arange(15.0)), index=np.arange(0, 100, 7))
-    for share,what in [(True, 'the share of I going to D'), (False, 'the initial number in I')]:
+    for frac,what in [(True, 'the fraction of I going to D'), (False, 'the initial number in I')]:
         with pytest.raises(ss.CapabilityError, match=f'{what}.*not linear in the fitted parameter "q"'):
-            make(share, data=data).log_density(likelihood=dict(D=ss.normal(std=50)))
+            make(frac, data=data).log_density(likelihood=dict(D=ss.normal(std=50)))
         with pytest.raises(ss.CapabilityError, match='require_jax=False'): # The JAX log-density with q*q at q = 0.3 was -22805, against -73.8 from the sim (#1575)
-            make(share, data=data).fit(likelihood=dict(D=ss.normal(std=50)), method='l-bfgs-b')
+            make(frac, data=data).fit(likelihood=dict(D=ss.normal(std=50)), method='l-bfgs-b')
     return
 
 

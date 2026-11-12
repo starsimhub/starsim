@@ -769,7 +769,7 @@ def candidates_driver(threaded):
 
 candidates_drivers = compile_drivers(candidates_driver)
 
-index_share = 0.25 # The largest share of the edges to visit by the edges of each agent rather than by a pass over all of them
+index_frac = 0.25 # The largest fraction of the edges to visit by the edges of each agent rather than by a pass over all of them
 
 def candidates(p1, p2, rel_trans, rel_sus, two_way=True, index=None):
     """
@@ -778,7 +778,7 @@ def candidates(p1, p2, rel_trans, rel_sus, two_way=True, index=None):
     or, with the edges of each agent (`index`, from `edge_index()`), from the edges of the people infectious or of those susceptible, if they have few
     """
     if index is not None:
-        done, out0, out1 = candidates_indexed(rel_trans, rel_sus, two_way, *index, int(index_share*len(p1)))
+        done, out0, out1 = candidates_indexed(rel_trans, rel_sus, two_way, *index, int(index_frac*len(p1)))
         if done:
             return (out0, out1) if two_way else (out0,)
     flags = np.empty(len(rel_trans) if 8*len(p1) > len(rel_trans) else 0, dtype=np.uint8) # A byte for each agent, which the edges read 5-10 times more quickly than two numbers each, unless there are few edges
@@ -1198,10 +1198,10 @@ def competing_exits(uids, slots, seed, ind, dtype, p_exit, edges):
 
 
 @jit
-def agent_exits_chunk(uids, slots, key, shift, scale, p_exit, share, hazards, a, b, pos, which):
+def agent_exits_chunk(uids, slots, key, shift, scale, p_exit, frac, hazards, a, b, pos, which):
     """
     As `exits_chunk()`, with chances that differ between agents: agent i leaves if their uniform is below `p_exit[i]`, by the first
-    exit t whose edge, the hazards of exits 0 to t added in order, times `share[i]`, is above it (the same numbers as NumPy's cumsum)
+    exit t whose edge, the hazards of exits 0 to t added in order, times `frac[i]`, is above it (the same numbers as NumPy's cumsum)
     """
     us = uids[a:b]
     ps = pos[a:b]
@@ -1217,7 +1217,7 @@ def agent_exits_chunk(uids, slots, key, shift, scale, p_exit, share, hazards, a,
             edge = 0.0
             while t < n_exits:
                 edge += hazards[t, j]
-                if u < edge*share[j]:
+                if u < edge*frac[j]:
                     break
                 t += 1
             ps[m] = j
@@ -1228,13 +1228,13 @@ def agent_exits_chunk(uids, slots, key, shift, scale, p_exit, share, hazards, a,
 
 def agent_exits_driver(threaded):
     loop = nb.prange if threaded else range
-    def exits(uids, slots, seed, ind, shift, scale, p_exit, share, hazards, pos, which, nchunks):
+    def exits(uids, slots, seed, ind, shift, scale, p_exit, frac, hazards, pos, which, nchunks):
         n = len(uids)
         found = np.zeros(nchunks, dtype=np.int64)
         key = draws.key(seed, ind)
         for c in loop(nchunks):
             a, b = bounds(c, n, nchunks)
-            found[c] = agent_exits_chunk(uids, slots, key, shift, scale, p_exit, share, hazards, a, b, pos, which)
+            found[c] = agent_exits_chunk(uids, slots, key, shift, scale, p_exit, frac, hazards, a, b, pos, which)
         p = found[0]
         for c in range(1, nchunks): # Close the gaps between the chunks
             a = bounds(c, n, nchunks)[0]
@@ -1247,14 +1247,14 @@ def agent_exits_driver(threaded):
 
 agent_exits_drivers = compile_drivers(agent_exits_driver)
 
-def competing_agent_exits(uids, slots, seed, ind, dtype, p_exit, share, hazards):
+def competing_agent_exits(uids, slots, seed, ind, dtype, p_exit, frac, hazards):
     """
     As `competing_exits()`, with chances that differ between agents: each agent's chance of leaving (`p_exit`), and the exits' hazards
-    (one row for each exit, and a column for each agent), whose running total times `share` (`p_exit` over the total hazard) are the edges
+    (one row for each exit, and a column for each agent), whose running total times `frac` (`p_exit` over the total hazard) are the edges
     """
     uids = np.asarray(uids, dtype=np.int64)
     pos = np.empty(len(uids), dtype=np.int64)
     which = np.empty(len(uids), dtype=np.int64)
     func, nchunks = threads(agent_exits_drivers, len(uids))
-    m = func(uids, np.empty(0, dtype=np.int64) if slots is None else slots, seed, ind, *draws.crn_bits(dtype), np.ascontiguousarray(p_exit, dtype=float), np.ascontiguousarray(share, dtype=float), np.ascontiguousarray(hazards, dtype=float), pos, which, nchunks)
+    m = func(uids, np.empty(0, dtype=np.int64) if slots is None else slots, seed, ind, *draws.crn_bits(dtype), np.ascontiguousarray(p_exit, dtype=float), np.ascontiguousarray(frac, dtype=float), np.ascontiguousarray(hazards, dtype=float), pos, which, nchunks)
     return pos[:m], which[:m]

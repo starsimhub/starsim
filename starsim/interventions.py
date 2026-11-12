@@ -200,9 +200,9 @@ def trigger_moves(owner, outcome, sel, eng=None, before=None):
     Args:
         owner (Event/Product): what fired the event
         outcome (str): the outcome (None for the delivery itself)
-        sel (uids/array): the people it happened to: UIDs, or a share of each state and group of `eng`
-        eng (Engine): in a compartmental run, the engine whose states and groups `sel` is a share of
-        before (array): in a compartmental run, the people in each state and group that `sel` is a share of, if not those now
+        sel (uids/array): the people it happened to: UIDs, or a fraction of each state and group of `eng`
+        eng (Engine): in a compartmental run, the engine whose states and groups `sel` is a fraction of
+        before (array): in a compartmental run, the people in each state and group that `sel` is a fraction of, if not those now
     """
     sim = owner.sim
     for mod in sim.declared:
@@ -212,7 +212,7 @@ def trigger_moves(owner, outcome, sel, eng=None, before=None):
                 cond = ss.conditions.join('&', [c for c in [cond, tr.where] if c is not None])
             if not any(leaf.op == 'event' and ss.conditions.modname(leaf.args[0]) == owner.name and leaf.args[1] == outcome for leaf in ss.conditions.event_leaves(event)):
                 continue
-            if not isinstance(sim.solver, ss.solvers.abm): # As shares of each state and group
+            if not isinstance(sim.solver, ss.solvers.abm): # As fractions of each state and group
                 ss.solvers.trigger_groups(owner, outcome, mod, tr, event, cond, sel, eng, before)
                 continue
             tgt = mod.engine
@@ -610,7 +610,7 @@ class Event(ss.products.EventSource, Intervention):
         self.every = every
         self.eligible = None if eligible is None else ss.conditions.as_cond(eligible)
         if sc.isnumber(coverage) and not 0 <= coverage <= 1:
-            errormsg = f'{cov_key}= of "{called}" is the share of those eligible who are reached, between 0 and 1, not {coverage}'
+            errormsg = f'{cov_key}= of "{called}" is the fraction of those eligible who are reached, between 0 and 1, not {coverage}'
             raise ValueError(errormsg)
         if callable(coverage) and not isinstance(coverage, (ss.conditions.Cond, ss.Dist, ss.expressions.Expr)) and ss.utils.takes_uids(coverage):
             errormsg = f'{cov_key}= of "{called}" is a function of the sim (and of the intervention, as self), fn(sim), returning a probability (or one for each person); it is not given uids'
@@ -1077,7 +1077,7 @@ class Event(ss.products.EventSource, Intervention):
         abm = isinstance(self.sim.solver, ss.solvers.abm)
         results = [
             ss.Result('delivered', dtype=float, scale=abm, label='Number delivered', kind='flow'),
-            ss.Result('eligible', dtype=float, scale=abm, label='Number eligible', kind='flow', auto_plot=False), # Those offered it in each step, so over the run the offers made, of which coverage is the share delivered
+            ss.Result('eligible', dtype=float, scale=abm, label='Number eligible', kind='flow', auto_plot=False), # Those offered it in each step, so over the run the offers made, of which coverage is the fraction delivered
             ss.Result('coverage', dtype=float, scale=False, label='Coverage of those eligible', kind='ratio', auto_plot=False),
         ]
         if self.cost is not None:
@@ -1105,7 +1105,7 @@ class Event(ss.products.EventSource, Intervention):
         ss.results.in_people(*results)
         for key,parts in self.by_edge.items():
             self.results[key].by_edge = parts
-        self.results.coverage.parts = (self.results.delivered, self.results.eligible) # Over the run, the coverage is the share of everyone eligible who received it
+        self.results.coverage.parts = (self.results.delivered, self.results.eligible) # Over the run, the coverage is the fraction of everyone eligible who received it
         ng = self.sim.groups.n_groups
         self.rows = self.group_ti = None # As for a disease: see ss.solvers.group_rows()
         if ng > 1: # By stratum, like the results of a disease: see res.select() and res.by()
@@ -1352,7 +1352,7 @@ class Event(ss.products.EventSource, Intervention):
         sel = self.offer(sel)
         self.tally('eligible', sel)
         cov = selector.per_person(1.0 if self.coverage is None else self.coverage, convert=lambda val: -np.expm1(-self.convert(val)*self.span), owner=self) # A typed probability or rate is over the step or the round
-        if self.in_compartments is not None: # That share of each state and group
+        if self.in_compartments is not None: # That fraction of each state and group
             chosen = sel*np.clip(cov, 0, 1)
         else:
             uids = self.uids(sel)
@@ -1441,10 +1441,10 @@ class Event(ss.products.EventSource, Intervention):
             return sel, chosen
         served = self.take(chosen, self.limit(), carry=True)
         self.use(served)
-        shares = self.in_compartments is not None # Of each state and group
-        dropped = chosen - served if shares else chosen & ~served
+        fracs = self.in_compartments is not None # Of each state and group
+        dropped = chosen - served if fracs else chosen & ~served
         self.tally('lost_capacity', dropped)
-        return (sel - dropped if shares else sel & ~dropped), served
+        return (sel - dropped if fracs else sel & ~dropped), served
 
     def limit(self):
         """ The most people that can be served now: what is left of the capacity this step """
@@ -1634,7 +1634,7 @@ class Event(ss.products.EventSource, Intervention):
             self.fire(None, self.follow(chosen, chosen, self.changes) if self.changes else chosen)
             return
         reached = self.uids(chosen)
-        if getattr(product, 'take', None) is not None: # All or nothing: a share of those reached are protected, and the rest are not (they have still received it)
+        if getattr(product, 'take', None) is not None: # All or nothing: a fraction of those reached are protected, and the rest are not (they have still received it)
             chosen = chosen.copy()
             chosen[reached[self.rng_eff.rvs(reached) >= product.take]] = False
         if product.holds:
@@ -1791,9 +1791,9 @@ class Event(ss.products.EventSource, Intervention):
                     owner.flush(np.inf)
         return
 
-    def record_flows(self):
+    def record_events(self):
         """ The coverage of what was delivered in the step """
-        super().record_flows()
+        super().record_events()
         res = self.results
         ti = self.ti
         res.coverage[ti] = res.delivered[ti]/res.eligible[ti] if res.eligible[ti] else 0.0

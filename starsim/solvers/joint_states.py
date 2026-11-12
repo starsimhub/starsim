@@ -130,7 +130,7 @@ class JointStates:
         size = f'{self.n_rows:,} compartments in each of {self.n_cols:,} group{"s" if self.n_cols != 1 else ""} ({self.n_rows*self.n_cols:,} in all)'
         return [size + (f', within ss.options.max_joint ({budget:,})' if budget else ''),
                 f'a whole run takes about {f"{kept/1e9:.2g} GB" if kept >= 1e9 else f"{kept/1e6:.2g} MB"} for its rates and its results by group',
-                'assumed: the diseases start independent of each other (the share in each state of one is the same in every state of the others), and step together, at one timestep']
+                'assumed: the diseases start independent of each other (the fraction in each state of one is the same in every state of the others), and step together, at one timestep']
 
     #%% The people
 
@@ -155,7 +155,7 @@ class JointStates:
         return
 
     def init(self):
-        """ Start the diseases independent of each other: the share of people in each compartment of one is the same in every compartment of the others """
+        """ Start the diseases independent of each other: the fraction of people in each compartment of one is the same in every compartment of the others """
         sim = self.sim
         self.engines = [sim._declared_module(name).engine for name in self.names]
         self.check()

@@ -20,7 +20,7 @@ The simplified measles model used throughout these pages is an SIR model:
 import starsim as ss
 
 S, I, R = ss.states('S I R')
-infection = S >> I @ 1.9*I        # From S to I, at a rate of 1.9 per day times the share infectious
+infection = S >> I @ 1.9*I        # From S to I, at a rate of 1.9 per day times the fraction infectious
 recovery  = I >> R @ ss.days(8)   # From I to R, after 8 days on average
 measles = ss.Disease(infection, recovery, init_prev=0.001)
 
@@ -34,7 +34,7 @@ library(starsim)
 
 states("S I R")
 measles <- Disease(
-  infection = Transition(S, I, rate = 1.9 * I), # From S to I, at a rate of 1.9 per day times the share infectious
+  infection = Transition(S, I, rate = 1.9 * I), # From S to I, at a rate of 1.9 per day times the fraction infectious
   recovery  = Transition(I, R, dur = days(8)),  # From I to R, after 8 days on average
   init_prev = 0.001
 )
@@ -46,7 +46,7 @@ measles$equations()
 
 ```{python}
 S, I, R = ss.State(name='S'), ss.State(name='I'), ss.State(name='R')
-infection = ss.Transition(source=S, dest=I, rate=ss.perday(1.9)*I, name='infection')       # From S to I, at a rate of 1.9 per day times the share infectious
+infection = ss.Transition(source=S, dest=I, rate=ss.perday(1.9)*I, name='infection')       # From S to I, at a rate of 1.9 per day times the fraction infectious
 recovery  = ss.Transition(source=I, dest=R, dur=ss.expon(mean=ss.days(8)), name='recovery') # From I to R, after an exponentially distributed time of 8 days on average
 measles_explicit = ss.Disease(transitions=[infection, recovery], init_prev=0.001, name='measles')
 
@@ -74,16 +74,16 @@ Each transition in Starsim has a rate per person in its source, so the rate of `
 | Rate | Read as | Force of infection |
 |---|---|---|
 | `beta*I` | contact with the people in `I` | well mixed, β I / N; with a contact matrix or a network, from whom each person meets, with β per contact |
-| `beta*I.frac` | the share of people in `I` | β I / N, of everyone (in a model with places, in the same place); with a contact matrix, met by it |
+| `beta*I.frac` | the fraction of people in `I` | β I / N, of everyone (in a model with places, in the same place); with a contact matrix, met by it |
 | `beta*I.n` | the number of people in `I` | β I: density-dependent, so R0 grows with the population; with a contact matrix, met by it |
 
 With a contact matrix by age, `beta*I` is β Σ_j C_ij I_j / N_j (as from a contact survey), `beta*I.frac` is β Σ_j C_ij I_j / N, and `beta*I.n` is β Σ_j C_ij I_j. On a network only `beta*I` can be used; a sim with a network refuses the other two. `beta*I` is the usual form, since β stays the rate per contact however people mix. Any of the three is a transmission, with coefficient `beta`.
 
 A rate is read as it is written: only a state on its own means contact. `ss.states('S I R', include_sum=True)` also makes `N = S + I + R`, so `beta*I/N` is the same as `beta*I.frac`, and a rate written as the whole flow is divided by its source (`beta*S*I/N` is `beta*I.frac`, and `beta*S*I` is `beta*I.n`).
 
-**Several sources of infection** are a sum: in `S >> E @ beta*(I + 0.5*A)`, people in `A` are half as infectious as those in `I`. A rate is linear in its bare states; anything nonlinear is written with counts (`I.n`). A set of states is written with `+` or `|`: `(E | I).frac` is the share in either, and `(E | I) >> R` a transition from either.
+**Several sources of infection** are a sum: in `S >> E @ beta*(I + 0.5*A)`, people in `A` are half as infectious as those in `I`. A rate is linear in its bare states; anything nonlinear is written with counts (`I.n`). A set of states is written with `+` or `|`: `(E | I).frac` is the fraction in either, and `(E | I) >> R` a transition from either.
 
-**Infected states and prevalence.** A disease with transmission has the results `infected` (the number in its infected states) and `prevalence` (their share of everyone in its states). The infected states are those people are infected into and those that infect them (`E` and `I` in `S >> E @ beta*I`), and are what a test detects and a treatment cures; `infected = E + I + H` on the disease adds others, such as a hospital stage.
+**Infected states and prevalence.** A disease with transmission has the results `infected` (the number in its infected states) and `prevalence` (their fraction of everyone in its states). The infected states are those people are infected into and those that infect them (`E` and `I` in `S >> E @ beta*I`), and are what a test detects and a treatment cures; `infected = E + I + H` on the disease adds others, such as a hospital stage.
 
 **Susceptibility and infectiousness.** A state can make the people in it less susceptible, or less infectious, than others, with `rel_sus` and `rel_trans`. Here people vaccinated against measles (`V`) are 97% protected, and 90% start vaccinated:
 
@@ -158,9 +158,9 @@ Anything that is not transmission is a rate per person, or a duration:
 | a function of the sim | a rate worked out at each step | `S >> I @ my_rate` |
 | a trigger, `when=` or `@ ss.on()` | a move as soon as a condition holds, or when an event happens to the person (as agents) | `U >> A @ ss.on(ss.person.age >= 15)` |
 
-Transitions out of the same state that are driven by rates compete: the total rate of leaving is their sum, and each takes its share of those who leave, whatever the order they are written in.
+Transitions out of the same state that are driven by rates compete: the total rate of leaving is their sum, and each takes its fraction of those who leave, whatever the order they are written in.
 
-A trigger has no rate: people move in the step its condition first holds for them, or in which its event (a transition, `X.enter`, `X.exit`) happened to them; see [`ss.on`](../api/transitions.qmd). Here people become sexually active (`A`) at 15; the "Explicit" tab does the same with a function given to the sim as an intervention:
+A trigger has no rate: people move in the step its condition first holds for them, or in which its event (a transition, `X.enter`, `X.exit`) happened to them; see [`ss.on`](../api/internals.transitions.qmd). Here people become sexually active (`A`) at 15; the "Explicit" tab does the same with a function given to the sim as an intervention:
 
 ::: {.panel-tabset group="language"}
 ## Python
@@ -280,7 +280,7 @@ Any other distribution works too ([Distributions](mechanics_distributions.qmd)).
 
 ### Branching
 
-Most people with measles recover, but a small share die. **Separate transitions with `p=`** are decided when people enter the state, and each can have its own duration:
+Most people with measles recover, but a small fraction die. **Separate transitions with `p=`** are decided when people enter the state, and each can have its own duration. `p=None` marks the one that takes the rest; leaving `p=` out of it is an error, unless the others' `p=` sum to 1. After `@`, a dict gives the transition's keywords:
 
 ::: {.panel-tabset group="language"}
 ## Python
@@ -288,8 +288,8 @@ Most people with measles recover, but a small share die. **Separate transitions 
 ```{python}
 S, I, R = ss.states('S I R')
 infection = S >> I @ 1.9*I
-recovery  = ss.Transition(I, R, dur=ss.days(8), p=0.998)
-death     = ss.Transition(I, ss.dead, dur=ss.days(8), p=0.002)
+recovery  = I >> R       @ dict(dur=ss.days(8), p=None) # The rest
+death     = I >> ss.dead @ dict(dur=ss.days(8), p=0.002)
 measles = ss.Disease(infection, recovery, death, init_prev=0.001)
 
 sim = ss.Sim(measles, total_pop=100_000, stop=ss.days(50), verbose=0)
@@ -350,7 +350,7 @@ print('Deaths:', round(res_explicit['outcome.dead'].sum()))
 
 :::
 
-The shares out of one state add up to 1; one of them can be left as `None`, for the rest. A share can vary by age group or in time, like any other value ([Parameters](building_parameters.qmd)).
+The fractions out of one state add up to 1; one of them can be left as `None`, for the rest. A fraction can vary by age group or in time, like any other value ([Parameters](building_parameters.qmd)).
 
 **Outside the model** are `ss.unborn` for births (`ss.unborn >> S`), `ss.dead` for deaths (`I >> ss.dead`), and `ss.outside` for people who arrive or leave alive, counted as arrivals and emigrants. The dead leave the people, unlike a state `D`, which would keep them in the denominator of `prevalence`.
 
@@ -383,8 +383,8 @@ The infection here is **spontaneous** (no bare state), but still the acquisition
 
 Three options say who is in which state at the start, and everyone not placed elsewhere starts in the first state, usually `S`:
 
-- `init_prev=` is the share of people who start infected. They start in the state that an infection leads to: `I` in an SIR model, but `E` in an SEIR model, where nobody is then infectious at the start (a note says so).
-- `init=` is the share of people who start in each state, e.g. `init=dict(I=0.001, R=0.9)`.
+- `init_prev=` is the fraction of people who start infected. They start in the state that an infection leads to: `I` in an SIR model, but `E` in an SEIR model, where nobody is then infectious at the start (a note says so).
+- `init=` is the fraction of people who start in each state, e.g. `init=dict(I=0.001, R=0.9)`.
 - `init_n=` is a number of people: `init_n=10` seeds 10 people as `init_prev=` does, and `init_n=dict(I=10)` is the number who start in each state.
 
 If nothing is given, a disease with transmission starts with 1% infected. `default_state=` says which state is the first, if not `S`. Values can also be given by group, with `ss.by()` ([Stratification](building_stratification.qmd#values-by-group)).
@@ -509,7 +509,7 @@ class SIRS(ss.Disease):
         )
         if waning is not None: # Immunity wanes only if asked for
             self.define_transitions(waning=self.R >> self.S @ waning)
-        self.define_results(prevalence=self.I.frac) # A share of everyone in the model
+        self.define_results(prevalence=self.I.frac) # A fraction of everyone in the model
 
 for waning in [None, ss.days(90)]:
     sim = ss.Sim(SIRS(waning=waning), total_pop=100_000, stop=ss.days(365), verbose=0)
@@ -517,7 +517,7 @@ for waning in [None, ss.days(90)]:
     print('Waning:', waning, '- prevalence after a year:', round(sim.results.sirs.prevalence[-1], 4))
 ```
 
-`overwrite=True` replaces a state or transition already declared. `ss.pars(defaults, **kwargs)` makes named parameters from a dict of defaults and the values given to `__init__()` ([`ss.pars`](../api/transitions.qmd)).
+`overwrite=True` replaces a state or transition already declared. `ss.pars(defaults, **kwargs)` makes named parameters from a dict of defaults and the values given to `__init__()` ([`ss.pars`](../api/internals.transitions.qmd)).
 
 ### Diseases written as code
 
@@ -544,7 +544,7 @@ S, I, R = ss.states('S I R')
 strains = ss.Strains(
     ['wild', 'variant'],
     rel_trans = [1, 1.5],     # The variant is 1.5 times as transmissible
-    fractions = [0.99, 0.01], # The share of each among the first infections
+    fractions = [0.99, 0.01], # The fraction of each among the first infections
     immunity  = ss.immunity(due_to=R, protection=[[1, 0.5], [0.5, 1]]), # Full protection against the same strain, half against the other
 )
 flu = ss.Disease(
@@ -580,12 +580,12 @@ When each strain moves through the states on its own (someone can have CIN from 
 
 ## Appendix: every argument of a state
 
-`ss.Transition()` and its arguments (`source`, `dest`, `rate`, `dur`, `p`, `stages`, `who`, `when`, `move`, `increment`, `min_stay`, `noise`, `acquisition`, `per_strain`, `name`, `label`) are listed in [`ss.Transition`](../api/transitions.qmd). `ss.State()` takes these arguments; `ss.states('S I R')` makes several states with the defaults. See [`ss.State`](../api/transitions.qmd).
+`ss.Transition()` and its arguments (`source`, `dest`, `rate`, `dur`, `p`, `stages`, `who`, `when`, `move`, `increment`, `min_stay`, `noise`, `acquisition`, `per_strain`, `name`, `label`) are listed in [`ss.Transition`](../api/internals.transitions.qmd). `ss.State()` takes these arguments; `ss.states('S I R')` makes several states with the defaults. See [`ss.State`](../api/internals.transitions.qmd).
 
 | Argument | What it gives |
 |---|---|
 | `name` | The name; by default, from the keyword or variable |
-| `init` | The share of people who start in the state; for a state that is not people, its starting amount |
+| `init` | The fraction of people who start in the state; for a state that is not people, its starting amount |
 | `init_n` | The number of people who start in the state, instead |
 | `people` | Whether the state holds people (the default), or is a count of something else (`people=False`: bacteria, mosquitoes) |
 | `infected` | Whether people in it count as infected (by default, from the transmissions) |
@@ -594,4 +594,4 @@ When each strain moves through the states on its own (someone can have CIN from 
 | `keep_time` | As agents, keep the time each person entered the state (`ti_<name>`) for code to read; by default, kept only if the model reads it |
 | `label` | A human-readable name, for plots |
 
-In rates and conditions, a state also gives: `.n` (the number in it; in the same place, in a model with places), `.total` (in the whole population), `.frac` (its share), `.n_infectious` (the number weighted by infectiousness), `.time_in` (the time since each person entered it), `.progress` (the share of each person's scheduled stay that has passed), and the events `.enter` and `.exit`, for `when=` and `ss.on()`, with `.ever`, `.n_times`, and `.since` for each person (agents only).
+In rates and conditions, a state also gives: `.n` (the number in it; in the same place, in a model with places), `.total` (in the whole population), `.frac` (the fraction in it), `.n_infectious` (the number weighted by infectiousness), `.time_in` (the time since each person entered it), `.progress` (the fraction of each person's scheduled stay that has passed), and the events `.enter` and `.exit`, for `when=` and `ss.on()`, with `.ever`, `.n_times`, and `.since` for each person (agents only).

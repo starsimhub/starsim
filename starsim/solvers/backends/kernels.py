@@ -45,7 +45,7 @@ fields = [
     'named',      # Whether each flow is counted as its transition
     'index',      # The transition each flow belongs to
     'record',     # The map (in maps) to the groups each flow is recorded in, or -1
-    'inflow',     # For an inflow, the share that arrives in each group
+    'inflow',     # For an inflow, the fraction that arrives in each group
     'fixed',      # The rate of each flow that does not change within a step, by group
     'mult',       # The multiplier on each flow whose rate does, by group
     # The rates that change within a step
@@ -64,21 +64,21 @@ fields = [
     'n_places',
     # Exposure to each infectious state
     'exp_set',    # The set of compartments that are the state; or, if negative, minus the number of exposures before it whose sum it is (diseases tracked jointly, see ss.solvers.JointStates)
-    'exp_n',      # Whether it is to the number in the state, not its share: a count in a rate that the contact matrices act on (`beta*I.n`), through them only (see ss.solvers.Mixing.count_terms())
+    'exp_n',      # Whether it is to the number in the state, not its fraction: a count in a rate that the contact matrices act on (`beta*I.n`), through them only (see ss.solvers.Mixing.count_terms())
     'rel_trans',  # Its infectiousness, by group
     'levels',     # For each mixing term, the cell that each group is in
     'sizes',      # The number of cells in each term
     'block',      # The number of cells for each place in each term, if its cells are places by levels (a cell is the place times this, plus the level), or else all of them
     'contacts',   # The contacts per unit time of each term, as (1, terms, 1); or for each exposure, term, and group, if they differ (a beta for each route, or a modifier of a network's contacts for some people)
-    'use',        # For each term, whether people are moved to where they spend their time (by the time share between places) before prevalence is worked out;
-                  # whether prevalence is then mixed between the levels in each place, by the term's matrix; and whether it is then mixed between places, by the time share
+    'use',        # For each term, whether people are moved to where they spend their time (by the time fraction between places) before prevalence is worked out;
+                  # whether prevalence is then mixed between the levels in each place, by the term's matrix; and whether it is then mixed between places, by the time fraction
     'mat',
-    'sh_pair',    # The time share between places: the place each entry is from and to (as row and column)
-    'sh_val',     # Its share
+    'sh_pair',    # The time fraction between places: the place each entry is from and to (as row and column)
+    'sh_val',     # Its fraction
     # Where the flows go
     'tgt_starts', # Where each flow's targets start and end
     'tgt_comp',   # The compartment
-    'tgt_w',      # The share that goes there, by group
+    'tgt_w',      # The fraction that goes there, by group
     'tgt_map',    # The map to the groups they land in, or -1
     'tgt_rec',    # The flow to a destination of a transition with several that it is also counted in (in the group they leave), or -1
     'crd_starts', # The same for the transitions that a flow is also counted as
@@ -127,7 +127,7 @@ register_fields = [
     'sel_to',     # The compartment that the people chosen from each of those go to (the same, unless the event moves them to other states)
     'ent_starts', # For each set: where the compartments that people are added to (the first of each state) start and end
     'ent_comps',
-    'ent_w',      # For each of those: the share of the people added to a place who go into each of its groups (by group)
+    'ent_w',      # For each of those: the fraction of the people added to a place who go into each of its groups (by group)
     'pg_starts',  # Where the groups in each place start and end
     'pg_groups',
     'step',       # How far apart adjacent places are, in groups
@@ -138,11 +138,11 @@ Register = collections.namedtuple('Register', register_fields)
 # The deliveries of a whole run (see ss.solvers.CompartmentalDelivery.shifts()), as the kernels apply them: each moves some of the people in each compartment and group to another group, or (a move between states) into the compartments of another state
 shift_fields = [
     'due',  # Whether each delivery happens at each time point (deliveries by time points)
-    'sel',  # The share of the people in each compartment and group who are eligible (deliveries by compartments by groups)
-    'cov',  # The share of those who are reached
+    'sel',  # The fraction of the people in each compartment and group who are eligible (deliveries by compartments by groups)
+    'cov',  # The fraction of those who are reached
     'to',   # The group that each group's people go to if they are reached (deliveries by groups)
     'rest', # The group they go to if they are eligible but not reached (their own, unless the delivery records who has been offered it)
-    'land', # For a move between states (move=S >> I), the share of the people reached who land in each compartment, by the group they go to; all zero for a delivery that leaves people in their state (deliveries by compartments by groups)
+    'land', # For a move between states (move=S >> I), the fraction of the people reached who land in each compartment, by the group they go to; all zero for a delivery that leaves people in their state (deliveries by compartments by groups)
 ]
 
 Shifts = collections.namedtuple('Shifts', shift_fields)
@@ -159,7 +159,7 @@ tape_fields = [
     'places',        # The place of each group (all 0, with no places)
     'n_places',
     'local',         # Whether there are places, so a count differs by group
-    'people',        # The compartments of people, for a share (FRAC)
+    'people',        # The compartments of people, for a fraction (FRAC)
     'has_frac',      # Whether there is one
 ]
 
@@ -274,7 +274,7 @@ def work(p, y):
     """
     About how many operations working out a program's rates once takes, from its size alone: each group times each
     flow, target, operation, compartment, and compartment of an infectious state; for each exposure, through each
-    mixing term, each group and cell, each entry of the time share between places that it uses (times the levels in
+    mixing term, each group and cell, each entry of the time fraction between places that it uses (times the levels in
     each place), and each pair of cells that mix in a place (a quarter as many for a whole matrix of more than 16,
     which BLAS takes); and each entry of a mover times its compartments. For `plain_seconds()`.
     """
@@ -650,7 +650,7 @@ def split(rng, n, a, b, weights, credit, out, comps, which, maps, scratch, rec, 
             for k in range(a, b):
                 total[g] += weights[k, g]
             whole = whole and abs(total[g] - 1) < 1e-9
-            if 0 < total[g] < 1 - 1e-9: # Shares that sum below 1 leave the rest nowhere, as in the ODE: the share of a split that takes ss.dead, or the part of a flow a credit is not
+            if 0 < total[g] < 1 - 1e-9: # Fractions that sum below 1 leave the rest nowhere, as in the ODE: the fraction of a split that takes ss.dead, or the part of a flow a credit is not
                 total[g] = 1.0
         for k in range(a, b): # One multinomial draw, as a chain of conditional binomials
             for g in range(ng):
@@ -941,8 +941,8 @@ def member(ys, p, i, g):
 
 
 @kernel(inline='always')
-def leaf_share(op, v, n):
-    """ A count on the stack of a rate (see `step()`): the number v in some compartments (COUNT), or its share of the n people there (FRAC), which is 0 where there is no one """
+def leaf_frac(op, v, n):
+    """ A count on the stack of a rate (see `step()`): the number v in some compartments (COUNT), or its fraction of the n people there (FRAC), which is 0 where there is no one """
     if op == FRAC:
         return v/n if n > 0 else 0.0
     return v
@@ -954,7 +954,7 @@ def binary(op, a, b):
     if   op == ADD: return a + b
     elif op == SUB: return a - b
     elif op == MUL: return a * b
-    elif op == DIV: return a / b if a != 0 else 0.0 # Nothing divided by anything is nothing, e.g. the share of an empty group
+    elif op == DIV: return a / b if a != 0 else 0.0 # Nothing divided by anything is nothing, e.g. the fraction of an empty group
     elif op == POW: return a ** b
     elif op == MIN: return min(a, b)
     elif op == MAX: return max(a, b)
@@ -971,7 +971,7 @@ def evaluate(y, t, consts, out, grouped):
     Every value of a tape (see `Tape`) at the compartments y, by group, into out (values by groups); grouped is set to whether each differs by group
 
     Each entry is a parameter's value (CONST, a row of consts, which differs by group if its row of t.const_grouped says so),
-    a count (COUNT, TOTAL, FRAC: in the same place, the whole population, and as a share of the people in the same place),
+    a count (COUNT, TOTAL, FRAC: in the same place, the whole population, and as a fraction of the people in the same place),
     or an operation on earlier entries (a, and b for one of two), so an expression used in many places is worked out once.
     """
     ng = y.shape[1]
@@ -1001,7 +1001,7 @@ def evaluate(y, t, consts, out, grouped):
             grouped[i] = t.local and op != TOTAL
             for g in range(ng):
                 pl = 0 if op == TOTAL else t.places[g]
-                out[i, g] = leaf_share(op, num[pl], people[pl])
+                out[i, g] = leaf_frac(op, num[pl], people[pl])
         elif op >= EXP:
             grouped[i] = grouped[arg]
             for g in range(ng):
@@ -1034,7 +1034,7 @@ def place_rates(ys, p, a, b, rates, stack, expo, only_det=False):
     a count is the number in the place.
     """
     nf = len(p.src)
-    n = place_people(ys, p, a, b) if len(p.exp_set) else -1.0 # Otherwise worked out if a share needs it
+    n = place_people(ys, p, a, b) if len(p.exp_set) else -1.0 # Otherwise worked out if a fraction needs it
     for e in range(len(p.exp_set)):
         s = p.exp_set[e]
         if s < 0:
@@ -1082,7 +1082,7 @@ def place_rates(ys, p, a, b, rates, stack, expo, only_det=False):
                             v += member(ys, p, i, p.pl_groups[jj])
                     if op == FRAC and n < 0:
                         n = place_people(ys, p, a, b)
-                    stack[top, 0] = leaf_share(op, v, n)
+                    stack[top, 0] = leaf_frac(op, v, n)
                 elif op == GROUP:
                     top += 1
                     v = 0.0
@@ -1166,13 +1166,13 @@ def place_events(y, p, w, active, first, last, dt, flows, seed):
                 y[src[which], where] -= 1
             if p.named[which]:
                 flows[p.index[which], where] += 1
-            ka, kb = p.tgt_starts[which], p.tgt_starts[which+1] # Where it goes: one of its targets, in proportion to their shares
+            ka, kb = p.tgt_starts[which], p.tgt_starts[which+1] # Where it goes: one of its targets, in proportion to their fractions
             z += golden
             u = uniform(z)
             tot = 0.0
             for k in range(ka, kb):
                 tot += p.tgt_w[k, where]
-            whole = not (0 < tot < 1 - 1e-9) # Shares that sum below 1 leave the rest nowhere, as in the ODE: the share of a split that takes ss.dead
+            whole = not (0 < tot < 1 - 1e-9) # Fractions that sum below 1 leave the rest nowhere, as in the ODE: the fraction of a split that takes ss.dead
             tot = tot if whole else 1.0
             cum = 0.0
             for k in range(ka, kb):
@@ -1410,7 +1410,7 @@ def sparse_events(y, p, w, active, first, last, dt, flows, seed, maps):
                         elif op == COUNT or op == FRAC:
                             top += 1
                             v = counts[arg]
-                            stack[top, 0] = leaf_share(op, v, n)
+                            stack[top, 0] = leaf_frac(op, v, n)
                         elif op == GROUP:
                             top += 1
                             v = 0.0
@@ -1472,7 +1472,7 @@ def sparse_events(y, p, w, active, first, last, dt, flows, seed, maps):
             tot = 0.0
             for k in range(ka, kb):
                 tot += p.tgt_w[k, where]
-            whole = not (0 < tot < 1 - 1e-9) # Shares that sum below 1 leave the rest nowhere, as in the ODE: the share of a split that takes ss.dead
+            whole = not (0 < tot < 1 - 1e-9) # Fractions that sum below 1 leave the rest nowhere, as in the ODE: the fraction of a split that takes ss.dead
             tot = tot if whole else 1.0
             cum = 0.0
             for k in range(ka, kb):
@@ -1770,8 +1770,8 @@ def by_block(matrix, v, size, block, out):
 
 
 @jit
-def share(pair, vals, v, size, block, out, by_columns):
-    """ The product of the time share between places (its entries: see `Program`) with a vector of places by levels (each level in turn, `block` of them), into out: `v @ share` if `by_columns`, else `share @ v`; by BLAS if every pair of places has an entry (gravity between hundreds of places), which is a matrix, in order """
+def frac(pair, vals, v, size, block, out, by_columns):
+    """ The product of the time fraction between places (its entries: see `Program`) with a vector of places by levels (each level in turn, `block` of them), into out: `v @ frac` if `by_columns`, else `frac @ v`; by BLAS if every pair of places has an entry (gravity between hundreds of places), which is a matrix, in order """
     places = size//block
     if len(vals) == places*places and places > 16:
         matrix = vals.reshape(places, places)
@@ -1816,7 +1816,7 @@ def convey(rng, y, p, w, flows, release):
     Each conveyor is a set of operations after the flows' (see `Program.starts`), all CONVEY:
     the first one's argument is the flow the last slot leaves by, and the others' are its
     slots, in order. The flow is an inflow in the program, whose last target is the last slot,
-    with a share of -1: for the ODE, `step()` sets its inflow to the people due to leave over
+    with a fraction of -1: for the ODE, `step()` sets its inflow to the people due to leave over
     the step, so the loops over flows move them; otherwise its inflow is 0.
     """
     ng = y.shape[1]
@@ -1953,9 +1953,9 @@ def release_rates(y, p, rates, dt):
 
     They leave at a constant rate (see `step_start()`), and the other exits of the state act on them
     until they do, so the rate is lowered for the slot to be empty at the end of the step: with a
-    total rate h of those exits, to a share ψ(h·dt) = h·dt/(exp(h·dt) - 1) of the people in it. With
-    those arriving in the first slot over a step, of whom a share (1 - exp(-h·dt))/(h·dt) are left at
-    its end, the exits act over the whole delay, as for agents: a delay of K steps keeps a share
+    total rate h of those exits, to a fraction ψ(h·dt) = h·dt/(exp(h·dt) - 1) of the people in it. With
+    those arriving in the first slot over a step, of whom a fraction (1 - exp(-h·dt))/(h·dt) are left at
+    its end, the exits act over the whole delay, as for agents: a delay of K steps keeps a fraction
     exp(-h·K·dt), where leaving the last slot by itself kept exp(-h·(K - 1/2)·dt).
 
     A flow from a last slot to last slots only (in joint states, another disease's move, which
@@ -2163,8 +2163,8 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, varying):
                             den[p.levels[t, g]] += n[g]
                         block = p.block[t]
                         if p.use[0, t]: # Move people to where they spend their time
-                            share(p.sh_pair, p.sh_val, num, size, block, num2, True)
-                            share(p.sh_pair, p.sh_val, den, size, block, den2, True)
+                            frac(p.sh_pair, p.sh_val, num, size, block, num2, True)
+                            frac(p.sh_pair, p.sh_val, den, size, block, den2, True)
                             for i in range(size):
                                 num[i] = num2[i]
                                 den[i] = den2[i]
@@ -2178,7 +2178,7 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, varying):
                             for i in range(size):
                                 prev[i] = num[i]
                         if p.use[2, t]: # Mix between places
-                            share(p.sh_pair, p.sh_val, prev, size, block, num, False)
+                            frac(p.sh_pair, p.sh_val, prev, size, block, num, False)
                             for i in range(size):
                                 prev[i] = num[i]
                         if p.contacts.shape[0] > 1 or p.contacts.shape[2] > 1: # Contacts by exposure and group
@@ -2220,7 +2220,7 @@ def step(rng, y, p, w, dt, n_sub, solver, flows, varying):
                                     vals[g] += member(ys, p, i, g)
                                 num[p.places[g]] += vals[g]
                             for g in range(ng):
-                                stack[top, g] = leaf_share(op, num[p.places[g]], local_n[g])
+                                stack[top, g] = leaf_frac(op, num[p.places[g]], local_n[g])
                         elif op == GROUP: # The number in some compartments, in the same group
                             top += 1
                             for g in range(ng):
@@ -2465,7 +2465,7 @@ def apply_events(rng, y, r, ti, whole):
 
     People who move or leave are chosen at random from the chosen compartments of their
     place: as whole people (a multivariate hypergeometric draw, one compartment and group
-    at a time), or as the expected share of each. People who are added are shared
+    at a time), or as the expected fraction of each. People who are added are shared
     equally between the states of their set, and between the groups of their place as
     births are.
 
@@ -2595,7 +2595,7 @@ def apply_shifts(rng, y, sh, ti, whole, tally):
 
 @jit
 def enter_state(rng, y, w, arrived, whole):
-    """ Put the people who have moved into a state (by group) into its compartments, by the share in each (`w`, compartments by groups): drawn one compartment after another where they are whole people, as `ss.solvers.Compartmental.move_states()` splits them """
+    """ Put the people who have moved into a state (by group) into its compartments, by the fraction in each (`w`, compartments by groups): drawn one compartment after another where they are whole people, as `ss.solvers.Compartmental.move_states()` splits them """
     nc, ng = y.shape
     for g in range(ng):
         left, rest = arrived[g], 1.0
@@ -2790,7 +2790,7 @@ def advance(rngs, p, ys, first, last, dt, start, end, solver, n_sub, fixed, mult
         first, last (int): the runs to take
         start, end (int): the time points to step from and to (the steps from start to end-1)
         fixed, mult, consts, rel_trans (arrays): as for `run()`, with a first axis for the runs: one entry if every run has the same values, or one for each run (as each particle of IF2 has its own parameter values)
-        sh_vals (array): the time share between places (`sh_val` of the program) of each run, as runs by entries: one entry if every run has the program's own
+        sh_vals (array): the time fraction between places (`sh_val` of the program) of each run, as runs by entries: one entry if every run has the program's own
         row0 (int): the row of the tables that their first row is (those with more than one), if they do not start at the start of the run
         state_of (array): the state that each compartment is part of
         stocks, flows (arrays): filled in at time points start to end-1, as `run_many()` returns them (by group, or the

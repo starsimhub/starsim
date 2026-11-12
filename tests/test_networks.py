@@ -589,8 +589,8 @@ def test_certain_transmission():
             sim.run(until=sim.t.timevec[0]) # The first step only
         return sim.diseases.si.I.raw[at_risk].mean(), k[at_risk]
     assert infected(ss.probperweek(1))[0] == 1
-    share, k = infected(0.3)
-    assert np.isclose(share, np.mean(1 - np.exp(-0.3*k)), atol=0.03) # A rate per contact, not a probability of 0.3
+    frac, k = infected(0.3)
+    assert np.isclose(frac, np.mean(1 - np.exp(-0.3*k)), atol=0.03) # A rate per contact, not a probability of 0.3
     return
 
 
@@ -677,7 +677,7 @@ def test_peract_describe():
         S, P, EL = ss.states('S P EL')
         syph = ss.Disease(S, P, EL, infection=ss.Transition(S, P, rate=beta * (P + 0.55*EL)),
                           latent=ss.Transition(P, EL, dur=ss.years(1)), clear=ss.Transition(EL, S, dur=ss.years(2)), init=dict(P=0.05), name='syph')
-        condoms = ss.modify(syph.infection, efficacy=0.5, share=ss.timeseries({2000: 0.05, 2020: 0.3}), network='sexualnet', name='condoms')
+        condoms = ss.modify(syph.infection, efficacy=0.5, frac=ss.timeseries({2000: 0.05, 2020: 0.3}), network='sexualnet', name='condoms')
         return ss.Sim(syph, networks=ss.SexualNet(), interventions=condoms, n_agents=500, start=2000, stop=2002, verbose=0)
     sim = make(ss.peract(m2f=0.3, f2m=0.15)).init()
     text = sim.diseases.syph.describe()
@@ -755,22 +755,22 @@ def test_condoms():
     class CondomNet(ss.SexualNet):
         def add_pairs(self):
             super().add_pairs()
-            self.edges.condoms[:] = self.pars.share
+            self.edges.condoms[:] = self.pars.frac
             return
-    def make(share=0.0, eff=0.8, seed=1):
+    def make(frac=0.0, eff=0.8, seed=1):
         S, I = ss.states('S I')
         si = ss.Disease(infection=ss.Transition(S, I, rate=0.02 * I), init_prev=0.05, name='si')
         net = CondomNet(name='mf', acts=ss.constant(ss.peryear(50)))
-        net.define_pars(share=share)
-        condoms = ss.modify(si.infection, efficacy=eff, share=lambda net: net.edges.condoms, network='mf', name='condoms')
+        net.define_pars(frac=frac)
+        condoms = ss.modify(si.infection, efficacy=eff, frac=lambda net: net.edges.condoms, network='mf', name='condoms')
         return ss.Sim(si, networks=net, interventions=condoms, n_agents=2000, start=2000, stop=2005, verbose=0, rand_seed=seed)
-    sim = make(share=0.5).init()
+    sim = make(frac=0.5).init()
     mf, si = sim.networks.mf, sim.diseases.si
     assert np.all(mf.edges.condoms == 0.5)
     assert 1*si.pars.beta == si.engine.value(si.pars.beta), 'The current value of a declared parameter is a number'
-    none, half, full = [sum(make(share=s, seed=seed).run().results.si.infection.sum() for seed in [1, 2, 3]) for s in [0.0, 0.5, 1.0]] # Over a few seeds, since the numbers are small
+    none, half, full = [sum(make(frac=s, seed=seed).run().results.si.infection.sum() for seed in [1, 2, 3]) for s in [0.0, 0.5, 1.0]] # Over a few seeds, since the numbers are small
     assert none > half > full, f'Condoms should reduce infections: {none}, {half}, {full}'
-    assert sum(make(share=1.0, eff=0.0, seed=seed).run().results.si.infection.sum() for seed in [1, 2, 3]) == none, 'With no efficacy, condoms do nothing'
+    assert sum(make(frac=1.0, eff=0.0, seed=seed).run().results.si.infection.sum() for seed in [1, 2, 3]) == none, 'With no efficacy, condoms do nothing'
     plain = ss.Sim(diseases=ss.SIS(beta=dict(mf=0.05)), networks=ss.SexualNet(name='mf'), n_agents=500, verbose=0).run() # append() without condoms
     assert len(plain.networks.mf.edges.condoms) == len(plain.networks.mf)
     return
@@ -901,8 +901,8 @@ def test_edge_index():
     tracing = ss.Delivery(I >> X, when=sis.quarantine, coverage=0.5, trace='net')
     sim = ss.Sim(sis, networks=ssl.StaticNet(n_contacts=8, name='net'), interventions=tracing, n_agents=2000, unit='day', stop=30, verbose=0)
     runs = []
-    for share in [0, 1]: # By a pass over the edges, then by the edges of each agent wherever it can
-        with mock.patch.object(ss.solvers.backends.passes, 'index_share', share):
+    for frac in [0, 1]: # By a pass over the edges, then by the edges of each agent wherever it can
+        with mock.patch.object(ss.solvers.backends.passes, 'index_frac', frac):
             runs.append(sim.new().run())
     assert runs[1].networks.net.agent_edges.lists is not None, 'Expected a static network to make the edges of each agent'
     assert all(np.array_equal(runs[0].results.sis[k], runs[1].results.sis[k]) for k in 'SIX'), 'Expected the same results by the edges of each agent'

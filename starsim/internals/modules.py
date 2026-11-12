@@ -301,8 +301,8 @@ class Module(Base):
         """ A module that defines `update_results()` is one written for Starsim 3 or an early v4: say how to split it, rather than never call it """
         super().__init_subclass__(**kwargs)
         if 'update_results' in cls.__dict__:
-            errormsg = (f'{cls.__name__} defines update_results(), which Starsim no longer calls: split it into record_stocks(), for the results that are the state at '
-                        f'the start of the step (e.g. a count of a state), and record_flows(), for those about what happened in the step (e.g. new infections); see ss.loop.Loop, and https://docs.starsim.org/v3v4 for help migrating from Starsim 3')
+            errormsg = (f'{cls.__name__} defines update_results(), which Starsim no longer calls: split it into record_states(), for the results that are the state at '
+                        f'the start of the step (e.g. a count of a state), and record_events(), for those about what happened in the step (e.g. new infections); see ss.loop.Loop, and https://docs.starsim.org/v3v4 for help migrating from Starsim 3')
             raise TypeError(errormsg)
         return
 
@@ -553,10 +553,10 @@ class Module(Base):
             # ... or equivalently, let the sim convert it automatically:
             sim = ss.Sim(diseases='sis', networks='random', interventions=knockdown)
 
-            # A value set in code, fitted: the share of transmission left in 2015
-            def knockdown(sim, share=ss.par(0.5, bounds=[0.1, 1])):
+            # A value set in code, fitted: the fraction of transmission left in 2015
+            def knockdown(sim, frac=ss.par(0.5, bounds=[0.1, 1])):
                 if sim.now == 2015:
-                    sim.diseases.sis.rel_trans[:] *= share
+                    sim.diseases.sis.rel_trans[:] *= frac
             ```
         """
         def step(mod): # TODO: see if this can be done more simply
@@ -1095,13 +1095,13 @@ class Module(Base):
         self.t.ti += 1
         return
 
-    def record_stocks(self, names=None):
+    def record_states(self, names=None):
         """
         Record the results that are the state at the start of the step (stocks), at its index; by default, the count of each state
 
         Called at the start of every step, before any module's step (see `ss.loop.Loop`), so the results at a time point
         are the state there: e.g. `self.results.n_on_art[self.ti] = self.on_art.sum()`. A result about what happens
-        in the step (a flow, or one that needs a flow) goes in `record_flows()` instead.
+        in the step (a flow, or one that needs a flow) goes in `record_events()` instead.
 
         Args:
             names (list): the states to count (default: every `ss.BoolState` and derived state)
@@ -1119,7 +1119,7 @@ class Module(Base):
                 ss.results.as_float(res)[self.ti] = weights[self[name].uids].sum()
         return
 
-    def record_flows(self):
+    def record_events(self):
         """
         Record the results about what happened in the step (flows), at its index: e.g. `self.results.doses[self.ti] = self.n_doses`
 
@@ -1131,7 +1131,7 @@ class Module(Base):
         return
 
     def _count_states(self, names):
-        """ Record the number of active agents in each of some boolean states, as `record_stocks()` does one by one, in one pass by UID (as `people.record_stocks()` does); False if they can't be counted so """
+        """ Record the number of active agents in each of some boolean states, as `record_states()` does one by one, in one pass by UID (as `people.record_states()` does); False if they can't be counted so """
         ppl = self.sim.people
         if not isinstance(getattr(self.sim, 'solver', None), ss.solvers.abm) or not isinstance(getattr(ppl, 'alive', None), ss.BoolArr): # Not with compartments, or in a mock sim
             return False

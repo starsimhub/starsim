@@ -23,7 +23,7 @@ def make_measles(immune=0.9):
     S, I, R = ss.states('S I R')
     infection  = S >> I @ 1.9*I        # β = 1.9 per day
     recovery   = I >> R @ ss.days(8)   # Infectious for 8 days on average
-    prevalence = I/(S + I + R)         # The share of people infectious
+    prevalence = I/(S + I + R)         # The fraction of people infectious
     return ss.Disease(infection, recovery, prevalence, init=dict(R=immune), init_n=dict(I=10), name='measles')
 
 sim = ss.Sim(make_measles(), total_pop=100_000, start='2025-01-01', stop='2025-07-01', verbose=0)
@@ -43,7 +43,7 @@ make_measles <- function(immune = 0.9) {
   Disease(
     infection  = Transition(S, I, rate = 1.9 * I), # β = 1.9 per day
     recovery   = Transition(I, R, dur = days(8)),  # Infectious for 8 days on average
-    prevalence = I / (S + I + R),                  # The share of people infectious
+    prevalence = I / (S + I + R),                  # The fraction of people infectious
     init   = list(R = immune),
     init_n = list(I = 10),
     name = "measles"
@@ -274,8 +274,8 @@ with ss.style():
     fig, ax = plt.subplots(figsize=(7, 4))
     for label, scenario in scenarios.items():
         sres = scenario.results.measles
-        ax.plot(sres.infection.timevec, sres.infection.cum/100_000, label=label) # Infected since the start, as a share
-    ax.set_title('Share of people infected since the start')
+        ax.plot(sres.infection.timevec, sres.infection.cum/100_000, label=label) # Infected since the start, as a fraction
+    ax.set_title('Fraction of people infected since the start')
     ax.legend()
     plt.show()
 ```

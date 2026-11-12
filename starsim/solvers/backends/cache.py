@@ -119,9 +119,9 @@ class Ticker:
 
 class Batch(Ticker):
     """
-    One bar for compiling several of the sets of functions in `slow` in turn, as `ss.compile()` does: each part takes a share
+    One bar for compiling several of the sets of functions in `slow` in turn, as `ss.compile()` does: each part takes a fraction
     of the bar by how long it is estimated to take, and is not said on its own (see `Compiling`). A part that takes longer
-    than estimated holds the bar at the end of its share until it is done.
+    than estimated holds the bar at the end of its fraction until it is done.
 
     Args:
         what (str): what is compiled, as said when it is done
@@ -130,7 +130,7 @@ class Batch(Ticker):
     current = None # The batch being compiled, if any
 
     def __init__(self, what, keys):
-        self.shares = {key:(slow[key][1] + slow[key][2])/2 for key in keys} # Each part's share of the bar
+        self.fracs = {key:(slow[key][1] + slow[key][2])/2 for key in keys} # Each part's fraction of the bar
         self.finished = set() # The parts done
         self.key = None # The part being compiled, and when it started
         self.part_start = None
@@ -151,11 +151,11 @@ class Batch(Ticker):
         return
 
     def text(self, elapsed):
-        done = sum(self.shares[key] for key in self.finished if key in self.shares)
-        if self.key in self.shares and self.key not in self.finished:
-            done += min(time.time() - self.part_start, self.shares[self.key])
-        share = min(done/sum(self.shares.values()), 1)
-        return f'  {self.progress.bar(share)} {share:4.0%}  {elapsed:.0f} s'
+        done = sum(self.fracs[key] for key in self.finished if key in self.fracs)
+        if self.key in self.fracs and self.key not in self.finished:
+            done += min(time.time() - self.part_start, self.fracs[self.key])
+        frac = min(done/sum(self.fracs.values()), 1)
+        return f'  {self.progress.bar(frac)} {frac:4.0%}  {elapsed:.0f} s'
 
     def finish(self):
         Batch.current = None

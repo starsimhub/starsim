@@ -188,12 +188,12 @@ class Undeclared(Transmission):
         ss.utils.shrink(self, ['sim', '_selector', 'cache']) # Each holds the sim (as the declared engine's shrink() drops it)
         return
 
-    def record_stocks(self):
+    def record_states(self):
         """ The count of each `ss.BoolState`, as for any module """
-        ss.Module.record_stocks(self.mod)
+        ss.Module.record_states(self.mod)
         return
 
-    def record_flows(self):
+    def record_events(self):
         """ Nothing: a disease written as code records its own flows """
         return
 
@@ -978,11 +978,11 @@ def check_routes(sim):
                 continue
             counts = [leaf for leaf in (tr.rate.leaves if tr.rate is not None else []) if isinstance(leaf, ss.expressions.Count) and any(getattr(s, 'people', True) for s in leaf.states)]
             others = [r for r in routes if r not in matrices] if counts and id(counts[0]) in met else routes
-            infecting = mod.graph.counted(tr) if all(s.people for s in tr.source or []) else [] # A transmission at a rate on the share or number of people in a state of the disease, e.g. beta*I.frac
+            infecting = mod.graph.counted(tr) if all(s.people for s in tr.source or []) else [] # A transmission at a rate on the fraction or number of people in a state of the disease, e.g. beta*I.frac
             if infecting and others: # It would infect whoever the routes say people meet, without them: refused, rather than ignoring them
                 written = f' (written as {tr.flow_given})' if tr.flow_given is not None else ''
                 dep = mod.graph.dependence(tr)
-                raise ValueError(f'"{mod.name}.{name}" infects at a rate on the {"share" if dep == "frequency" else "number"} of people in {sc.strjoin(s.name for s in infecting)}, {tr.rate}{written}, '
+                raise ValueError(f'"{mod.name}.{name}" infects at a rate on the {"fraction" if dep == "frequency" else "number"} of people in {sc.strjoin(s.name for s in infecting)}, {tr.rate}{written}, '
                                  f'of everyone, whoever they meet; but this sim has {sc.strjoin(others)}, which {"says" if len(others) == 1 else "say"} who meets whom. '
                                  f'For transmission through {"it" if len(others) == 1 else "them"}, write the bare state, e.g. {tr.source[0].name} >> {tr.dest[0].name if tr.dest else "..."} @ beta*{infecting[0].name}; or remove the {"network" if len(others) == 1 else "networks"}')
             if counts and others:
@@ -1479,7 +1479,7 @@ def needs_age(sim, mod, tr):
 
 
 def same_people_dwells(sim, mod):
-    """ Several non-exponential dwell times out of one state for the same people (for other people, a track for each: see `ss.solvers.Compartmental.apart_shares()`, which the engine checks; else racing, as a compartment for each combination of their stages, and one that is a fixed delay is refused by the layout) """
+    """ Several non-exponential dwell times out of one state for the same people (for other people, a track for each: see `ss.solvers.Compartmental.apart_fracs()`, which the engine checks; else racing, as a compartment for each combination of their stages, and one that is a fixed delay is refused by the layout) """
     for name,exits in mod.graph.exits.items():
         dwells = [tr for tr in exits.timed if isinstance(getattr(tr.dur, 'raw', None), ss.Dist) and not isinstance(tr.dur.raw, ss.expon)]
         if len(dwells) > 1 and not exits.branches:
@@ -1642,7 +1642,7 @@ def weighted_rate(sim, mod):
             yield leaf, held
             if isinstance(leaf, ss.par) and isinstance(leaf.raw, ss.expressions.Expr):
                 yield from leaves(leaf.raw, True)
-    stepped = lambda leaf, held: other(leaf) or isinstance(leaf, ss.expressions.HeldShare) or (count(leaf) and leaf.weighted and (held or mod.engine.joint is not None))
+    stepped = lambda leaf, held: other(leaf) or isinstance(leaf, ss.expressions.HeldFrac) or (count(leaf) and leaf.weighted and (held or mod.engine.joint is not None))
     leaf = next((leaf for tr in mod.graph.transitions.values() for expr in [tr.rate, tr.dur] if isinstance(expr, ss.expressions.Expr) for leaf,held in leaves(expr) if stepped(leaf, held)), None)
     return None if leaf is None else dict(leaf=leaf, what='a count of another disease' if other(leaf) else 'a weighted count' if count(leaf) else 'the coverage of a product')
 
@@ -1696,7 +1696,7 @@ kernels = [ # What stops the kernels taking a whole run in one call: something i
 
 def own_lifecycle(sim, mod):
     """ A declared module with a step of its own """
-    return next((dict(name=name) for name in ['start_step', 'step_state', 'step', 'on_death', 'record_stocks', 'record_flows', 'finish_step'] if getattr(type(mod), name) is not getattr(ss.Disease, name)), None)
+    return next((dict(name=name) for name in ['start_step', 'step_state', 'step', 'on_death', 'record_states', 'record_events', 'finish_step'] if getattr(type(mod), name) is not getattr(ss.Disease, name)), None)
 
 
 def step_function(sim, mod):
@@ -1771,5 +1771,5 @@ def as_ode(sim, **kwargs):
 
 
 def in_proportions(sim):
-    """ Whether a sim's numbers are shares of a population of 1 (`total_pop=1`): as an ODE, or as agents each a share of it, but not as a stochastic compartmental model, which then has one person """
+    """ Whether a sim's numbers are fractions of a population of 1 (`total_pop=1`): as an ODE, or as agents each a fraction of it, but not as a stochastic compartmental model, which then has one person """
     return sim.pars.total_pop <= 1 and not isinstance(sim.solver or sim.pars.solver, (ss.solvers.binomial, ss.solvers.gillespie, ss.solvers.tau))

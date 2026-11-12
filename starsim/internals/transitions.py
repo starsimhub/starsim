@@ -23,8 +23,8 @@ import itertools
 import numpy as np
 import sciris as sc
 import starsim as ss
-from .internals.expressions import as_expr, BinOp, dists_in, Count, did_you_mean, dimension, Expr, Flow, format_expr, is_one, linear, Nameable, par, value_str
-from .internals.parameters import by, TimeValue
+from .expressions import as_expr, BinOp, dists_in, Count, did_you_mean, dimension, Expr, Flow, format_expr, is_one, linear, Nameable, par, value_str
+from .parameters import by, TimeValue
 
 __all__ = ['pars', 'State', 'states', 'unborn', 'dead', 'outside',
            'Transition', 'move', 'birth', 'death', 'lifetable', 'immigration', 'emigration', 'migration', 'outcome', 'lifelong']
@@ -41,12 +41,12 @@ class State(Nameable, Expr):
 
     Args:
         label (str): a human-readable name, for plots (e.g. `S = ss.State('Susceptible')`)
-        init (float): the share of people who start in the state (1.0 is everyone); for a state that is not people, its starting amount
+        init (float): the fraction of people who start in the state (1.0 is everyone); for a state that is not people, its starting amount
         init_n (int): instead, the number of people who start in the state
         people (bool): whether this state holds people (the default), or is a count of something else (`people=False`: bacteria in the water, mosquitoes); `people=True` says so explicitly, for a group of people that only an inflow fills
         rel_sus (float): susceptibility multiplier while in this state (one value; for a value by group, `ss.modify(dis.rel_sus, multiply=ss.by(risk=[...]))`)
         rel_trans (float): infectiousness multiplier while in this state (likewise)
-        infected (bool): whether the people in it are infected, which the disease otherwise works out from its force of infection (the states people are infected into, and those that infect them: `E` and `I` in `S >> E @ beta*I`); once any state is said to be, the infected states are exactly those said to be. The disease's infected states give the results `infected`, the number in them, and `prevalence`, their share of everyone in its states (unless it defines its own); `infected = E + I`, given to the disease, says the same for several states
+        infected (bool): whether the people in it are infected, which the disease otherwise works out from its force of infection (the states people are infected into, and those that infect them: `E` and `I` in `S >> E @ beta*I`); once any state is said to be, the infected states are exactly those said to be. The disease's infected states give the results `infected`, the number in them, and `prevalence`, their fraction of everyone in its states (unless it defines its own); `infected = E + I`, given to the disease, says the same for several states
         keep_time (bool): as agents, keep the time each person entered the state (`ti_<name>`) for code to read, e.g. the years since onset; by default it is kept only if the model reads it (a clock, a scheduled exit), to save memory
         name (str): the name, if it is not the variable or keyword the state is given as (which it is taken from); a state that no variable holds takes its label as its name, if that is one word (`ss.Disease(ss.State('S'), ...)`)
 
@@ -115,7 +115,7 @@ class State(Nameable, Expr):
 
     @property
     def progress(self):
-        """ The share of the scheduled dwell time in this state that has elapsed, from 0 to 1 (NaN outside it) """
+        """ The fraction of the scheduled dwell time in this state that has elapsed, from 0 to 1 (NaN outside it) """
         return ss.expressions.Clock([self], kind='progress')
 
     @property
@@ -167,33 +167,33 @@ def states(arg=None, infected=False, include_sum=False, **kwargs):
         infected (bool/str/list): which of them are infected (see `ss.State`): all of them (`True`); some, by name, with names given
             up front (`'E I'`); or some, by position, with a number of states (`[1, 2]`, or `range(1, 6)`)
         include_sum (bool): also return the sum of the states, after them: the total of the people in them, often called `N`,
-            for rates written with it: `beta*I/N`, the share of people in `I`, which is `beta*I.frac`; or the whole flow, `beta*S*I/N`, the same
-        kwargs (dict): instead of `arg`, the states by name, with the share of people who start in each (`S=0.9, I=0.1, R=0`); and
+            for rates written with it: `beta*I/N`, the fraction of people in `I`, which is `beta*I.frac`; or the whole flow, `beta*S*I/N`, the same
+        kwargs (dict): instead of `arg`, the states by name, with the fraction of people who start in each (`S=0.9, I=0.1, R=0`); and
             any of the arguments of `ss.State`, passed to each, e.g. `people=False`
 
     Examples:
         ```python
         S, I, R = ss.states(3)
         S, I, R = ss.states('S I R') # The same, with the names given up front
-        S, I, R = ss.states(S=0.99, I=0.01, R=0) # With the share of people who start in each
+        S, I, R = ss.states(S=0.99, I=0.01, R=0) # With the fraction of people who start in each
         Sv, Ev, Iv = ss.states(3, people=False) # Mosquitoes: counts, not people
         S, E, I, H, R = ss.states('S E I H R', infected='E I H') # H does not transmit, so is not infected unless said
         S, E, I, H, R = ss.states(5, infected=range(1, 4)) # The same, by position
         S, I, R, N = ss.states('S I R', include_sum=True) # N = S + I + R, the total, e.g. for S >> I @ beta*I/N
         ```
     """
-    inits = {k:kwargs.pop(k) for k in list(kwargs) if k not in state_args} # The states by name, with their starting shares
+    inits = {k:kwargs.pop(k) for k in list(kwargs) if k not in state_args} # The states by name, with their starting fractions
     if inits:
         if arg is not None:
-            errormsg = f'ss.states() takes the states as a number or names ({arg!r}), or by name with the share of people who start in each ({sc.strjoin(inits)}), not both'
+            errormsg = f'ss.states() takes the states as a number or names ({arg!r}), or by name with the fraction of people who start in each ({sc.strjoin(inits)}), not both'
             raise TypeError(errormsg)
         bad = {k:v for k,v in inits.items() if not (isinstance(v, par) or (sc.isnumber(v) and 0 <= v <= 1))}
         if bad:
-            errormsg = f'ss.states() takes each state given by name with the share of people who start in it, from 0 to 1 (e.g. ss.states(S=0.99, I=0.01, R=0)); not {sc.strjoin(f"{k}={v!r}" for k,v in bad.items())}.\n     The arguments of ss.State are {sc.strjoin(state_args)}'
+            errormsg = f'ss.states() takes each state given by name with the fraction of people who start in it, from 0 to 1 (e.g. ss.states(S=0.99, I=0.01, R=0)); not {sc.strjoin(f"{k}={v!r}" for k,v in bad.items())}.\n     The arguments of ss.State are {sc.strjoin(state_args)}'
             raise ValueError(errormsg)
         arg = ' '.join(inits)
     elif arg is None:
-        errormsg = 'ss.states() takes the states: their number (ss.states(3)), their names (ss.states(\'S I R\')), or their names with the share of people who start in each (ss.states(S=0.99, I=0.01, R=0))'
+        errormsg = 'ss.states() takes the states: their number (ss.states(3)), their names (ss.states(\'S I R\')), or their names with the fraction of people who start in each (ss.states(S=0.99, I=0.01, R=0))'
         raise TypeError(errormsg)
     if isinstance(arg, str):
         names = arg.replace(',', ' ').split()
@@ -340,6 +340,14 @@ stay = Stay()
 
 
 #%% Transitions
+
+class NotGiven:
+    """ The default of `p=` of a transition, so that `p=None` (it takes the rest of what the branches out of its source leave over) differs from no `p=` at all """
+    def __repr__(self):
+        return 'not given'
+
+notgiven = NotGiven()
+
 
 def parse_increment(increment, what):
     """ The `increment=` of a transition, delivery, or transfer, as {counter: amount}: a name adds 1 (`'parity'`), as does a list of names; a dict gives the amounts (`dict(parity=2)`) """
@@ -492,7 +500,7 @@ class Transition(Nameable):
         dest (State/dict): the destination state; several (a split), as a dict of each and its probability (`{D: p_death, R: None}`, None for the rest); or `ss.dead` (deaths) or `ss.outside` (leaving) for an outflow
         rate (any): a hazard: a number, `ss.per`, `ss.prob`, an expression of states and parameters, or a function; a transmission is a rate with the source of infection in it (`rate=beta * I`)
         dur (any): a dwell time: a duration or a distribution of durations (instead of `rate`)
-        p (float): the probability of taking it, for those it applies to (e.g. on an event); a split gives each destination's in `dest`
+        p (float/None): the probability of taking it, for those it applies to (e.g. on an event); a split gives each destination's in `dest`. With several transitions out of a state, each a branch with its own `p=`, `p=None` marks the one that takes the rest
         stages (int): the number of stages a dwell time is split into, in a row (an Erlang distribution), under every solver: more stages make the times in the state vary less around the mean
         who (Cond/func/str): who it applies to: a condition (e.g. `ss.person.age > 30`, or a state by its path, `'sir.I'`), as for `ss.Event(who=)`; for everyone else its rate is 0
         when (Event/on/Cond/func/str): what triggers it, instead of a rate (the same as `@ ss.on(...)`): an event moves the people it happens to (`when=preg.delivery`),
@@ -538,7 +546,11 @@ class Transition(Nameable):
         importation = ss.Transition(S, I, rate=ss.perday(1e-4), acquisition=True) # An infection from outside, alongside one by contact
         ```
     """
-    def __init__(self, source=None, dest=None, rate=None, dur=None, p=None, stages=None, name=None, label=None, who=None, when=None, move=None, increment=None, min_stay=None, noise=None, acquisition=None, per_strain=False):
+    def __init__(self, source=None, dest=None, rate=None, dur=None, p=notgiven, stages=None, name=None, label=None, who=None, when=None, move=None, increment=None, min_stay=None, noise=None, acquisition=None, per_strain=False):
+        self.rest = p is None # Whether it takes the rest of what the branches out of its source leave over (p=None, as given)
+        self.p_rest = None # What the rest is, once its module is built (see ss.graph.Graph.resolve_transitions())
+        p = None if p is notgiven else p
+        self._given = (source, dest) # As given, for a transition made again with the keywords after @ (I >> R @ dict(dur=ss.days(8), p=None))
         where = None if who is None else check_who(who, 'a transition')
         trigger, delay = None, None
         if when is not None:
@@ -640,8 +652,8 @@ class Transition(Nameable):
         self.guessed = sc.obj() # Which fields were guessed, and why
         if isinstance(dest, (list, tuple)) and len(dest) > 1:
             names = [getattr(d, 'name', None) or repr(d) for d in dest]
-            shares = sc.tolist(p) if p is not None else [None]*len(dest)
-            example = '{' + ', '.join(f'{n}: {v}' for n,v in zip(names, shares + [None]*(len(names) - len(shares)))) + '}'
+            fracs = sc.tolist(p) if p is not None else [None]*len(dest)
+            example = '{' + ', '.join(f'{n}: {v}' for n,v in zip(names, fracs + [None]*(len(names) - len(fracs)))) + '}'
             errormsg = f'several destinations of a transition are a dict of each and its probability (None for the rest), e.g. ss.Transition(source, {example}, ...); not a list{" with p=" if p is not None else ""}'
             raise TypeError(errormsg)
         if isinstance(dest, dict): # A split, each destination with its probability: {D: p_death, R: None}
@@ -668,7 +680,7 @@ class Transition(Nameable):
 
     def incidence(self, over=None, by=None):
         """
-        A condition on how many go through the transition: the number over the last `over`, as a share of the people at the same level of `by`
+        A condition on how many go through the transition: the number over the last `over`, as a fraction of the people at the same level of `by`
 
         Args:
             over (dur): the window (default, one step); a bare number is in the sim's unit
@@ -766,6 +778,7 @@ class Transition(Nameable):
         return sc.isnumber(raw) and raw == 0
 
     def _set_source(self, src):
+        self._given = (src, self._given[1])
         if isinstance(src, Outside):
             check_outside(src, 'source')
             self.migration = self.migration or src.kind == 'outside' # Arrivals, at any age (as ss.immigration())
@@ -778,7 +791,7 @@ class Transition(Nameable):
             self.migration = self.migration or dst.kind == 'outside' # Leaving, without dying (as ss.emigration())
             self.dest = []
         elif isinstance(dst, Expr) and not isinstance(dst, State):
-            errormsg = f'The destination "{dst}" is not a state; several destinations are a dict of each and its share, e.g. ss.Transition(I, {{R: 0.9, D: 0.1}}, dur=10)'
+            errormsg = f'The destination "{dst}" is not a state; several destinations are a dict of each and its fraction, e.g. ss.Transition(I, {{R: 0.9, D: 0.1}}, dur=10)'
             raise TypeError(errormsg)
         else:
             self.dest = sc.tolist(dst)
@@ -835,7 +848,7 @@ class Transition(Nameable):
         return
 
     def __matmul__(self, driver):
-        """ What follows "@": a duration or a distribution is a dwell time, anything else is a rate """
+        """ What follows "@": a duration or a distribution is a dwell time, a dict of the transition's keywords is those (`@ dict(dur=ss.days(8), p=0.002)`), and anything else is a rate """
         if self.rate is not None or self.dur is not None or self.trigger is not None:
             errormsg = f'The transition {self} already has what drives it, so cannot take a second "@ {driver}"'
             raise TypeError(errormsg)
@@ -844,10 +857,19 @@ class Transition(Nameable):
             new.trigger = driver
             return new
         value = driver.value if isinstance(driver, par) else driver
+        if isinstance(value, dict) and value and all(isinstance(key, str) for key in value):
+            keywords = [key for key in inspect.signature(Transition).parameters if key not in ('source', 'dest')]
+            known = [key for key in value if key in keywords]
+            if len(known) == len(value): # The keywords of the transition, e.g. I >> R @ dict(dur=ss.days(8), p=None)
+                return Transition(*self._given, **value)
+            elif known:
+                unknown = [key for key in value if key not in keywords]
+                errormsg = f'"@ dict(...)" gives the keywords of a transition ({sc.strjoin(keywords)}), but {sc.strjoin(unknown)} {"is" if len(unknown) == 1 else "are"} not one{did_you_mean(unknown[0], keywords)}'
+                raise TypeError(errormsg)
         if isinstance(value, dict) and any(isinstance(leaf, State) for val in value.values() if isinstance(val, Expr) for leaf in val.leaves): # A rate for each route, with its own sources
             driver = value = route_rate(value)
         if isinstance(value, ss.bernoulli):
-            errormsg = f'"@ {value}" is a probability, not a rate or a duration; a share that goes one way is the share of its destination, e.g. ss.Transition(I, {{R: None, D: 0.1}}, dur=10)'
+            errormsg = f'"@ {value}" is a probability, not a rate or a duration; a fraction that goes one way is the fraction of its destination, e.g. ss.Transition(I, {{R: None, D: 0.1}}, dur=10)'
             raise TypeError(errormsg)
         typed = value.typed if isinstance(value, TimeValue) else value.items if isinstance(value, by) else []
         new = self._copy()
@@ -892,10 +914,10 @@ class Transition(Nameable):
         return new
 
     def _arith(self, op, other, reverse=False):
-        """ Arithmetic on a transition that is being written applies to its rate (`I @ beta * I`); on a finished one it is its flow: divided by something, in a result (`infection / S`), and times something, a share of it (`0.5 * infection`, an outcome) """
+        """ Arithmetic on a transition that is being written applies to its rate (`I @ beta * I`); on a finished one it is its flow: divided by something, in a result (`infection / S`), and times something, a fraction of it (`0.5 * infection`, an outcome) """
         if op == '/' and self.source is not None and not reverse:
             return BinOp('/', Flow(self), Flow(other) if isinstance(other, Transition) else as_expr(other))
-        if op == '*' and self.source is not None and not isinstance(other, (Transition, Destination, outcome, FlowSum)): # A share of the flow, never a change of rate (which is written in the rate, or with ss.modify)
+        if op == '*' and self.source is not None and not isinstance(other, (Transition, Destination, outcome, FlowSum)): # A fraction of the flow, never a change of rate (which is written in the rate, or with ss.modify)
             return FlowSum([self]) * other
         if isinstance(other, (Transition, Destination, outcome, FlowSum)):
             if op == '+': # A sum of flows, e.g. for an outcome: 0.1*mild + 0.5*severe
@@ -1013,10 +1035,10 @@ def move(*args, p=None, n=None, uids=None, who=None):
             state to move them to, as the code sees them at run time (`sir.I`) or by name (`'I'`), the source first;
             the disease, which is enough to say where they come from (any of its states of people); and the agents to
             move (`ss.uids`), as `uids=`
-        p (float): the share of the people in the source to move, in each group (by default, everyone)
+        p (float): the fraction of the people in the source to move, in each group (by default, everyone)
         n (float): instead, the number of people to move, shared among the groups and states in proportion to who is in them
-        uids (uids): only these agents (those of them in the source), which needs agents; with `p=` or `n=`, a share or number of them
-        who (Cond/State/func/str): only the people for whom a condition holds (e.g. `ss.person.age < 15`, a group, or a state by its path, `'sir.I'`), under every solver; with `p=` or `n=`, a share or number of them
+        uids (uids): only these agents (those of them in the source), which needs agents; with `p=` or `n=`, a fraction or number of them
+        who (Cond/State/func/str): only the people for whom a condition holds (e.g. `ss.person.age < 15`, a group, or a state by its path, `'sir.I'`), under every solver; with `p=` or `n=`, a fraction or number of them
 
     Returns:
         The number of people moved
@@ -1037,7 +1059,7 @@ def move(*args, p=None, n=None, uids=None, who=None):
     """
     where = None if who is None else check_who(who, 'ss.move()')
     if p is not None and n is not None:
-        raise ValueError('ss.move() moves a share of the people (p=) or a number of them (n=), not both')
+        raise ValueError('ss.move() moves a fraction of the people (p=) or a number of them (n=), not both')
 
     # Tell the arguments apart
     diseases, ends = [], []
@@ -1047,7 +1069,7 @@ def move(*args, p=None, n=None, uids=None, who=None):
         if len(moves) > 1 or len(moves[0].dest) != 1 or others:
             raise ValueError('ss.move() takes one move, from one or more states to one (e.g. ss.move(sir.I >> sir.R, p=0.5)), or the states (ss.move(sir.I, sir.R, p=0.5)), not both')
         if moves[0].rate is not None:
-            raise ValueError('ss.move() moves people now, so its move has no rate: give the share as p= or the number as n= (e.g. ss.move(sir.I >> sir.R, p=0.5))')
+            raise ValueError('ss.move() moves people now, so its move has no rate: give the fraction as p= or the number as n= (e.g. ss.move(sir.I >> sir.R, p=0.5))')
         args = [arg for arg in args if arg is not moves[0]] + [moves[0].source, moves[0].dest[0]]
     for arg in args:
         if isinstance(getattr(arg, 'graph', None), ss.graph.Graph):
@@ -1112,7 +1134,7 @@ def move(*args, p=None, n=None, uids=None, who=None):
     if where is not None and not people:
         raise ValueError(f'ss.move() with who= picks people, but it moves a count of "{mod.name}" (declared with people=False), which has none to pick')
     if uids is not None and (not isinstance(mod.sim.solver, ss.solvers.abm) or not people):
-        raise ss.CapabilityError(f'ss.move() of particular agents (uids) needs agents, but ' + (f'"{mod.name}" is run with solver="{mod.sim.solver}", which has none.\n     Move a share (p=) or a number (n=) of the people in a state instead, or run with solver="abm"' if people else 'a count has none'))
+        raise ss.CapabilityError(f'ss.move() of particular agents (uids) needs agents, but ' + (f'"{mod.name}" is run with solver="{mod.sim.solver}", which has none.\n     Move a fraction (p=) or a number (n=) of the people in a state instead, or run with solver="abm"' if people else 'a count has none'))
     if n is None and p is None:
         p = 1.0
     kw = dict(uids=uids.uids if hasattr(uids, 'uids') else ss.uids(uids)) if uids is not None else dict()
@@ -1244,7 +1266,7 @@ class lifetable:
 
     Args:
         ages (list): the start of each age band, in years (the last band is as wide as the one before)
-        deaths (list): the number, or share, of a cohort who die in each band (a life table's d(x))
+        deaths (list): the number, or fraction, of a cohort who die in each band (a life table's d(x))
 
     Examples:
         ```python
@@ -1259,7 +1281,7 @@ class lifetable:
             errormsg = f'ss.lifetable() takes increasing ages (the start of each band) and as many numbers dying, which are not negative and not all zero; not {len(ages)} ages and {len(deaths)} deaths'
             raise ValueError(errormsg)
         self.edges = np.append(ages, ages[-1] + (ages[-1] - ages[-2]))
-        self.survival = np.append(1.0, 1 - np.cumsum(deaths)/deaths.sum()) # The share of a cohort alive at each edge
+        self.survival = np.append(1.0, 1 - np.cumsum(deaths)/deaths.sum()) # The fraction of a cohort alive at each edge
         self.survival[-1] = 0.0
         return
 
@@ -1267,7 +1289,7 @@ class lifetable:
         return f'lifetable(ages {self.edges[0]:n} to {self.edges[-1]:n})'
 
     def survive(self, age):
-        """ The share of a cohort alive at each age
+        """ The fraction of a cohort alive at each age
 
         Args:
             age (float/array): the age or ages
@@ -1328,8 +1350,8 @@ def death(state=None, rate=None, dur=None, lifetable=None, name=None, label=None
         name (str): the name of the transition
         label (str): a human-readable name
     """
-    if 'p' in kwargs: # A share who die is a branch of the way out of a state, not a death rate
-        errormsg = (f'ss.death() takes a rate (rate= or dur=), not p=. For a share of the people leaving a state who die, make it a branch of that exit, e.g. '
+    if 'p' in kwargs: # A fraction who die is a branch of the way out of a state, not a death rate
+        errormsg = (f'ss.death() takes a rate (rate= or dur=), not p=. For a fraction of the people leaving a state who die, make it a branch of that exit, e.g. '
                     f'ss.Transition(I, {{R: None, ss.dead: {kwargs["p"]}}}, dur=ss.days(10))')
         raise TypeError(errormsg)
     elif kwargs:
@@ -1593,7 +1615,7 @@ def flow_key(base):
         elif kind == 'tr':
             return tr.name
     if isinstance(base, ss.conditions.Cond): # E.g. 0.5*cin.to(CA), which is arithmetic on a condition
-        errormsg = f'An outcome is counted from transitions, their branches (tr.to(B)), and other outcomes, not from the condition {base}; for a share of a branch, use an outcome of it, e.g. 0.5*ss.outcome(cin.to(CA))'
+        errormsg = f'An outcome is counted from transitions, their branches (tr.to(B)), and other outcomes, not from the condition {base}; for a fraction of a branch, use an outcome of it, e.g. 0.5*ss.outcome(cin.to(CA))'
         raise TypeError(errormsg)
     return base.name
 
@@ -1618,7 +1640,7 @@ def is_declaration(obj):
 
 
 class FlowSum:
-    """ A weighted sum of flows (transitions and outcomes), or a share of one, used as the source of an outcome: 0.1*mild + 0.5*severe, or 0.5*infection
+    """ A weighted sum of flows (transitions and outcomes), or a fraction of one, used as the source of an outcome: 0.1*mild + 0.5*severe, or 0.5*infection
 
     Args:
         items (list): the flows and their weights
