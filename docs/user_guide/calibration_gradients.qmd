@@ -189,7 +189,7 @@ post.plot()
 
 ### Other samplers
 
-For stochastic models, and models JAX can't run, the other methods apply: `'pmcmc'`, `'abc-smc'`, and `'if2'` (see [Fitting methods](calibration_methods.qmd)). Starsim's samplers can also be used directly on a log-density of your own (such as `density` above): `ss.fitting.nuts()`, `ss.fitting.pmmh()`, and `ss.fitting.abc_smc()`; see [ss.fitting](../api/fit.qmd). A posterior can also be put together by sampling-importance resampling: run draws from the priors (`ss.parallel(sim, priors=True, n_runs=1000)`), score each with `ss.fitting.loglik(run)`, and resample in proportion to the likelihoods; it works for any model, but needs many runs, and fails for many parameters.
+For stochastic models, and models JAX can't run, the other methods apply: `'pmcmc'`, `'abc-smc'`, and `'if2'` (see [Fitting methods](calibration_methods.qmd)). Starsim's samplers can also be used directly on a log-density of your own (such as `density` above): `ss.fitting.nuts()`, `ss.fitting.pmmh()`, and `ss.fitting.abc_smc()`; see [ss.fitting](../api/fit.qmd). A posterior can also be put together by sampling-importance resampling (SIR, not to be confused with SIR): run draws from the priors (`ss.parallel(sim, priors=True, n_runs=1000)`), score each with `ss.fitting.loglik(run)`, and resample in proportion to the likelihoods; it works for any model, but needs many runs, and fails for many parameters.
 
 ## Further reading
 

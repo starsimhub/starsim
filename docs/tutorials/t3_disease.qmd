@@ -106,7 +106,7 @@ msim = ss.parallel({'Lifelong immunity': lifelong, 'Immunity lasting 2 years': w
 msim.plot('measles.I')
 ```
 
-`unit='day'` says which unit the bare β = 1.9 is in ([Tutorial 2](t2_model.qmd)). With waning immunity, smaller waves follow the first outbreak, and the disease becomes endemic. A supply of new susceptible people, from waning immunity or births ([Tutorial 6](t6_data.qmd#births-and-deaths)), is what lets an infection persist.
+`unit='day'` says which unit the bare β = 1.9 is in ([Tutorial 2](t2_model.qmd)). With waning immunity, smaller waves follow the first outbreak, and the disease becomes endemic. A supply of new susceptible people, from waning immunity or births ([Tutorial 6](t6_data.qmd#births-and-deaths)), is what lets an infection persist, rather than burn through the population once and disappear.
 
 ## Deaths: a branch
 

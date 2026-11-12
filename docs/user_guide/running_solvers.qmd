@@ -221,7 +221,7 @@ If the structure of contacts is part of the question (partnerships, households, 
 
 ## Speed and backends
 
-The compartmental solvers don't slow down with the size of the population, except Gillespie, which takes one event at a time. A million people, as a chain binomial, tau-leaping, and Gillespie:
+The compartmental solvers don't slow down with the size of the population, except Gillespie, which takes one event at a time: an ODE of all 8 billion people on Earth runs faster than the same model as three agents. Does this mean compartmental models are better than agent-based ones? If all you want is a simple SIR model, then ... the answer is probably yes! A million people, as a chain binomial, tau-leaping, and Gillespie:
 
 ```{python}
 for solver in ['binomial', 'tau', 'gillespie']:

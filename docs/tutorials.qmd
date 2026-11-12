@@ -40,7 +40,7 @@ Who meets whom: age groups and contact matrices, movement between towns, and net
 ::: {.g-col-6}
 [**T5 – Interventions and scenarios**](tutorials/t5_interventions.qmd)
 
-Vaccination, isolating cases, and comparing scenarios across many runs; and, as agents, treatment, screening, and partner notification.
+It's not all doom and gloom: vaccination, isolating cases, and comparing scenarios across many runs; and, as agents, treatment, screening, and partner notification.
 :::
 
 ::: {.g-col-6}

@@ -62,7 +62,7 @@ print('Person 0 is banned')
 ss.Sim(Fishing(banned=[0]), **pars).run();
 ```
 
-Different people catch fish in the two scenarios, and on day 2 more fish are caught with person 0 banned. Now the same with common random numbers, as Starsim runs by default:
+Different people catch fish in the two scenarios, and on day 2 more fish are caught with person 0 banned: fewer people fishing, more fish caught, which is impossible. That is the noise. Now the same with common random numbers, as Starsim runs by default:
 
 ```{python}
 ss.options.crn = True # The default

@@ -11,7 +11,7 @@ This page is the mental model of Starsim on one page: what a model is made of, h
 
 ## The parts of a model
 
-A Starsim model is a **sim** (`ss.Sim`): a population, a span of time, and a set of **modules** that say what happens to the population. The modules are of a few kinds, each with its own job:
+A Starsim model is a **sim** (`ss.Sim`): a population, a span of time, and a set of **modules** that say what happens to the population. The modules are the ingredients of a model (or, if you like, of an epidemic). They are of a few kinds, each with its own job, and each can be built on its own and then combined:
 
 ```{mermaid}
 %%| echo: false

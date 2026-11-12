@@ -111,7 +111,7 @@ Erlang stages can be no more variable than an exponential, so `'ode'` keeps the 
 
 ### Population size and number of agents
 
-`total_pop` is the size of the population being modeled, and `n_agents` is how many agents are simulated: a computational choice, like the time step, and giving it makes the sim run as agents. If only one is given, the other is the same (up to 10,000 agents). Here is an SIR infection with R0 = 3 (β = 0.3 per day, infectious for 10 days) in a city of a million people, as compartments and as 10,000 agents. (This page uses a slower infection than measles, whose fast rates need short steps when run as agents; see [Solvers and backends](running_solvers.qmd#the-length-of-a-step).)
+`total_pop` is the size of the population being modeled, and `n_agents` is how many agents are simulated: a computational choice, like the time step, and giving it makes the sim run as agents. Think of the agents as a sample, like a survey: simulating all 230 million people in Nigeria one by one would be far too slow, but 50,000 agents, each standing for 4,600 people, will do. If only one is given, the other is the same (up to 10,000 agents). Here is an SIR infection with R0 = 3 (β = 0.3 per day, infectious for 10 days) in a city of a million people, as compartments and as 10,000 agents. (This page uses a slower infection than measles, whose fast rates need short steps when run as agents; see [Solvers and backends](running_solvers.qmd#the-length-of-a-step).)
 
 ```{python}
 S, I, R = ss.states('S I R')

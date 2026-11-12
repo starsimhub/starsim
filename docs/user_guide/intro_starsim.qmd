@@ -23,7 +23,7 @@ Starsim is available for both Python and R (see [R-Starsim](https://r.starsim.or
 
 ## Kinds of model and tool
 
-Mechanistic models of transmission differ in how they represent the population. **Deterministic compartmental models** follow the number of people in each compartment (susceptible, infectious, recovered, often stratified by age, sex, or place) as an ordinary differential equation (ODE): fast, smooth, and easy to fit, but with no chance in them. **Stochastic compartmental models** move whole numbers of people between the same compartments at random (a chain binomial, or the Gillespie algorithm), which captures fade-out and the variation between runs. **Metapopulation models** link compartmental models in many places by movement. **Network and agent-based models** (ABMs) follow individuals, with their own states, contacts, and histories: the most flexible, and the most costly to run and to check. The choice depends on the question: an ODE for the expected course of a large epidemic, a stochastic or agent-based model where chance, heterogeneity, or individual histories matter.
+Mechanistic models of transmission differ in how they represent the population. **Deterministic compartmental models** follow the number of people in each compartment (susceptible, infectious, recovered, often stratified by age, sex, or place) as an ordinary differential equation (ODE): fast, smooth, and easy to fit, but with no chance in them. **Stochastic compartmental models** move whole numbers of people between the same compartments at random (a chain binomial, or the Gillespie algorithm), which captures fade-out and the variation between runs. **Metapopulation models** link compartmental models in many places by movement. **Network and agent-based models** (ABMs) follow individuals, with their own states, contacts, and histories: the most flexible, and the most costly to run and to check. The choice depends on the question: an ODE for the expected course of a large epidemic, a stochastic or agent-based model where chance, heterogeneity, or individual histories matter. For example, "Are vaccinated people less likely to be infected?" is a question for a statistical model; "What will prevalence be in 5 years with 100% vaccine uptake?" for a compartmental model; and "What will prevalence be in 5 years given realistic screening and vaccine coverage?" for agents.
 
 ![Types of model](assets/types_of_model.png)
 
@@ -35,7 +35,7 @@ Starsim's distinctive feature is that one model runs in more than one of these w
 
 Around that core are the parts most models need: stratification by age, sex, place, or anything else ([Stratification](building_stratification.qmd)); populations by country ([Places and data](populations_places.qmd)); contact matrices and networks ([Mixing](populations_mixing.qmd)); demographics and pregnancy ([People and demographics](populations_people.qmd)); vaccines, treatments, and other interventions ([Interventions](interventions_interventions.qmd)); costs ([Health economics](library_econ.qmd)); and calibration, including gradients through the model ([Fitting a model](calibration_fitting.qmd)).
 
-Starsim's design follows two principles: common tasks (defining parameters, running a sim, plotting results) should be simple, and custom tasks (a new vaccine, a new disease, a calibration function of your own) can't always be simple, but should still be possible. See [Architecture](architecture_index.qmd#the-idea-and-the-principles) for the full set.
+Starsim's design follows two principles: common tasks (defining parameters, running a sim, plotting results) should be simple, and custom tasks (a new vaccine, a new disease, a calibration function of your own) can't always be simple, but should still be possible. If you're modeling a complicated disease, some of that complexity is irreducible: Starsim's job is to help where it can, then get out of the way and let you write your code. See [Architecture](architecture_index.qmd#the-idea-and-the-principles) for the full set.
 
 ## Why use a framework?
 
@@ -161,9 +161,9 @@ A framework is not a guarantee of correctness: the model's structure, assumption
 
 Starsim suits modelers who write code (or are willing to), and is a good fit:
 
-- If your agent-based model is too slow, inflexible, or hard to use for your questions (a single run takes 14 hours, say).
+- If your agent-based model is too slow, inflexible, or hard to use for your questions (a single run takes 14 hours, and every year you worry that your computing grant won't be renewed).
 - If you model with compartments and want to try agents without months of learning a new tool: an mpox model asked to evaluate an individually targeted intervention can run as an ODE and as agents, and the two can be compared.
-- If you want to prototype a disease or network before adding it to your full model (syphilis co-transmission beside your HIV model, or a different MSM network).
+- If you want to prototype a disease or network before adding it to your full model (you know and love your HIV model, but want to see what syphilis co-transmission, or a different MSM network, would do).
 
 It may not be the best choice:
 

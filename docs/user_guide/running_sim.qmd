@@ -131,7 +131,7 @@ A sim copies the modules it is given, so the same disease can be given to severa
 
 ### The order of each step
 
-For a declared model, Starsim works out the order of everything in a step from the model itself. Modules written as code run at fixed points in the step: demographics, then disease progression, connectors, networks, interventions, transmission, and analyzers, so a child born in a step can be infected in it, and a new partnership can transmit in the step it forms. `sim.loop.to_df()`, after `sim.init()`, lists every function called in every step, and `sim.loop.plot()` draws it; [Steps and time points](architecture_run.qmd#the-order-of-a-step) explains the order in full.
+For a declared model, Starsim works out the order of everything in a step from the model itself. Modules written as code run at fixed points in the step: demographics, then disease progression, connectors, networks, interventions, transmission, and analyzers, so a child born in a step can be infected in it, and a new partnership can transmit in the step it forms. Take a woman with pre-symptomatic COVID who, in one busy day, develops symptoms, gets tested, moves out of her parents' house into her husband's, and becomes pregnant. Starsim orders her day: she (1) becomes pregnant, (2) develops symptoms, (3) moves house, (4) gets tested, and (5) transmits COVID to her contacts, who by now include her husband but not her parents. (That is for a disease written as code; a declared disease takes all its transitions at step 5.) `sim.loop.to_df()`, after `sim.init()`, lists every function called in every step, and `sim.loop.plot()` draws it; [Steps and time points](architecture_run.qmd#the-order-of-a-step) explains the order in full.
 
 ## Running again, and variants
 
@@ -206,7 +206,7 @@ By default a saved sim that has finished keeps its results but not the people, w
 
 ## Larger projects: `make_sim()`
 
-A project with more than a few scenarios is usually built around one function that makes the sim, with an argument for each thing that varies, so that every scenario, seed, and calibration run is made the same way. A sketch of the pattern, as an HIV project might have it:
+A project with more than a few scenarios is usually built around one function that makes the sim, with an argument for each thing that varies, so that every scenario, seed, and calibration run is made the same way. It can get long: this is, after all, where most of the science happens. A sketch of the pattern, as an HIV project might have it:
 
 ```python
 import starsim as ss

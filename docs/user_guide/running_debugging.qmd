@@ -144,7 +144,7 @@ ss.Sim(wrong, total_pop=100_000, stop=ss.days(50)).run()
 R0 comes out at 0.24 instead of 15. Give a duration with its unit (`ss.days(8)`), or as `dur=` in `ss.Transition(I, R, dur=ss.days(8))`. The others, each covered in full on its own page:
 
 - **A plain number is in the sim's unit of time.** If the model's unit is days, `stop=2`, meant as two years, is two days. Give times with their units or as dates ([Time](building_time.qmd#units)).
-- **A number as a time is a calendar year if the sim has a calendar.** With `start='2025-01-01'`, `when=2026` is the start of 2026, whatever the unit; with `start=0`, it is 2026 units from 0. A time outside the sim is an error that says how it was read ([Time](building_time.qmd#conventions-and-pitfalls)).
+- **A number as a time is a calendar year if the sim has a calendar.** With `start='2025-01-01'`, `when=2026` is the start of 2026, whatever the unit; with `start=0`, it is 2026 units from 0. A time outside the sim is an error that says how it was read ([Time](building_time.qmd#on-the-philosophy-of-time)).
 - **A rate times a duration is not a rate.** `ss.peryear(0.1)*ss.days(3)` is the chance of an event over 3 days, and Starsim raises a `TypeError` rather than guess what was meant ([Time](building_time.qmd#rates-probabilities-and-durations)).
 - **An ODE always takes off.** With R0 above 1 it takes off from any number infected, while a real outbreak started by a few cases often dies out by chance; for the chance of an outbreak, run a stochastic solver many times ([Solvers and backends](running_solvers.qmd#whether-an-outbreak-takes-off)).
 - **The median of many runs can hide that some died out.** When some runs die out and the rest take off, the median or mean describes neither; count the runs with an outbreak, and summarize those ([Scenarios](running_scenarios.qmd#reading-many-runs)).
@@ -164,7 +164,7 @@ More are in the pitfalls of [Custom modules](building_modules.qmd#pitfalls) and 
 
 To look at a run partway through, `sim.run(until=...)` stops after the step that starts at that time, with the people and their states as they are at its end (`sim.people.to_df()`); a later `sim.run()` carries on (see [Running sims](running_sim.qmd#running-part-of-the-way)).
 
-A model run as agents, or one with modules written as code, is run one step at a time, and within each step the modules are run in a fixed order: the loop. `sim.loop.to_df()` lists every call in it, in order, for the whole run; the first rows are the first step:
+A model run as agents, or one with modules written as code, is run one step at a time, and within each step the modules are run in a fixed order: the loop. When a sim does something it shouldn't, or doesn't do something it should, `sim.loop` is your friend. `sim.loop.to_df()` lists every call in it, in order, for the whole run; the first rows are the first step:
 
 ```{python}
 agent_sim.run()

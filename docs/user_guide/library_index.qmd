@@ -17,7 +17,7 @@ Core Starsim (`import starsim as ss`) provides the framework and its generic bui
 
 Every class is also at the top level (`ssl.Measles` is `ssl.diseases.Measles`), and the [API reference](../api/index.qmd) lists them all.
 
-The library ships with Starsim, but is held to a lower bar than the core package. Its modules are *illustrative rather than validated*: parameter values are indicative, some are placeholders, and their interfaces may change between versions. Treat them as starting points to copy and adapt, not as ready-made models of a particular setting.
+The library ships with Starsim, but is held to a lower bar than the core package. Its modules are *illustrative rather than validated*: parameter values are indicative, some are placeholders, and their interfaces may change between versions. Treat them as starting points to copy and adapt, not as ready-made models of a particular setting. If you find yourself copying one wholesale and editing it, that's a perfectly good outcome: it's what they're for.
 
 ## Contributing to the library
 

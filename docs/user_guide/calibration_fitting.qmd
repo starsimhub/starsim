@@ -128,7 +128,7 @@ fit.pars
 Every parameter with `bounds` is fitted, wherever it is: a rate, a share, a duration (with bounds in its own unit, e.g. `ss.par(ss.days(8), bounds=[5, 12])`), an initial condition, a parameter of a network or intervention, a value for each level of a stratification, an array, a time series, or a setting of the sim. Each kind, and how it is named in `fit.pars`, is in the [appendix](#what-can-be-fitted). In addition:
 
 - `pars=` fits only the parameters named, keeping the others at their values: `sim.fit(pars=['beta'])`.
-- Wide positive bounds (the high end 10 or more times the low end) are searched on a log scale, and the fit says which.
+- Wide positive bounds (the high end 10 or more times the low end) are searched on a log scale, since going from 0.01 to 0.02 doubles transmission, but going from 0.11 to 0.12 hardly changes it. The fit says which.
 - A prior, `ss.par(1.5, bounds=[0.5, 4], prior=ss.normal(2, 0.3))`, is used by the methods that use likelihoods; without one, the prior is uniform over the bounds.
 - `penalty=` adds a function of the values to what a best fit minimizes, e.g. to keep a curve smooth: `sim.fit(penalty=lambda pars: 10*np.sum(np.diff(pars['curve'], 2)**2))`.
 
@@ -283,7 +283,7 @@ msim$plot("measles.cases")
 msim.summarize().loc['measles_cases']
 ```
 
-These runs use the best values only, so their spread is chance alone. `fit.project(scenarios, **kwargs)` runs scenarios from the fit, passing `kwargs` to `sim.new()`, e.g. `fit.project({'No campaign': None, 'Campaign': vaccination}, stop='2026-06-01')` to forecast past the data; from a posterior, the runs carry the uncertainty in the values too ([T6](../tutorials/t6_data.qmd#projecting-from-the-fit) has an example checked against what happened next).
+Strictly speaking, this is not the right thing to do: these runs all use the best values, so their spread is the model's own noise, not uncertainty about the values. `fit.project(scenarios, **kwargs)` runs scenarios from the fit, passing `kwargs` to `sim.new()`, e.g. `fit.project({'No campaign': None, 'Campaign': vaccination}, stop='2026-06-01')` to forecast past the data; from a posterior, the runs carry the uncertainty in the values too ([T6](../tutorials/t6_data.qmd#projecting-from-the-fit) has an example checked against what happened next).
 
 ### Projecting from a posterior
 

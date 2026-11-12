@@ -7,7 +7,7 @@ authorship:
   note: Based on the Claude drafts on scenarios and on uncertainty, merged, with comparing, combining, and copying runs adapted from the Starsim 3 user guide page on multiple runs; examples tidied and appendices added by AI; shortened on Nov 11 by AI
 ---
 
-A scenario is a sim with something changed: an intervention added, a parameter set to another value, a different population. Since a single stochastic run is one draw of what could happen, most comparisons also need many runs of each scenario. [T5 – Interventions and scenarios](../tutorials/t5_interventions.qmd) teaches the same through one example; [Running sims](running_sim.qmd) covers single sims.
+Let's be honest: there isn't much you can do with a single sim run. A scenario is a sim with something changed (an intervention added, a parameter set to another value, a different population), and 99.9% of the time you'll want to compare several, each run many times, since one stochastic run is just one draw of what could happen. [T5 – Interventions and scenarios](../tutorials/t5_interventions.qmd) teaches the same through one example; [Running sims](running_sim.qmd) covers single sims.
 
 ## Scenarios by label
 
@@ -139,7 +139,7 @@ msim$plot("measles.I")
 ```
 :::
 
-`ss.parallel(sim, n_runs=50)` runs it 50 times, each with its own random seed (with no `n_runs=`, it is one run). The plot shows the median at each time point, and the range that holds 95% of the runs; `lines=True` shows each run instead, which shows what the median hides:
+`ss.parallel(sim, n_runs=50)` runs it 50 times, each with its own random seed (with no `n_runs=`, it is one run). The plot shows the median at each time point, and the range that holds 95% of the runs (rather than the mean ± 2 standard deviations, which would happily let deaths go negative); `lines=True` shows each run instead, which shows what the median hides:
 
 ```{python}
 msim.plot('measles.I', lines=True)
