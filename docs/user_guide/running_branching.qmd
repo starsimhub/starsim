@@ -48,7 +48,7 @@ b = msim.branching
 print(f'Share of introductions that died out: {b.p_extinct:.2f} (95% interval {b.p_extinct_ci[0]:.2f} to {b.p_extinct_ci[1]:.2f}; theory: 1/R0 = 0.5)')
 ```
 
-`until=` stops a run once a condition holds: an expression of the model, as here, or a function of the sim, checked at the end of each step. It works for any run, not only a branching process; the results after the stop are NaN, and `sim.stopped` is the time point the run stopped at. Without it, a branching process that takes off grows without limit. `msim.branching.plot()` shows how large the chains got, and the gallery page [The chance of a major outbreak](../gallery/major_outbreak.qmd) does the same over a range of R0.
+`until=` stops a run once a condition holds: an expression of the model, as here, or a function of the sim, checked at the end of each step. It works for any run, not only a branching process; the results after the stop are NaN, and `sim.stopped` is the time point the run stopped at. Without it, a branching process that takes off grows without limit. `msim.branching.plot()` shows how large the chains got, and the gallery page [The chance of a major outbreak](../gallery/theory_checks.qmd#the-chance-of-a-major-outbreak) does the same over a range of R0.
 
 ### Chains and offspring, as agents
 

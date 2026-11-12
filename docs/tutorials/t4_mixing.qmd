@@ -1,0 +1,648 @@
+---
+title: "T4 – Mixing"
+jupyter: python3
+authorship:
+  human: 5
+  ai: 95
+  note: Merged on Nov 11 by AI from the tutorials on age groups and contacts (T4) and on geography and mixing (T6), both written by AI, and the agent-based tutorial on networks (A2), based on an AI draft with text and examples from the Starsim 3 networks tutorial
+---
+
+**Who meets whom, and why does it matter?** So far, everyone in the town mixes equally. In reality, children have many more contacts than adults, mostly with other children; people travel between towns, and carry measles with them; and some infections pass only between people who know each other, such as sexual partners. This tutorial takes mixing from everyone equally, to a contact matrix between age groups, to movement between places, to contacts between particular people.
+
+By the end of this tutorial, you will be able to:
+
+- split a model into age groups, and give a value for each group;
+- give the contacts between groups as a contact matrix, and say what β means then;
+- read results for one age group, or for each, and tell counts from risk;
+- give a model several places, say how much people move between them, and see an outbreak spread between them, on a map and as an animation;
+- see how much the answer depends on the amount of movement, and on chance;
+- give people contacts of their own in a network, look inside it, and use sexual and mother–child networks and mixing pools;
+- choose how people mix, for the question at hand.
+
+## The model so far
+
+This is the SEIR model from [T3 – Building a disease](t3_disease.qmd), in a town of 100,000 people, with R0 = 1.9 × 8 ≈ 15:
+
+```{python}
+import starsim as ss
+
+S, E, I, R = ss.states('S E I R')
+infection   = S >> E @ 1.9*I        # β = 1.9 per day
+progression = E >> I @ ss.days(10)  # Latent for 10 days on average
+recovery    = I >> R @ ss.days(8)   # Infectious for 8 days on average
+measles = ss.Disease(infection, progression, recovery, init=dict(I=0.001))
+
+sim = ss.Sim(measles, total_pop=100_000, stop=ss.days(150))
+sim.run()
+sim.plot()
+```
+
+## Age groups, each with its own immunity
+
+`stratify()` splits each state of a disease into groups: here by age, into 0–14, 15–64, and 65 and over, each given by its lower edge with its share of the population (30%, 60%, and 10%). The model then has a compartment for each state in each age group.
+
+On its own, this changes nothing; age groups matter when something differs between them, such as immunity. Suppose 92% of adults under 65 and 98% of older adults are immune, but only 80% of children, since vaccine coverage has slipped. [`ss.by()`](../api/internals.parameters.qmd) gives a value for each level of a stratification, and `init` the share of each group that starts in a state; `init_n` starts 10 people infectious, as if brought in by travelers. The run is for a year, from 1 January 2025:
+
+```{python}
+S, E, I, R = ss.states('S E I R')
+infection   = S >> E @ 1.9*I
+progression = E >> I @ ss.days(10)
+recovery    = I >> R @ ss.days(8)
+measles = ss.Disease(infection, progression, recovery,
+    init   = dict(R=ss.by(age=[0.8, 0.92, 0.98])), # The share immune in each age group
+    init_n = dict(I=10),                           # 10 people infectious at the start
+)
+measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1}) # Ages 0-14, 15-64, and 65+, with the share of people in each
+
+settings = dict(total_pop=100_000, start='2025-01-01', stop='2026-01-01')
+equal = ss.Sim(measles, label='Everyone mixes equally', **settings)
+equal.run()
+equal.results.measles.infection.by('age').plot()
+```
+
+About 90% of the town is immune, so each case at the start infects about 1.7 others (printed as `R` at the start): a modest outbreak, peaking in early July, spread over the age groups in proportion to the susceptible people in each.
+
+## Contacts between age groups
+
+A **contact matrix** gives the daily contacts between age groups: row *i*, column *j* is the number of contacts one person in group *i* has with people in group *j*, as measured by contact surveys such as POLYMOD in Europe. Below, children have 10 contacts a day with other children, 6 with adults, and 1 with people 65 and over; adults and older adults have 12 each. (The numbers are illustrative, but shaped like real surveys: children mix most, mostly with each other.)
+
+| Contacts a day, of a person aged... | ...with people 0–14 | ...with people 15–64 | ...with people 65+ |
+|---|---|---|---|
+| 0–14 | 10 | 6 | 1 |
+| 15–64 | 3 | 8 | 1 |
+| 65+ | 3 | 6 | 3 |
+
+A contact between a child and an adult counts for both, so the matrix is reciprocal: the children, 30% of the town, have 6 contacts each with adults, and the adults, twice as many, 3 each with children. (Starsim notes a matrix that isn't.)
+
+[`ss.contacts()`](../api/networks.qmd) takes the matrix, with the lower edge of each age group (`ages=`), and is given to the sim as `networks=`. With contacts, β is the daily rate of infection per contact with an infectious person, and the matrix supplies the contacts. People here average about 13.5 contacts a day, so β = 1.9 under equal mixing becomes about 0.14 per contact. (Reusing 1.9 would multiply transmission by 13.5: a β fitted under one assumption about mixing must be refitted under another.)
+
+::: {.panel-tabset group="language"}
+## Python
+
+```{python}
+S, E, I, R = ss.states('S E I R')
+beta = ss.par(0.14, bounds=[0.05, 0.5]) # The rate of infection per contact with an infectious person, per day
+
+infection   = S >> E @ beta*I       # At a rate of β times the contacts with infectious people
+progression = E >> I @ ss.days(10)
+recovery    = I >> R @ ss.days(8)
+measles = ss.Disease(infection, progression, recovery,
+    init   = dict(R=ss.by(age=[0.8, 0.92, 0.98])),
+    init_n = dict(I=10),
+)
+measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1})
+
+contacts = ss.contacts(ages=[0, 15, 65], matrix=[[10, 6, 1], [3, 8, 1], [3, 6, 3]]) # Contacts a day, between age groups
+sim = ss.Sim(measles, networks=contacts, label='Contact matrix', **settings)
+sim.run()
+sim.results.measles.infection.by('age').plot()
+```
+
+## R
+
+```r
+library(starsim)
+
+states("S E I R")
+beta <- par(0.14, bounds = c(0.05, 0.5)) # The rate of infection per contact with an infectious person, per day
+measles <- Disease(
+  infection   = Transition(S, E, rate = beta * I), # At a rate of β times the contacts with infectious people
+  progression = Transition(E, I, dur = days(10)),
+  recovery    = Transition(I, R, dur = days(8)),
+  init   = list(R = ss$by(age = c(0.8, 0.92, 0.98))),
+  init_n = list(I = 10)
+)
+measles$stratify(age = list("0" = 0.3, "15" = 0.6, "65" = 0.1))
+
+age_contacts <- contacts(ages = c(0, 15, 65), matrix = rbind(c(10, 6, 1), c(3, 8, 1), c(3, 6, 3))) # Contacts a day, between age groups
+sim <- Sim(measles, networks = age_contacts, total_pop = 100000, start = "2025-01-01", stop = "2026-01-01", label = "Contact matrix")
+sim$run()
+sim$results$measles$infection$by("age")$plot()
+```
+
+## Explicit
+
+```{python}
+S, E, I, R = ss.State(name='S'), ss.State(name='E'), ss.State(name='I'), ss.State(name='R')
+beta_explicit = ss.par(ss.perday(0.14), bounds=[ss.perday(0.05), ss.perday(0.5)], name='beta') # Per contact with an infectious person
+
+measles_explicit = ss.Disease(
+    transitions = [
+        ss.Transition(source=S, dest=E, rate=beta_explicit*I, name='infection'),
+        ss.Transition(source=E, dest=I, dur=ss.expon(mean=ss.days(10)), name='progression'),
+        ss.Transition(source=I, dest=R, dur=ss.expon(mean=ss.days(8)), name='recovery'),
+    ],
+    init   = dict(R=ss.by(age=[0.8, 0.92, 0.98])), # The rest start in S
+    init_n = dict(I=10),
+    name   = 'measles',
+)
+measles_explicit.stratify(age=ss.levels({0: 0.3, 15: 0.6, 65: 0.1}, kind='age')) # Age groups, which people would age through
+
+contacts_explicit = ss.contacts(matrix=[[10, 6, 1], [3, 8, 1], [3, 6, 3]], ages=[0, 15, 65], name='contacts')
+sim_explicit = ss.Sim(
+    diseases  = measles_explicit,
+    networks  = contacts_explicit,
+    total_pop = 100_000,
+    start     = '2025-01-01',
+    stop      = '2026-01-01',
+    dt        = ss.days(1),
+    unit      = 'day',
+    solver    = 'ode',
+    aging     = False, # Nobody is born or dies, so nobody ages
+    label     = 'Contact matrix',
+)
+sim_explicit.run()
+sim_explicit.results.measles.infection.by('age').plot()
+```
+:::
+
+Starsim works out R0 from the matrix (the largest eigenvalue of the next-generation matrix), so it depends on who meets whom. R0 is about the same, 16, but the reproduction number at the start is about 2.5 rather than 1.7: the susceptible people are children, who have the most contacts, mostly with each other. To compare the two runs:
+
+```{python}
+msim = ss.parallel([equal, sim])
+msim.plot('measles.infection')
+```
+
+With the contact matrix, the outbreak peaks two months sooner, twice as high, and infects about 8,800 people rather than 7,400, the extra ones all children. Assuming equal mixing would underestimate an outbreak where the gaps in immunity are in the group that mixes most.
+
+## Results by age group
+
+A stratified model keeps every result for each group, and totals as before (`res.infection` is all ages). [`by('age')`](../api/results.qmd) splits a result into a series per age group, and `select()` picks one group by its ages (`'0-14'`, `'15-64'`, `'65+'`):
+
+```{python}
+res = sim.results.measles
+children = res.I.select(age='0-14')
+print('Peak number of children infectious:', round(children.max()))
+print('Infections in people 65 and over:', round(res.infection.select(age='65+').sum()))
+```
+
+`summarize()` gives each group's total over the run, the same as summing each group in turn. Counts depend on a group's size as well as its risk; dividing by its size gives the share infected (the attack rate), the risk:
+
+::: {.panel-tabset group="language"}
+## Python
+
+```{python}
+infections = res.infection.by('age').summarize()
+print(infections.round())
+print('Share of each group infected:')
+print((infections / [30_000, 60_000, 10_000]).round(3))
+```
+
+## R
+
+```r
+res <- sim$results$measles
+infections <- res$infection$by("age")$summarize()
+print(round(infections))
+cat("Share of each group infected:\n")
+print(round(infections / c(30000, 60000, 10000), 3))
+```
+
+## Explicit
+
+```{python}
+sizes = {'0-14': 30_000, '15-64': 60_000, '65+': 10_000}
+for age, size in sizes.items():
+    total = res.infection.select(age=age).sum()
+    print(age, ' infections:', round(total), ' share infected:', round(total/size, 3))
+```
+:::
+
+Children have nearly two thirds of the infections, though under a third of the town: 18% of them are infected, over three times the share of adults.
+
+For more on stratification, such as several dimensions at once, see [T7 – Stratification and co-transmission](t7_strata.qmd) and [Stratification](../user_guide/building_stratification.qmd).
+
+## Several towns
+
+Measles also travels between towns. People travel to work, shop, or visit, and carry measles with them, so each town's outbreak is linked to the others'. This is a **metapopulation** model: several populations, each mixing mostly within itself, coupled by movement.
+
+The rest of this section and the next make the disease several times, so a function makes it, as above, with the number infectious at the start given. Its latent and infectious states are marked as infected, so that the results `infected` and `prevalence` count them:
+
+::: {.panel-tabset group="language"}
+## Python
+
+```{python}
+S, R = ss.states('S R')
+E, I = ss.states('E I', infected=True) # Infected: counted in the results infected and prevalence
+infection   = S >> E @ beta*I
+progression = E >> I @ ss.days(10)
+recovery    = I >> R @ ss.days(8)
+
+def make_measles(init_n=10):
+    """ The measles model, by age, with the number infectious at the start given """
+    measles = ss.Disease(infection, progression, recovery,
+        init   = dict(R=ss.by(age=[0.8, 0.92, 0.98])), # The share immune in each age group
+        init_n = dict(I=init_n),
+        name   = 'measles',
+    )
+    measles.stratify(age={0: 0.3, 15: 0.6, 65: 0.1}) # Ages 0-14, 15-64, and 65+
+    return measles
+```
+
+## R
+
+```r
+states("S R")
+states("E I", infected = TRUE) # Infected: counted in the results infected and prevalence
+infection   <- Transition(S, E, rate = beta * I)
+progression <- Transition(E, I, dur = days(10))
+recovery    <- Transition(I, R, dur = days(8))
+
+make_measles <- function(init_n = 10) {
+  measles <- Disease(infection, progression, recovery,
+    init   = list(R = ss$by(age = c(0.8, 0.92, 0.98))), # The share immune in each age group
+    init_n = list(I = init_n),
+    name   = "measles"
+  )
+  measles$stratify(age = list("0" = 0.3, "15" = 0.6, "65" = 0.1)) # Ages 0-14, 15-64, and 65+
+  measles
+}
+```
+:::
+
+The town, Riverton, has three smaller neighbors. A **geography** ([`ss.geo.geography()`](../api/geo.qmd)) gives the places' names, populations, and positions (here in kilometers, from which Starsim works out the distances, `towns.distances`). `plot()` draws them, sized by population:
+
+```{python}
+towns = ss.geo.geography(
+    names       = ['Riverton', 'Hillside', 'Lakeview', 'Fairfield'],
+    populations = [100_000, 40_000, 20_000, 10_000],
+    x           = [0, 20, 35, 60], # Kilometers east of Riverton
+    y           = [0, 10, -15, 5], # Kilometers north of Riverton
+)
+towns.plot()
+```
+
+Places are a stratification, like [age groups](#age-groups-each-with-its-own-immunity): `stratify(patch=towns)` splits each state by town (a "patch" is a place in a metapopulation model), and the contact matrix applies within each town. The towns' populations give the model's, so `total_pop` isn't needed. `ss.by(patch=[10, 0, 0, 0])` starts the outbreak in Riverton only.
+
+Without movement, each town is a separate model:
+
+```{python}
+alone = make_measles(init_n=ss.by(patch=[10, 0, 0, 0])) # 10 people infectious in Riverton, none elsewhere
+alone.stratify(patch=towns)
+
+settings = dict(networks=contacts, start='2025-01-01', stop='2026-01-01')
+sim = ss.Sim(alone, **settings)
+sim.run()
+sim.results.measles.infection.by('patch').summarize().round()
+```
+
+Riverton has the same outbreak as before, and measles never leaves it.
+
+## Movement between towns
+
+Movement is rarely known in detail. A **gravity model** is the usual first guess: movement grows with the destination's population and falls with the square of the distance. Its amount is given separately, as the share of time people spend in other towns, `away`, here 1% (about a day every three months). Written out, it is a matrix of the share of time each town's people spend in each other town:
+
+::: {.panel-tabset group="language"}
+## Python
+
+```{python}
+away = ss.par(0.01, bounds=[0.001, 0.1]) # People spend 1% of their time in other towns
+measles = make_measles(init_n=ss.by(patch=[10, 0, 0, 0]))
+measles.stratify(patch=ss.levels(towns, mobility=ss.geo.gravity(away=away)))
+
+sim = ss.Sim(measles, **settings)
+sim.run()
+sim.results.measles.I.by('patch').plot()
+```
+
+## R
+
+```r
+towns <- ss$geo$geography(
+  names       = c("Riverton", "Hillside", "Lakeview", "Fairfield"),
+  populations = c(100000, 40000, 20000, 10000),
+  x           = c(0, 20, 35, 60), # Kilometers east of Riverton
+  y           = c(0, 10, -15, 5)  # Kilometers north of Riverton
+)
+away <- par(0.01, bounds = c(0.001, 0.1)) # People spend 1% of their time in other towns
+measles <- make_measles(init_n = ss$by(patch = c(10, 0, 0, 0)))
+measles$stratify(patch = ss$levels(towns, mobility = ss$geo$gravity(away = away)))
+
+sim <- Sim(measles, networks = age_contacts, start = "2025-01-01", stop = "2026-01-01")
+sim$run()
+sim$results$measles$I$by("patch")$plot()
+```
+
+## Explicit
+
+```{python}
+import numpy as np
+
+pop, dist = towns.populations, towns.distances
+with np.errstate(divide='ignore'):
+    pull = pop[None, :]/dist**2 # Gravity: the destination's population over the squared distance
+np.fill_diagonal(pull, 0)       # Staying at home isn't movement
+share = 0.01*pull/pull.sum(axis=1, keepdims=True) # 1% of each town's time away, split by pull
+
+moving = make_measles(init_n=ss.by(patch=[10, 0, 0, 0]))
+moving.stratify(patch=ss.levels(towns, mobility=ss.geo.Mobility(share, kind='commute')))
+
+by_hand = ss.Sim(moving, **settings)
+by_hand.run()
+by_hand.results.measles.I.by('patch').plot()
+```
+:::
+
+The movement here is commuting: people keep their home town, but spend a share of their time in the others, where they can infect and be infected. (Migration, in which people move home, is `kind='migrate'`, with rates of moving rather than shares of time.)
+
+The outbreak peaks first in Riverton, at the end of April, then in each other town in turn: Hillside, the nearest, in late May, then Lakeview, and last Fairfield, the smallest and farthest, in mid-June. Since the towns have the same immunity, each outbreak infects about 9% of its town. `select()` picks one place's result, as it does an age group's:
+
+```{python}
+round(sim.results.measles.infection.select(patch='Fairfield').sum())
+```
+
+When movement is known, from a survey or mobile phone data, give it as a matrix, as in the explicit tab: with `ss.geo.Mobility(matrix=..., kind='commute')`, row *i*, column *j* is the share of time the people of place *i* spend in place *j*. [Mixing](../user_guide/populations_mixing.qmd) covers this, the radiation model, and coupling places through the force of infection rather than movement.
+
+## On a map
+
+Lines show when each outbreak happens, but not where. `map()` draws a result on a map of the places, by default its summary over the run (as `summarize()` gives it): here the prevalence, averaged over the year:
+
+```{python}
+sim.results.measles.prevalence.map()
+```
+
+Prevalence maps better than the number infectious, since the towns differ in size: Fairfield's outbreak is small in numbers, but as intense for its size as Riverton's. `n=6` draws six maps across the outbreak:
+
+```{python}
+sim.results.measles.prevalence.map(n=6)
+```
+
+`animate=True` makes an animation, with a frame every few days (press play):
+
+```{python}
+sim.results.measles.prevalence.map(animate=True)
+```
+
+The outbreak moves outward from Riverton, reaching Fairfield last. `map(t='2025-05-15')` draws one date, and `filename='spread.gif'` saves an animation. To map any other value for each place, such as the share infected over the year, give it to the geography's `plot()`:
+
+```{python}
+infected = sim.results.measles.infection.by('patch').summarize() # Infections in each town over the year
+towns.plot(values=infected/towns.populations, label='Share infected')
+```
+
+## How much movement matters
+
+The share of time away is the least certain number in this model. `ss.parallel()` with `pars=` runs a sim once for each value given (a parameter sweep), labeling each run:
+
+```{python}
+msim = ss.parallel(sim, pars=dict(away=[0.001, 0.01, 0.05]))
+msim.results.measles.I.select(patch='Fairfield').plot()
+```
+
+With 5 times as much movement, Fairfield's outbreak comes about three weeks earlier; with 10 times less, about five weeks later. Its size doesn't change: in this model, measles always reaches Fairfield.
+
+That isn't realistic. In an ODE, a fraction of an infectious person can travel to Fairfield on day one and start an outbreak; in reality, a whole infectious person must go, and the chains of infection they start can die out by chance. To see this, run the model as a stochastic model, which draws at random the number of people who move between states each day (`solver='binomial'`; [T5](t5_interventions.qmd#many-runs) says more), with little movement, many times:
+
+```{python}
+sim = ss.Sim(measles, pars=dict(away=0.001), solver='binomial', **settings)
+msim = ss.parallel(sim, n_runs=30)
+msim.results.measles.I.select(patch='Fairfield').plot(lines=True)
+```
+
+```{python}
+fairfield = msim.results.measles.infection.select(patch='Fairfield').summarize() # The infections in Fairfield in each run
+print('Runs with an outbreak in Fairfield:', sum(fairfield > 100), 'of', len(fairfield))
+```
+
+In about one run in five, measles never takes off in Fairfield: no infectious person goes there while the other outbreaks last, or the few infections they cause die out. In the others, the outbreak comes at very different times, from May to the end of the year. For a small, weakly linked place, whether an outbreak arrives at all is a matter of chance, and a model that ignores this overstates how surely it spreads.
+
+## Towns as agents
+
+The same model runs as agents with `n_agents=`, here one for each of the 170,000 people:
+
+```{python}
+sim = ss.Sim(measles, n_agents=170_000, **settings)
+sim.run()
+sim.results.measles.I.by('patch').plot()
+```
+
+Each agent has a home town, and is exposed in the others for the share of time spent there. The outbreaks spread from town to town as before, a little later (the run notes that agents taking whole days can lag the ODE), and with chance variation: in this run, Fairfield's outbreak comes before Lakeview's. With fewer agents than people, the 10 people infectious at the start can be as few as one agent, so the outbreak can die out by chance.
+
+Age groups work the same way as agents: each agent has an age, and so an age group, and agents age, are born, and die ([T6](t6_data.qmd#births-and-deaths)).
+
+## Contacts per person
+
+So far, people have mixed at random within their age group and town, which suits measles, spread through many brief contacts. A sexually transmitted infection instead spreads between partners who stay together for months or years, and HIV passes from mother to child. Then who is linked with whom, and for how long, matters: that is what a **network** describes. Starsim has two ways to transmit disease between people:
+
+- **Contact networks:** disease transmits along person-to-person links (edges between agents). An edge allows transmission both ways, though it can be stronger one way. The list of edges can change each step.
+- **Mixing pools:** well-mixed transmission from one group to another, as with a contact matrix. Instead of edges, a pool works out the total infectiousness of the source group, and exposes everyone in the target group to it.
+
+Both can be used together. The rest of this tutorial shows when a network changes an epidemic, how to look inside one, and how to use random, sexual, and mother–child networks, then mixing pools. A model with a network runs as agents.
+
+To see when a network matters, go back to the measles model of [T1](t1_intro.qmd), with nobody immune, as 10,000 agents. With no network, mixing is homogeneous: one infectious person infects others at β = 1.9 per day in a fully susceptible population, and R0 = 1.9 × 8 ≈ 15.
+
+β can be split into the number of contacts per day, and the rate at which a contact between an infectious and a susceptible person passes on the infection. With 3 contacts a day, 0.63 per contact per day gives the same β of 3 × 0.63 = 1.9. Once there are contacts, β in the transition is the rate per contact, as with the [contact matrix](#contacts-between-age-groups) above (a contact infects with probability 1 − e^−0.63 ≈ 0.47 in a day; for a chance per contact, give `ss.probperday()`), so a β fitted with homogeneous mixing can't be reused with a network unchecked.
+
+Those 3 contacts a day can be arranged in several ways:
+
+- `ss.MixingPool(n_contacts=3)`: everyone mixes at random, with 3 contacts a day: homogeneous mixing, with β split into contacts and a rate per contact.
+- `ss.RandomNet(n_contacts=3)`: each person has 3 contacts, with new people each day.
+- `ss.RandomNet(n_contacts=3, dynamic=False)`: each person has the same 3 contacts every day, for the whole run.
+
+```{python}
+import numpy as np
+
+S, I, R = ss.states('S I R')
+infection = S >> I @ 0.63*I       # A rate of infection of 0.63 per contact per day
+recovery  = I >> R @ ss.days(8)   # Infectious for 8 days on average
+measles = ss.Disease(infection, recovery, init_prev=0.001, name='measles')
+
+pars = dict(n_agents=10_000, stop=ss.days(100))
+sims = {
+    'Well mixed':              ss.Sim(measles, networks=ss.MixingPool(n_contacts=3), **pars),
+    'New contacts each day':   ss.Sim(measles, networks=ss.RandomNet(n_contacts=3), **pars),
+    'Same contacts every day': ss.Sim(measles, networks=ss.RandomNet(n_contacts=3, dynamic=False), **pars),
+}
+msim = ss.parallel(sims)
+msim.plot('measles.I')
+```
+
+With someone new each day, the epidemic is nearly the same as with random mixing. With the same people every day, it is slower and lower, since contacts are wasted on whoever infected you and those you already infected; the infection spreads one link at a time.
+
+Even so, almost everyone is infected, since measles passes along nearly every link: for measles, contacts change the timing more than the size, so random mixing (or mixing by age) is reasonable. A network matters most when people have few, lasting contacts, each with a chance of infection well below one, as for sexually transmitted infections.
+
+## Looking inside a network
+
+A network stores its contacts (edges) and the parameters for how they form and dissolve. The contacts are made when the sim is initialized. Here is the network with the same contacts every day, for 30 people, so that it can be plotted:
+
+```{python}
+small = ss.Sim(measles, networks=ss.RandomNet(n_contacts=3, dynamic=False), n_agents=30, stop=ss.days(10), verbose=0)
+small.init()
+net = small.networks.randomnet
+net.plot()
+```
+
+Networks are in `sim.networks`, each under its class name in lower case, here `randomnet`. Each edge has the UIDs of the two people (`p1` and `p2`), a transmission multiplier (`beta`), and a duration (`dur`). A network can find contacts, and its edges can be converted to a `pandas` dataframe (`to_df()`) or a NetworkX graph (`to_graph()`):
+
+```{python}
+print('Contacts of agent 0:', net.find_contacts([0]))
+
+df = net.to_df()
+df.loc[(df.p1 == 0) | (df.p2 == 0)] # The edges involving agent 0
+```
+
+## Sexual networks
+
+This section uses a simplified curable bacterial infection, loosely like gonorrhea, with illustrative numbers: an SIS model, in which people become susceptible again when they recover (after 6 months on average, untreated). `ss.SexualNet()` is a network of partnerships between men and women. Each partnership lasts a time (`dur=`) and has a number of sex acts per year (80 on average, by default). The chance of infection is given per act with `ss.peract()`, separately from men to women (`m2f`) and women to men (`f2m`). The model runs for 30 years in monthly steps.
+
+A key question is how often people change partners. Here are three networks that differ only in how long partnerships last:
+
+```{python}
+S, I = ss.states('S I')
+infection = S >> I @ ss.peract(m2f=0.1, f2m=0.05)*I  # Chance of infection per act
+recovery  = I >> S @ ss.months(6)                    # Infected for 6 months on average
+sti = ss.Disease(infection, recovery, init_prev=0.05)
+
+pars = dict(n_agents=5000, start=2000, stop=2030, dt=ss.months(1))
+sims = {}
+for label, dur in {'1 month': ss.months(1), '3 months': ss.months(3), '1 year': ss.years(1)}.items():
+    network = ss.SexualNet(dur=dur) # How long partnerships last, on average
+    sims[label] = ss.Sim(sti, networks=network, **pars)
+
+msim = ss.parallel(sims)
+msim.plot('sti.I')
+```
+
+With short partnerships, people have many partners a year, and the infection becomes endemic. When they last a year, a couple infects each other and has no one else to infect; by the time they part, the infection has usually cleared, and it dies out. Partner change, and concurrency (more than one partner at a time), drive sexually transmitted infections, which is why they are modeled with a network.
+
+Check the contact process before reading the epidemic: networks with the same average number of contacts can behave very differently. At any moment, these three look alike: about two in three people have a partner, and nobody has more than one. `degrees()` gives each person's current number of partners:
+
+```{python}
+for label, sim in zip(sims, msim.sims):
+    net = sim.networks.sexualnet
+    partners = net.degrees(sim.people.auids) # The number of partners of each person alive
+    print(label, '- people with 0, 1, 2, ... partners now:', np.bincount(partners))
+```
+
+Only how often partners change differs, which a snapshot doesn't show. `ss.SexualNet()` has options for partnerships between men (`between='mm'`), for the number of partners people have at a time (`n_contacts=`) and the share who have more than one (`concurrency=`), for the age of sexual debut (`debut=`), and for the share of people who take part (`participation=`); see [Mixing](../user_guide/populations_mixing.qmd).
+
+## Mothers and children
+
+Some infections, such as HIV, syphilis, and hepatitis B, can pass from mother to child during pregnancy or birth. `ss.PrenatalNet()` links each pregnant woman with her unborn child, so it needs `ss.Pregnancy()`, which gives women of reproductive age pregnancies that end in births (with `ss.Deaths()` to keep the population from growing without limit; see [T9](t9_agents.qmd#pregnancy)). Newborns are linked to their mothers automatically.
+
+Here is a simplified HIV model, with infection for life (no deaths or treatment), in which 10% of adults and no children have HIV at the start. Its β is given for each network: per act on the sexual network, at about the estimates for heterosexual transmission without treatment, and per month of pregnancy on the maternal network, so that about 24% of the children of mothers with HIV are infected. Splitting the disease by age (`stratify()`, as [above](#age-groups-each-with-its-own-immunity)) gives results for children, and lets the share infected at the start be given by age (`ss.by(age=...)`). A second sim adds prevention of mother-to-child transmission, 90% effective: an `ss.modify()` of the infection on the maternal network only (`network=`):
+
+```{python}
+S, I = ss.states('S I')
+beta = dict(
+    sexualnet   = ss.peract(m2f=0.002, f2m=0.001),  # Chance of infection per sex act
+    prenatalnet = ss.permonth(0.03),                # Rate of infection per month of pregnancy
+)
+infection = S >> I @ beta*I
+hiv = ss.Disease(infection, init_prev=ss.by(age=[0, 0.1])) # 10% of adults, and no children
+hiv.stratify(age=[0, 15]) # Children (0-14) and adults (15+)
+
+prevention = ss.modify(hiv.infection, efficacy=0.9, network='prenatalnet')
+
+pars = dict(
+    networks     = [ss.SexualNet(), ss.PrenatalNet()],
+    demographics = [ss.Pregnancy(fertility_rate=ss.peryear(0.15)), ss.Deaths(death_rate=ss.peryear(0.01))], # Per woman, and per person, a year: 150 and 10 per 1,000
+    n_agents     = 5000,
+    start        = 2000,
+    stop         = 2020,
+    dt           = ss.months(1),
+)
+sims = {
+    'No prevention': ss.Sim(hiv, **pars),
+    'Prevention in pregnancy': ss.Sim(hiv, interventions=prevention, **pars),
+}
+msim = ss.parallel(sims)
+msim.results.hiv.I.select(age='0-14').plot()
+```
+
+No child has HIV at the start, so every child with HIV was infected by their mother, and their number grows as more are born. With prevention in pregnancy, there are about a tenth as many. Starsim also has `ss.PrenatalNet()`, `ss.PostnatalNet()`, and `ss.BreastfeedingNet()`, for when infection before and after birth need to be told apart (see [Mixing](../user_guide/populations_mixing.qmd)).
+
+## Mixing pools
+
+In a mixing pool, everyone is equally likely to meet everyone else. It doesn't list who meets whom, so many contacts cost nothing extra. It suits large groups such as a school or a town; a network suits small groups where who meets whom matters, such as households.
+
+`source=` and `target=` say who can infect others in a pool and who can be infected. Here measles spreads through two pools: a school, where children aged 5 to 14 have 10 contacts a day with each other, and the community, where everyone has 2 a day. The condition on `ss.person.age` picks out the schoolchildren; written out, it is a function of the sim that returns their UIDs, giving exactly the same epidemic:
+
+```{python}
+S, I, R = ss.states('S I R')
+infection = S >> I @ 0.19*I       # A chance of infection of 0.19 per contact per day
+recovery  = I >> R @ ss.days(8)
+measles = ss.Disease(infection, recovery, init_prev=0.001)
+measles.stratify(age=[0, 5, 15]) # Ages 0-4, 5-14, and 15+, for the results
+```
+
+::: {.panel-tabset group="language"}
+## Python
+
+```{python}
+school    = ss.MixingPool(name='school', source=(ss.person.age >= 5) & (ss.person.age < 15), target=(ss.person.age >= 5) & (ss.person.age < 15), n_contacts=10)
+community = ss.MixingPool(name='community', n_contacts=2)
+sim = ss.Sim(measles, networks=[school, community], n_agents=10_000, stop=ss.days(100))
+sim.run()
+sim.results.measles.infection.by('age').plot()
+```
+
+## R
+
+```r
+# The measles model above
+states("S I R")
+infection <- Transition(S, I, rate = 0.19 * I) # A chance of infection of 0.19 per contact per day
+recovery  <- Transition(I, R, dur = days(8))
+measles <- Disease(infection, recovery, init_prev = 0.001)
+measles$stratify(age = c(0, 5, 15)) # Ages 0-4, 5-14, and 15+, for the results
+
+school_age <- (ss$person$age >= 5) & (ss$person$age < 15)
+school    <- ss$MixingPool(name = "school", source = school_age, target = school_age, n_contacts = 10)
+community <- ss$MixingPool(name = "community", n_contacts = 2)
+sim <- Sim(measles, networks = list(school, community), n_agents = 10000, stop = days(100))
+sim$run()
+sim$results$measles$infection$by("age")$plot()
+```
+
+## Explicit
+
+```{python}
+def school_age(sim):
+    """ The UIDs of the children aged 5 to 14 """
+    age = sim.people.age
+    return age.auids[(age.values >= 5) & (age.values < 15)]
+
+school    = ss.MixingPool(name='school', source=school_age, target=school_age, n_contacts=10)
+community = ss.MixingPool(name='community', n_contacts=2)
+sim = ss.Sim(measles, networks=[school, community], n_agents=10_000, stop=ss.days(100))
+sim.run()
+sim.results.measles.infection.by('age').plot()
+```
+:::
+
+The epidemic starts in school-age children, who have the most contacts, and spreads to the rest of the community. A set of mixing pools by age is a contact matrix, as [above](#contacts-between-age-groups): `ss.contacts()` makes one pool for each pair of age groups. Pools can be for any groups, not only ages.
+
+## Choosing how people mix
+
+| How people meet | Use | Runs as |
+|---|---|---|
+| Many brief contacts, at random | No network (homogeneous mixing), or `ss.MixingPool()` | Compartments or agents |
+| At random, but more within some groups (e.g. by age) | `ss.contacts()` with a stratified disease | Compartments or agents |
+| The same few people, again and again (households, partners) | A network: `ss.RandomNet(dynamic=False)`, `ss.SexualNet()`, or the library's household networks | Agents |
+| From mother to child | `ss.PrenatalNet()`, with `ss.Pregnancy()` | Agents |
+
+Networks and mixing pools can be used together, as a list, with a different β on each. To see how many infections came through each, give the sim `analyzers='infection_log'`, which records the route of each infection over a network, and who infected whom (see [Analyzers](../user_guide/interventions_analyzers.qmd#the-infection-log)). [Mixing](../user_guide/populations_mixing.qmd) covers Starsim's other networks, including households (`ssl.ClusterNet`) and the [library's networks](../user_guide/library_networks.qmd). To make your own network, see [T8](t8_modules.qmd#a-network-written-as-code).
+
+## Exercises
+
+Exercises 1 and 2 use the town with age groups, 3 and 4 the four towns, and 5 to 8 networks.
+
+1. Closing schools roughly halves the contacts between children. Change the matrix so that children have 5 contacts a day with other children instead of 10. How do the reproduction number at the start and the number of children infected change? Which other age groups are affected, and why?
+2. Give every age group the same immunity, 90%, keeping the contact matrix. How large is the outbreak now, compared with the town above, in which the same overall share of people (about 90%) is immune? What does this say about where gaps in immunity matter most?
+3. Only 65% of Lakeview's children are immune. Give the share immune by age and town (`ss.by()` with both, multiplied together: e.g. `ss.by(age=[0.8, 0.92, 0.98], patch=[1, 1, 0.8125, 1])`), and run the model. How does Lakeview's outbreak compare with the others'?
+4. Replace the gravity model with the radiation model (`ss.geo.radiation(away=away)`). Which towns' outbreaks come earlier or later, and why?
+5. In the section on contacts per person, measles reaches almost everyone whether contacts repeat or not. Repeat the comparison for a less infectious disease, with a rate of infection of 0.083 per contact per day (so R0 is about 2 with random mixing). How much does it matter now that people meet the same contacts every day, and why?
+6. In the sexual network with partnerships that last a year, the infection dies out. Give the network `n_contacts=1` and `concurrency=0.2`, so that 20% of people have more than one partner at a time. Does the infection persist?
+7. Adapt the STI model to include transmission between men as well, with a second network `ss.SexualNet(name='msm', between='mm', dur=ss.months(3))` and a β for each network. How much does the second network add to the number infected?
+8. Add households to the measles model: `import starsim.library as ssl`, then `ssl.ClusterNet(cluster_size=ss.poisson(4))` gives households of about 4 people, everyone in each in contact with everyone else. Run measles with households and a community mixing pool with 2 contacts a day, and compare it with the community pool alone. How much of the epidemic do households add?
+
+[Solutions](solutions.qmd#t4-mixing) · Next: [T5 – Interventions and scenarios](t5_interventions.qmd)
+
+## Further reading
+
+- [POLYMOD: Social contacts and mixing patterns relevant to the spread of infectious diseases](https://journals.plos.org/plosmedicine/article?id=10.1371/journal.pmed.0050074): the contact survey in eight European countries behind most age-structured models
+- [socialmixr: Social mixing matrices for infectious disease modeling](https://epiforecasts.io/socialmixr/): an R package for building contact matrices from survey data
+- [Xia, Bjørnstad and Grenfell (2004): Measles metapopulation dynamics: a gravity model for epidemiological coupling and dynamics](https://pubmed.ncbi.nlm.nih.gov/15278849/): the gravity model fitted to measles in England and Wales
+- [Simini et al. (2012): A universal model for mobility and migration patterns](https://www.nature.com/articles/nature10856): the radiation model
+- [EpiModel: network modeling for epidemics](https://epimodel.github.io/sismid/): a course on stochastic network models, including sexually transmitted infections, in R

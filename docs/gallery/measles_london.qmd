@@ -326,7 +326,7 @@ Either can be fitted with a likelihood of your own (`fn(observed, model)`), whic
 
 ## Going further
 
-- [T9 – Custom modules](../tutorials/t9_modules.qmd) and [A5 – Custom modules](../tutorials/a5_modules.qmd) teach writing modules as code, as compartments and as agents.
+- [T8 – Custom modules](../tutorials/t8_modules.qmd) teaches writing modules as code, as compartments and as agents.
 - [Custom modules](../user_guide/building_modules.qmd) in the user guide covers the options, including `@ss.jit`; [Fitting a model](../user_guide/calibration_fitting.qmd) covers likelihoods and the particle filter.
 - He D, Ionides EL, King AA (2010). Plug-and-play inference for disease dynamics: measles in large and small populations as a case study. *Journal of the Royal Society Interface* 7: 271–283.
 - [pomp: measles in England and Wales](https://kingaa.github.io/sbied/measles/index.html), the same model fitted with the R package pomp.

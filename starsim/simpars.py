@@ -195,6 +195,13 @@ class SimPars(ss.Pars):
             self.n_agents = round(self.n_agents)
         return
 
+    @staticmethod
+    def population():
+        """ Everyone alive, as one state, to hold the births and deaths of a sim with no declared disease (see `ss.demographics.Flows`) """
+        pop = ss.Disease(N=ss.State(label='Alive'), default_state='N', name='population')
+        pop.sets_unit = False # Its typed defaults say nothing of the units of the model's bare numbers
+        return pop
+
     def validate_modules(self):
         """ Check the modules given, make modules of what are not yet (e.g. 'sir'), and sort them by kind """
         self.validate_demographics() # Before the modules are made
@@ -206,7 +213,7 @@ class SimPars(ss.Pars):
         modules = self.expand_modules(modules)
         flows = any(isinstance(mod, ss.demographics.Flows) for source,mod in modules)
         if flows and not any(getattr(mod, 'graph', None) is not None for source,mod in modules): # With no declared disease, births and deaths declared for the population are held by everyone alive, a declared module like any other
-            modules.append(('demographics', ss.demographics.Population()))
+            modules.append(('demographics', self.population()))
         self._reset_modules()
         products = []
         names = {} # Module names must be unique across all types, since they share namespaces (e.g. sim.people.<name>, sim.results.<name>)

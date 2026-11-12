@@ -80,12 +80,11 @@ https://starsim.org/v4/llms.txt is the map: every tutorial and user guide page, 
 | Write something as code | `building_modules` |
 | Age groups, or any other strata | `building_stratification` |
 | What is observed, rather than what happens | `building_outcomes` |
-| Results and plots | `building_results`, `building_plotting` |
-| Populations and data for a place | `populations_people`, `populations_data`, `populations_demographics` |
-| Contacts and networks | `populations_networks` |
-| Places and movement between them | `populations_geography` |
+| Results and plots | `building_results` |
+| Populations and data for a place | `populations_people`, `populations_places` |
+| Contacts, networks, and movement between places | `populations_mixing` |
 | Vaccines, screening, treatment | `interventions_products`, `interventions_interventions` |
-| Cost-effectiveness | `interventions_costs` |
+| Cost-effectiveness | `library_econ` |
 | Import or export a model | The `convert-model` skill |
 | Scenarios and many runs | `running_scenarios` |
 | Which solver, and why | `running_solvers` |

@@ -13,7 +13,7 @@ For a deterministic model, run as an ODE, Starsim can work out how each result c
 - Drawing from the posterior (the distribution of values consistent with the data and the priors) with the No-U-Turn sampler, NUTS, a Hamiltonian Monte Carlo method that uses the gradient to move through the space of parameters efficiently.
 - Seeing which parts of the epidemic a parameter affects, and by how much.
 
-This page assumes the basics of [Fitting a model](calibration_fitting.qmd). Gradients need JAX (`pip install "starsim[jax]"`), a model that runs as an ODE, and one whose whole run is compiled: a rate that calls a Python function, a module written as code, or a movement register rules them out, and the fit says which when it can't use gradients; `ss.solvers.why_not(sim, 'jax')` says so for any sim, and every reason is listed by `ss.solvers.solver_table()` (see [Solvers](architecture_solvers.qmd#what-decides-which-engine-runs-a-model)). JAX runs on a GPU if it finds one; if it can't use it (e.g. its CUDA plugin is of another version than JAX), run it on the CPU with `ss.options.jax = 'cpu'` (or the environment variable `STARSIM_JAX=cpu`), or just for a block with `with ss.options(jax='cpu'):`.
+This page assumes the basics of [Fitting a model](calibration_fitting.qmd). Gradients need JAX (`pip install "starsim[jax]"`), a model that runs as an ODE, and one whose whole run is compiled: a rate that calls a Python function, a module written as code, or a movement register rules them out, and the fit says which when it can't use gradients; `ss.solvers.why_not(sim, 'jax')` says so for any sim, and every reason is listed by `ss.solvers.solver_table()` (see [Solvers](architecture_engines.qmd#what-decides-which-engine-runs-a-model)). JAX runs on a GPU if it finds one; if it can't use it (e.g. its CUDA plugin is of another version than JAX), run it on the CPU with `ss.options.jax = 'cpu'` (or the environment variable `STARSIM_JAX=cpu`), or just for a block with `with ss.options(jax='cpu'):`.
 
 ## The model
 
@@ -55,7 +55,7 @@ ax.axhline(0, color='k', lw=0.5)
 ax.legend();
 ```
 
-A higher β brings the epidemic forward: more cases before the peak, and fewer after it, when the susceptible people have already been used up. A higher reporting share scales every week's cases up in proportion. Because the two parameters change the curve in different ways, the data can tell them apart. Two parameters whose gradients had the same shape could only be fitted as a combination (see [Parameter identification](calibration_identification.qmd)).
+A higher β brings the epidemic forward: more cases before the peak, and fewer after it, when the susceptible people have already been used up. A higher reporting share scales every week's cases up in proportion. Because the two parameters change the curve in different ways, the data can tell them apart. Two parameters whose gradients had the same shape could only be fitted as a combination (see [Parameter identification](calibration_diagnostics.qmd#can-the-data-tell-the-parameters-apart)).
 
 The result is indexed by parameter, then module, then result: `grad.beta.measles.cases` is an array with one value per time step.
 
@@ -153,7 +153,7 @@ ax.legend();
 
 The two are negatively correlated: a slightly higher β gives a slightly larger epidemic, which a slightly lower reporting share brings back to the same number of reported cases.
 
-The posterior is narrow because the data were made by this very ODE, with Poisson noise, so the likelihood describes their noise exactly. Real counts vary more than that, and a real outbreak has chance in its transmission that an ODE leaves out. With a Poisson likelihood, the posterior of real data would be as narrow as this one and wrong: [Fitting methods](calibration_methods.qmd#comparing-the-methods) shows an ODE's posterior excluding the true values of data from a stochastic model. A negative binomial likelihood with its dispersion fitted (`likelihood=dict(cases=ss.nbinom(n=ss.par(10, bounds=[1, 100], name='dispersion')))`) lets the data say how variable they are, and widens the posterior to match, as in [T7](../tutorials/t7_calibration.qmd#how-sure-is-the-fit); for chance in transmission, use a stochastic model and `method='pmcmc'`.
+The posterior is narrow because the data were made by this very ODE, with Poisson noise, so the likelihood describes their noise exactly. Real counts vary more than that, and a real outbreak has chance in its transmission that an ODE leaves out. With a Poisson likelihood, the posterior of real data would be as narrow as this one and wrong: [Fitting methods](calibration_methods.qmd#comparing-the-methods) shows an ODE's posterior excluding the true values of data from a stochastic model. A negative binomial likelihood with its dispersion fitted (`likelihood=dict(cases=ss.nbinom(n=ss.par(10, bounds=[1, 100], name='dispersion')))`) lets the data say how variable they are, and widens the posterior to match, as in [T6](../tutorials/t6_data.qmd#how-sure-is-the-fit); for chance in transmission, use a stochastic model and `method='pmcmc'`.
 
 ## Profile likelihoods
 
@@ -213,7 +213,7 @@ Starsim's samplers can also be used directly, for a log-density of your own (suc
 
 A posterior can also be put together by hand, by sampling-importance resampling, which needs only runs of the model and a likelihood: draw many sets of values from the priors and run each (`ss.parallel(sim, priors=True, n_runs=1000)`, whose `msim.runs` has the values of each run), work out the likelihood of the data for each run (`ss.fitting.loglik(run)`), and resample the runs in proportion to their likelihoods. It is simple and works for any model, but most draws from a wide prior land where the likelihood is negligible, so it needs many runs for few parameters, and fails for many.
 
-How the gradients are computed (the run in JAX, and the steps around it) is explained in [Randomness](architecture_randomness.qmd#randomness-in-fitting).
+How the gradients are computed (the run in JAX, and the steps around it) is explained in [Randomness](mechanics_random.qmd#randomness-in-fitting).
 
 ## Further reading
 

@@ -9,7 +9,7 @@ authorship:
 
 Calibration asks which values of a model's parameters fit the data. Optimization asks a different question of a calibrated model: given a budget, how should it be divided between programs to do the most good? If testing, masks, and vaccination each reduce transmission of a respiratory infection, with diminishing returns as each reaches more people, there is an allocation of a fixed total between them that averts the most infections, and it is rarely all to the program that looks best on its own. `sim.optimize()` finds it, using the same machinery as fitting: the spending on each program is a parameter of the model, and the search runs the model at each allocation it tries.
 
-This page covers how spending is put into a model, the search itself, limits on each program, a different total, the least total that reaches a target, and reading the result. Where costs come from, and how to count what interventions cost, is in [Costs](interventions_costs.qmd); fitting the model first is in [Fitting a model](calibration_fitting.qmd).
+This page covers how spending is put into a model, the search itself, limits on each program, a different total, the least total that reaches a target, and reading the result. Where costs come from, and how to count what interventions cost, is in [Health economics](library_econ.qmd); fitting the model first is in [Fitting a model](calibration_fitting.qmd).
 
 ## Spending as parameters
 
@@ -169,7 +169,7 @@ If the search ends at an allocation worse than the one it started from, the star
 
 ## Program books from Atomica
 
-An optimization in Atomica starts from a program book: a spreadsheet of programs, their costs, and the coverage and effects they buy. A model imported from Atomica with its program book (see [Conversion: Atomica](conversion/atomica.qmd)) has a spending parameter for each program, so `spend=` is not needed, and the same calls work:
+An optimization in Atomica starts from a program book: a spreadsheet of programs, their costs, and the coverage and effects they buy. A model imported from Atomica with its program book (see [Conversion: Atomica](https://starsim.org/lingua_franca/models/atomica/)) has a spending parameter for each program, so `spend=` is not needed, and the same calls work:
 
 ```python
 sim = ss.import_from('hiv_framework.xlsx', format='atomica', databook='hiv_databook.xlsx', progbook='hiv_progbook.xlsx', programs_start=2020)

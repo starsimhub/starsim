@@ -9,7 +9,7 @@ authorship:
 
 Vaccination, screening, and treatment programs have two parts: **what** is given (a vaccine, a test, or a drug: a **product**), and the **delivery**, which says who gets it, when, and how many. Starsim keeps the two apart, because programs do: an intervention decides who gets something and when, while the product says what happens to a person when they get it. The same vaccine can then be given routinely to infants in one scenario and in a campaign in another, without defining the vaccine again.
 
-This page covers products: vaccines, tests, and treatments, how their protection wanes, and products of your own. Deliveries (routine and campaign delivery, coverage, capacity, eligibility, and delivery triggered by events) and changes to a model's parameters, such as distancing or school closures, which need no product, are on [Interventions](interventions_interventions.qmd). The cost of products is on [Costs](interventions_costs.qmd). The tutorial [T5 – Interventions and scenarios](../tutorials/t5_interventions.qmd) uses a vaccine for measles, and [A4 – Interventions](../tutorials/a4_interventions.qmd) uses tests and treatment with agents.
+This page covers products: vaccines, tests, and treatments, how their protection wanes, and products of your own. Deliveries (routine and campaign delivery, coverage, capacity, eligibility, and delivery triggered by events) and changes to a model's parameters, such as distancing or school closures, which need no product, are on [Interventions](interventions_interventions.qmd). The cost of products is on [Health economics](library_econ.qmd). The tutorial [T5 – Interventions and scenarios](../tutorials/t5_interventions.qmd) uses a vaccine for measles, and then tests and treatment with agents ([As agents](../tutorials/t5_interventions.qmd#as-agents)).
 
 ## A vaccination campaign
 
@@ -263,7 +263,7 @@ Treatment first cuts prevalence, but each failure is a chance for resistance to 
 
 ### Costs
 
-Every product takes `cost=`, the cost of each delivery, which is then a result of the delivery (`cost`), next to the number delivered. See [Costs](interventions_costs.qmd) for costing a program and comparing costs and effects between scenarios.
+Every product takes `cost=`, the cost of each delivery, which is then a result of the delivery (`cost`), next to the number delivered. See [Health economics](library_econ.qmd) for costing a program and comparing costs and effects between scenarios.
 
 ## One product, several deliveries
 
@@ -384,7 +384,7 @@ Each of these is an event, which can trigger a delivery (`when=`), and a result 
 | `never_ran` | A delivery with `queue=` a duration | Those still waiting when their time in the queue ran out |
 | `held` (a condition, not an event) | A product, e.g. `who=vaccine.held`, or every product of a kind, `ss.Vaccine.held` | Those who hold it now |
 
-The transitions of a disease (`measles.infection`, or a branch, `tr.to(state)`) and the events of [pregnancy](populations_demographics.qmd) (`pregnancy.birth`) are events in the same way; see [Interventions](interventions_interventions.qmd#appendix-who-and-when).
+The transitions of a disease (`measles.infection`, or a branch, `tr.to(state)`) and the events of [pregnancy](populations_people.qmd#births-and-deaths) (`pregnancy.birth`) are events in the same way; see [Interventions](interventions_interventions.qmd#appendix-who-and-when).
 
 ## Appendix: what efficacy and waning can be
 

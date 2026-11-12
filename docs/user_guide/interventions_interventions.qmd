@@ -9,7 +9,7 @@ authorship:
 
 An intervention is anything done to change the course of an epidemic. Most are one of two kinds. Some **deliver a product** to people: a vaccine, a test, or a drug, given to the people who are eligible, at given times or when something happens to them. Others **change a quantity** in the model, giving nothing to anyone: masks, distancing, and school closures change transmission, faster diagnosis shortens the time people are infectious. This page covers both: how products are delivered (who, when, and how many), and how parameters are changed (when, for whom, and how changes combine), and then interventions written as code, for anything else.
 
-What a vaccine, test, or treatment does is on [Products](interventions_products.qmd), and what interventions cost on [Costs](interventions_costs.qmd). The same `ss.modify()` that changes parameters is how one module changes another, on [Connectors](interventions_connectors.qmd). The tutorial [T5 – Interventions and scenarios](../tutorials/t5_interventions.qmd) compares interventions against measles, and [A4 – Interventions](../tutorials/a4_interventions.qmd) uses deliveries that need agents; running the scenarios of a comparison is on [Scenarios](running_scenarios.qmd).
+What a vaccine, test, or treatment does is on [Products](interventions_products.qmd), and what interventions cost on [Health economics](library_econ.qmd). The same `ss.modify()` that changes parameters is how one module changes another, on [Connectors](interventions_connectors.qmd). The tutorial [T5 – Interventions and scenarios](../tutorials/t5_interventions.qmd) compares interventions against measles, and then uses deliveries that need agents ([As agents](../tutorials/t5_interventions.qmd#as-agents)); running the scenarios of a comparison is on [Scenarios](running_scenarios.qmd).
 
 Here are the two kinds side by side, against an outbreak of measles in a town of 100,000 people, 90% of whom are immune (an SEIR model with an R0 of about 15, latent for 10 days and infectious for 8, as on [Products](interventions_products.qmd)): a vaccination campaign that reaches 80% of people on 1 May, three months before the outbreak would peak, and distancing that halves transmission from 1 May to 1 July:
 
@@ -334,7 +334,7 @@ print('Newborns tested:', sim.results.newborn.delivered.sum())
 
 As agents, every delivery keeps the memory of its events (who it reached, and each outcome), so it can be read after a run (and during it, `delivery.reached()` gives the UIDs of the people it reached on this step): `sim.interventions.screening.ever.uids` is everyone ever screened, and `(sim.interventions.screening.positive.since <= ss.years(1)).uids` everyone positive within the past year.
 
-`trace=` is contact tracing: it delivers to the contacts, on a network, of the people that the event in `when=` selects. A network with `memory=` reaches recent past partners too (see [Contact networks](populations_networks.qmd#working-with-edges)).
+`trace=` is contact tracing: it delivers to the contacts, on a network, of the people that the event in `when=` selects. A network with `memory=` reaches recent past partners too (see [Contact networks](populations_mixing.qmd#working-with-edges)).
 
 ### Delivery by a function
 
@@ -556,7 +556,7 @@ sim.run()
 sim.results.flu_age.I.by('age').plot()
 ```
 
-Closing schools is a modifier on the school layer of a contact matrix: see [Population data](populations_data.qmd#contact-matrices-by-setting).
+Closing schools is a modifier on the school layer of a contact matrix: see [Population data](populations_mixing.qmd#contact-matrices-by-setting).
 
 #### Who it applies to
 
@@ -629,7 +629,7 @@ Changes work the same under every solver. As agents, a change to contacts (such 
 
 ## Writing an intervention as code
 
-Deliveries and modifiers cover the common cases. Anything else is a module written as code: a subclass of `ss.Intervention` with a `step()` method, which runs on every step and can read and change anything in the sim (see [Custom modules](building_modules.qmd), and the tutorial [T9 – Custom modules](../tutorials/t9_modules.qmd), which writes one for isolating measles cases).
+Deliveries and modifiers cover the common cases. Anything else is a module written as code: a subclass of `ss.Intervention` with a `step()` method, which runs on every step and can read and change anything in the sim (see [Custom modules](building_modules.qmd), and the tutorial [T8 – Custom modules](../tutorials/t8_modules.qmd), which writes one for isolating measles cases).
 
 An intervention written as code is best kept to deciding, leaving the change itself to `ss.modify()`, so that the base value is never overwritten and the change combines with others. Here is a lockdown with memory: it starts when more than 5,000 people are infectious, as the reactive measure above does, but is lifted only once fewer than 1,000 are. The intervention keeps the decision, and records it as a result; the modifier reads it:
 

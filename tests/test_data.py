@@ -57,7 +57,7 @@ def test_geo():
     nodes = ssd.load_nodes('Kenya', level=1)
     assert len(kenya) == 47 and kenya.names == list(nodes.name)
     assert np.all(kenya.populations > 0) and abs(kenya.populations.sum()/nodes.population.sum() - 1) < 1e-9
-    assert np.allclose(kenya.distances, ssd.distances('Kenya', level=1).values, rtol=1e-3) # Great-circle distances in km, as the provider's
+    assert np.allclose(kenya.distances, ssd.distances('Kenya', level=1).values, rtol=1e-3) # Great-circle distances in km, as starsim_data's
     i, j = kenya.names.index('Nairobi'), kenya.names.index('Kiambu')
     assert kenya.adjacency[i, j] and kenya.adjacency[j, i] and not kenya.adjacency[i, i] # Neighbors
     assert not kenya.adjacency[i, kenya.names.index('Mombasa')]

@@ -9,7 +9,7 @@ authorship:
 
 What a model tracks is not what is observed. A model of measles tracks who is susceptible, latent, infectious, and immune; a surveillance system sees reported cases, some days after infection, and only some of them. This page covers the results a model has, how to declare more (such as prevalence or the share immune), how to declare **outcomes**, the reported quantities worked out from the model's flows (cases, hospital admissions, deaths), and how data is attached to the results by name, so that it can be plotted and fitted.
 
-For a step-by-step introduction, see [T7 – Data and calibration](../tutorials/t7_calibration.qmd).
+For a step-by-step introduction, see [T6 – Data and calibration](../tutorials/t6_data.qmd).
 
 ## The results of a declared disease
 

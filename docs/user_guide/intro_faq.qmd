@@ -15,16 +15,16 @@ No! Starsim covers a lot (compartmental and agent-based models, networks, demogr
 To get started with **compartmental modeling**, read:
 
 1. [T1 – Getting started](../tutorials/t1_intro.qmd), [T2 – Building a model](../tutorials/t2_model.qmd), and [T3 – Building a disease](../tutorials/t3_disease.qmd): states, transitions, parameters, and results
-2. [T4 – Age groups and contacts](../tutorials/t4_ages.qmd) and [T5 – Interventions and scenarios](../tutorials/t5_interventions.qmd), if your model has age groups or interventions
-3. [T7 – Data and calibration](../tutorials/t7_calibration.qmd), to fit the model to data
+2. [T4 – Mixing](../tutorials/t4_mixing.qmd) and [T5 – Interventions and scenarios](../tutorials/t5_interventions.qmd), if your model has age groups or interventions
+3. [T6 – Data and calibration](../tutorials/t6_data.qmd), to fit the model to data
 4. [Writing models](building_writing.qmd) and [Solvers and backends](running_solvers.qmd) in this user guide, to look things up as you go
 
 To get started with **agent-based modeling**, read:
 
-1. [T1 – Getting started](../tutorials/t1_intro.qmd) and [T2 – Building a model](../tutorials/t2_model.qmd): agent-based models in Starsim are written the same way as compartmental ones
-2. [A1 – Diseases](../tutorials/a1_diseases.qmd) and [A2 – Networks](../tutorials/a2_networks.qmd): diseases as agents, and who is in contact with whom
-3. [A3 – Demographics](../tutorials/a3_demographics.qmd), [A4 – Interventions](../tutorials/a4_interventions.qmd), and [A5 – Custom modules](../tutorials/a5_modules.qmd), as your model needs them
-4. [People and agents](populations_people.qmd), [Contact networks](populations_networks.qmd), and [Array indexing](mechanics_indexing.qmd) in this user guide, to look things up as you go
+1. [T1 – Getting started](../tutorials/t1_intro.qmd) and [T2 – Building a model](../tutorials/t2_model.qmd): agent-based models in Starsim are written the same way as compartmental ones, and T1 ends by running its model as agents
+2. The "As agents" parts of [T3 – Building a disease](../tutorials/t3_disease.qmd#as-agents) and [T5 – Interventions and scenarios](../tutorials/t5_interventions.qmd#as-agents), and the networks of [T4 – Mixing](../tutorials/t4_mixing.qmd#contacts-per-person): diseases, interventions, and contacts between particular people
+3. [T9 – Agents](../tutorials/t9_agents.qmd) and [T8 – Custom modules](../tutorials/t8_modules.qmd), as your model needs them
+4. [People and demographics](populations_people.qmd), [Mixing](populations_mixing.qmd), and [Array indexing](mechanics_indexing.qmd) in this user guide, to look things up as you go
 
 The [Architecture](architecture_index.qmd) pages, on how Starsim works inside, are for those who want to know; no model needs them.
 
@@ -42,11 +42,11 @@ The first run after installing Starsim may compile its kernels with Numba, which
 
 ## How large a population can Starsim model?
 
-As compartments, any size: a compartmental run takes the same time for a thousand people as for a billion (except with Gillespie's method, which takes one event at a time). As agents, the time grows with the number of agents, so a large population is usually represented by having each agent stand for several people. See [Branching and rescaling](running_branching.qmd) and [Getting the most speed](running_performance.qmd).
+As compartments, any size: a compartmental run takes the same time for a thousand people as for a billion (except with Gillespie's method, which takes one event at a time). As agents, the time grows with the number of agents, so a large population is usually represented by having each agent stand for several people. See [Branching and rescaling](running_branching.qmd) and [Speed and scale](running_performance.qmd).
 
 ## How do I fit a model to data?
 
-Give the parameters you want fitted bounds, give the sim data whose columns are named like its results, and call `sim.fit()`. There is no function to write that puts the values into the model or pulls out the results to compare. See [T7 – Data and calibration](../tutorials/t7_calibration.qmd) to start, and [Fitting a model](calibration_fitting.qmd) for the details.
+Give the parameters you want fitted bounds, give the sim data whose columns are named like its results, and call `sim.fit()`. There is no function to write that puts the values into the model or pulls out the results to compare. See [T6 – Data and calibration](../tutorials/t6_data.qmd) to start, and [Fitting a model](calibration_fitting.qmd) for the details.
 
 ## Why do two runs give different results, and how do I make them match?
 
@@ -58,7 +58,7 @@ They are starting points, not models of a particular setting. The [library](libr
 
 ## I have a model in Starsim 3 or another framework. Can I bring it over?
 
-In almost all cases, yes. Starsim can import models from several frameworks, including EpiModel, odin, and epydemix; others, such as LASER, have a guide to translating by hand (or by agent); Starsim 3 libraries like [STIsim](https://stisim.org) were automatically rewritten for this version by a migration script (`python -m starsim.converters.migrate`). See [Conversion](conversion/index.qmd), which has a page for each. If a model doesn't translate and you'd like it to, [email us](mailto:info@starsim.org) or [open an issue](https://github.com/starsimhub/starsim/issues) and we'll see if we can get it to work.
+In almost all cases, yes. Starsim can import models from several frameworks, including EpiModel, odin, and epydemix; others, such as LASER, have a guide to translating by hand (or by agent); Starsim 3 libraries like [STIsim](https://stisim.org) were automatically rewritten for this version by a migration script (`python -m starsim.converters.migrate`). See [Import/export](building_import.qmd), which has a page for each. If a model doesn't translate and you'd like it to, [email us](mailto:info@starsim.org) or [open an issue](https://github.com/starsimhub/starsim/issues) and we'll see if we can get it to work.
 
 ## Can I use Starsim with an AI coding agent?
 

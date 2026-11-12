@@ -101,8 +101,8 @@ The settings of a sim are its keywords. The ones most models use:
 | `start`, `stop` | The time span: dates (`'2025-01-01'`), years (`2025`), or, with no calendar, durations from 0 (`ss.days(50)`) |
 | `dur` | The length of the run (`ss.years(10)`, or a bare number in the sim's unit): any two of `start`, `stop`, and `dur` define the third (`stop=2035, dur=10` starts in 2025) |
 | `dt`, `unit` | The time step, and the unit of bare numbers (see [Time](building_time.qmd)) |
-| `networks` | How people mix: a contact matrix (`ss.contacts()`), a network, or a mixing pool (default: everyone mixes with everyone); see [Contact networks](populations_networks.qmd) |
-| `demographics` | Births, deaths, and migration (see [Demographics](populations_demographics.qmd)) |
+| `networks` | How people mix: a contact matrix (`ss.contacts()`), a network, or a mixing pool (default: everyone mixes with everyone); see [Mixing](populations_mixing.qmd) |
+| `demographics` | Births, deaths, and migration (see [Demographics](populations_people.qmd#births-and-deaths)) |
 | `interventions`, `analyzers`, `connectors` | Interventions, analyzers, and connectors between modules (see [Interventions](interventions_interventions.qmd)) |
 | `data` | Data to compare the results with, by name (see [Results](building_results.qmd)) |
 | `solver` | How to run: `'auto'` (the default), `'ode'`, `'binomial'`, `'gillespie'`, `'tau'`, or `'abm'`; or with options, `ss.solvers.ode()`, `ss.solvers.binomial()`, or `ss.solvers.abm()` |
@@ -185,7 +185,7 @@ Nothing is computed when a sim is made. `sim.init()`, which `sim.run()` calls if
 
 - It fills in whatever was left out (the unit of time from the values in the model, how long each state lasts beyond its average, how people mix, where people start) and records each choice, so that `describe()` can show it.
 - It checks the model: unknown parameter names, values outside their bounds, and shapes that don't match the model's groups are errors here, before the run.
-- It chooses the solver, makes the people (with a default age and sex structure, unless a population is given; see [People and agents](populations_people.qmd)), adds each module's states, parameters, and results, sets up the time steps, and starts the random number generators.
+- It chooses the solver, makes the people (with a default age and sex structure, unless a population is given; see [People and demographics](populations_people.qmd)), adds each module's states, parameters, and results, sets up the time steps, and starts the random number generators.
 
 Calling `sim.init()` yourself is useful for looking at the people or the model before a long run, or for finding an error without waiting for one.
 
@@ -284,7 +284,7 @@ For a declared model, Starsim works out the order of everything in a step from t
 
 So on a single day, a woman who becomes pregnant, develops symptoms, moves house, takes a test, and transmits an infection does them in that order, and transmits to her new household rather than her old one. Putting demographics first means that a child born during a step can be infected during that step (for example, by her mother), and that the effect of an infection during pregnancy is captured. Putting networks before transmission means that a new partnership can transmit in the step it forms, which matters for sexually transmitted infections with short partnerships.
 
-Modules can have time steps of their own (demographics once a year and a disease once a day, say); the sim keeps a plan of which module runs on which step. `sim.loop.to_df()`, after `sim.init()`, lists every function called in every step, and `sim.loop.plot()` draws it. A declared model with nothing but compartments is run in one go rather than step by step, which is why its run is so fast; see [Custom modules](building_modules.qmd). [Steps and time points](architecture_steps.qmd) explains the order in full: why each thing comes where it does, why stocks and flows are recorded at different points in the step, and how the state is updated within a step.
+Modules can have time steps of their own (demographics once a year and a disease once a day, say); the sim keeps a plan of which module runs on which step. `sim.loop.to_df()`, after `sim.init()`, lists every function called in every step, and `sim.loop.plot()` draws it. A declared model with nothing but compartments is run in one go rather than step by step, which is why its run is so fast; see [Custom modules](building_modules.qmd). [Steps and time points](architecture_run.qmd#time-points-and-steps) explains the order in full: why each thing comes where it does, why stocks and flows are recorded at different points in the step, and how the state is updated within a step.
 
 ## Saving and loading
 
@@ -296,7 +296,7 @@ loaded = ss.load('my-measles.sim')
 loaded.plot('measles')
 ```
 
-By default a saved sim that has finished keeps its results but not the people, which makes the file much smaller; a sim saved part of the way through keeps everything, so that it can be loaded and run on (`shrink=False` keeps everything in either case). A saved sim is a Python pickle, so it needs the same version of Starsim (and of any modules written as code) to load. For the results alone, `sim.to_df()` gives them as a table, which can be saved as a CSV or Excel file, and `sim.to_json()` gives the results and settings as JSON (see [Results](building_results.qmd)). To write the model itself in another format (SBML, odin), see [Import and export](conversion/index.qmd).
+By default a saved sim that has finished keeps its results but not the people, which makes the file much smaller; a sim saved part of the way through keeps everything, so that it can be loaded and run on (`shrink=False` keeps everything in either case). A saved sim is a Python pickle, so it needs the same version of Starsim (and of any modules written as code) to load. For the results alone, `sim.to_df()` gives them as a table, which can be saved as a CSV or Excel file, and `sim.to_json()` gives the results and settings as JSON (see [Results](building_results.qmd)). To write the model itself in another format (SBML, odin), see [Import and export](building_import.qmd).
 
 `sim.shrink()` does the same in memory: it removes the people and the other per-agent arrays from a finished sim, keeping the results. For a sim of agents this is most of its size, so it is worth doing when keeping many runs. `ss.MultiSim` and `ss.parallel()` already shrink the sims they run.
 
@@ -352,7 +352,7 @@ sims = sc.parallelize(make_sim, iterkwargs=iterkwargs)
 msim = ss.parallel(sims)
 ```
 
-Keep anything that differs between scenarios as an argument rather than editing the sim afterwards, and keep `debug=True` as a quick way to check the code end to end. For running such a project on a cluster or as a web app, see [Deployment](running_deploy.qmd).
+Keep anything that differs between scenarios as an argument rather than editing the sim afterwards, and keep `debug=True` as a quick way to check the code end to end. For running such a project on a cluster or as a web app, see [Deployment](running_performance.qmd#from-a-notebook-to-a-script).
 
 ## Pitfalls
 
@@ -381,7 +381,7 @@ Every keyword of `ss.Sim()`, by what it is for; `sim.pars` (an `ss.SimPars`) hol
 | `step_order` | 'type' | The order the modules step in: `'type'`, each kind at its place in the step, or `'given'`, in the order they were given (the model and `modules=` first) |
 | `pars` | none | Values of the model's parameters by name, e.g. `pars=dict(beta=0.1)` or `pars=fit.pars`; the settings in this table are keywords of their own (a parameter of the model given as a keyword says to put it in `pars=`), but as in Starsim 3 `pars=` can hold them too, e.g. `pars=dict(start=2000, dur=10, n_agents=1000, beta=0.1)`, told apart by name (a name is a setting if no parameter of the model has it; a keyword given outright wins), or be a whole `ss.SimPars` |
 | `data` | none | Data to plot with the results and to fit to, with a `time` column and columns named like `measles.infection` |
-| `people` | none | An `ss.People` to use, rather than making one (see [People and agents](populations_people.qmd)) |
+| `people` | none | An `ss.People` to use, rather than making one (see [People and demographics](populations_people.qmd)) |
 | **The population** | | |
 | `total_pop` | 10,000 | The size of the population modeled |
 | `n_agents` | as `total_pop`, up to 10,000 | The number of agents, for a run as agents; giving it makes the sim run as agents (and without `total_pop`, it is an error for a compartmental run). Each agent then stands for `sim.pop_scale = total_pop/n_agents` people |

@@ -20,24 +20,14 @@ These are solutions to the exercises at the end of each tutorial. Many of the ex
 
 {{< include _solutions_t3_disease.qmd >}}
 
-{{< include _solutions_t4_ages.qmd >}}
+{{< include _solutions_t4_mixing.qmd >}}
 
 {{< include _solutions_t5_interventions.qmd >}}
 
-{{< include _solutions_t6_places.qmd >}}
+{{< include _solutions_t6_data.qmd >}}
 
-{{< include _solutions_t7_calibration.qmd >}}
+{{< include _solutions_t7_strata.qmd >}}
 
-{{< include _solutions_t8_strata.qmd >}}
+{{< include _solutions_t8_modules.qmd >}}
 
-{{< include _solutions_t9_modules.qmd >}}
-
-{{< include _solutions_a1_diseases.qmd >}}
-
-{{< include _solutions_a2_networks.qmd >}}
-
-{{< include _solutions_a3_demographics.qmd >}}
-
-{{< include _solutions_a4_interventions.qmd >}}
-
-{{< include _solutions_a5_modules.qmd >}}
+{{< include _solutions_t9_agents.qmd >}}

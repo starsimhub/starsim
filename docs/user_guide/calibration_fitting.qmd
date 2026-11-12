@@ -18,7 +18,7 @@ In Starsim, calibration needs two things, each stated where it belongs:
 
 `sim.fit()` then fits every parameter that has bounds to every result that has data. There is no function to write that puts each value into the model, and none that pulls out the results to compare: the model already knows where each parameter is used and what each result is.
 
-This page covers the options. The [calibration tutorial](../tutorials/t7_calibration.qmd) goes through one fit step by step; [Parameter identification](calibration_identification.qmd) is about whether the data can determine the parameters at all; [Gradients](calibration_gradients.qmd) covers posteriors and profile likelihoods; [Fit diagnostics](calibration_diagnostics.qmd) covers what to check afterwards; and [Optimization](calibration_optimization.qmd) uses the same machinery to allocate a budget.
+This page covers the options. The [calibration tutorial](../tutorials/t6_data.qmd) goes through one fit step by step; [Parameter identification](calibration_diagnostics.qmd#can-the-data-tell-the-parameters-apart) is about whether the data can determine the parameters at all; [Gradients](calibration_gradients.qmd) covers posteriors and profile likelihoods; [Fit diagnostics](calibration_diagnostics.qmd) covers what to check afterwards; and [Optimization](calibration_optimization.qmd) uses the same machinery to allocate a budget.
 
 ## The smallest example
 
@@ -233,6 +233,7 @@ def betabinomial(observed, model, n=5000, rho=0.001):
 survey = truth.to_synthetic_data('prevalence', noise=None)
 survey = survey[survey.date.isin(ss.date.arange('2025-03-01', '2025-11-01', ss.months(2)))].copy() # The first of every other month
 p = np.clip(survey.prevalence.values, 1e-6, None) # Above 0, once the outbreak is over
+rng = np.random.default_rng(3)
 survey['prevalence'] = sps.betabinom.rvs(5000, p*999, (1 - p)*999, random_state=rng) # The number positive among 5,000, with rho = 0.001
 for label, run in {'Calibrated': fit_lik.sim, 'Starting values': fit_lik.before}.items():
     print(f'{label}: {ss.fitting.loglik(run, data=survey, likelihood=dict(prevalence=betabinomial)):.1f}')
@@ -344,7 +345,7 @@ msim$plot("measles.cases")
 msim.summarize().loc['measles_cases']
 ```
 
-These runs use the best values only, so their spread is chance alone, not the uncertainty in the fitted values. For projections that carry that uncertainty too, fit a posterior and use `fit.project()`; see [Gradients](calibration_gradients.qmd#projecting-from-a-posterior), and [T7](../tutorials/t7_calibration.qmd#projecting-from-the-fit) for a projection from early data checked against what happened next.
+These runs use the best values only, so their spread is chance alone, not the uncertainty in the fitted values. For projections that carry that uncertainty too, fit a posterior and use `fit.project()`; see [Gradients](calibration_gradients.qmd#projecting-from-a-posterior), and [T6](../tutorials/t6_data.qmd#projecting-from-the-fit) for a projection from early data checked against what happened next.
 
 To forecast beyond the data, fit the data so far and run on past them: `fit.project()` passes its other arguments to `sim.new()`, so `fit.project({'No campaign': None, 'Campaign': vaccination}, stop='2026-06-01')` runs each scenario to June 2026, from the best values (or from draws of a posterior).
 
@@ -374,12 +375,12 @@ The same machinery answers a different question: given the spending on each prog
 ## Pitfalls
 
 - **A best value at a bound.** The fit warns (`AtBound`) when a best value is at the edge of its bounds: the best value may lie beyond it, so widen the bounds, or check that the parameter means what you think it does.
-- **Parameters the data can't tell apart.** Two parameters that only ever appear multiplied together (such as a contact rate and a chance of infection per contact) can't be fitted separately; the fit notes this. See [Parameter identification](calibration_identification.qmd).
+- **Parameters the data can't tell apart.** Two parameters that only ever appear multiplied together (such as a contact rate and a chance of infection per contact) can't be fitted separately; the fit notes this. See [Parameter identification](calibration_diagnostics.qmd#can-the-data-tell-the-parameters-apart).
 - **A lucky trial.** In a stochastic fit, the best trial may simply have been a lucky run. The fit reruns the best values with the same seeds, and says so if they then score worse than the starting values; use more trials, or more runs or particles per trial (`n_runs=`, `particles=`).
 - **A column that matches nothing.** Data columns are matched to results by name; a column that matches no result is an error when fitting, with the closest names suggested.
 - **Too few runs to judge.** One run of a stochastic model, with the best values, says little about whether the model fits; compare the data with many runs, as [above](#a-stochastic-model).
 
-More checks are in [Fit diagnostics](calibration_diagnostics.qmd). How the fitting works, and how the method is chosen, is explained in [Randomness](architecture_randomness.qmd).
+More checks are in [Fit diagnostics](calibration_diagnostics.qmd). How the fitting works, and how the method is chosen, is explained in [Randomness](mechanics_random.qmd#how-it-works).
 
 ## Further reading
 

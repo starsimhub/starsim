@@ -137,7 +137,7 @@ class geography:
             if self.ref is None:
                 errormsg = 'shapes=True needs a geography of a country (e.g. ss.geo.geography("Kenya")) or one made from shapes (a .shp, .geojson, or .gpkg file, or a GeoDataFrame)'
                 raise ValueError(errormsg)
-            ssd = ss.data.provider()
+            ssd = ss.data.starsim_data()
             found = pd.concat([ssd.download_shapes(place, level=self.ref['level']) for place in sc.tolist(self.ref['place'])]) # Keeps them a GeoDataFrame
             found = found.drop_duplicates('pcode').set_index('pcode')
             missing = [name for name,code in zip(self.names, self.codes) if code not in found.index]

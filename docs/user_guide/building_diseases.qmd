@@ -9,7 +9,7 @@ authorship:
 
 A disease in Starsim is declared the way a compartmental model is drawn: as the states people can be in (the compartments) and the transitions between them (the flows), each with what drives it, a rate or a duration. This page is the reference for writing them: the ways to write a transition, transmission and other rates, durations and their distributions, branching, how an epidemic starts, births and deaths, quantities that are not people, and susceptibility. A disease declared this way runs as a compartmental model or as agents, unchanged.
 
-For a step-by-step introduction, see [T2 – Building a model](../tutorials/t2_model.qmd) and [T3 – Building a disease](../tutorials/t3_disease.qmd); for diseases among agents, [A1 – Diseases](../tutorials/a1_diseases.qmd). A disease that needs more than states and transitions can be written as code ([below](#diseases-written-as-code)).
+For a step-by-step introduction, see [T2 – Building a model](../tutorials/t2_model.qmd) and [T3 – Building a disease](../tutorials/t3_disease.qmd); for diseases among agents, [T1 – Getting started](../tutorials/t1_intro.qmd#the-same-model-as-agents). A disease that needs more than states and transitions can be written as code ([below](#diseases-written-as-code)).
 
 ## A disease in brief
 
@@ -421,7 +421,7 @@ If nothing is given, a disease with transmission starts with 1% of people infect
 
 ## Births and deaths in a disease
 
-Births and deaths of everyone are usually given to the sim, as `demographics=`, so that the same people are born into and die from every disease ([Demographics](populations_demographics.qmd)). With one disease, they can also be declared in it: `ss.birth(rate=...)` with no state is a crude birth rate into the first state (per year, and per 1,000 people if above 1, else per person, bare or typed), and `ss.death(rate=...)` with no state is a death rate in every state, read the same way. A birth into a given state, `ss.birth(S, rate=...)`, or a death from one, `ss.death(I, rate=...)`, is a rate like any other: a typed rate is per person, and a bare number is in the model's unit.
+Births and deaths of everyone are usually given to the sim, as `demographics=`, so that the same people are born into and die from every disease ([Demographics](populations_people.qmd#births-and-deaths)). With one disease, they can also be declared in it: `ss.birth(rate=...)` with no state is a crude birth rate into the first state (per year, and per 1,000 people if above 1, else per person, bare or typed), and `ss.death(rate=...)` with no state is a death rate in every state, read the same way. A birth into a given state, `ss.birth(S, rate=...)`, or a death from one, `ss.death(I, rate=...)`, is a rate like any other: a typed rate is per person, and a bare number is in the model's unit.
 
 New births are the supply of susceptible people that keeps measles endemic. Here is measles in a city of a million, starting from a population in which it has circulated before, so that only 7% of people are still susceptible. Since this model has values in both days and years, the unit of a bare number can't be known, so β is given as `ss.perday()`:
 
@@ -486,7 +486,7 @@ sim.diseases.cholera.plot('I', 'W') # The infectious, and the bacteria in the wa
 
 Since nobody catches cholera from a person here, the infection is **spontaneous** (its rate has no bare state), but it is still the acquisition of the disease: it is what a vaccine or a lower susceptibility acts on.
 
-A count can weight each person: `(ss.by(biting=[0.5, 1, 2])*I).n` counts each infectious person by how much they are bitten (in a model stratified by `biting`), and `I.n_infectious` by how infectious they are (their `rel_trans`, with any product or modifier on it), so a treatment that halves infectiousness also halves what the treated shed: `shedding = ss.outside >> W @ xi*I.n_infectious`. A weighted count works under every solver; in a compartmental run the kernels work it out within each step, as they do `I.n`, except in diseases tracked jointly (two diseases whose states depend on each other), where it is worked out once a step and held through it, as `sim.describe()` says. A contact matrix acts on a weighted count in a rate as it does on `I.n` (see [Population data](populations_data.qmd)).
+A count can weight each person: `(ss.by(biting=[0.5, 1, 2])*I).n` counts each infectious person by how much they are bitten (in a model stratified by `biting`), and `I.n_infectious` by how infectious they are (their `rel_trans`, with any product or modifier on it), so a treatment that halves infectiousness also halves what the treated shed: `shedding = ss.outside >> W @ xi*I.n_infectious`. A weighted count works under every solver; in a compartmental run the kernels work it out within each step, as they do `I.n`, except in diseases tracked jointly (two diseases whose states depend on each other), where it is worked out once a step and held through it, as `sim.describe()` says. A contact matrix acts on a weighted count in a rate as it does on `I.n` (see [Places and data](populations_places.qmd)).
 
 ## Susceptibility and infectiousness
 
@@ -779,7 +779,7 @@ dis = sim.diseases.twostrains
 print('People whose last infection was each strain:', dict(zip(strains.names, np.bincount(dis.strain[dis.strain >= 0], minlength=2))))
 ```
 
-The parts of a module written as code (its parameters, states, results, and the order in which Starsim calls its methods) are covered in [Custom modules](building_modules.qmd), and [A1 – Diseases](../tutorials/a1_diseases.qmd) builds a disease among agents step by step.
+The parts of a module written as code (its parameters, states, results, and the order in which Starsim calls its methods) are covered in [Custom modules](building_modules.qmd), and [T1 – Getting started](../tutorials/t1_intro.qmd#the-same-model-as-agents) builds a disease among agents step by step.
 
 ## Names with special meaning
 
@@ -895,7 +895,7 @@ print('Peak infected (E, I, and H):', round(res.infected.max()))
 | `p` | The share of people who take this transition (separate transitions out of one state), or a list of shares, one for each destination | [Branching](#branching) |
 | `stages` | The number of stages used to run the dwell time, under every solver | [Durations](#durations) |
 | `who` | Who it applies to: a condition (e.g. `ss.person.age > 30`, or a state by its path, `'sir.I'`), with a rate of 0 for everyone else | [Other rates](#other-rates) |
-| `when` | What triggers it, instead of a rate: an event, which moves the people it happens to, or `ss.on(event, delay=...)` for a time after it (as agents); or a condition, which moves people as soon as it holds | [Other rates](#other-rates), [Demographics](populations_demographics.qmd) |
+| `when` | What triggers it, instead of a rate: an event, which moves the people it happens to, or `ss.on(event, delay=...)` for a time after it (as agents); or a condition, which moves people as soon as it holds | [Other rates](#other-rates), [Demographics](populations_people.qmd#births-and-deaths) |
 | `move` | A change of level in a dimension as well as of state (`move=dict(risk=('low', 'high'))`), or a change of strains (`move=DS >> (DS, RIF)`) | [Stratification](building_stratification.qmd#moving-between-groups) |
 | `increment` | A counter that goes up each time the transition happens to someone (`increment='infections'`), or by another amount (`increment=dict(parity=2)`) | [Stratification](building_stratification.qmd#moving-between-groups) |
 | `min_stay` | A minimum stay: nobody takes the transition until they have been in the source state this long | |

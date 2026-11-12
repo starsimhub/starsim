@@ -7,7 +7,7 @@ authorship:
   note: The household and spatial network sections are adapted from the Starsim 3 user guide page on library modules; the rest, and every comparison, written by AI; school closure example and appendix added by AI
 ---
 
-Core Starsim has the networks most models need: random contacts (`ss.RandomNet`), partnerships (`ss.DegreeNet`, `ss.SexualNet`), mother and child (`ss.PrenatalNet` and its relatives), mixing pools, and contact matrices; they, and how to write a network of your own, are on [Contact networks](populations_networks.qmd). The Starsim library (`import starsim.library as ssl`; see [Library: diseases](library_diseases.qmd) for what the library is) has nine more, for households and other clusters, for space, and for theoretical work:
+Core Starsim has the networks most models need: random contacts (`ss.RandomNet`), partnerships (`ss.DegreeNet`, `ss.SexualNet`), mother and child (`ss.PrenatalNet` and its relatives), mixing pools, and contact matrices; they, and how to write a network of your own, are on [Mixing](populations_mixing.qmd). The Starsim library (`import starsim.library as ssl`; see [Library](library_index.qmd) for what the library is) has nine more, for households and other clusters, for space, and for theoretical work:
 
 | Class | Based on | What it is | Main parameters |
 | --- | --- | --- | --- |
@@ -22,7 +22,7 @@ Core Starsim has the networks most models need: random contacts (`ss.RandomNet`)
 | `ssl.ScaleFreeNet` | `ssl.StaticNet` | A few people with many contacts (Barabási-Albert) | `n_contacts` |
 | `ssl.NullNet` | `ss.Network` | Each person in contact only with themselves, with no transmission, as a placeholder | none |
 
-Like every network, these carry agents, so a model with one runs under the agent-based solver; [Contact networks](populations_networks.qmd) says how each would be approximated by a compartmental one. The tutorial [A2 – Networks](../tutorials/a2_networks.qmd) introduces networks with a worked example.
+Like every network, these carry agents, so a model with one runs under the agent-based solver; [Mixing](populations_mixing.qmd) says how each would be approximated by a compartmental one. The tutorial [T4 – Mixing](../tutorials/t4_mixing.qmd#contacts-per-person) introduces networks with a worked example.
 
 ## Households and other clusters
 
@@ -100,7 +100,7 @@ sim = ss.Sim(networks=ssl.HouseholdNet(dhs_data=dhs_data))
 ```
 
 ::: {.callout-warning}
-`HouseholdNet` sets the age and sex of every agent (other than unborn agents) when it starts. Take care when using it with other modules that set or depend on age and sex, such as `ss.population('Kenya')` (see [People and agents](populations_people.qmd)).
+`HouseholdNet` sets the age and sex of every agent (other than unborn agents) when it starts. Take care when using it with other modules that set or depend on age and sex, such as `ss.population('Kenya')` (see [People and demographics](populations_people.qmd)).
 :::
 
 ## Space
@@ -142,7 +142,7 @@ plt.legend()
 plt.show()
 ```
 
-For movement between distinct places (villages, districts, countries) rather than continuous space, see [Geography](populations_geography.qmd).
+For movement between distinct places (villages, districts, countries) rather than continuous space, see [Places and data](populations_places.qmd).
 
 ## Theoretical networks
 

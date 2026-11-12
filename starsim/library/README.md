@@ -41,7 +41,7 @@ Maternal, newborn, and child health examples, demonstrating patterns that are mo
 
 ### Economics (`econ/`)
 
-Health economics, which most sims don't need, so it is here rather than in core Starsim. See the user guide page on [Costs](https://docs.starsim.org/user_guide/interventions_costs.html).
+Health economics, which most sims don't need, so it is here rather than in core Starsim. See the user guide page on [health economics](https://starsim.org/v4/user_guide/library_econ.html).
 
 | Name | Base | Description |
 | --- | --- | --- |

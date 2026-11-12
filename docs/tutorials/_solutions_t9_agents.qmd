@@ -1,0 +1,74 @@
+## T9 – Agents
+
+### Exercise 1
+
+**How does the time between epidemics in the ODE change if the birth rate (and the death rate) is 20 per 1,000 per year instead of 30? Does it agree with the theory?**
+
+```{python}
+import matplotlib.pyplot as plt
+import starsim as ss
+
+S, I, R = ss.states('S I R')
+infection = S >> I @ ss.perday(1.9)*I
+recovery  = I >> R @ ss.days(8)
+measles = ss.Disease(infection, recovery, init_prev=0.001)
+
+demographics = [ss.birth(rate=ss.peryear(0.02)), ss.death(rate=ss.peryear(0.02))]
+sim = ss.Sim(measles, demographics=demographics, total_pop=20_000, start='2000-01-01', stop='2030-01-01', dt=ss.days(1))
+sim.run()
+
+res = sim.results.measles
+plt.figure()
+plt.semilogy(res.timevec, res.I)
+plt.ylim(bottom=0.01)
+plt.ylabel('Number infectious');
+```
+
+The epidemics are further apart, and the honeymoon after the first epidemic is longer: with fewer births, it takes longer to build up enough susceptible people for the next epidemic. The theory agrees: with a life expectancy of L = 1/0.02 = 50 years, the average age at infection is about 50/14 ≈ 3.5 years, and the time between epidemics is about 2π√(3.5 × 0.022) ≈ 1.7 years, rather than 1.4.
+
+### Exercise 2
+
+**In the town with importations, how often do epidemics come if the town has 50,000 people instead? Does measles ever persist between them?**
+
+```{python}
+S, I, R = ss.states('S I R')
+measles = ss.Disease(
+    infection   = S >> I @ ss.perday(1.9)*I,
+    recovery    = I >> R @ ss.days(8),
+    importation = S >> I @ ss.peryear(0.001),
+    init_prev   = 0.001,
+    name        = 'measles',
+)
+demographics = [ss.birth(rate=ss.peryear(0.03)), ss.death(rate=ss.peryear(0.03))]
+sim = ss.Sim(measles, n_agents=50_000, demographics=demographics, start='2000-01-01', stop='2012-01-01', dt=ss.days(1), verbose=0)
+sim.run()
+
+plt.figure()
+plt.semilogy(sim.results.measles.timevec, sim.results.measles.I)
+plt.ylim(bottom=0.5)
+plt.ylabel('Number infectious');
+```
+
+In the larger town, more children are born each year, so susceptible people build up faster, and imported cases (also more frequent) start epidemics sooner: they come more often, and are larger. Measles still dies out between most of them, since 50,000 is well below its critical community size.
+
+### Exercise 3
+
+**Add contraception (`ss.modify(pregnancy.conception, multiply=0.7, start=2010)`) to the Nigeria model with pregnancy. How many fewer people are there in 2030?**
+
+```{python}
+pars = dict(start=2000, stop=2030, dt=ss.months(1))
+
+sims = {}
+for label in ['Baseline', 'Contraception']:
+    pregnancy = ss.Pregnancy(fertility_rate='Nigeria')
+    contraception = ss.modify(pregnancy.conception, multiply=0.7, start=2010) if label == 'Contraception' else None
+    people = ss.population('Nigeria', n_agents=5000)
+    sims[label] = ss.Sim(people=people, demographics=[pregnancy, ss.Deaths(death_rate='Nigeria')], interventions=contraception, **pars)
+
+msim = ss.parallel(sims)
+msim.plot('alive')
+for label, sim in zip(sims, msim.sims):
+    print(label, round(sim.results.alive[-1]/1e6), 'million in 2030')
+```
+
+Cutting conception by 30% from 2010 leaves about 40 million fewer people in 2030 (about 227 million rather than 268 million).

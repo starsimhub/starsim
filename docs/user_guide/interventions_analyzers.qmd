@@ -7,7 +7,7 @@ authorship:
   note: Based on the AI-written v4 draft, with the description of the infection log and of function analyzers adapted from the Starsim 3 user guide page on analyzers; the comparison of mixing patterns written by AI; example made realistic and appendix added by AI
 ---
 
-An analyzer records something during a run that the results don't keep, without changing the model. It is called at the end of each step, after everything else has been updated, and reports on the state of things then. Most quantities don't need one: every state and transition of a declared disease has a result, ratios and outcomes are declared with the model (see [Results](building_results.qmd) and [Outcomes](building_outcomes.qmd)), and results by age or any other group come from [stratifying](building_stratification.qmd) the model. An analyzer is for the rest: something about individual agents (their ages when infected, who infected whom), or a quantity worked out from several modules at once. Besides the infection log in core Starsim, the library has analyzers for costs, DALYs, and cost-effectiveness (on [Costs](interventions_costs.qmd)) and for the CD4 counts of `ssl.HIV`; all are listed in the [appendix](#appendix-every-analyzer).
+An analyzer records something during a run that the results don't keep, without changing the model. It is called at the end of each step, after everything else has been updated, and reports on the state of things then. Most quantities don't need one: every state and transition of a declared disease has a result, ratios and outcomes are declared with the model (see [Results](building_results.qmd) and [Outcomes](building_outcomes.qmd)), and results by age or any other group come from [stratifying](building_stratification.qmd) the model. An analyzer is for the rest: something about individual agents (their ages when infected, who infected whom), or a quantity worked out from several modules at once. Besides the infection log in core Starsim, the library has analyzers for costs, DALYs, and cost-effectiveness (on [Health economics](library_econ.qmd)) and for the CD4 counts of `ssl.HIV`; all are listed in the [appendix](#appendix-every-analyzer).
 
 ## When an analyzer runs
 
@@ -75,7 +75,7 @@ The analyzer's results are under its name in lower case, `sim.results.ageatinfec
 sim.to_df().columns.tolist()
 ```
 
-An analyzer is a way to compare what the results don't show. Here the same analyzer is added to two versions of the model: the one above, with homogeneous mixing, and one with a contact matrix in which children have the most contacts, mostly with each other (the matrix of [Population data](populations_data.qmd#a-contact-matrix-by-age), with β per contact chosen to give a similar epidemic):
+An analyzer is a way to compare what the results don't show. Here the same analyzer is added to two versions of the model: the one above, with homogeneous mixing, and one with a contact matrix in which children have the most contacts, mostly with each other (the matrix of [Population data](populations_mixing.qmd#a-contact-matrix-by-age), with β per contact chosen to give a similar epidemic):
 
 ```{python}
 S, E, I, R = ss.states('S E I R')
@@ -209,7 +209,7 @@ An analyzer can be given to a model that runs as compartments, as any module wri
 
 ## See also
 
-- [T9 – Custom modules](../tutorials/t9_modules.qmd) and [A5 – Custom modules](../tutorials/a5_modules.qmd), the tutorials with modules written as code, including analyzers
+- [T8 – Custom modules](../tutorials/t8_modules.qmd): the tutorial on modules written as code, including analyzers
 - [Results](building_results.qmd), for the results a sim keeps
 - [Custom modules](building_modules.qmd), for the methods of a module, including `init_results()` and `finalize_results()`
 

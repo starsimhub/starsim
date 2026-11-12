@@ -176,12 +176,12 @@ msim.summarize()
 
 In every run, nearly everyone in the town is infected, so the size of the epidemic hardly varies; what chance changes is when it happens. In these runs, the peak comes anywhere from 3 to 14 February, depending on how quickly the first few chains of transmission took off.
 
-The model can also be run as agents, one for each person (`solver='abm'`), which is what a model needs when people differ in ways that compartments can't hold, such as their contacts in a network. The [agent-based tutorials](tutorials/a1_diseases.qmd) show how.
+The model can also be run as agents, one for each person (`solver='abm'`), which is what a model needs when people differ in ways that compartments can't hold, such as their contacts in a network. The [tutorials](tutorials.qmd) show how, from [T1](tutorials/t1_intro.qmd#the-same-model-as-agents) to [T9 – Agents](tutorials/t9_agents.qmd).
 
 ## Next steps
 
 - The [tutorials](tutorials.qmd) cover each of these steps in more depth, one at a time, with a model of a measles outbreak.
 - The [user guide](user_guide.qmd) covers each topic in full, including networks, demographics, custom modules, and solvers.
 - The [gallery](gallery.qmd) has complete models to start from.
-- If you have a model in another framework, the [conversion guides](user_guide/conversion/index.qmd) show how to bring it into Starsim.
+- If you have a model in another framework, the [conversion guides](user_guide/building_import.qmd) show how to bring it into Starsim.
 - Starsim can also be used from R, with [R-Starsim](https://r.starsim.org).

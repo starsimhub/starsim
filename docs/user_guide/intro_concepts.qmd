@@ -31,12 +31,12 @@ flowchart LR
 ```
 
 - **Diseases** are the heart of most models. A disease says what states people can be in (the compartments, such as S, I, and R), and how they move between them (the transitions, each with a rate or a duration). See [Diseases](building_diseases.qmd).
-- **Networks and contacts** say who meets whom: everyone equally (homogeneous mixing, the default), by a contact matrix between groups such as age groups, or through a network of contacts between individuals. See [Contact networks](populations_networks.qmd) and [Population data](populations_data.qmd).
-- **Demographics** add and remove people: births, deaths from causes other than the diseases, migration, and pregnancy. See [Demographics](populations_demographics.qmd).
+- **Networks and contacts** say who meets whom: everyone equally (homogeneous mixing, the default), by a contact matrix between groups such as age groups, or through a network of contacts between individuals. See [Mixing](populations_mixing.qmd) and [Places and data](populations_places.qmd).
+- **Demographics** add and remove people: births, deaths from causes other than the diseases, migration, and pregnancy. See [Demographics](populations_people.qmd#births-and-deaths).
 - **Interventions** act on the model: vaccinating, testing, and treating people, or changing a parameter from a date (closing schools, say). See [Interventions](interventions_interventions.qmd) and [Products](interventions_products.qmd).
 - **Connectors** link modules, such as one disease making another more likely. See [Connectors](interventions_connectors.qmd).
 - **Analyzers** record results that the other modules don't keep, without changing anything. See [Analyzers](interventions_analyzers.qmd).
-- **Custom modules** (given as `modules=`, and kept in `sim.custom`) are anything else a model needs that is none of these, such as a process that is not about health at all (the flocking of birds, say). See [Nonstandard usage](mechanics_nonstandard.qmd).
+- **Custom modules** (given as `modules=`, and kept in `sim.custom`) are anything else a model needs that is none of these, such as a process that is not about health at all (the flocking of birds, say). See [Beyond disease](../gallery/beyond_disease.qmd).
 
 Most models need only a disease and a sim; the other kinds are added as the question needs them. The sim itself holds what applies to the whole model: the population (`total_pop=`, or `n_agents=` for agents), the time span and step (`start=`, `stop=`, `dt=`), the random seed, and the solver.
 
@@ -47,7 +47,7 @@ The same population can be represented in two ways:
 - **As compartments**, people are counted: there are 92,000 people in S, 3,000 in I, and so on (and, in a model stratified by age, so many in each age group in each state). This is the representation of a classical compartmental model, and it is fast, whatever the size of the population.
 - **As agents**, each person is represented individually, with their own age, sex, state of each disease, and contacts. This is needed when something in the model is about individuals: a network of particular partnerships, a history (how long ago this person was vaccinated), or a value that varies continuously between people. An agent can stand for several people (`total_pop=1_000_000, n_agents=10_000`: each agent is 100 people).
 
-The model itself doesn't say which: a disease written as states and transitions means the same thing either way, and in the agent-based run each person moves between states at the same rates as people do between compartments. See [People and agents](populations_people.qmd).
+The model itself doesn't say which: a disease written as states and transitions means the same thing either way, and in the agent-based run each person moves between states at the same rates as people do between compartments. See [People and demographics](populations_people.qmd).
 
 ## States, transitions, and rates
 
@@ -112,9 +112,9 @@ Every rate is per some unit of time and every duration is in some unit, so value
 5. Deaths take effect, and the **results** of the step are recorded.
 6. **Analyzers** read the finished step.
 
-Within a disease, the transitions have no order: transitions out of the same state compete, as they do in an ODE. A module can have a step of its own (yearly births in a model with daily transmission), and runs on the steps at which it is due. [Model execution](architecture_execution.qmd) gives the full order.
+Within a disease, the transitions have no order: transitions out of the same state compete, as they do in an ODE. A module can have a step of its own (yearly births in a model with daily transmission), and runs on the steps at which it is due. [From declaration to run](architecture_run.qmd) gives the full order.
 
-After the run, the **results** are in `sim.results`, by module: for each disease, a result for each state (a **stock**: how many people are in it at each time point) and each transition (a **flow**: how many made it in each step), plus any other quantity the model declares, such as prevalence, or reported cases worked out from the flows (an **outcome**). Data attached to the sim is matched to the results by name, for plotting and fitting. See [Results](building_results.qmd), [Outcomes](building_outcomes.qmd), and [Plotting](building_plotting.qmd).
+After the run, the **results** are in `sim.results`, by module: for each disease, a result for each state (a **stock**: how many people are in it at each time point) and each transition (a **flow**: how many made it in each step), plus any other quantity the model declares, such as prevalence, or reported cases worked out from the flows (an **outcome**). Data attached to the sim is matched to the results by name, for plotting and fitting. See [Results](building_results.qmd), [Outcomes](building_outcomes.qmd), and [Plotting](building_results.qmd#plotting-a-sim).
 
 ## How the solver is chosen
 

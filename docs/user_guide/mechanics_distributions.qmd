@@ -79,7 +79,7 @@ A value that differs by group, rather than at random between people, is better g
 
 See the [API reference](../api/distributions.qmd) for each, and the [appendix](#appendix-every-distribution) for the full list with their parameters. The names are also in `ss.distributions.dist_list`, and a parameter of a module written as code can be given one as a dict, with its name as `type`: `ss.RandomNet(n_contacts=dict(type='poisson', mean=5))` is `ss.RandomNet(n_contacts=ss.poisson(mean=5))`, which is useful when parameters come from a file.
 
-A parameter can also be an array (or a list), for a distribution of each value: `ss.normal(mean=[3.5, 4.5], std=[0.9, 0.8]).rvs((1000, 2))` draws 1,000 from each, and `ss.poisson([[2.4, 0.9], [0.5, 1.6]])` is a matrix of contacts that differ between people (see [Networks](populations_networks.qmd)). Drawn for agents (`rvs(uids)`), an array has a value for each agent.
+A parameter can also be an array (or a list), for a distribution of each value: `ss.normal(mean=[3.5, 4.5], std=[0.9, 0.8]).rvs((1000, 2))` draws 1,000 from each, and `ss.poisson([[2.4, 0.9], [0.5, 1.6]])` is a matrix of contacts that differ between people (see [Networks](populations_mixing.qmd)). Drawn for agents (`rvs(uids)`), an array has a value for each agent.
 
 ### Any SciPy distribution
 

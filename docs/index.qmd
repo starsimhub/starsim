@@ -32,7 +32,7 @@ Complete models built with Starsim, each with its diagram, parameters, code, and
 :::
 
 ::: {.g-col-4}
-[**Import and export**](user_guide/conversion/index.qmd)
+[**Import and export**](user_guide/building_import.qmd)
 
 Bring in a model from another framework (EpiModel, odin, SBML, and a dozen more), or move from Starsim 3.
 :::

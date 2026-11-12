@@ -78,8 +78,8 @@ A sim can hold these kinds of modules, each given to it by keyword (a disease ca
 | Kind | What it is for | Keyword | See |
 |---|---|---|---|
 | Diseases | The states people can be in, and how they move between them | `diseases=` | [Diseases](building_diseases.qmd) |
-| Networks and contacts | Who meets whom: contact matrices, mixing pools, and networks of individual contacts | `networks=` | [Population data](populations_data.qmd), [Contact networks](populations_networks.qmd) |
-| Demographics | Births, deaths, and pregnancy | `demographics=` | [Demographics](populations_demographics.qmd) |
+| Networks and contacts | Who meets whom: contact matrices, mixing pools, and networks of individual contacts | `networks=` | [Places and data](populations_places.qmd), [Mixing](populations_mixing.qmd) |
+| Demographics | Births, deaths, and pregnancy | `demographics=` | [Demographics](populations_people.qmd#births-and-deaths) |
 | Interventions | Vaccination, testing, treatment, and changes to parameters | `interventions=` | [Products](interventions_products.qmd), [Interventions](interventions_interventions.qmd) |
 | Connectors | Links between modules, such as one disease making another more likely | `connectors=` | [Connectors](interventions_connectors.qmd) |
 | Analyzers | Extra results, collected as the sim runs | `analyzers=` | [Analyzers](interventions_analyzers.qmd) |
@@ -91,7 +91,7 @@ The sim itself holds what applies to the whole model: the population (`total_pop
 A disease can be written in two ways, and both kinds can be in the same sim:
 
 - **Declared**, as states and the transitions between them, as above. The model is then a description that Starsim can read: it can print the model's equations, draw its diagram, work out its R0, and run it either as a compartmental model (deterministic or stochastic) or as individual agents. This is the usual way to write a disease, and most of this section of the guide is about it.
-- **Written as code**, as a Python class with arrays for each person and a `step()` method that updates them. This is for what states and transitions can't say, such as a quantity that changes continuously in each person (a CD4 count, or a level of immunity). A module written as code that keeps a value for each person runs as agents. See [Custom modules](building_modules.qmd), and [What can be declared](building_declared.qmd) for what can be said each way. [Model declaration](architecture_declaration.qmd) explains how Starsim reads a declared model and fills in what was left out.
+- **Written as code**, as a Python class with arrays for each person and a `step()` method that updates them. This is for what states and transitions can't say, such as a quantity that changes continuously in each person (a CD4 count, or a level of immunity). A module written as code that keeps a value for each person runs as agents. See [Custom modules](building_modules.qmd), and [What can be declared](building_declared.qmd) for what can be said each way. [From declaration to run](architecture_run.qmd) explains how Starsim reads a declared model and fills in what was left out.
 
 ## Checking a model
 
@@ -239,7 +239,7 @@ print(sim.results.measles.keys())       # Its results
 
 - The parameters of each module are in `sim.diseases.measles.pars` (and `sim.pars.measles`); see [Parameters](building_parameters.qmd).
 - The results are in `sim.results`, by module: `sim.results.measles.I`. Every state and every transition has a result of the same name. See [Outcomes](building_outcomes.qmd) for declaring more, and [Results](building_results.qmd) for working with them.
-- In a model run as agents, the people are in `sim.people`, with each person's age, sex, and the states of each disease; see [People and agents](populations_people.qmd). Each module adds its states to the people, so `sim.people.to_df()` gives a table with a row for each agent and a column for each of their attributes and states:
+- In a model run as agents, the people are in `sim.people`, with each person's age, sex, and the states of each disease; see [People and demographics](populations_people.qmd). Each module adds its states to the people, so `sim.people.to_df()` gives a table with a row for each agent and a column for each of their attributes and states:
 
 ```{python}
 sim = ss.Sim(measles, n_agents=1000, total_pop=100_000, stop=ss.days(50), dt=ss.days(0.25), verbose=0) # A quarter-day step, short enough for measles as agents

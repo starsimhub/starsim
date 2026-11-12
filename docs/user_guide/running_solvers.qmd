@@ -2,12 +2,12 @@
 title: Solvers and backends
 jupyter: python3
 authorship:
-  human: 0
-  ai: 100
-  note: Based on the Claude draft on solvers, with a new section on the backends that run them (kernels, Rust, JAX, compiling) and points from the Codex draft
+  human: 5
+  ai: 95
+  note: Based on the Claude draft on solvers, with a new section on the backends that run them (kernels, Rust, JAX, compiling) and points from the Codex draft; merged on Nov 11 by AI with "Will my model run as an ODE?" (drafted by AI, revised by a human), now the appendix on what needs agents
 ---
 
-A model in Starsim says what the compartments are, how people move between them, and at what rates. A *solver* is the method that turns this into numbers over time. The same model can be solved in five ways (an ODE, three kinds of stochastic compartments, and agents), each with a few options, and for most models and questions they give the same answer, so Starsim chooses one for you. This page is about the cases where the choice matters: small numbers of people, outbreaks that die out by chance, steps that are too long for the rates, and contacts between particular people. It ends with speed, and the compiled code (the backends) that runs each solver. How the solvers work inside, and how they are tested against each other, is in [Engines and kernels](architecture_solvers.qmd) in the architecture section.
+A model in Starsim says what the compartments are, how people move between them, and at what rates. A *solver* is the method that turns this into numbers over time. The same model can be solved in five ways (an ODE, three kinds of stochastic compartments, and agents), each with a few options, and for most models and questions they give the same answer, so Starsim chooses one for you. This page is about the cases where the choice matters: small numbers of people, outbreaks that die out by chance, steps that are too long for the rates, and contacts between particular people. It ends with speed, the compiled code (the backends) that runs each solver, and an appendix of what runs under which solver ([Will my model run as an ODE?](#appendix-what-needs-agents)). How the solvers work inside, and how they are tested against each other, is in [Engines and transmission](architecture_engines.qmd) in the architecture section.
 
 ## The solvers
 
@@ -177,7 +177,7 @@ msim.plot('measles.I', lines=True)
 msim.summarize().loc['measles_infection']
 ```
 
-In every stochastic run, measles dies out after the first epidemic, with about 6,700 infections in all: a sixth of the ODE's. Neither is wrong as a model, but only the stochastic one represents a town in which measles can disappear, and the difference is the whole answer to a question about long-term burden. Where fade-out matters, use a stochastic solver, or add introductions from outside (see [Geography](populations_geography.qmd)).
+In every stochastic run, measles dies out after the first epidemic, with about 6,700 infections in all: a sixth of the ODE's. Neither is wrong as a model, but only the stochastic one represents a town in which measles can disappear, and the difference is the whole answer to a question about long-term burden. Where fade-out matters, use a stochastic solver, or add introductions from outside (see [Mixing](populations_mixing.qmd)).
 
 ### The length of a step
 
@@ -242,7 +242,7 @@ for solver in ['binomial', 'tau', 'gillespie']:
     ss.Sim(measles, total_pop=1_000_000, stop=ss.days(50), solver=solver).run()
 ```
 
-Each says how long it took. Gillespie handled about two million events here in well under a second; with tens of millions of events, use tau-leaping. Agents take time in proportion to the number of agents and the number of steps; a population larger than the number of agents is represented by having each agent stand for several people (see [Branching and rescaling](running_branching.qmd)). What keeps a run fast, and how to find what slows one down, is in [Getting the most speed](running_performance.qmd).
+Each says how long it took. Gillespie handled about two million events here in well under a second; with tens of millions of events, use tau-leaping. Agents take time in proportion to the number of agents and the number of steps; a population larger than the number of agents is represented by having each agent stand for several people (see [Branching and rescaling](running_branching.qmd)). What keeps a run fast, and how to find what slows one down, is in [Speed and scale](running_performance.qmd).
 
 ## Backends
 
@@ -252,7 +252,7 @@ Whichever solver is chosen, the numbers are worked out by compiled code rather t
 - **JAX** takes a whole run of the ODE only when asked, with `sim.jax = True` before the run (it takes about half a second to start, once a session, and compiles each model, so it repays that only for long runs over many groups, or on a GPU); an ODE run in JAX agrees with the kernels to rounding. It is chosen by itself only where it is needed: for [gradients](calibration_gradients.qmd) and the fits that use them. With `sim.jax = True`, many ODE runs with different values in `ss.parallel(sim, pars=...)` are also taken in one call to JAX, which is faster than the kernels for tens of thousands of runs.
 - **Plain Python and NumPy** run the rest: the step loop of agent-based runs, and modules written as code. Your own loops in a module can be compiled with `@ss.jit` (see [Custom modules](building_modules.qmd)).
 
-To compile everything at once rather than on first use, run `ss.compile()` (or `starsim init compile` from the command line): once after installing, when building a Docker image, in continuous integration, or before a long batch of runs on a cluster, so that no run waits for it (see [Deployment](running_deploy.qmd)). With `verbose=2`, a run says which engine took it and why (e.g. "engine: kernels: a short run, shorter than JAX takes to start"), and why a compartmental run was taken step by step rather than in one call (an intervention that needs its own step, for example).
+To compile everything at once rather than on first use, run `ss.compile()` (or `starsim init compile` from the command line): once after installing, when building a Docker image, in continuous integration, or before a long batch of runs on a cluster, so that no run waits for it (see [Speed and scale](running_performance.qmd#on-a-cluster-with-a-job-scheduler)). With `verbose=2`, a run says which engine took it and why (e.g. "engine: kernels: a short run, shorter than JAX takes to start"), and why a compartmental run was taken step by step rather than in one call (an intervention that needs its own step, for example).
 
 Two options of the solvers change the numerical method itself rather than the engine. `ss.solvers.ode(integrator=)` is the ODE's scheme: `'rk4'` (fourth-order Runge–Kutta, the default) or `'euler'`. `substeps=` (of `ss.solvers.ode()` and `ss.solvers.binomial()`) is the number of substeps in each time step; by default there are enough that no compartment turns over by more than a small share in one, and `substeps=1` takes each step whole, as discrete-time chain-binomial models in the literature do. The ODE has no tolerance to set: by default, a step too fast for RK4 to be accurate (as at an epidemic's peak) is taken by Dormand–Prince instead, which sets its own substeps to keep the error small, so it is typically within about 1e-6 of the largest value of a tightly solved ODE (3e-7 for an SIR with R0 = 10 and daily steps, where RK4 alone is 4e-5). Giving `ss.solvers.ode(substeps=)` takes every step by RK4 with that many.
 
@@ -280,6 +280,7 @@ Two options of the solvers change the numerical method itself rather than the en
 - [GillesPy2 documentation](https://gillespy2.readthedocs.io/en/latest/): a library of Gillespie and tau-leaping solvers for the same kind of model
 - [Epiverse epidemics](https://epiverse-trace.github.io/epidemics/articles/epidemics.html): deterministic and stochastic compartmental models in R
 - [odin.dust](https://mrc-ide.github.io/odin.dust/): one model compiled as an ODE or as a stochastic discrete-time model
+- [What can be declared](building_declared.qmd): every idea that can be declared, and the name for it
 
 ## Appendix: every solver
 
@@ -297,7 +298,7 @@ The properties of each solver, for looking up; the tables at the top of the page
 
 ## Appendix: every set of kernels
 
-The kernels are the compiled code under every solver. All the sets give the same numbers, so the choice is about speed and convenience, not the answer; `ss.options.kernels` sets it (or the environment variable `STARSIM_KERNELS`), and `ss.kernels.compile_status().summary` says which is in use and whether it is compiled. Speeds and how each is built are in [Engines and kernels](architecture_solvers.qmd#the-kernels) in the architecture section.
+The kernels are the compiled code under every solver. All the sets give the same numbers, so the choice is about speed and convenience, not the answer; `ss.options.kernels` sets it (or the environment variable `STARSIM_KERNELS`), and `ss.kernels.compile_status().summary` says which is in use and whether it is compiled. Speeds and how each is built are in [Engines and transmission](architecture_engines.qmd) in the architecture section.
 
 | `ss.options.kernels` | What it is | When `'auto'` uses it | Use it for |
 |---|---|---|---|
@@ -310,7 +311,82 @@ JAX is not one of these sets: it takes an ODE run when asked (`sim.jax = True`),
 
 ## Appendix: what needs agents
 
-The rules that decide which engine runs a model are in `ss.solvers.solver_table()` (all of them are in [Engines and kernels](architecture_solvers.qmd#what-decides-which-engine-runs-a-model) in the architecture section). A model with any of these runs as agents, and a compartmental solver asked for by name raises an `ss.CapabilityError` that says what to do:
+This appendix answers "will my model run as an ODE?", feature by feature, and then lists the rules Starsim checks. Most of a model runs under every solver: as an ODE, as a stochastic compartmental model, or as agents. In the tables below, **Any** means every solver, **Compartments only** means it works as an ODE (or another compartmental solver) but not as agents, **Agents only** means the model runs as agents, and **None** means no solver does it yet. With `solver='auto'`, Starsim picks agents when it has to, and `sim.solver_reason` says why ([How Starsim chooses](#how-starsim-chooses)).
+
+### People
+
+| Can I... | Runs as | More |
+|---|---|---|
+| Have births, deaths, and migration? | Any | Declared: `ss.birth()`, `ss.death()`, `ss.migration()` ([People and demographics](populations_people.qmd)) |
+| Have deaths from a disease, or imported cases? | Any | `I >> ss.dead @ rate`, `ss.immigration(I, n=...)` ([Migration](populations_people.qmd)) |
+| Use birth and death rates by country? | Any | `ss.birth(rate='Kenya')` ([Rates from data](populations_people.qmd)) |
+| Link each child to its mother? | Agents only | `ss.Births`, `ss.Pregnancy` ([Pregnancy](populations_people.qmd)) |
+| Add or remove people from my own code? | Any | `ss.move(sir.I, ss.dead, p=0.1)`, `ss.move(ss.outside, sir.I, n=20)`; they leave or join every disease |
+
+### Groups
+
+| Can I... | Runs as | More |
+|---|---|---|
+| Group people by age, sex, risk, or place? | Any | `stratify()` ([Stratification](building_stratification.qmd)) |
+| Have people age? | Any | Automatic with births or deaths ([Aging](populations_people.qmd)) |
+| Move people between groups (e.g. low to high risk)? | Any | `ss.transfer()` at a rate, `ss.Event()` once ([Moving between groups](building_stratification.qmd#moving-between-groups)) |
+| Give rates a value for each group? | Any | `ss.by()` ([How groups differ](building_stratification.qmd#how-groups-differ)) |
+| Use a rate that depends on exact age? | Agents only | Compartments have age groups, not ages ([Severity by age](../gallery/hospitalization.qmd)) |
+
+### Moving people between states
+
+| Can I... | Runs as | More |
+|---|---|---|
+| Move people between states? | Any | `ss.move(sir.I, sir.R, p=0.5)` ([Vaccine demand](../tutorials/t8_modules.qmd)) |
+| Move only some groups (e.g. children)? | Any | `ss.move(..., who=ss.person.age < 5)`, as agents or in a model stratified by age |
+| Move particular people? | Agents only | `ss.move(..., uids=uids)` |
+| Move between groups from my own code? | None | `ss.move()` takes states; use `ss.Event()` or `ss.transfer()` |
+| Move people on a date, or when cases pass a threshold? | Any | `ss.Event(S >> R, when=..., who=sir.I.n > 1000)` ([Events](interventions_interventions.qmd#events-moves-without-a-product)) |
+| Move a fraction of a person each step? | Any | As agents, `ss.move(..., n=0.3)` moves a whole agent now and then, 0.3 people a step on average |
+
+### Rates
+
+| Can I... | Runs as | More |
+|---|---|---|
+| Change a rate without moving anyone (e.g. double it)? | Any | `ss.modify(sir.pars.beta, multiply=2)` ([Changing parameters](interventions_interventions.qmd#changing-parameters)) |
+| Change a parameter from my own code? | Any | `sir.pars.beta = 0.6` in `step()` |
+| Have one disease change another's rates? | Any | `ss.modify(sti.rel_sus, multiply=3, who=hiv.I)` ([Connectors](interventions_connectors.qmd)) |
+| Have rates change over time, or by season? | Any | `ss.timeseries()`, `ss.seasonal()` ([Parameters](building_parameters.qmd#values-that-change-over-time)) |
+| Have noise on a rate? | Any | `ss.Transition(..., noise=0.1)`: the ODE uses its mean, and the exact (Gillespie) solver refuses it ([Measles in London](../gallery/measles_london.qmd#declared-with-noise)) |
+| Have rates depend on whether someone was ever infected? | Any | `.ever` ([What can be declared](building_declared.qmd#the-vocabulary-by-idea)) |
+| Have rates depend on how long ago, or how often? | Agents only | `.since`, `.n_times`; a count kept as a group (`increment=`) runs as any ([Moving between groups](building_stratification.qmd#moving-between-groups)) |
+
+### Interventions
+
+| Can I... | Runs as | More |
+|---|---|---|
+| Vaccinate, test, and treat? | Any | Products and deliveries ([Products](interventions_products.qmd)) |
+| Have protection wane with a fixed shape? | Any | `ss.boxcar()` ([Vaccines](interventions_products.qmd#vaccines)) |
+| Have protection wane from each person's own date? | Agents only | ([What needs agents](interventions_interventions.qmd#appendix-what-needs-agents)) |
+| Trace contacts? | Agents only | ([What needs agents](interventions_interventions.qmd#appendix-what-needs-agents)) |
+
+### Contacts and differences between people
+
+| Can I... | Runs as | More |
+|---|---|---|
+| Use a contact matrix? | Any | `ss.contacts()` ([Age groups and contacts](building_stratification.qmd#age-groups-and-contacts)) |
+| Use a network (partnerships, households)? | Agents only | `solver='ode'` uses random mixing instead, with a note ([Networks](populations_mixing.qmd)) |
+| Have susceptibility differ by group? | Any | `ss.by()` |
+| Have susceptibility differ person by person? | Agents only | `ss.attr()`; a compartmental solver uses the mean, with a note ([Parameters](building_parameters.qmd#values-that-vary-between-people)) |
+
+### Code of my own
+
+| Can I... | Runs as | More |
+|---|---|---|
+| Write a module that reads counts and results? | Any | `sir.I.n`, `sim.results` ([Modules](architecture_index.qmd)) |
+| Write a module that keeps a value for each person? | Agents only | `define_states()` ([Custom modules](building_modules.qmd)) |
+| Write a rate as a Python function? | Any | If it works on groups ([Severity by age](../gallery/hospitalization.qmd)) |
+| Read counts by group from code? | Compartments only | `sir.I.values` is per group as compartments, per agent as agents; use results instead |
+| Write my own ODE in NumPy? | Any | As agents, it runs beside them, unconnected ([Measles in London](../gallery/measles_london.qmd)) |
+
+### The rules Starsim checks
+
+The rules that decide which engine runs a model are in `ss.solvers.solver_table()` (all of them are in [Engines and transmission](architecture_engines.qmd) in the architecture section). A model with any of these runs as agents, and a compartmental solver asked for by name raises an `ss.CapabilityError` that says what to do:
 
 ```{python}
 import pandas as pd

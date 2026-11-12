@@ -9,7 +9,7 @@ authorship:
 
 A Starsim model is made of two kinds of part. A **declared** part is a description that Starsim reads: states, transitions and their rates, conditions, interventions, and results. A part **written as code** is a Python function or class that Starsim calls as the model runs. This page lists what can be declared, idea by idea, with an example of each and of what would need code instead; then shows how to mix the two, and what each costs in speed.
 
-For how to write a declared model, see [Writing models](building_writing.qmd); for modules written as code, [Custom modules](building_modules.qmd). For questions such as "can people die" or "can I double a rate", and whether each runs under every solver, see [Will my model run as an ODE?](building_solvers.qmd).
+For how to write a declared model, see [Writing models](building_writing.qmd); for modules written as code, [Custom modules](building_modules.qmd). For questions such as "can people die" or "can I double a rate", and whether each runs under every solver, see [Will my model run as an ODE?](running_solvers.qmd#appendix-what-needs-agents).
 
 ## Why the difference matters
 
@@ -32,7 +32,7 @@ Each row is an idea from epidemiology, how it is declared, and an example of a r
 | **Flows at a rate** | `>>` and `@`, and `ss.dead` for flows into or out of the model | `R >> S @ ss.peryear(0.1)`, `I >> ss.dead @ 0.01` | A rate worked out each step by another program |
 | **Time in a state** | A duration, or a distribution of durations | `I >> R @ ss.days(8)`, `E >> I @ ss.erlang(k=4, mean=ss.days(10))` | A recovery time from a model of each person's viral load within the host |
 | **Branching** (a share go one way, the rest another) | `p=` | `ss.Transition(I, {R: 0.98, D: None}, dur=ss.days(8))` | |
-| **Transmission**, frequency- or density-dependent | A bare state (a share), or a count, `.n`; with a contact matrix, each says what the matrix acts on (see [What a matrix acts on](populations_data.qmd#what-a-matrix-acts-on)) | `S >> I @ 1.9*I`, `S >> I @ 1.9e-5*I.n` | |
+| **Transmission**, frequency- or density-dependent | A bare state (a share), or a count, `.n`; with a contact matrix, each says what the matrix acts on (see [What a matrix acts on](populations_mixing.qmd#what-a-matrix-acts-on)) | `S >> I @ 1.9*I`, `S >> I @ 1.9e-5*I.n` | |
 | **Several sources of infection** | A sum | `S >> E @ beta*(I + 0.5*A)` | |
 | **Rates that depend on how many are infected** | Arithmetic and NumPy functions of counts | `S >> I @ beta*I.n/(1 + a*I.n)` (a force of infection that saturates) | |
 | **Rates that vary in time** | `ss.timeseries()`, `ss.seasonal()` | `beta = ss.seasonal(mean=0.3, amplitude=0.2, peak='March')` | |
@@ -225,7 +225,7 @@ for label, measure in versions.items():
     print(f'{label}: {1000*seconds(sim):.1f} ms')
 ```
 
-A run in compiled code takes a few milliseconds; a run a step at a time takes tens to hundreds of times longer, since each step goes back to Python. For one run this doesn't matter, but for a fit of thousands of runs it does: where a declared form can say the same thing, it is worth using. For many runs at once and other ways to keep runs fast, see [Getting the most speed](running_performance.qmd).
+A run in compiled code takes a few milliseconds; a run a step at a time takes tens to hundreds of times longer, since each step goes back to Python. For one run this doesn't matter, but for a fit of thousands of runs it does: where a declared form can say the same thing, it is worth using. For many runs at once and other ways to keep runs fast, see [Speed and scale](running_performance.qmd).
 
 ### Agents
 
@@ -265,8 +265,8 @@ The loop in Python takes several times as long as the whole rest of the run. Wri
 
 ## Further reading
 
-- [Will my model run as an ODE?](building_solvers.qmd): questions modelers ask, and which solvers each answer runs under
+- [Will my model run as an ODE?](running_solvers.qmd#appendix-what-needs-agents): questions modelers ask, and which solvers each answer runs under
 - [Custom modules](building_modules.qmd): writing modules as code, and what to check before doing so
-- [Getting the most speed](running_performance.qmd): what keeps a run in compiled code, and fast code of your own
+- [Speed and scale](running_performance.qmd): what keeps a run in compiled code, and fast code of your own
 - [Solvers and backends](running_solvers.qmd): which solver runs a model, and why
 - [Numba: A 5-minute guide](https://numba.readthedocs.io/en/stable/user/5minguide.html): the compiler behind `ss.jit`

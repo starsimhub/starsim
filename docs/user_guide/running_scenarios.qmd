@@ -352,7 +352,7 @@ A sim copies the modules it is given, so the same disease or intervention can be
 
 By default, `ss.parallel()` keeps the results of each run but not the people in it, which keeps memory use down when there are many runs. For many thousands of runs, keep only what you need from each: `msim.summarize()`, `msim.to_df()`, or a function of each sim, saved as a table, rather than the MultiSim itself. `ss.converters.to_hub()` writes runs as the quantile tables that forecasting hubs take.
 
-`ss.parallel()` runs the sims in separate processes. In a script (rather than a notebook), on Windows and macOS, put the code that runs them under `if __name__ == '__main__':`, as Python's multiprocessing requires; and on a system that cannot start processes, `ss.parallel(..., workers=1)` runs the same sims one after the other. For larger studies, build the sims with a `make_sim()` function (see [Running sims](running_sim.qmd#larger-projects-make_sim)), and for running them on a cluster, see [Deployment](running_deploy.qmd).
+`ss.parallel()` runs the sims in separate processes. In a script (rather than a notebook), on Windows and macOS, put the code that runs them under `if __name__ == '__main__':`, as Python's multiprocessing requires; and on a system that cannot start processes, `ss.parallel(..., workers=1)` runs the same sims one after the other. For larger studies, build the sims with a `make_sim()` function (see [Running sims](running_sim.qmd#larger-projects-make_sim)), and for running them on a cluster, see [Deployment](running_performance.qmd#from-a-notebook-to-a-script).
 
 ## Pitfalls
 
